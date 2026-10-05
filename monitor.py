@@ -50,28 +50,72 @@ def log(msg):
 
 # ---------------------------------------------------------------- FRED
 
-def fred_series(series_id, days=400):
-    """抓取 FRED 序列，返回 [(date_str, value), ...]，失败返回 []"""
-    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-    try:
-        r = requests.get(url, headers=UA, timeout=30)
-        r.raise_for_status()
-        rows = []
-        for line in r.text.strip().split("\n")[1:]:
-            parts = line.split(",")
-            if len(parts) != 2:
-                continue
-            d, v = parts[0].strip(), parts[1].strip()
-            if v in (".", "", "nan"):
-                continue
+# FRED 在 GitHub Actions（Azure IP）上会被挡，导致整段 Read timed out。
+# 这几个指标可以用 Yahoo 的指数代码兜底（Yahoo 在 Actions 上通、在大陆不通；
+# FRED 反过来在大陆通、在 Actions 不通 —— 两个源正好互补）。
+FRED_YAHOO_ALIAS = {
+    "vix":   "^VIX",     # VIX
+    "sp500": "^GSPC",    # 标普500
+    "ust10": "^TNX",     # 10Y 美债收益率（单位 %）
+    "dxy":   "DX-Y.NYB", # 美元指数
+}
+
+
+def _rows_from_closes(closes, days=400):
+    """把收盘价序列伪造成 (date, value) 列表。日期只用于内部排序，页面不展示。"""
+    n = len(closes)
+    out = []
+    for i, c in enumerate(closes):
+        d = (NOW.date() - timedelta(days=(n - 1 - i))).isoformat()
+        out.append((d, c))
+    return out[-days:]
+
+
+def fred_series(series_id, days=400, alias=None):
+    """抓取 FRED 序列，返回 [(date_str, value), ...]，失败返回 []
+
+    三级降级：
+      1. FRED 带 cosd/coed（响应更小，降低超时概率）→ 重试 2 次
+      2. FRED 不带日期参数的原始 URL
+      3. Yahoo 指数别名兜底（仅 vix/sp500/ust10/dxy 有）
+    """
+    end = NOW.date()
+    start = end - timedelta(days=730)
+    urls = [
+        f"https://fred.stlouisfed.org/graph/fredgraph.csv"
+        f"?id={series_id}&cosd={start.isoformat()}&coed={end.isoformat()}",
+        f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}",
+    ]
+
+    for attempt in range(2):
+        for url in urls:
             try:
-                rows.append((d, float(v)))
-            except ValueError:
-                continue
-        return rows[-days:]
-    except Exception as e:
-        log(f"  ! FRED {series_id} 失败: {e}")
-        return []
+                r = requests.get(url, headers=UA, timeout=20)
+                r.raise_for_status()
+                rows = []
+                for line in r.text.strip().split("\n")[1:]:
+                    parts = line.split(",")
+                    if len(parts) != 2:
+                        continue
+                    d, v = parts[0].strip(), parts[1].strip()
+                    if v in (".", "", "nan"):
+                        continue
+                    try:
+                        rows.append((d, float(v)))
+                    except ValueError:
+                        continue
+                if len(rows) >= 30:
+                    return rows[-days:]
+            except Exception as e:
+                log(f"  ! FRED {series_id} 第{attempt + 1}次失败: {str(e)[:70]}")
+                time.sleep(1.5 * (attempt + 1))
+
+    if alias:
+        log(f"  · FRED {series_id} 不可用，改用 Yahoo {alias}")
+        data = yahoo_history(alias)
+        if data and len(data["closes"]) >= 30:
+            return _rows_from_closes(data["closes"], days)
+    return []
 
 
 def pct_from_high(series):
@@ -87,7 +131,7 @@ def build_macro():
     log("抓取宏观指标...")
     macro = {}
     for key, cfg in FRED_SERIES.items():
-        rows = fred_series(cfg["id"])
+        rows = fred_series(cfg["id"], alias=FRED_YAHOO_ALIAS.get(key))
         if not rows:
             macro[key] = {"ok": False, "name": cfg["name"]}
             continue
@@ -193,13 +237,17 @@ def yahoo_history(symbol):
                 if len(closes) < 30:
                     last_err = "历史数据不足"
                     continue
+                # 注意：不要用 meta.chartPreviousClose！
+                # 它返回的是「请求区间起点之前」的那根 K 线收盘价，range=1y 时等于一年前的价格，
+                # 用它算涨跌幅会得到 +40% / +95% 这种荒谬数字。
+                # 统一用最后两根日线：closes[-1] 最新收盘，closes[-2] 上一交易日收盘。
                 return {
                     "closes": closes,
                     "volumes": vols,
                     "highs": highs,
                     "lows": lows,
-                    "price": meta.get("regularMarketPrice") or closes[-1],
-                    "prev_close": meta.get("chartPreviousClose") or meta.get("previousClose"),
+                    "price": closes[-1],
+                    "prev_close": closes[-2] if len(closes) >= 2 else None,
                     "currency": meta.get("currency", ""),
                 }
             except requests.HTTPError as e:
@@ -524,7 +572,10 @@ def render(macro, items, watch_count, data_down=False):
     vix = macro.get("vix", {})
     sp = macro.get("sp500", {})
     overall, overall_txt = "green", "绿框 · 不用动"
-    if hy.get("ok") and hy["value"] >= 400:
+    if not hy.get("ok"):
+        # 核心指标缺失时不能假装"绿框不用动"，否则会误导下单
+        overall, overall_txt = "gray", "跑路价签数据缺失 · 别据此下单"
+    elif hy.get("ok") and hy["value"] >= 400:
         overall, overall_txt = "red", "跑路价签破400 · 进入危机确认"
     elif hy.get("ok") and hy.get("delta_week") and hy["delta_week"] >= 50:
         overall, overall_txt = "red", "利差一周急剧扩大 · 立刻警戒"
@@ -582,6 +633,7 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 .o-green{{background:rgba(63,185,80,.12);color:var(--green)}}
 .o-yellow{{background:rgba(210,153,34,.14);color:var(--yellow)}}
 .o-red{{background:rgba(248,81,73,.14);color:var(--red)}}
+.o-gray{{background:rgba(139,147,161,.14);color:var(--dim)}}
 .foot{{color:var(--dim);font-size:11.5px;text-align:center;margin-top:22px;line-height:1.7}}
 .quiet{{color:var(--dim);font-size:12px;padding:8px 12px 12px}}
 .warn{{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
