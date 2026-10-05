@@ -29,6 +29,10 @@ jobs:
         run: pip install requests
 
       - name: 抓数据并生成页面
+        # FRED_API_KEY 是可选 Secret：配置了才能拿到跑路价签和收益率曲线
+        # （Actions 访问 fred.stlouisfed.org 的 CSV 接口会被 CDN 掐断，只有官方 API 域名通）
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: python monitor.py
 
       - name: 提交更新

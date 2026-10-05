@@ -26,6 +26,10 @@ NOW = datetime.now(TZ)
 
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
+# FRED 官方 API key（免费申请：https://fredaccount.stlouisfed.org/apikeys）
+# 配成仓库 Secret FRED_API_KEY 即可；不配也能跑，只是 Actions 上拿不到跑路价签和收益率曲线。
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "").strip()
+
 # ---------------------------------------------------------------- 配置
 
 FRED_SERIES = {
@@ -71,13 +75,39 @@ def _rows_from_closes(closes, days=400):
     return out[-days:]
 
 
-def fred_series(series_id, days=400, alias=None):
-    """抓取 FRED 序列，返回 [(date_str, value), ...]，失败返回 []
+def fred_api(series_id, days=400):
+    """FRED 官方 API（api.stlouisfed.org）。需要 FRED_API_KEY。
 
-    三级降级：
-      1. FRED 带 cosd/coed（响应更小，降低超时概率）→ 重试 2 次
-      2. FRED 不带日期参数的原始 URL
-      3. Yahoo 指数别名兜底（仅 vix/sp500/ust10/dxy 有）
+    实测可达性：GitHub Actions ✅ 通（约 1.5s）；中国大陆 ❌ 不通。
+    跟下面的 CSV 接口正好互补，所以两个都要留着。
+    """
+    if not FRED_API_KEY:
+        return []
+    end = NOW.date()
+    start = end - timedelta(days=730)
+    url = ("https://api.stlouisfed.org/fred/series/observations"
+           f"?series_id={series_id}&api_key={FRED_API_KEY}"
+           f"&file_type=json&observation_start={start.isoformat()}"
+           f"&observation_end={end.isoformat()}")
+    r = requests.get(url, headers=UA, timeout=15)
+    r.raise_for_status()
+    obs = (r.json() or {}).get("observations") or []
+    rows = []
+    for o in obs:
+        v = str(o.get("value", "")).strip()
+        if v in (".", "", "None"):
+            continue
+        try:
+            rows.append((o["date"], float(v)))
+        except (KeyError, ValueError):
+            continue
+    return rows[-days:] if len(rows) >= 30 else []
+
+
+def fred_csv(series_id, days=400):
+    """FRED CSV 图形接口（fred.stlouisfed.org），不需要 key。
+
+    实测可达性：中国大陆 ✅ 通；GitHub Actions ❌ 被 CDN 掐断（超时 / HTTP2 INTERNAL_ERROR）。
     """
     end = NOW.date()
     start = end - timedelta(days=730)
@@ -86,29 +116,48 @@ def fred_series(series_id, days=400, alias=None):
         f"?id={series_id}&cosd={start.isoformat()}&coed={end.isoformat()}",
         f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}",
     ]
+    for url in urls:
+        try:
+            r = requests.get(url, headers=UA, timeout=12)
+            r.raise_for_status()
+            rows = []
+            for line in r.text.strip().split("\n")[1:]:
+                parts = line.split(",")
+                if len(parts) != 2:
+                    continue
+                d, v = parts[0].strip(), parts[1].strip()
+                if v in (".", "", "nan"):
+                    continue
+                try:
+                    rows.append((d, float(v)))
+                except ValueError:
+                    continue
+            if len(rows) >= 30:
+                return rows[-days:]
+        except Exception as e:
+            log(f"  ! FRED CSV {series_id} 失败: {str(e)[:70]}")
+    return []
 
-    for attempt in range(2):
-        for url in urls:
-            try:
-                r = requests.get(url, headers=UA, timeout=20)
-                r.raise_for_status()
-                rows = []
-                for line in r.text.strip().split("\n")[1:]:
-                    parts = line.split(",")
-                    if len(parts) != 2:
-                        continue
-                    d, v = parts[0].strip(), parts[1].strip()
-                    if v in (".", "", "nan"):
-                        continue
-                    try:
-                        rows.append((d, float(v)))
-                    except ValueError:
-                        continue
-                if len(rows) >= 30:
-                    return rows[-days:]
-            except Exception as e:
-                log(f"  ! FRED {series_id} 第{attempt + 1}次失败: {str(e)[:70]}")
-                time.sleep(1.5 * (attempt + 1))
+
+def fred_series(series_id, days=400, alias=None):
+    """抓取 FRED 序列，返回 [(date_str, value), ...]，失败返回 []
+
+    三级降级：
+      1. 官方 API（有 FRED_API_KEY 时）—— Actions 上唯一能通的路
+      2. CSV 图形接口（免 key）—— 大陆本地能通，Actions 上不通
+      3. Yahoo 指数别名兜底（仅 vix/sp500/ust10/dxy 有）
+    """
+    if FRED_API_KEY:
+        try:
+            rows = fred_api(series_id, days)
+            if rows:
+                return rows
+        except Exception as e:
+            log(f"  ! FRED API {series_id} 失败: {str(e)[:70]}")
+
+    rows = fred_csv(series_id, days)
+    if rows:
+        return rows
 
     if alias:
         log(f"  · FRED {series_id} 不可用，改用 Yahoo {alias}")
