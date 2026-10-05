@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>市场自检</title>
+<style>
+:root{
+  --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
+  --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#f85149; --down:#3fb950;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+  padding:env(safe-area-inset-top) 14px 40px}
+.wrap{max-width:720px;margin:0 auto}
+h1{font-size:19px;margin:18px 0 4px;font-weight:600}
+.sub{color:var(--dim);font-size:12px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:6px 4px;margin-bottom:14px;overflow:hidden}
+h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
+tr:first-child td{border-top:none}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.dim{color:var(--dim);font-size:12px}
+.sym{font-weight:600}
+.note{color:var(--dim);font-weight:400;font-size:11px;margin-left:6px}
+.sig{font-size:12.5px;color:var(--text)}
+.up{color:var(--up)} .down{color:var(--down)}
+tr.red td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+tr.yellow td:first-child{box-shadow:inset 3px 0 0 var(--yellow)}
+tr.green td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+tr.gray td{color:var(--dim)}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+tr.red .badge{background:rgba(248,81,73,.15);color:var(--red)}
+tr.yellow .badge{background:rgba(210,153,34,.15);color:var(--yellow)}
+tr.green .badge{background:rgba(63,185,80,.15);color:var(--green)}
+.overall{border-radius:12px;padding:14px 16px;margin-bottom:14px;
+  font-weight:600;font-size:15px;border:1px solid var(--line)}
+.o-green{background:rgba(63,185,80,.12);color:var(--green)}
+.o-yellow{background:rgba(210,153,34,.14);color:var(--yellow)}
+.o-red{background:rgba(248,81,73,.14);color:var(--red)}
+.foot{color:var(--dim);font-size:11.5px;text-align:center;margin-top:22px;line-height:1.7}
+.quiet{color:var(--dim);font-size:12px;padding:8px 12px 12px}
+.warn{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
+  color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px}
+</style>
+</head>
+<body><div class="wrap">
+<h1>市场自检</h1>
+<div class="sub">2026-10-05 22:04 北京时间 · 数据自动更新</div>
+
+<div class="overall o-green">绿框 · 不用动</div>
+
+
+<div class="card">
+<h2>宏观</h2>
+<table>
+<tr class="gray"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
+['<tr class="green"><td>跑路价签</td><td class="num">324 bp</td><td class="num dim">+44</td><td>平静</td></tr>', '<tr class="green"><td>VIX</td><td class="num">15.3</td><td class="num dim">—</td><td>平静</td></tr>', '<tr class="green"><td>标普500</td><td class="num">−1.0%</td><td class="num dim">—</td><td>第0档</td></tr>', '<tr class="gray"><td>10Y美债</td><td class="num">5.24%</td><td class="num dim">—</td><td>—</td></tr>', '<tr class="green"><td>收益率曲线</td><td class="num">0.45</td><td class="num dim">—</td><td>正常</td></tr>', '<tr class="gray"><td>美元指数</td><td class="num">120.33</td><td class="num dim">—</td><td>—</td></tr>']
+</table>
+</div>
+
+<div class="card">
+<h2>今晚重点关注</h2>
+<table><tr class="red"><td class="sym">BRK-B<span class="note">占位1股</span></td><td class="num">502.65</td><td class="num up">+0.43%</td><td class="sig">距加仓价 480.00 还差 4.7%</td></tr><tr class="red"><td class="sym">TLT<span class="note">长债-观察</span></td><td class="num">77.48</td><td class="num down">-0.30%</td><td class="sig">RSI 24 超卖 · 触及52周新低</td></tr><tr class="red"><td class="sym">HYG<span class="note">垃圾债-观察</span></td><td class="num">76.91</td><td class="num up">+0.01%</td><td class="sig">RSI 18 超卖</td></tr><tr class="yellow"><td class="sym">AVGO</td><td class="num">355.14</td><td class="num up">+3.35%</td><td class="sig">波动 +3.3%</td></tr><tr class="yellow"><td class="sym">GOOGL</td><td class="num">343.50</td><td class="num up">+1.56%</td><td class="sig">上穿200日均线</td></tr></table>
+<div class="quiet">其余 11 只 / 共 16 只自选无异动</div>
+</div>
+
+<div class="foot">
+宏观：FRED · 个股：Nasdaq<br>
+跑路价签 &lt;350 平静 · 350–400 收紧 · ≥400 危机确认
+</div>
+</div></body></html>

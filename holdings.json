@@ -1,0 +1,26 @@
+{
+  "_说明": [
+    "watch = 你要监控的自选股 / ETF，Yahoo 代码（BRK.B 要写成 BRK-B）",
+    "note  = 备注，会显示在代码旁边",
+    "trigger = 你的加仓触发价，跌到这里会标红提醒；不需要就删掉这一行",
+    "改完直接 Commit，下次自动生效。成本价和数量不要写在这里（页面是公开的）"
+  ],
+  "watch": {
+    "UNH":   { "note": "主力", "trigger": 350 },
+    "AVGO":  { "note": "" },
+    "GOOGL": { "note": "" },
+    "BRK-B": { "note": "占位1股", "trigger": 480 },
+    "LMT":   { "note": "430买入", "trigger": 400 },
+    "NTNX":  { "note": "51买入" },
+    "PANW":  { "note": "140买入" },
+    "UBER":  { "note": "" },
+    "APH":   { "note": "" },
+    "CRSP":  { "note": "" },
+    "SGOV":  { "note": "弹药仓", "quiet": true },
+    "SPY":   { "note": "标普" },
+    "QQQ":   { "note": "纳指" },
+    "XLV":   { "note": "医疗" },
+    "TLT":   { "note": "长债-观察" },
+    "HYG":   { "note": "垃圾债-观察" }
+  }
+}
