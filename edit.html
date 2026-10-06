@@ -137,6 +137,12 @@ kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
   </div>
 
   <p class="note" style="margin-top:18px">
+    手机上也要改？点下面生成一条<b>带令牌的链接</b>，发到微信里用手机打开就行，
+    不用在手机上再贴一次。这条链接等于你的令牌，别发给别人。<br>
+    <button id="btnLink" style="padding:5px 10px;font-size:12px;margin-top:6px">生成手机用的链接</button>
+    <span id="linkBox" style="display:block;margin-top:7px;word-break:break-all;color:#6ba3f0;font-size:11px"></span>
+  </p>
+  <p class="note">
     <button id="btnWipe" class="danger" style="padding:5px 10px;font-size:12px">清除本机令牌</button>
   </p>
 </div>
@@ -151,7 +157,9 @@ const msg=document.getElementById('msg');
 const setMsg=(t,c)=>{msg.textContent=t||'';msg.className=c||'';};
 const $=id=>document.getElementById(id);
 
-let TOKEN=localStorage.getItem(TKEY)||'';
+let TOKEN='';
+try{TOKEN=localStorage.getItem(TKEY)||'';}catch(e){}
+function saveTok(t){TOKEN=t;try{localStorage.setItem(TKEY,t);return true;}catch(e){return false;}}
 let SHA='';
 let data={positions:{},watch:{}};
 let extra={};
@@ -165,10 +173,22 @@ const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 async function gh(method,path,body){
   const opt={method:method,headers:{Authorization:'token '+TOKEN,Accept:'application/vnd.github+json'}};
   if(body!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
-  const r=await fetch(API+path,opt);
-  let j={};
-  try{j=await r.json();}catch(e){}
+  let r,j={};
+  try{
+    r=await fetch(API+path,opt);
+    try{j=await r.json();}catch(e){}
+  }catch(e){
+    return {ok:false,status:0,data:{message:'连不上 api.github.com（'+e.message+'）'}};
+  }
   return {ok:r.ok,status:r.status,data:j};
+}
+function whyFail(status,dflt){
+  if(status===0)return '连不上 api.github.com：国内网络/公司代理可能拦了它，换个网络或开代理再试';
+  if(status===401)return '令牌无效或已过期（401）';
+  if(status===403)return '令牌没权限或被限流（403）：确认它是 fine-grained 且勾了 Contents: Read and write';
+  if(status===404)return '找不到 holdings.json，或令牌无权访问这个仓库（404）';
+  if(status===409)return '和线上版本冲突（409）';
+  return dflt||('HTTP '+status);
 }
 
 /* ---------- CSV 识别 ---------- */
@@ -240,7 +260,11 @@ function parseCsv(text){
 async function load(){
   setMsg('正在读取清单…','busy');
   const r=await gh('GET','/contents/holdings.json?ref='+BRANCH);
-  if(!r.ok||!r.data.content){setMsg('读取失败：'+(r.data.message||r.status),'err');return;}
+  if(!r.ok||!r.data.content){
+    setMsg('读取失败：'+whyFail(r.status,r.data.message),'err');
+    $('authCard').classList.remove('hide');
+    return;
+  }
   try{
     const c=JSON.parse(b64dec(r.data.content));
     data={positions:c.positions||{},watch:c.watch||{}};
@@ -321,7 +345,8 @@ $('btnSave').onclick=async e=>{
     setMsg('已保存。看板正在自动重跑，约 1 分钟后刷新看板页面即可。','ok');
     setTimeout(loadRun,8000);
   }else{
-    setMsg('保存失败：'+(r.data.message||r.status)+(r.status===409?'（冲突，点「重新载入」再改一次）':''),'err');
+    setMsg('保存失败：'+whyFail(r.status,r.data.message)+
+      (r.status===409?'（和线上版本冲突，点「重新载入」再改一次）':''),'err');
   }
   e.target.disabled=false;
 };
@@ -389,18 +414,44 @@ $('btnApply').onclick=()=>{
 };
 
 /* ---------- 令牌 ---------- */
-$('btnTok').onclick=()=>{
-  const t=$('tok').value.trim();
+async function enter(t){
   if(!t){setMsg('令牌不能为空','err');return;}
-  TOKEN=t;localStorage.setItem(TKEY,t);
+  if(!/^(ghp_|github_pat_)/.test(t)){
+    setMsg('这不像 GitHub 令牌：应以 ghp_ 或 github_pat_ 开头','err');return;}
+  const kept=saveTok(t);
   $('authCard').classList.add('hide');$('main').classList.remove('hide');
-  setMsg('');load();
-};
+  if(!kept)setMsg('这个浏览器不让存本地数据，令牌只在本次会话有效，关掉页面要重贴','err');
+  else setMsg('');
+  await load();
+}
+$('btnTok').onclick=()=>enter($('tok').value.trim());
 $('btnWipe').onclick=()=>{
   if(!confirm('清除本机令牌？下次打开要重新贴一次。'))return;
-  localStorage.removeItem(TKEY);location.reload();
+  try{localStorage.removeItem(TKEY);}catch(e){}
+  location.reload();
 };
 $('tok').onkeydown=e=>{if(e.key==='Enter')$('btnTok').click();};
+
+$('btnLink').onclick=()=>{
+  const u=location.origin+location.pathname+'#'+TOKEN;
+  $('linkBox').textContent=u;
+  let copied=false;
+  try{navigator.clipboard.writeText(u);copied=true;}catch(e){}
+  setMsg(copied?'已复制：发到微信里用手机打开，令牌就不用在手机上再贴一次'
+                :'链接已显示在下面，长按复制后发到手机','ok');
+};
+
+window.addEventListener('error',e=>setMsg('页面脚本出错：'+e.message,'err'));
+window.addEventListener('unhandledrejection',e=>setMsg('请求出错：'+(e.reason&&e.reason.message||e.reason),'err'));
+
+// 链接里带令牌（edit.html#github_pat_xxx）：手机扫码/点开即自动填好，不用手打
+(function(){
+  const h=(location.hash||'').replace(/^#/,'').trim();
+  if(h&&/^(ghp_|github_pat_)/.test(h)){
+    saveTok(h);
+    try{history.replaceState(null,'',location.pathname+(location.search||''));}catch(e){}
+  }
+})();
 
 if(TOKEN){$('authCard').classList.add('hide');$('main').classList.remove('hide');load();}
 </script>
