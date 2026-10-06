@@ -664,7 +664,7 @@ def render(macro, items, watch_count, data_down=False):
             chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
             note = f'<span class="note">{d["note"]}</span>' if d["note"] else ""
             out += (
-                f'<tr class="{cls}"><td class="sym">{d["symbol"]}{note}</td>'
+                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}</td>'
                 f'<td class="num">{fmt(d["price"])}</td>'
                 f'<td class="num {chg_cls}">{chg_txt}</td>'
                 f'<td class="sig">{sig}</td></tr>'
