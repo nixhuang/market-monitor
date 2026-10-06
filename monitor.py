@@ -47,6 +47,10 @@ THRESH = {
     "vix":     {"green": 20,  "yellow": 30,  "red": 40},
 }
 
+# 布林带"逼近"阈值（%）：距上轨/下轨不足这个百分比就算命中，不用等真的穿过去
+# 因为盘中价格一直在动，等收盘才确认会错过时机
+BOLL_NEAR_PCT = 0.5
+
 
 def log(msg):
     print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -564,13 +568,24 @@ def analyze_symbol(sym, cfg, data, group="watch"):
             signals.append(f"距加仓价 {tstr} 还差 {gap:.1f}%")
             bump("red")
 
-    # 布林带（20日 / 2倍标准差）：触上轨视为过热加速=红，触下轨视为超跌=黄
-    if boll_up is not None and price >= boll_up:
-        signals.append(f"触及布林上轨 {boll_up:,.2f}")
-        bump("red")
-    elif boll_dn is not None and price <= boll_dn:
-        signals.append(f"触及布林下轨 {boll_dn:,.2f}")
-        bump("yellow")
+    # 布林带（20日 / 2倍标准差）：逼近即算，盘中不用等收盘真的穿过去
+    # gap = 距离轨道还差百分之多少；<=0 表示已经穿过去了
+    if boll_up is not None:
+        gap_up = (boll_up - price) / boll_up * 100
+        if gap_up <= 0:
+            signals.append(f"突破布林上轨 {boll_up:,.2f}")
+            bump("red")
+        elif gap_up <= BOLL_NEAR_PCT:
+            signals.append(f"逼近布林上轨 还差{gap_up:.2f}%")
+            bump("red")
+    if boll_dn is not None:
+        gap_dn = (price - boll_dn) / boll_dn * 100
+        if gap_dn <= 0:
+            signals.append(f"跌破布林下轨 {boll_dn:,.2f}")
+            bump("yellow")
+        elif gap_dn <= BOLL_NEAR_PCT:
+            signals.append(f"逼近布林下轨 还差{gap_dn:.2f}%")
+            bump("yellow")
 
     # 🟡 黄色规则
     if chg is not None and 2 <= abs(chg) < 4:
@@ -619,6 +634,50 @@ def fmt(v, unit="", nd=2):
     if v is None:
         return "—"
     return f"{v:,.{nd}f}{unit}"
+
+
+# 看板页的「立即重跑」按钮脚本。写成独立常量而不是塞进 f-string 模板，
+# 是为了不用把每个 { } 都转义成 {{ }}
+RUN_JS = """
+<script>
+(function(){
+  var box=document.getElementById('runMsg');
+  var btn=document.getElementById('btnRunNow');
+  if(!btn)return;
+  btn.onclick=async function(){
+    var t='';
+    try{t=localStorage.getItem('mm_gh_token_v1')||'';}catch(e){}
+    if(!t){
+      box.textContent='还没填令牌：去「改自选清单」页贴一次，回来就能一键重跑';
+      box.className='err';
+      return;
+    }
+    btn.disabled=true;
+    box.textContent='正在触发…';
+    box.className='';
+    try{
+      var r=await fetch('https://api.github.com/repos/nixhuang/market-monitor/actions/workflows/daily.yml/dispatches',{
+        method:'POST',
+        headers:{Authorization:'token '+t,Accept:'application/vnd.github+json','Content-Type':'application/json'},
+        body:JSON.stringify({ref:'main'})
+      });
+      if(r.status===204||r.ok){
+        box.textContent='已触发，约 1 分钟后自动刷新（盘中拿到的是延迟约 15 分钟的报价）';
+        box.className='ok';
+        setTimeout(function(){location.reload();},70000);
+      }else{
+        box.textContent='触发失败 HTTP '+r.status+'（令牌过期？去编辑页重填一次）';
+        box.className='err';
+      }
+    }catch(e){
+      box.textContent='连不上 GitHub：'+e.message;
+      box.className='err';
+    }
+    btn.disabled=false;
+  };
+})();
+</script>
+"""
 
 
 def render(macro, items, watch_count, data_down=False):
@@ -699,6 +758,8 @@ def render(macro, items, watch_count, data_down=False):
     src_name = {"yahoo": "Yahoo Finance", "stooq": "Stooq", "nasdaq": "Nasdaq"}
     srcs = sorted({d.get("source") for d in items if d.get("source")})
     src_txt = " · ".join(src_name.get(x, x) for x in srcs) if srcs else "本轮不可用"
+    # 之前漏了 join，整段被当成 list 的 str() 插进表格，页面上会多出 [' 和 ']
+    rows_macro = "".join(rows_macro)
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -750,6 +811,13 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 .quiet{{color:var(--dim);font-size:12px;padding:8px 12px 12px}}
 .warn{{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
   color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px}}
+.acts{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}}
+.acts button{{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
+  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}}
+.acts button:disabled{{opacity:.5;cursor:not-allowed}}
+#runMsg{{font-size:12px;color:var(--dim);flex:1;min-width:180px;line-height:1.5}}
+#runMsg.ok{{color:var(--green)}}
+#runMsg.err{{color:var(--red)}}
 </style>
 </head>
 <body><div class="wrap">
@@ -778,9 +846,15 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 <div class="foot">
 宏观：FRED · 个股：{src_txt}<br>
 跑路价签 &lt;350 平静 · 350–400 收紧 · ≥400 危机确认<br>
-布林带 20 日 / 2 倍标准差 · 触上轨红 · 触下轨黄<br>
-<a href="./edit.html" style="color:#6ba3f0;text-decoration:none">改自选清单 →</a>
+布林带 20 日 / 2 倍标准差 · 逼近上下轨即算（差 ≤{BOLL_NEAR_PCT}%）
 </div>
+
+<div class="acts">
+<button id="btnRunNow">立即重跑</button>
+<a href="./edit.html" style="color:#6ba3f0;text-decoration:none">改自选清单 →</a>
+<span id="runMsg"></span>
+</div>
+{RUN_JS}
 </div></body></html>"""
 
 

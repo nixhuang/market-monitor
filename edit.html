@@ -126,7 +126,11 @@ kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
       <label class="filebtn">持仓 CSV<input type="file" id="filePos" accept=".csv,.txt,.tsv" hidden></label>
       <label class="filebtn">关注 CSV<input type="file" id="fileWatch" accept=".csv,.txt,.tsv" hidden></label>
     </div>
-    <div class="csvinfo" id="csvInfo">支持富途 / 嘉信 / 无表头导出，自动识别代码列。</div>
+    <div class="csvinfo" id="csvInfo">
+      持仓 CSV = <b>以这份为准整组替换</b>，清单里有、这份里没有的会被移除<br>
+      关注 CSV = <b>只增不删</b>，且持仓里已经有的不再重复加入<br>
+      港股 / A股（0700.HK、600519.SS 这类带点的）暂不支持，自动忽略
+    </div>
     <button class="primary hide" id="btnApply">确认导入</button>
   </div>
 
@@ -433,16 +437,37 @@ function readCsv(input,kind){
   fr.onload=()=>{
     const res=parseCsv(fr.result);
     if(!res.symbols.length){setMsg('没识别出代码，换个文件或手动添加','err');return;}
+    // 代码里带点的都是非美股（0700.HK / 600519.SS），脚本没做货币和时区适配，直接忽略
+    const skipped=res.symbols.filter(s=>s.indexOf('.')>=0);
+    let syms=res.symbols.filter(s=>s.indexOf('.')<0);
+    // 关注组：持仓里已经有的不重复加入
+    let dupPos=[];
+    if(kind==='watch'){
+      const posNorm={};
+      Object.keys(data.positions||{}).forEach(k=>{posNorm[normTicker(k)]=1;});
+      syms=syms.filter(s=>{if(posNorm[s]){dupPos.push(s);return false;}return true;});
+    }
+    if(!syms.length){
+      setMsg('这份 CSV 里没有可用的美股代码'+(skipped.length?'（'+skipped.length+' 只港股/A股已忽略）':''),'err');
+      return;
+    }
     const old=data[kind]||{};
     const oldNorm={};Object.keys(old).forEach(k=>{oldNorm[normTicker(k)]=k;});
     const added=[],kept=[];
-    res.symbols.forEach(s=>{(oldNorm[s]!==undefined)?kept.push(s):added.push(s);});
-    const removed=Object.keys(old).filter(k=>res.symbols.indexOf(normTicker(k))<0);
-    pending={kind:kind,symbols:res.symbols,oldNorm:oldNorm};
-    $('csvInfo').innerHTML='<b>'+(kind==='positions'?'持仓':'关注')+'</b>：识别到 '+res.symbols.length+' 只（'+res.how+'）<br>'
+    syms.forEach(s=>{(oldNorm[s]!==undefined)?kept.push(s):added.push(s);});
+    // 持仓 = 整组替换；关注 = 只增不删
+    const removed=(kind==='positions')
+      ? Object.keys(old).filter(k=>syms.indexOf(normTicker(k))<0) : [];
+    pending={kind:kind,symbols:syms,oldNorm:oldNorm};
+    $('csvInfo').innerHTML='<b>'+(kind==='positions'?'持仓':'关注')+'</b>：识别到 '
+      +res.symbols.length+' 只（'+res.how+'）<br>'
       +'新增 '+added.length+'：'+(added.slice(0,20).join(' ')||'—')+'<br>'
       +'保留 '+kept.length+'：'+(kept.slice(0,20).join(' ')||'—')+'<br>'
-      +'移除 '+removed.length+'：'+(removed.slice(0,20).join(' ')||'—');
+      +(kind==='positions'
+        ? '移除 '+removed.length+'：'+(removed.slice(0,20).join(' ')||'—')+'（以这份为准）'
+        : '不删除任何原有标的（关注组只增不删）')
+      +(skipped.length?'<br>忽略 '+skipped.length+' 只（港股/A股不支持）：'+skipped.slice(0,10).join(' '):'')
+      +(dupPos.length?'<br>已在持仓里、不再加入关注 '+dupPos.length+' 只：'+dupPos.slice(0,10).join(' '):'');
     $('btnApply').classList.remove('hide');
     setMsg('确认无误后点「确认导入」，然后别忘了点保存','ok');
     input.value='';
@@ -454,13 +479,21 @@ $('fileWatch').onchange=e=>readCsv(e.target,'watch');
 $('btnApply').onclick=()=>{
   if(!pending)return;
   const kind=pending.kind,old=data[kind]||{},next={};
-  pending.symbols.forEach(s=>{
-    const src=pending.oldNorm[s];
-    next[s]=(src!==undefined)?JSON.parse(JSON.stringify(old[src])):{};
-  });
+  if(kind==='positions'){
+    // 整组替换：以这份 CSV 为准，已有的继承备注和加仓价
+    pending.symbols.forEach(s=>{
+      const src=pending.oldNorm[s];
+      next[s]=(src!==undefined)?JSON.parse(JSON.stringify(old[src])):{};
+    });
+  }else{
+    // 只增不删：原有全部保留，只把新的追加进去
+    Object.keys(old).forEach(k=>{next[k]=old[k];});
+    pending.symbols.forEach(s=>{if(pending.oldNorm[s]===undefined)next[s]={};});
+  }
   data[kind]=next;render();touch();
   $('btnApply').classList.add('hide');
-  setMsg('已导入 '+pending.symbols.length+' 只，点保存才写入仓库','ok');
+  setMsg((kind==='positions'?'已按这份 CSV 覆盖持仓 ':'已追加到关注 ')
+    +pending.symbols.length+' 只，点保存才写入仓库','ok');
   pending=null;
 };
 
