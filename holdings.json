@@ -8,23 +8,37 @@
     "也可以直接在控制台上传 CSV 自动生成这两组（只取代码，数量/成本丢弃）"
   ],
   "positions": {
-    "UNH":   { "note": "主力", "trigger": 350 },
-    "AVGO":  { "note": "" },
-    "GOOGL": { "note": "" },
-    "BRK-B": { "note": "占位1股", "trigger": 480 },
-    "LMT":   { "note": "430买入", "trigger": 400 },
-    "NTNX":  { "note": "51买入" },
-    "PANW":  { "note": "140买入" },
-    "UBER":  { "note": "" },
-    "APH":   { "note": "" },
-    "CRSP":  { "note": "" },
-    "SGOV":  { "note": "弹药仓", "quiet": true }
+    "BRK-B-US": {},
+    "HII-US": {},
+    "APH-US": {},
+    "AVGO-US": {},
+    "CRSP-US": {},
+    "GOOGL-US": {},
+    "LMT-US": {},
+    "NTNX-US": {},
+    "ZS-US": {},
+    "UNH-US": {},
+    "UBER-US": {},
+    "DRAM-US": {},
+    "SPYM-US": {},
+    "SCHD-US": {},
+    "QQQM-US": {}
   },
   "watch": {
-    "SPY":   { "note": "标普" },
-    "QQQ":   { "note": "纳指" },
-    "XLV":   { "note": "医疗" },
-    "TLT":   { "note": "长债-观察" },
-    "HYG":   { "note": "垃圾债-观察" }
+    "SPY": {
+      "note": "标普"
+    },
+    "QQQ": {
+      "note": "纳指"
+    },
+    "XLV": {
+      "note": "医疗"
+    },
+    "TLT": {
+      "note": "长债-观察"
+    },
+    "HYG": {
+      "note": "垃圾债-观察"
+    }
   }
 }
