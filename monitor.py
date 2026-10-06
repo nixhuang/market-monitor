@@ -41,15 +41,77 @@ FRED_SERIES = {
     "dxy":      {"id": "DTWEXBGS",     "name": "美元指数",     "unit": "",    "scale": 1},
 }
 
-# 宏观阈值（跑路价签单位为 bp）
-THRESH = {
-    "hy_oas":  {"green": 350, "yellow": 400, "red": 400},   # >=400 危机确认
-    "vix":     {"green": 20,  "yellow": 30,  "red": 40},
+# ---------------------------------------------------------------- 可调阈值
+# 这些默认值会被同目录下的 settings.json 覆盖；settings.json 缺失或字段写错就退回默认值。
+# 你可以在 edit.html 里直接改，改完保存会自动重跑，不用碰代码。
+DEFAULT_SETTINGS = {
+    # 布林带
+    "boll_n": 20,           # 均线周期
+    "boll_k": 2.0,          # 标准差倍数
+    "boll_near_pct": 0.5,   # 距上/下轨不足 x% 就算命中（盘中不用等真的穿过去）
+
+    # 个股
+    "chg_red": 4.0,         # 单日涨跌 >= x% → 红
+    "chg_yellow": 2.0,      # 单日涨跌 >= x% 且 < chg_red → 黄
+    "rsi_high": 70,         # RSI >= x → 红（超买）
+    "rsi_low": 30,          # RSI <= x → 红（超卖）
+    "near_52w_low_pct": 1.0,  # 距 52 周低点不足 x% → 红
+    "trigger_gap_pct": 5.0,  # 距加仓价不足 x% → 红（已跌破则无视这条直接红）
+    "vol_ratio": 1.5,       # 量比 >= x 倍 → 黄
+    "quiet_chg": 2.0,       # quiet 标的（货币基金等）单日涨跌 >= x% → 黄
+
+    # 宏观
+    "hy_green": 350,        # 跑路价签 bp：< 350 绿 / 350~ 黄 / >= 400 红
+    "hy_yellow": 400,
+    "hy_red": 400,
+    "vix_green": 20,        # VIX：< 20 绿 / 20~ 黄 / >= 40 红
+    "vix_yellow": 30,
+    "vix_red": 40,
+
+    # 行情源：1=用 Nasdaq 实时报价覆盖最新价（0 延迟），0=只用日线收盘价
+    "use_realtime": 1,
 }
+
+
+try:
+    from zoneinfo import ZoneInfo
+    US_TZ = ZoneInfo("America/New_York")
+except Exception:                      # 没有 tzdata 时退回固定 -4（夏令时）
+    US_TZ = timezone(timedelta(hours=-4))
+
+
+def load_settings():
+    """读 settings.json 覆盖默认值。文件不存在 / 写错都安全退回默认值。"""
+    s = dict(DEFAULT_SETTINGS)
+    try:
+        with open("settings.json", encoding="utf-8") as f:
+            u = json.load(f)
+        if not isinstance(u, dict):
+            raise ValueError("settings.json 顶层不是对象")
+        for k, v in u.items():
+            if k not in s:
+                continue
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                continue  # 类型不对就跳过，不让它污染默认值
+            s[k] = type(DEFAULT_SETTINGS[k])(v)
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log(f"  ! settings.json 读取失败，用默认值：{e}")
+    return s
+
+
+S = load_settings()
 
 # 布林带"逼近"阈值（%）：距上轨/下轨不足这个百分比就算命中，不用等真的穿过去
 # 因为盘中价格一直在动，等收盘才确认会错过时机
-BOLL_NEAR_PCT = 0.5
+BOLL_NEAR_PCT = S["boll_near_pct"]
+
+# 宏观阈值（跑路价签单位为 bp）
+THRESH = {
+    "hy_oas":  {"green": S["hy_green"], "yellow": S["hy_yellow"], "red": S["hy_red"]},
+    "vix":     {"green": S["vix_green"], "yellow": S["vix_yellow"], "red": S["vix_red"]},
+}
 
 
 def log(msg):
@@ -282,7 +344,14 @@ def yahoo_history(symbol):
                 j = r.json()
                 res = j["chart"]["result"][0]
                 q = res["indicators"]["quote"][0]
-                closes = [c for c in q.get("close", []) if c is not None]
+                # 日期和收盘价要同步过滤，否则 dates 和 closes 会错位
+                _pairs = [
+                    (datetime.fromtimestamp(t, US_TZ).strftime("%Y-%m-%d"), c)
+                    for t, c in zip(res.get("timestamp") or [], q.get("close") or [])
+                    if c is not None
+                ]
+                dates = [d for d, _ in _pairs]
+                closes = [c for _, c in _pairs]
                 vols = [v for v in q.get("volume", []) if v is not None]
                 highs = [h for h in q.get("high", []) if h is not None]
                 lows = [l for l in q.get("low", []) if l is not None]
@@ -296,6 +365,7 @@ def yahoo_history(symbol):
                 # 统一用最后两根日线：closes[-1] 最新收盘，closes[-2] 上一交易日收盘。
                 return {
                     "closes": closes,
+                    "dates": dates,
                     "volumes": vols,
                     "highs": highs,
                     "lows": lows,
@@ -331,6 +401,7 @@ def stooq_history(symbol):
                 continue
             try:
                 rows.append({
+                    "d": p[0].strip(),
                     "o": float(p[1]), "h": float(p[2]), "l": float(p[3]),
                     "c": float(p[4]), "v": float(p[5]) if p[5] else 0.0,
                 })
@@ -340,6 +411,7 @@ def stooq_history(symbol):
             return None
         return {
             "closes": [r["c"] for r in rows],
+            "dates": [r["d"] for r in rows],
             "volumes": [r["v"] for r in rows],
             "highs": [r["h"] for r in rows],
             "lows": [r["l"] for r in rows],
@@ -351,6 +423,84 @@ def stooq_history(symbol):
     except Exception as e:
         log(f"  ! {symbol} stooq 失败: {e}")
         return None
+
+
+def _nasdaq_date(s):
+    """Nasdaq 的日期 '10/06/2026' → '2026-10-06'；认不出来返回 ''"""
+    try:
+        m, d, y = str(s).split("/")
+        return f"{y}-{m.zfill(2)}-{d.zfill(2)}"
+    except Exception:
+        return ""
+
+
+def nasdaq_realtime(symbol):
+    """Nasdaq 实时报价：返回 {"price": float, "ts": str}；拿不到返回 None
+
+    实测 api.nasdaq.com 的 /info 端点带 isRealTime=true，时间戳跟美东当前时间同步（0 延迟），
+    且中国大陆可直连、免 key。只用它取「最新价」，均线 / 布林 / RSI 仍用历史序列算。
+    注意 BRK-B 在这个源要写成 BRK.B，代码里已做变体尝试。
+    """
+    syms = [symbol]
+    if "-" in symbol:
+        syms.append(symbol.replace("-", "."))
+    hdr = dict(UA)
+    hdr.update({"Accept": "application/json", "Referer": "https://www.nasdaq.com/"})
+    for sym in syms:
+        for ac in ("stocks", "etf"):
+            try:
+                r = requests.get(
+                    f"https://api.nasdaq.com/api/quote/{sym}/info?assetclass={ac}",
+                    headers=hdr, timeout=12)
+                if r.status_code != 200:
+                    continue
+                p = ((r.json().get("data") or {}).get("primaryData") or {})
+                if not p.get("isRealTime"):
+                    continue
+                px = float(str(p.get("lastSalePrice", "")).replace("$", "").replace(",", ""))
+                if px <= 0:
+                    continue
+                return {"price": px, "ts": p.get("lastTradeTimestamp", "")}
+            except Exception:
+                continue
+    return None
+
+
+def apply_realtime(symbol, data):
+    """把实时价并进历史序列。
+
+    历史最后一根就是今天 → 替换它（收盘前它本来就是未定稿的那根）；
+    历史还没更新到今天 → 补一根新的，昨收顺延为 prev_close。
+    这样盘中重跑时 涨跌幅 / RSI / 均线 / 布林 全部按当前价算，而不是昨天的收盘价。
+    """
+    if not data or not S.get("use_realtime"):
+        return data
+    rt = nasdaq_realtime(symbol)
+    if not rt:
+        return data
+    px = rt["price"]
+    dates = data.get("dates") or []
+    today = datetime.now(US_TZ).strftime("%Y-%m-%d")
+    try:
+        if dates and dates[-1] == today:
+            data["closes"][-1] = px
+            if data.get("highs"):
+                data["highs"][-1] = max(data["highs"][-1], px)
+            if data.get("lows"):
+                data["lows"][-1] = min(data["lows"][-1], px)
+        else:
+            data["prev_close"] = data["price"]
+            data["closes"].append(px)
+            if data.get("highs"):
+                data["highs"].append(px)
+            if data.get("lows"):
+                data["lows"].append(px)
+        data["price"] = px
+        data["realtime"] = True
+        data["rt_ts"] = rt["ts"]
+    except Exception as e:
+        log(f"  ! {symbol} 实时价合并失败: {e}")
+    return data
 
 
 def nasdaq_history(symbol):
@@ -385,6 +535,8 @@ def nasdaq_history(symbol):
                 for row in rows:
                     try:
                         parsed.append({
+                            # Nasdaq 的日期是 10/06/2026 这种，统一成 2026-10-06 好比较
+                            "d": _nasdaq_date(row.get("date", "")),
                             "c": float(str(row["close"]).replace("$", "").replace(",", "")),
                             "h": float(str(row["high"]).replace("$", "").replace(",", "")),
                             "l": float(str(row["low"]).replace("$", "").replace(",", "")),
@@ -398,6 +550,7 @@ def nasdaq_history(symbol):
                 parsed.reverse()  # 旧 → 新
                 return {
                     "closes": [p["c"] for p in parsed],
+                    "dates": [p["d"] for p in parsed],
                     "volumes": [p["v"] for p in parsed],
                     "highs": [p["h"] for p in parsed],
                     "lows": [p["l"] for p in parsed],
@@ -452,13 +605,13 @@ def fetch_history(symbol):
     data = yahoo_history(symbol)
     if data:
         data["source"] = "yahoo"
-        return data
+        return apply_realtime(symbol, data)
     time.sleep(1.2)
     data = stooq_history(symbol)
     if data:
-        return data
+        return apply_realtime(symbol, data)
     time.sleep(0.8)
-    return nasdaq_history(symbol)
+    return apply_realtime(symbol, nasdaq_history(symbol))
 
 
 def calc_rsi(prices, period=14):
@@ -512,7 +665,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
     vol_ratio = (vols[-1] / sma(vols, 20)) if vols and sma(vols, 20) else None
     ma50 = sma(closes, 50)
     ma200 = sma(closes, 200)
-    boll_mid, boll_up, boll_dn = boll(closes)
+    boll_mid, boll_up, boll_dn = boll(closes, int(S["boll_n"]), float(S["boll_k"]))
 
     signals = []
     level = "green"
@@ -520,7 +673,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
     # quiet 标的（如 SGOV 货币基金）：波动极小，RSI/均线无意义，
     # 只在真正异动（>=2%）时才出声，避免噪音
     if cfg.get("quiet"):
-        if chg is not None and abs(chg) >= 2:
+        if chg is not None and abs(chg) >= S["quiet_chg"]:
             return "yellow", [f"异动 {chg:+.1f}%"], {
                 "symbol": sym, "note": cfg.get("note", ""), "price": price,
                 "chg": chg, "rsi": None, "dist_high": dist_high,
@@ -545,14 +698,14 @@ def analyze_symbol(sym, cfg, data, group="watch"):
             level = lv
 
     # 🔴 红色规则
-    if chg is not None and abs(chg) >= 4:
+    if chg is not None and abs(chg) >= S["chg_red"]:
         signals.append(f"异动 {chg:+.1f}%")
         bump("red")
-    if rsi is not None and (rsi >= 70 or rsi <= 30):
-        tag = "超买" if rsi >= 70 else "超卖"
+    if rsi is not None and (rsi >= S["rsi_high"] or rsi <= S["rsi_low"]):
+        tag = "超买" if rsi >= S["rsi_high"] else "超卖"
         signals.append(f"RSI {rsi:.0f} {tag}")
         bump("red")
-    if dist_low <= 1:
+    if dist_low <= S["near_52w_low_pct"]:
         signals.append("触及52周新低")
         bump("red")
 
@@ -564,7 +717,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         if gap <= 0:
             signals.append(f"已跌破加仓价 {tstr}")
             bump("red")
-        elif gap <= 5:
+        elif gap <= S["trigger_gap_pct"]:
             signals.append(f"距加仓价 {tstr} 还差 {gap:.1f}%")
             bump("red")
 
@@ -575,7 +728,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         if gap_up <= 0:
             signals.append(f"突破布林上轨 {boll_up:,.2f}")
             bump("red")
-        elif gap_up <= BOLL_NEAR_PCT:
+        elif gap_up <= S["boll_near_pct"]:
             signals.append(f"逼近布林上轨 还差{gap_up:.2f}%")
             bump("red")
     if boll_dn is not None:
@@ -583,15 +736,15 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         if gap_dn <= 0:
             signals.append(f"跌破布林下轨 {boll_dn:,.2f}")
             bump("yellow")
-        elif gap_dn <= BOLL_NEAR_PCT:
+        elif gap_dn <= S["boll_near_pct"]:
             signals.append(f"逼近布林下轨 还差{gap_dn:.2f}%")
             bump("yellow")
 
     # 🟡 黄色规则
-    if chg is not None and 2 <= abs(chg) < 4:
+    if chg is not None and S["chg_yellow"] <= abs(chg) < S["chg_red"]:
         signals.append(f"波动 {chg:+.1f}%")
         bump("yellow")
-    if vol_ratio and vol_ratio >= 1.5:
+    if vol_ratio and vol_ratio >= S["vol_ratio"]:
         signals.append(f"量比 {vol_ratio:.1f}x")
         bump("yellow")
 
@@ -619,6 +772,8 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         "vol_ratio": vol_ratio,
         "trigger": trig,
         "source": data.get("source", ""),
+        "realtime": bool(data.get("realtime")),
+        "rt_ts": data.get("rt_ts", ""),
         "group": group,
         "boll_up": boll_up,
         "boll_dn": boll_dn,
@@ -752,12 +907,15 @@ def render(macro, items, watch_count, data_down=False):
         overall, overall_txt = "red", "利差一周急剧扩大 · 立刻警戒"
     elif sp.get("ok") and (sp.get("drawdown") or 0) <= -10:
         overall, overall_txt = "yellow", "指数进入加仓档位 · 按表执行"
-    elif hy.get("ok") and hy["value"] >= 350:
+    elif hy.get("ok") and hy["value"] >= S["hy_green"]:
         overall, overall_txt = "yellow", "利差收紧 · 弹药就位"
 
     src_name = {"yahoo": "Yahoo Finance", "stooq": "Stooq", "nasdaq": "Nasdaq"}
     srcs = sorted({d.get("source") for d in items if d.get("source")})
     src_txt = " · ".join(src_name.get(x, x) for x in srcs) if srcs else "本轮不可用"
+    n_rt = len([d for d in items if d.get("realtime")])
+    if n_rt:
+        src_txt += f" · {n_rt} 只用了实时价（Nasdaq，0 延迟）"
     # 之前漏了 join，整段被当成 list 的 str() 插进表格，页面上会多出 [' 和 ']
     rows_macro = "".join(rows_macro)
 
@@ -845,8 +1003,10 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 
 <div class="foot">
 宏观：FRED · 个股：{src_txt}<br>
-跑路价签 &lt;350 平静 · 350–400 收紧 · ≥400 危机确认<br>
-布林带 20 日 / 2 倍标准差 · 逼近上下轨即算（差 ≤{BOLL_NEAR_PCT}%）
+跑路价签 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_yellow']:.0f} 收紧 · ≥{S['hy_red']:.0f} 危机确认<br>
+布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%）<br>
+异动 ≥{S['chg_red']:g}% 红 · ≥{S['chg_yellow']:g}% 黄 · RSI ≥{S['rsi_high']:.0f} 或 ≤{S['rsi_low']:.0f} 红 · 量比 ≥{S['vol_ratio']:g}x 黄<br>
+<a href="./settings.json" style="color:#6ba3f0;text-decoration:none">查看当前阈值 settings.json</a>
 </div>
 
 <div class="acts">

@@ -66,6 +66,14 @@ button.danger{color:var(--red)}
 .note b{color:var(--text);font-weight:500}
 kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
   padding:1px 5px;font-size:11px;font-family:ui-monospace,Menlo,monospace}
+.setgrid{display:grid;grid-template-columns:1fr;gap:7px}
+.setrow{display:flex;gap:8px;align-items:center}
+.setrow label{flex:1;font-size:12px;color:var(--dim);line-height:1.4}
+.setrow input{width:96px;text-align:right;font-variant-numeric:tabular-nums}
+details.set{margin-top:4px}
+details.set summary{font-size:12px;color:#6ba3f0;cursor:pointer;padding:4px 0;outline:none}
+details.set[open] summary{margin-bottom:10px}
+.setsec{font-size:11px;color:#5f6672;margin:10px 0 2px;letter-spacing:.4px}
 </style>
 </head>
 <body>
@@ -118,6 +126,56 @@ kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
       <a href="https://github.com/nixhuang/market-monitor/actions" target="_blank"><button>运行记录</button></a>
     </div>
     <div class="runstate" id="runState">读取中…</div>
+  </div>
+
+  <div class="card">
+    <h2>规则阈值 <span>（红黄绿的判定线，改完单独保存）</span></h2>
+    <details class="set" id="setToggle">
+      <summary>展开调整（布林 / 涨跌幅 / RSI / 量比 / 宏观）</summary>
+      <div class="setsec">布林带</div>
+      <div class="setgrid">
+        <div class="setrow"><label>均线周期（天）</label><input id="set_boll_n" inputmode="numeric"></div>
+        <div class="setrow"><label>标准差倍数</label><input id="set_boll_k" inputmode="decimal"></div>
+        <div class="setrow"><label>距上下轨不足 x% 就算命中</label><input id="set_boll_near_pct" inputmode="decimal"></div>
+      </div>
+      <div class="setsec">个股</div>
+      <div class="setgrid">
+        <div class="setrow"><label>单日涨跌 ≥ x% → 红</label><input id="set_chg_red" inputmode="decimal"></div>
+        <div class="setrow"><label>单日涨跌 ≥ x% → 黄</label><input id="set_chg_yellow" inputmode="decimal"></div>
+        <div class="setrow"><label>RSI ≥ x → 超买红</label><input id="set_rsi_high" inputmode="numeric"></div>
+        <div class="setrow"><label>RSI ≤ x → 超卖红</label><input id="set_rsi_low" inputmode="numeric"></div>
+        <div class="setrow"><label>距 52 周低点不足 x% → 红</label><input id="set_near_52w_low_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>距加仓价不足 x% → 红</label><input id="set_trigger_gap_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>量比 ≥ x 倍 → 黄</label><input id="set_vol_ratio" inputmode="decimal"></div>
+        <div class="setrow"><label>quiet 标的涨跌 ≥ x% → 黄</label><input id="set_quiet_chg" inputmode="decimal"></div>
+      </div>
+      <div class="setsec">宏观</div>
+      <div class="setgrid">
+        <div class="setrow"><label>跑路价签 &lt; x bp 绿</label><input id="set_hy_green" inputmode="numeric"></div>
+        <div class="setrow"><label>跑路价签 ≥ x bp 黄</label><input id="set_hy_yellow" inputmode="numeric"></div>
+        <div class="setrow"><label>跑路价签 ≥ x bp 红</label><input id="set_hy_red" inputmode="numeric"></div>
+        <div class="setrow"><label>VIX &lt; x 绿</label><input id="set_vix_green" inputmode="numeric"></div>
+        <div class="setrow"><label>VIX ≥ x 黄</label><input id="set_vix_yellow" inputmode="numeric"></div>
+        <div class="setrow"><label>VIX ≥ x 红</label><input id="set_vix_red" inputmode="numeric"></div>
+      </div>
+      <div class="setsec">行情源</div>
+      <div class="setgrid">
+        <div class="setrow"><label>用 Nasdaq 实时价（0 延迟，盘中更准）</label>
+          <select id="set_use_realtime"><option value="1">开</option><option value="0">关</option></select></div>
+      </div>
+    </details>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="btnSaveRules">保存规则</button>
+      <button id="btnResetRules">恢复默认</button>
+    </div>
+    <p class="note">
+      改完点<b>保存规则</b>会写回仓库的 <kbd>settings.json</kbd>，约 1 分钟后看板按新阈值重跑。<br>
+      改坏也不怕：值类型不对会被忽略、自动退回默认，填错顶多是信号变多变少，不会白屏。
+      <textarea id="rulesOut" spellcheck="false" class="hide"
+        style="width:100%;height:160px;margin-top:10px;padding:10px;font-size:12px;
+        font-family:ui-monospace,Menlo,monospace;background:#0e1014;color:#9fd3ff;
+        border:1px solid var(--line);border-radius:8px;resize:vertical"></textarea>
+    </p>
   </div>
 
   <div class="card">
@@ -296,9 +354,9 @@ async function load(){
       const c=JSON.parse(txt);
       data={positions:c.positions||{},watch:c.watch||{}};
       extra={};Object.keys(c).forEach(k=>{if(k!=='positions'&&k!=='watch')extra[k]=c[k];});
-      SHA='';changed=false;render();
+      SHA='';changed=false;      render();
       setMsg('手动模式：改完点保存，把生成的 JSON 粘到 GitHub 网页端','ok');
-      loadRun();
+      loadRun();loadSettings();
     }catch(e){setMsg('holdings.json 不是合法 JSON：'+e,'err');}
     return;
   }
@@ -317,7 +375,7 @@ async function load(){
     changed=false;
     render();
     setMsg('');
-    loadRun();
+    loadRun();loadSettings();
   }catch(e){setMsg('仓库里的 holdings.json 不是合法 JSON：'+e,'err');}
 }
 
@@ -428,6 +486,81 @@ $('btnAdd').onclick=()=>{
   data[k][s]=o;
   $('newSym').value='';$('newNote').value='';$('newTrig').value='';
   render();touch();setMsg('已添加 '+s+'，点保存才生效','ok');
+};
+
+/* ---------- 规则阈值（settings.json） ---------- */
+const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
+  rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,vol_ratio:1.5,quiet_chg:2,
+  hy_green:350,hy_yellow:400,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1};
+const SET_KEYS=Object.keys(SET_DEFS);
+let SET=Object.assign({},SET_DEFS), SET_SHA='';
+
+function renderSettings(){
+  SET_KEYS.forEach(k=>{
+    const el=$('set_'+k);if(!el)return;
+    if(k==='use_realtime')el.value=String(SET[k]||0);else el.value=SET[k];
+  });
+}
+function collectSettings(){
+  SET_KEYS.forEach(k=>{
+    const el=$('set_'+k);if(!el)return;
+    const v=String(el.value).trim();
+    if(k==='use_realtime'){SET[k]=v==='0'?0:1;return;}
+    const n=Number(v);
+    if(v!==''&&!isNaN(n))SET[k]=n;      // 留空或乱填就保持原值，不让脏数据进仓库
+  });
+}
+function setJsonText(){
+  const ordered={};
+  SET_KEYS.forEach(k=>{ordered[k]=SET[k];});
+  return JSON.stringify(ordered,null,2)+'\n';
+}
+async function loadSettings(){
+  SET=Object.assign({},SET_DEFS);
+  if(TOKEN){
+    const r=await gh('GET','/contents/settings.json?ref='+BRANCH);
+    if(r.ok&&r.data&&r.data.content){
+      try{Object.assign(SET,JSON.parse(b64dec(r.data.content)));}catch(e){}
+      SET_SHA=r.data.sha||'';
+    }else SET_SHA='';
+  }else{
+    try{
+      const r=await fetch('https://raw.githubusercontent.com/'+OWNER+'/'+REPO+'/'+BRANCH+
+        '/settings.json?t='+Date.now(),{cache:'no-store'});
+      if(r.ok)Object.assign(SET,JSON.parse(await r.text()));
+    }catch(e){}
+    SET_SHA='';
+  }
+  SET_KEYS.forEach(k=>{const n=Number(SET[k]);if(isNaN(n))SET[k]=SET_DEFS[k];});
+  renderSettings();
+}
+$('btnSaveRules').onclick=async e=>{
+  collectSettings();
+  const text=setJsonText();
+  if(!TOKEN){
+    $('rulesOut').value=text;$('rulesOut').classList.remove('hide');
+    let copied=false;try{await navigator.clipboard.writeText(text);copied=true;}catch(err){}
+    setMsg(copied?'规则 JSON 已复制：新建仓库里的 settings.json 粘进去提交'
+                 :'规则 JSON 已显示在下面，复制到仓库的 settings.json','ok');
+    return;
+  }
+  e.target.disabled=true;setMsg('正在写入规则…','busy');
+  const body={message:'更新规则阈值',content:b64enc(text),branch:BRANCH};
+  if(SET_SHA)body.sha=SET_SHA;
+  const r=await gh('PUT','/contents/settings.json',body);
+  if(r.ok){
+    SET_SHA=(r.data.content&&r.data.content.sha)||SET_SHA;
+    setMsg('规则已保存，看板约 1 分钟后按新阈值重跑。','ok');
+    setTimeout(loadRun,8000);
+  }else{
+    setMsg('规则保存失败：'+whyFail(r.status,r.data.message),'err');
+  }
+  e.target.disabled=false;
+};
+$('btnResetRules').onclick=()=>{
+  if(!confirm('把所有阈值恢复成默认值？'))return;
+  SET=Object.assign({},SET_DEFS);renderSettings();
+  setMsg('已填回默认值，点「保存规则」才写入仓库','ok');
 };
 
 /* ---------- CSV 导入 ---------- */

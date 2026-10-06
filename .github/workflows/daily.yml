@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - 'holdings.json'
+      - 'settings.json'
       - 'monitor.py'
       - '.github/workflows/daily.yml'
   # UTC 12:00 = 北京时间 20:00（美股开盘前约 1.5 小时）
