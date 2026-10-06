@@ -89,6 +89,24 @@ kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
     没有令牌？去 <a href="https://github.com/settings/personal-access-tokens" target="_blank" style="color:#6ba3f0">GitHub → Settings → Developer settings → Fine-grained tokens</a>，
     新建一个只管 <kbd>market-monitor</kbd> 这一个仓库、权限选 <b>Contents: Read and write</b> 的令牌，一年有效期。
   </p>
+  <div class="row" style="margin-top:12px">
+    <button id="btnSkip">不想用令牌，改成手动复制模式</button>
+    <span style="font-size:12px;color:var(--dim)">功能一样，最后一步自己粘一下</span>
+  </div>
+</div>
+
+<div class="card hide" id="manualCard">
+  <h2>手动模式 · 复制下面的内容 <span>（令牌模式不需要这一步）</span></h2>
+  <div class="row">
+    <button class="primary" id="btnCopy">复制 JSON</button>
+    <a href="https://github.com/nixhuang/market-monitor/edit/main/holdings.json" target="_blank"><button>打开 GitHub 编辑页</button></a>
+    <button id="btnBack">回到令牌模式</button>
+  </div>
+  <textarea id="jsonOut" spellcheck="false"
+    style="width:100%;height:220px;margin-top:10px;padding:10px;font-size:12px;line-height:1.5;
+    font-family:ui-monospace,Menlo,monospace;background:#0e1014;color:#9fd3ff;
+    border:1px solid var(--line);border-radius:8px;resize:vertical"></textarea>
+  <p class="note">粘贴进去后点页面最下方的 <b>Commit changes</b>，看板会在 1 分钟内自动重跑。</p>
 </div>
 
 <div id="main" class="hide">
@@ -259,6 +277,27 @@ function parseCsv(text){
 /* ---------- 载入 ---------- */
 async function load(){
   setMsg('正在读取清单…','busy');
+  if(!TOKEN){
+    let txt='';
+    try{
+      const r=await fetch('https://raw.githubusercontent.com/'+OWNER+'/'+REPO+'/'+BRANCH+
+        '/holdings.json?t='+Date.now(),{cache:'no-store'});
+      if(!r.ok){setMsg('读取失败：HTTP '+r.status,'err');$('authCard').classList.remove('hide');return;}
+      txt=await r.text();
+    }catch(e){
+      setMsg('读取失败：'+e.message+'（raw.githubusercontent.com 可能被网络拦了）','err');
+      $('authCard').classList.remove('hide');return;
+    }
+    try{
+      const c=JSON.parse(txt);
+      data={positions:c.positions||{},watch:c.watch||{}};
+      extra={};Object.keys(c).forEach(k=>{if(k!=='positions'&&k!=='watch')extra[k]=c[k];});
+      SHA='';changed=false;render();
+      setMsg('手动模式：改完点保存，把生成的 JSON 粘到 GitHub 网页端','ok');
+      loadRun();
+    }catch(e){setMsg('holdings.json 不是合法 JSON：'+e,'err');}
+    return;
+  }
   const r=await gh('GET','/contents/holdings.json?ref='+BRANCH);
   if(!r.ok||!r.data.content){
     setMsg('读取失败：'+whyFail(r.status,r.data.message),'err');
@@ -280,6 +319,7 @@ async function load(){
 
 async function loadRun(){
   const box=$('runState');
+  if(!TOKEN){box.textContent='手动模式看不到运行状态（填令牌后才有）';return;}
   const r=await gh('GET','/actions/runs?per_page=1');
   if(!r.ok||!r.data.workflow_runs||!r.data.workflow_runs.length){box.textContent='读不到运行状态（令牌权限不够？）';return;}
   const w=r.data.workflow_runs[0];
@@ -334,8 +374,18 @@ function touch(){changed=true;$('dirty').textContent='有未保存的改动';}
 
 /* ---------- 保存 ---------- */
 $('btnSave').onclick=async e=>{
-  e.target.disabled=true;setMsg('正在写入 GitHub…','busy');
   const text=JSON.stringify(Object.assign({},extra,data),null,2)+'\n';
+  if(!TOKEN){
+    $('jsonOut').value=text;
+    $('manualCard').classList.remove('hide');
+    let copied=false;
+    try{await navigator.clipboard.writeText(text);copied=true;}catch(e){}
+    setMsg(copied?'已复制：点「打开 GitHub 编辑页」全选粘贴进去，再点 Commit changes'
+                 :'JSON 已生成在下面，全选复制 → 粘到 GitHub 编辑页 → Commit changes','ok');
+    $('manualCard').scrollIntoView({behavior:'smooth',block:'center'});
+    return;
+  }
+  e.target.disabled=true;setMsg('正在写入 GitHub…','busy');
   const body={message:'更新自选清单',content:b64enc(text),branch:BRANCH};
   if(SHA)body.sha=SHA;
   const r=await gh('PUT','/contents/holdings.json',body);
@@ -354,6 +404,7 @@ $('btnSave').onclick=async e=>{
 $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定丢弃重新载入？'))return;load();};
 
 $('btnRun').onclick=async e=>{
+  if(!TOKEN){setMsg('手动模式没法远程触发；你在 GitHub 网页端改完会自动重跑','err');return;}
   e.target.disabled=true;setMsg('正在触发…','busy');
   const r=await gh('POST','/actions/workflows/daily.yml/dispatches',{ref:BRANCH});
   setMsg(r.ok?'已触发，约 1 分钟后刷新看板':'触发失败：'+(r.data.message||r.status),r.ok?'ok':'err');
@@ -433,12 +484,35 @@ $('btnWipe').onclick=()=>{
 $('tok').onkeydown=e=>{if(e.key==='Enter')$('btnTok').click();};
 
 $('btnLink').onclick=()=>{
+  if(!TOKEN){setMsg('手动模式没有令牌，手机上也直接用手动模式打开就行','err');return;}
   const u=location.origin+location.pathname+'#'+TOKEN;
   $('linkBox').textContent=u;
   let copied=false;
   try{navigator.clipboard.writeText(u);copied=true;}catch(e){}
   setMsg(copied?'已复制：发到微信里用手机打开，令牌就不用在手机上再贴一次'
                 :'链接已显示在下面，长按复制后发到手机','ok');
+};
+
+$('btnSkip').onclick=()=>{
+  TOKEN='';
+  try{localStorage.removeItem(TKEY);}catch(e){}
+  $('authCard').classList.add('hide');
+  $('main').classList.remove('hide');
+  load();
+};
+$('btnBack').onclick=()=>{
+  $('manualCard').classList.add('hide');
+  $('main').classList.add('hide');
+  $('authCard').classList.remove('hide');
+  setMsg('');
+};
+$('btnCopy').onclick=async ()=>{
+  const ta=$('jsonOut');ta.select();
+  let ok=false;
+  try{await navigator.clipboard.writeText(ta.value);ok=true;}catch(e){}
+  if(!ok){try{ok=document.execCommand('copy');}catch(e){}}
+  setMsg(ok?'已复制：去 GitHub 编辑页全选粘贴，再点 Commit changes':'复制失败，手动全选复制',
+        ok?'ok':'err');
 };
 
 window.addEventListener('error',e=>setMsg('页面脚本出错：'+e.message,'err'));
