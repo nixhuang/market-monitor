@@ -1,11 +1,13 @@
 {
   "_说明": [
-    "watch = 你要监控的自选股 / ETF，Yahoo 代码（BRK.B 要写成 BRK-B）",
-    "note  = 备注，会显示在代码旁边",
-    "trigger = 你的加仓触发价，跌到这里会标红提醒；不需要就删掉这一行",
-    "改完直接 Commit，下次自动生效。成本价和数量不要写在这里（页面是公开的）"
+    "positions = 你实际持有的标的；watch = 只看不持有的（指数、观察仓）",
+    "note    = 备注，会显示在代码旁边",
+    "trigger = 加仓触发价，跌到这里会标红提醒；不需要就删掉这一行",
+    "quiet   = true 则只在真正异动时才出声（货币基金之类用）",
+    "改完直接 Commit，下次运行生效。成本价和数量不要写在这里（仓库是公开的）",
+    "也可以直接在控制台上传 CSV 自动生成这两组（只取代码，数量/成本丢弃）"
   ],
-  "watch": {
+  "positions": {
     "UNH":   { "note": "主力", "trigger": 350 },
     "AVGO":  { "note": "" },
     "GOOGL": { "note": "" },
@@ -16,7 +18,9 @@
     "UBER":  { "note": "" },
     "APH":   { "note": "" },
     "CRSP":  { "note": "" },
-    "SGOV":  { "note": "弹药仓", "quiet": true },
+    "SGOV":  { "note": "弹药仓", "quiet": true }
+  },
+  "watch": {
     "SPY":   { "note": "标普" },
     "QQQ":   { "note": "纳指" },
     "XLV":   { "note": "医疗" },

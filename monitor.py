@@ -450,10 +450,20 @@ def sma(vals, n):
     return sum(vals[-n:]) / n
 
 
+def boll(closes, n=20, k=2.0):
+    """布林带：返回 (中轨, 上轨, 下轨)，数据不足返回三个 None"""
+    if len(closes) < n:
+        return None, None, None
+    win = closes[-n:]
+    mid = sum(win) / n
+    sd = (sum((x - mid) ** 2 for x in win) / n) ** 0.5
+    return mid, mid + k * sd, mid - k * sd
+
+
 # ---------------------------------------------------------------- 筛选
 
-def analyze_symbol(sym, cfg, data):
-    """返回 (等级, 信号列表, 详情dict)"""
+def analyze_symbol(sym, cfg, data, group="watch"):
+    """返回 (等级, 信号列表, 详情dict)  group: position=持仓 / watch=关注"""
     closes = data["closes"]
     vols = data["volumes"]
     price = data["price"]
@@ -468,6 +478,7 @@ def analyze_symbol(sym, cfg, data):
     vol_ratio = (vols[-1] / sma(vols, 20)) if vols and sma(vols, 20) else None
     ma50 = sma(closes, 50)
     ma200 = sma(closes, 200)
+    boll_mid, boll_up, boll_dn = boll(closes)
 
     signals = []
     level = "green"
@@ -481,6 +492,7 @@ def analyze_symbol(sym, cfg, data):
                 "chg": chg, "rsi": None, "dist_high": dist_high,
                 "dist_low": dist_low, "vol_ratio": vol_ratio,
                 "trigger": cfg.get("trigger"), "source": data.get("source", ""),
+                "group": group, "boll_up": boll_up, "boll_dn": boll_dn,
                 "signals": [f"异动 {chg:+.1f}%"], "level": "yellow",
             }
         return "green", [], {
@@ -488,6 +500,7 @@ def analyze_symbol(sym, cfg, data):
             "chg": chg, "rsi": None, "dist_high": dist_high,
             "dist_low": dist_low, "vol_ratio": vol_ratio,
             "trigger": cfg.get("trigger"), "source": data.get("source", ""),
+            "group": group, "boll_up": boll_up, "boll_dn": boll_dn,
             "signals": [], "level": "green",
         }
 
@@ -521,6 +534,14 @@ def analyze_symbol(sym, cfg, data):
             signals.append(f"距加仓价 {tstr} 还差 {gap:.1f}%")
             bump("red")
 
+    # 布林带（20日 / 2倍标准差）：触上轨视为过热加速=红，触下轨视为超跌=黄
+    if boll_up is not None and price >= boll_up:
+        signals.append(f"触及布林上轨 {boll_up:,.2f}")
+        bump("red")
+    elif boll_dn is not None and price <= boll_dn:
+        signals.append(f"触及布林下轨 {boll_dn:,.2f}")
+        bump("yellow")
+
     # 🟡 黄色规则
     if chg is not None and 2 <= abs(chg) < 4:
         signals.append(f"波动 {chg:+.1f}%")
@@ -553,6 +574,9 @@ def analyze_symbol(sym, cfg, data):
         "vol_ratio": vol_ratio,
         "trigger": trig,
         "source": data.get("source", ""),
+        "group": group,
+        "boll_up": boll_up,
+        "boll_dn": boll_dn,
         "signals": signals,
         "level": level,
     }
@@ -600,21 +624,30 @@ def render(macro, items, watch_count, data_down=False):
     focus = [d for d in items if d["level"] in ("red", "yellow")]
     quiet = [d for d in items if d["level"] == "green"]
 
-    rows_focus = ""
-    for d in focus:
-        cls = d["level"]
-        sig = " · ".join(d["signals"]) if d["signals"] else "—"
-        chg_cls = "up" if (d["chg"] or 0) > 0 else ("down" if (d["chg"] or 0) < 0 else "")
-        chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
-        note = f'<span class="note">{d["note"]}</span>' if d["note"] else ""
-        rows_focus += (
-            f'<tr class="{cls}"><td class="sym">{d["symbol"]}{note}</td>'
-            f'<td class="num">{fmt(d["price"])}</td>'
-            f'<td class="num {chg_cls}">{chg_txt}</td>'
-            f'<td class="sig">{sig}</td></tr>'
-        )
-    if not rows_focus:
-        rows_focus = '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
+    def rows_of(lst):
+        out = ""
+        for d in lst:
+            cls = d["level"]
+            sig = " · ".join(d["signals"]) if d["signals"] else "—"
+            chg_cls = "up" if (d["chg"] or 0) > 0 else (
+                "down" if (d["chg"] or 0) < 0 else "")
+            chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
+            note = f'<span class="note">{d["note"]}</span>' if d["note"] else ""
+            out += (
+                f'<tr class="{cls}"><td class="sym">{d["symbol"]}{note}</td>'
+                f'<td class="num">{fmt(d["price"])}</td>'
+                f'<td class="num {chg_cls}">{chg_txt}</td>'
+                f'<td class="sig">{sig}</td></tr>'
+            )
+        if not out:
+            out = '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
+        return out
+
+    is_pos = lambda d: d.get("group") == "position"
+    rows_focus_pos = rows_of([d for d in focus if is_pos(d)])
+    rows_focus_watch = rows_of([d for d in focus if not is_pos(d)])
+    n_quiet_pos = len([d for d in quiet if is_pos(d)])
+    n_quiet_watch = len([d for d in quiet if not is_pos(d)])
 
     # 宏观总判断
     hy = macro.get("hy_oas", {})
@@ -705,14 +738,17 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 </div>
 
 <div class="card">
-<h2>今晚重点关注</h2>
-<table>{rows_focus}</table>
-<div class="quiet">其余 {len(quiet)} 只 / 共 {watch_count} 只自选无异动</div>
+<h2>持仓重点关注</h2>
+<table>{rows_focus_pos}</table>
+<h2>其他重点关注</h2>
+<table>{rows_focus_watch}</table>
+<div class="quiet">无异动：持仓 {n_quiet_pos} 只 · 关注 {n_quiet_watch} 只 · 共 {watch_count} 只在册</div>
 </div>
 
 <div class="foot">
 宏观：FRED · 个股：{src_txt}<br>
-跑路价签 &lt;350 平静 · 350–400 收紧 · ≥400 危机确认
+跑路价签 &lt;350 平静 · 350–400 收紧 · ≥400 危机确认<br>
+布林带 20 日 / 2 倍标准差 · 触上轨红 · 触下轨黄
 </div>
 </div></body></html>"""
 
@@ -729,26 +765,30 @@ def main():
     except Exception:
         cfg = {}
 
+    # 持仓 / 关注分开存。旧版只有 watch 一个字段时，全部按「关注」处理
+    positions = cfg.get("positions", {})
     watch = cfg.get("watch", {})
-    if not watch:
+    universe = [(s, c, "position") for s, c in positions.items()] + \
+               [(s, c, "watch") for s, c in watch.items()]
+    if not universe:
         log("holdings.json 里没有自选股，跳过个股部分")
 
     macro = build_macro()
 
     items = []
-    if watch:
-        log(f"抓取 {len(watch)} 只自选...")
+    if universe:
+        log(f"抓取 {len(positions)} 只持仓 + {len(watch)} 只关注...")
         fail_streak = 0
         data_down = False
-        for i, (sym, sc) in enumerate(watch.items()):
+        for i, (sym, sc, grp) in enumerate(universe):
             data = None
             if not data_down:
                 data = fetch_history(sym)
-                if i < len(watch) - 1:
+                if i < len(universe) - 1:
                     time.sleep(0.5)  # 轻微限速，降低被封概率
             if data:
                 fail_streak = 0
-                lv, sig, detail = analyze_symbol(sym, sc, data)
+                lv, sig, detail = analyze_symbol(sym, sc, data, group=grp)
                 items.append(detail)
                 if lv != "green":
                     log(f"  {sym}: {lv} — {', '.join(sig)}")
@@ -762,11 +802,12 @@ def main():
                 "symbol": sym, "note": sc.get("note", ""), "price": None,
                 "chg": None, "rsi": None, "dist_high": None, "dist_low": None,
                 "vol_ratio": None, "trigger": sc.get("trigger"),
+                "group": grp, "boll_up": None, "boll_dn": None,
                 "signals": ["行情源暂时不可用"] if data_down else ["数据获取失败"],
                 "level": "gray",
             })
 
-    html = render(macro, items, len(watch), data_down=not watch
+    html = render(macro, items, len(universe), data_down=not universe
                   or all(d["level"] == "gray" for d in items))
     out = os.path.join(base, "index.html")
     with open(out, "w", encoding="utf-8") as f:
