@@ -408,13 +408,43 @@ def nasdaq_history(symbol):
     return None
 
 
+FUTU_MARKET = {"US": None, "HK": ".HK", "SH": ".SS", "SS": ".SS", "SZ": ".SZ"}
+
+
+def normalize_symbol(symbol):
+    """把富途 moomoo 导出的「代码-市场」写法转成行情源认的格式
+
+    UNH-US → UNH   00700-HK → 00700.HK   600519-SH → 600519.SS
+    已经是 Yahoo 写法的原样返回。
+    """
+    s = (symbol or "").strip().upper()
+    if "-" not in s and "." not in s:
+        return s
+    for sep in ("-", "."):
+        if sep in s:
+            code, _, mk = s.rpartition(sep)
+            if code and mk in FUTU_MARKET:
+                suffix = FUTU_MARKET[mk]
+                if suffix is None:
+                    return code.replace(".", "-")  # BRK.B-US → BRK-B
+                if mk == "HK":
+                    digits = code.lstrip("0") or "0"
+                    return digits.zfill(4) + ".HK"
+                return code + suffix
+    return s
+
+
 def fetch_history(symbol):
     """数据源优先级：Yahoo → stooq → Nasdaq
 
     GitHub Actions（美国 IP）走 Yahoo 正常；中国大陆本地跑 Yahoo 会被整段封禁
     （返回 403 且提示 mainland China 不可访问），stooq 也上了 JS 人机验证，
     所以补第三级 Nasdaq，保证本地也能跑出真实数据验证筛选逻辑。
+
+    代码先过一遍 normalize_symbol：富途导出的 UNH-US 这类后缀行情源不认，
+    剥掉后缀才抓得到（否则整只标的变灰）。
     """
+    symbol = normalize_symbol(symbol)
     data = yahoo_history(symbol)
     if data:
         data["source"] = "yahoo"
