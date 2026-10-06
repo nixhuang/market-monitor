@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>编辑自选清单 · 市场自检</title>
+<style>
+:root{
+  --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
+  --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#2f6bd8;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+  padding:env(safe-area-inset-top) 14px 60px}
+.wrap{max-width:720px;margin:0 auto}
+h1{font-size:19px;margin:18px 0 4px;font-weight:600}
+.sub{color:var(--dim);font-size:12px;margin-bottom:16px;line-height:1.7}
+.sub a{color:#6ba3f0;text-decoration:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:14px;margin-bottom:14px}
+h2{font-size:13px;color:var(--dim);font-weight:600;margin:0 0 10px;letter-spacing:.3px}
+h2 span{color:#5f6672;font-weight:400}
+input,select{padding:8px 10px;font-size:16px;background:#0e1014;color:var(--text);
+  border:1px solid var(--line);border-radius:7px;outline:none;font-family:inherit}
+input:focus,select:focus{border-color:#3d6ec4}
+input::placeholder{color:#5f6672}
+button{padding:9px 16px;font-size:14px;color:var(--text);background:#232833;
+  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
+button:hover{background:#2b303c}
+button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+button.primary:hover{background:#3a78e6}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.danger{color:var(--red)}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
+.sym{width:104px;font-family:ui-monospace,Menlo,monospace;font-size:13px;
+  padding:8px 8px;background:#0e1014;border:1px solid var(--line);border-radius:7px;
+  color:#9fd3ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row input.n{flex:1;min-width:110px}
+.row input.t{width:88px}
+.del{padding:7px 11px;font-size:13px;color:var(--red);background:#2a1d20;
+  border:1px solid #48292c;border-radius:7px}
+.del:hover{background:#3a2528}
+.add{margin-top:10px}
+.add input.s{width:104px}
+.add select{width:82px}
+.empty{color:#5f6672;font-size:13px;padding:3px 0 8px}
+#msg{font-size:13px;min-height:22px;margin:0 2px 12px;line-height:1.6}
+#msg.ok{color:var(--green)} #msg.err{color:var(--red)} #msg.busy{color:var(--dim)}
+.filebtn{display:inline-block;padding:8px 14px;font-size:13px;background:#232833;
+  border:1px solid #333a47;border-radius:8px;cursor:pointer}
+.filebtn:hover{background:#2b303c}
+.csvinfo{font-size:12px;color:var(--dim);line-height:1.9;margin:10px 0}
+.csvinfo b{color:var(--text);font-weight:500}
+.runstate{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  font-size:12px;color:var(--dim);margin-top:10px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
+.dot.g{background:var(--green)} .dot.r{background:var(--red)}
+.dot.y{background:var(--yellow)} .dot.d{background:#5f6672}
+.savebar{position:sticky;bottom:0;background:var(--bg);padding:10px 0 4px;
+  display:flex;gap:8px;align-items:center}
+.savebar .sp{flex:1;font-size:12px;color:var(--dim)}
+.hide{display:none}
+.note{color:var(--dim);font-size:12px;line-height:1.75;margin:8px 0 0}
+.note b{color:var(--text);font-weight:500}
+kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
+  padding:1px 5px;font-size:11px;font-family:ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>编辑自选清单</h1>
+<div class="sub">
+  改完点保存 → 直接写回你自己的仓库 <a href="https://github.com/nixhuang/market-monitor" target="_blank">nixhuang/market-monitor</a> → 自动重跑看板。<br>
+  <a href="./index.html">← 回看板</a>
+</div>
+
+<div id="msg"></div>
+
+<div class="card" id="authCard">
+  <h2>第 1 步 · 贴一次 GitHub 令牌</h2>
+  <div class="row">
+    <input id="tok" type="password" placeholder="github_pat_... 或 ghp_..." style="flex:1;min-width:180px">
+    <button class="primary" id="btnTok">保存并开始</button>
+  </div>
+  <p class="note">
+    令牌只存在<b>这台设备的浏览器</b>里，不上传给任何人，别人打开这个页面看不到你的清单。<br>
+    没有令牌？去 <a href="https://github.com/settings/personal-access-tokens" target="_blank" style="color:#6ba3f0">GitHub → Settings → Developer settings → Fine-grained tokens</a>，
+    新建一个只管 <kbd>market-monitor</kbd> 这一个仓库、权限选 <b>Contents: Read and write</b> 的令牌，一年有效期。
+  </p>
+</div>
+
+<div id="main" class="hide">
+
+  <div class="card">
+    <h2>运行状态</h2>
+    <div class="row">
+      <button class="primary" id="btnRun">立即重跑一次</button>
+      <a href="https://github.com/nixhuang/market-monitor/actions" target="_blank"><button>运行记录</button></a>
+    </div>
+    <div class="runstate" id="runState">读取中…</div>
+  </div>
+
+  <div class="card">
+    <h2>从券商 CSV 导入 <span>（只取代码，数量和成本一律丢弃）</span></h2>
+    <div class="row">
+      <label class="filebtn">持仓 CSV<input type="file" id="filePos" accept=".csv,.txt,.tsv" hidden></label>
+      <label class="filebtn">关注 CSV<input type="file" id="fileWatch" accept=".csv,.txt,.tsv" hidden></label>
+    </div>
+    <div class="csvinfo" id="csvInfo">支持富途 / 嘉信 / 无表头导出，自动识别代码列。</div>
+    <button class="primary hide" id="btnApply">确认导入</button>
+  </div>
+
+  <div class="card">
+    <h2>持仓重点关注 <span id="cntPos"></span></h2>
+    <div id="listPos"></div>
+    <div class="add row">
+      <input class="s" id="newSym" placeholder="代码">
+      <input class="n" id="newNote" placeholder="备注（可空）">
+      <input class="t" id="newTrig" placeholder="加仓价">
+      <select id="newKind"><option value="positions">持仓</option><option value="watch">关注</option></select>
+      <button id="btnAdd">添加</button>
+    </div>
+    <p class="note">加仓价填了才会出现「距加仓价还差 x%」这条信号，留空就不判断。</p>
+  </div>
+
+  <div class="card">
+    <h2>其他重点关注 <span id="cntWatch"></span></h2>
+    <div id="listWatch"></div>
+  </div>
+
+  <div class="savebar">
+    <span class="sp" id="dirty"></span>
+    <button id="btnReload">重新载入</button>
+    <button class="primary" id="btnSave">保存</button>
+  </div>
+
+  <p class="note" style="margin-top:18px">
+    <button id="btnWipe" class="danger" style="padding:5px 10px;font-size:12px">清除本机令牌</button>
+  </p>
+</div>
+</div>
+
+<script>
+const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
+const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
+const TKEY='mm_gh_token_v1';
+
+const msg=document.getElementById('msg');
+const setMsg=(t,c)=>{msg.textContent=t||'';msg.className=c||'';};
+const $=id=>document.getElementById(id);
+
+let TOKEN=localStorage.getItem(TKEY)||'';
+let SHA='';
+let data={positions:{},watch:{}};
+let extra={};
+let changed=false;
+let pending=null;
+
+function b64enc(s){const b=new TextEncoder().encode(s);let x='';for(const v of b)x+=String.fromCharCode(v);return btoa(x);}
+function b64dec(s){const x=atob(s.replace(/\s/g,''));const b=new Uint8Array(x.length);for(let i=0;i<x.length;i++)b[i]=x.charCodeAt(i);return new TextDecoder().decode(b);}
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+async function gh(method,path,body){
+  const opt={method:method,headers:{Authorization:'token '+TOKEN,Accept:'application/vnd.github+json'}};
+  if(body!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
+  const r=await fetch(API+path,opt);
+  let j={};
+  try{j=await r.json();}catch(e){}
+  return {ok:r.ok,status:r.status,data:j};
+}
+
+/* ---------- CSV 识别 ---------- */
+const NOISE=new Set(['','-','--','n/a','na','cash','cash & money market','total','totals',
+  'pending','symbol','ticker','代码','股票代码','证券代码','account total','合计','小计']);
+function isTicker(v){
+  v=(v||'').trim();
+  if(NOISE.has(v.toLowerCase()))return false;
+  if(v.length>12)return false;
+  return /^\$?[A-Za-z][A-Za-z0-9./\-^]{0,7}$/.test(v);
+}
+function normTicker(v){
+  v=(v||'').trim().toUpperCase().replace(/^\$/,'');
+  const m=v.match(/^(.+?)[-./](US|HK|SH|SZ|SS|SG|JP|UK|AU|CA)$/);
+  if(m){
+    const code=m[1],mk=m[2];
+    if(mk==='US')return code;
+    if(mk==='HK'){const c=code.replace(/^0+/,'');return (c?c.padStart(4,'0'):code)+'.HK';}
+    if(mk==='SH'||mk==='SS')return code+'.SS';
+    if(mk==='SZ')return code+'.SZ';
+    return code+'.'+mk;
+  }
+  return v.replace(/\./g,'-').replace(/\//g,'-');
+}
+function splitLine(line,d){
+  const out=[];let cur='';let q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){if(q&&line[i+1]==='"'){cur+='"';i++;}else q=!q;}
+    else if(c===d&&!q){out.push(cur);cur='';}
+    else cur+=c;
+  }
+  out.push(cur);return out;
+}
+function parseCsv(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)return {symbols:[],how:'文件是空的'};
+  const d=(lines[0].split(',').length>=lines[0].split('\t').length)?',':'\t';
+  const rows=lines.map(l=>splitLine(l,d));
+  const hints=['symbol','ticker','代码','证券代码','股票代码','标的','sym'];
+  let col=null,hi=-1;
+  for(let i=0;i<Math.min(10,rows.length);i++){
+    for(let j=0;j<rows[i].length;j++){
+      const c=rows[i][j].trim().toLowerCase();
+      if(hints.some(h=>c.indexOf(h)>=0)){col=j;hi=i;break;}
+    }
+    if(col!==null)break;
+  }
+  let how='按表头识别代码列';
+  if(col===null){
+    let best=0,bs=-1;
+    for(let j=0;j<Math.max.apply(null,rows.map(r=>r.length));j++){
+      let sc=0;rows.forEach(r=>{if(j<r.length&&isTicker(r[j]))sc++;});
+      if(sc>bs){bs=sc;best=j;}
+    }
+    col=best;hi=-1;how='没找到表头，按内容推测代码列';
+  }
+  const out=[],seen=new Set();
+  for(let i=hi+1;i<rows.length;i++){
+    const v=(col<rows[i].length)?rows[i][col].trim():'';
+    if(!isTicker(v))continue;
+    const s=normTicker(v);
+    if(s&&!seen.has(s)){seen.add(s);out.push(s);}
+  }
+  return {symbols:out,how:how};
+}
+
+/* ---------- 载入 ---------- */
+async function load(){
+  setMsg('正在读取清单…','busy');
+  const r=await gh('GET','/contents/holdings.json?ref='+BRANCH);
+  if(!r.ok||!r.data.content){setMsg('读取失败：'+(r.data.message||r.status),'err');return;}
+  try{
+    const c=JSON.parse(b64dec(r.data.content));
+    data={positions:c.positions||{},watch:c.watch||{}};
+    extra={};
+    Object.keys(c).forEach(k=>{if(k!=='positions'&&k!=='watch')extra[k]=c[k];});
+    SHA=r.data.sha||'';
+    changed=false;
+    render();
+    setMsg('');
+    loadRun();
+  }catch(e){setMsg('仓库里的 holdings.json 不是合法 JSON：'+e,'err');}
+}
+
+async function loadRun(){
+  const box=$('runState');
+  const r=await gh('GET','/actions/runs?per_page=1');
+  if(!r.ok||!r.data.workflow_runs||!r.data.workflow_runs.length){box.textContent='读不到运行状态（令牌权限不够？）';return;}
+  const w=r.data.workflow_runs[0];
+  const cls=w.status!=='completed'?'y':(w.conclusion==='success'?'g':(w.conclusion==='failure'?'r':'d'));
+  const when=new Date(w.created_at);
+  const p=n=>String(n).padStart(2,'0');
+  box.innerHTML='<span><span class="dot '+cls+'"></span>'+
+    (w.status!=='completed'?'正在跑':(w.conclusion==='success'?'成功':'失败'))+'</span>'+
+    '<span>上次 '+p(when.getMonth()+1)+'-'+p(when.getDate())+' '+p(when.getHours())+':'+p(when.getMinutes())+'</span>'+
+    '<a href="'+w.html_url+'" target="_blank" style="color:#6ba3f0">详情</a>';
+}
+
+/* ---------- 渲染 ---------- */
+function render(){
+  ['positions','watch'].forEach(k=>{
+    const box=$(k==='positions'?'listPos':'listWatch');
+    $('cntPos').textContent='('+Object.keys(data.positions).length+')';
+    $('cntWatch').textContent='('+Object.keys(data.watch).length+')';
+    const keys=Object.keys(data[k]||{});
+    if(!keys.length){box.innerHTML='<div class="empty">（空）</div>';return;}
+    let h='';
+    keys.forEach(s=>{
+      const c=data[k][s]||{};
+      const tv=(c.trigger===null||c.trigger===undefined)?'':c.trigger;
+      h+='<div class="row" data-k="'+k+'" data-s="'+esc(s)+'">'
+        +'<span class="sym" title="'+esc(s)+'">'+esc(s)+'</span>'
+        +'<input class="n" value="'+esc(c.note||'')+'" placeholder="备注" data-f="note">'
+        +'<input class="t" value="'+esc(tv)+'" placeholder="加仓价" data-f="trigger" inputmode="decimal">'
+        +'<button class="del" title="删除">×</button></div>';
+    });
+    box.innerHTML=h;
+    box.querySelectorAll('.row').forEach(row=>{
+      row.querySelectorAll('input').forEach(inp=>{
+        inp.oninput=()=>{
+          const k=row.dataset.k,s=row.dataset.s,f=inp.dataset.f;
+          const v=inp.value.trim();
+          const o=data[k][s]||(data[k][s]={});
+          if(f==='trigger'){ if(v==='')delete o.trigger; else {const n=Number(v); if(!isNaN(n))o.trigger=n;} }
+          else { if(v)o[f]=v; else delete o[f]; }
+          touch();
+        };
+      });
+      row.querySelector('.del').onclick=()=>{
+        const k=row.dataset.k,s=row.dataset.s;
+        if(!confirm('从「'+(k==='positions'?'持仓':'关注')+'」里删除 '+s+' ？'))return;
+        delete data[k][s];render();touch();setMsg('已删 '+s+'，点保存才生效','ok');
+      };
+    });
+  });
+}
+function touch(){changed=true;$('dirty').textContent='有未保存的改动';}
+
+/* ---------- 保存 ---------- */
+$('btnSave').onclick=async e=>{
+  e.target.disabled=true;setMsg('正在写入 GitHub…','busy');
+  const text=JSON.stringify(Object.assign({},extra,data),null,2)+'\n';
+  const body={message:'更新自选清单',content:b64enc(text),branch:BRANCH};
+  if(SHA)body.sha=SHA;
+  const r=await gh('PUT','/contents/holdings.json',body);
+  if(r.ok){
+    SHA=(r.data.content&&r.data.content.sha)||SHA;
+    changed=false;$('dirty').textContent='已保存';
+    setMsg('已保存。看板正在自动重跑，约 1 分钟后刷新看板页面即可。','ok');
+    setTimeout(loadRun,8000);
+  }else{
+    setMsg('保存失败：'+(r.data.message||r.status)+(r.status===409?'（冲突，点「重新载入」再改一次）':''),'err');
+  }
+  e.target.disabled=false;
+};
+
+$('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定丢弃重新载入？'))return;load();};
+
+$('btnRun').onclick=async e=>{
+  e.target.disabled=true;setMsg('正在触发…','busy');
+  const r=await gh('POST','/actions/workflows/daily.yml/dispatches',{ref:BRANCH});
+  setMsg(r.ok?'已触发，约 1 分钟后刷新看板':'触发失败：'+(r.data.message||r.status),r.ok?'ok':'err');
+  if(r.ok)setTimeout(loadRun,8000);
+  e.target.disabled=false;
+};
+
+$('btnAdd').onclick=()=>{
+  let s=$('newSym').value.trim().toUpperCase();
+  if(!s){setMsg('先填代码','err');return;}
+  s=s.replace(/^\$/,'').replace(/\//g,'-').replace(/\./g,'-');
+  const k=$('newKind').value,note=$('newNote').value.trim(),trig=$('newTrig').value.trim();
+  if(data[k][s]){setMsg(s+' 已经在'+(k==='positions'?'持仓':'关注')+'里了','err');return;}
+  const o={};
+  if(note)o.note=note;
+  if(trig&&!isNaN(Number(trig)))o.trigger=Number(trig);
+  data[k][s]=o;
+  $('newSym').value='';$('newNote').value='';$('newTrig').value='';
+  render();touch();setMsg('已添加 '+s+'，点保存才生效','ok');
+};
+
+/* ---------- CSV 导入 ---------- */
+function readCsv(input,kind){
+  const f=input.files[0];if(!f)return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    const res=parseCsv(fr.result);
+    if(!res.symbols.length){setMsg('没识别出代码，换个文件或手动添加','err');return;}
+    const old=data[kind]||{};
+    const oldNorm={};Object.keys(old).forEach(k=>{oldNorm[normTicker(k)]=k;});
+    const added=[],kept=[];
+    res.symbols.forEach(s=>{(oldNorm[s]!==undefined)?kept.push(s):added.push(s);});
+    const removed=Object.keys(old).filter(k=>res.symbols.indexOf(normTicker(k))<0);
+    pending={kind:kind,symbols:res.symbols,oldNorm:oldNorm};
+    $('csvInfo').innerHTML='<b>'+(kind==='positions'?'持仓':'关注')+'</b>：识别到 '+res.symbols.length+' 只（'+res.how+'）<br>'
+      +'新增 '+added.length+'：'+(added.slice(0,20).join(' ')||'—')+'<br>'
+      +'保留 '+kept.length+'：'+(kept.slice(0,20).join(' ')||'—')+'<br>'
+      +'移除 '+removed.length+'：'+(removed.slice(0,20).join(' ')||'—');
+    $('btnApply').classList.remove('hide');
+    setMsg('确认无误后点「确认导入」，然后别忘了点保存','ok');
+    input.value='';
+  };
+  fr.readAsText(f);
+}
+$('filePos').onchange=e=>readCsv(e.target,'positions');
+$('fileWatch').onchange=e=>readCsv(e.target,'watch');
+$('btnApply').onclick=()=>{
+  if(!pending)return;
+  const kind=pending.kind,old=data[kind]||{},next={};
+  pending.symbols.forEach(s=>{
+    const src=pending.oldNorm[s];
+    next[s]=(src!==undefined)?JSON.parse(JSON.stringify(old[src])):{};
+  });
+  data[kind]=next;render();touch();
+  $('btnApply').classList.add('hide');
+  setMsg('已导入 '+pending.symbols.length+' 只，点保存才写入仓库','ok');
+  pending=null;
+};
+
+/* ---------- 令牌 ---------- */
+$('btnTok').onclick=()=>{
+  const t=$('tok').value.trim();
+  if(!t){setMsg('令牌不能为空','err');return;}
+  TOKEN=t;localStorage.setItem(TKEY,t);
+  $('authCard').classList.add('hide');$('main').classList.remove('hide');
+  setMsg('');load();
+};
+$('btnWipe').onclick=()=>{
+  if(!confirm('清除本机令牌？下次打开要重新贴一次。'))return;
+  localStorage.removeItem(TKEY);location.reload();
+};
+$('tok').onkeydown=e=>{if(e.key==='Enter')$('btnTok').click();};
+
+if(TOKEN){$('authCard').classList.add('hide');$('main').classList.remove('hide');load();}
+</script>
+</body>
+</html>

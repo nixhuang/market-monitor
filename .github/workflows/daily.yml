@@ -1,6 +1,14 @@
 name: 每日市场自检
 
 on:
+  # 改了清单或脚本就立刻重跑，不用再去点 Run workflow
+  # 只监听这三个文件：workflow 自己提交 index.html 不会触发，避免空转
+  push:
+    branches: [main]
+    paths:
+      - 'holdings.json'
+      - 'monitor.py'
+      - '.github/workflows/daily.yml'
   # UTC 12:00 = 北京时间 20:00（美股开盘前约 1.5 小时）
   # Actions 可能延迟，所以提前留足缓冲
   schedule:
@@ -9,6 +17,11 @@ on:
     - cron: '0 13 * * 0'
   # 允许在网页上手动点一下立刻跑
   workflow_dispatch:
+
+# 同时只允许一个任务在跑，后来的排队，避免互相覆盖
+concurrency:
+  group: market-monitor
+  cancel-in-progress: false
 
 permissions:
   contents: write

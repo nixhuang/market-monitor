@@ -778,7 +778,8 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 <div class="foot">
 宏观：FRED · 个股：{src_txt}<br>
 跑路价签 &lt;350 平静 · 350–400 收紧 · ≥400 危机确认<br>
-布林带 20 日 / 2 倍标准差 · 触上轨红 · 触下轨黄
+布林带 20 日 / 2 倍标准差 · 触上轨红 · 触下轨黄<br>
+<a href="./edit.html" style="color:#6ba3f0;text-decoration:none">改自选清单 →</a>
 </div>
 </div></body></html>"""
 
