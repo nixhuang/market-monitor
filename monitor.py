@@ -843,7 +843,76 @@ def main():
     with open(out, "w", encoding="utf-8") as f:
         f.write(html)
     log(f"已生成 {out}")
+
+    try:
+        push_serverchan(macro, items)
+    except Exception as e:
+        log(f"推送环节异常（忽略）：{str(e)[:90]}")
     return 0
+
+
+def push_serverchan(macro, items):
+    """有红/黄信号时推微信（Server酱 https://sct.ftqq.com）
+
+    仓库 Secret 里配 SERVERCHAN_KEY 才生效；没配就静默跳过。
+    推送失败只记日志，绝不影响页面生成 —— 页面是主产物，推送是附赠。
+    """
+    key = (os.environ.get("SERVERCHAN_KEY") or "").strip()
+    if not key:
+        log("未配置 SERVERCHAN_KEY，跳过微信推送")
+        return
+
+    reds = [d for d in items if d["level"] == "red"]
+    yellows = [d for d in items if d["level"] == "yellow"]
+    grays = [d for d in items if d["level"] == "gray"]
+    if not reds and not yellows:
+        log("今晚无异动，不推送微信")
+        return
+
+    lines = []
+    for icon, label, group in (("🔴", "需要动手", reds), ("🟡", "留意", yellows)):
+        if not group:
+            continue
+        lines.append("## %s %s（%d）" % (icon, label, len(group)))
+        for d in group:
+            price = "%.2f" % d["price"] if d.get("price") else "—"
+            chg = " %+.2f%%" % d["chg"] if d.get("chg") is not None else ""
+            gname = "持仓" if d.get("group") == "positions" else "关注"
+            sig = " / ".join(d.get("signals") or []) or "—"
+            lines.append("- **%s** %s%s · %s（%s）" % (
+                normalize_symbol(d["symbol"]), price, chg, sig, gname))
+        lines.append("")
+
+    lines.append("## 宏观")
+    for k in ("hy_oas", "vix", "sp500", "ust10", "curve", "dxy"):
+        m = macro.get(k) or {}
+        if not m.get("ok"):
+            lines.append("- %s：无数据" % m.get("name", k))
+        else:
+            lines.append("- %s：%.2f%s（%s）" % (
+                m.get("name", k), m["value"], m.get("unit", ""), m.get("date", "")))
+
+    if grays:
+        lines.append("")
+        lines.append("> ⚪ %d 只取数失败：%s" % (
+            len(grays), "、".join(normalize_symbol(d["symbol"]) for d in grays[:8])))
+    lines.append("")
+    lines.append("[打开完整看板](https://nixhuang.github.io/market-monitor/)")
+
+    title = "%s 市场自检 🔴%d 🟡%d" % (
+        NOW.strftime("%m-%d"), len(reds), len(yellows))
+    try:
+        r = requests.post("https://sctapi.ftqq.com/%s.send" % key,
+                          data={"title": title, "desp": "\n".join(lines)},
+                          timeout=25)
+        try:
+            j = r.json()
+        except ValueError:
+            j = {}
+        ok = (j.get("code") == 0) or j.get("success") or r.status_code == 200
+        log("微信推送：%s（%s）" % ("成功" if ok else "失败", str(j)[:90]))
+    except Exception as e:
+        log("微信推送异常（不影响页面）：%s" % str(e)[:90])
 
 
 if __name__ == "__main__":

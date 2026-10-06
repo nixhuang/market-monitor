@@ -33,6 +33,8 @@ jobs:
         # （Actions 访问 fred.stlouisfed.org 的 CSV 接口会被 CDN 掐断，只有官方 API 域名通）
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          # 微信推送（Server酱）：没配就只生成页面、不推送
+          SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
         run: python monitor.py
 
       - name: 提交更新
