@@ -1,4 +1,5 @@
 name: 每日市场自检
+run-name: "市场自检 · ${{ github.event_name }} · ${{ inputs.request_id || github.sha }}"
 
 on:
   # 改了清单或脚本就立刻重跑，不用再去点 Run workflow
@@ -11,15 +12,16 @@ on:
       - 'monitor.py'
       - '.github/workflows/daily.yml'
   schedule:
-    # ① 开盘前：美东 08:00，看昨收数据做当天计划
-    #    夏令时 = 北京 20:00 / 冬令时 = 北京 21:00
-    - cron: '0 12 * * *'
-    # ② 收盘后 1 小时：美东 17:00，看当日完整 K 线（布林/RSI 才是定稿值）
-    #    夏令时 = 北京次日 05:00 / 冬令时 = 北京次日 06:00
-    #    周末没有交易，只跑周一到周五（UTC 星期几）
-    - cron: '0 21 * * 1-5'
-  # 允许在网页上手动点一下立刻跑
+    # 美东周一至周五20:30：夏令时北京次日08:30，冬令时次日09:30。
+    # GitHub原生IANA时区负责冬夏切换，不需要睡一小时或每年手动改。
+    - cron: '30 20 * * 1-5'
+      timezone: 'America/New_York'
   workflow_dispatch:
+    inputs:
+      request_id:
+        description: '网页运行回执标识（可留空）'
+        required: false
+        type: string
 
 # 同时只允许一个任务在跑，后来的排队，避免互相覆盖
 concurrency:
@@ -27,11 +29,17 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MM_EVENT: ${{ github.event_name }}
+      MM_REQUEST_ID: ${{ inputs.request_id }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - name: 拉取仓库
         uses: actions/checkout@v4
@@ -42,21 +50,11 @@ jobs:
           python-version: '3.11'
 
       - name: 安装依赖
-        run: pip install requests
+        run: pip install requests exchange-calendars
 
-      # cron 是 UTC 时间，而美股看的是美东时间：
-      #   夏令时 UTC-4：'0 12' → 美东 08:00，'0 21' → 美东 17:00
-      #   冬令时 UTC-5：'0 12' → 美东 07:00，'0 21' → 美东 16:00（都早了一小时）
-      # 所以冬令时补睡 1 小时，让两次任务全年都落在美东 08:00 和 17:00。
-      - name: 冬夏令时校正
+      - name: 锁定本次目标交易日
         run: |
-          H=$((10#$(TZ=America/New_York date +%H)))
-          echo "现在美东: $(TZ=America/New_York date)  (hour=$H)"
-          case "$H" in
-            7)  echo "冬令时 → 等到美东 08:00（开盘前 1.5 小时）"; sleep 3600 ;;
-            16) echo "冬令时 → 等到美东 17:00（收盘后 1 小时）";   sleep 3600 ;;
-          esac
-          echo "开跑: $(TZ=America/New_York date)"
+          python monitor.py --prepare-run >> "$GITHUB_ENV"
 
       - name: 抓数据并生成页面
         # FRED_API_KEY 是可选 Secret：配置了才能拿到跑路价签和收益率曲线
@@ -71,7 +69,7 @@ jobs:
         run: |
           git config user.name "market-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add index.html
+          git add index.html status.json
           if git diff --staged --quiet; then
             echo "无变化，跳过提交"
           else

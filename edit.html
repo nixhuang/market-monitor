@@ -93,9 +93,9 @@ details.set[open] summary{margin-bottom:10px}
     <button class="primary" id="btnTok">保存并开始</button>
   </div>
   <p class="note">
-    令牌只存在<b>这台设备的浏览器</b>里，不上传给任何人，别人打开这个页面看不到你的清单。<br>
+    令牌保存在<b>这台设备的浏览器</b>，仅用于向 GitHub API 认证；本仓库的清单和看板是公开的，<b>无令牌也能查看</b>。<br>
     没有令牌？去 <a href="https://github.com/settings/personal-access-tokens" target="_blank" style="color:#6ba3f0">GitHub → Settings → Developer settings → Fine-grained tokens</a>，
-    新建一个只管 <kbd>market-monitor</kbd> 这一个仓库、权限选 <b>Contents: Read and write</b> 的令牌，一年有效期。
+    新建一个只管 <kbd>market-monitor</kbd> 这一个仓库的令牌，选择 <b>Contents: Read and write</b>（编辑保存）和 <b>Actions: Read and write</b>（立即重跑）。有效期按需要设置，不要分享令牌。
   </p>
   <div class="row" style="margin-top:12px">
     <button id="btnSkip">不想用令牌，改成手动复制模式</button>
@@ -114,7 +114,7 @@ details.set[open] summary{margin-bottom:10px}
     style="width:100%;height:220px;margin-top:10px;padding:10px;font-size:12px;line-height:1.5;
     font-family:ui-monospace,Menlo,monospace;background:#0e1014;color:#9fd3ff;
     border:1px solid var(--line);border-radius:8px;resize:vertical"></textarea>
-  <p class="note">粘贴进去后点页面最下方的 <b>Commit changes</b>，看板会在 1 分钟内自动重跑。</p>
+  <p class="note">粘贴进去后点页面最下方的 <b>Commit changes</b>，会触发自动重跑；排队、生成和 Pages 发布可能需要等待，可刷新公开状态查看。手动复制没有本页提交回执，不能自动验证该次提交。</p>
 </div>
 
 <div id="main" class="hide">
@@ -125,7 +125,14 @@ details.set[open] summary{margin-bottom:10px}
       <button class="primary" id="btnRun">立即重跑一次</button>
       <a href="https://github.com/nixhuang/market-monitor/actions" target="_blank"><button>运行记录</button></a>
     </div>
-    <div class="runstate" id="runState">读取中…</div>
+    <button id="btnCheckStatus">刷新状态</button>
+    <div class="runstate" id="runState" aria-live="polite">读取公开发布状态中…</div>
+  </div>
+
+  <div class="card">
+    <h2>已发布生效配置 <span>（与编辑中的未保存内容分开）</span></h2>
+    <div id="appliedState" class="note" aria-live="polite">尚无本页提交待验证</div>
+    <p class="note">只有 status.json 和看板快照的运行与配置 blob SHA 一致才确认生效。刷新状态不重载编辑内容；验证完成后的「刷新看板」会另开页面。</p>
   </div>
 
   <div class="card">
@@ -169,7 +176,7 @@ details.set[open] summary{margin-bottom:10px}
       <button id="btnResetRules">恢复默认</button>
     </div>
     <p class="note">
-      改完点<b>保存规则</b>会写回仓库的 <kbd>settings.json</kbd>，约 1 分钟后看板按新阈值重跑。<br>
+      改完点<b>保存规则</b>只提交 <kbd>settings.json</kbd>，清单与定投请另点底部保存；生效卡片按提交回执的 blob SHA 验证发布。<br>
       改坏也不怕：值类型不对会被忽略、自动退回默认，填错顶多是信号变多变少，不会白屏。
       <textarea id="rulesOut" spellcheck="false" class="hide"
         style="width:100%;height:160px;margin-top:10px;padding:10px;font-size:12px;
@@ -228,7 +235,7 @@ details.set[open] summary{margin-bottom:10px}
 
   <p class="note" style="margin-top:18px">
     手机上也要改？点下面生成一条<b>带令牌的链接</b>，发到微信里用手机打开就行，
-    不用在手机上再贴一次。这条链接等于你的令牌，别发给别人。<br>
+    不用在手机上再贴一次。<b>这条链接等于你的令牌</b>；微信、剪贴板或截图都可能泄露它，建议在手机直接输入令牌，切勿转发。<br>
     <button id="btnLink" style="padding:5px 10px;font-size:12px;margin-top:6px">生成手机用的链接</button>
     <span id="linkBox" style="display:block;margin-top:7px;word-break:break-all;color:#6ba3f0;font-size:11px"></span>
   </p>
@@ -238,6 +245,7 @@ details.set[open] summary{margin-bottom:10px}
 </div>
 </div>
 
+<script src="./run-status.js"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
@@ -260,23 +268,44 @@ function b64enc(s){const b=new TextEncoder().encode(s);let x='';for(const v of b
 function b64dec(s){const x=atob(s.replace(/\s/g,''));const b=new Uint8Array(x.length);for(let i=0;i<x.length;i++)b[i]=x.charCodeAt(i);return new TextDecoder().decode(b);}
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 
-async function gh(method,path,body){
-  const opt={method:method,headers:{Authorization:'token '+TOKEN,Accept:'application/vnd.github+json'}};
+async function gh(method,path,body,getToken=()=>TOKEN){
+  const controller=new AbortController();
+  const opt={method,signal:controller.signal,cache:'no-store',headers:{Accept:'application/vnd.github+json'}};
+  const token=getToken();if(token)opt.headers.Authorization='Bearer '+token;
   if(body!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
-  let r,j={};
+  let timeout;
   try{
-    r=await fetch(API+path,opt);
-    try{j=await r.json();}catch(e){}
+    return await Promise.race([
+      (async()=>{
+        const r=await fetch(API+path,opt);
+        let j={};try{j=await r.json();}catch(e){}
+        return {ok:r.ok,status:r.status,data:j};
+      })(),
+      new Promise((_,reject)=>{timeout=setTimeout(()=>{
+        controller.abort();reject(new Error('请求超时；写入结果未确认，请检查仓库回执后再操作'));
+      },15000);})
+    ]);
   }catch(e){
-    return {ok:false,status:0,data:{message:'连不上 api.github.com（'+e.message+'）'}};
-  }
-  return {ok:r.ok,status:r.status,data:j};
+    return {ok:false,status:0,data:{message:'GitHub 请求未确认：'+e.message}};
+  }finally{clearTimeout(timeout);}
 }
+function trackReceipt(file,response){
+  const blobSHA=response.content&&response.content.sha;
+  const commitSHA=response.commit&&response.commit.sha;
+  if(!/^[a-f0-9]{40,64}$/i.test(blobSHA||'')||!/^[a-f0-9]{40,64}$/i.test(commitSHA||'')){
+    setMsg(file+' 写入已被接受，但提交回执缺少有效 blob/commit SHA，无法验证生效；请检查仓库，不要盲目重复保存','err');
+    return false;
+  }
+  void window.MMRunStatus.watchConfig({file,blobSHA,commitSHA});
+  setMsg(file+' 已提交：'+commitSHA+'；尚未确认发布生效，请看生效卡片','ok');
+  return true;
+}
+window.MMRunStatus.init({owner:OWNER,repo:REPO,branch:BRANCH,getToken:()=>TOKEN});
 function whyFail(status,dflt){
-  if(status===0)return '连不上 api.github.com：国内网络/公司代理可能拦了它，换个网络或开代理再试';
+  if(status===0)return dflt||'网络请求未确认；请检查仓库最新版本后再操作，不要盲目重复写入';
   if(status===401)return '令牌无效或已过期（401）';
-  if(status===403)return '令牌没权限或被限流（403）：确认它是 fine-grained 且勾了 Contents: Read and write';
-  if(status===404)return '找不到 holdings.json，或令牌无权访问这个仓库（404）';
+  if(status===403)return '权限不足或被限流（403）：fine-grained token 编辑需 Contents: Read and write，立即重跑需 Actions: Read and write';
+  if(status===404)return '找不到配置文件，或令牌无权访问这个仓库（404）';
   if(status===409)return '和线上版本冲突（409）';
   return dflt||('HTTP '+status);
 }
@@ -349,27 +378,6 @@ function parseCsv(text){
 /* ---------- 载入 ---------- */
 async function load(){
   setMsg('正在读取清单…','busy');
-  if(!TOKEN){
-    let txt='';
-    try{
-      const r=await fetch('https://raw.githubusercontent.com/'+OWNER+'/'+REPO+'/'+BRANCH+
-        '/holdings.json?t='+Date.now(),{cache:'no-store'});
-      if(!r.ok){setMsg('读取失败：HTTP '+r.status,'err');$('authCard').classList.remove('hide');return;}
-      txt=await r.text();
-    }catch(e){
-      setMsg('读取失败：'+e.message+'（raw.githubusercontent.com 可能被网络拦了）','err');
-      $('authCard').classList.remove('hide');return;
-    }
-    try{
-      const c=JSON.parse(txt);
-      data={positions:c.positions||{},watch:c.watch||{}};
-      extra={};Object.keys(c).forEach(k=>{if(k!=='positions'&&k!=='watch')extra[k]=c[k];});
-      SHA='';changed=false;      render();
-      setMsg('手动模式：改完点保存，把生成的 JSON 粘到 GitHub 网页端','ok');
-      loadRun();loadSettings();
-    }catch(e){setMsg('holdings.json 不是合法 JSON：'+e,'err');}
-    return;
-  }
   const r=await gh('GET','/contents/holdings.json?ref='+BRANCH);
   if(!r.ok||!r.data.content){
     setMsg('读取失败：'+whyFail(r.status,r.data.message),'err');
@@ -384,25 +392,12 @@ async function load(){
     SHA=r.data.sha||'';
     changed=false;
     render();
-    setMsg('');
+    setMsg(TOKEN?'':'手动模式：改完点保存，把生成的 JSON 粘到 GitHub 网页端',TOKEN?'':'ok');
     loadRun();loadSettings();
   }catch(e){setMsg('仓库里的 holdings.json 不是合法 JSON：'+e,'err');}
 }
 
-async function loadRun(){
-  const box=$('runState');
-  if(!TOKEN){box.textContent='手动模式看不到运行状态（填令牌后才有）';return;}
-  const r=await gh('GET','/actions/runs?per_page=1');
-  if(!r.ok||!r.data.workflow_runs||!r.data.workflow_runs.length){box.textContent='读不到运行状态（令牌权限不够？）';return;}
-  const w=r.data.workflow_runs[0];
-  const cls=w.status!=='completed'?'y':(w.conclusion==='success'?'g':(w.conclusion==='failure'?'r':'d'));
-  const when=new Date(w.created_at);
-  const p=n=>String(n).padStart(2,'0');
-  box.innerHTML='<span><span class="dot '+cls+'"></span>'+
-    (w.status!=='completed'?'正在跑':(w.conclusion==='success'?'成功':'失败'))+'</span>'+
-    '<span>上次 '+p(when.getMonth()+1)+'-'+p(when.getDate())+' '+p(when.getHours())+':'+p(when.getMinutes())+'</span>'+
-    '<a href="'+w.html_url+'" target="_blank" style="color:#6ba3f0">详情</a>';
-}
+function loadRun(){return window.MMRunStatus.refresh();}
 
 /* ---------- 渲染 ---------- */
 function render(){
@@ -496,9 +491,10 @@ $('btnSave').onclick=async e=>{
   const r=await gh('PUT','/contents/holdings.json',body);
   if(r.ok){
     SHA=(r.data.content&&r.data.content.sha)||SHA;
-    changed=false;$('dirty').textContent='已保存';
-    setMsg('已保存。看板正在自动重跑，约 1 分钟后刷新看板页面即可。','ok');
-    setTimeout(loadRun,8000);
+    const currentText=JSON.stringify(Object.assign({},extra,data),null,2)+'\n';
+    changed=currentText!==text;
+    $('dirty').textContent=changed?'有未保存的改动（提交期间又修改了清单）':'清单已提交，等待发布验证';
+    trackReceipt('holdings.json',r.data);
   }else{
     setMsg('保存失败：'+whyFail(r.status,r.data.message)+
       (r.status===409?'（和线上版本冲突，点「重新载入」再改一次）':''),'err');
@@ -508,14 +504,7 @@ $('btnSave').onclick=async e=>{
 
 $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定丢弃重新载入？'))return;load();};
 
-$('btnRun').onclick=async e=>{
-  if(!TOKEN){setMsg('手动模式没法远程触发；你在 GitHub 网页端改完会自动重跑','err');return;}
-  e.target.disabled=true;setMsg('正在触发…','busy');
-  const r=await gh('POST','/actions/workflows/daily.yml/dispatches',{ref:BRANCH});
-  setMsg(r.ok?'已触发，约 1 分钟后刷新看板':'触发失败：'+(r.data.message||r.status),r.ok?'ok':'err');
-  if(r.ok)setTimeout(loadRun,8000);
-  e.target.disabled=false;
-};
+$('btnRun').onclick=()=>{void window.MMRunStatus.startManual();};
 
 $('btnAdd').onclick=()=>{
   let s=$('newSym').value.trim().toUpperCase();
@@ -559,23 +548,15 @@ function setJsonText(){
   return JSON.stringify(ordered,null,2)+'\n';
 }
 async function loadSettings(){
-  SET=Object.assign({},SET_DEFS);
-  if(TOKEN){
-    const r=await gh('GET','/contents/settings.json?ref='+BRANCH);
-    if(r.ok&&r.data&&r.data.content){
-      try{Object.assign(SET,JSON.parse(b64dec(r.data.content)));}catch(e){}
-      SET_SHA=r.data.sha||'';
-    }else SET_SHA='';
-  }else{
-    try{
-      const r=await fetch('https://raw.githubusercontent.com/'+OWNER+'/'+REPO+'/'+BRANCH+
-        '/settings.json?t='+Date.now(),{cache:'no-store'});
-      if(r.ok)Object.assign(SET,JSON.parse(await r.text()));
-    }catch(e){}
-    SET_SHA='';
+  const r=await gh('GET','/contents/settings.json?ref='+BRANCH);
+  if(!r.ok||!r.data.content){
+    setMsg('规则读取未确认：'+whyFail(r.status,r.data.message)+'；保留当前编辑内容','err');return;
   }
-  SET_KEYS.forEach(k=>{const n=Number(SET[k]);if(isNaN(n))SET[k]=SET_DEFS[k];});
-  renderSettings();
+  try{
+    const next=Object.assign({},SET_DEFS,JSON.parse(b64dec(r.data.content)));
+    SET_KEYS.forEach(k=>{const n=Number(next[k]);if(isNaN(n))next[k]=SET_DEFS[k];});
+    SET=next;SET_SHA=r.data.sha||'';renderSettings();
+  }catch(e){setMsg('settings.json 不是合法 JSON；保留当前编辑内容','err');}
 }
 $('btnSaveRules').onclick=async e=>{
   collectSettings();
@@ -593,8 +574,7 @@ $('btnSaveRules').onclick=async e=>{
   const r=await gh('PUT','/contents/settings.json',body);
   if(r.ok){
     SET_SHA=(r.data.content&&r.data.content.sha)||SET_SHA;
-    setMsg('规则已保存，看板约 1 分钟后按新阈值重跑。','ok');
-    setTimeout(loadRun,8000);
+    trackReceipt('settings.json',r.data);
   }else{
     setMsg('规则保存失败：'+whyFail(r.status,r.data.message),'err');
   }
@@ -686,18 +666,22 @@ async function enter(t){
 }
 $('btnTok').onclick=()=>enter($('tok').value.trim());
 $('btnWipe').onclick=()=>{
-  if(!confirm('清除本机令牌？下次打开要重新贴一次。'))return;
-  try{localStorage.removeItem(TKEY);}catch(e){}
-  location.reload();
+  if(!confirm('清除本机令牌？当前编辑内容会保留，下次写入需重新贴令牌。'))return;
+  TOKEN='';try{localStorage.removeItem(TKEY);}catch(e){}
+  $('tok').value='';$('linkBox').textContent='';
+  $('authCard').classList.remove('hide');
+  setMsg('本机令牌已清除，编辑内容未重载；无令牌仍可查看公开状态','ok');
+  void loadRun();
 };
 $('tok').onkeydown=e=>{if(e.key==='Enter')$('btnTok').click();};
 
-$('btnLink').onclick=()=>{
+$('btnLink').onclick=async()=>{
   if(!TOKEN){setMsg('手动模式没有令牌，手机上也直接用手动模式打开就行','err');return;}
+  if(!confirm('链接包含可编辑仓库和触发运行的令牌，微信/剪贴板可能留存。确认仍生成？'))return;
   const u=location.origin+location.pathname+'#'+TOKEN;
   $('linkBox').textContent=u;
   let copied=false;
-  try{navigator.clipboard.writeText(u);copied=true;}catch(e){}
+  try{await navigator.clipboard.writeText(u);copied=true;}catch(e){}
   setMsg(copied?'已复制：发到微信里用手机打开，令牌就不用在手机上再贴一次'
                 :'链接已显示在下面，长按复制后发到手机','ok');
 };

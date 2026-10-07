@@ -12,17 +12,26 @@
   Yahoo https://query1.finance.yahoo.com/v8/finance/chart/<SYMBOL>
 """
 
+import argparse
+import hashlib
+import html as html_lib
 import json
+import math
 import os
+import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone
 
 import requests
 
-# 北京时间
+# 北京时间与运行口径
+BASE = os.path.dirname(os.path.abspath(__file__))
 TZ = timezone(timedelta(hours=8))
 NOW = datetime.now(TZ)
+EVENT = os.environ.get("MM_EVENT", "local")
+TARGET_DATE = os.environ.get("MM_TARGET_TRADE_DATE", "").strip()
+CLOSED_ONLY = os.environ.get("MM_CLOSED_ONLY", "0") == "1"
 
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
@@ -73,18 +82,85 @@ DEFAULT_SETTINGS = {
 }
 
 
-try:
-    from zoneinfo import ZoneInfo
-    US_TZ = ZoneInfo("America/New_York")
-except Exception:                      # 没有 tzdata 时退回固定 -4（夏令时）
-    US_TZ = timezone(timedelta(hours=-4))
+from zoneinfo import ZoneInfo
+US_TZ = ZoneInfo("America/New_York")
+
+
+def log(msg):
+    print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def session_date(on_or_before):
+    """交易所日历：节假日/周末回退到最近有效交易日，不能只按周一至周五猜。"""
+    import exchange_calendars as xcals
+    cal = xcals.get_calendar("XNYS")
+    return cal.date_to_session(on_or_before.isoformat(), direction="previous").date().isoformat()
+
+
+def plan_run(event, when):
+    """schedule锚定最近一次美东20:30；手动/保存重跑保留盘中行为。"""
+    ny = when.astimezone(US_TZ)
+    day = ny.date()
+    if event == "schedule":
+        anchor = ny.replace(hour=20, minute=30, second=0, microsecond=0)
+        if ny < anchor:
+            day -= timedelta(days=1)
+        return {"closed_only": True, "target": session_date(day)}
+    # 当前接口口径仍是常规时段日线：09:30–16:00可用实时覆盖。
+    in_regular_session = ny.weekday() < 5 and (9, 30) <= (ny.hour, ny.minute) < (16, 0)
+    if ny.weekday() < 5 and (ny.hour, ny.minute) >= (9, 30):
+        day_target = session_date(day)
+    else:
+        day_target = session_date(day - timedelta(days=1))
+    return {"closed_only": not in_regular_session, "target": day_target}
+
+
+def prepare_run():
+    """在workflow最早步骤锁定目标，后续排队/抓取跨日也不挪动目标。"""
+    when = datetime.now(timezone.utc)
+    run_id = os.environ.get("GITHUB_RUN_ID", "")
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    if run_id and repo:
+        # 用运行创建时间，而不是job开跑时间；极端排队跨午夜仍能守住目标。
+        r = requests.get(f"https://api.github.com/repos/{repo}/actions/runs/{run_id}",
+                         headers={"Authorization": "Bearer " + os.environ.get("GH_TOKEN", ""),
+                                  "Accept": "application/vnd.github+json"}, timeout=20)
+        r.raise_for_status()
+        when = datetime.fromisoformat(r.json()["created_at"].replace("Z", "+00:00"))
+    plan = plan_run(EVENT, when)
+    print("MM_TARGET_TRADE_DATE=" + plan["target"])
+    print("MM_CLOSED_ONLY=" + ("1" if plan["closed_only"] else "0"))
+    print("MM_STARTED_AT=" + when.isoformat())
+
+
+def trim_history(data, cutoff):
+    """按日期同步裁剪所有OHLCV，禁止把cutoff之后的新bar混入自动日报。"""
+    if not data:
+        return None
+    dates, closes = data.get("dates") or [], data.get("closes") or []
+    if len(dates) != len(closes):
+        return None
+    keep = [i for i, d in enumerate(dates) if d and d <= cutoff]
+    if not keep:
+        return None
+    out = dict(data)
+    for key in ("dates", "closes", "volumes", "highs", "lows"):
+        seq = data.get(key) or []
+        if seq and len(seq) != len(dates):
+            return None
+        out[key] = [seq[i] for i in keep] if seq else []
+    if len(out["closes"]) < 30:
+        return None
+    out.update(price=out["closes"][-1],
+               prev_close=out["closes"][-2], realtime=False, rt_ts="")
+    return out
 
 
 def load_settings():
     """读 settings.json 覆盖默认值。文件不存在 / 写错都安全退回默认值。"""
     s = dict(DEFAULT_SETTINGS)
     try:
-        with open("settings.json", encoding="utf-8") as f:
+        with open(os.path.join(BASE, "settings.json"), encoding="utf-8") as f:
             u = json.load(f)
         if not isinstance(u, dict):
             raise ValueError("settings.json 顶层不是对象")
@@ -284,19 +360,19 @@ def macro_status(key, item, drawdown=None):
             return "red", "周变化 +%.0f ⚠" % dw
         if v >= 500:
             return "red", "熊市中段"
-        if v >= 400:
+        if v >= S["hy_red"]:
             return "red", "危机确认"
-        if v >= 350:
+        if v >= S["hy_green"]:
             return "yellow", "收紧"
         return "green", "平静"
 
     if key == "vix":
         v = item["value"]
-        if v >= 40:
+        if v >= S["vix_red"]:
             return "red", "极度恐慌"
-        if v >= 30:
+        if v >= S["vix_yellow"]:
             return "yellow", "恐慌"
-        if v >= 20:
+        if v >= S["vix_green"]:
             return "yellow", "紧张"
         return "green", "平静"
 
@@ -344,17 +420,17 @@ def yahoo_history(symbol):
                 j = r.json()
                 res = j["chart"]["result"][0]
                 q = res["indicators"]["quote"][0]
-                # 日期和收盘价要同步过滤，否则 dates 和 closes 会错位
-                _pairs = [
-                    (datetime.fromtimestamp(t, US_TZ).strftime("%Y-%m-%d"), c)
-                    for t, c in zip(res.get("timestamp") or [], q.get("close") or [])
-                    if c is not None
-                ]
-                dates = [d for d, _ in _pairs]
-                closes = [c for _, c in _pairs]
-                vols = [v for v in q.get("volume", []) if v is not None]
-                highs = [h for h in q.get("high", []) if h is not None]
-                lows = [l for l in q.get("low", []) if l is not None]
+                # OHLCV沿同一索引过滤，空volume填0，避免裁剪时错位。
+                ticks, raw = res.get("timestamp") or [], q.get("close") or []
+                valid = [i for i, c in enumerate(raw) if c is not None and i < len(ticks)]
+                dates = [datetime.fromtimestamp(ticks[i], US_TZ).strftime("%Y-%m-%d") for i in valid]
+                closes = [raw[i] for i in valid]
+                def aligned(key, fallback):
+                    seq = q.get(key) or []
+                    return [seq[i] if i < len(seq) and seq[i] is not None else fallback(i) for i in valid]
+                vols = aligned("volume", lambda i: 0)
+                highs = aligned("high", lambda i: raw[i])
+                lows = aligned("low", lambda i: raw[i])
                 meta = res.get("meta", {})
                 if len(closes) < 30:
                     last_err = "历史数据不足"
@@ -473,14 +549,18 @@ def apply_realtime(symbol, data):
     历史还没更新到今天 → 补一根新的，昨收顺延为 prev_close。
     这样盘中重跑时 涨跌幅 / RSI / 均线 / 布林 全部按当前价算，而不是昨天的收盘价。
     """
-    if not data or not S.get("use_realtime"):
+    if not data or CLOSED_ONLY or not S.get("use_realtime"):
         return data
     rt = nasdaq_realtime(symbol)
     if not rt:
         return data
     px = rt["price"]
     dates = data.get("dates") or []
-    today = datetime.now(US_TZ).strftime("%Y-%m-%d")
+    now_ny = datetime.now(US_TZ)
+    today = now_ny.strftime("%Y-%m-%d")
+    # 常规日线实时层不能把夜盘冒充完整23小时bar。
+    if not ((9, 30) <= (now_ny.hour, now_ny.minute) < (16, 0)):
+        return data
     try:
         if dates and dates[-1] == today:
             data["closes"][-1] = px
@@ -498,6 +578,8 @@ def apply_realtime(symbol, data):
             # dates 必须跟着补一天，否则定投的「交易日计数」会少算今天
             if isinstance(data.get("dates"), list):
                 data["dates"].append(today)
+            if isinstance(data.get("volumes"), list):
+                data["volumes"].append(0)  # 报价接口没返回当日成交量，不拿昨量冒充今天。
         data["price"] = px
         data["realtime"] = True
         data["rt_ts"] = rt["ts"]
@@ -605,16 +687,24 @@ def fetch_history(symbol):
     剥掉后缀才抓得到（否则整只标的变灰）。
     """
     symbol = normalize_symbol(symbol)
-    data = yahoo_history(symbol)
-    if data:
-        data["source"] = "yahoo"
+    fallback = None
+    for name, loader in (("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history)):
+        data = loader(symbol)
+        if not data:
+            continue
+        data["source"] = name
+        if CLOSED_ONLY:
+            data = trim_history(data, TARGET_DATE)
+            if not data:
+                continue
+            # 日期落后先试另一个源；都落后时明确展示，不冒充新数据。
+            if data["dates"][-1] < TARGET_DATE:
+                if fallback is None or data["dates"][-1] > fallback["dates"][-1]:
+                    fallback = data
+                continue
+            return data
         return apply_realtime(symbol, data)
-    time.sleep(1.2)
-    data = stooq_history(symbol)
-    if data:
-        return apply_realtime(symbol, data)
-    time.sleep(0.8)
-    return apply_realtime(symbol, nasdaq_history(symbol))
+    return fallback
 
 
 def calc_rsi(prices, period=14):
@@ -757,6 +847,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
                 "chg": chg, "rsi": None, "dist_high": dist_high,
                 "dist_low": dist_low, "vol_ratio": vol_ratio,
                 "trigger": cfg.get("trigger"), "source": data.get("source", ""),
+                "data_date": (data.get("dates") or [""])[-1],
                 "group": group, "boll_up": boll_up, "boll_dn": boll_dn,
                 "signals": [f"异动 {chg:+.1f}%"], "level": "yellow",
             }
@@ -765,6 +856,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
             "chg": chg, "rsi": None, "dist_high": dist_high,
             "dist_low": dist_low, "vol_ratio": vol_ratio,
             "trigger": cfg.get("trigger"), "source": data.get("source", ""),
+            "data_date": (data.get("dates") or [""])[-1],
             "group": group, "boll_up": boll_up, "boll_dn": boll_dn,
             "signals": [], "level": "green",
         }
@@ -861,6 +953,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         "trigger": trig,
         "dca": dca,
         "source": data.get("source", ""),
+        "data_date": (data.get("dates") or [""])[-1],
         "realtime": bool(data.get("realtime")),
         "rt_ts": data.get("rt_ts", ""),
         "group": group,
@@ -880,51 +973,58 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-# 看板页的「立即重跑」按钮脚本。写成独立常量而不是塞进 f-string 模板，
-# 是为了不用把每个 { } 都转义成 {{ }}
-RUN_JS = """
-<script>
-(function(){
-  var box=document.getElementById('runMsg');
-  var btn=document.getElementById('btnRunNow');
-  if(!btn)return;
-  btn.onclick=async function(){
-    var t='';
-    try{t=localStorage.getItem('mm_gh_token_v1')||'';}catch(e){}
-    if(!t){
-      box.textContent='还没填令牌：去「改自选清单」页贴一次，回来就能一键重跑';
-      box.className='err';
-      return;
-    }
-    btn.disabled=true;
-    box.textContent='正在触发…';
-    box.className='';
-    try{
-      var r=await fetch('https://api.github.com/repos/nixhuang/market-monitor/actions/workflows/daily.yml/dispatches',{
-        method:'POST',
-        headers:{Authorization:'token '+t,Accept:'application/vnd.github+json','Content-Type':'application/json'},
-        body:JSON.stringify({ref:'main'})
-      });
-      if(r.status===204||r.ok){
-        box.textContent='已触发，约 1 分钟后自动刷新（盘中拿到的是延迟约 15 分钟的报价）';
-        box.className='ok';
-        setTimeout(function(){location.reload();},70000);
-      }else{
-        box.textContent='触发失败 HTTP '+r.status+'（令牌过期？去编辑页重填一次）';
-        box.className='err';
-      }
-    }catch(e){
-      box.textContent='连不上 GitHub：'+e.message;
-      box.className='err';
-    }
-    btn.disabled=false;
-  };
-})();
-</script>
-"""
+RUN_JS = '<script src="./run-status.js"></script>'
 
 
-def render(macro, items, watch_count, data_down=False):
+def config_hash(filename):
+    """与GitHub Contents API content.sha一致，用于精确验证哪版配置已生效。"""
+    raw = open(os.path.join(BASE, filename), "rb").read()
+    return hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
+
+
+def beijing_iso(value):
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(TZ).isoformat(timespec="seconds")
+    except Exception:
+        return ""
+
+
+def build_snapshot(macro, items, cfg):
+    dates = sorted({d.get("data_date") for d in items if d.get("data_date")})
+    missing = [normalize_symbol(d["symbol"]) for d in items if d.get("price") is None]
+    stale = [normalize_symbol(d["symbol"]) for d in items
+             if d.get("data_date") and TARGET_DATE and d["data_date"] < TARGET_DATE]
+    positions, watch = cfg.get("positions", {}), cfg.get("watch", {})
+    return {
+        "run_id": str(os.environ.get("GITHUB_RUN_ID") or "local-" + NOW.strftime("%Y%m%d%H%M%S")),
+        "request_id": os.environ.get("MM_REQUEST_ID", ""),
+        "source_sha": os.environ.get("GITHUB_SHA", ""),
+        "started_at": os.environ.get("MM_STARTED_AT", NOW.isoformat()),
+        "started_at_bj": beijing_iso(os.environ.get("MM_STARTED_AT", NOW.isoformat())),
+        "finished_at": datetime.now(TZ).isoformat(),
+        "finished_at_bj": datetime.now(TZ).isoformat(timespec="seconds"),
+        "event": EVENT,
+        "target_trade_date": TARGET_DATE,
+        "mode": "closed" if CLOSED_ONLY else "manual_or_config",
+        "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
+        "config_files": {f: config_hash(f) for f in ("holdings.json", "settings.json")},
+        "effective_settings": dict(S),
+        "list_counts": {"positions": len(positions), "watch": len(watch),
+                        "triggers": sum(bool(c.get("trigger")) for c in positions.values()),
+                        "dca": sum(bool(c.get("dca_every") and c.get("dca_start")) for c in positions.values())},
+        "summary": {**{lv: sum(d["level"] == lv for d in items) for lv in ("red", "yellow", "green", "gray")},
+                    "total": len(items), "macro_ok": sum(bool(m.get("ok")) for m in macro.values()),
+                    "stale_symbols": stale, "missing_symbols": missing},
+        "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
+        "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
+        "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
+    }
+
+
+def render(macro, items, watch_count, data_down=False, snapshot=None):
     rows_macro = []
     for key in ["hy_oas", "vix", "sp500", "ust10", "curve", "dxy"]:
         it = macro.get(key, {})
@@ -990,8 +1090,8 @@ def render(macro, items, watch_count, data_down=False):
     if not hy.get("ok"):
         # 核心指标缺失时不能假装"绿框不用动"，否则会误导下单
         overall, overall_txt = "gray", "跑路价签数据缺失 · 别据此下单"
-    elif hy.get("ok") and hy["value"] >= 400:
-        overall, overall_txt = "red", "跑路价签破400 · 进入危机确认"
+    elif hy.get("ok") and hy["value"] >= S["hy_red"]:
+        overall, overall_txt = "red", f"跑路价签≥{S['hy_red']:.0f} · 进入危机确认"
     elif hy.get("ok") and hy.get("delta_week") and hy["delta_week"] >= 50:
         overall, overall_txt = "red", "利差一周急剧扩大 · 立刻警戒"
     elif sp.get("ok") and (sp.get("drawdown") or 0) <= -10:
@@ -1007,6 +1107,19 @@ def render(macro, items, watch_count, data_down=False):
         src_txt += f" · {n_rt} 只用了实时价（Nasdaq，0 延迟）"
     # 之前漏了 join，整段被当成 list 的 str() 插进表格，页面上会多出 [' 和 ']
     rows_macro = "".join(rows_macro)
+    snapshot = snapshot or {}
+    snapshot_json = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
+    snapshot_json = snapshot_json.replace("</", "<\\/")
+    summary = snapshot.get("summary", {})
+    counts = snapshot.get("list_counts", {})
+    actual_dates = snapshot.get("actual_dates", {})
+    summary_hint = html_lib.escape(
+        f"目标交易日 {snapshot.get('target_trade_date') or '未锁定'} · "
+        f"持仓 {counts.get('positions', 0)} / 关注 {counts.get('watch', 0)} · "
+        f"红 {summary.get('red', 0)} / 黄 {summary.get('yellow', 0)} / "
+        f"绿 {summary.get('green', 0)} / 灰 {summary.get('gray', 0)} · "
+        f"行情日期 {actual_dates.get('min') or '—'} ～ {actual_dates.get('max') or '—'}"
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1065,11 +1178,15 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 #runMsg{{font-size:12px;color:var(--dim);flex:1;min-width:180px;line-height:1.5}}
 #runMsg.ok{{color:var(--green)}}
 #runMsg.err{{color:var(--red)}}
+.run-summary{{padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--dim);line-height:1.65}}
 </style>
 </head>
 <body><div class="wrap">
 <h1>市场自检</h1>
 <div class="sub">{NOW.strftime('%Y-%m-%d %H:%M')} 北京时间 · 数据自动更新</div>
+
+<div class="card"><h2>本次运行与生效配置摘要</h2><div class="run-summary" id="runSummary">{summary_hint}</div></div>
+<div class="script-data" hidden><script id="snapshotData" type="application/json">{snapshot_json}</script></div>
 
 <div class="overall o-{overall}">{overall_txt}</div>
 {('<div class="warn">⚠ 行情源暂时不可用（Yahoo 限流），个股数据未更新，宏观数据正常。通常隔一阵会自动恢复。</div>' if data_down else "")}
@@ -1111,14 +1228,25 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 
 # ---------------------------------------------------------------- main
 
-def main():
-    base = os.path.dirname(os.path.abspath(__file__))
-    cfg_path = os.path.join(base, "holdings.json")
+def main(argv=None):
+    global TARGET_DATE, CLOSED_ONLY
+    parser = argparse.ArgumentParser(description="市场自检生成器")
+    parser.add_argument("--prepare-run", action="store_true", help="锁定本次运行目标交易日并输出 GitHub Actions 环境变量")
+    args = parser.parse_args(argv)
+    if args.prepare_run:
+        prepare_run()
+        return 0
 
+    if not TARGET_DATE:
+        plan = plan_run(EVENT, datetime.now(timezone.utc))
+        TARGET_DATE, CLOSED_ONLY = plan["target"], plan["closed_only"]
+
+    cfg_path = os.path.join(BASE, "holdings.json")
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-    except Exception:
+    except Exception as e:
+        log(f"holdings.json 读取失败，按空清单处理：{e}")
         cfg = {}
 
     # 持仓 / 关注分开存。旧版只有 watch 一个字段时，全部按「关注」处理
@@ -1130,18 +1258,15 @@ def main():
         log("holdings.json 里没有自选股，跳过个股部分")
 
     macro = build_macro()
-
     items = []
     if universe:
         log(f"抓取 {len(positions)} 只持仓 + {len(watch)} 只关注...")
         fail_streak = 0
         data_down = False
         for i, (sym, sc, grp) in enumerate(universe):
-            data = None
-            if not data_down:
-                data = fetch_history(sym)
-                if i < len(universe) - 1:
-                    time.sleep(0.5)  # 轻微限速，降低被封概率
+            data = fetch_history(sym) if not data_down else None
+            if i < len(universe) - 1:
+                time.sleep(0.5)  # 轻微限速，降低被封概率
             if data:
                 fail_streak = 0
                 lv, sig, detail = analyze_symbol(sym, sc, data, group=grp)
@@ -1158,17 +1283,22 @@ def main():
                 "symbol": sym, "note": sc.get("note", ""), "price": None,
                 "chg": None, "rsi": None, "dist_high": None, "dist_low": None,
                 "vol_ratio": None, "trigger": sc.get("trigger"),
-                "group": grp, "boll_up": None, "boll_dn": None,
+                "group": grp, "data_date": "", "boll_up": None, "boll_dn": None,
                 "signals": ["行情源暂时不可用"] if data_down else ["数据获取失败"],
                 "level": "gray",
             })
 
+    snapshot = build_snapshot(macro, items, cfg)
     html = render(macro, items, len(universe), data_down=not universe
-                  or all(d["level"] == "gray" for d in items))
-    out = os.path.join(base, "index.html")
+                  or all(d["level"] == "gray" for d in items), snapshot=snapshot)
+    out = os.path.join(BASE, "index.html")
     with open(out, "w", encoding="utf-8") as f:
         f.write(html)
-    log(f"已生成 {out}")
+    status_path = os.path.join(BASE, "status.json")
+    with open(status_path, "w", encoding="utf-8") as f:
+        json.dump(snapshot, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    log(f"已生成 {out} 与 {status_path}；目标交易日 {TARGET_DATE}，实际行情日期 {snapshot['actual_dates']}")
 
     try:
         push_serverchan(macro, items)
