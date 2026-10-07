@@ -520,6 +520,75 @@
     render();
     return tick();
   }
+  // 「刷新状态」点了要有反馈：否则状态没变化时页面文字不动，看着像按钮坏了。
+  async function manualCheck() {
+    const b = el('btnCheckStatus');
+    const before = (latestStatus || verifiedSnapshot || {}).run_id || '';
+    if (b) { b.disabled = true; b.textContent = '核对中…'; }
+    try {
+      await refresh();
+    } finally {
+      if (b) {
+        b.disabled = false;
+        const after = (latestStatus || verifiedSnapshot || {}).run_id || '';
+        const t = new Date();
+        const hms = [t.getHours(), t.getMinutes(), t.getSeconds()]
+          .map(n => String(n).padStart(2, '0')).join(':');
+        const changed = before && after && before !== after;
+        b.textContent = '刷新状态（已核对 ' + hms + (changed ? ' · 有更新' : '') + '）';
+      }
+    }
+  }
+
+  function runsEventText(event) {
+    if (event === 'push') return '保存清单/规则后';
+    if (event === 'workflow_dispatch') return '立即运行';
+    if (event === 'schedule') return '定时自动';
+    return event || '未知';
+  }
+  function runsResult(run) {
+    if (run.status !== 'completed') return ['busy', '进行中'];
+    if (run.conclusion === 'success') return ['ok', '成功'];
+    if (run.conclusion === 'cancelled') return ['', '已取消'];
+    return ['bad', '失败'];
+  }
+  function runsTime(iso) {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString('zh-CN', {
+        timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false
+      });
+    } catch (_) { return String(iso).slice(0, 16).replace('T', ' '); }
+  }
+  // 运行记录：GitHub 后台只能按「天数」保留（最少 1 天），不能按条数限制。
+  // 所以改成在页面内只取最近 20 条展示，不再整页跳到 GitHub 那一长串列表。
+  async function loadRuns() {
+    const box = el('runList');
+    if (!box) return;
+    box.textContent = '读取最近运行记录…';
+    try {
+      const data = await request(apiURL('/actions/workflows/daily.yml/runs?per_page=20'), {github: true});
+      const runs = (data && data.workflow_runs) || [];
+      if (!runs.length) { box.textContent = '暂无运行记录'; return; }
+      const current = (latestStatus || verifiedSnapshot || {}).run_id || '';
+      let html = '<table>';
+      runs.forEach(run => {
+        const [cls, label] = runsResult(run);
+        const isNow = current && String(run.id) === String(current);
+        html += '<tr' + (isNow ? ' class="now"' : '') + '>' +
+          '<td class="rwhen">' + runsTime(run.run_started_at || run.created_at) + '</td>' +
+          '<td>' + runsEventText(run.event) + '</td>' +
+          '<td class="' + cls + '">' + label + (isNow ? ' · 当前线上' : '') + '</td>' +
+          '</tr>';
+      });
+      html += '</table>';
+      box.innerHTML = '最近 ' + runs.length + ' 次运行（北京时间）<br>' + html;
+    } catch (error) {
+      box.textContent = '读取失败：' + (error && error.message ? error.message : '未知错误');
+    }
+  }
+
   function init(opts = {}) {
     if (initialized && !Object.keys(opts).length) return window.MMRunStatus;
     cancelPoll();
@@ -528,7 +597,8 @@
     ['btnRun', 'btnRunNow'].forEach(id => {
       if (el(id)) el(id).onclick = () => { void startManual(); };
     });
-    if (el('btnCheckStatus')) el('btnCheckStatus').onclick = () => { void refresh(); };
+    if (el('btnCheckStatus')) el('btnCheckStatus').onclick = () => { void manualCheck(); };
+    if (el('btnRuns')) el('btnRuns').onclick = () => { void loadRuns(); };
     render(); // 不等网络请求，先保留本页生成数据并折叠旧版摘要。
     void refresh();
     return window.MMRunStatus;

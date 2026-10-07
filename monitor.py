@@ -653,6 +653,8 @@ def nasdaq_history(symbol):
                     "price": parsed[-1]["c"],
                     "prev_close": parsed[-2]["c"] if len(parsed) >= 2 else None,
                     "currency": "USD",
+                    # 哪个 assetclass 试通了就记下来：stocks / etf，用于给 ETF 打标签
+                    "asset": ac,
                     "source": "nasdaq",
                 }
             except Exception as e:
@@ -685,6 +687,41 @@ def normalize_symbol(symbol):
                     return digits.zfill(4) + ".HK"
                 return code + suffix
     return s
+
+
+# ETF / 基金类代码：看板上给这些标的一个「ETF」小标签，和个股区分开。
+# 静态表是主力（离线可判、不依赖行情源）；行情源若能给出 assetclass=etf 则以此为准，
+# 两者取其一命中即算 ETF。以后新增 ETF，往这里加代码即可。
+ETF_SYMBOLS = {
+    # 宽基 / 规模
+    "SPY", "VOO", "IVV", "VTI", "ITOT", "QQQ", "QQQM", "SPYM", "SPYX", "IWM", "DIA",
+    "SCHX", "SCHA", "SCHB", "VB", "VO", "VUG", "VTV", "VBR", "MGK", "MGV",
+    "SPYV", "SPYG", "VOOG", "VOOV", "SPMO", "QUAL", "MTUM", "USMV", "VLUE", "SIZE",
+    "SPHQ", "NOBL", "DGRO", "DGRW", "VYM", "SDY", "SPHD", "SCHD", "VIG",
+    # 国际 / 新兴
+    "EFA", "VEA", "EEM", "VWO", "VXUS", "SCHF", "SCHE", "IEFA", "IEMG", "EWJ", "FXI",
+    # 债券 / 利率（TLT、SGOV 已从清单移除，保留在表里以便日后加回仍能识别）
+    "AGG", "BND", "TLT", "IEF", "IEI", "SHY", "SHV", "BIL", "SGOV", "TFLO", "ICSH",
+    "JPST", "NEAR", "FLOT", "LQD", "HYG", "JNK", "EMB", "TIP", "SCHZ", "SCHP", "SCHR",
+    "MUB", "HYD", "HYMB", "PFF", "PGX", "VCSH", "VCIT", "BSV", "BIV",
+    # 行业 SPDR
+    "XLK", "XLF", "XLV", "XLE", "XLI", "XLY", "XLP", "XLB", "XLU", "XLRE", "XLC",
+    "VGT", "VHT", "VFH", "VPU", "VDC", "VCR", "VDE", "VIS", "VAW",
+    "SMH", "SOXX", "XBI", "XAR", "XRT", "XOP", "XME", "XPH", "XSW", "XTN", "XHB",
+    "KBE", "KRE", "KIE", "IYT", "IYR", "VNQ", "VNQI", "REM", "IAUM",
+    # 商品 / 加密 / 主题
+    "GLD", "IAU", "GLDM", "SGOL", "SIVR", "BAR", "SLV", "PPLT", "PALL", "GLTR",
+    "DBC", "GSG", "DBP", "USO", "UNG", "IBIT", "FBTC", "GBTC", "ETHA", "BITO",
+    "ARKK", "ARKW", "ARKQ", "ARKF", "ARKX", "SOXL", "SOXS", "TQQQ", "SQQQ",
+    "UVXY", "SVXY", "VXX", "USMV",
+    # 经 Nasdaq assetclass 实测确认为 ETF（名字不典型，容易漏）
+    "EUV", "DRAM",
+}
+
+
+def is_etf(symbol):
+    """判断标的是不是 ETF / 基金类。静态表命中即算。"""
+    return normalize_symbol(symbol).upper() in ETF_SYMBOLS
 
 
 def fetch_history(symbol):
@@ -1033,6 +1070,8 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         "group": group,
         "boll_up": boll_up,
         "boll_dn": boll_dn,
+        # ETF 标签：静态表命中，或行情源明确给出 assetclass=etf
+        "etf": is_etf(sym) or data.get("asset") == "etf",
         "signals": signals,
         "level": level,
     }
@@ -1047,7 +1086,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261007-6"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261007-7"></script>'
 
 
 def config_hash(filename):
@@ -1144,8 +1183,10 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
                 "down" if (d["chg"] or 0) < 0 else "")
             chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
             note = f'<span class="note">{d["note"]}</span>' if d["note"] else ""
+            # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
+            tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
             out += (
-                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}</td>'
+                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}</td>'
                 f'<td class="num">{fmt(d["price"])}</td>'
                 f'<td class="num {chg_cls}">{chg_txt}</td>'
                 f'<td class="sig">{sig}</td></tr>'
@@ -1240,6 +1281,9 @@ tr:first-child td{{border-top:none}}
 .dim{{color:var(--dim);font-size:12px}}
 .sym{{font-weight:600}}
 .note{{color:var(--dim);font-weight:400;font-size:11px;margin-left:6px}}
+.tag{{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;
+  font-size:10px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
+  color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}}
 .sig{{font-size:12.5px;color:var(--text)}}
 .up{{color:var(--up)}} .down{{color:var(--down)}}
 tr.red td:first-child{{box-shadow:inset 3px 0 0 var(--red)}}

@@ -99,6 +99,12 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
   font-size:12px;color:var(--dim);padding:8px 0 4px}
 .pager button{padding:5px 11px;font-size:12px}
 .pager .pg{font-variant-numeric:tabular-nums}
+.runlist{margin-top:12px;font-size:12px;color:var(--dim)}
+.runlist table{width:100%;border-collapse:collapse;margin-top:6px}
+.runlist td{padding:5px 8px;border-top:1px solid var(--line);vertical-align:top}
+.runlist tr.now td{color:var(--text);background:rgba(107,163,240,.08)}
+.runlist .ok{color:#3fb27f}.runlist .bad{color:#e0625f}.runlist .busy{color:#d8a33a}
+.runlist .rwhen{font-variant-numeric:tabular-nums;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -115,11 +121,12 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
   <h2>立即运行 <span>（不用等定时任务，点一下就抓最新行情）</span></h2>
   <div class="runbar">
     <button class="primary" id="btnRun">立即运行</button>
-    <a href="https://github.com/nixhuang/market-monitor/actions" target="_blank"><button>运行记录</button></a>
+    <button id="btnRuns">运行记录（最近 20 条）</button>
     <div class="runlight" id="runLight" data-phase="idle"><i class="dot"></i><span id="runLightTxt">点「立即运行」抓最新行情</span></div>
   </div>
   <button id="btnCheckStatus" style="margin-top:10px">刷新状态</button>
   <div class="runstate" id="runState" aria-live="polite">读取公开发布状态中…</div>
+  <div id="runList" class="runlist"></div>
 </div>
 
 <div class="card" id="authCard">
@@ -289,7 +296,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 </div>
 
-<script src="./run-status.js?v=20261007-6"></script>
+<script src="./run-status.js?v=20261007-7"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
