@@ -213,12 +213,18 @@ details.set[open] summary{margin-bottom:10px}
   </div>
 
   <div class="card">
-    <h2>定投提醒 <span>（按交易日计数，间隔逐只可调）</span></h2>
-    <div id="dcaList"></div>
+    <h2>定投提醒 <span>（全局一条，按美股交易日计数）</span></h2>
+    <div class="setrow"><label>起点日（YYYY-MM-DD，当天算第 1 个交易日）</label>
+      <input id="set_dca_start" placeholder="2026-10-01" style="width:130px"></div>
+    <div class="setrow" style="margin-top:7px"><label>间隔（每 N 个交易日提醒一次，0 或留空 = 关闭）</label>
+      <input id="set_dca_every" inputmode="numeric" placeholder="5"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" id="btnSaveDca">保存定投提醒</button>
+      <button id="btnClearDca">关闭定投提醒</button>
+    </div>
     <p class="note">
-      只对持仓生效。填了<b>间隔</b>和<b>起始日</b>才会提醒：比如间隔 <kbd>5</kbd>、起始日 <kbd>2026-10-01</kbd>，
-      就是从那天算起每 5 个交易日响一次（10/01 那天第 1 次，第 6 个交易日第 2 次，以此类推）。<br>
-      起始日填你想对齐的那一次即可，只填间隔不会提醒。改完点最下方的<b>保存</b>（和清单一并提交）。
+      例：起点 <kbd>2026-10-01</kbd>、间隔 <kbd>5</kbd> → 10/01 是第 1 次，之后每过 5 个交易日（周末和美股休市日不算）提醒一次。
+      看板首页会显示「今天是定投日」或「距下次还有几个交易日（日期）」。只改这一块，不影响下面的规则阈值；点保存后约 1 分钟生效。
     </p>
   </div>
 
@@ -436,39 +442,6 @@ function render(){
       };
     });
   });
-  renderDca();
-}
-function renderDca(){
-  const box=$('dcaList');
-  const keys=Object.keys(data.positions||{});
-  if(!keys.length){box.innerHTML='<div class="empty">（持仓为空）</div>';return;}
-  let h='';
-  keys.forEach(s=>{
-    const c=data.positions[s]||{};
-    h+='<div class="row" data-s="'+esc(s)+'">'
-      +'<span class="sym" title="'+esc(s)+'">'+esc(s)+'</span>'
-      +'<input class="n" style="max-width:130px" value="'+esc(c.dca_every===undefined?'':c.dca_every)+
-        '" placeholder="间隔（交易日）" data-f="dca_every" inputmode="numeric">'
-      +'<input class="t" style="width:140px" value="'+esc(c.dca_start||'')+
-        '" placeholder="起始日 2026-10-01" data-f="dca_start">'
-      +'</div>';
-  });
-  box.innerHTML=h;
-  box.querySelectorAll('.row').forEach(row=>{
-    row.querySelectorAll('input').forEach(inp=>{
-      inp.oninput=()=>{
-        const s=row.dataset.s,f=inp.dataset.f,v=inp.value.trim();
-        const o=data.positions[s]||(data.positions[s]={});
-        if(f==='dca_every'){
-          if(v==='')delete o.dca_every;
-          else{const n=parseInt(v,10);if(!isNaN(n)&&n>0)o.dca_every=n;}
-        }else{
-          if(v)o[f]=v;else delete o[f];
-        }
-        touch();
-      };
-    });
-  });
 }
 function touch(){changed=true;$('dirty').textContent='有未保存的改动';}
 
@@ -523,14 +496,18 @@ $('btnAdd').onclick=()=>{
 /* ---------- 规则阈值（settings.json） ---------- */
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
   rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,vol_ratio:1.5,quiet_chg:2,
-  hy_green:350,hy_yellow:400,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1};
+  hy_green:350,hy_yellow:400,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,
+  dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
+const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
 let SET=Object.assign({},SET_DEFS), SET_SHA='';
 
 function renderSettings(){
   SET_KEYS.forEach(k=>{
     const el=$('set_'+k);if(!el)return;
-    if(k==='use_realtime')el.value=String(SET[k]||0);else el.value=SET[k];
+    if(k==='use_realtime')el.value=String(SET[k]||0);
+    else if(k==='dca_every')el.value=SET[k]?String(SET[k]):'';
+    else el.value=SET[k];
   });
 }
 function collectSettings(){
@@ -538,6 +515,15 @@ function collectSettings(){
     const el=$('set_'+k);if(!el)return;
     const v=String(el.value).trim();
     if(k==='use_realtime'){SET[k]=v==='0'?0:1;return;}
+    if(k==='dca_start'){                 // 日期格式不对就保持原值
+      if(v===''||DATE_RE.test(v))SET[k]=v;
+      return;
+    }
+    if(k==='dca_every'){                 // 留空 = 关闭
+      if(v==='')SET[k]=0;
+      else{const n=parseInt(v,10);if(!isNaN(n)&&n>=0)SET[k]=n;}
+      return;
+    }
     const n=Number(v);
     if(v!==''&&!isNaN(n))SET[k]=n;      // 留空或乱填就保持原值，不让脏数据进仓库
   });
@@ -554,11 +540,14 @@ async function loadSettings(){
   }
   try{
     const next=Object.assign({},SET_DEFS,JSON.parse(b64dec(r.data.content)));
-    SET_KEYS.forEach(k=>{const n=Number(next[k]);if(isNaN(n))next[k]=SET_DEFS[k];});
+    SET_KEYS.forEach(k=>{
+      if(k==='dca_start'){if(typeof next[k]!=='string'||(next[k]!==''&&!DATE_RE.test(next[k])))next[k]='';return;}
+      const n=Number(next[k]);if(isNaN(n))next[k]=SET_DEFS[k];
+    });
     SET=next;SET_SHA=r.data.sha||'';renderSettings();
   }catch(e){setMsg('settings.json 不是合法 JSON；保留当前编辑内容','err');}
 }
-$('btnSaveRules').onclick=async e=>{
+async function saveRules(btn){
   collectSettings();
   const text=setJsonText();
   if(!TOKEN){
@@ -568,21 +557,35 @@ $('btnSaveRules').onclick=async e=>{
                  :'规则 JSON 已显示在下面，复制到仓库的 settings.json','ok');
     return;
   }
-  e.target.disabled=true;setMsg('正在写入规则…','busy');
-  const body={message:'更新规则阈值',content:b64enc(text),branch:BRANCH};
+  btn.disabled=true;setMsg('正在写入设置…','busy');
+  const body={message:'更新规则/定投设置',content:b64enc(text),branch:BRANCH};
   if(SET_SHA)body.sha=SET_SHA;
   const r=await gh('PUT','/contents/settings.json',body);
   if(r.ok){
     SET_SHA=(r.data.content&&r.data.content.sha)||SET_SHA;
     trackReceipt('settings.json',r.data);
   }else{
-    setMsg('规则保存失败：'+whyFail(r.status,r.data.message),'err');
+    setMsg('保存失败：'+whyFail(r.status,r.data.message),'err');
   }
-  e.target.disabled=false;
+  btn.disabled=false;
+}
+$('btnSaveRules').onclick=e=>saveRules(e.target);
+$('btnSaveDca').onclick=e=>{
+  const s=$('set_dca_start').value.trim(),n=$('set_dca_every').value.trim();
+  if(s&&!DATE_RE.test(s)){setMsg('起点日格式要写成 2026-10-01','err');return;}
+  if(n&&!(parseInt(n,10)>0)){setMsg('间隔要填大于 0 的整数（交易日数）','err');return;}
+  if(n&&!s){setMsg('填了间隔还要填起点日，否则不会提醒','err');return;}
+  if(s&&!n){setMsg('填了起点日还要填间隔','err');return;}
+  saveRules(e.target);
+};
+$('btnClearDca').onclick=e=>{
+  $('set_dca_start').value='';$('set_dca_every').value='';
+  saveRules(e.target);
 };
 $('btnResetRules').onclick=()=>{
-  if(!confirm('把所有阈值恢复成默认值？'))return;
-  SET=Object.assign({},SET_DEFS);renderSettings();
+  if(!confirm('把所有规则阈值恢复成默认值？（定投提醒设置不受影响）'))return;
+  const keep={dca_every:SET.dca_every,dca_start:SET.dca_start};
+  SET=Object.assign({},SET_DEFS,keep);renderSettings();
   setMsg('已填回默认值，点「保存规则」才写入仓库','ok');
 };
 

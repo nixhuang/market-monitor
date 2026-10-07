@@ -128,7 +128,7 @@
       '红 ' + (summary.red ?? '未知') + ' / 黄 ' + (summary.yellow ?? '未知') + ' / 绿 ' + (summary.green ?? '未知') +
         ' / 灰 ' + (summary.gray ?? '未知') + ' / 总数 ' + (summary.total ?? '未知') + ' · 宏观有效 ' + (summary.macro_ok ?? '未知'),
       '持仓 ' + (counts.positions ?? '未知') + ' · 关注 ' + (counts.watch ?? '未知') +
-        ' · trigger ' + (counts.triggers ?? '未知') + ' · 定投 ' + (counts.dca ?? '未知'),
+        ' · 设了加仓价 ' + (counts.triggers ?? '未知') + ' 只 · 定投提醒 ' + (counts.dca ? '已开启' : '未开启'),
       '行情实际日期 ' + (dates.min || '未知') + ' ～ ' + (dates.max || '未知') +
         ' · 过期 ' + list(summary.stale_symbols) + ' · 缺失 ' + list(summary.missing_symbols),
       '覆盖情况 ' + JSON.stringify(s.coverage ?? null),

@@ -18,6 +18,7 @@ import html as html_lib
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -79,6 +80,11 @@ DEFAULT_SETTINGS = {
 
     # 行情源：1=用 Nasdaq 实时报价覆盖最新价（0 延迟），0=只用日线收盘价
     "use_realtime": 1,
+
+    # 定投提醒（全局一条）：从 dca_start 那个交易日算起，每 dca_every 个交易日提醒一次
+    # dca_every=0 或 dca_start 为空 = 不提醒
+    "dca_every": 0,
+    "dca_start": "",
 }
 
 
@@ -166,6 +172,11 @@ def load_settings():
             raise ValueError("settings.json 顶层不是对象")
         for k, v in u.items():
             if k not in s:
+                continue
+            if k == "dca_start":
+                # 起始日是 YYYY-MM-DD 字符串（或空）；写错就当没设
+                if isinstance(v, str) and (v == "" or re.fullmatch(r"\d{4}-\d{2}-\d{2}", v.strip())):
+                    s[k] = v.strip()
                 continue
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 continue  # 类型不对就跳过，不让它污染默认值
@@ -815,6 +826,89 @@ def streak_tail(st, rail="上轨"):
     return t
 
 
+def global_dca(target_date):
+    """全局定投提醒：按交易所日历数「起点日 → 数据日」经过了几个交易日。
+
+    返回 None（没开启）或 dict：
+      every, start, count(已过交易日数), times(第几次定投), due(数据日是否定投日),
+      next_in(距下次还差几个交易日), next_date(下一个定投日，YYYY-MM-DD)
+    """
+    every, start = int(S.get("dca_every") or 0), (S.get("dca_start") or "").strip()
+    if every <= 0 or not start or not target_date:
+        return None
+    try:
+        import exchange_calendars as xcals
+        cal = xcals.get_calendar("XNYS")
+        first = cal.date_to_session(start, direction="next")
+        last = cal.date_to_session(target_date, direction="previous")
+        if first > last:
+            return {"every": every, "start": start, "pending": True,
+                    "first": first.date().isoformat()}
+        count = len(cal.sessions_in_range(first, last))
+        rem = (-(count - 1)) % every
+        upcoming = cal.sessions_window(last, rem + 1)
+        next_date = upcoming[-1].date().isoformat()
+        return {"every": every, "start": start, "count": count, "date": last.date().isoformat(),
+                "times": (count - 1) // every + 1, "due": rem == 0,
+                "next_in": rem, "next_date": next_date}
+    except Exception as e:
+        log(f"  ! 定投计算失败：{e}")
+        return None
+
+
+def dca_text(d):
+    if not d:
+        return ""
+    head = f"每 {d['every']} 个交易日一次 · 起点 {d['start']}"
+    if d.get("pending"):
+        return f"{head} · 尚未开始（首个定投日 {d['first']}）"
+    if d["due"]:
+        return f"{head} · <b>美东 {d['date'][5:]} 是定投日</b>（第 {d['times']} 次）"
+    return f"{head} · 距下次定投还有 {d['next_in']} 个交易日（{d['next_date']}）"
+
+
+WEEK = "一二三四五六日"
+
+
+def market_session_lines():
+    """下一个（或进行中的）美股交易日，对应的北京时间。冬夏令时由 zoneinfo 自动换算。"""
+    try:
+        import exchange_calendars as xcals
+        cal = xcals.get_calendar("XNYS")
+        now_ny = datetime.now(US_TZ)
+        day = now_ny.date()
+        if now_ny.hour >= 16:                       # 今天已收盘 → 看下一个交易日
+            day += timedelta(days=1)
+        sess = cal.date_to_session(day.isoformat(), direction="next").date()
+    except Exception:
+        return []
+
+    def bj(d, hh, mm):
+        t = datetime(d.year, d.month, d.day, hh, mm, tzinfo=US_TZ)
+        b = t.astimezone(TZ)
+        nxt = "次日 " if b.date() != t.date() and b.date() > t.date() else ""
+        return f"{nxt}{b.strftime('%H:%M')}", t.tzname()
+
+    o, tz = bj(sess, 9, 30)
+    c, _ = bj(sess, 16, 0)
+    season = "夏令时" if tz == "EDT" else "冬令时"
+    bj_day = datetime(sess.year, sess.month, sess.day, 9, 30, tzinfo=US_TZ).astimezone(TZ)
+    lines = [
+        f"当前/下一个交易日：美东 {sess.month}/{sess.day} 周{WEEK[sess.weekday()]}"
+        f"（北京 {bj_day.month}/{bj_day.day} 晚开盘）· {season}",
+        f"常规交易：美东 09:30–16:00 ＝ 北京 <b>{o}–{c}</b>",
+    ]
+    # 23/5 延长交易（官方 2026-12-06 起）：美东 21:00 开 → 次日 20:00 收，20:00–21:00 维护
+    o2, _ = bj(sess - timedelta(days=1), 21, 0)
+    o2 = o2.replace("次日 ", "")                     # 北京开盘时刻，不带“次日”
+    c2, _ = bj(sess, 20, 0)                          # 收盘在开盘之后的北京次日早上
+    if sess >= datetime(2026, 12, 6).date():
+        lines.append(f"23/5 全天交易：美东 前一日 21:00 开 → 当日 20:00 收 ＝ 北京 {o2} 开 → {c2} 收（每日停 1 小时维护）")
+    else:
+        lines.append(f"23/5 延长交易将自 2026-12-06 启动（美东 21:00 开 → 次日 20:00 收），届时这里自动切换；以交易所公告为准")
+    return lines
+
+
 # ---------------------------------------------------------------- 筛选
 
 def analyze_symbol(sym, cfg, data, group="watch"):
@@ -914,12 +1008,6 @@ def analyze_symbol(sym, cfg, data, group="watch"):
             signals.append(f"逼近布林下轨 还差{gap_dn:.2f}%{streak_txt_dn}")
             bump("yellow")
 
-    # 定投节奏：每 N 个交易日一次，只在到期那天出声
-    dca = dca_status(data.get("dates") or [], cfg.get("dca_start"), cfg.get("dca_every"))
-    if dca and dca["due"]:
-        signals.append(f"定投日 · 每{dca['every']}个交易日一次（第{dca['count']}次）")
-        bump("yellow")
-
     # 🟡 黄色规则
     if chg is not None and S["chg_yellow"] <= abs(chg) < S["chg_red"]:
         signals.append(f"波动 {chg:+.1f}%")
@@ -951,7 +1039,6 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         "dist_low": dist_low,
         "vol_ratio": vol_ratio,
         "trigger": trig,
-        "dca": dca,
         "source": data.get("source", ""),
         "data_date": (data.get("dates") or [""])[-1],
         "realtime": bool(data.get("realtime")),
@@ -998,7 +1085,9 @@ def build_snapshot(macro, items, cfg):
     stale = [normalize_symbol(d["symbol"]) for d in items
              if d.get("data_date") and TARGET_DATE and d["data_date"] < TARGET_DATE]
     positions, watch = cfg.get("positions", {}), cfg.get("watch", {})
+    dca = global_dca(TARGET_DATE)
     return {
+        "dca_reminder": dca,
         "run_id": str(os.environ.get("GITHUB_RUN_ID") or "local-" + NOW.strftime("%Y%m%d%H%M%S")),
         "request_id": os.environ.get("MM_REQUEST_ID", ""),
         "source_sha": os.environ.get("GITHUB_SHA", ""),
@@ -1014,7 +1103,7 @@ def build_snapshot(macro, items, cfg):
         "effective_settings": dict(S),
         "list_counts": {"positions": len(positions), "watch": len(watch),
                         "triggers": sum(bool(c.get("trigger")) for c in positions.values()),
-                        "dca": sum(bool(c.get("dca_every") and c.get("dca_start")) for c in positions.values())},
+                        "dca": 1 if dca else 0},
         "summary": {**{lv: sum(d["level"] == lv for d in items) for lv in ("red", "yellow", "green", "gray")},
                     "total": len(items), "macro_ok": sum(bool(m.get("ok")) for m in macro.values()),
                     "stale_symbols": stale, "missing_symbols": missing},
@@ -1113,13 +1202,21 @@ def render(macro, items, watch_count, data_down=False, snapshot=None):
     summary = snapshot.get("summary", {})
     counts = snapshot.get("list_counts", {})
     actual_dates = snapshot.get("actual_dates", {})
+    # 一行摘要：只放最要紧的四件事，细节折叠
+    bad = summary.get("stale_symbols", []) + summary.get("missing_symbols", [])
+    gray_txt = f" 灰{summary.get('gray')}" if summary.get("gray") else ""
+    fresh_txt = (f"<b>{len(bad)} 只未更新：{html_lib.escape('、'.join(bad[:6]))}</b>" if bad
+                 else f"{summary.get('total', 0)} 只全部更新")
+    one_line = (f"数据日期 {actual_dates.get('max') or '—'} · "
+                f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} 绿{summary.get('green', 0)}{gray_txt} · "
+                f"{fresh_txt} · 规则已按当前设置生成")
     summary_hint = html_lib.escape(
         f"目标交易日 {snapshot.get('target_trade_date') or '未锁定'} · "
-        f"持仓 {counts.get('positions', 0)} / 关注 {counts.get('watch', 0)} · "
-        f"红 {summary.get('red', 0)} / 黄 {summary.get('yellow', 0)} / "
-        f"绿 {summary.get('green', 0)} / 灰 {summary.get('gray', 0)} · "
-        f"行情日期 {actual_dates.get('min') or '—'} ～ {actual_dates.get('max') or '—'}"
-    )
+        f"持仓 {counts.get('positions', 0)} / 关注 {counts.get('watch', 0)}")
+    session_html = "<br>".join(market_session_lines())
+    dca_info = dca_text(snapshot.get("dca_reminder"))
+    dca_html = (f'<div class="dca {"on" if (snapshot.get("dca_reminder") or {}).get("due") else ""}">'
+                f'定投提醒：{dca_info}</div>') if dca_info else ""
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1179,13 +1276,30 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 #runMsg.ok{{color:var(--green)}}
 #runMsg.err{{color:var(--red)}}
 .run-summary{{padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--dim);line-height:1.65}}
+.sess{{padding:10px 14px;font-size:12.5px;color:var(--dim);line-height:1.8}}
+.sess b{{color:var(--text)}}
+.sumline{{padding:10px 14px;font-size:13px;line-height:1.6}}
+.sumcard details{{padding:0 6px 8px}}
+.sumcard summary{{font-size:11.5px;color:#6ba3f0;cursor:pointer;padding:2px 8px;outline:none}}
+.dca{{background:rgba(139,147,161,.12);border:1px solid var(--line);border-radius:10px;
+  padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--dim)}}
+.dca b{{color:var(--text)}}
+.dca.on{{background:rgba(210,153,34,.14);border-color:rgba(210,153,34,.4);color:var(--yellow)}}
+.dca.on b{{color:var(--yellow)}}
 </style>
 </head>
 <body><div class="wrap">
 <h1>市场自检</h1>
 <div class="sub">{NOW.strftime('%Y-%m-%d %H:%M')} 北京时间 · 数据自动更新</div>
 
-<div class="card"><h2>本次运行与生效配置摘要</h2><div class="run-summary" id="runSummary">{summary_hint}</div></div>
+<div class="card sess">{session_html}</div>
+{dca_html}
+<div class="card sumcard">
+<div class="sumline">{one_line}</div>
+<details><summary>运行详情（给核对用，平时不用看）</summary>
+<div class="run-summary" id="runSummary">{summary_hint}</div>
+</details>
+</div>
 <div class="script-data" hidden><script id="snapshotData" type="application/json">{snapshot_json}</script></div>
 
 <div class="overall o-{overall}">{overall_txt}</div>
