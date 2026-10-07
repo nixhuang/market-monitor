@@ -828,7 +828,10 @@ def streak_tail(st, rail="上轨"):
     """把连续天数拼成信号尾巴。连续 1 日不啰嗦，>=2 日才标。"""
     if not st or st["days"] < 2:
         return ""
-    t = f" · 连续第{st['days']}日贴近{rail}"
+    # 撞上 max_days 上限说明「从有数据起从没中断过」（货币基金之类），
+    # 写「连续第120日」没信息量，改成「≥」如实表达
+    n = f"≥{st['days']}" if st["days"] >= 120 else str(st["days"])
+    t = f" · 连续第{n}日贴近{rail}"
     if st["cross"]:
         t += f"（其中{st['cross']}日穿越）"
     return t
@@ -963,22 +966,34 @@ def analyze_symbol(sym, cfg, data, group="watch"):
     day_low = (data.get("lows") or [None])[-1]
     touch_up = price if day_high is None else max(day_high, price)
     touch_dn = price if day_low is None else min(day_low, price)
+    # 触及价和展示的现价不一致时，把触及价写出来。
+    # 否则会出现「现价 54.00 却写着突破上轨 59.15」的观感矛盾 ——
+    # 其实是当天盘中最高冲到 60.68 穿过去了，收盘又跌回来。
+    def touch_note(touch):
+        if touch is None or abs(touch - price) < 1e-9:
+            return ""
+        return f"（盘中触及 {touch:,.2f}）"
+
+    # 上下轨都命中时只留更贴近的那条：
+    # SGOV 这类短债/货币 ETF 波动极小，布林带宽不到 1%，上下轨会同时命中，
+    # 两条一起显示等于自相矛盾（既逼近上轨又逼近下轨）。
+    hits = []
     if boll_up is not None:
         gap_up = (boll_up - touch_up) / boll_up * 100
-        if gap_up <= 0:
-            signals.append(f"突破布林上轨 {boll_up:,.2f}{streak_txt_up}")
-            bump("red")
-        elif gap_up <= S["boll_near_pct"]:
-            signals.append(f"逼近布林上轨 还差{gap_up:.2f}%{streak_txt_up}")
-            bump("red")
+        if gap_up <= S["boll_near_pct"]:
+            text = (f"突破布林上轨 {boll_up:,.2f}" if gap_up <= 0
+                    else f"逼近布林上轨 还差{gap_up:.2f}%")
+            hits.append((gap_up, text + touch_note(touch_up) + streak_txt_up, "red"))
     if boll_dn is not None:
         gap_dn = (touch_dn - boll_dn) / boll_dn * 100
-        if gap_dn <= 0:
-            signals.append(f"跌破布林下轨 {boll_dn:,.2f}{streak_txt_dn}")
-            bump("yellow")
-        elif gap_dn <= S["boll_near_pct"]:
-            signals.append(f"逼近布林下轨 还差{gap_dn:.2f}%{streak_txt_dn}")
-            bump("yellow")
+        if gap_dn <= S["boll_near_pct"]:
+            text = (f"跌破布林下轨 {boll_dn:,.2f}" if gap_dn <= 0
+                    else f"逼近布林下轨 还差{gap_dn:.2f}%")
+            hits.append((gap_dn, text + touch_note(touch_dn) + streak_txt_dn, "yellow"))
+    if hits:
+        hits.sort(key=lambda x: x[0])
+        signals.append(hits[0][1])
+        bump(hits[0][2])
 
     # 🟡 黄色规则
     if chg is not None and S["chg_yellow"] <= abs(chg) < S["chg_red"]:
