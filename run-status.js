@@ -2,6 +2,7 @@
   'use strict';
 
   const MAX_WAIT = 10 * 60 * 1000;
+  const RETRY_WAIT = 5 * 60 * 1000;
   const SHA = /^[a-f0-9]{40,64}$/i;
   const FILES = ['holdings.json', 'settings.json'];
   const terminal = new Set(['published', 'failed', 'expired']);
@@ -11,6 +12,7 @@
   let configState = {phase: 'idle', message: '尚无本页提交待验证'};
   let manualState = {phase: 'idle', message: ''};
   let publication = {phase: 'idle', message: '正在读取公开发布状态…'};
+  let retryPending = false, retrySince = 0;
 
   function getToken() {
     if (options.getToken) {
@@ -181,6 +183,40 @@
     }
     return error.message || '暂时无法核对最新发布；本页数据仍可查看';
   }
+  function humanTime(s) {
+    const raw = s && (s.finished_at_bj || s.started_at_bj || s.finished_at || s.started_at);
+    if (!raw) return '';
+    const match = String(raw).match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+    return match ? match[1] + ' ' + match[2] : String(raw);
+  }
+  function dataTimeText(s) {
+    const dates = (s && s.actual_dates) || {};
+    return dates.max || dates.min || '';
+  }
+  function plainApplied() {
+    const when = humanTime(verifiedSnapshot || latestStatus);
+    if (activeManual()) {
+      const phase = manualState.phase;
+      if (phase === 'dispatching' || phase === 'queued') return '重跑已提交，正在更新看板，约 1 分钟…';
+      if (phase === 'running') return '正在重跑，正在抓最新行情…';
+      if (phase === 'generated') return '重跑已生成，正在发布到看板…';
+      if (phase === 'failed') return '重跑失败：' + manualState.message.replace(/^派发失败：/, '');
+      if (phase === 'expired') return '重跑跟踪超时，请点刷新状态确认，不代表失败';
+    }
+    if (Object.keys(targets).length) {
+      const phase = configState.phase;
+      if (phase === 'published') return '已生效：看板已按你保存的设置更新' + (when ? '（' + when + '）' : '');
+      if (phase === 'failed') return '保存未生效：本次运行失败，请查看运行记录';
+      if (phase === 'expired') return '保存已提交，但还没验证到生效；请点刷新状态确认';
+      return '保存成功，看板正在更新，约 1 分钟…';
+    }
+    if (publication.phase === 'published' && (verifiedSnapshot || latestStatus)) {
+      return '看板最新数据时间 ' + (dataTimeText(verifiedSnapshot || latestStatus) || '未知') +
+        ' · 看板更新于 ' + (when || '未知');
+    }
+    if (publication.phase === 'waiting') return '暂时无法核对看板状态；已保存的修改可能仍在发布中';
+    return '还没在这台设备保存过修改';
+  }
   function put(id, text, phase) {
     const box = el(id);
     if (!box) return;
@@ -209,11 +245,14 @@
     compactLegacySummary(currentPage);
     // 始终展示本页内嵌的生成结果；跨网络校验失败不能抹掉它。
     put('runSummary', summaryText(currentPage || verifiedSnapshot) + '\n' + publication.message, publication.phase);
-    if (el('appliedState')) {
-      const receipts = Object.entries(targets).map(([file, r]) =>
-        file + ' · 提交 ' + r.commitSHA + ' · blob ' + r.blobSHA).join('\n');
-      put('appliedState', configState.message + (receipts ? '\n' + receipts : '') +
-        '\n\n' + summaryText(verifiedSnapshot), configState.phase);
+    const appliedText = plainApplied();
+    const appliedPhase = activeManual() ? manualState.phase : configState.phase;
+    // 编辑页只回答“我保存的东西生效了吗”，详细核对字段留在首页；折叠时摘要行同步一句。
+    put('appliedState', appliedText, appliedPhase);
+    put('appliedBrief', appliedText, appliedPhase);
+    if (el('dataTime')) {
+      const snap = verifiedSnapshot || latestStatus || pageSnapshot();
+      put('dataTime', '数据时间 ' + (dataTimeText(snap) || '未知'), publication.phase);
     }
     ['btnRun', 'btnRunNow'].forEach(id => { if (el(id)) el(id).disabled = !!activeManual(); });
     const box = el('appliedState') || el('runMsg') || el('runState');
@@ -252,13 +291,14 @@
     return null;
   }
   function schedule() {
-    if (!activeConfig() && !activeManual()) return;
+    if (!activeConfig() && !activeManual() && !retryPending) return;
     const since = Math.min(activeConfig() ? configSince : Infinity, activeManual() ? manual.since : Infinity);
     timer = window.setTimeout(() => { void tick(); }, Date.now() - since < 120000 ? 8000 : 20000);
   }
   async function tick() {
     cancelPoll();
     const epoch = version;
+    retryPending = retrySince > 0 && Date.now() - retrySince < RETRY_WAIT;
     controller = new AbortController();
     const signal = controller.signal;
     const expected = JSON.parse(JSON.stringify(targets));
@@ -301,8 +341,9 @@
     verifiedSnapshot = snapshot;
     configRun = nextConfigRun;
     publication = snapshot
-      ? {phase: 'published', message: '已发布完成：status.json 与 index.html 的 run_id、配置 blob 均一致'}
+      ? {phase: 'published', message: '已发布完成：看板与状态文件一致（run ' + snapshot.run_id + '）'}
       : {phase: 'waiting', message: publicError || '尚未验证发布'};
+    retryPending = !snapshot && (!!publicError || !!actionError) && retryPending;
     if (Object.keys(expected).length) {
       if (snapshot && configMatches(status, expected) && configMatches(snapshot, expected)) {
         configState = {phase: 'published', message: '本页已提交的全部配置已发布生效（blob SHA 与看板快照双验证）'};
@@ -356,6 +397,7 @@
     cancelPoll();
     targets[file] = {blobSHA, commitSHA, savedAt: Date.now(), revision: ++receiptVersion};
     configSince = Date.now();
+    retrySince = Date.now();
     configRun = null;
     configState = {phase: 'queued', message: file + ' 已提交，正在跟踪全部待生效配置'};
     verifiedSnapshot = null;
@@ -380,6 +422,7 @@
       return {...state(), phase: 'auth', message: manualState.message};
     }
     cancelPoll();
+    retrySince = Date.now();
     manual = {request_id: uuid(), run_id: null, since: Date.now()};
     manualState = {phase: 'dispatching', message: '正在提交立即重跑请求（' + manual.request_id + '）'};
     render();

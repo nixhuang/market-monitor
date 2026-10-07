@@ -74,6 +74,21 @@ details.set{margin-top:4px}
 details.set summary{font-size:12px;color:#6ba3f0;cursor:pointer;padding:4px 0;outline:none}
 details.set[open] summary{margin-bottom:10px}
 .setsec{font-size:11px;color:#5f6672;margin:10px 0 2px;letter-spacing:.4px}
+details.fold{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:0 14px;margin-bottom:14px}
+details.fold>summary{font-size:13px;color:var(--dim);font-weight:600;cursor:pointer;
+  padding:13px 0;outline:none;letter-spacing:.3px}
+details.fold[open]>summary{padding-bottom:6px;border-bottom:1px solid var(--line);
+  margin-bottom:10px}
+details.fold>summary span{color:#5f6672;font-weight:400}
+.card>details.fold{background:none;border:none;border-radius:0;padding:0;margin-bottom:0}
+details.fold .pane{padding-bottom:8px}
+details.fold .pane #appliedState{color:var(--text);font-size:13px;
+  white-space:pre-wrap;line-height:1.7}
+.pager{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  font-size:12px;color:var(--dim);padding:8px 0 4px}
+.pager button{padding:5px 11px;font-size:12px}
+.pager .pg{font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -127,12 +142,6 @@ details.set[open] summary{margin-bottom:10px}
     </div>
     <button id="btnCheckStatus">刷新状态</button>
     <div class="runstate" id="runState" aria-live="polite">读取公开发布状态中…</div>
-  </div>
-
-  <div class="card">
-    <h2>已发布生效配置 <span>（与编辑中的未保存内容分开）</span></h2>
-    <div id="appliedState" class="note" aria-live="polite">尚无本页提交待验证</div>
-    <p class="note">只有 status.json 和看板快照的运行与配置 blob SHA 一致才确认生效。刷新状态不重载编辑内容；验证完成后的「刷新看板」会另开页面。</p>
   </div>
 
   <div class="card">
@@ -200,8 +209,11 @@ details.set[open] summary{margin-bottom:10px}
   </div>
 
   <div class="card">
-    <h2>持仓重点关注 <span id="cntPos"></span></h2>
-    <div id="listPos"></div>
+    <details class="fold" id="foldPos" open>
+      <summary>持仓重点关注 <span id="cntPos"></span></summary>
+      <div id="listPos"></div>
+      <div class="pager" id="pagerPos"></div>
+    </details>
     <div class="add row">
       <input class="s" id="newSym" placeholder="代码">
       <input class="n" id="newNote" placeholder="备注（可空）">
@@ -229,8 +241,14 @@ details.set[open] summary{margin-bottom:10px}
   </div>
 
   <div class="card">
-    <h2>其他重点关注 <span id="cntWatch"></span></h2>
-    <div id="listWatch"></div>
+    <details class="fold" id="foldWatch">
+      <summary>其他重点关注 <span id="cntWatch"></span></summary>
+      <div class="row" style="margin:2px 0 8px">
+        <input class="s" id="watchFilter" placeholder="按代码筛选（如 AAP 或 A）">
+      </div>
+      <div id="listWatch"></div>
+      <div class="pager" id="pagerWatch"></div>
+    </details>
   </div>
 
   <div class="savebar">
@@ -248,10 +266,19 @@ details.set[open] summary{margin-bottom:10px}
   <p class="note">
     <button id="btnWipe" class="danger" style="padding:5px 10px;font-size:12px">清除本机令牌</button>
   </p>
+
+  <details class="card fold" id="appliedCard">
+    <summary>保存是否生效 · <span id="appliedBrief">还没在这台设备保存过修改</span></summary>
+    <div class="pane">
+      <div id="appliedState" aria-live="polite">还没在这台设备保存过修改</div>
+      <div id="dataTime" aria-live="polite">数据时间 读取中…</div>
+      <p class="note">这里只回答一句话：我刚才保存的东西，有没有真的用到看板上。刷新状态不会动你正在编辑的内容；确认生效后出现「刷新看板」，点了会另开一个页面。</p>
+    </div>
+  </details>
 </div>
 </div>
 
-<script src="./run-status.js?v=20261007-2"></script>
+<script src="./run-status.js?v=20261007-4"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
@@ -406,15 +433,33 @@ async function load(){
 function loadRun(){return window.MMRunStatus.refresh();}
 
 /* ---------- 渲染 ---------- */
+const PAGE_SIZE=50;
+const FILTER_CAP=200;
+let watchPage=0,posPage=0,watchFilter='';
+const bySym=(a,b)=>String(a).toUpperCase().localeCompare(String(b).toUpperCase());
+
 function render(){
   ['positions','watch'].forEach(k=>{
     const box=$(k==='positions'?'listPos':'listWatch');
+    const pager=$(k==='positions'?'pagerPos':'pagerWatch');
     $('cntPos').textContent='('+Object.keys(data.positions).length+')';
     $('cntWatch').textContent='('+Object.keys(data.watch).length+')';
-    const keys=Object.keys(data[k]||{});
-    if(!keys.length){box.innerHTML='<div class="empty">（空）</div>';return;}
+    let keys=Object.keys(data[k]||{});
+    if(k==='watch')keys=keys.slice().sort(bySym);
+    const q=(k==='watch'?(watchFilter||''):'').trim().toUpperCase();
+    const view=q?keys.filter(s=>String(s).toUpperCase().indexOf(q)>=0):keys;
+    let page=(k==='watch'?watchPage:posPage);
+    const pages=Math.max(1,Math.ceil(view.length/PAGE_SIZE));
+    if(page>=pages)page=pages-1;
+    if(page<0)page=0;
+    if(k==='watch')watchPage=page;else posPage=page;
+    const capped=q&&view.length>FILTER_CAP;
+    const slice=q?(capped?view.slice(0,FILTER_CAP):view):view.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
+    if(!slice.length){
+      box.innerHTML='<div class="empty">'+(q?'没有代码包含「'+esc(q)+'」':'（空）')+'</div>';
+    }else{
     let h='';
-    keys.forEach(s=>{
+    slice.forEach(s=>{
       const c=data[k][s]||{};
       const tv=(c.trigger===null||c.trigger===undefined)?'':c.trigger;
       h+='<div class="row" data-k="'+k+'" data-s="'+esc(s)+'">'
@@ -424,6 +469,28 @@ function render(){
         +'<button class="del" title="删除">×</button></div>';
     });
     box.innerHTML=h;
+    }
+    if(pager){
+      const total=view.length,shown=slice.length;
+      let ph='';
+      if(!total){ph='';}
+      else if(pages<=1&&!q){ph='<span class="pg">共 '+total+' 只</span>';}
+      else if(q){ph='<span class="pg">匹配 '+total+' 只'+(capped?'，只显示前 '+FILTER_CAP+' 只':'')+'</span>';}
+      else{
+        ph='<button class="pgbtn" data-pg="prev">上一页</button>'
+          +'<span class="pg">第 '+(page+1)+'/'+pages+' 页 · 本页 '+shown+' 只 · 共 '+total+' 只</span>'
+          +'<button class="pgbtn" data-pg="next">下一页</button>';
+      }
+      pager.innerHTML=ph;
+      pager.querySelectorAll('.pgbtn').forEach(b=>{
+        b.onclick=()=>{
+          const delta=b.dataset.pg==='prev'?-1:1;
+          if(k==='watch')watchPage=Math.max(0,Math.min(pages-1,page+delta));
+          else posPage=Math.max(0,Math.min(pages-1,page+delta));
+          render();
+        };
+      });
+    }
     box.querySelectorAll('.row').forEach(row=>{
       row.querySelectorAll('input').forEach(inp=>{
         inp.oninput=()=>{
@@ -443,6 +510,9 @@ function render(){
     });
   });
 }
+$('watchFilter').addEventListener('input',()=>{
+  watchFilter=$('watchFilter').value||'';watchPage=0;render();
+});
 function touch(){changed=true;$('dirty').textContent='有未保存的改动';}
 
 /* ---------- 保存 ---------- */

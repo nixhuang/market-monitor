@@ -867,48 +867,6 @@ def dca_text(d):
     return f"{head} · 距下次定投还有 {d['next_in']} 个交易日（{d['next_date']}）"
 
 
-WEEK = "一二三四五六日"
-
-
-def market_session_lines():
-    """下一个（或进行中的）美股交易日，对应的北京时间。冬夏令时由 zoneinfo 自动换算。"""
-    try:
-        import exchange_calendars as xcals
-        cal = xcals.get_calendar("XNYS")
-        now_ny = datetime.now(US_TZ)
-        day = now_ny.date()
-        if now_ny.hour >= 16:                       # 今天已收盘 → 看下一个交易日
-            day += timedelta(days=1)
-        sess = cal.date_to_session(day.isoformat(), direction="next").date()
-    except Exception:
-        return []
-
-    def bj(d, hh, mm):
-        t = datetime(d.year, d.month, d.day, hh, mm, tzinfo=US_TZ)
-        b = t.astimezone(TZ)
-        nxt = "次日 " if b.date() != t.date() and b.date() > t.date() else ""
-        return f"{nxt}{b.strftime('%H:%M')}", t.tzname()
-
-    o, tz = bj(sess, 9, 30)
-    c, _ = bj(sess, 16, 0)
-    season = "夏令时" if tz == "EDT" else "冬令时"
-    bj_day = datetime(sess.year, sess.month, sess.day, 9, 30, tzinfo=US_TZ).astimezone(TZ)
-    lines = [
-        f"当前/下一个交易日：美东 {sess.month}/{sess.day} 周{WEEK[sess.weekday()]}"
-        f"（北京 {bj_day.month}/{bj_day.day} 晚开盘）· {season}",
-        f"常规交易：美东 09:30–16:00 ＝ 北京 <b>{o}–{c}</b>",
-    ]
-    # 23/5 延长交易（官方 2026-12-06 起）：美东 21:00 开 → 次日 20:00 收，20:00–21:00 维护
-    o2, _ = bj(sess - timedelta(days=1), 21, 0)
-    o2 = o2.replace("次日 ", "")                     # 北京开盘时刻，不带“次日”
-    c2, _ = bj(sess, 20, 0)                          # 收盘在开盘之后的北京次日早上
-    if sess >= datetime(2026, 12, 6).date():
-        lines.append(f"23/5 全天交易：美东 前一日 21:00 开 → 当日 20:00 收 ＝ 北京 {o2} 开 → {c2} 收（每日停 1 小时维护）")
-    else:
-        lines.append(f"23/5 延长交易将自 2026-12-06 启动（美东 21:00 开 → 次日 20:00 收），届时这里自动切换；以交易所公告为准")
-    return lines
-
-
 # ---------------------------------------------------------------- 筛选
 
 def analyze_symbol(sym, cfg, data, group="watch"):
@@ -1060,7 +1018,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261007-2"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261007-4"></script>'
 
 
 def config_hash(filename):
@@ -1213,7 +1171,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None):
     summary_hint = html_lib.escape(
         f"目标交易日 {snapshot.get('target_trade_date') or '未锁定'} · "
         f"持仓 {counts.get('positions', 0)} / 关注 {counts.get('watch', 0)}")
-    session_html = "<br>".join(market_session_lines())
     dca_info = dca_text(snapshot.get("dca_reminder"))
     dca_html = (f'<div class="dca {"on" if (snapshot.get("dca_reminder") or {}).get("due") else ""}">'
                 f'定投提醒：{dca_info}</div>') if dca_info else ""
@@ -1238,6 +1195,7 @@ body{{margin:0;background:var(--bg);color:var(--text);
 .wrap{{max-width:720px;margin:0 auto}}
 h1{{font-size:19px;margin:18px 0 4px;font-weight:600}}
 .sub{{color:var(--dim);font-size:12px;margin-bottom:16px}}
+.datatime{{color:var(--dim);font-size:12px;margin:-10px 0 12px}}
 .card{{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:6px 4px;margin-bottom:14px;overflow:hidden}}
 h2{{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}}
@@ -1276,8 +1234,6 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 #runMsg.ok{{color:var(--green)}}
 #runMsg.err{{color:var(--red)}}
 .run-summary{{padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--dim);line-height:1.65}}
-.sess{{padding:10px 14px;font-size:12.5px;color:var(--dim);line-height:1.8}}
-.sess b{{color:var(--text)}}
 .sumline{{padding:10px 14px;font-size:13px;line-height:1.6}}
 .sumcard details{{padding:0 6px 8px}}
 .sumcard summary{{font-size:11.5px;color:#6ba3f0;cursor:pointer;padding:2px 8px;outline:none}}
@@ -1291,8 +1247,8 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 <body><div class="wrap">
 <h1>市场自检</h1>
 <div class="sub">{NOW.strftime('%Y-%m-%d %H:%M')} 北京时间 · 数据自动更新</div>
+<div class="datatime" id="dataTime">数据时间 {actual_dates.get('max') or '未知'}</div>
 
-<div class="card sess">{session_html}</div>
 {dca_html}
 <div class="card sumcard">
 <div class="sumline">{one_line}</div>
