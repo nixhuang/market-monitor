@@ -1,19 +1,19 @@
 {
   "dca_reminder": null,
-  "run_id": "37637176467",
+  "run_id": "37642676909",
   "request_id": "",
-  "source_sha": "faece6e8bdfb17f6f6b5c9d9b5cfa5b14569b740",
-  "started_at": "2026-10-07T14:29:52+00:00",
-  "started_at_bj": "2026-10-07T22:29:52+08:00",
-  "finished_at": "2026-10-07T22:37:32.137835+08:00",
-  "finished_at_bj": "2026-10-07T22:37:32+08:00",
+  "source_sha": "d7d4c09c332b03f37e31babd8c13abfd169fb7cc",
+  "started_at": "2026-10-07T15:17:50+00:00",
+  "started_at_bj": "2026-10-07T23:17:50+08:00",
+  "finished_at": "2026-10-07T23:26:51.559544+08:00",
+  "finished_at_bj": "2026-10-07T23:26:51+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "manual_or_config",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
     "holdings.json": "d12fa3db6513e59ce4fddb783ebcb3f52d25e6d5",
-    "settings.json": "4724f6389f1e98c6035e34e55a002da5feb93929"
+    "settings.json": "d9f36eae4670ab1d7854102b29e86afcdc505ed9"
   },
   "effective_settings": {
     "boll_n": 20,
@@ -27,6 +27,8 @@
     "trigger_gap_pct": 5.0,
     "vol_ratio": 1.5,
     "quiet_chg": 2.0,
+    "amp_yellow": 5.0,
+    "amp_red": 8.0,
     "hy_green": 350,
     "hy_yellow": 400,
     "hy_red": 400,
@@ -45,9 +47,9 @@
     "dca": 0
   },
   "summary": {
-    "red": 31,
-    "yellow": 27,
-    "green": 71,
+    "red": 34,
+    "yellow": 34,
+    "green": 61,
     "gray": 0,
     "total": 129,
     "macro_ok": 6,
