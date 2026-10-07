@@ -16,12 +16,20 @@
   // 普通打开页面时，若一次没读到公开状态，自动再试两次，避免停在“没读到”。
   const PUBLIC_RETRY_MAX = 2;
   let publicRetry = 0;
+  let authNotice = '';
 
   function getToken() {
     if (options.getToken) {
       try { return options.getToken() || ''; } catch (_) { return ''; }
     }
     try { return window.localStorage.getItem('mm_gh_token_v1') || ''; } catch (_) { return ''; }
+  }
+  function saveToken(t) {
+    try { window.localStorage.setItem('mm_gh_token_v1', String(t || '').trim()); return true; }
+    catch (_) { return false; }
+  }
+  function looksLikeToken(t) {
+    return /^(gh[pousr]_|github_pat_)/.test(String(t || '').trim());
   }
   function apiURL(path) {
     return 'https://api.github.com/repos/' + encodeURIComponent(options.owner) + '/' +
@@ -245,6 +253,8 @@
   // 状态灯：黄=正在抓取（修改中），红=抓取失败（几只），绿=按当前设置生效；
   // 绿灯文案带红黄绿计数，数据时间已在第二排展示，这里不再重复。
   function lightState() {
+    // 点了「立即运行」但没令牌/令牌不对：直接把原因写在灯上，否则按钮看着像坏了
+    if (authNotice) return {phase: 'bad', text: authNotice};
     const snap = verifiedSnapshot || latestStatus || pageSnapshot();
     const info = snap ? (snap.summary || {}) : {};
     const cnt = info.red != null
@@ -496,11 +506,29 @@
     if (!initialized) init();
     if (activeManual()) return state();
     if (!getToken()) {
-      manualState = {phase: 'auth', message: '立即运行需要令牌及 Actions Read and write；无令牌仍可查看公开清单和发布状态'};
-      put('runState', manualState.message, 'auth');
-      put('runMsg', manualState.message, 'auth');
-      return {...state(), phase: 'auth', message: manualState.message};
+      // 首页没有令牌输入框：先问一次，贴了就当场存下并继续运行，不用跳去编辑页
+      const asked = window.prompt(
+        '立即运行需要 GitHub 令牌（权限：Actions Read and write）。\n\n' +
+        '粘贴令牌后点「确定」立即开始运行；点「取消」则只查看，不运行。\n' +
+        '令牌只保存在这台设备的浏览器里，不会写进公开仓库。');
+      if (asked && asked.trim()) {
+        if (!looksLikeToken(asked)) {
+          authNotice = '这不像 GitHub 令牌（应以 ghp_ / github_pat_ 开头），已取消运行';
+          render();
+          return {...state(), phase: 'auth', message: authNotice};
+        }
+        if (!saveToken(asked)) {
+          authNotice = '这个浏览器不让存本地数据，无法保存令牌；请到编辑页贴令牌后再回来点运行';
+          render();
+          return {...state(), phase: 'auth', message: authNotice};
+        }
+      } else {
+        authNotice = '没有令牌，无法立即运行：点「立即运行」贴一次令牌，或打开编辑页贴一次（同一浏览器通用）';
+        render();
+        return {...state(), phase: 'auth', message: authNotice};
+      }
     }
+    authNotice = '';
     cancelPoll();
     retrySince = Date.now();
     manual = {request_id: uuid(), run_id: null, since: Date.now()};
@@ -611,8 +639,13 @@
     return window.MMRunStatus;
   }
   window.MMRunStatus = {refresh, watchConfig, startManual, init};
+  // 首页这轮改版后已经没有 runState / runMsg / runSummary 了，只看这三个会导致
+  // 首页根本不 init —— 按钮没绑 onclick，点了就是「没反应」。改成任一控件存在即初始化。
   function autoInit() {
-    if (!initialized && (el('runState') || el('runMsg') || el('runSummary'))) init();
+    if (initialized) return;
+    const ids = ['runState', 'runMsg', 'runSummary', 'runLight', 'runLightTxt',
+                 'btnRun', 'btnRunNow', 'btnCheckStatus', 'btnRuns'];
+    if (ids.some(id => el(id))) init();
   }
   if (window.document.readyState === 'loading') window.document.addEventListener('DOMContentLoaded', autoInit);
   else autoInit();
