@@ -1349,7 +1349,17 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         )
 
     order = {"red": 0, "yellow": 1, "green": 2, "gray": 3}
-    items.sort(key=lambda d: (order[d["level"]], -(abs(d["chg"]) if d["chg"] else 0)))
+    # 行情没异动但基本面亮了警示的，要上表并往前排，否则徽章永远藏在「无异动 N 只」里看不见
+    def fund_alert(d):
+        return (d.get("fund") or {}).get("level") in ("red", "yellow")
+
+    def sort_key(d):
+        base = order[d["level"]]
+        if fund_alert(d) and base > 1:
+            base = 1.5  # 夹在黄和绿之间
+        return (base, -(abs(d["chg"]) if d["chg"] else 0))
+
+    items.sort(key=sort_key)
 
     def rows_of(lst):
         out = ""
@@ -1387,8 +1397,9 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     group_cards = ""
     for gtitle, gkey in group_defs:
         g = [d for d in items if d.get("group") == gkey]
-        shown = [d for d in g if d["level"] in ("red", "yellow", "gray")]
-        n_quiet = len([d for d in g if d["level"] == "green"])
+        # 基本面红/黄的即使行情是绿灯也要上表，不然警示等于没显示
+        shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or fund_alert(d)]
+        n_quiet = len([d for d in g if d["level"] == "green" and not fund_alert(d)])
         if gkey == "focus" and not g:
             body = '<div class="quiet">重点关注清单还是空的：去编辑页添加，或从其他关注里挑几只</div>'
         else:
