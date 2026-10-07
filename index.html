@@ -55,11 +55,15 @@ tr.green .badge{background:rgba(63,185,80,.15);color:var(--green)}
 #runMsg{font-size:12px;color:var(--dim);flex:1;min-width:180px;line-height:1.5}
 #runMsg.ok{color:var(--green)}
 #runMsg.err{color:var(--red)}
+.run-summary{padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--dim);line-height:1.65}
 </style>
 </head>
 <body><div class="wrap">
 <h1>市场自检</h1>
-<div class="sub">2026-10-07 10:40 北京时间 · 数据自动更新</div>
+<div class="sub">2026-10-07 13:43 北京时间 · 数据自动更新</div>
+
+<div class="card"><h2>本次运行与生效配置摘要</h2><div class="run-summary" id="runSummary">目标交易日 2026-10-06 · 持仓 15 / 关注 5 · 红 7 / 黄 1 / 绿 12 / 灰 0 · 行情日期 2026-10-06 ～ 2026-10-06</div></div>
+<div class="script-data" hidden><script id="snapshotData" type="application/json">{"run_id":"37577684327","request_id":"","source_sha":"fbe923c3b4201ed9efc56326b2978d4cb3dfa61b","started_at":"2026-10-07T05:42:55+00:00","started_at_bj":"2026-10-07T13:42:55+08:00","finished_at":"2026-10-07T13:43:24.251973+08:00","finished_at_bj":"2026-10-07T13:43:24+08:00","event":"push","target_trade_date":"2026-10-06","mode":"closed","schedule":"美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30","config_files":{"holdings.json":"334a8ba3f8e436115cea748bfd15b7098f7bef5e","settings.json":"babce616633a0e4daa3186c1e7bace4490ec174e"},"effective_settings":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"chg_red":4.0,"chg_yellow":2.0,"rsi_high":70,"rsi_low":30,"near_52w_low_pct":1.0,"trigger_gap_pct":5.0,"vol_ratio":1.5,"quiet_chg":2.0,"hy_green":350,"hy_yellow":400,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1},"list_counts":{"positions":15,"watch":5,"triggers":0,"dca":0},"summary":{"red":7,"yellow":1,"green":12,"gray":0,"total":20,"macro_ok":6,"stale_symbols":[],"missing_symbols":[]},"actual_dates":{"min":"2026-10-06","max":"2026-10-06"},"macro_dates":{"hy_oas":"2026-10-05","vix":"2026-10-05","sp500":"2026-10-06","ust10":"2026-10-05","curve":"2026-10-06","dxy":"2026-10-02"},"coverage":"数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。"}</script></div>
 
 <div class="overall o-green">绿框 · 不用动</div>
 
@@ -95,44 +99,5 @@ tr.green .badge{background:rgba(63,185,80,.15);color:var(--green)}
 <a href="./edit.html" style="color:#6ba3f0;text-decoration:none">改自选清单 →</a>
 <span id="runMsg"></span>
 </div>
-
-<script>
-(function(){
-  var box=document.getElementById('runMsg');
-  var btn=document.getElementById('btnRunNow');
-  if(!btn)return;
-  btn.onclick=async function(){
-    var t='';
-    try{t=localStorage.getItem('mm_gh_token_v1')||'';}catch(e){}
-    if(!t){
-      box.textContent='还没填令牌：去「改自选清单」页贴一次，回来就能一键重跑';
-      box.className='err';
-      return;
-    }
-    btn.disabled=true;
-    box.textContent='正在触发…';
-    box.className='';
-    try{
-      var r=await fetch('https://api.github.com/repos/nixhuang/market-monitor/actions/workflows/daily.yml/dispatches',{
-        method:'POST',
-        headers:{Authorization:'token '+t,Accept:'application/vnd.github+json','Content-Type':'application/json'},
-        body:JSON.stringify({ref:'main'})
-      });
-      if(r.status===204||r.ok){
-        box.textContent='已触发，约 1 分钟后自动刷新（盘中拿到的是延迟约 15 分钟的报价）';
-        box.className='ok';
-        setTimeout(function(){location.reload();},70000);
-      }else{
-        box.textContent='触发失败 HTTP '+r.status+'（令牌过期？去编辑页重填一次）';
-        box.className='err';
-      }
-    }catch(e){
-      box.textContent='连不上 GitHub：'+e.message;
-      box.className='err';
-    }
-    btn.disabled=false;
-  };
-})();
-</script>
-
+<script src="./run-status.js"></script>
 </div></body></html>
