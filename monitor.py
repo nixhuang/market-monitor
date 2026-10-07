@@ -647,6 +647,52 @@ def boll(closes, n=20, k=2.0):
     return mid, mid + k * sd, mid - k * sd
 
 
+def boll_streak(closes, n=20, k=2.0, near_pct=0.5, max_days=120):
+    """连续贴近布林上轨 / 下轨的天数，从今天往回数。
+
+    每一天都用「截至前一天」的窗口重算布林，不用当天之后的数据（避免未来函数）：
+    今天看到的第 i 天，用的就是当时真实能算出来的轨道。
+    只要某天距轨道超过 near_pct 就中断计数 —— 也就是「远离一天就不算连续，再贴近重新从第一日算」。
+
+    返回 {"up": {"days": int, "cross": int}, "dn": {...}}
+      days  连续贴合天数（距轨道 <= near_pct）
+      cross 其中真正穿越轨道的天数（距轨道 <= 0）
+    """
+    out = {"up": {"days": 0, "cross": 0}, "dn": {"days": 0, "cross": 0}}
+    if len(closes) < n + 1:
+        return out
+    for side in ("up", "dn"):
+        days = 0
+        cross = 0
+        i = len(closes) - 1
+        while i >= n and days < max_days:
+            win = closes[i - n:i]          # 不含第 i 天本身
+            mid = sum(win) / n
+            sd = (sum((x - mid) ** 2 for x in win) / n) ** 0.5
+            up = mid + k * sd
+            dn = mid - k * sd
+            px = closes[i]
+            gap = (up - px) / up * 100 if side == "up" else (px - dn) / dn * 100
+            if gap > near_pct:             # 这一天远离了，连续性断掉
+                break
+            days += 1
+            if gap <= 0:
+                cross += 1
+            i -= 1
+        out[side] = {"days": days, "cross": cross}
+    return out
+
+
+def streak_tail(st, rail="上轨"):
+    """把连续天数拼成信号尾巴。连续 1 日不啰嗦，>=2 日才标。"""
+    if not st or st["days"] < 2:
+        return ""
+    t = f" · 连续第{st['days']}日贴近{rail}"
+    if st["cross"]:
+        t += f"（其中{st['cross']}日穿越）"
+    return t
+
+
 # ---------------------------------------------------------------- 筛选
 
 def analyze_symbol(sym, cfg, data, group="watch"):
@@ -721,23 +767,27 @@ def analyze_symbol(sym, cfg, data, group="watch"):
             signals.append(f"距加仓价 {tstr} 还差 {gap:.1f}%")
             bump("red")
 
-    # 布林带（20日 / 2倍标准差）：逼近即算，盘中不用等收盘真的穿过去
+    # 布林带：逼近即算，盘中不用等收盘真的穿过去
     # gap = 距离轨道还差百分之多少；<=0 表示已经穿过去了
+    # 另外标出「连续第几日贴近轨道」——远离一天就断，再贴近重新从第一日算
+    streak = boll_streak(closes, int(S["boll_n"]), float(S["boll_k"]), S["boll_near_pct"])
+    streak_txt_up = streak_tail(streak["up"], "上轨")
+    streak_txt_dn = streak_tail(streak["dn"], "下轨")
     if boll_up is not None:
         gap_up = (boll_up - price) / boll_up * 100
         if gap_up <= 0:
-            signals.append(f"突破布林上轨 {boll_up:,.2f}")
+            signals.append(f"突破布林上轨 {boll_up:,.2f}{streak_txt_up}")
             bump("red")
         elif gap_up <= S["boll_near_pct"]:
-            signals.append(f"逼近布林上轨 还差{gap_up:.2f}%")
+            signals.append(f"逼近布林上轨 还差{gap_up:.2f}%{streak_txt_up}")
             bump("red")
     if boll_dn is not None:
         gap_dn = (price - boll_dn) / boll_dn * 100
         if gap_dn <= 0:
-            signals.append(f"跌破布林下轨 {boll_dn:,.2f}")
+            signals.append(f"跌破布林下轨 {boll_dn:,.2f}{streak_txt_dn}")
             bump("yellow")
         elif gap_dn <= S["boll_near_pct"]:
-            signals.append(f"逼近布林下轨 还差{gap_dn:.2f}%")
+            signals.append(f"逼近布林下轨 还差{gap_dn:.2f}%{streak_txt_dn}")
             bump("yellow")
 
     # 🟡 黄色规则
@@ -1005,6 +1055,7 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 宏观：FRED · 个股：{src_txt}<br>
 跑路价签 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_yellow']:.0f} 收紧 · ≥{S['hy_red']:.0f} 危机确认<br>
 布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%）<br>
+连续贴近轨道按日累计，远离一天（差 &gt;{S['boll_near_pct']:g}%）就断，再次贴近重新从第一日算 · 连续 2 日起才标注<br>
 异动 ≥{S['chg_red']:g}% 红 · ≥{S['chg_yellow']:g}% 黄 · RSI ≥{S['rsi_high']:.0f} 或 ≤{S['rsi_low']:.0f} 红 · 量比 ≥{S['vol_ratio']:g}x 黄<br>
 <a href="./settings.json" style="color:#6ba3f0;text-decoration:none">查看当前阈值 settings.json</a>
 </div>

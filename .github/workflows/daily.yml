@@ -42,6 +42,19 @@ jobs:
       - name: 安装依赖
         run: pip install requests
 
+      # cron 是 UTC 时间，写死的 '0 12' 在北京永远是 20:00，
+      # 但美股用夏令时（UTC-4）时是美东 08:00、冬令时（UTC-5）变成 07:00。
+      # 这里补一小时，让全年都稳定在「美东 08:00 = 开盘前 1.5 小时」这个时点。
+      - name: 冬夏令时校正
+        run: |
+          H=$((10#$(TZ=America/New_York date +%H)))
+          echo "现在美东: $(TZ=America/New_York date)  (hour=$H)"
+          if [ "$H" -lt 8 ]; then
+            echo "冬令时，等到美东 08:00 再抓数据"
+            sleep 3600
+            echo "开跑: $(TZ=America/New_York date)"
+          fi
+
       - name: 抓数据并生成页面
         # FRED_API_KEY 是可选 Secret：配置了才能拿到跑路价签和收益率曲线
         # （Actions 访问 fred.stlouisfed.org 的 CSV 接口会被 CDN 掐断，只有官方 API 域名通）
