@@ -18,6 +18,7 @@ body{margin:0;background:var(--bg);color:var(--text);
 .wrap{max-width:720px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600}
 .sub{color:var(--dim);font-size:12px;margin-bottom:16px}
+.datatime{color:var(--dim);font-size:12px;margin:-10px 0 12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:6px 4px;margin-bottom:14px;overflow:hidden}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
@@ -56,8 +57,6 @@ tr.green .badge{background:rgba(63,185,80,.15);color:var(--green)}
 #runMsg.ok{color:var(--green)}
 #runMsg.err{color:var(--red)}
 .run-summary{padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--dim);line-height:1.65}
-.sess{padding:10px 14px;font-size:12.5px;color:var(--dim);line-height:1.8}
-.sess b{color:var(--text)}
 .sumline{padding:10px 14px;font-size:13px;line-height:1.6}
 .sumcard details{padding:0 6px 8px}
 .sumcard summary{font-size:11.5px;color:#6ba3f0;cursor:pointer;padding:2px 8px;outline:none}
@@ -70,9 +69,9 @@ tr.green .badge{background:rgba(63,185,80,.15);color:var(--green)}
 </head>
 <body><div class="wrap">
 <h1>市场自检</h1>
-<div class="sub">2026-10-07 14:27 北京时间 · 数据自动更新</div>
+<div class="sub">2026-10-07 15:58 北京时间 · 数据自动更新</div>
+<div class="datatime" id="dataTime">数据时间 2026-10-06</div>
 
-<div class="card sess">当前/下一个交易日：美东 10/7 周三（北京 10/7 晚开盘）· 夏令时<br>常规交易：美东 09:30–16:00 ＝ 北京 <b>21:30–次日 04:00</b><br>23/5 延长交易将自 2026-12-06 启动（美东 21:00 开 → 次日 20:00 收），届时这里自动切换；以交易所公告为准</div>
 
 <div class="card sumcard">
 <div class="sumline">数据日期 2026-10-06 · 红7 黄1 绿12 · 20 只全部更新 · 规则已按当前设置生成</div>
@@ -80,7 +79,7 @@ tr.green .badge{background:rgba(63,185,80,.15);color:var(--green)}
 <div class="run-summary" id="runSummary">目标交易日 2026-10-06 · 持仓 15 / 关注 5</div>
 </details>
 </div>
-<div class="script-data" hidden><script id="snapshotData" type="application/json">{"dca_reminder":null,"run_id":"37581614073","request_id":"","source_sha":"33c9188b46b557812d5d2f937bb9130e173c06b0","started_at":"2026-10-07T06:27:41+00:00","started_at_bj":"2026-10-07T14:27:41+08:00","finished_at":"2026-10-07T14:28:11.237129+08:00","finished_at_bj":"2026-10-07T14:28:11+08:00","event":"push","target_trade_date":"2026-10-06","mode":"closed","schedule":"美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30","config_files":{"holdings.json":"334a8ba3f8e436115cea748bfd15b7098f7bef5e","settings.json":"4724f6389f1e98c6035e34e55a002da5feb93929"},"effective_settings":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"chg_red":4.0,"chg_yellow":2.0,"rsi_high":70,"rsi_low":30,"near_52w_low_pct":1.0,"trigger_gap_pct":5.0,"vol_ratio":1.5,"quiet_chg":2.0,"hy_green":350,"hy_yellow":400,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":0,"dca_start":""},"list_counts":{"positions":15,"watch":5,"triggers":0,"dca":0},"summary":{"red":7,"yellow":1,"green":12,"gray":0,"total":20,"macro_ok":6,"stale_symbols":[],"missing_symbols":[]},"actual_dates":{"min":"2026-10-06","max":"2026-10-06"},"macro_dates":{"hy_oas":"2026-10-05","vix":"2026-10-05","sp500":"2026-10-06","ust10":"2026-10-05","curve":"2026-10-06","dxy":"2026-10-02"},"coverage":"数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。"}</script></div>
+<div class="script-data" hidden><script id="snapshotData" type="application/json">{"dca_reminder":null,"run_id":"37590729252","request_id":"","source_sha":"5442e18036eef10415dd3b4db180ca97501383ad","started_at":"2026-10-07T07:58:46+00:00","started_at_bj":"2026-10-07T15:58:46+08:00","finished_at":"2026-10-07T15:59:14.855828+08:00","finished_at_bj":"2026-10-07T15:59:14+08:00","event":"push","target_trade_date":"2026-10-06","mode":"closed","schedule":"美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30","config_files":{"holdings.json":"334a8ba3f8e436115cea748bfd15b7098f7bef5e","settings.json":"4724f6389f1e98c6035e34e55a002da5feb93929"},"effective_settings":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"chg_red":4.0,"chg_yellow":2.0,"rsi_high":70,"rsi_low":30,"near_52w_low_pct":1.0,"trigger_gap_pct":5.0,"vol_ratio":1.5,"quiet_chg":2.0,"hy_green":350,"hy_yellow":400,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":0,"dca_start":""},"list_counts":{"positions":15,"watch":5,"triggers":0,"dca":0},"summary":{"red":7,"yellow":1,"green":12,"gray":0,"total":20,"macro_ok":6,"stale_symbols":[],"missing_symbols":[]},"actual_dates":{"min":"2026-10-06","max":"2026-10-06"},"macro_dates":{"hy_oas":"2026-10-05","vix":"2026-10-05","sp500":"2026-10-06","ust10":"2026-10-05","curve":"2026-10-06","dxy":"2026-10-02"},"coverage":"数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。"}</script></div>
 
 <div class="overall o-green">绿框 · 不用动</div>
 
@@ -116,5 +115,5 @@ tr.green .badge{background:rgba(63,185,80,.15);color:var(--green)}
 <a href="./edit.html" style="color:#6ba3f0;text-decoration:none">改自选清单 →</a>
 <span id="runMsg"></span>
 </div>
-<script src="./run-status.js?v=20261007-2"></script>
+<script src="./run-status.js?v=20261007-4"></script>
 </div></body></html>
