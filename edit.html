@@ -53,6 +53,16 @@ button.danger{color:var(--red)}
 .filebtn:hover{background:#2b303c}
 .csvinfo{font-size:12px;color:var(--dim);line-height:1.9;margin:10px 0}
 .csvinfo b{color:var(--text);font-weight:500}
+.runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.runlight{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}
+.runlight .dot{width:9px;height:9px;border-radius:50%;background:#5f6672;
+  display:inline-block;margin-right:0;flex:none}
+.runlight[data-phase="busy"]{color:var(--yellow)}
+.runlight[data-phase="busy"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
+.runlight[data-phase="ok"]{color:var(--green)}
+.runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}
+.runlight[data-phase="bad"]{color:var(--red)}
+.runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}
 .runstate{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
   font-size:12px;color:var(--dim);margin-top:10px}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
@@ -101,6 +111,17 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 
 <div id="msg"></div>
 
+<div class="card" id="runCard">
+  <h2>立即运行 <span>（不用等定时任务，点一下就抓最新行情）</span></h2>
+  <div class="runbar">
+    <button class="primary" id="btnRun">立即运行</button>
+    <a href="https://github.com/nixhuang/market-monitor/actions" target="_blank"><button>运行记录</button></a>
+    <div class="runlight" id="runLight" data-phase="idle"><i class="dot"></i><span id="runLightTxt">点「立即运行」抓最新行情</span></div>
+  </div>
+  <button id="btnCheckStatus" style="margin-top:10px">刷新状态</button>
+  <div class="runstate" id="runState" aria-live="polite">读取公开发布状态中…</div>
+</div>
+
 <div class="card" id="authCard">
   <h2>第 1 步 · 贴一次 GitHub 令牌</h2>
   <div class="row">
@@ -133,16 +154,6 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 
 <div id="main" class="hide">
-
-  <div class="card">
-    <h2>运行状态</h2>
-    <div class="row">
-      <button class="primary" id="btnRun">立即重跑一次</button>
-      <a href="https://github.com/nixhuang/market-monitor/actions" target="_blank"><button>运行记录</button></a>
-    </div>
-    <button id="btnCheckStatus">刷新状态</button>
-    <div class="runstate" id="runState" aria-live="polite">读取公开发布状态中…</div>
-  </div>
 
   <div class="card">
     <h2>规则阈值 <span>（红黄绿的判定线，改完单独保存）</span></h2>
@@ -202,7 +213,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     </div>
     <div class="csvinfo" id="csvInfo">
       持仓 CSV = <b>以这份为准整组替换</b>，清单里有、这份里没有的会被移除<br>
-      关注 CSV = <b>只增不删</b>，且持仓里已经有的不再重复加入<br>
+      关注 CSV = <b>只增不删</b>，与持仓重复的也照常收录；看板上重复的这只只在「持仓」区显示一次<br>
       港股 / A股（0700.HK、600519.SS 这类带点的）暂不支持，自动忽略
     </div>
     <button class="primary hide" id="btnApply">确认导入</button>
@@ -278,7 +289,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 </div>
 
-<script src="./run-status.js?v=20261007-4"></script>
+<script src="./run-status.js?v=20261007-6"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
@@ -669,12 +680,13 @@ function readCsv(input,kind){
     // 代码里带点的都是非美股（0700.HK / 600519.SS），脚本没做货币和时区适配，直接忽略
     const skipped=res.symbols.filter(s=>s.indexOf('.')>=0);
     let syms=res.symbols.filter(s=>s.indexOf('.')<0);
-    // 关注组：持仓里已经有的不重复加入
+    // 关注组保留完整清单：和持仓重复的代码照样收录（这里能自由增减），
+    // 看板渲染时重复的这只只在「持仓」区出现一次，不会重复报警
     let dupPos=[];
     if(kind==='watch'){
       const posNorm={};
       Object.keys(data.positions||{}).forEach(k=>{posNorm[normTicker(k)]=1;});
-      syms=syms.filter(s=>{if(posNorm[s]){dupPos.push(s);return false;}return true;});
+      syms.forEach(s=>{if(posNorm[s])dupPos.push(s);});
     }
     if(!syms.length){
       setMsg('这份 CSV 里没有可用的美股代码'+(skipped.length?'（'+skipped.length+' 只港股/A股已忽略）':''),'err');
@@ -696,7 +708,7 @@ function readCsv(input,kind){
         ? '移除 '+removed.length+'：'+(removed.slice(0,20).join(' ')||'—')+'（以这份为准）'
         : '不删除任何原有标的（关注组只增不删）')
       +(skipped.length?'<br>忽略 '+skipped.length+' 只（港股/A股不支持）：'+skipped.slice(0,10).join(' '):'')
-      +(dupPos.length?'<br>已在持仓里、不再加入关注 '+dupPos.length+' 只：'+dupPos.slice(0,10).join(' '):'');
+      +(dupPos.length?'<br>其中与持仓重复 '+dupPos.length+' 只（照常收录，看板只在持仓区显示一次）：'+dupPos.slice(0,10).join(' '):'');
     $('btnApply').classList.remove('hide');
     setMsg('确认无误后点「确认导入」，然后别忘了点保存','ok');
     input.value='';

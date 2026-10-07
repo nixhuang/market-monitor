@@ -751,31 +751,39 @@ def boll(closes, n=20, k=2.0):
     return mid, mid + k * sd, mid - k * sd
 
 
-def boll_streak(closes, n=20, k=2.0, near_pct=0.5, max_days=120):
+def boll_streak(closes, n=20, k=2.0, near_pct=0.5, max_days=120, highs=None, lows=None):
     """连续贴近布林上轨 / 下轨的天数，从今天往回数。
 
-    每一天都用「截至前一天」的窗口重算布林，不用当天之后的数据（避免未来函数）：
-    今天看到的第 i 天，用的就是当时真实能算出来的轨道。
-    只要某天距轨道超过 near_pct 就中断计数 —— 也就是「远离一天就不算连续，再贴近重新从第一日算」。
+    两条口径（2026-10-07 修正，此前与图上对不上就是这两点）：
+    1. 窗口包含当天：win = closes[i-n+1 : i+1]，和 boll() 完全一致。
+       修正前这里用 closes[i-n:i]（不含当天），等于拿「昨天的轨道」比「今天的价格」，
+       和看板主信号、和图上画出来的轨道都差一天。
+    2. 盘中触及即算：上轨用当日最高价、下轨用当日最低价，不用收盘价。
+       用户要的规则是「盘中穿过就算」，收盘价会把「冲上去又回落」的那天漏掉。
+
+    只要某天距轨道超过 near_pct 就中断计数 —— 「远离一天就不算连续，再贴近重新从第一日算」。
 
     返回 {"up": {"days": int, "cross": int}, "dn": {...}}
       days  连续贴合天数（距轨道 <= near_pct）
       cross 其中真正穿越轨道的天数（距轨道 <= 0）
     """
     out = {"up": {"days": 0, "cross": 0}, "dn": {"days": 0, "cross": 0}}
-    if len(closes) < n + 1:
+    if len(closes) < n:
         return out
+    # 没有日内高低价时退回收盘价，不至于整只股失去这条信号
+    hi = highs if (highs and len(highs) == len(closes)) else closes
+    lo = lows if (lows and len(lows) == len(closes)) else closes
     for side in ("up", "dn"):
         days = 0
         cross = 0
         i = len(closes) - 1
-        while i >= n and days < max_days:
-            win = closes[i - n:i]          # 不含第 i 天本身
+        while i >= n - 1 and days < max_days:
+            win = closes[i - n + 1:i + 1]  # 含第 i 天本身，与 boll() 同口径
             mid = sum(win) / n
             sd = (sum((x - mid) ** 2 for x in win) / n) ** 0.5
             up = mid + k * sd
             dn = mid - k * sd
-            px = closes[i]
+            px = hi[i] if side == "up" else lo[i]
             gap = (up - px) / up * 100 if side == "up" else (px - dn) / dn * 100
             if gap > near_pct:             # 这一天远离了，连续性断掉
                 break
@@ -946,11 +954,17 @@ def analyze_symbol(sym, cfg, data, group="watch"):
     # 布林带：逼近即算，盘中不用等收盘真的穿过去
     # gap = 距离轨道还差百分之多少；<=0 表示已经穿过去了
     # 另外标出「连续第几日贴近轨道」——远离一天就断，再贴近重新从第一日算
-    streak = boll_streak(closes, int(S["boll_n"]), float(S["boll_k"]), S["boll_near_pct"])
+    streak = boll_streak(closes, int(S["boll_n"]), float(S["boll_k"]), S["boll_near_pct"],
+                         highs=data.get("highs"), lows=data.get("lows"))
     streak_txt_up = streak_tail(streak["up"], "上轨")
     streak_txt_dn = streak_tail(streak["dn"], "下轨")
+    # 盘中触及即算：上轨比当日最高价，下轨比当日最低价；盘中重跑时当前价可能比已有极值更极端
+    day_high = (data.get("highs") or [None])[-1]
+    day_low = (data.get("lows") or [None])[-1]
+    touch_up = price if day_high is None else max(day_high, price)
+    touch_dn = price if day_low is None else min(day_low, price)
     if boll_up is not None:
-        gap_up = (boll_up - price) / boll_up * 100
+        gap_up = (boll_up - touch_up) / boll_up * 100
         if gap_up <= 0:
             signals.append(f"突破布林上轨 {boll_up:,.2f}{streak_txt_up}")
             bump("red")
@@ -958,7 +972,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
             signals.append(f"逼近布林上轨 还差{gap_up:.2f}%{streak_txt_up}")
             bump("red")
     if boll_dn is not None:
-        gap_dn = (price - boll_dn) / boll_dn * 100
+        gap_dn = (touch_dn - boll_dn) / boll_dn * 100
         if gap_dn <= 0:
             signals.append(f"跌破布林下轨 {boll_dn:,.2f}{streak_txt_dn}")
             bump("yellow")
@@ -1018,7 +1032,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261007-4"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261007-6"></script>'
 
 
 def config_hash(filename):
@@ -1037,7 +1051,7 @@ def beijing_iso(value):
         return ""
 
 
-def build_snapshot(macro, items, cfg):
+def build_snapshot(macro, items, cfg, watch_shown=None):
     dates = sorted({d.get("data_date") for d in items if d.get("data_date")})
     missing = [normalize_symbol(d["symbol"]) for d in items if d.get("price") is None]
     stale = [normalize_symbol(d["symbol"]) for d in items
@@ -1059,7 +1073,9 @@ def build_snapshot(macro, items, cfg):
         "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
         "config_files": {f: config_hash(f) for f in ("holdings.json", "settings.json")},
         "effective_settings": dict(S),
-        "list_counts": {"positions": len(positions), "watch": len(watch),
+        # watch 计数用「看板实际展示/抓取」的只数，不含与持仓重复被隐藏的那些
+        "list_counts": {"positions": len(positions),
+                        "watch": len(watch) if watch_shown is None else watch_shown,
                         "triggers": sum(bool(c.get("trigger")) for c in positions.values()),
                         "dca": 1 if dca else 0},
         "summary": {**{lv: sum(d["level"] == lv for d in items) for lv in ("red", "yellow", "green", "gray")},
@@ -1071,7 +1087,7 @@ def build_snapshot(macro, items, cfg):
     }
 
 
-def render(macro, items, watch_count, data_down=False, snapshot=None):
+def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
     rows_macro = []
     for key in ["hy_oas", "vix", "sp500", "ust10", "curve", "dxy"]:
         it = macro.get(key, {})
@@ -1172,6 +1188,10 @@ def render(macro, items, watch_count, data_down=False, snapshot=None):
         f"目标交易日 {snapshot.get('target_trade_date') or '未锁定'} · "
         f"持仓 {counts.get('positions', 0)} / 关注 {counts.get('watch', 0)}")
     dca_info = dca_text(snapshot.get("dca_reminder"))
+    event_txt = {'schedule': '定时自动运行', 'workflow_dispatch': '手动重跑',
+                 'push': '保存清单/规则后自动更新'}.get(snapshot.get('event') or '', '自动更新')
+    sub_line = (f"{NOW.strftime('%Y-%m-%d %H:%M')} 北京时间 · 本次{event_txt}"
+                f" · 自动计划：美东周一至五 20:30（北京 夏令时次日 08:30 / 冬令时次日 09:30）")
     dca_html = (f'<div class="dca {"on" if (snapshot.get("dca_reminder") or {}).get("due") else ""}">'
                 f'定投提醒：{dca_info}</div>') if dca_info else ""
 
@@ -1195,7 +1215,6 @@ body{{margin:0;background:var(--bg);color:var(--text);
 .wrap{{max-width:720px;margin:0 auto}}
 h1{{font-size:19px;margin:18px 0 4px;font-weight:600}}
 .sub{{color:var(--dim);font-size:12px;margin-bottom:16px}}
-.datatime{{color:var(--dim);font-size:12px;margin:-10px 0 12px}}
 .card{{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:6px 4px;margin-bottom:14px;overflow:hidden}}
 h2{{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}}
@@ -1237,6 +1256,15 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 .sumline{{padding:10px 14px;font-size:13px;line-height:1.6}}
 .sumcard details{{padding:0 6px 8px}}
 .sumcard summary{{font-size:11.5px;color:#6ba3f0;cursor:pointer;padding:2px 8px;outline:none}}
+.runbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}}
+.runlight{{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}}
+.runlight .dot{{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}}
+.runlight[data-phase="busy"]{{color:var(--yellow)}}
+.runlight[data-phase="busy"] .dot{{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}}
+.runlight[data-phase="ok"]{{color:var(--green)}}
+.runlight[data-phase="ok"] .dot{{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}}
+.runlight[data-phase="bad"]{{color:var(--red)}}
+.runlight[data-phase="bad"] .dot{{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}}
 .dca{{background:rgba(139,147,161,.12);border:1px solid var(--line);border-radius:10px;
   padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--dim)}}
 .dca b{{color:var(--text)}}
@@ -1246,8 +1274,12 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 </head>
 <body><div class="wrap">
 <h1>市场自检</h1>
-<div class="sub">{NOW.strftime('%Y-%m-%d %H:%M')} 北京时间 · 数据自动更新</div>
-<div class="datatime" id="dataTime">数据时间 {actual_dates.get('max') or '未知'}</div>
+<div class="sub">{sub_line}</div>
+
+<div class="runbar">
+  <button class="primary" id="btnRunNow">立即运行</button>
+  <div class="runlight" id="runLight" data-phase="idle"><i class="dot"></i><span id="runLightTxt">点「立即运行」抓最新行情</span></div>
+</div>
 
 {dca_html}
 <div class="card sumcard">
@@ -1274,13 +1306,14 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 <table>{rows_focus_pos}</table>
 <h2>其他重点关注</h2>
 <table>{rows_focus_watch}</table>
-<div class="quiet">无异动：持仓 {n_quiet_pos} 只 · 关注 {n_quiet_watch} 只 · 共 {watch_count} 只在册</div>
+<div class="quiet">无异动：持仓 {n_quiet_pos} 只 · 关注 {n_quiet_watch} 只 · 共 {watch_count} 只在册{(' · 已隐藏 ' + str(dup_hidden) + ' 只与持仓重复（只在持仓区显示）') if dup_hidden else ''}</div>
 </div>
 
 <div class="foot">
 宏观：FRED · 个股：{src_txt}<br>
 跑路价签 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_yellow']:.0f} 收紧 · ≥{S['hy_red']:.0f} 危机确认<br>
 布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%）<br>
+轨道按当日收盘价滚动计算；是否触及按<b>当日最高/最低价</b>判定，盘中穿过就算<br>
 连续贴近轨道按日累计，远离一天（差 &gt;{S['boll_near_pct']:g}%）就断，再次贴近重新从第一日算 · 连续 2 日起才标注<br>
 定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在编辑页逐只设置<br>
 异动 ≥{S['chg_red']:g}% 红 · ≥{S['chg_yellow']:g}% 黄 · RSI ≥{S['rsi_high']:.0f} 或 ≤{S['rsi_low']:.0f} 红 · 量比 ≥{S['vol_ratio']:g}x 黄<br>
@@ -1288,7 +1321,6 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 </div>
 
 <div class="acts">
-<button id="btnRunNow">立即重跑</button>
 <a href="./edit.html" style="color:#6ba3f0;text-decoration:none">改自选清单 →</a>
 <span id="runMsg"></span>
 </div>
@@ -1322,15 +1354,22 @@ def main(argv=None):
     # 持仓 / 关注分开存。旧版只有 watch 一个字段时，全部按「关注」处理
     positions = cfg.get("positions", {})
     watch = cfg.get("watch", {})
+    # 关注清单在编辑页是完整的一份（可自由增减），里面会有和持仓重复的代码。
+    # 重复的这只只在「持仓」区出现一次：不重复抓取、不重复报警，也不会被数两遍。
+    pos_norm = {normalize_symbol(s).upper() for s in positions}
+    watch_eff = {s: c for s, c in watch.items()
+                 if normalize_symbol(s).upper() not in pos_norm}
+    dup_hidden = len(watch) - len(watch_eff)
     universe = [(s, c, "position") for s, c in positions.items()] + \
-               [(s, c, "watch") for s, c in watch.items()]
+               [(s, c, "watch") for s, c in watch_eff.items()]
     if not universe:
         log("holdings.json 里没有自选股，跳过个股部分")
 
     macro = build_macro()
     items = []
     if universe:
-        log(f"抓取 {len(positions)} 只持仓 + {len(watch)} 只关注...")
+        log(f"抓取 {len(positions)} 只持仓 + {len(watch_eff)} 只关注"
+            + (f"（另有 {dup_hidden} 只与持仓重复，已跳过）" if dup_hidden else "") + "...")
         fail_streak = 0
         data_down = False
         for i, (sym, sc, grp) in enumerate(universe):
@@ -1358,9 +1397,10 @@ def main(argv=None):
                 "level": "gray",
             })
 
-    snapshot = build_snapshot(macro, items, cfg)
+    snapshot = build_snapshot(macro, items, cfg, watch_shown=len(watch_eff))
     html = render(macro, items, len(universe), data_down=not universe
-                  or all(d["level"] == "gray" for d in items), snapshot=snapshot)
+                  or all(d["level"] == "gray" for d in items), snapshot=snapshot,
+                  dup_hidden=dup_hidden)
     out = os.path.join(BASE, "index.html")
     with open(out, "w", encoding="utf-8") as f:
         f.write(html)

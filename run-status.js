@@ -13,6 +13,9 @@
   let manualState = {phase: 'idle', message: ''};
   let publication = {phase: 'idle', message: '正在读取公开发布状态…'};
   let retryPending = false, retrySince = 0;
+  // 普通打开页面时，若一次没读到公开状态，自动再试两次，避免停在“没读到”。
+  const PUBLIC_RETRY_MAX = 2;
+  let publicRetry = 0;
 
   function getToken() {
     if (options.getToken) {
@@ -29,7 +32,7 @@
   }
   function authMessage(status) {
     if (status === 401) return '401：令牌无效或过期，请重新填写';
-    if (status === 403) return '403：权限不足或 GitHub 限流；读取运行需 Actions Read，手动重跑需 Actions Read and write，编辑保存需 Contents Read and write';
+    if (status === 403) return '403：权限不足或 GitHub 限流；读取运行需 Actions Read，立即运行需 Actions Read and write，编辑保存需 Contents Read and write';
     if (status === 404) return '404：找不到 workflow/run，或令牌无权访问；请检查仓库及 daily.yml';
     return 'HTTP ' + status;
   }
@@ -193,15 +196,32 @@
     const dates = (s && s.actual_dates) || {};
     return dates.max || dates.min || '';
   }
+  // 上次成功读到的看板状态：编辑页没有内嵌快照，网络失败时用它兜底，避免一律显示“未知”。
+  const LAST_KEY = 'mm_last_pub_v1';
+  function loadLast() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(LAST_KEY);
+      const v = raw ? JSON.parse(raw) : null;
+      return (v && v.dataTime) ? v : null;
+    } catch (_) { return null; }
+  }
+  function saveLast(s) {
+    const dt = dataTimeText(s);
+    if (!dt || !s) return;
+    try {
+      if (window.localStorage) window.localStorage.setItem(LAST_KEY,
+        JSON.stringify({dataTime: dt, when: humanTime(s), run_id: s.run_id, at: Date.now()}));
+    } catch (_) { /* 隐私模式不能存储时忽略 */ }
+  }
   function plainApplied() {
     const when = humanTime(verifiedSnapshot || latestStatus);
     if (activeManual()) {
       const phase = manualState.phase;
-      if (phase === 'dispatching' || phase === 'queued') return '重跑已提交，正在更新看板，约 1 分钟…';
-      if (phase === 'running') return '正在重跑，正在抓最新行情…';
-      if (phase === 'generated') return '重跑已生成，正在发布到看板…';
-      if (phase === 'failed') return '重跑失败：' + manualState.message.replace(/^派发失败：/, '');
-      if (phase === 'expired') return '重跑跟踪超时，请点刷新状态确认，不代表失败';
+      if (phase === 'dispatching' || phase === 'queued') return '运行已提交，正在更新看板，约 1 分钟…';
+      if (phase === 'running') return '正在运行，正在抓最新行情…';
+      if (phase === 'generated') return '运行已生成，正在发布到看板…';
+      if (phase === 'failed') return '运行失败：' + manualState.message.replace(/^派发失败：/, '');
+      if (phase === 'expired') return '运行跟踪超时，请点刷新状态确认，不代表失败';
     }
     if (Object.keys(targets).length) {
       const phase = configState.phase;
@@ -214,8 +234,46 @@
       return '看板最新数据时间 ' + (dataTimeText(verifiedSnapshot || latestStatus) || '未知') +
         ' · 看板更新于 ' + (when || '未知');
     }
-    if (publication.phase === 'waiting') return '暂时无法核对看板状态；已保存的修改可能仍在发布中';
+    if (publication.phase === 'waiting') {
+      const last = loadLast();
+      if (last) return '这次没读到看板最新状态（多为网络问题）。上次读到的数据时间 ' + last.dataTime +
+        (last.when ? ' · 看板更新于 ' + last.when : '') + '；已保存的内容不受影响';
+      return '这次没读到看板状态（多为网络问题）；已保存的内容不受影响，可点「刷新状态」重试';
+    }
     return '还没在这台设备保存过修改';
+  }
+  // 状态灯：黄=正在抓取，红=抓取失败（几只），绿=抓取成功；三种都带上数据获取时间
+  function lightState() {
+    const snap = verifiedSnapshot || latestStatus || pageSnapshot();
+    const dt = dataTimeText(snap);
+    const timePart = dt ? ' · 数据时间 ' + dt : '';
+    const busyText = phase => {
+      if (phase === 'dispatching' || phase === 'queued') return '正在提交运行请求…';
+      if (phase === 'running') return '正在抓取最新行情…';
+      if (phase === 'generated') return '抓取完成，正在发布到看板…';
+      return '正在抓取…';
+    };
+    if (activeManual()) {
+      if (manualState.phase === 'failed') {
+        return {phase: 'bad', text: '运行失败：' + manualState.message.replace(/^派发失败：/, '')};
+      }
+      return {phase: 'busy', text: busyText(manualState.phase) + timePart};
+    }
+    if (Object.keys(targets).length && !terminal.has(configState.phase)) {
+      if (configState.phase === 'failed') return {phase: 'bad', text: '运行失败：本次运行未成功'};
+      return {phase: 'busy', text: busyText(configState.phase) + timePart};
+    }
+    if (snap) {
+      const info = snap.summary || {};
+      const bad = [...(info.stale_symbols || []), ...(info.missing_symbols || [])];
+      if (bad.length) {
+        return {phase: 'bad', text: '抓取失败 ' + bad.length + ' 只：' +
+          bad.slice(0, 6).join('、') + (bad.length > 6 ? ' 等' : '') + timePart};
+      }
+      return {phase: 'ok', text: '抓取成功 · ' + (info.total || 0) + ' 只全部更新' + timePart};
+    }
+    if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
+    return {phase: 'idle', text: '点「立即运行」抓最新行情'};
   }
   function put(id, text, phase) {
     const box = el(id);
@@ -241,6 +299,9 @@
     }
     put('runState', message, s.phase);
     put('runMsg', message, s.phase);
+    const light = lightState();
+    if (el('runLight')) el('runLight').dataset.phase = light.phase;
+    put('runLightTxt', light.text, light.phase);
     const currentPage = pageSnapshot();
     compactLegacySummary(currentPage);
     // 始终展示本页内嵌的生成结果；跨网络校验失败不能抹掉它。
@@ -252,7 +313,13 @@
     put('appliedBrief', appliedText, appliedPhase);
     if (el('dataTime')) {
       const snap = verifiedSnapshot || latestStatus || pageSnapshot();
-      put('dataTime', '数据时间 ' + (dataTimeText(snap) || '未知'), publication.phase);
+      const dt = dataTimeText(snap);
+      if (dt) put('dataTime', '数据时间 ' + dt, publication.phase);
+      else {
+        const last = loadLast();
+        put('dataTime', last ? '数据时间 ' + last.dataTime + '（上次读到，这次没取到最新）'
+          : '数据时间 未能读取（不影响已保存内容）', publication.phase);
+      }
     }
     ['btnRun', 'btnRunNow'].forEach(id => { if (el(id)) el(id).disabled = !!activeManual(); });
     const box = el('appliedState') || el('runMsg') || el('runState');
@@ -291,9 +358,12 @@
     return null;
   }
   function schedule() {
-    if (!activeConfig() && !activeManual() && !retryPending) return;
+    const tracking = activeConfig() || activeManual() || retryPending;
+    if (!tracking && publicRetry >= PUBLIC_RETRY_MAX) return;
     const since = Math.min(activeConfig() ? configSince : Infinity, activeManual() ? manual.since : Infinity);
-    timer = window.setTimeout(() => { void tick(); }, Date.now() - since < 120000 ? 8000 : 20000);
+    const delay = tracking ? (Date.now() - since < 120000 ? 8000 : 20000)
+      : (publicRetry === 0 ? 4000 : 10000);
+    timer = window.setTimeout(() => { void tick(); }, delay);
   }
   async function tick() {
     cancelPoll();
@@ -343,6 +413,8 @@
     publication = snapshot
       ? {phase: 'published', message: '已发布完成：看板与状态文件一致（run ' + snapshot.run_id + '）'}
       : {phase: 'waiting', message: publicError || '尚未验证发布'};
+    if (snapshot) { saveLast(snapshot); publicRetry = PUBLIC_RETRY_MAX; }
+    else if (publicError && publicRetry < PUBLIC_RETRY_MAX) publicRetry++;
     retryPending = !snapshot && (!!publicError || !!actionError) && retryPending;
     if (Object.keys(expected).length) {
       if (snapshot && configMatches(status, expected) && configMatches(snapshot, expected)) {
@@ -385,6 +457,7 @@
   }
   function refresh() {
     if (!initialized) init();
+    publicRetry = 0;
     if (configState.phase === 'expired') { configSince = Date.now(); configState.phase = 'waiting'; }
     if (manual && manualState.phase === 'expired') { manual.since = Date.now(); manualState.phase = 'waiting'; }
     return tick();
@@ -416,7 +489,7 @@
     if (!initialized) init();
     if (activeManual()) return state();
     if (!getToken()) {
-      manualState = {phase: 'auth', message: '立即重跑需要令牌及 Actions Read and write；无令牌仍可查看公开清单和发布状态'};
+      manualState = {phase: 'auth', message: '立即运行需要令牌及 Actions Read and write；无令牌仍可查看公开清单和发布状态'};
       put('runState', manualState.message, 'auth');
       put('runMsg', manualState.message, 'auth');
       return {...state(), phase: 'auth', message: manualState.message};
@@ -424,13 +497,13 @@
     cancelPoll();
     retrySince = Date.now();
     manual = {request_id: uuid(), run_id: null, since: Date.now()};
-    manualState = {phase: 'dispatching', message: '正在提交立即重跑请求（' + manual.request_id + '）'};
+    manualState = {phase: 'dispatching', message: '正在提交立即运行请求（' + manual.request_id + '）'};
     render();
     try {
       await request(apiURL('/actions/workflows/daily.yml/dispatches'), {
         method: 'POST', github: true, body: {ref: options.branch, inputs: {request_id: manual.request_id}}
       });
-      manualState = {phase: 'queued', message: '重跑请求已接受；正在按 request_id 定位指定运行，尚未完成'};
+      manualState = {phase: 'queued', message: '运行请求已接受；正在按 request_id 定位指定运行，尚未完成'};
     } catch (error) {
       if (!error.status) {
         // POST 超时可能已被接受：继续查同一 UUID，不自动重复派发。
