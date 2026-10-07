@@ -1589,7 +1589,7 @@ h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 
 <div class="runbar">
   <button class="primary" id="btnRunNow">立即运行</button>
-  <button id="btnCheckStatus">刷新状态</button>
+  <button id="btnCheckStatus">查运行状态</button>
   <a class="btnlink" href="./edit.html">设置</a>
 </div>
 <div class="statusrow">

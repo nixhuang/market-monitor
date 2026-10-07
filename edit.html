@@ -128,7 +128,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     <button id="btnRuns">运行记录（最近 20 条）</button>
     <div class="runlight" id="runLight" data-phase="idle"><i class="dot"></i><span id="runLightTxt">点「立即运行」抓最新行情</span></div>
   </div>
-  <button id="btnCheckStatus" style="margin-top:10px">刷新状态</button>
+  <button id="btnCheckStatus" style="margin-top:10px">查运行状态</button>
   <div class="runstate" id="runState" aria-live="polite">读取公开发布状态中…</div>
   <div id="runList" class="runlist"></div>
 </div>
@@ -303,7 +303,9 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     <div class="pane">
       <div id="appliedState" aria-live="polite">还没在这台设备保存过修改</div>
       <div id="dataTime" aria-live="polite">数据时间 读取中…</div>
-      <p class="note">这里只回答一句话：我刚才保存的东西，有没有真的用到看板上。刷新状态不会动你正在编辑的内容；确认生效后出现「刷新看板」，点了会另开一个页面。</p>
+      <p class="note">这里只回答一句话：<b>刚才保存的清单/规则，有没有真的跑到看板上</b>。<br>
+        <b>查运行状态</b> = 去问一次最新情况，只改这几行字，不会动你正在编辑的内容。<br>
+        <b>打开最新看板</b> = 在新标签页打开刚生成好的那版看板（你现在那个页面可能是旧的缓存）。确认生效后才会出现。</p>
     </div>
   </details>
 

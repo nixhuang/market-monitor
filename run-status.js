@@ -63,7 +63,7 @@
     const expired = new Promise((_, reject) => {
       timeout = window.setTimeout(() => {
         local.abort();
-        reject(new Error('网络请求超时；可稍后刷新状态，不代表运行失败'));
+        reject(new Error('网络请求超时；可稍后查运行状态，不代表运行失败'));
       }, options.timeoutMs);
     });
     try {
@@ -190,7 +190,7 @@
   }
   function networkMessage(error) {
     if (!error || error.name === 'TypeError' || error.message === 'Failed to fetch' || error.message === 'NetworkError when attempting to fetch resource.') {
-      return '网络暂时无法核对最新发布；本页已生成的数据仍可查看，请稍后刷新状态';
+      return '网络暂时无法核对最新发布；本页已生成的数据仍可查看，请稍后查运行状态';
     }
     return error.message || '暂时无法核对最新发布；本页数据仍可查看';
   }
@@ -229,13 +229,13 @@
       if (phase === 'running') return '正在运行，正在抓最新行情…';
       if (phase === 'generated') return '运行已生成，正在发布到看板…';
       if (phase === 'failed') return '运行失败：' + manualState.message.replace(/^派发失败：/, '');
-      if (phase === 'expired') return '运行跟踪超时，请点刷新状态确认，不代表失败';
+      if (phase === 'expired') return '运行跟踪超时，请点查运行状态确认，不代表失败';
     }
     if (Object.keys(targets).length) {
       const phase = configState.phase;
       if (phase === 'published') return '已生效：看板已按你保存的设置更新' + (when ? '（' + when + '）' : '');
       if (phase === 'failed') return '保存未生效：本次运行失败，请查看运行记录';
-      if (phase === 'expired') return '保存已提交，但还没验证到生效；请点刷新状态确认';
+      if (phase === 'expired') return '保存已提交，但还没验证到生效；请点查运行状态确认';
       return '保存成功，看板正在更新，约 1 分钟…';
     }
     if (publication.phase === 'published' && (verifiedSnapshot || latestStatus)) {
@@ -246,7 +246,7 @@
       const last = loadLast();
       if (last) return '这次没读到看板最新状态（多为网络问题）。上次读到的数据时间 ' + last.dataTime +
         (last.when ? ' · 看板更新于 ' + last.when : '') + '；已保存的内容不受影响';
-      return '这次没读到看板状态（多为网络问题）；已保存的内容不受影响，可点「刷新状态」重试';
+      return '这次没读到看板状态（多为网络问题）；已保存的内容不受影响，可点「查运行状态」重试';
     }
     return '还没在这台设备保存过修改';
   }
@@ -303,9 +303,9 @@
     if (s.phase === 'published' && embedded && verifiedSnapshot) {
       try {
         if (!samePublication(verifiedSnapshot, JSON.parse(embedded.textContent))) {
-          message += '；当前页面仍是旧快照，点击「刷新看板」查看新版本';
+          message += '；当前页面仍是旧快照，点击「打开最新看板」查看新版本';
         }
-      } catch (_) { message += '；当前页快照无效，请点击「刷新看板」'; }
+      } catch (_) { message += '；当前页快照无效，请点击「打开最新看板」'; }
     }
     if (actionsError && (activeManual() || activeConfig())) {
       message += '\n运行记录暂时无法读取：' + actionsError;
@@ -320,7 +320,7 @@
     // 运行详情现在只在编辑页展示（首页已移除）：优先本页内嵌快照，其次网络读到的最新状态。
     const detailSnap = currentPage || verifiedSnapshot || latestStatus;
     put('runSummary',
-      (detailSnap ? summaryText(detailSnap) : '还没读到本次运行的详情；点「刷新状态」核对一次') +
+      (detailSnap ? summaryText(detailSnap) : '还没读到本次运行的详情；点「查运行状态」核对一次') +
       '\n' + publication.message, publication.phase);
     const appliedText = plainApplied();
     const appliedPhase = activeManual() ? manualState.phase : configState.phase;
@@ -342,7 +342,7 @@
     if (box && verifiedSnapshot && (!Object.keys(targets).length || configState.phase === 'published') &&
         (!manual || manualState.phase === 'published')) {
       const link = window.document.createElement('a');
-      link.textContent = '刷新看板';
+      link.textContent = '打开最新看板';
       link.href = bust('./index.html') + '&mm_run=' + encodeURIComponent(verifiedSnapshot.run_id);
       link.style.cssText = 'display:inline-block;margin:8px;color:#6ba3f0';
       if (el('appliedState')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
@@ -442,7 +442,7 @@
           configState = {phase: 'generated', message: '配置生成结果已出现，尚未验证看板发布一致'};
         }
         if (Date.now() - configSince >= MAX_WAIT && configState.phase !== 'failed') {
-          configState = {phase: 'expired', message: '配置跟踪已达 10 分钟，停止自动轮询；提交目标已保留，请稍后刷新状态。这不代表运行失败'};
+          configState = {phase: 'expired', message: '配置跟踪已达 10 分钟，停止自动轮询；提交目标已保留，请稍后查运行状态。这不代表运行失败'};
         } else if (publicError) configState.message += '\n' + publicError;
       }
     }
@@ -457,15 +457,15 @@
         manualState = runPhase;
         if (manualMatches(status, manual)) manualState = {phase: 'generated', message: '指定 run 已生成，尚未验证看板发布一致'};
         if (Date.now() - manual.since >= MAX_WAIT) {
-          manualState = {phase: 'expired', message: '指定运行跟踪已达 10 分钟，停止自动轮询；request_id/run_id 已保留，请稍后刷新状态。这不代表运行失败'};
+          manualState = {phase: 'expired', message: '指定运行跟踪已达 10 分钟，停止自动轮询；request_id/run_id 已保留，请稍后查运行状态。这不代表运行失败'};
         } else if (publicError) manualState.message += '\n' + publicError;
       }
     }
     if (Date.now() - configSince >= MAX_WAIT && activeConfig()) {
-      configState = {phase: 'expired', message: '配置自动跟踪窗口已结束，目标仍保留；请稍后刷新状态，不代表运行失败'};
+      configState = {phase: 'expired', message: '配置自动跟踪窗口已结束，目标仍保留；请稍后查运行状态，不代表运行失败'};
     }
     if (manual && Date.now() - manual.since >= MAX_WAIT && activeManual()) {
-      manualState = {phase: 'expired', message: '指定运行自动跟踪窗口已结束，request_id/run_id 仍保留；请稍后刷新状态，不代表运行失败'};
+      manualState = {phase: 'expired', message: '指定运行自动跟踪窗口已结束，request_id/run_id 仍保留；请稍后查运行状态，不代表运行失败'};
     }
     // 已验证目标也保留；之后保存另一文件时仍校验旧文件，防止被旧运行回滚。
     render();
@@ -555,7 +555,7 @@
     render();
     return tick();
   }
-  // 「刷新状态」点了要有反馈：否则状态没变化时页面文字不动，看着像按钮坏了。
+  // 「查运行状态」点了要有反馈：否则状态没变化时页面文字不动，看着像按钮坏了。
   async function manualCheck() {
     const b = el('btnCheckStatus');
     const before = (latestStatus || verifiedSnapshot || {}).run_id || '';
@@ -570,7 +570,7 @@
         const hms = [t.getHours(), t.getMinutes(), t.getSeconds()]
           .map(n => String(n).padStart(2, '0')).join(':');
         const changed = before && after && before !== after;
-        b.textContent = '刷新状态（已核对 ' + hms + (changed ? ' · 有更新' : '') + '）';
+        b.textContent = '查运行状态（已核对 ' + hms + (changed ? ' · 有更新' : '') + '）';
       }
     }
   }
