@@ -1,15 +1,15 @@
 {
   "dca_reminder": null,
-  "run_id": "37628630312",
+  "run_id": "37634168149",
   "request_id": "",
-  "source_sha": "e4245dfcbc4029488011cd309546b440c88763b1",
-  "started_at": "2026-10-07T13:27:29+00:00",
-  "started_at_bj": "2026-10-07T21:27:29+08:00",
-  "finished_at": "2026-10-07T21:29:09.797748+08:00",
-  "finished_at_bj": "2026-10-07T21:29:09+08:00",
+  "source_sha": "0a86bd605e57e554d885691a2f5af68ee1ac01ed",
+  "started_at": "2026-10-07T14:08:07+00:00",
+  "started_at_bj": "2026-10-07T22:08:07+08:00",
+  "finished_at": "2026-10-07T22:15:21.000222+08:00",
+  "finished_at_bj": "2026-10-07T22:15:21+08:00",
   "event": "push",
-  "target_trade_date": "2026-10-06",
-  "mode": "closed",
+  "target_trade_date": "2026-10-07",
+  "mode": "manual_or_config",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
     "holdings.json": "d12fa3db6513e59ce4fddb783ebcb3f52d25e6d5",
@@ -45,9 +45,9 @@
     "dca": 0
   },
   "summary": {
-    "red": 44,
-    "yellow": 20,
-    "green": 65,
+    "red": 33,
+    "yellow": 27,
+    "green": 69,
     "gray": 0,
     "total": 129,
     "macro_ok": 6,
@@ -55,16 +55,21 @@
     "missing_symbols": []
   },
   "actual_dates": {
-    "min": "2026-10-06",
-    "max": "2026-10-06"
+    "min": "2026-10-07",
+    "max": "2026-10-07"
   },
   "macro_dates": {
     "hy_oas": "2026-10-05",
-    "vix": "2026-10-05",
+    "vix": "2026-10-06",
     "sp500": "2026-10-06",
     "ust10": "2026-10-05",
     "curve": "2026-10-06",
     "dxy": "2026-10-02"
   },
-  "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。"
+  "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
+  "fundamental": {
+    "checked": 10,
+    "red": 2,
+    "yellow": 3
+  }
 }
