@@ -1,11 +1,12 @@
 {
-  "run_id": "37578293947",
+  "dca_reminder": null,
+  "run_id": "37579395990",
   "request_id": "",
-  "source_sha": "a4c70ea56690ec14ad15b5e1e3c83b1ef07b0bd1",
-  "started_at": "2026-10-07T05:50:10+00:00",
-  "started_at_bj": "2026-10-07T13:50:10+08:00",
-  "finished_at": "2026-10-07T13:50:41.014718+08:00",
-  "finished_at_bj": "2026-10-07T13:50:41+08:00",
+  "source_sha": "e9376bc63df84436b734240670838c112e8b0d93",
+  "started_at": "2026-10-07T06:02:51+00:00",
+  "started_at_bj": "2026-10-07T14:02:51+08:00",
+  "finished_at": "2026-10-07T14:03:23.594377+08:00",
+  "finished_at_bj": "2026-10-07T14:03:23+08:00",
   "event": "push",
   "target_trade_date": "2026-10-06",
   "mode": "closed",
@@ -32,7 +33,9 @@
     "vix_green": 20,
     "vix_yellow": 30,
     "vix_red": 40,
-    "use_realtime": 1
+    "use_realtime": 1,
+    "dca_every": 0,
+    "dca_start": ""
   },
   "list_counts": {
     "positions": 15,
