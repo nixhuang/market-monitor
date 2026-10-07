@@ -10,6 +10,8 @@
   "trigger_gap_pct": 5,
   "vol_ratio": 1.5,
   "quiet_chg": 2,
+  "amp_yellow": 5,
+  "amp_red": 8,
   "hy_green": 350,
   "hy_yellow": 400,
   "hy_red": 400,

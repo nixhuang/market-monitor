@@ -71,6 +71,8 @@ DEFAULT_SETTINGS = {
     "trigger_gap_pct": 5.0,  # 距加仓价不足 x% → 红（已跌破则无视这条直接红）
     "vol_ratio": 1.5,       # 量比 >= x 倍 → 黄
     "quiet_chg": 2.0,       # quiet 标的（货币基金等）单日涨跌 >= x% → 黄
+    "amp_yellow": 5.0,      # 日内振幅（最高-最低）/昨收 >= x% → 黄
+    "amp_red": 8.0,         # 日内振幅 >= x% → 红（上下插针、剧烈震荡）
 
     # 宏观
     "hy_green": 350,        # 跑路价签 bp：< 350 绿 / 350~ 黄 / >= 400 红
@@ -1218,6 +1220,18 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         signals.append(f"量比 {vol_ratio:.1f}x")
         bump("yellow")
 
+    # 日内振幅：涨跌幅只看「收盘 vs 昨收」，盘中冲高又回落、最后收平的票不会响，这条专门抓它。
+    # 用当日最高/最低（盘中重跑时再和当前价取极值）除以昨收。
+    amp = None
+    if touch_up is not None and touch_dn is not None and prev:
+        amp = (touch_up - touch_dn) / prev * 100
+        if amp >= S["amp_red"]:
+            signals.append(f"振幅 {amp:.1f}%（{touch_dn:,.2f}~{touch_up:,.2f}）")
+            bump("red")
+        elif amp >= S["amp_yellow"]:
+            signals.append(f"振幅 {amp:.1f}%（{touch_dn:,.2f}~{touch_up:,.2f}）")
+            bump("yellow")
+
     # 均线穿越（比"贴近"有意义得多）
     if len(closes) >= 2:
         prev_c = closes[-2]
@@ -1240,6 +1254,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         "dist_high": dist_high,
         "dist_low": dist_low,
         "vol_ratio": vol_ratio,
+        "amp": amp,
         "trigger": trig,
         "source": data.get("source", ""),
         "data_date": (data.get("dates") or [""])[-1],
@@ -1264,7 +1279,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261007-9"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261007-10"></script>'
 
 
 def config_hash(filename):
@@ -1548,6 +1563,10 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
   border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}}
 .runbar button:disabled{{opacity:.5;cursor:not-allowed}}
 .runbar button.primary{{background:var(--blue);border-color:var(--blue);color:#fff}}
+.runbar a.btnlink{{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
+  border:1px solid #333a47;border-radius:8px;text-decoration:none;display:inline-block}}
+.statusrow{{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:-4px 0 14px;font-size:12.5px;line-height:1.5}}
 h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 .runlight{{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}}
 .runlight .dot{{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}}
@@ -1571,6 +1590,9 @@ h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 <div class="runbar">
   <button class="primary" id="btnRunNow">立即运行</button>
   <button id="btnCheckStatus">刷新状态</button>
+  <a class="btnlink" href="./edit.html">设置</a>
+</div>
+<div class="statusrow">
   <div class="runlight" id="runLight" data-phase="{init_light_phase}"><i class="dot"></i><span id="runLightTxt">{init_light}</span></div>
 </div>
 
@@ -1600,11 +1622,11 @@ h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 连续贴近轨道按日累计，远离一天（差 &gt;{S['boll_near_pct']:g}%）就断，再次贴近重新从第一日算 · 连续 2 日起才标注<br>
 定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在编辑页逐只设置<br>
 异动 ≥{S['chg_red']:g}% 红 · ≥{S['chg_yellow']:g}% 黄 · RSI ≥{S['rsi_high']:.0f} 或 ≤{S['rsi_low']:.0f} 红 · 量比 ≥{S['vol_ratio']:g}x 黄<br>
+日内振幅（最高-最低）/昨收 ≥{S['amp_red']:g}% 红 · ≥{S['amp_yellow']:g}% 黄（抓冲高回落、收盘却没动的票）<br>
 <a href="./settings.json" style="color:#6ba3f0;text-decoration:none">查看当前阈值 settings.json</a>
 </div>
 
 <div class="acts">
-<a href="./edit.html" style="color:#6ba3f0;text-decoration:none">改自选清单 →</a>
 <span id="runMsg"></span>
 </div>
 {RUN_JS}
