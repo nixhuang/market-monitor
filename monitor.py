@@ -1086,7 +1086,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261007-7"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261007-8"></script>'
 
 
 def config_hash(filename):
@@ -1110,7 +1110,8 @@ def build_snapshot(macro, items, cfg, watch_shown=None):
     missing = [normalize_symbol(d["symbol"]) for d in items if d.get("price") is None]
     stale = [normalize_symbol(d["symbol"]) for d in items
              if d.get("data_date") and TARGET_DATE and d["data_date"] < TARGET_DATE]
-    positions, watch = cfg.get("positions", {}), cfg.get("watch", {})
+    positions, focus, watch = (cfg.get("positions", {}), cfg.get("focus", {}),
+                               cfg.get("watch", {}))
     dca = global_dca(TARGET_DATE)
     return {
         "dca_reminder": dca,
@@ -1127,8 +1128,8 @@ def build_snapshot(macro, items, cfg, watch_shown=None):
         "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
         "config_files": {f: config_hash(f) for f in ("holdings.json", "settings.json")},
         "effective_settings": dict(S),
-        # watch 计数用「看板实际展示/抓取」的只数，不含与持仓重复被隐藏的那些
-        "list_counts": {"positions": len(positions),
+        # watch 计数用「看板实际展示/抓取」的只数，不含与持仓/重点关注重复被隐藏的那些
+        "list_counts": {"positions": len(positions), "focus": len(focus),
                         "watch": len(watch) if watch_shown is None else watch_shown,
                         "triggers": sum(bool(c.get("trigger")) for c in positions.values()),
                         "dca": 1 if dca else 0},
@@ -1171,8 +1172,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 
     order = {"red": 0, "yellow": 1, "green": 2, "gray": 3}
     items.sort(key=lambda d: (order[d["level"]], -(abs(d["chg"]) if d["chg"] else 0)))
-    focus = [d for d in items if d["level"] in ("red", "yellow")]
-    quiet = [d for d in items if d["level"] == "green"]
 
     def rows_of(lst):
         out = ""
@@ -1195,11 +1194,31 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             out = '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
         return out
 
-    is_pos = lambda d: d.get("group") == "position"
-    rows_focus_pos = rows_of([d for d in focus if is_pos(d)])
-    rows_focus_watch = rows_of([d for d in focus if not is_pos(d)])
-    n_quiet_pos = len([d for d in quiet if is_pos(d)])
-    n_quiet_watch = len([d for d in quiet if not is_pos(d)])
+    # 三个分区：持仓 > 重点关注 > 其他关注；组内再拆「个股」和「ETF 基金」，不混排。
+    # 红/黄是警示行；灰（取数失败）也展示出来，否则失败会被静默吞掉；绿的不上表只计数。
+    is_etf_row = lambda d: bool(d.get("etf")) or is_etf(d["symbol"])
+    group_defs = [("持仓", "position"), ("重点关注", "focus"), ("其他关注", "watch")]
+    group_cards = ""
+    for gtitle, gkey in group_defs:
+        g = [d for d in items if d.get("group") == gkey]
+        shown = [d for d in g if d["level"] in ("red", "yellow", "gray")]
+        n_quiet = len([d for d in g if d["level"] == "green"])
+        if gkey == "focus" and not g:
+            body = '<div class="quiet">重点关注清单还是空的：去编辑页添加，或从其他关注里挑几只</div>'
+        else:
+            stocks = [d for d in shown if not is_etf_row(d)]
+            etfs = [d for d in shown if is_etf_row(d)]
+            parts = []
+            if stocks:
+                parts.append(f"<h2>个股</h2>\n<table>{rows_of(stocks)}</table>")
+            if etfs:
+                parts.append(f"<h2>ETF 基金</h2>\n<table>{rows_of(etfs)}</table>")
+            if not parts:
+                parts.append('<div class="quiet">今晚无异动，不用盯</div>')
+            if n_quiet:
+                parts.append(f'<div class="quiet">无异动 {n_quiet} 只</div>')
+            body = "\n".join(parts)
+        group_cards += f'<div class="card">\n<h2 class="grp">{gtitle}</h2>\n{body}\n</div>\n'
 
     # 宏观总判断
     hy = macro.get("hy_oas", {})
@@ -1232,22 +1251,35 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     summary = snapshot.get("summary", {})
     counts = snapshot.get("list_counts", {})
     actual_dates = snapshot.get("actual_dates", {})
-    # 一行摘要：只放最要紧的四件事，细节折叠
+    # 一行摘要升级为状态灯文案（首页第三排）；这里只算红黄绿计数和异常清单。
     bad = summary.get("stale_symbols", []) + summary.get("missing_symbols", [])
     gray_txt = f" 灰{summary.get('gray')}" if summary.get("gray") else ""
-    fresh_txt = (f"<b>{len(bad)} 只未更新：{html_lib.escape('、'.join(bad[:6]))}</b>" if bad
-                 else f"{summary.get('total', 0)} 只全部更新")
-    one_line = (f"数据日期 {actual_dates.get('max') or '—'} · "
-                f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} 绿{summary.get('green', 0)}{gray_txt} · "
-                f"{fresh_txt} · 规则已按当前设置生成")
-    summary_hint = html_lib.escape(
-        f"目标交易日 {snapshot.get('target_trade_date') or '未锁定'} · "
-        f"持仓 {counts.get('positions', 0)} / 关注 {counts.get('watch', 0)}")
+    if bad:
+        init_light_phase = "bad"
+        init_light = (f"抓取失败 {len(bad)} 只：{html_lib.escape('、'.join(bad[:6]))}"
+                      + (" 等" if len(bad) > 6 else "") + " · 规则未完全生效")
+    else:
+        init_light_phase = "ok"
+        init_light = (f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
+                      f"绿{summary.get('green', 0)}{gray_txt} · "
+                      f"{summary.get('total', 0)} 只全部更新 · 规则按当前设置生效")
     dca_info = dca_text(snapshot.get("dca_reminder"))
-    event_txt = {'schedule': '定时自动运行', 'workflow_dispatch': '手动重跑',
-                 'push': '保存清单/规则后自动更新'}.get(snapshot.get('event') or '', '自动更新')
-    sub_line = (f"{NOW.strftime('%Y-%m-%d %H:%M')} 北京时间 · 本次{event_txt}"
-                f" · 自动计划：美东周一至五 20:30（北京 夏令时次日 08:30 / 冬令时次日 09:30）")
+    # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
+    ny_now = datetime.now(US_TZ)
+    bj_auto = "夏令时次日 08:30" if ny_now.dst() != timedelta(0) else "冬令时次日 09:30"
+    max_date = actual_dates.get("max") or "—"
+    if snapshot.get("mode") and snapshot["mode"] != "closed":
+        m_fin = re.match(r"(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})",
+                         snapshot.get("finished_at_bj") or "")
+        dt_txt = f"{m_fin.group(1)} {m_fin.group(2)}（盘中，北京时间）" if m_fin else max_date
+    else:
+        dt_txt = max_date
+    sub_line = f"数据时间 {dt_txt} · 自动计划：美东周一至五 20:30（北京 {bj_auto}）"
+    lc = counts
+    reg_line = (f'<div class="quiet">在册：持仓 {lc.get("positions", 0)} · '
+                f'重点关注 {lc.get("focus", 0)} · 其他关注 {lc.get("watch", 0)}'
+                + (f' · 已隐藏 {dup_hidden} 只与持仓/重点关注重复（只在更高分区显示一次）'
+                   if dup_hidden else "") + "</div>")
     dca_html = (f'<div class="dca {"on" if (snapshot.get("dca_reminder") or {}).get("due") else ""}">'
                 f'定投提醒：{dca_info}</div>') if dca_info else ""
 
@@ -1258,11 +1290,12 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>市场自检</title>
+<title>AI监测市场</title>
 <style>
 :root{{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
   --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#f85149; --down:#3fb950;
+  --blue:#2f6bd8;
 }}
 *{{box-sizing:border-box;-webkit-tap-highlight-color:transparent}}
 body{{margin:0;background:var(--bg);color:var(--text);
@@ -1311,11 +1344,12 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 #runMsg{{font-size:12px;color:var(--dim);flex:1;min-width:180px;line-height:1.5}}
 #runMsg.ok{{color:var(--green)}}
 #runMsg.err{{color:var(--red)}}
-.run-summary{{padding:10px 12px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;color:var(--dim);line-height:1.65}}
-.sumline{{padding:10px 14px;font-size:13px;line-height:1.6}}
-.sumcard details{{padding:0 6px 8px}}
-.sumcard summary{{font-size:11.5px;color:#6ba3f0;cursor:pointer;padding:2px 8px;outline:none}}
 .runbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}}
+.runbar button{{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
+  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}}
+.runbar button:disabled{{opacity:.5;cursor:not-allowed}}
+.runbar button.primary{{background:var(--blue);border-color:var(--blue);color:#fff}}
+h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 .runlight{{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}}
 .runlight .dot{{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}}
 .runlight[data-phase="busy"]{{color:var(--yellow)}}
@@ -1332,21 +1366,16 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 </style>
 </head>
 <body><div class="wrap">
-<h1>市场自检</h1>
+<h1>AI监测市场</h1>
 <div class="sub">{sub_line}</div>
 
 <div class="runbar">
   <button class="primary" id="btnRunNow">立即运行</button>
-  <div class="runlight" id="runLight" data-phase="idle"><i class="dot"></i><span id="runLightTxt">点「立即运行」抓最新行情</span></div>
+  <button id="btnCheckStatus">刷新状态</button>
+  <div class="runlight" id="runLight" data-phase="{init_light_phase}"><i class="dot"></i><span id="runLightTxt">{init_light}</span></div>
 </div>
 
 {dca_html}
-<div class="card sumcard">
-<div class="sumline">{one_line}</div>
-<details><summary>运行详情（给核对用，平时不用看）</summary>
-<div class="run-summary" id="runSummary">{summary_hint}</div>
-</details>
-</div>
 <div class="script-data" hidden><script id="snapshotData" type="application/json">{snapshot_json}</script></div>
 
 <div class="overall o-{overall}">{overall_txt}</div>
@@ -1360,13 +1389,8 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 </table>
 </div>
 
-<div class="card">
-<h2>持仓重点关注</h2>
-<table>{rows_focus_pos}</table>
-<h2>其他重点关注</h2>
-<table>{rows_focus_watch}</table>
-<div class="quiet">无异动：持仓 {n_quiet_pos} 只 · 关注 {n_quiet_watch} 只 · 共 {watch_count} 只在册{(' · 已隐藏 ' + str(dup_hidden) + ' 只与持仓重复（只在持仓区显示）') if dup_hidden else ''}</div>
-</div>
+{group_cards}
+{reg_line}
 
 <div class="foot">
 宏观：FRED · 个股：{src_txt}<br>
@@ -1410,16 +1434,22 @@ def main(argv=None):
         log(f"holdings.json 读取失败，按空清单处理：{e}")
         cfg = {}
 
-    # 持仓 / 关注分开存。旧版只有 watch 一个字段时，全部按「关注」处理
+    # 三组分开存：持仓 / 重点关注 / 其他关注。旧文件没有 focus 字段就当空组，完全兼容。
     positions = cfg.get("positions", {})
+    focus = cfg.get("focus", {})
     watch = cfg.get("watch", {})
-    # 关注清单在编辑页是完整的一份（可自由增减），里面会有和持仓重复的代码。
-    # 重复的这只只在「持仓」区出现一次：不重复抓取、不重复报警，也不会被数两遍。
+    # 同一只代码只出现在优先级最高的分区：持仓 > 重点关注 > 其他关注。
+    # 重复的不重复抓取、不重复报警，也不会被数两遍。
     pos_norm = {normalize_symbol(s).upper() for s in positions}
-    watch_eff = {s: c for s, c in watch.items()
+    focus_eff = {s: c for s, c in focus.items()
                  if normalize_symbol(s).upper() not in pos_norm}
-    dup_hidden = len(watch) - len(watch_eff)
+    focus_norm = {normalize_symbol(s).upper() for s in focus_eff}
+    watch_eff = {s: c for s, c in watch.items()
+                 if normalize_symbol(s).upper() not in pos_norm
+                 and normalize_symbol(s).upper() not in focus_norm}
+    dup_hidden = (len(focus) - len(focus_eff)) + (len(watch) - len(watch_eff))
     universe = [(s, c, "position") for s, c in positions.items()] + \
+               [(s, c, "focus") for s, c in focus_eff.items()] + \
                [(s, c, "watch") for s, c in watch_eff.items()]
     if not universe:
         log("holdings.json 里没有自选股，跳过个股部分")
@@ -1427,8 +1457,8 @@ def main(argv=None):
     macro = build_macro()
     items = []
     if universe:
-        log(f"抓取 {len(positions)} 只持仓 + {len(watch_eff)} 只关注"
-            + (f"（另有 {dup_hidden} 只与持仓重复，已跳过）" if dup_hidden else "") + "...")
+        log(f"抓取 {len(positions)} 只持仓 + {len(focus_eff)} 只重点关注 + {len(watch_eff)} 只其他关注"
+            + (f"（另有 {dup_hidden} 只重复，已跳过）" if dup_hidden else "") + "...")
         fail_streak = 0
         data_down = False
         for i, (sym, sc, grp) in enumerate(universe):
@@ -1502,7 +1532,8 @@ def push_serverchan(macro, items):
         for d in group:
             price = "%.2f" % d["price"] if d.get("price") else "—"
             chg = " %+.2f%%" % d["chg"] if d.get("chg") is not None else ""
-            gname = "持仓" if d.get("group") == "positions" else "关注"
+            gname = {"position": "持仓", "focus": "重点关注", "watch": "关注"}.get(
+                d.get("group"), "关注")
             sig = " / ".join(d.get("signals") or []) or "—"
             lines.append("- **%s** %s%s · %s（%s）" % (
                 normalize_symbol(d["symbol"]), price, chg, sig, gname))

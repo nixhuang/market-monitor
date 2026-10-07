@@ -242,14 +242,18 @@
     }
     return '还没在这台设备保存过修改';
   }
-  // 状态灯：黄=正在抓取，红=抓取失败（几只），绿=抓取成功；三种都带上数据获取时间
+  // 状态灯：黄=正在抓取（修改中），红=抓取失败（几只），绿=按当前设置生效；
+  // 绿灯文案带红黄绿计数，数据时间已在第二排展示，这里不再重复。
   function lightState() {
     const snap = verifiedSnapshot || latestStatus || pageSnapshot();
-    const dt = dataTimeText(snap);
-    const timePart = dt ? ' · 数据时间 ' + dt : '';
+    const info = snap ? (snap.summary || {}) : {};
+    const cnt = info.red != null
+      ? '红' + (info.red ?? 0) + ' 黄' + (info.yellow ?? 0) + ' 绿' + (info.green ?? 0) +
+        (info.gray ? ' 灰' + info.gray : '')
+      : '';
     const busyText = phase => {
-      if (phase === 'dispatching' || phase === 'queued') return '正在提交运行请求…';
-      if (phase === 'running') return '正在抓取最新行情…';
+      if (phase === 'dispatching' || phase === 'queued') return '规则修改中 · 正在提交运行请求…';
+      if (phase === 'running') return '规则修改中 · 正在抓取最新行情…';
       if (phase === 'generated') return '抓取完成，正在发布到看板…';
       return '正在抓取…';
     };
@@ -257,20 +261,19 @@
       if (manualState.phase === 'failed') {
         return {phase: 'bad', text: '运行失败：' + manualState.message.replace(/^派发失败：/, '')};
       }
-      return {phase: 'busy', text: busyText(manualState.phase) + timePart};
+      return {phase: 'busy', text: busyText(manualState.phase)};
     }
     if (Object.keys(targets).length && !terminal.has(configState.phase)) {
       if (configState.phase === 'failed') return {phase: 'bad', text: '运行失败：本次运行未成功'};
-      return {phase: 'busy', text: busyText(configState.phase) + timePart};
+      return {phase: 'busy', text: busyText(configState.phase)};
     }
-    if (snap) {
-      const info = snap.summary || {};
+    if (snap && info.red != null) {
       const bad = [...(info.stale_symbols || []), ...(info.missing_symbols || [])];
       if (bad.length) {
         return {phase: 'bad', text: '抓取失败 ' + bad.length + ' 只：' +
-          bad.slice(0, 6).join('、') + (bad.length > 6 ? ' 等' : '') + timePart};
+          bad.slice(0, 6).join('、') + (bad.length > 6 ? ' 等' : '') + ' · 规则未完全生效'};
       }
-      return {phase: 'ok', text: '抓取成功 · ' + (info.total || 0) + ' 只全部更新' + timePart};
+      return {phase: 'ok', text: cnt + ' · ' + (info.total || 0) + ' 只全部更新 · 规则按当前设置生效'};
     }
     if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
     return {phase: 'idle', text: '点「立即运行」抓最新行情'};
@@ -304,8 +307,11 @@
     put('runLightTxt', light.text, light.phase);
     const currentPage = pageSnapshot();
     compactLegacySummary(currentPage);
-    // 始终展示本页内嵌的生成结果；跨网络校验失败不能抹掉它。
-    put('runSummary', summaryText(currentPage || verifiedSnapshot) + '\n' + publication.message, publication.phase);
+    // 运行详情现在只在编辑页展示（首页已移除）：优先本页内嵌快照，其次网络读到的最新状态。
+    const detailSnap = currentPage || verifiedSnapshot || latestStatus;
+    put('runSummary',
+      (detailSnap ? summaryText(detailSnap) : '还没读到本次运行的详情；点「刷新状态」核对一次') +
+      '\n' + publication.message, publication.phase);
     const appliedText = plainApplied();
     const appliedPhase = activeManual() ? manualState.phase : configState.phase;
     // 编辑页只回答“我保存的东西生效了吗”，详细核对字段留在首页；折叠时摘要行同步一句。
@@ -407,8 +413,9 @@
     await Promise.all([publicTask, actionTask]);
     if (epoch !== version) return state();
     actionsError = actionError;
-    latestStatus = schema(status) ? status : null;
-    verifiedSnapshot = snapshot;
+    // 网络失败时保留上次成功读到的状态：状态灯不该因为一次断网就从绿灯跳黄。
+    if (schema(status)) latestStatus = status;
+    if (snapshot) verifiedSnapshot = snapshot;
     configRun = nextConfigRun;
     publication = snapshot
       ? {phase: 'published', message: '已发布完成：看板与状态文件一致（run ' + snapshot.run_id + '）'}

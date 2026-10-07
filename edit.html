@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>编辑自选清单 · 市场自检</title>
+<title>编辑清单 · AI监测市场</title>
 <style>
 :root{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
@@ -99,6 +99,10 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
   font-size:12px;color:var(--dim);padding:8px 0 4px}
 .pager button{padding:5px 11px;font-size:12px}
 .pager .pg{font-variant-numeric:tabular-nums}
+.subsec{font-size:11px;color:#5f6672;margin:12px 0 4px;letter-spacing:.4px;
+  border-top:1px dashed var(--line);padding-top:10px}
+.rs{padding:8px 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;
+  color:var(--dim);line-height:1.65}
 .runlist{margin-top:12px;font-size:12px;color:var(--dim)}
 .runlist table{width:100%;border-collapse:collapse;margin-top:6px}
 .runlist td{padding:5px 8px;border-top:1px solid var(--line);vertical-align:top}
@@ -220,7 +224,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     </div>
     <div class="csvinfo" id="csvInfo">
       持仓 CSV = <b>以这份为准整组替换</b>，清单里有、这份里没有的会被移除<br>
-      关注 CSV = <b>只增不删</b>，与持仓重复的也照常收录；看板上重复的这只只在「持仓」区显示一次<br>
+      关注 CSV = <b>只增不删</b>，与持仓/重点关注重复的也照常收录；看板上重复的代码只在优先级最高的分区显示一次（持仓 &gt; 重点关注 &gt; 其他关注）<br>
       港股 / A股（0700.HK、600519.SS 这类带点的）暂不支持，自动忽略
     </div>
     <button class="primary hide" id="btnApply">确认导入</button>
@@ -236,10 +240,19 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <input class="s" id="newSym" placeholder="代码">
       <input class="n" id="newNote" placeholder="备注（可空）">
       <input class="t" id="newTrig" placeholder="加仓价">
-      <select id="newKind"><option value="positions">持仓</option><option value="watch">关注</option></select>
+      <select id="newKind"><option value="positions">持仓</option><option value="focus">重点关注</option><option value="watch">其他关注</option></select>
       <button id="btnAdd">添加</button>
     </div>
     <p class="note">加仓价填了才会出现「距加仓价还差 x%」这条信号，留空就不判断。</p>
+  </div>
+
+  <div class="card">
+    <details class="fold" id="foldFocus" open>
+      <summary>重点关注 <span id="cntFocus"></span></summary>
+      <div id="listFocus"></div>
+      <div class="pager" id="pagerFocus"></div>
+    </details>
+    <p class="note">重点关注的标的会单独成为一个分区（在持仓之后、其他关注之前）；同一只代码同时在几个清单里时，只在优先级更高的分区显示一次（持仓 &gt; 重点关注 &gt; 其他关注）。</p>
   </div>
 
   <div class="card">
@@ -260,7 +273,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 
   <div class="card">
     <details class="fold" id="foldWatch">
-      <summary>其他重点关注 <span id="cntWatch"></span></summary>
+      <summary>其他关注 <span id="cntWatch"></span></summary>
       <div class="row" style="margin:2px 0 8px">
         <input class="s" id="watchFilter" placeholder="按代码筛选（如 AAP 或 A）">
       </div>
@@ -293,10 +306,17 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <p class="note">这里只回答一句话：我刚才保存的东西，有没有真的用到看板上。刷新状态不会动你正在编辑的内容；确认生效后出现「刷新看板」，点了会另开一个页面。</p>
     </div>
   </details>
+
+  <details class="card fold" id="detailCard">
+    <summary>运行详情 <span>（本次生成的技术细节，从首页挪到这里，给核对用）</span></summary>
+    <div class="pane">
+      <div id="runSummary" class="rs" aria-live="polite">还没读到本次运行的详情</div>
+    </div>
+  </details>
 </div>
 </div>
 
-<script src="./run-status.js?v=20261007-7"></script>
+<script src="./run-status.js?v=20261007-8"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
@@ -310,7 +330,7 @@ let TOKEN='';
 try{TOKEN=localStorage.getItem(TKEY)||'';}catch(e){}
 function saveTok(t){TOKEN=t;try{localStorage.setItem(TKEY,t);return true;}catch(e){return false;}}
 let SHA='';
-let data={positions:{},watch:{}};
+let data={positions:{},focus:{},watch:{}};
 let extra={};
 let changed=false;
 let pending=null;
@@ -437,9 +457,9 @@ async function load(){
   }
   try{
     const c=JSON.parse(b64dec(r.data.content));
-    data={positions:c.positions||{},watch:c.watch||{}};
+    data={positions:c.positions||{},focus:c.focus||{},watch:c.watch||{}};
     extra={};
-    Object.keys(c).forEach(k=>{if(k!=='positions'&&k!=='watch')extra[k]=c[k];});
+    Object.keys(c).forEach(k=>{if(k!=='positions'&&k!=='focus'&&k!=='watch')extra[k]=c[k];});
     SHA=r.data.sha||'';
     changed=false;
     render();
@@ -453,34 +473,48 @@ function loadRun(){return window.MMRunStatus.refresh();}
 /* ---------- 渲染 ---------- */
 const PAGE_SIZE=50;
 const FILTER_CAP=200;
-let watchPage=0,posPage=0,watchFilter='';
+let watchFilter='';
+const pageState={positions:0,focus:0,watch:0};
 const bySym=(a,b)=>String(a).toUpperCase().localeCompare(String(b).toUpperCase());
+// ETF 静态表：与 monitor.py 的 ETF_SYMBOLS 保持一致（新增 ETF 时两边都要加）
+const ETF_SET=new Set('AGG,ARKF,ARKK,ARKQ,ARKW,ARKX,BAR,BIL,BITO,BIV,BND,BSV,DBC,DBP,DGRO,DGRW,DIA,DRAM,EEM,EFA,EMB,ETHA,EUV,EWJ,FBTC,FLOT,FXI,GBTC,GLD,GLDM,GLTR,GSG,HYD,HYG,HYMB,IAU,IAUM,IBIT,ICSH,IEF,IEFA,IEI,IEMG,ITOT,IVV,IWM,IYR,IYT,JNK,JPST,KBE,KIE,KRE,LQD,MGK,MGV,MTUM,MUB,NEAR,NOBL,PALL,PFF,PGX,PPLT,QQQ,QQQM,QUAL,REM,SCHA,SCHB,SCHD,SCHE,SCHF,SCHP,SCHR,SCHX,SCHZ,SDY,SGOL,SGOV,SHV,SHY,SIVR,SIZE,SLV,SMH,SOXL,SOXS,SOXX,SPHD,SPHQ,SPMO,SPY,SPYG,SPYM,SPYV,SPYX,SQQQ,SVXY,TFLO,TIP,TLT,TQQQ,UNG,USMV,USO,UVXY,VAW,VB,VBR,VCIT,VCR,VCSH,VDC,VDE,VEA,VFH,VGT,VHT,VIG,VIS,VLUE,VNQ,VNQI,VO,VOO,VOOG,VOOV,VPU,VTI,VTV,VUG,VWO,VXUS,VXX,VYM,XAR,XBI,XHB,XLB,XLC,XLE,XLF,XLI,XLK,XLP,XLRE,XLU,XLV,XLY,XME,XOP,XPH,XRT,XSW,XTN'.split(','));
+const isEtf=s=>ETF_SET.has(String(s).toUpperCase());
+const KIND_LABEL={positions:'持仓',focus:'重点关注',watch:'其他关注'};
+const KINDS=[
+  {k:'positions',list:'listPos',  pager:'pagerPos',  cnt:'cntPos',  sort:false,filter:false},
+  {k:'focus',    list:'listFocus',pager:'pagerFocus',cnt:'cntFocus',sort:true, filter:false},
+  {k:'watch',    list:'listWatch',pager:'pagerWatch',cnt:'cntWatch',sort:true, filter:true}
+];
 
 function render(){
-  ['positions','watch'].forEach(k=>{
-    const box=$(k==='positions'?'listPos':'listWatch');
-    const pager=$(k==='positions'?'pagerPos':'pagerWatch');
-    $('cntPos').textContent='('+Object.keys(data.positions).length+')';
-    $('cntWatch').textContent='('+Object.keys(data.watch).length+')';
-    let keys=Object.keys(data[k]||{});
-    if(k==='watch')keys=keys.slice().sort(bySym);
-    const q=(k==='watch'?(watchFilter||''):'').trim().toUpperCase();
+  KINDS.forEach(K=>{
+    $(K.cnt).textContent='('+Object.keys(data[K.k]||{}).length+')';
+    const box=$(K.list),pager=$(K.pager);
+    let keys=Object.keys(data[K.k]||{});
+    if(K.sort)keys=keys.slice().sort(bySym);
+    // 个股在前、ETF 在后，各自保持原有顺序（持仓不重排，只分区）
+    keys=keys.filter(s=>!isEtf(s)).concat(keys.filter(isEtf));
+    const q=(K.filter?(watchFilter||''):'').trim().toUpperCase();
     const view=q?keys.filter(s=>String(s).toUpperCase().indexOf(q)>=0):keys;
-    let page=(k==='watch'?watchPage:posPage);
+    let page=pageState[K.k];
     const pages=Math.max(1,Math.ceil(view.length/PAGE_SIZE));
     if(page>=pages)page=pages-1;
     if(page<0)page=0;
-    if(k==='watch')watchPage=page;else posPage=page;
+    pageState[K.k]=page;
     const capped=q&&view.length>FILTER_CAP;
     const slice=q?(capped?view.slice(0,FILTER_CAP):view):view.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
     if(!slice.length){
       box.innerHTML='<div class="empty">'+(q?'没有代码包含「'+esc(q)+'」':'（空）')+'</div>';
     }else{
     let h='';
+    let prevEtf=false;
     slice.forEach(s=>{
-      const c=data[k][s]||{};
+      const e=isEtf(s);
+      if(e&&!prevEtf){h+='<div class="subsec">— ETF 基金 —</div>';}
+      prevEtf=e;
+      const c=data[K.k][s]||{};
       const tv=(c.trigger===null||c.trigger===undefined)?'':c.trigger;
-      h+='<div class="row" data-k="'+k+'" data-s="'+esc(s)+'">'
+      h+='<div class="row" data-k="'+K.k+'" data-s="'+esc(s)+'">'
         +'<span class="sym" title="'+esc(s)+'">'+esc(s)+'</span>'
         +'<input class="n" value="'+esc(c.note||'')+'" placeholder="备注" data-f="note">'
         +'<input class="t" value="'+esc(tv)+'" placeholder="加仓价" data-f="trigger" inputmode="decimal">'
@@ -503,8 +537,7 @@ function render(){
       pager.querySelectorAll('.pgbtn').forEach(b=>{
         b.onclick=()=>{
           const delta=b.dataset.pg==='prev'?-1:1;
-          if(k==='watch')watchPage=Math.max(0,Math.min(pages-1,page+delta));
-          else posPage=Math.max(0,Math.min(pages-1,page+delta));
+          pageState[K.k]=Math.max(0,Math.min(pages-1,page+delta));
           render();
         };
       });
@@ -522,7 +555,7 @@ function render(){
       });
       row.querySelector('.del').onclick=()=>{
         const k=row.dataset.k,s=row.dataset.s;
-        if(!confirm('从「'+(k==='positions'?'持仓':'关注')+'」里删除 '+s+' ？'))return;
+        if(!confirm('从「'+KIND_LABEL[k]+'」里删除 '+s+' ？'))return;
         delete data[k][s];render();touch();setMsg('已删 '+s+'，点保存才生效','ok');
       };
     });
@@ -572,7 +605,7 @@ $('btnAdd').onclick=()=>{
   if(!s){setMsg('先填代码','err');return;}
   s=s.replace(/^\$/,'').replace(/\//g,'-').replace(/\./g,'-');
   const k=$('newKind').value,note=$('newNote').value.trim(),trig=$('newTrig').value.trim();
-  if(data[k][s]){setMsg(s+' 已经在'+(k==='positions'?'持仓':'关注')+'里了','err');return;}
+  if(data[k][s]){setMsg(s+' 已经在「'+KIND_LABEL[k]+'」里了','err');return;}
   const o={};
   if(note)o.note=note;
   if(trig&&!isNaN(Number(trig)))o.trigger=Number(trig);
