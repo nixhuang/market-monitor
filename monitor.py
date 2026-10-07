@@ -1060,7 +1060,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261007-2"></script>'
 
 
 def config_hash(filename):

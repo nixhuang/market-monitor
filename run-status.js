@@ -7,7 +7,7 @@
   const terminal = new Set(['published', 'failed', 'expired']);
   let options = {}, initialized = false, timer = null, controller = null, version = 0;
   let targets = {}, receiptVersion = 0, configSince = 0, configRun = null, manual = null;
-  let latestStatus = null, verifiedSnapshot = null, latestRun = null, actionsError = '';
+  let latestStatus = null, verifiedSnapshot = null, actionsError = '';
   let configState = {phase: 'idle', message: '尚无本页提交待验证'};
   let manualState = {phase: 'idle', message: ''};
   let publication = {phase: 'idle', message: '正在读取公开发布状态…'};
@@ -118,11 +118,11 @@
     };
   }
   function summaryText(s) {
-    if (!s) return '暂无可验证的发布摘要';
+    if (!s) return '本页未找到运行摘要';
     const summary = s.summary || {}, counts = s.list_counts || {}, dates = s.actual_dates || {};
     const list = value => Array.isArray(value) ? value.join(', ') || '无' : value == null ? '未知' : String(value);
     return [
-      '已发布 run ' + s.run_id + ' · 事件 ' + (s.event || '未知') + ' · 源提交 ' + (s.source_sha || '未知'),
+      '本页生成数据 run ' + s.run_id + ' · 事件 ' + (s.event || '未知') + ' · 源提交 ' + (s.source_sha || '未知'),
       '开始 ' + (s.started_at_bj || s.started_at || '未知') + ' · 完成 ' + (s.finished_at_bj || s.finished_at || '未知') + ' · 目标交易日 ' + (s.target_trade_date || '未知'),
       '运行计划 ' + (s.schedule || '未记录') + ' · 数据模式 ' + (s.mode || '未知'),
       '红 ' + (summary.red ?? '未知') + ' / 黄 ' + (summary.yellow ?? '未知') + ' / 绿 ' + (summary.green ?? '未知') +
@@ -137,6 +137,50 @@
     ].join('\n');
   }
   function el(id) { return window.document.getElementById(id); }
+  function pageSnapshot() {
+    const embedded = el('snapshotData');
+    if (!embedded) return null;
+    try {
+      const value = JSON.parse(embedded.textContent);
+      return schema(value) ? value : null;
+    } catch (_) { return null; }
+  }
+  function shortSummary(s) {
+    const info = s.summary || {}, dates = s.actual_dates || {};
+    const bad = [...(info.stale_symbols || []), ...(info.missing_symbols || [])];
+    return '数据日期 ' + (dates.max || '未知') + ' · 红' + (info.red ?? 0) +
+      ' 黄' + (info.yellow ?? 0) + ' 绿' + (info.green ?? 0) +
+      (info.gray ? ' 灰' + info.gray : '') + ' · ' +
+      (bad.length ? bad.length + ' 只未更新' : (info.total ?? 0) + ' 只全部更新') +
+      ' · 规则已按当前设置生成';
+  }
+  function compactLegacySummary(s) {
+    const detail = el('runSummary');
+    const card = detail && detail.parentElement;
+    if (!s || !card || card.classList.contains('sumcard')) return;
+    const heading = card.querySelector('h2');
+    if (!heading || !heading.textContent.includes('本次运行与生效配置摘要')) return;
+    card.classList.add('sumcard');
+    heading.remove();
+    const line = window.document.createElement('div');
+    line.className = 'sumline';
+    line.style.cssText = 'padding:10px 14px;font-size:13px;line-height:1.6';
+    line.textContent = shortSummary(s);
+    const disclosure = window.document.createElement('details');
+    disclosure.style.padding = '0 6px 8px';
+    const title = window.document.createElement('summary');
+    title.textContent = '运行详情（给核对用，平时不用看）';
+    title.style.cssText = 'font-size:11.5px;color:#6ba3f0;cursor:pointer;padding:2px 8px';
+    card.insertBefore(line, detail);
+    card.insertBefore(disclosure, detail);
+    disclosure.append(title, detail);
+  }
+  function networkMessage(error) {
+    if (!error || error.name === 'TypeError' || error.message === 'Failed to fetch' || error.message === 'NetworkError when attempting to fetch resource.') {
+      return '网络暂时无法核对最新发布；本页已生成的数据仍可查看，请稍后刷新状态';
+    }
+    return error.message || '暂时无法核对最新发布；本页数据仍可查看';
+  }
   function put(id, text, phase) {
     const box = el(id);
     if (!box) return;
@@ -156,10 +200,15 @@
         }
       } catch (_) { message += '；当前页快照无效，请点击「刷新看板」'; }
     }
-    if (actionsError) message += '\nActions：' + actionsError + '；公开发布状态仍可验证';
+    if (actionsError && (activeManual() || activeConfig())) {
+      message += '\n运行记录暂时无法读取：' + actionsError;
+    }
     put('runState', message, s.phase);
     put('runMsg', message, s.phase);
-    put('runSummary', summaryText(verifiedSnapshot) + '\n' + publication.message, publication.phase);
+    const currentPage = pageSnapshot();
+    compactLegacySummary(currentPage);
+    // 始终展示本页内嵌的生成结果；跨网络校验失败不能抹掉它。
+    put('runSummary', summaryText(currentPage || verifiedSnapshot) + '\n' + publication.message, publication.phase);
     if (el('appliedState')) {
       const receipts = Object.entries(targets).map(([file, r]) =>
         file + ' · 提交 ' + r.commitSHA + ' · blob ' + r.blobSHA).join('\n');
@@ -215,7 +264,7 @@
     const expected = JSON.parse(JSON.stringify(targets));
     const manualTarget = manual ? {...manual} : null;
     let status = null, snapshot = null, publicError = '', actionError = '';
-    let nextConfigRun = configRun, nextManualRun = null, nextLatestRun = latestRun;
+    let nextConfigRun = configRun, nextManualRun = null;
     const publicTask = (async () => {
       try {
         status = await request(bust('./status.json'), {signal});
@@ -227,7 +276,7 @@
         const candidate = JSON.parse(node.textContent);
         if (samePublication(status, candidate)) snapshot = candidate;
         else publicError = 'status.json 与看板快照不一致，仍在等待 Pages 发布';
-      } catch (error) { publicError = error.message; }
+      } catch (error) { publicError = networkMessage(error); }
     })();
     const actionTask = (async () => {
       try {
@@ -242,19 +291,14 @@
           nextConfigRun = configRun
             ? await request(apiURL('/actions/runs/' + encodeURIComponent(configRun.id)), {github: true, signal})
             : await findRun('&event=push', run => run.event === 'push' && run.head_sha === newest.commitSHA, signal);
-        } else if (!manualTarget) {
-          const data = await request(apiURL('/actions/workflows/daily.yml/runs?branch=' +
-            encodeURIComponent(options.branch) + '&per_page=1'), {github: true, signal});
-          nextLatestRun = (data.workflow_runs || [])[0] || null;
         }
-      } catch (error) { actionError = error.message; }
+      } catch (error) { actionError = networkMessage(error); }
     })();
     await Promise.all([publicTask, actionTask]);
     if (epoch !== version) return state();
     actionsError = actionError;
     latestStatus = schema(status) ? status : null;
     verifiedSnapshot = snapshot;
-    latestRun = nextLatestRun;
     configRun = nextConfigRun;
     publication = snapshot
       ? {phase: 'published', message: '已发布完成：status.json 与 index.html 的 run_id、配置 blob 均一致'}
@@ -285,11 +329,6 @@
         if (Date.now() - manual.since >= MAX_WAIT) {
           manualState = {phase: 'expired', message: '指定运行跟踪已达 10 分钟，停止自动轮询；request_id/run_id 已保留，请稍后刷新状态。这不代表运行失败'};
         } else if (publicError) manualState.message += '\n' + publicError;
-      }
-    } else if (!manualTarget && !Object.keys(expected).length && latestRun) {
-      if (!snapshot || snapshot.run_id !== String(latestRun.id) || latestRun.conclusion !== 'success') {
-        const recent = phaseForRun(latestRun);
-        publication = {...recent, message: recent.message + '\n' + publication.message};
       }
     }
     if (Date.now() - configSince >= MAX_WAIT && activeConfig()) {
@@ -374,6 +413,7 @@
       if (el(id)) el(id).onclick = () => { void startManual(); };
     });
     if (el('btnCheckStatus')) el('btnCheckStatus').onclick = () => { void refresh(); };
+    render(); // 不等网络请求，先保留本页生成数据并折叠旧版摘要。
     void refresh();
     return window.MMRunStatus;
   }
