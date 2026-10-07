@@ -1,18 +1,18 @@
 {
   "dca_reminder": null,
-  "run_id": "37591460057",
+  "run_id": "37619110720",
   "request_id": "",
-  "source_sha": "400957b7d79dc4ee23267e1d92a7f9759bf28bcd",
-  "started_at": "2026-10-07T08:05:25+00:00",
-  "started_at_bj": "2026-10-07T16:05:25+08:00",
-  "finished_at": "2026-10-07T16:05:57.356044+08:00",
-  "finished_at_bj": "2026-10-07T16:05:57+08:00",
-  "event": "workflow_dispatch",
+  "source_sha": "40eac0d7bd0f277034a94121ca088c8a4935bd26",
+  "started_at": "2026-10-07T12:10:20+00:00",
+  "started_at_bj": "2026-10-07T20:10:20+08:00",
+  "finished_at": "2026-10-07T20:12:25.548548+08:00",
+  "finished_at_bj": "2026-10-07T20:12:25+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-06",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
-    "holdings.json": "334a8ba3f8e436115cea748bfd15b7098f7bef5e",
+    "holdings.json": "5831a7f09719c6700d5d70f473226b32cf72a1a7",
     "settings.json": "4724f6389f1e98c6035e34e55a002da5feb93929"
   },
   "effective_settings": {
@@ -38,20 +38,23 @@
     "dca_start": ""
   },
   "list_counts": {
-    "positions": 15,
-    "watch": 5,
+    "positions": 14,
+    "watch": 119,
     "triggers": 0,
     "dca": 0
   },
   "summary": {
-    "red": 7,
-    "yellow": 1,
-    "green": 12,
-    "gray": 0,
-    "total": 20,
+    "red": 46,
+    "yellow": 20,
+    "green": 65,
+    "gray": 2,
+    "total": 133,
     "macro_ok": 6,
     "stale_symbols": [],
-    "missing_symbols": []
+    "missing_symbols": [
+      "CLMAIN",
+      "ESMAIN"
+    ]
   },
   "actual_dates": {
     "min": "2026-10-06",
