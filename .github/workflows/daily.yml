@@ -2,7 +2,7 @@ name: 每日市场自检
 
 on:
   # 改了清单或脚本就立刻重跑，不用再去点 Run workflow
-  # 只监听这三个文件：workflow 自己提交 index.html 不会触发，避免空转
+  # 只监听这几个文件：workflow 自己提交 index.html 不会触发，避免空转
   push:
     branches: [main]
     paths:
@@ -10,12 +10,14 @@ on:
       - 'settings.json'
       - 'monitor.py'
       - '.github/workflows/daily.yml'
-  # UTC 12:00 = 北京时间 20:00（美股开盘前约 1.5 小时）
-  # Actions 可能延迟，所以提前留足缓冲
   schedule:
+    # ① 开盘前：美东 08:00，看昨收数据做当天计划
+    #    夏令时 = 北京 20:00 / 冬令时 = 北京 21:00
     - cron: '0 12 * * *'
-    # 周日额外跑一次（UTC 13:00 = 北京 21:00）
-    - cron: '0 13 * * 0'
+    # ② 收盘后 1 小时：美东 17:00，看当日完整 K 线（布林/RSI 才是定稿值）
+    #    夏令时 = 北京次日 05:00 / 冬令时 = 北京次日 06:00
+    #    周末没有交易，只跑周一到周五（UTC 星期几）
+    - cron: '0 21 * * 1-5'
   # 允许在网页上手动点一下立刻跑
   workflow_dispatch:
 
@@ -42,18 +44,19 @@ jobs:
       - name: 安装依赖
         run: pip install requests
 
-      # cron 是 UTC 时间，写死的 '0 12' 在北京永远是 20:00，
-      # 但美股用夏令时（UTC-4）时是美东 08:00、冬令时（UTC-5）变成 07:00。
-      # 这里补一小时，让全年都稳定在「美东 08:00 = 开盘前 1.5 小时」这个时点。
+      # cron 是 UTC 时间，而美股看的是美东时间：
+      #   夏令时 UTC-4：'0 12' → 美东 08:00，'0 21' → 美东 17:00
+      #   冬令时 UTC-5：'0 12' → 美东 07:00，'0 21' → 美东 16:00（都早了一小时）
+      # 所以冬令时补睡 1 小时，让两次任务全年都落在美东 08:00 和 17:00。
       - name: 冬夏令时校正
         run: |
           H=$((10#$(TZ=America/New_York date +%H)))
           echo "现在美东: $(TZ=America/New_York date)  (hour=$H)"
-          if [ "$H" -lt 8 ]; then
-            echo "冬令时，等到美东 08:00 再抓数据"
-            sleep 3600
-            echo "开跑: $(TZ=America/New_York date)"
-          fi
+          case "$H" in
+            7)  echo "冬令时 → 等到美东 08:00（开盘前 1.5 小时）"; sleep 3600 ;;
+            16) echo "冬令时 → 等到美东 17:00（收盘后 1 小时）";   sleep 3600 ;;
+          esac
+          echo "开跑: $(TZ=America/New_York date)"
 
       - name: 抓数据并生成页面
         # FRED_API_KEY 是可选 Secret：配置了才能拿到跑路价签和收益率曲线

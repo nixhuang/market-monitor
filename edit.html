@@ -206,6 +206,16 @@ details.set[open] summary{margin-bottom:10px}
   </div>
 
   <div class="card">
+    <h2>定投提醒 <span>（按交易日计数，间隔逐只可调）</span></h2>
+    <div id="dcaList"></div>
+    <p class="note">
+      只对持仓生效。填了<b>间隔</b>和<b>起始日</b>才会提醒：比如间隔 <kbd>5</kbd>、起始日 <kbd>2026-10-01</kbd>，
+      就是从那天算起每 5 个交易日响一次（10/01 那天第 1 次，第 6 个交易日第 2 次，以此类推）。<br>
+      起始日填你想对齐的那一次即可，只填间隔不会提醒。改完点最下方的<b>保存</b>（和清单一并提交）。
+    </p>
+  </div>
+
+  <div class="card">
     <h2>其他重点关注 <span id="cntWatch"></span></h2>
     <div id="listWatch"></div>
   </div>
@@ -428,6 +438,39 @@ function render(){
         const k=row.dataset.k,s=row.dataset.s;
         if(!confirm('从「'+(k==='positions'?'持仓':'关注')+'」里删除 '+s+' ？'))return;
         delete data[k][s];render();touch();setMsg('已删 '+s+'，点保存才生效','ok');
+      };
+    });
+  });
+  renderDca();
+}
+function renderDca(){
+  const box=$('dcaList');
+  const keys=Object.keys(data.positions||{});
+  if(!keys.length){box.innerHTML='<div class="empty">（持仓为空）</div>';return;}
+  let h='';
+  keys.forEach(s=>{
+    const c=data.positions[s]||{};
+    h+='<div class="row" data-s="'+esc(s)+'">'
+      +'<span class="sym" title="'+esc(s)+'">'+esc(s)+'</span>'
+      +'<input class="n" style="max-width:130px" value="'+esc(c.dca_every===undefined?'':c.dca_every)+
+        '" placeholder="间隔（交易日）" data-f="dca_every" inputmode="numeric">'
+      +'<input class="t" style="width:140px" value="'+esc(c.dca_start||'')+
+        '" placeholder="起始日 2026-10-01" data-f="dca_start">'
+      +'</div>';
+  });
+  box.innerHTML=h;
+  box.querySelectorAll('.row').forEach(row=>{
+    row.querySelectorAll('input').forEach(inp=>{
+      inp.oninput=()=>{
+        const s=row.dataset.s,f=inp.dataset.f,v=inp.value.trim();
+        const o=data.positions[s]||(data.positions[s]={});
+        if(f==='dca_every'){
+          if(v==='')delete o.dca_every;
+          else{const n=parseInt(v,10);if(!isNaN(n)&&n>0)o.dca_every=n;}
+        }else{
+          if(v)o[f]=v;else delete o[f];
+        }
+        touch();
       };
     });
   });

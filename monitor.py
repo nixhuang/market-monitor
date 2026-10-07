@@ -495,6 +495,9 @@ def apply_realtime(symbol, data):
                 data["highs"].append(px)
             if data.get("lows"):
                 data["lows"].append(px)
+            # dates 必须跟着补一天，否则定投的「交易日计数」会少算今天
+            if isinstance(data.get("dates"), list):
+                data["dates"].append(today)
         data["price"] = px
         data["realtime"] = True
         data["rt_ts"] = rt["ts"]
@@ -683,6 +686,35 @@ def boll_streak(closes, n=20, k=2.0, near_pct=0.5, max_days=120):
     return out
 
 
+def dca_status(dates, start, every):
+    """定投节奏：从 start 那个交易日算起，每 every 个交易日提醒一次。
+
+    无状态设计——不用记「上次提醒是哪天」，只按日历推，所以改间隔、改起始日随时生效，
+    也不存在脚本写回持仓文件导致的循环触发。
+
+    返回 None（没配置 / 数据不够）或
+      {"count": int, "due": bool, "next_in": int}
+        count   从 start 到今天一共经过几个交易日（start 当天算第 1 个）
+        due     今天是不是定投日
+        next_in 距下一个定投日还差几个交易日（0 = 就是今天）
+    """
+    if not dates or not start or not every:
+        return None
+    try:
+        every = int(every)
+    except (TypeError, ValueError):
+        return None
+    if every <= 0:
+        return None
+    start = str(start).strip()
+    cnt = sum(1 for d in dates if d and str(d) >= start)
+    if cnt == 0:
+        return None                      # 起始日在数据范围之后，还没开始
+    idx = cnt - 1
+    rem = (-idx) % every
+    return {"count": cnt, "due": rem == 0, "next_in": rem, "every": every}
+
+
 def streak_tail(st, rail="上轨"):
     """把连续天数拼成信号尾巴。连续 1 日不啰嗦，>=2 日才标。"""
     if not st or st["days"] < 2:
@@ -790,6 +822,12 @@ def analyze_symbol(sym, cfg, data, group="watch"):
             signals.append(f"逼近布林下轨 还差{gap_dn:.2f}%{streak_txt_dn}")
             bump("yellow")
 
+    # 定投节奏：每 N 个交易日一次，只在到期那天出声
+    dca = dca_status(data.get("dates") or [], cfg.get("dca_start"), cfg.get("dca_every"))
+    if dca and dca["due"]:
+        signals.append(f"定投日 · 每{dca['every']}个交易日一次（第{dca['count']}次）")
+        bump("yellow")
+
     # 🟡 黄色规则
     if chg is not None and S["chg_yellow"] <= abs(chg) < S["chg_red"]:
         signals.append(f"波动 {chg:+.1f}%")
@@ -821,6 +859,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         "dist_low": dist_low,
         "vol_ratio": vol_ratio,
         "trigger": trig,
+        "dca": dca,
         "source": data.get("source", ""),
         "realtime": bool(data.get("realtime")),
         "rt_ts": data.get("rt_ts", ""),
@@ -1056,6 +1095,7 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
 跑路价签 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_yellow']:.0f} 收紧 · ≥{S['hy_red']:.0f} 危机确认<br>
 布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%）<br>
 连续贴近轨道按日累计，远离一天（差 &gt;{S['boll_near_pct']:g}%）就断，再次贴近重新从第一日算 · 连续 2 日起才标注<br>
+定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在编辑页逐只设置<br>
 异动 ≥{S['chg_red']:g}% 红 · ≥{S['chg_yellow']:g}% 黄 · RSI ≥{S['rsi_high']:.0f} 或 ≤{S['rsi_low']:.0f} 红 · 量比 ≥{S['vol_ratio']:g}x 黄<br>
 <a href="./settings.json" style="color:#6ba3f0;text-decoration:none">查看当前阈值 settings.json</a>
 </div>
