@@ -21,7 +21,9 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -724,6 +726,182 @@ def is_etf(symbol):
     return normalize_symbol(symbol).upper() in ETF_SYMBOLS
 
 
+# ---------------------------------------------------------------- 基本面恶化
+# 数据源：Nasdaq 财报（季度，一次给最近 4 期）。value2=最新季，value5=去年同期 → 直接同比。
+# 只对「持仓 + 重点关注」查询：这两个组才是真会交易的；其他关注看财报意义不大，
+# 而且每只一个请求，全量查会把运行时间拉长并招来限流。
+# 阈值默认值写在这里；想调就在 settings.json 里加同名键覆盖（改完点保存即生效）。
+FUND_DEFAULT = {
+    "fund_enable":     1,      # 0 = 关闭基本面检查
+    "fund_rev_red":    -20.0,  # 营收同比 ≤ 此值 → 红
+    "fund_rev_yellow": -10.0,  # 营收同比 ≤ 此值 → 黄
+    "fund_om_drop":    3.0,    # 营业利润率同比下滑（百分点）→ 黄
+    "fund_gm_drop":    3.0,    # 毛利率同比下滑（百分点）→ 黄
+    "fund_de_rise":    30.0,   # 负债/权益同比上升 % → 黄
+    "fund_cr_drop":    20.0,   # 流动比率同比下滑 % → 黄
+    "fund_roe_drop":   30.0,   # ROE 同比下滑 % → 黄
+    "fund_pm_abnormal": 60.0,  # |净利率| 超过此值视为一次性损益污染，净利口径不参与判定
+}
+
+
+def fund_rule(key):
+    v = S.get(key, FUND_DEFAULT.get(key))
+    try:
+        return float(v)
+    except Exception:
+        return float(FUND_DEFAULT[key])
+
+
+_FUND_CACHE = {}
+_FUND_TLS = threading.local()
+
+
+def _fund_session():
+    """每线程一个长连接 Session：既复用 TCP 握手，又避免多线程共用一个 Session。"""
+    s = getattr(_FUND_TLS, "s", None)
+    if s is None:
+        s = requests.Session()
+        s.headers.update({**UA, "Accept": "application/json"})
+        _FUND_TLS.s = s
+    return s
+
+
+def _fund_num(v):
+    """Nasdaq 财报值形如 '$112,032,000'、'(91,154)'、'12.3%'、'--'，统一转 float。"""
+    if v is None:
+        return None
+    s = str(v).strip().replace("$", "").replace(",", "").replace("%", "")
+    if s in ("", "--", "-", "—"):
+        return None
+    neg = s.startswith("(") or s.startswith("-")
+    s = s.strip("()").lstrip("-")
+    try:
+        n = float(s)
+    except Exception:
+        return None
+    return -n if neg else n
+
+
+def nasdaq_financials(sym, timeout=12):
+    """取最近 4 个季度财报。ETF / 无财报 / 请求失败都返回 None，不影响主流程。"""
+    key = normalize_symbol(sym).upper()
+    if key in _FUND_CACHE:
+        return _FUND_CACHE[key]
+    res = None
+    try:
+        # Nasdaq 用 BRK.B 而不是 BRK-B，带横杠的代码拿不到数据
+        url = f"https://api.nasdaq.com/api/company/{key.replace('-', '.')}/financials?frequency=2"
+        r = _fund_session().get(url, timeout=timeout)
+        if r.status_code == 200:
+            d = (r.json() or {}).get("data") or {}
+
+            def table(name):
+                return {x.get("value1"): x for x in ((d.get(name) or {}).get("rows") or [])}
+
+            inc = table("incomeStatementTable")
+            if inc:  # ETF 返回空表
+                res = {
+                    "period": ((d.get("incomeStatementTable") or {}).get("headers") or {}).get("value2"),
+                    "inc": inc, "bs": table("balanceSheetTable"),
+                    "cf": table("cashFlowTable"), "rt": table("financialRatiosTable"),
+                }
+    except Exception as e:
+        log(f"  · {key} 财报读取失败：{e}")
+    _FUND_CACHE[key] = res
+    return res
+
+
+def _fcell(tbl, label, col="value2"):
+    return _fund_num((tbl or {}).get(label, {}).get(col)) if tbl else None
+
+
+def fundamental_check(sym):
+    """基本面恶化判定（全套 + 分级）。
+
+    核心三项决定红/黄：营收同比、营业利润率、经营现金流。
+    扩展四项只贡献黄：毛利率、负债/权益、流动比率、ROE。
+    主轴刻意避开净利润——一次性损益（如 NTNX 递延税资产释放、-11.9 亿税项）
+    会把净利抬高到营收之上，用净利判基本面必然误判。
+    """
+    if not fund_rule("fund_enable"):
+        return None
+    # ETF / 基金没有财报，直接跳过，省掉一次必然无结果的请求
+    if is_etf(sym):
+        return None
+    f = nasdaq_financials(sym)
+    if not f:
+        return None
+    inc, bs, cf, rt = f["inc"], f["bs"], f["cf"], f["rt"]
+    NOW, YR = "value2", "value5"  # 4 期窗口：value2 最新季、value5 去年同期
+
+    rev0, rev4 = _fcell(inc, "Total Revenue", NOW), _fcell(inc, "Total Revenue", YR)
+    gm0, gm4 = _fcell(rt, "Gross Margin", NOW), _fcell(rt, "Gross Margin", YR)
+    om0, om4 = _fcell(rt, "Operating Margin", NOW), _fcell(rt, "Operating Margin", YR)
+    roe0, roe4 = _fcell(rt, "After Tax ROE", NOW), _fcell(rt, "After Tax ROE", YR)
+    cr0, cr4 = _fcell(rt, "Current Ratio", NOW), _fcell(rt, "Current Ratio", YR)
+    pm0, tax0 = _fcell(rt, "Profit Margin", NOW), _fcell(inc, "Income Tax", NOW)
+    cfo0, cfo4 = _fcell(cf, "Net Cash Flow-Operating", NOW), _fcell(cf, "Net Cash Flow-Operating", YR)
+    tl0, te0 = _fcell(bs, "Total Liabilities", NOW), _fcell(bs, "Total Equity", NOW)
+    tl4, te4 = _fcell(bs, "Total Liabilities", YR), _fcell(bs, "Total Equity", YR)
+
+    hits, red = [], False
+
+    def add(t, is_red=False):
+        nonlocal red
+        hits.append(t)
+        if is_red:
+            red = True
+
+    # 一次性损益污染：净利率离谱高，或税项为负（大额税收返还/递延税资产释放）
+    oneoff = (pm0 is not None and abs(pm0) > fund_rule("fund_pm_abnormal")) or \
+             (tax0 is not None and tax0 < 0)
+
+    # 核心 1 · 营收
+    if rev0 is not None and rev4 and rev4 > 0:
+        c = (rev0 / rev4 - 1) * 100
+        if c <= fund_rule("fund_rev_red"):
+            add(f"营收同比 {c:.0f}%", True)
+        elif c <= fund_rule("fund_rev_yellow"):
+            add(f"营收同比 {c:.0f}%")
+    # 核心 2 · 营业利润率（不含税项和一次性损益，最干净的盈利口径）
+    if om0 is not None:
+        if om0 < 0:
+            add(f"营业亏损 {om0:.0f}%", True)
+        elif om4 is not None and om0 - om4 <= -fund_rule("fund_om_drop"):
+            add(f"营业利率 {om4:.1f}→{om0:.1f}%")
+    # 核心 3 · 经营现金流
+    if cfo0 is not None:
+        if cfo0 < 0 and cfo4 is not None and cfo4 > 0:
+            add("经营现金流转负", True)
+        elif cfo0 < 0:
+            add(f"经营现金流为负 {cfo0 / 1000:.0f}M")
+
+    # 扩展 · 毛利率
+    if gm0 is not None and gm4 is not None and gm0 - gm4 <= -fund_rule("fund_gm_drop"):
+        add(f"毛利率 {gm4:.1f}→{gm0:.1f}%")
+    # 扩展 · 负债/权益（要求负债绝对额也上升，否则亏损把权益做小会误报加杠杆）
+    de0 = tl0 / te0 if (tl0 and te0) else None
+    de4 = tl4 / te4 if (tl4 and te4) else None
+    if de0 and de4 and de4 > 0 and de0 / de4 - 1 >= fund_rule("fund_de_rise") / 100.0 \
+            and tl0 is not None and tl4 is not None and tl0 > tl4:
+        add(f"负债/权益 {de4:.2f}→{de0:.2f}")
+    # 扩展 · 短期偿债能力
+    if cr0 and cr4 and cr4 > 0 and cr0 / cr4 - 1 <= -fund_rule("fund_cr_drop") / 100.0:
+        add(f"流动比率 {cr4:.0f}→{cr0:.0f}")
+    # 扩展 · ROE（一次性损益时不参与）
+    if not oneoff and roe0 is not None and roe4 is not None and roe4 > 0 \
+            and roe0 / roe4 - 1 <= -fund_rule("fund_roe_drop") / 100.0:
+        add(f"ROE {roe4:.1f}→{roe0:.1f}%")
+
+    # 一次性损益只作附加说明，不单独点亮徽章（否则 GOOGL/NTNX 会被无谓判黄）
+    if oneoff and hits:
+        hits.append("净利含一次性损益，未参与判定")
+    if not hits:
+        return {"level": "green", "hits": [], "period": f["period"], "oneoff": oneoff}
+    return {"level": "red" if red else "yellow", "hits": hits,
+            "period": f["period"], "oneoff": oneoff}
+
+
 def fetch_history(symbol):
     """数据源优先级：Yahoo → stooq → Nasdaq
 
@@ -1086,7 +1264,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261007-8"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261007-9"></script>'
 
 
 def config_hash(filename):
@@ -1184,6 +1362,14 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             note = f'<span class="note">{d["note"]}</span>' if d["note"] else ""
             # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
             tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
+            # 基本面警示徽章：只对持仓/重点关注查询，鼠标悬停看具体哪几项恶化
+            fund = d.get("fund") or {}
+            if fund.get("level") in ("red", "yellow") and fund.get("hits"):
+                detail = html_lib.escape(
+                    (f"{fund.get('period') or ''} 报告期 · " if fund.get("period") else "")
+                    + "；".join(fund["hits"]))
+                fcls = "tag f-red" if fund["level"] == "red" else "tag f-yellow"
+                tag += f'<span class="{fcls}" title="基本面：{detail}">基本面</span>'
             out += (
                 f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}</td>'
                 f'<td class="num">{fmt(d["price"])}</td>'
@@ -1317,6 +1503,8 @@ tr:first-child td{{border-top:none}}
 .tag{{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;
   font-size:10px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
   color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}}
+.tag.f-red{{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}}
+.tag.f-yellow{{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}}
 .sig{{font-size:12.5px;color:var(--text)}}
 .up{{color:var(--up)}} .down{{color:var(--down)}}
 tr.red td:first-child{{box-shadow:inset 3px 0 0 var(--red)}}
@@ -1394,6 +1582,7 @@ h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 
 <div class="foot">
 宏观：FRED · 个股：{src_txt}<br>
+基本面：Nasdaq 季度财报（只查持仓 + 重点关注，ETF 不判）· 鼠标悬停徽章看具体哪几项恶化<br>
 跑路价签 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_yellow']:.0f} 收紧 · ≥{S['hy_red']:.0f} 危机确认<br>
 布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%）<br>
 轨道按当日收盘价滚动计算；是否触及按<b>当日最高/最低价</b>判定，盘中穿过就算<br>
@@ -1486,7 +1675,35 @@ def main(argv=None):
                 "level": "gray",
             })
 
+    # 基本面只查持仓 + 重点关注：其他关注只数大、交易价值低，全量查既拖慢运行又容易限流
+    fund_stat = {"checked": 0, "red": 0, "yellow": 0}
+    fund_targets = [d for d in items
+                    if d.get("group") in ("position", "focus") and d.get("symbol")]
+    if fund_targets:
+        log(f"读取 {len(fund_targets)} 只持仓/重点关注的财报…")
+        try:
+            # 4 路并发：串行一只约 2 秒，30 只会拖到 1 分钟；并发后 15 秒内结束
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                results = list(ex.map(lambda d: fundamental_check(d["symbol"]), fund_targets))
+            for d, fd in zip(fund_targets, results):
+                if not fd:
+                    continue
+                d["fund"] = fd
+                fund_stat["checked"] += 1
+                if fd["level"] == "red":
+                    fund_stat["red"] += 1
+                    log(f"  {d['symbol']} 基本面红：{'；'.join(fd['hits'])}")
+                elif fd["level"] == "yellow":
+                    fund_stat["yellow"] += 1
+                    log(f"  {d['symbol']} 基本面黄：{'；'.join(fd['hits'])}")
+        except Exception as e:
+            # 财报是加分项，任何异常都不能拖垮行情抓取和页面生成
+            log(f"  ! 基本面检查中断，跳过：{e}")
+        log(f"  基本面：{fund_stat['checked']} 份财报 · "
+            f"红 {fund_stat['red']} · 黄 {fund_stat['yellow']}")
+
     snapshot = build_snapshot(macro, items, cfg, watch_shown=len(watch_eff))
+    snapshot["fundamental"] = fund_stat
     html = render(macro, items, len(universe), data_down=not universe
                   or all(d["level"] == "gray" for d in items), snapshot=snapshot,
                   dup_hidden=dup_hidden)
