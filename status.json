@@ -1,18 +1,18 @@
 {
   "dca_reminder": null,
-  "run_id": "37722379919",
+  "run_id": "37732276892",
   "request_id": "",
-  "source_sha": "6aec641cf41394a22f9b78f97bbf2ff3dde802f4",
-  "started_at": "2026-10-08T03:22:07+00:00",
-  "started_at_bj": "2026-10-08T11:22:07+08:00",
-  "finished_at": "2026-10-08T11:23:58.454348+08:00",
-  "finished_at_bj": "2026-10-08T11:23:58+08:00",
+  "source_sha": "538c9b2860b828a953e6c00299dfa1f4792dab13",
+  "started_at": "2026-10-08T05:25:12+00:00",
+  "started_at_bj": "2026-10-08T13:25:12+08:00",
+  "finished_at": "2026-10-08T13:25:56.299132+08:00",
+  "finished_at_bj": "2026-10-08T13:25:56+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
-    "holdings.json": "d12fa3db6513e59ce4fddb783ebcb3f52d25e6d5",
+    "holdings.json": "c308037635a6b0c75c140eb2026dcbc430221c24",
     "settings.json": "d9f36eae4670ab1d7854102b29e86afcdc505ed9"
   },
   "effective_settings": {
@@ -39,22 +39,149 @@
     "dca_every": 0,
     "dca_start": ""
   },
+  "groups": [
+    {
+      "key": "positions",
+      "label": "持仓",
+      "item_group": "position"
+    },
+    {
+      "key": "focus",
+      "label": "重点关注",
+      "item_group": "focus"
+    },
+    {
+      "key": "index_funds",
+      "label": "指数基",
+      "item_group": "index_funds"
+    },
+    {
+      "key": "technology",
+      "label": "IT软硬Ai",
+      "item_group": "technology",
+      "sector_etf": "XLK"
+    },
+    {
+      "key": "healthcare",
+      "label": "医疗保健",
+      "item_group": "healthcare",
+      "sector_etf": "XLV"
+    },
+    {
+      "key": "financials",
+      "label": "金融",
+      "item_group": "financials",
+      "sector_etf": "XLF"
+    },
+    {
+      "key": "energy",
+      "label": "能源",
+      "item_group": "energy",
+      "sector_etf": "XLE"
+    },
+    {
+      "key": "industrials",
+      "label": "工航防建机",
+      "item_group": "industrials",
+      "sector_etf": "XLI"
+    },
+    {
+      "key": "materials",
+      "label": "化材金纸",
+      "item_group": "materials",
+      "sector_etf": "XLB"
+    },
+    {
+      "key": "utilities",
+      "label": "公水电气",
+      "item_group": "utilities",
+      "sector_etf": "XLU"
+    },
+    {
+      "key": "consumer_staples",
+      "label": "必需消费品",
+      "item_group": "consumer_staples",
+      "sector_etf": "XLP"
+    },
+    {
+      "key": "communications",
+      "label": "通信娱乐",
+      "item_group": "communications",
+      "sector_etf": "XLC"
+    },
+    {
+      "key": "consumer_discretionary",
+      "label": "非车酒奢",
+      "item_group": "consumer_discretionary",
+      "sector_etf": "XLY"
+    },
+    {
+      "key": "real_estate",
+      "label": "房地产",
+      "item_group": "real_estate",
+      "sector_etf": "XLRE"
+    }
+  ],
+  "group_monitoring": {
+    "positions": true,
+    "focus": true,
+    "index_funds": false,
+    "technology": false,
+    "healthcare": false,
+    "financials": false,
+    "energy": false,
+    "industrials": false,
+    "materials": false,
+    "utilities": false,
+    "consumer_staples": false,
+    "communications": false,
+    "consumer_discretionary": false,
+    "real_estate": false
+  },
+  "registered_counts": {
+    "positions": 14,
+    "focus": 8,
+    "index_funds": 12,
+    "technology": 40,
+    "healthcare": 18,
+    "financials": 20,
+    "energy": 4,
+    "industrials": 11,
+    "materials": 5,
+    "utilities": 3,
+    "consumer_staples": 8,
+    "communications": 5,
+    "consumer_discretionary": 4,
+    "real_estate": 1
+  },
   "list_counts": {
     "positions": 14,
-    "focus": 0,
-    "watch": 115,
+    "focus": 8,
+    "index_funds": 0,
+    "technology": 1,
+    "healthcare": 1,
+    "financials": 1,
+    "energy": 1,
+    "industrials": 1,
+    "materials": 1,
+    "utilities": 1,
+    "consumer_staples": 1,
+    "communications": 1,
+    "consumer_discretionary": 1,
+    "real_estate": 1,
     "triggers": 0,
     "dca": 0
   },
   "summary": {
-    "red": 26,
-    "yellow": 46,
-    "green": 57,
+    "red": 2,
+    "yellow": 10,
+    "green": 21,
     "gray": 0,
-    "total": 129,
+    "total": 33,
     "macro_ok": 6,
     "stale_symbols": [],
-    "missing_symbols": []
+    "missing_symbols": [],
+    "unsupported_symbols": []
   },
   "actual_dates": {
     "min": "2026-10-07",
@@ -70,8 +197,8 @@
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "fundamental": {
-    "checked": 10,
-    "red": 2,
-    "yellow": 3
+    "checked": 17,
+    "red": 4,
+    "yellow": 6
   }
 }
