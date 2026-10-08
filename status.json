@@ -9,13 +9,13 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37764561795",
+  "run_id": "37766163457",
   "request_id": "",
-  "source_sha": "724252fa7ec2e45ae79ccdc3fd3aca3c04c1bbe9",
-  "started_at": "2026-10-08T10:36:16+00:00",
-  "started_at_bj": "2026-10-08T18:36:16+08:00",
-  "finished_at": "2026-10-08T18:37:11.455936+08:00",
-  "finished_at_bj": "2026-10-08T18:37:11+08:00",
+  "source_sha": "3af5649f19afc21e28f2fd65ba5ec061e246c811",
+  "started_at": "2026-10-08T10:50:51+00:00",
+  "started_at_bj": "2026-10-08T18:50:51+08:00",
+  "finished_at": "2026-10-08T18:51:53.073380+08:00",
+  "finished_at_bj": "2026-10-08T18:51:53+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -213,9 +213,23 @@
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-07 收盘（美东交易日）",
+  "market_risk": {
+    "level": "yellow",
+    "label": "留意风险",
+    "text": "警示：上涨参与度",
+    "levels": {
+      "hy_oas": "green",
+      "vix": "green",
+      "sp500": "green",
+      "breadth": "yellow",
+      "nfci": "green"
+    },
+    "valid_count": 5,
+    "missing": []
+  },
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 6
+    "yellow": 7
   }
 }
