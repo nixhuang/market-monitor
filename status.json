@@ -9,19 +9,19 @@
     "next_in": 5,
     "next_date": "2026-10-15"
   },
-  "run_id": "37794691391",
-  "request_id": "b7c3513d-f0cf-4939-86c3-f88de6f1d9cc",
-  "source_sha": "c972aafaae946541e6fbcac1f7135378bd01d5f7",
-  "started_at": "2026-10-08T14:42:40+00:00",
-  "started_at_bj": "2026-10-08T22:42:40+08:00",
-  "finished_at": "2026-10-08T22:46:15.003707+08:00",
-  "finished_at_bj": "2026-10-08T22:46:15+08:00",
-  "event": "workflow_dispatch",
+  "run_id": "37799056048",
+  "request_id": "",
+  "source_sha": "599206ec09f852c51bd63e8c56a83e72845ece86",
+  "started_at": "2026-10-08T15:14:14+00:00",
+  "started_at_bj": "2026-10-08T23:14:14+08:00",
+  "finished_at": "2026-10-08T23:21:38.609349+08:00",
+  "finished_at_bj": "2026-10-08T23:21:38+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-08",
   "mode": "manual_or_config",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
-    "holdings.json": "31c0cf3940e2cd7eaa613542dab9473cd380b5a8",
+    "holdings.json": "2f0860755d3bacbfae9a147832cb4faccd5f6093",
     "settings.json": "2192af5364bdf88a40f9f95d4b1e671ae79a521d"
   },
   "effective_settings": {
@@ -136,17 +136,17 @@
     "positions": true,
     "focus": true,
     "index_funds": true,
-    "technology": false,
-    "healthcare": false,
-    "financials": false,
-    "energy": false,
-    "industrials": false,
-    "materials": false,
-    "utilities": false,
-    "consumer_staples": false,
-    "communications": false,
-    "consumer_discretionary": false,
-    "real_estate": false
+    "technology": true,
+    "healthcare": true,
+    "financials": true,
+    "energy": true,
+    "industrials": true,
+    "materials": true,
+    "utilities": true,
+    "consumer_staples": true,
+    "communications": true,
+    "consumer_discretionary": true,
+    "real_estate": true
   },
   "registered_counts": {
     "positions": 14,
@@ -168,26 +168,26 @@
     "positions": 14,
     "focus": 8,
     "index_funds": 10,
-    "technology": 1,
-    "healthcare": 1,
-    "financials": 1,
-    "energy": 1,
-    "industrials": 1,
-    "materials": 1,
-    "utilities": 1,
-    "consumer_staples": 1,
-    "communications": 1,
-    "consumer_discretionary": 1,
+    "technology": 31,
+    "healthcare": 16,
+    "financials": 17,
+    "energy": 4,
+    "industrials": 8,
+    "materials": 5,
+    "utilities": 3,
+    "consumer_staples": 7,
+    "communications": 5,
+    "consumer_discretionary": 3,
     "real_estate": 1,
     "triggers": 0,
     "dca": 1
   },
   "summary": {
-    "red": 3,
-    "yellow": 12,
-    "green": 28,
+    "red": 8,
+    "yellow": 42,
+    "green": 82,
     "gray": 0,
-    "total": 43,
+    "total": 132,
     "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
@@ -195,7 +195,7 @@
     "reference_dates": {
       "BD#US10Y": "2026-10-08"
     },
-    "today_prices": 42,
+    "today_prices": 131,
     "prior_prices": 0,
     "missing_prices": 0
   },
@@ -213,7 +213,7 @@
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.288000106811523,
+    "value": 5.302999973297119,
     "date": "2026-10-08",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -224,7 +224,7 @@
     "observed_value": null
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-08 22:46:15（盘中快照，北京时间） · 当日价 42 只 / 较早日线 0 只 / 无数据 0 只",
+  "data_time_text": "2026-10-08 23:21:38（盘中快照，北京时间） · 当日价 131 只 / 较早日线 0 只 / 无数据 0 只",
   "market_risk": {
     "level": "yellow",
     "label": "留意风险",
@@ -242,17 +242,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 15.3100004196167,
+      "value": 15.399999618530273,
       "date": "2026-10-08",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7788.330078125,
+      "value": 7775.6298828125,
       "date": "2026-10-08",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.3913591369703262
+      "drawdown": -0.553787947907125
     }
   },
   "fundamental": {
