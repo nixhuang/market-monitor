@@ -9,19 +9,19 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37754387231",
+  "run_id": "37755113909",
   "request_id": "",
-  "source_sha": "2ecba87618855d858d48f7f9a93579a6ce98e7d5",
-  "started_at": "2026-10-08T09:06:49+00:00",
-  "started_at_bj": "2026-10-08T17:06:49+08:00",
-  "finished_at": "2026-10-08T17:07:35.792062+08:00",
-  "finished_at_bj": "2026-10-08T17:07:35+08:00",
+  "source_sha": "d23c00a919cbcc7c3d0ab34f039f2e50e072b0f1",
+  "started_at": "2026-10-08T09:13:06+00:00",
+  "started_at_bj": "2026-10-08T17:13:06+08:00",
+  "finished_at": "2026-10-08T17:14:01.987720+08:00",
+  "finished_at_bj": "2026-10-08T17:14:01+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
-    "holdings.json": "f9e5d2f39a6d140fd47d5fcd59764c49719fdf2d",
+    "holdings.json": "31c0cf3940e2cd7eaa613542dab9473cd380b5a8",
     "settings.json": "b9f6c50a1993c93fde44f12ae9232c447baf6bcd"
   },
   "effective_settings": {
@@ -133,7 +133,7 @@
   "group_monitoring": {
     "positions": true,
     "focus": true,
-    "index_funds": false,
+    "index_funds": true,
     "technology": false,
     "healthcare": false,
     "financials": false,
@@ -165,7 +165,7 @@
   "list_counts": {
     "positions": 14,
     "focus": 8,
-    "index_funds": 0,
+    "index_funds": 12,
     "technology": 1,
     "healthcare": 1,
     "financials": 1,
@@ -182,17 +182,26 @@
   },
   "summary": {
     "red": 2,
-    "yellow": 9,
-    "green": 22,
-    "gray": 0,
-    "total": 33,
+    "yellow": 11,
+    "green": 24,
+    "gray": 8,
+    "total": 45,
     "macro_ok": 8,
     "stale_symbols": [],
     "missing_symbols": [],
-    "unsupported_symbols": [],
-    "today_prices": 33,
+    "unsupported_symbols": [
+      "BD#US10Y",
+      "ESMAIN",
+      ".VXN",
+      "CLMAIN",
+      ".NDX",
+      ".VIX",
+      ".SPX",
+      ".SOX"
+    ],
+    "today_prices": 37,
     "prior_prices": 0,
-    "missing_prices": 0
+    "missing_prices": 8
   },
   "actual_dates": {
     "min": "2026-10-07",
@@ -213,6 +222,6 @@
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 6
+    "yellow": 7
   }
 }
