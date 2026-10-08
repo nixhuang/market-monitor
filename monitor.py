@@ -428,7 +428,7 @@ def treasury_yield_series(days=400, source_info=None):
                           isinstance(data.get('price'), (int, float)) and math.isfinite(data['price']) and
                           data.get('closes') and math.isclose(data['price'], data['closes'][-1]))
         if name:
-            compatible = compatible and "10" in name and ("yield" in name or "interest rate" in name)
+            compatible = compatible and "10" in name and ("yield" in name or "interest rate" in name or name == "10-year bond")
         if source_info is not None and not (rows and compatible):
             source_info.update(source='Yahoo ^TNX', reason='收益率序列或标的校验未通过',
                                quote_name=data.get('quote_name', '') if data else '',
