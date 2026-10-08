@@ -275,8 +275,10 @@
     return match ? match[1] + ' ' + match[2] : String(raw);
   }
   function dataTimeText(s) {
+    if (s && s.data_time_text) return s.data_time_text;
     const dates = (s && s.actual_dates) || {};
-    return dates.max || dates.min || '';
+    const date = dates.max || dates.min || '';
+    return date ? date + (s && s.mode === 'closed' ? ' 收盘（美东交易日）' : '') : '';
   }
   // 上次成功读到的看板状态：编辑页没有内嵌快照，网络失败时用它兜底，避免一律显示“未知”。
   const LAST_KEY = 'mm_last_pub_v1';

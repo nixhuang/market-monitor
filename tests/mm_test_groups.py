@@ -134,6 +134,21 @@ class TestGroups(unittest.TestCase):
                 with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
                     self.assertEqual(json.load(f)['summary']['total'], 4)
 
+    def test_market_time_uses_data_session_not_fetch_clock(self):
+        def snap(when, date='2026-10-07', mode='manual_or_config'):
+            return {'finished_at_bj': when, 'mode': mode, 'actual_dates': {'min': date, 'max': date}}
+        for when in ['2026-10-08T13:55:28+08:00', '2026-10-08T21:29:00+08:00',
+                     '2026-10-08T04:00:00+08:00', '2026-10-10T23:00:00+08:00']:
+            self.assertEqual(monitor.market_data_time(snap(when)), '2026-10-07 收盘（美东交易日）')
+        live = snap('2026-10-08T21:30:00+08:00', '2026-10-08')
+        self.assertIn('2026-10-08 21:30:00（盘中快照，北京时间）', monitor.market_data_time(live))
+        self.assertNotIn('盘中快照', monitor.market_data_time(snap('2026-10-08T21:30:00+08:00')))
+        self.assertNotIn('盘中快照', monitor.market_data_time(snap('2026-10-08T21:30:00+08:00', '2026-10-08', 'closed')))
+        holiday = monitor.plan_run('workflow_dispatch', monitor.datetime.fromisoformat('2026-12-25T15:00:00-05:00'))
+        self.assertTrue(holiday['closed_only'])
+        self.assertNotEqual(holiday['target'], '2026-12-25')
+        self.assertEqual(monitor.market_data_time({}), '未取得行情')
+
     def test_render_is_side_effect_free_and_layout(self):
         rows = [dict(symbol=s, note=s, price=100, chg=chg, signals=[], level=lv,
                      source='test', group='position')

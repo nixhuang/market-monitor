@@ -149,11 +149,11 @@ def plan_run(event, when):
             day -= timedelta(days=1)
         return {"closed_only": True, "target": session_date(day)}
     # 当前接口口径仍是常规时段日线：09:30–16:00可用实时覆盖。
-    in_regular_session = ny.weekday() < 5 and (9, 30) <= (ny.hour, ny.minute) < (16, 0)
     if ny.weekday() < 5 and (ny.hour, ny.minute) >= (9, 30):
         day_target = session_date(day)
     else:
         day_target = session_date(day - timedelta(days=1))
+    in_regular_session = day_target == day.isoformat() and (9, 30) <= (ny.hour, ny.minute) < (16, 0)
     return {"closed_only": not in_regular_session, "target": day_target}
 
 
@@ -1330,7 +1330,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261008-5"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261008-6"></script>'
 
 
 def config_hash(filename):
@@ -1350,6 +1350,23 @@ def beijing_iso(value):
         return ""
 
 
+def market_data_time(snapshot):
+    dates = snapshot.get("actual_dates") or {}
+    latest = dates.get("max") or dates.get("min")
+    if not latest:
+        return "未取得行情"
+    earliest = dates.get("min") or latest
+    date_text = f"{earliest}～{latest}" if earliest != latest else latest
+    finished = beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
+    if snapshot.get("mode") == "manual_or_config" and finished:
+        when = datetime.fromisoformat(finished)
+        plan = plan_run("local", when)
+        if not plan["closed_only"] and latest == plan["target"]:
+            mixed = " · 含较早日期行情" if earliest != latest else ""
+            return finished[:19].replace("T", " ") + "（盘中快照，北京时间）" + mixed
+    return date_text + " 收盘（美东交易日）"
+
+
 def build_snapshot(macro, items, cfg, group_counts=None):
     dates = sorted({d.get("data_date") for d in items if d.get("data_date")})
     unsupported = [normalize_symbol(d["symbol"]) for d in items if not quote_supported(d["symbol"])]
@@ -1361,7 +1378,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
     positions = cfg.get("positions", {}) if monitoring["positions"] else {}
     counts = group_counts if group_counts is not None else grouped_universe(cfg)[1]
     dca = global_dca(TARGET_DATE)
-    return {
+    snapshot = {
         "dca_reminder": dca,
         "run_id": str(os.environ.get("GITHUB_RUN_ID") or "local-" + NOW.strftime("%Y%m%d%H%M%S")),
         "request_id": os.environ.get("MM_REQUEST_ID", ""),
@@ -1390,6 +1407,8 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
         "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
     }
+    snapshot["data_time_text"] = market_data_time(snapshot)
+    return snapshot
 
 
 def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
@@ -1518,7 +1537,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     snapshot_json = snapshot_json.replace("</", "<\\/")
     summary = snapshot.get("summary", {})
     counts = snapshot.get("list_counts", {})
-    actual_dates = snapshot.get("actual_dates", {})
     finished_iso = beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
     finished_txt = finished_iso[:19].replace("T", " ") if finished_iso else "未记录"
     # 一行摘要升级为状态灯文案（首页第三排）；这里只算红黄绿计数和异常清单。
@@ -1548,10 +1566,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
     ny_now = datetime.now(US_TZ)
     bj_auto = "夏令时次日 08:30" if ny_now.dst() != timedelta(0) else "冬令时次日 09:30"
-    max_date = actual_dates.get("max") or "—"
-    min_date = actual_dates.get("min") or max_date
-    trade_date = f"{min_date}～{max_date}" if min_date != max_date else max_date
-    sub_line = (f"本页数据更新 {finished_txt}（北京时间） · 行情交易日 {trade_date} · "
+    sub_line = (f"数据时间 {market_data_time(snapshot)} · "
                 f"自动计划：美东周一至五 20:30（北京 {bj_auto}）")
     lc = registered or counts
     reg_line = ('<div class="quiet">在册：' + ' · '.join(
