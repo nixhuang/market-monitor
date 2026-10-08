@@ -9,13 +9,13 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37772560783",
+  "run_id": "37775215767",
   "request_id": "",
-  "source_sha": "2922802b2740275dfa5c7e5d77f100e0565e4d3a",
-  "started_at": "2026-10-08T11:49:00+00:00",
-  "started_at_bj": "2026-10-08T19:49:00+08:00",
-  "finished_at": "2026-10-08T19:49:53.363754+08:00",
-  "finished_at_bj": "2026-10-08T19:49:53+08:00",
+  "source_sha": "b6fe7f5aa68dcce054783b56c2d149c765911d08",
+  "started_at": "2026-10-08T12:12:15+00:00",
+  "started_at_bj": "2026-10-08T20:12:15+08:00",
+  "finished_at": "2026-10-08T20:13:20.465819+08:00",
+  "finished_at_bj": "2026-10-08T20:13:20+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -38,6 +38,8 @@
     "quiet_chg": 2.0,
     "amp_yellow": 5.0,
     "amp_red": 8.0,
+    "ma_short": 50,
+    "ma_long": 200,
     "hy_green": 350,
     "hy_red": 400,
     "vix_green": 20,
@@ -256,6 +258,6 @@
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 7
+    "yellow": 6
   }
 }
