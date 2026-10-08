@@ -425,8 +425,9 @@ def treasury_yield_series(days=400, source_info=None):
             data = yahoo_history("^TNX")
             rows = validated(_rows_from_closes(data.get("closes", []), days, data.get("dates"))) if data else []
             name = data.get("quote_name", "").lower() if data else ""
-            compatible = bool(data and valid_history(data) and data.get("quote_symbol") == "^TNX" and
-                              "10" in name and ("yield" in name or "interest rate" in name))
+            compatible = bool(data and valid_history(data) and data.get("quote_symbol") == "^TNX")
+            if name or not best:
+                compatible = compatible and "10" in name and ("yield" in name or "interest rate" in name)
             if best and rows:
                 reference = dict(best)
                 common = [date for date, _ in rows if date in reference]
