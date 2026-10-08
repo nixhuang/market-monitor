@@ -35,11 +35,22 @@ NOW = datetime.now(TZ)
 EVENT = os.environ.get("MM_EVENT", "local")
 TARGET_DATE = os.environ.get("MM_TARGET_TRADE_DATE", "").strip()
 CLOSED_ONLY = os.environ.get("MM_CLOSED_ONLY", "0") == "1"
+QUOTE_DEADLINE = None  # 仅主任务取数阶段启用；为页面生成与推送预留时间
+
+
+def quote_timeout(seconds):
+    if QUOTE_DEADLINE is None:
+        return seconds
+    remaining = QUOTE_DEADLINE - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("本轮行情抓取时间预算已用完")
+    return max(0.1, min(seconds, remaining))
+
 
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 # FRED 官方 API key（免费申请：https://fredaccount.stlouisfed.org/apikeys）
-# 配成仓库 Secret FRED_API_KEY 即可；不配也能跑，只是 Actions 上拿不到跑路价签和收益率曲线。
+# 配成仓库 Secret FRED_API_KEY 即可；不配也能跑，只是 Actions 上拿不到垃圾债利差和收益率曲线。
 FRED_API_KEY = os.environ.get("FRED_API_KEY", "").strip()
 
 # ---------------------------------------------------------------- 配置
@@ -77,12 +88,13 @@ def grouped_universe(cfg):
 
 
 FRED_SERIES = {
-    "hy_oas":   {"id": "BAMLH0A0HYM2", "name": "跑路价签",   "unit": "bp",  "scale": 100},
+    "hy_oas":   {"id": "BAMLH0A0HYM2", "name": "垃圾债利差", "unit": "bp",  "scale": 100},
     "vix":      {"id": "VIXCLS",       "name": "VIX",        "unit": "",    "scale": 1},
     "sp500":    {"id": "SP500",        "name": "标普500",     "unit": "",    "scale": 1},
     "ust10":    {"id": "DGS10",        "name": "10Y美债",     "unit": "%",   "scale": 1},
     "curve":    {"id": "T10Y2Y",       "name": "收益率曲线",   "unit": "",    "scale": 1},
     "dxy":      {"id": "DTWEXBGS",     "name": "美元指数",     "unit": "",    "scale": 1},
+    "nfci":     {"id": "NFCI",         "name": "金融压力",     "unit": "",    "scale": 1},
 }
 
 # ---------------------------------------------------------------- 可调阈值
@@ -107,8 +119,7 @@ DEFAULT_SETTINGS = {
     "amp_red": 8.0,         # 日内振幅 >= x% → 红（上下插针、剧烈震荡）
 
     # 宏观
-    "hy_green": 350,        # 跑路价签 bp：< 350 绿 / 350~ 黄 / >= 400 红
-    "hy_yellow": 400,
+    "hy_green": 350,        # 垃圾债利差 bp：< 350 绿 / 350~400 黄 / >= 400 红
     "hy_red": 400,
     "vix_green": 20,        # VIX：< 20 绿 / 20~ 黄 / >= 40 红
     "vix_yellow": 30,
@@ -198,6 +209,45 @@ def trim_history(data, cutoff):
     return out
 
 
+SETTING_LIMITS = {
+    "boll_n": (2, 250), "boll_k": (0.1, 10), "boll_near_pct": (0, 100),
+    "chg_yellow": (0, 100), "chg_red": (0, 100),
+    "rsi_low": (0, 100), "rsi_high": (0, 100),
+    "near_52w_low_pct": (0, 100), "trigger_gap_pct": (0, 100),
+    "vol_ratio": (0.1, 100), "quiet_chg": (0, 100),
+    "amp_yellow": (0, 100), "amp_red": (0, 100),
+    "hy_green": (0, 10000), "hy_red": (0, 10000),
+    "vix_green": (0, 200), "vix_yellow": (0, 200), "vix_red": (0, 200),
+    "dca_every": (0, 10000), "use_realtime": (0, 1),
+}
+SETTING_ORDER = (("chg_yellow", "chg_red"), ("amp_yellow", "amp_red"),
+                 ("hy_green", "hy_red"),
+                 ("vix_green", "vix_yellow", "vix_red"))
+
+
+def valid_settings(s):
+    for k, (lo, hi) in SETTING_LIMITS.items():
+        v = s.get(k)
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not lo <= v <= hi:
+            return k
+    if s["boll_n"] != int(s["boll_n"]) or s["dca_every"] != int(s["dca_every"]) or s["use_realtime"] not in (0, 1):
+        return "整数设置"
+    if not s["rsi_low"] < s["rsi_high"]:
+        return "RSI 上下限"
+    for keys in SETTING_ORDER:
+        if any(a > b for a, b in zip((s[k] for k in keys), (s[k] for k in keys[1:]))):
+            return " / ".join(keys)
+    start = s.get("dca_start")
+    if start and (not isinstance(start, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", start)):
+        return "dca_start"
+    if start:
+        try:
+            datetime.strptime(start, "%Y-%m-%d")
+        except ValueError:
+            return "dca_start"
+    return ""
+
+
 def load_settings():
     """读 settings.json 覆盖默认值。文件不存在 / 写错都安全退回默认值。"""
     s = dict(DEFAULT_SETTINGS)
@@ -212,15 +262,35 @@ def load_settings():
             if k == "dca_start":
                 # 起始日是 YYYY-MM-DD 字符串（或空）；写错就当没设
                 if isinstance(v, str) and (v == "" or re.fullmatch(r"\d{4}-\d{2}-\d{2}", v.strip())):
-                    s[k] = v.strip()
+                    try:
+                        if v.strip():
+                            datetime.strptime(v.strip(), "%Y-%m-%d")
+                        s[k] = v.strip()
+                    except ValueError:
+                        log("  ! 定投起点日无效，沿用默认值")
                 continue
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 continue  # 类型不对就跳过，不让它污染默认值
+            if k in SETTING_LIMITS and (not math.isfinite(v) or not SETTING_LIMITS[k][0] <= v <= SETTING_LIMITS[k][1]):
+                continue
+            if k in ("boll_n", "dca_every", "use_realtime") and v != int(v):
+                continue
             s[k] = type(DEFAULT_SETTINGS[k])(v)
     except FileNotFoundError:
         pass
     except Exception as e:
         log(f"  ! settings.json 读取失败，用默认值：{e}")
+    if not s["rsi_low"] < s["rsi_high"]:
+        log("  ! RSI 上下限冲突，仅该组退回默认值")
+        s["rsi_low"], s["rsi_high"] = DEFAULT_SETTINGS["rsi_low"], DEFAULT_SETTINGS["rsi_high"]
+    for keys in SETTING_ORDER:
+        if any(s[a] > s[b] for a, b in zip(keys, keys[1:])):
+            log(f"  ! {'/'.join(keys)} 阈值顺序冲突，仅该组退回默认值")
+            for k in keys:
+                s[k] = DEFAULT_SETTINGS[k]
+    if valid_settings(s):
+        log(f"  ! settings.json 存在无效参数（{valid_settings(s)}），使用安全默认值")
+        return dict(DEFAULT_SETTINGS)
     return s
 
 
@@ -229,13 +299,6 @@ S = load_settings()
 # 布林带"逼近"阈值（%）：距上轨/下轨不足这个百分比就算命中，不用等真的穿过去
 # 因为盘中价格一直在动，等收盘才确认会错过时机
 BOLL_NEAR_PCT = S["boll_near_pct"]
-
-# 宏观阈值（跑路价签单位为 bp）
-THRESH = {
-    "hy_oas":  {"green": S["hy_green"], "yellow": S["hy_yellow"], "red": S["hy_red"]},
-    "vix":     {"green": S["vix_green"], "yellow": S["vix_yellow"], "red": S["vix_red"]},
-}
-
 
 def log(msg):
     print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -254,14 +317,12 @@ FRED_YAHOO_ALIAS = {
 }
 
 
-def _rows_from_closes(closes, days=400):
-    """把收盘价序列伪造成 (date, value) 列表。日期只用于内部排序，页面不展示。"""
-    n = len(closes)
-    out = []
-    for i, c in enumerate(closes):
-        d = (NOW.date() - timedelta(days=(n - 1 - i))).isoformat()
-        out.append((d, c))
-    return out[-days:]
+def _rows_from_closes(closes, days=400, dates=None):
+    """Yahoo 后备日线仅采用真实交易日期；绝不从位置推测日期。"""
+    if not dates or len(dates) != len(closes):
+        return []
+    return [(d, v) for d, v in zip(dates, closes) if d and isinstance(v, (int, float))
+            and math.isfinite(v) and v > 0][-days:]
 
 
 def fred_api(series_id, days=400):
@@ -352,7 +413,7 @@ def fred_series(series_id, days=400, alias=None):
         log(f"  · FRED {series_id} 不可用，改用 Yahoo {alias}")
         data = yahoo_history(alias)
         if data and len(data["closes"]) >= 30:
-            return _rows_from_closes(data["closes"], days)
+            return _rows_from_closes(data["closes"], days, data.get("dates"))
     return []
 
 
@@ -363,6 +424,39 @@ def pct_from_high(series):
     values = [v for _, v in series]
     cur, high = values[-1], max(values)
     return (cur / high - 1) * 100 if high else None
+
+
+BREADTH_URL = "https://historyofmarket.com/api/sp500/breadth.json"
+BREADTH_CREDIT = "https://historyofmarket.com/zh-cn/sp500/sp500-breadth/"
+
+
+def market_breadth(target_date):
+    """用当前成分股的均线覆盖率观察涨势广度，过期或格式异常时不亮绿灯。"""
+    item = {"ok": False, "name": "上涨参与度"}
+    try:
+        r = requests.get(BREADTH_URL, headers=UA, timeout=10)
+        r.raise_for_status()
+        body = r.json()
+        if not isinstance(body, dict) or body.get("_canonical") != BREADTH_URL or \
+                "CC BY 4.0" not in str(body.get("_license", "")) or \
+                body.get("source") != "Member daily closes, current constituents":
+            raise ValueError("市场宽度来源或授权不符")
+        latest = body.get("latest") or {}
+        if not isinstance(latest, dict) or latest.get("date") != body.get("updated"):
+            raise ValueError("市场宽度最新观测与更新日期不一致")
+        day = datetime.strptime(str(latest.get("date", "")), "%Y-%m-%d").date()
+        target = datetime.strptime(target_date, "%Y-%m-%d").date()
+        if day > target or (target - day).days > 7:
+            raise ValueError("市场宽度观测日期过旧或超出本轮日期")
+        p50, p200 = float(latest["pct50"]), float(latest["pct200"])
+        if not all(math.isfinite(v) and 0 <= v <= 100 for v in (p50, p200)) or \
+                not 450 <= int(body.get("members", 0)) <= 550:
+            raise ValueError("市场宽度数值或成员数异常")
+        return {"ok": True, "name": "上涨参与度", "date": day.isoformat(),
+                "value": p200, "pct50": p50, "unit": "%", "source": "History of Market"}
+    except (requests.RequestException, ValueError, TypeError, KeyError, OverflowError) as e:
+        log(f"  ! 市场宽度暂不可用：{str(e)[:80]}")
+    return item
 
 
 def build_macro():
@@ -390,8 +484,35 @@ def build_macro():
         if key == "sp500":
             dd = pct_from_high(rows)
             item["drawdown"] = dd
+        limit = 10 if key == "nfci" else 7
+        try:
+            age = (datetime.strptime(TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat(), "%Y-%m-%d") -
+                   datetime.strptime(item["date"], "%Y-%m-%d")).days
+        except ValueError:
+            age = 999
+        if not 0 <= age <= limit:
+            macro[key] = {"ok": False, "name": cfg["name"]}
+            log(f"  ! {cfg['name']} 数据日期过期，不参与判断")
+            continue
         macro[key] = item
         log(f"  {cfg['name']}: {cur:.2f} ({rows[-1][0]})")
+    target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+    macro["breadth"] = market_breadth(target)
+    def recent(item, days):
+        if not item.get("ok"):
+            return False
+        try:
+            age = (datetime.strptime(target, "%Y-%m-%d") -
+                   datetime.strptime(item["date"], "%Y-%m-%d")).days
+            return 0 <= age <= days
+        except (ValueError, KeyError):
+            return False
+    if macro["breadth"].get("ok"):
+        hy, nfci = macro.get("hy_oas", {}), macro.get("nfci", {})
+        macro["breadth"]["pressure_confirmed"] = bool(
+            recent(macro["breadth"], 5) and (
+                recent(hy, 5) and macro_status("hy_oas", hy)[0] == "red"
+                or recent(nfci, 8) and nfci["value"] >= 0))
     return macro
 
 
@@ -404,11 +525,11 @@ def macro_status(key, item, drawdown=None):
         v = item["value"]
         dw = item.get("delta_week")
         if dw is not None and dw >= 50:
-            return "red", "周变化 +%.0f ⚠" % dw
+            return "red", "一周急升，信用风险升温"
         if v >= 500:
-            return "red", "熊市中段"
+            return "red", "信用压力很高"
         if v >= S["hy_red"]:
-            return "red", "危机确认"
+            return "red", "信用压力升高"
         if v >= S["hy_green"]:
             return "yellow", "收紧"
         return "green", "平静"
@@ -441,6 +562,19 @@ def macro_status(key, item, drawdown=None):
             return "yellow", "倒挂"
         return "green", "正常"
 
+    if key == "nfci":
+        return ("yellow", "金融环境偏紧，留意风险") if item["value"] >= 0 else ("green", "金融环境偏宽松")
+
+    if key == "breadth":
+        long_term, short_term = item["value"], item["pct50"]
+        if long_term < 30 and item.get("pressure_confirmed"):
+            return "red", "多数股票走弱，且信用或金融压力也在升高"
+        if long_term < 50:
+            return "yellow", "过半股票跌破长期均线，注意风险"
+        if short_term < 30:
+            return "yellow", "短期上涨只由少数股票支撑"
+        return "green", "多数股票趋势尚稳"
+
     return "gray", "—"
 
 
@@ -458,7 +592,7 @@ def yahoo_history(symbol):
         for ep in endpoints:
             url = ep.format(s=symbol)
             try:
-                r = requests.get(url, headers=UA, timeout=20)
+                r = requests.get(url, headers=UA, timeout=quote_timeout(8))
                 if r.status_code == 429:
                     last_err = "429 限流"
                     time.sleep(3 * (attempt + 1))
@@ -512,7 +646,7 @@ def stooq_history(symbol):
     code = symbol.lower().replace(".", "-") + ".us"
     url = f"https://stooq.com/q/d/l/?s={code}&i=d"
     try:
-        r = requests.get(url, headers=UA, timeout=30)
+        r = requests.get(url, headers=UA, timeout=quote_timeout(10))
         r.raise_for_status()
         lines = [l for l in r.text.strip().split("\n") if l]
         if len(lines) < 40 or lines[0].startswith("Date") is False:
@@ -574,7 +708,7 @@ def nasdaq_realtime(symbol):
             try:
                 r = requests.get(
                     f"https://api.nasdaq.com/api/quote/{sym}/info?assetclass={ac}",
-                    headers=hdr, timeout=12)
+                    headers=hdr, timeout=quote_timeout(12))
                 if r.status_code != 200:
                     continue
                 p = ((r.json().get("data") or {}).get("primaryData") or {})
@@ -598,16 +732,16 @@ def apply_realtime(symbol, data):
     """
     if not data or CLOSED_ONLY or not S.get("use_realtime"):
         return data
+    now_ny = datetime.now(US_TZ)
+    # 常规日线实时层不能把夜盘冒充完整23小时bar。
+    if not ((9, 30) <= (now_ny.hour, now_ny.minute) < (16, 0)):
+        return data
     rt = nasdaq_realtime(symbol)
     if not rt:
         return data
     px = rt["price"]
     dates = data.get("dates") or []
-    now_ny = datetime.now(US_TZ)
     today = now_ny.strftime("%Y-%m-%d")
-    # 常规日线实时层不能把夜盘冒充完整23小时bar。
-    if not ((9, 30) <= (now_ny.hour, now_ny.minute) < (16, 0)):
-        return data
     try:
         if dates and dates[-1] == today:
             data["closes"][-1] = px
@@ -657,7 +791,7 @@ def nasdaq_history(symbol):
         for ac in ("stocks", "etf"):
             url = base.format(s=sym, ac=ac, f=start.isoformat(), t=end.isoformat())
             try:
-                r = requests.get(url, headers=UA, timeout=25)
+                r = requests.get(url, headers=UA, timeout=quote_timeout(8))
                 r.raise_for_status()
                 j = r.json()
                 rows = ((j.get("data") or {}).get("tradesTable") or {}).get("rows") or []
@@ -945,6 +1079,32 @@ def fundamental_check(sym):
             "period": f["period"], "oneoff": oneoff}
 
 
+def valid_history(data):
+    """拒绝损坏/错位的日线，不把异常 OHLCV 送进信号计算。"""
+    dates = data.get("dates") or []
+    if len(dates) < 30 or len(dates) != len(data.get("closes") or []):
+        return False
+    try:
+        if any(a >= b for a, b in zip(dates, dates[1:])):
+            return False
+        if any(datetime.strptime(d, "%Y-%m-%d").strftime("%Y-%m-%d") != d for d in dates):
+            return False
+        for key in ("closes", "highs", "lows", "volumes"):
+            seq = data.get(key) or []
+            if seq and len(seq) != len(dates):
+                return False
+            if any(not isinstance(v, (int, float)) or not math.isfinite(v) or
+                   (v < 0 if key == "volumes" else v <= 0) for v in seq):
+                return False
+        for low, close, high in zip(data.get("lows") or [], data["closes"], data.get("highs") or []):
+            if low > close * 1.001 or close > high * 1.001:
+                return False
+        return (math.isclose(data["price"], data["closes"][-1], rel_tol=1e-5) and
+                math.isclose(data["prev_close"], data["closes"][-2], rel_tol=1e-5))
+    except (ValueError, TypeError, OverflowError, KeyError):
+        return False
+
+
 def fetch_history(symbol):
     """数据源优先级：Yahoo → stooq → Nasdaq
 
@@ -957,23 +1117,38 @@ def fetch_history(symbol):
     """
     symbol = normalize_symbol(symbol)
     fallback = None
+    suspicious = None
     for name, loader in (("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history)):
         data = loader(symbol)
         if not data:
             continue
-        data["source"] = name
         if CLOSED_ONLY:
             data = trim_history(data, TARGET_DATE)
-            if not data:
+        if not data or not valid_history(data) or data["dates"][-1] > TARGET_DATE:
+            log(f"  ! {symbol} {name} 日线不合法或超过目标交易日，换源")
+            continue
+        data["source"] = name
+        # 大幅跳变可能是拆股口径错位；找另一个同日来源佐证，不直接制造红信号。
+        prev = data["closes"][-2]
+        jump = abs(data["price"] / prev - 1) > 0.6
+        if jump:
+            if suspicious and suspicious["dates"][-1] == data["dates"][-1] and \
+                    (not suspicious.get("currency") or not data.get("currency") or
+                     suspicious["currency"] == data["currency"]) and \
+                    abs(data["price"] / suspicious["price"] - 1) <= 0.1:
+                data = suspicious
+            else:
+                suspicious = data
                 continue
-            # 日期落后先试另一个源；都落后时明确展示，不冒充新数据。
-            if data["dates"][-1] < TARGET_DATE:
-                if fallback is None or data["dates"][-1] > fallback["dates"][-1]:
-                    fallback = data
-                continue
-            return data
-        return apply_realtime(symbol, data)
-    return fallback
+        if CLOSED_ONLY:
+            if data["dates"][-1] == TARGET_DATE:
+                return data
+        elif data["dates"][-1] == TARGET_DATE:
+            return apply_realtime(symbol, data)
+        if fallback is None or data["dates"][-1] > fallback["dates"][-1]:
+            fallback = data
+    # 历史源未提供当日bar时仍尝试盘中价；若无报价，保留最新日线并标出日期。
+    return apply_realtime(symbol, fallback) if fallback and not CLOSED_ONLY else fallback
 
 
 RSI_PERIODS = (6, 12, 24)
@@ -1354,6 +1529,10 @@ def market_data_time(snapshot):
     dates = snapshot.get("actual_dates") or {}
     latest = dates.get("max") or dates.get("min")
     if not latest:
+        finished = beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
+        if snapshot.get("mode") == "manual_or_config" and finished and not plan_run("local", datetime.fromisoformat(finished))["closed_only"]:
+            missing = snapshot.get("summary", {}).get("missing_prices", 0)
+            return f'{finished[:19].replace("T", " ")}（盘中运行，北京时间 · 未取得行情） · 无数据 {missing} 只'
         return "未取得行情"
     earliest = dates.get("min") or latest
     date_text = f"{earliest}～{latest}" if earliest != latest else latest
@@ -1361,9 +1540,13 @@ def market_data_time(snapshot):
     if snapshot.get("mode") == "manual_or_config" and finished:
         when = datetime.fromisoformat(finished)
         plan = plan_run("local", when)
-        if not plan["closed_only"] and latest == plan["target"]:
-            mixed = " · 含较早日期行情" if earliest != latest else ""
-            return finished[:19].replace("T", " ") + "（盘中快照，北京时间）" + mixed
+        if not plan["closed_only"]:
+            counts = snapshot.get("summary", {})
+            detail = (f" · 当日价 {counts['today_prices']} 只 / 较早日线 {counts['prior_prices']} 只 / "
+                      f"无数据 {counts['missing_prices']} 只" if "today_prices" in counts else "")
+            if latest == plan["target"]:
+                return finished[:19].replace("T", " ") + "（盘中快照，北京时间）" + detail
+            return finished[:19].replace("T", " ") + f"（盘中运行，北京时间 · 仍为 {date_text} 日线）" + detail
     return date_text + " 收盘（美东交易日）"
 
 
@@ -1402,7 +1585,10 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "summary": {**{lv: sum(d["level"] == lv for d in items) for lv in ("red", "yellow", "green", "gray")},
                     "total": len(items), "macro_ok": sum(bool(m.get("ok")) for m in macro.values()),
                     "stale_symbols": stale, "missing_symbols": missing,
-                    "unsupported_symbols": unsupported},
+                    "unsupported_symbols": unsupported,
+                    "today_prices": sum(d.get("price") is not None and d.get("data_date") == TARGET_DATE for d in items),
+                    "prior_prices": sum(d.get("price") is not None and d.get("data_date") != TARGET_DATE for d in items),
+                    "missing_prices": sum(d.get("price") is None for d in items)},
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
         "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
@@ -1416,14 +1602,17 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     monitoring = snapshot.get("group_monitoring", {})
     registered = snapshot.get("registered_counts", {})
     rows_macro = []
-    for key in ["hy_oas", "vix", "sp500", "ust10", "curve", "dxy"]:
+    macro_counts = {"red": 0, "yellow": 0}
+    for key in ["hy_oas", "vix", "sp500", "breadth", "nfci"]:
         it = macro.get(key, {})
         if not it.get("ok"):
-            rows_macro.append(
-                f'<tr class="gray"><td>{it.get("name", key)}</td><td colspan="3">无数据</td></tr>'
-            )
+            label = html_lib.escape(str(it.get("name") or
+                                        ("上涨参与度" if key == "breadth" else FRED_SERIES[key]["name"])))
+            rows_macro.append(f'<tr class="gray"><td>{label}</td><td colspan="3">无数据</td></tr>')
             continue
         lv, txt = macro_status(key, it)
+        if lv in macro_counts:
+            macro_counts[lv] += 1
         if key == "sp500":
             val = f'−{abs(it["drawdown"]):.1f}%' if it.get("drawdown") is not None else "—"
         elif key == "hy_oas":
@@ -1434,15 +1623,41 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             val = f'{it["value"]:.2f}%'
         elif key == "curve":
             val = f'{it["value"]:.2f}<span class="unit">个百分点</span>'
+        elif key == "breadth":
+            val = f'{it["value"]:.1f}%<span class="unit">站上200日均线 · 50日 {it["pct50"]:.1f}%</span>'
+        elif key == "nfci":
+            val = f'{it["value"]:+.2f}'
         else:
             val = f'{it["value"]:.2f}'
 
         dw = it.get("delta_week")
         dw_txt = f'{dw:+.0f}' if (key == "hy_oas" and dw is not None) else "—"
+        label = html_lib.escape(it["name"])
+        if key in ("breadth", "nfci"):
+            label += f'<span class="unit">截至 {html_lib.escape(it["date"])}</span>'
         rows_macro.append(
-            f'<tr class="{lv}"><td>{it["name"]}</td><td class="num">{val}</td>'
+            f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
             f'<td class="num dim">{dw_txt}</td><td>{txt}</td></tr>'
         )
+
+    reference_rows = []
+    for key in ("ust10", "dxy", "curve"):
+        it = macro.get(key) or {}
+        name = html_lib.escape(str(it.get("name") or FRED_SERIES[key]["name"]))
+        if it.get("ok") and isinstance(it.get("value"), (int, float)) and math.isfinite(it["value"]):
+            value = (f'{it["value"]:.2f}%' if key == "ust10" else
+                     f'{it["value"]:.2f} 个百分点' if key == "curve" else f'{it["value"]:.2f}')
+            date = html_lib.escape(str(it.get("date") or "日期未提供"))
+            reference_rows.append(f'<tr><td>{name}<span class="unit">截至 {date}</span></td>'
+                                  f'<td class="num">{value}</td></tr>')
+        else:
+            reference_rows.append(f'<tr class="gray"><td>{name}</td><td class="num">无数据</td></tr>')
+    index_reference = ('<div class="index-reference"><h2>市场参考（独立指标，不属于清单标的）</h2>'
+                       '<table><tr class="gray"><td>参考指标</td><td class="num">最新值</td></tr>'
+                       + "".join(reference_rows) + '</table>'
+                       '<details class="macro-help" id="yieldCurveHelp"><summary>收益率曲线是什么意思？</summary>'
+                       '<p>这里是美国 10年期国债收益率 − 2年期国债收益率，并非投资收益率。'
+                       '小于零称为倒挂，提示经济放缓风险，不能单独预测股市下跌。</p></details></div>')
 
     order = {"red": 0, "yellow": 1, "green": 2, "gray": 3}
     # 行情没异动但基本面亮了警示的，要上表并往前排，否则徽章永远藏在「无异动 N 只」里看不见
@@ -1472,6 +1687,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
             # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
             tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
+            if d.get("price") is None:
+                tag += '<span class="tag quote-note">无数据</span>'
+            elif snapshot.get("mode") == "manual_or_config" and d.get("data_date") != snapshot.get("target_trade_date"):
+                date = html_lib.escape(str(d.get("data_date") or "日期未知"))
+                tag += f'<span class="tag quote-note">日线 {date} 收盘</span>'
             fund = d.get("fund") or {}
             fund_html = ""
             if fund.get("level") in ("red", "yellow") and fund.get("hits"):
@@ -1503,6 +1723,9 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         if not enabled:
             note = f"行业监测关闭 · {group['sector_etf']} 仍监测（仅限原组已有标的）" if group.get("sector_etf") else "分组监测已关闭"
             parts.append(f'<div class="quiet">{note} · 清单保留，普通标的暂停抓取和报警</div>')
+        if group["key"] == "index_funds":
+            parts.append(index_reference)
+            parts.append('<div class="quiet">上述三项不属于自选清单：原指数基成员及监测开关保持不变。</div>')
         for label, rows in (("个股", [d for d in shown if not is_etf_row(d)]),
                             ("ETF 基金", [d for d in shown if is_etf_row(d)])):
             if rows:
@@ -1532,6 +1755,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         src_txt += f" · {n_rt} 只用了实时价（Nasdaq，0 延迟）"
     # 之前漏了 join，整段被当成 list 的 str() 插进表格，页面上会多出 [' 和 ']
     rows_macro = "".join(rows_macro)
+    macro_stats = " · ".join(f'{label}{macro_counts[key]}' for key, label in (("red", "红"), ("yellow", "黄"))
+                             if macro_counts[key])
     snapshot = snapshot or {}
     snapshot_json = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
     snapshot_json = snapshot_json.replace("</", "<\\/")
@@ -1544,7 +1769,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     gray_txt = f" 灰{summary.get('gray')}" if summary.get("gray") else ""
     if bad:
         init_light_phase = "bad"
-        init_light = (f"抓取失败 {len(bad)} 只：{html_lib.escape('、'.join(bad[:6]))}"
+        reason = "取数失败" if not summary.get("stale_symbols") else "当日行情未取得"
+        init_light = (f"{reason} {len(bad)} 只：{html_lib.escape('、'.join(bad[:6]))}"
                       + (" 等" if len(bad) > 6 else ""))
     else:
         total = summary.get("total", 0)
@@ -1614,11 +1840,13 @@ tr:first-child td{{border-top:none}}
   color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}}
 .tag.f-red{{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}}
 .tag.f-yellow{{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}}
+.tag.quote-note{{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}}
 .fund-detail{{margin-top:6px}}
 .fund-detail summary{{margin-left:0;padding:7px 9px;cursor:pointer;list-style:none;touch-action:manipulation}}
 .fund-detail summary::-webkit-details-marker{{display:none}}
-.fund-detail summary::after{{content:" · 展开";font-weight:400}}
-.fund-detail[open] summary::after{{content:" · 收起"}}
+.fund-detail summary::after{{content:"";display:inline-block;margin-left:6px;
+  border:4px solid transparent;border-top-color:currentColor;transform:translateY(2px)}}
+.fund-detail[open] summary::after{{transform:translateY(-2px) rotate(180deg)}}
 .fund-detail summary:focus-visible{{outline:2px solid #6ba3f0;outline-offset:3px}}
 .fund-body{{margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:6px;
   font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}}
@@ -1630,6 +1858,9 @@ tr.yellow td:first-child{{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12
 tr.green td:first-child{{box-shadow:inset 2px 0 0 var(--green)}}
 tr.gray td{{color:var(--dim)}}
 .group-card tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
+.index-reference{{margin:8px 4px 12px;padding:3px 4px 8px;border:1px solid var(--line);border-radius:8px}}
+.index-reference table{{font-size:12px}}
+.index-reference td{{padding:7px 9px}}
 .macro-help{{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}}
 .macro-help>summary{{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}}
 .macro-help p{{margin:6px 0}}
@@ -1660,17 +1891,17 @@ tr.gray td{{color:var(--dim)}}
 .check-result[data-phase="bad"]{{border-color:var(--red)}}
 .check-result[data-phase="busy"]{{border-color:var(--yellow)}}
 .check-result[hidden]{{display:none}}
-.group-card>summary.grp{{display:flex;align-items:center;gap:10px;cursor:pointer;
+.group-card>summary.grp,.macro-card>summary.grp{{display:flex;align-items:center;gap:10px;cursor:pointer;
   padding:12px;font-size:14px;font-weight:600;list-style:none;touch-action:manipulation}}
-.group-card>summary::-webkit-details-marker{{display:none}}
-.group-card>summary::before{{content:"›";color:var(--dim);font-size:20px;line-height:1}}
-.group-card[open]>summary::before{{transform:rotate(90deg)}}
-.group-card[open]>summary{{border-bottom:1px solid var(--line)}}
+.group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{{display:none}}
+.group-card>summary::before,.macro-card>summary::before{{content:"›";color:var(--dim);font-size:20px;line-height:1}}
+.group-card[open]>summary::before,.macro-card[open]>summary::before{{transform:rotate(90deg)}}
+.group-card[open]>summary,.macro-card[open]>summary{{border-bottom:1px solid var(--line)}}
 .group-stats{{margin-left:auto;color:var(--dim);font-size:11px;font-weight:400}}
 .quiet-list{{margin:8px 0}}
 .quiet-list>summary{{padding:8px 12px;color:var(--dim);font-size:12px;cursor:pointer}}
 .sym .note{{display:block;margin:3px 0 0;overflow-wrap:anywhere}}
-.group-card summary:focus-visible{{outline:2px solid #6ba3f0;outline-offset:-2px}}
+.group-card summary:focus-visible,.macro-card summary:focus-visible{{outline:2px solid #6ba3f0;outline-offset:-2px}}
 .runlight{{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}}
 .runlight .dot{{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}}
 .runlight[data-phase="busy"]{{color:var(--yellow)}}
@@ -1704,34 +1935,31 @@ tr.gray td{{color:var(--dim)}}
 {dca_html}
 <div class="script-data" hidden><script id="snapshotData" type="application/json">{snapshot_json}</script></div>
 
-{('<div class="warn">⚠ 行情源暂时不可用（Yahoo 限流），个股数据未更新，宏观数据正常。通常隔一阵会自动恢复。</div>' if data_down else "")}
+{('<div class="warn">本轮标的均未取得可用报价；可能是接口故障、异常行情或抓取时间预算不足，请查看个股原因。宏观数据另行展示。</div>' if data_down else "")}
 
-<div class="card">
-<h2>宏观</h2>
+<details class="card macro-card" id="macroCard">
+<summary class="grp"><span>市场风险参考</span><span class="group-stats">{macro_stats}</span></summary>
 <table>
 <tr class="gray"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
 {rows_macro}
 </table>
-<details class="macro-help" id="yieldCurveHelp">
-<summary>收益率曲线是什么意思？</summary>
-<p>这里显示的是美国 <b>10年期国债收益率 − 2年期国债收益率</b>，并非你的投资收益率，也不是完整的曲线图。</p>
-<p>大于 0：长债收益率高于短债，曲线正常倾斜；小于 0：短债收益率更高，称为倒挂，提示经济放缓风险，但不代表股市马上下跌。</p>
-<p>例如 0.51 个百分点 = 51 个基点（bp），表示10年期比2年期收益率高 0.51 个百分点。接近 0 则是曲线趋平。</p>
+<p class="macro-help">垃圾债利差：≥{S['hy_green']:.0f} bp 黄、≥{S['hy_red']:.0f} bp 红；一周扩大 ≥50 bp 也为红。VIX：≥{S['vix_green']:g} 黄、≥{S['vix_red']:g} 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
+<p class="macro-help">上涨参与度：站上长期均线的股票不足一半为黄；不足三成且信用／金融压力也升高才为红。金融压力是周度数据，达到历史平均紧张程度为黄。指标缺失时显示无数据，不代表安全，也不预测具体跌幅。</p>
+<p class="macro-help">市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a>，数据依据当前成分股计算，回看历史可能有成分股选择偏差。</p>
 </details>
-</div>
 
 {group_cards}
 {reg_line}
 
 <div class="foot">
-宏观：FRED · 个股：{src_txt}<br>
+宏观：FRED · 市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 个股：{src_txt}<br>
 基本面：Nasdaq 季度财报（只查持仓 + 重点关注，ETF 不判）· 点击基本面标签展开详情，再点收起<br>
-跑路价签 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_yellow']:.0f} 收紧 · ≥{S['hy_red']:.0f} 危机确认<br>
+垃圾债利差 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_red']:.0f} 收紧 · ≥{S['hy_red']:.0f} 信用压力升高（不是大跌保证）<br>
 布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%），逼近、触碰、穿越均为黄<br>
 布林信号 + RSI 至少两条同侧达到或越过阈值 → 红；没有双重信号时各按独立规则判定，其他红警示仍保留<br>
 轨道按当日收盘价滚动计算；是否触及按<b>当日最高/最低价</b>判定，盘中穿过就算<br>
 连续贴近轨道按日累计，远离一天（差 &gt;{S['boll_near_pct']:g}%）就断，再次贴近重新从第一日算 · 连续 2 日起才标注<br>
-定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在编辑页逐只设置<br>
+定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在设置页全局设定一条<br>
 异动 ≥{S['chg_red']:g}% 红 · ≥{S['chg_yellow']:g}% 黄 · 量比 ≥{S['vol_ratio']:g}x 黄<br>
 RSI 6 / 12 / 24：同侧达到或越过 {S['rsi_high']:g}（超买）或 {S['rsi_low']:g}（超卖），同侧两条黄、三条红；单条不警示<br>
 日内振幅（最高-最低）/昨收 ≥{S['amp_red']:g}% 红 · ≥{S['amp_yellow']:g}% 黄（抓冲高回落、收盘却没动的票）<br>
@@ -1748,7 +1976,7 @@ RSI 6 / 12 / 24：同侧达到或越过 {S['rsi_high']:g}（超买）或 {S['rsi
 # ---------------------------------------------------------------- main
 
 def main(argv=None):
-    global TARGET_DATE, CLOSED_ONLY
+    global TARGET_DATE, CLOSED_ONLY, QUOTE_DEADLINE
     parser = argparse.ArgumentParser(description="市场自检生成器")
     parser.add_argument("--prepare-run", action="store_true", help="锁定本次运行目标交易日并输出 GitHub Actions 环境变量")
     args = parser.parse_args(argv)
@@ -1778,36 +2006,34 @@ def main(argv=None):
         log("抓取 " + " + ".join(f"{group_counts[g['key']]} 只{g['label']}" for g in GROUPS
                                  if group_counts[g['key']])
             + (f"（另有 {dup_hidden} 只重复，已跳过）" if dup_hidden else "") + "...")
-        fail_streak = 0
-        data_down = False
+        QUOTE_DEADLINE = time.monotonic() + 8 * 60
         for i, (sym, sc, grp) in enumerate(universe):
             supported = quote_supported(sym)
-            data = fetch_history(sym) if supported and not data_down else None
-            if i < len(universe) - 1:
+            exhausted = time.monotonic() >= QUOTE_DEADLINE
+            data = fetch_history(sym) if supported and not exhausted else None
+            if data and i < len(universe) - 1 and time.monotonic() < QUOTE_DEADLINE:
                 time.sleep(0.5)  # 轻微限速，降低被封概率
             if data:
-                fail_streak = 0
                 lv, sig, detail = analyze_symbol(sym, sc, data, group=grp)
                 items.append(detail)
                 if lv != "green":
                     log(f"  {sym}: {lv} — {', '.join(sig)}")
                 continue
 
-            if supported:
-                fail_streak += 1
-            if fail_streak >= 3 and not data_down:
-                data_down = True
-                log("  ! 连续失败 3 次，判定行情源不可用，跳过剩余")
+            if supported and not exhausted and time.monotonic() >= QUOTE_DEADLINE:
+                exhausted = True
+                log("  ! 个股抓取时间预算已到，剩余标的本轮标记为未抓取")
             items.append({
                 "symbol": sym, "note": sc.get("note", ""), "price": None,
                 "chg": None, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": None, "dist_low": None,
                 "vol_ratio": None, "trigger": sc.get("trigger"),
                 "group": grp, "data_date": "", "boll_up": None, "boll_dn": None,
                 "signals": ["无数据：暂不支持该代码报价"] if not supported else
-                           (["行情源暂时不可用"] if data_down else ["数据获取失败"]),
+                           (["本轮抓取时间预算不足，尚未取数"] if exhausted else ["数据获取失败或报价异常"]),
                 "level": "gray",
             })
 
+    QUOTE_DEADLINE = None
     # 基本面只查持仓 + 重点关注：其他关注只数大、交易价值低，全量查既拖慢运行又容易限流
     fund_stat = {"checked": 0, "red": 0, "yellow": 0}
     fund_targets = [d for d in items

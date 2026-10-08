@@ -52,7 +52,7 @@ const check = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if
 global.window.addEventListener = () => {};
 
 try {
-  eval(code + '\n;globalThis.__T={render,data,pageState,ETF_SET,SET,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled};');
+  eval(code + '\n;globalThis.__T={render,data,pageState,ETF_SET,SET,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError};');
   globalThis.__T.initGroups(JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8')));
   console.log('PASS 脚本加载无异常');
 } catch (e) {
@@ -142,10 +142,15 @@ T.collectSettings();
 const saved = JSON.parse(T.setJsonText());
 check(saved.amp_yellow === 3 && saved.amp_red === 9, '振幅阈值正确采集并保留到保存 JSON');
 check(saved.custom_rule === 42, '表单外已有设置不会被保存操作删除');
+check(!('hy_yellow' in saved), '保存规则不保留无效的旧黄色信用利差阈值');
 check(src.includes('id="set_amp_yellow"') && src.includes('id="set_amp_red"'), '编辑页确实有两个振幅输入项');
 check(src.includes('RSI 周期固定为 6 / 12 / 24') && src.includes('同侧两条达到或越过阈值为黄，三条为红'), '编辑页说明三线 RSI 分级规则');
 check(!src.includes('RSI ≥ x → 超买红') && !src.includes('RSI ≤ x → 超卖红'), '旧单条 RSI 红灯说明已删除');
 check(src.includes('布林上、下轨逼近、触碰、穿越均为黄')&&src.includes('同时出现 RSI 至少两条同侧达到或越过阈值时为红'), '设置页说明布林独立黄与RSI双信号红');
+check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x bp 黄')&&src.includes('垃圾债利差 ≥ x bp 红'), '信用利差仅保留有效的黄红两条阈值');
+check(src.includes('一周扩大至少 50 bp 也为红')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力为周度'), '设置页明确说明信用急升和新增市场风险规则');
+check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');
+check(src.includes('距52周低点')&&src.includes('上穿或跌破50／200日均线')&&src.includes('基本面单独提示'), '设置页覆盖其他固定个股与基本面规则');
 
 (async () => {
   let resolve;
@@ -172,6 +177,17 @@ check(src.includes('布林上、下轨逼近、触碰、穿越均为黄')&&src.i
   check(JSON.stringify(after.materials)===JSON.stringify(cfg.materials)&&after.positions.AAPL.trigger===80&&after.custom_field==='preserved', '开关不改成员备注加仓价及未知字段');
   persisted=after;await T.load();
   check(T.monitorEnabled('materials')&&els.monitor_materials['aria-checked']==='true', '保存内容重载后监测状态一致');
+  T.renderSettings();
+  check(T.settingsError()==='', '默认规则均通过范围与顺序校验');
+  els.set_boll_n.value='0';
+  check(T.settingsError().includes('boll_n'), '布林周期零被阻止');
+  els.set_boll_n.value='20';els.set_rsi_low.value='80';
+  check(T.settingsError().includes('RSI'), 'RSI上下限倒置被阻止');
+  els.set_rsi_low.value='30';els.set_chg_yellow.value='6';
+  check(T.settingsError().includes('chg_yellow'), '黄色高于红色阈值被阻止');
+  els.set_chg_yellow.value='2';els.set_dca_start.value='2026-02-30';
+  check(T.settingsError().includes('定投起点日'), '虚构日期不能保存');
+  els.set_dca_start.value='';T.renderSettings();
   console.log();
   if (fails) { console.error(fails + ' 项失败'); process.exitCode = 1; }
   else console.log('全部通过');

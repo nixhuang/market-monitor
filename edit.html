@@ -185,16 +185,23 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       </div>
       <div class="setsec">宏观</div>
       <div class="setgrid">
-        <div class="setrow"><label>跑路价签 &lt; x bp 绿</label><input id="set_hy_green" inputmode="numeric"></div>
-        <div class="setrow"><label>跑路价签 ≥ x bp 黄</label><input id="set_hy_yellow" inputmode="numeric"></div>
-        <div class="setrow"><label>跑路价签 ≥ x bp 红</label><input id="set_hy_red" inputmode="numeric"></div>
+        <div class="setrow"><label>垃圾债利差 ≥ x bp 黄（低于此值为绿）</label><input id="set_hy_green" inputmode="numeric"></div>
+        <div class="setrow"><label>垃圾债利差 ≥ x bp 红</label><input id="set_hy_red" inputmode="numeric"></div>
         <div class="setrow"><label>VIX &lt; x 绿</label><input id="set_vix_green" inputmode="numeric"></div>
         <div class="setrow"><label>VIX ≥ x 黄</label><input id="set_vix_yellow" inputmode="numeric"></div>
         <div class="setrow"><label>VIX ≥ x 红</label><input id="set_vix_red" inputmode="numeric"></div>
       </div>
+      <p class="note">垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到红线，一周扩大至少 50 bp 也为红；达到 500 bp 会标注“信用压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
+      <p class="note">VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500距近一段高点回撤不足10%为绿、达到10%或15%为黄、达到20%为红，这些是已发生的跌幅。</p>
+      <p class="note">上涨参与度：站上200日均线的股票不足50%为黄；不足30%且近期垃圾债利差或金融压力也达到警戒时为红；站上50日均线的股票不足30%也为黄。金融压力为周度：指数达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
+      <div class="setsec">其他个股规则（固定判定）</div>
+      <p class="note">涨跌幅按绝对值判断：达到黄色线为黄，达到红色线为红；日内振幅＝（最高−最低）÷昨收，分别按黄/红线判定。布林轨道逼近、碰到或穿过都为黄，当日最高／最低触及也算；若同时 RSI 6／12／24 中至少两条在同一侧越过超买／超卖线，则组合升级红。单独 RSI 两条同侧为黄、三条为红，只有一条不报警。</p>
+      <p class="note">距52周低点不超过设置百分比、已跌破或距“加仓价”不超过设置百分比：红；量比达到设置倍数、上穿或跌破50／200日均线：黄。布林连续贴轨只补充天数，不会单独升级红。标的在清单中明确配置 quiet=true 时，跳过常规技术指标，仅在单日涨跌达到 quiet 阈值时为黄；当前清单未配置 quiet 标的。</p>
+      <div class="setsec">基本面单独提示（固定判定，不改变股价红黄等级）</div>
+      <p class="note">仅持仓与重点关注的非 ETF 有季度财报时检查：营收同比下降至少20%、营业亏损、经营现金流由正转负 → 基本面红；营收下降至少10%、营业利润率或毛利率较去年同期下滑至少3个百分点、经营现金流为负、负债／权益上升至少30%且债务额也升、流动比率下降至少20%、ROE下降至少30% → 基本面黄。异常一次性损益不单独触发警示。</p>
       <div class="setsec">行情源</div>
       <div class="setgrid">
-        <div class="setrow"><label>用 Nasdaq 实时价（0 延迟，盘中更准）</label>
+        <div class="setrow"><label>用 Nasdaq 盘中价（取得时覆盖日线最新价）</label>
           <select id="set_use_realtime"><option value="1">开</option><option value="0">关</option></select></div>
       </div>
     </details>
@@ -665,10 +672,34 @@ $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
   rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,vol_ratio:1.5,quiet_chg:2,
   amp_yellow:5,amp_red:8,
-  hy_green:350,hy_yellow:400,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,
+  hy_green:350,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,
   dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
+const SET_LIMITS={boll_n:[2,250],boll_k:[.1,10],boll_near_pct:[0,100],chg_yellow:[0,100],chg_red:[0,100],
+  rsi_low:[0,100],rsi_high:[0,100],near_52w_low_pct:[0,100],trigger_gap_pct:[0,100],vol_ratio:[.1,100],
+  quiet_chg:[0,100],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],
+  hy_red:[0,10000],vix_green:[0,200],vix_yellow:[0,200],vix_red:[0,200],dca_every:[0,10000]};
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
+function settingsError(){
+  const values={};
+  for(const [key,[lo,hi]] of Object.entries(SET_LIMITS)){
+    const el=$('set_'+key);if(!el)continue;
+    const raw=String(el.value).trim(),value=raw===''&&key==='dca_every'?0:Number(raw);
+    if((!raw&&key!=='dca_every')||!Number.isFinite(value)||value<lo||value>hi||
+        (['boll_n','dca_every'].includes(key)&&!Number.isInteger(value)))
+      return key+' 必须是 '+lo+'～'+hi+' 范围内的'+(['boll_n','dca_every'].includes(key)?'整数':'数字');
+    values[key]=value;
+  }
+  if(!(values.rsi_low<values.rsi_high))return 'RSI 超卖线必须小于超买线';
+  for(const keys of [['chg_yellow','chg_red'],['amp_yellow','amp_red'],
+    ['hy_green','hy_red'],['vix_green','vix_yellow','vix_red']]){
+    if(keys.some((key,i)=>i&&values[key]<values[keys[i-1]]))return keys.join('、')+' 的阈值顺序不正确';
+  }
+  const start=$('set_dca_start').value.trim();
+  if(start&&(!DATE_RE.test(start)||Number.isNaN(Date.parse(start+'T00:00:00Z'))||
+    new Date(start+'T00:00:00Z').toISOString().slice(0,10)!==start))return '定投起点日不是有效日期';
+  return '';
+}
 let SET=Object.assign({},SET_DEFS), SET_SHA='', settingsRevision=0, settingsBaseline=null;
 function settingsInputs(){
   return JSON.stringify(SET_KEYS.map(k=>{const el=$('set_'+k);return el?el.value:null;}));
@@ -702,6 +733,7 @@ function collectSettings(){
 }
 function setJsonText(){
   const ordered={...SET};
+  delete ordered.hy_yellow;
   SET_KEYS.forEach(k=>{ordered[k]=SET[k];});
   return JSON.stringify(ordered,null,2)+'\n';
 }
@@ -714,6 +746,7 @@ async function loadSettings(){
   }
   try{
     const next=Object.assign({},SET_DEFS,JSON.parse(b64dec(r.data.content)));
+    delete next.hy_yellow;
     SET_KEYS.forEach(k=>{
       if(k==='dca_start'){if(typeof next[k]!=='string'||(next[k]!==''&&!DATE_RE.test(next[k])))next[k]='';return;}
       const n=Number(next[k]);if(isNaN(n))next[k]=SET_DEFS[k];
@@ -722,6 +755,8 @@ async function loadSettings(){
   }catch(e){setMsg('settings.json 不是合法 JSON；保留当前编辑内容','err');}
 }
 async function saveRules(btn){
+  const error=settingsError();
+  if(error){setMsg('规则未保存：'+error,'err');return;}
   settingsRevision++;
   collectSettings();
   const text=setJsonText(), submittedInputs=settingsInputs();

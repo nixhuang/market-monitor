@@ -403,8 +403,8 @@
     if (snap && info.red != null) {
       const bad = [...new Set([...(info.stale_symbols || []), ...(info.missing_symbols || [])])];
       if (bad.length) {
-        return {phase: 'bad', text: '抓取失败 ' + bad.length + ' 只：' +
-          bad.slice(0, 6).join('、') + (bad.length > 6 ? ' 等' : '')};
+        return {phase: 'bad', text: ((info.stale_symbols || []).length ? '当日行情未取得 ' : '取数失败 ') +
+          bad.length + ' 只：' + bad.slice(0, 6).join('、') + (bad.length > 6 ? ' 等' : '')};
       }
       const unsupported = (info.unsupported_symbols || []).length;
       const total = info.total || 0;

@@ -101,7 +101,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     const page = snapshot(); page.summary.missing_symbols = ['NTNX', 'MCD'];
     const f = fixture(page); await f.win.MMRunStatus.refresh();
     assert.equal(f.els.runLight.dataset.phase, 'bad');
-    assert.match(f.els.runLightTxt.textContent, /抓取失败 2 只/);
+    assert.match(f.els.runLightTxt.textContent, /取数失败 2 只/);
     assert.equal(f.els.ruleLight.dataset.phase, 'ok');
   });
   await check('对应规则运行失败红灯，别误用行情绿灯', async () => {

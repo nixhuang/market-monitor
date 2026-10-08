@@ -18,7 +18,7 @@ def item(sym, group, level, chg=1.0, etf=False, note=""):
 
 macro = {k: {"ok": True, "name": n, "unit": "", "value": 1.0, "date": "2026-10-06",
              "prev": 1.0, "week_ago": 1.0, "delta_week": 0.0}
-         for k, n in (("hy_oas", "跑路价签"), ("vix", "VIX"), ("sp500", "标普500"),
+         for k, n in (("hy_oas", "垃圾债利差"), ("vix", "VIX"), ("sp500", "标普500"),
                       ("ust10", "10Y美债"), ("curve", "收益率曲线"), ("dxy", "美元指数"))}
 macro["sp500"]["drawdown"] = -5.0
 
@@ -100,7 +100,7 @@ snap2 = dict(snapshot)
 snap2["mode"] = "manual_or_config"
 snap2["finished_at_bj"] = "2026-10-07T23:19:00+08:00"
 html2 = monitor.render(macro, items, 10, snapshot=snap2, dup_hidden=0)
-check("数据时间 2026-10-06 收盘（美东交易日）" in html2,
+check("盘中运行，北京时间 · 仍为 2026-10-06 日线" in html2,
       "盘中运行若数据仍为前日不能冒充当天行情")
 snap_live = dict(snap2, actual_dates={"min":"2026-10-07", "max":"2026-10-07"})
 check("数据时间 2026-10-07 23:19:00（盘中快照，北京时间）" in monitor.render(macro, items, 10, snapshot=snap_live),
@@ -123,7 +123,7 @@ check('重点关注 (0)' in html3 and '暂无标的，去设置页录入或导�
 snap4 = dict(snapshot)
 snap4["summary"] = dict(snapshot["summary"], stale_symbols=["NTNX", "MCD"])
 html4 = monitor.render(macro, items, 10, snapshot=snap4)
-check("抓取失败 2 只：NTNX、MCD" in html4 and "规则未完全生效" not in html4, "行情失败不等于规则失败")
+check("当日行情未取得 2 只：NTNX、MCD" in html4 and "规则未完全生效" not in html4, "旧日线不被误报为完全没数据")
 check('id="runLight" data-phase="bad"' in html4, "运行灯初始为红")
 check('id="ruleLight" data-phase="idle"' in html4, "行情失败时规则灯仍独立待核验")
 
@@ -156,10 +156,14 @@ check('<li>流动比率 115→84</li>' in html5, "黄标签展开内容带命中
 check("6/30/2026 报告期" in html5, "展开内容带报告期")
 check(html5.count('class="fund-detail"') == 3, "绿色不亮徽章，共 3 个折叠详情")
 check('aria-label="查看 JNJ 基本面详情"' in html5, "标签有可访问名称")
+check('border-top-color:currentColor' in html5 and 'content:" · 展开"' not in html5,
+      "基本面收起时显示向下三角，展开时箭头翻转且不再显示展开文字")
 check('鼠标悬停徽章' not in html5, "页脚更新为点击查看说明")
 # 基本面不改变原有红黄绿灯：NTNX 本来就是 red，加 fund 不改变行数与灯色
 check(html5.count('<tr class="red"') == html.count('<tr class="red"'), "基本面不影响红行数量")
 check('data-phase="ok"' in html5, "基本面不影响状态灯（仍为绿）")
+check('垃圾债利差' in html5 and '高收益债利差' not in html5 and '跑路价签' not in html5,
+      "正式生成首页仅使用垃圾债利差新名称")
 check('RSI 6 / 12 / 24' in html5 and '同侧两条黄、三条红' in html5, "页脚说明三线 RSI 分级")
 check('逼近、触碰、穿越均为黄' in html5 and '布林信号 + RSI 至少两条同侧达到或越过阈值 → 红' in html5,
       "页脚说明布林独立黄与RSI组合红")

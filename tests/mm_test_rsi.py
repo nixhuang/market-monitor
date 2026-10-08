@@ -91,14 +91,14 @@ class TestRSI(unittest.TestCase):
 
     def test_other_yellow_is_not_an_rsi_signal(self):
         data = neutral_data()
-        data['prev_close'] = 97.5
+        data['prev_close'] = data['price'] / (1 + (monitor.S['chg_yellow'] + 0.5) / 100)
         level, signals, _ = self.analyze([50, 50, 50], bands=(100, 101, 90), data=data)
         self.assertEqual(level, 'yellow')
         self.assertTrue(any(s.startswith('波动') for s in signals))
         self.assertFalse(any('双重信号' in s for s in signals))
 
     def test_other_red_with_bollinger_stays_red(self):
-        for cfg, prev in [({}, 94), ({'trigger': 100}, 100)]:
+        for cfg, prev in [({}, 100 / (1 + (monitor.S['chg_red'] + 0.5) / 100)), ({'trigger': 100}, 100)]:
             data = neutral_data()
             data['prev_close'] = prev
             level, signals, _ = self.analyze([50, 50, 50], cfg=cfg, data=data, bands=(100, 101, 90))
@@ -107,7 +107,7 @@ class TestRSI(unittest.TestCase):
 
     def test_other_red_not_downgraded(self):
         data = neutral_data()
-        data['prev_close'] = 94
+        data['prev_close'] = data['price'] / (1 + (monitor.S['chg_red'] + 0.5) / 100)
         level, signals, _ = self.analyze([70, 70, 50], data=data)
         self.assertEqual(level, 'red')
         self.assertTrue(any(s.startswith('RSI') for s in signals))
