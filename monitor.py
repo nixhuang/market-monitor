@@ -69,13 +69,24 @@ def group_monitoring(cfg):
             else False for g in GROUPS}
 
 
+def instrument_identity(symbol):
+    normalized = normalize_symbol(symbol)
+    aliases = {".SPX": "^GSPC", "^SPX": "^GSPC", ".VIX": "^VIX",
+               ".NDX": "^NDX", ".VXN": "^VXN", ".SOX": "^SOX",
+               "BD#US10Y": "^TNX", ".TNX": "^TNX", "ESMAIN": "ES=F", "CLMAIN": "CL=F"}
+    return aliases.get(normalized, normalized).replace('/', '-')
+
+
+RISK_IDENTITIES = {"^GSPC", "^VIX"}
+
+
 def grouped_universe(cfg):
     monitoring = group_monitoring(cfg)
-    seen, universe, counts, duplicates = set(), [], {}, 0
+    seen, universe, counts, duplicates = set(RISK_IDENTITIES), [], {}, 0
     for group in GROUPS:
         counts[group["key"]] = 0
         for symbol, settings in (cfg.get(group["key"]) or {}).items():
-            normalized = normalize_symbol(symbol).upper().replace('.', '-').replace('/', '-')
+            normalized = instrument_identity(symbol)
             if not monitoring[group["key"]] and normalized != group.get("sector_etf"):
                 continue
             if normalized in seen:
@@ -390,7 +401,7 @@ def fred_csv(series_id, days=400):
 
 
 def treasury_yield_series(days=400, source_info=None):
-    """10Y 收益率优先 FRED；日期落后时比较 Yahoo，整段择源而非拼接。"""
+    """10Y 收益率使用 Yahoo ^TNX 的百分比日线，不混用 FRED 或债券价格。"""
     target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
 
     def validated(rows):
@@ -409,42 +420,20 @@ def treasury_yield_series(days=400, source_info=None):
         result = [(date, value) for date, value in result if date <= target]
         return result[-days:] if len(result) >= 30 else []
 
-    best, source = [], ""
-    loaders = (("FRED DGS10", fred_api), ("FRED DGS10", fred_csv)) if FRED_API_KEY else (
-        ("FRED DGS10", fred_csv),)
-    for name, loader in loaders:
-        try:
-            rows = validated(loader("DGS10", days))
-            if rows:
-                best, source = rows, name
-                break
-        except Exception as e:
-            log(f"  ! 10Y美债 FRED 获取失败: {str(e)[:70]}")
-    if not best or best[-1][0] < target:
-        try:
-            data = yahoo_history("^TNX")
-            rows = validated(_rows_from_closes(data.get("closes", []), days, data.get("dates"))) if data else []
-            name = data.get("quote_name", "").lower() if data else ""
-            compatible = bool(data and valid_history(data) and data.get("quote_symbol") == "^TNX")
-            if name or not best:
-                compatible = compatible and "10" in name and ("yield" in name or "interest rate" in name)
-            if best and rows:
-                reference = dict(best)
-                common = [date for date, _ in rows if date in reference]
-                compatible = compatible and bool(common)
-                if common:
-                    date = common[-1]
-                    compatible = compatible and abs(dict(rows)[date] - reference[date]) <= max(0.5, reference[date] * 0.15)
-            if rows and compatible and (not best or rows[-1][0] > best[-1][0]):
-                best, source = rows, "Yahoo ^TNX"
-            elif data:
-                log("  · 10Y美债备用值未更新或口径校验未通过，保留原参考值")
-        except Exception as e:
-            log(f"  ! 10Y美债 Yahoo 备用失败，保留原参考值: {str(e)[:70]}")
-    if source_info is not None and best:
-        source_info.update(source=source, unit="%", date=best[-1][0],
-                           lagging=best[-1][0] < target)
-    return best
+    try:
+        data = yahoo_history("^TNX")
+        rows = validated(_rows_from_closes(data.get("closes", []), days, data.get("dates"))) if data else []
+        name = data.get("quote_name", "").lower() if data else ""
+        compatible = bool(data and valid_history(data) and data.get("quote_symbol") == "^TNX")
+        if name:
+            compatible = compatible and "10" in name and ("yield" in name or "interest rate" in name)
+        if rows and compatible:
+            if source_info is not None:
+                source_info.update(source="Yahoo ^TNX", unit="%", date=rows[-1][0], lagging=rows[-1][0] < target)
+            return rows
+    except Exception as e:
+        log(f"  ! 10Y美债 Yahoo 获取失败: {str(e)[:70]}")
+    return []
 
 
 def fred_series(series_id, days=400, alias=None, source_info=None):
@@ -519,15 +508,61 @@ def market_breadth(target_date):
     return item
 
 
+NFCI_URL = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
+
+
+def financial_conditions_series(days=400):
+    """NFCI原始周度指标，不以股票/ETF价格替代。"""
+    try:
+        r = requests.get(NFCI_URL, headers=UA, timeout=12)
+        r.raise_for_status()
+        lines = r.text.strip().splitlines()
+        if lines[0].split(',')[:2] != ['Friday_of_Week', 'NFCI']:
+            return []
+        target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+        rows = []
+        for line in lines[1:]:
+            fields = line.split(',')
+            date = datetime.strptime(fields[0], '%m/%d/%Y').date().isoformat()
+            value = float(fields[1])
+            if not math.isfinite(value) or rows and date <= rows[-1][0]:
+                return []
+            if date <= target:
+                rows.append((date, value))
+        return rows[-days:]
+    except (requests.RequestException, ValueError, IndexError) as e:
+        log(f"  ! NFCI原始数据暂不可用: {str(e)[:70]}")
+        return []
+
+
+def market_index_series(alias, days=400):
+    data = yahoo_history(alias)
+    if not data or not valid_history(data):
+        return []
+    target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+    return [(date, value) for date, value in _rows_from_closes(data['closes'], days, data['dates'])
+            if date <= target]
+
+
 def build_macro():
     log("抓取宏观指标...")
     macro = {}
     for key, cfg in FRED_SERIES.items():
         source_info = {}
-        if key == "ust10":
-            rows = fred_series(cfg["id"], alias=FRED_YAHOO_ALIAS.get(key), source_info=source_info)
+        if key == "hy_oas":
+            rows = fred_series(cfg["id"])
+            source_info['source'] = 'FRED'
+        elif key in ('vix', 'sp500'):
+            alias = FRED_YAHOO_ALIAS[key]
+            rows = market_index_series(alias)
+            source_info['source'] = 'Yahoo ' + alias
+        elif key == "ust10":
+            rows = treasury_yield_series(source_info=source_info)
+        elif key == "nfci":
+            rows = financial_conditions_series()
+            source_info['source'] = 'NFCI原始周度数据'
         else:
-            rows = fred_series(cfg["id"], alias=FRED_YAHOO_ALIAS.get(key))
+            continue
         if not rows:
             macro[key] = {"ok": False, "name": cfg["name"]}
             continue
@@ -960,7 +995,7 @@ INDEX_MACRO_ALIAS = {".VIX": "vix", ".SPX": "sp500", "BD#US10Y": "ust10"}
 
 def quote_supported(symbol):
     s = normalize_symbol(symbol)
-    return s in INDEX_YAHOO_ALIAS or s in INDEX_MACRO_ALIAS or not (
+    return instrument_identity(s) == '^TNX' or s in INDEX_YAHOO_ALIAS or s in INDEX_MACRO_ALIAS or not (
         s.startswith((".", "BD#")) or s.endswith("MAIN") or s in ("2USDCNY", "2XAUUSD"))
 
 
@@ -1239,8 +1274,9 @@ def fetch_history(symbol):
     剥掉后缀才抓得到（否则整只标的变灰）。
     """
     symbol = normalize_symbol(symbol)
-    alias = INDEX_YAHOO_ALIAS.get(symbol)
-    if symbol in INDEX_MACRO_ALIAS and not alias:
+    identity = instrument_identity(symbol)
+    alias = INDEX_YAHOO_ALIAS.get(symbol) or (identity if identity.startswith('^') or identity.endswith('=F') else None)
+    if identity == '^TNX':
         return None  # 国债收益率不使用报价指数替代百分比口径。
     loaders = (("yahoo", yahoo_history),) if alias else (
         ("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history))
@@ -1281,7 +1317,7 @@ def fetch_history(symbol):
 
 def macro_index_quote(symbol, cfg, group, macro):
     """Yahoo 日线不可用时复用已验证的市场参考点位；不伪造 OHLC 或交易警示。"""
-    key = INDEX_MACRO_ALIAS.get(normalize_symbol(symbol))
+    key = {'^VIX': 'vix', '^GSPC': 'sp500', '^TNX': 'ust10'}.get(instrument_identity(symbol))
     item = macro.get(key) if key else None
     if not item or not item.get("ok") or not isinstance(item.get("value"), (int, float)) or not math.isfinite(item["value"]) or item["value"] <= 0 or not item.get("date"):
         return None
@@ -1746,6 +1782,8 @@ def build_snapshot(macro, items, cfg, group_counts=None):
     }
     snapshot["data_time_text"] = market_data_time(snapshot)
     snapshot["market_risk"] = market_risk_summary(macro)
+    snapshot["risk_quotes"] = {key: {field: (macro.get(key) or {}).get(field) for field in
+                             ('ok', 'value', 'date', 'source', 'drawdown')} for key in ('vix', 'sp500')}
     return snapshot
 
 
@@ -1763,11 +1801,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             continue
         lv, txt = macro_status(key, it)
         if key == "sp500":
-            val = f'−{abs(it["drawdown"]):.1f}%' if it.get("drawdown") is not None else "—"
+            val = f'{it["value"]:,.2f}<span class="unit">较近一年高点回撤 {it["drawdown"]:.1f}%</span>' if it.get("drawdown") is not None else "—"
         elif key == "hy_oas":
             val = f'{it["value"]:.0f} bp'
         elif key == "vix":
-            val = f'{it["value"]:.1f}'
+            val = f'{it["value"]:.2f}'
         elif key == "ust10":
             val = f'{it["value"]:.2f}%'
         elif key == "curve":
@@ -1783,6 +1821,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         dw_txt = f'{dw:+.0f}' if (key == "hy_oas" and dw is not None) else "—"
         label = html_lib.escape(str(it.get("name") or RISK_LABELS[key]))
         label += f'<span class="unit">截至 {html_lib.escape(it["date"])}</span>'
+        if it.get("source"):
+            label += f'<span class="unit">{html_lib.escape(str(it["source"]))}</span>'
         rows_macro.append(
             f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
             f'<td class="num dim">{dw_txt}</td><td>{txt}</td></tr>'
@@ -1799,7 +1839,15 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             base = 1.5  # 夹在黄和绿之间
         return (base, -(abs(d["chg"]) if d["chg"] else 0))
 
-    items = sorted(items, key=sort_key)
+    priority = {g['item_group']: i for i, g in enumerate(GROUPS)}
+    seen = set(RISK_IDENTITIES)
+    unique_items = []
+    for item in sorted(items, key=lambda d: priority.get(d.get('group'), len(GROUPS))):
+        identity = instrument_identity(item['symbol'])
+        if identity not in seen:
+            seen.add(identity)
+            unique_items.append(item)
+    items = sorted(unique_items, key=sort_key)
     items_by_group = {g["item_group"]: [] for g in GROUPS}
     for item in items:
         if item.get("group") in items_by_group:
@@ -1947,7 +1995,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     reg_line = ('<div class="quiet">在册：' + ' · '.join(
                     f"{g['label']} {lc.get(g['key'], 0)}" for g in GROUPS if lc.get(g['key'], 0))
                 + (f" · 本轮监测 {summary.get('total', 0)} 个唯一标的" if registered else "")
-                + (f' · 已隐藏 {dup_hidden} 只重复标的（按分组顺序只展示一次）'
+                + (f' · 已隐藏 {dup_hidden} 只重复标的（风险参考／持仓优先，其次重点关注，最后其他）'
                    if dup_hidden else "") + "</div>")
     dca_html = (f'<div class="dca {"on" if (snapshot.get("dca_reminder") or {}).get("due") else ""}">'
                 f'定投提醒：{dca_info}</div>') if dca_info else ""
@@ -2109,7 +2157,7 @@ tr.gray td{{color:var(--dim)}}
 {reg_line}
 
 <div class="foot">
-宏观：FRED · 市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 个股：{src_txt}<br>
+垃圾债利差：FRED · VIX／标普500／10Y收益率：Yahoo · 金融压力：NFCI原始周度数据 · 市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 个股：{src_txt}<br>
 基本面：Nasdaq 季度财报（只查持仓 + 重点关注，ETF 不判）· 点击基本面标签展开详情，再点收起<br>
 垃圾债利差 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_red']:.0f} 收紧 · ≥{S['hy_red']:.0f} 信用压力升高（不是大跌保证）<br>
 布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%），逼近、触碰、穿越均为黄<br>
@@ -2167,8 +2215,9 @@ def main(argv=None):
         for i, (sym, sc, grp) in enumerate(universe):
             supported = quote_supported(sym)
             exhausted = time.monotonic() >= QUOTE_DEADLINE
-            data = fetch_history(sym) if supported and not exhausted else None
-            if not data and grp == "index_funds":
+            is_yield = instrument_identity(sym) == '^TNX'
+            data = fetch_history(sym) if supported and not exhausted and not is_yield else None
+            if not data and (grp == "index_funds" or is_yield):
                 reference = macro_index_quote(sym, sc, grp, macro)
                 if reference:
                     items.append(reference)
@@ -2279,7 +2328,7 @@ def push_serverchan(macro, items):
         lines.append("")
 
     lines.append("## 宏观")
-    for k in ("hy_oas", "vix", "sp500", "ust10", "curve", "dxy"):
+    for k in RISK_INDICATORS:
         m = macro.get(k) or {}
         if not m.get("ok"):
             lines.append("- %s：无数据" % m.get("name", k))

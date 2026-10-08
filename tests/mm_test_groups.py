@@ -38,21 +38,81 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(sum(counts.values()), 4)
         self.assertNotIn('watch', counts)
 
+    def test_instrument_priority_does_not_merge_etfs_with_indices(self):
+        import copy
+        cfg = {'positions': {'AAPL-US': {}, 'SPY': {}, 'BD#US10Y': {}},
+               'focus': {'AAPL': {}, '.SPX': {}, '.VIX': {}, '.TNX': {}, 'QQQ': {}},
+               'index_funds': {'^GSPC': {}, '^VIX': {}, '^TNX': {}, 'QQQ-US': {}, 'ESMAIN': {},
+                               'ES=F': {}, '.NDX': {}, '^NDX': {}, 'HYG': {}},
+               'group_monitoring': {'index_funds': True}}
+        original = copy.deepcopy(cfg)
+        universe, counts, duplicates = monitor.grouped_universe(cfg)
+        self.assertEqual([s for s, _, _ in universe], ['AAPL-US', 'SPY', 'BD#US10Y', 'QQQ', 'ESMAIN', '.NDX', 'HYG'])
+        self.assertEqual(cfg, original)
+        self.assertEqual(counts['positions'], 3)
+        self.assertEqual(counts['focus'], 1)
+        self.assertGreater(duplicates, 5)
+        self.assertNotEqual(monitor.instrument_identity('SPY'), monitor.instrument_identity('.SPX'))
+        self.assertNotEqual(monitor.instrument_identity('ESMAIN'), monitor.instrument_identity('.SPX'))
+        self.assertNotEqual(monitor.instrument_identity('HYG'), 'hy_oas')
+
+    def test_macro_uses_new_yahoo_quotes_and_only_credit_spread_from_fred(self):
+        from datetime import date, timedelta
+        def bars(alias):
+            prices = {'^VIX': 15.08, '^GSPC': 7801.77, '^TNX': 5.3}
+            value = prices[alias]
+            dates = [(date(2026, 10, 7) - timedelta(days=i)).isoformat() for i in range(39, -1, -1)]
+            return {'dates': dates, 'closes': [value]*40, 'highs': [value]*40, 'lows': [value]*40,
+                    'volumes': [0]*40, 'price':value, 'prev_close':value,
+                    'quote_symbol':alias, 'quote_name':'Treasury Yield 10 Years' if alias == '^TNX' else alias}
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                patch.object(monitor, 'fred_series', return_value=[('2026-10-06', 3.0)]) as fred, \
+                patch.object(monitor, 'yahoo_history', side_effect=bars) as yahoo, \
+                patch.object(monitor, 'financial_conditions_series', return_value=[('2026-10-02', -0.3)]), \
+                patch.object(monitor, 'market_breadth', return_value={'ok':True,'name':'上涨参与度',
+                                    'date':'2026-10-06','value':65,'pct50':60}):
+            macro = monitor.build_macro()
+            self.assertEqual(fred.call_args_list, [unittest.mock.call('BAMLH0A0HYM2')])
+            self.assertEqual([call.args[0] for call in yahoo.call_args_list], ['^VIX', '^GSPC', '^TNX'])
+            self.assertEqual((macro['vix']['value'], macro['vix']['date']), (15.08, '2026-10-07'))
+            cfg = {'index_funds': {'.VIX': {}, '.SPX': {}, 'SPY': {}}, 'group_monitoring':{'index_funds':True}}
+            with patch.object(monitor, 'global_dca', return_value=None):
+                snap = monitor.build_snapshot(macro, [], cfg)
+            page = monitor.render(macro, [], 0, snapshot=snap)
+        risk = page.split('id="macroCard"')[1].split('id="group_positions"')[0]
+        self.assertIn('15.08', risk)
+        self.assertIn('7,801.77', risk)
+        self.assertIn('截至 2026-10-07', risk)
+        self.assertIn('Yahoo ^VIX', risk)
+        self.assertNotIn('.VIX</td>', page)
+        self.assertNotIn('.SPX</td>', page)
+        self.assertEqual(snap['risk_quotes']['vix']['value'], 15.08)
+
+    def test_nfci_original_series_parser(self):
+        class Response:
+            text = 'Friday_of_Week,NFCI,ANFCI\n10/02/2026,-0.3,0\n10/09/2026,0.1,0\n'
+            def raise_for_status(self):
+                pass
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                patch.object(monitor.requests, 'get', return_value=Response()):
+            self.assertEqual(monitor.financial_conditions_series(), [('2026-10-02', -0.3)])
+
     def test_special_assets_are_preserved_without_fake_stock_quotes(self):
         cfg = {'index_funds': {s: {'note': s} for s in ['.SPX', 'BD#US10Y', 'ESMAIN', 'CLMAIN', '2USDCNY', '2XAUUSD']},
                'group_monitoring': {'index_funds': True}}
         universe, counts, _ = monitor.grouped_universe(cfg)
-        self.assertEqual(len(universe), 6)
-        self.assertEqual(counts['index_funds'], 6)
-        self.assertTrue(all(monitor.quote_supported(s) for s, _, _ in universe[:4]))
-        self.assertTrue(all(not monitor.quote_supported(s) for s, _, _ in universe[4:]))
+        self.assertEqual(len(universe), 5)
+        self.assertEqual(counts['index_funds'], 5)
+        self.assertNotIn('.SPX', [s for s, _, _ in universe])
+        self.assertTrue(all(monitor.quote_supported(s) for s, _, _ in universe[:3]))
+        self.assertTrue(all(not monitor.quote_supported(s) for s, _, _ in universe[3:]))
         self.assertTrue(monitor.quote_supported('AAPL'))
         self.assertFalse(monitor.quote_supported('NQmain'))
         self.assertEqual(monitor.normalize_symbol('31#BRK.B'), 'BRK-B')
         rows = [dict(symbol=s, price=None, level='gray') for s, _, _ in universe]
         with patch.object(monitor, 'global_dca', return_value=None):
             snap = monitor.build_snapshot({}, rows, cfg)
-        self.assertEqual(len(snap['summary']['missing_symbols']), 4)
+        self.assertEqual(len(snap['summary']['missing_symbols']), 3)
         self.assertEqual(len(snap['summary']['unsupported_symbols']), 2)
 
     def test_index_aliases_use_daily_index_or_futures_not_stock_quotes(self):
@@ -88,8 +148,9 @@ class TestGroups(unittest.TestCase):
             snap = monitor.build_snapshot(macro, rows, cfg)
         page = monitor.render(macro, rows, len(rows), snapshot=snap)
         index = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
-        for code in cfg['index_funds']:
-            self.assertIn(code, index)
+        self.assertIn('BD#US10Y', index)
+        self.assertNotIn('.VIX', index)
+        self.assertNotIn('.SPX', index)
         self.assertIn('参考值 · 截至 2026-10-07', index)
         self.assertIn('4.25%</td>', index)
         self.assertEqual(index.count('BD#US10Y'), 1)
@@ -218,14 +279,15 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor, 'push_serverchan'):
                 self.assertEqual(monitor.main([]), 0)
-            self.assertEqual([c.args[0] for c in fetch.call_args_list], ['.VIX', '.SPX', 'BD#US10Y', '.NDX'])
+            self.assertEqual([c.args[0] for c in fetch.call_args_list], ['.NDX'])
             with open(os.path.join(directory, 'index.html'), encoding='utf-8') as f:
                 page = f.read()
             with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
                 snap = json.load(f)
         index = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
-        for price in ('21.30', '6,700.50', '4.25%'):
-            self.assertIn(price, index)
+        self.assertIn('4.25%', index)
+        self.assertNotIn('.VIX', index)
+        self.assertNotIn('.SPX', index)
         self.assertEqual(snap['summary']['missing_symbols'], ['.NDX'])
         self.assertEqual(snap['summary']['unsupported_symbols'], [])
         self.assertEqual(snap['summary']['missing_prices'], 1)
@@ -418,9 +480,12 @@ class TestGroups(unittest.TestCase):
     def test_macro_old_values_are_gray_and_yahoo_fallback_uses_real_dates(self):
         with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), \
                 patch.object(monitor, 'fred_series', return_value=[('2026-09-01', 2), ('2026-09-02', 2)]), \
+                patch.object(monitor, 'market_index_series', return_value=[]), \
+                patch.object(monitor, 'treasury_yield_series', return_value=[]), \
+                patch.object(monitor, 'financial_conditions_series', return_value=[]), \
                 patch.object(monitor, 'market_breadth', return_value={'ok':False,'name':'上涨参与度'}):
             macro = monitor.build_macro()
-        for key in ('hy_oas','vix','sp500','nfci','ust10','dxy','curve'):
+        for key in ('hy_oas','vix','sp500','nfci','ust10'):
             self.assertEqual(monitor.macro_status(key, macro[key])[0], 'gray')
         rows = monitor._rows_from_closes([101,102], dates=['2026-10-02','2026-10-05'])
         self.assertEqual(rows, [('2026-10-02',101),('2026-10-05',102)])
@@ -456,27 +521,27 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(info, {'source':'Yahoo ^TNX', 'unit':'%', 'date':'2026-10-07', 'lagging':False})
         csv.assert_not_called(); quote.assert_called_once_with('^TNX')
         fresh = series('2026-10-07')
-        rows, info, _, _, quote = fetch(fresh, yahoo())
-        self.assertEqual(rows, fresh)
-        quote.assert_not_called()
-        for data in (None, yahoo('2026-10-06'), yahoo('2026-10-05'), yahoo(value=43.0),
+        rows, info, api, csv, quote = fetch(fresh, yahoo())
+        self.assertEqual(rows[-1], ('2026-10-07', 4.3))
+        api.assert_not_called(); csv.assert_not_called(); quote.assert_called_once()
+        rows, info, _, _, _ = fetch(old, yahoo('2026-10-06'))
+        self.assertEqual(rows[-1], ('2026-10-06', 4.3))
+        self.assertTrue(info['lagging'])
+        for data in (None, yahoo(value=43.0),
                      dict(yahoo(), quote_symbol='SPY'), dict(yahoo(), quote_name='S&P 500'),
                      dict(yahoo(), price=float('nan')),
                      dict(yahoo(), dates=['2026-10-07']*40)):
             with self.subTest(data=data):
                 rows, info, _, _, _ = fetch(old, data)
-                self.assertEqual(rows, old)
-                self.assertEqual(info['source'], 'FRED DGS10')
-                self.assertTrue(info['lagging'])
+                self.assertEqual((rows, info), ([], {}))
         rows, info, _, _, _ = fetch(old, None, monitor.requests.Timeout('offline'))
-        self.assertEqual(rows, old)
-        self.assertTrue(info['lagging'])
+        self.assertEqual((rows, info), ([], {}))
         rows, info, _, _, _ = fetch(old, yahoo('2026-10-08'))
         self.assertEqual(rows[-1], ('2026-10-07', 4.3))
         rows, info, _, _, _ = fetch(old, dict(yahoo(), quote_name=''))
         self.assertEqual(info['source'], 'Yahoo ^TNX')
         rows, info, _, _, _ = fetch([], dict(yahoo(), quote_name=''))
-        self.assertEqual((rows, info), ([], {}))
+        self.assertEqual(info['source'], 'Yahoo ^TNX')
         rows, info, _, _, _ = fetch([], yahoo())
         self.assertEqual(info['source'], 'Yahoo ^TNX')
         rows, info, _, _, _ = fetch([], None)
@@ -620,6 +685,9 @@ class TestGroups(unittest.TestCase):
             return [('2026-09-25', value), (nfci_date, value)]
         with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), \
                 patch.object(monitor, 'fred_series', side_effect=fred), \
+                patch.object(monitor, 'market_index_series', return_value=[]), \
+                patch.object(monitor, 'treasury_yield_series', return_value=[]), \
+                patch.object(monitor, 'financial_conditions_series', side_effect=lambda: fred('NFCI')), \
                 patch.object(monitor.requests, 'get', return_value=Response()):
             macro = monitor.build_macro()
             self.assertTrue(macro['breadth']['pressure_confirmed'])

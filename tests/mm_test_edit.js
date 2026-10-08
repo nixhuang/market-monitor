@@ -151,6 +151,8 @@ check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x b
 check(src.includes('一周扩大至少 50 bp 也为红')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力为周度'), '设置页明确说明信用急升和新增市场风险规则');
 check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');
 check(src.includes('距52周低点')&&src.includes('上穿或跌破50／200日均线')&&src.includes('基本面单独提示'), '设置页覆盖其他固定个股与基本面规则');
+check(src.includes('50／200日均线穿越（固定判定）')&&src.includes('昨日收盘价低于本轮均线')&&src.includes('日线不足对应周期时不计算')&&src.includes('当前不启用250日'), '均线规则单独列明且不擅自改为250日');
+check(src.includes('五指标综合市场风险')&&src.includes('同类指标不重复算跨类确认')&&src.includes('一级为市场风险参考和持仓'), '完整说明综合风险及最高优先级去重');
 
 (async () => {
   let resolve;
