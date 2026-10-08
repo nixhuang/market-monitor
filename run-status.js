@@ -42,7 +42,7 @@
   // 普通打开页面时，若一次没读到公开状态，自动再试两次，避免停在“没读到”。
   const PUBLIC_RETRY_MAX = 2;
   let publicRetry = 0;
-  let authNotice = '';
+  let authNotice = '', checkFeedback = '', checkPhase = 'idle';
   let latestRules = null, rulesError = '', ruleSince = 0;
 
   function getToken() {
@@ -65,14 +65,30 @@
   function bust(path) {
     return path + (path.includes('?') ? '&' : '?') + '_mm=' + Date.now() + '-' + version;
   }
-  function authMessage(status) {
-    if (status === 401) return '401：令牌无效或过期，请重新填写';
-    if (status === 403) return '403：权限不足或 GitHub 限流；读取运行需 Actions Read，立即运行需 Actions Read and write，编辑保存需 Contents Read and write';
-    if (status === 404) return '404：找不到 workflow/run，或令牌无权访问；请检查仓库及 daily.yml';
-    return 'HTTP ' + status;
+  let apiBlockedUntil = 0;
+  function authMessage(status, message = '', remaining = null, required = '', retryAt = 0, authenticated = false) {
+    const isLimit = status === 429 || status === 403 && (remaining === '0' || /rate limit|secondary rate|abuse detection/i.test(message));
+    if (isLimit) {
+      const wait = retryAt ? '；请在 ' + new Date(retryAt).toLocaleTimeString('zh-CN') + ' 后再试' : '；请稍后再试';
+      return {kind: 'rate_limit', text: status + '：GitHub API 限流，不代表令牌过期' + wait};
+    }
+    if (status === 401) return {kind: 'auth', text: '401：令牌无效、被撤销或过期，请在设置页更新'};
+    if (status === 403 && /resource not accessible/i.test(message)) {
+      return {kind: 'permission', text: '403：此令牌无权执行这项操作，不是到期失效；请确认授权仓库 nixhuang/market-monitor，立即运行需要 Actions: Read and write，编辑需要 Contents: Read and write' +
+        (required ? '；接口要求 ' + required : '')};
+    }
+    if (status === 403) return {kind: 'forbidden', text: '403：GitHub 拒绝请求，尚不能确定是权限或访问限制；' +
+      (authenticated ? '已随请求携带本机令牌，不代表令牌已过期' : '本次请求未携带令牌，请在同一浏览器的设置页填写')};
+    if (status === 404) return {kind: 'not_found', text: '404：找不到 workflow/run，或令牌未获授权访问这个仓库；请核对仓库选择'};
+    return {kind: 'http', text: 'HTTP ' + status};
   }
   // 令牌只发送给 GitHub API；超时覆盖请求和响应体读取。
   async function request(url, {method = 'GET', body, github = false, signal, text = false} = {}) {
+    if (github && Date.now() < apiBlockedUntil) {
+      const error = new Error(authMessage(429, '', '0', '', apiBlockedUntil, !!getToken()).text);
+      error.status = 429; error.kind = 'rate_limit'; error.retryAt = apiBlockedUntil;
+      throw error;
+    }
     const local = new AbortController();
     const abort = () => local.abort();
     if (signal) {
@@ -100,9 +116,29 @@
           ...(body !== undefined ? {body: JSON.stringify(body)} : {})
         });
         if (!response.ok) {
-          const error = new Error(github ? authMessage(response.status) :
-            (response.status === 404 ? 'status.json 尚未发布或页面不存在（404）' : '公开页面 HTTP ' + response.status));
+          let diagnostic = {kind: 'http', text: response.status === 404
+            ? 'status.json 尚未发布或页面不存在（404）' : '公开页面 HTTP ' + response.status};
+          let retryAt = 0;
+          if (github) {
+            let payload = {};
+            try { payload = await response.json(); } catch (_) {}
+            const header = name => response.headers && response.headers.get ? response.headers.get(name) : null;
+            const remaining = header('x-ratelimit-remaining');
+            const retry = Number(header('retry-after'));
+            const reset = Number(header('x-ratelimit-reset'));
+            const message = String(payload.message || '');
+            if (response.status === 429 || response.status === 403 && (remaining === '0' || /rate limit|secondary rate|abuse detection/i.test(message))) {
+              retryAt = Math.max(Date.now() + 60000, retry > 0 ? Date.now() + retry * 1000 : 0,
+                remaining === '0' && reset > 0 ? reset * 1000 : 0);
+              apiBlockedUntil = Math.max(apiBlockedUntil, retryAt);
+            }
+            diagnostic = authMessage(response.status, message, remaining,
+              header('x-accepted-github-permissions') || '', retryAt, !!headers.Authorization);
+          }
+          const error = new Error(diagnostic.text);
           error.status = response.status;
+          error.kind = diagnostic.kind;
+          error.retryAt = retryAt;
           throw error;
         }
         if (response.status === 204) return null;
@@ -315,8 +351,9 @@
       if (phase === 'generated') return '抓取完成，正在发布到看板…';
       return '正在抓取…';
     };
-    if (manual && manualState.phase === 'failed') {
-      return {phase: 'bad', text: '运行失败：' + manualState.message.replace(/^派发失败：/, '')};
+    if (manual && manualState.phase === 'failed' && (!manual.rejected || !checkFeedback || publication.phase !== 'published')) {
+      return {phase: 'bad', text: manual.rejected ? manualState.message
+        : '运行失败：' + manualState.message.replace(/^派发失败：/, '')};
     }
     if (activeManual()) return {phase: 'busy', text: busyText(manualState.phase)};
     if (Object.keys(targets).length) {
@@ -367,6 +404,18 @@
     }
     put('runState', message, s.phase);
     put('runMsg', message, s.phase);
+    if (el('checkResult')) {
+      el('checkResult').hidden = !checkFeedback;
+      put('checkResult', checkFeedback, checkPhase);
+      if (checkFeedback && publication.phase === 'published' && verifiedSnapshot &&
+          pageSnapshot() && !samePublication(pageSnapshot(), verifiedSnapshot)) {
+        const link = window.document.createElement('a');
+        link.textContent = '打开最新看板';
+        link.href = bust('./index.html');
+        link.style.cssText = 'display:block;margin-top:6px;color:#6ba3f0';
+        el('checkResult').appendChild(link);
+      }
+    }
     const light = lightState();
     if (el('runLight')) el('runLight').dataset.phase = light.phase;
     put('runLightTxt', light.text, light.phase);
@@ -405,7 +454,7 @@
     ['btnRun', 'btnRunNow'].forEach(id => { if (el(id)) el(id).disabled = !!activeManual(); });
     const box = el('appliedState') || el('runMsg') || el('runState');
     if (box && verifiedSnapshot && (!Object.keys(targets).length || configState.phase === 'published') &&
-        (!manual || manualState.phase === 'published')) {
+        (!manual || manual.rejected || manualState.phase === 'published')) {
       const link = window.document.createElement('a');
       link.textContent = '打开最新看板';
       link.href = bust('./index.html') + '&mm_run=' + encodeURIComponent(verifiedSnapshot.run_id);
@@ -443,8 +492,8 @@
     const tracking = activeConfig() || activeManual() || retryPending;
     if (!tracking && !ruleWaiting && publicRetry >= PUBLIC_RETRY_MAX) return;
     const since = Math.min(activeConfig() ? configSince : Infinity, activeManual() ? manual.since : Infinity);
-    const delay = tracking ? (Date.now() - since < 120000 ? 8000 : 20000)
-      : ruleWaiting ? 60000 : (publicRetry === 0 ? 4000 : 10000);
+    const delay = Math.max(apiBlockedUntil - Date.now(), tracking ? (Date.now() - since < 120000 ? 8000 : 20000)
+      : ruleWaiting ? 60000 : (publicRetry === 0 ? 4000 : 10000));
     timer = window.setTimeout(() => { void tick(); }, delay);
   }
   async function tick() {
@@ -647,6 +696,7 @@
       }
     }
     authNotice = '';
+    checkFeedback = '';
     cancelPoll();
     retrySince = Date.now();
     manual = {request_id: uuid(), run_id: null, since: Date.now()};
@@ -663,7 +713,7 @@
         manualState = {phase: 'queued', message: '派发响应未确认：' + error.message + '；仅跟踪此 request_id，不重复发送'};
       } else {
         manual.rejected = true;
-        manualState = {phase: 'failed', message: '派发失败：' + error.message +
+        manualState = {phase: 'failed', message: '未启动：运行请求被拒绝。' + error.message +
           (error.status === 422 ? '；daily.yml 必须声明 workflow_dispatch.inputs.request_id' : '')};
         render();
         schedule();
@@ -676,20 +726,57 @@
   // 「查运行状态」点了要有反馈：否则状态没变化时页面文字不动，看着像按钮坏了。
   async function manualCheck() {
     const b = el('btnCheckStatus');
-    const before = (latestStatus || verifiedSnapshot || {}).run_id || '';
     if (b) { b.disabled = true; b.textContent = '核对中…'; }
+    checkFeedback = '正在核对最新任务和已发布看板…';
+    checkPhase = 'busy';
+    render();
+    let recentRun = null, recentError = '';
     try {
       await refresh();
-    } finally {
-      if (b) {
-        b.disabled = false;
-        const after = (latestStatus || verifiedSnapshot || {}).run_id || '';
-        const t = new Date();
-        const hms = [t.getHours(), t.getMinutes(), t.getSeconds()]
-          .map(n => String(n).padStart(2, '0')).join(':');
-        const changed = before && after && before !== after;
-        b.textContent = '查运行状态（已核对 ' + hms + (changed ? ' · 有更新' : '') + '）';
+      if ((!manual || manual.rejected) && !Object.keys(targets).length) {
+        try {
+          const data = await request(bust(apiURL('/actions/workflows/daily.yml/runs?branch=' +
+            encodeURIComponent(options.branch) + '&per_page=1')), {github: true});
+          recentRun = data && data.workflow_runs && data.workflow_runs[0] || null;
+        } catch (error) { recentError = networkMessage(error); }
       }
+      const published = publication.phase === 'published' && verifiedSnapshot;
+      checkPhase = published ? 'ok' : 'busy';
+      const lines = [];
+      if (manual && manual.rejected) {
+        lines.push('上次立即运行未启动：' + manualState.message.replace(/^未启动：运行请求被拒绝。/, ''));
+        lines.push('查状态不会重新派发，请处理拒绝原因后再点立即运行。');
+        checkPhase = 'bad';
+      } else if (manual) {
+        lines.push('你的运行：' + manualState.message);
+        if (manualState.phase === 'failed') checkPhase = 'bad';
+        else if (manualState.phase !== 'published') checkPhase = 'busy';
+      } else if (Object.keys(targets).length) {
+        lines.push('保存后的运行：' + configState.message);
+        if (configState.phase === 'failed') checkPhase = 'bad';
+        else if (configState.phase !== 'published') checkPhase = 'busy';
+      } else if (recentRun) {
+        const phase = phaseForRun(recentRun);
+        const label = phase.phase === 'generated'
+          ? (published && String(recentRun.id) === verifiedSnapshot.run_id ? '已完成并发布' : '生成成功，等待看板发布')
+          : phase.phase === 'running' ? '运行中' : phase.phase === 'failed' ? '失败（' + (recentRun.conclusion || '未知') + '）' : '排队中';
+        lines.push('最新任务：' + label + ' · run ' + recentRun.id);
+        if (phase.phase === 'failed') checkPhase = 'bad';
+        else if (!published || String(recentRun.id) !== verifiedSnapshot.run_id) checkPhase = 'busy';
+      } else lines.push(recentError ? '最新任务状态未能核对：' + recentError : '未找到最新任务记录。');
+      if (published) {
+        lines.push('已核对线上 run ' + verifiedSnapshot.run_id + '，看板与状态文件一致。');
+        lines.push('数据更新时间：' + (humanTime(verifiedSnapshot) || '未知') + '（北京时间）');
+        const current = pageSnapshot();
+        lines.push(current && !samePublication(current, verifiedSnapshot)
+          ? '当前页面仍是旧数据，请打开最新看板。' : '当前页面已是这版发布结果，暂无页面更新。');
+      } else lines.push('核对尚未完成：' + publication.message);
+      if (actionsError) lines.push('对应运行记录无法核对：' + actionsError);
+      if (recentError || actionsError) checkPhase = 'bad';
+      checkFeedback = lines.join('\n');
+      render();
+    } finally {
+      if (b) { b.disabled = false; b.textContent = '查运行状态'; }
     }
   }
 
@@ -750,7 +837,7 @@
     ['btnRun', 'btnRunNow'].forEach(id => {
       if (el(id)) el(id).onclick = () => { void startManual(); };
     });
-    if (el('btnCheckStatus')) el('btnCheckStatus').onclick = () => { void manualCheck(); };
+    if (el('btnCheckStatus')) el('btnCheckStatus').onclick = () => manualCheck();
     if (el('btnRuns')) el('btnRuns').onclick = () => { void loadRuns(); };
     render(); // 不等网络请求，先保留本页生成数据并折叠旧版摘要。
     void refresh();

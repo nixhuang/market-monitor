@@ -19,7 +19,7 @@ function element() {
 }
 function fixture(page = snapshot(), onlyRule = false) {
   const els = Object.fromEntries((onlyRule ? ['ruleLight', 'ruleLightTxt'] :
-    ['runLight', 'runLightTxt', 'ruleLight', 'ruleLightTxt', 'runSummary', 'btnCheckStatus']).map(id => [id, element()]));
+    ['runLight', 'runLightTxt', 'ruleLight', 'ruleLightTxt', 'runSummary', 'runMsg', 'checkResult', 'btnCheckStatus']).map(id => [id, element()]));
   if (page) { els.snapshotData = element(); els.snapshotData.textContent = JSON.stringify(page); }
   const data = {status: snapshot(), published: snapshot(), sha: B, failRules: false, failPublic: false,
     run: {id: 2, event: 'push', head_sha: D, status: 'in_progress', conclusion: null}, delay: null, commitSHA: null, raw: null};
@@ -34,9 +34,16 @@ function fixture(page = snapshot(), onlyRule = false) {
     Date: Clock, AbortController, TextEncoder, crypto: webcrypto, DOMParser: class { parseFromString(html) {
       return {querySelector() { return {textContent: html}; }};
     }},
-    fetch: async url => {
+    fetch: async (url, options) => {
       urls.push(url);
       const response = v => ({ok: true, status: 200, json: async () => clone(v), text: async () => JSON.stringify(v)});
+      if (url.includes('/dispatches')) {
+        data.posts=(data.posts||0)+1;
+        assert.equal(options.headers.Authorization,'Bearer github_pat_test');
+        const failure=data.dispatchError||{status:403,message:'Resource not accessible by personal access token'};
+        return {ok:false,status:failure.status,json:async()=>({message:failure.message}),
+          headers:{get:name=>(failure.headers||{})[name]??null}};
+      }
       if (url.includes('/contents/settings.json')) {
         if (data.delay) return data.delay;
         if (data.failRules) throw new TypeError('Failed to fetch');
@@ -169,6 +176,66 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
       assert.equal(f.els.runLight.dataset.phase,'idle');
       assert.match(f.els.runLightTxt.textContent,expected);
       assert.doesNotMatch(f.els.runLightTxt.textContent,/抓取成功/);
+    }
+  });
+  await check('403权限不足是未启动；核对公开状态不重发且恢复数据灯', async () => {
+    const f=fixture();f.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});
+    const rejected=await f.win.MMRunStatus.startManual();
+    assert.equal(rejected.manual.phase,'failed');
+    assert.match(f.els.runLightTxt.textContent,/未启动.*此令牌无权/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/运行失败/);
+    await f.els.btnCheckStatus.onclick();
+    assert.equal(f.data.posts,1);
+    assert.equal(f.els.runLight.dataset.phase,'ok');
+    assert.match(f.els.checkResult.textContent,/已核对线上 run 1/);
+    assert.match(f.els.checkResult.textContent,/上次立即运行未启动/);
+    assert.equal(f.els.checkResult.hidden,false);
+  });
+  await check('限流响应尊重冷却时间，查状态仍读公开页面且不反复请求API', async () => {
+    const f=fixture();f.data.dispatchError={status:403,message:'API rate limit exceeded',headers:{'x-ratelimit-remaining':'0','retry-after':'120'}};
+    f.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});
+    await f.win.MMRunStatus.startManual();
+    assert.match(f.els.runLightTxt.textContent,/限流，不代表令牌过期/);
+    await f.els.btnCheckStatus.onclick();
+    const before=f.urls.length;
+    await f.win.MMRunStatus.startManual();
+    assert.equal(f.data.posts,1);
+    assert.equal(f.urls.length,before);
+    f.advance(121000);await f.win.MMRunStatus.startManual();assert.equal(f.data.posts,2);
+  });
+  await check('401与未知403不能被错误归为限流或确认过期', async () => {
+    for(const [status,message,expected] of [[401,'Bad credentials',/无效、被撤销或过期/],
+      [403,'Forbidden',/尚不能确定/],[429,'Too many requests',/限流/]]) {
+      const f=fixture();f.data.dispatchError={status,message};f.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});
+      await f.win.MMRunStatus.startManual();assert.match(f.els.runLightTxt.textContent,expected);
+    }
+  });
+  await check('公开状态读取失败必须显示核对未完成，不是假成功', async () => {
+    const f=fixture();await f.win.MMRunStatus.refresh();f.data.failPublic=true;
+    await f.els.btnCheckStatus.onclick();assert.equal(f.els.btnCheckStatus.textContent,'查运行状态');
+    assert.match(f.els.checkResult.textContent,/核对尚未完成/);
+    assert.equal(f.els.checkResult.hidden,false);
+  });
+  await check('核对显示最新任务运行中，而不是把旧版已发布误称新任务完成', async () => {
+    const f=fixture();await f.els.btnCheckStatus.onclick();
+    assert.match(f.els.checkResult.textContent,/最新任务：运行中 · run 2/);
+    assert.match(f.els.checkResult.textContent,/已核对线上 run 1/);
+    assert.equal(f.els.checkResult.dataset.phase,'busy');
+    assert.equal(f.els.btnCheckStatus.textContent,'查运行状态');
+  });
+  await check('完成且与线上同版时显示完成；旧页有明确刷新入口', async () => {
+    const f=fixture();f.data.run={id:1,status:'completed',conclusion:'success'};
+    await f.els.btnCheckStatus.onclick();assert.match(f.els.checkResult.textContent,/最新任务：已完成并发布/);
+    assert.equal(f.els.checkResult.dataset.phase,'ok');
+    f.data.status=snapshot(B,'3');f.data.published=snapshot(B,'3');
+    await f.els.btnCheckStatus.onclick();assert.match(f.els.checkResult.textContent,/当前页面仍是旧数据/);
+    assert.equal(f.els.checkResult.children.at(-1).textContent,'打开最新看板');
+  });
+  await check('最新任务失败和排队各有清楚结果，不影响已发布数据', async () => {
+    for(const [status,conclusion,label] of [['queued',null,'排队中'],['completed','failure','失败']]){
+      const f=fixture();f.data.run={id:2,status,conclusion};await f.els.btnCheckStatus.onclick();
+      assert.match(f.els.checkResult.textContent,new RegExp('最新任务：'+label));
+      assert.match(f.els.checkResult.textContent,/已核对线上 run 1/);
     }
   });
   console.log('全部通过');

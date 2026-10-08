@@ -73,6 +73,8 @@ check('id="ruleLight" data-phase="idle"' in html and 'id="ruleLightTxt"' in html
 check("规则按当前设置生效" not in html, "未查最新设置前没有假绿灯")
 check("运行详情" not in html, "首页无运行详情")
 check('class="card sumcard"' not in html and "sumline" not in html, "首页摘要卡已移除")
+check('id="checkResult"' in html and html.index('id="checkResult"')<html.index('id="group_positions"'),
+      "核对结果面板位于按钮附近，不在页尾")
 
 # 分组
 check(html.count('class="card group-card"') == 14, "十四个分类均可折叠")

@@ -1330,7 +1330,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261008-3"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261008-4"></script>'
 
 
 def config_hash(filename):
@@ -1627,7 +1627,7 @@ tr.gray td{{color:var(--dim)}}
 .acts button{{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
   border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}}
 .acts button:disabled{{opacity:.5;cursor:not-allowed}}
-#runMsg{{font-size:12px;color:var(--dim);flex:1;min-width:180px;line-height:1.5}}
+#runMsg{{font-size:12px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}}
 #runMsg.ok{{color:var(--green)}}
 #runMsg.err{{color:var(--red)}}
 .runbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}}
@@ -1639,6 +1639,11 @@ tr.gray td{{color:var(--dim)}}
   border:1px solid #333a47;border-radius:8px;text-decoration:none;display:inline-block}}
 .statusrow{{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   margin:-4px 0 14px;font-size:12.5px;line-height:1.5}}
+.check-result{{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;
+  font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}}
+.check-result[data-phase="bad"]{{border-color:var(--red)}}
+.check-result[data-phase="busy"]{{border-color:var(--yellow)}}
+.check-result[hidden]{{display:none}}
 .group-card>summary.grp{{display:flex;align-items:center;gap:10px;cursor:pointer;
   padding:12px;font-size:14px;font-weight:600;list-style:none;touch-action:manipulation}}
 .group-card>summary::-webkit-details-marker{{display:none}}
@@ -1678,6 +1683,7 @@ tr.gray td{{color:var(--dim)}}
   <div class="runlight" id="runLight" data-phase="{init_light_phase}"><i class="dot"></i><span id="runLightTxt">{init_light}</span></div>
   <div class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">正在核对最新规则…</span></div>
 </div>
+<div id="checkResult" class="check-result" role="status" hidden></div>
 
 {dca_html}
 <div class="script-data" hidden><script id="snapshotData" type="application/json">{snapshot_json}</script></div>

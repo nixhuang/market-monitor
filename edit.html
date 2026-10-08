@@ -88,6 +88,11 @@ button.danger{color:var(--red)}
 .runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}
 .runlight[data-phase="bad"]{color:var(--red)}
 .runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}
+.check-result{padding:10px 12px;margin:10px 0;border:1px solid var(--line);border-radius:8px;
+  font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+.check-result[data-phase="bad"]{border-color:var(--red)}
+.check-result[data-phase="busy"]{border-color:var(--yellow)}
+.check-result[hidden]{display:none}
 .runstate{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
   font-size:12px;color:var(--dim);margin-top:10px}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
@@ -154,6 +159,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     <div class="runlight" id="runLight" data-phase="idle"><i class="dot"></i><span id="runLightTxt">点「立即运行」抓最新行情</span></div>
   </div>
   <button id="btnCheckStatus" style="margin-top:10px">查运行状态</button>
+  <div id="checkResult" class="check-result" role="status" hidden></div>
   <div class="runstate" id="runState" aria-live="polite">读取公开发布状态中…</div>
   <div id="runList" class="runlist"></div>
 </div>
@@ -318,7 +324,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 </div>
 
-<script src="./run-status.js?v=20261008-3"></script>
+<script src="./run-status.js?v=20261008-4"></script>
 <script src="./list-import.js?v=20261008-1"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
