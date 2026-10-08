@@ -2,23 +2,23 @@
   "dca_reminder": {
     "every": 10,
     "start": "2026-10-01",
-    "count": 5,
-    "date": "2026-10-07",
+    "count": 6,
+    "date": "2026-10-08",
     "times": 1,
     "due": false,
-    "next_in": 6,
+    "next_in": 5,
     "next_date": "2026-10-15"
   },
-  "run_id": "37776277627",
-  "request_id": "",
-  "source_sha": "c56e036f59da97bc0721e2bc13597564ab54f836",
-  "started_at": "2026-10-08T12:21:27+00:00",
-  "started_at_bj": "2026-10-08T20:21:27+08:00",
-  "finished_at": "2026-10-08T20:22:18.999983+08:00",
-  "finished_at_bj": "2026-10-08T20:22:18+08:00",
-  "event": "push",
-  "target_trade_date": "2026-10-07",
-  "mode": "closed",
+  "run_id": "37792728262",
+  "request_id": "cc910265-5458-4a56-a315-c31c67648071",
+  "source_sha": "f7a499b2c8dd427449319875dafa73793c48cdca",
+  "started_at": "2026-10-08T14:28:19+00:00",
+  "started_at_bj": "2026-10-08T22:28:19+08:00",
+  "finished_at": "2026-10-08T22:32:02.675304+08:00",
+  "finished_at_bj": "2026-10-08T22:32:02+08:00",
+  "event": "workflow_dispatch",
+  "target_trade_date": "2026-10-08",
+  "mode": "manual_or_config",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
     "holdings.json": "31c0cf3940e2cd7eaa613542dab9473cd380b5a8",
@@ -184,8 +184,8 @@
   },
   "summary": {
     "red": 2,
-    "yellow": 15,
-    "green": 26,
+    "yellow": 13,
+    "green": 28,
     "gray": 0,
     "total": 43,
     "macro_ok": 6,
@@ -193,28 +193,28 @@
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {
-      "BD#US10Y": "2026-10-07"
+      "BD#US10Y": "2026-10-08"
     },
     "today_prices": 42,
     "prior_prices": 0,
     "missing_prices": 0
   },
   "actual_dates": {
-    "min": "2026-10-07",
-    "max": "2026-10-07"
+    "min": "2026-10-08",
+    "max": "2026-10-08"
   },
   "macro_dates": {
-    "hy_oas": "2026-10-06",
-    "vix": "2026-10-07",
-    "sp500": "2026-10-07",
-    "ust10": "2026-10-07",
+    "hy_oas": "2026-10-07",
+    "vix": "2026-10-08",
+    "sp500": "2026-10-08",
+    "ust10": "2026-10-08",
     "nfci": "2026-10-02",
     "breadth": "2026-10-07"
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.2769999504089355,
-    "date": "2026-10-07",
+    "value": 5.275000095367432,
+    "date": "2026-10-08",
     "source": "Yahoo ^TNX",
     "unit": "%",
     "lagging": false,
@@ -224,7 +224,7 @@
     "observed_value": null
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-07 收盘（美东交易日）",
+  "data_time_text": "2026-10-08 22:32:02（盘中快照，北京时间） · 当日价 42 只 / 较早日线 0 只 / 无数据 0 只",
   "market_risk": {
     "level": "yellow",
     "label": "留意风险",
@@ -242,17 +242,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 15.079999923706055,
-      "date": "2026-10-07",
+      "value": 15.369999885559082,
+      "date": "2026-10-08",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7801.77001953125,
-      "date": "2026-10-07",
+      "value": 7791.919921875,
+      "date": "2026-10-08",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.21946936299741537
+      "drawdown": -0.3454469255898096
     }
   },
   "fundamental": {
