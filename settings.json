@@ -7,7 +7,7 @@
   "rsi_high": 70,
   "rsi_low": 30,
   "near_52w_low_pct": 1,
-  "trigger_gap_pct": 5,
+  "trigger_gap_pct": 1,
   "vol_ratio": 1.5,
   "quiet_chg": 2,
   "amp_yellow": 5,
