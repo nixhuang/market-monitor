@@ -44,15 +44,57 @@ class TestGroups(unittest.TestCase):
         universe, counts, _ = monitor.grouped_universe(cfg)
         self.assertEqual(len(universe), 6)
         self.assertEqual(counts['index_funds'], 6)
-        self.assertTrue(all(not monitor.quote_supported(s) for s, _, _ in universe))
+        self.assertTrue(all(monitor.quote_supported(s) for s, _, _ in universe[:4]))
+        self.assertTrue(all(not monitor.quote_supported(s) for s, _, _ in universe[4:]))
         self.assertTrue(monitor.quote_supported('AAPL'))
         self.assertFalse(monitor.quote_supported('NQmain'))
         self.assertEqual(monitor.normalize_symbol('31#BRK.B'), 'BRK-B')
         rows = [dict(symbol=s, price=None, level='gray') for s, _, _ in universe]
         with patch.object(monitor, 'global_dca', return_value=None):
             snap = monitor.build_snapshot({}, rows, cfg)
-        self.assertEqual(snap['summary']['missing_symbols'], [])
-        self.assertEqual(len(snap['summary']['unsupported_symbols']), 6)
+        self.assertEqual(len(snap['summary']['missing_symbols']), 4)
+        self.assertEqual(len(snap['summary']['unsupported_symbols']), 2)
+
+    def test_index_aliases_use_daily_index_or_futures_not_stock_quotes(self):
+        from datetime import date, timedelta
+        dates = [(date(2026, 10, 7) - timedelta(days=i)).isoformat() for i in range(31, -1, -1)]
+        def bars():
+            return {'dates': dates[:], 'closes': [100.0] * 32, 'highs': [100.0] * 32,
+                    'lows': [100.0] * 32, 'volumes': [0] * 32,
+                    'price': 100.0, 'prev_close': 100.0}
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'CLOSED_ONLY', False), \
+                patch.object(monitor, 'yahoo_history', side_effect=lambda _: bars()) as yahoo, \
+                patch.object(monitor, 'nasdaq_realtime') as realtime, \
+                patch.object(monitor, 'stooq_history') as stooq, patch.object(monitor, 'nasdaq_history') as nasdaq:
+            for code, alias in monitor.INDEX_YAHOO_ALIAS.items():
+                data = monitor.fetch_history(code)
+                self.assertEqual((data['price'], data['source']), (100.0, 'yahoo'))
+                self.assertEqual(yahoo.call_args.args[0], alias)
+            self.assertIsNone(monitor.fetch_history('BD#US10Y'))
+            stooq.assert_not_called(); nasdaq.assert_not_called(); realtime.assert_not_called()
+
+    def test_existing_reference_quotes_have_dates_without_fake_signals(self):
+        cfg = {'index_funds': {'.VIX': {'note': '波动率'}, '.SPX': {}, 'BD#US10Y': {}},
+               'group_monitoring': {'index_funds': True}}
+        macro = {k: {'ok': True, 'name': monitor.FRED_SERIES[k]['name'], 'value': value,
+                     'prev': value - 1, 'date': '2026-10-07'}
+                 for k, value in [('vix', 21.3), ('sp500', 6700.5), ('ust10', 4.25)]}
+        rows = [monitor.macro_index_quote(s, cfg['index_funds'][s], 'index_funds', macro)
+                for s in cfg['index_funds']]
+        self.assertEqual([d['price'] for d in rows], [21.3, 6700.5, 4.25])
+        self.assertTrue(all(d['level'] == 'green' and d['reference_only'] for d in rows))
+        self.assertIsNone(monitor.macro_index_quote('.NDX', {}, 'index_funds', macro))
+        with patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot(macro, rows, cfg)
+        page = monitor.render(macro, rows, len(rows), snapshot=snap)
+        index = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
+        for code in cfg['index_funds']:
+            self.assertIn(code, index)
+        self.assertIn('参考值 · 截至 2026-10-07', index)
+        self.assertIn('4.25%</td>', index)
+        self.assertIn('不计算交易警示', index)
+        self.assertNotIn('无异动 3 只', index)
+        self.assertEqual(snap['summary']['missing_prices'], 0)
 
     def test_snapshot_all_groups(self):
         with patch.object(monitor, 'global_dca', return_value=None):
@@ -133,6 +175,35 @@ class TestGroups(unittest.TestCase):
                 self.assertEqual([r['symbol'] for r in notify.call_args.args[1]], ['AAPL', 'MSFT', 'XLK', 'XLB'])
                 with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
                     self.assertEqual(json.load(f)['summary']['total'], 4)
+
+    def test_main_keeps_index_reference_prices_if_yahoo_unavailable(self):
+        import tempfile
+        cfg = {'index_funds': {s: {} for s in ('.VIX', '.SPX', 'BD#US10Y', '.NDX')},
+               'group_monitoring': {'index_funds': True}}
+        macro = {k: {'ok': True, 'name': monitor.FRED_SERIES[k]['name'], 'value': v,
+                     'prev': v, 'date': '2026-10-07'}
+                 for k, v in (('vix', 21.3), ('sp500', 6700.5), ('ust10', 4.25))}
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            for name, content in [('holdings.json', cfg), ('settings.json', {})]:
+                with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
+                    json.dump(content, f)
+            with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                    patch.object(monitor, 'build_macro', return_value=macro), \
+                    patch.object(monitor, 'fetch_history', return_value=None) as fetch, \
+                    patch.object(monitor, 'global_dca', return_value=None), \
+                    patch.object(monitor, 'push_serverchan'):
+                self.assertEqual(monitor.main([]), 0)
+            self.assertEqual([c.args[0] for c in fetch.call_args_list], ['.VIX', '.SPX', 'BD#US10Y', '.NDX'])
+            with open(os.path.join(directory, 'index.html'), encoding='utf-8') as f:
+                page = f.read()
+            with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
+                snap = json.load(f)
+        index = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
+        for price in ('21.30', '6,700.50', '4.25%'):
+            self.assertIn(price, index)
+        self.assertEqual(snap['summary']['missing_symbols'], ['.NDX'])
+        self.assertEqual(snap['summary']['unsupported_symbols'], [])
+        self.assertEqual(snap['summary']['missing_prices'], 1)
 
     def test_three_failures_do_not_skip_fourth_symbol(self):
         import tempfile

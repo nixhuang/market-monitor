@@ -835,10 +835,19 @@ def nasdaq_history(symbol):
 
 FUTU_MARKET = {"US": None, "HK": ".HK", "SH": ".SS", "SS": ".SS", "SZ": ".SZ"}
 
+# 清单保留原代码；仅抓取时映射到行情提供方的指数／期货代码。
+INDEX_YAHOO_ALIAS = {
+    ".VIX": "^VIX", ".SPX": "^GSPC", ".NDX": "^NDX",
+    ".VXN": "^VXN", ".SOX": "^SOX",
+    "ESMAIN": "ES=F", "CLMAIN": "CL=F",
+}
+INDEX_MACRO_ALIAS = {".VIX": "vix", ".SPX": "sp500", "BD#US10Y": "ust10"}
+
 
 def quote_supported(symbol):
     s = normalize_symbol(symbol)
-    return not (s.startswith((".", "BD#")) or s.endswith("MAIN") or s in ("2USDCNY", "2XAUUSD"))
+    return s in INDEX_YAHOO_ALIAS or s in INDEX_MACRO_ALIAS or not (
+        s.startswith((".", "BD#")) or s.endswith("MAIN") or s in ("2USDCNY", "2XAUUSD"))
 
 
 def normalize_symbol(symbol):
@@ -1106,7 +1115,7 @@ def valid_history(data):
 
 
 def fetch_history(symbol):
-    """数据源优先级：Yahoo → stooq → Nasdaq
+    """普通标的 Yahoo → stooq → Nasdaq；指数／期货只取经映射的 Yahoo 日线。
 
     GitHub Actions（美国 IP）走 Yahoo 正常；中国大陆本地跑 Yahoo 会被整段封禁
     （返回 403 且提示 mainland China 不可访问），stooq 也上了 JS 人机验证，
@@ -1116,10 +1125,15 @@ def fetch_history(symbol):
     剥掉后缀才抓得到（否则整只标的变灰）。
     """
     symbol = normalize_symbol(symbol)
+    alias = INDEX_YAHOO_ALIAS.get(symbol)
+    if symbol in INDEX_MACRO_ALIAS and not alias:
+        return None  # 国债收益率不使用报价指数替代百分比口径。
+    loaders = (("yahoo", yahoo_history),) if alias else (
+        ("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history))
     fallback = None
     suspicious = None
-    for name, loader in (("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history)):
-        data = loader(symbol)
+    for name, loader in loaders:
+        data = loader(alias or symbol)
         if not data:
             continue
         if CLOSED_ONLY:
@@ -1144,11 +1158,29 @@ def fetch_history(symbol):
             if data["dates"][-1] == TARGET_DATE:
                 return data
         elif data["dates"][-1] == TARGET_DATE:
-            return apply_realtime(symbol, data)
+            return data if alias else apply_realtime(symbol, data)
         if fallback is None or data["dates"][-1] > fallback["dates"][-1]:
             fallback = data
-    # 历史源未提供当日bar时仍尝试盘中价；若无报价，保留最新日线并标出日期。
-    return apply_realtime(symbol, fallback) if fallback and not CLOSED_ONLY else fallback
+    # Nasdaq 股票/ETF 实时报价不可套用在指数或期货别名上。
+    return apply_realtime(symbol, fallback) if fallback and not CLOSED_ONLY and not alias else fallback
+
+
+def macro_index_quote(symbol, cfg, group, macro):
+    """Yahoo 日线不可用时复用已验证的市场参考点位；不伪造 OHLC 或交易警示。"""
+    key = INDEX_MACRO_ALIAS.get(normalize_symbol(symbol))
+    item = macro.get(key) if key else None
+    if not item or not item.get("ok") or not isinstance(item.get("value"), (int, float)) or not math.isfinite(item["value"]) or item["value"] <= 0 or not item.get("date"):
+        return None
+    price, prev = item["value"], item.get("prev")
+    return {
+        "symbol": symbol, "note": cfg.get("note", ""), "price": price,
+        "chg": (price / prev - 1) * 100 if prev else None,
+        "rsi": {period: None for period in RSI_PERIODS},
+        "dist_high": None, "dist_low": None, "vol_ratio": None,
+        "trigger": cfg.get("trigger"), "source": "市场参考", "data_date": item["date"],
+        "unit": "%" if key == "ust10" else "", "group": group, "boll_up": None, "boll_dn": None,
+        "reference_only": True, "signals": ["参考点位 · 不计算交易警示"], "level": "green",
+    }
 
 
 RSI_PERIODS = (6, 12, 24)
@@ -1689,6 +1721,9 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
             if d.get("price") is None:
                 tag += '<span class="tag quote-note">无数据</span>'
+            elif d.get("reference_only"):
+                date = html_lib.escape(str(d.get("data_date") or "日期未知"))
+                tag += f'<span class="tag quote-note">参考值 · 截至 {date}</span>'
             elif snapshot.get("mode") == "manual_or_config" and d.get("data_date") != snapshot.get("target_trade_date"):
                 date = html_lib.escape(str(d.get("data_date") or "日期未知"))
                 tag += f'<span class="tag quote-note">日线 {date} 收盘</span>'
@@ -1704,7 +1739,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
                              f'<ul>{hits}</ul></div></details>')
             out += (
                 f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}</td>'
-                f'<td class="num">{fmt(d["price"])}</td>'
+                f'<td class="num">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</td>'
                 f'<td class="num {chg_cls}">{chg_txt}</td>'
                 f'<td class="sig">{sig}{fund_html}</td></tr>'
             )
@@ -1716,8 +1751,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     group_cards = ""
     for group in GROUPS:
         g = items_by_group[group["item_group"]]
-        shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or fund_alert(d)]
-        quiet = [d for d in g if d["level"] == "green" and not fund_alert(d)]
+        shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or fund_alert(d) or d.get("reference_only")]
+        quiet = [d for d in g if d["level"] == "green" and not fund_alert(d) and not d.get("reference_only")]
         parts = []
         enabled = monitoring.get(group["key"], True)
         if not enabled:
@@ -1737,11 +1772,14 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             parts.append('<div class="quiet">本组标的已在优先分组展示，避免重复信号</div>' if registered.get(group["key"], 0)
                          else '<div class="quiet">暂无标的，去设置页录入或导入 CSV / EBK</div>')
         body = "\n".join(parts)
-        stats = " · ".join(f"{label}{sum(d['level'] == lv for d in g)}"
-                           for lv, label in (("red", "红"), ("yellow", "黄"), ("gray", "缺失"))
-                           if any(d["level"] == lv for d in g))
+        stats = ''.join(
+            f'<span class="stat-count" aria-label="{label} {count} 项">'
+            f'<i class="stat-dot {lv}" aria-hidden="true"></i>{count}</span>'
+            for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "无数据"))
+            if (count := sum(d["level"] == lv for d in g)))
         if not enabled:
-            stats = ("仅板块ETF" if g else "监测关闭") + (" · " + stats if stats else "")
+            note = "仅板块ETF" if g else "监测关闭"
+            stats = f'<span class="monitor-note">{note}</span>' + stats
         expanded = " open" if enabled and group["key"] in ("positions", "focus") else ""
         group_cards += (f'<details class="card group-card" id="group_{group["key"]}"{expanded}>'
                         f'<summary class="grp"><span>{group["label"]} ({registered.get(group["key"], len(g))})</span>'
@@ -1898,6 +1936,11 @@ tr.gray td{{color:var(--dim)}}
 .group-card[open]>summary::before,.macro-card[open]>summary::before{{transform:rotate(90deg)}}
 .group-card[open]>summary,.macro-card[open]>summary{{border-bottom:1px solid var(--line)}}
 .group-stats{{margin-left:auto;color:var(--dim);font-size:11px;font-weight:400}}
+.group-card>summary .group-stats{{margin-left:6px;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-start;text-align:left}}
+.stat-count{{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}}
+.stat-dot{{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}}
+.stat-dot.red{{background:var(--red)}} .stat-dot.yellow{{background:var(--yellow)}}
+.stat-dot.gray{{background:var(--dim)}}
 .quiet-list{{margin:8px 0}}
 .quiet-list>summary{{padding:8px 12px;color:var(--dim);font-size:12px;cursor:pointer}}
 .sym .note{{display:block;margin:3px 0 0;overflow-wrap:anywhere}}
@@ -2011,6 +2054,11 @@ def main(argv=None):
             supported = quote_supported(sym)
             exhausted = time.monotonic() >= QUOTE_DEADLINE
             data = fetch_history(sym) if supported and not exhausted else None
+            if not data and grp == "index_funds":
+                reference = macro_index_quote(sym, sc, grp, macro)
+                if reference:
+                    items.append(reference)
+                    continue
             if data and i < len(universe) - 1 and time.monotonic() < QUOTE_DEADLINE:
                 time.sleep(0.5)  # 轻微限速，降低被封概率
             if data:

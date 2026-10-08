@@ -81,6 +81,11 @@ check('id="checkResult"' in html and html.index('id="checkResult"')<html.index('
 # 分组
 check(html.count('class="card group-card"') == 14, "十四个分类均可折叠")
 check('id="group_positions" open' in html and 'id="group_focus" open' in html, "持仓与重点关注默认展开")
+pos_title = html.split('id="group_positions"', 1)[1].split('</summary>', 1)[0]
+check('class="stat-dot red"' in pos_title and 'class="stat-dot gray"' in pos_title and
+      '红1' not in pos_title and '缺失1' not in pos_title, "分组警示采用圆点与计数而非颜色文字")
+check('.group-card>summary .group-stats{margin-left:6px' in html and
+      '.group-stats{margin-left:auto' in html, "警示在分组名称右侧左对齐，宏观标题保持原样")
 check('id="group_technology"' in html and 'IT软硬Ai (5)' in html, "IT 分类展示计数")
 check('其他关注' not in html, "旧其他关注分类已移除")
 check(html.count("<h2>个股</h2>") == 3 and html.count("<h2>ETF 基金</h2>") == 2, "分类内警示个股与 ETF 分区")
