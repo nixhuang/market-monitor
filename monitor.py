@@ -1330,7 +1330,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261008-4"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261008-5"></script>'
 
 
 def config_hash(filename):
@@ -1519,6 +1519,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     summary = snapshot.get("summary", {})
     counts = snapshot.get("list_counts", {})
     actual_dates = snapshot.get("actual_dates", {})
+    finished_iso = beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
+    finished_txt = finished_iso[:19].replace("T", " ") if finished_iso else "未记录"
     # 一行摘要升级为状态灯文案（首页第三排）；这里只算红黄绿计数和异常清单。
     bad = list(dict.fromkeys(summary.get("stale_symbols", []) + summary.get("missing_symbols", [])))
     gray_txt = f" 灰{summary.get('gray')}" if summary.get("gray") else ""
@@ -1539,20 +1541,18 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             coverage = (f"{total - unsupported_count} 只报价已更新 · "
                         f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
                         else f"{total} 只全部更新")
-            init_light = (f"抓取成功 · 红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
+            init_light = (f"抓取成功 · 完成于 {finished_txt}（北京时间） · "
+                          f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
                           f"绿{summary.get('green', 0)}{gray_txt} · {coverage}")
     dca_info = dca_text(snapshot.get("dca_reminder"))
     # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
     ny_now = datetime.now(US_TZ)
     bj_auto = "夏令时次日 08:30" if ny_now.dst() != timedelta(0) else "冬令时次日 09:30"
     max_date = actual_dates.get("max") or "—"
-    if snapshot.get("mode") and snapshot["mode"] != "closed":
-        m_fin = re.match(r"(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})",
-                         snapshot.get("finished_at_bj") or "")
-        dt_txt = f"{m_fin.group(1)} {m_fin.group(2)}（盘中，北京时间）" if m_fin else max_date
-    else:
-        dt_txt = max_date
-    sub_line = f"数据时间 {dt_txt} · 自动计划：美东周一至五 20:30（北京 {bj_auto}）"
+    min_date = actual_dates.get("min") or max_date
+    trade_date = f"{min_date}～{max_date}" if min_date != max_date else max_date
+    sub_line = (f"本页数据更新 {finished_txt}（北京时间） · 行情交易日 {trade_date} · "
+                f"自动计划：美东周一至五 20:30（北京 {bj_auto}）")
     lc = registered or counts
     reg_line = ('<div class="quiet">在册：' + ' · '.join(
                     f"{g['label']} {lc.get(g['key'], 0)}" for g in GROUPS if lc.get(g['key'], 0))
@@ -1609,9 +1609,9 @@ tr:first-child td{{border-top:none}}
 .fund-body ul{{margin:4px 0 0;padding-left:16px}}
 .sig{{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}}
 .up{{color:var(--up)}} .down{{color:var(--down)}}
-tr.red td:first-child{{box-shadow:inset 3px 0 0 var(--red)}}
-tr.yellow td:first-child{{box-shadow:inset 3px 0 0 var(--yellow)}}
-tr.green td:first-child{{box-shadow:inset 3px 0 0 var(--green)}}
+tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
+tr.yellow td:first-child{{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}}
+tr.green td:first-child{{box-shadow:inset 2px 0 0 var(--green)}}
 tr.gray td{{color:var(--dim)}}
 .group-card tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
 .macro-help{{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}}

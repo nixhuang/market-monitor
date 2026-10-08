@@ -143,6 +143,8 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('class="overall', page)
         self.assertNotIn('绿框 · 不用动', page)
         self.assertIn('.group-card tr.red td:first-child{box-shadow:inset 6px', page)
+        for color, width in [('red', 6), ('yellow', 4), ('green', 2)]:
+            self.assertIn(f'tr.{color} td:first-child{{box-shadow:inset {width}px', page)
         self.assertIn('0.51<span class="unit">个百分点</span>', page)
         self.assertIn('id="yieldCurveHelp"', page)
         self.assertIn('10年期国债收益率 − 2年期国债收益率', page)

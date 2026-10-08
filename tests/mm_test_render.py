@@ -62,7 +62,9 @@ def check(cond, msg):
 # 标题与排
 check("AI监测市场" in html, "标题 = AI监测市场")
 check("市场自检" not in html, "旧标题已移除")
-check("数据时间 2026-10-06" in html, "第二排数据时间（收盘口径）")
+check("本页数据更新 2026-10-07 20:40:28（北京时间）" in html and "行情交易日 2026-10-06" in html,
+      "顶部区分完成时间与行情交易日，收盘运行也显示秒级时间")
+check("抓取成功 · 完成于 2026-10-07 20:40:28（北京时间）" in html, "静态成功灯显示真实完成时间")
 check("自动计划：美东周一至五 20:30（北京 " in html, "第二排自动计划")
 check(("夏令时次日 08:30" in html) != ("冬令时次日 09:30" in html), "冬夏令时只出现一个")
 check('id="btnRunNow"' in html and 'id="btnCheckStatus"' in html, "第三排两个按钮都在")
@@ -98,7 +100,14 @@ snap2 = dict(snapshot)
 snap2["mode"] = "manual_or_config"
 snap2["finished_at_bj"] = "2026-10-07T23:19:00+08:00"
 html2 = monitor.render(macro, items, 10, snapshot=snap2, dup_hidden=0)
-check("数据时间 2026-10-07 23:19（盘中，北京时间）" in html2, "盘中运行显示抓取时刻")
+check("本页数据更新 2026-10-07 23:19:00（北京时间）" in html2 and "行情交易日 2026-10-06" in html2,
+      "手动运行显示时分秒，交易日仍独立显示")
+snap_utc = dict(snapshot, finished_at_bj="", finished_at="2026-10-07T12:40:28Z")
+check("本页数据更新 2026-10-07 20:40:28（北京时间）" in monitor.render(macro, items, 10, snapshot=snap_utc),
+      "UTC完成时间正确转为北京时间")
+snap_no_finish = {k:v for k,v in snapshot.items() if k not in ('finished_at', 'finished_at_bj')}
+check("完成于 未记录" in monitor.render(macro, items, 10, snapshot=snap_no_finish),
+      "缺少完成时间不以开始时间或当前时间冒充")
 
 # 重点关注为空
 items3 = [d for d in items if d["group"] != "focus"]

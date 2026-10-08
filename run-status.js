@@ -258,6 +258,16 @@
     }
     return error.message || '暂时无法核对最新发布；本页数据仍可查看';
   }
+  function completedTime(s) {
+    const raw = s && (s.finished_at_bj || s.finished_at);
+    if (!raw) return '';
+    const value = String(raw);
+    if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) return '';
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    return date.toLocaleString('sv-SE', {timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit',
+      day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false});
+  }
   function humanTime(s) {
     const raw = s && (s.finished_at_bj || s.started_at_bj || s.finished_at || s.started_at);
     if (!raw) return '';
@@ -339,7 +349,14 @@
   function lightState() {
     // 点了「立即运行」但没令牌/令牌不对：直接把原因写在灯上，否则按钮看着像坏了
     if (authNotice) return {phase: 'bad', text: authNotice};
-    const snap = pageSnapshot() || verifiedSnapshot || latestStatus;
+    const current = pageSnapshot();
+    const trackedPublished = manual && !manual.rejected && manualState.phase === 'published' ||
+      Object.keys(targets).length && configState.phase === 'published';
+    const snap = trackedPublished && verifiedSnapshot ? verifiedSnapshot : current || verifiedSnapshot || latestStatus;
+    const oldPage = current && snap && !samePublication(current, snap);
+    const finished = completedTime(snap);
+    const success = '抓取成功 · 完成于 ' + (finished || '未记录') + '（北京时间） · ';
+    const suffix = oldPage ? ' · 新结果已发布，本页仍是旧数据' : '';
     const info = snap ? (snap.summary || {}) : {};
     const cnt = info.red != null
       ? '红' + (info.red ?? 0) + ' 黄' + (info.yellow ?? 0) + ' 绿' + (info.green ?? 0) +
@@ -372,10 +389,10 @@
         ? '没有开启的监测标的，未抓取报价' : '清单为空，未抓取报价'};
       if (unsupported >= total) return {phase: 'idle', text: '清单中 ' + unsupported + ' 个特殊代码暂不支持报价，未抓取报价'};
       if (unsupported) {
-        return {phase: 'ok', text: '抓取成功 · ' + cnt + ' · ' +
-          (total - unsupported) + ' 只报价已更新 · ' + unsupported + ' 个特殊代码暂不支持报价'};
+        return {phase: 'ok', text: success + cnt + ' · ' +
+          (total - unsupported) + ' 只报价已更新 · ' + unsupported + ' 个特殊代码暂不支持报价' + suffix, reload: !!oldPage};
       }
-      return {phase: 'ok', text: '抓取成功 · ' + cnt + ' · ' + total + ' 只全部更新'};
+      return {phase: 'ok', text: success + cnt + ' · ' + total + ' 只全部更新' + suffix, reload: !!oldPage};
     }
     if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
     return {phase: 'idle', text: '点「立即运行」抓最新行情'};
@@ -419,6 +436,13 @@
     const light = lightState();
     if (el('runLight')) el('runLight').dataset.phase = light.phase;
     put('runLightTxt', light.text, light.phase);
+    if (light.reload && el('runLightTxt')) {
+      const link = window.document.createElement('a');
+      link.textContent = '打开最新看板';
+      link.href = bust('./index.html');
+      link.style.cssText = 'display:inline-block;margin-left:8px;color:#6ba3f0';
+      el('runLightTxt').appendChild(link);
+    }
     const rule = ruleState();
     if (el('ruleLight')) el('ruleLight').dataset.phase = rule.phase;
     put('ruleLightTxt', rule.text, rule.phase);

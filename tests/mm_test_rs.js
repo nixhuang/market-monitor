@@ -39,7 +39,9 @@ function fixture(page = snapshot(), onlyRule = false) {
       const response = v => ({ok: true, status: 200, json: async () => clone(v), text: async () => JSON.stringify(v)});
       if (url.includes('/dispatches')) {
         data.posts=(data.posts||0)+1;
+        data.requestId=JSON.parse(options.body).inputs.request_id;
         assert.equal(options.headers.Authorization,'Bearer github_pat_test');
+        if(data.dispatchSuccess)return {ok:true,status:204};
         const failure=data.dispatchError||{status:403,message:'Resource not accessible by personal access token'};
         return {ok:false,status:failure.status,json:async()=>({message:failure.message}),
           headers:{get:name=>(failure.headers||{})[name]??null}};
@@ -237,6 +239,31 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
       assert.match(f.els.checkResult.textContent,new RegExp('最新任务：'+label));
       assert.match(f.els.checkResult.textContent,/已核对线上 run 1/);
     }
+  });
+  await check('完成时间显示北京时间时分秒，开始时间不能冒充完成时间', async () => {
+    const page=snapshot();page.finished_at='2026-10-08T01:05:06Z';
+    const f=fixture(page);await f.win.MMRunStatus.refresh();
+    assert.match(f.els.runLightTxt.textContent,/完成于 2026-10-08 09:05:06（北京时间）/);
+    delete page.finished_at;f.els.snapshotData.textContent=JSON.stringify(page);
+    await f.win.MMRunStatus.refresh();assert.match(f.els.runLightTxt.textContent,/完成于 未记录/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/09:05:06/);
+  });
+  await check('本次手动运行发布后显示新完成时间，但不伪装旧表格已经刷新', async () => {
+    const page=snapshot();page.finished_at='2026-10-08T01:05:06Z';
+    const f=fixture(page);f.data.dispatchSuccess=true;
+    f.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});
+    await f.win.MMRunStatus.startManual();
+    const fresh=snapshot(B,'2');fresh.request_id=f.data.requestId;
+    fresh.finished_at_bj='2026-10-08T10:11:12+08:00';fresh.summary.red=1;
+    f.data.status=fresh;f.data.published=fresh;
+    f.data.run={id:2,event:'workflow_dispatch',display_title:f.data.requestId,status:'completed',conclusion:'success'};
+    const result=await f.win.MMRunStatus.refresh();
+    assert.equal(result.manual.phase,'published');
+    assert.match(f.els.runLightTxt.textContent,/完成于 2026-10-08 10:11:12/);
+    assert.match(f.els.runLightTxt.textContent,/红1/);
+    assert.match(f.els.runLightTxt.textContent,/本页仍是旧数据/);
+    assert.equal(f.els.runLightTxt.children.at(-1).textContent,'打开最新看板');
+    assert.equal(JSON.parse(f.els.snapshotData.textContent).run_id,'1');
   });
   console.log('全部通过');
 })().catch(error => { console.error(error); process.exitCode = 1; });
