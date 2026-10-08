@@ -10,7 +10,7 @@
   "group_monitoring": {
     "positions": true,
     "focus": true,
-    "index_funds": false,
+    "index_funds": true,
     "technology": false,
     "healthcare": false,
     "financials": false,
