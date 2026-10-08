@@ -9,13 +9,13 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37772053869",
+  "run_id": "37772221026",
   "request_id": "",
-  "source_sha": "7e30e1bc6788aeefef56143f019b2729640985eb",
-  "started_at": "2026-10-08T11:44:30+00:00",
-  "started_at_bj": "2026-10-08T19:44:30+08:00",
-  "finished_at": "2026-10-08T19:45:29.296694+08:00",
-  "finished_at_bj": "2026-10-08T19:45:29+08:00",
+  "source_sha": "6da29b49ced3f94d066f7d5cb1c2e8c63461cc66",
+  "started_at": "2026-10-08T11:45:56+00:00",
+  "started_at_bj": "2026-10-08T19:45:56+08:00",
+  "finished_at": "2026-10-08T19:46:52.348012+08:00",
+  "finished_at_bj": "2026-10-08T19:46:52+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -186,7 +186,7 @@
     "green": 25,
     "gray": 1,
     "total": 43,
-    "macro_ok": 4,
+    "macro_ok": 5,
     "stale_symbols": [],
     "missing_symbols": [
       "BD#US10Y"
@@ -206,7 +206,7 @@
     "vix": "2026-10-07",
     "sp500": "2026-10-07",
     "ust10": "",
-    "nfci": "",
+    "nfci": "2026-10-02",
     "breadth": "2026-10-07"
   },
   "treasury_reference": {
@@ -226,18 +226,16 @@
   "market_risk": {
     "level": "yellow",
     "label": "留意风险",
-    "text": "警示：上涨参与度；缺失或过期：金融压力",
+    "text": "警示：上涨参与度",
     "levels": {
       "hy_oas": "green",
       "vix": "green",
       "sp500": "green",
       "breadth": "yellow",
-      "nfci": "gray"
+      "nfci": "green"
     },
-    "valid_count": 4,
-    "missing": [
-      "金融压力"
-    ]
+    "valid_count": 5,
+    "missing": []
   },
   "risk_quotes": {
     "vix": {
