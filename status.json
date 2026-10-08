@@ -9,13 +9,13 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37768409790",
+  "run_id": "37771519421",
   "request_id": "",
-  "source_sha": "9d2638ee77a2d4a82f5963548ce2f633f70b4acd",
-  "started_at": "2026-10-08T11:11:18+00:00",
-  "started_at_bj": "2026-10-08T19:11:18+08:00",
-  "finished_at": "2026-10-08T19:12:16.082687+08:00",
-  "finished_at_bj": "2026-10-08T19:12:16+08:00",
+  "source_sha": "a55d8ee9154bbcf13f2f6e722679e84a851848e9",
+  "started_at": "2026-10-08T11:39:39+00:00",
+  "started_at_bj": "2026-10-08T19:39:39+08:00",
+  "finished_at": "2026-10-08T19:40:28.129481+08:00",
+  "finished_at_bj": "2026-10-08T19:40:28+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -165,7 +165,7 @@
   "list_counts": {
     "positions": 14,
     "focus": 8,
-    "index_funds": 12,
+    "index_funds": 10,
     "technology": 1,
     "healthcare": 1,
     "financials": 1,
@@ -182,20 +182,20 @@
   },
   "summary": {
     "red": 3,
-    "yellow": 16,
-    "green": 26,
-    "gray": 0,
-    "total": 45,
-    "macro_ok": 8,
+    "yellow": 14,
+    "green": 25,
+    "gray": 1,
+    "total": 43,
+    "macro_ok": 4,
     "stale_symbols": [],
-    "missing_symbols": [],
+    "missing_symbols": [
+      "BD#US10Y"
+    ],
     "unsupported_symbols": [],
-    "reference_dates": {
-      "BD#US10Y": "2026-10-06"
-    },
-    "today_prices": 44,
+    "reference_dates": {},
+    "today_prices": 42,
     "prior_prices": 0,
-    "missing_prices": 0
+    "missing_prices": 1
   },
   "actual_dates": {
     "min": "2026-10-07",
@@ -203,41 +203,57 @@
   },
   "macro_dates": {
     "hy_oas": "2026-10-06",
-    "vix": "2026-10-06",
+    "vix": "2026-10-07",
     "sp500": "2026-10-07",
-    "ust10": "2026-10-06",
-    "curve": "2026-10-07",
-    "dxy": "2026-10-02",
-    "nfci": "2026-10-02",
+    "ust10": "",
+    "nfci": "",
     "breadth": "2026-10-07"
   },
   "treasury_reference": {
-    "ok": true,
-    "value": 5.27,
-    "date": "2026-10-06",
-    "source": "FRED DGS10",
-    "unit": "%",
-    "lagging": true
+    "ok": false,
+    "value": null,
+    "date": null,
+    "source": null,
+    "unit": null,
+    "lagging": null
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-07 收盘（美东交易日）",
   "market_risk": {
     "level": "yellow",
     "label": "留意风险",
-    "text": "警示：上涨参与度",
+    "text": "警示：上涨参与度；缺失或过期：金融压力",
     "levels": {
       "hy_oas": "green",
       "vix": "green",
       "sp500": "green",
       "breadth": "yellow",
-      "nfci": "green"
+      "nfci": "gray"
     },
-    "valid_count": 5,
-    "missing": []
+    "valid_count": 4,
+    "missing": [
+      "金融压力"
+    ]
+  },
+  "risk_quotes": {
+    "vix": {
+      "ok": true,
+      "value": 15.079999923706055,
+      "date": "2026-10-07",
+      "source": "Yahoo ^VIX",
+      "drawdown": null
+    },
+    "sp500": {
+      "ok": true,
+      "value": 7801.77001953125,
+      "date": "2026-10-07",
+      "source": "Yahoo ^GSPC",
+      "drawdown": -0.21946936299741537
+    }
   },
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 7
+    "yellow": 6
   }
 }
