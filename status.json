@@ -1,13 +1,13 @@
 {
   "dca_reminder": null,
-  "run_id": "37734015235",
-  "request_id": "093bd84e-020e-4d0a-8933-68d594326ba1",
-  "source_sha": "81a82fb8dd1ec477873881169c95d6dc3f14281d",
-  "started_at": "2026-10-08T05:45:51+00:00",
-  "started_at_bj": "2026-10-08T13:45:51+08:00",
-  "finished_at": "2026-10-08T13:46:43.294786+08:00",
-  "finished_at_bj": "2026-10-08T13:46:43+08:00",
-  "event": "workflow_dispatch",
+  "run_id": "37734174915",
+  "request_id": "",
+  "source_sha": "4ad34764a3021e79a9bb57b72e55ca98d7108d22",
+  "started_at": "2026-10-08T05:47:45+00:00",
+  "started_at_bj": "2026-10-08T13:47:45+08:00",
+  "finished_at": "2026-10-08T13:48:37.719225+08:00",
+  "finished_at_bj": "2026-10-08T13:48:37+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
@@ -199,6 +199,6 @@
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 7
+    "yellow": 6
   }
 }
