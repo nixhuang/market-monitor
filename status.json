@@ -9,14 +9,14 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37759698965",
-  "request_id": "",
-  "source_sha": "7f6e8bd79b7fefbf8a868a938140ff861dc09d15",
-  "started_at": "2026-10-08T09:52:53+00:00",
-  "started_at_bj": "2026-10-08T17:52:53+08:00",
-  "finished_at": "2026-10-08T17:53:43.580393+08:00",
-  "finished_at_bj": "2026-10-08T17:53:43+08:00",
-  "event": "push",
+  "run_id": "37763860507",
+  "request_id": "3ba60731-3aad-4583-af0f-dd5afb7c038e",
+  "source_sha": "23477af77692fb9e3d2820bec48b1ad41e862703",
+  "started_at": "2026-10-08T10:30:01+00:00",
+  "started_at_bj": "2026-10-08T18:30:01+08:00",
+  "finished_at": "2026-10-08T18:31:06.957214+08:00",
+  "finished_at_bj": "2026-10-08T18:31:06+08:00",
+  "event": "workflow_dispatch",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
@@ -208,13 +208,13 @@
     "curve": "2026-10-07",
     "dxy": "2026-10-02",
     "nfci": "2026-10-02",
-    "breadth": "2026-10-06"
+    "breadth": "2026-10-07"
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-06～2026-10-07 收盘（美东交易日）",
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 6
+    "yellow": 7
   }
 }
