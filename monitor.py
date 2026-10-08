@@ -1279,7 +1279,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261007-10"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261008-1"></script>'
 
 
 def config_hash(filename):
@@ -1469,12 +1469,12 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     if bad:
         init_light_phase = "bad"
         init_light = (f"抓取失败 {len(bad)} 只：{html_lib.escape('、'.join(bad[:6]))}"
-                      + (" 等" if len(bad) > 6 else "") + " · 规则未完全生效")
+                      + (" 等" if len(bad) > 6 else ""))
     else:
         init_light_phase = "ok"
-        init_light = (f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
+        init_light = (f"抓取成功 · 红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
                       f"绿{summary.get('green', 0)}{gray_txt} · "
-                      f"{summary.get('total', 0)} 只全部更新 · 规则按当前设置生效")
+                      f"{summary.get('total', 0)} 只全部更新")
     dca_info = dca_text(snapshot.get("dca_reminder"))
     # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
     ny_now = datetime.now(US_TZ)
@@ -1594,6 +1594,7 @@ h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 </div>
 <div class="statusrow">
   <div class="runlight" id="runLight" data-phase="{init_light_phase}"><i class="dot"></i><span id="runLightTxt">{init_light}</span></div>
+  <div class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">正在核对最新规则…</span></div>
 </div>
 
 {dca_html}

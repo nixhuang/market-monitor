@@ -186,6 +186,8 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
         <div class="setrow"><label>距加仓价不足 x% → 红</label><input id="set_trigger_gap_pct" inputmode="decimal"></div>
         <div class="setrow"><label>量比 ≥ x 倍 → 黄</label><input id="set_vol_ratio" inputmode="decimal"></div>
         <div class="setrow"><label>quiet 标的涨跌 ≥ x% → 黄</label><input id="set_quiet_chg" inputmode="decimal"></div>
+        <div class="setrow"><label>日内振幅 ≥ x% → 黄</label><input id="set_amp_yellow" inputmode="decimal"></div>
+        <div class="setrow"><label>日内振幅 ≥ x% → 红</label><input id="set_amp_red" inputmode="decimal"></div>
       </div>
       <div class="setsec">宏观</div>
       <div class="setgrid">
@@ -207,7 +209,8 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <button id="btnResetRules">恢复默认</button>
     </div>
     <p class="note">
-      改完点<b>保存规则</b>只提交 <kbd>settings.json</kbd>，清单与定投请另点底部保存；生效卡片按提交回执的 blob SHA 验证发布。<br>
+      改完点<b>保存规则</b>只提交 <kbd>settings.json</kbd>，清单另点底部保存，定投另点「保存定投提醒」。<br>
+      保存后需等待 Actions 重跑和看板发布，通常约 5–9 分钟；首页独立规则灯变绿才表示本页已用最新规则。<br>
       改坏也不怕：值类型不对会被忽略、自动退回默认，填错顶多是信号变多变少，不会白屏。
       <textarea id="rulesOut" spellcheck="false" class="hide"
         style="width:100%;height:160px;margin-top:10px;padding:10px;font-size:12px;
@@ -267,7 +270,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     </div>
     <p class="note">
       例：起点 <kbd>2026-10-01</kbd>、间隔 <kbd>5</kbd> → 10/01 是第 1 次，之后每过 5 个交易日（周末和美股休市日不算）提醒一次。
-      看板首页会显示「今天是定投日」或「距下次还有几个交易日（日期）」。只改这一块，不影响下面的规则阈值；点保存后约 1 分钟生效。
+      看板首页会显示「今天是定投日」或「距下次还有几个交易日（日期）」。只改这一块，不影响下面的规则阈值；点保存后通常约 5–9 分钟生效，以首页规则灯为准。
     </p>
   </div>
 
@@ -318,7 +321,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 </div>
 
-<script src="./run-status.js?v=20261007-9"></script>
+<script src="./run-status.js?v=20261008-1"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
@@ -619,11 +622,15 @@ $('btnAdd').onclick=()=>{
 /* ---------- 规则阈值（settings.json） ---------- */
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
   rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,vol_ratio:1.5,quiet_chg:2,
+  amp_yellow:5,amp_red:8,
   hy_green:350,hy_yellow:400,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,
   dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
-let SET=Object.assign({},SET_DEFS), SET_SHA='';
+let SET=Object.assign({},SET_DEFS), SET_SHA='', settingsRevision=0;
+function settingsInputs(){
+  return JSON.stringify(SET_KEYS.map(k=>{const el=$('set_'+k);return el?el.value:null;}));
+}
 
 function renderSettings(){
   SET_KEYS.forEach(k=>{
@@ -652,12 +659,14 @@ function collectSettings(){
   });
 }
 function setJsonText(){
-  const ordered={};
+  const ordered={...SET};
   SET_KEYS.forEach(k=>{ordered[k]=SET[k];});
   return JSON.stringify(ordered,null,2)+'\n';
 }
 async function loadSettings(){
+  const revision=++settingsRevision, inputs=settingsInputs();
   const r=await gh('GET','/contents/settings.json?ref='+BRANCH);
+  if(revision!==settingsRevision||inputs!==settingsInputs())return;
   if(!r.ok||!r.data.content){
     setMsg('规则读取未确认：'+whyFail(r.status,r.data.message)+'；保留当前编辑内容','err');return;
   }
@@ -671,6 +680,7 @@ async function loadSettings(){
   }catch(e){setMsg('settings.json 不是合法 JSON；保留当前编辑内容','err');}
 }
 async function saveRules(btn){
+  settingsRevision++;
   collectSettings();
   const text=setJsonText();
   if(!TOKEN){

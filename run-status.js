@@ -17,6 +17,7 @@
   const PUBLIC_RETRY_MAX = 2;
   let publicRetry = 0;
   let authNotice = '';
+  let latestRules = null, rulesError = '', ruleSince = 0;
 
   function getToken() {
     if (options.getToken) {
@@ -225,7 +226,7 @@
     const when = humanTime(verifiedSnapshot || latestStatus);
     if (activeManual()) {
       const phase = manualState.phase;
-      if (phase === 'dispatching' || phase === 'queued') return '运行已提交，正在更新看板，约 1 分钟…';
+      if (phase === 'dispatching' || phase === 'queued') return '运行已提交，正在更新看板，通常约 5–9 分钟…';
       if (phase === 'running') return '正在运行，正在抓最新行情…';
       if (phase === 'generated') return '运行已生成，正在发布到看板…';
       if (phase === 'failed') return '运行失败：' + manualState.message.replace(/^派发失败：/, '');
@@ -236,7 +237,7 @@
       if (phase === 'published') return '已生效：看板已按你保存的设置更新' + (when ? '（' + when + '）' : '');
       if (phase === 'failed') return '保存未生效：本次运行失败，请查看运行记录';
       if (phase === 'expired') return '保存已提交，但还没验证到生效；请点查运行状态确认';
-      return '保存成功，看板正在更新，约 1 分钟…';
+      return '保存成功，看板正在更新，通常约 5–9 分钟…';
     }
     if (publication.phase === 'published' && (verifiedSnapshot || latestStatus)) {
       return '看板最新数据时间 ' + (dataTimeText(verifiedSnapshot || latestStatus) || '未知') +
@@ -250,40 +251,58 @@
     }
     return '还没在这台设备保存过修改';
   }
-  // 状态灯：黄=正在抓取（修改中），红=抓取失败（几只），绿=按当前设置生效；
-  // 绿灯文案带红黄绿计数，数据时间已在第二排展示，这里不再重复。
+  function ruleState() {
+    const snap = el('snapshotData') ? pageSnapshot() : verifiedSnapshot;
+    const appliedSHA = snap && snap.config_files['settings.json'];
+    if (rulesError) return {phase: 'idle', text: '暂无法核对最新规则；请稍后查运行状态'};
+    if (!latestRules) return {phase: 'idle', text: '正在核对最新规则…'};
+    const receipt = targets['settings.json'];
+    const expectedSHA = receipt && receipt.savedAt > latestRules.checkedAt
+      ? receipt.blobSHA : latestRules.sha;
+    if (appliedSHA === expectedSHA) return {phase: 'ok', text: '规则按当前设置生效'};
+    if (!appliedSHA) return {phase: 'idle', text: '未读到有效看板快照，暂无法核对规则'};
+    if (verifiedSnapshot && verifiedSnapshot.config_files['settings.json'] === expectedSHA) {
+      return {phase: 'busy', text: '新规则已发布，本页仍是旧规则；请打开最新看板', reload: true};
+    }
+    const phase = receipt && receipt.blobSHA === expectedSHA && configState.phase === 'failed'
+      ? 'failed' : latestRules.run && phaseForRun(latestRules.run).phase;
+    if (phase === 'failed') return {phase: 'bad', text: '规则未生效：对应运行失败，请查看运行记录'};
+    if (ruleSince && Date.now() - ruleSince >= MAX_WAIT) {
+      return {phase: 'bad', text: '规则尚未生效：本页仍用旧设置，等待已超过 10 分钟；请查运行状态（不代表运行失败）'};
+    }
+    if (phase === 'generated') return {phase: 'busy', text: '新规则已生成，正在等待看板发布…'};
+    return {phase: 'busy', text: '规则已保存，正在重跑…（通常约 5–9 分钟）'};
+  }
   function lightState() {
     // 点了「立即运行」但没令牌/令牌不对：直接把原因写在灯上，否则按钮看着像坏了
     if (authNotice) return {phase: 'bad', text: authNotice};
-    const snap = verifiedSnapshot || latestStatus || pageSnapshot();
+    const snap = pageSnapshot() || verifiedSnapshot || latestStatus;
     const info = snap ? (snap.summary || {}) : {};
     const cnt = info.red != null
       ? '红' + (info.red ?? 0) + ' 黄' + (info.yellow ?? 0) + ' 绿' + (info.green ?? 0) +
         (info.gray ? ' 灰' + info.gray : '')
       : '';
     const busyText = phase => {
-      if (phase === 'dispatching' || phase === 'queued') return '规则修改中 · 正在提交运行请求…';
-      if (phase === 'running') return '规则修改中 · 正在抓取最新行情…';
+      if (phase === 'dispatching' || phase === 'queued') return '正在提交运行请求…';
+      if (phase === 'running') return '正在抓取最新行情…';
       if (phase === 'generated') return '抓取完成，正在发布到看板…';
       return '正在抓取…';
     };
-    if (activeManual()) {
-      if (manualState.phase === 'failed') {
-        return {phase: 'bad', text: '运行失败：' + manualState.message.replace(/^派发失败：/, '')};
-      }
-      return {phase: 'busy', text: busyText(manualState.phase)};
+    if (manual && manualState.phase === 'failed') {
+      return {phase: 'bad', text: '运行失败：' + manualState.message.replace(/^派发失败：/, '')};
     }
-    if (Object.keys(targets).length && !terminal.has(configState.phase)) {
+    if (activeManual()) return {phase: 'busy', text: busyText(manualState.phase)};
+    if (Object.keys(targets).length) {
       if (configState.phase === 'failed') return {phase: 'bad', text: '运行失败：本次运行未成功'};
-      return {phase: 'busy', text: busyText(configState.phase)};
+      if (activeConfig()) return {phase: 'busy', text: busyText(configState.phase)};
     }
     if (snap && info.red != null) {
-      const bad = [...(info.stale_symbols || []), ...(info.missing_symbols || [])];
+      const bad = [...new Set([...(info.stale_symbols || []), ...(info.missing_symbols || [])])];
       if (bad.length) {
         return {phase: 'bad', text: '抓取失败 ' + bad.length + ' 只：' +
-          bad.slice(0, 6).join('、') + (bad.length > 6 ? ' 等' : '') + ' · 规则未完全生效'};
+          bad.slice(0, 6).join('、') + (bad.length > 6 ? ' 等' : '')};
       }
-      return {phase: 'ok', text: cnt + ' · ' + (info.total || 0) + ' 只全部更新 · 规则按当前设置生效'};
+      return {phase: 'ok', text: '抓取成功 · ' + cnt + ' · ' + (info.total || 0) + ' 只全部更新'};
     }
     if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
     return {phase: 'idle', text: '点「立即运行」抓最新行情'};
@@ -315,6 +334,16 @@
     const light = lightState();
     if (el('runLight')) el('runLight').dataset.phase = light.phase;
     put('runLightTxt', light.text, light.phase);
+    const rule = ruleState();
+    if (el('ruleLight')) el('ruleLight').dataset.phase = rule.phase;
+    put('ruleLightTxt', rule.text, rule.phase);
+    if (rule.reload && el('ruleLightTxt')) {
+      const link = window.document.createElement('a');
+      link.textContent = '打开最新看板';
+      link.href = bust('./index.html');
+      link.style.cssText = 'margin-left:8px;color:#6ba3f0';
+      el('ruleLightTxt').appendChild(link);
+    }
     const currentPage = pageSnapshot();
     compactLegacySummary(currentPage);
     // 运行详情现在只在编辑页展示（首页已移除）：优先本页内嵌快照，其次网络读到的最新状态。
@@ -374,11 +403,12 @@
     return null;
   }
   function schedule() {
+    const ruleWaiting = ruleSince > 0 && Date.now() - ruleSince < MAX_WAIT && ruleState().phase === 'busy';
     const tracking = activeConfig() || activeManual() || retryPending;
-    if (!tracking && publicRetry >= PUBLIC_RETRY_MAX) return;
+    if (!tracking && !ruleWaiting && publicRetry >= PUBLIC_RETRY_MAX) return;
     const since = Math.min(activeConfig() ? configSince : Infinity, activeManual() ? manual.since : Infinity);
     const delay = tracking ? (Date.now() - since < 120000 ? 8000 : 20000)
-      : (publicRetry === 0 ? 4000 : 10000);
+      : ruleWaiting ? 60000 : (publicRetry === 0 ? 4000 : 10000);
     timer = window.setTimeout(() => { void tick(); }, delay);
   }
   async function tick() {
@@ -420,8 +450,60 @@
         }
       } catch (error) { actionError = networkMessage(error); }
     })();
-    await Promise.all([publicTask, actionTask]);
+    let nextRules = null, nextRulesError = '';
+    const rulesTask = (async () => {
+      const checkedAt = Date.now();
+      try {
+        const settings = await request(bust(apiURL('/contents/settings.json?ref=' +
+          encodeURIComponent(options.branch))), {github: true, signal});
+        if (!SHA.test(settings && settings.sha || '')) throw new Error('最新规则缺少有效 blob SHA');
+        nextRules = {sha: settings.sha, checkedAt, run: null};
+      } catch (error) {
+        try {
+          const raw = await request(bust('https://raw.githubusercontent.com/' +
+            encodeURIComponent(options.owner) + '/' + encodeURIComponent(options.repo) + '/' +
+            encodeURIComponent(options.branch) + '/settings.json'), {signal, text: true});
+          JSON.parse(raw);
+          const bytes = new TextEncoder().encode(raw);
+          const header = new TextEncoder().encode('blob ' + bytes.length + '\0');
+          const blob = new Uint8Array(header.length + bytes.length);
+          blob.set(header); blob.set(bytes, header.length);
+          const hash = await window.crypto.subtle.digest('SHA-1', blob);
+          nextRules = {sha: Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join(''), checkedAt, run: null};
+        } catch (_) {
+          nextRulesError = networkMessage(error);
+          return;
+        }
+      }
+      const current = el('snapshotData') ? pageSnapshot() : verifiedSnapshot;
+      if (current && current.config_files['settings.json'] === nextRules.sha) return;
+      try {
+        const commits = await request(bust(apiURL('/commits?path=settings.json&sha=' +
+          encodeURIComponent(options.branch) + '&per_page=1')), {github: true, signal});
+        const commit = Array.isArray(commits) && commits[0];
+        if (commit && SHA.test(commit.sha || '')) {
+          const atCommit = await request(apiURL('/contents/settings.json?ref=' +
+            encodeURIComponent(commit.sha)), {github: true, signal});
+          if (atCommit && atCommit.sha === nextRules.sha) {
+            nextRules.run = await findRun('&event=push', run =>
+              run.event === 'push' && run.head_sha === commit.sha, signal);
+          }
+        }
+      } catch (_) {
+        // 没有运行证据时保留等待状态，不把无关运行的失败当成规则失败。
+      }
+    })();
+    await Promise.all([publicTask, actionTask, rulesTask]);
     if (epoch !== version) return state();
+    if (nextRules) {
+      if (!latestRules || nextRules.sha !== latestRules.sha) ruleSince = 0;
+      latestRules = nextRules;
+      const current = el('snapshotData') ? pageSnapshot() : (snapshot || verifiedSnapshot);
+      if (current && current.config_files['settings.json'] !== nextRules.sha) {
+        if (!ruleSince) ruleSince = Date.now();
+      } else ruleSince = 0;
+    }
+    rulesError = nextRulesError;
     actionsError = actionError;
     // 网络失败时保留上次成功读到的状态：状态灯不该因为一次断网就从绿灯跳黄。
     if (schema(status)) latestStatus = status;
@@ -644,7 +726,7 @@
   function autoInit() {
     if (initialized) return;
     const ids = ['runState', 'runMsg', 'runSummary', 'runLight', 'runLightTxt',
-                 'btnRun', 'btnRunNow', 'btnCheckStatus', 'btnRuns'];
+                 'ruleLight', 'ruleLightTxt', 'btnRun', 'btnRunNow', 'btnCheckStatus', 'btnRuns'];
     if (ids.some(id => el(id))) init();
   }
   if (window.document.readyState === 'loading') window.document.addEventListener('DOMContentLoaded', autoInit);
