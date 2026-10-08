@@ -1,12 +1,12 @@
 {
   "dca_reminder": null,
-  "run_id": "37734771491",
+  "run_id": "37735479478",
   "request_id": "",
-  "source_sha": "df3b5924f805db5fdee4f8bcacc462cb8f249381",
-  "started_at": "2026-10-08T05:54:42+00:00",
-  "started_at_bj": "2026-10-08T13:54:42+08:00",
-  "finished_at": "2026-10-08T13:55:28.625828+08:00",
-  "finished_at_bj": "2026-10-08T13:55:28+08:00",
+  "source_sha": "7824626cf7fce4e2fc86589d3b8e4764e888e105",
+  "started_at": "2026-10-08T06:02:43+00:00",
+  "started_at_bj": "2026-10-08T14:02:43+08:00",
+  "finished_at": "2026-10-08T14:03:31.942555+08:00",
+  "finished_at_bj": "2026-10-08T14:03:31+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -196,9 +196,10 @@
     "dxy": "2026-10-02"
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
+  "data_time_text": "2026-10-07 收盘（美东交易日）",
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 7
+    "yellow": 6
   }
 }
