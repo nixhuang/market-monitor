@@ -533,7 +533,8 @@ class TestGroups(unittest.TestCase):
                      dict(yahoo(), dates=['2026-10-07']*40)):
             with self.subTest(data=data):
                 rows, info, _, _, _ = fetch(old, data)
-                self.assertEqual((rows, info), ([], {}))
+                self.assertEqual(rows, [])
+                self.assertEqual(info['source'], 'Yahoo ^TNX')
         rows, info, _, _, _ = fetch(old, None, monitor.requests.Timeout('offline'))
         self.assertEqual((rows, info), ([], {}))
         rows, info, _, _, _ = fetch(old, yahoo('2026-10-08'))
@@ -545,7 +546,10 @@ class TestGroups(unittest.TestCase):
         rows, info, _, _, _ = fetch([], yahoo())
         self.assertEqual(info['source'], 'Yahoo ^TNX')
         rows, info, _, _, _ = fetch([], None)
-        self.assertEqual((rows, info), ([], {}))
+        self.assertEqual(rows, [])
+        self.assertIn('reason', info)
+        rows, info, _, _, _ = fetch([], dict(yahoo(), highs=[1.0]*40))
+        self.assertEqual(info['source'], 'Yahoo ^TNX')
         reference = monitor.macro_index_quote('BD#US10Y', {}, 'index_funds',
             {'ust10': {'ok':True, 'value':4.2, 'date':'2026-10-06', 'source':'FRED DGS10', 'lagging':True}})
         cfg = {'index_funds': {'BD#US10Y': {}}, 'group_monitoring': {'index_funds':True}}

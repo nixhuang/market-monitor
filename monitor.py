@@ -424,9 +424,16 @@ def treasury_yield_series(days=400, source_info=None):
         data = yahoo_history("^TNX")
         rows = validated(_rows_from_closes(data.get("closes", []), days, data.get("dates"))) if data else []
         name = data.get("quote_name", "").lower() if data else ""
-        compatible = bool(data and valid_history(data) and data.get("quote_symbol") == "^TNX")
+        compatible = bool(data and data.get("quote_symbol") == "^TNX" and
+                          isinstance(data.get('price'), (int, float)) and math.isfinite(data['price']) and
+                          data.get('closes') and math.isclose(data['price'], data['closes'][-1]))
         if name:
             compatible = compatible and "10" in name and ("yield" in name or "interest rate" in name)
+        if source_info is not None and not (rows and compatible):
+            source_info.update(source='Yahoo ^TNX', reason='收益率序列或标的校验未通过',
+                               quote_name=data.get('quote_name', '') if data else '',
+                               observed_date=(data.get('dates') or [''])[-1] if data else '',
+                               observed_value=data.get('price') if data else None)
         if rows and compatible:
             if source_info is not None:
                 source_info.update(source="Yahoo ^TNX", unit="%", date=rows[-1][0], lagging=rows[-1][0] < target)
@@ -564,7 +571,7 @@ def build_macro():
         else:
             continue
         if not rows:
-            macro[key] = {"ok": False, "name": cfg["name"]}
+            macro[key] = {"ok": False, "name": cfg["name"], **source_info}
             continue
         cur = rows[-1][1] * cfg["scale"]
         prev = rows[-2][1] * cfg["scale"] if len(rows) >= 2 else None
@@ -1777,7 +1784,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
         "treasury_reference": {key: macro.get("ust10", {}).get(key) for key in
-                               ("ok", "value", "date", "source", "unit", "lagging")},
+                               ("ok", "value", "date", "source", "unit", "lagging", "reason", "quote_name", "observed_date", "observed_value")},
         "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
     }
     snapshot["data_time_text"] = market_data_time(snapshot)
