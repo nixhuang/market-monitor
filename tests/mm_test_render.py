@@ -31,7 +31,7 @@ snapshot = {
     "event": "push", "target_trade_date": "2026-10-06", "mode": "closed",
     "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
     "config_files": {}, "effective_settings": {},
-    "list_counts": {"positions": 2, "focus": 2, "watch": 6, "triggers": 0, "dca": 0},
+    "list_counts": {"positions": 2, "focus": 2, "technology": 6, "triggers": 0, "dca": 0},
     "summary": {"red": 2, "yellow": 2, "green": 4, "gray": 2, "total": 10,
                 "macro_ok": 6, "stale_symbols": [], "missing_symbols": []},
     "actual_dates": {"min": "2026-10-06", "max": "2026-10-06"},
@@ -44,11 +44,11 @@ items = [
     item("CRSP", "position", "gray", chg=0.0),
     item("TEM", "focus", "red", chg=8.0),
     item("SOXL", "focus", "yellow", chg=3.0, etf=True),
-    item("MCD", "watch", "red", chg=-4.5),
-    item("XLU", "watch", "yellow", chg=2.5, etf=True),
-    item("PG", "watch", "green", chg=0.3),
-    item("BAC", "watch", "gray", chg=0.0),
-    item("JNJ", "watch", "green", chg=0.2),
+    item("MCD", "technology", "red", chg=-4.5),
+    item("XLU", "technology", "yellow", chg=2.5, etf=True),
+    item("PG", "technology", "green", chg=0.3),
+    item("BAC", "technology", "gray", chg=0.0),
+    item("JNJ", "technology", "green", chg=0.2),
 ]
 
 html = monitor.render(macro, items, 10, snapshot=snapshot, dup_hidden=2)
@@ -75,26 +75,21 @@ check("运行详情" not in html, "首页无运行详情")
 check('class="card sumcard"' not in html and "sumline" not in html, "首页摘要卡已移除")
 
 # 分组
-check('<h2 class="grp">持仓</h2>' in html, "持仓分组")
-check('<h2 class="grp">重点关注</h2>' in html, "重点关注分组")
-check('<h2 class="grp">其他关注</h2>' in html, "其他关注分组（已改名）")
-check("其他重点关注" not in html, "旧名「其他重点关注」已消失")
-check(html.count("<h2>个股</h2>") == 3 and html.count("<h2>ETF 基金</h2>") == 2,
-      "三组都拆个股/ETF（持仓组无警示 ETF 故 2 个 ETF 小节）")
-check("SPYM" not in html.split("snapshotData")[1], "绿色 ETF（SPYM）只计数不上表")
-pos_card = html.split('class="grp">持仓')[1].split("</div>\n")[0]
-check("NTNX" in pos_card and "SPYM" not in pos_card.split("ETF 基金")[0].replace("NTNX", ""),
-      "持仓组内个股/ETF 分表")
-focus_card = html.split('class="grp">重点关注')[1].split('<h2 class="grp">')[0]
-check("TEM" in focus_card and "SOXL" in focus_card, "重点关注组包含 TEM/SOXL")
-watch_card = html.split('class="grp">其他关注')[1].split("<div class=")[0]
-check("MCD" in watch_card and "XLU" in watch_card and "PG" not in watch_card,
-      "其他关注组只含警示行，绿色只计数")
-check("在册：持仓 2 · 重点关注 2 · 其他关注 6" in html, "在册行计数")
-check("已隐藏 2 只与持仓/重点关注重复" in html, "去重提示")
-# 灰色行应展示
-watch_card_all = html.split('class="grp">其他关注')[1].split('class="grp"')[0]
-check("BAC" in watch_card_all, "灰色（取数失败）行也展示")
+check(html.count('class="card group-card"') == 14, "十四个分类均可折叠")
+check('id="group_positions" open' in html and 'id="group_focus" open' in html, "持仓与重点关注默认展开")
+check('id="group_technology"' in html and 'IT软硬Ai (5)' in html, "IT 分类展示计数")
+check('其他关注' not in html, "旧其他关注分类已移除")
+check(html.count("<h2>个股</h2>") == 3 and html.count("<h2>ETF 基金</h2>") == 2, "分类内警示个股与 ETF 分区")
+check('无异动 1 只 · 点击查看' in html and 'SPYM' in html, "无异动标的可展开查看")
+pos_card = html.split('id="group_positions"')[1].split('id="group_focus"')[0]
+check('NTNX' in pos_card and 'SPYM' in pos_card, "持仓包含警示及无异动标的")
+focus_card = html.split('id="group_focus"')[1].split('id="group_index_funds"')[0]
+check('TEM' in focus_card and 'SOXL' in focus_card, "重点关注仍包含 TEM/SOXL")
+tech_card = html.split('id="group_technology"')[1].split('id="group_healthcare"')[0]
+check('MCD' in tech_card and 'XLU' in tech_card and 'PG' in tech_card, "IT 分类包含警示与无异动标的")
+check('在册：持仓 2 · 重点关注 2 · IT软硬Ai 6' in html, "在册计数更新")
+check('已隐藏 2 只重复标的' in html, "跨组去重提示")
+check('BAC' in tech_card, "灰色取数失败仍展示")
 
 # 盘中口径
 snap2 = dict(snapshot)
@@ -106,9 +101,9 @@ check("数据时间 2026-10-07 23:19（盘中，北京时间）" in html2, "盘�
 # 重点关注为空
 items3 = [d for d in items if d["group"] != "focus"]
 snap3 = dict(snapshot)
-snap3["list_counts"] = {"positions": 2, "focus": 0, "watch": 6, "triggers": 0, "dca": 0}
+snap3["list_counts"] = {"positions": 2, "focus": 0, "technology": 6, "triggers": 0, "dca": 0}
 html3 = monitor.render(macro, items3, 8, snapshot=snap3, dup_hidden=0)
-check("重点关注清单还是空的" in html3, "重点关注空态提示")
+check('重点关注 (0)' in html3 and '暂无标的，去设置页录入或导入 CSV' in html3, "重点关注空态提示")
 
 # 抓取失败文案
 snap4 = dict(snapshot)
@@ -152,6 +147,8 @@ check('鼠标悬停徽章' not in html5, "页脚更新为点击查看说明")
 check(html5.count('<tr class="red"') == html.count('<tr class="red"'), "基本面不影响红行数量")
 check('data-phase="ok"' in html5, "基本面不影响状态灯（仍为绿）")
 check('RSI 6 / 12 / 24' in html5 and '同侧两条黄、三条红' in html5, "页脚说明三线 RSI 分级")
+check('逼近、触碰、穿越均为黄' in html5 and '布林信号 + RSI 至少两条同侧达到或越过阈值 → 红' in html5,
+      "页脚说明布林独立黄与RSI组合红")
 by_sym(items, "NTNX")["fund"]["hits"] = ['利润 < 0 & "下降" <script>alert(1)</script>']
 html6 = monitor.render(macro, items, 10, snapshot=snapshot)
 check('&lt;script&gt;alert(1)&lt;/script&gt;' in html6 and '<script>alert(1)</script>' not in html6,

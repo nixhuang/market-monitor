@@ -1,3 +1,6 @@
 __pycache__/
 .venv/
 .playwright-cli/
+preview.html
+preview-data.json
+最新分组看板.html

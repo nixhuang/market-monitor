@@ -45,6 +45,31 @@ button.danger{color:var(--red)}
 .add{margin-top:10px}
 .add input.s{width:104px}
 .add select{width:82px}
+.edit-group>summary{color:var(--text);font-size:14px;list-style:none;display:flex;gap:8px;align-items:center}
+.edit-group>summary::-webkit-details-marker{display:none}
+.edit-group>summary{flex-wrap:wrap}
+.monitor-toggle{margin-left:auto;font-size:12px;padding:8px 10px;min-height:36px;touch-action:manipulation}
+.monitor-toggle[aria-checked="true"]{color:var(--green);border-color:var(--green)}
+.monitor-note{font-size:12px;color:var(--dim);margin:4px 0 10px;line-height:1.6}
+.monitor-toggle:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
+.edit-group>summary::before{content:'›';font-size:20px;color:var(--dim)}
+.edit-group[open]>summary::before{transform:rotate(90deg)}
+.edit-group .group-filter{width:100%;margin:3px 0 12px;font-size:13px}
+.edit-group .move{font-size:12px;max-width:120px;padding:7px}
+.edit-group .row input.n{min-width:140px}
+.group-tools{color:var(--dim);font-size:12px;gap:8px;margin:20px 2px 12px}
+.group-tools h2{margin:0 auto 0 0;color:var(--text);font-size:14px}
+.group-tools button{padding:5px 9px;font-size:12px}
+@media(max-width:480px){.edit-group .row{display:grid;grid-template-columns:82px minmax(0,1fr) 42px;gap:6px}
+.edit-group .sym{width:82px;grid-column:1}
+.edit-group .row input.n{min-width:0;width:100%;grid-column:2}
+.edit-group .del{grid-column:3;grid-row:1;padding:7px}
+.edit-group .row input.t{grid-column:1;width:82px;font-size:13px}
+.edit-group .move{grid-column:2;max-width:none;width:100%}
+.edit-group .add .s{width:82px;font-size:13px}
+.edit-group .add button{grid-column:3;grid-row:1;padding:7px 3px;font-size:12px}
+.edit-group .add .t{grid-row:2}}
+.edit-group summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
 .empty{color:#5f6672;font-size:13px;padding:3px 0 8px}
 #msg{font-size:13px;min-height:22px;margin:0 2px 12px;line-height:1.6}
 #msg.ok{color:var(--green)} #msg.err{color:var(--red)} #msg.busy{color:var(--dim)}
@@ -176,6 +201,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
         <div class="setrow"><label>标准差倍数</label><input id="set_boll_k" inputmode="decimal"></div>
         <div class="setrow"><label>距上下轨不足 x% 就算命中</label><input id="set_boll_near_pct" inputmode="decimal"></div>
       </div>
+      <p class="note">布林上、下轨逼近、触碰、穿越均为黄；同时出现 RSI 至少两条同侧达到或越过阈值时为红。无双重信号时各按独立规则判定，其他红警示仍保留。</p>
       <div class="setsec">个股</div>
       <div class="setgrid">
         <div class="setrow"><label>单日涨跌 ≥ x% → 红</label><input id="set_chg_red" inputmode="decimal"></div>
@@ -220,44 +246,25 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     </p>
   </div>
 
-  <div class="card">
-    <h2>从券商 CSV 导入 <span>（只取代码，数量和成本一律丢弃）</span></h2>
+  <div class="card group-intro">
+    <h2>CSV / EBK 导入 <span>（先选分组，再上传文件）</span></h2>
     <div class="row">
-      <label class="filebtn">持仓 CSV<input type="file" id="filePos" accept=".csv,.txt,.tsv" hidden></label>
-      <label class="filebtn">关注 CSV<input type="file" id="fileWatch" accept=".csv,.txt,.tsv" hidden></label>
+      <label for="csvKind" class="note">导入到</label>
+      <select id="csvKind" aria-label="CSV 目标分组"></select>
+      <label class="filebtn">上传 CSV / EBK<input type="file" id="fileCsv" accept=".csv,.ebk,.txt,.tsv" hidden></label>
     </div>
-    <div class="csvinfo" id="csvInfo">
-      持仓 CSV = <b>以这份为准整组替换</b>，清单里有、这份里没有的会被移除<br>
-      关注 CSV = <b>只增不删</b>，与持仓/重点关注重复的也照常收录；看板上重复的代码只在优先级最高的分区显示一次（持仓 &gt; 重点关注 &gt; 其他关注）<br>
-      港股 / A股（0700.HK、600519.SS 这类带点的）暂不支持，自动忽略
-    </div>
+    <p class="note" id="csvMode">持仓：按 CSV 替换整组，其余组不受影响。</p>
+    <p class="note">CSV 可读取代码及名称；EBK 自动识别富途市场标识并补充名称。忽略 A股、港股和 SGOV，特殊指数 / 期货 / 汇率代码保留，暂不支持报价时显示无数据。持仓替换，其余分类追加；已有备注和加仓价保留。</p>
+    <div class="note" id="importAudit"></div>
+    <div class="csvinfo" id="csvInfo" aria-live="polite"></div>
     <button class="primary hide" id="btnApply">确认导入</button>
   </div>
-
-  <div class="card">
-    <details class="fold" id="foldPos" open>
-      <summary>持仓重点关注 <span id="cntPos"></span></summary>
-      <div id="listPos"></div>
-      <div class="pager" id="pagerPos"></div>
-    </details>
-    <div class="add row">
-      <input class="s" id="newSym" placeholder="代码">
-      <input class="n" id="newNote" placeholder="备注（可空）">
-      <input class="t" id="newTrig" placeholder="加仓价">
-      <select id="newKind"><option value="positions">持仓</option><option value="focus">重点关注</option><option value="watch">其他关注</option></select>
-      <button id="btnAdd">添加</button>
-    </div>
-    <p class="note">加仓价填了才会出现「距加仓价还差 x%」这条信号，留空就不判断。</p>
+  <div class="row group-tools">
+    <h2>分类清单</h2><span id="groupTotal"></span>
+    <button id="btnExpandGroups">全部展开</button><button id="btnCollapseGroups">全部收起</button>
   </div>
-
-  <div class="card">
-    <details class="fold" id="foldFocus" open>
-      <summary>重点关注 <span id="cntFocus"></span></summary>
-      <div id="listFocus"></div>
-      <div class="pager" id="pagerFocus"></div>
-    </details>
-    <p class="note">重点关注的标的会单独成为一个分区（在持仓之后、其他关注之前）；同一只代码同时在几个清单里时，只在优先级更高的分区显示一次（持仓 &gt; 重点关注 &gt; 其他关注）。</p>
-  </div>
+  <p class="note" style="margin-bottom:12px">持仓和重点关注始终监测，无需开关。其他分组的监测开关改完点底部「保存」才生效；关闭后清单仍保留，不抓取该组普通标的。行业组已有的 XL 板块 ETF 继续监测和报警，不自动添加基金。</p>
+  <fieldset id="groupEditor" disabled style="border:0;padding:0;margin:0;min-width:0"></fieldset>
 
   <div class="card">
     <h2>定投提醒 <span>（全局一条，按美股交易日计数）</span></h2>
@@ -273,17 +280,6 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       例：起点 <kbd>2026-10-01</kbd>、间隔 <kbd>5</kbd> → 10/01 是第 1 次，之后每过 5 个交易日（周末和美股休市日不算）提醒一次。
       看板首页会显示「今天是定投日」或「距下次还有几个交易日（日期）」。只改这一块，不影响下面的规则阈值；点保存后通常约 5–9 分钟生效，以首页规则灯为准。
     </p>
-  </div>
-
-  <div class="card">
-    <details class="fold" id="foldWatch">
-      <summary>其他关注 <span id="cntWatch"></span></summary>
-      <div class="row" style="margin:2px 0 8px">
-        <input class="s" id="watchFilter" placeholder="按代码筛选（如 AAP 或 A）">
-      </div>
-      <div id="listWatch"></div>
-      <div class="pager" id="pagerWatch"></div>
-    </details>
   </div>
 
   <div class="savebar">
@@ -322,30 +318,61 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 </div>
 
-<script src="./run-status.js?v=20261008-1"></script>
+<script src="./run-status.js?v=20261008-3"></script>
+<script src="./list-import.js?v=20261008-1"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
 const TKEY='mm_gh_token_v1';
+const LOCAL_PREVIEW=location.origin!=='https://nixhuang.github.io';
+const DRAFT_KEY='mm_groups_preview_monitoring_v3';
+let AUDIT=null;
+function showAudit(){
+  if(!AUDIT)return;
+  const all=new Set(GROUPS.flatMap(g=>Object.keys(data[g.key]||{})));
+  const missing=AUDIT.all_symbols.filter(s=>!all.has(s));
+  const extra=[...all].filter(s=>!AUDIT.all_symbols.includes(s));
+  $('importAudit').textContent='按上传的原分组保留成员，不自动补归。当前在册唯一代码 '+all.size+' 个。'
+    +(missing.length?' 全部清单中另有 '+missing.length+' 个代码未指定分组，保留待确认，不自动添加：'+missing.join('、'):'')
+    +(extra.length?' 与全部清单不同的代码：'+extra.join('、'):'');
+}
+let GROUPS=[], KINDS=[], KIND_LABEL={}, NAMES={};
+const pageState={}, filters={};
+let monitoring={};
+function alwaysMonitored(key){return key==='positions'||key==='focus';}
+function monitorEnabled(key){return alwaysMonitored(key)||monitoring[key]===true;}
+function configText(){return JSON.stringify({...extra,...data,group_monitoring:{
+  ...monitoring,...Object.fromEntries(GROUPS.map(g=>[g.key,monitorEnabled(g.key)]))}},null,2)+'\n';}
 
 const msg=document.getElementById('msg');
 const setMsg=(t,c)=>{msg.textContent=t||'';msg.className=c||'';};
 const $=id=>document.getElementById(id);
 
 let TOKEN='';
-try{TOKEN=localStorage.getItem(TKEY)||'';}catch(e){}
+try{if(!LOCAL_PREVIEW)TOKEN=localStorage.getItem(TKEY)||'';}catch(e){}
 function saveTok(t){TOKEN=t;try{localStorage.setItem(TKEY,t);return true;}catch(e){return false;}}
 let SHA='';
-let data={positions:{},focus:{},watch:{}};
+let data={};
 let extra={};
 let changed=false;
-let pending=null;
+let pending=null, loadRevision=0, loaded=false;
+function loadingControls(loading){
+  $('groupEditor').disabled=loading;
+  ['btnSave','csvKind','fileCsv'].forEach(id=>$(id).disabled=loading);
+}
 
 function b64enc(s){const b=new TextEncoder().encode(s);let x='';for(const v of b)x+=String.fromCharCode(v);return btoa(x);}
 function b64dec(s){const x=atob(s.replace(/\s/g,''));const b=new Uint8Array(x.length);for(let i=0;i<x.length;i++)b[i]=x.charCodeAt(i);return new TextDecoder().decode(b);}
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 
 async function gh(method,path,body,getToken=()=>TOKEN){
+  if(LOCAL_PREVIEW){
+    if(method!=='GET')return {ok:false,status:0,data:{message:'本地预览禁止远端写入'}};
+    const file=path.includes('settings.json')?'settings.json':'holdings.json';
+    try{const r=await fetch('./'+file,{cache:'no-store'});const text=await r.text();
+      return {ok:r.ok,status:r.status,data:{content:b64enc(text),sha:''}};
+    }catch(e){return {ok:false,status:0,data:{message:e.message}};}
+  }
   const controller=new AbortController();
   const opt={method,signal:controller.signal,cache:'no-store',headers:{Accept:'application/vnd.github+json'}};
   const token=getToken();if(token)opt.headers.Authorization='Bearer '+token;
@@ -377,7 +404,9 @@ function trackReceipt(file,response){
   setMsg(file+' 已提交：'+commitSHA+'；尚未确认发布生效，请看生效卡片','ok');
   return true;
 }
-window.MMRunStatus.init({owner:OWNER,repo:REPO,branch:BRANCH,getToken:()=>TOKEN});
+window.MMRunStatus.init({owner:OWNER,repo:REPO,branch:BRANCH,getToken:()=>{
+  try{return TOKEN||localStorage.getItem(TKEY)||'';}catch(e){return TOKEN;}
+}});
 function whyFail(status,dflt){
   if(status===0)return dflt||'网络请求未确认；请检查仓库最新版本后再操作，不要盲目重复写入';
   if(status===401)return '令牌无效或已过期（401）';
@@ -390,25 +419,9 @@ function whyFail(status,dflt){
 /* ---------- CSV 识别 ---------- */
 const NOISE=new Set(['','-','--','n/a','na','cash','cash & money market','total','totals',
   'pending','symbol','ticker','代码','股票代码','证券代码','account total','合计','小计']);
-function isTicker(v){
-  v=(v||'').trim();
-  if(NOISE.has(v.toLowerCase()))return false;
-  if(v.length>12)return false;
-  return /^\$?[A-Za-z][A-Za-z0-9./\-^]{0,7}$/.test(v);
-}
-function normTicker(v){
-  v=(v||'').trim().toUpperCase().replace(/^\$/,'');
-  const m=v.match(/^(.+?)[-./](US|HK|SH|SZ|SS|SG|JP|UK|AU|CA)$/);
-  if(m){
-    const code=m[1],mk=m[2];
-    if(mk==='US')return code;
-    if(mk==='HK'){const c=code.replace(/^0+/,'');return (c?c.padStart(4,'0'):code)+'.HK';}
-    if(mk==='SH'||mk==='SS')return code+'.SS';
-    if(mk==='SZ')return code+'.SZ';
-    return code+'.'+mk;
-  }
-  return v.replace(/\./g,'-').replace(/\//g,'-');
-}
+const Import=window.MMListImport;
+function isTicker(v){return !NOISE.has(String(v||'').trim().toLowerCase())&&Import.valid(v);}
+function normTicker(v){return Import.normalize(v);}
 function splitLine(line,d){
   const out=[];let cur='';let q=false;
   for(let i=0;i<line.length;i++){
@@ -420,8 +433,8 @@ function splitLine(line,d){
   out.push(cur);return out;
 }
 function parseCsv(text){
-  const lines=text.split(/\r?\n/).filter(l=>l.trim());
-  if(!lines.length)return {symbols:[],how:'文件是空的'};
+  const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)return {symbols:[],names:{},ignored:[],rejected:[],how:'文件是空的'};
   const d=(lines[0].split(',').length>=lines[0].split('\t').length)?',':'\t';
   const rows=lines.map(l=>splitLine(l,d));
   const hints=['symbol','ticker','代码','证券代码','股票代码','标的','sym'];
@@ -435,43 +448,60 @@ function parseCsv(text){
   }
   let how='按表头识别代码列';
   if(col===null){
-    let best=0,bs=-1;
-    for(let j=0;j<Math.max.apply(null,rows.map(r=>r.length));j++){
+    let best=0,bs=-1,ties=0;
+    const columns=rows.reduce((max,row)=>Math.max(max,row.length),0);
+    for(let j=0;j<columns;j++){
       let sc=0;rows.forEach(r=>{if(j<r.length&&isTicker(r[j]))sc++;});
-      if(sc>bs){bs=sc;best=j;}
+      if(sc>bs){bs=sc;best=j;ties=1;}else if(sc===bs){ties++;}
     }
+    if(bs>0&&ties>1)return {symbols:[],names:{},ignored:[],rejected:[],format:'CSV',
+      error:'无法明确识别代码列：多个列同样像股票代码，请补充 symbol 或「代码」表头后上传。'};
     col=best;hi=-1;how='没找到表头，按内容推测代码列';
   }
-  const out=[],seen=new Set();
+  const headers=hi>=0?rows[hi].map(v=>v.trim().toLowerCase()):[];
+  const nameCol=headers.findIndex(v=>['名称','公司名称','证券名称','股票名称','中文名称','name','company','company name','description','security name'].includes(v));
+  const out=[],names={},ignored=[],rejected=[],seen=new Set();
   for(let i=hi+1;i<rows.length;i++){
     const v=(col<rows[i].length)?rows[i][col].trim():'';
-    if(!isTicker(v))continue;
+    const reason=Import.ignoredReason(v);
+    if(reason){ignored.push({raw:v,reason});continue;}
+    if(!isTicker(v)){if(v&&!NOISE.has(v.toLowerCase()))rejected.push(v);continue;}
     const s=normTicker(v);
     if(s&&!seen.has(s)){seen.add(s);out.push(s);}
+    if(nameCol>=0&&rows[i][nameCol])names[s]=rows[i][nameCol].trim();
   }
-  return {symbols:out,how:how};
+  return {symbols:out,names,ignored,rejected,format:'CSV',how:how};
 }
 
 /* ---------- 载入 ---------- */
 async function load(){
+  const revision=++loadRevision;
+  loadingControls(true);pending=null;$('btnApply').classList.add('hide');csvRevision++;
   setMsg('正在读取清单…','busy');
   const r=await gh('GET','/contents/holdings.json?ref='+BRANCH);
+  if(revision!==loadRevision)return;
   if(!r.ok||!r.data.content){
     setMsg('读取失败：'+whyFail(r.status,r.data.message),'err');
-    $('authCard').classList.remove('hide');
+    if(!LOCAL_PREVIEW)$('authCard').classList.remove('hide');
+    loadingControls(!loaded);
     return;
   }
   try{
     const c=JSON.parse(b64dec(r.data.content));
-    data={positions:c.positions||{},focus:c.focus||{},watch:c.watch||{}};
+    let config=c;
+    if(LOCAL_PREVIEW){try{const saved=localStorage.getItem(DRAFT_KEY);if(saved)config=JSON.parse(saved);}catch(e){}}
+    data=Object.fromEntries(GROUPS.map(g=>[g.key,config[g.key]||{}]));
+    monitoring=config.group_monitoring&&typeof config.group_monitoring==='object'&&!Array.isArray(config.group_monitoring)
+      ?{...config.group_monitoring}:{};
     extra={};
-    Object.keys(c).forEach(k=>{if(k!=='positions'&&k!=='focus'&&k!=='watch')extra[k]=c[k];});
+    Object.keys(config).forEach(k=>{if(!KIND_LABEL[k]&&k!=='watch')extra[k]=config[k];});
+    GROUPS.forEach(g=>Object.entries(data[g.key]).forEach(([s,c])=>{if(!c.note&&NAMES[normTicker(s)])c.note=NAMES[normTicker(s)];}));
     SHA=r.data.sha||'';
     changed=false;
     render();
-    setMsg(TOKEN?'':'手动模式：改完点保存，把生成的 JSON 粘到 GitHub 网页端',TOKEN?'':'ok');
-    loadRun();loadSettings();
-  }catch(e){setMsg('仓库里的 holdings.json 不是合法 JSON：'+e,'err');}
+    setMsg(LOCAL_PREVIEW?'本地预览：保存仅存本机草稿，不提交 GitHub':TOKEN?'':'手动模式：改完点保存，复制 JSON 到 GitHub',TOKEN?'':'ok');
+    loaded=true;loadingControls(false);loadRun();loadSettings();
+  }catch(e){setMsg('仓库里的 holdings.json 不是合法 JSON：'+e,'err');loadingControls(!loaded);}
 }
 
 function loadRun(){return window.MMRunStatus.refresh();}
@@ -479,29 +509,78 @@ function loadRun(){return window.MMRunStatus.refresh();}
 /* ---------- 渲染 ---------- */
 const PAGE_SIZE=50;
 const FILTER_CAP=200;
-let watchFilter='';
-const pageState={positions:0,focus:0,watch:0};
+
 const bySym=(a,b)=>String(a).toUpperCase().localeCompare(String(b).toUpperCase());
 // ETF 静态表：与 monitor.py 的 ETF_SYMBOLS 保持一致（新增 ETF 时两边都要加）
 const ETF_SET=new Set('AGG,ARKF,ARKK,ARKQ,ARKW,ARKX,BAR,BIL,BITO,BIV,BND,BSV,DBC,DBP,DGRO,DGRW,DIA,DRAM,EEM,EFA,EMB,ETHA,EUV,EWJ,FBTC,FLOT,FXI,GBTC,GLD,GLDM,GLTR,GSG,HYD,HYG,HYMB,IAU,IAUM,IBIT,ICSH,IEF,IEFA,IEI,IEMG,ITOT,IVV,IWM,IYR,IYT,JNK,JPST,KBE,KIE,KRE,LQD,MGK,MGV,MTUM,MUB,NEAR,NOBL,PALL,PFF,PGX,PPLT,QQQ,QQQM,QUAL,REM,SCHA,SCHB,SCHD,SCHE,SCHF,SCHP,SCHR,SCHX,SCHZ,SDY,SGOL,SGOV,SHV,SHY,SIVR,SIZE,SLV,SMH,SOXL,SOXS,SOXX,SPHD,SPHQ,SPMO,SPY,SPYG,SPYM,SPYV,SPYX,SQQQ,SVXY,TFLO,TIP,TLT,TQQQ,UNG,USMV,USO,UVXY,VAW,VB,VBR,VCIT,VCR,VCSH,VDC,VDE,VEA,VFH,VGT,VHT,VIG,VIS,VLUE,VNQ,VNQI,VO,VOO,VOOG,VOOV,VPU,VTI,VTV,VUG,VWO,VXUS,VXX,VYM,XAR,XBI,XHB,XLB,XLC,XLE,XLF,XLI,XLK,XLP,XLRE,XLU,XLV,XLY,XME,XOP,XPH,XRT,XSW,XTN'.split(','));
 const isEtf=s=>ETF_SET.has(String(s).toUpperCase());
-const KIND_LABEL={positions:'持仓',focus:'重点关注',watch:'其他关注'};
-const KINDS=[
-  {k:'positions',list:'listPos',  pager:'pagerPos',  cnt:'cntPos',  sort:false,filter:false},
-  {k:'focus',    list:'listFocus',pager:'pagerFocus',cnt:'cntFocus',sort:true, filter:false},
-  {k:'watch',    list:'listWatch',pager:'pagerWatch',cnt:'cntWatch',sort:true, filter:true}
-];
+function initGroups(groups){
+  GROUPS=groups;
+  KIND_LABEL=Object.fromEntries(groups.map(g=>[g.key,g.label]));
+  KINDS=groups.map(g=>({k:g.key,list:'list_'+g.key,pager:'pager_'+g.key,cnt:'cnt_'+g.key,sort:g.key!=='positions'}));
+  $('csvKind').innerHTML=groups.map(g=>'<option value="'+g.key+'">'+esc(g.label)+'</option>').join('');
+  $('groupEditor').innerHTML=groups.map(g=>'<details class="fold edit-group" id="fold_'+g.key+'"'+(g.key==='positions'?' open':'')+'>'
+    +'<summary>'+esc(g.label)+' <span id="cnt_'+g.key+'">(0)</span>'
+    +(alwaysMonitored(g.key)?'<span class="monitor-note" style="margin:0 0 0 auto">始终监测</span>'
+      :'<button type="button" class="monitor-toggle" id="monitor_'+g.key+'" role="switch" aria-checked="false" aria-label="'+esc(g.label)+'分组监测">监测关闭</button>')+'</summary>'
+    +'<div class="pane"><div class="monitor-note" id="monitorNote_'+g.key+'"></div>'
+    +'<input class="group-filter" id="filter_'+g.key+'" placeholder="筛选代码或名称" aria-label="筛选'+esc(g.label)+'">'
+    +'<div id="list_'+g.key+'"></div><div class="pager" id="pager_'+g.key+'"></div>'
+    +'<div class="add row"><input class="s" id="newSym_'+g.key+'" placeholder="股票代码" aria-label="'+esc(g.label)+'股票代码">'
+    +'<input class="n" id="newNote_'+g.key+'" placeholder="中文名 / 英文公司名" aria-label="'+esc(g.label)+'名称备注">'
+    +'<input class="t" id="newTrig_'+g.key+'" placeholder="加仓价" inputmode="decimal">'
+    +'<button class="primary" id="add_'+g.key+'">添加</button></div></div></details>').join('');
+  groups.forEach(g=>{
+    data[g.key] ||= {}; pageState[g.key]=0; filters[g.key]='';
+    $('filter_'+g.key).oninput=e=>{filters[g.key]=e.target.value;pageState[g.key]=0;render();};
+    $('add_'+g.key).onclick=()=>addSymbol(g.key);
+    if(alwaysMonitored(g.key))return;
+    $('monitor_'+g.key).onclick=e=>{
+      e.preventDefault();e.stopPropagation();
+      if(!loaded||$('groupEditor').disabled)return;
+      monitoring[g.key]=!monitorEnabled(g.key);render();touch();
+      setMsg('「'+g.label+'」监测'+(monitorEnabled(g.key)?'已开启':'已关闭')+'，点底部保存才生效','ok');
+    };
+  });
+}
+function addSymbol(kind){
+  const symbol=normTicker($('newSym_'+kind).value);
+  if(!isTicker(symbol)){setMsg('请填写有效代码，A股、港股和 SGOV 不导入','err');return;}
+  if(Object.keys(data[kind]).some(s=>normTicker(s)===symbol)){setMsg(symbol+' 已在该分组中','err');return;}
+  const note=$('newNote_'+kind).value.trim()||NAMES[symbol]||'';
+  if(!note){setMsg('请补充中文名或英文公司名称，作为首页备注显示','err');$('newNote_'+kind).focus();return;}
+  const trigger=$('newTrig_'+kind).value.trim();
+  if(trigger&&!Number.isFinite(Number(trigger))){setMsg('加仓价应填写数字','err');return;}
+  data[kind][symbol]={note,...(trigger?{trigger:Number(trigger)}:{})};
+  ['newSym_','newNote_','newTrig_'].forEach(id=>$(id+kind).value='');
+  render();touch();setMsg('已添加 '+symbol+' 到「'+KIND_LABEL[kind]+'」','ok');
+}
+function moveSymbol(from,to,symbol){
+  if(!KIND_LABEL[to]||from===to)return;
+  if(Object.keys(data[to]).some(s=>normTicker(s)===normTicker(symbol))){setMsg('目标分组已包含 '+symbol+'，未移动','err');render();return;}
+  data[to][symbol]=data[from][symbol];delete data[from][symbol];
+  $('fold_'+to).open=true;render();touch();
+}
+$('btnExpandGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=true);
+$('btnCollapseGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=false);
 
 function render(){
   KINDS.forEach(K=>{
     $(K.cnt).textContent='('+Object.keys(data[K.k]||{}).length+')';
+    const enabled=monitorEnabled(K.k),group=GROUPS.find(g=>g.key===K.k);
+    const sectorPresent=group.sector_etf&&Object.keys(data[K.k]||{}).some(s=>normTicker(s)===group.sector_etf);
+    const toggle=alwaysMonitored(K.k)?null:$('monitor_'+K.k);
+    if(toggle){toggle.textContent=enabled?'监测开启':'监测关闭';toggle.setAttribute('aria-checked',String(enabled));}
+    $('monitorNote_'+K.k).textContent=alwaysMonitored(K.k)?'本组始终开启监测，无需开关；跨组重复只抓取一次。':enabled?'监测本组全部标的，跨组重复只抓取一次。':sectorPresent
+      ?'分组监测已关闭；本组已有的 '+group.sector_etf+' 仍正常抓取和报警。普通标的保留但暂停监测。'
+      :'分组监测已关闭；清单仍保留，本组独有标的不抓取、不报警。';
     const box=$(K.list),pager=$(K.pager);
     let keys=Object.keys(data[K.k]||{});
     if(K.sort)keys=keys.slice().sort(bySym);
     // 个股在前、ETF 在后，各自保持原有顺序（持仓不重排，只分区）
     keys=keys.filter(s=>!isEtf(s)).concat(keys.filter(isEtf));
-    const q=(K.filter?(watchFilter||''):'').trim().toUpperCase();
-    const view=q?keys.filter(s=>String(s).toUpperCase().indexOf(q)>=0):keys;
+    const q=(filters[K.k]||'').trim().toUpperCase();
+    const view=q?keys.filter(s=>(s+' '+(data[K.k][s].note||'')).toUpperCase().includes(q)):keys;
     let page=pageState[K.k];
     const pages=Math.max(1,Math.ceil(view.length/PAGE_SIZE));
     if(page>=pages)page=pages-1;
@@ -524,6 +603,7 @@ function render(){
         +'<span class="sym" title="'+esc(s)+'">'+esc(s)+'</span>'
         +'<input class="n" value="'+esc(c.note||'')+'" placeholder="备注" data-f="note">'
         +'<input class="t" value="'+esc(tv)+'" placeholder="加仓价" data-f="trigger" inputmode="decimal">'
+        +'<select class="move" aria-label="移动 '+esc(s)+' 到分组">'+GROUPS.map(g=>'<option value="'+g.key+'"'+(g.key===K.k?' selected':'')+'>'+esc(g.label)+'</option>').join('')+'</select>'
         +'<button class="del" title="删除">×</button></div>';
     });
     box.innerHTML=h;
@@ -564,17 +644,24 @@ function render(){
         if(!confirm('从「'+KIND_LABEL[k]+'」里删除 '+s+' ？'))return;
         delete data[k][s];render();touch();setMsg('已删 '+s+'，点保存才生效','ok');
       };
+      row.querySelector('.move').onchange=e=>moveSymbol(row.dataset.k,e.target.value,row.dataset.s);
     });
   });
+  $('groupTotal').textContent=GROUPS.length+' 个分组 · '+Object.values(data).reduce((n,g)=>n+Object.keys(g).length,0)+' 条记录';
+  showAudit();
 }
-$('watchFilter').addEventListener('input',()=>{
-  watchFilter=$('watchFilter').value||'';watchPage=0;render();
-});
 function touch(){changed=true;$('dirty').textContent='有未保存的改动';}
 
 /* ---------- 保存 ---------- */
 $('btnSave').onclick=async e=>{
-  const text=JSON.stringify(Object.assign({},extra,data),null,2)+'\n';
+  if(!loaded||$('groupEditor').disabled){setMsg('清单尚未载入完成，不能保存','err');return;}
+  const text=configText();
+  if(LOCAL_PREVIEW){
+    try{localStorage.setItem(DRAFT_KEY,text);changed=false;$('dirty').textContent='本机草稿已保存';
+      setMsg('仅保存到本机浏览器，未提交 GitHub；刷新后可继续编辑','ok');
+    }catch(e){setMsg('本机草稿保存失败：'+e.message,'err');}
+    return;
+  }
   if(!TOKEN){
     $('jsonOut').value=text;
     $('manualCard').classList.remove('hide');
@@ -591,7 +678,7 @@ $('btnSave').onclick=async e=>{
   const r=await gh('PUT','/contents/holdings.json',body);
   if(r.ok){
     SHA=(r.data.content&&r.data.content.sha)||SHA;
-    const currentText=JSON.stringify(Object.assign({},extra,data),null,2)+'\n';
+    const currentText=configText();
     changed=currentText!==text;
     $('dirty').textContent=changed?'有未保存的改动（提交期间又修改了清单）':'清单已提交，等待发布验证';
     trackReceipt('holdings.json',r.data);
@@ -605,20 +692,6 @@ $('btnSave').onclick=async e=>{
 $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定丢弃重新载入？'))return;load();};
 
 $('btnRun').onclick=()=>{void window.MMRunStatus.startManual();};
-
-$('btnAdd').onclick=()=>{
-  let s=$('newSym').value.trim().toUpperCase();
-  if(!s){setMsg('先填代码','err');return;}
-  s=s.replace(/^\$/,'').replace(/\//g,'-').replace(/\./g,'-');
-  const k=$('newKind').value,note=$('newNote').value.trim(),trig=$('newTrig').value.trim();
-  if(data[k][s]){setMsg(s+' 已经在「'+KIND_LABEL[k]+'」里了','err');return;}
-  const o={};
-  if(note)o.note=note;
-  if(trig&&!isNaN(Number(trig)))o.trigger=Number(trig);
-  data[k][s]=o;
-  $('newSym').value='';$('newNote').value='';$('newTrig').value='';
-  render();touch();setMsg('已添加 '+s+'，点保存才生效','ok');
-};
 
 /* ---------- 规则阈值（settings.json） ---------- */
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
@@ -684,6 +757,7 @@ async function saveRules(btn){
   settingsRevision++;
   collectSettings();
   const text=setJsonText();
+  if(LOCAL_PREVIEW){setMsg('本地预览：规则仅用于查看，未写入 GitHub','ok');return;}
   if(!TOKEN){
     $('rulesOut').value=text;$('rulesOut').classList.remove('hide');
     let copied=false;try{await navigator.clipboard.writeText(text);copied=true;}catch(err){}
@@ -724,71 +798,67 @@ $('btnResetRules').onclick=()=>{
 };
 
 /* ---------- CSV 导入 ---------- */
-function readCsv(input,kind){
-  const f=input.files[0];if(!f)return;
-  const fr=new FileReader();
-  fr.onload=()=>{
-    const res=parseCsv(fr.result);
-    if(!res.symbols.length){setMsg('没识别出代码，换个文件或手动添加','err');return;}
-    // 代码里带点的都是非美股（0700.HK / 600519.SS），脚本没做货币和时区适配，直接忽略
-    const skipped=res.symbols.filter(s=>s.indexOf('.')>=0);
-    let syms=res.symbols.filter(s=>s.indexOf('.')<0);
-    // 关注组保留完整清单：和持仓重复的代码照样收录（这里能自由增减），
-    // 看板渲染时重复的这只只在「持仓」区出现一次，不会重复报警
-    let dupPos=[];
-    if(kind==='watch'){
-      const posNorm={};
-      Object.keys(data.positions||{}).forEach(k=>{posNorm[normTicker(k)]=1;});
-      syms.forEach(s=>{if(posNorm[s])dupPos.push(s);});
-    }
-    if(!syms.length){
-      setMsg('这份 CSV 里没有可用的美股代码'+(skipped.length?'（'+skipped.length+' 只港股/A股已忽略）':''),'err');
-      return;
-    }
-    const old=data[kind]||{};
-    const oldNorm={};Object.keys(old).forEach(k=>{oldNorm[normTicker(k)]=k;});
-    const added=[],kept=[];
-    syms.forEach(s=>{(oldNorm[s]!==undefined)?kept.push(s):added.push(s);});
-    // 持仓 = 整组替换；关注 = 只增不删
-    const removed=(kind==='positions')
-      ? Object.keys(old).filter(k=>syms.indexOf(normTicker(k))<0) : [];
-    pending={kind:kind,symbols:syms,oldNorm:oldNorm};
-    $('csvInfo').innerHTML='<b>'+(kind==='positions'?'持仓':'关注')+'</b>：识别到 '
-      +res.symbols.length+' 只（'+res.how+'）<br>'
-      +'新增 '+added.length+'：'+(added.slice(0,20).join(' ')||'—')+'<br>'
-      +'保留 '+kept.length+'：'+(kept.slice(0,20).join(' ')||'—')+'<br>'
-      +(kind==='positions'
-        ? '移除 '+removed.length+'：'+(removed.slice(0,20).join(' ')||'—')+'（以这份为准）'
-        : '不删除任何原有标的（关注组只增不删）')
-      +(skipped.length?'<br>忽略 '+skipped.length+' 只（港股/A股不支持）：'+skipped.slice(0,10).join(' '):'')
-      +(dupPos.length?'<br>其中与持仓重复 '+dupPos.length+' 只（照常收录，看板只在持仓区显示一次）：'+dupPos.slice(0,10).join(' '):'');
-    $('btnApply').classList.remove('hide');
-    setMsg('确认无误后点「确认导入」，然后别忘了点保存','ok');
-    input.value='';
-  };
-  fr.readAsText(f);
+let csvRevision=0;
+function previewCsv(text,kind,filename=''){
+  pending=null;$('btnApply').classList.add('hide');
+  if(!KIND_LABEL[kind])return;
+  const ebk=/\.ebk$/i.test(filename)||(!/\.(csv|tsv)$/i.test(filename)&&Import.looksLikeEbk(text));
+  const res=ebk?Import.parseEbk(text):parseCsv(text);
+  const symbols=res.symbols;
+  if(res.error){$('csvInfo').textContent=res.error;setMsg(res.error,'err');return;}
+  if(!symbols.length){
+    $('csvInfo').textContent='未导入。忽略 '+res.ignored.length+' 条：'+res.ignored.map(v=>v.raw+'（'+v.reason+'）').join('、')
+      +(res.rejected.length?'；未识别：'+res.rejected.join('、'):'');
+    setMsg('没有可用代码，未修改任何清单','err');return;
+  }
+  const old=data[kind],oldNorm=Object.fromEntries(Object.keys(old).map(s=>[normTicker(s),s]));
+  const added=symbols.filter(s=>oldNorm[s]===undefined),kept=symbols.filter(s=>oldNorm[s]!==undefined);
+  const removed=kind==='positions'?Object.keys(old).filter(s=>!symbols.includes(normTicker(s))):[];
+  const unnamed=symbols.filter(s=>!old[oldNorm[s]]?.note&&!NAMES[s]&&!res.names[s]);
+  pending={kind,symbols,names:res.names||{},baseline:JSON.stringify(old),text,filename};
+  $('csvInfo').innerHTML='<b>目标分组：'+esc(KIND_LABEL[kind])+'</b> · '+res.format+' · '+symbols.length+' 只<br>'
+    +'新增 '+added.length+'：'+esc(added.slice(0,20).join(' ')||'—')+'<br>'
+    +'已在组内 '+kept.length+'：'+esc(kept.slice(0,20).join(' ')||'—')+'<br>'
+    +(kind==='positions'?'将移除 '+removed.length+'：'+esc(removed.slice(0,20).join(' ')||'—'):'追加模式，不删除原有标的')
+    +(res.ignored.length?'<br>已忽略 '+res.ignored.length+' 条：'+esc(res.ignored.map(v=>v.raw+'（'+v.reason+'）').join('、')):'')
+    +(res.rejected.length?'<br>未识别 '+res.rejected.length+' 条，未导入：'+esc(res.rejected.join('、')):'')
+    +(unnamed.length?'<br>'+unnamed.length+' 只未提供公司名称，导入后请在备注中补充':'')
+    +'<br><b>确认前不会修改任何清单。</b>';
+  $('btnApply').textContent='确认导入到「'+KIND_LABEL[kind]+'」';$('btnApply').classList.remove('hide');
 }
-$('filePos').onchange=e=>readCsv(e.target,'positions');
-$('fileWatch').onchange=e=>readCsv(e.target,'watch');
+async function readCsv(input){
+  const file=input.files[0];if(!file)return;
+  const kind=$('csvKind').value,revision=++csvRevision;
+  pending=null;$('btnApply').classList.add('hide');
+  try{
+    const bytes=new Uint8Array(await file.arrayBuffer());
+    const utf16=bytes[0]===0xff&&bytes[1]===0xfe?'utf-16le':bytes[0]===0xfe&&bytes[1]===0xff?'utf-16be':null;
+    let text;
+    try{text=new TextDecoder(utf16||'utf-8',{fatal:true}).decode(bytes);}catch(e){text=new TextDecoder('gb18030',{fatal:true}).decode(bytes);}
+    if(revision===csvRevision)previewCsv(text,kind,file.name);
+  }catch(e){setMsg('文件读取失败：'+e.message,'err');}
+  input.value='';
+}
+$('fileCsv').onchange=e=>readCsv(e.target);
+$('csvKind').onchange=()=>{
+  csvRevision++;pending=null;$('btnApply').classList.add('hide');$('csvInfo').textContent='';
+  $('csvMode').textContent=$('csvKind').value==='positions'?'持仓：按 CSV 替换整组，其余组不受影响。':'追加到所选分组，只增不删，其他组不受影响。';
+};
 $('btnApply').onclick=()=>{
   if(!pending)return;
-  const kind=pending.kind,old=data[kind]||{},next={};
-  if(kind==='positions'){
-    // 整组替换：以这份 CSV 为准，已有的继承备注和加仓价
-    pending.symbols.forEach(s=>{
-      const src=pending.oldNorm[s];
-      next[s]=(src!==undefined)?JSON.parse(JSON.stringify(old[src])):{};
-    });
-  }else{
-    // 只增不删：原有全部保留，只把新的追加进去
-    Object.keys(old).forEach(k=>{next[k]=old[k];});
-    pending.symbols.forEach(s=>{if(pending.oldNorm[s]===undefined)next[s]={};});
-  }
-  data[kind]=next;render();touch();
-  $('btnApply').classList.add('hide');
-  setMsg((kind==='positions'?'已按这份 CSV 覆盖持仓 ':'已追加到关注 ')
-    +pending.symbols.length+' 只，点保存才写入仓库','ok');
-  pending=null;
+  const {kind,symbols,names,baseline,text,filename}=pending,old=data[kind];
+  if(JSON.stringify(old)!==baseline){previewCsv(text,kind,filename);setMsg('目标清单已变化，已重新预览，请再次确认','err');return;}
+  const oldNorm=Object.fromEntries(Object.keys(old).map(s=>[normTicker(s),s]));
+  const next=kind==='positions'?{}:{...old};
+  symbols.forEach(s=>{
+    const key=kind!=='positions'&&oldNorm[s]!==undefined?oldNorm[s]:s;
+    const existing=old[oldNorm[s]]||{};
+    next[key]={...existing};
+    if(!next[key].note)next[key].note=names[s]||NAMES[s]||'';
+  });
+  data[kind]=next;pending=null;$('btnApply').classList.add('hide');
+  $('fold_'+kind).open=true;render();touch();
+  setMsg('已导入到「'+KIND_LABEL[kind]+'」，共 '+symbols.length+' 只；尚未保存','ok');
 };
 
 /* ---------- 令牌 ---------- */
@@ -852,13 +922,30 @@ window.addEventListener('unhandledrejection',e=>setMsg('请求出错：'+(e.reas
 // 链接里带令牌（edit.html#github_pat_xxx）：手机扫码/点开即自动填好，不用手打
 (function(){
   const h=(location.hash||'').replace(/^#/,'').trim();
-  if(h&&/^(ghp_|github_pat_)/.test(h)){
+  if(!LOCAL_PREVIEW&&h&&/^(ghp_|github_pat_)/.test(h)){
     saveTok(h);
     try{history.replaceState(null,'',location.pathname+(location.search||''));}catch(e){}
   }
 })();
 
-if(TOKEN){$('authCard').classList.add('hide');$('main').classList.remove('hide');load();}
+async function bootstrap(){
+  loadingControls(true);
+  try{
+    const [groups,names]=await Promise.all(['groups.json','symbol-names.json'].map(async file=>{
+      const r=await fetch('./'+file,{cache:'no-store'});if(!r.ok)throw new Error(file+' 读取失败');return r.json();
+    }));
+    NAMES=names;initGroups(groups);
+    if(LOCAL_PREVIEW){
+      try{const r=await fetch('./import-audit.json',{cache:'no-store'});if(r.ok)AUDIT=await r.json();}catch(e){}
+      $('authCard').classList.add('hide');$('main').classList.remove('hide');
+      $('btnSave').textContent='保存本机草稿';
+      document.querySelector('.sub').innerHTML='本地分类预览 · 不会提交或修改 GitHub<br><a href="./preview.html">← 查看首页分类预览</a>';
+      ['btnTok','btnLink','btnWipe'].forEach(id=>$(id).disabled=true);
+      await load();
+    }else if(TOKEN){$('authCard').classList.add('hide');$('main').classList.remove('hide');await load();}
+  }catch(e){setMsg('分类页面初始化失败：'+e.message,'err');}
+}
+void bootstrap();
 </script>
 </body>
 </html>

@@ -10,6 +10,7 @@ on:
       - 'holdings.json'
       - 'settings.json'
       - 'monitor.py'
+      - 'groups.json'
       - '.github/workflows/daily.yml'
   schedule:
     # 美东周一至周五20:30：夏令时北京次日08:30，冬令时次日09:30。

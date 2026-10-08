@@ -17,10 +17,10 @@ def neutral_data():
 
 
 class TestRSI(unittest.TestCase):
-    def analyze(self, values, cfg=None, data=None):
+    def analyze(self, values, cfg=None, data=None, bands=(100, 110, 90), streak=None):
         with patch.object(monitor, 'calc_rsi', side_effect=values) as rsi, \
-                patch.object(monitor, 'boll', return_value=(100, 110, 90)), \
-                patch.object(monitor, 'boll_streak', return_value={'up': 0, 'dn': 0}):
+                patch.object(monitor, 'boll', return_value=bands), \
+                patch.object(monitor, 'boll_streak', return_value=streak or {'up': 0, 'dn': 0}):
             result = monitor.analyze_symbol('TEST', cfg or {}, data or neutral_data())
             self.assertEqual([call.args[1] for call in rsi.call_args_list], [6, 12, 24])
         return result
@@ -58,6 +58,52 @@ class TestRSI(unittest.TestCase):
                     self.assertIn('RSI6=', rsi_signals[0])
                     self.assertIn('RSI12=', rsi_signals[0])
                     self.assertIn('RSI24=', rsi_signals[0])
+
+    def test_bollinger_independent_yellow_and_combined_red(self):
+        bands_cases = [(100, 101.5, 90), (100, 101, 90), (100, 100.8, 90),
+                       (100, 110, 98.6), (100, 110, 99), (100, 110, 99.2),
+                       (100, 101, 99)]
+        rsi_cases = [([50, 50, 50], 'yellow', False), ([70, 50, 50], 'yellow', False),
+                     ([80, 20, 50], 'yellow', False), ([70, 70, 50], 'red', True),
+                     ([30, 30, 50], 'red', True), ([70, 70, 70], 'red', True),
+                     ([30, 30, 30], 'red', True), ([None, 70, 70], 'red', True)]
+        for bands in bands_cases:
+            for values, expected, combined in rsi_cases:
+                with self.subTest(bands=bands, rsi=values):
+                    level, signals, detail = self.analyze(values, bands=bands)
+                    self.assertEqual(level, expected)
+                    self.assertEqual(detail['level'], expected)
+                    self.assertEqual(sum('布林' in s and '双重' not in s for s in signals), 1)
+                    self.assertEqual('布林 + RSI 双重信号 → 红' in signals, combined)
+
+    def test_bollinger_misses_do_not_upgrade_rsi(self):
+        for bands in [(100, 102, 90), (100, 110, 98), (None, None, None)]:
+            level, signals, _ = self.analyze([70, 70, 50], bands=bands)
+            self.assertEqual(level, 'yellow')
+            self.assertFalse(any('布林' in s for s in signals))
+
+    def test_consecutive_bollinger_hits_do_not_turn_red(self):
+        streak = {'up': {'days': 6, 'cross': 2}, 'dn': {'days': 0, 'cross': 0}}
+        level, signals, _ = self.analyze([50, 50, 50], bands=(100, 101, 90), streak=streak)
+        self.assertEqual(level, 'yellow')
+        self.assertTrue(any('连续第6日' in s for s in signals))
+        self.assertFalse(any('双重信号' in s for s in signals))
+
+    def test_other_yellow_is_not_an_rsi_signal(self):
+        data = neutral_data()
+        data['prev_close'] = 97.5
+        level, signals, _ = self.analyze([50, 50, 50], bands=(100, 101, 90), data=data)
+        self.assertEqual(level, 'yellow')
+        self.assertTrue(any(s.startswith('波动') for s in signals))
+        self.assertFalse(any('双重信号' in s for s in signals))
+
+    def test_other_red_with_bollinger_stays_red(self):
+        for cfg, prev in [({}, 94), ({'trigger': 100}, 100)]:
+            data = neutral_data()
+            data['prev_close'] = prev
+            level, signals, _ = self.analyze([50, 50, 50], cfg=cfg, data=data, bands=(100, 101, 90))
+            self.assertEqual(level, 'red')
+            self.assertFalse(any('双重信号' in s for s in signals))
 
     def test_other_red_not_downgraded(self):
         data = neutral_data()

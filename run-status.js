@@ -1,6 +1,32 @@
 (function (window) {
   'use strict';
 
+  if (window.location && window.location.origin && window.location.origin !== 'https://nixhuang.github.io') {
+    const show = () => {
+      ['runState', 'runMsg', 'appliedState', 'appliedBrief'].forEach(id => {
+        const node = window.document.getElementById(id);
+        if (node) node.textContent = '本地预览：尚未提交 GitHub，不会触发线上运行';
+      });
+      ['runLight', 'ruleLight'].forEach(id => {
+        const node = window.document.getElementById(id);
+        if (node) node.dataset.phase = 'idle';
+      });
+      [['runLightTxt', '本地预览 · 行情为历史快照'], ['ruleLightTxt', '本地预览 · 尚未发布']].forEach(([id, text]) => {
+        const node = window.document.getElementById(id);
+        if (node) node.textContent = text;
+      });
+      ['btnRun', 'btnRunNow', 'btnCheckStatus', 'btnRuns'].forEach(id => {
+        const node = window.document.getElementById(id);
+        if (node) node.disabled = true;
+      });
+      return {phase: 'preview', message: '仅本地预览'};
+    };
+    window.MMRunStatus = {init: () => { show(); return window.MMRunStatus; },
+      refresh: async () => show(), watchConfig: async () => show(), startManual: async () => show()};
+    show();
+    return;
+  }
+
   const MAX_WAIT = 10 * 60 * 1000;
   const RETRY_WAIT = 5 * 60 * 1000;
   const SHA = /^[a-f0-9]{40,64}$/i;
@@ -141,7 +167,8 @@
       '运行计划 ' + (s.schedule || '未记录') + ' · 数据模式 ' + (s.mode || '未知'),
       '红 ' + (summary.red ?? '未知') + ' / 黄 ' + (summary.yellow ?? '未知') + ' / 绿 ' + (summary.green ?? '未知') +
         ' / 灰 ' + (summary.gray ?? '未知') + ' / 总数 ' + (summary.total ?? '未知') + ' · 宏观有效 ' + (summary.macro_ok ?? '未知'),
-      '持仓 ' + (counts.positions ?? '未知') + ' · 关注 ' + (counts.watch ?? '未知') +
+      (s.groups || [{key: 'positions', label: '持仓'}, {key: 'focus', label: '重点关注'}])
+        .map(g => g.label + ' ' + (counts[g.key] ?? 0)).join(' · ') +
         ' · 设了加仓价 ' + (counts.triggers ?? '未知') + ' 只 · 定投提醒 ' + (counts.dca ? '已开启' : '未开启'),
       '行情实际日期 ' + (dates.min || '未知') + ' ～ ' + (dates.max || '未知') +
         ' · 过期 ' + list(summary.stale_symbols) + ' · 缺失 ' + list(summary.missing_symbols),
@@ -302,7 +329,16 @@
         return {phase: 'bad', text: '抓取失败 ' + bad.length + ' 只：' +
           bad.slice(0, 6).join('、') + (bad.length > 6 ? ' 等' : '')};
       }
-      return {phase: 'ok', text: '抓取成功 · ' + cnt + ' · ' + (info.total || 0) + ' 只全部更新'};
+      const unsupported = (info.unsupported_symbols || []).length;
+      const total = info.total || 0;
+      if (!total) return {phase: 'idle', text: Object.values(snap.registered_counts || {}).some(n => n > 0)
+        ? '没有开启的监测标的，未抓取报价' : '清单为空，未抓取报价'};
+      if (unsupported >= total) return {phase: 'idle', text: '清单中 ' + unsupported + ' 个特殊代码暂不支持报价，未抓取报价'};
+      if (unsupported) {
+        return {phase: 'ok', text: '抓取成功 · ' + cnt + ' · ' +
+          (total - unsupported) + ' 只报价已更新 · ' + unsupported + ' 个特殊代码暂不支持报价'};
+      }
+      return {phase: 'ok', text: '抓取成功 · ' + cnt + ' · ' + total + ' 只全部更新'};
     }
     if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
     return {phase: 'idle', text: '点「立即运行」抓最新行情'};

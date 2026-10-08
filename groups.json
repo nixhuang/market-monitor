@@ -1,0 +1,16 @@
+[
+  {"key":"positions","label":"持仓","item_group":"position"},
+  {"key":"focus","label":"重点关注","item_group":"focus"},
+  {"key":"index_funds","label":"指数基","item_group":"index_funds"},
+  {"key":"technology","label":"IT软硬Ai","item_group":"technology","sector_etf":"XLK"},
+  {"key":"healthcare","label":"医疗保健","item_group":"healthcare","sector_etf":"XLV"},
+  {"key":"financials","label":"金融","item_group":"financials","sector_etf":"XLF"},
+  {"key":"energy","label":"能源","item_group":"energy","sector_etf":"XLE"},
+  {"key":"industrials","label":"工航防建机","item_group":"industrials","sector_etf":"XLI"},
+  {"key":"materials","label":"化材金纸","item_group":"materials","sector_etf":"XLB"},
+  {"key":"utilities","label":"公水电气","item_group":"utilities","sector_etf":"XLU"},
+  {"key":"consumer_staples","label":"必需消费品","item_group":"consumer_staples","sector_etf":"XLP"},
+  {"key":"communications","label":"通信娱乐","item_group":"communications","sector_etf":"XLC"},
+  {"key":"consumer_discretionary","label":"非车酒奢","item_group":"consumer_discretionary","sector_etf":"XLY"},
+  {"key":"real_estate","label":"房地产","item_group":"real_estate","sector_etf":"XLRE"}
+]

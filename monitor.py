@@ -44,6 +44,38 @@ FRED_API_KEY = os.environ.get("FRED_API_KEY", "").strip()
 
 # ---------------------------------------------------------------- 配置
 
+with open(os.path.join(BASE, "groups.json"), encoding="utf-8") as f:
+    GROUPS = json.load(f)
+GROUP_LABELS = {g["item_group"]: g["label"] for g in GROUPS}
+
+
+def group_monitoring(cfg):
+    saved = cfg.get("group_monitoring") or {}
+    if not isinstance(saved, dict):
+        saved = {}
+    return {g["key"]: True if g["key"] in ("positions", "focus")
+            else saved[g["key"]] if isinstance(saved.get(g["key"]), bool)
+            else False for g in GROUPS}
+
+
+def grouped_universe(cfg):
+    monitoring = group_monitoring(cfg)
+    seen, universe, counts, duplicates = set(), [], {}, 0
+    for group in GROUPS:
+        counts[group["key"]] = 0
+        for symbol, settings in (cfg.get(group["key"]) or {}).items():
+            normalized = normalize_symbol(symbol).upper().replace('.', '-').replace('/', '-')
+            if not monitoring[group["key"]] and normalized != group.get("sector_etf"):
+                continue
+            if normalized in seen:
+                duplicates += 1
+                continue
+            seen.add(normalized)
+            universe.append((symbol, settings, group["item_group"]))
+            counts[group["key"]] += 1
+    return universe, counts, duplicates
+
+
 FRED_SERIES = {
     "hy_oas":   {"id": "BAMLH0A0HYM2", "name": "跑路价签",   "unit": "bp",  "scale": 100},
     "vix":      {"id": "VIXCLS",       "name": "VIX",        "unit": "",    "scale": 1},
@@ -670,6 +702,11 @@ def nasdaq_history(symbol):
 FUTU_MARKET = {"US": None, "HK": ".HK", "SH": ".SS", "SS": ".SS", "SZ": ".SZ"}
 
 
+def quote_supported(symbol):
+    s = normalize_symbol(symbol)
+    return not (s.startswith((".", "BD#")) or s.endswith("MAIN") or s in ("2USDCNY", "2XAUUSD"))
+
+
 def normalize_symbol(symbol):
     """把富途 moomoo 导出的「代码-市场」写法转成行情源认的格式
 
@@ -677,6 +714,10 @@ def normalize_symbol(symbol):
     已经是 Yahoo 写法的原样返回。
     """
     s = (symbol or "").strip().upper()
+    if s.startswith("31#"):
+        s = s[3:]
+    if s == "BRK.B":
+        s = "BRK-B"
     if "-" not in s and "." not in s:
         return s
     for sep in ("-", "."):
@@ -1100,8 +1141,8 @@ def dca_text(d):
 
 # ---------------------------------------------------------------- 筛选
 
-def analyze_symbol(sym, cfg, data, group="watch"):
-    """返回 (等级, 信号列表, 详情dict)  group: position=持仓 / watch=关注"""
+def analyze_symbol(sym, cfg, data, group="technology"):
+    """返回等级、信号和详情，分组定义见 groups.json。"""
     closes = data["closes"]
     vols = data["volumes"]
     price = data["price"]
@@ -1208,17 +1249,19 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         if gap_up <= S["boll_near_pct"]:
             text = (f"突破布林上轨 {boll_up:,.2f}" if gap_up <= 0
                     else f"逼近布林上轨 还差{gap_up:.2f}%")
-            hits.append((gap_up, text + touch_note(touch_up) + streak_txt_up, "red"))
+            hits.append((gap_up, text + touch_note(touch_up) + streak_txt_up))
     if boll_dn is not None:
         gap_dn = (touch_dn - boll_dn) / boll_dn * 100
         if gap_dn <= S["boll_near_pct"]:
             text = (f"跌破布林下轨 {boll_dn:,.2f}" if gap_dn <= 0
                     else f"逼近布林下轨 还差{gap_dn:.2f}%")
-            hits.append((gap_dn, text + touch_note(touch_dn) + streak_txt_dn, "yellow"))
+            hits.append((gap_dn, text + touch_note(touch_dn) + streak_txt_dn))
     if hits:
-        hits.sort(key=lambda x: x[0])
-        signals.append(hits[0][1])
-        bump(hits[0][2])
+        signals.append(min(hits, key=lambda x: x[0])[1])
+        bump("yellow")
+        if max(high_hits, low_hits) >= 2:
+            signals.append("布林 + RSI 双重信号 → 红")
+            bump("red")
 
     # 🟡 黄色规则
     if chg is not None and S["chg_yellow"] <= abs(chg) < S["chg_red"]:
@@ -1287,12 +1330,13 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261008-1"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261008-3"></script>'
 
 
 def config_hash(filename):
     """与GitHub Contents API content.sha一致，用于精确验证哪版配置已生效。"""
-    raw = open(os.path.join(BASE, filename), "rb").read()
+    with open(os.path.join(BASE, filename), "rb") as f:
+        raw = f.read()
     return hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\0" + raw).hexdigest()
 
 
@@ -1306,13 +1350,16 @@ def beijing_iso(value):
         return ""
 
 
-def build_snapshot(macro, items, cfg, watch_shown=None):
+def build_snapshot(macro, items, cfg, group_counts=None):
     dates = sorted({d.get("data_date") for d in items if d.get("data_date")})
-    missing = [normalize_symbol(d["symbol"]) for d in items if d.get("price") is None]
+    unsupported = [normalize_symbol(d["symbol"]) for d in items if not quote_supported(d["symbol"])]
+    missing = [normalize_symbol(d["symbol"]) for d in items
+               if d.get("price") is None and quote_supported(d["symbol"])]
     stale = [normalize_symbol(d["symbol"]) for d in items
              if d.get("data_date") and TARGET_DATE and d["data_date"] < TARGET_DATE]
-    positions, focus, watch = (cfg.get("positions", {}), cfg.get("focus", {}),
-                               cfg.get("watch", {}))
+    monitoring = group_monitoring(cfg)
+    positions = cfg.get("positions", {}) if monitoring["positions"] else {}
+    counts = group_counts if group_counts is not None else grouped_universe(cfg)[1]
     dca = global_dca(TARGET_DATE)
     return {
         "dca_reminder": dca,
@@ -1329,14 +1376,16 @@ def build_snapshot(macro, items, cfg, watch_shown=None):
         "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
         "config_files": {f: config_hash(f) for f in ("holdings.json", "settings.json")},
         "effective_settings": dict(S),
-        # watch 计数用「看板实际展示/抓取」的只数，不含与持仓/重点关注重复被隐藏的那些
-        "list_counts": {"positions": len(positions), "focus": len(focus),
-                        "watch": len(watch) if watch_shown is None else watch_shown,
+        "groups": GROUPS,
+        "group_monitoring": monitoring,
+        "registered_counts": {g["key"]: len(cfg.get(g["key"]) or {}) for g in GROUPS},
+        "list_counts": {**counts,
                         "triggers": sum(bool(c.get("trigger")) for c in positions.values()),
                         "dca": 1 if dca else 0},
         "summary": {**{lv: sum(d["level"] == lv for d in items) for lv in ("red", "yellow", "green", "gray")},
                     "total": len(items), "macro_ok": sum(bool(m.get("ok")) for m in macro.values()),
-                    "stale_symbols": stale, "missing_symbols": missing},
+                    "stale_symbols": stale, "missing_symbols": missing,
+                    "unsupported_symbols": unsupported},
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
         "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
@@ -1344,6 +1393,9 @@ def build_snapshot(macro, items, cfg, watch_shown=None):
 
 
 def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
+    snapshot = snapshot or {}
+    monitoring = snapshot.get("group_monitoring", {})
+    registered = snapshot.get("registered_counts", {})
     rows_macro = []
     for key in ["hy_oas", "vix", "sp500", "ust10", "curve", "dxy"]:
         it = macro.get(key, {})
@@ -1361,6 +1413,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             val = f'{it["value"]:.1f}'
         elif key == "ust10":
             val = f'{it["value"]:.2f}%'
+        elif key == "curve":
+            val = f'{it["value"]:.2f}<span class="unit">个百分点</span>'
         else:
             val = f'{it["value"]:.2f}'
 
@@ -1382,7 +1436,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             base = 1.5  # 夹在黄和绿之间
         return (base, -(abs(d["chg"]) if d["chg"] else 0))
 
-    items.sort(key=sort_key)
+    items = sorted(items, key=sort_key)
+    items_by_group = {g["item_group"]: [] for g in GROUPS}
+    for item in items:
+        if item.get("group") in items_by_group:
+            items_by_group[item["group"]].append(item)
 
     def rows_of(lst):
         out = ""
@@ -1392,7 +1450,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             chg_cls = "up" if (d["chg"] or 0) > 0 else (
                 "down" if (d["chg"] or 0) < 0 else "")
             chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
-            note = f'<span class="note">{d["note"]}</span>' if d["note"] else ""
+            note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
             # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
             tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
             fund = d.get("fund") or {}
@@ -1415,49 +1473,37 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             out = '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
         return out
 
-    # 三个分区：持仓 > 重点关注 > 其他关注；组内再拆「个股」和「ETF 基金」，不混排。
-    # 红/黄是警示行；灰（取数失败）也展示出来，否则失败会被静默吞掉；绿的不上表只计数。
     is_etf_row = lambda d: bool(d.get("etf")) or is_etf(d["symbol"])
-    group_defs = [("持仓", "position"), ("重点关注", "focus"), ("其他关注", "watch")]
     group_cards = ""
-    for gtitle, gkey in group_defs:
-        g = [d for d in items if d.get("group") == gkey]
-        # 基本面红/黄的即使行情是绿灯也要上表，不然警示等于没显示
+    for group in GROUPS:
+        g = items_by_group[group["item_group"]]
         shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or fund_alert(d)]
-        n_quiet = len([d for d in g if d["level"] == "green" and not fund_alert(d)])
-        if gkey == "focus" and not g:
-            body = '<div class="quiet">重点关注清单还是空的：去编辑页添加，或从其他关注里挑几只</div>'
-        else:
-            stocks = [d for d in shown if not is_etf_row(d)]
-            etfs = [d for d in shown if is_etf_row(d)]
-            parts = []
-            if stocks:
-                parts.append(f"<h2>个股</h2>\n<table>{rows_of(stocks)}</table>")
-            if etfs:
-                parts.append(f"<h2>ETF 基金</h2>\n<table>{rows_of(etfs)}</table>")
-            if not parts:
-                parts.append('<div class="quiet">今晚无异动，不用盯</div>')
-            if n_quiet:
-                parts.append(f'<div class="quiet">无异动 {n_quiet} 只</div>')
-            body = "\n".join(parts)
-        group_cards += f'<div class="card">\n<h2 class="grp">{gtitle}</h2>\n{body}\n</div>\n'
-
-    # 宏观总判断
-    hy = macro.get("hy_oas", {})
-    vix = macro.get("vix", {})
-    sp = macro.get("sp500", {})
-    overall, overall_txt = "green", "绿框 · 不用动"
-    if not hy.get("ok"):
-        # 核心指标缺失时不能假装"绿框不用动"，否则会误导下单
-        overall, overall_txt = "gray", "跑路价签数据缺失 · 别据此下单"
-    elif hy.get("ok") and hy["value"] >= S["hy_red"]:
-        overall, overall_txt = "red", f"跑路价签≥{S['hy_red']:.0f} · 进入危机确认"
-    elif hy.get("ok") and hy.get("delta_week") and hy["delta_week"] >= 50:
-        overall, overall_txt = "red", "利差一周急剧扩大 · 立刻警戒"
-    elif sp.get("ok") and (sp.get("drawdown") or 0) <= -10:
-        overall, overall_txt = "yellow", "指数进入加仓档位 · 按表执行"
-    elif hy.get("ok") and hy["value"] >= S["hy_green"]:
-        overall, overall_txt = "yellow", "利差收紧 · 弹药就位"
+        quiet = [d for d in g if d["level"] == "green" and not fund_alert(d)]
+        parts = []
+        enabled = monitoring.get(group["key"], True)
+        if not enabled:
+            note = f"行业监测关闭 · {group['sector_etf']} 仍监测（仅限原组已有标的）" if group.get("sector_etf") else "分组监测已关闭"
+            parts.append(f'<div class="quiet">{note} · 清单保留，普通标的暂停抓取和报警</div>')
+        for label, rows in (("个股", [d for d in shown if not is_etf_row(d)]),
+                            ("ETF 基金", [d for d in shown if is_etf_row(d)])):
+            if rows:
+                parts.append(f"<h2>{label}</h2>\n<table>{rows_of(rows)}</table>")
+        if quiet:
+            parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只 · 点击查看</summary>'
+                         f'<table>{rows_of(quiet)}</table></details>')
+        if not g and enabled:
+            parts.append('<div class="quiet">本组标的已在优先分组展示，避免重复信号</div>' if registered.get(group["key"], 0)
+                         else '<div class="quiet">暂无标的，去设置页录入或导入 CSV / EBK</div>')
+        body = "\n".join(parts)
+        stats = " · ".join(f"{label}{sum(d['level'] == lv for d in g)}"
+                           for lv, label in (("red", "红"), ("yellow", "黄"), ("gray", "缺失"))
+                           if any(d["level"] == lv for d in g))
+        if not enabled:
+            stats = ("仅板块ETF" if g else "监测关闭") + (" · " + stats if stats else "")
+        expanded = " open" if enabled and group["key"] in ("positions", "focus") else ""
+        group_cards += (f'<details class="card group-card" id="group_{group["key"]}"{expanded}>'
+                        f'<summary class="grp"><span>{group["label"]} ({registered.get(group["key"], len(g))})</span>'
+                        f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
 
     src_name = {"yahoo": "Yahoo Finance", "stooq": "Stooq", "nasdaq": "Nasdaq"}
     srcs = sorted({d.get("source") for d in items if d.get("source")})
@@ -1474,17 +1520,27 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     counts = snapshot.get("list_counts", {})
     actual_dates = snapshot.get("actual_dates", {})
     # 一行摘要升级为状态灯文案（首页第三排）；这里只算红黄绿计数和异常清单。
-    bad = summary.get("stale_symbols", []) + summary.get("missing_symbols", [])
+    bad = list(dict.fromkeys(summary.get("stale_symbols", []) + summary.get("missing_symbols", [])))
     gray_txt = f" 灰{summary.get('gray')}" if summary.get("gray") else ""
     if bad:
         init_light_phase = "bad"
         init_light = (f"抓取失败 {len(bad)} 只：{html_lib.escape('、'.join(bad[:6]))}"
                       + (" 等" if len(bad) > 6 else ""))
     else:
-        init_light_phase = "ok"
-        init_light = (f"抓取成功 · 红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
-                      f"绿{summary.get('green', 0)}{gray_txt} · "
-                      f"{summary.get('total', 0)} 只全部更新")
+        total = summary.get("total", 0)
+        unsupported_count = len(summary.get("unsupported_symbols", []))
+        if not total:
+            has_registered = any(registered.values())
+            init_light_phase, init_light = "idle", ("没有开启的监测标的，未抓取报价" if has_registered else "清单为空，未抓取报价")
+        elif unsupported_count >= total:
+            init_light_phase, init_light = "idle", f"清单中 {unsupported_count} 个特殊代码暂不支持报价，未抓取报价"
+        else:
+            init_light_phase = "ok"
+            coverage = (f"{total - unsupported_count} 只报价已更新 · "
+                        f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
+                        else f"{total} 只全部更新")
+            init_light = (f"抓取成功 · 红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
+                          f"绿{summary.get('green', 0)}{gray_txt} · {coverage}")
     dca_info = dca_text(snapshot.get("dca_reminder"))
     # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
     ny_now = datetime.now(US_TZ)
@@ -1497,10 +1553,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     else:
         dt_txt = max_date
     sub_line = f"数据时间 {dt_txt} · 自动计划：美东周一至五 20:30（北京 {bj_auto}）"
-    lc = counts
-    reg_line = (f'<div class="quiet">在册：持仓 {lc.get("positions", 0)} · '
-                f'重点关注 {lc.get("focus", 0)} · 其他关注 {lc.get("watch", 0)}'
-                + (f' · 已隐藏 {dup_hidden} 只与持仓/重点关注重复（只在更高分区显示一次）'
+    lc = registered or counts
+    reg_line = ('<div class="quiet">在册：' + ' · '.join(
+                    f"{g['label']} {lc.get(g['key'], 0)}" for g in GROUPS if lc.get(g['key'], 0))
+                + (f" · 本轮监测 {summary.get('total', 0)} 个唯一标的" if registered else "")
+                + (f' · 已隐藏 {dup_hidden} 只重复标的（按分组顺序只展示一次）'
                    if dup_hidden else "") + "</div>")
     dca_html = (f'<div class="dca {"on" if (snapshot.get("dca_reminder") or {}).get("due") else ""}">'
                 f'定投提醒：{dca_info}</div>') if dca_info else ""
@@ -1556,16 +1613,12 @@ tr.red td:first-child{{box-shadow:inset 3px 0 0 var(--red)}}
 tr.yellow td:first-child{{box-shadow:inset 3px 0 0 var(--yellow)}}
 tr.green td:first-child{{box-shadow:inset 3px 0 0 var(--green)}}
 tr.gray td{{color:var(--dim)}}
-.badge{{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}}
-tr.red .badge{{background:rgba(248,81,73,.15);color:var(--red)}}
-tr.yellow .badge{{background:rgba(210,153,34,.15);color:var(--yellow)}}
-tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
-.overall{{border-radius:12px;padding:14px 16px;margin-bottom:14px;
-  font-weight:600;font-size:15px;border:1px solid var(--line)}}
-.o-green{{background:rgba(63,185,80,.12);color:var(--green)}}
-.o-yellow{{background:rgba(210,153,34,.14);color:var(--yellow)}}
-.o-red{{background:rgba(248,81,73,.14);color:var(--red)}}
-.o-gray{{background:rgba(139,147,161,.14);color:var(--dim)}}
+.group-card tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
+.macro-help{{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}}
+.macro-help>summary{{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}}
+.macro-help p{{margin:6px 0}}
+.macro-help>summary:focus-visible{{outline:2px solid #6ba3f0;outline-offset:2px}}
+.unit{{display:block;font-size:10px;color:var(--dim);font-weight:400}}
 .foot{{color:var(--dim);font-size:11.5px;text-align:center;margin-top:22px;line-height:1.7}}
 .quiet{{color:var(--dim);font-size:12px;padding:8px 12px 12px}}
 .warn{{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
@@ -1586,7 +1639,17 @@ tr.green .badge{{background:rgba(63,185,80,.15);color:var(--green)}}
   border:1px solid #333a47;border-radius:8px;text-decoration:none;display:inline-block}}
 .statusrow{{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   margin:-4px 0 14px;font-size:12.5px;line-height:1.5}}
-h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
+.group-card>summary.grp{{display:flex;align-items:center;gap:10px;cursor:pointer;
+  padding:12px;font-size:14px;font-weight:600;list-style:none;touch-action:manipulation}}
+.group-card>summary::-webkit-details-marker{{display:none}}
+.group-card>summary::before{{content:"›";color:var(--dim);font-size:20px;line-height:1}}
+.group-card[open]>summary::before{{transform:rotate(90deg)}}
+.group-card[open]>summary{{border-bottom:1px solid var(--line)}}
+.group-stats{{margin-left:auto;color:var(--dim);font-size:11px;font-weight:400}}
+.quiet-list{{margin:8px 0}}
+.quiet-list>summary{{padding:8px 12px;color:var(--dim);font-size:12px;cursor:pointer}}
+.sym .note{{display:block;margin:3px 0 0;overflow-wrap:anywhere}}
+.group-card summary:focus-visible{{outline:2px solid #6ba3f0;outline-offset:-2px}}
 .runlight{{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}}
 .runlight .dot{{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}}
 .runlight[data-phase="busy"]{{color:var(--yellow)}}
@@ -1619,7 +1682,6 @@ h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 {dca_html}
 <div class="script-data" hidden><script id="snapshotData" type="application/json">{snapshot_json}</script></div>
 
-<div class="overall o-{overall}">{overall_txt}</div>
 {('<div class="warn">⚠ 行情源暂时不可用（Yahoo 限流），个股数据未更新，宏观数据正常。通常隔一阵会自动恢复。</div>' if data_down else "")}
 
 <div class="card">
@@ -1628,6 +1690,12 @@ h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 <tr class="gray"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
 {rows_macro}
 </table>
+<details class="macro-help" id="yieldCurveHelp">
+<summary>收益率曲线是什么意思？</summary>
+<p>这里显示的是美国 <b>10年期国债收益率 − 2年期国债收益率</b>，并非你的投资收益率，也不是完整的曲线图。</p>
+<p>大于 0：长债收益率高于短债，曲线正常倾斜；小于 0：短债收益率更高，称为倒挂，提示经济放缓风险，但不代表股市马上下跌。</p>
+<p>例如 0.51 个百分点 = 51 个基点（bp），表示10年期比2年期收益率高 0.51 个百分点。接近 0 则是曲线趋平。</p>
+</details>
 </div>
 
 {group_cards}
@@ -1637,7 +1705,8 @@ h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 宏观：FRED · 个股：{src_txt}<br>
 基本面：Nasdaq 季度财报（只查持仓 + 重点关注，ETF 不判）· 点击基本面标签展开详情，再点收起<br>
 跑路价签 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_yellow']:.0f} 收紧 · ≥{S['hy_red']:.0f} 危机确认<br>
-布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%）<br>
+布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%），逼近、触碰、穿越均为黄<br>
+布林信号 + RSI 至少两条同侧达到或越过阈值 → 红；没有双重信号时各按独立规则判定，其他红警示仍保留<br>
 轨道按当日收盘价滚动计算；是否触及按<b>当日最高/最低价</b>判定，盘中穿过就算<br>
 连续贴近轨道按日累计，远离一天（差 &gt;{S['boll_near_pct']:g}%）就断，再次贴近重新从第一日算 · 连续 2 日起才标注<br>
 定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在编辑页逐只设置<br>
@@ -1677,35 +1746,21 @@ def main(argv=None):
         log(f"holdings.json 读取失败，按空清单处理：{e}")
         cfg = {}
 
-    # 三组分开存：持仓 / 重点关注 / 其他关注。旧文件没有 focus 字段就当空组，完全兼容。
-    positions = cfg.get("positions", {})
-    focus = cfg.get("focus", {})
-    watch = cfg.get("watch", {})
-    # 同一只代码只出现在优先级最高的分区：持仓 > 重点关注 > 其他关注。
-    # 重复的不重复抓取、不重复报警，也不会被数两遍。
-    pos_norm = {normalize_symbol(s).upper() for s in positions}
-    focus_eff = {s: c for s, c in focus.items()
-                 if normalize_symbol(s).upper() not in pos_norm}
-    focus_norm = {normalize_symbol(s).upper() for s in focus_eff}
-    watch_eff = {s: c for s, c in watch.items()
-                 if normalize_symbol(s).upper() not in pos_norm
-                 and normalize_symbol(s).upper() not in focus_norm}
-    dup_hidden = (len(focus) - len(focus_eff)) + (len(watch) - len(watch_eff))
-    universe = [(s, c, "position") for s, c in positions.items()] + \
-               [(s, c, "focus") for s, c in focus_eff.items()] + \
-               [(s, c, "watch") for s, c in watch_eff.items()]
+    universe, group_counts, dup_hidden = grouped_universe(cfg)
     if not universe:
         log("holdings.json 里没有自选股，跳过个股部分")
 
     macro = build_macro()
     items = []
     if universe:
-        log(f"抓取 {len(positions)} 只持仓 + {len(focus_eff)} 只重点关注 + {len(watch_eff)} 只其他关注"
+        log("抓取 " + " + ".join(f"{group_counts[g['key']]} 只{g['label']}" for g in GROUPS
+                                 if group_counts[g['key']])
             + (f"（另有 {dup_hidden} 只重复，已跳过）" if dup_hidden else "") + "...")
         fail_streak = 0
         data_down = False
         for i, (sym, sc, grp) in enumerate(universe):
-            data = fetch_history(sym) if not data_down else None
+            supported = quote_supported(sym)
+            data = fetch_history(sym) if supported and not data_down else None
             if i < len(universe) - 1:
                 time.sleep(0.5)  # 轻微限速，降低被封概率
             if data:
@@ -1716,7 +1771,8 @@ def main(argv=None):
                     log(f"  {sym}: {lv} — {', '.join(sig)}")
                 continue
 
-            fail_streak += 1
+            if supported:
+                fail_streak += 1
             if fail_streak >= 3 and not data_down:
                 data_down = True
                 log("  ! 连续失败 3 次，判定行情源不可用，跳过剩余")
@@ -1725,14 +1781,16 @@ def main(argv=None):
                 "chg": None, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": None, "dist_low": None,
                 "vol_ratio": None, "trigger": sc.get("trigger"),
                 "group": grp, "data_date": "", "boll_up": None, "boll_dn": None,
-                "signals": ["行情源暂时不可用"] if data_down else ["数据获取失败"],
+                "signals": ["无数据：暂不支持该代码报价"] if not supported else
+                           (["行情源暂时不可用"] if data_down else ["数据获取失败"]),
                 "level": "gray",
             })
 
     # 基本面只查持仓 + 重点关注：其他关注只数大、交易价值低，全量查既拖慢运行又容易限流
     fund_stat = {"checked": 0, "red": 0, "yellow": 0}
     fund_targets = [d for d in items
-                    if d.get("group") in ("position", "focus") and d.get("symbol")]
+                    if d.get("group") in ("position", "focus") and d.get("symbol")
+                    and quote_supported(d["symbol"])]
     if fund_targets:
         log(f"读取 {len(fund_targets)} 只持仓/重点关注的财报…")
         try:
@@ -1756,10 +1814,11 @@ def main(argv=None):
         log(f"  基本面：{fund_stat['checked']} 份财报 · "
             f"红 {fund_stat['red']} · 黄 {fund_stat['yellow']}")
 
-    snapshot = build_snapshot(macro, items, cfg, watch_shown=len(watch_eff))
+    snapshot = build_snapshot(macro, items, cfg, group_counts=group_counts)
     snapshot["fundamental"] = fund_stat
-    html = render(macro, items, len(universe), data_down=not universe
-                  or all(d["level"] == "gray" for d in items), snapshot=snapshot,
+    supported_items = [d for d in items if quote_supported(d["symbol"])]
+    html = render(macro, items, len(universe), data_down=bool(supported_items)
+                  and all(d["level"] == "gray" for d in supported_items), snapshot=snapshot,
                   dup_hidden=dup_hidden)
     out = os.path.join(BASE, "index.html")
     with open(out, "w", encoding="utf-8") as f:
@@ -1803,8 +1862,7 @@ def push_serverchan(macro, items):
         for d in group:
             price = "%.2f" % d["price"] if d.get("price") else "—"
             chg = " %+.2f%%" % d["chg"] if d.get("chg") is not None else ""
-            gname = {"position": "持仓", "focus": "重点关注", "watch": "关注"}.get(
-                d.get("group"), "关注")
+            gname = GROUP_LABELS.get(d.get("group"), "未分类")
             sig = " / ".join(d.get("signals") or []) or "—"
             lines.append("- **%s** %s%s · %s（%s）" % (
                 normalize_symbol(d["symbol"]), price, chg, sig, gname))

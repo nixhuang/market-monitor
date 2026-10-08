@@ -1,162 +1,513 @@
 {
   "_说明": [
-    "positions = 你实际持有的标的；focus = 重点关注；watch = 其他关注（观察仓、指数、备选）",
+    "positions = 持仓；focus = 重点关注；其余分类及顺序见 groups.json",
     "note    = 备注，会显示在代码旁边",
     "trigger = 加仓触发价，跌到这里会标红提醒；不需要就删掉这一行",
     "quiet   = true 则只在真正异动时才出声（货币基金之类用）",
     "改完直接 Commit，下次运行生效。成本价和数量不要写在这里（仓库是公开的）",
-    "同一只代码只出现在优先级最高的分区：持仓 > 重点关注 > 其他关注，不重复报警"
+    "同一代码首页按 groups.json 顺序只展示一次；编辑页各组保留独立清单"
   ],
-  "positions": {
-    "BRK-B": {},
-    "HII": {},
-    "APH": {},
-    "AVGO": {},
-    "CRSP": {},
-    "GOOGL": {},
-    "LMT": {},
-    "NTNX": {},
-    "UNH": {},
-    "UBER": {},
-    "DRAM": {},
-    "SPYM": {},
-    "SCHD": {},
-    "QQQM": {}
+  "group_monitoring": {
+    "positions": true,
+    "focus": true,
+    "index_funds": false,
+    "technology": false,
+    "healthcare": false,
+    "financials": false,
+    "energy": false,
+    "industrials": false,
+    "materials": false,
+    "utilities": false,
+    "consumer_staples": false,
+    "communications": false,
+    "consumer_discretionary": false,
+    "real_estate": false
   },
-  "focus": {},
-  "watch": {
+  "positions": {
+    "BRK-B": {
+      "note": "伯克希尔哈撒韦"
+    },
+    "HII": {
+      "note": "亨廷顿英格尔斯工业"
+    },
+    "APH": {
+      "note": "安费诺"
+    },
+    "AVGO": {
+      "note": "博通"
+    },
+    "CRSP": {
+      "note": "CRISPR Therapeutics"
+    },
+    "GOOGL": {
+      "note": "谷歌（Alphabet）"
+    },
+    "LMT": {
+      "note": "洛克希德马丁"
+    },
+    "NTNX": {
+      "note": "Nutanix"
+    },
+    "UNH": {
+      "note": "联合健康"
+    },
+    "UBER": {
+      "note": "优步"
+    },
+    "DRAM": {
+      "note": "Roundhill Memory ETF"
+    },
+    "SPYM": {
+      "note": "SPDR标普500指数ETF"
+    },
+    "SCHD": {
+      "note": "嘉信美国红利股票ETF"
+    },
+    "QQQM": {
+      "note": "景顺纳斯达克100指数ETF"
+    }
+  },
+  "focus": {
+    "ZS": {
+      "note": "Zscaler"
+    },
+    "COST": {
+      "note": "好市多"
+    },
+    "TSM": {
+      "note": "台积电"
+    },
+    "MA": {
+      "note": "万事达"
+    },
+    "PDD": {
+      "note": "拼多多"
+    },
+    "V": {
+      "note": "Visa"
+    },
+    "AAPL": {
+      "note": "苹果"
+    },
+    "MSFT": {
+      "note": "微软"
+    }
+  },
+  "index_funds": {
+    "BD#US10Y": {
+      "note": "美国10年期国债收益率"
+    },
     "HYG": {
-      "note": "垃圾债-观察"
+      "note": "iShares高收益公司债ETF"
     },
-    "MCD": {},
-    "MA": {},
-    "PDD": {},
-    "APP": {},
-    "U": {},
-    "WFC": {},
-    "TXN": {},
-    "CVS": {},
-    "IBIT": {},
-    "VIG": {},
-    "SPMO": {},
-    "NXPI": {},
-    "SNOW": {},
-    "NOW": {},
-    "HII": {},
-    "TTWO": {},
-    "MRNA": {},
-    "KHC": {},
-    "MCO": {},
-    "CB": {},
-    "CVX": {},
-    "BAC": {},
-    "AXP": {},
-    "CRWD": {},
-    "FTNT": {},
-    "ABBV": {},
-    "FNF": {},
-    "BHP": {},
-    "BX": {},
-    "BASFY": {},
-    "DD": {},
-    "AZN": {},
-    "BKNG": {},
-    "UBER": {},
-    "QCOM": {},
-    "BMY": {},
-    "GOOGL": {},
-    "PEP": {},
-    "AMZN": {},
-    "SKHY": {},
-    "ANET": {},
-    "ZS": {},
-    "TMO": {},
-    "AXON": {},
-    "HEI": {},
-    "SPGI": {},
-    "NTNX": {},
-    "SPCX": {},
-    "NOK": {},
-    "EUV": {},
-    "UPST": {},
-    "UTHR": {},
-    "CBRS": {},
-    "SLDE": {},
-    "DRAM": {},
-    "SDGR": {},
-    "GENB": {},
-    "COHR": {},
-    "INTC": {},
-    "WMT": {},
-    "AMAT": {},
-    "ARM": {},
-    "CIEN": {},
-    "LITE": {},
-    "SCHD": {},
-    "GS": {},
-    "MRVL": {},
-    "NUE": {},
-    "NU": {},
-    "XLB": {},
-    "XLRE": {},
-    "XLE": {},
-    "XLP": {},
-    "XLI": {},
-    "XLC": {},
-    "XLY": {},
-    "XLF": {},
+    "IBIT": {
+      "note": "iShares比特币ETF"
+    },
+    "ESMAIN": {
+      "note": "标普500股指期货主连"
+    },
+    ".VXN": {
+      "note": "纳斯达克100波动率指数"
+    },
+    "CLMAIN": {
+      "note": "WTI原油期货主连"
+    },
+    ".NDX": {
+      "note": "纳斯达克100指数"
+    },
+    ".VIX": {
+      "note": "标普500波动率指数"
+    },
+    ".SPX": {
+      "note": "标普500指数"
+    },
+    ".SOX": {
+      "note": "费城半导体指数"
+    },
+    "VIG": {
+      "note": "先锋红利增值ETF"
+    },
+    "SPMO": {
+      "note": "景顺标普500动量ETF"
+    }
+  },
+  "technology": {
+    "XLK": {
+      "note": "科技精选行业ETF"
+    },
+    "APP": {
+      "note": "AppLovin"
+    },
+    "U": {
+      "note": "Unity Software"
+    },
+    "TSLA": {
+      "note": "特斯拉"
+    },
+    "GOOGL": {
+      "note": "谷歌（Alphabet）"
+    },
+    "NXPI": {
+      "note": "恩智浦半导体"
+    },
+    "SNOW": {
+      "note": "Snowflake"
+    },
+    "DRAM": {
+      "note": "Roundhill Memory ETF"
+    },
+    "SKHY": {
+      "note": "SK海力士ADR"
+    },
+    "MU": {
+      "note": "美光科技"
+    },
+    "SNDK": {
+      "note": "闪迪"
+    },
+    "STX": {
+      "note": "希捷科技"
+    },
+    "NOW": {
+      "note": "ServiceNow"
+    },
+    "CRWD": {
+      "note": "CrowdStrike Holdings"
+    },
+    "FTNT": {
+      "note": "Fortinet"
+    },
+    "QCOM": {
+      "note": "高通"
+    },
+    "ANET": {
+      "note": "Arista Networks"
+    },
+    "ZS": {
+      "note": "Zscaler"
+    },
+    "NTNX": {
+      "note": "Nutanix"
+    },
+    "NOK": {
+      "note": "诺基亚"
+    },
+    "EUV": {
+      "note": "Corgi Lithography & Semiconductor Photonics ETF"
+    },
+    "CBRS": {
+      "note": "Cerebras Systems"
+    },
+    "COHR": {
+      "note": "Coherent"
+    },
+    "INTC": {
+      "note": "英特尔"
+    },
+    "AMAT": {
+      "note": "应用材料"
+    },
+    "ARM": {
+      "note": "Arm Holdings"
+    },
+    "CIEN": {
+      "note": "Ciena"
+    },
+    "LITE": {
+      "note": "Lumentum Holdings"
+    },
+    "MRVL": {
+      "note": "迈威尔科技"
+    },
+    "APH": {
+      "note": "安费诺"
+    },
+    "CRDO": {
+      "note": "Credo Technology"
+    },
+    "PANW": {
+      "note": "Palo Alto Networks"
+    },
+    "TER": {
+      "note": "泰瑞达"
+    },
+    "PLTR": {
+      "note": "Palantir Technologies"
+    },
+    "MSFT": {
+      "note": "微软"
+    },
+    "LRCX": {
+      "note": "拉姆研究"
+    },
+    "NVDA": {
+      "note": "英伟达"
+    },
+    "TSM": {
+      "note": "台积电"
+    },
+    "AAPL": {
+      "note": "苹果"
+    },
+    "AVGO": {
+      "note": "博通"
+    }
+  },
+  "healthcare": {
     "XLV": {
-      "note": "医疗"
+      "note": "医疗保健精选行业ETF"
     },
-    "APH": {},
-    "SPYM": {},
-    "CAT": {},
-    "ISRG": {},
-    "LLY": {},
-    "CEG": {},
-    "NOC": {},
-    "XOM": {},
-    "IAUM": {},
-    "CRDO": {},
-    "OXY": {},
-    "XLU": {},
-    "PANW": {},
-    "BRK-B": {},
-    "COST": {},
-    "LMT": {},
-    "UNH": {},
-    "NEE": {},
-    "XLK": {},
-    "STX": {},
-    "META": {},
-    "SNDK": {},
-    "V": {},
-    "TER": {},
-    "TEM": {},
-    "CRSP": {},
-    "CRCL": {},
-    "COIN": {},
-    "HOOD": {},
-    "QQQM": {},
-    "PLTR": {},
-    "PG": {},
-    "VOO": {},
-    "NFLX": {},
-    "PFE": {},
-    "DIS": {},
-    "KO": {},
-    "MSFT": {},
-    "JNJ": {},
-    "LRCX": {},
-    "RTX": {},
-    "NVDA": {},
-    "MRK": {},
-    "TSM": {},
-    "AAPL": {},
-    "JPM": {},
-    "AVGO": {},
-    "TSLA": {},
-    "VRT": {},
-    "MU": {}
+    "CVS": {
+      "note": "CVS Health"
+    },
+    "MRNA": {
+      "note": "Moderna"
+    },
+    "ABBV": {
+      "note": "艾伯维"
+    },
+    "AZN": {
+      "note": "阿斯利康"
+    },
+    "BMY": {
+      "note": "百时美施贵宝"
+    },
+    "TMO": {
+      "note": "赛默飞世尔科技"
+    },
+    "UTHR": {
+      "note": "United Therapeutics"
+    },
+    "SDGR": {
+      "note": "Schrodinger"
+    },
+    "GENB": {
+      "note": "Generate Biomedicines"
+    },
+    "ISRG": {
+      "note": "直觉外科"
+    },
+    "LLY": {
+      "note": "礼来"
+    },
+    "UNH": {
+      "note": "联合健康"
+    },
+    "TEM": {
+      "note": "Tempus AI"
+    },
+    "CRSP": {
+      "note": "CRISPR Therapeutics"
+    },
+    "PFE": {
+      "note": "辉瑞"
+    },
+    "JNJ": {
+      "note": "强生"
+    },
+    "MRK": {
+      "note": "默沙东"
+    }
+  },
+  "financials": {
+    "XLF": {
+      "note": "金融精选行业ETF"
+    },
+    "MA": {
+      "note": "万事达"
+    },
+    "WFC": {
+      "note": "富国银行"
+    },
+    "MCO": {
+      "note": "穆迪"
+    },
+    "CB": {
+      "note": "安达保险"
+    },
+    "BAC": {
+      "note": "美国银行"
+    },
+    "AXP": {
+      "note": "美国运通"
+    },
+    "FNF": {
+      "note": "Fidelity National Financial"
+    },
+    "BX": {
+      "note": "黑石"
+    },
+    "SPGI": {
+      "note": "标普全球"
+    },
+    "UPST": {
+      "note": "Upstart Holdings"
+    },
+    "SLDE": {
+      "note": "Slide Insurance"
+    },
+    "GS": {
+      "note": "高盛"
+    },
+    "NU": {
+      "note": "Nu Holdings"
+    },
+    "BRK-B": {
+      "note": "伯克希尔哈撒韦"
+    },
+    "V": {
+      "note": "Visa"
+    },
+    "CRCL": {
+      "note": "Circle Internet Group"
+    },
+    "COIN": {
+      "note": "Coinbase Global"
+    },
+    "HOOD": {
+      "note": "Robinhood Markets"
+    },
+    "JPM": {
+      "note": "摩根大通"
+    }
+  },
+  "energy": {
+    "XLE": {
+      "note": "能源精选行业ETF"
+    },
+    "CVX": {
+      "note": "雪佛龙"
+    },
+    "XOM": {
+      "note": "埃克森美孚"
+    },
+    "OXY": {
+      "note": "西方石油"
+    }
+  },
+  "industrials": {
+    "XLI": {
+      "note": "工业精选行业ETF"
+    },
+    "HII": {
+      "note": "亨廷顿英格尔斯工业"
+    },
+    "UBER": {
+      "note": "优步"
+    },
+    "AXON": {
+      "note": "Axon Enterprise"
+    },
+    "HEI": {
+      "note": "HEICO"
+    },
+    "SPCX": {
+      "note": "SpaceX"
+    },
+    "CAT": {
+      "note": "卡特彼勒"
+    },
+    "NOC": {
+      "note": "诺斯罗普格鲁曼"
+    },
+    "LMT": {
+      "note": "洛克希德马丁"
+    },
+    "RTX": {
+      "note": "RTX Corporation"
+    },
+    "VRT": {
+      "note": "维谛技术"
+    }
+  },
+  "materials": {
+    "XLB": {
+      "note": "原材料精选行业ETF"
+    },
+    "BHP": {
+      "note": "必和必拓"
+    },
+    "BASFY": {
+      "note": "巴斯夫ADR"
+    },
+    "DD": {
+      "note": "杜邦"
+    },
+    "NUE": {
+      "note": "纽柯钢铁"
+    }
+  },
+  "utilities": {
+    "XLU": {
+      "note": "公用事业精选行业ETF"
+    },
+    "CEG": {
+      "note": "Constellation Energy"
+    },
+    "NEE": {
+      "note": "新纪元能源"
+    }
+  },
+  "consumer_staples": {
+    "XLP": {
+      "note": "必需消费精选行业ETF"
+    },
+    "MCD": {
+      "note": "麦当劳"
+    },
+    "KHC": {
+      "note": "卡夫亨氏"
+    },
+    "PEP": {
+      "note": "百事"
+    },
+    "WMT": {
+      "note": "沃尔玛"
+    },
+    "COST": {
+      "note": "好市多"
+    },
+    "PG": {
+      "note": "宝洁"
+    },
+    "KO": {
+      "note": "可口可乐"
+    }
+  },
+  "communications": {
+    "XLC": {
+      "note": "通信服务精选行业ETF"
+    },
+    "TTWO": {
+      "note": "Take-Two Interactive"
+    },
+    "META": {
+      "note": "Meta Platforms"
+    },
+    "NFLX": {
+      "note": "奈飞"
+    },
+    "DIS": {
+      "note": "迪士尼"
+    }
+  },
+  "consumer_discretionary": {
+    "XLY": {
+      "note": "非必需消费精选行业ETF"
+    },
+    "PDD": {
+      "note": "拼多多"
+    },
+    "BKNG": {
+      "note": "Booking Holdings"
+    },
+    "AMZN": {
+      "note": "亚马逊"
+    }
+  },
+  "real_estate": {
+    "XLRE": {
+      "note": "房地产精选行业ETF"
+    }
   }
 }

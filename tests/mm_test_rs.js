@@ -160,5 +160,16 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
       await f.win.MMRunStatus.refresh(); assert.equal(f.els.ruleLight.dataset.phase, 'ok');
     }
   });
+  await check('空清单及全部不支持报价均为闲置，不误报成功', async () => {
+    for (const [total, unsupported, expected] of [[0, [], /清单为空，未抓取报价/],
+      [1, ['.SPX'], /1 个特殊代码暂不支持报价，未抓取报价/]]) {
+      const page=snapshot();
+      page.summary={red:0,yellow:0,green:0,gray:total,total,stale_symbols:[],missing_symbols:[],unsupported_symbols:unsupported};
+      const f=fixture(page);await f.win.MMRunStatus.refresh();
+      assert.equal(f.els.runLight.dataset.phase,'idle');
+      assert.match(f.els.runLightTxt.textContent,expected);
+      assert.doesNotMatch(f.els.runLightTxt.textContent,/抓取成功/);
+    }
+  });
   console.log('全部通过');
 })().catch(error => { console.error(error); process.exitCode = 1; });

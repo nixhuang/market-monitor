@@ -1,0 +1,516 @@
+{
+  "total_raw": 152,
+  "total_eligible": 141,
+  "ignored": [
+    {
+      "raw": "1600519",
+      "reason": "A股/港股"
+    },
+    {
+      "raw": "1688795",
+      "reason": "A股/港股"
+    },
+    {
+      "raw": "74#01024",
+      "reason": "港股"
+    },
+    {
+      "raw": "74#01810",
+      "reason": "港股"
+    },
+    {
+      "raw": "1688836",
+      "reason": "A股/港股"
+    },
+    {
+      "raw": "31#SGOV",
+      "reason": "SGOV"
+    },
+    {
+      "raw": "1000001",
+      "reason": "A股/港股"
+    },
+    {
+      "raw": "74#00700",
+      "reason": "港股"
+    },
+    {
+      "raw": "0399001",
+      "reason": "A股/港股"
+    },
+    {
+      "raw": "0399006",
+      "reason": "A股/港股"
+    },
+    {
+      "raw": "74#800000",
+      "reason": "港股"
+    }
+  ],
+  "rejected": [],
+  "source_counts": {
+    "重点关注": 8,
+    "指数基": 12,
+    "IT软硬Ai": 40,
+    "医疗保健": 18,
+    "金融": 20,
+    "能源": 4,
+    "工航防建机": 11,
+    "化材金纸": 5,
+    "公水电气": 3,
+    "必需消费品": 8,
+    "通信娱乐": 5,
+    "非车酒奢": 4,
+    "房地产": 1
+  },
+  "source_categories": {
+    "focus": {
+      "file": "重点关注.ebk",
+      "symbols": [
+        "ZS",
+        "COST",
+        "TSM",
+        "MA",
+        "PDD",
+        "V",
+        "AAPL",
+        "MSFT"
+      ]
+    },
+    "index_funds": {
+      "file": "📈指数基.ebk",
+      "symbols": [
+        "BD#US10Y",
+        "HYG",
+        "IBIT",
+        "ESMAIN",
+        ".VXN",
+        "CLMAIN",
+        ".NDX",
+        ".VIX",
+        ".SPX",
+        ".SOX",
+        "VIG",
+        "SPMO"
+      ]
+    },
+    "technology": {
+      "file": "💻IT软硬Ai🤖.ebk",
+      "symbols": [
+        "XLK",
+        "APP",
+        "U",
+        "TSLA",
+        "GOOGL",
+        "NXPI",
+        "SNOW",
+        "DRAM",
+        "SKHY",
+        "MU",
+        "SNDK",
+        "STX",
+        "NOW",
+        "CRWD",
+        "FTNT",
+        "QCOM",
+        "ANET",
+        "ZS",
+        "NTNX",
+        "NOK",
+        "EUV",
+        "CBRS",
+        "COHR",
+        "INTC",
+        "AMAT",
+        "ARM",
+        "CIEN",
+        "LITE",
+        "MRVL",
+        "APH",
+        "CRDO",
+        "PANW",
+        "TER",
+        "PLTR",
+        "MSFT",
+        "LRCX",
+        "NVDA",
+        "TSM",
+        "AAPL",
+        "AVGO"
+      ]
+    },
+    "healthcare": {
+      "file": "💊医疗保健.ebk",
+      "symbols": [
+        "XLV",
+        "CVS",
+        "MRNA",
+        "ABBV",
+        "AZN",
+        "BMY",
+        "TMO",
+        "UTHR",
+        "SDGR",
+        "GENB",
+        "ISRG",
+        "LLY",
+        "UNH",
+        "TEM",
+        "CRSP",
+        "PFE",
+        "JNJ",
+        "MRK"
+      ]
+    },
+    "financials": {
+      "file": "🏦金融.ebk",
+      "symbols": [
+        "XLF",
+        "MA",
+        "WFC",
+        "MCO",
+        "CB",
+        "BAC",
+        "AXP",
+        "FNF",
+        "BX",
+        "SPGI",
+        "UPST",
+        "SLDE",
+        "GS",
+        "NU",
+        "BRK-B",
+        "V",
+        "CRCL",
+        "COIN",
+        "HOOD",
+        "JPM"
+      ]
+    },
+    "energy": {
+      "file": "⚡️能源.ebk",
+      "symbols": [
+        "XLE",
+        "CVX",
+        "XOM",
+        "OXY"
+      ]
+    },
+    "industrials": {
+      "file": "🏭工航防建机.ebk",
+      "symbols": [
+        "XLI",
+        "HII",
+        "UBER",
+        "AXON",
+        "HEI",
+        "SPCX",
+        "CAT",
+        "NOC",
+        "LMT",
+        "RTX",
+        "VRT"
+      ]
+    },
+    "materials": {
+      "file": "🧪化材金纸.ebk",
+      "symbols": [
+        "XLB",
+        "BHP",
+        "BASFY",
+        "DD",
+        "NUE"
+      ]
+    },
+    "utilities": {
+      "file": "💼公水电气.ebk",
+      "symbols": [
+        "XLU",
+        "CEG",
+        "NEE"
+      ]
+    },
+    "consumer_staples": {
+      "file": "🍜必需消费品.ebk",
+      "symbols": [
+        "XLP",
+        "MCD",
+        "KHC",
+        "PEP",
+        "WMT",
+        "COST",
+        "PG",
+        "KO"
+      ]
+    },
+    "communications": {
+      "file": "🎤通信娱乐.ebk",
+      "symbols": [
+        "XLC",
+        "TTWO",
+        "META",
+        "NFLX",
+        "DIS"
+      ]
+    },
+    "consumer_discretionary": {
+      "file": "🍷非车酒奢.ebk",
+      "symbols": [
+        "XLY",
+        "PDD",
+        "BKNG",
+        "AMZN"
+      ]
+    },
+    "real_estate": {
+      "file": "🏡房地产.ebk",
+      "symbols": [
+        "XLRE"
+      ]
+    }
+  },
+  "source_missing": [
+    "TLT",
+    "TXN",
+    "SCHD",
+    "2USDCNY",
+    "SPYM",
+    "IAUM",
+    ".DJI",
+    "QQQM",
+    "VOO",
+    "2XAUUSD"
+  ],
+  "final_counts": {
+    "持仓": 14,
+    "重点关注": 8,
+    "指数基": 12,
+    "IT软硬Ai": 40,
+    "医疗保健": 18,
+    "金融": 20,
+    "能源": 4,
+    "工航防建机": 11,
+    "化材金纸": 5,
+    "公水电气": 3,
+    "必需消费品": 8,
+    "通信娱乐": 5,
+    "非车酒奢": 4,
+    "房地产": 1
+  },
+  "final_unique": 134,
+  "missing_after": [
+    "TLT",
+    "TXN",
+    "2USDCNY",
+    "IAUM",
+    ".DJI",
+    "VOO",
+    "2XAUUSD"
+  ],
+  "extra_after": [],
+  "all_symbols": [
+    "TLT",
+    "HYG",
+    "MCD",
+    "MA",
+    "PDD",
+    "APP",
+    "U",
+    "WFC",
+    "TXN",
+    "CVS",
+    "IBIT",
+    "VIG",
+    "SPMO",
+    "CLMAIN",
+    "BD#US10Y",
+    "NXPI",
+    "SNOW",
+    "NOW",
+    "HII",
+    "TTWO",
+    "MRNA",
+    ".VXN",
+    "KHC",
+    "MCO",
+    "CB",
+    "CVX",
+    "BAC",
+    "AXP",
+    "CRWD",
+    "FTNT",
+    "ABBV",
+    "FNF",
+    "BHP",
+    "BX",
+    "BASFY",
+    "DD",
+    "AZN",
+    ".SOX",
+    "BKNG",
+    "UBER",
+    "QCOM",
+    "BMY",
+    "GOOGL",
+    "PEP",
+    "AMZN",
+    "SKHY",
+    "ANET",
+    "ZS",
+    "TMO",
+    "AXON",
+    "HEI",
+    "SPGI",
+    "NTNX",
+    "SPCX",
+    "NOK",
+    "EUV",
+    "UPST",
+    "UTHR",
+    "CBRS",
+    "SLDE",
+    "DRAM",
+    "SDGR",
+    "GENB",
+    "COHR",
+    "INTC",
+    "WMT",
+    "AMAT",
+    "ARM",
+    "CIEN",
+    "LITE",
+    "ESMAIN",
+    "SCHD",
+    "GS",
+    ".NDX",
+    "2USDCNY",
+    ".SPX",
+    "MRVL",
+    "NUE",
+    "NU",
+    "XLB",
+    "XLRE",
+    "XLE",
+    "XLP",
+    "XLI",
+    "XLC",
+    "XLY",
+    "XLF",
+    "XLV",
+    "APH",
+    "SPYM",
+    "CAT",
+    "ISRG",
+    "LLY",
+    "CEG",
+    "NOC",
+    "XOM",
+    "IAUM",
+    "CRDO",
+    "OXY",
+    "XLU",
+    "PANW",
+    "BRK-B",
+    "COST",
+    "LMT",
+    "UNH",
+    "NEE",
+    "XLK",
+    "STX",
+    "META",
+    "SNDK",
+    "V",
+    "TER",
+    "TEM",
+    "CRSP",
+    "CRCL",
+    "COIN",
+    "HOOD",
+    ".DJI",
+    "QQQM",
+    "PLTR",
+    "PG",
+    "VOO",
+    "NFLX",
+    "PFE",
+    "DIS",
+    "KO",
+    "MSFT",
+    "JNJ",
+    "LRCX",
+    "RTX",
+    "NVDA",
+    "MRK",
+    "TSM",
+    "AAPL",
+    "JPM",
+    "AVGO",
+    "TSLA",
+    "VRT",
+    ".VIX",
+    "MU",
+    "2XAUUSD"
+  ],
+  "withdrawn_supplements": [
+    {
+      "symbol": "TLT",
+      "group": "index_funds",
+      "label": "指数基"
+    },
+    {
+      "symbol": "TXN",
+      "group": "technology",
+      "label": "IT软硬Ai"
+    },
+    {
+      "symbol": "SCHD",
+      "group": "index_funds",
+      "label": "指数基"
+    },
+    {
+      "symbol": "2USDCNY",
+      "group": "index_funds",
+      "label": "指数基"
+    },
+    {
+      "symbol": "SPYM",
+      "group": "index_funds",
+      "label": "指数基"
+    },
+    {
+      "symbol": "IAUM",
+      "group": "materials",
+      "label": "化材金纸"
+    },
+    {
+      "symbol": ".DJI",
+      "group": "index_funds",
+      "label": "指数基"
+    },
+    {
+      "symbol": "QQQM",
+      "group": "index_funds",
+      "label": "指数基"
+    },
+    {
+      "symbol": "VOO",
+      "group": "index_funds",
+      "label": "指数基"
+    },
+    {
+      "symbol": "2XAUUSD",
+      "group": "index_funds",
+      "label": "指数基"
+    }
+  ],
+  "supplemented": [],
+  "unassigned_from_all": [
+    "TLT",
+    "TXN",
+    "2USDCNY",
+    "IAUM",
+    ".DJI",
+    "VOO",
+    "2XAUUSD"
+  ]
+}
