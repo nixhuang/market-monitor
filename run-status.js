@@ -15,7 +15,7 @@
         const node = window.document.getElementById(id);
         if (node) node.textContent = text;
       });
-      ['btnRun', 'btnRunNow', 'btnCheckStatus', 'btnRuns'].forEach(id => {
+      ['btnRunNow', 'btnCheckStatus'].forEach(id => {
         const node = window.document.getElementById(id);
         if (node) node.disabled = true;
       });
@@ -43,6 +43,7 @@
   const PUBLIC_RETRY_MAX = 2;
   let publicRetry = 0;
   let authNotice = '', checkFeedback = '', checkPhase = 'idle';
+  let checkRequest = 0, checkDismissed = false;
   let latestRules = null, rulesError = '', ruleSince = 0;
 
   function getToken() {
@@ -446,6 +447,20 @@
     if (el('checkResult')) {
       el('checkResult').hidden = !checkFeedback;
       put('checkResult', checkFeedback, checkPhase);
+      if (checkFeedback) {
+        const close = window.document.createElement('button');
+        close.type = 'button';
+        close.textContent = '关闭';
+        close.setAttribute('aria-label', '关闭运行状态核对结果');
+        close.style.cssText = 'float:right;margin:0 0 6px 10px;cursor:pointer';
+        close.onclick = () => {
+          checkDismissed = true;
+          checkFeedback = '';
+          checkPhase = 'idle';
+          render();
+        };
+        el('checkResult').appendChild(close);
+      }
       if (checkFeedback && publication.phase === 'published' && verifiedSnapshot &&
           pageSnapshot() && !samePublication(pageSnapshot(), verifiedSnapshot)) {
         const link = window.document.createElement('a');
@@ -777,6 +792,8 @@
   }
   // 「查运行状态」点了要有反馈：否则状态没变化时页面文字不动，看着像按钮坏了。
   async function manualCheck() {
+    const sequence = ++checkRequest;
+    checkDismissed = false;
     const b = el('btnCheckStatus');
     if (b) { b.disabled = true; b.textContent = '核对中…'; }
     checkFeedback = '正在核对最新任务和已发布看板…';
@@ -825,59 +842,12 @@
       } else lines.push('核对尚未完成：' + publication.message);
       if (actionsError) lines.push('对应运行记录无法核对：' + actionsError);
       if (recentError || actionsError) checkPhase = 'bad';
-      checkFeedback = lines.join('\n');
-      render();
+      if (sequence === checkRequest && !checkDismissed) {
+        checkFeedback = lines.join('\n');
+        render();
+      }
     } finally {
       if (b) { b.disabled = false; b.textContent = '查运行状态'; }
-    }
-  }
-
-  function runsEventText(event) {
-    if (event === 'push') return '保存清单/规则后';
-    if (event === 'workflow_dispatch') return '立即运行';
-    if (event === 'schedule') return '定时自动';
-    return event || '未知';
-  }
-  function runsResult(run) {
-    if (run.status !== 'completed') return ['busy', '进行中'];
-    if (run.conclusion === 'success') return ['ok', '成功'];
-    if (run.conclusion === 'cancelled') return ['', '已取消'];
-    return ['bad', '失败'];
-  }
-  function runsTime(iso) {
-    if (!iso) return '—';
-    try {
-      return new Date(iso).toLocaleString('zh-CN', {
-        timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', hour12: false
-      });
-    } catch (_) { return String(iso).slice(0, 16).replace('T', ' '); }
-  }
-  // 运行记录：GitHub 后台只能按「天数」保留（最少 1 天），不能按条数限制。
-  // 所以改成在页面内只取最近 20 条展示，不再整页跳到 GitHub 那一长串列表。
-  async function loadRuns() {
-    const box = el('runList');
-    if (!box) return;
-    box.textContent = '读取最近运行记录…';
-    try {
-      const data = await request(apiURL('/actions/workflows/daily.yml/runs?per_page=20'), {github: true});
-      const runs = (data && data.workflow_runs) || [];
-      if (!runs.length) { box.textContent = '暂无运行记录'; return; }
-      const current = (latestStatus || verifiedSnapshot || {}).run_id || '';
-      let html = '<table>';
-      runs.forEach(run => {
-        const [cls, label] = runsResult(run);
-        const isNow = current && String(run.id) === String(current);
-        html += '<tr' + (isNow ? ' class="now"' : '') + '>' +
-          '<td class="rwhen">' + runsTime(run.run_started_at || run.created_at) + '</td>' +
-          '<td>' + runsEventText(run.event) + '</td>' +
-          '<td class="' + cls + '">' + label + (isNow ? ' · 当前线上' : '') + '</td>' +
-          '</tr>';
-      });
-      html += '</table>';
-      box.innerHTML = '最近 ' + runs.length + ' 次运行（北京时间）<br>' + html;
-    } catch (error) {
-      box.textContent = '读取失败：' + (error && error.message ? error.message : '未知错误');
     }
   }
 
@@ -886,11 +856,8 @@
     cancelPoll();
     options = {owner: 'nixhuang', repo: 'market-monitor', branch: 'main', timeoutMs: 15000, ...options, ...opts};
     initialized = true;
-    ['btnRun', 'btnRunNow'].forEach(id => {
-      if (el(id)) el(id).onclick = () => { void startManual(); };
-    });
+    if (el('btnRunNow')) el('btnRunNow').onclick = () => { void startManual(); };
     if (el('btnCheckStatus')) el('btnCheckStatus').onclick = () => manualCheck();
-    if (el('btnRuns')) el('btnRuns').onclick = () => { void loadRuns(); };
     render(); // 不等网络请求，先保留本页生成数据并折叠旧版摘要。
     void refresh();
     return window.MMRunStatus;
@@ -900,8 +867,8 @@
   // 首页根本不 init —— 按钮没绑 onclick，点了就是「没反应」。改成任一控件存在即初始化。
   function autoInit() {
     if (initialized) return;
-    const ids = ['runState', 'runMsg', 'runSummary', 'runLight', 'runLightTxt',
-                 'ruleLight', 'ruleLightTxt', 'btnRun', 'btnRunNow', 'btnCheckStatus', 'btnRuns'];
+    const ids = ['runMsg', 'runSummary', 'runLight', 'runLightTxt',
+                 'ruleLight', 'ruleLightTxt', 'btnRunNow', 'btnCheckStatus', 'appliedState'];
     if (ids.some(id => el(id))) init();
   }
   if (window.document.readyState === 'loading') window.document.addEventListener('DOMContentLoaded', autoInit);

@@ -14,7 +14,7 @@ function snapshot(sha = B, run = '1') {
 }
 function element() {
   return {textContent: '', style: {}, dataset: {}, children: [], disabled: false,
-    setAttribute() {}, appendChild(child) { this.children.push(child); },
+    setAttribute(name, value) { this[name] = value; }, appendChild(child) { this.children.push(child); },
     classList: {contains() { return false; }}};
 }
 function fixture(page = snapshot(), onlyRule = false) {
@@ -309,6 +309,33 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
       const f=fixture(page);await f.win.MMRunStatus.refresh();
       assert.match(f.els.runLightTxt.textContent,new RegExp('^'+label+'抓取成功'));
     }
+  });
+  await check('核对结果可关闭，轮询不会重现；下次点击仍可重新查看', async () => {
+    const f=fixture();
+    await f.els.btnCheckStatus.onclick();
+    assert.equal(f.els.checkResult.hidden,false);
+    const close=f.els.checkResult.children.find(c=>c.textContent==='关闭');
+    assert.equal(close.type,'button');
+    assert.equal(close['aria-label'],'关闭运行状态核对结果');
+    close.onclick();
+    assert.equal(f.els.checkResult.hidden,true);
+    await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.checkResult.hidden,true);
+    await f.els.btnCheckStatus.onclick();
+    assert.equal(f.els.checkResult.hidden,false);
+    assert.match(f.els.checkResult.textContent,/已核对线上/);
+  });
+  await check('查询尚未结束时关闭也不会在结果返回后重新出现', async () => {
+    const f=fixture();
+    let resolve;
+    f.data.delay=new Promise(r=>{resolve=r;});
+    const pending=f.els.btnCheckStatus.onclick();
+    const close=f.els.checkResult.children.find(c=>c.textContent==='关闭');
+    assert(close);
+    close.onclick();
+    resolve({ok:true,status:200,json:async()=>({sha:B})});
+    await pending;
+    assert.equal(f.els.checkResult.hidden,true);
   });
   console.log('全部通过');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -62,7 +62,11 @@ try {
 
 const T = globalThis.__T;
 store.mm_gh_token_v1='github_pat_test_dispatch';
-check(runOptions.getToken()==='github_pat_test_dispatch', '编辑页运行弹窗保存授权后可立即读取派发');
+check(runOptions.getToken()==='github_pat_test_dispatch', '编辑页仍可核验保存生效所需的授权状态');
+check(!src.includes('id="runCard"')&&!src.includes('id="btnRun"')&&!src.includes('id="btnRuns"')&&
+  !src.includes('id="btnCheckStatus"')&&!src.includes('id="runList"'), '编辑页不再重复首页运行控件与20条运行记录');
+check(src.includes('id="appliedCard"')&&src.includes('id="appliedState"')&&src.includes('id="detailCard"'),
+  '编辑页仍保留保存生效核对与折叠运行详情');
 delete store.mm_gh_token_v1;
 T.data.positions = { 'BRK-B': {}, SPYM: {}, NTNX: {} };
 T.data.focus = { SOXL: { note: '半导体3倍' }, TEM: {} };

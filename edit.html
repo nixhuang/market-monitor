@@ -78,26 +78,6 @@ button.danger{color:var(--red)}
 .filebtn:hover{background:#2b303c}
 .csvinfo{font-size:12px;color:var(--dim);line-height:1.9;margin:10px 0}
 .csvinfo b{color:var(--text);font-weight:500}
-.runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.runlight{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}
-.runlight .dot{width:9px;height:9px;border-radius:50%;background:#5f6672;
-  display:inline-block;margin-right:0;flex:none}
-.runlight[data-phase="busy"]{color:var(--yellow)}
-.runlight[data-phase="busy"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
-.runlight[data-phase="ok"]{color:var(--green)}
-.runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}
-.runlight[data-phase="bad"]{color:var(--red)}
-.runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}
-.check-result{padding:10px 12px;margin:10px 0;border:1px solid var(--line);border-radius:8px;
-  font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
-.check-result[data-phase="bad"]{border-color:var(--red)}
-.check-result[data-phase="busy"]{border-color:var(--yellow)}
-.check-result[hidden]{display:none}
-.runstate{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
-  font-size:12px;color:var(--dim);margin-top:10px}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
-.dot.g{background:var(--green)} .dot.r{background:var(--red)}
-.dot.y{background:var(--yellow)} .dot.d{background:#5f6672}
 .savebar{background:var(--bg);padding:10px 0 4px;
   display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .savebar .sp{flex:1;font-size:12px;color:var(--dim)}
@@ -133,12 +113,6 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
   border-top:1px dashed var(--line);padding-top:10px}
 .rs{padding:8px 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;
   color:var(--dim);line-height:1.65}
-.runlist{margin-top:12px;font-size:12px;color:var(--dim)}
-.runlist table{width:100%;border-collapse:collapse;margin-top:6px}
-.runlist td{padding:5px 8px;border-top:1px solid var(--line);vertical-align:top}
-.runlist tr.now td{color:var(--text);background:rgba(107,163,240,.08)}
-.runlist .ok{color:#3fb27f}.runlist .bad{color:#e0625f}.runlist .busy{color:#d8a33a}
-.runlist .rwhen{font-variant-numeric:tabular-nums;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -150,19 +124,6 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 
 <div id="msg"></div>
-
-<div class="card" id="runCard">
-  <h2>立即运行 <span>（不用等定时任务，点一下就抓最新行情）</span></h2>
-  <div class="runbar">
-    <button class="primary" id="btnRun">立即运行</button>
-    <button id="btnRuns">运行记录（最近 20 条）</button>
-    <div class="runlight" id="runLight" data-phase="idle"><i class="dot"></i><span id="runLightTxt">点「立即运行」抓最新行情</span></div>
-  </div>
-  <button id="btnCheckStatus" style="margin-top:10px">查运行状态</button>
-  <div id="checkResult" class="check-result" role="status" hidden></div>
-  <div class="runstate" id="runState" aria-live="polite">读取公开发布状态中…</div>
-  <div id="runList" class="runlist"></div>
-</div>
 
 <div class="card" id="authCard">
   <h2>第 1 步 · 贴一次 GitHub 令牌</h2>
@@ -324,7 +285,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 </div>
 
-<script src="./run-status.js?v=20261008-7"></script>
+<script src="./run-status.js?v=20261008-8"></script>
 <script src="./list-import.js?v=20261008-1"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
@@ -699,8 +660,6 @@ $('btnSave').onclick=async e=>{
 };
 
 $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定丢弃重新载入？'))return;load();};
-
-$('btnRun').onclick=()=>{void window.MMRunStatus.startManual();};
 
 /* ---------- 规则阈值（settings.json） ---------- */
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
