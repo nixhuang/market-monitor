@@ -337,5 +337,14 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     await pending;
     assert.equal(f.els.checkResult.hidden,true);
   });
+  await check('旧的市场参考日期不把已经更新的当日日线判为红灯', async () => {
+    const page=snapshot();page.summary={red:0,yellow:0,green:2,total:2,gray:0,
+      stale_symbols:[],missing_symbols:[],unsupported_symbols:[],
+      reference_dates:{'BD#US10Y':'2026-10-06'},today_prices:1,prior_prices:0,missing_prices:0};
+    const f=fixture(page);await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.runLight.dataset.phase,'ok');
+    assert.match(f.els.runLightTxt.textContent,/1 只日线已更新 · 1 项参考值（截至 2026-10-06）/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/当日行情未取得|2 只全部更新/);
+  });
   console.log('全部通过');
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -96,6 +96,29 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('无异动 3 只', index)
         self.assertEqual(snap['summary']['missing_prices'], 0)
 
+    def test_older_reference_does_not_mark_all_daily_quotes_stale(self):
+        cfg = {'index_funds': {'BD#US10Y': {}, 'HYG': {}},
+               'group_monitoring': {'index_funds': True}}
+        reference = monitor.macro_index_quote('BD#US10Y', {}, 'index_funds',
+                                               {'ust10': {'ok': True, 'value': 4.25,
+                                                          'date': '2026-10-06'}})
+        daily = {'symbol': 'HYG', 'note': '', 'price': 77.0, 'chg': 0.0,
+                 'rsi': {}, 'dist_high': None, 'dist_low': None, 'vol_ratio': None,
+                 'trigger': None, 'group': 'index_funds', 'data_date': '2026-10-07',
+                 'boll_up': None, 'boll_dn': None, 'signals': [], 'level': 'green'}
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot({}, [reference, daily], cfg)
+        self.assertEqual(snap['summary']['reference_dates'], {'BD#US10Y': '2026-10-06'})
+        self.assertEqual(snap['summary']['stale_symbols'], [])
+        self.assertEqual((snap['summary']['today_prices'], snap['summary']['prior_prices']), (1, 0))
+        self.assertEqual(snap['actual_dates'], {'min': '2026-10-07', 'max': '2026-10-07'})
+        self.assertEqual(snap['data_time_text'], '2026-10-07 收盘（美东交易日）')
+        page = monitor.render({}, [reference, daily], 2, snapshot=snap)
+        self.assertIn('1 只日线已更新 · 1 项参考值（截至 2026-10-06）', page)
+        self.assertNotIn('当日行情未取得', page)
+        self.assertIn('参考值 · 截至 2026-10-06', page)
+
     def test_snapshot_all_groups(self):
         with patch.object(monitor, 'global_dca', return_value=None):
             snapshot = monitor.build_snapshot({}, [], {'technology': {'NVDA': {}},

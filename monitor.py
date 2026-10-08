@@ -1537,7 +1537,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261008-8"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261008-9"></script>'
 
 
 def config_hash(filename):
@@ -1583,12 +1583,14 @@ def market_data_time(snapshot):
 
 
 def build_snapshot(macro, items, cfg, group_counts=None):
-    dates = sorted({d.get("data_date") for d in items if d.get("data_date")})
+    dates = sorted({d.get("data_date") for d in items if d.get("data_date") and not d.get("reference_only")})
+    references = {normalize_symbol(d["symbol"]): d["data_date"] for d in items
+                  if d.get("reference_only") and d.get("data_date")}
     unsupported = [normalize_symbol(d["symbol"]) for d in items if not quote_supported(d["symbol"])]
     missing = [normalize_symbol(d["symbol"]) for d in items
                if d.get("price") is None and quote_supported(d["symbol"])]
     stale = [normalize_symbol(d["symbol"]) for d in items
-             if d.get("data_date") and TARGET_DATE and d["data_date"] < TARGET_DATE]
+             if not d.get("reference_only") and d.get("data_date") and TARGET_DATE and d["data_date"] < TARGET_DATE]
     monitoring = group_monitoring(cfg)
     positions = cfg.get("positions", {}) if monitoring["positions"] else {}
     counts = group_counts if group_counts is not None else grouped_universe(cfg)[1]
@@ -1617,9 +1619,9 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "summary": {**{lv: sum(d["level"] == lv for d in items) for lv in ("red", "yellow", "green", "gray")},
                     "total": len(items), "macro_ok": sum(bool(m.get("ok")) for m in macro.values()),
                     "stale_symbols": stale, "missing_symbols": missing,
-                    "unsupported_symbols": unsupported,
-                    "today_prices": sum(d.get("price") is not None and d.get("data_date") == TARGET_DATE for d in items),
-                    "prior_prices": sum(d.get("price") is not None and d.get("data_date") != TARGET_DATE for d in items),
+                    "unsupported_symbols": unsupported, "reference_dates": references,
+                    "today_prices": sum(not d.get("reference_only") and d.get("price") is not None and d.get("data_date") == TARGET_DATE for d in items),
+                    "prior_prices": sum(not d.get("reference_only") and d.get("price") is not None and d.get("data_date") != TARGET_DATE for d in items),
                     "missing_prices": sum(d.get("price") is None for d in items)},
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
@@ -1820,9 +1822,18 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             init_light_phase, init_light = "idle", f"清单中 {unsupported_count} 个特殊代码暂不支持报价，未抓取报价"
         else:
             init_light_phase = "ok"
-            coverage = (f"{total - unsupported_count} 只报价已更新 · "
-                        f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
-                        else f"{total} 只全部更新")
+            references = summary.get("reference_dates") or {}
+            if references:
+                dates = sorted(set(references.values()))
+                date_text = dates[0] if len(dates) == 1 else f"{dates[0]}～{dates[-1]}"
+                coverage = (f"{total - unsupported_count - len(references)} 只日线已更新 · "
+                            f"{len(references)} 项参考值（截至 {date_text}）")
+                if unsupported_count:
+                    coverage += f" · {unsupported_count} 个特殊代码暂不支持报价"
+            else:
+                coverage = (f"{total - unsupported_count} 只报价已更新 · "
+                            f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
+                            else f"{total} 只全部更新")
             kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
             init_light = (f"{kind}抓取成功 · 完成于 {finished_txt}（北京时间） · "
                           f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
