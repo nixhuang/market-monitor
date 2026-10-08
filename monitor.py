@@ -389,7 +389,64 @@ def fred_csv(series_id, days=400):
     return []
 
 
-def fred_series(series_id, days=400, alias=None):
+def treasury_yield_series(days=400, source_info=None):
+    """10Y 收益率优先 FRED；日期落后时比较 Yahoo，整段择源而非拼接。"""
+    target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+
+    def validated(rows):
+        result = []
+        try:
+            for date, value in rows:
+                if datetime.strptime(date, "%Y-%m-%d").strftime("%Y-%m-%d") != date:
+                    return []
+                if not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 < value < 25:
+                    return []
+                if result and date <= result[-1][0]:
+                    return []
+                result.append((date, value))
+        except (ValueError, TypeError):
+            return []
+        result = [(date, value) for date, value in result if date <= target]
+        return result[-days:] if len(result) >= 30 else []
+
+    best, source = [], ""
+    loaders = (("FRED DGS10", fred_api), ("FRED DGS10", fred_csv)) if FRED_API_KEY else (
+        ("FRED DGS10", fred_csv),)
+    for name, loader in loaders:
+        try:
+            rows = validated(loader("DGS10", days))
+            if rows:
+                best, source = rows, name
+                break
+        except Exception as e:
+            log(f"  ! 10Y美债 FRED 获取失败: {str(e)[:70]}")
+    if not best or best[-1][0] < target:
+        try:
+            data = yahoo_history("^TNX")
+            rows = validated(_rows_from_closes(data.get("closes", []), days, data.get("dates"))) if data else []
+            name = data.get("quote_name", "").lower() if data else ""
+            compatible = bool(data and valid_history(data) and data.get("quote_symbol") == "^TNX" and
+                              "10" in name and ("yield" in name or "interest rate" in name))
+            if best and rows:
+                reference = dict(best)
+                common = [date for date, _ in rows if date in reference]
+                compatible = compatible and bool(common)
+                if common:
+                    date = common[-1]
+                    compatible = compatible and abs(dict(rows)[date] - reference[date]) <= max(0.5, reference[date] * 0.15)
+            if rows and compatible and (not best or rows[-1][0] > best[-1][0]):
+                best, source = rows, "Yahoo ^TNX"
+            elif data:
+                log("  · 10Y美债备用值未更新或口径校验未通过，保留原参考值")
+        except Exception as e:
+            log(f"  ! 10Y美债 Yahoo 备用失败，保留原参考值: {str(e)[:70]}")
+    if source_info is not None and best:
+        source_info.update(source=source, unit="%", date=best[-1][0],
+                           lagging=best[-1][0] < target)
+    return best
+
+
+def fred_series(series_id, days=400, alias=None, source_info=None):
     """抓取 FRED 序列，返回 [(date_str, value), ...]，失败返回 []
 
     三级降级：
@@ -397,6 +454,8 @@ def fred_series(series_id, days=400, alias=None):
       2. CSV 图形接口（免 key）—— 大陆本地能通，Actions 上不通
       3. Yahoo 指数别名兜底（仅 vix/sp500/ust10/dxy 有）
     """
+    if series_id == "DGS10":
+        return treasury_yield_series(days, source_info)
     if FRED_API_KEY:
         try:
             rows = fred_api(series_id, days)
@@ -463,7 +522,11 @@ def build_macro():
     log("抓取宏观指标...")
     macro = {}
     for key, cfg in FRED_SERIES.items():
-        rows = fred_series(cfg["id"], alias=FRED_YAHOO_ALIAS.get(key))
+        source_info = {}
+        if key == "ust10":
+            rows = fred_series(cfg["id"], alias=FRED_YAHOO_ALIAS.get(key), source_info=source_info)
+        else:
+            rows = fred_series(cfg["id"], alias=FRED_YAHOO_ALIAS.get(key))
         if not rows:
             macro[key] = {"ok": False, "name": cfg["name"]}
             continue
@@ -481,6 +544,7 @@ def build_macro():
             "week_ago": week_ago,
             "delta_week": (cur - week_ago) if week_ago is not None else None,
         }
+        item.update(source_info)
         if key == "sp500":
             dd = pct_from_high(rows)
             item["drawdown"] = dd
@@ -676,6 +740,8 @@ def yahoo_history(symbol):
                     "price": closes[-1],
                     "prev_close": closes[-2] if len(closes) >= 2 else None,
                     "currency": meta.get("currency", ""),
+                    "quote_symbol": meta.get("symbol", ""),
+                    "quote_name": meta.get("shortName") or meta.get("longName") or "",
                 }
             except requests.HTTPError as e:
                 last_err = str(e)[:60]
@@ -1224,7 +1290,8 @@ def macro_index_quote(symbol, cfg, group, macro):
         "chg": (price / prev - 1) * 100 if prev else None,
         "rsi": {period: None for period in RSI_PERIODS},
         "dist_high": None, "dist_low": None, "vol_ratio": None,
-        "trigger": cfg.get("trigger"), "source": "市场参考", "data_date": item["date"],
+        "trigger": cfg.get("trigger"), "source": item.get("source") or "市场参考", "data_date": item["date"],
+        "reference_lagging": bool(item.get("lagging")),
         "unit": "%" if key == "ust10" else "", "group": group, "boll_up": None, "boll_dn": None,
         "reference_only": True, "signals": ["参考点位 · 不计算交易警示"], "level": "green",
     }
@@ -1672,6 +1739,8 @@ def build_snapshot(macro, items, cfg, group_counts=None):
                     "missing_prices": sum(d.get("price") is None for d in items)},
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
+        "treasury_reference": {key: macro.get("ust10", {}).get(key) for key in
+                               ("ok", "value", "date", "source", "unit", "lagging")},
         "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
     }
     snapshot["data_time_text"] = market_data_time(snapshot)
@@ -1751,6 +1820,10 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             elif d.get("reference_only"):
                 date = html_lib.escape(str(d.get("data_date") or "日期未知"))
                 tag += f'<span class="tag quote-note">参考值 · 截至 {date}</span>'
+                if d.get("source") and d["source"] != "市场参考":
+                    tag += f'<span class="unit">来源 {html_lib.escape(str(d["source"]))} · 收益率百分比</span>'
+                if d.get("reference_lagging"):
+                    tag += '<span class="unit">来源尚未提供目标日有效值，保留最近参考值</span>'
             elif snapshot.get("mode") == "manual_or_config" and d.get("data_date") != snapshot.get("target_trade_date"):
                 date = html_lib.escape(str(d.get("data_date") or "日期未知"))
                 tag += f'<span class="tag quote-note">日线 {date} 收盘</span>'

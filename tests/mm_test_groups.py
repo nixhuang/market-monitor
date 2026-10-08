@@ -427,6 +427,66 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(monitor._rows_from_closes([101,102], dates=None), [])
         self.assertEqual(monitor._rows_from_closes([101,102], dates=['2026-10-02']), [])
 
+    def test_treasury_uses_newer_valid_yield_and_preserves_source_dates(self):
+        from datetime import date, timedelta
+        from contextlib import ExitStack
+        def series(last, value=4.2):
+            end = date.fromisoformat(last)
+            return [((end - timedelta(days=i)).isoformat(), value) for i in range(39, -1, -1)]
+        def yahoo(last='2026-10-07', value=4.3):
+            rows = series(last, value)
+            return {'dates': [d for d, _ in rows], 'closes': [v for _, v in rows],
+                    'price': value, 'prev_close': value, 'highs': [value]*40,
+                    'lows': [value]*40, 'volumes': [0]*40,
+                    'quote_symbol': '^TNX', 'quote_name': 'Treasury Yield 10 Years'}
+        old = series('2026-10-06')
+        def fetch(fred_rows, data, error=None):
+            info = {}
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(monitor, 'TARGET_DATE', '2026-10-07'))
+                stack.enter_context(patch.object(monitor, 'FRED_API_KEY', 'test-key'))
+                api = stack.enter_context(patch.object(monitor, 'fred_api', return_value=fred_rows))
+                csv = stack.enter_context(patch.object(monitor, 'fred_csv', return_value=[]))
+                quote = stack.enter_context(patch.object(monitor, 'yahoo_history', return_value=data, side_effect=error))
+                rows = monitor.fred_series('DGS10', alias='^TNX', source_info=info)
+            return rows, info, api, csv, quote
+        rows, info, _, csv, quote = fetch(old, yahoo())
+        self.assertEqual(rows[-1], ('2026-10-07', 4.3))
+        self.assertTrue(all(v == 4.3 for _, v in rows))
+        self.assertEqual(info, {'source':'Yahoo ^TNX', 'unit':'%', 'date':'2026-10-07', 'lagging':False})
+        csv.assert_not_called(); quote.assert_called_once_with('^TNX')
+        fresh = series('2026-10-07')
+        rows, info, _, _, quote = fetch(fresh, yahoo())
+        self.assertEqual(rows, fresh)
+        quote.assert_not_called()
+        for data in (None, yahoo('2026-10-06'), yahoo('2026-10-05'), yahoo(value=43.0),
+                     dict(yahoo(), quote_symbol='SPY'), dict(yahoo(), quote_name='S&P 500'),
+                     dict(yahoo(), price=float('nan')),
+                     dict(yahoo(), dates=['2026-10-07']*40)):
+            with self.subTest(data=data):
+                rows, info, _, _, _ = fetch(old, data)
+                self.assertEqual(rows, old)
+                self.assertEqual(info['source'], 'FRED DGS10')
+                self.assertTrue(info['lagging'])
+        rows, info, _, _, _ = fetch(old, None, monitor.requests.Timeout('offline'))
+        self.assertEqual(rows, old)
+        self.assertTrue(info['lagging'])
+        rows, info, _, _, _ = fetch(old, yahoo('2026-10-08'))
+        self.assertEqual(rows[-1], ('2026-10-07', 4.3))
+        rows, info, _, _, _ = fetch([], yahoo())
+        self.assertEqual(info['source'], 'Yahoo ^TNX')
+        rows, info, _, _, _ = fetch([], None)
+        self.assertEqual((rows, info), ([], {}))
+        reference = monitor.macro_index_quote('BD#US10Y', {}, 'index_funds',
+            {'ust10': {'ok':True, 'value':4.2, 'date':'2026-10-06', 'source':'FRED DGS10', 'lagging':True}})
+        cfg = {'index_funds': {'BD#US10Y': {}}, 'group_monitoring': {'index_funds':True}}
+        with patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot({}, [reference], cfg)
+        page = monitor.render({}, [reference], 1, snapshot=snap)
+        self.assertIn('参考值 · 截至 2026-10-06', page)
+        self.assertIn('来源 FRED DGS10 · 收益率百分比', page)
+        self.assertIn('保留最近参考值', page)
+
     def test_credit_spread_thresholds_are_unambiguous(self):
         original = monitor.S.copy()
         try:
@@ -551,7 +611,7 @@ class TestGroups(unittest.TestCase):
             def json(self):
                 return body
         nfci_date = '2026-10-02'
-        def fred(series, days=400, alias=None):
+        def fred(series, days=400, alias=None, source_info=None):
             value = 0.1 if series == 'NFCI' else 3.0
             return [('2026-09-25', value), (nfci_date, value)]
         with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), \
