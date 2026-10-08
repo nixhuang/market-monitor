@@ -87,7 +87,8 @@
       "note": "Visa"
     },
     "AAPL": {
-      "note": "苹果"
+      "note": "苹果",
+      "trigger": 325
     },
     "MSFT": {
       "note": "微软"
