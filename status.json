@@ -1,18 +1,18 @@
 {
   "dca_reminder": null,
-  "run_id": "37735479478",
+  "run_id": "37736797476",
   "request_id": "",
-  "source_sha": "7824626cf7fce4e2fc86589d3b8e4764e888e105",
-  "started_at": "2026-10-08T06:02:43+00:00",
-  "started_at_bj": "2026-10-08T14:02:43+08:00",
-  "finished_at": "2026-10-08T14:03:31.942555+08:00",
-  "finished_at_bj": "2026-10-08T14:03:31+08:00",
+  "source_sha": "a946ab7921268090b51861e0a7401e48a6a60d6c",
+  "started_at": "2026-10-08T06:17:30+00:00",
+  "started_at_bj": "2026-10-08T14:17:30+08:00",
+  "finished_at": "2026-10-08T14:18:20.816162+08:00",
+  "finished_at_bj": "2026-10-08T14:18:20+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
-    "holdings.json": "c308037635a6b0c75c140eb2026dcbc430221c24",
+    "holdings.json": "f9e5d2f39a6d140fd47d5fcd59764c49719fdf2d",
     "settings.json": "d9f36eae4670ab1d7854102b29e86afcdc505ed9"
   },
   "effective_settings": {
@@ -173,9 +173,9 @@
     "dca": 0
   },
   "summary": {
-    "red": 2,
+    "red": 3,
     "yellow": 10,
-    "green": 21,
+    "green": 20,
     "gray": 0,
     "total": 33,
     "macro_ok": 6,
@@ -200,6 +200,6 @@
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 6
+    "yellow": 7
   }
 }
