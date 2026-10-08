@@ -578,6 +578,53 @@ def macro_status(key, item, drawdown=None):
     return "gray", "—"
 
 
+RISK_INDICATORS = ("hy_oas", "vix", "sp500", "breadth", "nfci")
+RISK_LABELS = {"hy_oas": "垃圾债利差", "vix": "VIX", "sp500": "标普500回撤",
+               "breadth": "上涨参与度", "nfci": "金融压力"}
+RISK_RULE_TEXT = (
+    "五指标分为三类：信用／金融环境（垃圾债利差、金融压力）、情绪（VIX）、"
+    "趋势（标普500回撤、上涨参与度）。红灯：三类均出现警示，或任一指标为红且另一类也出现警示；"
+    "黄灯：未达到红灯，但至少一项警示或数据缺失；绿灯：五项数据齐全且均为绿。"
+    "同类指标不重复算作跨类确认。数据缺失不代表安全；这是风险参考规则，不预测涨跌，也不是买卖指令。"
+)
+
+
+def market_risk_summary(macro, target_date=None):
+    """按跨类别确认聚合风险；缺失或过期数据不能得到绿灯。"""
+    target_date = target_date or TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+    levels, missing = {}, []
+    for key in RISK_INDICATORS:
+        item = macro.get(key) or {}
+        try:
+            age = (datetime.strptime(target_date, "%Y-%m-%d") -
+                   datetime.strptime(item["date"], "%Y-%m-%d")).days
+            limit = 10 if key == "nfci" else 5 if key == "breadth" else 7
+            fields = ("value", "drawdown") if key == "sp500" else (
+                ("value", "pct50") if key == "breadth" else ("value",))
+            valid = item.get("ok") and 0 <= age <= limit and all(
+                isinstance(item.get(field), (int, float)) and math.isfinite(item[field]) for field in fields)
+            level = macro_status(key, item)[0] if valid else "gray"
+        except (KeyError, TypeError, ValueError):
+            level = "gray"
+        levels[key] = level
+        if level == "gray":
+            missing.append(RISK_LABELS[key])
+    categories = (("hy_oas", "nfci"), ("vix",), ("sp500", "breadth"))
+    warning = lambda key: levels[key] in ("red", "yellow")
+    active = sum(any(warning(key) for key in category) for category in categories)
+    red = any(level == "red" for level in levels.values())
+    level = "red" if active == 3 or red and active >= 2 else "yellow" if active or missing else "green"
+    label = {"red": "风险升高", "yellow": "留意风险", "green": "风险平稳"}[level]
+    if not active and missing:
+        label = "数据不足"
+    warnings = [RISK_LABELS[key] for key in RISK_INDICATORS if warning(key)]
+    reasons = (["警示：" + "、".join(warnings)] if warnings else ["已取得的指标未触发警示"])
+    if missing:
+        reasons.append("缺失或过期：" + "、".join(missing))
+    return {"level": level, "label": label, "text": "；".join(reasons),
+            "levels": levels, "valid_count": 5 - len(missing), "missing": missing}
+
+
 # ---------------------------------------------------------------- Yahoo
 
 def yahoo_history(symbol):
@@ -1628,6 +1675,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
     }
     snapshot["data_time_text"] = market_data_time(snapshot)
+    snapshot["market_risk"] = market_risk_summary(macro)
     return snapshot
 
 
@@ -1636,17 +1684,14 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     monitoring = snapshot.get("group_monitoring", {})
     registered = snapshot.get("registered_counts", {})
     rows_macro = []
-    macro_counts = {"red": 0, "yellow": 0}
-    for key in ["hy_oas", "vix", "sp500", "breadth", "nfci"]:
+    risk = market_risk_summary(macro, snapshot.get("target_trade_date"))
+    for key in RISK_INDICATORS:
         it = macro.get(key, {})
-        if not it.get("ok"):
-            label = html_lib.escape(str(it.get("name") or
-                                        ("上涨参与度" if key == "breadth" else FRED_SERIES[key]["name"])))
-            rows_macro.append(f'<tr class="gray"><td>{label}</td><td colspan="3">无数据</td></tr>')
+        if risk["levels"][key] == "gray":
+            label = html_lib.escape(str(it.get("name") or RISK_LABELS[key]))
+            rows_macro.append(f'<tr class="gray"><td>{label}</td><td colspan="3">无数据或已过期</td></tr>')
             continue
         lv, txt = macro_status(key, it)
-        if lv in macro_counts:
-            macro_counts[lv] += 1
         if key == "sp500":
             val = f'−{abs(it["drawdown"]):.1f}%' if it.get("drawdown") is not None else "—"
         elif key == "hy_oas":
@@ -1666,32 +1711,12 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 
         dw = it.get("delta_week")
         dw_txt = f'{dw:+.0f}' if (key == "hy_oas" and dw is not None) else "—"
-        label = html_lib.escape(it["name"])
-        if key in ("breadth", "nfci"):
-            label += f'<span class="unit">截至 {html_lib.escape(it["date"])}</span>'
+        label = html_lib.escape(str(it.get("name") or RISK_LABELS[key]))
+        label += f'<span class="unit">截至 {html_lib.escape(it["date"])}</span>'
         rows_macro.append(
             f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
             f'<td class="num dim">{dw_txt}</td><td>{txt}</td></tr>'
         )
-
-    reference_rows = []
-    for key in ("ust10", "dxy", "curve"):
-        it = macro.get(key) or {}
-        name = html_lib.escape(str(it.get("name") or FRED_SERIES[key]["name"]))
-        if it.get("ok") and isinstance(it.get("value"), (int, float)) and math.isfinite(it["value"]):
-            value = (f'{it["value"]:.2f}%' if key == "ust10" else
-                     f'{it["value"]:.2f} 个百分点' if key == "curve" else f'{it["value"]:.2f}')
-            date = html_lib.escape(str(it.get("date") or "日期未提供"))
-            reference_rows.append(f'<tr><td>{name}<span class="unit">截至 {date}</span></td>'
-                                  f'<td class="num">{value}</td></tr>')
-        else:
-            reference_rows.append(f'<tr class="gray"><td>{name}</td><td class="num">无数据</td></tr>')
-    index_reference = ('<div class="index-reference"><h2>市场参考（独立指标，不属于清单标的）</h2>'
-                       '<table><tr class="gray"><td>参考指标</td><td class="num">最新值</td></tr>'
-                       + "".join(reference_rows) + '</table>'
-                       '<details class="macro-help" id="yieldCurveHelp"><summary>收益率曲线是什么意思？</summary>'
-                       '<p>这里是美国 10年期国债收益率 − 2年期国债收益率，并非投资收益率。'
-                       '小于零称为倒挂，提示经济放缓风险，不能单独预测股市下跌。</p></details></div>')
 
     order = {"red": 0, "yellow": 1, "green": 2, "gray": 3}
     # 行情没异动但基本面亮了警示的，要上表并往前排，否则徽章永远藏在「无异动 N 只」里看不见
@@ -1760,9 +1785,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         if not enabled:
             note = f"行业监测关闭 · {group['sector_etf']} 仍监测（仅限原组已有标的）" if group.get("sector_etf") else "分组监测已关闭"
             parts.append(f'<div class="quiet">{note} · 清单保留，普通标的暂停抓取和报警</div>')
-        if group["key"] == "index_funds":
-            parts.append(index_reference)
-            parts.append('<div class="quiet">上述三项不属于自选清单：原指数基成员及监测开关保持不变。</div>')
         for label, rows in (("个股", [d for d in shown if not is_etf_row(d)]),
                             ("ETF 基金", [d for d in shown if is_etf_row(d)])):
             if rows:
@@ -1795,8 +1817,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         src_txt += f" · {n_rt} 只用了实时价（Nasdaq，0 延迟）"
     # 之前漏了 join，整段被当成 list 的 str() 插进表格，页面上会多出 [' 和 ']
     rows_macro = "".join(rows_macro)
-    macro_stats = " · ".join(f'{label}{macro_counts[key]}' for key, label in (("red", "红"), ("yellow", "黄"))
-                             if macro_counts[key])
+    risk_title = html_lib.escape(f"综合判断：{risk['label']} · 有效指标 {risk['valid_count']}/5")
+    macro_stats = (f'<span class="market-risk-badge" id="marketRiskLight" data-level="{risk["level"]}" '
+                   f'role="status" aria-label="{risk_title}" title="{risk_title}">'
+                   f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
+                   f'综合：{html_lib.escape(risk["label"])}</span>')
     snapshot = snapshot or {}
     snapshot_json = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
     snapshot_json = snapshot_json.replace("</", "<\\/")
@@ -1907,9 +1932,6 @@ tr.yellow td:first-child{{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12
 tr.green td:first-child{{box-shadow:inset 2px 0 0 var(--green)}}
 tr.gray td{{color:var(--dim)}}
 .group-card tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
-.index-reference{{margin:8px 4px 12px;padding:3px 4px 8px;border:1px solid var(--line);border-radius:8px}}
-.index-reference table{{font-size:12px}}
-.index-reference td{{padding:7px 9px}}
 .macro-help{{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}}
 .macro-help>summary{{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}}
 .macro-help p{{margin:6px 0}}
@@ -1951,7 +1973,12 @@ tr.gray td{{color:var(--dim)}}
 .stat-count{{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}}
 .stat-dot{{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}}
 .stat-dot.red{{background:var(--red)}} .stat-dot.yellow{{background:var(--yellow)}}
-.stat-dot.gray{{background:var(--dim)}}
+.stat-dot.gray{{background:var(--dim)}} .stat-dot.green{{background:var(--green)}}
+.market-risk-badge{{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}}
+.market-risk-badge[data-level="red"]{{color:var(--red)}}
+.market-risk-badge[data-level="yellow"]{{color:var(--yellow)}}
+.market-risk-badge[data-level="green"]{{color:var(--green)}}
+.macro-card>summary .group-stats{{margin-left:6px;text-align:left}}
 .quiet-list{{margin:8px 0}}
 .quiet-list>summary{{padding:8px 12px;color:var(--dim);font-size:12px;cursor:pointer}}
 .sym .note{{display:block;margin:3px 0 0;overflow-wrap:anywhere}}
@@ -1993,6 +2020,8 @@ tr.gray td{{color:var(--dim)}}
 
 <details class="card macro-card" id="macroCard">
 <summary class="grp"><span>市场风险参考</span><span class="group-stats">{macro_stats}</span></summary>
+<p class="macro-help" id="marketRiskReason">{html_lib.escape(risk['text'])} · 有效指标 {risk['valid_count']}/5</p>
+<details class="macro-help" id="marketRiskRules"><summary>综合判断规则</summary><p>{html_lib.escape(RISK_RULE_TEXT)}</p></details>
 <table>
 <tr class="gray"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
 {rows_macro}

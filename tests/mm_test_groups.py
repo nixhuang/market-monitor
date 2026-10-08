@@ -92,6 +92,8 @@ class TestGroups(unittest.TestCase):
             self.assertIn(code, index)
         self.assertIn('参考值 · 截至 2026-10-07', index)
         self.assertIn('4.25%</td>', index)
+        self.assertEqual(index.count('BD#US10Y'), 1)
+        self.assertNotIn('市场参考（独立指标，不属于清单标的）', index)
         self.assertIn('不计算交易警示', index)
         self.assertNotIn('无异动 3 只', index)
         self.assertEqual(snap['summary']['missing_prices'], 0)
@@ -405,13 +407,13 @@ class TestGroups(unittest.TestCase):
         self.assertIn('.group-card tr.red td:first-child{box-shadow:inset 6px', page)
         for color, width in [('red', 6), ('yellow', 4), ('green', 2)]:
             self.assertIn(f'tr.{color} td:first-child{{box-shadow:inset {width}px', page)
-        self.assertIn('0.51 个百分点', page)
+        self.assertNotIn('0.51 个百分点', page)
         risk = page.split('id="macroCard"', 1)[1].split('id="group_positions"', 1)[0]
         reference = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
         self.assertNotIn('收益率曲线', risk)
-        self.assertIn('收益率曲线', reference)
-        self.assertIn('id="yieldCurveHelp"', page)
-        self.assertIn('10年期国债收益率 − 2年期国债收益率', page)
+        self.assertNotIn('收益率曲线', reference)
+        self.assertNotIn('id="yieldCurveHelp"', page)
+        self.assertNotIn('10年期国债收益率 − 2年期国债收益率', page)
 
     def test_macro_old_values_are_gray_and_yahoo_fallback_uses_real_dates(self):
         with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), \
@@ -454,17 +456,54 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(snap['registered_counts']['index_funds'], 1)
         self.assertIn('指数基 (1)', page)
         for name in ('10Y美债','美元指数','收益率曲线'):
-            self.assertIn(name, index)
+            self.assertNotIn(name, index)
             self.assertNotIn(name, risk)
-        self.assertNotIn('红',risk.split('</summary>',1)[0])
-        self.assertNotIn('黄',risk.split('</summary>',1)[0])
-        self.assertIn('原指数基成员及监测开关保持不变',index)
-        self.assertEqual(list(cfg['index_funds']),['HYG'])
-        no_reference = monitor.render({}, [], 0, snapshot=snap)
-        no_index = no_reference.split('id="group_index_funds"',1)[1].split('id="group_technology"',1)[0]
-        self.assertIn('10Y美债</td><td class="num">无数据', no_index)
-        self.assertIn('美元指数</td><td class="num">无数据', no_index)
-        self.assertIn('收益率曲线</td><td class="num">无数据', no_index)
+        self.assertNotIn('市场参考（独立指标，不属于清单标的）', page)
+        self.assertNotIn('index-reference', page)
+        self.assertNotIn('原指数基成员及监测开关保持不变', index)
+        self.assertEqual(list(cfg['index_funds']), ['HYG'])
+        self.assertIn('id="marketRiskLight" data-level="yellow"', risk)
+        self.assertIn('综合：数据不足', risk)
+
+    def test_five_indicator_summary_requires_cross_category_confirmation(self):
+        import copy
+        base = {k: {'ok': True, 'date': '2026-10-07', 'value': value}
+                for k, value in (('hy_oas', 300), ('vix', 15), ('sp500', 6700),
+                                 ('breadth', 65), ('nfci', -0.3))}
+        base['sp500']['drawdown'] = -2
+        base['breadth']['pct50'] = 60
+        def risk(**changes):
+            macro = copy.deepcopy(base)
+            for key, update in changes.items():
+                macro[key].update(update)
+            return monitor.market_risk_summary(macro)
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-08'):
+            self.assertEqual(risk()['level'], 'green')
+            self.assertEqual(risk()['valid_count'], 5)
+            self.assertEqual(risk(vix={'value': 25})['level'], 'yellow')
+            self.assertEqual(risk(vix={'value': 45})['level'], 'yellow')
+            self.assertEqual(risk(hy_oas={'value': 500}, nfci={'value': 0.1})['level'], 'yellow')
+            self.assertEqual(risk(hy_oas={'value': 500}, vix={'value': 25})['level'], 'red')
+            self.assertEqual(risk(hy_oas={'value': 380}, vix={'value': 25},
+                                  breadth={'value': 40})['level'], 'red')
+            self.assertEqual(risk(vix={'value': 25}, sp500={'drawdown': -12})['level'], 'yellow')
+            self.assertEqual(risk(nfci={'ok': False})['level'], 'yellow')
+            self.assertEqual(risk(nfci={'ok': False})['valid_count'], 4)
+            self.assertEqual(risk(vix={'value': float('nan')})['level'], 'yellow')
+            self.assertIn('VIX', risk(vix={'date': '2026-09-01'})['missing'])
+            self.assertEqual(risk(nfci={'date': '2026-10-02'})['level'], 'green')
+            self.assertEqual(monitor.market_risk_summary({})['label'], '数据不足')
+            self.assertEqual(risk(hy_oas={'value': 500}, vix={'value': 25},
+                                  nfci={'ok': False})['level'], 'red')
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), \
+                patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot(base, [], {})
+        self.assertEqual(snap['market_risk']['level'], 'green')
+        page = monitor.render(base, [], 0, snapshot=snap)
+        self.assertIn('id="marketRiskLight" data-level="green"', page)
+        self.assertIn('有效指标 5/5', page)
+        self.assertIn('id="marketRiskRules"', page)
+        self.assertIn('同类指标不重复算作跨类确认', page)
 
     def test_market_breadth_validation_and_simple_risk_language(self):
         body = {'_canonical': monitor.BREADTH_URL,
@@ -546,7 +585,9 @@ class TestGroups(unittest.TestCase):
                              'pct50': 18.0, 'date': '2026-10-06', 'pressure_confirmed': True}}
         page = monitor.render(macro, [], 0)
         summary = page.split('id="macroCard"', 1)[1].split('</summary>', 1)[0]
-        self.assertIn('红1 · 黄1', summary)
+        self.assertIn('id="marketRiskLight" data-level="red"', summary)
+        self.assertIn('综合：风险升高', summary)
+        self.assertNotIn('红1 · 黄1', summary)
         self.assertIn('多数股票走弱，且信用或金融压力也在升高', page)
         self.assertIn('截至 2026-10-02', page)
         self.assertIn('History of Market (historyofmarket.com)', page)
