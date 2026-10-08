@@ -18,5 +18,7 @@
   "vix_green": 20,
   "vix_yellow": 30,
   "vix_red": 40,
-  "use_realtime": 1
+  "use_realtime": 1,
+  "dca_every": 10,
+  "dca_start": ""
 }
