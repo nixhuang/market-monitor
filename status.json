@@ -9,13 +9,13 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37767922556",
+  "run_id": "37768409790",
   "request_id": "",
-  "source_sha": "98279e57b178f4980c5e6b478c35f96850f35bca",
-  "started_at": "2026-10-08T11:06:49+00:00",
-  "started_at_bj": "2026-10-08T19:06:49+08:00",
-  "finished_at": "2026-10-08T19:07:50.052295+08:00",
-  "finished_at_bj": "2026-10-08T19:07:50+08:00",
+  "source_sha": "9d2638ee77a2d4a82f5963548ce2f633f70b4acd",
+  "started_at": "2026-10-08T11:11:18+00:00",
+  "started_at_bj": "2026-10-08T19:11:18+08:00",
+  "finished_at": "2026-10-08T19:12:16.082687+08:00",
+  "finished_at_bj": "2026-10-08T19:12:16+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -238,6 +238,6 @@
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 6
+    "yellow": 7
   }
 }
