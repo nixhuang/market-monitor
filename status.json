@@ -1,12 +1,12 @@
 {
   "dca_reminder": null,
-  "run_id": "37734174915",
+  "run_id": "37734771491",
   "request_id": "",
-  "source_sha": "4ad34764a3021e79a9bb57b72e55ca98d7108d22",
-  "started_at": "2026-10-08T05:47:45+00:00",
-  "started_at_bj": "2026-10-08T13:47:45+08:00",
-  "finished_at": "2026-10-08T13:48:37.719225+08:00",
-  "finished_at_bj": "2026-10-08T13:48:37+08:00",
+  "source_sha": "df3b5924f805db5fdee4f8bcacc462cb8f249381",
+  "started_at": "2026-10-08T05:54:42+00:00",
+  "started_at_bj": "2026-10-08T13:54:42+08:00",
+  "finished_at": "2026-10-08T13:55:28.625828+08:00",
+  "finished_at_bj": "2026-10-08T13:55:28+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -199,6 +199,6 @@
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 6
+    "yellow": 7
   }
 }
