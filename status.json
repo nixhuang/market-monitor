@@ -1,19 +1,28 @@
 {
-  "dca_reminder": null,
-  "run_id": "37736797476",
+  "dca_reminder": {
+    "every": 10,
+    "start": "2026-10-01",
+    "count": 5,
+    "date": "2026-10-07",
+    "times": 1,
+    "due": false,
+    "next_in": 6,
+    "next_date": "2026-10-15"
+  },
+  "run_id": "37737113267",
   "request_id": "",
-  "source_sha": "a946ab7921268090b51861e0a7401e48a6a60d6c",
-  "started_at": "2026-10-08T06:17:30+00:00",
-  "started_at_bj": "2026-10-08T14:17:30+08:00",
-  "finished_at": "2026-10-08T14:18:20.816162+08:00",
-  "finished_at_bj": "2026-10-08T14:18:20+08:00",
+  "source_sha": "50ebe4e0a020d00a8cd171936d026009938ba303",
+  "started_at": "2026-10-08T06:21:00+00:00",
+  "started_at_bj": "2026-10-08T14:21:00+08:00",
+  "finished_at": "2026-10-08T14:22:34.444435+08:00",
+  "finished_at_bj": "2026-10-08T14:22:34+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
     "holdings.json": "f9e5d2f39a6d140fd47d5fcd59764c49719fdf2d",
-    "settings.json": "d9f36eae4670ab1d7854102b29e86afcdc505ed9"
+    "settings.json": "c57b9f6286e5e03e36ded7eef61550689708a755"
   },
   "effective_settings": {
     "boll_n": 20,
@@ -24,7 +33,7 @@
     "rsi_high": 70,
     "rsi_low": 30,
     "near_52w_low_pct": 1.0,
-    "trigger_gap_pct": 5.0,
+    "trigger_gap_pct": 1.0,
     "vol_ratio": 1.5,
     "quiet_chg": 2.0,
     "amp_yellow": 5.0,
@@ -36,8 +45,8 @@
     "vix_yellow": 30,
     "vix_red": 40,
     "use_realtime": 1,
-    "dca_every": 0,
-    "dca_start": ""
+    "dca_every": 10,
+    "dca_start": "2026-10-01"
   },
   "groups": [
     {
@@ -170,12 +179,12 @@
     "consumer_discretionary": 1,
     "real_estate": 1,
     "triggers": 0,
-    "dca": 0
+    "dca": 1
   },
   "summary": {
-    "red": 3,
+    "red": 2,
     "yellow": 10,
-    "green": 20,
+    "green": 21,
     "gray": 0,
     "total": 33,
     "macro_ok": 6,
