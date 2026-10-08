@@ -9,7 +9,7 @@ sys.path.insert(0, ROOT)
 import monitor  # noqa: E402
 
 def item(sym, group, level, chg=1.0, etf=False, note=""):
-    return {"symbol": sym, "note": note, "price": 100.0, "chg": chg, "rsi": 50.0,
+    return {"symbol": sym, "note": note, "price": 100.0, "chg": chg, "rsi": {6: 50.0, 12: 50.0, 24: 50.0},
             "dist_high": -5.0, "dist_low": 10.0, "vol_ratio": 1.0,
             "trigger": None, "source": "yahoo", "data_date": "2026-10-06",
             "realtime": False, "rt_ts": "", "group": group,
@@ -140,15 +140,22 @@ check("经营现金流转负" in html5, "该行徽章 title 正确")
 quiet_nums = re.findall(r"无异动 (\d+) 只", html5)
 check("1" in quiet_nums and "2" not in quiet_nums,
       f"无异动计数已扣掉基本面警示的那只：{quiet_nums}")
-check(html5.count('tag f-red" title="基本面') == 2, "红色基本面徽章渲染 2 个（NTNX 持仓 + JNJ 绿灯行）")
-check(html5.count('tag f-yellow" title="基本面') == 1, "黄色基本面徽章渲染 1 个")
-check("营收同比 -22%" in html5, "红徽章 title 带命中原因")
-check("流动比率 115→84" in html5, "黄徽章 title 带命中原因")
-check("6/30/2026 报告期" in html5, "徽章 title 带报告期")
-check(html5.count(">基本面</span>") == 3, "绿色（含仅一次性损益 MCD）不亮徽章，共 3 个徽章")
+check(html5.count('summary class="tag f-red"') == 2, "红色基本面可点击标签 2 个")
+check(html5.count('summary class="tag f-yellow"') == 1, "黄色基本面可点击标签 1 个")
+check('<li>营收同比 -22%</li>' in html5, "红标签展开内容带命中原因")
+check('<li>流动比率 115→84</li>' in html5, "黄标签展开内容带命中原因")
+check("6/30/2026 报告期" in html5, "展开内容带报告期")
+check(html5.count('class="fund-detail"') == 3, "绿色不亮徽章，共 3 个折叠详情")
+check('aria-label="查看 JNJ 基本面详情"' in html5, "标签有可访问名称")
+check('鼠标悬停徽章' not in html5, "页脚更新为点击查看说明")
 # 基本面不改变原有红黄绿灯：NTNX 本来就是 red，加 fund 不改变行数与灯色
 check(html5.count('<tr class="red"') == html.count('<tr class="red"'), "基本面不影响红行数量")
 check('data-phase="ok"' in html5, "基本面不影响状态灯（仍为绿）")
+check('RSI 6 / 12 / 24' in html5 and '同侧两条黄、三条红' in html5, "页脚说明三线 RSI 分级")
+by_sym(items, "NTNX")["fund"]["hits"] = ['利润 < 0 & "下降" <script>alert(1)</script>']
+html6 = monitor.render(macro, items, 10, snapshot=snapshot)
+check('&lt;script&gt;alert(1)&lt;/script&gt;' in html6 and '<script>alert(1)</script>' not in html6,
+      "基本面展开内容保留 HTML 转义")
 
 print()
 if fail:

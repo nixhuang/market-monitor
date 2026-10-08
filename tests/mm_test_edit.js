@@ -107,6 +107,8 @@ const saved = JSON.parse(T.setJsonText());
 check(saved.amp_yellow === 3 && saved.amp_red === 9, '振幅阈值正确采集并保留到保存 JSON');
 check(saved.custom_rule === 42, '表单外已有设置不会被保存操作删除');
 check(src.includes('id="set_amp_yellow"') && src.includes('id="set_amp_red"'), '编辑页确实有两个振幅输入项');
+check(src.includes('RSI 周期固定为 6 / 12 / 24') && src.includes('同侧两条达到或越过阈值为黄，三条为红'), '编辑页说明三线 RSI 分级规则');
+check(!src.includes('RSI ≥ x → 超买红') && !src.includes('RSI ≤ x → 超卖红'), '旧单条 RSI 红灯说明已删除');
 
 (async () => {
   let resolve;

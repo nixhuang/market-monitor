@@ -180,8 +180,9 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <div class="setgrid">
         <div class="setrow"><label>单日涨跌 ≥ x% → 红</label><input id="set_chg_red" inputmode="decimal"></div>
         <div class="setrow"><label>单日涨跌 ≥ x% → 黄</label><input id="set_chg_yellow" inputmode="decimal"></div>
-        <div class="setrow"><label>RSI ≥ x → 超买红</label><input id="set_rsi_high" inputmode="numeric"></div>
-        <div class="setrow"><label>RSI ≤ x → 超卖红</label><input id="set_rsi_low" inputmode="numeric"></div>
+        <div class="setrow"><label>RSI 超买线（默认 70）</label><input id="set_rsi_high" inputmode="numeric"></div>
+        <div class="setrow"><label>RSI 超卖线（默认 30）</label><input id="set_rsi_low" inputmode="numeric"></div>
+        <p class="note">RSI 周期固定为 6 / 12 / 24：同侧两条达到或越过阈值为黄，三条为红；只有一条不触发 RSI 警示。</p>
         <div class="setrow"><label>距 52 周低点不足 x% → 红</label><input id="set_near_52w_low_pct" inputmode="decimal"></div>
         <div class="setrow"><label>距加仓价不足 x% → 红</label><input id="set_trigger_gap_pct" inputmode="decimal"></div>
         <div class="setrow"><label>量比 ≥ x 倍 → 黄</label><input id="set_vol_ratio" inputmode="decimal"></div>

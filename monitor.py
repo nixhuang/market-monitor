@@ -65,8 +65,8 @@ DEFAULT_SETTINGS = {
     # 个股
     "chg_red": 4.0,         # 单日涨跌 >= x% → 红
     "chg_yellow": 2.0,      # 单日涨跌 >= x% 且 < chg_red → 黄
-    "rsi_high": 70,         # RSI >= x → 红（超买）
-    "rsi_low": 30,          # RSI <= x → 红（超卖）
+    "rsi_high": 70,         # RSI 6/12/24 同侧 >= x：两条黄、三条红
+    "rsi_low": 30,          # RSI 6/12/24 同侧 <= x：两条黄、三条红
     "near_52w_low_pct": 1.0,  # 距 52 周低点不足 x% → 红
     "trigger_gap_pct": 5.0,  # 距加仓价不足 x% → 红（已跌破则无视这条直接红）
     "vol_ratio": 1.5,       # 量比 >= x 倍 → 黄
@@ -935,6 +935,9 @@ def fetch_history(symbol):
     return fallback
 
 
+RSI_PERIODS = (6, 12, 24)
+
+
 def calc_rsi(prices, period=14):
     if len(prices) < period + 1:
         return None
@@ -947,7 +950,7 @@ def calc_rsi(prices, period=14):
         ag = (ag * (period - 1) + gains[i]) / period
         al = (al * (period - 1) + losses[i]) / period
     if al == 0:
-        return 100.0
+        return 50.0 if ag == 0 else 100.0
     rs = ag / al
     return 100 - 100 / (1 + rs)
 
@@ -1105,7 +1108,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
     prev = data["prev_close"]
 
     chg = (price / prev - 1) * 100 if prev else None
-    rsi = calc_rsi(closes)
+    rsi = {period: calc_rsi(closes, period) for period in RSI_PERIODS}
     high52 = max(data["highs"]) if data["highs"] else max(closes)
     low52 = min(data["lows"]) if data["lows"] else min(closes)
     dist_high = (price / high52 - 1) * 100
@@ -1124,7 +1127,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
         if chg is not None and abs(chg) >= S["quiet_chg"]:
             return "yellow", [f"异动 {chg:+.1f}%"], {
                 "symbol": sym, "note": cfg.get("note", ""), "price": price,
-                "chg": chg, "rsi": None, "dist_high": dist_high,
+                "chg": chg, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": dist_high,
                 "dist_low": dist_low, "vol_ratio": vol_ratio,
                 "trigger": cfg.get("trigger"), "source": data.get("source", ""),
                 "data_date": (data.get("dates") or [""])[-1],
@@ -1133,7 +1136,7 @@ def analyze_symbol(sym, cfg, data, group="watch"):
             }
         return "green", [], {
             "symbol": sym, "note": cfg.get("note", ""), "price": price,
-            "chg": chg, "rsi": None, "dist_high": dist_high,
+            "chg": chg, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": dist_high,
             "dist_low": dist_low, "vol_ratio": vol_ratio,
             "trigger": cfg.get("trigger"), "source": data.get("source", ""),
             "data_date": (data.get("dates") or [""])[-1],
@@ -1151,10 +1154,15 @@ def analyze_symbol(sym, cfg, data, group="watch"):
     if chg is not None and abs(chg) >= S["chg_red"]:
         signals.append(f"异动 {chg:+.1f}%")
         bump("red")
-    if rsi is not None and (rsi >= S["rsi_high"] or rsi <= S["rsi_low"]):
-        tag = "超买" if rsi >= S["rsi_high"] else "超卖"
-        signals.append(f"RSI {rsi:.0f} {tag}")
-        bump("red")
+    high_hits = sum(v is not None and math.isfinite(v) and v >= S["rsi_high"] for v in rsi.values())
+    low_hits = sum(v is not None and math.isfinite(v) and v <= S["rsi_low"] for v in rsi.values())
+    for count, tag, boundary in ((high_hits, "超买", f"≥{S['rsi_high']:g}"),
+                                 (low_hits, "超卖", f"≤{S['rsi_low']:g}")):
+        if count >= 2:
+            values = " / ".join(f"RSI{period}={v:.1f}" if v is not None and math.isfinite(v)
+                                else f"RSI{period}=无数据" for period, v in rsi.items())
+            signals.append(f"RSI {count}条{tag}（{boundary}）：{values}")
+            bump("red" if count == 3 else "yellow")
     if dist_low <= S["near_52w_low_pct"]:
         signals.append("触及52周新低")
         bump("red")
@@ -1387,19 +1395,21 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             note = f'<span class="note">{d["note"]}</span>' if d["note"] else ""
             # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
             tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
-            # 基本面警示徽章：只对持仓/重点关注查询，鼠标悬停看具体哪几项恶化
             fund = d.get("fund") or {}
+            fund_html = ""
             if fund.get("level") in ("red", "yellow") and fund.get("hits"):
-                detail = html_lib.escape(
-                    (f"{fund.get('period') or ''} 报告期 · " if fund.get("period") else "")
-                    + "；".join(fund["hits"]))
+                period = html_lib.escape(str(fund.get("period") or "未提供"))
+                hits = "".join(f'<li>{html_lib.escape(str(hit))}</li>' for hit in fund["hits"])
                 fcls = "tag f-red" if fund["level"] == "red" else "tag f-yellow"
-                tag += f'<span class="{fcls}" title="基本面：{detail}">基本面</span>'
+                label = html_lib.escape(f"查看 {normalize_symbol(d['symbol'])} 基本面详情")
+                fund_html = (f'<details class="fund-detail"><summary class="{fcls}" aria-label="{label}">'
+                             f'基本面</summary><div class="fund-body"><div>{period} 报告期</div>'
+                             f'<ul>{hits}</ul></div></details>')
             out += (
                 f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}</td>'
                 f'<td class="num">{fmt(d["price"])}</td>'
                 f'<td class="num {chg_cls}">{chg_txt}</td>'
-                f'<td class="sig">{sig}</td></tr>'
+                f'<td class="sig">{sig}{fund_html}</td></tr>'
             )
         if not out:
             out = '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
@@ -1531,7 +1541,16 @@ tr:first-child td{{border-top:none}}
   color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}}
 .tag.f-red{{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}}
 .tag.f-yellow{{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}}
-.sig{{font-size:12.5px;color:var(--text)}}
+.fund-detail{{margin-top:6px}}
+.fund-detail summary{{margin-left:0;padding:7px 9px;cursor:pointer;list-style:none;touch-action:manipulation}}
+.fund-detail summary::-webkit-details-marker{{display:none}}
+.fund-detail summary::after{{content:" · 展开";font-weight:400}}
+.fund-detail[open] summary::after{{content:" · 收起"}}
+.fund-detail summary:focus-visible{{outline:2px solid #6ba3f0;outline-offset:3px}}
+.fund-body{{margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:6px;
+  font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}}
+.fund-body ul{{margin:4px 0 0;padding-left:16px}}
+.sig{{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}}
 .up{{color:var(--up)}} .down{{color:var(--down)}}
 tr.red td:first-child{{box-shadow:inset 3px 0 0 var(--red)}}
 tr.yellow td:first-child{{box-shadow:inset 3px 0 0 var(--yellow)}}
@@ -1616,13 +1635,14 @@ h2.grp{{color:var(--text);font-size:14px;margin-top:14px}}
 
 <div class="foot">
 宏观：FRED · 个股：{src_txt}<br>
-基本面：Nasdaq 季度财报（只查持仓 + 重点关注，ETF 不判）· 鼠标悬停徽章看具体哪几项恶化<br>
+基本面：Nasdaq 季度财报（只查持仓 + 重点关注，ETF 不判）· 点击基本面标签展开详情，再点收起<br>
 跑路价签 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_yellow']:.0f} 收紧 · ≥{S['hy_red']:.0f} 危机确认<br>
 布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%）<br>
 轨道按当日收盘价滚动计算；是否触及按<b>当日最高/最低价</b>判定，盘中穿过就算<br>
 连续贴近轨道按日累计，远离一天（差 &gt;{S['boll_near_pct']:g}%）就断，再次贴近重新从第一日算 · 连续 2 日起才标注<br>
 定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在编辑页逐只设置<br>
-异动 ≥{S['chg_red']:g}% 红 · ≥{S['chg_yellow']:g}% 黄 · RSI ≥{S['rsi_high']:.0f} 或 ≤{S['rsi_low']:.0f} 红 · 量比 ≥{S['vol_ratio']:g}x 黄<br>
+异动 ≥{S['chg_red']:g}% 红 · ≥{S['chg_yellow']:g}% 黄 · 量比 ≥{S['vol_ratio']:g}x 黄<br>
+RSI 6 / 12 / 24：同侧达到或越过 {S['rsi_high']:g}（超买）或 {S['rsi_low']:g}（超卖），同侧两条黄、三条红；单条不警示<br>
 日内振幅（最高-最低）/昨收 ≥{S['amp_red']:g}% 红 · ≥{S['amp_yellow']:g}% 黄（抓冲高回落、收盘却没动的票）<br>
 <a href="./settings.json" style="color:#6ba3f0;text-decoration:none">查看当前阈值 settings.json</a>
 </div>
@@ -1702,7 +1722,7 @@ def main(argv=None):
                 log("  ! 连续失败 3 次，判定行情源不可用，跳过剩余")
             items.append({
                 "symbol": sym, "note": sc.get("note", ""), "price": None,
-                "chg": None, "rsi": None, "dist_high": None, "dist_low": None,
+                "chg": None, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": None, "dist_low": None,
                 "vol_ratio": None, "trigger": sc.get("trigger"),
                 "group": grp, "data_date": "", "boll_up": None, "boll_dn": None,
                 "signals": ["行情源暂时不可用"] if data_down else ["数据获取失败"],
