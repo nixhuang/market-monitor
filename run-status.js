@@ -411,20 +411,11 @@
       if (!total) return {phase: 'idle', text: Object.values(snap.registered_counts || {}).some(n => n > 0)
         ? '没有开启的监测标的，未抓取报价' : '清单为空，未抓取报价'};
       if (unsupported >= total) return {phase: 'idle', text: '清单中 ' + unsupported + ' 个特殊代码暂不支持报价，未抓取报价'};
-      const references = info.reference_dates || {};
-      const count = Object.keys(references).length;
-      if (count) {
-        const dates = [...new Set(Object.values(references))].sort();
-        const when = dates.length === 1 ? dates[0] : dates[0] + '～' + dates[dates.length - 1];
-        return {phase: 'ok', text: success + cnt + ' · ' + (total - unsupported - count) +
-          ' 只日线已更新 · ' + count + ' 项参考值（截至 ' + when + '）' +
-          (unsupported ? ' · ' + unsupported + ' 个特殊代码暂不支持报价' : '') + suffix, reload: !!oldPage};
-      }
       if (unsupported) {
         return {phase: 'ok', text: success + cnt + ' · ' +
-          (total - unsupported) + ' 只报价已更新 · ' + unsupported + ' 个特殊代码暂不支持报价' + suffix, reload: !!oldPage};
+          (total - unsupported) + ' 项数据已更新 · ' + unsupported + ' 个特殊代码暂不支持报价' + suffix, reload: !!oldPage};
       }
-      return {phase: 'ok', text: success + cnt + ' · ' + total + ' 只全部更新' + suffix, reload: !!oldPage};
+      return {phase: 'ok', text: success + cnt + ' · ' + total + ' 项数据已更新' + suffix, reload: !!oldPage};
     }
     if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
     return {phase: 'idle', text: '点「立即运行」抓最新行情'};

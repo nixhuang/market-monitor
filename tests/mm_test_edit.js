@@ -150,8 +150,9 @@ check(src.includes('布林上、下轨逼近、触碰、穿越均为黄')&&src.i
 check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x bp 黄')&&src.includes('垃圾债利差 ≥ x bp 红'), '信用利差仅保留有效的黄红两条阈值');
 check(src.includes('一周扩大至少 50 bp 也为红')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力为周度'), '设置页明确说明信用急升和新增市场风险规则');
 check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');
-check(src.includes('距52周低点')&&src.includes('上穿或跌破50／200日均线')&&src.includes('基本面单独提示'), '设置页覆盖其他固定个股与基本面规则');
-check(src.includes('50／200日均线穿越（固定判定）')&&src.includes('昨日收盘价低于本轮均线')&&src.includes('日线不足对应周期时不计算')&&src.includes('当前不启用250日'), '均线规则单独列明且不擅自改为250日');
+check(src.includes('距52周低点')&&src.includes('上穿或跌破所设周期均线')&&src.includes('基本面单独提示'), '设置页覆盖其他固定个股与基本面规则');
+check(src.includes('id="set_ma_short"')&&src.includes('id="set_ma_long"')&&src.includes('昨日收盘价低于本轮均线')&&src.includes('日线不足对应周期时不计算')&&src.includes('可在上方改为250日'), '均线周期实际可调，规则说明与数据不足处理齐全');
+check(src.includes('<details class="set" id="ruleDetails">')&&!src.includes('id="ruleDetails" open'), '完整规则默认折叠');
 check(src.includes('五指标综合市场风险')&&src.includes('同类指标不重复算跨类确认')&&src.includes('一级为市场风险参考和持仓'), '完整说明综合风险及最高优先级去重');
 
 (async () => {
@@ -181,6 +182,17 @@ check(src.includes('五指标综合市场风险')&&src.includes('同类指标不
   check(T.monitorEnabled('materials')&&els.monitor_materials['aria-checked']==='true', '保存内容重载后监测状态一致');
   T.renderSettings();
   check(T.settingsError()==='', '默认规则均通过范围与顺序校验');
+  check(Number(els.set_ma_short.value)===50&&Number(els.set_ma_long.value)===200, '均线默认50／200日');
+  els.set_ma_short.value='20';els.set_ma_long.value='250';
+  check(T.settingsError()==='', '两条均线可改为20／250');
+  T.collectSettings();
+  const periods=JSON.parse(T.setJsonText());
+  check(periods.ma_short===20&&periods.ma_long===250, '均线周期真正写入settings JSON');
+  els.set_ma_short.value='20.5';check(T.settingsError().includes('ma_short'), '均线周期小数被拒绝');
+  els.set_ma_short.value='251';check(T.settingsError().includes('ma_short'), '均线超过250日被拒绝');
+  els.set_ma_short.value='200';els.set_ma_long.value='50';
+  check(T.settingsError().includes('ma_short'), '均线顺序倒置被拒绝');
+  T.SET.ma_short=50;T.SET.ma_long=200;T.renderSettings();
   els.set_boll_n.value='0';
   check(T.settingsError().includes('boll_n'), '布林周期零被阻止');
   els.set_boll_n.value='20';els.set_rsi_low.value='80';

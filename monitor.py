@@ -128,6 +128,8 @@ DEFAULT_SETTINGS = {
     "quiet_chg": 2.0,       # quiet 标的（货币基金等）单日涨跌 >= x% → 黄
     "amp_yellow": 5.0,      # 日内振幅（最高-最低）/昨收 >= x% → 黄
     "amp_red": 8.0,         # 日内振幅 >= x% → 红（上下插针、剧烈震荡）
+    "ma_short": 50,
+    "ma_long": 200,
 
     # 宏观
     "hy_green": 350,        # 垃圾债利差 bp：< 350 绿 / 350~400 黄 / >= 400 红
@@ -222,6 +224,7 @@ def trim_history(data, cutoff):
 
 SETTING_LIMITS = {
     "boll_n": (2, 250), "boll_k": (0.1, 10), "boll_near_pct": (0, 100),
+    "ma_short": (2, 250), "ma_long": (2, 250),
     "chg_yellow": (0, 100), "chg_red": (0, 100),
     "rsi_low": (0, 100), "rsi_high": (0, 100),
     "near_52w_low_pct": (0, 100), "trigger_gap_pct": (0, 100),
@@ -233,7 +236,7 @@ SETTING_LIMITS = {
 }
 SETTING_ORDER = (("chg_yellow", "chg_red"), ("amp_yellow", "amp_red"),
                  ("hy_green", "hy_red"),
-                 ("vix_green", "vix_yellow", "vix_red"))
+                 ("vix_green", "vix_yellow", "vix_red"), ("ma_short", "ma_long"))
 
 
 def valid_settings(s):
@@ -241,7 +244,7 @@ def valid_settings(s):
         v = s.get(k)
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not lo <= v <= hi:
             return k
-    if s["boll_n"] != int(s["boll_n"]) or s["dca_every"] != int(s["dca_every"]) or s["use_realtime"] not in (0, 1):
+    if any(s[k] != int(s[k]) for k in ("boll_n", "ma_short", "ma_long", "dca_every")) or s["use_realtime"] not in (0, 1):
         return "整数设置"
     if not s["rsi_low"] < s["rsi_high"]:
         return "RSI 上下限"
@@ -284,7 +287,7 @@ def load_settings():
                 continue  # 类型不对就跳过，不让它污染默认值
             if k in SETTING_LIMITS and (not math.isfinite(v) or not SETTING_LIMITS[k][0] <= v <= SETTING_LIMITS[k][1]):
                 continue
-            if k in ("boll_n", "dca_every", "use_realtime") and v != int(v):
+            if k in ("boll_n", "ma_short", "ma_long", "dca_every", "use_realtime") and v != int(v):
                 continue
             s[k] = type(DEFAULT_SETTINGS[k])(v)
     except FileNotFoundError:
@@ -743,9 +746,10 @@ def market_risk_summary(macro, target_date=None):
 def yahoo_history(symbol):
     """返回 dict: closes(list), volumes(list), highs, lows；失败返回 None
     多端点轮换 + 429 退避重试，尽量扛住限流"""
+    span = "2y" if max(S["ma_short"], S["ma_long"]) > 200 and symbol not in FRED_YAHOO_ALIAS.values() else "1y"
     endpoints = [
-        "https://query1.finance.yahoo.com/v8/finance/chart/{s}?range=1y&interval=1d",
-        "https://query2.finance.yahoo.com/v8/finance/chart/{s}?range=1y&interval=1d",
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{{s}}?range={span}&interval=1d",
+        f"https://query2.finance.yahoo.com/v8/finance/chart/{{s}}?range={span}&interval=1d",
     ]
     last_err = None
     for attempt in range(2):
@@ -1521,13 +1525,18 @@ def analyze_symbol(sym, cfg, data, group="technology"):
 
     chg = (price / prev - 1) * 100 if prev else None
     rsi = {period: calc_rsi(closes, period) for period in RSI_PERIODS}
-    high52 = max(data["highs"]) if data["highs"] else max(closes)
-    low52 = min(data["lows"]) if data["lows"] else min(closes)
+    dates = data.get("dates") or []
+    start52 = 0
+    if dates:
+        cutoff = (datetime.fromisoformat(dates[-1]) - timedelta(weeks=52)).date().isoformat()
+        start52 = next((i for i, date in enumerate(dates) if date >= cutoff), 0)
+    high52 = max((data["highs"] or closes)[start52:])
+    low52 = min((data["lows"] or closes)[start52:])
     dist_high = (price / high52 - 1) * 100
     dist_low = (price / low52 - 1) * 100
     vol_ratio = (vols[-1] / sma(vols, 20)) if vols and sma(vols, 20) else None
-    ma50 = sma(closes, 50)
-    ma200 = sma(closes, 200)
+    ma_periods = (int(S["ma_short"]), int(S["ma_long"]))
+    moving_averages = [(period, sma(closes, period)) for period in dict.fromkeys(ma_periods)]
     boll_mid, boll_up, boll_dn = boll(closes, int(S["boll_n"]), float(S["boll_k"]))
 
     signals = []
@@ -1657,7 +1666,8 @@ def analyze_symbol(sym, cfg, data, group="technology"):
     # 均线穿越（比"贴近"有意义得多）
     if len(closes) >= 2:
         prev_c = closes[-2]
-        for ma_val, ma_name in ((ma50, "50日"), (ma200, "200日")):
+        for period, ma_val in moving_averages:
+            ma_name = f"{period}日"
             if not ma_val:
                 continue
             if prev_c < ma_val <= price:
@@ -1701,7 +1711,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261008-9"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261008-10"></script>'
 
 
 def config_hash(filename):
@@ -1982,18 +1992,9 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             init_light_phase, init_light = "idle", f"清单中 {unsupported_count} 个特殊代码暂不支持报价，未抓取报价"
         else:
             init_light_phase = "ok"
-            references = summary.get("reference_dates") or {}
-            if references:
-                dates = sorted(set(references.values()))
-                date_text = dates[0] if len(dates) == 1 else f"{dates[0]}～{dates[-1]}"
-                coverage = (f"{total - unsupported_count - len(references)} 只日线已更新 · "
-                            f"{len(references)} 项参考值（截至 {date_text}）")
-                if unsupported_count:
-                    coverage += f" · {unsupported_count} 个特殊代码暂不支持报价"
-            else:
-                coverage = (f"{total - unsupported_count} 只报价已更新 · "
-                            f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
-                            else f"{total} 只全部更新")
+            coverage = (f"{total - unsupported_count} 项数据已更新 · "
+                        f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
+                        else f"{total} 项数据已更新")
             kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
             init_light = (f"{kind}抓取成功 · 完成于 {finished_txt}（北京时间） · "
                           f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
@@ -2170,18 +2171,9 @@ tr.gray td{{color:var(--dim)}}
 {reg_line}
 
 <div class="foot">
-垃圾债利差：FRED · VIX／标普500／10Y收益率：Yahoo · 金融压力：NFCI原始周度数据 · 市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 个股：{src_txt}<br>
-基本面：Nasdaq 季度财报（只查持仓 + 重点关注，ETF 不判）· 点击基本面标签展开详情，再点收起<br>
-垃圾债利差 &lt;{S['hy_green']:.0f} 平静 · {S['hy_green']:.0f}–{S['hy_red']:.0f} 收紧 · ≥{S['hy_red']:.0f} 信用压力升高（不是大跌保证）<br>
-布林带 {int(S['boll_n'])} 日 / {S['boll_k']:g} 倍标准差 · 逼近上下轨即算（差 ≤{S['boll_near_pct']:g}%），逼近、触碰、穿越均为黄<br>
-布林信号 + RSI 至少两条同侧达到或越过阈值 → 红；没有双重信号时各按独立规则判定，其他红警示仍保留<br>
-轨道按当日收盘价滚动计算；是否触及按<b>当日最高/最低价</b>判定，盘中穿过就算<br>
-连续贴近轨道按日累计，远离一天（差 &gt;{S['boll_near_pct']:g}%）就断，再次贴近重新从第一日算 · 连续 2 日起才标注<br>
-定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在设置页全局设定一条<br>
-异动 ≥{S['chg_red']:g}% 红 · ≥{S['chg_yellow']:g}% 黄 · 量比 ≥{S['vol_ratio']:g}x 黄<br>
-RSI 6 / 12 / 24：同侧达到或越过 {S['rsi_high']:g}（超买）或 {S['rsi_low']:g}（超卖），同侧两条黄、三条红；单条不警示<br>
-日内振幅（最高-最低）/昨收 ≥{S['amp_red']:g}% 红 · ≥{S['amp_yellow']:g}% 黄（抓冲高回落、收盘却没动的票）<br>
-<a href="./settings.json" style="color:#6ba3f0;text-decoration:none">查看当前阈值 settings.json</a>
+行情：{src_txt} · 垃圾债利差：FRED · 金融压力：NFCI原始周度数据／FRED同步备用<br>
+市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 基本面：Nasdaq<br>
+<a href="./edit.html?rules=1" style="color:#6ba3f0;text-decoration:none">查看完整规则与阈值</a>
 </div>
 
 <div class="acts">

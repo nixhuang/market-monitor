@@ -68,7 +68,7 @@ check("抓取成功 · 完成于 2026-10-07 20:40:28（北京时间）" in html,
 check("自动计划：美东周一至五 20:30（北京 " in html, "第二排自动计划")
 check(("夏令时次日 08:30" in html) != ("冬令时次日 09:30" in html), "冬夏令时只出现一个")
 check('id="btnRunNow"' in html and 'id="btnCheckStatus"' in html, "第三排两个按钮都在")
-check("红2 黄2 绿4" in html and "10 只全部更新" in html, "运行灯含计数与抓取结果")
+check("红2 黄2 绿4" in html and "10 项数据已更新" in html, "运行灯含计数与完整数据总数")
 check('id="runLight" data-phase="ok"' in html, "运行灯初始为绿")
 check('id="ruleLight" data-phase="idle"' in html and 'id="ruleLightTxt"' in html,
       "独立规则灯初始待核验，不预先宣称最新规则生效")
@@ -169,9 +169,10 @@ check(html5.count('<tr class="red"') == html.count('<tr class="red"'), "基本�
 check('data-phase="ok"' in html5, "基本面不影响状态灯（仍为绿）")
 check('垃圾债利差' in html5 and '高收益债利差' not in html5 and '跑路价签' not in html5,
       "正式生成首页仅使用垃圾债利差新名称")
-check('RSI 6 / 12 / 24' in html5 and '同侧两条黄、三条红' in html5, "页脚说明三线 RSI 分级")
-check('逼近、触碰、穿越均为黄' in html5 and '布林信号 + RSI 至少两条同侧达到或越过阈值 → 红' in html5,
-      "页脚说明布林独立黄与RSI组合红")
+footer = html5.split('<div class="foot">', 1)[1].split('</div>', 1)[0]
+check('./edit.html?rules=1' in footer and '查看完整规则与阈值' in footer, "页脚指向设置页完整规则")
+check('RSI 6 / 12 / 24' not in footer and '布林信号 + RSI' not in footer and 'Nasdaq' in footer,
+      "页脚仅保留数据来源，不再重复长篇规则")
 by_sym(items, "NTNX")["fund"]["hits"] = ['利润 < 0 & "下降" <script>alert(1)</script>']
 html6 = monitor.render(macro, items, 10, snapshot=snapshot)
 check('&lt;script&gt;alert(1)&lt;/script&gt;' in html6 and '<script>alert(1)</script>' not in html6,

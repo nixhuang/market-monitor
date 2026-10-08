@@ -161,21 +161,29 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
   <div class="card">
     <h2>规则阈值 <span>（红黄绿的判定线，改完单独保存）</span></h2>
     <details class="set" id="setToggle">
-      <summary>展开调整（布林 / 涨跌幅 / RSI / 量比 / 宏观）</summary>
+      <summary>展开调整（布林 / 均线 / 涨跌幅 / RSI / 量比 / 宏观）</summary>
       <div class="setsec">布林带</div>
       <div class="setgrid">
         <div class="setrow"><label>均线周期（天）</label><input id="set_boll_n" inputmode="numeric"></div>
         <div class="setrow"><label>标准差倍数</label><input id="set_boll_k" inputmode="decimal"></div>
         <div class="setrow"><label>距上下轨不足 x% 就算命中</label><input id="set_boll_near_pct" inputmode="decimal"></div>
       </div>
+      <details class="set"><summary>布林判定说明</summary>
       <p class="note">布林上、下轨逼近、触碰、穿越均为黄；同时出现 RSI 至少两条同侧达到或越过阈值时为红。无双重信号时各按独立规则判定，其他红警示仍保留。</p>
+      </details>
+      <div class="setsec">趋势均线穿越</div>
+      <div class="setgrid">
+        <div class="setrow"><label for="set_ma_short">第一条均线周期（交易日，默认50）</label><input id="set_ma_short" type="number" min="2" max="250" step="1" inputmode="numeric"></div>
+        <div class="setrow"><label for="set_ma_long">第二条均线周期（交易日，默认200）</label><input id="set_ma_long" type="number" min="2" max="250" step="1" inputmode="numeric"></div>
+      </div>
+      <p class="note">周期范围2～250，第一条不大于第二条；调整后点「保存规则」生效。与布林周期独立。</p>
       <div class="setsec">个股</div>
       <div class="setgrid">
         <div class="setrow"><label>单日涨跌 ≥ x% → 红</label><input id="set_chg_red" inputmode="decimal"></div>
         <div class="setrow"><label>单日涨跌 ≥ x% → 黄</label><input id="set_chg_yellow" inputmode="decimal"></div>
         <div class="setrow"><label>RSI 超买线（默认 70）</label><input id="set_rsi_high" inputmode="numeric"></div>
         <div class="setrow"><label>RSI 超卖线（默认 30）</label><input id="set_rsi_low" inputmode="numeric"></div>
-        <p class="note">RSI 周期固定为 6 / 12 / 24：同侧两条达到或越过阈值为黄，三条为红；只有一条不触发 RSI 警示。</p>
+        <details class="set"><summary>RSI判定说明</summary><p class="note">RSI 周期固定为 6 / 12 / 24：同侧两条达到或越过阈值为黄，三条为红；只有一条不触发 RSI 警示。</p></details>
         <div class="setrow"><label>距 52 周低点不足 x% → 红</label><input id="set_near_52w_low_pct" inputmode="decimal"></div>
         <div class="setrow"><label>距加仓价不足 x% → 红</label><input id="set_trigger_gap_pct" inputmode="decimal"></div>
         <div class="setrow"><label>量比 ≥ x 倍 → 黄</label><input id="set_vol_ratio" inputmode="decimal"></div>
@@ -191,23 +199,28 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
         <div class="setrow"><label>VIX ≥ x 黄</label><input id="set_vix_yellow" inputmode="numeric"></div>
         <div class="setrow"><label>VIX ≥ x 红</label><input id="set_vix_red" inputmode="numeric"></div>
       </div>
+      <details class="set" id="ruleDetails">
+      <summary>完整规则与数据来源（点击展开）</summary>
+      <div class="setsec">宏观单项规则</div>
       <p class="note">垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到红线，一周扩大至少 50 bp 也为红；达到 500 bp 会标注“信用压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
       <p class="note">VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500距近一段高点回撤不足10%为绿、达到10%或15%为黄、达到20%为红，这些是已发生的跌幅。</p>
       <p class="note">上涨参与度：站上200日均线的股票不足50%为黄；不足30%且近期垃圾债利差或金融压力也达到警戒时为红；站上50日均线的股票不足30%也为黄。金融压力为周度：指数达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
-      <div class="setsec">50／200日均线穿越（固定判定）</div>
-      <p class="note">均线是最近50／200个交易日收盘价的简单平均（SMA）。昨日收盘价低于本轮均线、最新价达到或高于该均线：上穿 → 黄；昨日收盘价高于本轮均线、最新价达到或低于该均线：跌破 → 黄。只是一直站在线上／线下或贴近，不单独警示；其他红色条件优先，不被均线黄灯覆盖。日线不足对应周期时不计算该周期。</p>
-      <p class="note">收盘运行用收盘价；常规盘中仅在取得有效报价时按最新价重算。50日观察中期变化，200日观察长期趋势。250日更接近一年交易日、反应更慢，不保证更有效；当前不启用250日，避免默默改动既有规则。</p>
+      <div class="setsec">趋势均线穿越（周期可调整，默认50／200日）</div>
+      <p class="note">均线是最近所设周期交易日收盘价的简单平均（SMA）。昨日收盘价低于本轮均线、最新价达到或高于该均线：上穿 → 黄；昨日收盘价高于本轮均线、最新价达到或低于该均线：跌破 → 黄。只是一直站在线上／线下或贴近，不单独警示；其他红色条件优先，不被均线黄灯覆盖。日线不足对应周期时不计算该周期。</p>
+      <p class="note">收盘运行用收盘价；常规盘中仅在取得有效报价时按最新价重算。50日观察中期变化，200日观察长期趋势。250日更接近一年交易日、反应更慢，不保证更有效；默认50／200日，可在上方改为250日。若两条周期相同，只生成一次均线警示。只调整标的穿越规则，不改变市场宽度源固定的50／200日统计口径。</p>
       <div class="setsec">五指标综合市场风险（固定判定）</div>
       <p class="note">信用／金融环境：垃圾债利差、金融压力；情绪：VIX；趋势：标普500回撤、上涨参与度。三类均有警示，或任一指标为红且另一类也有警示 → 综合红；未达到红，但有警示或数据缺失 → 综合黄；五项齐全且均为绿 → 综合绿。同类指标不重复算跨类确认。综合灯不是买卖指令，也不预测涨跌。</p>
       <p class="note">综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力最多10日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且信用压力最多落后5日或金融压力最多8日达到警戒。</p>
       <div class="setsec">其他个股规则（固定判定）</div>
       <p class="note">涨跌幅按绝对值判断：达到黄色线为黄，达到红色线为红；日内振幅＝（最高−最低）÷昨收，分别按黄/红线判定。布林轨道逼近、碰到或穿过都为黄，当日最高／最低触及也算；若同时 RSI 6／12／24 中至少两条在同一侧越过超买／超卖线，则组合升级红。单独 RSI 两条同侧为黄、三条为红，只有一条不报警。</p>
-      <p class="note">距52周低点不超过设置百分比、已跌破或距“加仓价”不超过设置百分比：红；量比达到设置倍数、上穿或跌破50／200日均线：黄。量比＝当日成交量÷最近20日平均成交量（含本轮）；没有有效成交量时不触发量比。布林连续贴轨只补充天数，不会单独升级红；远离一天就重新计数。标的在清单中明确配置 quiet=true 时，跳过常规技术指标，仅在单日涨跌达到 quiet 阈值时为黄；当前清单未配置 quiet 标的。</p>
+      <p class="note">距52周低点不超过设置百分比、已跌破或距“加仓价”不超过设置百分比：红；量比达到设置倍数、上穿或跌破所设周期均线（默认50／200日）：黄。量比＝当日成交量÷最近20日平均成交量（含本轮）；没有有效成交量时不触发量比。布林连续贴轨只补充天数，不会单独升级红；连续2日起显示天数，远离一天就重新计数；同日同时命中上下轨只保留更贴近的一侧。标的在清单中明确配置 quiet=true 时，跳过常规技术指标，仅在单日涨跌达到 quiet 阈值时为黄；当前清单未配置 quiet 标的。</p>
       <div class="setsec">基本面单独提示（固定判定，不改变股价红黄等级）</div>
       <p class="note">仅持仓与重点关注的非 ETF 有季度财报时检查：营收同比下降至少20%、营业亏损、经营现金流由正转负 → 基本面红；营收下降至少10%、营业利润率或毛利率较去年同期下滑至少3个百分点、经营现金流为负、负债／权益上升至少30%且债务额也升、流动比率下降至少20%、ROE下降至少30% → 基本面黄。异常一次性损益不单独触发警示。</p>
       <div class="setsec">优先级与数据来源</div>
       <p class="note">一级为市场风险参考和持仓，二级重点关注，三级其他组；相同实质标的只在最高优先级显示和报警，清单记录不删除。VIX（.VIX／^VIX）和标普指数（.SPX／^GSPC）只在风险参考显示。指数本身、跟踪ETF和期货不是同一标的，不互相去重。</p>
       <p class="note">垃圾债利差使用FRED；VIX、标普指数和10年收益率使用Yahoo指数/收益率数据；金融压力使用NFCI原始周度数据，原文件过期或不可用时采用同一NFCI的FRED同步备用（不是报价替代）；上涨参与度使用市场宽度源，两者不能以ETF价格替代。股票日线沿现有来源降级；Nasdaq盘中报价仅覆盖股票/ETF，不把指数日线冒充实时价。来源和真实观测日期会标明，获取失败或数据过期不当作安全。</p>
+      </details>
+      <div class="setsec">行情源开关</div>
       <div class="setgrid">
         <div class="setrow"><label>用 Nasdaq 盘中价（取得时覆盖日线最新价）</label>
           <select id="set_use_realtime"><option value="1">开</option><option value="0">关</option></select></div>
@@ -300,7 +313,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 </div>
 
-<script src="./run-status.js?v=20261008-9"></script>
+<script src="./run-status.js?v=20261008-10"></script>
 <script src="./list-import.js?v=20261008-1"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
@@ -679,11 +692,11 @@ $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定
 /* ---------- 规则阈值（settings.json） ---------- */
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
   rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,vol_ratio:1.5,quiet_chg:2,
-  amp_yellow:5,amp_red:8,
+  amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,
   hy_green:350,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,
   dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
-const SET_LIMITS={boll_n:[2,250],boll_k:[.1,10],boll_near_pct:[0,100],chg_yellow:[0,100],chg_red:[0,100],
+const SET_LIMITS={ma_short:[2,250],ma_long:[2,250],boll_n:[2,250],boll_k:[.1,10],boll_near_pct:[0,100],chg_yellow:[0,100],chg_red:[0,100],
   rsi_low:[0,100],rsi_high:[0,100],near_52w_low_pct:[0,100],trigger_gap_pct:[0,100],vol_ratio:[.1,100],
   quiet_chg:[0,100],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],
   hy_red:[0,10000],vix_green:[0,200],vix_yellow:[0,200],vix_red:[0,200],dca_every:[0,10000]};
@@ -694,13 +707,13 @@ function settingsError(){
     const el=$('set_'+key);if(!el)continue;
     const raw=String(el.value).trim(),value=raw===''&&key==='dca_every'?0:Number(raw);
     if((!raw&&key!=='dca_every')||!Number.isFinite(value)||value<lo||value>hi||
-        (['boll_n','dca_every'].includes(key)&&!Number.isInteger(value)))
-      return key+' 必须是 '+lo+'～'+hi+' 范围内的'+(['boll_n','dca_every'].includes(key)?'整数':'数字');
+        (['boll_n','ma_short','ma_long','dca_every'].includes(key)&&!Number.isInteger(value)))
+      return key+' 必须是 '+lo+'～'+hi+' 范围内的'+(['boll_n','ma_short','ma_long','dca_every'].includes(key)?'整数':'数字');
     values[key]=value;
   }
   if(!(values.rsi_low<values.rsi_high))return 'RSI 超卖线必须小于超买线';
   for(const keys of [['chg_yellow','chg_red'],['amp_yellow','amp_red'],
-    ['hy_green','hy_red'],['vix_green','vix_yellow','vix_red']]){
+    ['hy_green','hy_red'],['vix_green','vix_yellow','vix_red'],['ma_short','ma_long']]){
     if(keys.some((key,i)=>i&&values[key]<values[keys[i-1]]))return keys.join('、')+' 的阈值顺序不正确';
   }
   const start=$('set_dca_start').value.trim();
@@ -955,6 +968,16 @@ async function bootstrap(){
       ['btnTok','btnLink','btnWipe'].forEach(id=>$(id).disabled=true);
       await load();
     }else if(TOKEN){$('authCard').classList.add('hide');$('main').classList.remove('hide');await load();}
+    if(new URLSearchParams(location.search).get('rules')==='1'){
+      if(!TOKEN&&!LOCAL_PREVIEW){
+        const r=await fetch('./settings.json',{cache:'no-store'});
+        if(!r.ok)throw new Error('规则读取失败');
+        SET=Object.assign({},SET_DEFS,await r.json());renderSettings();settingsBaseline=settingsInputs();
+        $('main').classList.remove('hide');
+      }
+      $('setToggle').open=true;$('ruleDetails').open=true;
+      $('ruleDetails').scrollIntoView({block:'start'});
+    }
   }catch(e){setMsg('分类页面初始化失败：'+e.message,'err');}
 }
 void bootstrap();

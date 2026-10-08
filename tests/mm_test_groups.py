@@ -178,7 +178,8 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(snap['actual_dates'], {'min': '2026-10-07', 'max': '2026-10-07'})
         self.assertEqual(snap['data_time_text'], '2026-10-07 收盘（美东交易日）')
         page = monitor.render({}, [reference, daily], 2, snapshot=snap)
-        self.assertIn('1 只日线已更新 · 1 项参考值（截至 2026-10-06）', page)
+        self.assertIn('2 项数据已更新', page)
+        self.assertNotIn('项参考值（截至', page)
         self.assertNotIn('当日行情未取得', page)
         self.assertIn('参考值 · 截至 2026-10-06', page)
 
@@ -421,6 +422,49 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(loaded['amp_red'], 8)
         self.assertEqual(loaded['chg_red'], 4.5)
         self.assertEqual(monitor.valid_settings(monitor.DEFAULT_SETTINGS), '')
+
+    def test_moving_average_periods_are_configurable_and_validated(self):
+        import tempfile
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            for values in ({'ma_short': 20, 'ma_long': 250},
+                           {'ma_short': 50.5, 'ma_long': 999},
+                           {'ma_short': 200, 'ma_long': 50}):
+                with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:
+                    json.dump(values, f)
+                with patch.object(monitor, 'BASE', directory):
+                    loaded = monitor.load_settings()
+                expected = (20, 250) if values['ma_short'] == 20 else (50, 200)
+                self.assertEqual((loaded['ma_short'], loaded['ma_long']), expected)
+        self.assertTrue(monitor.valid_settings(dict(monitor.DEFAULT_SETTINGS, ma_long=200.5)))
+        closes = [100.0]*249 + [99.0, 101.0]
+        data = {'closes':closes, 'highs':closes[:], 'lows':closes[:], 'volumes':[0]*len(closes),
+                'price':101.0, 'prev_close':99.0}
+        settings = dict(monitor.S, ma_short=20, ma_long=250)
+        with patch.dict(monitor.S, settings):
+            _, signals, _ = monitor.analyze_symbol('AAPL', {}, data)
+            self.assertIn('上穿20日均线', signals)
+            self.assertIn('上穿250日均线', signals)
+            self.assertNotIn('上穿200日均线', signals)
+        with patch.dict(monitor.S, dict(settings, ma_short=250)):
+            _, signals, _ = monitor.analyze_symbol('AAPL', {}, data)
+            self.assertEqual(signals.count('上穿250日均线'), 1)
+        data['closes'] = closes[-30:]
+        data['highs'] = data['lows'] = data['closes'][:]
+        data['volumes'] = [0]*30
+        with patch.dict(monitor.S, settings):
+            _, signals, _ = monitor.analyze_symbol('AAPL', {}, data)
+            self.assertNotIn('上穿250日均线', signals)
+
+    def test_longer_history_keeps_52_week_low_window(self):
+        from datetime import date, timedelta
+        dates = [(date(2026, 10, 7) - timedelta(days=i)).isoformat() for i in range(499, -1, -1)]
+        closes = [100]*500
+        highs = [100]*500; lows = [100]*500
+        highs[0] = 300; lows[0] = 1
+        data = {'dates':dates, 'closes':closes, 'highs':highs, 'lows':lows,
+                'volumes':[0]*500, 'price':100, 'prev_close':100}
+        _, _, detail = monitor.analyze_symbol('AAPL', {}, data)
+        self.assertEqual((detail['dist_high'], detail['dist_low']), (0, 0))
 
     def test_market_time_uses_data_session_not_fetch_clock(self):
         def snap(when, date='2026-10-07', mode='manual_or_config'):

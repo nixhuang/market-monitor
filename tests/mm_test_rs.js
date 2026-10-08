@@ -343,8 +343,16 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
       reference_dates:{'BD#US10Y':'2026-10-06'},today_prices:1,prior_prices:0,missing_prices:0};
     const f=fixture(page);await f.win.MMRunStatus.refresh();
     assert.equal(f.els.runLight.dataset.phase,'ok');
-    assert.match(f.els.runLightTxt.textContent,/1 只日线已更新 · 1 项参考值（截至 2026-10-06）/);
-    assert.doesNotMatch(f.els.runLightTxt.textContent,/当日行情未取得|2 只全部更新/);
+    assert.match(f.els.runLightTxt.textContent,/2 项数据已更新/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/当日行情未取得|项参考值|只日线/);
+  });
+  await check('43项总数包含42项日线和1项正常收益率，不再显示参考值提示', async () => {
+    const page=snapshot();page.summary={red:3,yellow:14,green:26,total:43,gray:0,
+      stale_symbols:[],missing_symbols:[],unsupported_symbols:[],
+      reference_dates:{'BD#US10Y':'2026-10-07'},today_prices:42,prior_prices:0,missing_prices:0};
+    const f=fixture(page);await f.win.MMRunStatus.refresh();
+    assert.match(f.els.runLightTxt.textContent,/红3 黄14 绿26 · 43 项数据已更新/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/项参考值|42 只/);
   });
   console.log('全部通过');
 })().catch(error => { console.error(error); process.exitCode = 1; });
