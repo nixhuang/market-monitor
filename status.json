@@ -9,13 +9,13 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37771519421",
+  "run_id": "37772053869",
   "request_id": "",
-  "source_sha": "a55d8ee9154bbcf13f2f6e722679e84a851848e9",
-  "started_at": "2026-10-08T11:39:39+00:00",
-  "started_at_bj": "2026-10-08T19:39:39+08:00",
-  "finished_at": "2026-10-08T19:40:28.129481+08:00",
-  "finished_at_bj": "2026-10-08T19:40:28+08:00",
+  "source_sha": "7e30e1bc6788aeefef56143f019b2729640985eb",
+  "started_at": "2026-10-08T11:44:30+00:00",
+  "started_at_bj": "2026-10-08T19:44:30+08:00",
+  "finished_at": "2026-10-08T19:45:29.296694+08:00",
+  "finished_at_bj": "2026-10-08T19:45:29+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -213,9 +213,13 @@
     "ok": false,
     "value": null,
     "date": null,
-    "source": null,
+    "source": "Yahoo ^TNX",
     "unit": null,
-    "lagging": null
+    "lagging": null,
+    "reason": "收益率序列或标的校验未通过",
+    "quote_name": "10-Year Bond",
+    "observed_date": "2026-10-07",
+    "observed_value": 5.2769999504089355
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-07 收盘（美东交易日）",
@@ -254,6 +258,6 @@
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 6
+    "yellow": 7
   }
 }
