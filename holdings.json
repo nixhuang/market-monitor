@@ -11,17 +11,17 @@
     "positions": true,
     "focus": true,
     "index_funds": true,
-    "technology": false,
-    "healthcare": false,
-    "financials": false,
-    "energy": false,
-    "industrials": false,
-    "materials": false,
-    "utilities": false,
-    "consumer_staples": false,
-    "communications": false,
-    "consumer_discretionary": false,
-    "real_estate": false
+    "technology": true,
+    "healthcare": true,
+    "financials": true,
+    "energy": true,
+    "industrials": true,
+    "materials": true,
+    "utilities": true,
+    "consumer_staples": true,
+    "communications": true,
+    "consumer_discretionary": true,
+    "real_estate": true
   },
   "positions": {
     "BRK-B": {
