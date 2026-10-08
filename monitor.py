@@ -568,6 +568,12 @@ def build_macro():
         elif key == "nfci":
             rows = financial_conditions_series()
             source_info['source'] = 'NFCI原始周度数据'
+            target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+            if not rows or (datetime.fromisoformat(target) - datetime.fromisoformat(rows[-1][0])).days > 10:
+                backup = fred_series('NFCI')
+                if backup and (not rows or backup[-1][0] > rows[-1][0]):
+                    rows = backup
+                    source_info['source'] = 'NFCI周度数据（FRED同步备用）'
         else:
             continue
         if not rows:

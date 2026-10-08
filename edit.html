@@ -207,7 +207,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <p class="note">仅持仓与重点关注的非 ETF 有季度财报时检查：营收同比下降至少20%、营业亏损、经营现金流由正转负 → 基本面红；营收下降至少10%、营业利润率或毛利率较去年同期下滑至少3个百分点、经营现金流为负、负债／权益上升至少30%且债务额也升、流动比率下降至少20%、ROE下降至少30% → 基本面黄。异常一次性损益不单独触发警示。</p>
       <div class="setsec">优先级与数据来源</div>
       <p class="note">一级为市场风险参考和持仓，二级重点关注，三级其他组；相同实质标的只在最高优先级显示和报警，清单记录不删除。VIX（.VIX／^VIX）和标普指数（.SPX／^GSPC）只在风险参考显示。指数本身、跟踪ETF和期货不是同一标的，不互相去重。</p>
-      <p class="note">垃圾债利差使用FRED；VIX、标普指数和10年收益率使用Yahoo指数/收益率数据；金融压力使用NFCI原始周度数据，上涨参与度使用市场宽度源，两者不能以ETF价格替代。股票日线沿现有来源降级；Nasdaq盘中报价仅覆盖股票/ETF，不把指数日线冒充实时价。来源和真实观测日期会标明，获取失败或数据过期不当作安全。</p>
+      <p class="note">垃圾债利差使用FRED；VIX、标普指数和10年收益率使用Yahoo指数/收益率数据；金融压力使用NFCI原始周度数据，原文件过期或不可用时采用同一NFCI的FRED同步备用（不是报价替代）；上涨参与度使用市场宽度源，两者不能以ETF价格替代。股票日线沿现有来源降级；Nasdaq盘中报价仅覆盖股票/ETF，不把指数日线冒充实时价。来源和真实观测日期会标明，获取失败或数据过期不当作安全。</p>
       <div class="setgrid">
         <div class="setrow"><label>用 Nasdaq 盘中价（取得时覆盖日线最新价）</label>
           <select id="set_use_realtime"><option value="1">开</option><option value="0">关</option></select></div>
