@@ -9,13 +9,13 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37772221026",
+  "run_id": "37772560783",
   "request_id": "",
-  "source_sha": "6da29b49ced3f94d066f7d5cb1c2e8c63461cc66",
-  "started_at": "2026-10-08T11:45:56+00:00",
-  "started_at_bj": "2026-10-08T19:45:56+08:00",
-  "finished_at": "2026-10-08T19:46:52.348012+08:00",
-  "finished_at_bj": "2026-10-08T19:46:52+08:00",
+  "source_sha": "2922802b2740275dfa5c7e5d77f100e0565e4d3a",
+  "started_at": "2026-10-08T11:49:00+00:00",
+  "started_at_bj": "2026-10-08T19:49:00+08:00",
+  "finished_at": "2026-10-08T19:49:53.363754+08:00",
+  "finished_at_bj": "2026-10-08T19:49:53+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -183,19 +183,19 @@
   "summary": {
     "red": 3,
     "yellow": 14,
-    "green": 25,
-    "gray": 1,
+    "green": 26,
+    "gray": 0,
     "total": 43,
-    "macro_ok": 5,
+    "macro_ok": 6,
     "stale_symbols": [],
-    "missing_symbols": [
-      "BD#US10Y"
-    ],
+    "missing_symbols": [],
     "unsupported_symbols": [],
-    "reference_dates": {},
+    "reference_dates": {
+      "BD#US10Y": "2026-10-07"
+    },
     "today_prices": 42,
     "prior_prices": 0,
-    "missing_prices": 1
+    "missing_prices": 0
   },
   "actual_dates": {
     "min": "2026-10-07",
@@ -205,21 +205,21 @@
     "hy_oas": "2026-10-06",
     "vix": "2026-10-07",
     "sp500": "2026-10-07",
-    "ust10": "",
+    "ust10": "2026-10-07",
     "nfci": "2026-10-02",
     "breadth": "2026-10-07"
   },
   "treasury_reference": {
-    "ok": false,
-    "value": null,
-    "date": null,
+    "ok": true,
+    "value": 5.2769999504089355,
+    "date": "2026-10-07",
     "source": "Yahoo ^TNX",
-    "unit": null,
-    "lagging": null,
-    "reason": "收益率序列或标的校验未通过",
-    "quote_name": "10-Year Bond",
-    "observed_date": "2026-10-07",
-    "observed_value": 5.2769999504089355
+    "unit": "%",
+    "lagging": false,
+    "reason": null,
+    "quote_name": null,
+    "observed_date": null,
+    "observed_value": null
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-07 收盘（美东交易日）",
