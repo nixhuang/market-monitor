@@ -9,13 +9,13 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37766163457",
+  "run_id": "37767922556",
   "request_id": "",
-  "source_sha": "3af5649f19afc21e28f2fd65ba5ec061e246c811",
-  "started_at": "2026-10-08T10:50:51+00:00",
-  "started_at_bj": "2026-10-08T18:50:51+08:00",
-  "finished_at": "2026-10-08T18:51:53.073380+08:00",
-  "finished_at_bj": "2026-10-08T18:51:53+08:00",
+  "source_sha": "98279e57b178f4980c5e6b478c35f96850f35bca",
+  "started_at": "2026-10-08T11:06:49+00:00",
+  "started_at_bj": "2026-10-08T19:06:49+08:00",
+  "finished_at": "2026-10-08T19:07:50.052295+08:00",
+  "finished_at_bj": "2026-10-08T19:07:50+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -211,6 +211,14 @@
     "nfci": "2026-10-02",
     "breadth": "2026-10-07"
   },
+  "treasury_reference": {
+    "ok": true,
+    "value": 5.27,
+    "date": "2026-10-06",
+    "source": "FRED DGS10",
+    "unit": "%",
+    "lagging": true
+  },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-07 收盘（美东交易日）",
   "market_risk": {
@@ -230,6 +238,6 @@
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 7
+    "yellow": 6
   }
 }
