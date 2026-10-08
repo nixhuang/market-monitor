@@ -34,11 +34,13 @@ tr:first-child td{border-top:none}
   color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}
 .tag.f-red{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}
 .tag.f-yellow{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}
+.tag.quote-note{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}
 .fund-detail{margin-top:6px}
 .fund-detail summary{margin-left:0;padding:7px 9px;cursor:pointer;list-style:none;touch-action:manipulation}
 .fund-detail summary::-webkit-details-marker{display:none}
-.fund-detail summary::after{content:" · 展开";font-weight:400}
-.fund-detail[open] summary::after{content:" · 收起"}
+.fund-detail summary::after{content:"";display:inline-block;margin-left:6px;
+  border:4px solid transparent;border-top-color:currentColor;transform:translateY(2px)}
+.fund-detail[open] summary::after{transform:translateY(-2px) rotate(180deg)}
 .fund-detail summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:3px}
 .fund-body{margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:6px;
   font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}
@@ -50,6 +52,9 @@ tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12p
 tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}
 tr.gray td{color:var(--dim)}
 .group-card tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
+.index-reference{margin:8px 4px 12px;padding:3px 4px 8px;border:1px solid var(--line);border-radius:8px}
+.index-reference table{font-size:12px}
+.index-reference td{padding:7px 9px}
 .macro-help{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}
 .macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
 .macro-help p{margin:6px 0}
@@ -80,17 +85,17 @@ tr.gray td{color:var(--dim)}
 .check-result[data-phase="bad"]{border-color:var(--red)}
 .check-result[data-phase="busy"]{border-color:var(--yellow)}
 .check-result[hidden]{display:none}
-.group-card>summary.grp{display:flex;align-items:center;gap:10px;cursor:pointer;
+.group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:10px;cursor:pointer;
   padding:12px;font-size:14px;font-weight:600;list-style:none;touch-action:manipulation}
-.group-card>summary::-webkit-details-marker{display:none}
-.group-card>summary::before{content:"›";color:var(--dim);font-size:20px;line-height:1}
-.group-card[open]>summary::before{transform:rotate(90deg)}
-.group-card[open]>summary{border-bottom:1px solid var(--line)}
+.group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{display:none}
+.group-card>summary::before,.macro-card>summary::before{content:"›";color:var(--dim);font-size:20px;line-height:1}
+.group-card[open]>summary::before,.macro-card[open]>summary::before{transform:rotate(90deg)}
+.group-card[open]>summary,.macro-card[open]>summary{border-bottom:1px solid var(--line)}
 .group-stats{margin-left:auto;color:var(--dim);font-size:11px;font-weight:400}
 .quiet-list{margin:8px 0}
 .quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:12px;cursor:pointer}
 .sym .note{display:block;margin:3px 0 0;overflow-wrap:anywhere}
-.group-card summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
+.group-card summary:focus-visible,.macro-card summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
 .runlight{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}
 .runlight .dot{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}
 .runlight[data-phase="busy"]{color:var(--yellow)}
@@ -116,29 +121,26 @@ tr.gray td{color:var(--dim)}
   <a class="btnlink" href="./edit.html">设置</a>
 </div>
 <div class="statusrow">
-  <div class="runlight" id="runLight" data-phase="ok"><i class="dot"></i><span id="runLightTxt">保存后抓取成功 · 完成于 2026-10-08 15:50:31（北京时间） · 红2 黄9 绿22 · 33 只全部更新</span></div>
+  <div class="runlight" id="runLight" data-phase="ok"><i class="dot"></i><span id="runLightTxt">保存后抓取成功 · 完成于 2026-10-08 17:07:35（北京时间） · 红2 黄9 绿22 · 33 只全部更新</span></div>
   <div class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">正在核对最新规则…</span></div>
 </div>
 <div id="checkResult" class="check-result" role="status" hidden></div>
 
 <div class="dca ">定投提醒：每 10 个交易日一次 · 起点 2026-10-01 · 距下次定投还有 6 个交易日（2026-10-15）</div>
-<div class="script-data" hidden><script id="snapshotData" type="application/json">{"dca_reminder":{"every":10,"start":"2026-10-01","count":5,"date":"2026-10-07","times":1,"due":false,"next_in":6,"next_date":"2026-10-15"},"run_id":"37745855435","request_id":"","source_sha":"25c7311c28b5ad6bbf6cd01b2313ec6798ba8dff","started_at":"2026-10-08T07:49:45+00:00","started_at_bj":"2026-10-08T15:49:45+08:00","finished_at":"2026-10-08T15:50:31.518839+08:00","finished_at_bj":"2026-10-08T15:50:31+08:00","event":"push","target_trade_date":"2026-10-07","mode":"closed","schedule":"美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30","config_files":{"holdings.json":"f9e5d2f39a6d140fd47d5fcd59764c49719fdf2d","settings.json":"53751f3ed739d019236fb1fdb8278aca47110920"},"effective_settings":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"chg_red":10.0,"chg_yellow":5.0,"rsi_high":70,"rsi_low":30,"near_52w_low_pct":1.0,"trigger_gap_pct":1.0,"vol_ratio":1.5,"quiet_chg":2.0,"amp_yellow":5.0,"amp_red":8.0,"hy_green":350,"hy_yellow":400,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":10,"dca_start":"2026-10-01"},"groups":[{"key":"positions","label":"持仓","item_group":"position"},{"key":"focus","label":"重点关注","item_group":"focus"},{"key":"index_funds","label":"指数基","item_group":"index_funds"},{"key":"technology","label":"IT软硬Ai","item_group":"technology","sector_etf":"XLK"},{"key":"healthcare","label":"医疗保健","item_group":"healthcare","sector_etf":"XLV"},{"key":"financials","label":"金融","item_group":"financials","sector_etf":"XLF"},{"key":"energy","label":"能源","item_group":"energy","sector_etf":"XLE"},{"key":"industrials","label":"工航防建机","item_group":"industrials","sector_etf":"XLI"},{"key":"materials","label":"化材金纸","item_group":"materials","sector_etf":"XLB"},{"key":"utilities","label":"公水电气","item_group":"utilities","sector_etf":"XLU"},{"key":"consumer_staples","label":"必需消费品","item_group":"consumer_staples","sector_etf":"XLP"},{"key":"communications","label":"通信娱乐","item_group":"communications","sector_etf":"XLC"},{"key":"consumer_discretionary","label":"非车酒奢","item_group":"consumer_discretionary","sector_etf":"XLY"},{"key":"real_estate","label":"房地产","item_group":"real_estate","sector_etf":"XLRE"}],"group_monitoring":{"positions":true,"focus":true,"index_funds":false,"technology":false,"healthcare":false,"financials":false,"energy":false,"industrials":false,"materials":false,"utilities":false,"consumer_staples":false,"communications":false,"consumer_discretionary":false,"real_estate":false},"registered_counts":{"positions":14,"focus":8,"index_funds":12,"technology":40,"healthcare":18,"financials":20,"energy":4,"industrials":11,"materials":5,"utilities":3,"consumer_staples":8,"communications":5,"consumer_discretionary":4,"real_estate":1},"list_counts":{"positions":14,"focus":8,"index_funds":0,"technology":1,"healthcare":1,"financials":1,"energy":1,"industrials":1,"materials":1,"utilities":1,"consumer_staples":1,"communications":1,"consumer_discretionary":1,"real_estate":1,"triggers":0,"dca":1},"summary":{"red":2,"yellow":9,"green":22,"gray":0,"total":33,"macro_ok":6,"stale_symbols":[],"missing_symbols":[],"unsupported_symbols":[]},"actual_dates":{"min":"2026-10-07","max":"2026-10-07"},"macro_dates":{"hy_oas":"2026-10-06","vix":"2026-10-06","sp500":"2026-10-07","ust10":"2026-10-06","curve":"2026-10-07","dxy":"2026-10-02"},"coverage":"数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。","data_time_text":"2026-10-07 收盘（美东交易日）","fundamental":{"checked":17,"red":4,"yellow":6}}</script></div>
+<div class="script-data" hidden><script id="snapshotData" type="application/json">{"dca_reminder":{"every":10,"start":"2026-10-01","count":5,"date":"2026-10-07","times":1,"due":false,"next_in":6,"next_date":"2026-10-15"},"run_id":"37754387231","request_id":"","source_sha":"2ecba87618855d858d48f7f9a93579a6ce98e7d5","started_at":"2026-10-08T09:06:49+00:00","started_at_bj":"2026-10-08T17:06:49+08:00","finished_at":"2026-10-08T17:07:35.792062+08:00","finished_at_bj":"2026-10-08T17:07:35+08:00","event":"push","target_trade_date":"2026-10-07","mode":"closed","schedule":"美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30","config_files":{"holdings.json":"f9e5d2f39a6d140fd47d5fcd59764c49719fdf2d","settings.json":"b9f6c50a1993c93fde44f12ae9232c447baf6bcd"},"effective_settings":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"chg_red":10.0,"chg_yellow":5.0,"rsi_high":70,"rsi_low":30,"near_52w_low_pct":1.0,"trigger_gap_pct":1.0,"vol_ratio":1.5,"quiet_chg":2.0,"amp_yellow":5.0,"amp_red":8.0,"hy_green":350,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":10,"dca_start":"2026-10-01"},"groups":[{"key":"positions","label":"持仓","item_group":"position"},{"key":"focus","label":"重点关注","item_group":"focus"},{"key":"index_funds","label":"指数基","item_group":"index_funds"},{"key":"technology","label":"IT软硬Ai","item_group":"technology","sector_etf":"XLK"},{"key":"healthcare","label":"医疗保健","item_group":"healthcare","sector_etf":"XLV"},{"key":"financials","label":"金融","item_group":"financials","sector_etf":"XLF"},{"key":"energy","label":"能源","item_group":"energy","sector_etf":"XLE"},{"key":"industrials","label":"工航防建机","item_group":"industrials","sector_etf":"XLI"},{"key":"materials","label":"化材金纸","item_group":"materials","sector_etf":"XLB"},{"key":"utilities","label":"公水电气","item_group":"utilities","sector_etf":"XLU"},{"key":"consumer_staples","label":"必需消费品","item_group":"consumer_staples","sector_etf":"XLP"},{"key":"communications","label":"通信娱乐","item_group":"communications","sector_etf":"XLC"},{"key":"consumer_discretionary","label":"非车酒奢","item_group":"consumer_discretionary","sector_etf":"XLY"},{"key":"real_estate","label":"房地产","item_group":"real_estate","sector_etf":"XLRE"}],"group_monitoring":{"positions":true,"focus":true,"index_funds":false,"technology":false,"healthcare":false,"financials":false,"energy":false,"industrials":false,"materials":false,"utilities":false,"consumer_staples":false,"communications":false,"consumer_discretionary":false,"real_estate":false},"registered_counts":{"positions":14,"focus":8,"index_funds":12,"technology":40,"healthcare":18,"financials":20,"energy":4,"industrials":11,"materials":5,"utilities":3,"consumer_staples":8,"communications":5,"consumer_discretionary":4,"real_estate":1},"list_counts":{"positions":14,"focus":8,"index_funds":0,"technology":1,"healthcare":1,"financials":1,"energy":1,"industrials":1,"materials":1,"utilities":1,"consumer_staples":1,"communications":1,"consumer_discretionary":1,"real_estate":1,"triggers":0,"dca":1},"summary":{"red":2,"yellow":9,"green":22,"gray":0,"total":33,"macro_ok":8,"stale_symbols":[],"missing_symbols":[],"unsupported_symbols":[],"today_prices":33,"prior_prices":0,"missing_prices":0},"actual_dates":{"min":"2026-10-07","max":"2026-10-07"},"macro_dates":{"hy_oas":"2026-10-06","vix":"2026-10-06","sp500":"2026-10-07","ust10":"2026-10-06","curve":"2026-10-07","dxy":"2026-10-02","nfci":"2026-10-02","breadth":"2026-10-06"},"coverage":"数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。","data_time_text":"2026-10-07 收盘（美东交易日）","fundamental":{"checked":17,"red":4,"yellow":6}}</script></div>
 
 
 
-<div class="card">
-<h2>宏观</h2>
+<details class="card macro-card" id="macroCard">
+<summary class="grp"><span>市场风险参考</span><span class="group-stats"></span></summary>
 <table>
 <tr class="gray"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
-<tr class="green"><td>跑路价签</td><td class="num">303 bp</td><td class="num dim">-5</td><td>平静</td></tr><tr class="green"><td>VIX</td><td class="num">15.0</td><td class="num dim">—</td><td>平静</td></tr><tr class="green"><td>标普500</td><td class="num">−0.2%</td><td class="num dim">—</td><td>第0档</td></tr><tr class="gray"><td>10Y美债</td><td class="num">5.27%</td><td class="num dim">—</td><td>—</td></tr><tr class="green"><td>收益率曲线</td><td class="num">0.51<span class="unit">个百分点</span></td><td class="num dim">—</td><td>正常</td></tr><tr class="gray"><td>美元指数</td><td class="num">121.38</td><td class="num dim">—</td><td>—</td></tr>
+<tr class="green"><td>垃圾债利差</td><td class="num">303 bp</td><td class="num dim">-5</td><td>平静</td></tr><tr class="green"><td>VIX</td><td class="num">15.0</td><td class="num dim">—</td><td>平静</td></tr><tr class="green"><td>标普500</td><td class="num">−0.2%</td><td class="num dim">—</td><td>第0档</td></tr><tr class="green"><td>上涨参与度<span class="unit">截至 2026-10-06</span></td><td class="num">50.2%<span class="unit">站上200日均线 · 50日 30.1%</span></td><td class="num dim">—</td><td>多数股票趋势尚稳</td></tr><tr class="green"><td>金融压力<span class="unit">截至 2026-10-02</span></td><td class="num">-0.49</td><td class="num dim">—</td><td>金融环境偏宽松</td></tr>
 </table>
-<details class="macro-help" id="yieldCurveHelp">
-<summary>收益率曲线是什么意思？</summary>
-<p>这里显示的是美国 <b>10年期国债收益率 − 2年期国债收益率</b>，并非你的投资收益率，也不是完整的曲线图。</p>
-<p>大于 0：长债收益率高于短债，曲线正常倾斜；小于 0：短债收益率更高，称为倒挂，提示经济放缓风险，但不代表股市马上下跌。</p>
-<p>例如 0.51 个百分点 = 51 个基点（bp），表示10年期比2年期收益率高 0.51 个百分点。接近 0 则是曲线趋平。</p>
+<p class="macro-help">垃圾债利差：≥350 bp 黄、≥400 bp 红；一周扩大 ≥50 bp 也为红。VIX：≥20 黄、≥40 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
+<p class="macro-help">上涨参与度：站上长期均线的股票不足一半为黄；不足三成且信用／金融压力也升高才为红。金融压力是周度数据，达到历史平均紧张程度为黄。指标缺失时显示无数据，不代表安全，也不预测具体跌幅。</p>
+<p class="macro-help">市场宽度：<a href="https://historyofmarket.com/zh-cn/sp500/sp500-breadth/" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a>，数据依据当前成分股计算，回看历史可能有成分股选择偏差。</p>
 </details>
-</div>
 
 <details class="card group-card" id="group_positions" open><summary class="grp"><span>持仓 (14)</span><span class="group-stats">红2 · 黄3</span></summary><h2>个股</h2>
 <table><tr class="red"><td class="sym">LMT<span class="note">洛克希德马丁</span></td><td class="num">499.22</td><td class="num down">-2.14%</td><td class="sig">RSI 2条超卖（≤30）：RSI6=21.4 / RSI12=28.3 / RSI24=37.3 · 逼近布林下轨 还差0.27%（盘中触及 498.73） · 布林 + RSI 双重信号 → 红</td></tr><tr class="red"><td class="sym">NTNX<span class="note">Nutanix</span></td><td class="num">73.42</td><td class="num up">+0.01%</td><td class="sig">RSI 2条超买（≥70）：RSI6=83.6 / RSI12=72.9 / RSI24=67.5 · 突破布林上轨 74.14（盘中触及 74.30） · 连续第6日贴近上轨（其中6日穿越） · 布林 + RSI 双重信号 → 红</td></tr><tr class="yellow"><td class="sym">CRSP<span class="note">CRISPR Therapeutics</span></td><td class="num">52.35</td><td class="num down">-3.06%</td><td class="sig">跌破200日均线<details class="fund-detail"><summary class="tag f-red" aria-label="查看 CRSP 基本面详情">基本面</summary><div class="fund-body"><div>6/30/2026 报告期</div><ul><li>营业亏损 -1152%</li><li>经营现金流为负 -83M</li><li>负债/权益 0.17→0.52</li><li>净利含一次性损益，未参与判定</li></ul></div></details></td></tr><tr class="yellow"><td class="sym">AVGO<span class="note">博通</span></td><td class="num">376.51</td><td class="num up">+0.19%</td><td class="sig">突破布林上轨 375.51（盘中触及 376.97） · 连续第2日贴近上轨（其中2日穿越）</td></tr><tr class="green"><td class="sym">APH<span class="note">安费诺</span></td><td class="num">87.55</td><td class="num down">-1.21%</td><td class="sig">—<details class="fund-detail"><summary class="tag f-yellow" aria-label="查看 APH 基本面详情">基本面</summary><div class="fund-body"><div>6/30/2026 报告期</div><ul><li>负债/权益 1.16→1.88</li></ul></div></details></td></tr><tr class="green"><td class="sym">HII<span class="note">亨廷顿英格尔斯工业</span></td><td class="num">260.67</td><td class="num down">-1.17%</td><td class="sig">—<details class="fund-detail"><summary class="tag f-red" aria-label="查看 HII 基本面详情">基本面</summary><div class="fund-body"><div>6/30/2026 报告期</div><ul><li>经营现金流转负</li></ul></div></details></td></tr><tr class="green"><td class="sym">UBER<span class="note">优步</span></td><td class="num">68.45</td><td class="num down">-0.91%</td><td class="sig">—<details class="fund-detail"><summary class="tag f-yellow" aria-label="查看 UBER 基本面详情">基本面</summary><div class="fund-body"><div>6/30/2026 报告期</div><ul><li>流动比率 115→84</li><li>ROE 23.6→8.8%</li></ul></div></details></td></tr><tr class="green"><td class="sym">BRK-B<span class="note">伯克希尔哈撒韦</span></td><td class="num">506.25</td><td class="num up">+0.14%</td><td class="sig">—<details class="fund-detail"><summary class="tag f-yellow" aria-label="查看 BRK-B 基本面详情">基本面</summary><div class="fund-body"><div>6/30/2026 报告期</div><ul><li>营业利率 32.3→27.0%</li></ul></div></details></td></tr></table>
@@ -148,7 +150,9 @@ tr.gray td{color:var(--dim)}
 <details class="card group-card" id="group_focus" open><summary class="grp"><span>重点关注 (8)</span><span class="group-stats">黄2</span></summary><h2>个股</h2>
 <table><tr class="yellow"><td class="sym">COST<span class="note">好市多</span></td><td class="num">942.25</td><td class="num up">+0.70%</td><td class="sig">突破布林上轨 939.50（盘中触及 948.77） · 连续第3日贴近上轨（其中2日穿越）</td></tr><tr class="yellow"><td class="sym">MSFT<span class="note">微软</span></td><td class="num">529.76</td><td class="num up">+0.09%</td><td class="sig">突破布林上轨 530.41（盘中触及 531.73） · 连续第9日贴近上轨（其中9日穿越）<details class="fund-detail"><summary class="tag f-yellow" aria-label="查看 MSFT 基本面详情">基本面</summary><div class="fund-body"><div>6/30/2026 报告期</div><ul><li>营业利率 48.9→45.1%</li></ul></div></details></td></tr><tr class="green"><td class="sym">MA<span class="note">万事达</span></td><td class="num">570.06</td><td class="num up">+0.61%</td><td class="sig">—<details class="fund-detail"><summary class="tag f-yellow" aria-label="查看 MA 基本面详情">基本面</summary><div class="fund-body"><div>6/30/2026 报告期</div><ul><li>负债/权益 5.74→9.28</li></ul></div></details></td></tr><tr class="green"><td class="sym">ZS<span class="note">Zscaler</span></td><td class="num">213.55</td><td class="num up">+0.61%</td><td class="sig">—<details class="fund-detail"><summary class="tag f-red" aria-label="查看 ZS 基本面详情">基本面</summary><div class="fund-body"><div>7/31/2026 报告期</div><ul><li>营业亏损 -2%</li></ul></div></details></td></tr><tr class="green"><td class="sym">V<span class="note">Visa</span></td><td class="num">372.10</td><td class="num up">+0.39%</td><td class="sig">—<details class="fund-detail"><summary class="tag f-yellow" aria-label="查看 V 基本面详情">基本面</summary><div class="fund-body"><div>6/30/2026 报告期</div><ul><li>毛利率 83.8→78.9%</li></ul></div></details></td></tr><tr class="green"><td class="sym">PDD<span class="note">拼多多</span></td><td class="num">78.50</td><td class="num up">+0.13%</td><td class="sig">—<details class="fund-detail"><summary class="tag f-red" aria-label="查看 PDD 基本面详情">基本面</summary><div class="fund-body"><div>3/31/2018 报告期</div><ul><li>营业亏损 -18%</li></ul></div></details></td></tr></table>
 <details class="quiet-list"><summary>无异动 2 只 · 点击查看</summary><table><tr class="green"><td class="sym">TSM<span class="note">台积电</span></td><td class="num">472.20</td><td class="num down">-2.09%</td><td class="sig">—</td></tr><tr class="green"><td class="sym">AAPL<span class="note">苹果</span></td><td class="num">336.67</td><td class="num up">+0.91%</td><td class="sig">—</td></tr></table></details></details>
-<details class="card group-card" id="group_index_funds"><summary class="grp"><span>指数基 (12)</span><span class="group-stats">监测关闭</span></summary><div class="quiet">分组监测已关闭 · 清单保留，普通标的暂停抓取和报警</div></details>
+<details class="card group-card" id="group_index_funds"><summary class="grp"><span>指数基 (12)</span><span class="group-stats">监测关闭</span></summary><div class="quiet">分组监测已关闭 · 清单保留，普通标的暂停抓取和报警</div>
+<div class="index-reference"><h2>市场参考（独立指标，不属于清单标的）</h2><table><tr class="gray"><td>参考指标</td><td class="num">最新值</td></tr><tr><td>10Y美债<span class="unit">截至 2026-10-06</span></td><td class="num">5.27%</td></tr><tr><td>美元指数<span class="unit">截至 2026-10-02</span></td><td class="num">121.38</td></tr><tr><td>收益率曲线<span class="unit">截至 2026-10-07</span></td><td class="num">0.51 个百分点</td></tr></table><details class="macro-help" id="yieldCurveHelp"><summary>收益率曲线是什么意思？</summary><p>这里是美国 10年期国债收益率 − 2年期国债收益率，并非投资收益率。小于零称为倒挂，提示经济放缓风险，不能单独预测股市下跌。</p></details></div>
+<div class="quiet">上述三项不属于自选清单：原指数基成员及监测开关保持不变。</div></details>
 <details class="card group-card" id="group_technology"><summary class="grp"><span>IT软硬Ai (40)</span><span class="group-stats">仅板块ETF · 黄1</span></summary><div class="quiet">行业监测关闭 · XLK 仍监测（仅限原组已有标的） · 清单保留，普通标的暂停抓取和报警</div>
 <h2>ETF 基金</h2>
 <table><tr class="yellow"><td class="sym">XLK<span class="note">科技精选行业ETF</span><span class="tag">ETF</span></td><td class="num">201.39</td><td class="num down">-0.30%</td><td class="sig">RSI 2条超买（≥70）：RSI6=78.2 / RSI12=71.6 / RSI24=63.4</td></tr></table></details>
@@ -179,14 +183,14 @@ tr.gray td{color:var(--dim)}
 <div class="quiet">在册：持仓 14 · 重点关注 8 · 指数基 12 · IT软硬Ai 40 · 医疗保健 18 · 金融 20 · 能源 4 · 工航防建机 11 · 化材金纸 5 · 公水电气 3 · 必需消费品 8 · 通信娱乐 5 · 非车酒奢 4 · 房地产 1 · 本轮监测 33 个唯一标的</div>
 
 <div class="foot">
-宏观：FRED · 个股：Yahoo Finance<br>
+宏观：FRED · 市场宽度：<a href="https://historyofmarket.com/zh-cn/sp500/sp500-breadth/" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 个股：Yahoo Finance<br>
 基本面：Nasdaq 季度财报（只查持仓 + 重点关注，ETF 不判）· 点击基本面标签展开详情，再点收起<br>
-跑路价签 &lt;350 平静 · 350–400 收紧 · ≥400 危机确认<br>
+垃圾债利差 &lt;350 平静 · 350–400 收紧 · ≥400 信用压力升高（不是大跌保证）<br>
 布林带 20 日 / 2 倍标准差 · 逼近上下轨即算（差 ≤0.5%），逼近、触碰、穿越均为黄<br>
 布林信号 + RSI 至少两条同侧达到或越过阈值 → 红；没有双重信号时各按独立规则判定，其他红警示仍保留<br>
 轨道按当日收盘价滚动计算；是否触及按<b>当日最高/最低价</b>判定，盘中穿过就算<br>
 连续贴近轨道按日累计，远离一天（差 &gt;0.5%）就断，再次贴近重新从第一日算 · 连续 2 日起才标注<br>
-定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在编辑页逐只设置<br>
+定投提醒按<b>交易日</b>计数（不含周末休市），间隔与起始日在设置页全局设定一条<br>
 异动 ≥10% 红 · ≥5% 黄 · 量比 ≥1.5x 黄<br>
 RSI 6 / 12 / 24：同侧达到或越过 70（超买）或 30（超卖），同侧两条黄、三条红；单条不警示<br>
 日内振幅（最高-最低）/昨收 ≥8% 红 · ≥5% 黄（抓冲高回落、收盘却没动的票）<br>

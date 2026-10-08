@@ -9,20 +9,20 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37745855435",
+  "run_id": "37754387231",
   "request_id": "",
-  "source_sha": "25c7311c28b5ad6bbf6cd01b2313ec6798ba8dff",
-  "started_at": "2026-10-08T07:49:45+00:00",
-  "started_at_bj": "2026-10-08T15:49:45+08:00",
-  "finished_at": "2026-10-08T15:50:31.518839+08:00",
-  "finished_at_bj": "2026-10-08T15:50:31+08:00",
+  "source_sha": "2ecba87618855d858d48f7f9a93579a6ce98e7d5",
+  "started_at": "2026-10-08T09:06:49+00:00",
+  "started_at_bj": "2026-10-08T17:06:49+08:00",
+  "finished_at": "2026-10-08T17:07:35.792062+08:00",
+  "finished_at_bj": "2026-10-08T17:07:35+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
     "holdings.json": "f9e5d2f39a6d140fd47d5fcd59764c49719fdf2d",
-    "settings.json": "53751f3ed739d019236fb1fdb8278aca47110920"
+    "settings.json": "b9f6c50a1993c93fde44f12ae9232c447baf6bcd"
   },
   "effective_settings": {
     "boll_n": 20,
@@ -39,7 +39,6 @@
     "amp_yellow": 5.0,
     "amp_red": 8.0,
     "hy_green": 350,
-    "hy_yellow": 400,
     "hy_red": 400,
     "vix_green": 20,
     "vix_yellow": 30,
@@ -187,10 +186,13 @@
     "green": 22,
     "gray": 0,
     "total": 33,
-    "macro_ok": 6,
+    "macro_ok": 8,
     "stale_symbols": [],
     "missing_symbols": [],
-    "unsupported_symbols": []
+    "unsupported_symbols": [],
+    "today_prices": 33,
+    "prior_prices": 0,
+    "missing_prices": 0
   },
   "actual_dates": {
     "min": "2026-10-07",
@@ -202,7 +204,9 @@
     "sp500": "2026-10-07",
     "ust10": "2026-10-06",
     "curve": "2026-10-07",
-    "dxy": "2026-10-02"
+    "dxy": "2026-10-02",
+    "nfci": "2026-10-02",
+    "breadth": "2026-10-06"
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-07 收盘（美东交易日）",
