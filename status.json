@@ -9,13 +9,13 @@
     "next_in": 6,
     "next_date": "2026-10-15"
   },
-  "run_id": "37755113909",
+  "run_id": "37759698965",
   "request_id": "",
-  "source_sha": "d23c00a919cbcc7c3d0ab34f039f2e50e072b0f1",
-  "started_at": "2026-10-08T09:13:06+00:00",
-  "started_at_bj": "2026-10-08T17:13:06+08:00",
-  "finished_at": "2026-10-08T17:14:01.987720+08:00",
-  "finished_at_bj": "2026-10-08T17:14:01+08:00",
+  "source_sha": "7f6e8bd79b7fefbf8a868a938140ff861dc09d15",
+  "started_at": "2026-10-08T09:52:53+00:00",
+  "started_at_bj": "2026-10-08T17:52:53+08:00",
+  "finished_at": "2026-10-08T17:53:43.580393+08:00",
+  "finished_at_bj": "2026-10-08T17:53:43+08:00",
   "event": "push",
   "target_trade_date": "2026-10-07",
   "mode": "closed",
@@ -181,30 +181,23 @@
     "dca": 1
   },
   "summary": {
-    "red": 2,
-    "yellow": 11,
-    "green": 24,
-    "gray": 8,
+    "red": 3,
+    "yellow": 16,
+    "green": 26,
+    "gray": 0,
     "total": 45,
     "macro_ok": 8,
-    "stale_symbols": [],
-    "missing_symbols": [],
-    "unsupported_symbols": [
-      "BD#US10Y",
-      "ESMAIN",
-      ".VXN",
-      "CLMAIN",
-      ".NDX",
-      ".VIX",
-      ".SPX",
-      ".SOX"
+    "stale_symbols": [
+      "BD#US10Y"
     ],
-    "today_prices": 37,
-    "prior_prices": 0,
-    "missing_prices": 8
+    "missing_symbols": [],
+    "unsupported_symbols": [],
+    "today_prices": 44,
+    "prior_prices": 1,
+    "missing_prices": 0
   },
   "actual_dates": {
-    "min": "2026-10-07",
+    "min": "2026-10-06",
     "max": "2026-10-07"
   },
   "macro_dates": {
@@ -218,10 +211,10 @@
     "breadth": "2026-10-06"
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-07 收盘（美东交易日）",
+  "data_time_text": "2026-10-06～2026-10-07 收盘（美东交易日）",
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 7
+    "yellow": 6
   }
 }
