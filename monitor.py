@@ -1330,7 +1330,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261008-6"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261008-7"></script>'
 
 
 def config_hash(filename):
@@ -1559,7 +1559,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             coverage = (f"{total - unsupported_count} 只报价已更新 · "
                         f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
                         else f"{total} 只全部更新")
-            init_light = (f"抓取成功 · 完成于 {finished_txt}（北京时间） · "
+            kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
+            init_light = (f"{kind}抓取成功 · 完成于 {finished_txt}（北京时间） · "
                           f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
                           f"绿{summary.get('green', 0)}{gray_txt} · {coverage}")
     dca_info = dca_text(snapshot.get("dca_reminder"))

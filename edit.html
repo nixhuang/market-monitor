@@ -98,8 +98,8 @@ button.danger{color:var(--red)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px}
 .dot.g{background:var(--green)} .dot.r{background:var(--red)}
 .dot.y{background:var(--yellow)} .dot.d{background:#5f6672}
-.savebar{position:sticky;bottom:0;background:var(--bg);padding:10px 0 4px;
-  display:flex;gap:8px;align-items:center}
+.savebar{background:var(--bg);padding:10px 0 4px;
+  display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .savebar .sp{flex:1;font-size:12px;color:var(--dim)}
 .hide{display:none}
 .note{color:var(--dim);font-size:12px;line-height:1.75;margin:8px 0 0}
@@ -242,7 +242,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <button id="btnResetRules">恢复默认</button>
     </div>
     <p class="note">
-      改完点<b>保存规则</b>只提交 <kbd>settings.json</kbd>，清单另点底部保存，定投另点「保存定投提醒」。<br>
+      改完点<b>保存规则</b>只提交 <kbd>settings.json</kbd>，清单另点分类清单下方「保存清单与分组」，定投另点「保存定投提醒」。<br>
       保存后需等待 Actions 重跑和看板发布，通常约 5–9 分钟；首页独立规则灯变绿才表示本页已用最新规则。<br>
       改坏也不怕：值类型不对会被忽略、自动退回默认，填错顶多是信号变多变少，不会白屏。
       <textarea id="rulesOut" spellcheck="false" class="hide"
@@ -269,8 +269,14 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     <h2>分类清单</h2><span id="groupTotal"></span>
     <button id="btnExpandGroups">全部展开</button><button id="btnCollapseGroups">全部收起</button>
   </div>
-  <p class="note" style="margin-bottom:12px">持仓和重点关注始终监测，无需开关。其他分组的监测开关改完点底部「保存」才生效；关闭后清单仍保留，不抓取该组普通标的。行业组已有的 XL 板块 ETF 继续监测和报警，不自动添加基金。</p>
+  <p class="note" style="margin-bottom:12px">持仓和重点关注始终监测，无需开关。其他分组的监测开关改完点分类下方「保存清单与分组」才生效；关闭后清单仍保留，不抓取该组普通标的。行业组已有的 XL 板块 ETF 继续监测和报警，不自动添加基金。</p>
   <fieldset id="groupEditor" disabled style="border:0;padding:0;margin:0;min-width:0"></fieldset>
+  <div class="savebar">
+    <span class="sp" id="dirty"></span>
+    <button id="btnReload">重新读取已保存清单</button>
+    <button class="primary" id="btnSave">保存清单与分组</button>
+  </div>
+  <p class="note">保存股票清单、备注、加仓价和监测开关，不影响规则与定投设置。重新读取会先询问是否丢弃未保存的清单改动。</p>
 
   <div class="card">
     <h2>定投提醒 <span>（全局一条，按美股交易日计数）</span></h2>
@@ -286,12 +292,6 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       例：起点 <kbd>2026-10-01</kbd>、间隔 <kbd>5</kbd> → 10/01 是第 1 次，之后每过 5 个交易日（周末和美股休市日不算）提醒一次。
       看板首页会显示「今天是定投日」或「距下次还有几个交易日（日期）」。只改这一块，不影响下面的规则阈值；点保存后通常约 5–9 分钟生效，以首页规则灯为准。
     </p>
-  </div>
-
-  <div class="savebar">
-    <span class="sp" id="dirty"></span>
-    <button id="btnReload">重新载入</button>
-    <button class="primary" id="btnSave">保存</button>
   </div>
 
   <p class="note" style="margin-top:18px">
@@ -311,7 +311,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <div id="dataTime" aria-live="polite">数据时间 读取中…</div>
       <p class="note">这里只回答一句话：<b>刚才保存的清单/规则，有没有真的跑到看板上</b>。<br>
         <b>查运行状态</b> = 去问一次最新情况，只改这几行字，不会动你正在编辑的内容。<br>
-        <b>打开最新看板</b> = 在新标签页打开刚生成好的那版看板（你现在那个页面可能是旧的缓存）。确认生效后才会出现。</p>
+        <b>规则确认发布后</b> = 自动刷新当前页，不再打开新标签。若还有未保存的编辑，会先保留并等待保存完成，避免丢失改动。</p>
     </div>
   </details>
 
@@ -324,7 +324,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 </div>
 
-<script src="./run-status.js?v=20261008-6"></script>
+<script src="./run-status.js?v=20261008-7"></script>
 <script src="./list-import.js?v=20261008-1"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
@@ -412,6 +412,9 @@ function trackReceipt(file,response){
 }
 window.MMRunStatus.init({owner:OWNER,repo:REPO,branch:BRANCH,getToken:()=>{
   try{return TOKEN||localStorage.getItem(TKEY)||'';}catch(e){return TOKEN;}
+},canReload:()=>{
+  try{return !changed&&settingsBaseline!==null&&settingsInputs()===settingsBaseline&&
+    !['btnSave','btnSaveRules','btnSaveDca','btnClearDca'].some(id=>$(id).disabled);}catch(e){return false;}
 }});
 function whyFail(status,dflt){
   if(status===0)return dflt||'网络请求未确认；请检查仓库最新版本后再操作，不要盲目重复写入';
@@ -545,7 +548,7 @@ function initGroups(groups){
       e.preventDefault();e.stopPropagation();
       if(!loaded||$('groupEditor').disabled)return;
       monitoring[g.key]=!monitorEnabled(g.key);render();touch();
-      setMsg('「'+g.label+'」监测'+(monitorEnabled(g.key)?'已开启':'已关闭')+'，点底部保存才生效','ok');
+      setMsg('「'+g.label+'」监测'+(monitorEnabled(g.key)?'已开启':'已关闭')+'，点「保存清单与分组」才生效','ok');
     };
   });
 }
@@ -707,7 +710,7 @@ const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
   dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
-let SET=Object.assign({},SET_DEFS), SET_SHA='', settingsRevision=0;
+let SET=Object.assign({},SET_DEFS), SET_SHA='', settingsRevision=0, settingsBaseline=null;
 function settingsInputs(){
   return JSON.stringify(SET_KEYS.map(k=>{const el=$('set_'+k);return el?el.value:null;}));
 }
@@ -756,13 +759,13 @@ async function loadSettings(){
       if(k==='dca_start'){if(typeof next[k]!=='string'||(next[k]!==''&&!DATE_RE.test(next[k])))next[k]='';return;}
       const n=Number(next[k]);if(isNaN(n))next[k]=SET_DEFS[k];
     });
-    SET=next;SET_SHA=r.data.sha||'';renderSettings();
+    SET=next;SET_SHA=r.data.sha||'';renderSettings();settingsBaseline=settingsInputs();
   }catch(e){setMsg('settings.json 不是合法 JSON；保留当前编辑内容','err');}
 }
 async function saveRules(btn){
   settingsRevision++;
   collectSettings();
-  const text=setJsonText();
+  const text=setJsonText(), submittedInputs=settingsInputs();
   if(LOCAL_PREVIEW){setMsg('本地预览：规则仅用于查看，未写入 GitHub','ok');return;}
   if(!TOKEN){
     $('rulesOut').value=text;$('rulesOut').classList.remove('hide');
@@ -777,6 +780,7 @@ async function saveRules(btn){
   const r=await gh('PUT','/contents/settings.json',body);
   if(r.ok){
     SET_SHA=(r.data.content&&r.data.content.sha)||SET_SHA;
+    settingsBaseline=submittedInputs;
     trackReceipt('settings.json',r.data);
   }else{
     setMsg('保存失败：'+whyFail(r.status,r.data.message),'err');

@@ -22,7 +22,7 @@ function fixture(page = snapshot(), onlyRule = false) {
     ['runLight', 'runLightTxt', 'ruleLight', 'ruleLightTxt', 'runSummary', 'runMsg', 'checkResult', 'btnCheckStatus']).map(id => [id, element()]));
   if (page) { els.snapshotData = element(); els.snapshotData.textContent = JSON.stringify(page); }
   const data = {status: snapshot(), published: snapshot(), sha: B, failRules: false, failPublic: false,
-    run: {id: 2, event: 'push', head_sha: D, status: 'in_progress', conclusion: null}, delay: null, commitSHA: null, raw: null};
+    run: {id: 2, event: 'push', head_sha: D, status: 'in_progress', conclusion: null}, delay: null, commitSHA: null, raw: null, reloads: []};
   const urls = [], timers = [], events = {};
   let now = Date.parse('2026-10-08T02:00:00Z');
   class Clock extends Date { static now() { return now; } }
@@ -31,7 +31,8 @@ function fixture(page = snapshot(), onlyRule = false) {
     addEventListener(name, fn) { events[name] = fn; },
     localStorage: {getItem() { return null; }, setItem() {}},
     setTimeout(fn, ms) { timers.push({fn, ms}); return timers.length; }, clearTimeout() {},
-    Date: Clock, AbortController, TextEncoder, crypto: webcrypto, DOMParser: class { parseFromString(html) {
+    location: {href: 'https://example.test/market-monitor/index.html', replace(url) { data.reloads.push(url); }},
+    URL, Date: Clock, AbortController, TextEncoder, crypto: webcrypto, DOMParser: class { parseFromString(html) {
       return {querySelector() { return {textContent: html}; }};
     }},
     fetch: async (url, options) => {
@@ -89,7 +90,9 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     f.data.published.summary.red = 1; await f.win.MMRunStatus.refresh();
     assert.equal(f.els.ruleLight.dataset.phase, 'busy');
     assert.match(f.els.ruleLightTxt.textContent, /本页仍是旧规则/);
-    assert.equal(f.els.ruleLightTxt.children.at(-1).textContent, '打开最新看板');
+    assert.equal(f.data.reloads.length, 1);
+    assert.equal(new URL(f.data.reloads[0]).pathname, '/market-monitor/index.html');
+    assert.equal(new URL(f.data.reloads[0]).searchParams.get('mm_refreshed_run'), '2');
     assert.match(f.els.runLightTxt.textContent, /红44/);
     f.els.snapshotData.textContent = JSON.stringify(f.data.published);
     await f.win.MMRunStatus.refresh(); assert.equal(f.els.ruleLight.dataset.phase, 'ok');
@@ -152,7 +155,9 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     const f = fixture(); f.data.sha = C; f.data.status = snapshot(C, '2'); f.data.published = snapshot(C, '2');
     await f.win.MMRunStatus.refresh(); f.data.failPublic = true;
     await f.win.MMRunStatus.refresh(); assert.match(f.els.ruleLightTxt.textContent, /本页仍是旧规则/);
-    assert.equal(f.els.ruleLightTxt.children.at(-1).textContent, '打开最新看板');
+    assert.equal(f.data.reloads.length, 1);
+    assert.equal(new URL(f.data.reloads[0]).pathname, '/market-monitor/index.html');
+    assert.equal(new URL(f.data.reloads[0]).searchParams.get('mm_refreshed_run'), '2');
     assert.equal(f.els.ruleLight.dataset.phase, 'busy');
   });
   await check('同轮提交版本变化不能套用另一版本的失败运行', async () => {
@@ -231,7 +236,9 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.equal(f.els.checkResult.dataset.phase,'ok');
     f.data.status=snapshot(B,'3');f.data.published=snapshot(B,'3');
     await f.els.btnCheckStatus.onclick();assert.match(f.els.checkResult.textContent,/当前页面仍是旧数据/);
-    assert.equal(f.els.checkResult.children.at(-1).textContent,'打开最新看板');
+    assert.equal(f.els.checkResult.children.at(-1).textContent,'刷新当前看板');
+    f.els.checkResult.children.at(-1).onclick({preventDefault(){}});
+    assert.equal(new URL(f.data.reloads.at(-1)).searchParams.get('mm_refreshed_run'),'3');
   });
   await check('最新任务失败和排队各有清楚结果，不影响已发布数据', async () => {
     for(const [status,conclusion,label] of [['queued',null,'排队中'],['completed','failure','失败']]){
@@ -262,8 +269,46 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.match(f.els.runLightTxt.textContent,/完成于 2026-10-08 10:11:12/);
     assert.match(f.els.runLightTxt.textContent,/红1/);
     assert.match(f.els.runLightTxt.textContent,/本页仍是旧数据/);
-    assert.equal(f.els.runLightTxt.children.at(-1).textContent,'打开最新看板');
+    assert.equal(f.els.runLightTxt.children.at(-1).textContent,'刷新当前看板');
     assert.equal(JSON.parse(f.els.snapshotData.textContent).run_id,'1');
+  });
+  await check('规则发布后同页只刷新一次，缓存旧页不循环刷新', async () => {
+    const f=fixture();f.data.sha=C;f.data.status=snapshot(C,'2');f.data.published=snapshot(C,'2');
+    await f.win.MMRunStatus.refresh();await f.win.MMRunStatus.refresh();
+    assert.equal(f.data.reloads.length,1);
+    const cached=fixture();cached.win.location.href='https://example.test/market-monitor/index.html?mm_refreshed_run=2';
+    cached.data.sha=C;cached.data.status=snapshot(C,'2');cached.data.published=snapshot(C,'2');
+    await cached.win.MMRunStatus.refresh();assert.equal(cached.data.reloads.length,0);
+  });
+  await check('未保存编辑阻止刷新，保存完成后才自动刷新', async () => {
+    const f=fixture();let dirty=true;
+    f.win.MMRunStatus.init({canReload:()=>!dirty});
+    f.data.sha=C;f.data.status=snapshot(C,'2');f.data.published=snapshot(C,'2');
+    await f.win.MMRunStatus.refresh();assert.equal(f.data.reloads.length,0);
+    assert.match(f.els.ruleLightTxt.textContent,/有未保存编辑/);
+    dirty=false;await f.win.MMRunStatus.refresh();assert.equal(f.data.reloads.length,1);
+  });
+  await check('产物未发布或已被更新的规则不能触发刷新', async () => {
+    const f=fixture();f.data.sha=C;f.data.status=snapshot(C,'2');
+    await f.win.MMRunStatus.refresh();assert.equal(f.data.reloads.length,0);
+    f.data.sha=A;f.data.published=snapshot(C,'2');
+    await f.win.MMRunStatus.refresh();assert.equal(f.data.reloads.length,0);
+  });
+  await check('设置页的保存回执验证发布后仍停留本页刷新', async () => {
+    const f=fixture(null,true);f.win.location.href='https://example.test/market-monitor/edit.html';
+    f.data.sha=C;
+    await f.win.MMRunStatus.watchConfig({file:'settings.json',blobSHA:C,commitSHA:D});
+    assert.equal(f.data.reloads.length,0);
+    f.data.status=snapshot(C,'2');f.data.published=snapshot(C,'2');
+    await f.win.MMRunStatus.refresh();assert.equal(f.data.reloads.length,1);
+    assert.equal(new URL(f.data.reloads[0]).pathname,'/market-monitor/edit.html');
+  });
+  await check('自动、手动、保存后完成标签仅依据实际事件', async () => {
+    for(const [event,label] of [['schedule','自动'],['workflow_dispatch','手动'],['push','保存后']]){
+      const page=snapshot();page.event=event;
+      const f=fixture(page);await f.win.MMRunStatus.refresh();
+      assert.match(f.els.runLightTxt.textContent,new RegExp('^'+label+'抓取成功'));
+    }
   });
   console.log('全部通过');
 })().catch(error => { console.error(error); process.exitCode = 1; });

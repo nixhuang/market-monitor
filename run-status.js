@@ -326,6 +326,24 @@
     }
     return '还没在这台设备保存过修改';
   }
+  let reloadStarted = false, reloadDeferred = false;
+  function reloadCurrent(force = false) {
+    if (!verifiedSnapshot || publication.phase !== 'published' || rulesError || !latestRules ||
+        verifiedSnapshot.config_files['settings.json'] !== latestRules.sha) return false;
+    const receipt = targets['settings.json'];
+    if (receipt && configState.phase !== 'published') return false;
+    if (!window.location || typeof window.location.replace !== 'function') return false;
+    const url = new URL(window.location.href);
+    if (!force && (reloadStarted || url.searchParams.get('mm_refreshed_run') === verifiedSnapshot.run_id)) return false;
+    try {
+      if (options.canReload && !options.canReload()) { reloadDeferred = true; return false; }
+    } catch (_) { reloadDeferred = true; return false; }
+    reloadDeferred = false; reloadStarted = true;
+    url.searchParams.set('_mm', String(Date.now()));
+    url.searchParams.set('mm_refreshed_run', verifiedSnapshot.run_id);
+    window.location.replace(url.href);
+    return true;
+  }
   function ruleState() {
     const snap = el('snapshotData') ? pageSnapshot() : verifiedSnapshot;
     const appliedSHA = snap && snap.config_files['settings.json'];
@@ -337,7 +355,8 @@
     if (appliedSHA === expectedSHA) return {phase: 'ok', text: '规则按当前设置生效'};
     if (!appliedSHA) return {phase: 'idle', text: '未读到有效看板快照，暂无法核对规则'};
     if (verifiedSnapshot && verifiedSnapshot.config_files['settings.json'] === expectedSHA) {
-      return {phase: 'busy', text: '新规则已发布，本页仍是旧规则；请打开最新看板', reload: true};
+      return {phase: 'busy', text: reloadDeferred ? '新规则已发布；有未保存编辑，保存后将自动刷新当前页'
+        : '新规则已发布，本页仍是旧规则；正在刷新当前页', reload: true};
     }
     const phase = receipt && receipt.blobSHA === expectedSHA && configState.phase === 'failed'
       ? 'failed' : latestRules.run && phaseForRun(latestRules.run).phase;
@@ -357,7 +376,8 @@
     const snap = trackedPublished && verifiedSnapshot ? verifiedSnapshot : current || verifiedSnapshot || latestStatus;
     const oldPage = current && snap && !samePublication(current, snap);
     const finished = completedTime(snap);
-    const success = '抓取成功 · 完成于 ' + (finished || '未记录') + '（北京时间） · ';
+    const kind = {schedule: '自动', workflow_dispatch: '手动', push: '保存后'}[snap && snap.event] || '';
+    const success = kind + '抓取成功 · 完成于 ' + (finished || '未记录') + '（北京时间） · ';
     const suffix = oldPage ? ' · 新结果已发布，本页仍是旧数据' : '';
     const info = snap ? (snap.summary || {}) : {};
     const cnt = info.red != null
@@ -414,9 +434,9 @@
     if (s.phase === 'published' && embedded && verifiedSnapshot) {
       try {
         if (!samePublication(verifiedSnapshot, JSON.parse(embedded.textContent))) {
-          message += '；当前页面仍是旧快照，点击「打开最新看板」查看新版本';
+          message += '；当前页面仍是旧快照，可点击「刷新当前看板」查看新版本';
         }
-      } catch (_) { message += '；当前页快照无效，请点击「打开最新看板」'; }
+      } catch (_) { message += '；当前页快照无效，请刷新当前看板'; }
     }
     if (actionsError && (activeManual() || activeConfig())) {
       message += '\n运行记录暂时无法读取：' + actionsError;
@@ -429,8 +449,9 @@
       if (checkFeedback && publication.phase === 'published' && verifiedSnapshot &&
           pageSnapshot() && !samePublication(pageSnapshot(), verifiedSnapshot)) {
         const link = window.document.createElement('a');
-        link.textContent = '打开最新看板';
-        link.href = bust('./index.html');
+        link.textContent = '刷新当前看板';
+        link.href = '#';
+        link.onclick = event => { event.preventDefault(); reloadCurrent(true); };
         link.style.cssText = 'display:block;margin-top:6px;color:#6ba3f0';
         el('checkResult').appendChild(link);
       }
@@ -440,20 +461,17 @@
     put('runLightTxt', light.text, light.phase);
     if (light.reload && el('runLightTxt')) {
       const link = window.document.createElement('a');
-      link.textContent = '打开最新看板';
-      link.href = bust('./index.html');
+      link.textContent = '刷新当前看板';
+      link.href = '#';
+      link.onclick = event => { event.preventDefault(); reloadCurrent(true); };
       link.style.cssText = 'display:inline-block;margin-left:8px;color:#6ba3f0';
       el('runLightTxt').appendChild(link);
     }
     const rule = ruleState();
     if (el('ruleLight')) el('ruleLight').dataset.phase = rule.phase;
     put('ruleLightTxt', rule.text, rule.phase);
-    if (rule.reload && el('ruleLightTxt')) {
-      const link = window.document.createElement('a');
-      link.textContent = '打开最新看板';
-      link.href = bust('./index.html');
-      link.style.cssText = 'margin-left:8px;color:#6ba3f0';
-      el('ruleLightTxt').appendChild(link);
+    if (rule.reload && el('ruleLightTxt') && reloadDeferred) {
+      put('ruleLightTxt', '新规则已发布；有未保存编辑，保存后将自动刷新当前页', 'busy');
     }
     const currentPage = pageSnapshot();
     compactLegacySummary(currentPage);
@@ -482,13 +500,21 @@
     if (box && verifiedSnapshot && (!Object.keys(targets).length || configState.phase === 'published') &&
         (!manual || manual.rejected || manualState.phase === 'published')) {
       const link = window.document.createElement('a');
-      link.textContent = '打开最新看板';
+      link.textContent = '返回看板';
       link.href = bust('./index.html') + '&mm_run=' + encodeURIComponent(verifiedSnapshot.run_id);
       link.style.cssText = 'display:inline-block;margin:8px;color:#6ba3f0';
-      if (el('appliedState')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
       box.appendChild(link);
     }
     if (typeof options.onChange === 'function') options.onChange(s);
+    const receipt = targets['settings.json'];
+    if (rule.reload || receipt && configState.phase === 'published') {
+      reloadCurrent();
+      if (reloadDeferred) {
+        const note = '新规则已发布；有未保存编辑，保存后将自动刷新当前页';
+        put('ruleLightTxt', note, 'busy');
+        put('appliedBrief', note, 'busy');
+      }
+    }
     return s;
   }
   function phaseForRun(run) {
@@ -515,7 +541,7 @@
   }
   function schedule() {
     const ruleWaiting = ruleSince > 0 && Date.now() - ruleSince < MAX_WAIT && ruleState().phase === 'busy';
-    const tracking = activeConfig() || activeManual() || retryPending;
+    const tracking = activeConfig() || activeManual() || retryPending || reloadDeferred;
     if (!tracking && !ruleWaiting && publicRetry >= PUBLIC_RETRY_MAX) return;
     const since = Math.min(activeConfig() ? configSince : Infinity, activeManual() ? manual.since : Infinity);
     const delay = Math.max(apiBlockedUntil - Date.now(), tracking ? (Date.now() - since < 120000 ? 8000 : 20000)
@@ -795,7 +821,7 @@
         lines.push('数据更新时间：' + (humanTime(verifiedSnapshot) || '未知') + '（北京时间）');
         const current = pageSnapshot();
         lines.push(current && !samePublication(current, verifiedSnapshot)
-          ? '当前页面仍是旧数据，请打开最新看板。' : '当前页面已是这版发布结果，暂无页面更新。');
+          ? '当前页面仍是旧数据，可刷新当前看板。' : '当前页面已是这版发布结果，暂无页面更新。');
       } else lines.push('核对尚未完成：' + publication.message);
       if (actionsError) lines.push('对应运行记录无法核对：' + actionsError);
       if (recentError || actionsError) checkPhase = 'bad';
