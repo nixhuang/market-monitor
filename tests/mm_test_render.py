@@ -107,7 +107,9 @@ check('.group-card>summary .group-stats{margin-left:6px' in html and
       '.group-stats{margin-left:auto' in html, "警示在分组名称右侧左对齐，宏观标题保持原样")
 check('id="group_technology"' in html and 'IT软硬Ai (5)' in html, "IT 分类展示计数")
 check('其他关注' not in html, "旧其他关注分类已移除")
-check(html.count("<h2>个股</h2>") == 3 and html.count("<h2>ETF 基金</h2>") == 2, "分类内警示个股与 ETF 分区")
+check("<h2>个股</h2>" not in html and "<h2>ETF 基金</h2>" not in html, "个股与 ETF 不再分区")
+check(html.count('<thead><tr><th>名称</th><th class="h-earn">财报</th>') >= 3, "表头：名称｜财报")
+check("财报 美东" not in html and "下一次财报" not in html.split("<style>")[-1].split("</style>")[-1], "每行不再重复写「财报」二字")
 check('无异动 1 只 · 点击查看' in html and 'SPYM' in html, "无异动标的可展开查看")
 pos_card = html.split('id="group_positions"')[1].split('id="group_focus"')[0]
 check('NTNX' in pos_card and 'SPYM' in pos_card, "持仓包含警示及无异动标的")
@@ -190,6 +192,16 @@ check('垃圾债利差' in html5 and '高收益债利差' not in html5 and '跑�
       "正式生成首页仅使用垃圾债利差新名称")
 footer = html5.split('<div class="foot">', 1)[1].split('</div>', 1)[0]
 check('./edit.html?rules=1' in footer and '查看完整规则与阈值' in footer, "页脚指向设置页完整规则")
+head5 = html5.split('</head>', 1)[0]
+check('rel="icon"' in head5 and './icons/favicon-32.png' in head5, "页头有网页图标（相对路径）")
+check('rel="apple-touch-icon" href="./icons/apple-touch-icon.png"' in head5, "页头有 apple-touch-icon")
+check('rel="manifest" href="./manifest.webmanifest"' in head5 and 'name="theme-color"' in head5, "页头有 manifest 与 theme-color")
+import json as _json, os as _os
+_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+_mf = _json.load(open(_os.path.join(_root, 'manifest.webmanifest'), encoding='utf-8'))
+check(all(_os.path.exists(_os.path.join(_root, i['src'])) for i in _mf['icons']), "manifest 里的图标文件都存在")
+check(all(_os.path.exists(_os.path.join(_root, 'icons', n)) for n in ('favicon-32.png', 'apple-touch-icon.png')), "页头引用的图标文件存在")
+check(sum(_os.path.getsize(_os.path.join(_root, 'icons', n)) for n in _os.listdir(_os.path.join(_root, 'icons'))) < 400 * 1024, "图标总体积小于 400KB")
 check('RSI 6 / 12 / 24' not in footer and '布林信号 + RSI' not in footer and 'Nasdaq' in footer,
       "页脚仅保留数据来源，不再重复长篇规则")
 by_sym(items, "NTNX")["fund"]["hits"] = ['利润 < 0 & "下降" <script>alert(1)</script>']

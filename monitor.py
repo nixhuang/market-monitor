@@ -1376,6 +1376,8 @@ HARD_REFRESH_JS = (
 
 # 个股/ETF 表统一用固定列宽，三张表（警示 / ETF / 折叠的无异动）栏位才能上下对齐
 STK_COLS = ('<colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>')
+# 表头：「财报」两个字只在这里写一次，每行只写日期和时段；价格、信号两列不写表头
+STK_HEAD = '<thead><tr><th>名称</th><th class="h-earn">财报</th><th></th><th></th></tr></thead>'
 
 
 def earnings_label(e):
@@ -1384,9 +1386,9 @@ def earnings_label(e):
         return None
     status = e["status"]
     if status == "unknown":
-        return "下一次财报时间待公布", "供应商尚未提供，不使用过去的报告期代替"
+        return "时间待公布", "下一次财报时间供应商尚未提供，不使用过去的报告期代替"
     if status == "error":
-        return "下一次财报日期暂未取得", "本轮读取失败，不代表没有财报"
+        return "日期暂未取得", "下一次财报日期本轮读取失败，不代表没有财报"
     year, month, day = e["date"].split("-")
     this_year = datetime.now(US_TZ).year
     date_txt = f"{month}/{day}" if int(year) == this_year else f"{year}/{month}/{day}"
@@ -1395,7 +1397,7 @@ def earnings_label(e):
     bj = {"pre": f"北京时间约{month}/{day}傍晚至晚间", "post": f"北京时间约{nxt}凌晨",
           "during": f"北京时间约{month}/{day}夜间至{nxt}凌晨"}.get(e.get("timing"), "北京时间待定")
     kind = "预计" if e.get("kind") == "expected" else "算法估算，可能调整"
-    return f"财报 美东 {date_txt} {timing}", f"{kind} · {bj}"
+    return f"美东 {date_txt} {timing}", f"{kind} · {bj}"
 
 
 EARN_SOON_DAYS = 14   # 财报日距今 0~14 天（含）时，页面上的财报文字标黄
@@ -1673,6 +1675,38 @@ def sma(vals, n):
     if len(vals) < n:
         return None
     return sum(vals[-n:]) / n
+
+
+RS_DAYS = 20          # 相对 SPY 强弱的回看交易日数（约一个月）
+RS_NEUTRAL_PP = 0.5   # 相对强弱绝对值不足该百分点，按「持平」显示（不着色）
+
+
+def relative_strength(etf, spy, days=RS_DAYS):
+    """板块 ETF 相对 SPY 的强弱：两者近 days 个交易日涨幅之差（单位：百分点）。
+
+    按日期对齐而不是按下标：两边任何一端缺一天（或盘中补了实时价的那一根不同步），
+    下标就会错位一天。最近 3 根里找双方共有的最新日期作终点，起点必须是 ETF 序列里
+    终点往前数第 days 根、且 SPY 也有该日；对不上就返回 None，页面不显示，绝不拿错位数据凑数。
+    """
+    try:
+        ed, ec = list(etf.get("dates") or []), list(etf.get("closes") or [])
+        sd, sc = list(spy.get("dates") or []), list(spy.get("closes") or [])
+        if not ed or len(ed) != len(ec) or len(sd) != len(sc) or len(ec) <= days:
+            return None
+        spy_close = dict(zip(sd, sc))
+        end_i = next((i for i in range(len(ed) - 1, max(len(ed) - 4, -1), -1) if ed[i] in spy_close), None)
+        if end_i is None or end_i - days < 0 or ed[end_i - days] not in spy_close:
+            return None
+        start_i = end_i - days
+        e0, e1 = float(ec[start_i]), float(ec[end_i])
+        s0, s1 = float(spy_close[ed[start_i]]), float(spy_close[ed[end_i]])
+        if min(e0, e1, s0, s1) <= 0 or not all(math.isfinite(x) for x in (e0, e1, s0, s1)):
+            return None
+        etf_ret, spy_ret = (e1 / e0 - 1) * 100, (s1 / s0 - 1) * 100
+        return {"days": days, "etf": etf_ret, "spy": spy_ret, "diff": etf_ret - spy_ret,
+                "start": ed[start_i], "end": ed[end_i]}
+    except (ValueError, TypeError, OverflowError, AttributeError):
+        return None
 
 
 def boll(closes, n=20, k=2.0):
@@ -2247,10 +2281,20 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             out = '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
         return out
 
-    is_etf_row = lambda d: bool(d.get("etf")) or is_etf(d["symbol"])
     group_cards = ""
+    # 板块 ETF 可能因去重落在持仓／重点关注里，按代码在全部条目里找，不限本组
+    items_by_symbol = {normalize_symbol(d["symbol"]): d for d in items}
     for group in GROUPS:
         g = items_by_group[group["item_group"]]
+        etf_row = lambda d: bool(d.get("etf")) or is_etf(d["symbol"])
+        if group["item_group"] in ("position", "focus"):
+            # 持仓 / 重点关注：同一预警级别里 ETF 排在个股后面（稳定排序，级别和涨跌幅顺序不变）
+            g = sorted(g, key=lambda d: (sort_key(d)[0], etf_row(d)))
+        elif group.get("sector_etf"):
+            # 行业分类：本行业板块 ETF（XLK、XLV…）只在同一预警级别内排第一；无警示（绿灯）时照常折叠
+            g = sorted(g, key=lambda d: (sort_key(d)[0],
+                                         normalize_symbol(d["symbol"]) != group["sector_etf"],
+                                         sort_key(d)[1]))
         shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or fund_alert(d) or d.get("reference_only")]
         quiet = [d for d in g if d["level"] == "green" and not fund_alert(d) and not d.get("reference_only")]
         parts = []
@@ -2258,13 +2302,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         if not enabled:
             note = f"行业监测关闭 · {group['sector_etf']} 仍监测（仅限原组已有标的）" if group.get("sector_etf") else "分组监测已关闭"
             parts.append(f'<div class="quiet">{note} · 清单保留，普通标的暂停抓取和报警</div>')
-        for label, rows in (("个股", [d for d in shown if not is_etf_row(d)]),
-                            ("ETF 基金", [d for d in shown if is_etf_row(d)])):
-            if rows:
-                parts.append(f"<h2>{label}</h2>\n<table class=\"stk\">{STK_COLS}{rows_of(rows)}</table>")
+        if shown:
+            parts.append(f'<table class="stk">{STK_COLS}{STK_HEAD}{rows_of(shown)}</table>')
         if quiet:
             parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只 · 点击查看</summary>'
-                         f'<table class="stk">{STK_COLS}{rows_of(quiet)}</table></details>')
+                         f'<table class="stk">{STK_COLS}{STK_HEAD}{rows_of(quiet)}</table></details>')
         if not g and enabled:
             parts.append('<div class="quiet">本组标的已在优先分组展示，避免重复信号</div>' if registered.get(group["key"], 0)
                          else '<div class="quiet">暂无标的，去设置页录入或导入 CSV / EBK</div>')
@@ -2274,6 +2316,16 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             f'<i class="stat-dot {lv}" aria-hidden="true"></i>{count}</span>'
             for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "无数据"))
             if (count := sum(d["level"] == lv for d in g)))
+        # 板块组：红黄灯后面跟「板块 ETF 近 20 日相对 SPY 的强弱」，折叠时也能看到
+        rs = (items_by_symbol.get(group["sector_etf"]) or {}).get("rs_spy") if group.get("sector_etf") else None
+        if rs:
+            diff = rs["diff"]
+            rs_cls = "up" if diff >= RS_NEUTRAL_PP else "down" if diff <= -RS_NEUTRAL_PP else ""
+            rs_tip = html_lib.escape(
+                f'{group["sector_etf"]} {rs["days"]}日 {rs["etf"]:+.1f}% − SPY {rs["spy"]:+.1f}% = {diff:+.1f} 个百分点'
+                f'（{rs["start"]} → {rs["end"]}）')
+            stats += (f'<span class="rs-spy {rs_cls}" title="{rs_tip}" aria-label="{rs_tip}">'
+                      f'{rs["days"]}日相对SPY {diff:+.1f}%</span>')
         if not enabled:
             note = "仅板块ETF" if g else "监测关闭"
             stats = f'<span class="monitor-note">{note}</span>' + stats
@@ -2349,6 +2401,10 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f1115">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="manifest" href="./manifest.webmanifest">
 <title>AI监测市场</title>
 <style>
 :root{{
@@ -2398,17 +2454,20 @@ table.stk{{table-layout:fixed}}
 .earn-cell{{vertical-align:middle;overflow-wrap:anywhere}}
 table.stk tr td:first-child{{padding-left:14px}}
 .stk td.sym{{overflow-wrap:anywhere}}
+.stk th{{font-size:13px;color:var(--dim);font-weight:600;letter-spacing:.3px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}}
+.stk th:first-child{{padding-left:14px}}
+.stk th.h-earn,.earn-cell{{text-align:center}}
 .px{{white-space:nowrap}}
 .px-price,.px-chg{{display:block}}
 .px-chg{{font-size:12.5px}}
 @media (max-width:600px){{
   table.stk{{table-layout:auto}}
-  .stk colgroup{{display:none}}
+  .stk colgroup,.stk thead{{display:none}}
   tr:not(:has(td[colspan])){{display:grid;grid-template-columns:1fr 84px;column-gap:10px;border-top:1px solid var(--line)}}
   tr:not(:has(td[colspan])) td{{border-top:none;padding:6px 10px}}
   tr:not(:has(td[colspan])) td.sym{{grid-column:1;grid-row:1}}
   tr:not(:has(td[colspan])) td.px{{grid-column:2;grid-row:1}}
-  tr:not(:has(td[colspan])) td.earn-cell{{grid-column:1/-1;grid-row:2;padding-top:0;width:auto}}
+  tr:not(:has(td[colspan])) td.earn-cell{{grid-column:1/-1;grid-row:2;padding-top:0;width:auto;text-align:left}}
   tr:not(:has(td[colspan])) td.sig{{grid-column:1/-1;grid-row:3;padding-top:0}}
   tr:not(:has(td[colspan])) td.earn-cell:empty{{display:none}}
   tr:first-child{{border-top:none}}
@@ -2459,6 +2518,8 @@ tr.gray td{{color:var(--dim)}}
 .group-stats{{margin-left:auto;color:var(--dim);font-size:11px;font-weight:400}}
 .group-card>summary .group-stats{{margin-left:6px;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-start;text-align:left}}
 .stat-count{{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}}
+.rs-spy{{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}}
+.rs-spy.up{{color:var(--up)}} .rs-spy.down{{color:var(--down)}}
 .stat-dot{{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}}
 .stat-dot.red{{background:var(--red)}} .stat-dot.yellow{{background:var(--yellow)}}
 .stat-dot.gray{{background:var(--dim)}} .stat-dot.green{{background:var(--green)}}
@@ -2632,7 +2693,15 @@ def main(argv=None):
         STOOQ_GATE.reset(True)
         to_fetch = [sym for sym, _, _ in universe
                     if quote_supported(sym) and instrument_identity(sym) != '^TNX']
+        sector_etfs = {g["sector_etf"] for g in GROUPS if g.get("sector_etf")}
+        # 板块 ETF 相对 SPY 强弱要用 SPY 的日线；清单里没有 SPY 就多抓这一只（只用来对比，不进页面清单）
+        need_spy = any(normalize_symbol(s) in sector_etfs for s in to_fetch)
+        spy_key = next((s for s in to_fetch if normalize_symbol(s) == "SPY"), None)
+        if need_spy and not spy_key:
+            spy_key = "SPY"
+            to_fetch = to_fetch + [spy_key]
         fetched = collect_quotes(to_fetch)
+        spy_data = fetched.get(spy_key) if need_spy and isinstance(fetched.get(spy_key), dict) else None
         YAHOO_GATE.reset(False)
         STOOQ_GATE.reset(False)
         for sym, sc, grp in universe:
@@ -2648,6 +2717,10 @@ def main(argv=None):
                     continue
             if data:
                 lv, sig, detail = analyze_symbol(sym, sc, data, group=grp)
+                if spy_data and normalize_symbol(sym) in sector_etfs:
+                    rs = relative_strength(data, spy_data)
+                    if rs:
+                        detail["rs_spy"] = rs
                 items.append(detail)
                 if lv != "green":
                     log(f"  {sym}: {lv} — {', '.join(sig)}")

@@ -259,10 +259,44 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
                 self.assertEqual(monitor.main([]), 0)
-                self.assertEqual([c.args[0] for c in fetch.call_args_list], ['AAPL', 'MSFT', 'XLK', 'XLB'])
+                # 末尾的 SPY 只用来算板块 ETF 的相对强弱，不进页面清单、不计入监测数量
+                self.assertEqual([c.args[0] for c in fetch.call_args_list], ['AAPL', 'MSFT', 'XLK', 'XLB', 'SPY'])
                 self.assertEqual([r['symbol'] for r in notify.call_args.args[1]], ['AAPL', 'MSFT', 'XLK', 'XLB'])
                 with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
                     self.assertEqual(json.load(f)['summary']['total'], 4)
+
+    def test_main_attaches_relative_strength_for_sector_etf_and_renders_it(self):
+        import tempfile
+        cfg = {'technology': {'XLK': {}}}
+        dates = [f'2026-09-{d:02d}' for d in range(1, 31)] + ['2026-10-01', '2026-10-02']
+        def hist(symbol, *a, **k):
+            step = {'XLK': 1.0, 'SPY': 0.5}[symbol]
+            return {'price': 100, 'dates': dates, 'closes': [100 + i * step for i in range(len(dates))]}
+        def analyzed(symbol, settings, data, group):
+            detail = dict(symbol=symbol, note='', price=100, chg=0, level='green',
+                          group=group, signals=[], data_date='2026-10-02')
+            return 'green', [], detail
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            for name, content in [('holdings.json', cfg), ('settings.json', {})]:
+                with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
+                    json.dump(content, f)
+            with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-02'), \
+                    patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_macro', return_value={}), \
+                    patch.object(monitor, 'fetch_history', side_effect=hist), \
+                    patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
+                    patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'global_dca', return_value=None), \
+                    patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
+                self.assertEqual(monitor.main([]), 0)
+                rs = notify.call_args.args[1][0]['rs_spy']
+                self.assertEqual(rs['days'], 20)
+                self.assertAlmostEqual(rs['etf'], (131 / 111 - 1) * 100, places=6)
+                self.assertAlmostEqual(rs['spy'], (115.5 / 105.5 - 1) * 100, places=6)
+                with open(os.path.join(directory, 'index.html'), encoding='utf-8') as f:
+                    page = f.read()
+                self.assertIn('20日相对SPY', page.split('id="group_technology"', 1)[1].split('</summary>', 1)[0])
 
     def test_main_keeps_index_reference_prices_if_yahoo_unavailable(self):
         import tempfile
@@ -430,10 +464,11 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(parse('X will report on 13/45/2026', '2026-10-09'), {'status': 'unknown'})
         self.assertEqual(monitor.earnings_label(None), None)
         self.assertEqual(monitor.earnings_label({'status': 'na'}), None)
-        self.assertEqual(monitor.earnings_label({'status': 'unknown'})[0], '下一次财报时间待公布')
+        self.assertEqual(monitor.earnings_label({'status': 'unknown'})[0], '时间待公布')
         self.assertIn('不代表没有财报', monitor.earnings_label({'status': 'error'})[1])
         text, note = monitor.earnings_label(dict(ok, date='2026-10-30'))
         self.assertIn('美东 10/30 盘后', text)
+        self.assertNotIn('财报', text)   # 「财报」二字只写在表头
         self.assertIn('北京时间约10/31凌晨', note)
         self.assertNotIn('不含具体钟点', note)
         self.assertNotIn('数据源只给', note)
@@ -475,7 +510,117 @@ class TestGroups(unittest.TestCase):
         position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
         self.assertIn('无异动 1 只', position)
         folded = position.split('无异动 1 只', 1)[1]
-        self.assertIn('财报 美东 10/30 盘后', folded)
+        self.assertIn('美东 10/30 盘后', folded)
+        self.assertNotIn('财报 美东', folded)
+
+    def test_etf_and_stocks_share_one_table_sorted_red_yellow_green(self):
+        def mk(symbol, level, chg):
+            return {'symbol': symbol, 'note': symbol, 'price': 10, 'chg': chg, 'rsi': {}, 'dist_high': None,
+                    'dist_low': None, 'vol_ratio': None, 'trigger': None, 'group': 'position',
+                    'data_date': '2026-10-07', 'boll_up': None, 'boll_dn': None,
+                    'signals': ['x'] if level != 'green' else [], 'level': level}
+        items = [mk('AAPL', 'yellow', 3.0), mk('XLK', 'red', 4.0), mk('NVDA', 'red', -9.0), mk('QQQ', 'yellow', 6.0)]
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot({}, items, {'positions': {i['symbol']: {} for i in items}})
+        page = monitor.render({}, items, 4, snapshot=snap)
+        position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
+        self.assertNotIn('<h2>', position)
+        self.assertEqual(position.count('<table'), 1)          # 个股和 ETF 同一张表
+        # 持仓组：红(NVDA 个股在 XLK ETF 前) → 黄(AAPL 个股在 QQQ ETF 前)；同级 ETF 排最后
+        order = [position.index(f'<td class="sym">{s}') for s in ('NVDA', 'XLK', 'AAPL', 'QQQ')]
+        self.assertEqual(order, sorted(order))
+
+    def test_position_etf_last_per_level_and_sector_etf_first_only_when_alerting(self):
+        def mk(symbol, level, chg, group):
+            return {'symbol': symbol, 'note': symbol, 'price': 10, 'chg': chg, 'rsi': {}, 'dist_high': None,
+                    'dist_low': None, 'vol_ratio': None, 'trigger': None, 'group': group,
+                    'data_date': '2026-10-07', 'boll_up': None, 'boll_dn': None,
+                    'signals': ['x'] if level != 'green' else [], 'level': level}
+        items = [mk('SPYM', 'yellow', 9.0, 'position'), mk('AAPL', 'yellow', 1.0, 'position'),
+                 mk('QQQM', 'red', 8.0, 'position'), mk('NVDA', 'red', 2.0, 'position'),
+                 mk('XLK', 'green', 0.1, 'technology'), mk('MU', 'red', 5.0, 'technology'),
+                 mk('AMD', 'yellow', 7.0, 'technology'), mk('SNOW', 'green', 0.2, 'technology')]
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot({}, items, {'positions': {'SPYM': {}, 'AAPL': {}, 'QQQM': {}, 'NVDA': {}}})
+        page = monitor.render({}, items, 8, snapshot=snap)
+        pos = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
+        order = [pos.index(f'<td class="sym">{s}') for s in ('NVDA', 'QQQM', 'AAPL', 'SPYM')]
+        self.assertEqual(order, sorted(order))      # 红：个股 NVDA 在 ETF QQQM 前；黄：AAPL 在 SPYM 前
+        tech = page.split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
+        main, quiet = tech.split('<details class=\"quiet-list\">', 1)
+        # 板块 ETF 绿灯无警示：不在主表，照常折叠
+        self.assertNotIn('<td class=\"sym\">XLK', main)
+        self.assertIn('<td class=\"sym\">XLK', quiet)
+        self.assertIn('无异动 2 只', tech)
+        # 板块 ETF 有警示时：排在同一预警级别第一位（红里 XLK 在 MU 前，不越过更高级别）
+        items2 = [mk('XLK', 'red', 1.0, 'technology'), mk('MU', 'red', 5.0, 'technology'),
+                  mk('AMD', 'yellow', 7.0, 'technology'), mk('NVDA2', 'yellow', 9.0, 'technology')]
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
+            snap2 = monitor.build_snapshot({}, items2, {'positions': {}})
+        tech2 = monitor.render({}, items2, 4, snapshot=snap2).split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
+        order = [tech2.index(f'<td class=\"sym\">{s}') for s in ('XLK', 'MU', 'NVDA2', 'AMD')]
+        self.assertEqual(order, sorted(order))
+        items3 = [mk('XLK', 'yellow', 0.5, 'technology'), mk('MU', 'red', 5.0, 'technology'), mk('AMD', 'yellow', 7.0, 'technology')]
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
+            snap3 = monitor.build_snapshot({}, items3, {'positions': {}})
+        tech3 = monitor.render({}, items3, 3, snapshot=snap3).split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
+        order = [tech3.index(f'<td class=\"sym\">{s}') for s in ('MU', 'XLK', 'AMD')]
+        self.assertEqual(order, sorted(order))      # 黄档 XLK 排黄档第一，仍在红档 MU 之后
+        self.assertNotIn('财报 "', page)             # 手机端不再用 CSS 给每行补「财报」
+
+    def test_relative_strength_vs_spy_aligned_by_date_and_shown_after_lights(self):
+        def hist(start_day, closes):
+            dates = [f'2026-09-{d:02d}' if d <= 30 else f'2026-10-{d - 30:02d}' for d in range(start_day, start_day + len(closes))]
+            return {'dates': dates, 'closes': closes}
+        etf = hist(1, [100.0] * 5 + [100.0 + i for i in range(1, 22)])      # 26 根：起点 101、终点 121
+        spy = hist(1, [100.0] * 5 + [100.0 + i * 0.5 for i in range(1, 22)])  # 同日期：起点 100.5、终点 110.5
+        rs = monitor.relative_strength(etf, spy)
+        self.assertEqual(rs['days'], 20)
+        self.assertEqual((rs['start'], rs['end']), ('2026-09-06', '2026-09-26'))
+        self.assertAlmostEqual(rs['etf'], (121 / 101 - 1) * 100, places=6)
+        self.assertAlmostEqual(rs['spy'], (110.5 / 100.5 - 1) * 100, places=6)
+        self.assertAlmostEqual(rs['diff'], rs['etf'] - rs['spy'], places=6)
+        # SPY 少最后一天：终点退到双方共有的最新日，不能按下标错位
+        short = {'dates': spy['dates'][:-1], 'closes': spy['closes'][:-1]}
+        rs2 = monitor.relative_strength(etf, short)
+        self.assertEqual(rs2['end'], '2026-09-25')
+        self.assertAlmostEqual(rs2['etf'], (120 / 100 - 1) * 100, places=6)
+        # 数据不足 / 起点 SPY 缺失 / 价格异常：一律不显示
+        self.assertIsNone(monitor.relative_strength(hist(1, [100.0] * 20), spy))
+        self.assertIsNone(monitor.relative_strength(etf, {'dates': spy['dates'][8:], 'closes': spy['closes'][8:]}))
+        self.assertIsNone(monitor.relative_strength({**etf, 'closes': etf['closes'][:5] + [0.0] + etf['closes'][6:]}, spy))
+        self.assertIsNone(monitor.relative_strength(etf, {}))
+
+        def mk(symbol, level, group, **extra):
+            d = {'symbol': symbol, 'note': symbol, 'price': 10, 'chg': 0.0, 'rsi': {}, 'dist_high': None,
+                 'dist_low': None, 'vol_ratio': None, 'trigger': None, 'group': group,
+                 'data_date': '2026-10-07', 'boll_up': None, 'boll_dn': None,
+                 'signals': ['x'] if level != 'green' else [], 'level': level}
+            d.update(extra)
+            return d
+        up = {'days': 20, 'etf': 5.2, 'spy': 3.4, 'diff': 1.8, 'start': '2026-09-08', 'end': '2026-10-07'}
+        down = {'days': 20, 'etf': -1.0, 'spy': 2.0, 'diff': -3.0, 'start': '2026-09-08', 'end': '2026-10-07'}
+        flat = {'days': 20, 'etf': 2.2, 'spy': 2.0, 'diff': 0.2, 'start': '2026-09-08', 'end': '2026-10-07'}
+        items = [mk('XLK', 'green', 'technology', rs_spy=up), mk('MU', 'red', 'technology'),
+                 mk('XLV', 'green', 'healthcare', rs_spy=down), mk('XLF', 'green', 'financials', rs_spy=flat),
+                 mk('XLE', 'green', 'energy'),          # 抓不到 SPY 对比：不显示
+                 mk('XLI', 'green', 'position', rs_spy=up)]   # 板块 ETF 因去重落在持仓里：行业分组头仍要显示
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot({}, items, {'positions': {'XLI': {}}})
+        page = monitor.render({}, items, len(items), snapshot=snap)
+        def head(key):
+            return page.split(f'id="group_{key}"', 1)[1].split('</summary>', 1)[0]
+        tech = head('technology')
+        self.assertIn('20日相对SPY +1.8%', tech)
+        self.assertIn('class="rs-spy up"', tech)
+        self.assertLess(tech.index('stat-dot red'), tech.index('rs-spy'))      # 在红黄灯后面
+        self.assertIn('XLK 20日 +5.2% − SPY +3.4% = +1.8 个百分点', tech)
+        self.assertIn('class="rs-spy down"', head('healthcare'))
+        self.assertIn('20日相对SPY -3.0%', head('healthcare'))
+        self.assertIn('class="rs-spy "', head('financials'))                    # ±0.5 内持平不着色
+        self.assertNotIn('rs-spy', head('energy'))
+        self.assertIn('20日相对SPY +1.8%', head('industrials'))
+        self.assertNotIn('rs-spy', head('positions'))                            # 持仓/关注/指数基不是板块组
 
     def test_us_style_colors_green_up_red_down_but_risk_lights_unchanged(self):
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
