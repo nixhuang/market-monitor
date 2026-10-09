@@ -21,7 +21,7 @@
     "consumer_staples": true,
     "communications": true,
     "consumer_discretionary": true,
-    "real_estate": true
+    "real_estate": false
   },
   "positions": {
     "BRK-B": {
