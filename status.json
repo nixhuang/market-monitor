@@ -2,23 +2,23 @@
   "dca_reminder": {
     "every": 20,
     "start": "2026-10-01",
-    "count": 6,
-    "date": "2026-10-08",
+    "count": 7,
+    "date": "2026-10-09",
     "times": 1,
     "due": false,
-    "next_in": 15,
+    "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "37931582645",
+  "run_id": "37937770469",
   "request_id": "",
-  "source_sha": "40f9c0fa947fef013069f4f696387c1e0bd1bb2e",
-  "started_at": "2026-10-09T12:40:26+00:00",
-  "started_at_bj": "2026-10-09T20:40:26+08:00",
-  "finished_at": "2026-10-09T20:42:02.951846+08:00",
-  "finished_at_bj": "2026-10-09T20:42:02+08:00",
+  "source_sha": "cc661e3927334cd64ba3225e3f5a354417e31733",
+  "started_at": "2026-10-09T13:34:11+00:00",
+  "started_at_bj": "2026-10-09T21:34:11+08:00",
+  "finished_at": "2026-10-09T21:36:17.238357+08:00",
+  "finished_at_bj": "2026-10-09T21:36:17+08:00",
   "event": "push",
-  "target_trade_date": "2026-10-08",
-  "mode": "closed",
+  "target_trade_date": "2026-10-09",
+  "mode": "manual_or_config",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
     "holdings.json": "8b8d92fe0777bc4d75d4142a28f28298d911e26a",
@@ -188,35 +188,38 @@
   },
   "summary": {
     "red": 5,
-    "yellow": 57,
-    "green": 67,
+    "yellow": 28,
+    "green": 96,
     "gray": 0,
     "total": 129,
     "macro_ok": 6,
-    "stale_symbols": [],
+    "stale_symbols": [
+      ".VXN",
+      "BASFY"
+    ],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 129,
-    "prior_prices": 0,
+    "today_prices": 127,
+    "prior_prices": 2,
     "missing_prices": 0
   },
   "actual_dates": {
     "min": "2026-10-08",
-    "max": "2026-10-08"
+    "max": "2026-10-09"
   },
   "macro_dates": {
-    "hy_oas": "2026-10-07",
-    "vix": "2026-10-08",
-    "sp500": "2026-10-08",
-    "ust10": "2026-10-08",
+    "hy_oas": "2026-10-08",
+    "vix": "2026-10-09",
+    "sp500": "2026-10-09",
+    "ust10": "2026-10-09",
     "nfci": "2026-10-02",
     "breadth": "2026-10-08"
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.230999946594238,
-    "date": "2026-10-08",
+    "value": 5.258999824523926,
+    "date": "2026-10-09",
     "source": "Yahoo ^TNX",
     "unit": "%",
     "lagging": false,
@@ -224,10 +227,10 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.4249997138977051
+    "delta_month": 0.4219999313354492
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-08 收盘（美东交易日）",
+  "data_time_text": "2026-10-09 21:36:17（盘中快照，北京时间） · 当日价 127 只 / 较早日线 2 只 / 无数据 0 只",
   "market_risk": {
     "level": "green",
     "label": "风险平稳",
@@ -246,17 +249,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 15.40999984741211,
-      "date": "2026-10-08",
+      "value": 15.140000343322754,
+      "date": "2026-10-09",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7765.35986328125,
-      "date": "2026-10-08",
+      "value": 7793.68017578125,
+      "date": "2026-10-09",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.6851360901767745
+      "drawdown": -0.32293420496593006
     }
   },
   "fundamental": {
@@ -268,9 +271,9 @@
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
       "marker": "2026-10-01",
-      "due": 17,
-      "tried": 17,
-      "ok": 17,
+      "due": 0,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": ""
@@ -398,9 +401,9 @@
     }
   },
   "earnings": {
-    "targets": 60,
-    "dated": 51,
-    "pending": 8,
+    "targets": 40,
+    "dated": 35,
+    "pending": 4,
     "failed": 0
   }
 }
