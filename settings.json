@@ -20,6 +20,6 @@
   "vix_yellow": 30,
   "vix_red": 40,
   "use_realtime": 1,
-  "dca_every": 10,
+  "dca_every": 20,
   "dca_start": "2026-10-01"
 }
