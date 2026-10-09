@@ -605,11 +605,11 @@ function render(){
       const c=data[K.k][s]||{};
       const tv=(c.trigger===null||c.trigger===undefined)?'':c.trigger;
       h+='<div class="row" data-k="'+K.k+'" data-s="'+esc(s)+'">'
-        +'<span class="sym" title="'+esc(s)+'">'+esc(s)+'</span>'
+        +'<span class="sym">'+esc(s)+'</span>'
         +'<input class="n" value="'+esc(c.note||'')+'" placeholder="备注" data-f="note">'
         +'<input class="t" value="'+esc(tv)+'" placeholder="加仓价" data-f="trigger" inputmode="decimal">'
         +'<select class="move" aria-label="移动 '+esc(s)+' 到分组">'+GROUPS.map(g=>'<option value="'+g.key+'"'+(g.key===K.k?' selected':'')+'>'+esc(g.label)+'</option>').join('')+'</select>'
-        +'<button class="del" title="删除">×</button></div>';
+        +'<button class="del" aria-label="删除">×</button></div>';
     });
     box.innerHTML=h;
     }

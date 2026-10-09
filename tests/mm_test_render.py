@@ -74,7 +74,8 @@ _near = item("NTNX", "position", "red", chg=5.2); _near["earnings"] = {"status":
 _far = item("TEM", "focus", "red", chg=8.0); _far["earnings"] = {"status": "ok", "date": "2026-12-20", "timing": "pre", "kind": "expected"}
 _html_e = monitor.render(macro, [_near, _far] + [d for d in items if d["symbol"] not in ("NTNX", "TEM")], 10, snapshot=snapshot, dup_hidden=2)
 check('<span class="earn soon"' in _html_e and _html_e.count('<span class="earn soon"') == 1
-      and '<span class="earn" title' in _html_e, "两周内的财报标黄（earn soon），更远的保持蓝色")
+      and '<span class="earn">' in _html_e, "两周内的财报标黄（earn soon），更远的保持蓝色")
+check(' title="' not in _html_e and " title='" not in _html_e, "首页不含任何 title 悬停提示（手机/iPad 无法悬停）")
 check(".earn.soon{color:#f0c674" in _html_e, "财报标黄样式存在")
 _macro_u = dict(macro, ust10=dict(macro["ust10"], value=4.55, delta_week=0.12, month_ago=4.0, delta_month=0.55))
 _html_u = monitor.render(_macro_u, items, 10, snapshot=snapshot, dup_hidden=2)

@@ -13,7 +13,7 @@ import monitor
 class TestGroups(unittest.TestCase):
     def test_definitions_and_initial_config(self):
         labels = ['持仓', '重点关注', '指数基', 'IT软硬Ai', '医疗保健', '金融', '能源',
-                  '工航防建机', '化材金纸', '公水电气', '必需消费品', '通信娱乐', '非车酒奢', '房地产']
+                  '工航防建机', '化材金纸', '公水电气', '必需消费品', '通信娱乐', '可选消费', '房地产']
         self.assertEqual([g['label'] for g in monitor.GROUPS], labels)
         with open(os.path.join(ROOT, 'holdings.json'), encoding='utf-8') as f:
             cfg = json.load(f)

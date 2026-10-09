@@ -11,6 +11,6 @@
   {"key":"utilities","label":"公水电气","item_group":"utilities","sector_etf":"XLU"},
   {"key":"consumer_staples","label":"必需消费品","item_group":"consumer_staples","sector_etf":"XLP"},
   {"key":"communications","label":"通信娱乐","item_group":"communications","sector_etf":"XLC"},
-  {"key":"consumer_discretionary","label":"非车酒奢","item_group":"consumer_discretionary","sector_etf":"XLY"},
+  {"key":"consumer_discretionary","label":"可选消费","item_group":"consumer_discretionary","sector_etf":"XLY"},
   {"key":"real_estate","label":"房地产","item_group":"real_estate","sector_etf":"XLRE"}
 ]

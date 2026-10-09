@@ -2307,7 +2307,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             earn = earnings_label(d.get("earnings"))
             if earn:
                 soon = " soon" if earnings_soon(d.get("earnings")) else ""
-                earn_html = (f'<span class="earn{soon}" title="{html_lib.escape(earn[1])}">'
+                earn_html = (f'<span class="earn{soon}">'
                              f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}</span></span>')
             out += (
                 f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}</td>'
@@ -2364,7 +2364,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             rs_tip = html_lib.escape(
                 f'{group["sector_etf"]} {rs["days"]}日 {rs["etf"]:+.1f}% − {bn} {rs["bench"]:+.1f}% = {diff:+.1f} 个百分点'
                 f'（{rs["start"]} → {rs["end"]}）')
-            stats += (f'<span class="rs-spy {rs_cls}" title="{rs_tip}" aria-label="{rs_tip}">'
+            stats += (f'<span class="rs-spy {rs_cls}" aria-label="{rs_tip}">'
                       f'{rs["days"]}日相对{html_lib.escape(bn)} {diff:+.1f}%</span>')
         if not enabled:
             note = "仅板块ETF" if g else "监测关闭"
@@ -2384,7 +2384,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     rows_macro = "".join(rows_macro)
     risk_title = html_lib.escape(f"综合判断：{risk['label']} · 有效指标 {risk['valid_count']}/5")
     macro_stats = (f'<span class="market-risk-badge" id="marketRiskLight" data-level="{risk["level"]}" '
-                   f'role="status" aria-label="{risk_title}" title="{risk_title}">'
+                   f'role="status" aria-label="{risk_title}">'
                    f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
                    f'综合：{html_lib.escape(risk["label"])}</span>')
     snapshot = snapshot or {}
@@ -2594,7 +2594,7 @@ tr.gray td{{color:var(--dim)}}
 <div class="runbar">
   <button class="primary" id="btnRunNow">立即运行</button>
   <button id="btnCheckStatus">查运行状态</button>
-  <button id="btnHardRefresh" title="清除本页缓存并重新加载，拿到最新页面">强制刷新</button>
+  <button id="btnHardRefresh">强制刷新</button>
   <a class="btnlink" href="./edit.html">设置</a>
   <script>{HARD_REFRESH_JS}</script>
 </div>

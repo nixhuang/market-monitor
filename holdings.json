@@ -139,9 +139,6 @@
     "U": {
       "note": "Unity Software"
     },
-    "TSLA": {
-      "note": "特斯拉"
-    },
     "GOOGL": {
       "note": "谷歌（Alphabet）"
     },
@@ -413,6 +410,9 @@
     },
     "VRT": {
       "note": "维谛技术"
+    },
+    "DD": {
+      "note": "杜邦"
     }
   },
   "materials": {
@@ -424,9 +424,6 @@
     },
     "BASFY": {
       "note": "巴斯夫ADR"
-    },
-    "DD": {
-      "note": "杜邦"
     },
     "NUE": {
       "note": "纽柯钢铁"
@@ -446,9 +443,6 @@
   "consumer_staples": {
     "XLP": {
       "note": "必需消费精选行业ETF"
-    },
-    "MCD": {
-      "note": "麦当劳"
     },
     "KHC": {
       "note": "卡夫亨氏"
@@ -498,6 +492,12 @@
     },
     "AMZN": {
       "note": "亚马逊"
+    },
+    "MCD": {
+      "note": "麦当劳"
+    },
+    "TSLA": {
+      "note": "特斯拉"
     }
   },
   "real_estate": {
