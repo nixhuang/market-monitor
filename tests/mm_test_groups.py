@@ -18,11 +18,10 @@ class TestGroups(unittest.TestCase):
         with open(os.path.join(ROOT, 'holdings.json'), encoding='utf-8') as f:
             cfg = json.load(f)
         self.assertNotIn('watch', cfg)
-        self.assertEqual(len(cfg['positions']), 14)
+        # 清单由用户在设置页持续编辑（增删、移动分组），这里只校验结构，不再锁定当时的成员数量
+        self.assertTrue(cfg['positions'])
         self.assertTrue(all(c.get('note') for c in cfg['positions'].values()))
-        with open(os.path.join(ROOT, 'import-audit.json'), encoding='utf-8') as f:
-            audit = json.load(f)
-        self.assertEqual({g['label']: len(cfg[g['key']]) for g in monitor.GROUPS}, audit['final_counts'])
+        self.assertTrue(all(g['key'] in cfg for g in monitor.GROUPS))
         self.assertTrue(all(c.get('note') for g in monitor.GROUPS for c in cfg[g['key']].values()))
 
     def test_dedup_priority_and_old_watch_excluded(self):
@@ -251,6 +250,8 @@ class TestGroups(unittest.TestCase):
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                    patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}) as fetch, \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
@@ -275,6 +276,8 @@ class TestGroups(unittest.TestCase):
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                    patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
                     patch.object(monitor, 'build_macro', return_value=macro), \
                     patch.object(monitor, 'fetch_history', return_value=None) as fetch, \
                     patch.object(monitor, 'global_dca', return_value=None), \
@@ -309,6 +312,8 @@ class TestGroups(unittest.TestCase):
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                    patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'fetch_history', side_effect=fetch), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
@@ -331,13 +336,20 @@ class TestGroups(unittest.TestCase):
             for name, content in [('holdings.json', cfg), ('settings.json', {})]:
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
-            clock = iter([0, 0, 481, 481, 481, 481, 481])
+            clock = {'t': 1000.0}
+            def slow_fail(symbol):
+                fetched.append(symbol)
+                clock['t'] += 481  # 第一只耗尽整个总预算
+                return None
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                    patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
-                    patch.object(monitor, 'fetch_history', side_effect=lambda s: fetched.append(s) or None), \
+                    patch.object(monitor, 'fetch_history', side_effect=slow_fail), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
-                    patch.object(monitor, 'push_serverchan'), patch.object(monitor.time, 'monotonic', side_effect=clock):
+                    patch.object(monitor, 'push_serverchan'), \
+                    patch.object(monitor.time, 'monotonic', side_effect=lambda: clock['t']):
                 self.assertEqual(monitor.main([]), 0)
                 with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
                     snap = json.load(f)
@@ -346,6 +358,141 @@ class TestGroups(unittest.TestCase):
             self.assertEqual(fetched, ['FIRST'])
             self.assertEqual(snap['summary']['total'], 3)
             self.assertIn('本轮抓取时间预算不足，尚未取数', page)
+
+    def test_concurrent_quotes_keep_order_and_single_symbol_budget(self):
+        import time as real_time
+        order = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+        def fetch(symbol):
+            real_time.sleep(0.02 if symbol in 'AC' else 0)  # 完成顺序故意打乱
+            return {'price': ord(symbol)}
+        with patch.object(monitor, 'fetch_history', side_effect=fetch), patch.object(monitor, 'QUOTE_WORKERS', 4):
+            result = monitor.collect_quotes(order)
+        self.assertEqual(list(result), order)
+        self.assertEqual([result[s]['price'] for s in order], [ord(s) for s in order])
+        # 单只卡死只吃自己的限额，不吃总预算
+        with patch.object(monitor, 'QUOTE_SYMBOL_SECONDS', 5):
+            monitor._QUOTE_TLS.deadline = monitor.time.monotonic() + 0.01
+            real_time.sleep(0.02)
+            with self.assertRaises(TimeoutError):
+                monitor.quote_timeout(8)
+            monitor._QUOTE_TLS.deadline = None
+            self.assertEqual(monitor.quote_timeout(8), 8)
+
+    def test_failed_symbols_retry_once_and_exhausted_is_distinct(self):
+        calls = {}
+        def fetch(symbol):
+            calls[symbol] = calls.get(symbol, 0) + 1
+            if symbol == 'FLAKY' and calls[symbol] == 1:
+                return None
+            return None if symbol == 'DEAD' else {'price': 1}
+        with patch.object(monitor, 'fetch_history', side_effect=fetch), patch.object(monitor.time, 'sleep'), \
+                patch.object(monitor, 'QUOTE_WORKERS', 2):
+            result = monitor.collect_quotes(['OK', 'FLAKY', 'DEAD'])
+        self.assertEqual(result['FLAKY'], {'price': 1})
+        self.assertIsNone(result['DEAD'])
+        self.assertEqual((calls['OK'], calls['FLAKY'], calls['DEAD']), (1, 2, 2))
+        with patch.object(monitor, 'QUOTE_DEADLINE', monitor.time.monotonic() - 1):
+            self.assertIs(monitor._fetch_quote('X'), monitor.QUOTE_EXHAUSTED)
+
+    def test_source_gate_only_applies_to_batch_stage(self):
+        gate = monitor.SourceGate(threshold=2, cooldown=60)
+        self.assertFalse(gate.fail())
+        self.assertTrue(gate.allow())
+        gate.reset(True)
+        self.assertFalse(gate.fail())
+        self.assertTrue(gate.fail())
+        self.assertFalse(gate.allow())
+        gate.reset(False)
+        self.assertTrue(gate.allow())
+
+    def test_earnings_text_never_uses_past_dates_or_invented_times(self):
+        parse = monitor.parse_earnings_text
+        ok = parse('Apple Inc. is expected* to report earnings on 10/30/2026 after market close.', '2026-10-09')
+        self.assertEqual(ok, {'status': 'ok', 'date': '2026-10-30', 'timing': 'post', 'kind': 'expected'})
+        est = parse('Tesla is estimated to report earnings on 10/21/2026 before market open', '2026-10-09')
+        self.assertEqual((est['timing'], est['kind']), ('pre', 'estimated'))
+        self.assertEqual(parse('X is expected to report earnings on 10/09/2026', '2026-10-09')['status'], 'ok')
+        self.assertEqual(parse('X is expected to report earnings on 10/08/2026 after market close', '2026-10-09'),
+                         {'status': 'unknown'})
+        self.assertEqual(parse('', '2026-10-09'), {'status': 'unknown'})
+        self.assertEqual(parse('X will report on 13/45/2026', '2026-10-09'), {'status': 'unknown'})
+        self.assertEqual(monitor.earnings_label(None), None)
+        self.assertEqual(monitor.earnings_label({'status': 'na'}), None)
+        self.assertEqual(monitor.earnings_label({'status': 'unknown'})[0], '下一次财报时间待公布')
+        self.assertIn('不代表没有财报', monitor.earnings_label({'status': 'error'})[1])
+        text, note = monitor.earnings_label(dict(ok, date='2026-10-30'))
+        self.assertIn('美东 10/30 盘后', text)
+        self.assertIn('北京时间约10/31凌晨', note)
+        self.assertIn('不含具体钟点', note)
+        self.assertIn('具体时段待定', monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'})[0])
+
+    def test_earnings_shown_for_holdings_and_focus_but_others_only_when_alerted(self):
+        def row(symbol, group, level):
+            return {'symbol': symbol, 'group': group, 'level': level, 'price': 10, 'note': ''}
+        items = [row('AAPL', 'position', 'green'), row('MSFT', 'focus', 'green'),
+                 row('NVDA', 'technology', 'green'), row('AMD', 'technology', 'yellow'),
+                 row('XLK', 'technology', 'red'), row('SPY', 'position', 'green'),
+                 row('.VIX', 'index_funds', 'red')]
+        asked = []
+        def earnings(symbol):
+            asked.append(symbol)
+            return {'status': 'ok', 'date': '2026-10-30', 'timing': 'post', 'kind': 'expected'}
+        with patch.object(monitor, 'nasdaq_earnings', side_effect=earnings):
+            stat = monitor.attach_earnings(items)
+        self.assertEqual(sorted(asked), ['AAPL', 'AMD', 'MSFT'])
+        self.assertEqual(stat['targets'], 3)
+        by_symbol = {d['symbol']: d for d in items}
+        self.assertIn('earnings', by_symbol['AAPL'])
+        self.assertNotIn('earnings', by_symbol['NVDA'])
+        self.assertNotIn('earnings', by_symbol['XLK'])
+        self.assertNotIn('earnings', by_symbol['SPY'])
+        self.assertNotIn('earnings', by_symbol['.VIX'])
+        with patch.object(monitor, 'nasdaq_earnings', side_effect=RuntimeError('boom')):
+            stat = monitor.attach_earnings([row('AAPL', 'position', 'green')])
+        self.assertEqual(stat['targets'], 1)
+
+    def test_quiet_holdings_keep_earnings_inside_folded_list(self):
+        quiet = {'symbol': 'AAPL', 'note': '苹果', 'price': 100, 'chg': 0.0, 'rsi': {}, 'dist_high': None,
+                 'dist_low': None, 'vol_ratio': None, 'trigger': None, 'group': 'position',
+                 'data_date': '2026-10-07', 'boll_up': None, 'boll_dn': None, 'signals': [], 'level': 'green',
+                 'earnings': {'status': 'ok', 'date': '2026-10-30', 'timing': 'post', 'kind': 'expected'}}
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot({}, [quiet], {'positions': {'AAPL': {}}})
+        page = monitor.render({}, [quiet], 1, snapshot=snap)
+        position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
+        self.assertIn('无异动 1 只', position)
+        folded = position.split('无异动 1 只', 1)[1]
+        self.assertIn('财报 美东 10/30 盘后', folded)
+
+    def test_us_style_colors_green_up_red_down_but_risk_lights_unchanged(self):
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
+            page = monitor.render({}, [], 0, snapshot=monitor.build_snapshot({}, [], {}))
+        self.assertIn('--up:#3fb950; --down:#f85149;', page)
+        self.assertIn('--green:#3fb950; --yellow:#d29922; --red:#f85149;', page)
+
+    def test_fundamental_units_periods_and_oneoff_base(self):
+        def table(rows):
+            return {k: dict(zip(('value2', 'value5'), v)) for k, v in rows.items()}
+        facts = {'period': '6/30/2026', 'base_period': '9/30/2025',
+                 'inc': table({'Total Revenue': ('$1,000', '$1,000'), 'Operating Income': ('$100', '$100'),
+                               'Gross Profit': ('$500', '$500'), 'Net Income': ('$90', '$900'),
+                               'Income Tax': ('$10', '-$4,000')}),
+                 'bs': table({'Total Assets': ('$10,000', '$10,000'), 'Total Liabilities': ('$5,000', '$5,000'),
+                              'Total Equity': ('$5,000', '$5,000')}),
+                 'cf': table({'Net Cash Flow-Operating': ('$200', '$200')}),
+                 'rt': table({'Current Ratio': ('84.25%', '114.00%'), 'After Tax ROE': ('8.8%', '23.6%'),
+                              'Operating Margin': ('10.0%', '10.0%'), 'Gross Margin': ('50.0%', '50.0%'),
+                              'Profit Margin': ('9.0%', '90.0%')})}
+        with patch.object(monitor, 'nasdaq_financials', return_value=facts):
+            result = monitor.fundamental_check('UBER')
+        text = ' '.join(result['hits'])
+        self.assertIn('流动比率 1.14→0.84倍', text)
+        self.assertIn('2025/9→2026/6', text)
+        self.assertNotIn('114→84', text)
+        self.assertNotIn('ROE', text.replace('ROE未比较', ''))  # 基准季净利含一次性，ROE不比较
+        self.assertIn('ROE未比较', text)
+        self.assertEqual(result['compare'], '2025/9→2026/6')
+        self.assertTrue(any('营业利率' in c for c in result['context']))
 
     def test_daily_source_validation_and_intraday_fallback(self):
         from datetime import datetime, timedelta
@@ -521,8 +668,26 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('id="yieldCurveHelp"', page)
         self.assertNotIn('10年期国债收益率 − 2年期国债收益率', page)
 
+    def test_macro_retries_yahoo_series_once_before_giving_up(self):
+        from datetime import date, timedelta
+        rows = [((date(2026, 10, 7) - timedelta(days=i)).isoformat(), 15.0) for i in range(39, -1, -1)]
+        attempts = []
+        def flaky(alias, days=400):
+            attempts.append(alias)
+            return [] if attempts.count(alias) == 1 else rows
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), patch.object(monitor, 'MACRO_RETRY_WAIT', 0), \
+                patch.object(monitor, 'fred_series', return_value=[]), \
+                patch.object(monitor, 'market_index_series', side_effect=flaky), \
+                patch.object(monitor, 'treasury_yield_series', return_value=[]), \
+                patch.object(monitor, 'financial_conditions_series', return_value=[]), \
+                patch.object(monitor, 'market_breadth', return_value={'ok': False, 'name': '上涨参与度'}):
+            macro = monitor.build_macro()
+        self.assertEqual(attempts, ['^VIX', '^VIX', '^GSPC', '^GSPC'])
+        self.assertTrue(macro['vix']['ok'] and macro['sp500']['ok'])
+        self.assertEqual(macro['vix']['date'], '2026-10-07')
+
     def test_macro_old_values_are_gray_and_yahoo_fallback_uses_real_dates(self):
-        with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), \
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), patch.object(monitor, 'MACRO_RETRY_WAIT', 0), \
                 patch.object(monitor, 'fred_series', return_value=[('2026-09-01', 2), ('2026-09-02', 2)]), \
                 patch.object(monitor, 'market_index_series', return_value=[]), \
                 patch.object(monitor, 'treasury_yield_series', return_value=[]), \
@@ -734,7 +899,7 @@ class TestGroups(unittest.TestCase):
         def fred(series, days=400, alias=None, source_info=None):
             value = 0.1 if series == 'NFCI' else 3.0
             return [('2026-09-25', value), (nfci_date, value)]
-        with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), \
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), patch.object(monitor, 'MACRO_RETRY_WAIT', 0), \
                 patch.object(monitor, 'fred_series', side_effect=fred), \
                 patch.object(monitor, 'market_index_series', return_value=[]), \
                 patch.object(monitor, 'treasury_yield_series', return_value=[]), \

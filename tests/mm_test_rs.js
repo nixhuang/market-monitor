@@ -346,6 +346,18 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.match(f.els.runLightTxt.textContent,/2 项数据已更新/);
     assert.doesNotMatch(f.els.runLightTxt.textContent,/当日行情未取得|项参考值|只日线/);
   });
+  await check('取消的运行不叫失败，且说明看板仍是上次成功数据', async () => {
+    const f=fixture();f.data.run={id:9,event:'workflow_dispatch',head_sha:D,status:'completed',conclusion:'cancelled'};
+    await f.els.btnCheckStatus.onclick();
+    const text=f.els.checkResult.textContent;
+    assert.match(text,/已取消/);
+    assert.match(text,/不是抓取失败/);
+    assert.doesNotMatch(text,/失败（cancelled）/);
+    assert.notEqual(f.els.checkResult.dataset.phase,'bad');
+    const g=fixture();g.data.run={id:10,event:'workflow_dispatch',head_sha:D,status:'completed',conclusion:'failure'};
+    await g.els.btnCheckStatus.onclick();
+    assert.match(g.els.checkResult.textContent,/失败（failure）/);
+  });
   await check('43项总数包含42项日线和1项正常收益率，不再显示参考值提示', async () => {
     const page=snapshot();page.summary={red:3,yellow:14,green:26,total:43,gray:0,
       stale_symbols:[],missing_symbols:[],unsupported_symbols:[],

@@ -298,6 +298,15 @@
         JSON.stringify({dataTime: dt, when: humanTime(s), run_id: s.run_id, at: Date.now()}));
     } catch (_) { /* 隐私模式不能存储时忽略 */ }
   }
+  // 新任务失败/取消时，看板仍显示上一次成功发布的数据——要明确告诉用户这一点和数据时间
+  function keptData() {
+    const when = humanTime(verifiedSnapshot || latestStatus);
+    return '；看板仍显示上次成功发布的数据' + (when ? '（' + when + '）' : '');
+  }
+  function failureText(state) {
+    if (state.cancelled) return state.message + '，不是抓取失败' + keptData();
+    return '运行失败：' + state.message.replace(/^派发失败：/, '') + keptData();
+  }
   function plainApplied() {
     const when = humanTime(verifiedSnapshot || latestStatus);
     if (activeManual()) {
@@ -305,13 +314,15 @@
       if (phase === 'dispatching' || phase === 'queued') return '运行已提交，正在更新看板，通常约 5–9 分钟…';
       if (phase === 'running') return '正在运行，正在抓最新行情…';
       if (phase === 'generated') return '运行已生成，正在发布到看板…';
-      if (phase === 'failed') return '运行失败：' + manualState.message.replace(/^派发失败：/, '');
+      if (phase === 'failed') return failureText(manualState);
       if (phase === 'expired') return '运行跟踪超时，请点查运行状态确认，不代表失败';
     }
     if (Object.keys(targets).length) {
       const phase = configState.phase;
       if (phase === 'published') return '已生效：看板已按你保存的设置更新' + (when ? '（' + when + '）' : '');
-      if (phase === 'failed') return '保存未生效：本次运行失败，请查看运行记录';
+      if (phase === 'failed') return configState.cancelled
+        ? '保存已提交，但对应运行被取消（通常被更新的等待任务替换），请稍后查运行状态' + keptData()
+        : '保存未生效：本次运行失败，请查看运行记录' + keptData();
       if (phase === 'expired') return '保存已提交，但还没验证到生效；请点查运行状态确认';
       return '保存成功，看板正在更新，通常约 5–9 分钟…';
     }
@@ -361,7 +372,12 @@
     }
     const phase = receipt && receipt.blobSHA === expectedSHA && configState.phase === 'failed'
       ? 'failed' : latestRules.run && phaseForRun(latestRules.run).phase;
-    if (phase === 'failed') return {phase: 'bad', text: '规则未生效：对应运行失败，请查看运行记录'};
+    if (phase === 'failed') {
+      const cancelled = configState.cancelled || (latestRules.run && phaseForRun(latestRules.run).cancelled);
+      return cancelled
+        ? {phase: 'busy', text: '规则尚未生效：对应运行已取消（通常被更新的等待任务替换），稍后以最新运行为准；可点查运行状态'}
+        : {phase: 'bad', text: '规则未生效：对应运行失败，请查看运行记录'};
+    }
     if (ruleSince && Date.now() - ruleSince >= MAX_WAIT) {
       return {phase: 'bad', text: '规则尚未生效：本页仍用旧设置，等待已超过 10 分钟；请查运行状态（不代表运行失败）'};
     }
@@ -392,12 +408,16 @@
       return '正在抓取…';
     };
     if (manual && manualState.phase === 'failed' && (!manual.rejected || !checkFeedback || publication.phase !== 'published')) {
-      return {phase: 'bad', text: manual.rejected ? manualState.message
-        : '运行失败：' + manualState.message.replace(/^派发失败：/, '')};
+      return {phase: manualState.cancelled ? 'busy' : 'bad',
+        text: manual.rejected ? manualState.message : failureText(manualState)};
     }
     if (activeManual()) return {phase: 'busy', text: busyText(manualState.phase)};
     if (Object.keys(targets).length) {
-      if (configState.phase === 'failed') return {phase: 'bad', text: '运行失败：本次运行未成功'};
+      if (configState.phase === 'failed') {
+        return configState.cancelled
+          ? {phase: 'busy', text: configState.message + '，不是抓取失败' + keptData()}
+          : {phase: 'bad', text: '运行失败：本次运行未成功' + keptData()};
+      }
       if (activeConfig()) return {phase: 'busy', text: busyText(configState.phase)};
     }
     if (snap && info.red != null) {
@@ -537,6 +557,11 @@
     const id = String(run.id);
     if (run.status === 'completed') {
       if (run.conclusion === 'success') return {phase: 'generated', message: 'run ' + id + ' 生成成功，尚未验证 Pages 发布'};
+      if (run.conclusion === 'cancelled') {
+        // 并发队列里被更新的等待任务替换、或被手动取消：不是抓取失败，不能写成"运行失败"
+        return {phase: 'failed', cancelled: true,
+          message: 'run ' + id + ' 已取消（通常是被更新的等待任务替换，或被手动取消）'};
+      }
       return {phase: 'failed', message: 'run ' + id + ' 未成功：' + (run.conclusion || '结论未知')};
     }
     if (run.status === 'in_progress') return {phase: 'running', message: 'run ' + id + ' 正在运行'};
@@ -828,9 +853,11 @@
         const phase = phaseForRun(recentRun);
         const label = phase.phase === 'generated'
           ? (published && String(recentRun.id) === verifiedSnapshot.run_id ? '已完成并发布' : '生成成功，等待看板发布')
-          : phase.phase === 'running' ? '运行中' : phase.phase === 'failed' ? '失败（' + (recentRun.conclusion || '未知') + '）' : '排队中';
+          : phase.phase === 'running' ? '运行中'
+          : phase.phase === 'failed' ? (phase.cancelled ? '已取消（通常被更新的等待任务替换，不是抓取失败）'
+            : '失败（' + (recentRun.conclusion || '未知') + '）') : '排队中';
         lines.push('最新任务：' + label + ' · run ' + recentRun.id);
-        if (phase.phase === 'failed') checkPhase = 'bad';
+        if (phase.phase === 'failed') checkPhase = phase.cancelled ? 'busy' : 'bad';
         else if (!published || String(recentRun.id) !== verifiedSnapshot.run_id) checkPhase = 'busy';
       } else lines.push(recentError ? '最新任务状态未能核对：' + recentError : '未找到最新任务记录。');
       if (published) {

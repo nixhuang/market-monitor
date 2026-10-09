@@ -36,15 +36,57 @@ EVENT = os.environ.get("MM_EVENT", "local")
 TARGET_DATE = os.environ.get("MM_TARGET_TRADE_DATE", "").strip()
 CLOSED_ONLY = os.environ.get("MM_CLOSED_ONLY", "0") == "1"
 QUOTE_DEADLINE = None  # 仅主任务取数阶段启用；为页面生成与推送预留时间
+QUOTE_BUDGET_SECONDS = 8 * 60   # 全部行情抓取的总预算
+QUOTE_SYMBOL_SECONDS = 40       # 单只标的最长耗时：超时就换下一只，不拖垮整批
+QUOTE_WORKERS = 6               # 有界并发：既比串行快，又不至于把行情源打到限流
+QUOTE_RETRY_PASSES = 1          # 第一轮失败的标的，预算够时再补抓一轮
+_QUOTE_TLS = threading.local()
 
 
 def quote_timeout(seconds):
-    if QUOTE_DEADLINE is None:
+    deadlines = [d for d in (QUOTE_DEADLINE, getattr(_QUOTE_TLS, "deadline", None)) if d is not None]
+    if not deadlines:
         return seconds
-    remaining = QUOTE_DEADLINE - time.monotonic()
+    remaining = min(deadlines) - time.monotonic()
     if remaining <= 0:
         raise TimeoutError("本轮行情抓取时间预算已用完")
     return max(0.1, min(seconds, remaining))
+
+
+class SourceGate:
+    """行情源熔断：连续被限流/失败就暂停一小段时间，直接走备用源，避免每只都白等重试。"""
+
+    def __init__(self, threshold=3, cooldown=90):
+        self.threshold, self.cooldown = threshold, cooldown
+        self.fails, self.blocked_until = 0, 0.0
+        self.enabled = False  # 只在批量个股抓取阶段启用；宏观指标没有备用源，不能被熔断误伤
+        self.lock = threading.Lock()
+
+    def reset(self, enabled=False):
+        with self.lock:
+            self.fails, self.blocked_until, self.enabled = 0, 0.0, enabled
+
+    def allow(self):
+        return not self.enabled or time.monotonic() >= self.blocked_until
+
+    def ok(self):
+        with self.lock:
+            self.fails = 0
+
+    def fail(self):
+        if not self.enabled:
+            return False
+        with self.lock:
+            self.fails += 1
+            if self.fails >= self.threshold:
+                self.blocked_until = time.monotonic() + self.cooldown
+                self.fails = 0
+                return True
+        return False
+
+
+YAHOO_GATE = SourceGate(threshold=3, cooldown=90)
+STOOQ_GATE = SourceGate(threshold=3, cooldown=3600)
 
 
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -197,6 +239,37 @@ def prepare_run():
     print("MM_TARGET_TRADE_DATE=" + plan["target"])
     print("MM_CLOSED_ONLY=" + ("1" if plan["closed_only"] else "0"))
     print("MM_STARTED_AT=" + when.isoformat())
+
+
+def ensure_schedule_run():
+    """保险：GitHub 定时任务可能被延迟或丢弃。若今晚（美东20:30之后）的收盘结果还没生成，
+    就补派发一次与定时任务等价的运行；已有结果或已有任务在排队/运行则不重复派发。"""
+    plan = plan_run("schedule", datetime.now(timezone.utc))
+    try:
+        with open(os.path.join(BASE, "status.json"), encoding="utf-8") as f:
+            snap = json.load(f)
+    except Exception:
+        snap = {}
+    if snap.get("target_trade_date") == plan["target"] and snap.get("mode") == "closed" \
+            and (snap.get("summary") or {}).get("total"):
+        print(f"目标交易日 {plan['target']} 的收盘结果已存在，无需补跑")
+        return 0
+    repo, token = os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GH_TOKEN", "")
+    headers = {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"}
+    base = f"https://api.github.com/repos/{repo}/actions/workflows/daily.yml"
+    r = requests.get(base + "/runs?branch=main&per_page=10", headers=headers, timeout=20)
+    r.raise_for_status()
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
+    for run in r.json().get("workflow_runs", []):
+        created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
+        if run.get("status") in ("queued", "in_progress", "waiting", "pending") and created >= cutoff:
+            print(f"已有运行 {run['id']} 在排队或执行（{run['status']}），不重复派发")
+            return 0
+    d = requests.post(base + "/dispatches", headers=headers, timeout=20,
+                      json={"ref": "main", "inputs": {"source": "schedule-fallback"}})
+    d.raise_for_status()
+    print(f"今晚收盘结果缺失，已补派发运行（目标交易日 {plan['target']}）")
+    return 0
 
 
 def trim_history(data, cutoff):
@@ -518,6 +591,7 @@ def market_breadth(target_date):
     return item
 
 
+MACRO_RETRY_WAIT = 20  # 风险参考的 VIX/标普/10Y 首次失败后的重试间隔（秒）
 NFCI_URL = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
 
 
@@ -579,6 +653,14 @@ def build_macro():
                     source_info['source'] = 'NFCI周度数据（FRED同步备用）'
         else:
             continue
+        if not rows and key in ("vix", "sp500", "ust10"):
+            # 只有 3 个请求，值得多等一会儿再试一次：这三项决定风险参考的综合灯
+            log(f"  · {cfg['name']} 首次取数失败，稍后重试一次")
+            time.sleep(MACRO_RETRY_WAIT)
+            if key == "ust10":
+                rows = treasury_yield_series(source_info=source_info)
+            else:
+                rows = market_index_series(FRED_YAHOO_ALIAS[key])
         if not rows:
             macro[key] = {"ok": False, "name": cfg["name"], **source_info}
             continue
@@ -752,6 +834,8 @@ def yahoo_history(symbol):
         f"https://query2.finance.yahoo.com/v8/finance/chart/{{s}}?range={span}&interval=1d",
     ]
     last_err = None
+    if not YAHOO_GATE.allow():
+        return None  # 刚被限流：冷却期内直接走备用源，不重复撞墙
     for attempt in range(2):
         for ep in endpoints:
             url = ep.format(s=symbol)
@@ -759,7 +843,10 @@ def yahoo_history(symbol):
                 r = requests.get(url, headers=UA, timeout=quote_timeout(8))
                 if r.status_code == 429:
                     last_err = "429 限流"
-                    time.sleep(3 * (attempt + 1))
+                    if YAHOO_GATE.fail():
+                        log("  ! Yahoo 连续限流，暂停约90秒，期间改用备用行情源")
+                        return None
+                    time.sleep(min(1.5 * (attempt + 1), max(0.0, quote_timeout(1.5))))
                     continue
                 r.raise_for_status()
                 j = r.json()
@@ -780,6 +867,7 @@ def yahoo_history(symbol):
                 if len(closes) < 30:
                     last_err = "历史数据不足"
                     continue
+                YAHOO_GATE.ok()
                 # 注意：不要用 meta.chartPreviousClose！
                 # 它返回的是「请求区间起点之前」的那根 K 线收盘价，range=1y 时等于一年前的价格，
                 # 用它算涨跌幅会得到 +40% / +95% 这种荒谬数字。
@@ -809,14 +897,18 @@ def yahoo_history(symbol):
 def stooq_history(symbol):
     """备用数据源 stooq（无限流，稳定）。失败返回 None"""
     # Yahoo 代码 BRK-B -> stooq 的 brk-b.us
+    if not STOOQ_GATE.allow():
+        return None  # 该源已连续返回非CSV（人机验证等），本轮不再浪费时间
     code = symbol.lower().replace(".", "-") + ".us"
     url = f"https://stooq.com/q/d/l/?s={code}&i=d"
     try:
-        r = requests.get(url, headers=UA, timeout=quote_timeout(10))
+        r = requests.get(url, headers=UA, timeout=quote_timeout(6))
         r.raise_for_status()
         lines = [l for l in r.text.strip().split("\n") if l]
         if len(lines) < 40 or lines[0].startswith("Date") is False:
+            STOOQ_GATE.fail()
             return None
+        STOOQ_GATE.ok()
         rows = []
         for line in lines[1:]:
             p = line.split(",")
@@ -1152,8 +1244,11 @@ def nasdaq_financials(sym, timeout=12):
 
             inc = table("incomeStatementTable")
             if inc:  # ETF 返回空表
+                headers = (d.get("incomeStatementTable") or {}).get("headers") or {}
                 res = {
-                    "period": ((d.get("incomeStatementTable") or {}).get("headers") or {}).get("value2"),
+                    "period": headers.get("value2"),
+                    # 接口只给最近4个季度：value2 最新季，value5 是 3 个季度前（不是去年同期）
+                    "base_period": headers.get("value5"),
                     "inc": inc, "bs": table("balanceSheetTable"),
                     "cf": table("cashFlowTable"), "rt": table("financialRatiosTable"),
                 }
@@ -1165,6 +1260,115 @@ def nasdaq_financials(sym, timeout=12):
 
 def _fcell(tbl, label, col="value2"):
     return _fund_num((tbl or {}).get(label, {}).get(col)) if tbl else None
+
+
+def _period_label(period):
+    """Nasdaq 报告期 '6/30/2026' → '2026/6'；认不出来返回空串。"""
+    date = _nasdaq_date(period)
+    if not date:
+        return ""
+    year, month, _ = date.split("-")
+    return f"{year}/{int(month)}"
+
+
+# ---------------------------------------------------------------- 下一次财报日期
+# 数据源：Nasdaq analyst/earnings-date（Zacks 提供）。接口只给日期和盘前/盘后，不给具体钟点。
+# 只对持仓与重点关注常驻查询；其他分组仅在个股有红/黄警示时查询。ETF、指数、期货不适用。
+_EARN_CACHE = {}
+_EARN_RE = re.compile(
+    r"(expected\*?|estimated)\s+to\s+report\s+earnings\s+on\s+(\d{1,2})/(\d{1,2})/(\d{4})"
+    r"(?:\s+(before market open|after market close|during market hours))?", re.I)
+_EARN_TIMING = {"before market open": "pre", "after market close": "post", "during market hours": "during"}
+
+
+def parse_earnings_text(text, today=None):
+    """解析 Nasdaq 财报日期文案。返回 {'status': ...}：
+    ok 有未来日期；unknown 供应商尚未提供/日期已过期待更新。"""
+    today = today or datetime.now(US_TZ).date().isoformat()
+    m = _EARN_RE.search(" ".join(str(text or "").split()))
+    if not m:
+        return {"status": "unknown"}
+    kind, month, day, year, timing = m.groups()
+    try:
+        date = datetime(int(year), int(month), int(day)).date().isoformat()
+    except ValueError:
+        return {"status": "unknown"}
+    if date < today:
+        return {"status": "unknown"}  # 供应商还没更新到下一次，不拿过去日期冒充
+    return {"status": "ok", "date": date, "timing": _EARN_TIMING.get((timing or "").lower(), ""),
+            "kind": "estimated" if kind.lower() == "estimated" else "expected"}
+
+
+def nasdaq_earnings(sym, timeout=12):
+    """取下一次财报日期。状态：ok / unknown(待公布) / na(不适用,如ETF) / error(请求失败)。"""
+    key = normalize_symbol(sym).upper()
+    if key in _EARN_CACHE:
+        return _EARN_CACHE[key]
+    res = {"status": "error"}
+    try:
+        url = f"https://api.nasdaq.com/api/analyst/{key.replace('-', '.')}/earnings-date"
+        r = _fund_session().get(url, timeout=timeout)
+        if r.status_code == 200:
+            data = (r.json() or {}).get("data")
+            if isinstance(data, dict) and data.get("reportText") is not None:
+                res = parse_earnings_text(data["reportText"])
+            else:
+                res = {"status": "na"}
+    except Exception as e:
+        log(f"  · {key} 财报日期读取失败：{str(e)[:60]}")
+    _EARN_CACHE[key] = res
+    return res
+
+
+def earnings_label(e):
+    """返回 (页面文字, 说明) 或 None。时间只写数据源真实提供的：盘前/盘后/盘中，不编造钟点。"""
+    if not e or e.get("status") in (None, "na"):
+        return None
+    status = e["status"]
+    if status == "unknown":
+        return "下一次财报时间待公布", "供应商尚未提供，不使用过去的报告期代替"
+    if status == "error":
+        return "下一次财报日期暂未取得", "本轮读取失败，不代表没有财报"
+    year, month, day = e["date"].split("-")
+    this_year = datetime.now(US_TZ).year
+    date_txt = f"{month}/{day}" if int(year) == this_year else f"{year}/{month}/{day}"
+    timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(e.get("timing"), "具体时段待定")
+    nxt = (datetime(int(year), int(month), int(day)) + timedelta(days=1)).strftime("%m/%d")
+    bj = {"pre": f"北京时间约{month}/{day}傍晚至晚间", "post": f"北京时间约{nxt}凌晨",
+          "during": f"北京时间约{month}/{day}夜间至{nxt}凌晨"}.get(e.get("timing"), "北京时间待定")
+    kind = "预计" if e.get("kind") == "expected" else "算法估算，可能调整"
+    return f"财报 美东 {date_txt} {timing}", f"{kind} · {bj} · 数据源只给盘前/盘后，不含具体钟点"
+
+
+def attach_earnings(items):
+    """持仓/重点关注个股常驻；其他分组仅红黄警示个股。ETF、指数、期货和参考值不适用。"""
+    def wants(d):
+        sym = d.get("symbol") or ""
+        ident = instrument_identity(sym)
+        if not sym or d.get("reference_only") or not quote_supported(sym) or is_etf(sym):
+            return False
+        if ident.startswith("^") or ident.endswith("=F"):
+            return False
+        return d.get("group") in ("position", "focus") or d.get("level") in ("red", "yellow")
+
+    targets = [d for d in items if wants(d)]
+    stat = {"targets": len(targets), "dated": 0, "pending": 0, "failed": 0}
+    if not targets:
+        return stat
+    log(f"读取 {len(targets)} 只个股的下一次财报日期…")
+    try:
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            results = list(ex.map(lambda d: nasdaq_earnings(d["symbol"]), targets))
+        for d, e in zip(targets, results):
+            if e.get("status") == "na":
+                continue
+            d["earnings"] = e
+            key = {"ok": "dated", "unknown": "pending"}.get(e.get("status"), "failed")
+            stat[key] += 1
+    except Exception as e:
+        log(f"  ! 财报日期读取中断，跳过：{e}")  # 加分项，不能拖垮页面生成
+    log(f"  财报日期：已取得 {stat['dated']} · 待公布 {stat['pending']} · 失败 {stat['failed']}")
+    return stat
 
 
 def fundamental_check(sym):
@@ -1184,7 +1388,9 @@ def fundamental_check(sym):
     if not f:
         return None
     inc, bs, cf, rt = f["inc"], f["bs"], f["cf"], f["rt"]
-    NOW, YR = "value2", "value5"  # 4 期窗口：value2 最新季、value5 去年同期
+    NOW, YR = "value2", "value5"  # 4 季窗口：value2 最新季、value5 是 3 个季度前（接口取不到去年同期）
+    now_label, base_label = _period_label(f.get("period")), _period_label(f.get("base_period"))
+    span = f"{base_label}→{now_label}" if base_label and now_label else ""
 
     rev0, rev4 = _fcell(inc, "Total Revenue", NOW), _fcell(inc, "Total Revenue", YR)
     gm0, gm4 = _fcell(rt, "Gross Margin", NOW), _fcell(rt, "Gross Margin", YR)
@@ -1192,6 +1398,7 @@ def fundamental_check(sym):
     roe0, roe4 = _fcell(rt, "After Tax ROE", NOW), _fcell(rt, "After Tax ROE", YR)
     cr0, cr4 = _fcell(rt, "Current Ratio", NOW), _fcell(rt, "Current Ratio", YR)
     pm0, tax0 = _fcell(rt, "Profit Margin", NOW), _fcell(inc, "Income Tax", NOW)
+    pm4, tax4 = _fcell(rt, "Profit Margin", YR), _fcell(inc, "Income Tax", YR)
     cfo0, cfo4 = _fcell(cf, "Net Cash Flow-Operating", NOW), _fcell(cf, "Net Cash Flow-Operating", YR)
     tl0, te0 = _fcell(bs, "Total Liabilities", NOW), _fcell(bs, "Total Equity", NOW)
     tl4, te4 = _fcell(bs, "Total Liabilities", YR), _fcell(bs, "Total Equity", YR)
@@ -1204,23 +1411,30 @@ def fundamental_check(sym):
         if is_red:
             red = True
 
-    # 一次性损益污染：净利率离谱高，或税项为负（大额税收返还/递延税资产释放）
-    oneoff = (pm0 is not None and abs(pm0) > fund_rule("fund_pm_abnormal")) or \
-             (tax0 is not None and tax0 < 0)
+    # 一次性损益污染：净利率离谱高、税项为负（税收返还/递延税资产释放），
+    # 或净利率远高于营业利润率（说明净利里有大量非经营收益）。最新季和对比基准季都要查，
+    # 否则基准季被一次性收益抬高，会把正常回落误读成"盈利腰斩"。
+    def distorted(pm, om, tax):
+        return (pm is not None and abs(pm) > fund_rule("fund_pm_abnormal")) or \
+               (tax is not None and tax < 0) or \
+               (pm is not None and om is not None and pm - om > 20)
 
-    # 核心 1 · 营收
+    oneoff, base_oneoff = distorted(pm0, om0, tax0), distorted(pm4, om4, tax4)
+    tag = f"（{span}）" if span else ""
+
+    # 核心 1 · 营收（对比 3 个季度前；Nasdaq 只提供最近 4 个季度，取不到去年同期）
     if rev0 is not None and rev4 and rev4 > 0:
         c = (rev0 / rev4 - 1) * 100
         if c <= fund_rule("fund_rev_red"):
-            add(f"营收同比 {c:.0f}%", True)
+            add(f"营收较{base_label or '3季前'} {c:+.0f}%", True)
         elif c <= fund_rule("fund_rev_yellow"):
-            add(f"营收同比 {c:.0f}%")
+            add(f"营收较{base_label or '3季前'} {c:+.0f}%")
     # 核心 2 · 营业利润率（不含税项和一次性损益，最干净的盈利口径）
     if om0 is not None:
         if om0 < 0:
             add(f"营业亏损 {om0:.0f}%", True)
         elif om4 is not None and om0 - om4 <= -fund_rule("fund_om_drop"):
-            add(f"营业利率 {om4:.1f}→{om0:.1f}%")
+            add(f"营业利率 {om4:.1f}%→{om0:.1f}%{tag}")
     # 核心 3 · 经营现金流
     if cfo0 is not None:
         if cfo0 < 0 and cfo4 is not None and cfo4 > 0:
@@ -1230,28 +1444,39 @@ def fundamental_check(sym):
 
     # 扩展 · 毛利率
     if gm0 is not None and gm4 is not None and gm0 - gm4 <= -fund_rule("fund_gm_drop"):
-        add(f"毛利率 {gm4:.1f}→{gm0:.1f}%")
+        add(f"毛利率 {gm4:.1f}%→{gm0:.1f}%{tag}")
     # 扩展 · 负债/权益（要求负债绝对额也上升，否则亏损把权益做小会误报加杠杆）
     de0 = tl0 / te0 if (tl0 and te0) else None
     de4 = tl4 / te4 if (tl4 and te4) else None
     if de0 and de4 and de4 > 0 and de0 / de4 - 1 >= fund_rule("fund_de_rise") / 100.0 \
             and tl0 is not None and tl4 is not None and tl0 > tl4:
-        add(f"负债/权益 {de4:.2f}→{de0:.2f}")
-    # 扩展 · 短期偿债能力
+        add(f"负债/权益 {de4:.2f}→{de0:.2f}倍{tag}")
+    # 扩展 · 短期偿债能力（Nasdaq 以百分比给出：84.25% 即 0.84 倍，页面统一显示成倍数）
     if cr0 and cr4 and cr4 > 0 and cr0 / cr4 - 1 <= -fund_rule("fund_cr_drop") / 100.0:
-        add(f"流动比率 {cr4:.0f}→{cr0:.0f}")
-    # 扩展 · ROE（一次性损益时不参与）
-    if not oneoff and roe0 is not None and roe4 is not None and roe4 > 0 \
+        add(f"流动比率 {cr4 / 100:.2f}→{cr0 / 100:.2f}倍{tag}")
+    # 扩展 · ROE（本季或基准季净利含一次性损益时不比较）
+    if not oneoff and not base_oneoff and roe0 is not None and roe4 is not None and roe4 > 0 \
             and roe0 / roe4 - 1 <= -fund_rule("fund_roe_drop") / 100.0:
-        add(f"ROE {roe4:.1f}→{roe0:.1f}%")
+        add(f"季度ROE {roe4:.1f}%→{roe0:.1f}%{tag}")
 
     # 一次性损益只作附加说明，不单独点亮徽章（否则 GOOGL/NTNX 会被无谓判黄）
-    if oneoff and hits:
-        hits.append("净利含一次性损益，未参与判定")
+    notes = []
+    if hits and oneoff:
+        notes.append("本季净利含一次性损益，ROE未参与判定")
+    if hits and base_oneoff:
+        notes.append(f"对比基准季（{base_label or '3季前'}）净利含一次性损益，ROE未比较")
+    hits.extend(notes)
+    # 参考背景：单项恶化要结合经营利润和现金流判断，不能把比率变化直接等同于主营变差
+    context = []
+    if om0 is not None:
+        context.append(f"本季营业利率 {om0:.1f}%")
+    if cfo0 is not None:
+        context.append("本季经营现金流为" + ("正" if cfo0 > 0 else "负"))
+    base = {"period": f["period"], "base_period": f.get("base_period"),
+            "compare": span, "context": context, "oneoff": oneoff}
     if not hits:
-        return {"level": "green", "hits": [], "period": f["period"], "oneoff": oneoff}
-    return {"level": "red" if red else "yellow", "hits": hits,
-            "period": f["period"], "oneoff": oneoff}
+        return {"level": "green", "hits": [], **base}
+    return {"level": "red" if red else "yellow", "hits": hits, **base}
 
 
 def valid_history(data):
@@ -1906,11 +2131,22 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
                 hits = "".join(f'<li>{html_lib.escape(str(hit))}</li>' for hit in fund["hits"])
                 fcls = "tag f-red" if fund["level"] == "red" else "tag f-yellow"
                 label = html_lib.escape(f"查看 {normalize_symbol(d['symbol'])} 基本面详情")
+                compare = html_lib.escape(str(fund.get("compare") or ""))
+                compare_html = (f'<div>对比：{compare}（接口只有最近4个季度，不是去年同期）</div>'
+                                if compare else "")
+                context = "；".join(str(x) for x in fund.get("context") or [])
+                context_html = (f'<div class="fund-context">参考：{html_lib.escape(context)}。'
+                                f'单项比率变化不等于主营恶化，请结合行业和现金流判断</div>' if context else "")
                 fund_html = (f'<details class="fund-detail"><summary class="{fcls}" aria-label="{label}">'
-                             f'基本面</summary><div class="fund-body"><div>{period} 报告期</div>'
-                             f'<ul>{hits}</ul></div></details>')
+                             f'基本面</summary><div class="fund-body"><div>{period} 报告期</div>{compare_html}'
+                             f'<ul>{hits}</ul>{context_html}</div></details>')
+            earn_html = ""
+            earn = earnings_label(d.get("earnings"))
+            if earn:
+                earn_html = (f'<span class="earn" title="{html_lib.escape(earn[1])}">'
+                             f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}</span></span>')
             out += (
-                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}</td>'
+                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}{earn_html}</td>'
                 f'<td class="num">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</td>'
                 f'<td class="num {chg_cls}">{chg_txt}</td>'
                 f'<td class="sig">{sig}{fund_html}</td></tr>'
@@ -2025,7 +2261,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <style>
 :root{{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
-  --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#f85149; --down:#3fb950;
+  --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
   --blue:#2f6bd8;
 }}
 *{{box-sizing:border-box;-webkit-tap-highlight-color:transparent}}
@@ -2062,6 +2298,9 @@ tr:first-child td{{border-top:none}}
   font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}}
 .fund-body ul{{margin:4px 0 0;padding-left:16px}}
 .sig{{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}}
+.earn{{display:block;margin:4px 0 0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}}
+.earn .unit{{display:block;color:var(--dim);font-size:11px}}
+.fund-context{{margin-top:6px;color:var(--dim)}}
 .up{{color:var(--up)}} .down{{color:var(--down)}}
 tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
 tr.yellow td:first-child{{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}}
@@ -2183,16 +2422,72 @@ tr.gray td{{color:var(--dim)}}
 </div></body></html>"""
 
 
+QUOTE_EXHAUSTED = object()  # 总预算用完、这只根本没来得及尝试（与"尝试了但失败"区分）
+
+
+def _fetch_quote(symbol):
+    """工作线程里抓一只：返回行情 dict / None（失败）/ QUOTE_EXHAUSTED（总预算已用完）。"""
+    if QUOTE_DEADLINE is not None and time.monotonic() >= QUOTE_DEADLINE:
+        return QUOTE_EXHAUSTED
+    _QUOTE_TLS.deadline = time.monotonic() + QUOTE_SYMBOL_SECONDS  # 单只限时，卡住也不拖累整批
+    try:
+        return fetch_history(symbol)
+    except Exception as e:
+        log(f"  ! {symbol} 抓取异常：{str(e)[:70]}")
+        return None
+    finally:
+        _QUOTE_TLS.deadline = None
+
+
+def collect_quotes(symbols):
+    """有界并发抓取，保持结果与输入一一对应；失败的标的在预算充足时补抓一轮。"""
+    results = {}
+
+    def run(batch, workers, keep_better=False):
+        if not batch:
+            return
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
+            for sym, data in zip(batch, ex.map(_fetch_quote, batch)):
+                if keep_better and (data is None or data is QUOTE_EXHAUSTED):
+                    continue  # 补抓没成功就保留第一轮的失败原因
+                results[sym] = data
+
+    run(symbols, QUOTE_WORKERS)
+    for _ in range(QUOTE_RETRY_PASSES):
+        failed = [s for s in symbols if results.get(s) is None]
+        remaining = (QUOTE_DEADLINE - time.monotonic()) if QUOTE_DEADLINE is not None else 999
+        if not failed or remaining < 60:
+            break
+        log(f"补抓 {len(failed)} 只第一轮失败的标的…")
+        # 指数/期货只有 Yahoo 一个源，熔断冷却期内会被跳过；预算充足就等冷却结束再补抓，
+        # 否则补抓轮还是撞同一堵墙。等待时间受总预算约束。
+        wait = max(0.0, max(YAHOO_GATE.blocked_until, STOOQ_GATE.blocked_until) - time.monotonic())
+        if wait and (QUOTE_DEADLINE is None or remaining > wait + 45):
+            log(f"  等待行情源限流冷却约 {wait:.0f} 秒后再补抓…")
+            time.sleep(wait + 1)
+        else:
+            time.sleep(3)
+        YAHOO_GATE.reset(True)
+        STOOQ_GATE.reset(True)
+        run(failed, max(1, QUOTE_WORKERS // 2), keep_better=True)
+    done = sum(isinstance(v, dict) for v in results.values())
+    log(f"行情抓取完成：成功 {done}/{len(symbols)}")
+    return results
+
+
 # ---------------------------------------------------------------- main
 
 def main(argv=None):
     global TARGET_DATE, CLOSED_ONLY, QUOTE_DEADLINE
     parser = argparse.ArgumentParser(description="市场自检生成器")
     parser.add_argument("--prepare-run", action="store_true", help="锁定本次运行目标交易日并输出 GitHub Actions 环境变量")
+    parser.add_argument("--ensure-schedule-run", action="store_true", help="定时任务保险：缺失时补派发一次运行")
     args = parser.parse_args(argv)
     if args.prepare_run:
         prepare_run()
         return 0
+    if args.ensure_schedule_run:
+        return ensure_schedule_run()
 
     if not TARGET_DATE:
         plan = plan_run(EVENT, datetime.now(timezone.utc))
@@ -2216,19 +2511,25 @@ def main(argv=None):
         log("抓取 " + " + ".join(f"{group_counts[g['key']]} 只{g['label']}" for g in GROUPS
                                  if group_counts[g['key']])
             + (f"（另有 {dup_hidden} 只重复，已跳过）" if dup_hidden else "") + "...")
-        QUOTE_DEADLINE = time.monotonic() + 8 * 60
-        for i, (sym, sc, grp) in enumerate(universe):
+        QUOTE_DEADLINE = time.monotonic() + QUOTE_BUDGET_SECONDS
+        YAHOO_GATE.reset(True)
+        STOOQ_GATE.reset(True)
+        to_fetch = [sym for sym, _, _ in universe
+                    if quote_supported(sym) and instrument_identity(sym) != '^TNX']
+        fetched = collect_quotes(to_fetch)
+        YAHOO_GATE.reset(False)
+        STOOQ_GATE.reset(False)
+        for sym, sc, grp in universe:
             supported = quote_supported(sym)
-            exhausted = time.monotonic() >= QUOTE_DEADLINE
             is_yield = instrument_identity(sym) == '^TNX'
-            data = fetch_history(sym) if supported and not exhausted and not is_yield else None
+            raw = fetched.get(sym)
+            exhausted = raw is QUOTE_EXHAUSTED
+            data = None if exhausted else raw
             if not data and (grp == "index_funds" or is_yield):
                 reference = macro_index_quote(sym, sc, grp, macro)
                 if reference:
                     items.append(reference)
                     continue
-            if data and i < len(universe) - 1 and time.monotonic() < QUOTE_DEADLINE:
-                time.sleep(0.5)  # 轻微限速，降低被封概率
             if data:
                 lv, sig, detail = analyze_symbol(sym, sc, data, group=grp)
                 items.append(detail)
@@ -2236,9 +2537,8 @@ def main(argv=None):
                     log(f"  {sym}: {lv} — {', '.join(sig)}")
                 continue
 
-            if supported and not exhausted and time.monotonic() >= QUOTE_DEADLINE:
-                exhausted = True
-                log("  ! 个股抓取时间预算已到，剩余标的本轮标记为未抓取")
+            if exhausted:
+                log(f"  ! {sym} 未取数：个股抓取总预算已用完")
             items.append({
                 "symbol": sym, "note": sc.get("note", ""), "price": None,
                 "chg": None, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": None, "dist_low": None,
@@ -2278,8 +2578,11 @@ def main(argv=None):
         log(f"  基本面：{fund_stat['checked']} 份财报 · "
             f"红 {fund_stat['red']} · 黄 {fund_stat['yellow']}")
 
+    earn_stat = attach_earnings(items)
+
     snapshot = build_snapshot(macro, items, cfg, group_counts=group_counts)
     snapshot["fundamental"] = fund_stat
+    snapshot["earnings"] = earn_stat
     supported_items = [d for d in items if quote_supported(d["symbol"])]
     html = render(macro, items, len(universe), data_down=bool(supported_items)
                   and all(d["level"] == "gray" for d in supported_items), snapshot=snapshot,

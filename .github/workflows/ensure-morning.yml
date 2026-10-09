@@ -1,0 +1,35 @@
+name: 早间自动结果保险
+run-name: "自动结果保险 · ${{ github.event_name }}"
+
+# GitHub 的 schedule 触发只是尽力而为，高负载时可能延迟或丢弃。
+# 这里在主定时任务之后再检查一次：当晚收盘结果还没生成，才补派发一次；已有结果或已有任务在跑则什么都不做。
+on:
+  schedule:
+    - cron: '50 20 * * 1-5'
+      timezone: 'America/New_York'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  ensure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: 拉取仓库
+        uses: actions/checkout@v4
+
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: pip install requests exchange-calendars
+
+      - name: 检查并按需补跑
+        run: python monitor.py --ensure-schedule-run
