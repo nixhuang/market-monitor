@@ -2501,16 +2501,20 @@ table.stk tr td:first-child{{padding-left:14px}}
 .px-price,.px-chg{{display:block}}
 .px-chg{{font-size:12.5px}}
 @media (max-width:600px){{
-  table.stk{{table-layout:auto}}
-  .stk colgroup,.stk thead{{display:none}}
-  tr:not(:has(td[colspan])){{display:grid;grid-template-columns:1fr 84px;column-gap:10px;border-top:1px solid var(--line)}}
-  tr:not(:has(td[colspan])) td{{border-top:none;padding:6px 10px}}
-  tr:not(:has(td[colspan])) td.sym{{grid-column:1;grid-row:1}}
-  tr:not(:has(td[colspan])) td.px{{grid-column:2;grid-row:1}}
-  tr:not(:has(td[colspan])) td.earn-cell{{grid-column:1/-1;grid-row:2;padding-top:0;width:auto;text-align:left}}
-  tr:not(:has(td[colspan])) td.sig{{grid-column:1/-1;grid-row:3;padding-top:0}}
-  tr:not(:has(td[colspan])) td.earn-cell:empty{{display:none}}
-  tr:first-child{{border-top:none}}
+  /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
+  .c-sym{{width:22%}} .c-earn{{width:25%}} .c-px{{width:17%}}
+  .stk td{{padding:8px 5px}}
+  table.stk tr td:first-child,.stk th:first-child{{padding-left:11px}}
+  .stk th{{padding:7px 5px;font-size:12px}}
+  .stk th.h-earn,.earn-cell{{text-align:left}}
+  .stk td.sym{{font-size:13.5px}}
+  .stk td.sym .note{{font-size:10.5px;line-height:1.35}}
+  .stk .earn{{font-size:10.5px;line-height:1.4}}
+  .stk .earn .unit{{font-size:10px;line-height:1.35}}
+  .stk .px-price{{font-size:13.5px}}
+  .stk .px-chg{{font-size:11.5px}}
+  .stk td.sig{{font-size:11.5px;line-height:1.45}}
+  .stk .fund-detail summary{{padding:6px 7px}}
 }}
 .fund-context{{margin-top:6px;color:var(--dim)}}
 .up{{color:var(--up)}} .down{{color:var(--down)}}
