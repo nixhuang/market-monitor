@@ -2863,6 +2863,7 @@ tr.green td:first-child{{box-shadow:inset 2px 0 0 var(--green)}}
 tr.gray td{{color:var(--dim)}}
 .group-card tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
 .group-card tr.pur td.sig{{box-shadow:inset -2px 0 0 var(--purple);padding-right:12px}}
+#macroCard tr.mh td{{padding:5px 10px;font-size:11.5px;white-space:nowrap}} #macroCard tr.mh td:nth-child(3){{padding-left:2px}}
 .macro-help{{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}}
 .macro-help>summary{{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}}
 .macro-help p{{margin:6px 0}}
@@ -2958,7 +2959,7 @@ tr.gray td{{color:var(--dim)}}
 <p class="macro-help" id="marketRiskReason">{html_lib.escape(risk['text'])} · 有效指标 {risk['valid_count']}/5</p>
 <details class="macro-help" id="marketRiskRules"><summary>综合判断规则</summary><p>{html_lib.escape(RISK_RULE_TEXT)}</p></details>
 <table>
-<tr class="gray"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
+<tr class="gray mh"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
 {rows_macro}
 </table>
 <details class="macro-help" id="marketRiskNotes"><summary>指标阈值与数据说明</summary>
