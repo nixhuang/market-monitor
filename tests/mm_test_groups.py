@@ -1532,14 +1532,14 @@ class TestTargets(unittest.TestCase):
         tag = monitor.target_tag
         self.assertEqual(tag(None), '')
         self.assertEqual(tag({'kind': 'consensus', 'price': 429.47, 'month': 10}),
-                         '<span class="tgs"><span class="lvtag tgt"><span>共识 429.47</span><span>· 10月</span></span></span>')
+                         '<span class="tgs"><span class="lvtag tgt"><span>共识</span> <span>429.47</span> <span>· 10月</span></span></span>')
         self.assertIn('lvtag tgt hit', tag({'kind': 'consensus', 'price': 87.56, 'month': 10, 'hit': True}))
-        self.assertIn('<span>目标 108</span><span>· 10月</span>', tag({'kind': 'manual', 'price': 108.0, 'month': 10}))
+        self.assertIn('<span>目标</span> <span>108</span> <span>· 10月</span>', tag({'kind': 'manual', 'price': 108.0, 'month': 10}))
         self.assertNotIn('月', tag({'kind': 'manual', 'price': 108.0, 'month': None}))
         failed = tag({'kind': 'consensus', 'price': 429.0, 'month': 8, 'failed': True})
         self.assertIn('lvtag tgt bad', failed)
-        self.assertIn('共识 429', failed)
-        self.assertIn('共识 获取失败', tag({'kind': 'consensus', 'price': None, 'month': None, 'failed': True}))
+        self.assertIn('<span>429</span>', failed)
+        self.assertIn('<span>共识</span> <span>获取失败</span>', tag({'kind': 'consensus', 'price': None, 'month': None, 'failed': True}))
         # 数据异常：标签不变红
         self.assertNotIn('bad', tag({'kind': 'consensus', 'price': 250.0, 'month': 10, 'anomaly': True}))
 
@@ -1698,7 +1698,7 @@ class TestTargets(unittest.TestCase):
         t = {'kind': 'manual', 'price': 108.0, 'month': 10, 'failed': False, 'hit': False, 'anomaly': False, 'space': 8.0}
         page = self._page([self._row('MAN', 'yellow', False, t, ['波动 +2.1%'])])
         self.assertIn('波动 +2.1% · <span class="tnote">目标价 108，空间 +8%</span>', page)
-        self.assertIn('<span>目标 108</span><span>· 10月</span>', page)
+        self.assertIn('<span>目标</span> <span>108</span> <span>· 10月</span>', page)
         self.assertNotIn('共识价来源', page)               # 只有手填：不显示共识来源
 
     def test_page_target_alert_text_is_purple_last_and_purple_bar_on_right(self):

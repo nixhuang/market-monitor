@@ -2160,9 +2160,9 @@ def target_tag(t):
     manual = t.get("kind") == "manual"
     month = f'<span>· {t["month"]}月</span>' if t.get("month") else ""
     if t.get("price") is None:
-        body, cls = '<span>共识 获取失败</span>', "tgt bad"
+        body, cls = '<span>共识</span> <span>获取失败</span>', "tgt bad"
     else:
-        body = f'<span>{"目标" if manual else "共识"} {_price_text(t["price"])}</span>{month}'
+        body = f'<span>{"目标" if manual else "共识"}</span> <span>{_price_text(t["price"])}</span> {month}'
         cls = "tgt bad" if t.get("failed") else ("tgt hit" if t.get("hit") else "tgt")
     return f'<span class="tgs"><span class="lvtag {cls}">{body}</span></span>'
 
@@ -2808,7 +2808,7 @@ tr:first-child td{{border-top:none}}
 .lvtag.add{{color:#ffa94d;border-color:rgba(255,169,77,.6)}}
 .lvtag.cut{{color:#4dd0e1;border-color:rgba(77,208,225,.6)}}
 .tgs{{display:block;margin:3px 0 0;line-height:1.4;white-space:normal}}
-.tgs .lvtag{{margin:0;padding:0 6px;white-space:normal;text-align:center}}
+.tgs .lvtag{{margin:0;padding:1px 5px;border-radius:4px;line-height:1.35;white-space:normal;text-align:center}}
 .tgs .lvtag span{{display:inline-block;white-space:nowrap}}
 .lvtag.tgt{{color:#c4a3ff;border-color:rgba(163,113,247,.65)}}
 .lvtag.tgt.hit{{color:#fff;background:#8957e5;border-color:#8957e5}}
@@ -2841,7 +2841,7 @@ table.stk tr td:first-child{{padding-left:14px}}
 .px-chg{{font-size:12.5px}}
 @media (max-width:600px){{
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
-  .c-sym{{width:22%}} .c-earn{{width:25%}} .c-px{{width:17%}}
+  .c-sym{{width:22%}} .c-earn{{width:23%}} .c-px{{width:19%}}
   .stk td{{padding:8px 5px}}
   table.stk tr td:first-child,.stk th:first-child{{padding-left:11px}}
   .stk th{{padding:7px 5px;font-size:12px}}
@@ -2851,7 +2851,7 @@ table.stk tr td:first-child{{padding-left:14px}}
   .stk .earn{{font-size:10.5px;line-height:1.4}}
   .stk .earn .unit{{font-size:10px;line-height:1.35}}
   .stk .px-price{{font-size:13.5px}}
-  .stk .px-chg{{font-size:11.5px}}
+  .stk .px-chg{{font-size:11.5px}} .stk .tgs .lvtag{{padding:1px 3px;font-size:9.5px;max-width:100%;box-sizing:border-box}} .stk .tgs .lvtag span{{white-space:normal;overflow-wrap:anywhere}}
   .stk td.sig{{font-size:11.5px;line-height:1.45}}
   .stk .fund-detail summary{{padding:6px 7px}}
 }}

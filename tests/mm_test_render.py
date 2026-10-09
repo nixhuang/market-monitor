@@ -82,7 +82,7 @@ check('display:grid' not in _mob_css and 'grid-column' not in _mob_css and 'tr:n
       "手机端不再把个股行拆成上下三层 grid，保持四栏各自换行")
 check('.stk thead{display:none}' not in _mob_css and '.stk colgroup' not in _mob_css and 'table-layout:auto' not in _mob_css,
       "手机端保留表头和固定列宽")
-check('.c-sym{width:22%}' in _mob_css and '.c-earn{width:25%}' in _mob_css and '.c-px{width:17%}' in _mob_css, "手机端四栏列宽独立设置")
+check('.c-sym{width:22%}' in _mob_css and '.c-earn{width:23%}' in _mob_css and '.c-px{width:19%}' in _mob_css, "手机端四栏列宽独立设置")
 _macro_u = dict(macro, ust10=dict(macro["ust10"], value=4.55, delta_week=0.12, month_ago=4.0, delta_month=0.55))
 _html_u = monitor.render(_macro_u, items, 10, snapshot=snapshot, dup_hidden=2)
 check('id="ust10Ref"' in _html_u and "一个月急升 +55 bp" in _html_u and "参考 · 不计入综合灯" in _html_u
