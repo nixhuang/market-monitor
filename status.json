@@ -9,14 +9,14 @@
     "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "37937770469",
-  "request_id": "",
-  "source_sha": "cc661e3927334cd64ba3225e3f5a354417e31733",
-  "started_at": "2026-10-09T13:34:11+00:00",
-  "started_at_bj": "2026-10-09T21:34:11+08:00",
-  "finished_at": "2026-10-09T21:36:17.238357+08:00",
-  "finished_at_bj": "2026-10-09T21:36:17+08:00",
-  "event": "push",
+  "run_id": "37940424734",
+  "request_id": "7f90e0d5-8f29-4160-ac2c-3fe2dae101ef",
+  "source_sha": "3556a4ad7d6a97fce864b56726b9f9ae6e162306",
+  "started_at": "2026-10-09T13:56:03+00:00",
+  "started_at_bj": "2026-10-09T21:56:03+08:00",
+  "finished_at": "2026-10-09T21:57:59.032666+08:00",
+  "finished_at_bj": "2026-10-09T21:57:59+08:00",
+  "event": "workflow_dispatch",
   "target_trade_date": "2026-10-09",
   "mode": "manual_or_config",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
@@ -187,25 +187,22 @@
     "dca": 1
   },
   "summary": {
-    "red": 5,
-    "yellow": 28,
-    "green": 96,
+    "red": 6,
+    "yellow": 35,
+    "green": 88,
     "gray": 0,
     "total": 129,
     "macro_ok": 6,
-    "stale_symbols": [
-      ".VXN",
-      "BASFY"
-    ],
+    "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 127,
-    "prior_prices": 2,
+    "today_prices": 129,
+    "prior_prices": 0,
     "missing_prices": 0
   },
   "actual_dates": {
-    "min": "2026-10-08",
+    "min": "2026-10-09",
     "max": "2026-10-09"
   },
   "macro_dates": {
@@ -218,7 +215,7 @@
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.258999824523926,
+    "value": 5.261000156402588,
     "date": "2026-10-09",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -227,10 +224,10 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.4219999313354492
+    "delta_month": 0.42400026321411133
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-09 21:36:17（盘中快照，北京时间） · 当日价 127 只 / 较早日线 2 只 / 无数据 0 只",
+  "data_time_text": "2026-10-09 21:57:59（盘中快照，北京时间） · 当日价 129 只 / 较早日线 0 只 / 无数据 0 只",
   "market_risk": {
     "level": "green",
     "label": "风险平稳",
@@ -249,17 +246,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 15.140000343322754,
+      "value": 15.079999923706055,
       "date": "2026-10-09",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7793.68017578125,
+      "value": 7785.56982421875,
       "date": "2026-10-09",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.32293420496593006
+      "drawdown": -0.426661331058209
     }
   },
   "fundamental": {
@@ -401,9 +398,9 @@
     }
   },
   "earnings": {
-    "targets": 40,
-    "dated": 35,
-    "pending": 4,
+    "targets": 43,
+    "dated": 38,
+    "pending": 5,
     "failed": 0
   }
 }
