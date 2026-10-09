@@ -1,5 +1,6 @@
 """离线分类模型、去重、备注及全部折叠标题回归。"""
 import json
+import re
 import os
 import sys
 import unittest
@@ -46,9 +47,9 @@ class TestGroups(unittest.TestCase):
                'group_monitoring': {'index_funds': True}}
         original = copy.deepcopy(cfg)
         universe, counts, duplicates = monitor.grouped_universe(cfg)
-        self.assertEqual([s for s, _, _ in universe], ['AAPL-US', 'SPY', 'BD#US10Y', 'QQQ', 'ESMAIN', '.NDX', 'HYG'])
+        self.assertEqual([s for s, _, _ in universe], ['AAPL-US', 'SPY', 'QQQ', 'ESMAIN', '.NDX', 'HYG'])   # BD#US10Y 已在风险参考里，跳过
         self.assertEqual(cfg, original)
-        self.assertEqual(counts['positions'], 3)
+        self.assertEqual(counts['positions'], 2)
         self.assertEqual(counts['focus'], 1)
         self.assertGreater(duplicates, 5)
         self.assertNotEqual(monitor.instrument_identity('SPY'), monitor.instrument_identity('.SPX'))
@@ -100,18 +101,19 @@ class TestGroups(unittest.TestCase):
         cfg = {'index_funds': {s: {'note': s} for s in ['.SPX', 'BD#US10Y', 'ESMAIN', 'CLMAIN', '2USDCNY', '2XAUUSD']},
                'group_monitoring': {'index_funds': True}}
         universe, counts, _ = monitor.grouped_universe(cfg)
-        self.assertEqual(len(universe), 5)
-        self.assertEqual(counts['index_funds'], 5)
+        self.assertEqual(len(universe), 4)
+        self.assertEqual(counts['index_funds'], 4)
         self.assertNotIn('.SPX', [s for s, _, _ in universe])
-        self.assertTrue(all(monitor.quote_supported(s) for s, _, _ in universe[:3]))
-        self.assertTrue(all(not monitor.quote_supported(s) for s, _, _ in universe[3:]))
+        self.assertNotIn('BD#US10Y', [s for s, _, _ in universe])      # 10Y 美债已在风险参考里，不再重复
+        self.assertTrue(all(monitor.quote_supported(s) for s, _, _ in universe[:2]))
+        self.assertTrue(all(not monitor.quote_supported(s) for s, _, _ in universe[2:]))
         self.assertTrue(monitor.quote_supported('AAPL'))
         self.assertFalse(monitor.quote_supported('NQmain'))
         self.assertEqual(monitor.normalize_symbol('31#BRK.B'), 'BRK-B')
         rows = [dict(symbol=s, price=None, level='gray') for s, _, _ in universe]
         with patch.object(monitor, 'global_dca', return_value=None):
             snap = monitor.build_snapshot({}, rows, cfg)
-        self.assertEqual(len(snap['summary']['missing_symbols']), 3)
+        self.assertEqual(len(snap['summary']['missing_symbols']), 2)
         self.assertEqual(len(snap['summary']['unsupported_symbols']), 2)
 
     def test_index_aliases_use_daily_index_or_futures_not_stock_quotes(self):
@@ -143,9 +145,9 @@ class TestGroups(unittest.TestCase):
         self.assertEqual([d['price'] for d in rows], [21.3, 6700.5, 4.25])
         self.assertTrue(all(d['level'] == 'green' and d['reference_only'] for d in rows))
         self.assertIsNone(monitor.macro_index_quote('.NDX', {}, 'index_funds', macro))
-        with patch.object(monitor, 'global_dca', return_value=None):
+        with patch.object(monitor, 'global_dca', return_value=None), patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):   # 旧的参考行渲染路径：临时放开 ^TNX
             snap = monitor.build_snapshot(macro, rows, cfg)
-        page = monitor.render(macro, rows, len(rows), snapshot=snap)
+            page = monitor.render(macro, rows, len(rows), snapshot=snap)
         index = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
         self.assertIn('BD#US10Y', index)
         self.assertNotIn('.VIX', index)
@@ -169,14 +171,15 @@ class TestGroups(unittest.TestCase):
                  'trigger': None, 'group': 'index_funds', 'data_date': '2026-10-07',
                  'boll_up': None, 'boll_dn': None, 'signals': [], 'level': 'green'}
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
-                patch.object(monitor, 'global_dca', return_value=None):
+                patch.object(monitor, 'global_dca', return_value=None), patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):
             snap = monitor.build_snapshot({}, [reference, daily], cfg)
         self.assertEqual(snap['summary']['reference_dates'], {'BD#US10Y': '2026-10-06'})
         self.assertEqual(snap['summary']['stale_symbols'], [])
         self.assertEqual((snap['summary']['today_prices'], snap['summary']['prior_prices']), (1, 0))
         self.assertEqual(snap['actual_dates'], {'min': '2026-10-07', 'max': '2026-10-07'})
         self.assertEqual(snap['data_time_text'], '2026-10-07 收盘（美东交易日）')
-        page = monitor.render({}, [reference, daily], 2, snapshot=snap)
+        with patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):
+            page = monitor.render({}, [reference, daily], 2, snapshot=snap)
         self.assertIn('2 项数据已更新', page)
         self.assertNotIn('项参考值（截至', page)
         self.assertNotIn('当日行情未取得', page)
@@ -231,7 +234,7 @@ class TestGroups(unittest.TestCase):
         self.assertFalse(snap['group_monitoring']['materials'])
         self.assertEqual(snap['summary']['missing_symbols'], [])
         page = monitor.render({}, [row], 1, snapshot=snap)
-        self.assertIn('化材金纸 (2)', page)
+        self.assertIn('化材金纸 (1)', page)          # 括号里是页面实际显示数（登记 2，监测关闭只显示板块 ETF）
         self.assertIn('仅板块ETF', page)
         self.assertIn('XLB 仍监测', page)
         self.assertIn('异动测试', page)
@@ -257,6 +260,7 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}) as fetch, \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
                 self.assertEqual(monitor.main([]), 0)
@@ -292,6 +296,7 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', side_effect=hist), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
                 self.assertEqual(monitor.main([]), 0)
@@ -366,7 +371,7 @@ class TestGroups(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
-                    patch.object(monitor, 'build_macro', return_value=macro), \
+                    patch.object(monitor, 'build_macro', return_value=macro), patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}), \
                     patch.object(monitor, 'fetch_history', return_value=None) as fetch, \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor, 'push_serverchan'):
@@ -406,6 +411,7 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', side_effect=fetch), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
                 self.assertEqual(monitor.main([]), 0)
@@ -436,6 +442,7 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', side_effect=slow_fail), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'push_serverchan'), \
                     patch.object(monitor.time, 'monotonic', side_effect=lambda: clock['t']):
                 self.assertEqual(monitor.main([]), 0)
@@ -676,6 +683,142 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('rs-spy', head('energy'))
         self.assertIn('20日相对标普500 +1.8%', head('industrials'))
         self.assertNotIn('rs-spy', head('positions'))                            # 持仓/关注/指数基不是板块组
+
+    def test_dca_text_short_form_and_only_due_day_turns_yellow(self):
+        base = {'every': 10, 'start': '2026-10-01'}
+        self.assertEqual(monitor.dca_text({**base, 'due': False, 'next_in': 5, 'next_date': '2026-10-15'}),
+                         '还有 5 个交易日（2026-10-15）')
+        self.assertEqual(monitor.dca_text({**base, 'due': True, 'date': '2026-10-15', 'times': 2}),
+                         '今天是定投日（2026-10-15，第 2 次）')
+        self.assertEqual(monitor.dca_text({**base, 'pending': True, 'first': '2026-10-20'}),
+                         '尚未开始（首个定投日 2026-10-20）')
+        def page(d):
+            snap = {'dca_reminder': d, 'registered_counts': {}, 'list_counts': {}, 'summary': {}}
+            with patch.object(monitor, 'global_dca', return_value=None):
+                return monitor.render({}, [], 0, snapshot=snap)
+        quiet = page({**base, 'due': False, 'next_in': 5, 'next_date': '2026-10-15'})
+        self.assertIn('<div class="dca ">定投提醒：还有 5 个交易日（2026-10-15）</div>', quiet)
+        due = page({**base, 'due': True, 'date': '2026-10-15', 'times': 2})
+        self.assertIn('<div class="dca on">定投提醒：今天是定投日（2026-10-15，第 2 次）</div>', due)
+
+    def test_group_count_is_displayed_rows_not_registered(self):
+        cfg = {'technology': {'AAPL': {}, 'MSFT': {}, 'NVDA': {}}, 'positions': {'AAPL': {}}}
+        rows = lambda syms, grp: [dict(symbol=x, note='', price=100, chg=0, level='green', group=grp,
+                                       signals=[], data_date='2026-10-02') for x in syms]
+        items = rows(['AAPL'], 'position') + rows(['MSFT', 'NVDA'], 'technology')
+        snap = monitor.build_snapshot({}, items, cfg)
+        page = monitor.render({}, items, 3, snapshot=snap)
+        self.assertEqual(snap['registered_counts']['technology'], 3)       # 登记 3，AAPL 去重落在持仓
+        self.assertIn('IT软硬Ai (2)', page)
+        self.assertIn('持仓 (1)', page)
+
+    def _reduce_signals(self, cfg, group='position', price=100):
+        closes = [100 + (0.5 if i % 2 else -0.5) for i in range(60)]
+        closes[-2:] = [100, 100]
+        data = dict(closes=closes, highs=[101] * 60, lows=[99] * 60, volumes=[1000] * 60,
+                    price=price, prev_close=100, dates=['2026-10-08'] * 60, source='test')
+        with patch.object(monitor, 'log'):
+            level, signals, detail = monitor.analyze_symbol('TEST', cfg, data, group=group)
+        return level, [x for x in signals if '减仓价' in x], detail
+
+    def test_reduce_price_red_when_crossed_or_within_gap(self):
+        # 现价 100：已涨到减仓价以上（不管高出多少）→ 红；还没到但差距 ≤3% → 红
+        for reduce, text in [(100, '已涨到减仓价 100.00（高出 0.0%）'),      # 刚好等于
+                             (99, '已涨到减仓价 99.00（高出 1.0%）'),
+                             (90, '已涨到减仓价 90.00（高出 11.1%）'),       # 已越过很多，照样报
+                             (50, '已涨到减仓价 50.00（高出 100.0%）'),
+                             (101, '距减仓价 101.00 还差 1.0%'),
+                             (103, '距减仓价 103.00 还差 2.9%')]:
+            with self.subTest(reduce=reduce):
+                level, hit, detail = self._reduce_signals({'reduce': reduce})
+                self.assertEqual(level, 'red')
+                self.assertEqual(hit, [text])
+                self.assertEqual(detail['reduce'], reduce)
+        for reduce in (104, 120, 200):                                      # 还差超过 3%：不报
+            with self.subTest(far=reduce):
+                _, hit, detail = self._reduce_signals({'reduce': reduce})
+                self.assertEqual(hit, [])
+                self.assertEqual(detail['reduce'], reduce)
+        # 旧版遗留的 reduce_dir 不再起作用
+        self.assertEqual(self._reduce_signals({'reduce': 99, 'reduce_dir': 'down'})[0], 'red')
+        self.assertEqual(self._reduce_signals({'reduce': 120, 'reduce_dir': 'up'})[1], [])
+        self.assertNotIn('reduce_dir', self._reduce_signals({'reduce': 99})[2])
+
+    def test_reduce_price_threshold_setting_and_boundary(self):
+        with patch.dict(monitor.S, {'reduce_gap_pct': 3.0}):
+            self.assertEqual(self._reduce_signals({'reduce': 103.1})[1], [])            # 100/103.1-1 = -3.01%
+            self.assertEqual(len(self._reduce_signals({'reduce': 103})[1]), 1)
+        with patch.dict(monitor.S, {'reduce_gap_pct': 5.0}):
+            self.assertEqual(self._reduce_signals({'reduce': 104.5})[1], ['距减仓价 104.50 还差 4.3%'])
+        with patch.dict(monitor.S, {'reduce_gap_pct': 0.0}):
+            self.assertEqual(self._reduce_signals({'reduce': 101})[1], [])              # 没越过且阈值 0：不报
+            self.assertEqual(len(self._reduce_signals({'reduce': 100})[1]), 1)          # 已到：照报
+            self.assertEqual(len(self._reduce_signals({'reduce': 90})[1]), 1)
+        self.assertEqual(monitor.DEFAULT_SETTINGS['reduce_gap_pct'], 3.0)
+        self.assertEqual(monitor.SETTING_LIMITS['reduce_gap_pct'], (0, 100))
+
+    def test_trigger_price_reports_both_within_gap_and_already_crossed(self):
+        def hit(trigger, price=100):
+            closes = [100 + (0.5 if i % 2 else -0.5) for i in range(60)]
+            closes[-2:] = [100, 100]
+            data = dict(closes=closes, highs=[101] * 60, lows=[99] * 60, volumes=[1000] * 60,
+                        price=price, prev_close=100, dates=['2026-10-08'] * 60, source='test')
+            with patch.object(monitor, 'log'):
+                with patch.dict(monitor.S, {'trigger_gap_pct': 5.0}):
+                    _, sigs, _ = monitor.analyze_symbol('TEST', {'trigger': trigger}, data, group='position')
+            return [x for x in sigs if '加仓价' in x]
+        self.assertEqual(hit(104), ['已跌破加仓价 104.00'])      # 现价低于加仓价 3.8%
+        self.assertEqual(hit(100), ['已跌破加仓价 100.00'])      # 刚好到
+        self.assertEqual(hit(110), ['已跌破加仓价 110.00'])      # 跌破很多
+        self.assertEqual(hit(97), ['距加仓价 97.00 还差 3.1%'])  # 上方 5% 内
+        self.assertEqual(hit(90), [])                            # 还差 11%：不报
+
+    def test_level_note_under_symbol_only_when_set(self):
+        self.assertEqual(monitor.level_note(325, None), '<span class="lvs"><span class="lvtag add">加 325</span></span>')
+        self.assertEqual(monitor.level_note(None, 400.5), '<span class="lvs"><span class="lvtag cut">减 400.5</span></span>')
+        self.assertEqual(monitor.level_note(325, 400), '<span class="lvs"><span class="lvtag add">加 325</span><span class="lvtag cut">减 400</span></span>')
+        self.assertEqual(monitor.level_note(12.3456, None), '<span class="lvs"><span class="lvtag add">加 12.3456</span></span>')
+        for bad in (None, '', 0, -1, 'abc', True, float('nan'), float('inf')):
+            self.assertEqual(monitor.level_note(bad, bad), '')
+
+    def test_page_shows_level_note_under_name_and_clearing_removes_it(self):
+        def page_for(trigger, reduce):
+            d = dict(symbol='AAPL', note='苹果', price=100.0, chg=0.0, level='green', signals=[],
+                     group='position', data_date='2026-10-08', trigger=trigger, reduce=reduce)
+            snap = monitor.build_snapshot({}, [d], {'positions': {'AAPL': {'note': '苹果'}}})
+            return monitor.render({}, [d], 1, snapshot=snap)
+        with patch.object(monitor, 'global_dca', return_value=None):
+            both = page_for(325, 400)
+            self.assertIn('AAPL<span class="note">苹果</span><span class="lvs"><span class="lvtag add">加 325</span><span class="lvtag cut">减 400</span></span>', both)
+            cleared = page_for(None, None)                                  # 设置页清空后：不再显示
+            self.assertNotIn('class="lvs"', cleared)
+            self.assertNotIn('class="lvtag', cleared)
+
+    def test_market_risk_notes_are_folded_by_default(self):
+        with patch.object(monitor, 'global_dca', return_value=None):
+            page = monitor.render({}, [], 0, snapshot={})
+        m = re.search(r'<details class="macro-help" id="marketRiskNotes">(.*?)</details>', page, re.S)
+        self.assertIsNotNone(m)
+        self.assertNotIn(' open', page[m.start():m.start() + 60])
+        self.assertIn('垃圾债利差：≥', m.group(1))
+        self.assertIn('可能有成分股选择偏差', m.group(1))
+
+    def test_reduce_price_only_applies_to_positions_and_bad_values_are_ignored(self):
+        for group in ('focus', 'technology', 'index_funds'):
+            self.assertEqual(self._reduce_signals({'reduce': 100}, group=group)[1], [])
+            self.assertIsNone(self._reduce_signals({'reduce': 100}, group=group)[2]['reduce'])
+        for bad in (0, -5, 'abc', '100', True, False, float('nan'), float('inf'), None, '', [], {}):
+            with self.subTest(reduce=bad):
+                level, hit, detail = self._reduce_signals({'reduce': bad})
+                self.assertEqual(hit, [])
+                self.assertIsNone(detail['reduce'])
+
+    def test_snapshot_counts_valid_reduce_prices_only_for_positions(self):
+        cfg = {'positions': {'AAPL': {'reduce': 90}, 'MSFT': {'reduce': 'x'}, 'NVDA': {'reduce': 120, 'reduce_dir': 'up'},
+                             'TSLA': {}}, 'technology': {'AMD': {'reduce': 50}}}
+        with patch.object(monitor, 'log'):
+            snap = monitor.build_snapshot({}, [], cfg)
+        self.assertEqual(snap['list_counts']['reduces'], 2)
 
     def test_us_style_colors_green_up_red_down_but_risk_lights_unchanged(self):
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
@@ -1006,9 +1149,9 @@ class TestGroups(unittest.TestCase):
         reference = monitor.macro_index_quote('BD#US10Y', {}, 'index_funds',
             {'ust10': {'ok':True, 'value':4.2, 'date':'2026-10-06', 'source':'FRED DGS10', 'lagging':True}})
         cfg = {'index_funds': {'BD#US10Y': {}}, 'group_monitoring': {'index_funds':True}}
-        with patch.object(monitor, 'global_dca', return_value=None):
+        with patch.object(monitor, 'global_dca', return_value=None), patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):
             snap = monitor.build_snapshot({}, [reference], cfg)
-        page = monitor.render({}, [reference], 1, snapshot=snap)
+            page = monitor.render({}, [reference], 1, snapshot=snap)
         self.assertIn('参考值 · 截至 2026-10-06', page)
         self.assertIn('来源 FRED DGS10 · 收益率百分比', page)
         self.assertIn('保留最近参考值', page)
@@ -1031,6 +1174,24 @@ class TestGroups(unittest.TestCase):
         finally:
             monitor.S.clear();monitor.S.update(original)
 
+    def test_items_already_in_market_risk_reference_are_skipped_everywhere(self):
+        # 标普500、VIX、10Y美债已在「市场风险参考」里：不管写在哪个分组、用哪种写法，都不再单独成行
+        cfg = {'positions': {'BD#US10Y': {}, 'AAPL': {}},
+               'index_funds': {'.SPX': {}, '^GSPC': {}, '.VIX': {}, '^VIX': {}, 'BD#US10Y': {}, '.TNX': {}, '^TNX': {}, 'HYG': {}},
+               'group_monitoring': {'index_funds': True}}
+        universe, counts, dups = monitor.grouped_universe(cfg)
+        self.assertEqual([s for s, _, _ in universe], ['AAPL', 'HYG'])
+        self.assertEqual((counts['positions'], counts['index_funds']), (1, 1))
+        self.assertEqual(dups, 8)
+        macro = {'ust10': {'ok': True, 'name': '10Y美债', 'value': 4.3, 'date': '2026-10-07'}}
+        with patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot(macro, [], cfg)
+        page = monitor.render(macro, [], 0, snapshot=snap)
+        risk = page.split('id="macroCard"', 1)[1].split('id="group_positions"', 1)[0]
+        index = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
+        self.assertEqual(risk.count('id="ust10Ref"'), 1)      # 风险参考里的 10Y 参考行还在
+        self.assertNotIn('BD#US10Y', index)
+
     def test_index_reference_does_not_change_holdings_or_macro_alerts(self):
         cfg = {'index_funds': {'HYG': {'note':'保留的原清单'}}}
         macro = {key: {'ok': True, 'name': monitor.FRED_SERIES[key]['name'], 'value': value,
@@ -1044,7 +1205,7 @@ class TestGroups(unittest.TestCase):
         self.assertFalse(snap['group_monitoring']['index_funds'])
         self.assertEqual(snap['summary']['total'], 0)
         self.assertEqual(snap['registered_counts']['index_funds'], 1)
-        self.assertIn('指数基 (1)', page)
+        self.assertIn('指数基 (0)', page)          # 括号里是页面实际显示数，不是登记数
         for name in ('10Y美债','美元指数','收益率曲线'):
             self.assertNotIn(name, index)
         # 风险卡里不出现美元指数、收益率曲线；10Y美债只作为「参考 · 不计入综合灯」的参考行出现
@@ -1232,6 +1393,402 @@ class TestGroups(unittest.TestCase):
         self.assertIn('&lt;公司 &amp; 名称&gt;', page)
         self.assertIn('无异动 1 只 · 点击查看', page)
         self.assertNotIn('其他关注', page)
+
+
+class FakeResp:
+    def __init__(self, status=200, text=''):
+        self.status_code, self.text = status, text
+
+
+class FakeSession:
+    """按网址返回预设内容；记录请求顺序。"""
+    def __init__(self, pages, robots='User-agent: *\nDisallow: /e/\n'):
+        self.pages, self.robots, self.calls = pages, robots, []
+        self.headers = {}
+
+    def get(self, url, timeout=0):
+        self.calls.append(url)
+        if url.endswith('/robots.txt'):
+            return FakeResp(200, self.robots) if self.robots is not None else FakeResp(503)
+        for slug, page in self.pages.items():
+            if f'/stocks/{slug}/forecast/' in url:
+                if isinstance(page, Exception):
+                    raise page
+                return page if isinstance(page, FakeResp) else FakeResp(200, page)
+        return FakeResp(404)
+
+
+def spg_page(avg, upd='2026-10-07', cur='USD'):
+    return ('x targets:{low:300,high:500,count:20,median:420,average:410,updated:"%s"} y '
+            'Targets:{source:"spg",currency:"%s",avg:%s,median:420,low:300,high:500,numPriceTargets:20}' % (upd, cur, avg))
+
+
+class TestTargets(unittest.TestCase):
+    def _run(self, cfg, price=100, prev=100, group='position', cons=None):
+        closes = [100 + (0.5 if i % 2 else -0.5) for i in range(60)]
+        closes[-2:] = [prev, price]
+        data = dict(closes=closes, highs=[101] * 60, lows=[99] * 60, volumes=[1000] * 60,
+                    price=price, prev_close=prev, dates=['2026-10-08'] * 60, source='test')
+        cfg = {**cfg, '_consensus': cons} if cons else cfg
+        with patch.object(monitor, 'log'):
+            return monitor.analyze_symbol('TEST', cfg, data, group=group)
+
+    def _tg(self, cfg, **kw):
+        level, signals, detail = self._run(cfg, **kw)
+        base = self._run({}, **kw)[0]
+        return level, base, [x for x in signals if '目标价' in x or '共识价' in x], detail
+
+    # ---- 警示规则（手填目标价和共识价共用一套）
+    def test_within_gap_is_purple_and_does_not_change_level(self):
+        for target, text in [(101, '在目标价 101 ±3% 内（偏离 -1.0%）'),
+                             (97.5, '在目标价 97.5 ±3% 内（偏离 +2.6%）'),   # 已超过目标价但还在带内：也报
+                             (103, '在目标价 103 ±3% 内（偏离 -2.9%）')]:
+            with self.subTest(target=target):
+                level, base, hit, detail = self._tg({'target': target})
+                self.assertEqual(hit, [text])
+                self.assertEqual(level, base)                # 紫色不改红黄绿
+                self.assertTrue(detail['purple'])
+                self.assertTrue(detail['target']['hit'])
+
+    def test_far_from_target_or_far_beyond_is_silent(self):
+        for target in (104, 120, 140, 96, 90, 60):           # 远离 / 已远超：都不报
+            with self.subTest(target=target):
+                level, base, hit, detail = self._tg({'target': target})
+                self.assertEqual(hit, [])
+                self.assertFalse(detail['purple'])
+
+    def test_same_day_cross_is_purple_even_when_jump_is_big(self):
+        _, _, hit, d = self._tg({'target': 100.5}, price=101, prev=100)
+        self.assertEqual(hit, ['今日上穿目标价 100.5'])
+        _, _, hit, d = self._tg({'target': 100.5}, price=100, prev=101)
+        self.assertEqual(hit, ['今日跌破目标价 100.5'])
+        self.assertTrue(d['purple'])
+        # 跳空一次越过 ±3% 的带：只要跨越就报
+        _, _, hit, _ = self._tg({'target': 100}, price=108, prev=95)
+        self.assertEqual(hit, ['今日上穿目标价 100'])
+        # 跨越之后第二天：还在带内照报（带内一律报），出了带就不报
+        self.assertEqual(len(self._tg({'target': 100}, price=102, prev=101)[2]), 1)
+        self.assertEqual(self._tg({'target': 100}, price=110, prev=108)[2], [])
+
+    def test_space_over_threshold_is_purple_with_percent_text(self):
+        level, base, hit, detail = self._tg({'target': 160})        # 160/100-1 = +60%
+        self.assertEqual(hit, ['目标价 160，空间 +60%'])
+        self.assertEqual(level, base)
+        self.assertTrue(detail['purple'])
+        self.assertEqual(self._tg({'target': 150})[2], [])                  # 刚好 50% 不算「超过」
+        with patch.dict(monitor.S, {'target_space_pct': 30.0}):
+            self.assertEqual(self._tg({'target': 140})[2], ['目标价 140，空间 +40%'])
+        with patch.dict(monitor.S, {'target_gap_pct': 5.0}):
+            self.assertEqual(len(self._tg({'target': 104})[2]), 1)
+        self.assertEqual(monitor.DEFAULT_SETTINGS['target_gap_pct'], 3.0)
+        self.assertEqual(monitor.DEFAULT_SETTINGS['target_space_pct'], 50.0)
+
+    def test_over_100_percent_is_anomaly_red_not_purple(self):
+        level, base, hit, detail = self._tg({'target': 250})        # +150%
+        self.assertEqual(hit, ['目标价 250 疑似数据异常（高出现价 150%）'])
+        self.assertEqual(level, 'red')
+        self.assertFalse(detail['purple'])
+        self.assertTrue(detail['target']['anomaly'])
+
+    def test_only_positions_and_focus_use_targets(self):
+        for group in ('position', 'focus'):
+            self.assertTrue(self._tg({'target': 101}, group=group)[3]['purple'])
+        for group in ('technology', 'materials', 'index_funds'):
+            d = self._tg({'target': 101}, group=group)[3]
+            self.assertFalse(d['purple'])
+            self.assertIsNone(d['target'])
+
+    def test_manual_target_beats_consensus_and_bad_values_ignored(self):
+        cons = {'s': 'ok', 'avg': 160.0, 'upd': '2026-10-07', 'r': '2026-10-01'}
+        _, _, hit, d = self._tg({'target': 101, 'target_at': '2026-09'}, cons=cons)
+        self.assertEqual(d['target']['kind'], 'manual')
+        self.assertEqual(d['target']['month'], 9)
+        self.assertEqual(hit, ['在目标价 101 ±3% 内（偏离 -1.0%）'])          # 用手填的 101，不是共识的 160
+        _, _, hit, d = self._tg({}, cons=cons)
+        self.assertEqual(d['target']['kind'], 'consensus')
+        self.assertEqual(hit, ['共识价 160，空间 +60%'])
+        for bad in (0, -5, 'abc', True, float('nan'), float('inf'), ''):
+            with self.subTest(bad=bad):
+                d = self._tg({'target': bad})[3]
+                self.assertIsNone(d['target'])
+                self.assertFalse(d['purple'])
+        with patch.object(monitor, 'log'):
+            self.assertIsNone(monitor.manual_target({'target': 0}))
+
+    def test_failed_consensus_shows_old_value_but_never_alerts(self):
+        cons = {'s': 'fail', 'avg': 160.0, 'upd': '2026-08-17', 'r': '2026-09-15', 'try': '2026-10-09'}
+        level, base, hit, d = self._tg({}, cons=cons)
+        self.assertEqual(hit, [])
+        self.assertEqual(level, base)
+        self.assertTrue(d['target']['failed'])
+        self.assertEqual(d['target']['month'], 8)
+        self.assertFalse(d['purple'])
+        d = self._tg({}, cons={'s': 'fail', 'try': '2026-10-09'})[3]       # 没有旧值
+        self.assertIsNone(d['target']['price'])
+        self.assertIsNone(self._tg({}, cons={'s': 'none', 'r': '2026-10-01'})[3]['target'])   # 无覆盖：不显示
+
+    # ---- 标签样式
+    def test_tag_html_variants(self):
+        tag = monitor.target_tag
+        self.assertEqual(tag(None), '')
+        self.assertEqual(tag({'kind': 'consensus', 'price': 429.47, 'month': 10}),
+                         '<span class="tgs"><span class="lvtag tgt"><span>共识 429.47</span><span>· 10月</span></span></span>')
+        self.assertIn('lvtag tgt hit', tag({'kind': 'consensus', 'price': 87.56, 'month': 10, 'hit': True}))
+        self.assertIn('<span>目标 108</span><span>· 10月</span>', tag({'kind': 'manual', 'price': 108.0, 'month': 10}))
+        self.assertNotIn('月', tag({'kind': 'manual', 'price': 108.0, 'month': None}))
+        failed = tag({'kind': 'consensus', 'price': 429.0, 'month': 8, 'failed': True})
+        self.assertIn('lvtag tgt bad', failed)
+        self.assertIn('共识 429', failed)
+        self.assertIn('共识 获取失败', tag({'kind': 'consensus', 'price': None, 'month': None, 'failed': True}))
+        # 数据异常：标签不变红
+        self.assertNotIn('bad', tag({'kind': 'consensus', 'price': 250.0, 'month': 10, 'anomaly': True}))
+
+    # ---- 抓取
+    def test_parse_consensus(self):
+        self.assertEqual(monitor.parse_consensus(spg_page(429.47)), {'avg': 429.47, 'upd': '2026-10-07'})
+        self.assertIsNone(monitor.parse_consensus(spg_page(429.47, cur='HKD')))
+        self.assertIsNone(monitor.parse_consensus(spg_page(0)))
+        self.assertIsNone(monitor.parse_consensus('nothing'))
+        self.assertIsNone(monitor.parse_consensus(None))
+        self.assertEqual(monitor.parse_consensus(spg_page(12, upd='bad'))['upd'], '')
+
+    def test_marker_and_due_rules(self):
+        self.assertEqual(monitor.consensus_marker('2026-10-09'), '2026-10-01')
+        self.assertEqual(monitor.consensus_marker('2026-10-15'), '2026-10-15')
+        self.assertEqual(monitor.consensus_marker('2026-10-31'), '2026-10-15')
+        due = monitor.consensus_due
+        self.assertTrue(due(None, '2026-10-01', '2026-10-09'))
+        self.assertTrue(due({'s': 'ok', 'r': '2026-09-15'}, '2026-10-01', '2026-10-09'))     # 上一个节拍的
+        self.assertFalse(due({'s': 'ok', 'r': '2026-10-01'}, '2026-10-01', '2026-10-09'))    # 本节拍已取
+        self.assertFalse(due({'s': 'none', 'r': '2026-10-01'}, '2026-10-01', '2026-10-09'))
+        self.assertTrue(due({'s': 'fail', 'r': '2026-10-01', 'try': '2026-10-08'}, '2026-10-01', '2026-10-09'))
+        self.assertFalse(due({'s': 'fail', 'r': '2026-10-01', 'try': '2026-10-09'}, '2026-10-01', '2026-10-09'))
+        self.assertTrue(due({'s': 'weird'}, '2026-10-01', '2026-10-09'))
+
+    def test_wanted_scope_only_positions_and_focus_stocks(self):
+        w = monitor.consensus_wanted
+        self.assertTrue(w('AAPL', {}, 'position'))
+        self.assertTrue(w('MSFT', {}, 'focus'))
+        self.assertFalse(w('NVDA', {}, 'technology'))          # 其它分组不取
+        self.assertFalse(w('NVDA', {}, 'other'))
+        self.assertFalse(w('BRK-B', {}, 'position'))           # 伯克希尔不取
+        self.assertFalse(w('BRK.B', {}, 'position'))
+        self.assertFalse(w('XLK', {}, 'position'))             # ETF 不取
+        self.assertFalse(w('AAPL', {'target': 300}, 'position'))   # 手填了就不取共识
+        self.assertTrue(w('AAPL', {'target': 0}, 'position'))      # 手填无效当没填
+        self.assertFalse(w('.VIX', {}, 'position'))
+        self.assertFalse(w('00700.HK', {}, 'position'))
+
+    def _update(self, symbols, pages, prev=None, today='2026-10-09', robots='User-agent: *\nDisallow: /e/\n'):
+        sess = FakeSession(pages, robots=robots)
+        sleeps = []
+        with patch.object(monitor, 'log'):
+            data, stat = monitor.update_consensus(symbols, prev, today, sess=sess, sleep=sleeps.append)
+        return data, stat, sess, sleeps
+
+    def test_update_fetches_due_symbols_politely(self):
+        pages = {'aapl': spg_page(328.09), 'zs': spg_page(233.38, '2026-09-12'), 'newx': FakeResp(404)}
+        data, stat, sess, sleeps = self._update(['AAPL', 'ZS', 'NEWX'], pages)
+        self.assertEqual(data['AAPL'], {'s': 'ok', 'avg': 328.09, 'upd': '2026-10-07', 'r': '2026-10-01', 'try': '2026-10-09'})
+        self.assertEqual(data['ZS']['upd'], '2026-09-12')
+        self.assertEqual(data['NEWX']['s'], 'none')
+        self.assertEqual((stat['ok'], stat['none'], stat['fail']), (2, 1, 0))
+        self.assertTrue(sess.calls[0].endswith('/robots.txt'))                # 先读 robots
+        self.assertEqual(sleeps, [monitor.CONSENSUS_GAP, monitor.CONSENSUS_GAP])   # 每只之间隔开
+        self.assertIn('market-monitor/1.0', sess.headers['User-Agent'])
+        self.assertIn('github.com/nixhuang/market-monitor', sess.headers['User-Agent'])
+        self.assertNotIn('@', sess.headers['User-Agent'])                      # 不留邮箱
+
+    def test_update_only_fetches_missing_or_stale_and_drops_removed(self):
+        prev = {'data': {'AAPL': {'s': 'ok', 'avg': 300.0, 'upd': '2026-10-01', 'r': '2026-10-01', 'try': '2026-10-01'},
+                         'OLD': {'s': 'ok', 'avg': 9.0, 'upd': '2026-10-01', 'r': '2026-10-01'}}}
+        data, stat, sess, _ = self._update(['AAPL', 'ZS'], {'zs': spg_page(233.38)}, prev=prev)
+        self.assertEqual([u for u in sess.calls if 'forecast' in u], ['https://stockanalysis.com/stocks/zs/forecast/'])
+        self.assertEqual(data['AAPL']['avg'], 300.0)            # 本节拍已取：不重复
+        self.assertNotIn('OLD', data)                           # 不在清单里了：清掉
+        data, stat, sess, _ = self._update(['AAPL'], {}, prev={'data': data}, today='2026-10-12')
+        self.assertEqual(stat['due'], 0)                        # 同一节拍内不再取
+        self.assertEqual(sess.calls, [])
+        data, stat, sess, _ = self._update(['AAPL'], {'aapl': spg_page(310)}, prev={'data': data}, today='2026-10-15')
+        self.assertEqual(data['AAPL']['avg'], 310.0)            # 到 15 号：新节拍，再取一次
+        self.assertEqual(data['AAPL']['r'], '2026-10-15')
+
+    def test_failure_keeps_old_value_and_marks_fail(self):
+        old = {'s': 'ok', 'avg': 300.0, 'upd': '2026-08-17', 'r': '2026-09-15', 'try': '2026-09-15'}
+        data, stat, _, _ = self._update(['AAPL'], {'aapl': FakeResp(429)}, prev={'data': {'AAPL': old}})
+        e = data['AAPL']
+        self.assertEqual((e['s'], e['avg'], e['upd'], e['r']), ('fail', 300.0, '2026-08-17', '2026-09-15'))
+        self.assertEqual(stat['fail'], 1)
+        t = monitor.resolve_target({}, e)
+        self.assertTrue(t['failed'])
+        self.assertEqual((t['price'], t['month']), (300.0, 8))   # 旧值 + 旧月份
+        # 同一天不重试；第二天再试
+        _, st2, sess2, _ = self._update(['AAPL'], {'aapl': spg_page(1)}, prev={'data': data}, today='2026-10-09')
+        self.assertEqual(st2['due'], 0)
+        d3, st3, _, _ = self._update(['AAPL'], {'aapl': spg_page(310)}, prev={'data': data}, today='2026-10-10')
+        self.assertEqual(d3['AAPL']['s'], 'ok')
+        # 网络异常也算失败
+        d4, _, _, _ = self._update(['AAPL'], {'aapl': ConnectionError('boom')})
+        self.assertEqual(d4['AAPL']['s'], 'fail')
+        self.assertNotIn('avg', d4['AAPL'])
+
+    def test_stops_after_three_consecutive_failures(self):
+        syms = ['AA', 'BB', 'CC', 'DD', 'EE']
+        data, stat, sess, _ = self._update(syms, {s.lower(): FakeResp(403) for s in syms})
+        self.assertEqual(stat['stopped'], 'blocked')
+        self.assertEqual(stat['tried'], 3)
+        self.assertEqual(len([u for u in sess.calls if 'forecast' in u]), 3)
+        self.assertNotIn('EE', data)                              # 没试到的留给下次
+
+    def test_robots_disallow_or_unreadable_means_no_fetch(self):
+        data, stat, sess, _ = self._update(['AAPL'], {'aapl': spg_page(1)}, robots='User-agent: *\nDisallow: /stocks/\n')
+        self.assertEqual(stat['stopped'], 'robots')
+        self.assertEqual(data, {})
+        self.assertEqual([u for u in sess.calls if 'forecast' in u], [])
+        data, stat, sess, _ = self._update(['AAPL'], {'aapl': spg_page(1)}, robots=None)   # robots 读到 503
+        self.assertEqual(stat['stopped'], 'robots')
+
+    def test_all_none_in_a_big_batch_is_treated_as_layout_change(self):
+        syms = ['AA', 'BB', 'CC', 'DD', 'EE', 'FF']
+        old = {s: {'s': 'ok', 'avg': 10.0, 'upd': '2026-09-12', 'r': '2026-09-15'} for s in syms}
+        data, stat, _, _ = self._update(syms, {s.lower(): 'no data here' for s in syms}, prev={'data': old})
+        self.assertEqual(stat['stopped'], 'layout')
+        self.assertEqual(stat['fail'], 6)
+        self.assertTrue(all(data[s]['s'] == 'fail' and data[s]['avg'] == 10.0 for s in syms))   # 旧值保留、标红
+
+    # ---- 页面
+    def _page(self, rows):
+        snap = monitor.build_snapshot({}, rows, {'positions': {}, 'focus': {}})
+        with patch.object(monitor, 'global_dca', return_value=None):
+            return monitor.render({}, rows, len(rows), snapshot=snap)
+
+    def _row(self, sym, level='green', purple=False, target=None, signals=None, group='position', note=''):
+        return dict(symbol=sym, note=note, price=100.0, chg=0.0, level=level, signals=signals or [],
+                    group=group, data_date='2026-10-08', purple=purple, target=target)
+
+    def test_page_purple_rows_are_unfolded_and_stripe_class_stacks(self):
+        t_hit = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True, 'space': 60.0}
+        t_ok = {'kind': 'consensus', 'price': 429.47, 'month': 10, 'failed': False, 'hit': False, 'space': 10.0}
+        rows = [self._row('AAA', 'green', True, t_hit, ['共识价 160，空间 +60%']),
+                self._row('BBB', 'red', True, t_hit, ['异动 +5.0%', '共识价 160，空间 +60%']),
+                self._row('CCC', 'yellow', True, t_hit, ['x']),
+                self._row('DDD', 'green', False, t_ok)]
+        page = self._page(rows)
+        self.assertIn('<tr class="green pur"><td class="sym">AAA', page)
+        self.assertIn('<tr class="red pur"><td class="sym">BBB', page)
+        self.assertIn('<tr class="yellow pur"><td class="sym">CCC', page)
+        self.assertIn('<tr class="green"><td class="sym">DDD', page)
+        shown, folded = page.split('无异动 1 只', 1)
+        self.assertIn('>AAA', shown)                      # 紫色的绿灯行不折叠
+        self.assertNotIn('>DDD', shown)                   # 普通绿灯行仍然折叠
+        self.assertIn('>DDD', folded)
+        self.assertIn('lvtag tgt hit', page)
+        self.assertIn('tr.pur td.sig', page)
+        self.assertIn('--purple:', page)
+        self.assertIn('共识价来源：stockanalysis.com（S&P Global），每月 1、15 日更新', page)
+
+    def test_page_sort_order_not_changed_by_purple(self):
+        t_hit = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True}
+        rows = [self._row('GRN', 'green', True, t_hit), self._row('RED', 'red'), self._row('YEL', 'yellow')]
+        page = self._page(rows)
+        pos = [page.index(f'>{s}<') if f'>{s}<' in page else page.index(f'>{s}') for s in ('RED', 'YEL', 'GRN')]
+        self.assertEqual(pos, sorted(pos))
+
+    def test_page_manual_target_always_shows_space_in_alert_column(self):
+        t = {'kind': 'manual', 'price': 108.0, 'month': 10, 'failed': False, 'hit': False, 'anomaly': False, 'space': 8.0}
+        page = self._page([self._row('MAN', 'yellow', False, t, ['波动 +2.1%'])])
+        self.assertIn('波动 +2.1% · <span class="tnote">目标价 108，空间 +8%</span>', page)
+        self.assertIn('<span>目标 108</span><span>· 10月</span>', page)
+        self.assertNotIn('共识价来源', page)               # 只有手填：不显示共识来源
+
+    def test_page_target_alert_text_is_purple_last_and_purple_bar_on_right(self):
+        t = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True}
+        page = self._page([self._row('PUR', 'green', True, t, ['在共识价 160 ±3% 内（偏离 +0.0%）', '异动 +2.1%', 'RSI 超买'])])
+        # 共识价 / 目标价的警示统一排在最后，并用紫色文字
+        self.assertIn('异动 +2.1% · RSI 超买 · <span class="tp">在共识价 160 ±3% 内（偏离 +0.0%）</span>', page)
+        css = page.split('<style>')[1]
+        # 红黄绿竖条在左、宽度不变（6/4/2px）；紫条改画在整行右侧（警示栏右缘），宽 2px
+        self.assertIn('tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red)', css)
+        self.assertIn('tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow)', css)
+        self.assertIn('tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}', css)
+        self.assertIn('.group-card tr.pur td.sig{box-shadow:inset -2px 0 0 var(--purple)', css)
+        self.assertNotIn('tr.pur td:first-child', css)
+
+    def test_group_header_shows_purple_count_only_when_there_is_one(self):
+        t = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True}
+        with_pur = self._page([self._row('PUR', 'green', True, t, ['在共识价 160 ±3% 内（偏离 +0.0%）'])])
+        self.assertIn('aria-label="紫色警示 1 项"', with_pur)
+        self.assertIn('stat-dot purple', with_pur.split('</style>')[1])
+        without = self._page([self._row('AAPL', 'red', signals=['异动 +5.0%'])])
+        self.assertNotIn('紫色警示', without)
+        self.assertNotIn('stat-dot purple', without.split('</style>')[1])
+
+    def test_page_no_target_means_no_tag_and_no_credit(self):
+        page = self._page([self._row('AAPL', 'red', signals=['异动 +5.0%'])])
+        self.assertNotIn('class="tgs"', page)
+        self.assertNotIn('共识价来源', page)
+
+    def test_main_passes_consensus_to_analysis_and_saves_cache(self):
+        import tempfile
+        cfg = {'positions': {'AAPL': {}, 'MSFT': {'target': 700}}, 'focus': {'ZS': {}},
+               'technology': {'NVDA': {}}, 'group_monitoring': {'technology': True}}
+        seen = {}
+        def analyzed(symbol, settings, data, group):
+            seen[symbol] = settings.get('_consensus')
+            return 'green', [], dict(symbol=symbol, note='', price=100, chg=0, level='green', group=group,
+                                     signals=[], data_date='2026-10-07')
+        cache = {'AAPL': {'s': 'ok', 'avg': 328.09, 'upd': '2026-10-07', 'r': '2026-10-01'}}
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            for name, content in [('holdings.json', cfg), ('settings.json', {})]:
+                with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
+                    json.dump(content, f)
+            with open(os.path.join(directory, 'status.json'), 'w', encoding='utf-8') as f:
+                json.dump({'consensus': {'data': {'AAPL': cache['AAPL']}}}, f)
+            with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                    patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_macro', return_value={}), \
+                    patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
+                    patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
+                    patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
+                    patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'global_dca', return_value=None), \
+                    patch.object(monitor, 'update_consensus', return_value=({'AAPL': cache['AAPL']}, {'ok': 1})) as upd, \
+                    patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
+                self.assertEqual(monitor.main([]), 0)
+                # 只把持仓/重点关注里「没手填目标价」的美股个股交给抓取；MSFT 手填了、NVDA 在板块组都不取
+                self.assertEqual(upd.call_args.args[0], ['AAPL', 'ZS'])
+                self.assertEqual(upd.call_args.args[1], {'data': {'AAPL': cache['AAPL']}})   # 上次缓存从 status.json 读回
+                self.assertEqual(seen['AAPL'], cache['AAPL'])
+                self.assertIsNone(seen['NVDA'])
+                with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
+                    saved = json.load(f)['consensus']
+                self.assertEqual(saved['data'], {'AAPL': cache['AAPL']})
+                self.assertIn('S&P Global', saved['source'])
+
+    def test_main_survives_consensus_crash(self):
+        import tempfile
+        cfg = {'positions': {'AAPL': {}}}
+        def analyzed(symbol, settings, data, group):
+            return 'green', [], dict(symbol=symbol, note='', price=100, chg=0, level='green', group=group,
+                                     signals=[], data_date='2026-10-07')
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            for name, content in [('holdings.json', cfg), ('settings.json', {})]:
+                with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
+                    json.dump(content, f)
+            with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                    patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_macro', return_value={}), \
+                    patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
+                    patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
+                    patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
+                    patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'global_dca', return_value=None), \
+                    patch.object(monitor, 'update_consensus', side_effect=RuntimeError('boom')), \
+                    patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
+                self.assertEqual(monitor.main([]), 0)
+                self.assertTrue(os.path.exists(os.path.join(directory, 'index.html')))
 
 
 if __name__ == '__main__':

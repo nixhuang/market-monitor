@@ -98,9 +98,6 @@
     }
   },
   "index_funds": {
-    "BD#US10Y": {
-      "note": "美国10年期国债收益率"
-    },
     "HYG": {
       "note": "iShares高收益公司债ETF"
     },

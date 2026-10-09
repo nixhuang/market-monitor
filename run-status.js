@@ -196,7 +196,7 @@
   }
   function summaryText(s) {
     if (!s) return '本页未找到运行摘要';
-    const summary = s.summary || {}, counts = s.list_counts || {}, dates = s.actual_dates || {};
+    const summary = s.summary || {}, dates = s.actual_dates || {};
     const list = value => Array.isArray(value) ? value.join(', ') || '无' : value == null ? '未知' : String(value);
     return [
       '本页生成数据 run ' + s.run_id + ' · 事件 ' + (s.event || '未知') + ' · 源提交 ' + (s.source_sha || '未知'),
@@ -204,9 +204,6 @@
       '运行计划 ' + (s.schedule || '未记录') + ' · 数据模式 ' + (s.mode || '未知'),
       '红 ' + (summary.red ?? '未知') + ' / 黄 ' + (summary.yellow ?? '未知') + ' / 绿 ' + (summary.green ?? '未知') +
         ' / 灰 ' + (summary.gray ?? '未知') + ' / 总数 ' + (summary.total ?? '未知') + ' · 宏观有效 ' + (summary.macro_ok ?? '未知'),
-      (s.groups || [{key: 'positions', label: '持仓'}, {key: 'focus', label: '重点关注'}])
-        .map(g => g.label + ' ' + (counts[g.key] ?? 0)).join(' · ') +
-        ' · 设了加仓价 ' + (counts.triggers ?? '未知') + ' 只 · 定投提醒 ' + (counts.dca ? '已开启' : '未开启'),
       '行情实际日期 ' + (dates.min || '未知') + ' ～ ' + (dates.max || '未知') +
         ' · 过期 ' + list(summary.stale_symbols) + ' · 缺失 ' + list(summary.missing_symbols),
       '覆盖情况 ' + JSON.stringify(s.coverage ?? null),

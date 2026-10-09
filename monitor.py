@@ -23,6 +23,7 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.robotparser
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
@@ -119,7 +120,7 @@ def instrument_identity(symbol):
     return aliases.get(normalized, normalized).replace('/', '-')
 
 
-RISK_IDENTITIES = {"^GSPC", "^VIX"}
+RISK_IDENTITIES = {"^GSPC", "^VIX", "^TNX"}   # 已在「市场风险参考」里显示的品种：清单里再出现就跳过（标普500、VIX、10Y美债）
 
 
 def grouped_universe(cfg):
@@ -166,6 +167,9 @@ DEFAULT_SETTINGS = {
     "rsi_low": 30,          # RSI 6/12/24 同侧 <= x：两条黄、三条红
     "near_52w_low_pct": 1.0,  # 距 52 周低点不足 x% → 红
     "trigger_gap_pct": 5.0,  # 距加仓价不足 x% → 红（已跌破则无视这条直接红）
+    "reduce_gap_pct": 3.0,   # 持仓的减仓价：现价在减仓价 ±x%（按减仓价算）内 → 红，不分涨跌方向
+    "target_space_pct": 50.0,  # 目标价（共识价 / 手填）高出现价超过 x% → 紫色（竖条 + 实心标签 + 警示栏，不改红黄绿）
+    "target_gap_pct": 3.0,     # 现价在目标价 ±x% 内、或当日跨越目标价 → 紫色
     "vol_ratio": 1.5,       # 量比 >= x 倍 → 黄
     "quiet_chg": 2.0,       # quiet 标的（货币基金等）单日涨跌 >= x% → 黄
     "amp_yellow": 5.0,      # 日内振幅（最高-最低）/昨收 >= x% → 黄
@@ -300,7 +304,8 @@ SETTING_LIMITS = {
     "ma_short": (2, 250), "ma_long": (2, 250),
     "chg_yellow": (0, 100), "chg_red": (0, 100),
     "rsi_low": (0, 100), "rsi_high": (0, 100),
-    "near_52w_low_pct": (0, 100), "trigger_gap_pct": (0, 100),
+    "near_52w_low_pct": (0, 100), "trigger_gap_pct": (0, 100), "reduce_gap_pct": (0, 100),
+    "target_space_pct": (0, 1000), "target_gap_pct": (0, 100),
     "vol_ratio": (0.1, 100), "quiet_chg": (0, 100),
     "amp_yellow": (0, 100), "amp_red": (0, 100),
     "hy_green": (0, 10000), "hy_red": (0, 10000),
@@ -1877,15 +1882,290 @@ def global_dca(target_date):
 def dca_text(d):
     if not d:
         return ""
-    head = f"每 {d['every']} 个交易日一次 · 起点 {d['start']}"
+    # 页面只留一句：还有几个交易日（日期）；定投日当天整行变黄（样式 .dca.on）
     if d.get("pending"):
-        return f"{head} · 尚未开始（首个定投日 {d['first']}）"
+        return f"尚未开始（首个定投日 {d['first']}）"
     if d["due"]:
-        return f"{head} · <b>美东 {d['date'][5:]} 是定投日</b>（第 {d['times']} 次）"
-    return f"{head} · 距下次定投还有 {d['next_in']} 个交易日（{d['next_date']}）"
+        return f"今天是定投日（{d['date']}，第 {d['times']} 次）"
+    return f"还有 {d['next_in']} 个交易日（{d['next_date']}）"
 
 
 # ---------------------------------------------------------------- 筛选
+
+def reduce_rule(cfg):
+    """读持仓条目的减仓价，返回价格；没填或写错一律返回 None。
+
+    reduce 必须是大于 0 的有限数字（布尔、字符串都不算），写错就忽略并记一条日志。"""
+    v = cfg.get("reduce")
+    if v is None or v == "":
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
+        log(f"  ! 减仓价无效，已忽略：{v!r}")
+        return None
+    return float(v)
+
+
+def _level_num(v):
+    """加仓价／减仓价是否可显示：必须是大于 0 的有限数字（布尔、字符串都不算）。"""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
+        return None
+    return f"{v:.4f}".rstrip("0").rstrip(".")
+
+
+def level_note(trigger, reduce):
+    """标的名称下面的小标签：加仓价 = 橙色「加 325」，减仓价 = 青色「减 400」，都有就并排；都没有返回空串。
+    样式是空心胶囊，和 ETF 的实心蓝色小方标签区分开。"""
+    parts = []
+    t, r = _level_num(trigger), _level_num(reduce)
+    if t:
+        parts.append(f'<span class="lvtag add">加 {t}</span>')
+    if r:
+        parts.append(f'<span class="lvtag cut">减 {r}</span>')
+    if not parts:
+        return ""
+    return f'<span class="lvs">{"".join(parts)}</span>'
+
+
+# ---------------------------------------------------------------- 目标价（手填 / S&P Global 共识价）
+# 只对「持仓」「重点关注」里的个股生效；首页每只最多显示一个目标价标签，手填优先于共识价。
+#   手填：设置页填的 target，月份取保存当月（target_at）。
+#   共识价：S&P Global，取自 stockanalysis.com 个股预测页里内嵌的数据块；
+#           每月 1 号、15 号各取一轮（遇周末顺延到下一次运行），结果缓存在 status.json，不新增文件；
+#           月份取页面「分析师最近更新日」；失败时保留旧值并把标签标红，不影响红黄绿，也不触发警示。
+#           手填了目标价的个股不取共识价；ETF、伯克希尔不取。
+# 两者共用同一套警示（目标价 T，现价 P），命中只出紫色（紫色竖条 + 实心紫标签 + 警示栏文字），不改红黄绿：
+#   ① 当日跨越：昨收和现价分别在 T 的两侧（含刚好到达）；
+#   ② 在 T 的 ±target_gap_pct% 内（按 P/T−1 算）；
+#   ③ 空间 T/P−1 超过 target_space_pct%；
+#   空间超过 TARGET_ANOMALY_PCT（100%）→ 疑似数据异常（如拆股后共识价没同步），改成红色警示、不出紫色；
+#   其余（已远超目标价、离得很远、共识价获取失败）→ 不警示。
+CONSENSUS_URL = "https://stockanalysis.com/stocks/{slug}/forecast/"
+CONSENSUS_ROBOTS = "https://stockanalysis.com/robots.txt"
+CONSENSUS_UA = {"User-Agent": "market-monitor/1.0 (personal dashboard; +https://github.com/nixhuang/market-monitor)"}
+CONSENSUS_SOURCE = "stockanalysis.com（S&P Global）"
+CONSENSUS_SKIP = {"BRK-B", "BRK-A"}   # 伯克希尔：分析师太少，不抓
+CONSENSUS_GAP = 2.0                   # 两次请求的间隔（秒）
+CONSENSUS_BUDGET = 7 * 60             # 单次运行最多花这么久；没取完的下次运行接着取
+CONSENSUS_BREAK = 3                   # 连续失败这么多次就停手，不再继续敲对方网站
+CONSENSUS_GROUPS = ("position", "focus")
+TARGET_ANOMALY_PCT = 100.0
+_CONS_SPG = re.compile(r'Targets:\{source:"spg",currency:"([A-Z]+)",avg:([0-9.]+)')
+_CONS_UPD = re.compile(r'targets:\{low:[0-9.]+,high:[0-9.]+,count:\d+,median:[0-9.]+,average:[0-9.]+,updated:"(\d{4}-\d{2}-\d{2})"')
+
+
+def _pos_num(v):
+    """大于 0 的有限数字（布尔、字符串都不算）→ float；否则 None。"""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
+        return None
+    return float(v)
+
+
+def _month_of(text):
+    """'2026-10-07' / '2026-10' → 10；其它 → None。"""
+    m = re.match(r"\d{4}-(0[1-9]|1[0-2])(?!\d)", text) if isinstance(text, str) else None
+    return int(m.group(1)) if m else None
+
+
+def consensus_marker(today_iso):
+    """今天对应的取数节拍：当月 1 号或 15 号（已到的最近一个）。"""
+    return today_iso[:8] + ("15" if int(today_iso[8:10]) >= 15 else "01")
+
+
+def consensus_slug(sym):
+    s = normalize_symbol(sym)
+    return s.lower().replace("-", ".") if re.fullmatch(r"[A-Z]{1,5}(-[A-Z])?", s) else None
+
+
+def consensus_wanted(sym, cfg, group):
+    """该不该自动取共识价：只有持仓/重点关注里的美股个股；手填了目标价的、ETF、指数、期货、伯克希尔都不取。"""
+    if group not in CONSENSUS_GROUPS or not sym or not quote_supported(sym) or is_etf(sym):
+        return False
+    if manual_target(cfg, quiet=True):
+        return False
+    ident = instrument_identity(sym)
+    return (not ident.startswith("^") and not ident.endswith("=F")
+            and normalize_symbol(sym) not in CONSENSUS_SKIP and consensus_slug(sym) is not None)
+
+
+def parse_consensus(text):
+    """从预测页文本里取 S&P Global 共识价 → {"avg", "upd"}；页面没有（或不是美元）返回 None。"""
+    m = _CONS_SPG.search(text or "")
+    if not m or m.group(1) != "USD":
+        return None
+    avg = _pos_num(float(m.group(2))) if re.fullmatch(r"[0-9]+(\.[0-9]+)?", m.group(2)) else None
+    if avg is None:
+        return None
+    u = _CONS_UPD.search(text)
+    return {"avg": avg, "upd": u.group(1) if u else ""}
+
+
+def consensus_robots_ok(sess):
+    """先读对方 robots.txt：读不到（网络/5xx）或明确禁止就不取；4xx 视为没有限制。"""
+    try:
+        r = sess.get(CONSENSUS_ROBOTS, timeout=15)
+    except Exception as e:
+        log(f"  · 共识价：robots.txt 读取失败，本轮不取：{str(e)[:60]}")
+        return False
+    if r.status_code >= 500:
+        return False
+    if r.status_code != 200:
+        return True
+    rp = urllib.robotparser.RobotFileParser()
+    rp.parse(r.text.splitlines())
+    return rp.can_fetch(CONSENSUS_UA["User-Agent"], CONSENSUS_URL.format(slug="aapl"))
+
+
+def fetch_consensus_one(sess, sym):
+    """取一只：{"s":"ok","avg","upd"} / {"s":"none"}（页面没有共识，属于无覆盖）/ {"s":"fail","why"}。"""
+    try:
+        r = sess.get(CONSENSUS_URL.format(slug=consensus_slug(sym)), timeout=25)
+    except Exception as e:
+        return {"s": "fail", "why": str(e)[:60]}
+    if r.status_code == 404:
+        return {"s": "none"}
+    if r.status_code != 200:
+        return {"s": "fail", "why": f"HTTP {r.status_code}"}
+    got = parse_consensus(r.text)
+    return {"s": "ok", **got} if got else {"s": "none"}
+
+
+def consensus_due(entry, marker, today_iso):
+    """该不该取：没有记录、记录是上一个节拍的、或上次失败且今天还没试过。"""
+    if not isinstance(entry, dict) or entry.get("s") not in ("ok", "none", "fail"):
+        return True
+    if entry["s"] == "fail" and entry.get("try") == today_iso:
+        return False
+    return entry.get("r") != marker or entry["s"] == "fail"
+
+
+def _consensus_failed(old_entry, today_iso, why):
+    old_entry = old_entry if isinstance(old_entry, dict) else {}
+    e = {"s": "fail", "r": old_entry.get("r", ""), "try": today_iso, "why": why}
+    for k in ("avg", "upd"):
+        if old_entry.get(k) not in (None, ""):
+            e[k] = old_entry[k]
+    return e
+
+
+def update_consensus(symbols, prev, today_iso, sess=None, sleep=time.sleep, clock=time.monotonic, force=False):
+    """按节拍更新共识价缓存。prev 是上一次 status.json 里的 consensus。返回 (新缓存 data, 统计)。
+    不在清单里的代码会被清掉；失败保留旧值；整批都「无覆盖」视为页面改版，按失败处理。"""
+    marker = consensus_marker(today_iso)
+    old = {}
+    if isinstance(prev, dict) and isinstance(prev.get("data"), dict):
+        old = {k: v for k, v in prev["data"].items() if isinstance(v, dict)}
+    syms = list(dict.fromkeys(normalize_symbol(s) for s in symbols))
+    data = {s: old[s] for s in syms if s in old}
+    todo = [s for s in syms if force or consensus_due(old.get(s), marker, today_iso)]
+    stat = {"marker": marker, "due": len(todo), "tried": 0, "ok": 0, "none": 0, "fail": 0, "stopped": ""}
+    if not todo:
+        return data, stat
+    sess = sess or requests.Session()
+    sess.headers.update(CONSENSUS_UA)
+    if not consensus_robots_ok(sess):
+        stat["stopped"] = "robots"
+        log("  · 共识价：robots.txt 不允许或读取失败，本轮不取，沿用旧值")
+        return data, stat
+    log(f"  取共识价：{len(todo)} 只到期（节拍 {marker}），每只间隔 {CONSENSUS_GAP:g} 秒…")
+    start, streak, fresh = clock(), 0, []
+    for i, s in enumerate(todo):
+        if clock() - start > CONSENSUS_BUDGET:
+            stat["stopped"] = "budget"
+            break
+        if i:
+            sleep(CONSENSUS_GAP)
+        res = fetch_consensus_one(sess, s)
+        stat["tried"] += 1
+        stat[res["s"]] += 1
+        if res["s"] == "fail":
+            streak += 1
+            data[s] = _consensus_failed(old.get(s), today_iso, res.get("why", ""))
+            if streak >= CONSENSUS_BREAK:
+                stat["stopped"] = "blocked"
+                break
+        else:
+            streak = 0
+            data[s] = {**res, "r": marker, "try": today_iso}
+            fresh.append(s)
+    if stat["tried"] >= 5 and stat["ok"] == 0 and stat["none"] == stat["tried"]:
+        # 全部「无覆盖」不可能（AAPL 这类一定有）→ 多半是页面改版，按失败处理，保留旧值并标红
+        for s in fresh:
+            data[s] = _consensus_failed(old.get(s), today_iso, "页面结构疑似改版")
+        stat["fail"], stat["none"], stat["stopped"] = stat["tried"], 0, "layout"
+    log(f"  共识价：成功 {stat['ok']} · 无覆盖 {stat['none']} · 失败 {stat['fail']}"
+        + (f" · 提前停止（{stat['stopped']}）" if stat["stopped"] else ""))
+    return data, stat
+
+
+def manual_target(entry, quiet=False):
+    """设置页手填的目标价 → (价格, 月份 或 None)；没填或写错返回 None（写错会记一条日志）。"""
+    if not isinstance(entry, dict):
+        return None
+    v = entry.get("target")
+    price = _pos_num(v)
+    if price is None:
+        if v not in (None, "") and not quiet:
+            log(f"  ! 目标价无效，已忽略：{v!r}")
+        return None
+    return price, _month_of(entry.get("target_at"))
+
+
+def resolve_target(cfg, cons):
+    """手填优先于共识价。返回 {"kind","price","month","failed"}；都没有返回 None。
+    共识价获取失败但有旧值：price 是旧值、failed=True（只显示标签，不参与警示）；没有旧值：price=None。"""
+    m = manual_target(cfg)
+    if m:
+        return {"kind": "manual", "price": m[0], "month": m[1], "failed": False}
+    if not isinstance(cons, dict) or cons.get("s") not in ("ok", "fail"):
+        return None
+    month = _month_of(cons.get("upd")) or _month_of(cons.get("r"))
+    if cons["s"] == "ok":
+        price = _pos_num(cons.get("avg"))
+        return {"kind": "consensus", "price": price, "month": month, "failed": False} if price else None
+    return {"kind": "consensus", "price": _pos_num(cons.get("avg")), "month": month, "failed": True}
+
+
+def _price_text(v):
+    return f"{v:.2f}".rstrip("0").rstrip(".")
+
+
+def target_label(t):
+    return "目标价" if t.get("kind") == "manual" else "共识价"
+
+
+def target_alerts(price, prev, target, label, space_pct, gap_pct):
+    """目标价警示 → (紫色文字列表, 红色文字列表, 空间%)。空间 = 目标价 / 现价 − 1。"""
+    space = (target / price - 1) * 100
+    tstr = _price_text(target)
+    if space > TARGET_ANOMALY_PCT:
+        return [], [f"{label} {tstr} 疑似数据异常（高出现价 {space:.0f}%）"], space
+    purple = []
+    dev = (price / target - 1) * 100
+    if prev and prev < target <= price:
+        purple.append(f"今日上穿{label} {tstr}")
+    elif prev and prev > target >= price:
+        purple.append(f"今日跌破{label} {tstr}")
+    elif abs(dev) <= gap_pct:
+        purple.append(f"在{label} {tstr} ±{gap_pct:g}% 内（偏离 {dev:+.1f}%）")
+    if space > space_pct:
+        purple.append(f"{label} {tstr}，空间 +{space:.0f}%")
+    return purple, [], space
+
+
+def target_tag(t):
+    """价格涨跌幅下面的标签：正常 = 空心紫色胶囊；命中紫色警示 = 实心紫色；共识价取数失败 = 红色。
+    手填写「目标 108 · 10月」，共识价写「共识 429 · 10月」。没有目标价返回空串。"""
+    if not t:
+        return ""
+    manual = t.get("kind") == "manual"
+    month = f'<span>· {t["month"]}月</span>' if t.get("month") else ""
+    if t.get("price") is None:
+        body, cls = '<span>共识 获取失败</span>', "tgt bad"
+    else:
+        body = f'<span>{"目标" if manual else "共识"} {_price_text(t["price"])}</span>{month}'
+        cls = "tgt bad" if t.get("failed") else ("tgt hit" if t.get("hit") else "tgt")
+    return f'<span class="tgs"><span class="lvtag {cls}">{body}</span></span>'
+
 
 def analyze_symbol(sym, cfg, data, group="technology"):
     """返回等级、信号和详情，分组定义见 groups.json。"""
@@ -1970,6 +2250,32 @@ def analyze_symbol(sym, cfg, data, group="technology"):
         elif gap <= S["trigger_gap_pct"]:
             signals.append(f"距加仓价 {tstr} 还差 {gap:.1f}%")
             bump("red")
+
+    # 减仓价：只对「持仓」分组生效——和加仓价对称：
+    # 现价已涨到减仓价以上（不管高出多少）→ 红；还没到但距离不足 x%（按减仓价算）→ 红
+    reduce = reduce_rule(cfg) if group == "position" else None
+    if reduce:
+        rgap = (price / reduce - 1) * 100
+        rstr = f"{reduce:,.2f}"
+        if rgap >= 0:
+            signals.append(f"已涨到减仓价 {rstr}（高出 {rgap:.1f}%）")
+            bump("red")
+        elif -rgap <= S["reduce_gap_pct"]:
+            signals.append(f"距减仓价 {rstr} 还差 {-rgap:.1f}%")
+            bump("red")
+
+    # 目标价（手填优先于 S&P Global 共识价）：只对持仓 / 重点关注；命中只出紫色，不改红黄绿；
+    # 疑似数据异常（空间 > 100%）才升成红色警示；共识价取数失败只标红标签，不参与警示
+    tgt = resolve_target(cfg, cfg.get("_consensus")) if group in CONSENSUS_GROUPS else None
+    if tgt:
+        tgt["hit"] = False
+        if tgt["price"] and not tgt["failed"]:
+            purple, reds, space = target_alerts(price, prev, tgt["price"], target_label(tgt),
+                                                S["target_space_pct"], S["target_gap_pct"])
+            signals.extend(reds + purple)
+            if reds:
+                bump("red")
+            tgt.update(hit=bool(purple), space=space, anomaly=bool(reds))
 
     # 布林带：逼近即算，盘中不用等收盘真的穿过去
     # gap = 距离轨道还差百分之多少；<=0 表示已经穿过去了
@@ -2059,6 +2365,9 @@ def analyze_symbol(sym, cfg, data, group="technology"):
         "vol_ratio": vol_ratio,
         "amp": amp,
         "trigger": trig,
+        "reduce": reduce,
+        "target": tgt,
+        "purple": bool(tgt and tgt.get("hit")),
         "source": data.get("source", ""),
         "data_date": (data.get("dates") or [""])[-1],
         "realtime": bool(data.get("realtime")),
@@ -2082,7 +2391,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261008-10"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261009-1"></script>'
 
 
 def config_hash(filename):
@@ -2160,6 +2469,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "registered_counts": {g["key"]: len(cfg.get(g["key"]) or {}) for g in GROUPS},
         "list_counts": {**counts,
                         "triggers": sum(bool(c.get("trigger")) for c in positions.values()),
+                        "reduces": sum(bool(reduce_rule(c)) for c in positions.values()),
                         "dca": 1 if dca else 0},
         "summary": {**{lv: sum(d["level"] == lv for d in items) for lv in ("red", "yellow", "green", "gray")},
                     "total": len(items), "macro_ok": sum(bool(m.get("ok")) for m in macro.values()),
@@ -2267,8 +2577,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     def rows_of(lst):
         out = ""
         for d in lst:
-            cls = d["level"]
-            sig = " · ".join(d["signals"]) if d["signals"] else "—"
+            cls = d["level"] + (" pur" if d.get("purple") else "")
+            # 目标价 / 共识价相关的警示文字一律用紫色，并统一排在最后
+            _is_tp = lambda x: "共识价" in x or "目标价" in x
+            _sigs = [x for x in d["signals"] if not _is_tp(x)] + [f'<span class="tp">{x}</span>' for x in d["signals"] if _is_tp(x)]
+            sig = " · ".join(_sigs) if _sigs else "—"
             chg_cls = "up" if (d["chg"] or 0) > 0 else (
                 "down" if (d["chg"] or 0) < 0 else "")
             chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
@@ -2309,11 +2622,17 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
                 soon = " soon" if earnings_soon(d.get("earnings")) else ""
                 earn_html = (f'<span class="earn{soon}">'
                              f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}</span></span>')
+            lv_html = level_note(d.get("trigger"), d.get("reduce"))
+            tg = d.get("target") or {}
+            tg_html = target_tag(tg)
+            if tg.get("kind") == "manual" and tg.get("space") is not None and not tg.get("hit") and not tg.get("anomaly"):
+                # 手填目标价：没触发警示时也在警示栏写出空间，方便对照
+                sig = ("" if sig == "—" else sig + " · ") + f'<span class="tnote">目标价 {_price_text(tg["price"])}，空间 {tg["space"]:+.0f}%</span>'
             out += (
-                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}</td>'
+                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{lv_html}{tag}</td>'
                 f'<td class="earn-cell">{earn_html}</td>'
                 f'<td class="num px"><span class="px-price">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
-                f'<span class="px-chg {chg_cls}">{chg_txt}</span></td>'
+                f'<span class="px-chg {chg_cls}">{chg_txt}</span>{tg_html}</td>'
                 f'<td class="sig">{sig}{fund_html}</td></tr>'
             )
         if not out:
@@ -2334,8 +2653,10 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             g = sorted(g, key=lambda d: (sort_key(d)[0],
                                          normalize_symbol(d["symbol"]) != group["sector_etf"],
                                          sort_key(d)[1]))
-        shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or fund_alert(d) or d.get("reference_only")]
-        quiet = [d for d in g if d["level"] == "green" and not fund_alert(d) and not d.get("reference_only")]
+        shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or fund_alert(d) or d.get("reference_only")
+                 or d.get("purple")]
+        quiet = [d for d in g if d["level"] == "green" and not fund_alert(d) and not d.get("reference_only")
+                 and not d.get("purple")]
         parts = []
         enabled = monitoring.get(group["key"], True)
         if not enabled:
@@ -2355,6 +2676,10 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             f'<i class="stat-dot {lv}" aria-hidden="true"></i>{count}</span>'
             for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "无数据"))
             if (count := sum(d["level"] == lv for d in g)))
+        # 紫色（目标价 / 共识价警示）：条数跟在红黄灯后面；一条都没有就不显示
+        if (n_pur := sum(bool(d.get("purple")) for d in g)):
+            stats += (f'<span class="stat-count" aria-label="紫色警示 {n_pur} 项">'
+                      f'<i class="stat-dot purple" aria-hidden="true"></i>{n_pur}</span>')
         # 板块组：红黄灯后面跟「板块 ETF 近 20 日相对标普500的强弱」，折叠时也能看到
         rs = (items_by_symbol.get(group["sector_etf"]) or {}).get("rs_spy") if group.get("sector_etf") else None
         if rs:
@@ -2371,7 +2696,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             stats = f'<span class="monitor-note">{note}</span>' + stats
         expanded = " open" if enabled and group["key"] in ("positions", "focus") else ""
         group_cards += (f'<details class="card group-card" id="group_{group["key"]}"{expanded}>'
-                        f'<summary class="grp"><span>{group["label"]} ({registered.get(group["key"], len(g))})</span>'
+                        f'<summary class="grp"><span>{group["label"]} ({len(g)})</span>'
                         f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
 
     src_name = {"yahoo": "Yahoo Finance", "stooq": "Stooq", "nasdaq": "Nasdaq"}
@@ -2431,6 +2756,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
                 + (f" · 本轮监测 {summary.get('total', 0)} 个唯一标的" if registered else "")
                 + (f' · 已隐藏 {dup_hidden} 只重复标的（风险参考／持仓优先，其次重点关注，最后其他）'
                    if dup_hidden else "") + "</div>")
+    consensus_credit = (f'共识价来源：{CONSENSUS_SOURCE}，每月 1、15 日更新<br>\n'
+                        if any((d.get("target") or {}).get("kind") == "consensus" for d in items) else "")
     dca_html = (f'<div class="dca {"on" if (snapshot.get("dca_reminder") or {}).get("due") else ""}">'
                 f'定投提醒：{dca_info}</div>') if dca_info else ""
 
@@ -2450,7 +2777,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 :root{{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
   --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
-  --blue:#2f6bd8;
+  --blue:#2f6bd8; --purple:#a371f7;
 }}
 *{{box-sizing:border-box;-webkit-tap-highlight-color:transparent}}
 body{{margin:0;background:var(--bg);color:var(--text);
@@ -2475,6 +2802,18 @@ tr:first-child td{{border-top:none}}
 .tag.f-red{{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}}
 .tag.f-yellow{{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}}
 .tag.quote-note{{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}}
+.lvs{{display:block;margin:4px 0 0;line-height:1.5}}
+.lvtag{{display:inline-block;margin:0 4px 2px 0;padding:0 7px;border-radius:999px;border:1px solid;
+  background:transparent;font-size:10px;font-weight:400;line-height:16px;white-space:nowrap;font-variant-numeric:tabular-nums}}
+.lvtag.add{{color:#ffa94d;border-color:rgba(255,169,77,.6)}}
+.lvtag.cut{{color:#4dd0e1;border-color:rgba(77,208,225,.6)}}
+.tgs{{display:block;margin:3px 0 0;line-height:1.4;white-space:normal}}
+.tgs .lvtag{{margin:0;padding:0 6px;white-space:normal;text-align:center}}
+.tgs .lvtag span{{display:inline-block;white-space:nowrap}}
+.lvtag.tgt{{color:#c4a3ff;border-color:rgba(163,113,247,.65)}}
+.lvtag.tgt.hit{{color:#fff;background:#8957e5;border-color:#8957e5}}
+.lvtag.tgt.bad{{color:#ff9b95;border-color:rgba(248,81,73,.7)}}
+.tnote,.sig .tp{{color:#c4a3ff}}
 .fund-detail{{margin-top:6px}}
 .fund-detail summary{{margin-left:0;padding:7px 9px;cursor:pointer;list-style:none;touch-action:manipulation}}
 .fund-detail summary::-webkit-details-marker{{display:none}}
@@ -2523,6 +2862,7 @@ tr.yellow td:first-child{{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12
 tr.green td:first-child{{box-shadow:inset 2px 0 0 var(--green)}}
 tr.gray td{{color:var(--dim)}}
 .group-card tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
+.group-card tr.pur td.sig{{box-shadow:inset -2px 0 0 var(--purple);padding-right:12px}}
 .macro-help{{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}}
 .macro-help>summary{{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}}
 .macro-help p{{margin:6px 0}}
@@ -2566,7 +2906,7 @@ tr.gray td{{color:var(--dim)}}
 .rs-spy.up{{color:var(--up)}} .rs-spy.down{{color:var(--down)}}
 .stat-dot{{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}}
 .stat-dot.red{{background:var(--red)}} .stat-dot.yellow{{background:var(--yellow)}}
-.stat-dot.gray{{background:var(--dim)}} .stat-dot.green{{background:var(--green)}}
+.stat-dot.gray{{background:var(--dim)}} .stat-dot.green{{background:var(--green)}} .stat-dot.purple{{background:var(--purple)}}
 .market-risk-badge{{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}}
 .market-risk-badge[data-level="red"]{{color:var(--red)}}
 .market-risk-badge[data-level="yellow"]{{color:var(--yellow)}}
@@ -2621,10 +2961,12 @@ tr.gray td{{color:var(--dim)}}
 <tr class="gray"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
 {rows_macro}
 </table>
-<p class="macro-help">垃圾债利差：≥{S['hy_green']:.0f} bp 黄、≥{S['hy_red']:.0f} bp 红；一周扩大 ≥30 bp 为黄、≥50 bp 为红。VIX：≥{S['vix_green']:g} 黄、≥{S['vix_red']:g} 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
-<p class="macro-help">10Y美债是参考行，不计入综合灯：一个月上行 ≥{UST_MONTH_YELLOW} bp 标黄（利率冲击风险），≥{UST_MONTH_WATCH} bp 只提示偏快；周变化列单位为 bp。</p>
-<p class="macro-help">上涨参与度：站上长期均线的股票不足一半为黄；不足三成且信用／金融压力也升高才为红。金融压力是周度数据，达到历史平均紧张程度为黄。指标缺失时显示无数据，不代表安全，也不预测具体跌幅。</p>
-<p class="macro-help">市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a>，数据依据当前成分股计算，回看历史可能有成分股选择偏差。</p>
+<details class="macro-help" id="marketRiskNotes"><summary>指标阈值与数据说明</summary>
+<p>垃圾债利差：≥{S['hy_green']:.0f} bp 黄、≥{S['hy_red']:.0f} bp 红；一周扩大 ≥30 bp 为黄、≥50 bp 为红。VIX：≥{S['vix_green']:g} 黄、≥{S['vix_red']:g} 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
+<p>10Y美债是参考行，不计入综合灯：一个月上行 ≥{UST_MONTH_YELLOW} bp 标黄（利率冲击风险），≥{UST_MONTH_WATCH} bp 只提示偏快；周变化列单位为 bp。</p>
+<p>上涨参与度：站上长期均线的股票不足一半为黄；不足三成且信用／金融压力也升高才为红。金融压力是周度数据，达到历史平均紧张程度为黄。指标缺失时显示无数据，不代表安全，也不预测具体跌幅。</p>
+<p>市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a>，数据依据当前成分股计算，回看历史可能有成分股选择偏差。</p>
+</details>
 </details>
 
 {group_cards}
@@ -2633,7 +2975,7 @@ tr.gray td{{color:var(--dim)}}
 <div class="foot">
 行情：{src_txt} · 垃圾债利差：FRED · 金融压力：NFCI原始周度数据／FRED同步备用<br>
 市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 基本面：Nasdaq<br>
-<a href="./edit.html?rules=1" style="color:#6ba3f0;text-decoration:none">查看完整规则与阈值</a>
+{consensus_credit}<a href="./edit.html?rules=1" style="color:#6ba3f0;text-decoration:none">查看完整规则与阈值</a>
 </div>
 
 <div class="acts">
@@ -2723,6 +3065,7 @@ def main(argv=None):
         cfg = {}
 
     universe, group_counts, dup_hidden = grouped_universe(cfg)
+    cons_data, cons_stat = {}, {}
     if not universe:
         log("holdings.json 里没有自选股，跳过个股部分")
 
@@ -2758,6 +3101,20 @@ def main(argv=None):
             bench_data = fetched[spy_key]
         YAHOO_GATE.reset(False)
         STOOQ_GATE.reset(False)
+        # S&P Global 共识价：只取持仓 / 重点关注，每月 1、15 号一轮；任何异常都不能拖垮行情和页面
+        cons_syms = [normalize_symbol(sym) for sym, sc, grp in universe if consensus_wanted(sym, sc, grp)]
+        try:
+            with open(os.path.join(BASE, "status.json"), encoding="utf-8") as f:
+                prev_cons = json.load(f).get("consensus")
+        except Exception:
+            prev_cons = None
+        try:
+            cons_data, cons_stat = update_consensus(cons_syms, prev_cons, NOW.strftime("%Y-%m-%d"))
+        except Exception as e:
+            log(f"  ! 共识价更新中断，沿用旧值：{str(e)[:90]}")
+            old_data = prev_cons.get("data") if isinstance(prev_cons, dict) else None
+            cons_data = {k: v for k, v in (old_data or {}).items() if k in cons_syms and isinstance(v, dict)}
+            cons_stat = {"stopped": "error"}
         for sym, sc, grp in universe:
             supported = quote_supported(sym)
             is_yield = instrument_identity(sym) == '^TNX'
@@ -2770,7 +3127,8 @@ def main(argv=None):
                     items.append(reference)
                     continue
             if data:
-                lv, sig, detail = analyze_symbol(sym, sc, data, group=grp)
+                cons = cons_data.get(normalize_symbol(sym))
+                lv, sig, detail = analyze_symbol(sym, {**sc, "_consensus": cons} if cons else sc, data, group=grp)
                 if bench_data and normalize_symbol(sym) in sector_etfs:
                     rs = relative_strength(data, bench_data, bench_name=bench_name)
                     if rs:
@@ -2825,6 +3183,7 @@ def main(argv=None):
 
     snapshot = build_snapshot(macro, items, cfg, group_counts=group_counts)
     snapshot["fundamental"] = fund_stat
+    snapshot["consensus"] = {"source": CONSENSUS_SOURCE, "stat": cons_stat, "data": cons_data}
     snapshot["earnings"] = earn_stat
     supported_items = [d for d in items if quote_supported(d["symbol"])]
     html = render(macro, items, len(universe), data_down=bool(supported_items)

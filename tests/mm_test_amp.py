@@ -63,7 +63,7 @@ if m:
     check('runLight' not in bar, "灯已从第三排移走")
 check('statusrow{{' in src, "statusrow 样式已定义")
 check('改自选清单' not in src, "旧的「改自选清单」已删除")
-check('v=20261008-10' in src, "版本号已升到 20261008-10")
+check('v=20261009-1' in src, "版本号已升到 20261009-1")
 
 print()
 if fails:

@@ -202,6 +202,81 @@ check(src.includes('五指标综合市场风险')&&src.includes('同类只取最
   els.set_chg_yellow.value='2';els.set_dca_start.value='2026-02-30';
   check(T.settingsError().includes('定投起点日'), '虚构日期不能保存');
   els.set_dca_start.value='';T.renderSettings();
+
+  // ---- 减仓价：只有持仓分组有这一栏 ----
+  persisted={positions:{AAPL:{note:'苹果',trigger:80,reduce:200},MSFT:{note:'微软',reduce:300}},
+    focus:{ZS:{note:'Zscaler',reduce:50}},technology:{AMD:{note:'超威',reduce:90}}};
+  await T.load();
+  const gh=els.groupEditor.innerHTML;
+  check(gh.includes('id="newReduce_positions"')&&!gh.includes('newRDir_')&&!gh.includes('rdir'), '持仓的添加栏只有减仓价，没有方向下拉');
+  check(!/newReduce_(?!positions)/.test(gh), '其他分组的添加栏没有减仓价');
+  const lp=els.list_positions.innerHTML;
+  check(lp.includes('data-f="reduce"')&&lp.includes('value="200"')&&lp.includes('value="300"'), '持仓每行显示已存的减仓价');
+  check(!lp.includes('<select class="rdir"')&&!lp.includes('reduce_dir'), '持仓每行没有方向下拉');
+  check(!els.list_focus.innerHTML.includes('data-f="reduce"')&&!els.list_technology.innerHTML.includes('data-f="reduce"'), '其他分组每行没有减仓价');
+  let cfg2=JSON.parse(T.configText());
+  check(cfg2.positions.AAPL.reduce===200&&!('reduce_dir' in cfg2.positions.AAPL)&&cfg2.positions.AAPL.trigger===80&&cfg2.positions.MSFT.reduce===300, '保存内容保留减仓价和加仓价');
+  doc.getElementById('newSym_positions').value='NVDA';doc.getElementById('newNote_positions').value='英伟达';doc.getElementById('newTrig_positions').value='';
+  doc.getElementById('newReduce_positions').value='95.5';
+  T.addSymbol('positions');
+  cfg2=JSON.parse(T.configText());
+  check(cfg2.positions.NVDA&&cfg2.positions.NVDA.reduce===95.5&&!('reduce_dir' in cfg2.positions.NVDA)&&!('trigger' in cfg2.positions.NVDA), '添加持仓时可填减仓价（不存方向）');
+  check(doc.getElementById('newReduce_positions').value==='', '添加后清空减仓价');
+  for(const bad of ['-3','0','abc']){
+    doc.getElementById('newSym_positions').value='AMZN';doc.getElementById('newNote_positions').value='亚马逊';doc.getElementById('newReduce_positions').value=bad;
+    T.addSymbol('positions');
+    check(!('AMZN' in JSON.parse(T.configText()).positions), '减仓价“'+bad+'”被拒绝，不添加');
+  }
+  doc.getElementById('newReduce_positions').value='';T.addSymbol('positions');
+  cfg2=JSON.parse(T.configText());
+  check(cfg2.positions.AMZN&&!('reduce' in cfg2.positions.AMZN)&&!('reduce_dir' in cfg2.positions.AMZN), '不填减仓价时不写 reduce');
+  T.moveSymbol('positions','focus','NVDA');
+  cfg2=JSON.parse(T.configText());
+  check(cfg2.focus.NVDA&&!cfg2.positions.NVDA&&!('reduce' in cfg2.focus.NVDA)&&!('reduce_dir' in cfg2.focus.NVDA), '移出持仓时清掉减仓价，避免留下不监测的残值');
+  check(src.includes('id="set_reduce_gap_pct"'), '规则区有减仓价 ±x% 设置');
+  T.SET.reduce_gap_pct=3;T.renderSettings();
+  check(Number(els.set_reduce_gap_pct.value)===3&&T.settingsError()==='', '减仓价 ±x% 默认 3% 且通过校验');
+  els.set_reduce_gap_pct.value='101';check(T.settingsError().includes('reduce_gap_pct'), '减仓价 ±x% 超过 100% 被拒绝');
+  els.set_reduce_gap_pct.value='3';T.renderSettings();
+
+  // ---- 目标价：持仓和重点关注都有这一栏，其他分组没有 ----
+  persisted={positions:{AAPL:{note:'苹果',target:350,target_at:'2026-09'}},focus:{ZS:{note:'Zscaler',target:250.5,target_at:'2026-10'}},
+    technology:{AMD:{note:'超威',target:90,target_at:'2026-10'}}};
+  await T.load();
+  const gt=els.groupEditor.innerHTML;
+  check(gt.includes('id="newTarget_positions"')&&gt.includes('id="newTarget_focus"'), '持仓和重点关注的添加栏都有目标价');
+  check(!/newTarget_(?!positions|focus)/.test(gt), '其他分组的添加栏没有目标价');
+  check(els.list_positions.innerHTML.includes('data-f="target"')&&els.list_positions.innerHTML.includes('value="350"'), '持仓每行显示已存的目标价');
+  check(els.list_focus.innerHTML.includes('data-f="target"')&&els.list_focus.innerHTML.includes('value="250.5"'), '重点关注每行显示已存的目标价');
+  check(!els.list_technology.innerHTML.includes('data-f="target"'), '其他分组每行没有目标价');
+  cfg2=JSON.parse(T.configText());
+  check(cfg2.positions.AAPL.target===350&&cfg2.positions.AAPL.target_at==='2026-09'&&cfg2.focus.ZS.target===250.5, '保存内容保留目标价和保存月份');
+  doc.getElementById('newSym_focus').value='NVDA';doc.getElementById('newNote_focus').value='英伟达';
+  doc.getElementById('newTarget_focus').value='1000';
+  T.addSymbol('focus');
+  cfg2=JSON.parse(T.configText());
+  check(cfg2.focus.NVDA&&cfg2.focus.NVDA.target===1000&&/^\d{4}-(0[1-9]|1[0-2])$/.test(cfg2.focus.NVDA.target_at), '添加时填目标价：同时记下保存月份');
+  check(doc.getElementById('newTarget_focus').value==='', '添加后清空目标价');
+  for(const bad of ['-3','0','abc']){
+    doc.getElementById('newSym_focus').value='AMZN';doc.getElementById('newNote_focus').value='亚马逊';doc.getElementById('newTarget_focus').value=bad;
+    T.addSymbol('focus');
+    check(!('AMZN' in JSON.parse(T.configText()).focus), '目标价“'+bad+'”被拒绝，不添加');
+  }
+  doc.getElementById('newTarget_focus').value='';T.addSymbol('focus');
+  cfg2=JSON.parse(T.configText());
+  check(cfg2.focus.AMZN&&!('target' in cfg2.focus.AMZN)&&!('target_at' in cfg2.focus.AMZN), '不填目标价时不写 target');
+  T.moveSymbol('focus','positions','NVDA');
+  cfg2=JSON.parse(T.configText());
+  check(cfg2.positions.NVDA&&cfg2.positions.NVDA.target===1000, '持仓和重点关注之间移动，目标价保留');
+  T.moveSymbol('positions','technology','NVDA');
+  cfg2=JSON.parse(T.configText());
+  check(cfg2.technology.NVDA&&!('target' in cfg2.technology.NVDA)&&!('target_at' in cfg2.technology.NVDA), '移到其他分组时清掉目标价和月份');
+  check(src.includes('id="set_target_gap_pct"')&&src.includes('id="set_target_space_pct"'), '规则区有目标价 ±x% 和空间 x% 两项设置');
+  T.SET.target_gap_pct=3;T.SET.target_space_pct=50;T.renderSettings();
+  check(Number(els.set_target_gap_pct.value)===3&&Number(els.set_target_space_pct.value)===50&&T.settingsError()==='', '目标价设置默认 3% / 50% 且通过校验');
+  els.set_target_gap_pct.value='101';check(T.settingsError().includes('target_gap_pct'), '目标价 ±x% 超过 100% 被拒绝');
+  els.set_target_gap_pct.value='3';els.set_target_space_pct.value='-1';check(T.settingsError().includes('target_space_pct'), '空间阈值为负被拒绝');
+  els.set_target_space_pct.value='50';T.renderSettings();
   console.log();
   if (fails) { console.error(fails + ' 项失败'); process.exitCode = 1; }
   else console.log('全部通过');

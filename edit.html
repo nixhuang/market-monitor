@@ -69,7 +69,9 @@ button.danger{color:var(--red)}
 .edit-group .row input.n{min-width:0;width:100%;grid-column:2}
 .edit-group .del{grid-column:3;grid-row:1;padding:7px}
 .edit-group .row input.t{grid-column:1;width:82px;font-size:13px}
-.edit-group .move{grid-column:2;max-width:none;width:100%}
+.edit-group .row input.r{grid-row:3}
+.edit-group .move{grid-column:2;grid-row:2;max-width:none;width:100%}
+.edit-group .row input.g,.edit-group .add input.g{grid-row:auto}
 .edit-group .add .s{width:82px;font-size:13px}
 .edit-group .add button{grid-column:3;grid-row:1;padding:7px 3px;font-size:12px}
 .edit-group .add .t{grid-row:2}}
@@ -190,6 +192,9 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
         <details class="set"><summary>RSI判定说明</summary><p class="note">RSI 周期固定为 6 / 12 / 24：同侧两条达到或越过阈值为黄，三条为红；只有一条不触发 RSI 警示。</p></details>
         <div class="setrow"><label>距 52 周低点不足 x% → 红</label><input id="set_near_52w_low_pct" inputmode="decimal"></div>
         <div class="setrow"><label>距加仓价不足 x% → 红</label><input id="set_trigger_gap_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>距减仓价不足 x% → 红（已涨到减仓价直接红，仅持仓）</label><input id="set_reduce_gap_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>现价在目标价 ±x% 内，或当日跨越目标价 → 紫（仅持仓和重点关注）</label><input id="set_target_gap_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>目标价高出现价超过 x% → 紫（仅持仓和重点关注）</label><input id="set_target_space_pct" inputmode="decimal"></div>
         <div class="setrow"><label>量比 ≥ x 倍 → 黄</label><input id="set_vol_ratio" inputmode="decimal"></div>
         <div class="setrow"><label>quiet 标的涨跌 ≥ x% → 黄</label><input id="set_quiet_chg" inputmode="decimal"></div>
         <div class="setrow"><label>日内振幅 ≥ x% → 黄</label><input id="set_amp_yellow" inputmode="decimal"></div>
@@ -217,7 +222,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <p class="note">综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力最多10日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且信用压力最多落后5日或金融压力最多8日达到警戒。</p>
       <div class="setsec">其他个股规则（固定判定）</div>
       <p class="note">涨跌幅按绝对值判断：达到黄色线为黄，达到红色线为红；日内振幅＝（最高−最低）÷昨收，分别按黄/红线判定。布林轨道逼近、碰到或穿过都为黄，当日最高／最低触及也算；若同时 RSI 6／12／24 中至少两条在同一侧越过超买／超卖线，则组合升级红。单独 RSI 两条同侧为黄、三条为红，只有一条不报警。</p>
-      <p class="note">距52周低点不超过设置百分比、已跌破或距“加仓价”不超过设置百分比：红；量比达到设置倍数、上穿或跌破所设周期均线（默认50／200日）：黄。量比＝当日成交量÷最近20日平均成交量（含本轮）；没有有效成交量时不触发量比。布林连续贴轨只补充天数，不会单独升级红；连续2日起显示天数，远离一天就重新计数；同日同时命中上下轨只保留更贴近的一侧。标的在清单中明确配置 quiet=true 时，跳过常规技术指标，仅在单日涨跌达到 quiet 阈值时为黄；当前清单未配置 quiet 标的。</p>
+      <p class="note">距52周低点不超过设置百分比、已跌破或距“加仓价”不超过设置百分比：红；仅持仓分组可填“减仓价”，现价落在减仓价正负“x%”（按减仓价算，不分涨跌方向）以内为红；持仓和重点关注可填“目标价”（不填则首页自动显示 S&P Global 共识价，手填优先、只显示一个）：现价在目标价正负“x%”以内、当日跨越目标价、或目标价高出现价超过“x%”，只显示紫色提醒，不改红黄绿；目标价高出现价超过 100% 视为数据异常，按红色提示；量比达到设置倍数、上穿或跌破所设周期均线（默认50／200日）：黄。量比＝当日成交量÷最近20日平均成交量（含本轮）；没有有效成交量时不触发量比。布林连续贴轨只补充天数，不会单独升级红；连续2日起显示天数，远离一天就重新计数；同日同时命中上下轨只保留更贴近的一侧。标的在清单中明确配置 quiet=true 时，跳过常规技术指标，仅在单日涨跌达到 quiet 阈值时为黄；当前清单未配置 quiet 标的。</p>
       <div class="setsec">基本面单独提示（固定判定，不改变股价红黄等级）</div>
       <p class="note">仅持仓与重点关注的非 ETF 有季度财报时检查。财报接口只提供最近4个季度，<b>取不到去年同期</b>，所以所有“下降／下滑”都是最新季与<b>3个季度前</b>比较，页面会写明具体报告期（例如 2025/9→2026/6），不是同比。营收较基准下降至少20%、营业亏损、经营现金流由正转负 → 基本面红；营收下降至少10%、营业利润率或毛利率下滑至少3个百分点、经营现金流为负、负债／权益上升至少30%且债务额也升、流动比率下降至少20%、季度ROE下降至少30% → 基本面黄。</p>
       <p class="note">流动比率、ROE 的数据源以百分比给出（84%＝0.84倍），页面统一显示为倍数。最新季或对比基准季的净利含一次性损益（净利率远高于营业利率、税项为负等）时，ROE 不参与比较。银行、保险、券商等行业流动比率意义有限；单项比率变化只是提示核查，需结合行业、营业利润率和经营现金流判断，不等于主营恶化。</p>
@@ -256,7 +261,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <label class="filebtn">上传 CSV / EBK<input type="file" id="fileCsv" accept=".csv,.ebk,.txt,.tsv" hidden></label>
     </div>
     <p class="note" id="csvMode">持仓：按 CSV 替换整组，其余组不受影响。</p>
-    <p class="note">CSV 可读取代码及名称；EBK 自动识别富途市场标识并补充名称。忽略 A股、港股和 SGOV，特殊指数 / 期货 / 汇率代码保留，暂不支持报价时显示无数据。持仓替换，其余分类追加；已有备注和加仓价保留。</p>
+    <p class="note">CSV 可读取代码及名称；EBK 自动识别富途市场标识并补充名称。忽略 A股、港股和 SGOV，特殊指数 / 期货 / 汇率代码保留，暂不支持报价时显示无数据。持仓替换，其余分类追加；已有备注、加仓价和减仓价保留。</p>
     <div class="note" id="importAudit"></div>
     <div class="csvinfo" id="csvInfo" aria-live="polite"></div>
     <button class="primary hide" id="btnApply">确认导入</button>
@@ -272,7 +277,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     <button id="btnReload">重新读取已保存清单</button>
     <button class="primary" id="btnSave">保存清单与分组</button>
   </div>
-  <p class="note">保存股票清单、备注、加仓价和监测开关，不影响规则与定投设置。重新读取会先询问是否丢弃未保存的清单改动。</p>
+  <p class="note">保存股票清单、备注、加仓价、减仓价、目标价和监测开关，不影响规则与定投设置。重新读取会先询问是否丢弃未保存的清单改动。</p>
 
   <div class="card">
     <h2>定投提醒 <span>（全局一条，按美股交易日计数）</span></h2>
@@ -320,7 +325,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 </div>
 </div>
 
-<script src="./run-status.js?v=20261008-10"></script>
+<script src="./run-status.js?v=20261009-1"></script>
 <script src="./list-import.js?v=20261008-1"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
@@ -341,6 +346,10 @@ function showAudit(){
 let GROUPS=[], KINDS=[], KIND_LABEL={}, NAMES={};
 const pageState={}, filters={};
 let monitoring={};
+function hasReduce(key){return key==='positions';}
+function hasTarget(key){return key==='positions'||key==='focus';}
+// 手填目标价的“月份”：保存时按北京时间记当月，首页标签上显示「目标 108 · 10月」
+function monthNow(){return new Date(Date.now()+8*3600*1000).toISOString().slice(0,7);}
 function alwaysMonitored(key){return key==='positions'||key==='focus';}
 function monitorEnabled(key){return alwaysMonitored(key)||monitoring[key]===true;}
 function configText(){return JSON.stringify({...extra,...data,group_monitoring:{
@@ -534,6 +543,8 @@ function initGroups(groups){
     +'<div class="add row"><input class="s" id="newSym_'+g.key+'" placeholder="股票代码" aria-label="'+esc(g.label)+'股票代码">'
     +'<input class="n" id="newNote_'+g.key+'" placeholder="中文名 / 英文公司名" aria-label="'+esc(g.label)+'名称备注">'
     +'<input class="t" id="newTrig_'+g.key+'" placeholder="加仓价" inputmode="decimal">'
+    +(hasReduce(g.key)?'<input class="t r" id="newReduce_'+g.key+'" placeholder="减仓价" inputmode="decimal" aria-label="减仓价">':'')
+    +(hasTarget(g.key)?'<input class="t g" id="newTarget_'+g.key+'" placeholder="目标价" inputmode="decimal" aria-label="目标价">':'')
     +'<button class="primary" id="add_'+g.key+'">添加</button></div></div></details>').join('');
   groups.forEach(g=>{
     data[g.key] ||= {}; pageState[g.key]=0; filters[g.key]='';
@@ -556,14 +567,27 @@ function addSymbol(kind){
   if(!note){setMsg('请补充中文名或英文公司名称，作为首页备注显示','err');$('newNote_'+kind).focus();return;}
   const trigger=$('newTrig_'+kind).value.trim();
   if(trigger&&!Number.isFinite(Number(trigger))){setMsg('加仓价应填写数字','err');return;}
-  data[kind][symbol]={note,...(trigger?{trigger:Number(trigger)}:{})};
-  ['newSym_','newNote_','newTrig_'].forEach(id=>$(id+kind).value='');
+  let reduce='';
+  if(hasReduce(kind)){
+    reduce=$('newReduce_'+kind).value.trim();
+    if(reduce&&!(Number.isFinite(Number(reduce))&&Number(reduce)>0)){setMsg('减仓价应填写大于 0 的数字','err');return;}
+  }
+  let target='';
+  if(hasTarget(kind)){
+    target=$('newTarget_'+kind).value.trim();
+    if(target&&!(Number.isFinite(Number(target))&&Number(target)>0)){setMsg('目标价应填写大于 0 的数字','err');return;}
+  }
+  data[kind][symbol]={note,...(trigger?{trigger:Number(trigger)}:{}),...(reduce?{reduce:Number(reduce)}:{}),
+    ...(target?{target:Number(target),target_at:monthNow()}:{})};
+  ['newSym_','newNote_','newTrig_'].concat(hasReduce(kind)?['newReduce_']:[]).concat(hasTarget(kind)?['newTarget_']:[]).forEach(id=>$(id+kind).value='');
   render();touch();setMsg('已添加 '+symbol+' 到「'+KIND_LABEL[kind]+'」','ok');
 }
 function moveSymbol(from,to,symbol){
   if(!KIND_LABEL[to]||from===to)return;
   if(Object.keys(data[to]).some(s=>normTicker(s)===normTicker(symbol))){setMsg('目标分组已包含 '+symbol+'，未移动','err');render();return;}
   data[to][symbol]=data[from][symbol];delete data[from][symbol];
+  if(!hasReduce(to))delete data[to][symbol].reduce;
+  if(!hasTarget(to)){delete data[to][symbol].target;delete data[to][symbol].target_at;}
   $('fold_'+to).open=true;render();touch();
 }
 $('btnExpandGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=true);
@@ -604,10 +628,14 @@ function render(){
       prevEtf=e;
       const c=data[K.k][s]||{};
       const tv=(c.trigger===null||c.trigger===undefined)?'':c.trigger;
+      const rv=(c.reduce===null||c.reduce===undefined)?'':c.reduce;
+      const gv=(c.target===null||c.target===undefined)?'':c.target;
       h+='<div class="row" data-k="'+K.k+'" data-s="'+esc(s)+'">'
         +'<span class="sym">'+esc(s)+'</span>'
         +'<input class="n" value="'+esc(c.note||'')+'" placeholder="备注" data-f="note">'
         +'<input class="t" value="'+esc(tv)+'" placeholder="加仓价" data-f="trigger" inputmode="decimal">'
+        +(hasReduce(K.k)?'<input class="t r" value="'+esc(rv)+'" placeholder="减仓价" data-f="reduce" inputmode="decimal" aria-label="减仓价">':'')
+        +(hasTarget(K.k)?'<input class="t g" value="'+esc(gv)+'" placeholder="目标价" data-f="target" inputmode="decimal" aria-label="目标价">':'')
         +'<select class="move" aria-label="移动 '+esc(s)+' 到分组">'+GROUPS.map(g=>'<option value="'+g.key+'"'+(g.key===K.k?' selected':'')+'>'+esc(g.label)+'</option>').join('')+'</select>'
         +'<button class="del" aria-label="删除">×</button></div>';
     });
@@ -640,6 +668,14 @@ function render(){
           const v=inp.value.trim();
           const o=data[k][s]||(data[k][s]={});
           if(f==='trigger'){ if(v==='')delete o.trigger; else {const n=Number(v); if(!isNaN(n))o.trigger=n;} }
+          else if(f==='reduce'){
+            if(v==='')delete o.reduce;
+            else{const n=Number(v); if(Number.isFinite(n)&&n>0)o.reduce=n;}
+          }
+          else if(f==='target'){
+            if(v===''){delete o.target;delete o.target_at;}
+            else{const n=Number(v); if(Number.isFinite(n)&&n>0){o.target=n;o.target_at=monthNow();}}
+          }
           else { if(v)o[f]=v; else delete o[f]; }
           touch();
         };
@@ -698,13 +734,13 @@ $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定
 
 /* ---------- 规则阈值（settings.json） ---------- */
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
-  rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,vol_ratio:1.5,quiet_chg:2,
+  rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,target_gap_pct:3,target_space_pct:50,vol_ratio:1.5,quiet_chg:2,
   amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,
   hy_green:350,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,
   dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
 const SET_LIMITS={ma_short:[2,250],ma_long:[2,250],boll_n:[2,250],boll_k:[.1,10],boll_near_pct:[0,100],chg_yellow:[0,100],chg_red:[0,100],
-  rsi_low:[0,100],rsi_high:[0,100],near_52w_low_pct:[0,100],trigger_gap_pct:[0,100],vol_ratio:[.1,100],
+  rsi_low:[0,100],rsi_high:[0,100],near_52w_low_pct:[0,100],trigger_gap_pct:[0,100],reduce_gap_pct:[0,100],target_gap_pct:[0,100],target_space_pct:[0,1000],vol_ratio:[.1,100],
   quiet_chg:[0,100],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],
   hy_red:[0,10000],vix_green:[0,200],vix_yellow:[0,200],vix_red:[0,200],dca_every:[0,10000]};
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
