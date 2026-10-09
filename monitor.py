@@ -628,6 +628,21 @@ def market_index_series(alias, days=400):
             if date <= target]
 
 
+def month_change(rows, days=30):
+    """收益率类序列：最新值相对约一个月（自然日 days 天）前最近一个交易日的变化，单位同原序列。
+    历史不够长（找不到 days 天前的记录）时返回 (None, None)。"""
+    if len(rows) < 2:
+        return None, None
+    try:
+        cutoff = (datetime.strptime(rows[-1][0], "%Y-%m-%d") - timedelta(days=days)).strftime("%Y-%m-%d")
+    except ValueError:
+        return None, None
+    base = [v for d, v in rows if d <= cutoff]
+    if not base:
+        return None, None
+    return base[-1], rows[-1][1] - base[-1]
+
+
 def build_macro():
     log("抓取宏观指标...")
     macro = {}
@@ -682,6 +697,8 @@ def build_macro():
         if key == "sp500":
             dd = pct_from_high(rows)
             item["drawdown"] = dd
+        if key == "ust10":
+            item["month_ago"], item["delta_month"] = month_change(rows)
         limit = 10 if key == "nfci" else 7
         try:
             age = (datetime.strptime(TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat(), "%Y-%m-%d") -
@@ -714,6 +731,12 @@ def build_macro():
     return macro
 
 
+UST_MONTH_WATCH = 30  # 10Y 美债一个月上行 >= 30 bp：偏快（仅提示，不变色）
+UST_MONTH_YELLOW = 50  # 一个月上行 >= 50 bp：急升，利率冲击风险（参考行，不计入综合灯）
+HY_WEEK_YELLOW = 30   # 垃圾债利差一周（5个交易日）扩大 >= 30 bp → 黄
+HY_WEEK_RED = 50      # 一周扩大 >= 50 bp → 红
+
+
 def macro_status(key, item, drawdown=None):
     """返回 (等级, 文案)  等级: green/yellow/red/gray"""
     if not item.get("ok"):
@@ -722,14 +745,18 @@ def macro_status(key, item, drawdown=None):
     if key == "hy_oas":
         v = item["value"]
         dw = item.get("delta_week")
-        if dw is not None and dw >= 50:
-            return "red", "一周急升，信用风险升温"
+        if dw is not None and dw >= HY_WEEK_RED:
+            if v >= S["hy_green"]:
+                return "red", "一周急升，信用风险升温"
+            return "red", "一周急升但水平不高，观察是否持续"
         if v >= 500:
             return "red", "信用压力很高"
         if v >= S["hy_red"]:
             return "red", "信用压力升高"
         if v >= S["hy_green"]:
             return "yellow", "收紧"
+        if dw is not None and dw >= HY_WEEK_YELLOW:
+            return "yellow", "一周走阔，信用转弱"
         return "green", "平静"
 
     if key == "vix":
@@ -753,6 +780,17 @@ def macro_status(key, item, drawdown=None):
         if dd <= -10:
             return "yellow", "第1档"
         return "green", "第0档"
+
+    if key == "ust10":
+        dm = item.get("delta_month")
+        if dm is None:
+            return "gray", "一个月前数据不足"
+        bp = round(dm * 100, 6)  # 避免 0.4999999 这类浮点误差让刚好 50 bp 漏判
+        if bp >= UST_MONTH_YELLOW:
+            return "yellow", f"一个月急升 {bp:+.0f} bp，留意利率冲击"
+        if bp >= UST_MONTH_WATCH:
+            return "green", f"一个月 {bp:+.0f} bp，上行偏快"
+        return "green", f"一个月 {bp:+.0f} bp，利率平稳"
 
     if key == "curve":
         v = item["value"]
@@ -780,15 +818,18 @@ RISK_INDICATORS = ("hy_oas", "vix", "sp500", "breadth", "nfci")
 RISK_LABELS = {"hy_oas": "垃圾债利差", "vix": "VIX", "sp500": "标普500回撤",
                "breadth": "上涨参与度", "nfci": "金融压力"}
 RISK_RULE_TEXT = (
-    "五指标分为三类：信用／金融环境（垃圾债利差、金融压力）、情绪（VIX）、"
-    "趋势（标普500回撤、上涨参与度）。红灯：三类均出现警示，或任一指标为红且另一类也出现警示；"
-    "黄灯：未达到红灯，但至少一项警示或数据缺失；绿灯：五项数据齐全且均为绿。"
-    "同类指标不重复算作跨类确认。数据缺失不代表安全；这是风险参考规则，不预测涨跌，也不是买卖指令。"
+    "五项指标分三类：信用／金融环境（垃圾债利差、金融压力）、情绪（VIX）、趋势（标普500回撤、上涨参与度）。"
+    "每项黄记1分、红记2分；同类只取最高分，不重复计分；信用／金融环境类按2倍计分，情绪、趋势各按1倍，总分0至8。"
+    "0至1分为绿灯（有轻微提示会写在说明里），2至4分为黄灯，5分及以上为红灯。"
+    "数据缺失时最低为黄灯，缺失不代表安全。这是风险参考规则，不预测涨跌，也不是买卖指令。"
 )
+RISK_CATEGORIES = (("hy_oas", "nfci"), ("vix",), ("sp500", "breadth"))
+RISK_CATEGORY_WEIGHT = (2, 1, 1)
+RISK_SCORE = {"green": 0, "yellow": 1, "red": 2, "gray": 0}
 
 
 def market_risk_summary(macro, target_date=None):
-    """按跨类别确认聚合风险；缺失或过期数据不能得到绿灯。"""
+    """严重度计分（黄1红2，同类取最高，信用／金融类×2）；缺失或过期数据不能得到绿灯。"""
     target_date = target_date or TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
     levels, missing = {}, []
     for key in RISK_INDICATORS:
@@ -807,19 +848,21 @@ def market_risk_summary(macro, target_date=None):
         levels[key] = level
         if level == "gray":
             missing.append(RISK_LABELS[key])
-    categories = (("hy_oas", "nfci"), ("vix",), ("sp500", "breadth"))
-    warning = lambda key: levels[key] in ("red", "yellow")
-    active = sum(any(warning(key) for key in category) for category in categories)
-    red = any(level == "red" for level in levels.values())
-    level = "red" if active == 3 or red and active >= 2 else "yellow" if active or missing else "green"
+    score = sum(weight * max(RISK_SCORE[levels[key]] for key in category)
+                for category, weight in zip(RISK_CATEGORIES, RISK_CATEGORY_WEIGHT))
+    warnings = [RISK_LABELS[key] for key in RISK_INDICATORS if levels[key] in ("red", "yellow")]
+    level = "red" if score >= 5 else "yellow" if score >= 2 or missing else "green"
     label = {"red": "风险升高", "yellow": "留意风险", "green": "风险平稳"}[level]
-    if not active and missing:
+    if not warnings and missing:
         label = "数据不足"
-    warnings = [RISK_LABELS[key] for key in RISK_INDICATORS if warning(key)]
-    reasons = (["警示：" + "、".join(warnings)] if warnings else ["已取得的指标未触发警示"])
+    if warnings:
+        reasons = [("轻微提示：" if level == "green" else "警示：") + "、".join(warnings)]
+    else:
+        reasons = ["已取得的指标未触发警示"]
+    reasons.append(f"风险得分 {score}/8")
     if missing:
         reasons.append("缺失或过期：" + "、".join(missing))
-    return {"level": level, "label": label, "text": "；".join(reasons),
+    return {"level": level, "label": label, "text": "；".join(reasons), "score": score,
             "levels": levels, "valid_count": 5 - len(missing), "missing": missing}
 
 
@@ -1320,6 +1363,21 @@ def nasdaq_earnings(sym, timeout=12):
     return res
 
 
+# 「强制刷新」按钮：清掉 Cache Storage / Service Worker，再带时间戳参数重新加载，绕开浏览器和 CDN 缓存
+HARD_REFRESH_JS = (
+    "(function(){var b=document.getElementById('btnHardRefresh');if(!b)return;"
+    "b.onclick=async function(){b.disabled=true;b.textContent='刷新中…';"
+    "try{if(window.caches){var ks=await caches.keys();await Promise.all(ks.map(function(k){return caches.delete(k);}));}"
+    "if(navigator.serviceWorker){var rs=await navigator.serviceWorker.getRegistrations();"
+    "await Promise.all(rs.map(function(r){return r.unregister();}));}}catch(e){}"
+    "var u=new URL(location.href);u.searchParams.set('_r',String(Date.now()));location.replace(u.toString());};})();"
+)
+
+
+# 个股/ETF 表统一用固定列宽，三张表（警示 / ETF / 折叠的无异动）栏位才能上下对齐
+STK_COLS = ('<colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>')
+
+
 def earnings_label(e):
     """返回 (页面文字, 说明) 或 None。时间只写数据源真实提供的：盘前/盘后/盘中，不编造钟点。"""
     if not e or e.get("status") in (None, "na"):
@@ -1337,7 +1395,22 @@ def earnings_label(e):
     bj = {"pre": f"北京时间约{month}/{day}傍晚至晚间", "post": f"北京时间约{nxt}凌晨",
           "during": f"北京时间约{month}/{day}夜间至{nxt}凌晨"}.get(e.get("timing"), "北京时间待定")
     kind = "预计" if e.get("kind") == "expected" else "算法估算，可能调整"
-    return f"财报 美东 {date_txt} {timing}", f"{kind} · {bj} · 数据源只给盘前/盘后，不含具体钟点"
+    return f"财报 美东 {date_txt} {timing}", f"{kind} · {bj}"
+
+
+EARN_SOON_DAYS = 14   # 财报日距今 0~14 天（含）时，页面上的财报文字标黄
+
+
+def earnings_soon(e, today=None):
+    """财报日期落在今天起 EARN_SOON_DAYS 天内（含当天、含第 14 天）返回 True；待公布、失败、已过期都不算。"""
+    if not e or e.get("status") != "ok" or not e.get("date"):
+        return False
+    try:
+        today = today or TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+        days = (datetime.strptime(e["date"], "%Y-%m-%d") - datetime.strptime(today, "%Y-%m-%d")).days
+    except (ValueError, TypeError):
+        return False
+    return 0 <= days <= EARN_SOON_DAYS
 
 
 def attach_earnings(items):
@@ -2025,7 +2098,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
         "treasury_reference": {key: macro.get("ust10", {}).get(key) for key in
-                               ("ok", "value", "date", "source", "unit", "lagging", "reason", "quote_name", "observed_date", "observed_value")},
+                               ("ok", "value", "date", "source", "unit", "lagging", "reason", "quote_name", "observed_date", "observed_value", "delta_month")},
         "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
     }
     snapshot["data_time_text"] = market_data_time(snapshot)
@@ -2059,7 +2132,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         elif key == "curve":
             val = f'{it["value"]:.2f}<span class="unit">个百分点</span>'
         elif key == "breadth":
-            val = f'{it["value"]:.1f}%<span class="unit">站上200日均线 · 50日 {it["pct50"]:.1f}%</span>'
+            val = (f'{it["value"]:.1f}%<span class="unit">的成分股站上200日线（长期趋势）</span>'
+                   f'<span class="unit">站上50日线（短期）：{it["pct50"]:.1f}%</span>')
         elif key == "nfci":
             val = f'{it["value"]:+.2f}'
         else:
@@ -2075,6 +2149,22 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
             f'<td class="num dim">{dw_txt}</td><td>{txt}</td></tr>'
         )
+
+    # 参考行：10Y 美债一个月变化。只看利率冲击，不进 RISK_INDICATORS，不影响综合灯和有效指标数
+    ut = macro.get("ust10") or {}
+    if ut.get("ok") and ut.get("delta_month") is not None:
+        ulv, utxt = macro_status("ust10", ut)
+        uw = ut.get("delta_week")
+        uw_txt = f'{uw * 100:+.0f}' if uw is not None else "—"
+        ulabel = (f'{html_lib.escape(str(ut.get("name") or "10Y美债"))}'
+                  f'<span class="unit">参考 · 不计入综合灯</span>'
+                  f'<span class="unit">截至 {html_lib.escape(ut["date"])}</span>')
+        rows_macro.append(
+            f'<tr class="{ulv}" id="ust10Ref"><td>{ulabel}</td><td class="num">{ut["value"]:.2f}%</td>'
+            f'<td class="num dim">{uw_txt}</td><td>{utxt}</td></tr>')
+    else:
+        rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债<span class="unit">参考 · 不计入综合灯</span></td>'
+                          '<td colspan="3">无数据或已过期</td></tr>')
 
     order = {"red": 0, "yellow": 1, "green": 2, "gray": 3}
     # 行情没异动但基本面亮了警示的，要上表并往前排，否则徽章永远藏在「无异动 N 只」里看不见
@@ -2143,12 +2233,14 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             earn_html = ""
             earn = earnings_label(d.get("earnings"))
             if earn:
-                earn_html = (f'<span class="earn" title="{html_lib.escape(earn[1])}">'
+                soon = " soon" if earnings_soon(d.get("earnings")) else ""
+                earn_html = (f'<span class="earn{soon}" title="{html_lib.escape(earn[1])}">'
                              f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}</span></span>')
             out += (
-                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}{earn_html}</td>'
-                f'<td class="num">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</td>'
-                f'<td class="num {chg_cls}">{chg_txt}</td>'
+                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{tag}</td>'
+                f'<td class="earn-cell">{earn_html}</td>'
+                f'<td class="num px"><span class="px-price">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
+                f'<span class="px-chg {chg_cls}">{chg_txt}</span></td>'
                 f'<td class="sig">{sig}{fund_html}</td></tr>'
             )
         if not out:
@@ -2169,10 +2261,10 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         for label, rows in (("个股", [d for d in shown if not is_etf_row(d)]),
                             ("ETF 基金", [d for d in shown if is_etf_row(d)])):
             if rows:
-                parts.append(f"<h2>{label}</h2>\n<table>{rows_of(rows)}</table>")
+                parts.append(f"<h2>{label}</h2>\n<table class=\"stk\">{STK_COLS}{rows_of(rows)}</table>")
         if quiet:
             parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只 · 点击查看</summary>'
-                         f'<table>{rows_of(quiet)}</table></details>')
+                         f'<table class="stk">{STK_COLS}{rows_of(quiet)}</table></details>')
         if not g and enabled:
             parts.append('<div class="quiet">本组标的已在优先分组展示，避免重复信号</div>' if registered.get(group["key"], 0)
                          else '<div class="quiet">暂无标的，去设置页录入或导入 CSV / EBK</div>')
@@ -2298,8 +2390,29 @@ tr:first-child td{{border-top:none}}
   font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}}
 .fund-body ul{{margin:4px 0 0;padding-left:16px}}
 .sig{{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}}
-.earn{{display:block;margin:4px 0 0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}}
+.earn{{display:block;margin:0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}}
 .earn .unit{{display:block;color:var(--dim);font-size:11px}}
+.earn.soon{{color:#f0c674;font-weight:600}}
+table.stk{{table-layout:fixed}}
+.c-sym{{width:19%}} .c-earn{{width:29%}} .c-px{{width:13%}}
+.earn-cell{{vertical-align:middle;overflow-wrap:anywhere}}
+table.stk tr td:first-child{{padding-left:14px}}
+.stk td.sym{{overflow-wrap:anywhere}}
+.px{{white-space:nowrap}}
+.px-price,.px-chg{{display:block}}
+.px-chg{{font-size:12.5px}}
+@media (max-width:600px){{
+  table.stk{{table-layout:auto}}
+  .stk colgroup{{display:none}}
+  tr:not(:has(td[colspan])){{display:grid;grid-template-columns:1fr 84px;column-gap:10px;border-top:1px solid var(--line)}}
+  tr:not(:has(td[colspan])) td{{border-top:none;padding:6px 10px}}
+  tr:not(:has(td[colspan])) td.sym{{grid-column:1;grid-row:1}}
+  tr:not(:has(td[colspan])) td.px{{grid-column:2;grid-row:1}}
+  tr:not(:has(td[colspan])) td.earn-cell{{grid-column:1/-1;grid-row:2;padding-top:0;width:auto}}
+  tr:not(:has(td[colspan])) td.sig{{grid-column:1/-1;grid-row:3;padding-top:0}}
+  tr:not(:has(td[colspan])) td.earn-cell:empty{{display:none}}
+  tr:first-child{{border-top:none}}
+}}
 .fund-context{{margin-top:6px;color:var(--dim)}}
 .up{{color:var(--up)}} .down{{color:var(--down)}}
 tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
@@ -2380,7 +2493,9 @@ tr.gray td{{color:var(--dim)}}
 <div class="runbar">
   <button class="primary" id="btnRunNow">立即运行</button>
   <button id="btnCheckStatus">查运行状态</button>
+  <button id="btnHardRefresh" title="清除本页缓存并重新加载，拿到最新页面">强制刷新</button>
   <a class="btnlink" href="./edit.html">设置</a>
+  <script>{HARD_REFRESH_JS}</script>
 </div>
 <div class="statusrow">
   <div class="runlight" id="runLight" data-phase="{init_light_phase}"><i class="dot"></i><span id="runLightTxt">{init_light}</span></div>
@@ -2401,7 +2516,8 @@ tr.gray td{{color:var(--dim)}}
 <tr class="gray"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
 {rows_macro}
 </table>
-<p class="macro-help">垃圾债利差：≥{S['hy_green']:.0f} bp 黄、≥{S['hy_red']:.0f} bp 红；一周扩大 ≥50 bp 也为红。VIX：≥{S['vix_green']:g} 黄、≥{S['vix_red']:g} 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
+<p class="macro-help">垃圾债利差：≥{S['hy_green']:.0f} bp 黄、≥{S['hy_red']:.0f} bp 红；一周扩大 ≥30 bp 为黄、≥50 bp 为红。VIX：≥{S['vix_green']:g} 黄、≥{S['vix_red']:g} 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
+<p class="macro-help">10Y美债是参考行，不计入综合灯：一个月上行 ≥{UST_MONTH_YELLOW} bp 标黄（利率冲击风险），≥{UST_MONTH_WATCH} bp 只提示偏快；周变化列单位为 bp。</p>
 <p class="macro-help">上涨参与度：站上长期均线的股票不足一半为黄；不足三成且信用／金融压力也升高才为红。金融压力是周度数据，达到历史平均紧张程度为黄。指标缺失时显示无数据，不代表安全，也不预测具体跌幅。</p>
 <p class="macro-help">市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a>，数据依据当前成分股计算，回看历史可能有成分股选择偏差。</p>
 </details>

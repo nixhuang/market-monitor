@@ -148,12 +148,12 @@ check(src.includes('RSI 周期固定为 6 / 12 / 24') && src.includes('同侧两
 check(!src.includes('RSI ≥ x → 超买红') && !src.includes('RSI ≤ x → 超卖红'), '旧单条 RSI 红灯说明已删除');
 check(src.includes('布林上、下轨逼近、触碰、穿越均为黄')&&src.includes('同时出现 RSI 至少两条同侧达到或越过阈值时为红'), '设置页说明布林独立黄与RSI双信号红');
 check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x bp 黄')&&src.includes('垃圾债利差 ≥ x bp 红'), '信用利差仅保留有效的黄红两条阈值');
-check(src.includes('一周扩大至少 50 bp 也为红')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力为周度'), '设置页明确说明信用急升和新增市场风险规则');
+check(src.includes('一周扩大至少 30 bp 为黄、至少 50 bp 为红')&&src.includes('同类只取最高分')&&src.includes('信用／金融环境按2倍计分')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力为周度'), '设置页明确说明信用急升和新增市场风险规则');
 check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');
 check(src.includes('距52周低点')&&src.includes('上穿或跌破所设周期均线')&&src.includes('基本面单独提示'), '设置页覆盖其他固定个股与基本面规则');
 check(src.includes('id="set_ma_short"')&&src.includes('id="set_ma_long"')&&src.includes('昨日收盘价低于本轮均线')&&src.includes('日线不足对应周期时不计算')&&src.includes('可在上方改为250日'), '均线周期实际可调，规则说明与数据不足处理齐全');
 check(src.includes('<details class="set" id="ruleDetails">')&&!src.includes('id="ruleDetails" open'), '完整规则默认折叠');
-check(src.includes('五指标综合市场风险')&&src.includes('同类指标不重复算跨类确认')&&src.includes('一级为市场风险参考和持仓'), '完整说明综合风险及最高优先级去重');
+check(src.includes('五指标综合市场风险')&&src.includes('同类只取最高分')&&src.includes('一级为市场风险参考和持仓'), '完整说明综合风险及最高优先级去重');
 
 (async () => {
   let resolve;

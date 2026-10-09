@@ -55,8 +55,9 @@ m = re.search(r'<div class="runbar">(.*?)</div>\s*<div class="statusrow">(.*?)</
 check(bool(m), "runbar 与 statusrow 两排结构存在")
 if m:
     bar, row = m.group(1), m.group(2)
-    check('id="btnRunNow"' in bar and bar.index('btnRunNow') < bar.index('btnCheckStatus') < bar.index('btnlink'),
-          "第三排顺序：立即运行 → 刷新状态 → 设置")
+    check('id="btnRunNow"' in bar and 'btnHardRefresh' in bar
+          and bar.index('btnRunNow') < bar.index('btnCheckStatus') < bar.index('btnHardRefresh') < bar.index('btnlink'),
+          "第三排顺序：立即运行 → 查运行状态 → 强制刷新 → 设置")
     check('>设置</a>' in bar and './edit.html' in bar, "按钮改名「设置」且指向 edit.html")
     check('id="runLight"' in row and 'id="runLightTxt"' in row, "第四排：状态灯 + 文案")
     check('runLight' not in bar, "灯已从第三排移走")

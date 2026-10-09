@@ -151,7 +151,7 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('.VIX', index)
         self.assertNotIn('.SPX', index)
         self.assertIn('参考值 · 截至 2026-10-07', index)
-        self.assertIn('4.25%</td>', index)
+        self.assertIn('<span class="px-price">4.25%</span>', index)
         self.assertEqual(index.count('BD#US10Y'), 1)
         self.assertNotIn('市场参考（独立指标，不属于清单标的）', index)
         self.assertIn('不计算交易警示', index)
@@ -405,6 +405,18 @@ class TestGroups(unittest.TestCase):
         gate.reset(False)
         self.assertTrue(gate.allow())
 
+    def test_earnings_within_two_weeks_is_highlighted(self):
+        soon = lambda d, today='2026-10-09', status='ok': monitor.earnings_soon(
+            {'status': status, 'date': d, 'timing': 'post', 'kind': 'expected'}, today)
+        self.assertTrue(soon('2026-10-09'))      # 当天
+        self.assertTrue(soon('2026-10-23'))      # 第 14 天，含
+        self.assertFalse(soon('2026-10-24'))     # 第 15 天
+        self.assertFalse(soon('2026-10-08'))     # 已过期不算
+        self.assertFalse(soon('2026-10-12', status='unknown'))
+        self.assertFalse(monitor.earnings_soon(None, '2026-10-09'))
+        self.assertFalse(monitor.earnings_soon({'status': 'error'}, '2026-10-09'))
+        self.assertFalse(monitor.earnings_soon({'status': 'ok', 'date': 'bad'}, '2026-10-09'))
+
     def test_earnings_text_never_uses_past_dates_or_invented_times(self):
         parse = monitor.parse_earnings_text
         ok = parse('Apple Inc. is expected* to report earnings on 10/30/2026 after market close.', '2026-10-09')
@@ -423,7 +435,8 @@ class TestGroups(unittest.TestCase):
         text, note = monitor.earnings_label(dict(ok, date='2026-10-30'))
         self.assertIn('美东 10/30 盘后', text)
         self.assertIn('北京时间约10/31凌晨', note)
-        self.assertIn('不含具体钟点', note)
+        self.assertNotIn('不含具体钟点', note)
+        self.assertNotIn('数据源只给', note)
         self.assertIn('具体时段待定', monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'})[0])
 
     def test_earnings_shown_for_holdings_and_focus_but_others_only_when_alerted(self):
@@ -701,6 +714,34 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(monitor._rows_from_closes([101,102], dates=None), [])
         self.assertEqual(monitor._rows_from_closes([101,102], dates=['2026-10-02']), [])
 
+    def test_ust10_month_change_is_reference_only(self):
+        # 一个月前取「30 天前（含）最近一个交易日」，不够长返回 None
+        rows = [('2026-09-04', 4.00), ('2026-09-05', 4.02), ('2026-09-30', 4.20), ('2026-10-05', 4.55)]
+        base, delta = monitor.month_change(rows)
+        self.assertEqual(base, 4.02)                      # cutoff=09-05
+        self.assertAlmostEqual(delta, 0.53)
+        self.assertEqual(monitor.month_change([('2026-10-01', 4.0), ('2026-10-05', 4.1)]), (None, None))
+        self.assertEqual(monitor.month_change([('2026-10-05', 4.1)]), (None, None))
+        st = lambda dm: monitor.macro_status('ust10', {'ok': True, 'value': 4.5, 'delta_month': dm})
+        self.assertEqual(st(0.50)[0], 'yellow')
+        self.assertIn('急升', st(0.50)[1])
+        self.assertEqual(st(0.49)[0], 'green')
+        self.assertIn('偏快', st(0.30)[1])
+        self.assertIn('平稳', st(0.29)[1])
+        self.assertIn('平稳', st(-0.80)[1])
+        self.assertEqual(st(None)[0], 'gray')
+        # 参考行不进综合灯：10Y 急升时 risk 的得分、有效指标数都不变
+        macro = {k: {'ok': True, 'name': k, 'value': 1.0, 'date': '2026-10-06'}
+                 for k in ('hy_oas', 'vix', 'nfci')}
+        macro['sp500'] = {'ok': True, 'name': 'sp', 'value': 1.0, 'date': '2026-10-06', 'drawdown': -1.0}
+        macro['breadth'] = {'ok': True, 'name': 'b', 'value': 60.0, 'pct50': 60.0, 'date': '2026-10-06'}
+        base_risk = monitor.market_risk_summary(macro, '2026-10-06')
+        macro['ust10'] = {'ok': True, 'value': 5.5, 'date': '2026-10-06', 'delta_month': 1.0}
+        risk = monitor.market_risk_summary(macro, '2026-10-06')
+        self.assertEqual((risk['score'], risk['level'], risk['valid_count']),
+                         (base_risk['score'], base_risk['level'], 5))
+        self.assertNotIn('ust10', risk['levels'])
+
     def test_treasury_uses_newer_valid_yield_and_preserves_source_dates(self):
         from datetime import date, timedelta
         from contextlib import ExitStack
@@ -781,6 +822,10 @@ class TestGroups(unittest.TestCase):
                                     (400, 'red'), (500, 'red')):
                 with self.subTest(value=value):
                     self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': value})[0], expected)
+            self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 30})[0], 'yellow')
+            self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 29})[0], 'green')
+            self.assertIn('水平不高', monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 60})[1])
+            self.assertNotIn('水平不高', monitor.macro_status('hy_oas', {'ok': True, 'value': 360, 'delta_week': 60})[1])
             self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320,
                                                              'delta_week': 50})[0], 'red')
         finally:
@@ -802,7 +847,11 @@ class TestGroups(unittest.TestCase):
         self.assertIn('指数基 (1)', page)
         for name in ('10Y美债','美元指数','收益率曲线'):
             self.assertNotIn(name, index)
+        # 风险卡里不出现美元指数、收益率曲线；10Y美债只作为「参考 · 不计入综合灯」的参考行出现
+        for name in ('美元指数','收益率曲线'):
             self.assertNotIn(name, risk)
+        self.assertEqual(risk.count('id="ust10Ref"'), 1)
+        self.assertIn('参考 · 不计入综合灯', risk)
         self.assertNotIn('市场参考（独立指标，不属于清单标的）', page)
         self.assertNotIn('index-reference', page)
         self.assertNotIn('原指数基成员及监测开关保持不变', index)
@@ -825,12 +874,32 @@ class TestGroups(unittest.TestCase):
         with patch.object(monitor, 'TARGET_DATE', '2026-10-08'):
             self.assertEqual(risk()['level'], 'green')
             self.assertEqual(risk()['valid_count'], 5)
-            self.assertEqual(risk(vix={'value': 25})['level'], 'yellow')
-            self.assertEqual(risk(vix={'value': 45})['level'], 'yellow')
+            self.assertEqual(risk(vix={'value': 25})['level'], 'green')   # 情绪黄 1 分：绿灯+轻微提示
+            self.assertEqual(risk(vix={'value': 45})['level'], 'yellow')  # 情绪红 2 分
             self.assertEqual(risk(hy_oas={'value': 500}, nfci={'value': 0.1})['level'], 'yellow')
             self.assertEqual(risk(hy_oas={'value': 500}, vix={'value': 25})['level'], 'red')
+            # 严重度计分：信用黄2 + 情绪黄1 + 趋势黄1 = 4 → 黄（不再三类各黄就升红）
             self.assertEqual(risk(hy_oas={'value': 380}, vix={'value': 25},
-                                  breadth={'value': 40})['level'], 'red')
+                                  breadth={'value': 40})['level'], 'yellow')
+            self.assertEqual(risk(hy_oas={'value': 380}, vix={'value': 25},
+                                  breadth={'value': 40})['score'], 4)
+            # 信用红4 + 趋势黄1 = 5 → 红；信用红单独4 → 黄
+            self.assertEqual(risk(hy_oas={'value': 500}, breadth={'value': 40})['level'], 'red')
+            self.assertEqual(risk(hy_oas={'value': 500})['level'], 'yellow')
+            # 只有一个情绪/趋势黄（1分）→ 绿灯 + 轻微提示
+            weak = risk(breadth={'value': 40})
+            self.assertEqual((weak['level'], weak['score'], weak['label']), ('green', 1, '风险平稳'))
+            self.assertIn('轻微提示：上涨参与度', weak['text'])
+            self.assertEqual(risk(vix={'value': 25})['level'], 'green')
+            # 同类只取最高分：垃圾债黄 + 金融压力黄 仍是 2 分
+            self.assertEqual(risk(hy_oas={'value': 380}, nfci={'value': 0.2})['score'], 2)
+            # 垃圾债一周走阔 30bp → 黄（信用类 2 分 → 综合黄）
+            wk = risk(hy_oas={'delta_week': 35})
+            self.assertEqual((wk['levels']['hy_oas'], wk['level'], wk['score']), ('yellow', 'yellow', 2))
+            self.assertEqual(risk(hy_oas={'delta_week': 29})['level'], 'green')
+            self.assertEqual(risk(hy_oas={'delta_week': 55})['levels']['hy_oas'], 'red')
+            # 缺失数据最低为黄
+            self.assertEqual(risk(nfci={'ok': False})['level'], 'yellow')
             self.assertEqual(risk(vix={'value': 25}, sp500={'drawdown': -12})['level'], 'yellow')
             self.assertEqual(risk(nfci={'ok': False})['level'], 'yellow')
             self.assertEqual(risk(nfci={'ok': False})['valid_count'], 4)
@@ -848,7 +917,8 @@ class TestGroups(unittest.TestCase):
         self.assertIn('id="marketRiskLight" data-level="green"', page)
         self.assertIn('有效指标 5/5', page)
         self.assertIn('id="marketRiskRules"', page)
-        self.assertIn('同类指标不重复算作跨类确认', page)
+        self.assertIn('同类只取最高分，不重复计分', page)
+        self.assertIn('风险得分 0/8', page)
 
     def test_market_breadth_validation_and_simple_risk_language(self):
         body = {'_canonical': monitor.BREADTH_URL,
@@ -927,7 +997,7 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('open', summary)
         self.assertNotIn('红', summary)
         self.assertNotIn('黄', summary)
-        macro = {'hy_oas': {'ok': True, 'name': '垃圾债利差', 'value': 300, 'date': '2026-10-06'},
+        macro = {'hy_oas': {'ok': True, 'name': '垃圾债利差', 'value': 450, 'date': '2026-10-06'},
                  'nfci': {'ok': True, 'name': '金融压力', 'value': 0.12, 'date': '2026-10-02'},
                  'breadth': {'ok': True, 'name': '上涨参与度', 'value': 28.0,
                              'pct50': 18.0, 'date': '2026-10-06', 'pressure_confirmed': True}}

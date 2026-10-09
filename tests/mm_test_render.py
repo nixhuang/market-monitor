@@ -68,6 +68,25 @@ check("抓取成功 · 完成于 2026-10-07 20:40:28（北京时间）" in html,
 check("自动计划：美东周一至五 20:30（北京 " in html, "第二排自动计划")
 check(("夏令时次日 08:30" in html) != ("冬令时次日 09:30" in html), "冬夏令时只出现一个")
 check('id="btnRunNow"' in html and 'id="btnCheckStatus"' in html, "第三排两个按钮都在")
+check('<table class="stk"><colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>' in html
+      and 'class="px-price"' in html and 'class="earn-cell"' in html, "个股表用固定列宽 colgroup，价格/涨跌幅同列，财报独立一栏")
+_near = item("NTNX", "position", "red", chg=5.2); _near["earnings"] = {"status": "ok", "date": "2026-10-20", "timing": "post", "kind": "expected"}
+_far = item("TEM", "focus", "red", chg=8.0); _far["earnings"] = {"status": "ok", "date": "2026-12-20", "timing": "pre", "kind": "expected"}
+_html_e = monitor.render(macro, [_near, _far] + [d for d in items if d["symbol"] not in ("NTNX", "TEM")], 10, snapshot=snapshot, dup_hidden=2)
+check('<span class="earn soon"' in _html_e and _html_e.count('<span class="earn soon"') == 1
+      and '<span class="earn" title' in _html_e, "两周内的财报标黄（earn soon），更远的保持蓝色")
+check(".earn.soon{color:#f0c674" in _html_e, "财报标黄样式存在")
+_macro_u = dict(macro, ust10=dict(macro["ust10"], value=4.55, delta_week=0.12, month_ago=4.0, delta_month=0.55))
+_html_u = monitor.render(_macro_u, items, 10, snapshot=snapshot, dup_hidden=2)
+check('id="ust10Ref"' in _html_u and "一个月急升 +55 bp" in _html_u and "参考 · 不计入综合灯" in _html_u
+      and '<td class="num dim">+12</td>' in _html_u, "10Y美债参考行：一个月急升标黄，周变化按 bp 显示")
+check('id="ust10Ref"' in html and "无数据或已过期" in html.split('id="ust10Ref"')[1].split("</tr>")[0],
+      "10Y美债缺一个月数据时显示无数据")
+_macro_b = dict(macro, breadth={"ok": True, "name": "上涨参与度", "date": "2026-10-06", "value": 47.0,
+                               "pct50": 29.3, "unit": "%", "source": "History of Market"})
+_html_b = monitor.render(_macro_b, items, 10, snapshot=snapshot, dup_hidden=2)
+check("47.0%<span class=\"unit\">的成分股站上200日线（长期趋势）</span>" in _html_b
+      and "站上50日线（短期）：29.3%" in _html_b and "站上200日均线 · 50日" not in _html_b, "上涨参与度文案已改写")
 check("红2 黄2 绿4" in html and "10 项数据已更新" in html, "运行灯含计数与完整数据总数")
 check('id="runLight" data-phase="ok"' in html, "运行灯初始为绿")
 check('id="ruleLight" data-phase="idle"' in html and 'id="ruleLightTxt"' in html,
