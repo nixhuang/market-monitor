@@ -107,14 +107,8 @@
     "IBIT": {
       "note": "iShares比特币ETF"
     },
-    "ESMAIN": {
-      "note": "标普500股指期货主连"
-    },
     ".VXN": {
       "note": "纳斯达克100波动率指数"
-    },
-    "CLMAIN": {
-      "note": "WTI原油期货主连"
     },
     ".NDX": {
       "note": "纳斯达克100指数"
