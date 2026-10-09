@@ -9,14 +9,14 @@
     "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "37940424734",
-  "request_id": "7f90e0d5-8f29-4160-ac2c-3fe2dae101ef",
-  "source_sha": "3556a4ad7d6a97fce864b56726b9f9ae6e162306",
-  "started_at": "2026-10-09T13:56:03+00:00",
-  "started_at_bj": "2026-10-09T21:56:03+08:00",
-  "finished_at": "2026-10-09T21:57:59.032666+08:00",
-  "finished_at_bj": "2026-10-09T21:57:59+08:00",
-  "event": "workflow_dispatch",
+  "run_id": "37942413387",
+  "request_id": "",
+  "source_sha": "e263c8ed310a3e6b09ebe7487cbd8f2713ecc85b",
+  "started_at": "2026-10-09T14:12:07+00:00",
+  "started_at_bj": "2026-10-09T22:12:07+08:00",
+  "finished_at": "2026-10-09T22:14:10.334377+08:00",
+  "finished_at_bj": "2026-10-09T22:14:10+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-09",
   "mode": "manual_or_config",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
@@ -187,9 +187,9 @@
     "dca": 1
   },
   "summary": {
-    "red": 6,
-    "yellow": 35,
-    "green": 88,
+    "red": 7,
+    "yellow": 42,
+    "green": 80,
     "gray": 0,
     "total": 129,
     "macro_ok": 6,
@@ -215,7 +215,7 @@
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.261000156402588,
+    "value": 5.265000343322754,
     "date": "2026-10-09",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -224,10 +224,10 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.42400026321411133
+    "delta_month": 0.42800045013427734
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-09 21:57:59（盘中快照，北京时间） · 当日价 129 只 / 较早日线 0 只 / 无数据 0 只",
+  "data_time_text": "2026-10-09 22:14:10（盘中快照，北京时间） · 当日价 129 只 / 较早日线 0 只 / 无数据 0 只",
   "market_risk": {
     "level": "green",
     "label": "风险平稳",
@@ -246,17 +246,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 15.079999923706055,
+      "value": 15.050000190734863,
       "date": "2026-10-09",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7785.56982421875,
+      "value": 7788.16015625,
       "date": "2026-10-09",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.426661331058209
+      "drawdown": -0.3935323482815889
     }
   },
   "fundamental": {
@@ -398,9 +398,9 @@
     }
   },
   "earnings": {
-    "targets": 43,
-    "dated": 38,
-    "pending": 5,
+    "targets": 51,
+    "dated": 45,
+    "pending": 6,
     "failed": 0
   }
 }
