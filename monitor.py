@@ -619,6 +619,42 @@ def financial_conditions_series(days=400):
         return []
 
 
+SP500_RS_ROWS = []   # build_macro 取到的标普500指数日线（最近约 60 根），供板块「相对标普500」强弱使用
+RS_BENCH_NAME = "标普500"
+HOM_PRICE_URL = "https://historyofmarket.com/api/sp500/price.json"
+
+
+def sp500_rows_fallback(target=None, keep=60):
+    """标普500指数日线的第二来源：History of Market（项目已在用其市场宽度，CC BY 4.0，免 key）。
+
+    Yahoo 的 ^GSPC 取不到时才用（例如大陆本机跑不通 Yahoo）。它比 Yahoo 晚 1~2 个交易日，
+    relative_strength 按日期对齐，终点会自动退到双方共有的最新日；落后太多就对不上、页面不显示。
+    格式、授权、日期顺序有任何异常一律返回空列表，不拿不确定的数据凑数。"""
+    target = target or TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+    try:
+        r = requests.get(HOM_PRICE_URL, headers=UA, timeout=30)
+        r.raise_for_status()
+        body = r.json()
+        if not isinstance(body, dict) or "CC BY 4.0" not in str(body.get("_license", "")) or \
+                not isinstance(body.get("series"), list):
+            raise ValueError("标普500日线来源或授权不符")
+        rows = []
+        for row in body["series"][-keep * 3:]:
+            date, close = str(row["date"]), float(row["close"])
+            datetime.strptime(date, "%Y-%m-%d")
+            if not math.isfinite(close) or close <= 0 or (rows and date <= rows[-1][0]):
+                raise ValueError("标普500日线数值或日期顺序异常")
+            if date <= target:
+                rows.append((date, close))
+        rows = rows[-keep:]
+        if not rows or (datetime.strptime(target, "%Y-%m-%d") - datetime.strptime(rows[-1][0], "%Y-%m-%d")).days > 7:
+            raise ValueError("标普500日线过旧")
+        return rows
+    except (requests.RequestException, ValueError, TypeError, KeyError, OverflowError) as e:
+        log(f"  ! 标普500日线第二来源暂不可用：{str(e)[:80]}")
+        return []
+
+
 def market_index_series(alias, days=400):
     data = yahoo_history(alias)
     if not data or not valid_history(data):
@@ -646,6 +682,7 @@ def month_change(rows, days=30):
 def build_macro():
     log("抓取宏观指标...")
     macro = {}
+    SP500_RS_ROWS.clear()
     for key, cfg in FRED_SERIES.items():
         source_info = {}
         if key == "hy_oas":
@@ -679,6 +716,8 @@ def build_macro():
         if not rows:
             macro[key] = {"ok": False, "name": cfg["name"], **source_info}
             continue
+        if key == "sp500":
+            SP500_RS_ROWS[:] = rows[-60:]
         cur = rows[-1][1] * cfg["scale"]
         prev = rows[-2][1] * cfg["scale"] if len(rows) >= 2 else None
         week_ago = rows[-6][1] * cfg["scale"] if len(rows) >= 6 else None
@@ -1677,33 +1716,33 @@ def sma(vals, n):
     return sum(vals[-n:]) / n
 
 
-RS_DAYS = 20          # 相对 SPY 强弱的回看交易日数（约一个月）
+RS_DAYS = 20          # 板块相对标普500强弱的回看交易日数（约一个月）
 RS_NEUTRAL_PP = 0.5   # 相对强弱绝对值不足该百分点，按「持平」显示（不着色）
 
 
-def relative_strength(etf, spy, days=RS_DAYS):
-    """板块 ETF 相对 SPY 的强弱：两者近 days 个交易日涨幅之差（单位：百分点）。
+def relative_strength(etf, bench, days=RS_DAYS, bench_name=RS_BENCH_NAME):
+    """板块 ETF 相对基准（默认标普500指数）的强弱：两者近 days 个交易日涨幅之差（单位：百分点）。
 
     按日期对齐而不是按下标：两边任何一端缺一天（或盘中补了实时价的那一根不同步），
     下标就会错位一天。最近 3 根里找双方共有的最新日期作终点，起点必须是 ETF 序列里
-    终点往前数第 days 根、且 SPY 也有该日；对不上就返回 None，页面不显示，绝不拿错位数据凑数。
+    终点往前数第 days 根、且基准也有该日；对不上就返回 None，页面不显示，绝不拿错位数据凑数。
     """
     try:
         ed, ec = list(etf.get("dates") or []), list(etf.get("closes") or [])
-        sd, sc = list(spy.get("dates") or []), list(spy.get("closes") or [])
+        sd, sc = list(bench.get("dates") or []), list(bench.get("closes") or [])
         if not ed or len(ed) != len(ec) or len(sd) != len(sc) or len(ec) <= days:
             return None
-        spy_close = dict(zip(sd, sc))
-        end_i = next((i for i in range(len(ed) - 1, max(len(ed) - 4, -1), -1) if ed[i] in spy_close), None)
-        if end_i is None or end_i - days < 0 or ed[end_i - days] not in spy_close:
+        bench_close = dict(zip(sd, sc))
+        end_i = next((i for i in range(len(ed) - 1, max(len(ed) - 4, -1), -1) if ed[i] in bench_close), None)
+        if end_i is None or end_i - days < 0 or ed[end_i - days] not in bench_close:
             return None
         start_i = end_i - days
         e0, e1 = float(ec[start_i]), float(ec[end_i])
-        s0, s1 = float(spy_close[ed[start_i]]), float(spy_close[ed[end_i]])
+        s0, s1 = float(bench_close[ed[start_i]]), float(bench_close[ed[end_i]])
         if min(e0, e1, s0, s1) <= 0 or not all(math.isfinite(x) for x in (e0, e1, s0, s1)):
             return None
-        etf_ret, spy_ret = (e1 / e0 - 1) * 100, (s1 / s0 - 1) * 100
-        return {"days": days, "etf": etf_ret, "spy": spy_ret, "diff": etf_ret - spy_ret,
+        etf_ret, bench_ret = (e1 / e0 - 1) * 100, (s1 / s0 - 1) * 100
+        return {"days": days, "etf": etf_ret, "bench": bench_ret, "bench_name": bench_name, "diff": etf_ret - bench_ret,
                 "start": ed[start_i], "end": ed[end_i]}
     except (ValueError, TypeError, OverflowError, AttributeError):
         return None
@@ -2316,16 +2355,17 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
             f'<i class="stat-dot {lv}" aria-hidden="true"></i>{count}</span>'
             for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "无数据"))
             if (count := sum(d["level"] == lv for d in g)))
-        # 板块组：红黄灯后面跟「板块 ETF 近 20 日相对 SPY 的强弱」，折叠时也能看到
+        # 板块组：红黄灯后面跟「板块 ETF 近 20 日相对标普500的强弱」，折叠时也能看到
         rs = (items_by_symbol.get(group["sector_etf"]) or {}).get("rs_spy") if group.get("sector_etf") else None
         if rs:
             diff = rs["diff"]
             rs_cls = "up" if diff >= RS_NEUTRAL_PP else "down" if diff <= -RS_NEUTRAL_PP else ""
+            bn = rs.get("bench_name") or RS_BENCH_NAME
             rs_tip = html_lib.escape(
-                f'{group["sector_etf"]} {rs["days"]}日 {rs["etf"]:+.1f}% − SPY {rs["spy"]:+.1f}% = {diff:+.1f} 个百分点'
+                f'{group["sector_etf"]} {rs["days"]}日 {rs["etf"]:+.1f}% − {bn} {rs["bench"]:+.1f}% = {diff:+.1f} 个百分点'
                 f'（{rs["start"]} → {rs["end"]}）')
             stats += (f'<span class="rs-spy {rs_cls}" title="{rs_tip}" aria-label="{rs_tip}">'
-                      f'{rs["days"]}日相对SPY {diff:+.1f}%</span>')
+                      f'{rs["days"]}日相对{html_lib.escape(bn)} {diff:+.1f}%</span>')
         if not enabled:
             note = "仅板块ETF" if g else "监测关闭"
             stats = f'<span class="monitor-note">{note}</span>' + stats
@@ -2694,14 +2734,24 @@ def main(argv=None):
         to_fetch = [sym for sym, _, _ in universe
                     if quote_supported(sym) and instrument_identity(sym) != '^TNX']
         sector_etfs = {g["sector_etf"] for g in GROUPS if g.get("sector_etf")}
-        # 板块 ETF 相对 SPY 强弱要用 SPY 的日线；清单里没有 SPY 就多抓这一只（只用来对比，不进页面清单）
-        need_spy = any(normalize_symbol(s) in sector_etfs for s in to_fetch)
-        spy_key = next((s for s in to_fetch if normalize_symbol(s) == "SPY"), None)
-        if need_spy and not spy_key:
-            spy_key = "SPY"
-            to_fetch = to_fetch + [spy_key]
+        # 板块 ETF 相对强弱的基准是标普500指数本身，来源优先级：
+        #   1) 风险参考已取的 Yahoo ^GSPC 日线（不额外请求）  2) History of Market 日线  3) 都没有才抓 SPY 作近似
+        need_bench = any(normalize_symbol(s) in sector_etfs for s in to_fetch)
+        bench_rows, bench_name, spy_key = [], RS_BENCH_NAME, None
+        if need_bench:
+            bench_rows = list(SP500_RS_ROWS) or sp500_rows_fallback()
+            if not bench_rows:
+                bench_name = "SPY"
+                spy_key = next((s for s in to_fetch if normalize_symbol(s) == "SPY"), None)
+                if not spy_key:
+                    spy_key = "SPY"
+                    to_fetch = to_fetch + [spy_key]
         fetched = collect_quotes(to_fetch)
-        spy_data = fetched.get(spy_key) if need_spy and isinstance(fetched.get(spy_key), dict) else None
+        bench_data = None
+        if bench_rows:
+            bench_data = {"dates": [d for d, _ in bench_rows], "closes": [v for _, v in bench_rows]}
+        elif spy_key and isinstance(fetched.get(spy_key), dict):
+            bench_data = fetched[spy_key]
         YAHOO_GATE.reset(False)
         STOOQ_GATE.reset(False)
         for sym, sc, grp in universe:
@@ -2717,8 +2767,8 @@ def main(argv=None):
                     continue
             if data:
                 lv, sig, detail = analyze_symbol(sym, sc, data, group=grp)
-                if spy_data and normalize_symbol(sym) in sector_etfs:
-                    rs = relative_strength(data, spy_data)
+                if bench_data and normalize_symbol(sym) in sector_etfs:
+                    rs = relative_strength(data, bench_data, bench_name=bench_name)
                     if rs:
                         detail["rs_spy"] = rs
                 items.append(detail)

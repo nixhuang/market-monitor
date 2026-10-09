@@ -3,7 +3,7 @@ import json
 import os
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -253,23 +253,26 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
+                    patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}) as fetch, \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
                 self.assertEqual(monitor.main([]), 0)
-                # 末尾的 SPY 只用来算板块 ETF 的相对强弱，不进页面清单、不计入监测数量
+                # 标普500指数日线和第二来源都取不到时，末尾才多抓一只 SPY 作近似基准；不进页面清单、不计入监测数量
                 self.assertEqual([c.args[0] for c in fetch.call_args_list], ['AAPL', 'MSFT', 'XLK', 'XLB', 'SPY'])
                 self.assertEqual([r['symbol'] for r in notify.call_args.args[1]], ['AAPL', 'MSFT', 'XLK', 'XLB'])
                 with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
                     self.assertEqual(json.load(f)['summary']['total'], 4)
 
-    def test_main_attaches_relative_strength_for_sector_etf_and_renders_it(self):
+    def _run_main_for_rs(self, bench_rows, fallback_rows=None):
         import tempfile
         cfg = {'technology': {'XLK': {}}}
         dates = [f'2026-09-{d:02d}' for d in range(1, 31)] + ['2026-10-01', '2026-10-02']
+        fetched_symbols = []
         def hist(symbol, *a, **k):
+            fetched_symbols.append(symbol)
             step = {'XLK': 1.0, 'SPY': 0.5}[symbol]
             return {'price': 100, 'dates': dates, 'closes': [100 + i * step for i in range(len(dates))]}
         def analyzed(symbol, settings, data, group):
@@ -284,19 +287,70 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
+                    patch.object(monitor, 'SP500_RS_ROWS', list(bench_rows)), \
+                    patch.object(monitor, 'sp500_rows_fallback', return_value=list(fallback_rows or [])) as fallback, \
                     patch.object(monitor, 'fetch_history', side_effect=hist), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
                 self.assertEqual(monitor.main([]), 0)
-                rs = notify.call_args.args[1][0]['rs_spy']
-                self.assertEqual(rs['days'], 20)
-                self.assertAlmostEqual(rs['etf'], (131 / 111 - 1) * 100, places=6)
-                self.assertAlmostEqual(rs['spy'], (115.5 / 105.5 - 1) * 100, places=6)
                 with open(os.path.join(directory, 'index.html'), encoding='utf-8') as f:
                     page = f.read()
-                self.assertIn('20日相对SPY', page.split('id="group_technology"', 1)[1].split('</summary>', 1)[0])
+                return notify.call_args.args[1][0].get('rs_spy'), page, fetched_symbols, fallback
+
+    def test_main_relative_strength_uses_sp500_index_rows_without_fetching_spy(self):
+        dates = [f'2026-09-{d:02d}' for d in range(1, 31)] + ['2026-10-01', '2026-10-02']
+        index_rows = [(d, 5000 + i * 10) for i, d in enumerate(dates)]     # 标普500指数点位（约 5000 点）
+        rs, page, fetched, fallback = self._run_main_for_rs(index_rows)
+        self.assertEqual(fetched, ['XLK'])                  # 不再额外抓 SPY
+        fallback.assert_not_called()                        # 第一来源可用就不碰第二来源
+        self.assertEqual(rs['days'], 20)
+        self.assertEqual(rs['bench_name'], '标普500')
+        self.assertAlmostEqual(rs['etf'], (131 / 111 - 1) * 100, places=6)
+        self.assertAlmostEqual(rs['bench'], (5310 / 5110 - 1) * 100, places=6)
+        head = page.split('id="group_technology"', 1)[1].split('</summary>', 1)[0]
+        self.assertIn('20日相对标普500', head)
+        self.assertNotIn('SPY', head)
+        self.assertIn('− 标普500 +3.9%', head)
+
+    def test_main_relative_strength_second_source_when_yahoo_index_missing(self):
+        dates = [f'2026-09-{d:02d}' for d in range(1, 31)] + ['2026-10-01']   # 第二来源晚一天
+        hom_rows = [(d, 7000 + i * 5) for i, d in enumerate(dates)]
+        rs, page, fetched, fallback = self._run_main_for_rs([], hom_rows)
+        self.assertEqual(fetched, ['XLK'])
+        fallback.assert_called_once()
+        self.assertEqual(rs['bench_name'], '标普500')
+        self.assertEqual(rs['end'], '2026-10-01')           # 终点退到双方共有的最新日，不按下标错位
+        self.assertIn('20日相对标普500', page.split('id="group_technology"', 1)[1].split('</summary>', 1)[0])
+
+    def test_main_relative_strength_falls_back_to_spy_only_when_no_index_data(self):
+        rs, page, fetched, fallback = self._run_main_for_rs([], [])
+        self.assertEqual(fetched, ['XLK', 'SPY'])
+        self.assertEqual(rs['bench_name'], 'SPY')
+        head = page.split('id="group_technology"', 1)[1].split('</summary>', 1)[0]
+        self.assertIn('20日相对SPY', head)                   # 明确标注是 SPY 近似，不冒充指数
+
+    def test_sp500_rows_fallback_validates_license_order_and_staleness(self):
+        def body(rows, lic='CC BY 4.0', **extra):
+            b = {'_license': lic, 'series': [{'date': d, 'close': c, 'drawdown': 0.0} for d, c in rows]}
+            b.update(extra)
+            return b
+        def run(payload, target='2026-10-08'):
+            resp = MagicMock()
+            resp.json.return_value = payload
+            with patch.object(monitor.requests, 'get', return_value=resp), patch.object(monitor, 'log'):
+                return monitor.sp500_rows_fallback(target, keep=3)
+        good = [('2026-10-01', 7700.0), ('2026-10-02', 7710.0), ('2026-10-05', 7720.0), ('2026-10-06', 7730.0), ('2026-10-07', 7740.0)]
+        self.assertEqual(run(body(good)), good[-3:])
+        self.assertEqual(run(body(good), target='2026-10-05'), good[:3][-3:])   # 不取目标日之后的数据
+        self.assertEqual(run(body(good, lic='proprietary')), [])
+        self.assertEqual(run(body(good + [('2026-10-07', 7750.0)])), [])         # 日期重复/倒序
+        self.assertEqual(run(body(good[:2] + [('2026-10-05', -1.0)])), [])        # 价格异常
+        self.assertEqual(run(body(good), target='2026-10-20'), [])                # 过旧（>7 天）
+        self.assertEqual(run({'_license': 'CC BY 4.0', 'series': 'x'}), [])
+        with patch.object(monitor.requests, 'get', side_effect=monitor.requests.ConnectionError('x')), patch.object(monitor, 'log'):
+            self.assertEqual(monitor.sp500_rows_fallback('2026-10-08'), [])
 
     def test_main_keeps_index_reference_prices_if_yahoo_unavailable(self):
         import tempfile
@@ -568,7 +622,7 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(order, sorted(order))      # 黄档 XLK 排黄档第一，仍在红档 MU 之后
         self.assertNotIn('财报 "', page)             # 手机端不再用 CSS 给每行补「财报」
 
-    def test_relative_strength_vs_spy_aligned_by_date_and_shown_after_lights(self):
+    def test_relative_strength_vs_sp500_aligned_by_date_and_shown_after_lights(self):
         def hist(start_day, closes):
             dates = [f'2026-09-{d:02d}' if d <= 30 else f'2026-10-{d - 30:02d}' for d in range(start_day, start_day + len(closes))]
             return {'dates': dates, 'closes': closes}
@@ -578,8 +632,9 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(rs['days'], 20)
         self.assertEqual((rs['start'], rs['end']), ('2026-09-06', '2026-09-26'))
         self.assertAlmostEqual(rs['etf'], (121 / 101 - 1) * 100, places=6)
-        self.assertAlmostEqual(rs['spy'], (110.5 / 100.5 - 1) * 100, places=6)
-        self.assertAlmostEqual(rs['diff'], rs['etf'] - rs['spy'], places=6)
+        self.assertAlmostEqual(rs['bench'], (110.5 / 100.5 - 1) * 100, places=6)
+        self.assertEqual(monitor.relative_strength(etf, spy, bench_name='SPY')['bench_name'], 'SPY')
+        self.assertAlmostEqual(rs['diff'], rs['etf'] - rs['bench'], places=6)
         # SPY 少最后一天：终点退到双方共有的最新日，不能按下标错位
         short = {'dates': spy['dates'][:-1], 'closes': spy['closes'][:-1]}
         rs2 = monitor.relative_strength(etf, short)
@@ -598,12 +653,12 @@ class TestGroups(unittest.TestCase):
                  'signals': ['x'] if level != 'green' else [], 'level': level}
             d.update(extra)
             return d
-        up = {'days': 20, 'etf': 5.2, 'spy': 3.4, 'diff': 1.8, 'start': '2026-09-08', 'end': '2026-10-07'}
-        down = {'days': 20, 'etf': -1.0, 'spy': 2.0, 'diff': -3.0, 'start': '2026-09-08', 'end': '2026-10-07'}
-        flat = {'days': 20, 'etf': 2.2, 'spy': 2.0, 'diff': 0.2, 'start': '2026-09-08', 'end': '2026-10-07'}
+        up = {'days': 20, 'etf': 5.2, 'bench': 3.4, 'bench_name': '标普500', 'diff': 1.8, 'start': '2026-09-08', 'end': '2026-10-07'}
+        down = {'days': 20, 'etf': -1.0, 'bench': 2.0, 'bench_name': '标普500', 'diff': -3.0, 'start': '2026-09-08', 'end': '2026-10-07'}
+        flat = {'days': 20, 'etf': 2.2, 'bench': 2.0, 'bench_name': '标普500', 'diff': 0.2, 'start': '2026-09-08', 'end': '2026-10-07'}
         items = [mk('XLK', 'green', 'technology', rs_spy=up), mk('MU', 'red', 'technology'),
                  mk('XLV', 'green', 'healthcare', rs_spy=down), mk('XLF', 'green', 'financials', rs_spy=flat),
-                 mk('XLE', 'green', 'energy'),          # 抓不到 SPY 对比：不显示
+                 mk('XLE', 'green', 'energy'),          # 抓不到基准对比：不显示
                  mk('XLI', 'green', 'position', rs_spy=up)]   # 板块 ETF 因去重落在持仓里：行业分组头仍要显示
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
             snap = monitor.build_snapshot({}, items, {'positions': {'XLI': {}}})
@@ -611,15 +666,15 @@ class TestGroups(unittest.TestCase):
         def head(key):
             return page.split(f'id="group_{key}"', 1)[1].split('</summary>', 1)[0]
         tech = head('technology')
-        self.assertIn('20日相对SPY +1.8%', tech)
+        self.assertIn('20日相对标普500 +1.8%', tech)
         self.assertIn('class="rs-spy up"', tech)
         self.assertLess(tech.index('stat-dot red'), tech.index('rs-spy'))      # 在红黄灯后面
-        self.assertIn('XLK 20日 +5.2% − SPY +3.4% = +1.8 个百分点', tech)
+        self.assertIn('XLK 20日 +5.2% − 标普500 +3.4% = +1.8 个百分点', tech)
         self.assertIn('class="rs-spy down"', head('healthcare'))
-        self.assertIn('20日相对SPY -3.0%', head('healthcare'))
+        self.assertIn('20日相对标普500 -3.0%', head('healthcare'))
         self.assertIn('class="rs-spy "', head('financials'))                    # ±0.5 内持平不着色
         self.assertNotIn('rs-spy', head('energy'))
-        self.assertIn('20日相对SPY +1.8%', head('industrials'))
+        self.assertIn('20日相对标普500 +1.8%', head('industrials'))
         self.assertNotIn('rs-spy', head('positions'))                            # 持仓/关注/指数基不是板块组
 
     def test_us_style_colors_green_up_red_down_but_risk_lights_unchanged(self):
