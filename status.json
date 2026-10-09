@@ -9,19 +9,19 @@
     "next_in": 5,
     "next_date": "2026-10-15"
   },
-  "run_id": "37875882289",
+  "run_id": "37876540310",
   "request_id": "",
-  "source_sha": "6ffff85007040b72a8b9fe863838fd97df76c4ee",
-  "started_at": "2026-10-09T02:43:02+00:00",
-  "started_at_bj": "2026-10-09T10:43:02+08:00",
-  "finished_at": "2026-10-09T10:44:13.878809+08:00",
-  "finished_at_bj": "2026-10-09T10:44:13+08:00",
+  "source_sha": "f5ffe7ac2bc1cc0a2c3355be1805702a6b8909e8",
+  "started_at": "2026-10-09T02:51:23+00:00",
+  "started_at_bj": "2026-10-09T10:51:23+08:00",
+  "finished_at": "2026-10-09T10:52:27.402778+08:00",
+  "finished_at_bj": "2026-10-09T10:52:27+08:00",
   "event": "push",
   "target_trade_date": "2026-10-08",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
-    "holdings.json": "9c5399d792d1cc866767d037c13bbf648bb85c63",
+    "holdings.json": "37d91e2a672b32eb0bfef24d452ee1eba2ca32ef",
     "settings.json": "2192af5364bdf88a40f9f95d4b1e671ae79a521d"
   },
   "effective_settings": {
@@ -151,7 +151,7 @@
   "registered_counts": {
     "positions": 15,
     "focus": 8,
-    "index_funds": 12,
+    "index_funds": 10,
     "technology": 40,
     "healthcare": 18,
     "financials": 20,
@@ -167,7 +167,7 @@
   "list_counts": {
     "positions": 15,
     "focus": 8,
-    "index_funds": 10,
+    "index_funds": 8,
     "technology": 31,
     "healthcare": 16,
     "financials": 17,
@@ -186,21 +186,18 @@
     "red": 5,
     "yellow": 57,
     "green": 68,
-    "gray": 2,
-    "total": 132,
+    "gray": 0,
+    "total": 130,
     "macro_ok": 6,
     "stale_symbols": [],
-    "missing_symbols": [
-      "ESMAIN",
-      "CLMAIN"
-    ],
+    "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {
       "BD#US10Y": "2026-10-08"
     },
     "today_prices": 129,
     "prior_prices": 0,
-    "missing_prices": 2
+    "missing_prices": 0
   },
   "actual_dates": {
     "min": "2026-10-08",
