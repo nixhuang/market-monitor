@@ -9,19 +9,19 @@
     "next_in": 15,
     "next_date": "2026-10-29"
   },
-  "run_id": "37904659229",
+  "run_id": "37931582645",
   "request_id": "",
-  "source_sha": "de55f87979a5f7391398a66196cb225e86511103",
-  "started_at": "2026-10-09T08:23:29+00:00",
-  "started_at_bj": "2026-10-09T16:23:29+08:00",
-  "finished_at": "2026-10-09T16:24:38.526766+08:00",
-  "finished_at_bj": "2026-10-09T16:24:38+08:00",
+  "source_sha": "40f9c0fa947fef013069f4f696387c1e0bd1bb2e",
+  "started_at": "2026-10-09T12:40:26+00:00",
+  "started_at_bj": "2026-10-09T20:40:26+08:00",
+  "finished_at": "2026-10-09T20:42:02.951846+08:00",
+  "finished_at_bj": "2026-10-09T20:42:02+08:00",
   "event": "push",
   "target_trade_date": "2026-10-08",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
   "config_files": {
-    "holdings.json": "274dfededa1ee3ffd2326c0227cadd2ffa2d1712",
+    "holdings.json": "8b8d92fe0777bc4d75d4142a28f28298d911e26a",
     "settings.json": "7f91541063b77f4f420d11031f489ba52e8db484"
   },
   "effective_settings": {
@@ -34,6 +34,9 @@
     "rsi_low": 30,
     "near_52w_low_pct": 1.0,
     "trigger_gap_pct": 1.0,
+    "reduce_gap_pct": 3.0,
+    "target_space_pct": 50.0,
+    "target_gap_pct": 3.0,
     "vol_ratio": 1.5,
     "quiet_chg": 2.0,
     "amp_yellow": 6.0,
@@ -151,7 +154,7 @@
   "registered_counts": {
     "positions": 15,
     "focus": 8,
-    "index_funds": 10,
+    "index_funds": 9,
     "technology": 39,
     "healthcare": 18,
     "financials": 20,
@@ -167,7 +170,7 @@
   "list_counts": {
     "positions": 15,
     "focus": 8,
-    "index_funds": 8,
+    "index_funds": 7,
     "technology": 30,
     "healthcare": 16,
     "financials": 17,
@@ -180,21 +183,20 @@
     "consumer_discretionary": 5,
     "real_estate": 1,
     "triggers": 0,
+    "reduces": 0,
     "dca": 1
   },
   "summary": {
     "red": 5,
     "yellow": 57,
-    "green": 68,
+    "green": 67,
     "gray": 0,
-    "total": 130,
+    "total": 129,
     "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
-    "reference_dates": {
-      "BD#US10Y": "2026-10-08"
-    },
+    "reference_dates": {},
     "today_prices": 129,
     "prior_prices": 0,
     "missing_prices": 0
@@ -209,7 +211,7 @@
     "sp500": "2026-10-08",
     "ust10": "2026-10-08",
     "nfci": "2026-10-02",
-    "breadth": "2026-10-07"
+    "breadth": "2026-10-08"
   },
   "treasury_reference": {
     "ok": true,
@@ -229,13 +231,13 @@
   "market_risk": {
     "level": "green",
     "label": "风险平稳",
-    "text": "轻微提示：上涨参与度；风险得分 1/8",
-    "score": 1,
+    "text": "已取得的指标未触发警示；风险得分 0/8",
+    "score": 0,
     "levels": {
       "hy_oas": "green",
       "vix": "green",
       "sp500": "green",
-      "breadth": "yellow",
+      "breadth": "green",
       "nfci": "green"
     },
     "valid_count": 5,
@@ -261,6 +263,139 @@
     "checked": 17,
     "red": 4,
     "yellow": 6
+  },
+  "consensus": {
+    "source": "stockanalysis.com（S&P Global）",
+    "stat": {
+      "marker": "2026-10-01",
+      "due": 17,
+      "tried": 17,
+      "ok": 17,
+      "none": 0,
+      "fail": 0,
+      "stopped": ""
+    },
+    "data": {
+      "HII": {
+        "s": "ok",
+        "avg": 363.0,
+        "upd": "2026-10-07",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "APH": {
+        "s": "ok",
+        "avg": 101.66,
+        "upd": "2026-10-08",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "AVGO": {
+        "s": "ok",
+        "avg": 531.31,
+        "upd": "2026-10-02",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "CRSP": {
+        "s": "ok",
+        "avg": 87.56,
+        "upd": "2026-10-09",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "GOOGL": {
+        "s": "ok",
+        "avg": 429.47,
+        "upd": "2026-10-09",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "LMT": {
+        "s": "ok",
+        "avg": 625.76,
+        "upd": "2026-10-08",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "NTNX": {
+        "s": "ok",
+        "avg": 77.79,
+        "upd": "2026-09-28",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "UNH": {
+        "s": "ok",
+        "avg": 481.72,
+        "upd": "2026-10-09",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "UBER": {
+        "s": "ok",
+        "avg": 100.86,
+        "upd": "2026-10-07",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "ZS": {
+        "s": "ok",
+        "avg": 233.38,
+        "upd": "2026-10-09",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "COST": {
+        "s": "ok",
+        "avg": 1057.94,
+        "upd": "2026-10-09",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "TSM": {
+        "s": "ok",
+        "avg": 555.01,
+        "upd": "2026-09-12",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "MA": {
+        "s": "ok",
+        "avg": 668.07,
+        "upd": "2026-10-09",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "PDD": {
+        "s": "ok",
+        "avg": 114.6,
+        "upd": "2026-09-10",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "V": {
+        "s": "ok",
+        "avg": 419.36,
+        "upd": "2026-10-09",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "AAPL": {
+        "s": "ok",
+        "avg": 328.09,
+        "upd": "2026-10-08",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      },
+      "MSFT": {
+        "s": "ok",
+        "avg": 587.63,
+        "upd": "2026-10-08",
+        "r": "2026-10-01",
+        "try": "2026-10-09"
+      }
+    }
   },
   "earnings": {
     "targets": 60,
