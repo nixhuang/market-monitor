@@ -181,12 +181,6 @@
     "NTNX": {
       "note": "Nutanix-混合云"
     },
-    "NOK": {
-      "note": "诺基亚"
-    },
-    "EUV": {
-      "note": "Corgi ETF-光刻"
-    },
     "CBRS": {
       "note": "Cerebras-AI芯片"
     },
@@ -249,32 +243,14 @@
     "XLV": {
       "note": "医疗保健精选行业ETF"
     },
-    "CVS": {
-      "note": "CVS Health-药房医保"
-    },
     "MRNA": {
       "note": "Moderna-mRNA疫苗"
     },
     "ABBV": {
       "note": "艾伯维"
     },
-    "AZN": {
-      "note": "阿斯利康"
-    },
-    "BMY": {
-      "note": "百时美施贵宝"
-    },
     "TMO": {
       "note": "赛默飞世尔科技"
-    },
-    "UTHR": {
-      "note": "United Thera-肺动脉高压"
-    },
-    "SDGR": {
-      "note": "Schrodinger-AI制药"
-    },
-    "GENB": {
-      "note": "Generate Bio-AI生物药"
     },
     "ISRG": {
       "note": "直觉外科"
@@ -291,14 +267,8 @@
     "CRSP": {
       "note": "CRISPR-基因编辑"
     },
-    "PFE": {
-      "note": "辉瑞"
-    },
     "JNJ": {
       "note": "强生"
-    },
-    "MRK": {
-      "note": "默沙东"
     }
   },
   "financials": {
@@ -323,20 +293,11 @@
     "AXP": {
       "note": "美国运通"
     },
-    "FNF": {
-      "note": "Fidelity Natl-产权保险"
-    },
     "BX": {
       "note": "黑石"
     },
     "SPGI": {
       "note": "标普全球"
-    },
-    "UPST": {
-      "note": "Upstart-AI信贷"
-    },
-    "SLDE": {
-      "note": "Slide-佛州财险"
     },
     "GS": {
       "note": "高盛"
@@ -416,14 +377,8 @@
     "XLB": {
       "note": "原材料精选行业ETF"
     },
-    "BHP": {
-      "note": "必和必拓"
-    },
-    "BASFY": {
-      "note": "巴斯夫ADR"
-    },
-    "NUE": {
-      "note": "纽柯钢铁"
+    "LIN": {
+      "note": "林德-工业气体"
     }
   },
   "utilities": {
@@ -440,9 +395,6 @@
   "consumer_staples": {
     "XLP": {
       "note": "必需消费精选行业ETF"
-    },
-    "KHC": {
-      "note": "卡夫亨氏"
     },
     "PEP": {
       "note": "百事"

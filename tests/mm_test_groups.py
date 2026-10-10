@@ -264,6 +264,7 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}) as fetch, \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
@@ -300,6 +301,7 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', side_effect=hist), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
@@ -415,6 +417,7 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', side_effect=fetch), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
@@ -446,6 +449,7 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', side_effect=slow_fail), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'push_serverchan'), \
                     patch.object(monitor.time, 'monotonic', side_effect=lambda: clock['t']):
@@ -539,30 +543,110 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('数据源只给', note)
         self.assertIn('具体时段待定', monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'})[0])
 
-    def test_earnings_shown_for_holdings_and_focus_but_others_only_when_alerted(self):
+    def test_earnings_shown_for_every_fetched_stock_but_not_etf_or_index(self):
         def row(symbol, group, level):
             return {'symbol': symbol, 'group': group, 'level': level, 'price': 10, 'note': ''}
         items = [row('AAPL', 'position', 'green'), row('MSFT', 'focus', 'green'),
                  row('NVDA', 'technology', 'green'), row('AMD', 'technology', 'yellow'),
+                 row('TSLA', 'technology', 'green'),
                  row('XLK', 'technology', 'red'), row('SPY', 'position', 'green'),
                  row('.VIX', 'index_funds', 'red')]
         asked = []
+        dates = {'NVDA': '2026-12-20', 'TSLA': '2026-10-15'}
         def earnings(symbol):
             asked.append(symbol)
-            return {'status': 'ok', 'date': '2026-10-30', 'timing': 'post', 'kind': 'expected'}
+            return {'status': 'ok', 'date': dates.get(symbol, '2026-10-30'), 'timing': 'post', 'kind': 'expected'}
         with patch.object(monitor, 'nasdaq_earnings', side_effect=earnings):
-            stat = monitor.attach_earnings(items)
-        self.assertEqual(sorted(asked), ['AAPL', 'AMD', 'MSFT'])
-        self.assertEqual(stat['targets'], 3)
+            stat = monitor.attach_earnings(items, None, '2026-10-09')
+        self.assertEqual(sorted(asked), ['AAPL', 'AMD', 'MSFT', 'NVDA', 'TSLA'])   # ETF/指数/期货不抓
+        self.assertEqual(stat['targets'], 5)
         by_symbol = {d['symbol']: d for d in items}
-        self.assertIn('earnings', by_symbol['AAPL'])
-        self.assertNotIn('earnings', by_symbol['NVDA'])
+        for sym in ('AAPL', 'MSFT', 'NVDA', 'AMD', 'TSLA'):
+            self.assertIn('earnings', by_symbol[sym], sym)             # 抓到的都显示，不论分组和灯色
         self.assertNotIn('earnings', by_symbol['XLK'])
         self.assertNotIn('earnings', by_symbol['SPY'])
         self.assertNotIn('earnings', by_symbol['.VIX'])
         with patch.object(monitor, 'nasdaq_earnings', side_effect=RuntimeError('boom')):
-            stat = monitor.attach_earnings([row('AAPL', 'position', 'green')])
+            stat = monitor.attach_earnings([row('AAPL', 'position', 'green')], None, '2026-10-09')
         self.assertEqual(stat['targets'], 1)
+
+    def test_earnings_refetch_schedule_by_distance(self):
+        due = monitor.earnings_refetch_due
+        today = '2026-10-10'
+        exp = lambda date, fetched: {'status': 'ok', 'kind': 'expected', 'date': date, 'fetched': fetched}
+        est = lambda date, fetched: {'status': 'ok', 'kind': 'estimated', 'date': date, 'fetched': fetched}
+        # 已确认的日期：远 14 天、近 7 天、3 天内不追抓
+        self.assertFalse(due(exp('2026-11-10', '2026-09-27'), today))    # 13 天前
+        self.assertTrue(due(exp('2026-11-10', '2026-09-26'), today))     # 满 14 天
+        self.assertFalse(due(exp('2026-10-20', '2026-10-04'), today))    # 4~14 天：6 天前
+        self.assertTrue(due(exp('2026-10-20', '2026-10-03'), today))     # 满 7 天
+        self.assertFalse(due(exp('2026-10-12', '2026-10-08'), today))    # 3 天内：2 天前，不追
+        self.assertFalse(due(exp('2026-10-10', '2026-10-09'), today))
+        self.assertTrue(due(exp('2026-10-13', '2026-10-07'), today))     # 3 天内但缓存已满 3 天：补查一次
+        self.assertTrue(due(exp('2026-10-09', '2026-10-09'), today))     # 财报日已过：立即重抓
+        # 算法估算的日期：远 7 天、近 3 天
+        self.assertFalse(due(est('2026-11-10', '2026-10-04'), today))
+        self.assertTrue(due(est('2026-11-10', '2026-10-03'), today))
+        self.assertFalse(due(est('2026-10-20', '2026-10-08'), today))
+        self.assertTrue(due(est('2026-10-20', '2026-10-07'), today))
+        self.assertTrue(due({'status': 'ok', 'date': '2026-11-10', 'fetched': '2026-10-03'}, today))  # 缺 kind 按估算
+        self.assertTrue(due({'status': 'error', 'fetched': today}, today))
+        self.assertFalse(due({'status': 'unknown', 'fetched': '2026-10-04'}, today))
+        self.assertTrue(due({'status': 'unknown', 'fetched': '2026-10-03'}, today))
+        self.assertFalse(due({'status': 'na', 'reason': 'http404', 'fetched': '2026-09-15'}, today))
+        self.assertTrue(due({'status': 'na', 'fetched': '2026-09-10'}, today))
+        self.assertTrue(due({}, today))
+        self.assertTrue(due(None, today))
+        self.assertTrue(due({'status': 'ok', 'date': 'bad', 'fetched': today}, today))
+        self.assertTrue(due(exp('2026-11-10', '2026-10-20'), today))     # 缓存时间在未来：重抓
+
+    def test_earnings_cache_reuse_and_fallbacks(self):
+        def row(symbol, group='technology', level='green'):
+            return {'symbol': symbol, 'group': group, 'level': level, 'price': 10, 'note': ''}
+        today = '2026-10-10'
+        prev = {'AAPL': {'status': 'ok', 'date': '2026-11-20', 'timing': 'post', 'kind': 'expected', 'fetched': '2026-10-08'},
+                'MSFT': {'status': 'ok', 'date': '2026-10-12', 'timing': 'post', 'kind': 'expected', 'fetched': '2026-10-06'},
+                'AMD': {'status': 'ok', 'date': '2026-10-08', 'timing': 'pre', 'kind': 'expected', 'fetched': '2026-10-01'}}
+        asked = []
+        def fetch(symbol):
+            asked.append(symbol)
+            return {'status': 'ok', 'date': '2026-11-03', 'timing': 'pre', 'kind': 'expected'}
+        items = [row('AAPL', 'position'), row('MSFT', 'position'), row('AMD', 'position'), row('NEW', 'position')]
+        with patch.object(monitor, 'nasdaq_earnings', side_effect=fetch):
+            stat = monitor.attach_earnings(items, prev, today)
+        self.assertEqual(sorted(asked), ['AMD', 'MSFT', 'NEW'])        # AAPL 命中缓存；临近的、过期的、新的要抓
+        self.assertEqual(stat['fetched'], 3)
+        by = {d['symbol']: d for d in items}
+        self.assertEqual(by['AAPL']['earnings']['date'], '2026-11-20')
+        self.assertEqual(by['AMD']['earnings']['date'], '2026-11-03')  # 过期日期不显示，换新的
+        self.assertEqual(stat['data']['NEW']['fetched'], today)
+        # 失败：日期还有效 → 沿用旧值；没有可用旧值 → 显示失败且不进缓存
+        with patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'error'}):
+            items = [row('MSFT', 'position'), row('AMD', 'position'), row('NEW', 'position')]
+            stat = monitor.attach_earnings(items, prev, today)
+        by = {d['symbol']: d for d in items}
+        self.assertEqual(by['MSFT']['earnings']['date'], '2026-10-12')
+        self.assertEqual(by['AMD']['earnings']['status'], 'error')
+        self.assertNotIn('AMD', stat['data'])
+        self.assertNotIn('NEW', stat['data'])
+        self.assertEqual(stat['failed'], 2)
+        # 旧快照缺字段或格式不对不报错
+        for bad in (None, [], 'x', {'AAPL': 'x'}, {'AAPL': {}}):
+            with patch.object(monitor, 'nasdaq_earnings', side_effect=fetch):
+                monitor.attach_earnings([row('AAPL', 'position')], bad, today)
+
+    def test_earnings_fetch_cap_defers_low_priority(self):
+        def row(symbol, group, level='green'):
+            return {'symbol': symbol, 'group': group, 'level': level, 'price': 10, 'note': ''}
+        items = [row('AAA', 'technology'), row('BBB', 'technology', 'yellow'), row('CCC', 'position')]
+        asked = []
+        def fetch(symbol):
+            asked.append(symbol)
+            return {'status': 'ok', 'date': '2026-11-03', 'timing': 'pre', 'kind': 'expected'}
+        with patch.object(monitor, 'EARN_MAX_FETCH_PER_RUN', 2), patch.object(monitor, 'nasdaq_earnings', side_effect=fetch):
+            stat = monitor.attach_earnings(items, None, '2026-10-10')
+        self.assertEqual(sorted(asked), ['BBB', 'CCC'])                # 持仓、黄灯优先
+        self.assertEqual(stat['deferred'], 1)
 
     def test_quiet_holdings_keep_earnings_inside_folded_list(self):
         quiet = {'symbol': 'AAPL', 'note': '苹果', 'price': 100, 'chg': 0.0, 'rsi': {}, 'dist_high': None,
@@ -854,6 +938,56 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('ROE未比较', text)
         self.assertEqual(result['compare'], '2025/9→2026/6')
         self.assertTrue(any('营业利率' in c for c in result['context']))
+
+    def test_fundamentals_cache_by_quarter(self):
+        today = '2026-10-10'
+        entry = lambda period, fetched: {'fetched': fetched, 'data': {'period': period, 'base_period': '9/30/2025'}}
+        due = monitor.fundamentals_refetch_due
+        self.assertFalse(due(entry('6/30/2026', '2026-10-01'), today))    # 静默期内沿用
+        self.assertTrue(due(entry('6/30/2026', '2026-09-09'), today))     # 放满 30 天：重抓
+        self.assertFalse(due(entry('3/31/2026', '2026-10-08'), today))    # 过了静默期：3 天内不问
+        self.assertTrue(due(entry('3/31/2026', '2026-10-07'), today))     # 过了静默期：满 3 天问一次
+        self.assertTrue(due(None, today))
+        self.assertTrue(due({'fetched': today}, today))
+        self.assertTrue(due(entry('bad', today), today))
+        self.assertTrue(due(entry('6/30/2026', '2026-10-20'), today))     # 时间在未来
+        full = {'period': '6/30/2026', 'base_period': '9/30/2025',
+                'inc': {'Total Revenue': {'value2': '$1', 'value5': '$2', 'value3': 'x'}, 'Junk': {'value2': '1'}},
+                'bs': {}, 'cf': {}, 'rt': {'Gross Margin': {'value2': '50%', 'value5': '55%'}}}
+        c = monitor.compact_financials(full)
+        self.assertEqual(c['inc'], {'Total Revenue': {'value2': '$1', 'value5': '$2'}})
+        self.assertEqual(c['rt']['Gross Margin']['value5'], '55%')
+        self.assertIsNone(monitor.compact_financials(None))
+        # 精简版结果与完整版一致
+        table = lambda rows: {k: dict(zip(('value2', 'value5'), v)) for k, v in rows.items()}
+        facts = {'period': '6/30/2026', 'base_period': '9/30/2025',
+                 'inc': table({'Total Revenue': ('$700', '$1,000'), 'Income Tax': ('$1', '$1')}),
+                 'bs': table({'Total Liabilities': ('$5', '$5'), 'Total Equity': ('$5', '$5')}),
+                 'cf': table({'Net Cash Flow-Operating': ('$20', '$20')}),
+                 'rt': table({'Operating Margin': ('10%', '10%'), 'Profit Margin': ('9%', '9%')})}
+        self.assertEqual(monitor.fundamental_check('UBER', monitor.compact_financials(facts)),
+                         monitor.fundamental_check('UBER', facts))
+        self.assertIsNone(monitor.fundamental_check('UBER', {}))        # 传空：不联网，直接无结果
+
+    def test_update_fundamentals_reuses_cache_and_falls_back(self):
+        today = '2026-10-10'
+        fresh = {'period': '6/30/2026', 'base_period': '9/30/2025', 'inc': {}, 'bs': {}, 'cf': {}, 'rt': {}}
+        prev = {'AAPL': {'fetched': '2026-10-01', 'data': fresh},
+                'MSFT': {'fetched': '2026-09-01', 'data': fresh}}
+        asked = []
+        def fetch(sym):
+            asked.append(sym)
+            return None if sym == 'MSFT' else dict(fresh, period='9/30/2026')
+        with patch.object(monitor, 'nasdaq_financials', side_effect=fetch):
+            facts, stat = monitor.update_fundamentals(['AAPL', 'MSFT', 'NEW'], prev, today)
+        self.assertEqual(sorted(asked), ['MSFT', 'NEW'])                   # AAPL 命中缓存
+        self.assertEqual((stat['fetched'], stat['cached']), (2, 1))
+        self.assertEqual(stat['data']['NEW']['fetched'], today)
+        self.assertEqual(stat['data']['MSFT']['fetched'], '2026-09-01')    # 没取到：沿用旧数据，不刷新时间
+        self.assertIn('MSFT', facts)
+        for bad in (None, [], 'x', {'AAPL': 'x'}, {'AAPL': {'data': 1}}):
+            with patch.object(monitor, 'nasdaq_financials', return_value=None):
+                monitor.update_fundamentals(['AAPL'], bad, today)
 
     def test_daily_source_validation_and_intraday_fallback(self):
         from datetime import datetime, timedelta
@@ -1545,6 +1679,25 @@ class TestTargets(unittest.TestCase):
             self.assertFalse(d['purple'])
             self.assertIsNone(d['target'])
 
+    def test_other_groups_show_consensus_but_never_alert(self):
+        cons = {'s': 'ok', 'avg': 160.0, 'upd': '2026-10-07', 'r': '2026-10-07'}
+        for avg in (160.0, 101.0, 500.0):          # 空间大、贴着现价、高得离谱：其他分组都不警示
+            with self.subTest(avg=avg):
+                level, base, hit, detail = self._tg({'target': 100}, group='technology', cons=dict(cons, avg=avg))
+                self.assertEqual((level, hit), (base, []))
+                self.assertEqual(detail['target']['kind'], 'consensus')      # 手填值对其他分组无效
+                self.assertEqual(detail['target']['price'], avg)
+                self.assertAlmostEqual(detail['target']['space'], (avg / 100 - 1) * 100)
+                self.assertFalse(detail['target']['hit'])
+                self.assertFalse(detail['target']['anomaly'])
+                self.assertFalse(detail['purple'])
+        level, base, hit, detail = self._tg({}, group='position', cons=cons)
+        self.assertEqual(hit, ['共识价 160，空间 +60%'])                    # 持仓里同样的值照常警示
+        level, base, hit, detail = self._tg({}, group='technology', cons={'s': 'fail', 'avg': 160.0, 'r': '2026-09-15'})
+        self.assertEqual((level, hit), (base, []))
+        self.assertTrue(detail['target']['failed'])                          # 取数失败照样标出来
+        self.assertIsNone(self._tg({}, group='technology')[3]['target'])     # 没共识价：什么都不显示
+
     def test_manual_target_beats_consensus_and_bad_values_ignored(self):
         cons = {'s': 'ok', 'avg': 160.0, 'upd': '2026-10-07', 'r': '2026-10-01'}
         _, _, hit, d = self._tg({'target': 101, 'target_at': '2026-09'}, cons=cons)
@@ -1599,44 +1752,58 @@ class TestTargets(unittest.TestCase):
         self.assertIsNone(monitor.parse_consensus(None))
         self.assertEqual(monitor.parse_consensus(spg_page(12, upd='bad'))['upd'], '')
 
-    def test_marker_and_due_rules(self):
-        self.assertEqual(monitor.consensus_marker('2026-10-09'), '2026-10-01')
-        self.assertEqual(monitor.consensus_marker('2026-10-15'), '2026-10-15')
-        self.assertEqual(monitor.consensus_marker('2026-10-31'), '2026-10-15')
-        due = monitor.consensus_due
-        self.assertTrue(due(None, '2026-10-01', '2026-10-09'))
-        self.assertTrue(due({'s': 'ok', 'r': '2026-09-15'}, '2026-10-01', '2026-10-09'))     # 上一个节拍的
-        self.assertFalse(due({'s': 'ok', 'r': '2026-10-01'}, '2026-10-01', '2026-10-09'))    # 本节拍已取
-        self.assertFalse(due({'s': 'none', 'r': '2026-10-01'}, '2026-10-01', '2026-10-09'))
-        self.assertTrue(due({'s': 'fail', 'r': '2026-10-01', 'try': '2026-10-08'}, '2026-10-01', '2026-10-09'))
-        self.assertFalse(due({'s': 'fail', 'r': '2026-10-01', 'try': '2026-10-09'}, '2026-10-01', '2026-10-09'))
-        self.assertTrue(due({'s': 'weird'}, '2026-10-01', '2026-10-09'))
+    def test_priority_and_due_rules(self):
+        pr = monitor.consensus_priority
+        today = '2026-10-10'
+        ok = lambda r, **kw: {'s': 'ok', 'avg': 1.0, 'r': r, **kw}
+        self.assertEqual(pr(None, today), 0)                                   # 新加入：最优先
+        self.assertEqual(pr({'s': 'weird'}, today), 0)
+        self.assertEqual(pr({'s': 'fail', 'try': '2026-10-09'}, today), 1)     # 失败过：次日重试
+        self.assertIsNone(pr({'s': 'fail', 'try': today}, today))              # 同一天不重试
+        self.assertIsNone(pr(ok('2026-09-27'), today))                         # 13 天：不取
+        self.assertEqual(pr(ok('2026-09-26'), today), 3)                       # 满 14 天
+        self.assertEqual(pr(ok('2026-10-11'), today), 3)                       # 记录时间在未来：重取
+        self.assertEqual(pr(ok('bad'), today), 3)
+        self.assertIsNone(pr({'s': 'none', 'reason': 'http404', 'r': '2026-09-12'}, today))         # 无覆盖：28 天不看
+        self.assertEqual(pr({'s': 'none', 'r': '2026-09-10'}, today), 4)       # 满 30 天复查
+        # 财报日过后提前重取（等 2 天让分析师调完）
+        self.assertEqual(pr(ok('2026-10-05', ne='2026-10-08'), today), 2)
+        self.assertIsNone(pr(ok('2026-10-05', ne='2026-10-09'), today))        # 才过 1 天
+        self.assertEqual(pr(ok('2026-10-09', ne='2026-10-08'), today), 2)     # 财后1天抓取尚未覆盖2天等待窗口
+        self.assertEqual(pr(ok('2026-10-08', ne='2026-10-08'), today), 2)      # 财报当天取的：之后再取一次
+        self.assertIsNone(pr(ok('2026-10-05', ne='bad'), today))
+        self.assertTrue(monitor.consensus_due(None, today))
+        self.assertFalse(monitor.consensus_due(ok('2026-10-05'), today))
 
-    def test_wanted_scope_only_positions_and_focus_stocks(self):
+    def test_wanted_scope_covers_all_groups_but_not_etf_or_index(self):
         w = monitor.consensus_wanted
         self.assertTrue(w('AAPL', {}, 'position'))
         self.assertTrue(w('MSFT', {}, 'focus'))
-        self.assertFalse(w('NVDA', {}, 'technology'))          # 其它分组不取
-        self.assertFalse(w('NVDA', {}, 'other'))
+        self.assertTrue(w('NVDA', {}, 'technology'))           # 其它分组也取
+        self.assertTrue(w('NVDA', {}, 'other'))
         self.assertFalse(w('BRK-B', {}, 'position'))           # 伯克希尔不取
         self.assertFalse(w('BRK.B', {}, 'position'))
         self.assertFalse(w('XLK', {}, 'position'))             # ETF 不取
-        self.assertFalse(w('AAPL', {'target': 300}, 'position'))   # 手填了就不取共识
+        self.assertFalse(w('XLK', {}, 'technology'))
+        self.assertFalse(w('AAPL', {'target': 300}, 'position'))   # 持仓手填了就不取共识
+        self.assertTrue(w('NVDA', {'target': 300}, 'technology'))  # 手填对其它分组无效，照取
         self.assertTrue(w('AAPL', {'target': 0}, 'position'))      # 手填无效当没填
         self.assertFalse(w('.VIX', {}, 'position'))
         self.assertFalse(w('00700.HK', {}, 'position'))
 
-    def _update(self, symbols, pages, prev=None, today='2026-10-09', robots='User-agent: *\nDisallow: /e/\n'):
+    def _update(self, symbols, pages, prev=None, today='2026-10-09', robots='User-agent: *\nDisallow: /e/\n',
+                next_earn=None):
         sess = FakeSession(pages, robots=robots)
         sleeps = []
         with patch.object(monitor, 'log'):
-            data, stat = monitor.update_consensus(symbols, prev, today, sess=sess, sleep=sleeps.append)
+            data, stat = monitor.update_consensus(symbols, prev, today, sess=sess, sleep=sleeps.append,
+                                                  next_earn=next_earn)
         return data, stat, sess, sleeps
 
     def test_update_fetches_due_symbols_politely(self):
         pages = {'aapl': spg_page(328.09), 'zs': spg_page(233.38, '2026-09-12'), 'newx': FakeResp(404)}
         data, stat, sess, sleeps = self._update(['AAPL', 'ZS', 'NEWX'], pages)
-        self.assertEqual(data['AAPL'], {'s': 'ok', 'avg': 328.09, 'upd': '2026-10-07', 'r': '2026-10-01', 'try': '2026-10-09'})
+        self.assertEqual(data['AAPL'], {'s': 'ok', 'avg': 328.09, 'upd': '2026-10-07', 'r': '2026-10-09', 'r_tz': 'America/New_York', 'try': '2026-10-09'})
         self.assertEqual(data['ZS']['upd'], '2026-09-12')
         self.assertEqual(data['NEWX']['s'], 'none')
         self.assertEqual((stat['ok'], stat['none'], stat['fail']), (2, 1, 0))
@@ -1654,11 +1821,57 @@ class TestTargets(unittest.TestCase):
         self.assertEqual(data['AAPL']['avg'], 300.0)            # 本节拍已取：不重复
         self.assertNotIn('OLD', data)                           # 不在清单里了：清掉
         data, stat, sess, _ = self._update(['AAPL'], {}, prev={'data': data}, today='2026-10-12')
-        self.assertEqual(stat['due'], 0)                        # 同一节拍内不再取
+        self.assertEqual(stat['due'], 0)                        # 没满 14 天不再取
         self.assertEqual(sess.calls, [])
         data, stat, sess, _ = self._update(['AAPL'], {'aapl': spg_page(310)}, prev={'data': data}, today='2026-10-15')
-        self.assertEqual(data['AAPL']['avg'], 310.0)            # 到 15 号：新节拍，再取一次
+        self.assertEqual(data['AAPL']['avg'], 310.0)            # 10-01 取的，满 14 天：再取一次
         self.assertEqual(data['AAPL']['r'], '2026-10-15')
+
+    def test_daily_cap_takes_new_then_failed_then_oldest(self):
+        today = '2026-10-10'
+        old = lambda r: {'s': 'ok', 'avg': 1.0, 'upd': '', 'r': r, 'try': r}
+        prev = {'data': {'OLDA': old('2026-09-01'), 'OLDB': old('2026-09-20'), 'FRESH': old('2026-10-05'),
+                         'FAILC': {'s': 'fail', 'r': '2026-09-01', 'try': '2026-09-30'}}}
+        pages = {k.lower(): spg_page(50) for k in ('OLDA', 'OLDB', 'FRESH', 'FAILC', 'NEWD', 'NEWE')}
+        syms = ['OLDA', 'OLDB', 'FAILC', 'FRESH', 'NEWD', 'NEWE']
+        with patch.object(monitor, 'CONSENSUS_MAX_PER_DAY', 3):
+            data, stat, sess, _ = self._update(syms, pages, prev=prev, today=today)
+            fetched = [u.split('/')[4] for u in sess.calls if 'forecast' in u]
+            self.assertEqual(fetched, ['newd', 'newe', 'failc'])                 # 新加入 > 上次失败 > 最久没更新
+            self.assertEqual((stat['due'], stat['deferred'], stat['tried']), (5, 2, 3))
+            self.assertEqual(data['OLDA']['r'], '2026-09-01')                    # 留到下一轮：旧值保留
+            # 同一天再跑：额度已用完，不再取
+            data2, stat2, sess2, _ = self._update(syms, pages, prev={'data': data}, today=today)
+            self.assertEqual([u for u in sess2.calls if 'forecast' in u], [])
+            self.assertEqual((stat2['due'], stat2['deferred']), (2, 2))
+            # 第二天：轮到最久没更新的
+            data3, stat3, sess3, _ = self._update(syms, pages, prev={'data': data2}, today='2026-10-11')
+            self.assertEqual([u.split('/')[4] for u in sess3.calls if 'forecast' in u], ['olda', 'oldb'])
+            self.assertEqual(stat3['deferred'], 0)
+
+    def test_next_earnings_is_stored_and_pulls_refetch_forward(self):
+        data, _, _, _ = self._update(['AAPL'], {'aapl': spg_page(300)}, today='2026-10-09',
+                                     next_earn={'AAPL': '2026-10-12'})
+        self.assertEqual(data['AAPL']['ne'], '2026-10-12')
+        _, st, sess, _ = self._update(['AAPL'], {}, prev={'data': data}, today='2026-10-13')
+        self.assertEqual(st['due'], 0)                                           # 财报才过 1 天，还不取
+        d2, st, sess, _ = self._update(['AAPL'], {'aapl': spg_page(310)}, prev={'data': data}, today='2026-10-14')
+        self.assertEqual(d2['AAPL']['avg'], 310.0)                               # 财报过后 2 天，提前重取
+        self.assertNotIn('ne', d2['AAPL'])                                       # 没传新的财报日就不记
+        # 过去的、写错的财报日不记
+        for bad in ('2026-10-01', 'bad', None, 5):
+            d3, _, _, _ = self._update(['AAPL'], {'aapl': spg_page(300)}, today='2026-10-09', next_earn={'AAPL': bad})
+            self.assertNotIn('ne', d3['AAPL'])
+        # 失败保留旧财报日
+        d4, _, _, _ = self._update(['AAPL'], {'aapl': FakeResp(429)}, prev={'data': data}, today='2026-10-14')
+        self.assertEqual(d4['AAPL']['ne'], '2026-10-12')
+
+    def test_next_earnings_dates_from_status(self):
+        got = monitor._next_earnings_dates({'data': {'aapl': {'status': 'ok', 'date': '2026-10-28'},
+                                                    'MSFT': {'status': 'unknown'}, 'X': 'bad'}})
+        self.assertEqual(got, {'AAPL': '2026-10-28'})
+        for bad in (None, [], {}, {'data': []}, 'x'):
+            self.assertEqual(monitor._next_earnings_dates(bad), {})
 
     def test_failure_keeps_old_value_and_marks_fail(self):
         old = {'s': 'ok', 'avg': 300.0, 'upd': '2026-08-17', 'r': '2026-09-15', 'try': '2026-09-15'}
@@ -1695,13 +1908,14 @@ class TestTargets(unittest.TestCase):
         data, stat, sess, _ = self._update(['AAPL'], {'aapl': spg_page(1)}, robots=None)   # robots 读到 503
         self.assertEqual(stat['stopped'], 'robots')
 
-    def test_all_none_in_a_big_batch_is_treated_as_layout_change(self):
+    def test_parse_failures_keep_old_values_without_batch_none_heuristic(self):
         syms = ['AA', 'BB', 'CC', 'DD', 'EE', 'FF']
         old = {s: {'s': 'ok', 'avg': 10.0, 'upd': '2026-09-12', 'r': '2026-09-15'} for s in syms}
         data, stat, _, _ = self._update(syms, {s.lower(): 'no data here' for s in syms}, prev={'data': old})
-        self.assertEqual(stat['stopped'], 'layout')
+        self.assertEqual(stat['stopped'], '')
         self.assertEqual(stat['fail'], 6)
-        self.assertTrue(all(data[s]['s'] == 'fail' and data[s]['avg'] == 10.0 for s in syms))   # 旧值保留、标红
+        self.assertEqual(stat['none'], 0)
+        self.assertTrue(all(data[s]['s'] == 'fail' and data[s]['avg'] == 10.0 for s in syms))
 
     # ---- 页面
     def _page(self, rows):
@@ -1732,7 +1946,7 @@ class TestTargets(unittest.TestCase):
         self.assertIn('lvtag tgt hit', page)
         self.assertIn('tr.pur td.sig', page)
         self.assertIn('--purple:', page)
-        self.assertIn('共识价来源：stockanalysis.com（S&P Global），每月 1、15 日更新', page)
+        self.assertIn('共识价来源：stockanalysis.com（S&P Global），每只约 14 天更新一次，财报后提前更新', page)
 
     def test_page_sort_order_not_changed_by_purple(self):
         t_hit = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True}
@@ -1799,15 +2013,17 @@ class TestTargets(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor, 'update_consensus', return_value=({'AAPL': cache['AAPL']}, {'ok': 1})) as upd, \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
                 self.assertEqual(monitor.main([]), 0)
-                # 只把持仓/重点关注里「没手填目标价」的美股个股交给抓取；MSFT 手填了、NVDA 在板块组都不取
-                self.assertEqual(upd.call_args.args[0], ['AAPL', 'ZS'])
+                # 所有分组里的美股个股都交给抓取；只有持仓/重点关注里手填了目标价的 MSFT 不取
+                self.assertEqual(upd.call_args.args[0], ['AAPL', 'ZS', 'NVDA'])
+                self.assertEqual(upd.call_args.kwargs['next_earn'], {})   # 旧快照没有财报缓存
                 self.assertEqual(upd.call_args.args[1], {'data': {'AAPL': cache['AAPL']}})   # 上次缓存从 status.json 读回
                 self.assertEqual(seen['AAPL'], cache['AAPL'])
-                self.assertIsNone(seen['NVDA'])
+                self.assertIsNone(seen['NVDA'])                           # 缓存里没有 NVDA：不传
                 with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
                     saved = json.load(f)['consensus']
                 self.assertEqual(saved['data'], {'AAPL': cache['AAPL']})
@@ -1831,11 +2047,359 @@ class TestTargets(unittest.TestCase):
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor, 'update_consensus', side_effect=RuntimeError('boom')), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
                 self.assertEqual(monitor.main([]), 0)
                 self.assertTrue(os.path.exists(os.path.join(directory, 'index.html')))
+
+
+class TestCacheAudit(unittest.TestCase):
+    """最终审核反例：多轮状态回放、业务失败、排队、改期、配额与财后事件。"""
+
+    def _cons(self, symbols, pages=None, prev=None, today='2026-10-10', **kwargs):
+        sess = FakeSession(pages or {})
+        with patch.object(monitor, 'log'):
+            data, stat = monitor.update_consensus(symbols, prev, today, sess=sess,
+                                                  sleep=lambda _: None, **kwargs)
+        return {'data': data, 'quota': stat['quota'], 'stat': stat}, sess
+
+    @staticmethod
+    def _old(r='2026-10-05', **extra):
+        return {'s': 'ok', 'avg': 100.0, 'r': r, 'r_tz': 'America/New_York', 'try': r, **extra}
+
+    @staticmethod
+    def _earn(date='2026-10-12', fetched='2026-10-06'):
+        return {'status': 'ok', 'date': date, 'kind': 'expected', 'timing': 'post', 'fetched': fetched}
+
+    @staticmethod
+    def _row(symbol):
+        return {'symbol': symbol, 'group': 'technology', 'level': 'green', 'price': 100}
+
+    def test_late_earnings_date_syncs_without_price_fetch(self):
+        prev = {'data': {'AAA': self._old()}}
+        synced, sess = self._cons(['AAA'], prev=prev, today='2026-10-06', next_earn={'AAA': '2026-10-08'})
+        self.assertEqual(sess.calls, [])
+        self.assertEqual(synced['data']['AAA']['ne'], '2026-10-08')
+        self.assertNotIn('ne', prev['data']['AAA'])  # 不原地污染传入快照
+        final, _ = self._cons(['AAA'], {'aaa': spg_page(110)}, synced, next_earn={'AAA': '2026-10-08'})
+        self.assertEqual(final['stat']['tried'], 1)
+        self.assertEqual(final['data']['AAA']['avg'], 110)
+        self.assertNotIn('earn_pending', final['data']['AAA'])
+
+    def test_upcoming_earnings_reschedule_replaces_old_date(self):
+        prev = {'data': {'AAA': self._old(ne='2026-10-12')}}
+        state, _ = self._cons(['AAA'], prev=prev, next_earn={'AAA': '2026-10-20'})
+        state, _ = self._cons(['AAA'], prev=state, today='2026-10-14')
+        self.assertEqual(state['stat']['tried'], 0)
+        self.assertEqual(state['data']['AAA']['ne'], '2026-10-20')
+
+    def test_next_quarter_date_does_not_erase_pending_event(self):
+        prev = {'data': {'AAA': self._old(ne='2026-10-08')}}
+        state, _ = self._cons(['AAA'], prev=prev, today='2026-10-09', next_earn={'AAA': '2027-01-15'})
+        self.assertEqual(state['data']['AAA']['earn_pending'], ['2026-10-08'])
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(120)}, state)
+        self.assertEqual(state['stat']['tried'], 1)
+        self.assertEqual(state['data']['AAA']['ne'], '2027-01-15')
+        state, _ = self._cons(['AAA'], prev=state, today='2026-10-11', earnings_events={'AAA': ['2026-10-08']})
+        self.assertEqual(state['stat']['tried'], 0)
+
+    def test_refresh_before_lag_does_not_satisfy_post_earnings_refresh(self):
+        prev = {'data': {'AAA': self._old(r='2026-09-25', ne='2026-10-08')}}
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(110)}, prev, today='2026-10-09')
+        self.assertEqual(state['stat']['tried'], 1)  # 常规到期恰落在财后第一天
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(120)}, state)
+        self.assertEqual(state['stat']['tried'], 1)  # 财后第二天仍要补取
+
+    def test_quota_zero_still_saves_new_event(self):
+        prev = {'data': {'AAA': self._old()}, 'quota': {'date': '2026-10-10', 'symbols': ['USED'], 'retry_symbols': []}}
+        with patch.object(monitor, 'CONSENSUS_MAX_PER_DAY', 1):
+            state, sess = self._cons(['AAA'], prev=prev, next_earn={'AAA': '2026-10-12'})
+        self.assertEqual(sess.calls, [])
+        self.assertEqual(state['data']['AAA']['ne'], '2026-10-12')
+
+    def test_404_batch_stays_none_and_leaves_next_day_for_normal_symbols(self):
+        syms = ['X' + chr(65 + i) for i in range(12)]
+        state, _ = self._cons(syms)
+        self.assertEqual(state['stat']['none'], 12)
+        self.assertTrue(all(e['s'] == 'none' for e in state['data'].values()))
+        state['data']['WAIT'] = self._old('2026-09-01')
+        state, _ = self._cons(syms + ['WAIT'], {'wait': spg_page(110)}, state, today='2026-10-11')
+        self.assertEqual(state['stat']['tried'], 1)
+        self.assertEqual(state['data']['WAIT']['r'], '2026-10-11')
+
+    def test_parse_failure_is_not_negative_coverage_cache(self):
+        state, _ = self._cons(['AAA'], {'aaa': '<html>challenge or changed layout</html>'},
+                              {'data': {'AAA': self._old('2026-09-01')}})
+        e = state['data']['AAA']
+        self.assertEqual((e['s'], e['avg']), ('fail', 100))
+        self.assertEqual(e['next_retry'], '2026-10-11')
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(0).replace('numPriceTargets:20', 'numPriceTargets:0')})
+        self.assertEqual(state['data']['AAA']['s'], 'none')
+
+    def test_retry_backoff_and_reserved_normal_capacity(self):
+        fails = ['X' + chr(65 + i) for i in range(12)]
+        old = {s: {'s': 'fail', 'r': '2026-09-01', 'try': '2026-10-09'} for s in fails}
+        old['WAIT'] = self._old('2026-09-01')
+        pages = {s.lower(): 'invalid body' for s in fails}
+        pages['wait'] = spg_page(110)
+        state, _ = self._cons(fails + ['WAIT'], pages, {'data': old})
+        self.assertEqual(state['stat']['fail'], 3)
+        self.assertEqual(state['data']['WAIT']['r'], '2026-10-10')
+        first = state['data']['XA']
+        failed = monitor._consensus_failed(first, '2026-10-11', 'again')
+        self.assertEqual(failed['next_retry'], '2026-10-13')
+        self.assertIsNone(monitor.consensus_priority(failed, '2026-10-12'))
+
+    def test_daily_quota_survives_remove_clear_readd_and_force(self):
+        first = ['X' + chr(65 + i) for i in range(12)]
+        second = ['Y' + chr(65 + i) for i in range(12)]
+        state, _ = self._cons(first, {s.lower(): spg_page(100) for s in first})
+        state, _ = self._cons([], prev=state)
+        self.assertEqual(state['data'], {})
+        self.assertEqual(len(state['quota']['symbols']), 12)
+        state, sess = self._cons(second, prev=state, force=True)
+        self.assertEqual(sess.calls, [])
+        self.assertEqual(state['stat']['tried'], 0)
+        state, _ = self._cons(second, prev=state, today='2026-10-11')
+        self.assertEqual(state['stat']['tried'], 12)
+
+    def test_legacy_quota_counts_removed_symbols_before_pruning(self):
+        old = {'data': {'OLD': self._old('2026-10-10')}}
+        with patch.object(monitor, 'CONSENSUS_MAX_PER_DAY', 1):
+            state, sess = self._cons(['NEW'], prev=old)
+        self.assertEqual(sess.calls, [])
+        self.assertIn('OLD', state['quota']['symbols'])
+        self.assertNotIn('OLD', state['data'])
+
+    def test_event_day_and_quota_day_are_independent(self):
+        prev = {'data': {'AAA': self._old(ne='2026-10-08')}}
+        state, _ = self._cons(['AAA'], prev=prev, today='2026-10-09', quota_day='2026-10-10')
+        self.assertEqual(state['stat']['tried'], 0)  # 北京已10日，美东才9日
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(110)}, state,
+                              today='2026-10-10', quota_day='2026-10-11')
+        self.assertEqual(state['data']['AAA']['r'], '2026-10-10')
+        self.assertEqual(state['data']['AAA']['try'], '2026-10-11')
+
+    def test_us_calendar_clock_summer_winter_and_weekend(self):
+        from datetime import datetime
+        for bj, us in [('2026-10-10T08:15:00+08:00', '2026-10-09'),
+                       ('2026-12-10T09:15:00+08:00', '2026-12-09'),
+                       ('2026-11-01T18:00:00+08:00', '2026-11-01')]:
+            with self.subTest(bj=bj), patch.object(monitor, 'NOW', datetime.fromisoformat(bj)), \
+                    patch.object(monitor, 'TARGET_DATE', '2026-10-01'):
+                self.assertEqual(monitor._earn_today(), us)
+
+    def _nasdaq(self, body, http=200):
+        response = MagicMock(status_code=http)
+        response.json.return_value = body
+        session = MagicMock()
+        session.get.return_value = response
+        with patch.object(monitor, '_EARN_CACHE', {}), patch.object(monitor, '_fund_session', return_value=session), \
+                patch.object(monitor, '_earn_today', return_value='2026-10-10'):
+            return monitor.nasdaq_earnings('AAA')
+
+    def test_nasdaq_business_error_null_and_missing_fields_are_retryable(self):
+        for body in [None, [], {}, {'data': None, 'status': {'rCode': 500}},
+                     {'data': None, 'status': {'rCode': 200}},
+                     {'data': {'reportText': 'expected to report earnings on 10/20/2026'}},
+                     {'data': {'reportText': ''}, 'status': {'rCode': 200}},
+                     {'data': {}, 'status': {'rCode': 200}},
+                     {'data': {'reportText': 'pending'}, 'status': {'rCode': 200, 'bCodeMessage': ['error']}}]:
+            with self.subTest(body=body):
+                self.assertEqual(self._nasdaq(body)['status'], 'error')
+        self.assertEqual(self._nasdaq({}, 429)['status'], 'error')
+        self.assertEqual(self._nasdaq({}, 404)['status'], 'na')
+        good = {'data': {'reportText': 'expected to report earnings on 10/20/2026 after market close'},
+                'status': {'rCode': 200, 'bCodeMessage': None, 'developerMessage': None}}
+        self.assertEqual(self._nasdaq(good)['date'], '2026-10-20')
+
+    def test_business_error_preserves_old_date_and_retries(self):
+        bad = self._nasdaq({'data': None, 'status': {'rCode': 500}})
+        items = [self._row('AAA')]
+        old = {'AAA': self._earn()}
+        with patch.object(monitor, 'nasdaq_earnings', return_value=bad), patch.object(monitor, 'log'):
+            state = monitor.attach_earnings(items, old, '2026-10-10')
+        self.assertEqual(state['data']['AAA'], old['AAA'])
+        self.assertEqual(items[0]['earnings']['date'], '2026-10-12')
+        self.assertTrue(monitor.earnings_refetch_due(state['data']['AAA'], '2026-10-11'))
+
+    def test_deferred_keeps_valid_old_cache_and_fetch_timestamp(self):
+        items = [self._row(s) for s in ('AAA', 'BBB', 'CCC')]
+        old = {s: self._earn() for s in ('AAA', 'BBB', 'CCC')}
+        with patch.object(monitor, 'EARN_MAX_FETCH_PER_RUN', 2), patch.object(monitor, 'log'), \
+                patch.object(monitor, 'nasdaq_earnings', return_value=self._earn()):
+            state = monitor.attach_earnings(items, old, '2026-10-10')
+        self.assertEqual(state['deferred'], 1)
+        self.assertEqual(state['data']['CCC'], old['CCC'])
+        self.assertEqual(items[2]['earnings']['date'], '2026-10-12')
+        with patch.object(monitor, 'nasdaq_earnings', return_value=self._earn()) as fetch, patch.object(monitor, 'log'):
+            monitor.attach_earnings([self._row(s) for s in old], state['data'], '2026-10-11')
+        self.assertEqual([c.args[0] for c in fetch.call_args_list], ['CCC'])
+
+    def test_earnings_history_survives_unknown_and_next_quarter(self):
+        prev = {'AAA': self._earn('2026-10-08', '2026-10-01')}
+        with patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), patch.object(monitor, 'log'):
+            st = monitor.attach_earnings([self._row('AAA')], prev, '2026-10-09')
+            self.assertEqual(st['events']['AAA'], ['2026-10-08'])
+            st2 = monitor.attach_earnings([self._row('AAA')], st['data'], '2026-10-10', st['events'])
+        self.assertEqual(st2['events']['AAA'], ['2026-10-08'])
+        with patch.object(monitor, 'nasdaq_earnings', return_value=self._earn('2027-01-10')), patch.object(monitor, 'log'):
+            st3 = monitor.attach_earnings([self._row('AAA')], st2['data'], '2026-10-17', st2['events'])
+        self.assertEqual(st3['events']['AAA'], ['2026-10-08'])
+        self.assertEqual(st3['data']['AAA']['date'], '2027-01-10')
+
+    def test_deferred_past_date_is_not_shown_as_next(self):
+        rows = [self._row('AAA')]
+        with patch.object(monitor, 'EARN_MAX_FETCH_PER_RUN', 0), patch.object(monitor, 'log'):
+            st = monitor.attach_earnings(rows, {'AAA': self._earn('2026-10-08')}, '2026-10-10')
+        self.assertEqual(rows[0]['earnings']['status'], 'unknown')
+        self.assertEqual(st['events']['AAA'], ['2026-10-08'])
+        self.assertIn('AAA', st['data'])
+
+    @staticmethod
+    def _financials(period='6/30/2026'):
+        return {'period': period, 'base_period': '9/30/2025',
+                'inc': {'Total Revenue': {'value2': '$100', 'value5': '$120'}}, 'bs': {}, 'cf': {}, 'rt': {}}
+
+    def test_fundamental_event_overrides_quiet_period_until_period_advances(self):
+        prev = {'AAA': {'fetched': '2026-10-01', 'data': self._financials()}}
+        events = {'AAA': ['2026-10-09']}
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()) as fetch:
+            _, st = monitor.update_fundamentals(['AAA'], prev, '2026-10-10', events)
+            self.assertEqual(fetch.call_count, 1)
+            self.assertEqual(st['data']['AAA']['event_date'], '2026-10-09')
+            _, same = monitor.update_fundamentals(['AAA'], st['data'], '2026-10-10', events)
+            self.assertEqual(same['fetched'], 0)
+            _, next_day = monitor.update_fundamentals(['AAA'], st['data'], '2026-10-11', events)
+            self.assertEqual(next_day['fetched'], 1)
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('9/30/2026')):
+            _, advanced = monitor.update_fundamentals(['AAA'], next_day['data'], '2026-10-12', events)
+            self.assertNotIn('event_date', advanced['data']['AAA'])
+            self.assertEqual(advanced['data']['AAA']['event_done'], '2026-10-09')
+            _, final = monitor.update_fundamentals(['AAA'], advanced['data'], '2026-10-13', events)
+            self.assertEqual(final['fetched'], 0)
+
+    def test_fundamental_failure_keeps_event_and_old_timestamp(self):
+        prev = {'AAA': {'fetched': '2026-10-01', 'data': self._financials()}}
+        with patch.object(monitor, 'nasdaq_financials', return_value=None):
+            facts, st = monitor.update_fundamentals(['AAA'], prev, '2026-10-10', {'AAA': ['2026-10-09']})
+        self.assertEqual(facts['AAA']['period'], '6/30/2026')
+        entry = st['data']['AAA']
+        self.assertTrue(entry['fetch_error'])
+        self.assertEqual(entry['fetched'], '2026-10-01')
+        self.assertTrue(monitor.fundamentals_refetch_due(entry, '2026-10-11'))
+
+    def test_fundamental_one_bad_symbol_does_not_drop_other_results(self):
+        def fetch(sym):
+            return {'inc': 'bad'} if sym == 'BAD' else self._financials()
+        with patch.object(monitor, 'nasdaq_financials', side_effect=fetch), patch.object(monitor, 'log'):
+            facts, st = monitor.update_fundamentals(['BAD', 'GOOD'], today='2026-10-10')
+        self.assertIn('GOOD', facts)
+        self.assertEqual(st['failed'], 1)
+
+    def test_fundamental_report_regression_keeps_old_data(self):
+        prev = {'AAA': {'fetched': '2026-09-01', 'data': self._financials()}}
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('3/31/2026')):
+            facts, st = monitor.update_fundamentals(['AAA'], prev, '2026-10-10')
+        self.assertEqual(facts['AAA']['period'], '6/30/2026')
+        self.assertTrue(st['data']['AAA']['fetch_error'])
+
+    def test_fund_cache_warning_visible_even_without_red_yellow(self):
+        row = self._row('AAA')
+        row['fund_cache_note'] = '读取失败，沿用缓存 <旧>'
+        markup = monitor._row_tags(row, {})
+        self.assertIn('读取失败，沿用缓存', markup)
+        self.assertIn('&lt;旧&gt;', markup)
+
+    def test_first_post_event_fetch_establishes_baseline_not_completion(self):
+        events = {'AAA': ['2026-10-09']}
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()):
+            _, first = monitor.update_fundamentals(['AAA'], today='2026-10-10', earnings_events=events)
+        self.assertEqual(first['data']['AAA']['event_base'], '2026-06-30')
+        self.assertNotIn('event_done', first['data']['AAA'])
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('9/30/2026')) as fetch:
+            _, second = monitor.update_fundamentals(['AAA'], first['data'], '2026-10-11', events)
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(second['data']['AAA']['event_done'], '2026-10-09')
+
+    def test_two_unfinished_quarter_events_are_completed_in_order(self):
+        old = {'AAA': {'fetched': '2026-07-02', 'data': self._financials('3/31/2026'),
+                       'event_date': '2026-07-01', 'event_base': '2026-03-31', 'event_checked': '2026-07-02'}}
+        events = {'AAA': ['2026-07-01', '2026-10-09']}
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()):
+            _, first = monitor.update_fundamentals(['AAA'], old, '2026-10-10', events)
+            self.assertEqual(first['data']['AAA']['event_done'], '2026-07-01')
+            _, second = monitor.update_fundamentals(['AAA'], first['data'], '2026-10-11', events)
+        self.assertEqual(second['data']['AAA']['event_date'], '2026-10-09')
+        self.assertEqual(second['data']['AAA']['event_base'], '2026-06-30')
+        self.assertEqual(second['data']['AAA']['event_done'], '2026-07-01')
+
+    def test_legacy_untrusted_negative_caches_get_one_time_recheck(self):
+        self.assertTrue(monitor.earnings_refetch_due({'status': 'na', 'fetched': '2026-10-09'}, '2026-10-10'))
+        old = {'data': {'AAA': {'s': 'none', 'r': '2026-10-09'}}}
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(110)}, old)
+        self.assertEqual(state['stat']['tried'], 1)
+        self.assertEqual(state['data']['AAA']['s'], 'ok')
+
+    def test_legacy_beijing_fetch_day_cannot_falsely_complete_us_event(self):
+        old = {'data': {'AAA': {'s': 'ok', 'avg': 100, 'r': '2026-10-10', 'try': '2026-10-10', 'ne': '2026-10-08'}}}
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(110)}, old,
+                              today='2026-10-10', quota_day='2026-10-11')
+        self.assertEqual(state['stat']['tried'], 1)
+        self.assertEqual(state['data']['AAA']['r_tz'], 'America/New_York')
+        state, _ = self._cons(['AAA'], prev=state, today='2026-10-11', quota_day='2026-10-12',
+                              earnings_events={'AAA': ['2026-10-08']})
+        self.assertEqual(state['stat']['tried'], 0)
+
+    def test_main_multirun_earnings_then_consensus_and_persisted_quota(self):
+        import tempfile
+        from datetime import datetime
+        cfg = {'positions': {'AAA': {}}}
+        def analyzed(symbol, settings, data, group):
+            return 'green', [], dict(symbol=symbol, note='', price=100, chg=0, level='green', group=group,
+                                     signals=[], data_date='2026-10-09')
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            with open(os.path.join(directory, 'holdings.json'), 'w', encoding='utf-8') as f:
+                json.dump(cfg, f)
+            with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:
+                json.dump({}, f)
+            with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-09'), \
+                    patch.object(monitor, 'build_macro', return_value={}), \
+                    patch.object(monitor, 'collect_quotes', return_value={'AAA': {'price': 100}}), \
+                    patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
+                    patch.object(monitor, 'global_dca', return_value=None), \
+                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})) as fund, \
+                    patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'consensus_robots_ok', return_value=True), \
+                    patch.object(monitor, 'fetch_consensus_one', return_value={'s': 'ok', 'avg': 110, 'upd': '2026-10-05'}) as cons, \
+                    patch.object(monitor, 'push_serverchan'), patch.object(monitor, 'log'):
+                def run(day, earnings):
+                    with patch.object(monitor, 'NOW', datetime.fromisoformat(day)), \
+                            patch.object(monitor, 'nasdaq_earnings', return_value=earnings):
+                        self.assertEqual(monitor.main([]), 0)
+                    with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
+                        return json.load(f)
+                first = run('2026-10-05T20:15:00-04:00', self._earn('2026-10-08'))
+                self.assertEqual(first['consensus']['data']['AAA']['ne'], '2026-10-08')
+                self.assertEqual(first['consensus']['quota']['date'], '2026-10-06')
+                second = run('2026-10-09T20:15:00-04:00', {'status': 'unknown'})
+                self.assertEqual(second['earnings']['events']['AAA'], ['2026-10-08'])
+                self.assertEqual(cons.call_count, 1)  # 财后第一天，不提前
+                third = run('2026-10-10T20:15:00-04:00', {'status': 'unknown'})
+                self.assertEqual(cons.call_count, 2)
+                self.assertEqual(third['consensus']['data']['AAA']['r'], '2026-10-10')
+                self.assertEqual(fund.call_args.kwargs['earnings_events']['AAA'], ['2026-10-08'])
+                # 关闭检查不许再触及批量抓取入口，已有缓存必须保留。
+                third['fundamental']['data'] = {'AAA': {'fetched': '2026-10-01', 'data': self._financials()}}
+                with open(os.path.join(directory, 'status.json'), 'w', encoding='utf-8') as f:
+                    json.dump(third, f)
+                count = fund.call_count
+                with patch.dict(monitor.S, {'fund_enable': 0}):
+                    disabled = run('2026-10-11T20:15:00-04:00', {'status': 'unknown'})
+                self.assertEqual(fund.call_count, count)
+                self.assertEqual(disabled['fundamental']['data'], third['fundamental']['data'])
 
 
 class TestVolTier(unittest.TestCase):

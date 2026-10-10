@@ -1264,7 +1264,7 @@ def is_etf(symbol):
 
 
 # ---------------------------------------------------------------- 基本面恶化
-# 数据源：Nasdaq 财报（季度，一次给最近 4 期）。value2=最新季，value5=去年同期 → 直接同比。
+# 数据源：Nasdaq 财报（季度，一次给最近 4 期）。value2=最新季，value5=3 个季度前，不是去年同期。
 # 只对「持仓 + 重点关注」查询：这两个组才是真会交易的；其他关注看财报意义不大，
 # 而且每只一个请求，全量查会把运行时间拉长并招来限流。
 # 阈值默认值写在这里；想调就在 settings.json 里加同名键覆盖（改完点保存即生效）。
@@ -1351,6 +1351,127 @@ def nasdaq_financials(sym, timeout=12):
     return res
 
 
+# 基本面判定只读这些行的最新季(value2)与 3 个季度前(value5)；缓存只存它们，status.json 才不会膨胀
+FUND_CELLS = {
+    "inc": ("Total Revenue", "Income Tax"),
+    "rt": ("Gross Margin", "Operating Margin", "After Tax ROE", "Current Ratio", "Profit Margin"),
+    "cf": ("Net Cash Flow-Operating",),
+    "bs": ("Total Liabilities", "Total Equity"),
+}
+FUND_QUIET_DAYS = 105     # 无已知财报事件时的保守缓存窗口，不保证下一份季报尚未发布
+FUND_POLL_DAYS = 3        # 常规新季报轮询间隔；已知财报后先按日检查，报告期推进才结束
+FUND_MAX_AGE_DAYS = 30    # 无事件时的最大正常复用期；抓取失败的旧值需明确标注
+FUND_EVENT_DAILY_DAYS = 14  # 财后两周每日检查，供应商长期未推进则退回每 3 天，事件不丢失
+
+
+def compact_financials(f):
+    """nasdaq_financials 的结果 → 只含判定所需单元格的精简版（结构不变，fundamental_check 可直接用）。"""
+    if not f:
+        return None
+    out = {"period": f.get("period"), "base_period": f.get("base_period")}
+    for table, labels in FUND_CELLS.items():
+        src = f.get(table) or {}
+        out[table] = {lb: {c: (src.get(lb) or {}).get(c) for c in ("value2", "value5")}
+                      for lb in labels if lb in src}
+    return out
+
+
+def _fund_sync_event(entry, events, today):
+    out = dict(entry) if isinstance(entry, dict) else {}
+    done = _iso_date(out.get("event_done")) or ""
+    pending = [d for d in _event_dates(events) if done < d <= today]
+    # 按事件顺序核销：后一季不能覆盖尚未完成的前一季并共用旧基准。
+    if pending and not out.get("event_date"):
+        out["event_date"] = pending[0]
+        data = out.get("data") if isinstance(out.get("data"), dict) else {}
+        out["event_base"] = _nasdaq_date(data.get("period")) or ""
+        out.pop("event_checked", None)
+    return out
+
+
+def fundamentals_refetch_due(entry, today=None):
+    """财报事件优先于静默期；未见报告期推进就继续轮询，不用抓取成功时间掩盖旧季报。"""
+    today = today or _earn_today()
+    try:
+        event = _iso_date(entry.get("event_date"))
+        if event and event <= today:
+            checked = _iso_date(entry.get("event_checked"))
+            interval = 1 if _days_between(today, event) <= FUND_EVENT_DAILY_DAYS else FUND_POLL_DAYS
+            return not checked or _days_between(today, checked) < 0 or _days_between(today, checked) >= interval
+        if entry.get("fetch_error"):
+            return entry.get("attempted") != today
+        age = _days_between(today, entry["fetched"])
+        if age < 0 or age >= FUND_MAX_AGE_DAYS:
+            return True
+        period = _nasdaq_date(entry["data"]["period"])
+        since = _days_between(today, period)
+    except (AttributeError, KeyError, ValueError, TypeError):
+        return True
+    if since < 0:
+        return True
+    return False if since < FUND_QUIET_DAYS else age >= FUND_POLL_DAYS
+
+
+def update_fundamentals(symbols, prev=None, today=None, earnings_events=None):
+    """精简财报跨次缓存；事件后轮询到报告期推进，错误保留旧值和事件，单只异常不拖垮整批。"""
+    today = today or _earn_today()
+    prev = prev if isinstance(prev, dict) else {}
+    earnings_events = earnings_events if isinstance(earnings_events, dict) else {}
+    keys = list(dict.fromkeys(normalize_symbol(s).upper() for s in symbols if not is_etf(s)))
+    stat = {"fetched": 0, "cached": 0, "failed": 0, "data": {}}
+    facts, due, entries = {}, [], {}
+    for k in keys:
+        old = _fund_sync_event(prev.get(k), earnings_events.get(k), today)
+        entries[k] = old
+        if isinstance(old.get("data"), dict) and not fundamentals_refetch_due(old, today):
+            facts[k] = old["data"]
+            stat["data"][k] = old
+            stat["cached"] += 1
+        else:
+            due.append(k)
+
+    def fetch(k):
+        try:
+            return compact_financials(nasdaq_financials(k))
+        except Exception as e:
+            log(f"  ! {k} 基本面读取异常，沿用旧值：{str(e)[:60]}")
+            return None
+
+    if due:
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            got = list(ex.map(fetch, due))
+        for k, c in zip(due, got):
+            stat["fetched"] += 1
+            old = entries[k]
+            old_data = old.get("data") if isinstance(old.get("data"), dict) else {}
+            old_period, new_period = _nasdaq_date(old_data.get("period")), _nasdaq_date((c or {}).get("period"))
+            if c and (not new_period or new_period > today or (old_period and new_period < old_period)):
+                c = None                       # 供应商返回倒退/异常报告期，不能覆盖有效缓存
+            entry = {**old, "attempted": today}
+            if old.get("event_date"):
+                entry["event_checked"] = today
+            if c:
+                entry.update(fetched=today, data=c)
+                entry.pop("fetch_error", None)
+                event, base = old.get("event_date"), old.get("event_base")
+                if event and base and new_period > base:
+                    entry["event_done"] = event
+                    for field in ("event_date", "event_base", "event_checked"):
+                        entry.pop(field, None)
+                elif event and not base:
+                    # 首次财后抓取没有对照，不能宣称“新季报已更新”；先建基准继续检查。
+                    entry["event_base"] = new_period
+                facts[k] = c
+            else:
+                stat["failed"] += 1
+                entry["fetch_error"] = True
+                if old_data:
+                    facts[k] = old_data          # fetched 保持旧值，页面显式提示缓存回退
+            if old_data or c or entry.get("event_date"):
+                stat["data"][k] = entry
+    return facts, stat
+
+
 def _fcell(tbl, label, col="value2"):
     return _fund_num((tbl or {}).get(label, {}).get(col)) if tbl else None
 
@@ -1366,7 +1487,7 @@ def _period_label(period):
 
 # ---------------------------------------------------------------- 下一次财报日期
 # 数据源：Nasdaq analyst/earnings-date（Zacks 提供）。接口只给日期和盘前/盘后，不给具体钟点。
-# 只对持仓与重点关注常驻查询；其他分组仅在个股有红/黄警示时查询。ETF、指数、期货不适用。
+# 全部非 ETF 个股都查，结果跨次缓存到 status.json（离财报越近刷新越勤）。ETF、指数、期货不适用。
 _EARN_CACHE = {}
 _EARN_RE = re.compile(
     r"(expected\*?|estimated)\s+to\s+report\s+earnings\s+on\s+(\d{1,2})/(\d{1,2})/(\d{4})"
@@ -1393,20 +1514,28 @@ def parse_earnings_text(text, today=None):
 
 
 def nasdaq_earnings(sym, timeout=12):
-    """取下一次财报日期。状态：ok / unknown(待公布) / na(不适用,如ETF) / error(请求失败)。"""
+    """只把明确不适用/HTTP 404 记为 na；业务错误、空结构、解析异常均可重试。"""
     key = normalize_symbol(sym).upper()
+    if is_etf(key):
+        return {"status": "na", "reason": "etf"}
     if key in _EARN_CACHE:
         return _EARN_CACHE[key]
     res = {"status": "error"}
     try:
         url = f"https://api.nasdaq.com/api/analyst/{key.replace('-', '.')}/earnings-date"
         r = _fund_session().get(url, timeout=timeout)
-        if r.status_code == 200:
-            data = (r.json() or {}).get("data")
-            if isinstance(data, dict) and data.get("reportText") is not None:
-                res = parse_earnings_text(data["reportText"])
-            else:
-                res = {"status": "na"}
+        if r.status_code == 404:
+            res = {"status": "na", "reason": "http404"}
+        elif r.status_code == 200:
+            body = r.json()
+            status = body.get("status") if isinstance(body, dict) else None
+            data = body.get("data") if isinstance(body, dict) else None
+            # Nasdaq 的 HTTP 成功不等于业务成功；缺失状态也不能作为长期负缓存的依据。
+            if (isinstance(status, dict) and str(status.get("rCode")) == "200"
+                    and not status.get("bCodeMessage") and not status.get("developerMessage")
+                    and isinstance(data, dict) and isinstance(data.get("reportText"), str)
+                    and data["reportText"].strip()):
+                res = parse_earnings_text(data["reportText"], _earn_today())
     except Exception as e:
         log(f"  · {key} 财报日期读取失败：{str(e)[:60]}")
     _EARN_CACHE[key] = res
@@ -1436,7 +1565,7 @@ def earnings_label(e):
         return None
     status = e["status"]
     if status == "unknown":
-        return "时间待公布", "下一次财报时间供应商尚未提供，不使用过去的报告期代替"
+        return "时间待公布", "下一次财报时间供应商尚未提供"
     if status == "error":
         return "日期暂未取得", "下一次财报日期本轮读取失败，不代表没有财报"
     year, month, day = e["date"].split("-")
@@ -1465,38 +1594,182 @@ def earnings_soon(e, today=None):
     return 0 <= days <= EARN_SOON_DAYS
 
 
-def attach_earnings(items):
-    """持仓/重点关注个股常驻；其他分组仅红黄警示个股。ETF、指数、期货和参考值不适用。"""
+# 重抓间隔表：(财报日距今至少多少天, 缓存多少天内不重抓)，自上而下取第一条命中的。
+# expected = 供应商已确认的日期，改期极少，抓得疏；estimated = 算法估算，临近时可能被确认或调整，抓得勤些。
+# 财报日一过（距今 < 0）一律立即重抓下一次；财报日当天及前 3 天，确认过的日期不再追抓。
+EARN_REFETCH_DAYS = {
+    "expected": ((15, 14), (4, 7), (0, 3)),
+    "estimated": ((15, 7), (0, 3)),
+}
+EARN_UNKNOWN_REFETCH_DAYS = 7    # 供应商还没公布：每 7 天问一次
+EARN_NA_REFETCH_DAYS = 30        # 不适用（如接口无此代码）：每 30 天复查一次
+EARN_MAX_FETCH_PER_RUN = 60      # 单次运行最多发这么多财报请求，其余留到下一轮，防止限流
+
+
+def _earn_today():
+    # 财报是自然日事件，不随行情目标交易日回退（周末/节假日也会推进）。
+    return NOW.astimezone(US_TZ).date().isoformat()
+
+
+def _days_between(a, b):
+    return (datetime.strptime(a, "%Y-%m-%d") - datetime.strptime(b, "%Y-%m-%d")).days
+
+
+def _iso_date(value):
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return None
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
+    except ValueError:
+        return None
+
+
+def _event_dates(values):
+    """只接受有效日期列表；兼容缺失或损坏的旧快照。"""
+    return sorted({_iso_date(v) for v in values if _iso_date(v)}) if isinstance(values, (list, tuple)) else []
+
+
+def _remember_earnings_events(prev, resolved, history, today):
+    """下一季日期/unknown 不得抹掉刚发生的财报事件；未来改期只以最新日期为准。"""
+    history = history if isinstance(history, dict) else {}
+    out = {}
+    for k in set(prev) | set(resolved):
+        dates = _event_dates(history.get(k))
+        for e in (prev.get(k), resolved.get(k)):
+            date = _iso_date(e.get("date")) if isinstance(e, dict) and e.get("status") == "ok" else None
+            if date and date <= today:
+                dates.append(date)
+        dates = sorted({d for d in dates if d <= today})[-4:]
+        if dates:
+            out[k] = dates
+    return out
+
+
+def earnings_refetch_due(entry, today=None):
+    """缓存条目是否该重抓。没有缓存、读不懂、日期已过、失败过的一律重抓。"""
+    today = today or _earn_today()
+    try:
+        status = entry.get("status")
+        age = _days_between(today, entry["fetched"])
+        if age < 0:
+            return True                       # 缓存时间在“未来”，时钟或数据异常，重抓
+        if status == "na":
+            return entry.get("reason") not in ("etf", "http404") or age >= EARN_NA_REFETCH_DAYS
+        if status == "unknown":
+            return age >= EARN_UNKNOWN_REFETCH_DAYS
+        if status != "ok":
+            return True
+        days = _days_between(entry["date"], today)
+    except (AttributeError, KeyError, ValueError, TypeError):
+        return True
+    if days < 0:
+        return True                           # 财报日已过，立即抓下一次
+    table = EARN_REFETCH_DAYS.get(entry.get("kind")) or EARN_REFETCH_DAYS["estimated"]
+    for min_days, keep in table:
+        if days >= min_days:
+            return age >= keep
+    return True
+
+
+def _earn_cache_usable(entry, today):
+    """缓存里的日期还没过期时，抓取失败也可以继续沿用。"""
+    try:
+        return entry.get("status") == "ok" and bool(_iso_date(entry.get("date"))) and entry["date"] >= today
+    except (AttributeError, KeyError, TypeError):
+        return False
+
+
+def attach_earnings(items, prev=None, today=None, prev_events=None):
+    """全部非 ETF 个股都查财报日期，但靠跨次缓存按远近分档刷新，大部分运行只需少量请求。
+    抓到的日期全部挂到页面上；财报在 EARN_SOON_DAYS 天内的文字标黄（由 earnings_soon 决定）。
+    ETF、指数、期货和参考值不适用。返回统计，其中 data 是下一轮复用的缓存。"""
+    today = today or _earn_today()
+    prev = prev if isinstance(prev, dict) else {}
+
     def wants(d):
         sym = d.get("symbol") or ""
         ident = instrument_identity(sym)
         if not sym or d.get("reference_only") or not quote_supported(sym) or is_etf(sym):
             return False
-        if ident.startswith("^") or ident.endswith("=F"):
-            return False
-        return d.get("group") in ("position", "focus") or d.get("level") in ("red", "yellow")
+        return not (ident.startswith("^") or ident.endswith("=F"))
+
+    def key_of(d):
+        return normalize_symbol(d["symbol"]).upper()
+
+    def priority(d):
+        if d.get("group") in ("position", "focus"):
+            return 0
+        return 1 if d.get("level") in ("red", "yellow") else 2
 
     targets = [d for d in items if wants(d)]
-    stat = {"targets": len(targets), "dated": 0, "pending": 0, "failed": 0}
+    stat = {"targets": len(targets), "dated": 0, "pending": 0, "failed": 0,
+            "fetched": 0, "cached": 0, "deferred": 0, "data": {}, "events": {}}
     if not targets:
         return stat
-    log(f"读取 {len(targets)} 只个股的下一次财报日期…")
+    due, resolved = [], {}
+    for d in targets:
+        k = key_of(d)
+        old = prev.get(k)
+        if isinstance(old, dict) and not earnings_refetch_due(old, today):
+            resolved[k] = old
+        else:
+            due.append(d)
+    due.sort(key=priority)                                  # 稳定排序：同级保持原顺序
+    todo = {}
+    for d in due:
+        todo.setdefault(key_of(d), d)
+    queue = list(todo)[:EARN_MAX_FETCH_PER_RUN]
+    stat["deferred"] = len(todo) - len(queue)
+    # 延后不是失败，更不能删除仍有效的旧缓存；保留 fetched，下一轮依然到期。
+    for k in list(todo)[len(queue):]:
+        if isinstance(prev.get(k), dict):
+            resolved[k] = prev[k]
+    log(f"财报日期：{len(targets)} 只个股，缓存可用 {len(resolved)}，本轮需抓 {len(queue)}"
+        + (f"，{stat['deferred']} 只留到下一轮" if stat["deferred"] else "") + "…")
     try:
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            results = list(ex.map(lambda d: nasdaq_earnings(d["symbol"]), targets))
-        for d, e in zip(targets, results):
-            if e.get("status") == "na":
-                continue
-            d["earnings"] = e
-            key = {"ok": "dated", "unknown": "pending"}.get(e.get("status"), "failed")
-            stat[key] += 1
+        if queue:
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                got = list(ex.map(nasdaq_earnings, queue))
+            for k, e in zip(queue, got):
+                stat["fetched"] += 1
+                if e.get("status") == "error":
+                    old = prev.get(k)
+                    if _earn_cache_usable(old, today):
+                        resolved[k] = old                   # 日期还有效，继续用旧的，下一轮再试
+                    else:
+                        resolved[k] = {"status": "error"}   # 不写进缓存，下一轮必重抓
+                else:
+                    resolved[k] = {**e, "fetched": today}
     except Exception as e:
-        log(f"  ! 财报日期读取中断，跳过：{e}")  # 加分项，不能拖垮页面生成
-    log(f"  财报日期：已取得 {stat['dated']} · 待公布 {stat['pending']} · 失败 {stat['failed']}")
+        log(f"  ! 财报日期读取中断，用已有缓存：{e}")      # 加分项，不能拖垮页面生成
+        for k in todo:
+            old = prev.get(k)
+            if k not in resolved and _earn_cache_usable(old, today):
+                resolved[k] = old
+    stat["cached"] = len(targets) - len(todo)
+    for d in targets:
+        k = key_of(d)
+        e = resolved.get(k)
+        if not e:
+            continue
+        if e.get("status") != "error":
+            stat["data"][k] = e
+        if e.get("status") == "na":
+            continue
+        # 延后项可保留过期缓存供事件回放，但绝不把过去日期显示成“下一次”。
+        shown = {"status": "unknown"} if e.get("status") == "ok" and not _earn_cache_usable(e, today) else e
+        d["earnings"] = shown
+        key = {"ok": "dated", "unknown": "pending"}.get(shown.get("status"), "failed")
+        stat[key] += 1
+    active_prev = {key_of(d): prev.get(key_of(d)) for d in targets}
+    stat["events"] = _remember_earnings_events(active_prev, resolved, prev_events, today)
+    log(f"  财报日期：已取得 {stat['dated']} · 待公布 {stat['pending']} · 失败 {stat['failed']}"
+        f" · 本轮请求 {stat['fetched']}")
     return stat
 
 
-def fundamental_check(sym):
+def fundamental_check(sym, facts=None):
     """基本面恶化判定（全套 + 分级）。
 
     核心三项决定红/黄：营收同比、营业利润率、经营现金流。
@@ -1509,7 +1782,7 @@ def fundamental_check(sym):
     # ETF / 基金没有财报，直接跳过，省掉一次必然无结果的请求
     if is_etf(sym):
         return None
-    f = nasdaq_financials(sym)
+    f = nasdaq_financials(sym) if facts is None else facts   # 传入 facts（含 {}）时不再联网
     if not f:
         return None
     inc, bs, cf, rt = f["inc"], f["bs"], f["cf"], f["rt"]
@@ -1932,12 +2205,12 @@ def level_note(trigger, reduce):
 
 
 # ---------------------------------------------------------------- 目标价（手填 / S&P Global 共识价）
-# 只对「持仓」「重点关注」里的个股生效；首页每只最多显示一个目标价标签，手填优先于共识价。
-#   手填：设置页填的 target，月份取保存当月（target_at）。
+# 全部分组的个股可显示共识价，仅「持仓」「重点关注」触发警示；每只最多一个标签。
+#   手填：设置页填的 target，仅持仓/重点关注有效，优先于共识价。
 #   共识价：S&P Global，取自 stockanalysis.com 个股预测页里内嵌的数据块；
-#           每月 1 号、15 号各取一轮（遇周末顺延到下一次运行），结果缓存在 status.json，不新增文件；
-#           月份取页面「分析师最近更新日」；失败时保留旧值并把标签标红，不影响红黄绿，也不触发警示。
-#           手填了目标价的个股不取共识价；ETF、伯克希尔不取。
+#           每只满 14 天到期，财报后至少 2 个美东自然日提前刷新；每天北京时间最多 12 只；
+#           月份取页面「分析师最近更新日」；失败保留旧值并标红标签，不参与价格警示。
+#           持仓/重点关注手填目标价的不取；ETF、指数、期货、伯克希尔不取。
 # 两者共用同一套警示（目标价 T，现价 P），命中只出紫色（紫色竖条 + 实心紫标签 + 警示栏文字），不改红黄绿：
 #   ① 当日跨越：昨收和现价分别在 T 的两侧（含刚好到达）；
 #   ② 在 T 的 ±target_gap_pct% 内（按 P/T−1 算）；
@@ -1952,7 +2225,13 @@ CONSENSUS_SKIP = {"BRK-B", "BRK-A"}   # 伯克希尔：分析师太少，不抓
 CONSENSUS_GAP = 2.0                   # 两次请求的间隔（秒）
 CONSENSUS_BUDGET = 7 * 60             # 单次运行最多花这么久；没取完的下次运行接着取
 CONSENSUS_BREAK = 3                   # 连续失败这么多次就停手，不再继续敲对方网站
-CONSENSUS_GROUPS = ("position", "focus")
+CONSENSUS_GROUPS = ("position", "focus")   # 只有这两组的共识价/目标价会触发警示；其他分组只显示
+CONSENSUS_REFETCH_DAYS = 14           # 每只各自满这么多天重取（不再用统一的 1、15 号节拍）
+CONSENSUS_NONE_RECHECK_DAYS = 30      # 页面上没有共识价（无覆盖）的，隔这么久再看一次
+CONSENSUS_POST_EARN_LAG_DAYS = 2      # 财报后至少等 2 个美东自然日；不保证所有分析师已更新
+CONSENSUS_MAX_PER_DAY = 12           # 北京自然日的独立台账，删除/关闭分组不返还额度
+CONSENSUS_RETRY_PER_DAY = 3          # 失败重试最多占用 3 个名额，避免挤掉正常到期项
+CONSENSUS_RETRY_BACKOFF = (1, 2, 4, 7)  # 连续失败：首次次日重试，此后逐步退避
 CHG_AMP_GROUPS = ("position", "focus")   # 涨跌幅、振幅警示只对这两组生效
 TARGET_ANOMALY_PCT = 100.0
 _CONS_SPG = re.compile(r'Targets:\{source:"spg",currency:"([A-Z]+)",avg:([0-9.]+)')
@@ -1972,21 +2251,17 @@ def _month_of(text):
     return int(m.group(1)) if m else None
 
 
-def consensus_marker(today_iso):
-    """今天对应的取数节拍：当月 1 号或 15 号（已到的最近一个）。"""
-    return today_iso[:8] + ("15" if int(today_iso[8:10]) >= 15 else "01")
-
-
 def consensus_slug(sym):
     s = normalize_symbol(sym)
     return s.lower().replace("-", ".") if re.fullmatch(r"[A-Z]{1,5}(-[A-Z])?", s) else None
 
 
 def consensus_wanted(sym, cfg, group):
-    """该不该自动取共识价：只有持仓/重点关注里的美股个股；手填了目标价的、ETF、指数、期货、伯克希尔都不取。"""
-    if group not in CONSENSUS_GROUPS or not sym or not quote_supported(sym) or is_etf(sym):
+    """该不该自动取共识价：任何分组里的美股个股都取；ETF、指数、期货、伯克希尔不取。
+    持仓/重点关注手填了目标价就不取（手填优先）；其他分组只显示共识价，手填值对它们无效。"""
+    if not sym or not quote_supported(sym) or is_etf(sym):
         return False
-    if manual_target(cfg, quiet=True):
+    if group in CONSENSUS_GROUPS and manual_target(cfg, quiet=True):
         return False
     ident = instrument_identity(sym)
     return (not ident.startswith("^") and not ident.endswith("=F")
@@ -2022,48 +2297,149 @@ def consensus_robots_ok(sess):
 
 
 def fetch_consensus_one(sess, sym):
-    """取一只：{"s":"ok","avg","upd"} / {"s":"none"}（页面没有共识，属于无覆盖）/ {"s":"fail","why"}。"""
+    """明确无覆盖与页面解析失败分开；不再根据一个批次的数量猜测改版。"""
     try:
         r = sess.get(CONSENSUS_URL.format(slug=consensus_slug(sym)), timeout=25)
     except Exception as e:
         return {"s": "fail", "why": str(e)[:60]}
     if r.status_code == 404:
-        return {"s": "none"}
+        return {"s": "none", "reason": "http404"}
     if r.status_code != 200:
-        return {"s": "fail", "why": f"HTTP {r.status_code}"}
+        return {"s": "fail", "why": f"HTTP {r.status_code}", "retryable_block": r.status_code in (403, 429)}
     got = parse_consensus(r.text)
-    return {"s": "ok", **got} if got else {"s": "none"}
+    if got:
+        return {"s": "ok", **got}
+    # 只有来源数据块明确声明零覆盖才进入长期负缓存；空页/挑战页/非美元均保守重试。
+    if re.search(r'Targets:\{source:"spg",[^{}]*numPriceTargets:0(?:[,}])', r.text or ""):
+        return {"s": "none", "reason": "zero_coverage"}
+    return {"s": "fail", "why": "页面结构或共识数据无法解析", "kind": "parse"}
 
 
-def consensus_due(entry, marker, today_iso):
-    """该不该取：没有记录、记录是上一个节拍的、或上次失败且今天还没试过。"""
+def _consensus_fetch_day(entry):
+    date = _iso_date(entry.get("r"))
+    if date and entry.get("r_tz") != "America/New_York":
+        # 旧 r 是北京日，且更早版本还是1/15号节拍；无法恢复钟点，保守前移一天，宁可补取不漏取。
+        return (datetime.strptime(date, "%Y-%m-%d") - timedelta(days=1)).date().isoformat()
+    return date
+
+
+def _consensus_events(entry, next_date, events, today):
+    """事件与价格缓存独立同步：改期更新未来日期，发生过的事件保留到完成财后刷新。"""
+    out = dict(entry) if isinstance(entry, dict) else {}
+    pending = _event_dates(out.get("earn_pending")) + _event_dates(events)
+    old_ne, new_ne = _iso_date(out.get("ne")), _iso_date(next_date)
+    if old_ne and old_ne < today:
+        pending.append(old_ne)
+    if new_ne:
+        out["ne"] = new_ne
+    ne = _iso_date(out.get("ne"))
+    if ne and ne <= today:
+        pending.append(ne)
+    fetched = _consensus_fetch_day(out)
+    pending = sorted({d for d in pending if d <= today and
+                      (not fetched or _days_between(fetched, d) < CONSENSUS_POST_EARN_LAG_DAYS)})
+    if pending:
+        out["earn_pending"] = pending[-4:]
+    else:
+        out.pop("earn_pending", None)
+    if ne and ne < today and ne not in pending:
+        out.pop("ne", None)
+    return out
+
+
+def consensus_priority(entry, today_iso, quota_day=None):
+    """0 新加入，1 失败重试，2 财后到期，3 常规14天，4 无覆盖30天；事件按美东日。"""
+    quota_day = quota_day or today_iso
     if not isinstance(entry, dict) or entry.get("s") not in ("ok", "none", "fail"):
-        return True
-    if entry["s"] == "fail" and entry.get("try") == today_iso:
-        return False
-    return entry.get("r") != marker or entry["s"] == "fail"
+        return 0
+    if entry["s"] == "fail":
+        retry = _iso_date(entry.get("next_retry"))
+        return None if entry.get("try") == quota_day or (retry and retry > quota_day) else 1
+    try:
+        age = _days_between(today_iso, entry["r"])
+    except (KeyError, ValueError, TypeError):
+        return 3
+    if age < 0:
+        return 3
+    if entry["s"] == "none":
+        return 4 if entry.get("reason") not in ("http404", "zero_coverage") or age >= CONSENSUS_NONE_RECHECK_DAYS else None
+    pending = _event_dates(entry.get("earn_pending"))
+    if _iso_date(entry.get("ne")):
+        pending.append(entry["ne"])
+    if any(_days_between(today_iso, d) >= CONSENSUS_POST_EARN_LAG_DAYS and
+           _days_between(_consensus_fetch_day(entry), d) < CONSENSUS_POST_EARN_LAG_DAYS for d in pending):
+        return 2
+    return 3 if age >= CONSENSUS_REFETCH_DAYS else None
+
+
+def consensus_due(entry, today_iso):
+    return consensus_priority(entry, today_iso) is not None
 
 
 def _consensus_failed(old_entry, today_iso, why):
     old_entry = old_entry if isinstance(old_entry, dict) else {}
-    e = {"s": "fail", "r": old_entry.get("r", ""), "try": today_iso, "why": why}
-    for k in ("avg", "upd"):
+    count = old_entry.get("failures", 0)
+    count = max(0, count) if isinstance(count, int) and not isinstance(count, bool) else 0
+    count = min(count + 1, len(CONSENSUS_RETRY_BACKOFF))
+    retry = (datetime.strptime(today_iso, "%Y-%m-%d") + timedelta(days=CONSENSUS_RETRY_BACKOFF[count - 1])).date().isoformat()
+    e = {"s": "fail", "r": old_entry.get("r", ""), "try": today_iso, "why": why,
+         "failures": count, "next_retry": retry}
+    for k in ("avg", "upd", "ne", "earn_pending", "r_tz"):
         if old_entry.get(k) not in (None, ""):
             e[k] = old_entry[k]
     return e
 
 
-def update_consensus(symbols, prev, today_iso, sess=None, sleep=time.sleep, clock=time.monotonic, force=False):
-    """按节拍更新共识价缓存。prev 是上一次 status.json 里的 consensus。返回 (新缓存 data, 统计)。
-    不在清单里的代码会被清掉；失败保留旧值；整批都「无覆盖」视为页面改版，按失败处理。"""
-    marker = consensus_marker(today_iso)
-    old = {}
-    if isinstance(prev, dict) and isinstance(prev.get("data"), dict):
-        old = {k: v for k, v in prev["data"].items() if isinstance(v, dict)}
+def _consensus_quota(prev, quota_day):
+    """独立台账不受当前清单裁剪影响；旧快照从所有条目的 try 迁移。"""
+    prev = prev if isinstance(prev, dict) else {}
+    prior_stat = prev.get("stat") if isinstance(prev.get("stat"), dict) else {}
+    ledger = prev.get("quota") or prior_stat.get("quota")
+    ledger = ledger if isinstance(ledger, dict) and ledger.get("date") == quota_day else {}
+    raw_symbols, raw_retries = ledger.get("symbols"), ledger.get("retry_symbols")
+    symbols = {s for s in raw_symbols if isinstance(s, str)} if isinstance(raw_symbols, list) else set()
+    retries = {s for s in raw_retries if isinstance(s, str)} if isinstance(raw_retries, list) else set()
+    old = prev.get("data") if isinstance(prev.get("data"), dict) else {}
+    for s, e in old.items():
+        if isinstance(e, dict) and e.get("try") == quota_day:
+            symbols.add(s)
+    return {"date": quota_day, "symbols": sorted(symbols), "retry_symbols": sorted(retries)}
+
+
+def update_consensus(symbols, prev, today_iso, sess=None, sleep=time.sleep, clock=time.monotonic,
+                     force=False, next_earn=None, earnings_events=None, quota_day=None):
+    """事件/TTL 用美东日，额度用独立北京日；force 仅强制到期，不绕过日额度或同日去重。"""
+    quota_day = quota_day or today_iso
+    old = prev.get("data") if isinstance(prev, dict) else None
+    old = {k: v for k, v in (old or {}).items() if isinstance(v, dict)} if isinstance(old, dict) else {}
+    next_earn = next_earn if isinstance(next_earn, dict) else {}
+    earnings_events = earnings_events if isinstance(earnings_events, dict) else {}
     syms = list(dict.fromkeys(normalize_symbol(s) for s in symbols))
-    data = {s: old[s] for s in syms if s in old}
-    todo = [s for s in syms if force or consensus_due(old.get(s), marker, today_iso)]
-    stat = {"marker": marker, "due": len(todo), "tried": 0, "ok": 0, "none": 0, "fail": 0, "stopped": ""}
+    data = {s: _consensus_events(old.get(s), next_earn.get(s), earnings_events.get(s), today_iso) for s in syms}
+    ledger = _consensus_quota(prev, quota_day)
+    attempted, retried = set(ledger["symbols"]), set(ledger["retry_symbols"])
+    ranked = []
+    for s in syms:
+        rank = 0 if force else consensus_priority(data[s], today_iso, quota_day)
+        if rank is not None and s not in attempted:
+            ranked.append((rank, str(data[s].get("r") or ""), s))
+    ranked.sort()
+    quota = max(0, CONSENSUS_MAX_PER_DAY - len(attempted))
+    retry_left = max(0, CONSENSUS_RETRY_PER_DAY - len(retried))
+    todo = []
+    for rank, _, s in ranked:
+        if len(todo) >= quota:
+            break
+        is_retry = data[s].get("s") == "fail"
+        if is_retry and not retry_left:
+            continue
+        if is_retry:
+            retry_left -= 1
+        todo.append(s)
+    stat = {"due": len(ranked), "deferred": len(ranked), "tried": 0, "ok": 0, "none": 0,
+            "fail": 0, "stopped": "", "quota": ledger}
+    # 未取到任何数据的全新代码不制造空缓存，已知事件元数据则照常保留。
+    data = {s: e for s, e in data.items() if e}
     if not todo:
         return data, stat
     sess = sess or requests.Session()
@@ -2072,35 +2448,52 @@ def update_consensus(symbols, prev, today_iso, sess=None, sleep=time.sleep, cloc
         stat["stopped"] = "robots"
         log("  · 共识价：robots.txt 不允许或读取失败，本轮不取，沿用旧值")
         return data, stat
-    log(f"  取共识价：{len(todo)} 只到期（节拍 {marker}），每只间隔 {CONSENSUS_GAP:g} 秒…")
-    start, streak, fresh = clock(), 0, []
+    log(f"  取共识价：{len(ranked)} 只到期，本轮最多取 {len(todo)} 只，每只间隔 {CONSENSUS_GAP:g} 秒…")
+    start, streak = clock(), 0
     for i, s in enumerate(todo):
+        if i:
+            sleep(CONSENSUS_GAP)
         if clock() - start > CONSENSUS_BUDGET:
             stat["stopped"] = "budget"
             break
-        if i:
-            sleep(CONSENSUS_GAP)
-        res = fetch_consensus_one(sess, s)
+        entry = data.get(s, {})
+        attempted.add(s)
+        if entry.get("s") == "fail":
+            retried.add(s)
+        ledger.update(symbols=sorted(attempted), retry_symbols=sorted(retried))
+        try:
+            res = fetch_consensus_one(sess, s)
+        except Exception as e:
+            res = {"s": "fail", "why": str(e)[:60]}
         stat["tried"] += 1
         stat[res["s"]] += 1
         if res["s"] == "fail":
-            streak += 1
-            data[s] = _consensus_failed(old.get(s), today_iso, res.get("why", ""))
+            data[s] = _consensus_failed(entry, quota_day, res.get("why", ""))
+            # 单页解析失败不能阻塞正常标的；连续网络/HTTP错误仍熔断保护供应商。
+            streak = 0 if res.get("kind") == "parse" else streak + 1
             if streak >= CONSENSUS_BREAK:
                 stat["stopped"] = "blocked"
                 break
         else:
             streak = 0
-            data[s] = {**res, "r": marker, "try": today_iso}
-            fresh.append(s)
-    if stat["tried"] >= 5 and stat["ok"] == 0 and stat["none"] == stat["tried"]:
-        # 全部「无覆盖」不可能（AAPL 这类一定有）→ 多半是页面改版，按失败处理，保留旧值并标红
-        for s in fresh:
-            data[s] = _consensus_failed(old.get(s), today_iso, "页面结构疑似改版")
-        stat["fail"], stat["none"], stat["stopped"] = stat["tried"], 0, "layout"
+            fresh = {**res, "r": today_iso, "r_tz": "America/New_York", "try": quota_day}
+            for k in ("ne", "earn_pending"):
+                if k in entry:
+                    fresh[k] = entry[k]
+            data[s] = _consensus_events(fresh, next_earn.get(s), earnings_events.get(s), today_iso)
+    stat["deferred"] = len(ranked) - stat["tried"]
     log(f"  共识价：成功 {stat['ok']} · 无覆盖 {stat['none']} · 失败 {stat['fail']}"
         + (f" · 提前停止（{stat['stopped']}）" if stat["stopped"] else ""))
     return data, stat
+
+
+def _next_earnings_dates(earn_stat):
+    """上一次 status.json 里的财报缓存 → {代码: 下一次财报日}；格式不对返回空字典。"""
+    data = earn_stat.get("data") if isinstance(earn_stat, dict) else None
+    if not isinstance(data, dict):
+        return {}
+    return {str(k).upper(): v["date"] for k, v in data.items()
+            if isinstance(v, dict) and v.get("status") == "ok" and isinstance(v.get("date"), str)}
 
 
 def manual_target(entry, quiet=False):
@@ -2400,14 +2793,19 @@ def _rule_reduce_price(al, x):
 
 
 def _rule_target(al, x):
-    """目标价（手填优先于 S&P Global 共识价）：只对持仓 / 重点关注；命中只出紫色，不改红黄绿；
-    疑似数据异常（空间 > 100%）才升成红色警示；共识价取数失败只标红标签，不参与警示。"""
-    x.tgt = resolve_target(x.cfg, x.cfg.get("_consensus")) if x.group in CONSENSUS_GROUPS else None
+    """目标价（手填优先于 S&P Global 共识价）：持仓 / 重点关注才警示，命中只出紫色，不改红黄绿；
+    疑似数据异常（空间 > 100%）才升成红色警示；共识价取数失败只标红标签，不参与警示。
+    其他分组的个股只显示共识价和空间，不警示，手填的目标价对它们无效。"""
+    alert = x.group in CONSENSUS_GROUPS
+    x.tgt = resolve_target(x.cfg if alert else {}, x.cfg.get("_consensus"))
     tgt = x.tgt
     if not tgt:
         return
     tgt["hit"] = False
     if tgt["price"] and not tgt["failed"]:
+        if not alert:
+            tgt.update(space=(tgt["price"] / x.price - 1) * 100, anomaly=False)
+            return
         purple, reds, space = target_alerts(x.price, x.prev, tgt["price"], target_label(tgt),
                                             S["target_space_pct"], S["target_gap_pct"])
         for text in reds:
@@ -2946,6 +3344,8 @@ def _row_tags(d, snapshot):
     """名称旁的小标签：ETF、无数据、参考值、日线日期。"""
     # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
     tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
+    if d.get("fund_cache_note"):
+        tag += f'<span class="unit">基本面：{html_lib.escape(str(d["fund_cache_note"]))}</span>'
     if d.get("price") is None:
         tag += '<span class="tag quote-note">无数据</span>'
     elif d.get("reference_only"):
@@ -3193,7 +3593,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
                 + (f" · 本轮监测 {summary.get('total', 0)} 个唯一标的" if registered else "")
                 + (f' · 已隐藏 {dup_hidden} 只重复标的（风险参考／持仓优先，其次重点关注，最后其他）'
                    if dup_hidden else "") + "</div>")
-    consensus_credit = (f'共识价来源：{CONSENSUS_SOURCE}，每月 1、15 日更新<br>\n'
+    consensus_credit = (f'共识价来源：{CONSENSUS_SOURCE}，每只约 {CONSENSUS_REFETCH_DAYS} 天更新一次，财报后提前更新<br>\n'
                         if any((d.get("target") or {}).get("kind") == "consensus" for d in items) else "")
     dca_html = (f'<div class="dca {"on" if (snapshot.get("dca_reminder") or {}).get("due") else ""}">'
                 f'定投提醒：{dca_info}</div>') if dca_info else ""
@@ -3347,7 +3747,20 @@ def main(argv=None):
         cfg = {}
 
     universe, group_counts, dup_hidden = grouped_universe(cfg)
-    cons_data, cons_stat = {}, {}
+    # 一轮只读一个快照；进程内重复调用也必须重新取本轮到期数据。
+    _EARN_CACHE.clear()
+    _FUND_CACHE.clear()
+    try:
+        with open(os.path.join(BASE, "status.json"), encoding="utf-8") as f:
+            prev_status = json.load(f)
+    except Exception:
+        prev_status = {}
+    prev_status = prev_status if isinstance(prev_status, dict) else {}
+    prev_cons = prev_status.get("consensus")
+    old_cons = prev_cons.get("data") if isinstance(prev_cons, dict) else None
+    old_cons = old_cons if isinstance(old_cons, dict) else {}
+    cons_data, cons_stat, fetched = old_cons, {}, {}
+    event_today, quota_day = _earn_today(), NOW.astimezone(TZ).date().isoformat()
     if not universe:
         log("holdings.json 里没有自选股，跳过个股部分")
 
@@ -3383,20 +3796,7 @@ def main(argv=None):
             bench_data = fetched[spy_key]
         YAHOO_GATE.reset(False)
         STOOQ_GATE.reset(False)
-        # S&P Global 共识价：只取持仓 / 重点关注，每月 1、15 号一轮；任何异常都不能拖垮行情和页面
-        cons_syms = [normalize_symbol(sym) for sym, sc, grp in universe if consensus_wanted(sym, sc, grp)]
-        try:
-            with open(os.path.join(BASE, "status.json"), encoding="utf-8") as f:
-                prev_cons = json.load(f).get("consensus")
-        except Exception:
-            prev_cons = None
-        try:
-            cons_data, cons_stat = update_consensus(cons_syms, prev_cons, NOW.strftime("%Y-%m-%d"))
-        except Exception as e:
-            log(f"  ! 共识价更新中断，沿用旧值：{str(e)[:90]}")
-            old_data = prev_cons.get("data") if isinstance(prev_cons, dict) else None
-            cons_data = {k: v for k, v in (old_data or {}).items() if k in cons_syms and isinstance(v, dict)}
-            cons_stat = {"stopped": "error"}
+        # 先用旧共识价解析当前技术信号，为财报请求提供持仓/红黄优先级；刷新后仅重算变化项。
         for sym, sc, grp in universe:
             supported = quote_supported(sym)
             is_yield = instrument_identity(sym) == '^TNX'
@@ -3433,20 +3833,65 @@ def main(argv=None):
             })
 
     QUOTE_DEADLINE = None
-    # 基本面只查持仓 + 重点关注：其他关注只数大、交易价值低，全量查既拖慢运行又容易限流
+    prev_earn = prev_status.get("earnings")
+    prev_earn = prev_earn if isinstance(prev_earn, dict) else {}
+    earn_stat = attach_earnings(items, prev_earn.get("data"), event_today, prev_earn.get("events"))
+    cons_syms = [normalize_symbol(sym) for sym, sc, grp in universe if consensus_wanted(sym, sc, grp)]
+    try:
+        cons_data, cons_stat = update_consensus(cons_syms, prev_cons, event_today,
+                                               next_earn=_next_earnings_dates(earn_stat),
+                                               earnings_events=earn_stat.get("events"), quota_day=quota_day)
+    except Exception as e:
+        log(f"  ! 共识价更新中断，沿用旧值：{str(e)[:90]}")
+        cons_data = {k: v for k, v in old_cons.items() if k in cons_syms and isinstance(v, dict)}
+        cons_stat = {"stopped": "error", "quota": _consensus_quota(prev_cons, quota_day)}
+    configs = {sym: (sc, grp) for sym, sc, grp in universe}
+    for i, d in enumerate(items):
+        sym = d["symbol"]
+        key = normalize_symbol(sym)
+        if not isinstance(fetched.get(sym), dict) or cons_data.get(key) == old_cons.get(key):
+            continue
+        sc, grp = configs[sym]
+        cons = cons_data.get(key)
+        _, _, detail = analyze_symbol(sym, {**sc, "_consensus": cons} if cons else sc, fetched[sym], group=grp)
+        for field in ("earnings", "rs_spy"):
+            if field in d:
+                detail[field] = d[field]
+        items[i] = detail
+    # 基本面只查持仓/重点关注；财报事件优先触发，供应商未推进报告期时继续轮询。
     fund_stat = {"checked": 0, "red": 0, "yellow": 0}
+    previous_fund = prev_status.get("fundamental")
+    previous_fund = previous_fund.get("data") if isinstance(previous_fund, dict) else {}
+    previous_fund = previous_fund if isinstance(previous_fund, dict) else {}
     fund_targets = [d for d in items
                     if d.get("group") in ("position", "focus") and d.get("symbol")
-                    and quote_supported(d["symbol"])]
-    if fund_targets:
-        log(f"读取 {len(fund_targets)} 只持仓/重点关注的财报…")
+                    and quote_supported(d["symbol"]) and not is_etf(d["symbol"])]
+    fund_keys = {normalize_symbol(d["symbol"]).upper() for d in fund_targets}
+    fund_data = {k: v for k, v in previous_fund.items() if k in fund_keys and isinstance(v, dict)}
+    if fund_targets and fund_rule("fund_enable"):
+        prev_fund = prev_status.get("fundamental")
+        prev_fund = prev_fund.get("data") if isinstance(prev_fund, dict) else None
         try:
-            # 4 路并发：串行一只约 2 秒，30 只会拖到 1 分钟；并发后 15 秒内结束
-            with ThreadPoolExecutor(max_workers=4) as ex:
-                results = list(ex.map(lambda d: fundamental_check(d["symbol"]), fund_targets))
-            for d, fd in zip(fund_targets, results):
+            fund_facts, fund_run = update_fundamentals([d["symbol"] for d in fund_targets], prev_fund,
+                                                       event_today, earnings_events=earn_stat.get("events"))
+        except Exception as e:
+            log(f"  ! 基本面读取中断，跳过：{e}")
+            fund_facts, fund_run = {}, {"fetched": 0, "cached": 0, "data": {}}
+        fund_data = fund_run["data"]
+        fund_stat.update(fetched=fund_run["fetched"], cached=fund_run["cached"])
+        log(f"检查 {len(fund_targets)} 只持仓/重点关注的基本面（缓存 {fund_run['cached']}，本轮请求 {fund_run['fetched']}）…")
+        try:
+            for d in fund_targets:
+                cache = fund_data.get(normalize_symbol(d["symbol"]).upper(), {})
+                if cache.get("fetch_error") or cache.get("event_date"):
+                    d["fund_cache_note"] = (
+                        f"{'读取失败，沿用缓存' if cache.get('fetch_error') else '财报已到期，等待供应商更新报告期'}"
+                        f"（上次成功取数 {cache.get('fetched') or '未知'}）")
+                fd = fundamental_check(d["symbol"], fund_facts.get(normalize_symbol(d["symbol"]).upper(), {}))
                 if not fd:
                     continue
+                if d.get("fund_cache_note"):
+                    fd.setdefault("context", []).append(d["fund_cache_note"])
                 d["fund"] = fd
                 fund_stat["checked"] += 1
                 if fd["level"] == "red":
@@ -3461,11 +3906,10 @@ def main(argv=None):
         log(f"  基本面：{fund_stat['checked']} 份财报 · "
             f"红 {fund_stat['red']} · 黄 {fund_stat['yellow']}")
 
-    earn_stat = attach_earnings(items)
-
     snapshot = build_snapshot(macro, items, cfg, group_counts=group_counts)
-    snapshot["fundamental"] = fund_stat
-    snapshot["consensus"] = {"source": CONSENSUS_SOURCE, "stat": cons_stat, "data": cons_data}
+    snapshot["fundamental"] = {**fund_stat, "data": fund_data}
+    snapshot["consensus"] = {"source": CONSENSUS_SOURCE, "stat": cons_stat, "data": cons_data,
+                             "quota": cons_stat.get("quota", _consensus_quota(prev_cons, quota_day))}
     snapshot["earnings"] = earn_stat
     supported_items = [d for d in items if quote_supported(d["symbol"])]
     html = render(macro, items, len(universe), data_down=bool(supported_items)
