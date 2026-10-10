@@ -9,19 +9,19 @@
     "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "38019739991",
+  "run_id": "38036028621",
   "request_id": "",
-  "source_sha": "963b8e38d087137b28058d55327115bb90aaff1d",
-  "started_at": "2026-10-10T03:12:25+00:00",
-  "started_at_bj": "2026-10-10T11:12:25+08:00",
-  "finished_at": "2026-10-10T11:13:36.491745+08:00",
-  "finished_at_bj": "2026-10-10T11:13:36+08:00",
+  "source_sha": "f8e54aa411afc0751705e7f6aae5b484884ab437",
+  "started_at": "2026-10-10T07:54:18+00:00",
+  "started_at_bj": "2026-10-10T15:54:18+08:00",
+  "finished_at": "2026-10-10T15:55:48.851436+08:00",
+  "finished_at_bj": "2026-10-10T15:55:48+08:00",
   "event": "push",
   "target_trade_date": "2026-10-09",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "15ee6676870692b9d092d175630f17f0da62d274",
+    "holdings.json": "21eed6bb27bd1475f0c02b1eb144c6dad87ac275",
     "settings.json": "7d980cfc74476065d0f39687c35e4fea0d1c55f1"
   },
   "effective_settings": {
@@ -187,9 +187,9 @@
     "dca": 1
   },
   "summary": {
-    "red": 14,
-    "yellow": 50,
-    "green": 65,
+    "red": 12,
+    "yellow": 44,
+    "green": 73,
     "gray": 0,
     "total": 129,
     "macro_ok": 6,
@@ -200,6 +200,92 @@
     "today_prices": 129,
     "prior_prices": 0,
     "missing_prices": 0
+  },
+  "signal_counts": {
+    "chg": {
+      "label": "涨跌幅",
+      "red": 0,
+      "yellow": 2,
+      "purple": 0,
+      "sole_yellow": 0
+    },
+    "amp": {
+      "label": "振幅",
+      "red": 0,
+      "yellow": 1,
+      "purple": 0,
+      "sole_yellow": 0
+    },
+    "vol_ratio": {
+      "label": "量比",
+      "red": 0,
+      "yellow": 5,
+      "purple": 0,
+      "sole_yellow": 1
+    },
+    "rsi": {
+      "label": "RSI",
+      "red": 0,
+      "yellow": 8,
+      "purple": 0,
+      "sole_yellow": 0
+    },
+    "boll": {
+      "label": "布林",
+      "red": 0,
+      "yellow": 38,
+      "purple": 0,
+      "sole_yellow": 23
+    },
+    "boll_rsi": {
+      "label": "布林+RSI",
+      "red": 7,
+      "yellow": 0,
+      "purple": 0,
+      "sole_yellow": 0
+    },
+    "ma_cross": {
+      "label": "50日线穿越",
+      "red": 0,
+      "yellow": 10,
+      "purple": 0,
+      "sole_yellow": 6
+    },
+    "ma_band": {
+      "label": "250日线贴近",
+      "red": 0,
+      "yellow": 6,
+      "purple": 0,
+      "sole_yellow": 4
+    },
+    "low52": {
+      "label": "52周低位",
+      "red": 5,
+      "yellow": 1,
+      "purple": 0,
+      "sole_yellow": 1
+    },
+    "add_price": {
+      "label": "加仓价",
+      "red": 0,
+      "yellow": 0,
+      "purple": 0,
+      "sole_yellow": 0
+    },
+    "reduce_price": {
+      "label": "减仓价",
+      "red": 0,
+      "yellow": 0,
+      "purple": 0,
+      "sole_yellow": 0
+    },
+    "target": {
+      "label": "目标价/共识价",
+      "red": 0,
+      "yellow": 0,
+      "purple": 3,
+      "sole_yellow": 0
+    }
   },
   "actual_dates": {
     "min": "2026-10-09",
@@ -398,8 +484,8 @@
     }
   },
   "earnings": {
-    "targets": 60,
-    "dated": 52,
+    "targets": 51,
+    "dated": 43,
     "pending": 8,
     "failed": 0
   }
