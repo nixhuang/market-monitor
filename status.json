@@ -9,13 +9,13 @@
     "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "38046391040",
+  "run_id": "38048195978",
   "request_id": "",
-  "source_sha": "129719b16fc7d0e1cbff60752c0922e1328364f0",
-  "started_at": "2026-10-10T10:51:53+00:00",
-  "started_at_bj": "2026-10-10T18:51:53+08:00",
-  "finished_at": "2026-10-10T18:53:49.455818+08:00",
-  "finished_at_bj": "2026-10-10T18:53:49+08:00",
+  "source_sha": "ca4cd9446c65f440281539eab79f0b057e72911b",
+  "started_at": "2026-10-10T11:22:49+00:00",
+  "started_at_bj": "2026-10-10T19:22:49+08:00",
+  "finished_at": "2026-10-10T19:23:52.992722+08:00",
+  "finished_at_bj": "2026-10-10T19:23:52+08:00",
   "event": "push",
   "target_trade_date": "2026-10-09",
   "mode": "closed",
@@ -349,8 +349,8 @@
     "checked": 17,
     "red": 4,
     "yellow": 6,
-    "fetched": 18,
-    "cached": 0,
+    "fetched": 1,
+    "cached": 17,
     "data": {
       "BRK-B": {
         "attempted": "2026-10-10",
@@ -1309,10 +1309,10 @@
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 73,
+      "due": 61,
       "deferred": 61,
-      "tried": 12,
-      "ok": 12,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -1545,11 +1545,23 @@
       "LITE": {
         "ne": "2026-11-05"
       },
+      "MRVL": {
+        "ne": "2026-12-01"
+      },
       "PANW": {
         "ne": "2026-11-18"
       },
+      "TER": {
+        "ne": "2026-10-27"
+      },
       "PLTR": {
         "ne": "2026-11-02"
+      },
+      "LRCX": {
+        "ne": "2026-10-21"
+      },
+      "NVDA": {
+        "ne": "2026-11-18"
       },
       "MRNA": {
         "ne": "2026-11-05"
@@ -1563,11 +1575,26 @@
         "try": "2026-10-10",
         "ne": "2026-10-30"
       },
+      "TMO": {
+        "ne": "2026-10-21"
+      },
       "ISRG": {
         "ne": "2026-10-20"
       },
+      "LLY": {
+        "ne": "2026-10-29"
+      },
+      "TEM": {
+        "ne": "2026-11-03"
+      },
+      "JNJ": {
+        "ne": "2026-10-13"
+      },
       "WFC": {
         "ne": "2026-10-13"
+      },
+      "MCO": {
+        "ne": "2026-10-21"
       },
       "CB": {
         "ne": "2026-10-20"
@@ -1581,20 +1608,95 @@
         "try": "2026-10-10",
         "ne": "2026-10-14"
       },
+      "AXP": {
+        "s": "ok",
+        "avg": 371.12,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-10-23"
+      },
+      "BX": {
+        "s": "ok",
+        "avg": 141.64,
+        "upd": "2026-10-08",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-10-22"
+      },
+      "SPGI": {
+        "ne": "2026-10-27"
+      },
+      "GS": {
+        "ne": "2026-10-13"
+      },
       "NU": {
         "ne": "2026-11-12"
+      },
+      "CRCL": {
+        "ne": "2026-11-04"
       },
       "COIN": {
         "ne": "2026-10-29"
       },
+      "HOOD": {
+        "ne": "2026-10-27"
+      },
+      "JPM": {
+        "ne": "2026-10-13"
+      },
+      "CVX": {
+        "ne": "2026-10-30"
+      },
       "XOM": {
         "ne": "2026-10-30"
+      },
+      "OXY": {
+        "ne": "2026-11-09"
+      },
+      "AXON": {
+        "s": "ok",
+        "avg": 704.11,
+        "upd": "2026-09-29",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-11-03"
+      },
+      "SPCX": {
+        "ne": "2026-11-03"
+      },
+      "CAT": {
+        "s": "ok",
+        "avg": 970.8,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-11-04"
       },
       "NOC": {
         "ne": "2026-10-20"
       },
+      "RTX": {
+        "ne": "2026-10-20"
+      },
+      "VRT": {
+        "ne": "2026-10-28"
+      },
+      "DD": {
+        "ne": "2026-11-03"
+      },
+      "LIN": {
+        "ne": "2026-10-29"
+      },
       "CEG": {
         "ne": "2026-11-06"
+      },
+      "NEE": {
+        "ne": "2026-10-21"
       },
       "WMT": {
         "ne": "2026-11-19"
@@ -1602,8 +1704,29 @@
       "PG": {
         "ne": "2026-10-22"
       },
+      "KO": {
+        "ne": "2026-10-27"
+      },
+      "TTWO": {
+        "ne": "2026-11-05"
+      },
+      "META": {
+        "ne": "2026-11-04"
+      },
+      "NFLX": {
+        "ne": "2026-10-20"
+      },
       "DIS": {
         "ne": "2026-11-12"
+      },
+      "BKNG": {
+        "s": "ok",
+        "avg": 235.26,
+        "upd": "2026-10-07",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-11-03"
       },
       "AMZN": {
         "s": "ok",
@@ -1619,46 +1742,6 @@
       },
       "TSLA": {
         "ne": "2026-10-21"
-      },
-      "AXON": {
-        "s": "ok",
-        "avg": 704.11,
-        "upd": "2026-09-29",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-10"
-      },
-      "AXP": {
-        "s": "ok",
-        "avg": 371.12,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-10"
-      },
-      "BKNG": {
-        "s": "ok",
-        "avg": 235.26,
-        "upd": "2026-10-07",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-10"
-      },
-      "BX": {
-        "s": "ok",
-        "avg": 141.64,
-        "upd": "2026-10-08",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-10"
-      },
-      "CAT": {
-        "s": "ok",
-        "avg": 970.8,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-10"
       }
     },
     "quota": {
@@ -1682,12 +1765,12 @@
   },
   "earnings": {
     "targets": 91,
-    "dated": 51,
+    "dated": 82,
     "pending": 9,
     "failed": 0,
-    "fetched": 60,
-    "cached": 0,
-    "deferred": 31,
+    "fetched": 31,
+    "cached": 60,
+    "deferred": 0,
     "data": {
       "BRK-B": {
         "status": "unknown",
@@ -1937,6 +2020,13 @@
         "kind": "expected",
         "fetched": "2026-10-10"
       },
+      "MRVL": {
+        "status": "ok",
+        "date": "2026-12-01",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
       "CRDO": {
         "status": "unknown",
         "fetched": "2026-10-10"
@@ -1948,9 +2038,30 @@
         "kind": "estimated",
         "fetched": "2026-10-10"
       },
+      "TER": {
+        "status": "ok",
+        "date": "2026-10-27",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
       "PLTR": {
         "status": "ok",
         "date": "2026-11-02",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "LRCX": {
+        "status": "ok",
+        "date": "2026-10-21",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "NVDA": {
+        "status": "ok",
+        "date": "2026-11-18",
         "timing": "",
         "kind": "estimated",
         "fetched": "2026-10-10"
@@ -1969,6 +2080,13 @@
         "kind": "expected",
         "fetched": "2026-10-10"
       },
+      "TMO": {
+        "status": "ok",
+        "date": "2026-10-21",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
       "ISRG": {
         "status": "ok",
         "date": "2026-10-20",
@@ -1976,9 +2094,37 @@
         "kind": "expected",
         "fetched": "2026-10-10"
       },
+      "LLY": {
+        "status": "ok",
+        "date": "2026-10-29",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "TEM": {
+        "status": "ok",
+        "date": "2026-11-03",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "JNJ": {
+        "status": "ok",
+        "date": "2026-10-13",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
       "WFC": {
         "status": "ok",
         "date": "2026-10-13",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "MCO": {
+        "status": "ok",
+        "date": "2026-10-21",
         "timing": "pre",
         "kind": "expected",
         "fetched": "2026-10-10"
@@ -1997,11 +2143,46 @@
         "kind": "expected",
         "fetched": "2026-10-10"
       },
+      "AXP": {
+        "status": "ok",
+        "date": "2026-10-23",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "BX": {
+        "status": "ok",
+        "date": "2026-10-22",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "SPGI": {
+        "status": "ok",
+        "date": "2026-10-27",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "GS": {
+        "status": "ok",
+        "date": "2026-10-13",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
       "NU": {
         "status": "ok",
         "date": "2026-11-12",
         "timing": "",
         "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "CRCL": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "pre",
+        "kind": "expected",
         "fetched": "2026-10-10"
       },
       "COIN": {
@@ -2011,6 +2192,27 @@
         "kind": "estimated",
         "fetched": "2026-10-10"
       },
+      "HOOD": {
+        "status": "ok",
+        "date": "2026-10-27",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "JPM": {
+        "status": "ok",
+        "date": "2026-10-13",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "CVX": {
+        "status": "ok",
+        "date": "2026-10-30",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
       "XOM": {
         "status": "ok",
         "date": "2026-10-30",
@@ -2018,8 +2220,36 @@
         "kind": "estimated",
         "fetched": "2026-10-10"
       },
+      "OXY": {
+        "status": "ok",
+        "date": "2026-11-09",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "AXON": {
+        "status": "ok",
+        "date": "2026-11-03",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
       "HEI": {
         "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "SPCX": {
+        "status": "ok",
+        "date": "2026-11-03",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "CAT": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "",
+        "kind": "estimated",
         "fetched": "2026-10-10"
       },
       "NOC": {
@@ -2029,11 +2259,46 @@
         "kind": "expected",
         "fetched": "2026-10-10"
       },
+      "RTX": {
+        "status": "ok",
+        "date": "2026-10-20",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "VRT": {
+        "status": "ok",
+        "date": "2026-10-28",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "DD": {
+        "status": "ok",
+        "date": "2026-11-03",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "LIN": {
+        "status": "ok",
+        "date": "2026-10-29",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
       "CEG": {
         "status": "ok",
         "date": "2026-11-06",
         "timing": "",
         "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "NEE": {
+        "status": "ok",
+        "date": "2026-10-21",
+        "timing": "pre",
+        "kind": "expected",
         "fetched": "2026-10-10"
       },
       "PEP": {
@@ -2054,11 +2319,46 @@
         "kind": "expected",
         "fetched": "2026-10-10"
       },
+      "KO": {
+        "status": "ok",
+        "date": "2026-10-27",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "TTWO": {
+        "status": "ok",
+        "date": "2026-11-05",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "META": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "NFLX": {
+        "status": "ok",
+        "date": "2026-10-20",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
       "DIS": {
         "status": "ok",
         "date": "2026-11-12",
         "timing": "",
         "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "BKNG": {
+        "status": "ok",
+        "date": "2026-11-03",
+        "timing": "post",
+        "kind": "expected",
         "fetched": "2026-10-10"
       },
       "AMZN": {
