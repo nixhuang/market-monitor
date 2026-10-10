@@ -9,19 +9,19 @@
     "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "38036028621",
+  "run_id": "38046391040",
   "request_id": "",
-  "source_sha": "f8e54aa411afc0751705e7f6aae5b484884ab437",
-  "started_at": "2026-10-10T07:54:18+00:00",
-  "started_at_bj": "2026-10-10T15:54:18+08:00",
-  "finished_at": "2026-10-10T15:55:48.851436+08:00",
-  "finished_at_bj": "2026-10-10T15:55:48+08:00",
+  "source_sha": "129719b16fc7d0e1cbff60752c0922e1328364f0",
+  "started_at": "2026-10-10T10:51:53+00:00",
+  "started_at_bj": "2026-10-10T18:51:53+08:00",
+  "finished_at": "2026-10-10T18:53:49.455818+08:00",
+  "finished_at_bj": "2026-10-10T18:53:49+08:00",
   "event": "push",
   "target_trade_date": "2026-10-09",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "21eed6bb27bd1475f0c02b1eb144c6dad87ac275",
+    "holdings.json": "10a9168831e765dd55b0b9a6bc929902adb313c1",
     "settings.json": "7d980cfc74476065d0f39687c35e4fea0d1c55f1"
   },
   "effective_settings": {
@@ -155,14 +155,14 @@
     "positions": 15,
     "focus": 8,
     "index_funds": 9,
-    "technology": 39,
-    "healthcare": 18,
-    "financials": 20,
+    "technology": 37,
+    "healthcare": 10,
+    "financials": 17,
     "energy": 4,
     "industrials": 11,
-    "materials": 4,
+    "materials": 2,
     "utilities": 3,
-    "consumer_staples": 7,
+    "consumer_staples": 6,
     "communications": 5,
     "consumer_discretionary": 6,
     "real_estate": 1
@@ -171,14 +171,14 @@
     "positions": 15,
     "focus": 8,
     "index_funds": 7,
-    "technology": 30,
-    "healthcare": 16,
-    "financials": 17,
+    "technology": 28,
+    "healthcare": 8,
+    "financials": 14,
     "energy": 4,
     "industrials": 8,
-    "materials": 4,
+    "materials": 2,
     "utilities": 3,
-    "consumer_staples": 6,
+    "consumer_staples": 5,
     "communications": 5,
     "consumer_discretionary": 5,
     "real_estate": 1,
@@ -187,17 +187,17 @@
     "dca": 1
   },
   "summary": {
-    "red": 12,
-    "yellow": 44,
-    "green": 73,
+    "red": 11,
+    "yellow": 41,
+    "green": 61,
     "gray": 0,
-    "total": 129,
+    "total": 113,
     "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 129,
+    "today_prices": 113,
     "prior_prices": 0,
     "missing_prices": 0
   },
@@ -233,9 +233,9 @@
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 38,
+      "yellow": 37,
       "purple": 0,
-      "sole_yellow": 23
+      "sole_yellow": 22
     },
     "boll_rsi": {
       "label": "布林+RSI",
@@ -247,20 +247,20 @@
     "ma_cross": {
       "label": "50日线穿越",
       "red": 0,
-      "yellow": 10,
+      "yellow": 9,
       "purple": 0,
-      "sole_yellow": 6
+      "sole_yellow": 5
     },
     "ma_band": {
       "label": "250日线贴近",
       "red": 0,
-      "yellow": 6,
+      "yellow": 5,
       "purple": 0,
-      "sole_yellow": 4
+      "sole_yellow": 3
     },
     "low52": {
       "label": "52周低位",
-      "red": 5,
+      "red": 4,
       "yellow": 1,
       "purple": 0,
       "sole_yellow": 1
@@ -297,7 +297,7 @@
     "sp500": "2026-10-09",
     "ust10": "2026-10-09",
     "nfci": "2026-10-02",
-    "breadth": "2026-10-08"
+    "breadth": "2026-10-09"
   },
   "treasury_reference": {
     "ok": true,
@@ -348,18 +348,992 @@
   "fundamental": {
     "checked": 17,
     "red": 4,
-    "yellow": 6
+    "yellow": 6,
+    "fetched": 18,
+    "cached": 0,
+    "data": {
+      "BRK-B": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$117,885,000",
+              "value5": "$116,911,000"
+            },
+            "Income Tax": {
+              "value2": "$6,291,000",
+              "value5": "$7,241,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "82.78407%",
+              "value5": "83.50711%"
+            },
+            "Operating Margin": {
+              "value2": "26.98817%",
+              "value5": "32.3109%"
+            },
+            "After Tax ROE": {
+              "value2": "3.43183%",
+              "value5": "4.41105%"
+            },
+            "Current Ratio": {
+              "value2": "NaN",
+              "value5": "NaN"
+            },
+            "Profit Margin": {
+              "value2": "21.77291%",
+              "value5": "26.34141%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$11,215,000",
+              "value5": "$13,789,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$512,894,000",
+              "value5": "$525,522,000"
+            },
+            "Total Equity": {
+              "value2": "$747,910,000",
+              "value5": "$698,155,000"
+            }
+          }
+        }
+      },
+      "HII": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$3,418,000",
+              "value5": "$3,192,000"
+            },
+            "Income Tax": {
+              "value2": "$46,000",
+              "value5": "$59,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "12.60971%",
+              "value5": "12.34336%"
+            },
+            "Operating Margin": {
+              "value2": "6.14394%",
+              "value5": "5.04386%"
+            },
+            "After Tax ROE": {
+              "value2": "3.91566%",
+              "value5": "2.90931%"
+            },
+            "Current Ratio": {
+              "value2": "123.01557%",
+              "value5": "113.91562%"
+            },
+            "Profit Margin": {
+              "value2": "6.08543%",
+              "value5": "4.54261%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "-$31,000",
+              "value5": "$118,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$7,370,000",
+              "value5": "$7,325,000"
+            },
+            "Total Equity": {
+              "value2": "$5,312,000",
+              "value5": "$4,984,000"
+            }
+          }
+        }
+      },
+      "APH": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$8,758,100",
+              "value5": "$6,194,400"
+            },
+            "Income Tax": {
+              "value2": "$604,100",
+              "value5": "$385,900"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "40.51107%",
+              "value5": "38.08763%"
+            },
+            "Operating Margin": {
+              "value2": "29.51097%",
+              "value5": "27.48127%"
+            },
+            "After Tax ROE": {
+              "value2": "11.42038%",
+              "value5": "9.94944%"
+            },
+            "Current Ratio": {
+              "value2": "188.77728%",
+              "value5": "206.95366%"
+            },
+            "Profit Margin": {
+              "value2": "20.20073%",
+              "value5": "20.1101%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$1,557,200",
+              "value5": "$1,470,800"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$29,184,500",
+              "value5": "$14,536,100"
+            },
+            "Total Equity": {
+              "value2": "$15,491,600",
+              "value5": "$12,520,300"
+            }
+          }
+        }
+      },
+      "AVGO": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "8/2/2026",
+          "base_period": "11/2/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$29,591,000",
+              "value5": "$18,015,000"
+            },
+            "Income Tax": {
+              "value2": "$2,187,000",
+              "value5": "-$1,649,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "69.12913%",
+              "value5": "67.99334%"
+            },
+            "Operating Margin": {
+              "value2": "53.91842%",
+              "value5": "41.67638%"
+            },
+            "After Tax ROE": {
+              "value2": "13.1287%",
+              "value5": "10.47828%"
+            },
+            "Current Ratio": {
+              "value2": "250.37432%",
+              "value5": "170.53581%"
+            },
+            "Profit Margin": {
+              "value2": "44.22966%",
+              "value5": "47.28282%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$14,197,000",
+              "value5": "$7,703,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$88,458,000",
+              "value5": "$89,800,000"
+            },
+            "Total Equity": {
+              "value2": "$99,690,000",
+              "value5": "$81,292,000"
+            }
+          }
+        }
+      },
+      "CRSP": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$10,181",
+              "value5": "$889"
+            },
+            "Income Tax": {
+              "value2": "$960",
+              "value5": "$619"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "100%",
+              "value5": "100%"
+            },
+            "Operating Margin": {
+              "value2": "-1151.84167%",
+              "value5": "-14854.78065%"
+            },
+            "After Tax ROE": {
+              "value2": "-5.21909%",
+              "value5": "-5.55543%"
+            },
+            "Current Ratio": {
+              "value2": "1784.68125%",
+              "value5": "1621.6717%"
+            },
+            "Profit Margin": {
+              "value2": "-895.33445%",
+              "value5": "-11973.11586%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "-$83,498",
+              "value5": "-$84,634"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$904,219",
+              "value5": "$329,326"
+            },
+            "Total Equity": {
+              "value2": "$1,746,551",
+              "value5": "$1,915,982"
+            }
+          }
+        }
+      },
+      "GOOGL": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$119,796,000",
+              "value5": "$102,345,000"
+            },
+            "Income Tax": {
+              "value2": "$26,560,000",
+              "value5": "$9,008,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "61.64897%",
+              "value5": "59.57985%"
+            },
+            "Operating Margin": {
+              "value2": "34.03286%",
+              "value5": "30.51248%"
+            },
+            "After Tax ROE": {
+              "value2": "17.51702%",
+              "value5": "9.04161%"
+            },
+            "Current Ratio": {
+              "value2": "272.39813%",
+              "value5": "174.7333%"
+            },
+            "Profit Margin": {
+              "value2": "93.65338%",
+              "value5": "34.17754%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$39,069,000",
+              "value5": "$48,414,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$281,503,000",
+              "value5": "$149,602,000"
+            },
+            "Total Equity": {
+              "value2": "$640,480,000",
+              "value5": "$386,867,000"
+            }
+          }
+        }
+      },
+      "LMT": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/28/2026",
+          "base_period": "9/28/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$20,063,000",
+              "value5": "$18,609,000"
+            },
+            "Income Tax": {
+              "value2": "$342,000",
+              "value5": "$319,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "12.1916%",
+              "value5": "12.03719%"
+            },
+            "Operating Margin": {
+              "value2": "12.35608%",
+              "value5": "12.25214%"
+            },
+            "After Tax ROE": {
+              "value2": "20.93978%",
+              "value5": "26.19317%"
+            },
+            "Current Ratio": {
+              "value2": "119.28682%",
+              "value5": "112.89284%"
+            },
+            "Profit Margin": {
+              "value2": "9.15117%",
+              "value5": "8.70009%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$3,235,000",
+              "value5": "$3,728,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$53,682,000",
+              "value5": "$54,095,000"
+            },
+            "Total Equity": {
+              "value2": "$8,768,000",
+              "value5": "$6,181,000"
+            }
+          }
+        }
+      },
+      "NTNX": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "7/31/2026",
+          "base_period": "10/31/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$757,078",
+              "value5": "$670,576"
+            },
+            "Income Tax": {
+              "value2": "-$1,186,917",
+              "value5": "$3,478"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "86.03486%",
+              "value5": "86.95599%"
+            },
+            "Operating Margin": {
+              "value2": "9.24462%",
+              "value5": "7.35711%"
+            },
+            "After Tax ROE": {
+              "value2": "180.71381%",
+              "value5": "-9.28708%"
+            },
+            "Current Ratio": {
+              "value2": "179.8304%",
+              "value5": "188.5197%"
+            },
+            "Profit Margin": {
+              "value2": "167.70161%",
+              "value5": "9.2601%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$315,013",
+              "value5": "$196,825"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$4,371,120",
+              "value5": "$3,992,620"
+            },
+            "Total Equity": {
+              "value2": "$702,565",
+              "value5": "-$668,628"
+            }
+          }
+        }
+      },
+      "UNH": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$112,032,000",
+              "value5": "$113,161,000"
+            },
+            "Income Tax": {
+              "value2": "$1,298,000",
+              "value5": "$686,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "32.73529%",
+              "value5": "29.34138%"
+            },
+            "Operating Margin": {
+              "value2": "7.13278%",
+              "value5": "3.81315%"
+            },
+            "After Tax ROE": {
+              "value2": "5.57051%",
+              "value5": "2.45127%"
+            },
+            "Current Ratio": {
+              "value2": "NaN",
+              "value5": "NaN"
+            },
+            "Profit Margin": {
+              "value2": "4.89503%",
+              "value5": "2.07492%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$11,052,000",
+              "value5": "$5,945,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$203,778,000",
+              "value5": "$209,456,000"
+            },
+            "Total Equity": {
+              "value2": "$98,447,000",
+              "value5": "$95,787,000"
+            }
+          }
+        }
+      },
+      "UBER": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$14,191,000",
+              "value5": "$13,467,000"
+            },
+            "Income Tax": {
+              "value2": "$840,000",
+              "value5": "-$4,046,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "39.25728%",
+              "value5": "34.32836%"
+            },
+            "Operating Margin": {
+              "value2": "13.3183%",
+              "value5": "8.26465%"
+            },
+            "After Tax ROE": {
+              "value2": "8.76409%",
+              "value5": "23.55157%"
+            },
+            "Current Ratio": {
+              "value2": "84.25123%",
+              "value5": "115.37993%"
+            },
+            "Profit Margin": {
+              "value2": "16.86985%",
+              "value5": "49.20175%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$2,862,000",
+              "value5": "$2,328,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$37,402,000",
+              "value5": "$34,189,000"
+            },
+            "Total Equity": {
+              "value2": "$27,316,000",
+              "value5": "$28,134,000"
+            }
+          }
+        }
+      },
+      "ZS": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "7/31/2026",
+          "base_period": "10/31/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$898,185",
+              "value5": "$788,112"
+            },
+            "Income Tax": {
+              "value2": "$18,273",
+              "value5": "$3,241"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "76.73486%",
+              "value5": "76.55752%"
+            },
+            "Operating Margin": {
+              "value2": "-1.72481%",
+              "value5": "-4.61381%"
+            },
+            "After Tax ROE": {
+              "value2": "-.12966%",
+              "value5": "-.58593%"
+            },
+            "Current Ratio": {
+              "value2": "169.89884%",
+              "value5": "182.41311%"
+            },
+            "Profit Margin": {
+              "value2": "-.37509%",
+              "value5": "-1.47378%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$279,285",
+              "value5": "$448,280"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$5,268,453",
+              "value5": "$4,520,759"
+            },
+            "Total Equity": {
+              "value2": "$2,598,261",
+              "value5": "$1,982,328"
+            }
+          }
+        }
+      },
+      "COST": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "8/30/2026",
+          "base_period": "11/23/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$95,723,000",
+              "value5": "$67,307,000"
+            },
+            "Income Tax": {
+              "value2": "$1,011,000",
+              "value5": "$582,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "12.73675%",
+              "value5": "13.06996%"
+            },
+            "Operating Margin": {
+              "value2": "3.97083%",
+              "value5": "3.65935%"
+            },
+            "After Tax ROE": {
+              "value2": "8.3736%",
+              "value5": "6.60331%"
+            },
+            "Current Ratio": {
+              "value2": "105.9838%",
+              "value5": "103.84165%"
+            },
+            "Profit Margin": {
+              "value2": "3.13195%",
+              "value5": "2.97294%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$4,684,000",
+              "value5": "$4,688,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$53,242,000",
+              "value5": "$52,487,000"
+            },
+            "Total Equity": {
+              "value2": "$35,803,000",
+              "value5": "$30,303,000"
+            }
+          }
+        }
+      },
+      "MA": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$9,277,000",
+              "value5": "$8,602,000"
+            },
+            "Income Tax": {
+              "value2": "$1,098,000",
+              "value5": "$1,072,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "100%",
+              "value5": "100%"
+            },
+            "Operating Margin": {
+              "value2": "60.22421%",
+              "value5": "58.83515%"
+            },
+            "After Tax ROE": {
+              "value2": "78.20353%",
+              "value5": "49.6837%"
+            },
+            "Current Ratio": {
+              "value2": "106.07103%",
+              "value5": "112.22636%"
+            },
+            "Profit Margin": {
+              "value2": "47.29977%",
+              "value5": "45.65217%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$3,773,000",
+              "value5": "$5,663,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$52,085,000",
+              "value5": "$45,370,000"
+            },
+            "Total Equity": {
+              "value2": "$5,611,000",
+              "value5": "$7,904,000"
+            }
+          }
+        }
+      },
+      "PDD": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "3/31/2018",
+          "base_period": "",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$220,068",
+              "value5": ""
+            },
+            "Income Tax": {
+              "value2": "--",
+              "value5": ""
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "76.98257%",
+              "value5": ""
+            },
+            "Operating Margin": {
+              "value2": "-18.28208%",
+              "value5": ""
+            },
+            "After Tax ROE": {
+              "value2": "14.80332%",
+              "value5": ""
+            },
+            "Current Ratio": {
+              "value2": "156.4015%",
+              "value5": ""
+            },
+            "Profit Margin": {
+              "value2": "-14.51824%",
+              "value5": ""
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$99,961",
+              "value5": ""
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$1,868,087",
+              "value5": ""
+            },
+            "Total Equity": {
+              "value2": "-$215,830",
+              "value5": ""
+            }
+          }
+        }
+      },
+      "V": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$11,633,000",
+              "value5": "$10,724,000"
+            },
+            "Income Tax": {
+              "value2": "$1,205,000",
+              "value5": "$1,133,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "78.87045%",
+              "value5": "83.75606%"
+            },
+            "Operating Margin": {
+              "value2": "59.11631%",
+              "value5": "57.32935%"
+            },
+            "After Tax ROE": {
+              "value2": "15.99864%",
+              "value5": "13.42689%"
+            },
+            "Current Ratio": {
+              "value2": "98.52226%",
+              "value5": "107.75508%"
+            },
+            "Profit Margin": {
+              "value2": "48.37961%",
+              "value5": "47.46363%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$6,554,000",
+              "value5": "$6,238,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$59,412,000",
+              "value5": "$61,718,000"
+            },
+            "Total Equity": {
+              "value2": "$35,178,000",
+              "value5": "$37,909,000"
+            }
+          }
+        }
+      },
+      "AAPL": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/27/2026",
+          "base_period": "9/27/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$109,417,000",
+              "value5": "$102,466,000"
+            },
+            "Income Tax": {
+              "value2": "$6,478,000",
+              "value5": "$5,338,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "50.05621%",
+              "value5": "47.1776%"
+            },
+            "Operating Margin": {
+              "value2": "32.6229%",
+              "value5": "31.64659%"
+            },
+            "After Tax ROE": {
+              "value2": "27.70554%",
+              "value5": "37.25062%"
+            },
+            "Current Ratio": {
+              "value2": "100.32948%",
+              "value5": "89.32929%"
+            },
+            "Profit Margin": {
+              "value2": "27.2252%",
+              "value5": "26.80499%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$34,369,000",
+              "value5": "$29,728,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$275,746,000",
+              "value5": "$285,508,000"
+            },
+            "Total Equity": {
+              "value2": "$107,520,000",
+              "value5": "$73,733,000"
+            }
+          }
+        }
+      },
+      "MSFT": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$90,007,000",
+              "value5": "$77,673,000"
+            },
+            "Income Tax": {
+              "value2": "$8,281,000",
+              "value5": "$6,554,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "67.197%",
+              "value5": "69.04587%"
+            },
+            "Operating Margin": {
+              "value2": "45.11094%",
+              "value5": "48.87284%"
+            },
+            "After Tax ROE": {
+              "value2": "8.08478%",
+              "value5": "7.6422%"
+            },
+            "Current Ratio": {
+              "value2": "123.03273%",
+              "value5": "140.05304%"
+            },
+            "Profit Margin": {
+              "value2": "39.73691%",
+              "value5": "35.72284%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$55,441,000",
+              "value5": "$45,057,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$315,989,000",
+              "value5": "$273,275,000"
+            },
+            "Total Equity": {
+              "value2": "$442,387,000",
+              "value5": "$363,076,000"
+            }
+          }
+        }
+      }
+    }
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "marker": "2026-10-01",
-      "due": 0,
-      "tried": 0,
-      "ok": 0,
+      "due": 73,
+      "deferred": 61,
+      "tried": 12,
+      "ok": 12,
       "none": 0,
       "fail": 0,
-      "stopped": ""
+      "stopped": "",
+      "quota": {
+        "date": "2026-10-10",
+        "symbols": [
+          "ABBV",
+          "AMAT",
+          "AMZN",
+          "ANET",
+          "APP",
+          "ARM",
+          "AXON",
+          "AXP",
+          "BAC",
+          "BKNG",
+          "BX",
+          "CAT"
+        ],
+        "retry_symbols": []
+      }
     },
     "data": {
       "HII": {
@@ -367,14 +1341,16 @@
         "avg": 363.0,
         "upd": "2026-10-07",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-10-29"
       },
       "APH": {
         "s": "ok",
         "avg": 101.66,
         "upd": "2026-10-08",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-10-28"
       },
       "AVGO": {
         "s": "ok",
@@ -388,49 +1364,56 @@
         "avg": 87.56,
         "upd": "2026-10-09",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-11-09"
       },
       "GOOGL": {
         "s": "ok",
         "avg": 429.47,
         "upd": "2026-10-09",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-10-28"
       },
       "LMT": {
         "s": "ok",
         "avg": 625.76,
         "upd": "2026-10-08",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-10-22"
       },
       "NTNX": {
         "s": "ok",
         "avg": 77.79,
         "upd": "2026-09-28",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-11-24"
       },
       "UNH": {
         "s": "ok",
         "avg": 481.72,
         "upd": "2026-10-09",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-10-13"
       },
       "UBER": {
         "s": "ok",
         "avg": 100.86,
         "upd": "2026-10-07",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-11-04"
       },
       "ZS": {
         "s": "ok",
         "avg": 233.38,
         "upd": "2026-10-09",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-11-24"
       },
       "COST": {
         "s": "ok",
@@ -444,49 +1427,662 @@
         "avg": 555.01,
         "upd": "2026-09-12",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-10-15"
       },
       "MA": {
         "s": "ok",
         "avg": 668.07,
         "upd": "2026-10-09",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-10-29"
       },
       "PDD": {
         "s": "ok",
         "avg": 114.6,
         "upd": "2026-09-10",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-11-17"
       },
       "V": {
         "s": "ok",
         "avg": 419.36,
         "upd": "2026-10-09",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-10-27"
       },
       "AAPL": {
         "s": "ok",
         "avg": 328.09,
         "upd": "2026-10-08",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-11-02"
       },
       "MSFT": {
         "s": "ok",
         "avg": 587.63,
         "upd": "2026-10-08",
         "r": "2026-10-01",
-        "try": "2026-10-09"
+        "try": "2026-10-09",
+        "ne": "2026-10-28"
+      },
+      "APP": {
+        "s": "ok",
+        "avg": 487.66,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-11-04"
+      },
+      "U": {
+        "ne": "2026-11-04"
+      },
+      "NXPI": {
+        "ne": "2026-10-27"
+      },
+      "SNOW": {
+        "ne": "2026-12-02"
+      },
+      "SNDK": {
+        "ne": "2026-10-29"
+      },
+      "STX": {
+        "ne": "2026-10-27"
+      },
+      "NOW": {
+        "ne": "2026-10-28"
+      },
+      "CRWD": {
+        "ne": "2026-12-01"
+      },
+      "FTNT": {
+        "ne": "2026-10-28"
+      },
+      "QCOM": {
+        "ne": "2026-11-04"
+      },
+      "ANET": {
+        "s": "ok",
+        "avg": 243.69,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-11-03"
+      },
+      "CBRS": {
+        "ne": "2026-11-11"
+      },
+      "COHR": {
+        "ne": "2026-11-04"
+      },
+      "INTC": {
+        "ne": "2026-10-29"
+      },
+      "AMAT": {
+        "s": "ok",
+        "avg": 638.94,
+        "upd": "2026-09-28",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-11-12"
+      },
+      "ARM": {
+        "s": "ok",
+        "avg": 290.71,
+        "upd": "2026-09-18",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-11-04"
+      },
+      "LITE": {
+        "ne": "2026-11-05"
+      },
+      "PANW": {
+        "ne": "2026-11-18"
+      },
+      "PLTR": {
+        "ne": "2026-11-02"
+      },
+      "MRNA": {
+        "ne": "2026-11-05"
+      },
+      "ABBV": {
+        "s": "ok",
+        "avg": 282.61,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-10-30"
+      },
+      "ISRG": {
+        "ne": "2026-10-20"
+      },
+      "WFC": {
+        "ne": "2026-10-13"
+      },
+      "CB": {
+        "ne": "2026-10-20"
+      },
+      "BAC": {
+        "s": "ok",
+        "avg": 66.59,
+        "upd": "2026-10-08",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-10-14"
+      },
+      "NU": {
+        "ne": "2026-11-12"
+      },
+      "COIN": {
+        "ne": "2026-10-29"
+      },
+      "XOM": {
+        "ne": "2026-10-30"
+      },
+      "NOC": {
+        "ne": "2026-10-20"
+      },
+      "CEG": {
+        "ne": "2026-11-06"
+      },
+      "WMT": {
+        "ne": "2026-11-19"
+      },
+      "PG": {
+        "ne": "2026-10-22"
+      },
+      "DIS": {
+        "ne": "2026-11-12"
+      },
+      "AMZN": {
+        "s": "ok",
+        "avg": 331.53,
+        "upd": "2026-10-07",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10",
+        "ne": "2026-10-29"
+      },
+      "MCD": {
+        "ne": "2026-11-04"
+      },
+      "TSLA": {
+        "ne": "2026-10-21"
+      },
+      "AXON": {
+        "s": "ok",
+        "avg": 704.11,
+        "upd": "2026-09-29",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10"
+      },
+      "AXP": {
+        "s": "ok",
+        "avg": 371.12,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10"
+      },
+      "BKNG": {
+        "s": "ok",
+        "avg": 235.26,
+        "upd": "2026-10-07",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10"
+      },
+      "BX": {
+        "s": "ok",
+        "avg": 141.64,
+        "upd": "2026-10-08",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10"
+      },
+      "CAT": {
+        "s": "ok",
+        "avg": 970.8,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-10"
       }
+    },
+    "quota": {
+      "date": "2026-10-10",
+      "symbols": [
+        "ABBV",
+        "AMAT",
+        "AMZN",
+        "ANET",
+        "APP",
+        "ARM",
+        "AXON",
+        "AXP",
+        "BAC",
+        "BKNG",
+        "BX",
+        "CAT"
+      ],
+      "retry_symbols": []
     }
   },
   "earnings": {
-    "targets": 51,
-    "dated": 43,
-    "pending": 8,
-    "failed": 0
+    "targets": 91,
+    "dated": 51,
+    "pending": 9,
+    "failed": 0,
+    "fetched": 60,
+    "cached": 0,
+    "deferred": 31,
+    "data": {
+      "BRK-B": {
+        "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "HII": {
+        "status": "ok",
+        "date": "2026-10-29",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "APH": {
+        "status": "ok",
+        "date": "2026-10-28",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "AVGO": {
+        "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "CRSP": {
+        "status": "ok",
+        "date": "2026-11-09",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "GOOGL": {
+        "status": "ok",
+        "date": "2026-10-28",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "LMT": {
+        "status": "ok",
+        "date": "2026-10-22",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "NTNX": {
+        "status": "ok",
+        "date": "2026-11-24",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "UNH": {
+        "status": "ok",
+        "date": "2026-10-13",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "UBER": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "ZS": {
+        "status": "ok",
+        "date": "2026-11-24",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "COST": {
+        "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "TSM": {
+        "status": "ok",
+        "date": "2026-10-15",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "MA": {
+        "status": "ok",
+        "date": "2026-10-29",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "PDD": {
+        "status": "ok",
+        "date": "2026-11-17",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "V": {
+        "status": "ok",
+        "date": "2026-10-27",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "AAPL": {
+        "status": "ok",
+        "date": "2026-11-02",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "MSFT": {
+        "status": "ok",
+        "date": "2026-10-28",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "APP": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "U": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "NXPI": {
+        "status": "ok",
+        "date": "2026-10-27",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "SNOW": {
+        "status": "ok",
+        "date": "2026-12-02",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "SKHY": {
+        "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "MU": {
+        "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "SNDK": {
+        "status": "ok",
+        "date": "2026-10-29",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "STX": {
+        "status": "ok",
+        "date": "2026-10-27",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "NOW": {
+        "status": "ok",
+        "date": "2026-10-28",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "CRWD": {
+        "status": "ok",
+        "date": "2026-12-01",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "FTNT": {
+        "status": "ok",
+        "date": "2026-10-28",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "QCOM": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "ANET": {
+        "status": "ok",
+        "date": "2026-11-03",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "CBRS": {
+        "status": "ok",
+        "date": "2026-11-11",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "COHR": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "INTC": {
+        "status": "ok",
+        "date": "2026-10-29",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "AMAT": {
+        "status": "ok",
+        "date": "2026-11-12",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "ARM": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "CIEN": {
+        "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "LITE": {
+        "status": "ok",
+        "date": "2026-11-05",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "CRDO": {
+        "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "PANW": {
+        "status": "ok",
+        "date": "2026-11-18",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "PLTR": {
+        "status": "ok",
+        "date": "2026-11-02",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "MRNA": {
+        "status": "ok",
+        "date": "2026-11-05",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "ABBV": {
+        "status": "ok",
+        "date": "2026-10-30",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "ISRG": {
+        "status": "ok",
+        "date": "2026-10-20",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "WFC": {
+        "status": "ok",
+        "date": "2026-10-13",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "CB": {
+        "status": "ok",
+        "date": "2026-10-20",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "BAC": {
+        "status": "ok",
+        "date": "2026-10-14",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "NU": {
+        "status": "ok",
+        "date": "2026-11-12",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "COIN": {
+        "status": "ok",
+        "date": "2026-10-29",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "XOM": {
+        "status": "ok",
+        "date": "2026-10-30",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "HEI": {
+        "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "NOC": {
+        "status": "ok",
+        "date": "2026-10-20",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "CEG": {
+        "status": "ok",
+        "date": "2026-11-06",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "PEP": {
+        "status": "unknown",
+        "fetched": "2026-10-10"
+      },
+      "WMT": {
+        "status": "ok",
+        "date": "2026-11-19",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "PG": {
+        "status": "ok",
+        "date": "2026-10-22",
+        "timing": "pre",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
+      "DIS": {
+        "status": "ok",
+        "date": "2026-11-12",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "AMZN": {
+        "status": "ok",
+        "date": "2026-10-29",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "MCD": {
+        "status": "ok",
+        "date": "2026-11-04",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-10"
+      },
+      "TSLA": {
+        "status": "ok",
+        "date": "2026-10-21",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      }
+    },
+    "events": {}
   }
 }
