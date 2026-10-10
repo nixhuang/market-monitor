@@ -13,10 +13,13 @@ on:
       - 'groups.json'
       - '.github/workflows/daily.yml'
   schedule:
-    # 美东周一至周五20:30：夏令时北京次日08:30，冬令时次日09:30。
-    # GitHub原生IANA时区负责冬夏切换，不需要睡一小时或每年手动改。
-    - cron: '30 20 * * 1-5'
-      timezone: 'America/New_York'
+    # 目标：美东周一至周五 20:15（落在纳斯达克 23/5 交易的 20:00–21:00 休盘窗口内）= 夏令时北京次日 08:15 / 冬令时北京次日 09:15。
+    # 不用 GitHub 的 timezone 写法（实测定时触发时间对不上），改用普通 UTC cron，夏冬令时各排一个时点：
+    #   夏令时(EDT) 美东 20:15 = 00:15 UTC；冬令时(EST) 美东 20:15 = 01:15 UTC。
+    # 两个时点每天都会触发，由下面的 gate 任务按美东当地时间只放行对的那一个。
+    # 美东周一~周五晚 = UTC 周二~周六，所以星期写 2-6。
+    - cron: '15 0 * * 2-6'
+    - cron: '15 1 * * 2-6'
   workflow_dispatch:
     inputs:
       request_id:
@@ -38,11 +41,36 @@ permissions:
   contents: write
 
 jobs:
+  gate:
+    # 只对定时触发做判断：美东当地时间在 20:00–21:00（休盘窗口）之间才放行，其余时点（夏冬令时里不对的那一个、或被拖过 21:00）直接跳过。
+    # 手动运行、保存清单触发、自动补跑都不受影响。
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      go: ${{ steps.g.outputs.go }}
+    steps:
+      - id: g
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "go=yes" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          hm=$(TZ=America/New_York date +%H%M)
+          m=$(( 10#${hm:0:2} * 60 + 10#${hm:2:2} ))
+          echo "美东当地时间 ${hm:0:2}:${hm:2:2}（分钟数 $m）"
+          if [ "$m" -ge 1200 ] && [ "$m" -lt 1260 ]; then
+            echo "go=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "不在美东 20:00–21:00 休盘窗口，本次是冬夏令时里不对的那个时点（或被拖过 21:00），跳过"
+            echo "go=no" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: gate
+    if: needs.gate.outputs.go == 'yes'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # 自动补跑按 schedule 口径（收盘数据、目标交易日锚定美东20:30），页面显示为"自动"
+      # 自动补跑按 schedule 口径（收盘数据、目标交易日锚定美东20:00），页面显示为"自动"
       MM_EVENT: ${{ inputs.source == 'schedule-fallback' && 'schedule' || github.event_name }}
       MM_REQUEST_ID: ${{ inputs.request_id }}
       GH_TOKEN: ${{ github.token }}

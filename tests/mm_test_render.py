@@ -29,7 +29,7 @@ snapshot = {
     "finished_at": "2026-10-07T20:40:28+08:00",
     "finished_at_bj": "2026-10-07T20:40:28+08:00",
     "event": "push", "target_trade_date": "2026-10-06", "mode": "closed",
-    "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
+    "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
     "config_files": {}, "effective_settings": {},
     "list_counts": {"positions": 2, "focus": 2, "technology": 6, "triggers": 0, "dca": 0},
     "summary": {"red": 2, "yellow": 2, "green": 4, "gray": 2, "total": 10,
@@ -65,8 +65,8 @@ check("市场自检" not in html, "旧标题已移除")
 check("数据时间 2026-10-06 收盘（美东交易日）" in html and "本页数据更新" not in html,
       "休市顶部显示行情收盘日，不重复抓取完成时间")
 check("抓取成功 · 完成于 2026-10-07 20:40:28（北京时间）" in html, "静态成功灯显示真实完成时间")
-check("自动计划：美东周一至五 20:30（北京 " in html, "第二排自动计划")
-check(("夏令时次日 08:30" in html) != ("冬令时次日 09:30" in html), "冬夏令时只出现一个")
+check("自动计划：美东周一至五 20:15（北京 " in html, "第二排自动计划")
+check(("夏令时次日 08:15" in html) != ("冬令时次日 09:15" in html), "冬夏令时只出现一个")
 check('id="btnRunNow"' in html and 'id="btnCheckStatus"' in html, "第三排两个按钮都在")
 check('<table class="stk"><colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>' in html
       and 'class="px-price"' in html and 'class="earn-cell"' in html, "个股表用固定列宽 colgroup，价格/涨跌幅同列，财报独立一栏")

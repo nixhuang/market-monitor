@@ -210,11 +210,11 @@ def session_date(on_or_before):
 
 
 def plan_run(event, when):
-    """schedule锚定最近一次美东20:30；手动/保存重跑保留盘中行为。"""
+    """schedule锚定最近一次美东20:00（23/5交易休盘窗口20:00-21:00的起点）；手动/保存重跑保留盘中行为。"""
     ny = when.astimezone(US_TZ)
     day = ny.date()
     if event == "schedule":
-        anchor = ny.replace(hour=20, minute=30, second=0, microsecond=0)
+        anchor = ny.replace(hour=20, minute=0, second=0, microsecond=0)
         if ny < anchor:
             day -= timedelta(days=1)
         return {"closed_only": True, "target": session_date(day)}
@@ -246,8 +246,13 @@ def prepare_run():
 
 
 def ensure_schedule_run():
-    """保险：GitHub 定时任务可能被延迟或丢弃。若今晚（美东20:30之后）的收盘结果还没生成，
+    """保险：GitHub 定时任务可能被延迟或丢弃。若今晚（美东20:00之后）的收盘结果还没生成，
     就补派发一次与定时任务等价的运行；已有结果或已有任务在排队/运行则不重复派发。"""
+    now_ny = datetime.now(timezone.utc).astimezone(US_TZ)
+    if not 20 * 60 <= now_ny.hour * 60 + now_ny.minute < 21 * 60:
+        # 夏冬令时两组时点每天都会触发；不在休盘窗口内（错季节的时点或被严重拖延）就什么都不做，避免抓到新一轮盘中价
+        print(f"美东 {now_ny:%H:%M} 不在 20:00-21:00 休盘窗口内，不补跑")
+        return 0
     plan = plan_run("schedule", datetime.now(timezone.utc))
     try:
         with open(os.path.join(BASE, "status.json"), encoding="utf-8") as f:
@@ -2461,7 +2466,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "event": EVENT,
         "target_trade_date": TARGET_DATE,
         "mode": "closed" if CLOSED_ONLY else "manual_or_config",
-        "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
+        "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
         "config_files": {f: config_hash(f) for f in ("holdings.json", "settings.json")},
         "effective_settings": dict(S),
         "groups": GROUPS,
@@ -2747,9 +2752,9 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     dca_info = dca_text(snapshot.get("dca_reminder"))
     # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
     ny_now = datetime.now(US_TZ)
-    bj_auto = "夏令时次日 08:30" if ny_now.dst() != timedelta(0) else "冬令时次日 09:30"
+    bj_auto = "夏令时次日 08:15" if ny_now.dst() != timedelta(0) else "冬令时次日 09:15"
     sub_line = (f"数据时间 {market_data_time(snapshot)} · "
-                f"自动计划：美东周一至五 20:30（北京 {bj_auto}）")
+                f"自动计划：美东周一至五 20:15（北京 {bj_auto}）")
     lc = registered or counts
     reg_line = ('<div class="quiet">在册：' + ' · '.join(
                     f"{g['label']} {lc.get(g['key'], 0)}" for g in GROUPS if lc.get(g['key'], 0))

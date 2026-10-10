@@ -5,8 +5,11 @@ run-name: "自动结果保险 · ${{ github.event_name }}"
 # 这里在主定时任务之后再检查一次：当晚收盘结果还没生成，才补派发一次；已有结果或已有任务在跑则什么都不做。
 on:
   schedule:
-    - cron: '50 20 * * 1-5'
-      timezone: 'America/New_York'
+    # 同样改用普通 UTC cron（美东周一~周五晚 = UTC 周二~周六）：
+    # 00:45 / 01:45 UTC 分别是夏令时、冬令时的美东 20:45（落在 20:00-21:00 休盘窗口内，晚于主任务 30 分钟）。
+    # 不对的那个时点（美东不在 20:00-21:00）monitor.py 会直接退出，什么都不做。
+    - cron: '45 0 * * 2-6'
+    - cron: '45 1 * * 2-6'
   workflow_dispatch:
 
 permissions:

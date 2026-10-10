@@ -984,6 +984,48 @@ class TestGroups(unittest.TestCase):
         self.assertNotEqual(holiday['target'], '2026-12-25')
         self.assertEqual(monitor.market_data_time({}), '未取得行情')
 
+    def test_schedule_target_follows_nasdaq_23_5_pause_window(self):
+        def plan(iso):
+            return monitor.plan_run('schedule', monitor.datetime.fromisoformat(iso))
+        # 夏令时：2026-10-09(周五)美东20:15/20:45 = 2026-10-10 00:15/00:45 UTC，目标是当晚休盘前的交易日
+        for iso in ('2026-10-10T00:15:00+00:00', '2026-10-10T00:45:00+00:00'):
+            self.assertEqual(plan(iso)['target'], '2026-10-09')
+            self.assertTrue(plan(iso)['closed_only'])
+        # 美东19:55 还没到休盘，仍算上一晚
+        self.assertEqual(plan('2026-10-09T23:55:00+00:00')['target'], '2026-10-08')
+        # 冬令时：2026-12-09(周三)美东20:15 = 12-10 01:15 UTC
+        self.assertEqual(plan('2026-12-10T01:15:00+00:00')['target'], '2026-12-09')
+
+    def test_ensure_schedule_run_only_acts_inside_pause_window(self):
+        import tempfile
+        from unittest.mock import MagicMock
+        real = monitor.datetime
+
+        def at(iso):
+            class F(real):
+                @classmethod
+                def now(cls, tz=None):
+                    return real.fromisoformat(iso)
+            return F
+
+        def run(iso):
+            get = MagicMock()
+            get.return_value.json.return_value = {'workflow_runs': []}
+            post = MagicMock()
+            with tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(monitor, 'BASE', tmp), \
+                    patch.object(monitor, 'datetime', at(iso)), \
+                    patch.object(monitor.requests, 'get', get), \
+                    patch.object(monitor.requests, 'post', post):
+                self.assertEqual(monitor.ensure_schedule_run(), 0)
+            return post.call_count
+        # 对的时点：夏令时 00:45 UTC(美东20:45)、冬令时 01:45 UTC(美东20:45) -> 结果缺失才补派发
+        self.assertEqual(run('2026-10-10T00:45:00+00:00'), 1)
+        self.assertEqual(run('2026-12-10T01:45:00+00:00'), 1)
+        # 错季节或被拖过21:00的时点：什么都不做
+        self.assertEqual(run('2026-10-10T01:45:00+00:00'), 0)   # 夏令时美东21:45
+        self.assertEqual(run('2026-12-10T00:45:00+00:00'), 0)   # 冬令时美东19:45
+
     def test_intraday_summary_and_per_stock_fallback_labels(self):
         rows = [dict(symbol=s, note=s, group='position', price=price, chg=0, level=level,
                      source='yahoo', data_date=date, signals=[]) for s, price, level, date in [
