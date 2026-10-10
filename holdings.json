@@ -37,7 +37,7 @@
       "note": "博通"
     },
     "CRSP": {
-      "note": "CRISPR Therapeutics"
+      "note": "CRISPR-基因编辑"
     },
     "GOOGL": {
       "note": "谷歌（Alphabet）"
@@ -46,7 +46,7 @@
       "note": "洛克希德马丁"
     },
     "NTNX": {
-      "note": "Nutanix"
+      "note": "Nutanix-混合云"
     },
     "UNH": {
       "note": "联合健康"
@@ -55,7 +55,7 @@
       "note": "优步"
     },
     "DRAM": {
-      "note": "Roundhill Memory ETF"
+      "note": "Memory ETF-存储芯片"
     },
     "SPYM": {
       "note": "SPDR标普500指数ETF"
@@ -72,7 +72,7 @@
   },
   "focus": {
     "ZS": {
-      "note": "Zscaler"
+      "note": "Zscaler-云安全"
     },
     "COST": {
       "note": "好市多"
@@ -87,7 +87,7 @@
       "note": "拼多多"
     },
     "V": {
-      "note": "Visa"
+      "note": "Visa-支付"
     },
     "AAPL": {
       "note": "苹果",
@@ -131,10 +131,10 @@
       "note": "科技精选行业ETF"
     },
     "APP": {
-      "note": "AppLovin"
+      "note": "AppLovin-广告"
     },
     "U": {
-      "note": "Unity Software"
+      "note": "Unity-游戏引擎"
     },
     "GOOGL": {
       "note": "谷歌（Alphabet）"
@@ -143,10 +143,10 @@
       "note": "恩智浦半导体"
     },
     "SNOW": {
-      "note": "Snowflake"
+      "note": "Snowflake-数据云"
     },
     "DRAM": {
-      "note": "Roundhill Memory ETF"
+      "note": "Memory ETF-存储芯片"
     },
     "SKHY": {
       "note": "SK海力士ADR"
@@ -161,37 +161,37 @@
       "note": "希捷科技"
     },
     "NOW": {
-      "note": "ServiceNow"
+      "note": "ServiceNow-工作流软件"
     },
     "CRWD": {
-      "note": "CrowdStrike Holdings"
+      "note": "CrowdStrike-终端安全"
     },
     "FTNT": {
-      "note": "Fortinet"
+      "note": "Fortinet-防火墙"
     },
     "QCOM": {
       "note": "高通"
     },
     "ANET": {
-      "note": "Arista Networks"
+      "note": "Arista-数据中心网络"
     },
     "ZS": {
-      "note": "Zscaler"
+      "note": "Zscaler-云安全"
     },
     "NTNX": {
-      "note": "Nutanix"
+      "note": "Nutanix-混合云"
     },
     "NOK": {
       "note": "诺基亚"
     },
     "EUV": {
-      "note": "Corgi Lithography & Semiconductor Photonics ETF"
+      "note": "Corgi ETF-光刻"
     },
     "CBRS": {
-      "note": "Cerebras Systems"
+      "note": "Cerebras-AI芯片"
     },
     "COHR": {
-      "note": "Coherent"
+      "note": "Coherent-光器件"
     },
     "INTC": {
       "note": "英特尔"
@@ -200,13 +200,13 @@
       "note": "应用材料"
     },
     "ARM": {
-      "note": "Arm Holdings"
+      "note": "Arm Holdings-芯片架构"
     },
     "CIEN": {
-      "note": "Ciena"
+      "note": "Ciena-光网络"
     },
     "LITE": {
-      "note": "Lumentum Holdings"
+      "note": "Lumentum-光模块"
     },
     "MRVL": {
       "note": "迈威尔科技"
@@ -215,16 +215,16 @@
       "note": "安费诺"
     },
     "CRDO": {
-      "note": "Credo Technology"
+      "note": "Credo-高速互连"
     },
     "PANW": {
-      "note": "Palo Alto Networks"
+      "note": "Palo Alto-网络安全"
     },
     "TER": {
       "note": "泰瑞达"
     },
     "PLTR": {
-      "note": "Palantir Technologies"
+      "note": "Palantir-AI数据分析"
     },
     "MSFT": {
       "note": "微软"
@@ -250,10 +250,10 @@
       "note": "医疗保健精选行业ETF"
     },
     "CVS": {
-      "note": "CVS Health"
+      "note": "CVS Health-药房医保"
     },
     "MRNA": {
-      "note": "Moderna"
+      "note": "Moderna-mRNA疫苗"
     },
     "ABBV": {
       "note": "艾伯维"
@@ -268,13 +268,13 @@
       "note": "赛默飞世尔科技"
     },
     "UTHR": {
-      "note": "United Therapeutics"
+      "note": "United Thera-肺动脉高压"
     },
     "SDGR": {
-      "note": "Schrodinger"
+      "note": "Schrodinger-AI制药"
     },
     "GENB": {
-      "note": "Generate Biomedicines"
+      "note": "Generate Bio-AI生物药"
     },
     "ISRG": {
       "note": "直觉外科"
@@ -286,10 +286,10 @@
       "note": "联合健康"
     },
     "TEM": {
-      "note": "Tempus AI"
+      "note": "Tempus AI-AI精准医疗"
     },
     "CRSP": {
-      "note": "CRISPR Therapeutics"
+      "note": "CRISPR-基因编辑"
     },
     "PFE": {
       "note": "辉瑞"
@@ -324,7 +324,7 @@
       "note": "美国运通"
     },
     "FNF": {
-      "note": "Fidelity National Financial"
+      "note": "Fidelity Natl-产权保险"
     },
     "BX": {
       "note": "黑石"
@@ -333,31 +333,31 @@
       "note": "标普全球"
     },
     "UPST": {
-      "note": "Upstart Holdings"
+      "note": "Upstart-AI信贷"
     },
     "SLDE": {
-      "note": "Slide Insurance"
+      "note": "Slide-佛州财险"
     },
     "GS": {
       "note": "高盛"
     },
     "NU": {
-      "note": "Nu Holdings"
+      "note": "Nu Holdings-数字银行"
     },
     "BRK-B": {
       "note": "伯克希尔哈撒韦"
     },
     "V": {
-      "note": "Visa"
+      "note": "Visa-支付"
     },
     "CRCL": {
-      "note": "Circle Internet Group"
+      "note": "Circle-稳定币"
     },
     "COIN": {
-      "note": "Coinbase Global"
+      "note": "Coinbase-加密交易所"
     },
     "HOOD": {
-      "note": "Robinhood Markets"
+      "note": "Robinhood-零售券商"
     },
     "JPM": {
       "note": "摩根大通"
@@ -385,13 +385,13 @@
       "note": "优步"
     },
     "AXON": {
-      "note": "Axon Enterprise"
+      "note": "Axon-执法科技"
     },
     "HEI": {
-      "note": "HEICO"
+      "note": "HEICO-航空零部件"
     },
     "SPCX": {
-      "note": "SpaceX"
+      "note": "SpaceX-商业航天"
     },
     "CAT": {
       "note": "卡特彼勒"
@@ -403,7 +403,7 @@
       "note": "洛克希德马丁"
     },
     "RTX": {
-      "note": "RTX Corporation"
+      "note": "RTX-航空防务"
     },
     "VRT": {
       "note": "维谛技术"
@@ -431,7 +431,7 @@
       "note": "公用事业精选行业ETF"
     },
     "CEG": {
-      "note": "Constellation Energy"
+      "note": "Constellation-核电"
     },
     "NEE": {
       "note": "新纪元能源"
@@ -465,10 +465,10 @@
       "note": "通信服务精选行业ETF"
     },
     "TTWO": {
-      "note": "Take-Two Interactive"
+      "note": "Take-Two-游戏"
     },
     "META": {
-      "note": "Meta Platforms"
+      "note": "Meta-社交广告"
     },
     "NFLX": {
       "note": "奈飞"
@@ -485,7 +485,7 @@
       "note": "拼多多"
     },
     "BKNG": {
-      "note": "Booking Holdings"
+      "note": "Booking-在线旅游"
     },
     "AMZN": {
       "note": "亚马逊"

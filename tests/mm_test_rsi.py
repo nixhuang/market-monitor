@@ -7,6 +7,10 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import monitor
 
+# 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
+monitor.S.clear()
+monitor.S.update(monitor.DEFAULT_SETTINGS)
+
 
 def neutral_data():
     closes = [100 + (0.5 if i % 2 else -0.5) for i in range(60)]
@@ -19,9 +23,10 @@ def neutral_data():
 class TestRSI(unittest.TestCase):
     def analyze(self, values, cfg=None, data=None, bands=(100, 110, 90), streak=None):
         with patch.object(monitor, 'calc_rsi', side_effect=values) as rsi, \
+                patch.object(monitor, 'vol_profile', return_value=('mid', None)), \
                 patch.object(monitor, 'boll', return_value=bands), \
                 patch.object(monitor, 'boll_streak', return_value=streak or {'up': 0, 'dn': 0}):
-            result = monitor.analyze_symbol('TEST', cfg or {}, data or neutral_data())
+            result = monitor.analyze_symbol('TEST', cfg or {}, data or neutral_data(), group='position')
             self.assertEqual([call.args[1] for call in rsi.call_args_list], [6, 12, 24])
         return result
 
@@ -75,6 +80,20 @@ class TestRSI(unittest.TestCase):
                     self.assertEqual(detail['level'], expected)
                     self.assertEqual(sum('布林' in s and '双重' not in s for s in signals), 1)
                     self.assertEqual('布林 + RSI 双重信号 → 红' in signals, combined)
+
+    def test_bollinger_near_or_intraday_touch_is_yellow_in_every_group(self):
+        data = neutral_data()
+        data['highs'] = data['highs'][:-1] + [103]       # 盘中冲过上轨，收盘回到轨内
+        for group in ('position', 'focus', 'index_funds', 'technology', 'healthcare', 'real_estate'):
+            for bands in [(100, 100.3, 90), (100, 101, 90), (100, 110, 99.6)]:
+                with self.subTest(group=group, bands=bands):
+                    with patch.object(monitor, 'calc_rsi', side_effect=[50, 50, 50]), \
+                            patch.object(monitor, 'vol_profile', return_value=('mid', None)), \
+                            patch.object(monitor, 'boll', return_value=bands), \
+                            patch.object(monitor, 'boll_streak', return_value={'up': 0, 'dn': 0}):
+                        level, signals, _ = monitor.analyze_symbol('T', {}, data, group=group)
+                    self.assertEqual(level, 'yellow')
+                    self.assertTrue(any('布林' in x for x in signals), signals)
 
     def test_bollinger_misses_do_not_upgrade_rsi(self):
         for bands in [(100, 102, 90), (100, 110, 98), (None, None, None)]:

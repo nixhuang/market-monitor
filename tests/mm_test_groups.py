@@ -10,6 +10,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import monitor
 
+# 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
+monitor.S.clear()
+monitor.S.update(monitor.DEFAULT_SETTINGS)
+
 
 class TestGroups(unittest.TestCase):
     def test_definitions_and_initial_config(self):
@@ -845,8 +849,9 @@ class TestGroups(unittest.TestCase):
         self.assertIn('流动比率 1.14→0.84倍', text)
         self.assertIn('2025/9→2026/6', text)
         self.assertNotIn('114→84', text)
-        self.assertNotIn('ROE', text.replace('ROE未比较', ''))  # 基准季净利含一次性，ROE不比较
-        self.assertIn('ROE未比较', text)
+        self.assertIn('季度ROE 23.6%→8.8%', text)           # 基准季含一次性收益：照常比较
+        self.assertIn('基准季含一次性收益，仅供参考', text)
+        self.assertNotIn('ROE未比较', text)
         self.assertEqual(result['compare'], '2025/9→2026/6')
         self.assertTrue(any('营业利率' in c for c in result['context']))
 
@@ -946,7 +951,7 @@ class TestGroups(unittest.TestCase):
         with patch.dict(monitor.S, settings):
             _, signals, _ = monitor.analyze_symbol('AAPL', {}, data)
             self.assertIn('上穿20日均线', signals)
-            self.assertIn('上穿250日均线', signals)
+            self.assertTrue(any('250日均线' in x for x in signals), signals)   # 现价在 250 日线 ±1% 内
             self.assertNotIn('上穿200日均线', signals)
         with patch.dict(monitor.S, dict(settings, ma_short=250)):
             _, signals, _ = monitor.analyze_symbol('AAPL', {}, data)
@@ -1831,6 +1836,283 @@ class TestTargets(unittest.TestCase):
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
                 self.assertEqual(monitor.main([]), 0)
                 self.assertTrue(os.path.exists(os.path.join(directory, 'index.html')))
+
+
+class TestVolTier(unittest.TestCase):
+    def setUp(self):
+        # 固定中档阈值，不依赖线上 settings.json
+        patcher = patch.dict(monitor.S, {'chg_yellow': 2.0, 'chg_red': 4.0, 'amp_yellow': 5.0, 'amp_red': 8.0})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def series(amp, n=120):
+        """固定种子的正态日收益序列，日波动标准差 ≈ amp%。"""
+        import random
+        rnd = random.Random(7)
+        out, c = [], 100.0
+        for _ in range(n):
+            c *= 1 + rnd.gauss(0, amp) / 100
+            out.append(c)
+        return out
+
+    @staticmethod
+    def data(closes, last_chg, hi_pct=0.0, lo_pct=0.0):
+        closes = list(closes)
+        prev = closes[-1]
+        price = prev * (1 + last_chg / 100)
+        closes.append(price)
+        n = len(closes)
+        return {'closes': closes, 'highs': [c * 1.002 for c in closes[:-1]] + [price * (1 + hi_pct / 100)],
+                'lows': [c * 0.998 for c in closes[:-1]] + [price * (1 - lo_pct / 100)],
+                'volumes': [1e6] * n, 'price': price, 'prev_close': prev,
+                'dates': [f'2026-01-{i % 28 + 1:02d}' for i in range(n)], 'source': 't', 'realtime': False}
+
+    def test_tier_boundaries(self):
+        self.assertEqual(monitor.vol_profile(self.series(0.5))[0], 'low')
+        self.assertEqual(monitor.vol_profile(self.series(1.8))[0], 'mid')
+        self.assertEqual(monitor.vol_profile(self.series(4.0))[0], 'high')
+
+    def test_new_listing_defaults_to_mid(self):
+        tier, sigma = monitor.vol_profile(self.series(0.5, n=30))
+        self.assertEqual((tier, sigma), ('mid', None))
+
+    def test_single_spike_does_not_decide_tier(self):
+        closes = self.series(0.8)
+        closes[60] *= 2.7          # 一次 +170% 的财报/数据异常
+        for i in range(61, len(closes)):
+            closes[i] *= 2.7
+        self.assertEqual(monitor.vol_profile(closes)[0], 'low')
+
+    def test_today_move_does_not_raise_its_own_threshold(self):
+        closes = self.series(0.5)
+        self.assertEqual(monitor.vol_profile(closes + [closes[-1] * 1.30])[0], 'low')
+
+    def test_same_move_hits_differently_per_tier(self):
+        # 同样涨 2.5%：低波动股（门槛 1.2/2.4）报红，中波动股（2/4）报黄，高波动股（2.8/5.6）不报
+        low = monitor.analyze_symbol('L', {}, self.data(self.series(0.5), 2.5), group='position')
+        mid = monitor.analyze_symbol('M', {}, self.data(self.series(1.8), 2.5), group='position')
+        high = monitor.analyze_symbol('H', {}, self.data(self.series(4.0), 2.5), group='position')
+        self.assertTrue(any('异动 +2.5%' in x for x in low[1]), low[1])
+        self.assertTrue(any('波动 +2.5%' in x for x in mid[1]), mid[1])
+        self.assertFalse(any(('异动' in x or '波动' in x) for x in high[1]), high[1])
+        self.assertEqual((low[2]['vol_tier'], mid[2]['vol_tier'], high[2]['vol_tier']), ('low', 'mid', 'high'))
+
+    def test_signal_text_shows_usual_range(self):
+        _, sig, _ = monitor.analyze_symbol('M', {}, self.data(self.series(1.8), 3.0), group='position')
+        self.assertTrue(any('平时约 ±' in x for x in sig), sig)
+        _, sig2, _ = monitor.analyze_symbol('N', {}, self.data(self.series(1.8, n=30), 3.0), group='position')
+        self.assertFalse(any('平时约' in x for x in sig2), sig2)
+
+    def test_amplitude_scales_with_tier(self):
+        # 振幅 7%：低档(红 6%)红；中档(黄 5% 红 8%)黄；高档(黄 7%，刚好命中)黄
+        for amp, expect in ((0.5, 'red'), (1.8, 'yellow')):
+            lv, sig, _ = monitor.analyze_symbol('A', {}, self.data(self.series(amp), 0.0, hi_pct=3.5, lo_pct=3.5), group='position')
+            self.assertTrue(any('振幅' in x for x in sig), sig)
+            self.assertEqual(lv, expect, (amp, sig))
+        _, sig, _ = monitor.analyze_symbol('A', {}, self.data(self.series(4.0), 0.0, hi_pct=2.5, lo_pct=2.5), group='position')
+        self.assertFalse(any('振幅' in x for x in sig), sig)
+
+    def test_change_and_amplitude_only_apply_to_position_and_focus(self):
+        big = self.data(self.series(1.8), 9.0, hi_pct=6.0, lo_pct=6.0)   # 涨 9%、振幅很大
+        for grp in ('position', 'focus'):
+            lv, sig, _ = monitor.analyze_symbol('X', {}, big, group=grp)
+            self.assertEqual(lv, 'red', (grp, sig))
+            self.assertTrue(any('异动' in x for x in sig), sig)
+            self.assertTrue(any('振幅' in x for x in sig), sig)
+        for grp in ('technology', 'index_funds', 'healthcare'):
+            lv, sig, _ = monitor.analyze_symbol('X', {}, big, group=grp)
+            self.assertFalse(any(('异动' in x or '波动' in x or '振幅' in x) for x in sig), (grp, sig))
+
+
+class TestMaConfirm(unittest.TestCase):
+    """50 日线（周期最小那条）要「带宽确认」才算穿越；250 日线保持原规则。"""
+
+    @staticmethod
+    def flat(n=300, last=(100, 100)):
+        closes = [100.0] * n
+        closes[-2:] = list(last)
+        return closes
+
+    def test_confirmed_cross_up_needs_band_and_prior_side(self):
+        c = [100.0] * 300
+        for i in range(-6, -1):
+            c[i] = 95.0                       # 最近几天在均线下方
+        self.assertEqual(monitor.ma_confirmed_cross(c, 101.5, 50, 1.0), 'up')
+        self.assertIsNone(monitor.ma_confirmed_cross(c, 99.9, 50, 1.0))     # 没站上带外
+        flat = [100.0] * 300
+        self.assertIsNone(monitor.ma_confirmed_cross(flat, 101.5, 50, 1.0)) # 10 日内没在另一侧
+
+    def test_confirmed_cross_down(self):
+        c = [100.0] * 300
+        for i in range(-6, -1):
+            c[i] = 105.0
+        self.assertEqual(monitor.ma_confirmed_cross(c, 98.0, 50, 1.0), 'down')
+
+    def test_short_history_falls_back(self):
+        self.assertEqual(monitor.ma_confirmed_cross([100.0] * 55, 101, 50, 1.0), 'n/a')
+
+    def test_threshold_follows_volatility(self):
+        self.assertEqual(monitor.ma_confirm_pct(None), monitor.MA_CONFIRM_DEFAULT)
+        self.assertEqual(monitor.ma_confirm_pct(0.2), monitor.MA_CONFIRM_MIN)
+        self.assertEqual(monitor.ma_confirm_pct(2.0), 1.0)
+        self.assertEqual(monitor.ma_confirm_pct(20), monitor.MA_CONFIRM_MAX)
+
+    @staticmethod
+    def run_sym(closes, shorts=50, longs=250):
+        price = closes[-1]
+        data = {'closes': closes, 'highs': [c for c in closes], 'lows': [c * 0.995 for c in closes],
+                'volumes': [1000] * len(closes), 'price': price, 'prev_close': closes[-2],
+                'dates': ['2026-10-09'] * len(closes), 'source': 't', 'realtime': False}
+        with patch.dict(monitor.S, {'ma_short': shorts, 'ma_long': longs, 'near_52w_low_pct': 0.0,
+                                      'chg_yellow': 5.0, 'chg_red': 8.0, 'amp_yellow': 5.0, 'amp_red': 8.0}), \
+                patch.object(monitor, 'vol_profile', return_value=('mid', None)), \
+                patch.object(monitor, 'calc_rsi', return_value=50), \
+                patch.object(monitor, 'boll', return_value=(None, None, None)):
+            return monitor.analyze_symbol('T', {}, data, group='watch')
+
+    def test_marginal_cross_only_hits_long_ma(self):
+        # 昨收略低、今收略高于均线：250 日线在 ±1% 带内亮黄，50 日线不报穿越
+        level, signals, _ = self.run_sym(self.flat(last=(99.9, 100.05)))
+        self.assertTrue(any('贴近250日均线 +0.1%' in x for x in signals), signals)
+        self.assertFalse(any(('上穿50日' in x or '跌破50日' in x) for x in signals), signals)
+
+    def test_long_ma_band_is_plus_minus_one_percent(self):
+        for last, hit in ((100.9, True), (99.1, True), (101.5, False), (98.5, False)):
+            with self.subTest(price=last):
+                lv, signals, _ = self.run_sym(self.flat(last=(100.0, last)))
+                self.assertEqual(any('250日均线' in x for x in signals), hit, signals)
+                if hit:
+                    self.assertEqual(lv, 'yellow')
+
+    def test_long_ma_big_gap_cross_is_silent(self):
+        # 跳空 +5% 穿过均线，超出 ±1% 带：不再报"上穿250日均线"
+        _, signals, _ = self.run_sym(self.flat(last=(99.0, 105.0)))
+        self.assertFalse(any('250日' in x for x in signals), signals)
+
+    def test_decisive_cross_hits_short_ma(self):
+        c = [100.0] * 300
+        for i in range(-6, -1):
+            c[i] = 95.0
+        c[-1] = 104.0
+        _, signals, _ = self.run_sym(c)
+        self.assertTrue(any('上穿50日均线' in x for x in signals), signals)
+
+    def test_single_ma_keeps_old_rule(self):
+        _, signals, _ = self.run_sym(self.flat(last=(99.9, 100.05)), shorts=50, longs=50)
+        self.assertTrue(any('上穿50日均线' in x for x in signals), signals)
+
+
+class Test52wLow(unittest.TestCase):
+    """52 周新低：第一天/再创新低红 → 在低位区没再创新低黄 → 远离后不报。"""
+
+    @staticmethod
+    def run_sym(closes, lows=None, price=None):
+        n = len(closes)
+        price = closes[-1] if price is None else price
+        series = list(closes)
+        series[-1] = price
+        lows = lows or [c * 0.999 for c in series]
+        data = {'closes': series, 'highs': [c * 1.001 for c in series], 'lows': lows,
+                'volumes': [1000] * n, 'price': price, 'prev_close': series[-2],
+                'dates': [(__import__('datetime').date(2026, 1, 1) + __import__('datetime').timedelta(days=i)).isoformat()
+                          for i in range(n)], 'source': 't', 'realtime': False}
+        with patch.dict(monitor.S, {'near_52w_low_pct': 3.0}), \
+                patch.object(monitor, 'boll', return_value=(None, None, None)):
+            return monitor.analyze_symbol('T', {}, data, group='watch')
+
+    def base(self):
+        return [100.0 - i * 0.2 for i in range(200)]   # 缓慢下行，最后一天附近就是低点
+
+    def test_first_day_into_zone_is_red(self):
+        c = [100.0] * 150 + [80.0] * 20 + [90.0] * 29 + [82.0]   # 昨天离低点(80)+12%，今天回到+2.5%
+        lv, sig, _ = self.run_sym(c)
+        self.assertEqual(lv, 'red')
+        self.assertTrue(any('触及52周新低' in x for x in sig), sig)
+
+    def test_new_low_again_is_red(self):
+        c = self.base()
+        lv, sig, _ = self.run_sym(c)          # 每天都在创新低
+        self.assertEqual(lv, 'red')
+        self.assertTrue(any('触及52周新低' in x for x in sig), sig)
+
+    def test_staying_in_zone_without_new_low_is_yellow(self):
+        c = [100.0] * 150 + [80.0] * 20 + [81.0] * 29 + [81.5]   # 昨天已在低位区，今天没破 80
+        lv, sig, _ = self.run_sym(c, lows=[x * 0.999 for x in c[:-1]] + [81.0])
+        # lows 里 80*0.999=79.92 是前低；今天最低 81 没破
+        self.assertEqual(lv, 'yellow')
+        self.assertTrue(any('仍在52周低位' in x for x in sig), sig)
+        self.assertFalse(any('触及52周新低' in x for x in sig), sig)
+
+    def test_far_from_low_is_silent(self):
+        c = [100.0] * 150 + [80.0] * 20 + [95.0] * 30
+        lv, sig, _ = self.run_sym(c)
+        self.assertFalse(any('52周' in x for x in sig), sig)
+
+
+class TestSignalCounts(unittest.TestCase):
+    """status.json 的 signal_counts：各类信号各触发多少、哪些黄灯只由一类信号造成。"""
+
+    @staticmethod
+    def row(level, *marks):
+        return {'symbol': 'T', 'level': level, 'signal_marks': list(marks)}
+
+    def test_counts_by_kind_and_level(self):
+        rows = [self.row('red', ('chg', 'red'), ('rsi', 'yellow')),
+                self.row('yellow', ('boll', 'yellow')),
+                self.row('yellow', ('boll', 'yellow'), ('vol_ratio', 'yellow')),
+                self.row('green', ('target', 'purple'))]
+        out = monitor.signal_counts(rows)
+        self.assertEqual((out['chg']['red'], out['chg']['yellow']), (1, 0))
+        self.assertEqual(out['rsi']['yellow'], 1)
+        self.assertEqual(out['boll']['yellow'], 2)
+        self.assertEqual(out['target']['purple'], 1)
+        # 只有第二行的黄灯是「只由布林造成」的；第三行有两类黄信号，不算单独
+        self.assertEqual(out['boll']['sole_yellow'], 1)
+        self.assertEqual(out['vol_ratio']['sole_yellow'], 0)
+
+    def test_one_stock_counts_once_per_kind(self):
+        out = monitor.signal_counts([self.row('yellow', ('ma_cross', 'yellow'), ('ma_cross', 'yellow'))])
+        self.assertEqual(out['ma_cross']['yellow'], 1)
+
+    def test_every_kind_is_listed_even_when_zero(self):
+        out = monitor.signal_counts([])
+        self.assertEqual(list(out), [k for k, _ in monitor.SIGNAL_KINDS])
+        self.assertTrue(all(v['red'] == v['yellow'] == v['purple'] == v['sole_yellow'] == 0 for v in out.values()))
+
+    def test_unknown_kind_is_ignored(self):
+        out = monitor.signal_counts([self.row('yellow', ('mystery', 'yellow'))])
+        self.assertNotIn('mystery', out)
+
+    def test_analyze_symbol_records_marks_that_match_signals(self):
+        closes = [100.0] * 60
+        data = {'closes': closes + [110.0], 'highs': [c * 1.001 for c in closes] + [110.2],
+                'lows': [c * 0.999 for c in closes] + [109.8], 'volumes': [1e6] * 61,
+                'price': 110.0, 'prev_close': 100.0, 'dates': [f'2026-01-{i % 28 + 1:02d}' for i in range(61)],
+                'source': 't', 'realtime': False}
+        with patch.object(monitor, 'vol_profile', return_value=('mid', None)):
+            lv, sigs, det = monitor.analyze_symbol('T', {}, data, 'position')
+        marks = det['signal_marks']
+        self.assertEqual(len(marks), len(sigs))
+        self.assertIn(('chg', 'red'), marks)
+
+    def test_signal_counts_card_on_homepage(self):
+        rows = [{'symbol': 'AAA', 'level': 'yellow', 'signal_marks': [('boll', 'yellow')]},
+                {'symbol': 'BBB', 'level': 'red', 'signal_marks': [('chg', 'red'), ('rsi', 'yellow')]}]
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        page = monitor.render({}, [], 0, snapshot=snap)
+        self.assertIn('id="signalCounts"', page)
+        self.assertIn('各信号计数', page)
+        self.assertIn('仅此一条黄灯', page)
+        self.assertLess(page.index('id="signalCounts"'), page.index('class="foot"'))
+        # 没有任何信号 / 旧快照没有该字段：整块不显示
+        quiet = monitor.render({}, [], 0, snapshot=monitor.build_snapshot({}, [], {}, group_counts={}))
+        self.assertNotIn('id="signalCounts"', quiet)
+        self.assertNotIn('id="signalCounts"', monitor.render({}, [], 0, snapshot={}))
+
+    def test_snapshot_carries_signal_counts(self):
+        snap = monitor.build_snapshot({}, [self.row('red', ('chg', 'red'))], {}, group_counts={})
+        self.assertEqual(snap['signal_counts']['chg']['red'], 1)
 
 
 if __name__ == '__main__':

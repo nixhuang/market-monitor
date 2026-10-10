@@ -64,8 +64,15 @@ jobs:
             echo "go=no" >> "$GITHUB_OUTPUT"
           fi
 
-  build:
+  # 发布前自检：八项离线测试（tests.yml，不联网、不读线上设置）。
+  # 不通过 → build 不会运行 → 不抓数据、不生成页面、不发布，页面保持上一次的内容，Actions 里这一轮显示红叉。
+  test:
     needs: gate
+    if: needs.gate.outputs.go == 'yes'
+    uses: ./.github/workflows/tests.yml
+
+  build:
+    needs: [gate, test]
     if: needs.gate.outputs.go == 'yes'
     runs-on: ubuntu-latest
     timeout-minutes: 15

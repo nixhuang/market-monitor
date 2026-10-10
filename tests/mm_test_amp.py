@@ -7,6 +7,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import monitor  # noqa: E402
 
+# 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
+monitor.S.clear()
+monitor.S.update(monitor.DEFAULT_SETTINGS)
+
 fails = []
 
 
@@ -28,24 +32,24 @@ def mk(prev=100.0, hi=101.0, lo=99.0, last=100.0):
 
 
 # --- 1. 振幅 12%（106/94，昨收100）→ 红 ---
-lv, sig, d = monitor.analyze_symbol("AMPRED", {}, mk(hi=106, lo=94, last=100), group="watch")
+lv, sig, d = monitor.analyze_symbol("AMPRED", {}, mk(hi=106, lo=94, last=100), group="position")
 check(lv == "red", f"振幅 12% → 红（实测 {lv}）")
 check(any("振幅 12.0%" in s for s in sig), f"振幅信号文案正确：{sig}")
 check(abs((d.get("amp") or 0) - 12.0) < 0.01, f"detail.amp = {d.get('amp')}")
 
 # --- 2. 振幅 6% → 黄（且收盘没动，涨跌幅规则不响） ---
-lv2, sig2, _ = monitor.analyze_symbol("AMPYEL", {}, mk(hi=103, lo=97, last=100), group="watch")
+lv2, sig2, _ = monitor.analyze_symbol("AMPYEL", {}, mk(hi=103, lo=97, last=100), group="position")
 check(any("振幅 6.0%" in s for s in sig2), f"振幅 6% 有信号：{sig2}")
 check(not any("异动" in s or "波动" in s for s in sig2), "收盘没动 → 涨跌幅规则静默（振幅规则的价值）")
 
 # --- 3. 振幅 2% → 不响 ---
-lv3, sig3, _ = monitor.analyze_symbol("AMPOK", {}, mk(hi=101, lo=99, last=100), group="watch")
+lv3, sig3, _ = monitor.analyze_symbol("AMPOK", {}, mk(hi=101, lo=99, last=100), group="position")
 check(not any("振幅" in s for s in sig3), f"振幅 2% 不报警：{sig3}")
 
 # --- 4. 阈值可从 settings 覆盖 ---
 old = monitor.S["amp_yellow"]
 monitor.S["amp_yellow"] = 3.0
-lv4, sig4, _ = monitor.analyze_symbol("AMPCFG", {}, mk(hi=102.5, lo=99.5, last=100), group="watch")
+lv4, sig4, _ = monitor.analyze_symbol("AMPCFG", {}, mk(hi=102.5, lo=99.5, last=100), group="position")
 check(any("振幅 3.0%" in s for s in sig4), f"阈值改成 3% 后生效：{sig4}")
 monitor.S["amp_yellow"] = old
 
@@ -61,7 +65,7 @@ if m:
     check('>设置</a>' in bar and './edit.html' in bar, "按钮改名「设置」且指向 edit.html")
     check('id="runLight"' in row and 'id="runLightTxt"' in row, "第四排：状态灯 + 文案")
     check('runLight' not in bar, "灯已从第三排移走")
-check('statusrow{{' in src, "statusrow 样式已定义")
+check('.statusrow{' in src, "statusrow 样式已定义")
 check('改自选清单' not in src, "旧的「改自选清单」已删除")
 check('v=20261009-1' in src, "版本号已升到 20261009-1")
 

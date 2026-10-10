@@ -17,6 +17,7 @@ import hashlib
 import html as html_lib
 import json
 import math
+from types import SimpleNamespace
 import os
 import re
 import subprocess
@@ -1578,17 +1579,16 @@ def fundamental_check(sym):
     # 扩展 · 短期偿债能力（Nasdaq 以百分比给出：84.25% 即 0.84 倍，页面统一显示成倍数）
     if cr0 and cr4 and cr4 > 0 and cr0 / cr4 - 1 <= -fund_rule("fund_cr_drop") / 100.0:
         add(f"流动比率 {cr4 / 100:.2f}→{cr0 / 100:.2f}倍{tag}")
-    # 扩展 · ROE（本季或基准季净利含一次性损益时不比较）
-    if not oneoff and not base_oneoff and roe0 is not None and roe4 is not None and roe4 > 0 \
+    # 扩展 · ROE（本季净利含一次性损益时不比较；基准季含一次性收益时照常比较，但在文字里注明仅供参考）
+    if not oneoff and roe0 is not None and roe4 is not None and roe4 > 0 \
             and roe0 / roe4 - 1 <= -fund_rule("fund_roe_drop") / 100.0:
-        add(f"季度ROE {roe4:.1f}%→{roe0:.1f}%{tag}")
+        ref = "（基准季含一次性收益，仅供参考）" if base_oneoff else ""
+        add(f"季度ROE {roe4:.1f}%→{roe0:.1f}%{tag}{ref}")
 
     # 一次性损益只作附加说明，不单独点亮徽章（否则 GOOGL/NTNX 会被无谓判黄）
     notes = []
     if hits and oneoff:
         notes.append("本季净利含一次性损益，ROE未参与判定")
-    if hits and base_oneoff:
-        notes.append(f"对比基准季（{base_label or '3季前'}）净利含一次性损益，ROE未比较")
     hits.extend(notes)
     # 参考背景：单项恶化要结合经营利润和现金流判断，不能把比率变化直接等同于主营变差
     context = []
@@ -1953,6 +1953,7 @@ CONSENSUS_GAP = 2.0                   # 两次请求的间隔（秒）
 CONSENSUS_BUDGET = 7 * 60             # 单次运行最多花这么久；没取完的下次运行接着取
 CONSENSUS_BREAK = 3                   # 连续失败这么多次就停手，不再继续敲对方网站
 CONSENSUS_GROUPS = ("position", "focus")
+CHG_AMP_GROUPS = ("position", "focus")   # 涨跌幅、振幅警示只对这两组生效
 TARGET_ANOMALY_PCT = 100.0
 _CONS_SPG = re.compile(r'Targets:\{source:"spg",currency:"([A-Z]+)",avg:([0-9.]+)')
 _CONS_UPD = re.compile(r'targets:\{low:[0-9.]+,high:[0-9.]+,count:\d+,median:[0-9.]+,average:[0-9.]+,updated:"(\d{4}-\d{2}-\d{2})"')
@@ -2172,220 +2173,399 @@ def target_tag(t):
     return f'<span class="tgs"><span class="lvtag {cls}">{body}</span></span>'
 
 
-def analyze_symbol(sym, cfg, data, group="technology"):
-    """返回等级、信号和详情，分组定义见 groups.json。"""
+MA_CONFIRM_LOOKBACK = 10   # 50 日线确认穿越：最近多少个交易日内收盘价曾在均线另一侧
+MA_CONFIRM_MIN, MA_CONFIRM_MAX, MA_CONFIRM_DEFAULT = 0.5, 3.0, 1.0
+MA_LONG_BAND_PCT = 1.0     # 长均线（250 日）：现价在均线 ±1% 内亮黄，超出不报
+
+
+def ma_confirm_pct(vol_sigma):
+    """短均线确认穿越所需的偏离幅度（%）：取这只股平时日波动的一半，限制在 0.5~3；新股没有波动数据按 1。"""
+    if vol_sigma is None:
+        return MA_CONFIRM_DEFAULT
+    return min(MA_CONFIRM_MAX, max(MA_CONFIRM_MIN, 0.5 * vol_sigma))
+
+
+def ma_confirmed_cross(closes, price, period, th_pct, lookback=MA_CONFIRM_LOOKBACK):
+    """短均线「带宽确认」穿越：今天首次收到均线 ±th_pct 之外，昨天还没在带外，且最近 lookback 日内
+    收盘价曾在均线另一侧。返回 "up" / "down" / None；数据不够返回 "n/a"（调用方退回旧规则）。
+    比「昨收在一侧、今收在另一侧」多一道幅度门槛，价格贴着均线来回晃时不再每次都响。"""
+    series = list(closes)
+    if not series:
+        return "n/a"
+    series[-1] = price
+    n = len(series)
+    if n < period + lookback + 1:
+        return "n/a"
+
+    def ma_at(i):
+        return sum(series[i - period + 1:i + 1]) / period
+
+    t = n - 1
+    th = th_pct / 100.0
+    ma_t, ma_y = ma_at(t), ma_at(t - 1)
+    if series[t] >= ma_t * (1 + th) and series[t - 1] < ma_y * (1 + th):
+        if any(series[j] < ma_at(j) for j in range(t - lookback, t)):
+            return "up"
+    if series[t] <= ma_t * (1 - th) and series[t - 1] > ma_y * (1 - th):
+        if any(series[j] > ma_at(j) for j in range(t - lookback, t)):
+            return "down"
+    return None
+
+
+# 涨跌 / 振幅阈值按个股自己的平时波动分档：设置页里的数字是「中档」，低档更灵敏、高档更迟钝。
+VOL_LOOKBACK = 60          # 取最近多少个交易日算平时波动
+VOL_MIN_RETURNS = 40       # 少于这么多个日收益（新上市）就按中档
+VOL_LOW_SIGMA = 1.2        # 日收益标准差 < 此值 → 低档
+VOL_HIGH_SIGMA = 2.5       # 日收益标准差 > 此值 → 高档
+VOL_MULT = {"low": 0.6, "mid": 1.0, "high": 1.4}
+
+
+def vol_profile(closes):
+    """返回 (档位, 平时日波动% 或 None)。不含最后一根（避免今天的异动把自己的门槛抬高）。"""
+    series = [c for c in (closes or [])[:-1] if c]
+    series = series[-(VOL_LOOKBACK + 1):]
+    rets = [(b / a - 1) * 100 for a, b in zip(series, series[1:]) if a]
+    if len(rets) < VOL_MIN_RETURNS:
+        return "mid", None
+    # 用中位数绝对偏差(MAD)估算，单日财报跳空 / 数据异常不会把整档拉高
+    ordered = sorted(rets)
+    mid = len(ordered) // 2
+    med = ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2
+    devs = sorted(abs(r - med) for r in rets)
+    dmid = len(devs) // 2
+    mad = devs[dmid] if len(devs) % 2 else (devs[dmid - 1] + devs[dmid]) / 2
+    sigma = 1.4826 * mad
+    if sigma < VOL_LOW_SIGMA:
+        return "low", sigma
+    if sigma > VOL_HIGH_SIGMA:
+        return "high", sigma
+    return "mid", sigma
+
+
+class _Alerts:
+    """收集一只标的触发的信号：文字、整体等级、以及每条信号的（类别, 等级）用于统计。"""
+    RANK = {"green": 0, "yellow": 1, "red": 2}
+
+    def __init__(self):
+        self.signals = []
+        self.marks = []
+        self.level = "green"
+
+    def add(self, kind, text, lv):
+        """lv 为 red / yellow 时抬高整体等级；purple（目标价提示）只记录，不改红黄绿。"""
+        self.signals.append(text)
+        self.marks.append((kind, lv))
+        if self.RANK.get(lv, -1) > self.RANK[self.level]:
+            self.level = lv
+
+
+# 各类信号的统计名称（status.json 的 signal_counts 用）；顺序即展示顺序
+SIGNAL_KINDS = (
+    ("chg", "涨跌幅"), ("amp", "振幅"), ("vol_ratio", "量比"),
+    ("rsi", "RSI"), ("boll", "布林"), ("boll_rsi", "布林+RSI"),
+    ("ma_cross", "50日线穿越"), ("ma_band", "250日线贴近"), ("low52", "52周低位"),
+    ("add_price", "加仓价"), ("reduce_price", "减仓价"), ("target", "目标价/共识价"),
+)
+
+
+def _analysis_context(sym, cfg, data, group):
+    """把一只标的需要的指标一次算好，各条规则只读不算。"""
     closes = data["closes"]
     vols = data["volumes"]
     price = data["price"]
     prev = data["prev_close"]
-
-    chg = (price / prev - 1) * 100 if prev else None
-    rsi = {period: calc_rsi(closes, period) for period in RSI_PERIODS}
-    dates = data.get("dates") or []
+    x = SimpleNamespace(sym=sym, cfg=cfg, data=data, group=group,
+                        closes=closes, price=price, prev=prev)
+    x.chg = (price / prev - 1) * 100 if prev else None
+    x.rsi = {period: calc_rsi(closes, period) for period in RSI_PERIODS}
+    x.dates = data.get("dates") or []
     start52 = 0
-    if dates:
-        cutoff = (datetime.fromisoformat(dates[-1]) - timedelta(weeks=52)).date().isoformat()
-        start52 = next((i for i, date in enumerate(dates) if date >= cutoff), 0)
+    if x.dates:
+        cutoff = (datetime.fromisoformat(x.dates[-1]) - timedelta(weeks=52)).date().isoformat()
+        start52 = next((i for i, date in enumerate(x.dates) if date >= cutoff), 0)
     high52 = max((data["highs"] or closes)[start52:])
     low52 = min((data["lows"] or closes)[start52:])
-    dist_high = (price / high52 - 1) * 100
-    dist_low = (price / low52 - 1) * 100
-    vol_ratio = (vols[-1] / sma(vols, 20)) if vols and sma(vols, 20) else None
+    x.dist_high = (price / high52 - 1) * 100
+    x.dist_low = (price / low52 - 1) * 100
+    x.vol_ratio = (vols[-1] / sma(vols, 20)) if vols and sma(vols, 20) else None
     ma_periods = (int(S["ma_short"]), int(S["ma_long"]))
-    moving_averages = [(period, sma(closes, period)) for period in dict.fromkeys(ma_periods)]
-    boll_mid, boll_up, boll_dn = boll(closes, int(S["boll_n"]), float(S["boll_k"]))
+    x.moving_averages = [(period, sma(closes, period)) for period in dict.fromkeys(ma_periods)]
+    x.boll_mid, x.boll_up, x.boll_dn = boll(closes, int(S["boll_n"]), float(S["boll_k"]))
+    return x
 
-    signals = []
-    level = "green"
 
-    # quiet 标的（如 SGOV 货币基金）：波动极小，RSI/均线无意义，
-    # 只在真正异动（>=2%）时才出声，避免噪音
-    if cfg.get("quiet"):
-        if chg is not None and abs(chg) >= S["quiet_chg"]:
-            return "yellow", [f"异动 {chg:+.1f}%"], {
-                "symbol": sym, "note": cfg.get("note", ""), "price": price,
-                "chg": chg, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": dist_high,
-                "dist_low": dist_low, "vol_ratio": vol_ratio,
-                "trigger": cfg.get("trigger"), "source": data.get("source", ""),
-                "data_date": (data.get("dates") or [""])[-1],
-                "group": group, "boll_up": boll_up, "boll_dn": boll_dn,
-                "signals": [f"异动 {chg:+.1f}%"], "level": "yellow",
-            }
-        return "green", [], {
-            "symbol": sym, "note": cfg.get("note", ""), "price": price,
-            "chg": chg, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": dist_high,
-            "dist_low": dist_low, "vol_ratio": vol_ratio,
-            "trigger": cfg.get("trigger"), "source": data.get("source", ""),
-            "data_date": (data.get("dates") or [""])[-1],
-            "group": group, "boll_up": boll_up, "boll_dn": boll_dn,
-            "signals": [], "level": "green",
-        }
-
-    def bump(lv):
-        nonlocal level
-        order = {"green": 0, "yellow": 1, "red": 2}
-        if order[lv] > order[level]:
-            level = lv
-
-    # 🔴 红色规则
-    if chg is not None and abs(chg) >= S["chg_red"]:
-        signals.append(f"异动 {chg:+.1f}%")
-        bump("red")
-    high_hits = sum(v is not None and math.isfinite(v) and v >= S["rsi_high"] for v in rsi.values())
-    low_hits = sum(v is not None and math.isfinite(v) and v <= S["rsi_low"] for v in rsi.values())
-    for count, tag, boundary in ((high_hits, "超买", f"≥{S['rsi_high']:g}"),
-                                 (low_hits, "超卖", f"≤{S['rsi_low']:g}")):
-        if count >= 2:
-            values = " / ".join(f"RSI{period}={v:.1f}" if v is not None and math.isfinite(v)
-                                else f"RSI{period}=无数据" for period, v in rsi.items())
-            signals.append(f"RSI {count}条{tag}（{boundary}）：{values}")
-            bump("red" if count == 3 else "yellow")
-    if dist_low <= S["near_52w_low_pct"]:
-        signals.append("触及52周新低")
-        bump("red")
-
-    # 距加仓触发价
-    trig = cfg.get("trigger")
-    if trig:
-        gap = (price / trig - 1) * 100
-        tstr = f"{trig:,.2f}"
-        if gap <= 0:
-            signals.append(f"已跌破加仓价 {tstr}")
-            bump("red")
-        elif gap <= S["trigger_gap_pct"]:
-            signals.append(f"距加仓价 {tstr} 还差 {gap:.1f}%")
-            bump("red")
-
-    # 减仓价：只对「持仓」分组生效——和加仓价对称：
-    # 现价已涨到减仓价以上（不管高出多少）→ 红；还没到但距离不足 x%（按减仓价算）→ 红
-    reduce = reduce_rule(cfg) if group == "position" else None
-    if reduce:
-        rgap = (price / reduce - 1) * 100
-        rstr = f"{reduce:,.2f}"
-        if rgap >= 0:
-            signals.append(f"已涨到减仓价 {rstr}（高出 {rgap:.1f}%）")
-            bump("red")
-        elif -rgap <= S["reduce_gap_pct"]:
-            signals.append(f"距减仓价 {rstr} 还差 {-rgap:.1f}%")
-            bump("red")
-
-    # 目标价（手填优先于 S&P Global 共识价）：只对持仓 / 重点关注；命中只出紫色，不改红黄绿；
-    # 疑似数据异常（空间 > 100%）才升成红色警示；共识价取数失败只标红标签，不参与警示
-    tgt = resolve_target(cfg, cfg.get("_consensus")) if group in CONSENSUS_GROUPS else None
-    if tgt:
-        tgt["hit"] = False
-        if tgt["price"] and not tgt["failed"]:
-            purple, reds, space = target_alerts(price, prev, tgt["price"], target_label(tgt),
-                                                S["target_space_pct"], S["target_gap_pct"])
-            signals.extend(reds + purple)
-            if reds:
-                bump("red")
-            tgt.update(hit=bool(purple), space=space, anomaly=bool(reds))
-
-    # 布林带：逼近即算，盘中不用等收盘真的穿过去
-    # gap = 距离轨道还差百分之多少；<=0 表示已经穿过去了
-    # 另外标出「连续第几日贴近轨道」——远离一天就断，再贴近重新从第一日算
-    streak = boll_streak(closes, int(S["boll_n"]), float(S["boll_k"]), S["boll_near_pct"],
-                         highs=data.get("highs"), lows=data.get("lows"))
-    streak_txt_up = streak_tail(streak["up"], "上轨")
-    streak_txt_dn = streak_tail(streak["dn"], "下轨")
-    # 盘中触及即算：上轨比当日最高价，下轨比当日最低价；盘中重跑时当前价可能比已有极值更极端
-    day_high = (data.get("highs") or [None])[-1]
-    day_low = (data.get("lows") or [None])[-1]
-    touch_up = price if day_high is None else max(day_high, price)
-    touch_dn = price if day_low is None else min(day_low, price)
-    # 触及价和展示的现价不一致时，把触及价写出来。
-    # 否则会出现「现价 54.00 却写着突破上轨 59.15」的观感矛盾 ——
-    # 其实是当天盘中最高冲到 60.68 穿过去了，收盘又跌回来。
-    def touch_note(touch):
-        if touch is None or abs(touch - price) < 1e-9:
-            return ""
-        return f"（盘中触及 {touch:,.2f}）"
-
-    # 上下轨都命中时只留更贴近的那条：
-    # SGOV 这类短债/货币 ETF 波动极小，布林带宽不到 1%，上下轨会同时命中，
-    # 两条一起显示等于自相矛盾（既逼近上轨又逼近下轨）。
-    hits = []
-    if boll_up is not None:
-        gap_up = (boll_up - touch_up) / boll_up * 100
-        if gap_up <= S["boll_near_pct"]:
-            text = (f"突破布林上轨 {boll_up:,.2f}" if gap_up <= 0
-                    else f"逼近布林上轨 还差{gap_up:.2f}%")
-            hits.append((gap_up, text + touch_note(touch_up) + streak_txt_up))
-    if boll_dn is not None:
-        gap_dn = (touch_dn - boll_dn) / boll_dn * 100
-        if gap_dn <= S["boll_near_pct"]:
-            text = (f"跌破布林下轨 {boll_dn:,.2f}" if gap_dn <= 0
-                    else f"逼近布林下轨 还差{gap_dn:.2f}%")
-            hits.append((gap_dn, text + touch_note(touch_dn) + streak_txt_dn))
-    if hits:
-        signals.append(min(hits, key=lambda x: x[0])[1])
-        bump("yellow")
-        if max(high_hits, low_hits) >= 2:
-            signals.append("布林 + RSI 双重信号 → 红")
-            bump("red")
-
-    # 🟡 黄色规则
-    if chg is not None and S["chg_yellow"] <= abs(chg) < S["chg_red"]:
-        signals.append(f"波动 {chg:+.1f}%")
-        bump("yellow")
-    if vol_ratio and vol_ratio >= S["vol_ratio"]:
-        signals.append(f"量比 {vol_ratio:.1f}x")
-        bump("yellow")
-
-    # 日内振幅：涨跌幅只看「收盘 vs 昨收」，盘中冲高又回落、最后收平的票不会响，这条专门抓它。
-    # 用当日最高/最低（盘中重跑时再和当前价取极值）除以昨收。
-    amp = None
-    if touch_up is not None and touch_dn is not None and prev:
-        amp = (touch_up - touch_dn) / prev * 100
-        if amp >= S["amp_red"]:
-            signals.append(f"振幅 {amp:.1f}%（{touch_dn:,.2f}~{touch_up:,.2f}）")
-            bump("red")
-        elif amp >= S["amp_yellow"]:
-            signals.append(f"振幅 {amp:.1f}%（{touch_dn:,.2f}~{touch_up:,.2f}）")
-            bump("yellow")
-
-    # 均线穿越（比"贴近"有意义得多）
-    if len(closes) >= 2:
-        prev_c = closes[-2]
-        for period, ma_val in moving_averages:
-            ma_name = f"{period}日"
-            if not ma_val:
-                continue
-            if prev_c < ma_val <= price:
-                signals.append(f"上穿{ma_name}均线")
-                bump("yellow")
-            elif prev_c > ma_val >= price:
-                signals.append(f"跌破{ma_name}均线")
-                bump("yellow")
-
+def _quiet_result(x):
+    """quiet 标的（如 SGOV 货币基金）：波动极小，RSI/均线无意义，只在真正异动（>=2%）时才出声，避免噪音。"""
+    hot = x.chg is not None and abs(x.chg) >= S["quiet_chg"]
+    signals = [f"异动 {x.chg:+.1f}%"] if hot else []
+    level = "yellow" if hot else "green"
     detail = {
-        "symbol": sym,
-        "note": cfg.get("note", ""),
-        "price": price,
-        "chg": chg,
-        "rsi": rsi,
-        "dist_high": dist_high,
-        "dist_low": dist_low,
-        "vol_ratio": vol_ratio,
-        "amp": amp,
-        "trigger": trig,
-        "reduce": reduce,
-        "target": tgt,
-        "purple": bool(tgt and tgt.get("hit")),
-        "source": data.get("source", ""),
-        "data_date": (data.get("dates") or [""])[-1],
-        "realtime": bool(data.get("realtime")),
-        "rt_ts": data.get("rt_ts", ""),
-        "group": group,
-        "boll_up": boll_up,
-        "boll_dn": boll_dn,
-        # ETF 标签：静态表命中，或行情源明确给出 assetclass=etf
-        "etf": is_etf(sym) or data.get("asset") == "etf",
-        "signals": signals,
-        "level": level,
+        "symbol": x.sym, "note": x.cfg.get("note", ""), "price": x.price,
+        "chg": x.chg, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": x.dist_high,
+        "dist_low": x.dist_low, "vol_ratio": x.vol_ratio,
+        "trigger": x.cfg.get("trigger"), "source": x.data.get("source", ""),
+        "data_date": (x.data.get("dates") or [""])[-1],
+        "group": x.group, "boll_up": x.boll_up, "boll_dn": x.boll_dn,
+        "signals": signals, "level": level,
+        "signal_marks": [("chg", "yellow")] if hot else [],
     }
     return level, signals, detail
+
+
+def _apply_vol_tier(x):
+    """涨跌 / 振幅阈值：设置页的值是中档，按这只股自己的平时波动缩放；
+    涨跌幅 / 振幅警示只对「持仓」和「重点关注」生效，其他分组不报这两类。"""
+    x.vol_tier, x.vol_sigma = vol_profile(x.closes)
+    mult = VOL_MULT[x.vol_tier]
+    x.chg_red, x.chg_yellow = S["chg_red"] * mult, S["chg_yellow"] * mult
+    x.amp_red, x.amp_yellow = S["amp_red"] * mult, S["amp_yellow"] * mult
+    x.usual = f"（平时约 ±{x.vol_sigma:.1f}%）" if x.vol_sigma is not None else ""
+    x.chg_amp_on = x.group in CHG_AMP_GROUPS
+
+
+def _rule_chg_red(al, x):
+    if x.chg_amp_on and x.chg is not None and abs(x.chg) >= x.chg_red:
+        al.add("chg", f"异动 {x.chg:+.1f}%{x.usual}", "red")
+
+
+def _rule_chg_yellow(al, x):
+    if x.chg_amp_on and x.chg is not None and x.chg_yellow <= abs(x.chg) < x.chg_red:
+        al.add("chg", f"波动 {x.chg:+.1f}%{x.usual}", "yellow")
+
+
+def _rule_rsi(al, x):
+    x.high_hits = sum(v is not None and math.isfinite(v) and v >= S["rsi_high"] for v in x.rsi.values())
+    x.low_hits = sum(v is not None and math.isfinite(v) and v <= S["rsi_low"] for v in x.rsi.values())
+    for count, tag, boundary in ((x.high_hits, "超买", f"≥{S['rsi_high']:g}"),
+                                 (x.low_hits, "超卖", f"≤{S['rsi_low']:g}")):
+        if count >= 2:
+            values = " / ".join(f"RSI{period}={v:.1f}" if v is not None and math.isfinite(v)
+                                else f"RSI{period}=无数据" for period, v in x.rsi.items())
+            al.add("rsi", f"RSI {count}条{tag}（{boundary}）：{values}", "red" if count == 3 else "yellow")
+
+
+def _fresh_52w_low(x):
+    """已处在低位区时，判断是不是「刚进入 / 再创新低」。算不出昨天的情况就当作新的。"""
+    closes, dates, data, price = x.closes, x.dates, x.data, x.price
+    if len(dates) < 2 or len(closes) < 2:
+        return True
+    try:
+        cut_y = (datetime.fromisoformat(dates[-2]) - timedelta(weeks=52)).date().isoformat()
+        sy = next((i for i, d_ in enumerate(dates) if d_ >= cut_y), 0)
+        lows_all = data["lows"] or closes
+        prior_low = min(lows_all[sy:-1])
+        yesterday_dist = (closes[-2] / prior_low - 1) * 100
+        new_low = min(price, lows_all[-1]) <= prior_low
+        return new_low or yesterday_dist > S["near_52w_low_pct"]
+    except (ValueError, TypeError, ZeroDivisionError):
+        return True
+
+
+def _rule_52w_low(al, x):
+    """52 周新低：刚进入低位区、或再创新低 → 红；已在低位区且没再创新低 → 黄；远离后不报。"""
+    if x.dist_low > S["near_52w_low_pct"]:
+        return
+    if _fresh_52w_low(x):
+        al.add("low52", "触及52周新低", "red")
+    else:
+        al.add("low52", f"仍在52周低位（距低点 +{x.dist_low:.1f}%）", "yellow")
+
+
+def _rule_add_price(al, x):
+    """距加仓触发价。"""
+    trig = x.cfg.get("trigger")
+    x.trig = trig
+    if not trig:
+        return
+    gap = (x.price / trig - 1) * 100
+    tstr = f"{trig:,.2f}"
+    if gap <= 0:
+        al.add("add_price", f"已跌破加仓价 {tstr}", "red")
+    elif gap <= S["trigger_gap_pct"]:
+        al.add("add_price", f"距加仓价 {tstr} 还差 {gap:.1f}%", "red")
+
+
+def _rule_reduce_price(al, x):
+    """减仓价：只对「持仓」分组生效，和加仓价对称：
+    现价已涨到减仓价以上（不管高出多少）→ 红；还没到但距离不足 x%（按减仓价算）→ 红。"""
+    x.reduce = reduce_rule(x.cfg) if x.group == "position" else None
+    if not x.reduce:
+        return
+    rgap = (x.price / x.reduce - 1) * 100
+    rstr = f"{x.reduce:,.2f}"
+    if rgap >= 0:
+        al.add("reduce_price", f"已涨到减仓价 {rstr}（高出 {rgap:.1f}%）", "red")
+    elif -rgap <= S["reduce_gap_pct"]:
+        al.add("reduce_price", f"距减仓价 {rstr} 还差 {-rgap:.1f}%", "red")
+
+
+def _rule_target(al, x):
+    """目标价（手填优先于 S&P Global 共识价）：只对持仓 / 重点关注；命中只出紫色，不改红黄绿；
+    疑似数据异常（空间 > 100%）才升成红色警示；共识价取数失败只标红标签，不参与警示。"""
+    x.tgt = resolve_target(x.cfg, x.cfg.get("_consensus")) if x.group in CONSENSUS_GROUPS else None
+    tgt = x.tgt
+    if not tgt:
+        return
+    tgt["hit"] = False
+    if tgt["price"] and not tgt["failed"]:
+        purple, reds, space = target_alerts(x.price, x.prev, tgt["price"], target_label(tgt),
+                                            S["target_space_pct"], S["target_gap_pct"])
+        for text in reds:
+            al.add("target", text, "red")
+        for text in purple:
+            al.add("target", text, "purple")
+        tgt.update(hit=bool(purple), space=space, anomaly=bool(reds))
+
+
+def _intraday_extremes(x):
+    """盘中触及即算：上轨比当日最高价，下轨比当日最低价；盘中重跑时当前价可能比已有极值更极端。"""
+    day_high = (x.data.get("highs") or [None])[-1]
+    day_low = (x.data.get("lows") or [None])[-1]
+    x.touch_up = x.price if day_high is None else max(day_high, x.price)
+    x.touch_dn = x.price if day_low is None else min(day_low, x.price)
+
+
+def _touch_note(price, touch):
+    """触及价和展示的现价不一致时，把触及价写出来，
+    否则会出现「现价 54.00 却写着突破上轨 59.15」的观感矛盾：其实是当天盘中最高冲到 60.68 穿过去了，收盘又跌回来。"""
+    if touch is None or abs(touch - price) < 1e-9:
+        return ""
+    return f"（盘中触及 {touch:,.2f}）"
+
+
+def _boll_hits(x):
+    """布林上下轨命中情况 → [(还差百分之多少, 文字)]；<=0 表示已经穿过去了。
+    另外标出「连续第几日贴近轨道」——远离一天就断，再贴近重新从第一日算。"""
+    streak = boll_streak(x.closes, int(S["boll_n"]), float(S["boll_k"]), S["boll_near_pct"],
+                         highs=x.data.get("highs"), lows=x.data.get("lows"))
+    hits = []
+    if x.boll_up is not None:
+        gap_up = (x.boll_up - x.touch_up) / x.boll_up * 100
+        if gap_up <= S["boll_near_pct"]:
+            text = (f"突破布林上轨 {x.boll_up:,.2f}" if gap_up <= 0
+                    else f"逼近布林上轨 还差{gap_up:.2f}%")
+            hits.append((gap_up, text + _touch_note(x.price, x.touch_up) + streak_tail(streak["up"], "上轨")))
+    if x.boll_dn is not None:
+        gap_dn = (x.touch_dn - x.boll_dn) / x.boll_dn * 100
+        if gap_dn <= S["boll_near_pct"]:
+            text = (f"跌破布林下轨 {x.boll_dn:,.2f}" if gap_dn <= 0
+                    else f"逼近布林下轨 还差{gap_dn:.2f}%")
+            hits.append((gap_dn, text + _touch_note(x.price, x.touch_dn) + streak_tail(streak["dn"], "下轨")))
+    return hits
+
+
+def _rule_boll(al, x):
+    """布林带：逼近即算，盘中不用等收盘真的穿过去；逼近 / 盘中触及 / 收盘穿出一律黄。
+    上下轨都命中时只留更贴近的那条：SGOV 这类短债/货币 ETF 波动极小，布林带宽不到 1%，
+    上下轨会同时命中，两条一起显示等于自相矛盾（既逼近上轨又逼近下轨）。"""
+    hits = _boll_hits(x)
+    if not hits:
+        return
+    best = min(hits, key=lambda h: h[0])
+    al.add("boll", best[1], "yellow")
+    if max(x.high_hits, x.low_hits) >= 2:
+        al.add("boll_rsi", "布林 + RSI 双重信号 → 红", "red")
+
+
+def _rule_vol_ratio(al, x):
+    if x.vol_ratio and x.vol_ratio >= S["vol_ratio"]:
+        al.add("vol_ratio", f"量比 {x.vol_ratio:.1f}x", "yellow")
+
+
+def _rule_amplitude(al, x):
+    """日内振幅：涨跌幅只看「收盘 vs 昨收」，盘中冲高又回落、最后收平的票不会响，这条专门抓它。
+    用当日最高/最低（盘中重跑时再和当前价取极值）除以昨收。"""
+    x.amp = None
+    if x.touch_up is None or x.touch_dn is None or not x.prev:
+        return
+    x.amp = (x.touch_up - x.touch_dn) / x.prev * 100
+    if not x.chg_amp_on:
+        return
+    text = f"振幅 {x.amp:.1f}%（{x.touch_dn:,.2f}~{x.touch_up:,.2f}）"
+    if x.amp >= x.amp_red:
+        al.add("amp", text, "red")
+    elif x.amp >= x.amp_yellow:
+        al.add("amp", text, "yellow")
+
+
+def _rule_moving_averages(al, x):
+    """均线：周期最短的一条（50 日）要「确认穿越」才报；周期最长的一条（250 日）只看是否贴近（±MA_LONG_BAND_PCT%）；
+    只设了一条均线时走最朴素的穿越规则。"""
+    closes, price, mas = x.closes, x.price, x.moving_averages
+    if len(closes) < 2:
+        return
+    prev_c = closes[-2]
+    for period, ma_val in mas:
+        ma_name = f"{period}日"
+        if not ma_val:
+            continue
+        weak = len(mas) > 1 and period == min(p_ for p_, _ in mas)
+        strong = len(mas) > 1 and period == max(p_ for p_, _ in mas)
+        if strong:
+            gap_ma = (price / ma_val - 1) * 100
+            if abs(gap_ma) <= MA_LONG_BAND_PCT + 1e-9:
+                al.add("ma_band", f"贴近{ma_name}均线 {gap_ma:+.1f}%", "yellow")
+            continue
+        confirmed = ma_confirmed_cross(closes, price, period, ma_confirm_pct(x.vol_sigma)) if weak else "n/a"
+        if confirmed == "up" or (confirmed == "n/a" and prev_c < ma_val <= price):
+            al.add("ma_cross", f"上穿{ma_name}均线", "yellow")
+        elif confirmed == "down" or (confirmed == "n/a" and prev_c > ma_val >= price):
+            al.add("ma_cross", f"跌破{ma_name}均线", "yellow")
+
+
+def _analysis_detail(x, al):
+    return {
+        "symbol": x.sym,
+        "note": x.cfg.get("note", ""),
+        "price": x.price,
+        "chg": x.chg,
+        "rsi": x.rsi,
+        "dist_high": x.dist_high,
+        "dist_low": x.dist_low,
+        "vol_ratio": x.vol_ratio,
+        "amp": x.amp,
+        "vol_tier": x.vol_tier,
+        "vol_sigma": x.vol_sigma,
+        "trigger": x.trig,
+        "reduce": x.reduce,
+        "target": x.tgt,
+        "purple": bool(x.tgt and x.tgt.get("hit")),
+        "source": x.data.get("source", ""),
+        "data_date": (x.data.get("dates") or [""])[-1],
+        "realtime": bool(x.data.get("realtime")),
+        "rt_ts": x.data.get("rt_ts", ""),
+        "group": x.group,
+        "boll_up": x.boll_up,
+        "boll_dn": x.boll_dn,
+        # ETF 标签：静态表命中，或行情源明确给出 assetclass=etf
+        "etf": is_etf(x.sym) or x.data.get("asset") == "etf",
+        "signals": al.signals,
+        "signal_marks": al.marks,
+        "level": al.level,
+    }
+
+
+def analyze_symbol(sym, cfg, data, group="technology"):
+    """返回等级、信号和详情，分组定义见 groups.json。
+    规则按「红 → 加减仓价/目标价 → 布林 → 黄」的顺序依次跑，顺序也是页面上警示文字的顺序。"""
+    x = _analysis_context(sym, cfg, data, group)
+    if cfg.get("quiet"):
+        return _quiet_result(x)
+    al = _Alerts()
+    _apply_vol_tier(x)
+    _intraday_extremes(x)
+    _rule_chg_red(al, x)
+    _rule_rsi(al, x)
+    _rule_52w_low(al, x)
+    _rule_add_price(al, x)
+    _rule_reduce_price(al, x)
+    _rule_target(al, x)
+    _rule_boll(al, x)
+    _rule_chg_yellow(al, x)
+    _rule_vol_ratio(al, x)
+    _rule_amplitude(al, x)
+    _rule_moving_averages(al, x)
+    return al.level, al.signals, _analysis_detail(x, al)
 
 
 # ---------------------------------------------------------------- HTML
@@ -2441,6 +2621,27 @@ def market_data_time(snapshot):
     return date_text + " 收盘（美东交易日）"
 
 
+def signal_counts(items):
+    """各类信号的触发数量，写进 status.json，方便看「黄灯到底是被哪条规则点亮的」。
+    red / yellow：这一类信号以红 / 黄级别触发的标的数；purple：目标价提示数；
+    sole_yellow：整只标的是黄灯、且黄灯只由这一类信号造成的数量（删掉这条规则就会少几盏黄灯）。"""
+    out = {kind: {"label": label, "red": 0, "yellow": 0, "purple": 0, "sole_yellow": 0}
+           for kind, label in SIGNAL_KINDS}
+    for d in items:
+        marks = d.get("signal_marks") or []
+        for kind in {k for k, _ in marks}:
+            if kind not in out:
+                continue
+            for lv in ("red", "yellow", "purple"):
+                if any(k == kind and m == lv for k, m in marks):
+                    out[kind][lv] += 1
+        if d.get("level") == "yellow":
+            yellow_kinds = {k for k, m in marks if m == "yellow"}
+            if len(yellow_kinds) == 1 and next(iter(yellow_kinds)) in out:
+                out[next(iter(yellow_kinds))]["sole_yellow"] += 1
+    return out
+
+
 def build_snapshot(macro, items, cfg, group_counts=None):
     dates = sorted({d.get("data_date") for d in items if d.get("data_date") and not d.get("reference_only")})
     references = {normalize_symbol(d["symbol"]): d["data_date"] for d in items
@@ -2483,6 +2684,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
                     "today_prices": sum(not d.get("reference_only") and d.get("price") is not None and d.get("data_date") == TARGET_DATE for d in items),
                     "prior_prices": sum(not d.get("reference_only") and d.get("price") is not None and d.get("data_date") != TARGET_DATE for d in items),
                     "missing_prices": sum(d.get("price") is None for d in items)},
+        "signal_counts": signal_counts(items),
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
         "treasury_reference": {key: macro.get("ust10", {}).get(key) for key in
@@ -2496,12 +2698,168 @@ def build_snapshot(macro, items, cfg, group_counts=None):
     return snapshot
 
 
-def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
-    snapshot = snapshot or {}
-    monitoring = snapshot.get("group_monitoring", {})
-    registered = snapshot.get("registered_counts", {})
+PAGE_CSS = """:root{
+  --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
+  --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
+  --blue:#2f6bd8; --purple:#a371f7;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
+  padding:env(safe-area-inset-top) 14px 40px}
+.wrap{max-width:720px;margin:0 auto}
+h1{font-size:19px;margin:18px 0 4px;font-weight:600}
+.sub{color:var(--dim);font-size:12px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:6px 4px;margin-bottom:14px;overflow:hidden}
+h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
+tr:first-child td{border-top:none}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.dim{color:var(--dim);font-size:12px}
+.sym{font-weight:600}
+.note{color:var(--dim);font-weight:400;font-size:11px;margin-left:6px}
+.tag{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;
+  font-size:10px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
+  color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}
+.tag.f-red{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}
+.tag.f-yellow{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}
+.tag.quote-note{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}
+.lvs{display:block;margin:4px 0 0;line-height:1.5}
+.lvtag{display:inline-block;margin:0 4px 2px 0;padding:0 7px;border-radius:999px;border:1px solid;
+  background:transparent;font-size:10px;font-weight:400;line-height:16px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.lvtag.add{color:#ffa94d;border-color:rgba(255,169,77,.6)}
+.lvtag.cut{color:#4dd0e1;border-color:rgba(77,208,225,.6)}
+.tgs{display:block;margin:3px 0 0;line-height:1.4;white-space:normal}
+.tgs .lvtag{margin:0;padding:1px 5px;border-radius:4px;line-height:1.35;white-space:normal;text-align:center}
+.tgs .lvtag span{display:inline-block;white-space:nowrap}
+.lvtag.tgt{color:#c4a3ff;border-color:rgba(163,113,247,.65)}
+.lvtag.tgt.hit{color:#fff;background:#8957e5;border-color:#8957e5}
+.lvtag.tgt.bad{color:#ff9b95;border-color:rgba(248,81,73,.7)}
+.tnote,.sig .tp{color:#c4a3ff}
+.fund-detail{margin-top:6px}
+.fund-detail summary{margin-left:0;padding:7px 9px;cursor:pointer;list-style:none;touch-action:manipulation}
+.fund-detail summary::-webkit-details-marker{display:none}
+.fund-detail summary::after{content:"";display:inline-block;margin-left:6px;
+  border:4px solid transparent;border-top-color:currentColor;transform:translateY(2px)}
+.fund-detail[open] summary::after{transform:translateY(-2px) rotate(180deg)}
+.fund-detail summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:3px}
+.fund-body{margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:6px;
+  font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}
+.fund-body ul{margin:4px 0 0;padding-left:16px}
+.sig{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}
+.earn{display:block;margin:0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}
+.earn .unit{display:block;color:var(--dim);font-size:11px}
+.earn.soon{color:#f0c674;font-weight:600}
+table.stk{table-layout:fixed}
+.c-sym{width:19%} .c-earn{width:29%} .c-px{width:13%}
+.earn-cell{vertical-align:middle;overflow-wrap:anywhere}
+table.stk tr td:first-child{padding-left:14px}
+.stk td.sym{overflow-wrap:anywhere}
+.stk th{font-size:13px;color:var(--dim);font-weight:600;letter-spacing:.3px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+.stk th:first-child{padding-left:14px}
+.stk th.h-earn,.earn-cell{text-align:center}
+.px{white-space:nowrap}
+.px-price,.px-chg{display:block}
+.px-chg{font-size:12.5px}
+@media (max-width:600px){
+  /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
+  .c-sym{width:22%} .c-earn{width:23%} .c-px{width:19%}
+  .stk td{padding:8px 5px}
+  table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
+  .stk th{padding:7px 5px;font-size:12px}
+  .stk th.h-earn,.earn-cell{text-align:left}
+  .stk td.sym{font-size:13.5px}
+  .stk td.sym .note{font-size:10.5px;line-height:1.35}
+  .stk .earn{font-size:10.5px;line-height:1.4}
+  .stk .earn .unit{font-size:10px;line-height:1.35}
+  .stk .px-price{font-size:13.5px}
+  .stk .px-chg{font-size:11.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:9.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
+  .stk td.sig{font-size:11.5px;line-height:1.45}
+  .stk .fund-detail summary{padding:6px 7px}
+}
+.fund-context{margin-top:6px;color:var(--dim)}
+.up{color:var(--up)} .down{color:var(--down)}
+tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
+tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}
+tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}
+tr.gray td{color:var(--dim)}
+.group-card tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
+.group-card tr.pur td.sig{box-shadow:inset -2px 0 0 var(--purple);padding-right:12px}
+#macroCard tr.mh td{padding:5px 10px;font-size:11.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
+.macro-help{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}
+.macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
+.macro-help p{margin:6px 0}
+.macro-help>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
+.unit{display:block;font-size:10px;color:var(--dim);font-weight:400}
+.foot{color:var(--dim);font-size:11.5px;text-align:center;margin-top:22px;line-height:1.7}
+.quiet{color:var(--dim);font-size:12px;padding:8px 12px 12px}
+.warn{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
+  color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px}
+.acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.acts button{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
+  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
+.acts button:disabled{opacity:.5;cursor:not-allowed}
+#runMsg{font-size:12px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}
+#runMsg.ok{color:var(--green)}
+#runMsg.err{color:var(--red)}
+.runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.runbar button{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
+  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
+.runbar button:disabled{opacity:.5;cursor:not-allowed}
+.runbar button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.runbar a.btnlink{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
+  border:1px solid #333a47;border-radius:8px;text-decoration:none;display:inline-block}
+.statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin:-4px 0 14px;font-size:12.5px;line-height:1.5}
+.check-result{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;
+  font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+.check-result[data-phase="bad"]{border-color:var(--red)}
+.check-result[data-phase="busy"]{border-color:var(--yellow)}
+.check-result[hidden]{display:none}
+.group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:10px;cursor:pointer;
+  padding:12px;font-size:14px;font-weight:600;list-style:none;touch-action:manipulation}
+.group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{display:none}
+.group-card>summary::before,.macro-card>summary::before{content:"›";color:var(--dim);font-size:20px;line-height:1}
+.group-card[open]>summary::before,.macro-card[open]>summary::before{transform:rotate(90deg)}
+.group-card[open]>summary,.macro-card[open]>summary{border-bottom:1px solid var(--line)}
+.group-stats{margin-left:auto;color:var(--dim);font-size:11px;font-weight:400}
+.group-card>summary .group-stats{margin-left:6px;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-start;text-align:left}
+.stat-count{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+.rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
+.rs-spy.up{color:var(--up)} .rs-spy.down{color:var(--down)}
+.stat-dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
+.stat-dot.red{background:var(--red)} .stat-dot.yellow{background:var(--yellow)}
+.stat-dot.gray{background:var(--dim)} .stat-dot.green{background:var(--green)} .stat-dot.purple{background:var(--purple)}
+.market-risk-badge{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.market-risk-badge[data-level="red"]{color:var(--red)}
+.market-risk-badge[data-level="yellow"]{color:var(--yellow)}
+.market-risk-badge[data-level="green"]{color:var(--green)}
+.macro-card>summary .group-stats{margin-left:6px;text-align:left}
+.quiet-list{margin:8px 0}
+.quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:12px;cursor:pointer}
+.sym .note{display:block;margin:3px 0 0;overflow-wrap:anywhere}
+.group-card summary:focus-visible,.macro-card summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
+.runlight{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}
+.runlight .dot{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}
+.runlight[data-phase="busy"]{color:var(--yellow)}
+.runlight[data-phase="busy"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
+.runlight[data-phase="ok"]{color:var(--green)}
+.runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}
+.runlight[data-phase="bad"]{color:var(--red)}
+.runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}
+.dca{background:rgba(139,147,161,.12);border:1px solid var(--line);border-radius:10px;
+  padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--dim)}
+.dca b{color:var(--text)}
+.dca.on{background:rgba(210,153,34,.14);border-color:rgba(210,153,34,.4);color:var(--yellow)}
+.dca.on b{color:var(--yellow)}
+"""
+
+
+def _macro_rows(macro, risk):
+    """市场风险参考表的各行（五项指标 + 10Y 美债参考行）。"""
     rows_macro = []
-    risk = market_risk_summary(macro, snapshot.get("target_trade_date"))
     for key in RISK_INDICATORS:
         it = macro.get(key, {})
         if risk["levels"][key] == "gray":
@@ -2553,18 +2911,26 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     else:
         rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债<span class="unit">参考 · 不计入综合灯</span></td>'
                           '<td colspan="3">无数据或已过期</td></tr>')
+    return "".join(rows_macro)
 
-    order = {"red": 0, "yellow": 1, "green": 2, "gray": 3}
-    # 行情没异动但基本面亮了警示的，要上表并往前排，否则徽章永远藏在「无异动 N 只」里看不见
-    def fund_alert(d):
-        return (d.get("fund") or {}).get("level") in ("red", "yellow")
 
-    def sort_key(d):
-        base = order[d["level"]]
-        if fund_alert(d) and base > 1:
-            base = 1.5  # 夹在黄和绿之间
-        return (base, -(abs(d["chg"]) if d["chg"] else 0))
+_LEVEL_ORDER = {"red": 0, "yellow": 1, "green": 2, "gray": 3}
 
+
+def _fund_alert(d):
+    """行情没异动但基本面亮了警示的，要上表并往前排，否则徽章永远藏在「无异动 N 只」里看不见。"""
+    return (d.get("fund") or {}).get("level") in ("red", "yellow")
+
+
+def _sort_key(d):
+    base = _LEVEL_ORDER[d["level"]]
+    if _fund_alert(d) and base > 1:
+        base = 1.5  # 夹在黄和绿之间
+    return (base, -(abs(d["chg"]) if d["chg"] else 0))
+
+
+def _dedupe_items(items):
+    """同一只标的只留一行：按分组优先级（风险参考／持仓优先，其次重点关注，最后其他）保留第一次出现的。"""
     priority = {g['item_group']: i for i, g in enumerate(GROUPS)}
     seen = set(RISK_IDENTITIES)
     unique_items = []
@@ -2573,136 +2939,228 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
         if identity not in seen:
             seen.add(identity)
             unique_items.append(item)
-    items = sorted(unique_items, key=sort_key)
+    return sorted(unique_items, key=_sort_key)
+
+
+def _row_tags(d, snapshot):
+    """名称旁的小标签：ETF、无数据、参考值、日线日期。"""
+    # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
+    tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
+    if d.get("price") is None:
+        tag += '<span class="tag quote-note">无数据</span>'
+    elif d.get("reference_only"):
+        date = html_lib.escape(str(d.get("data_date") or "日期未知"))
+        tag += f'<span class="tag quote-note">参考值 · 截至 {date}</span>'
+        if d.get("source") and d["source"] != "市场参考":
+            tag += f'<span class="unit">来源 {html_lib.escape(str(d["source"]))} · 收益率百分比</span>'
+        if d.get("reference_lagging"):
+            tag += '<span class="unit">来源尚未提供目标日有效值，保留最近参考值</span>'
+    elif snapshot.get("mode") == "manual_or_config" and d.get("data_date") != snapshot.get("target_trade_date"):
+        date = html_lib.escape(str(d.get("data_date") or "日期未知"))
+        tag += f'<span class="tag quote-note">日线 {date} 收盘</span>'
+    return tag
+
+
+def _fund_detail_html(d):
+    """基本面警示的折叠详情；没有红黄警示就返回空串。"""
+    fund = d.get("fund") or {}
+    if fund.get("level") not in ("red", "yellow") or not fund.get("hits"):
+        return ""
+    period = html_lib.escape(str(fund.get("period") or "未提供"))
+    hits = "".join(f'<li>{html_lib.escape(str(hit))}</li>' for hit in fund["hits"])
+    fcls = "tag f-red" if fund["level"] == "red" else "tag f-yellow"
+    label = html_lib.escape(f"查看 {normalize_symbol(d['symbol'])} 基本面详情")
+    compare = html_lib.escape(str(fund.get("compare") or ""))
+    compare_html = (f'<div>对比：{compare}（接口只有最近4个季度，不是去年同期）</div>'
+                    if compare else "")
+    context = "；".join(str(x) for x in fund.get("context") or [])
+    context_html = (f'<div class="fund-context">参考：{html_lib.escape(context)}。'
+                    f'单项比率变化不等于主营恶化，请结合行业和现金流判断</div>' if context else "")
+    return (f'<details class="fund-detail"><summary class="{fcls}" aria-label="{label}">'
+            f'基本面</summary><div class="fund-body"><div>{period} 报告期</div>{compare_html}'
+            f'<ul>{hits}</ul>{context_html}</div></details>')
+
+
+def _earnings_html(d):
+    earn = earnings_label(d.get("earnings"))
+    if not earn:
+        return ""
+    soon = " soon" if earnings_soon(d.get("earnings")) else ""
+    return (f'<span class="earn{soon}">'
+            f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}</span></span>')
+
+
+def _signals_html(d):
+    """警示文字：目标价 / 共识价相关的一律用紫色，并统一排在最后；手填目标价没触发时也写出空间。"""
+    is_tp = lambda x: "共识价" in x or "目标价" in x
+    parts = ([x for x in d["signals"] if not is_tp(x)]
+             + [f'<span class="tp">{x}</span>' for x in d["signals"] if is_tp(x)])
+    sig = " · ".join(parts) if parts else "—"
+    tg = d.get("target") or {}
+    if tg.get("kind") == "manual" and tg.get("space") is not None and not tg.get("hit") and not tg.get("anomaly"):
+        sig = ("" if sig == "—" else sig + " · ") + f'<span class="tnote">目标价 {_price_text(tg["price"])}，空间 {tg["space"]:+.0f}%</span>'
+    return sig
+
+
+def _stock_row(d, snapshot):
+    cls = d["level"] + (" pur" if d.get("purple") else "")
+    chg_cls = "up" if (d["chg"] or 0) > 0 else (
+        "down" if (d["chg"] or 0) < 0 else "")
+    chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
+    note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
+    lv_html = level_note(d.get("trigger"), d.get("reduce"))
+    tg_html = target_tag(d.get("target") or {})
+    return (
+        f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{lv_html}{_row_tags(d, snapshot)}</td>'
+        f'<td class="earn-cell">{_earnings_html(d)}</td>'
+        f'<td class="num px"><span class="px-price">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
+        f'<span class="px-chg {chg_cls}">{chg_txt}</span>{tg_html}</td>'
+        f'<td class="sig">{_signals_html(d)}{_fund_detail_html(d)}</td></tr>'
+    )
+
+
+def _stock_rows(lst, snapshot):
+    out = "".join(_stock_row(d, snapshot) for d in lst)
+    return out or '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
+
+
+def _group_stats_html(g, group, items_by_symbol, enabled):
+    """分组标题右侧的小圆点计数：红、黄、灰、紫，板块组再跟「相对标普500的强弱」。"""
+    stats = ''.join(
+        f'<span class="stat-count" aria-label="{label} {count} 项">'
+        f'<i class="stat-dot {lv}" aria-hidden="true"></i>{count}</span>'
+        for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "无数据"))
+        if (count := sum(d["level"] == lv for d in g)))
+    # 紫色（目标价 / 共识价警示）：条数跟在红黄灯后面；一条都没有就不显示
+    if (n_pur := sum(bool(d.get("purple")) for d in g)):
+        stats += (f'<span class="stat-count" aria-label="紫色警示 {n_pur} 项">'
+                  f'<i class="stat-dot purple" aria-hidden="true"></i>{n_pur}</span>')
+    # 板块组：红黄灯后面跟「板块 ETF 近 20 日相对标普500的强弱」，折叠时也能看到
+    rs = (items_by_symbol.get(group["sector_etf"]) or {}).get("rs_spy") if group.get("sector_etf") else None
+    if rs:
+        diff = rs["diff"]
+        rs_cls = "up" if diff >= RS_NEUTRAL_PP else "down" if diff <= -RS_NEUTRAL_PP else ""
+        bn = rs.get("bench_name") or RS_BENCH_NAME
+        rs_tip = html_lib.escape(
+            f'{group["sector_etf"]} {rs["days"]}日 {rs["etf"]:+.1f}% − {bn} {rs["bench"]:+.1f}% = {diff:+.1f} 个百分点'
+            f'（{rs["start"]} → {rs["end"]}）')
+        stats += (f'<span class="rs-spy {rs_cls}" aria-label="{rs_tip}">'
+                  f'{rs["days"]}日相对{html_lib.escape(bn)} {diff:+.1f}%</span>')
+    if not enabled:
+        note = "仅板块ETF" if g else "监测关闭"
+        stats = f'<span class="monitor-note">{note}</span>' + stats
+    return stats
+
+
+def _sort_group_items(g, group):
+    etf_row = lambda d: bool(d.get("etf")) or is_etf(d["symbol"])
+    if group["item_group"] in ("position", "focus"):
+        # 持仓 / 重点关注：同一预警级别里 ETF 排在个股后面（稳定排序，级别和涨跌幅顺序不变）
+        return sorted(g, key=lambda d: (_sort_key(d)[0], etf_row(d)))
+    if group.get("sector_etf"):
+        # 行业分类：本行业板块 ETF（XLK、XLV…）只在同一预警级别内排第一；无警示（绿灯）时照常折叠
+        return sorted(g, key=lambda d: (_sort_key(d)[0],
+                                        normalize_symbol(d["symbol"]) != group["sector_etf"],
+                                        _sort_key(d)[1]))
+    return g
+
+
+def _group_card(group, g, items_by_symbol, snapshot):
+    """一个分组的折叠卡片：展开的警示表 + 「无异动 N 只」折叠表。"""
+    monitoring = snapshot.get("group_monitoring", {})
+    registered = snapshot.get("registered_counts", {})
+    g = _sort_group_items(g, group)
+    shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or _fund_alert(d) or d.get("reference_only")
+             or d.get("purple")]
+    quiet = [d for d in g if d["level"] == "green" and not _fund_alert(d) and not d.get("reference_only")
+             and not d.get("purple")]
+    parts = []
+    enabled = monitoring.get(group["key"], True)
+    if not enabled:
+        note = f"行业监测关闭 · {group['sector_etf']} 仍监测（仅限原组已有标的）" if group.get("sector_etf") else "分组监测已关闭"
+        parts.append(f'<div class="quiet">{note} · 清单保留，普通标的暂停抓取和报警</div>')
+    if shown:
+        parts.append(f'<table class="stk">{STK_COLS}{STK_HEAD}{_stock_rows(shown, snapshot)}</table>')
+    if quiet:
+        parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只 · 点击查看</summary>'
+                     f'<table class="stk">{STK_COLS}{STK_HEAD}{_stock_rows(quiet, snapshot)}</table></details>')
+    if not g and enabled:
+        parts.append('<div class="quiet">本组标的已在优先分组展示，避免重复信号</div>' if registered.get(group["key"], 0)
+                     else '<div class="quiet">暂无标的，去设置页录入或导入 CSV / EBK</div>')
+    body = "\n".join(parts)
+    stats = _group_stats_html(g, group, items_by_symbol, enabled)
+    expanded = " open" if enabled and group["key"] in ("positions", "focus") else ""
+    return (f'<details class="card group-card" id="group_{group["key"]}"{expanded}>'
+            f'<summary class="grp"><span>{group["label"]} ({len(g)})</span>'
+            f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
+
+
+def _run_light(snapshot, finished_txt):
+    """首页状态灯（第三排）的 (状态, 文案)：取数失败 / 空清单 / 成功。"""
+    summary = snapshot.get("summary", {})
+    registered = snapshot.get("registered_counts", {})
+    gray_txt = f" 灰{summary.get('gray')}" if summary.get("gray") else ""
+    bad = list(dict.fromkeys(summary.get("stale_symbols", []) + summary.get("missing_symbols", [])))
+    if bad:
+        reason = "取数失败" if not summary.get("stale_symbols") else "当日行情未取得"
+        return "bad", (f"{reason} {len(bad)} 只：{html_lib.escape('、'.join(bad[:6]))}"
+                       + (" 等" if len(bad) > 6 else ""))
+    total = summary.get("total", 0)
+    unsupported_count = len(summary.get("unsupported_symbols", []))
+    if not total:
+        has_registered = any(registered.values())
+        return "idle", ("没有开启的监测标的，未抓取报价" if has_registered else "清单为空，未抓取报价")
+    if unsupported_count >= total:
+        return "idle", f"清单中 {unsupported_count} 个特殊代码暂不支持报价，未抓取报价"
+    coverage = (f"{total - unsupported_count} 项数据已更新 · "
+                f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
+                else f"{total} 项数据已更新")
+    kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
+    return "ok", (f"{kind}抓取成功 · 完成于 {finished_txt}（北京时间） · "
+                  f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
+                  f"绿{summary.get('green', 0)}{gray_txt} · {coverage}")
+
+
+def _signal_counts_card(snapshot):
+    """首页最末尾的折叠卡片「各信号计数」：哪类信号点亮了多少只标的、哪些黄灯只由一类信号造成。
+    快照里没有 signal_counts 或一条信号都没有，就整块不显示。"""
+    counts = snapshot.get("signal_counts") or {}
+    rows = ""
+    for v in counts.values():
+        if not (v.get("red") or v.get("yellow") or v.get("purple")):
+            continue
+        cell = lambda n: f'<td class="num">{n if n else "—"}</td>'
+        rows += (f'<tr><td>{html_lib.escape(str(v.get("label", "")))}</td>'
+                 f'{cell(v.get("red"))}{cell(v.get("yellow"))}{cell(v.get("purple"))}{cell(v.get("sole_yellow"))}</tr>')
+    if not rows:
+        return ""
+    dim = 'style="color:var(--dim)"'
+    head = (f'<tr class="gray mh"><td {dim}>信号</td><td class="num" {dim}>红</td><td class="num" {dim}>黄</td>'
+            f'<td class="num" {dim}>紫</td><td class="num" {dim}>仅此一条黄灯</td></tr>')
+    yellow = (snapshot.get("summary") or {}).get("yellow", 0)
+    return (f'<details class="card group-card" id="signalCounts"><summary class="grp"><span>各信号计数</span>'
+            f'<span class="group-stats">本轮黄灯 {yellow} 只</span></summary>'
+            f'<table>{head}{rows}</table>'
+            f'<p class="macro-help">每只标的每类信号只算一次；“仅此一条黄灯”＝这只标的的黄灯完全由这一类信号造成，'
+            f'关掉这条规则它就变绿。紫色为目标价／共识价提示。</p></details>\n')
+
+
+def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
+    snapshot = snapshot or {}
+    registered = snapshot.get("registered_counts", {})
+    risk = market_risk_summary(macro, snapshot.get("target_trade_date"))
+    rows_macro = _macro_rows(macro, risk)
+
+    items = _dedupe_items(items)
+    signal_card = _signal_counts_card(snapshot)
     items_by_group = {g["item_group"]: [] for g in GROUPS}
     for item in items:
         if item.get("group") in items_by_group:
             items_by_group[item["group"]].append(item)
-
-    def rows_of(lst):
-        out = ""
-        for d in lst:
-            cls = d["level"] + (" pur" if d.get("purple") else "")
-            # 目标价 / 共识价相关的警示文字一律用紫色，并统一排在最后
-            _is_tp = lambda x: "共识价" in x or "目标价" in x
-            _sigs = [x for x in d["signals"] if not _is_tp(x)] + [f'<span class="tp">{x}</span>' for x in d["signals"] if _is_tp(x)]
-            sig = " · ".join(_sigs) if _sigs else "—"
-            chg_cls = "up" if (d["chg"] or 0) > 0 else (
-                "down" if (d["chg"] or 0) < 0 else "")
-            chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
-            note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
-            # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
-            tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
-            if d.get("price") is None:
-                tag += '<span class="tag quote-note">无数据</span>'
-            elif d.get("reference_only"):
-                date = html_lib.escape(str(d.get("data_date") or "日期未知"))
-                tag += f'<span class="tag quote-note">参考值 · 截至 {date}</span>'
-                if d.get("source") and d["source"] != "市场参考":
-                    tag += f'<span class="unit">来源 {html_lib.escape(str(d["source"]))} · 收益率百分比</span>'
-                if d.get("reference_lagging"):
-                    tag += '<span class="unit">来源尚未提供目标日有效值，保留最近参考值</span>'
-            elif snapshot.get("mode") == "manual_or_config" and d.get("data_date") != snapshot.get("target_trade_date"):
-                date = html_lib.escape(str(d.get("data_date") or "日期未知"))
-                tag += f'<span class="tag quote-note">日线 {date} 收盘</span>'
-            fund = d.get("fund") or {}
-            fund_html = ""
-            if fund.get("level") in ("red", "yellow") and fund.get("hits"):
-                period = html_lib.escape(str(fund.get("period") or "未提供"))
-                hits = "".join(f'<li>{html_lib.escape(str(hit))}</li>' for hit in fund["hits"])
-                fcls = "tag f-red" if fund["level"] == "red" else "tag f-yellow"
-                label = html_lib.escape(f"查看 {normalize_symbol(d['symbol'])} 基本面详情")
-                compare = html_lib.escape(str(fund.get("compare") or ""))
-                compare_html = (f'<div>对比：{compare}（接口只有最近4个季度，不是去年同期）</div>'
-                                if compare else "")
-                context = "；".join(str(x) for x in fund.get("context") or [])
-                context_html = (f'<div class="fund-context">参考：{html_lib.escape(context)}。'
-                                f'单项比率变化不等于主营恶化，请结合行业和现金流判断</div>' if context else "")
-                fund_html = (f'<details class="fund-detail"><summary class="{fcls}" aria-label="{label}">'
-                             f'基本面</summary><div class="fund-body"><div>{period} 报告期</div>{compare_html}'
-                             f'<ul>{hits}</ul>{context_html}</div></details>')
-            earn_html = ""
-            earn = earnings_label(d.get("earnings"))
-            if earn:
-                soon = " soon" if earnings_soon(d.get("earnings")) else ""
-                earn_html = (f'<span class="earn{soon}">'
-                             f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}</span></span>')
-            lv_html = level_note(d.get("trigger"), d.get("reduce"))
-            tg = d.get("target") or {}
-            tg_html = target_tag(tg)
-            if tg.get("kind") == "manual" and tg.get("space") is not None and not tg.get("hit") and not tg.get("anomaly"):
-                # 手填目标价：没触发警示时也在警示栏写出空间，方便对照
-                sig = ("" if sig == "—" else sig + " · ") + f'<span class="tnote">目标价 {_price_text(tg["price"])}，空间 {tg["space"]:+.0f}%</span>'
-            out += (
-                f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{lv_html}{tag}</td>'
-                f'<td class="earn-cell">{earn_html}</td>'
-                f'<td class="num px"><span class="px-price">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
-                f'<span class="px-chg {chg_cls}">{chg_txt}</span>{tg_html}</td>'
-                f'<td class="sig">{sig}{fund_html}</td></tr>'
-            )
-        if not out:
-            out = '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
-        return out
-
-    group_cards = ""
     # 板块 ETF 可能因去重落在持仓／重点关注里，按代码在全部条目里找，不限本组
     items_by_symbol = {normalize_symbol(d["symbol"]): d for d in items}
-    for group in GROUPS:
-        g = items_by_group[group["item_group"]]
-        etf_row = lambda d: bool(d.get("etf")) or is_etf(d["symbol"])
-        if group["item_group"] in ("position", "focus"):
-            # 持仓 / 重点关注：同一预警级别里 ETF 排在个股后面（稳定排序，级别和涨跌幅顺序不变）
-            g = sorted(g, key=lambda d: (sort_key(d)[0], etf_row(d)))
-        elif group.get("sector_etf"):
-            # 行业分类：本行业板块 ETF（XLK、XLV…）只在同一预警级别内排第一；无警示（绿灯）时照常折叠
-            g = sorted(g, key=lambda d: (sort_key(d)[0],
-                                         normalize_symbol(d["symbol"]) != group["sector_etf"],
-                                         sort_key(d)[1]))
-        shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or fund_alert(d) or d.get("reference_only")
-                 or d.get("purple")]
-        quiet = [d for d in g if d["level"] == "green" and not fund_alert(d) and not d.get("reference_only")
-                 and not d.get("purple")]
-        parts = []
-        enabled = monitoring.get(group["key"], True)
-        if not enabled:
-            note = f"行业监测关闭 · {group['sector_etf']} 仍监测（仅限原组已有标的）" if group.get("sector_etf") else "分组监测已关闭"
-            parts.append(f'<div class="quiet">{note} · 清单保留，普通标的暂停抓取和报警</div>')
-        if shown:
-            parts.append(f'<table class="stk">{STK_COLS}{STK_HEAD}{rows_of(shown)}</table>')
-        if quiet:
-            parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只 · 点击查看</summary>'
-                         f'<table class="stk">{STK_COLS}{STK_HEAD}{rows_of(quiet)}</table></details>')
-        if not g and enabled:
-            parts.append('<div class="quiet">本组标的已在优先分组展示，避免重复信号</div>' if registered.get(group["key"], 0)
-                         else '<div class="quiet">暂无标的，去设置页录入或导入 CSV / EBK</div>')
-        body = "\n".join(parts)
-        stats = ''.join(
-            f'<span class="stat-count" aria-label="{label} {count} 项">'
-            f'<i class="stat-dot {lv}" aria-hidden="true"></i>{count}</span>'
-            for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "无数据"))
-            if (count := sum(d["level"] == lv for d in g)))
-        # 紫色（目标价 / 共识价警示）：条数跟在红黄灯后面；一条都没有就不显示
-        if (n_pur := sum(bool(d.get("purple")) for d in g)):
-            stats += (f'<span class="stat-count" aria-label="紫色警示 {n_pur} 项">'
-                      f'<i class="stat-dot purple" aria-hidden="true"></i>{n_pur}</span>')
-        # 板块组：红黄灯后面跟「板块 ETF 近 20 日相对标普500的强弱」，折叠时也能看到
-        rs = (items_by_symbol.get(group["sector_etf"]) or {}).get("rs_spy") if group.get("sector_etf") else None
-        if rs:
-            diff = rs["diff"]
-            rs_cls = "up" if diff >= RS_NEUTRAL_PP else "down" if diff <= -RS_NEUTRAL_PP else ""
-            bn = rs.get("bench_name") or RS_BENCH_NAME
-            rs_tip = html_lib.escape(
-                f'{group["sector_etf"]} {rs["days"]}日 {rs["etf"]:+.1f}% − {bn} {rs["bench"]:+.1f}% = {diff:+.1f} 个百分点'
-                f'（{rs["start"]} → {rs["end"]}）')
-            stats += (f'<span class="rs-spy {rs_cls}" aria-label="{rs_tip}">'
-                      f'{rs["days"]}日相对{html_lib.escape(bn)} {diff:+.1f}%</span>')
-        if not enabled:
-            note = "仅板块ETF" if g else "监测关闭"
-            stats = f'<span class="monitor-note">{note}</span>' + stats
-        expanded = " open" if enabled and group["key"] in ("positions", "focus") else ""
-        group_cards += (f'<details class="card group-card" id="group_{group["key"]}"{expanded}>'
-                        f'<summary class="grp"><span>{group["label"]} ({len(g)})</span>'
-                        f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
+    group_cards = "".join(_group_card(group, items_by_group[group["item_group"]], items_by_symbol, snapshot)
+                          for group in GROUPS)
 
     src_name = {"yahoo": "Yahoo Finance", "stooq": "Stooq", "nasdaq": "Nasdaq"}
     srcs = sorted({d.get("source") for d in items if d.get("source")})
@@ -2710,45 +3168,19 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     n_rt = len([d for d in items if d.get("realtime")])
     if n_rt:
         src_txt += f" · {n_rt} 只用了实时价（Nasdaq，0 延迟）"
-    # 之前漏了 join，整段被当成 list 的 str() 插进表格，页面上会多出 [' 和 ']
-    rows_macro = "".join(rows_macro)
     risk_title = html_lib.escape(f"综合判断：{risk['label']} · 有效指标 {risk['valid_count']}/5")
     macro_stats = (f'<span class="market-risk-badge" id="marketRiskLight" data-level="{risk["level"]}" '
                    f'role="status" aria-label="{risk_title}">'
                    f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
                    f'综合：{html_lib.escape(risk["label"])}</span>')
-    snapshot = snapshot or {}
     snapshot_json = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
     snapshot_json = snapshot_json.replace("</", "<\\/")
     summary = snapshot.get("summary", {})
     counts = snapshot.get("list_counts", {})
     finished_iso = beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
     finished_txt = finished_iso[:19].replace("T", " ") if finished_iso else "未记录"
-    # 一行摘要升级为状态灯文案（首页第三排）；这里只算红黄绿计数和异常清单。
-    bad = list(dict.fromkeys(summary.get("stale_symbols", []) + summary.get("missing_symbols", [])))
-    gray_txt = f" 灰{summary.get('gray')}" if summary.get("gray") else ""
-    if bad:
-        init_light_phase = "bad"
-        reason = "取数失败" if not summary.get("stale_symbols") else "当日行情未取得"
-        init_light = (f"{reason} {len(bad)} 只：{html_lib.escape('、'.join(bad[:6]))}"
-                      + (" 等" if len(bad) > 6 else ""))
-    else:
-        total = summary.get("total", 0)
-        unsupported_count = len(summary.get("unsupported_symbols", []))
-        if not total:
-            has_registered = any(registered.values())
-            init_light_phase, init_light = "idle", ("没有开启的监测标的，未抓取报价" if has_registered else "清单为空，未抓取报价")
-        elif unsupported_count >= total:
-            init_light_phase, init_light = "idle", f"清单中 {unsupported_count} 个特殊代码暂不支持报价，未抓取报价"
-        else:
-            init_light_phase = "ok"
-            coverage = (f"{total - unsupported_count} 项数据已更新 · "
-                        f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
-                        else f"{total} 项数据已更新")
-            kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
-            init_light = (f"{kind}抓取成功 · 完成于 {finished_txt}（北京时间） · "
-                          f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
-                          f"绿{summary.get('green', 0)}{gray_txt} · {coverage}")
+    # 一行摘要升级为状态灯文案（首页第三排）
+    init_light_phase, init_light = _run_light(snapshot, finished_txt)
     dca_info = dca_text(snapshot.get("dca_reminder"))
     # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
     ny_now = datetime.now(US_TZ)
@@ -2779,163 +3211,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <link rel="manifest" href="./manifest.webmanifest">
 <title>AI监测市场</title>
 <style>
-:root{{
-  --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
-  --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
-  --blue:#2f6bd8; --purple:#a371f7;
-}}
-*{{box-sizing:border-box;-webkit-tap-highlight-color:transparent}}
-body{{margin:0;background:var(--bg);color:var(--text);
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
-  padding:env(safe-area-inset-top) 14px 40px}}
-.wrap{{max-width:720px;margin:0 auto}}
-h1{{font-size:19px;margin:18px 0 4px;font-weight:600}}
-.sub{{color:var(--dim);font-size:12px;margin-bottom:16px}}
-.card{{background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:6px 4px;margin-bottom:14px;overflow:hidden}}
-h2{{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}}
-table{{width:100%;border-collapse:collapse;font-size:14px}}
-td{{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}}
-tr:first-child td{{border-top:none}}
-.num{{text-align:right;font-variant-numeric:tabular-nums}}
-.dim{{color:var(--dim);font-size:12px}}
-.sym{{font-weight:600}}
-.note{{color:var(--dim);font-weight:400;font-size:11px;margin-left:6px}}
-.tag{{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;
-  font-size:10px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
-  color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}}
-.tag.f-red{{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}}
-.tag.f-yellow{{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}}
-.tag.quote-note{{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}}
-.lvs{{display:block;margin:4px 0 0;line-height:1.5}}
-.lvtag{{display:inline-block;margin:0 4px 2px 0;padding:0 7px;border-radius:999px;border:1px solid;
-  background:transparent;font-size:10px;font-weight:400;line-height:16px;white-space:nowrap;font-variant-numeric:tabular-nums}}
-.lvtag.add{{color:#ffa94d;border-color:rgba(255,169,77,.6)}}
-.lvtag.cut{{color:#4dd0e1;border-color:rgba(77,208,225,.6)}}
-.tgs{{display:block;margin:3px 0 0;line-height:1.4;white-space:normal}}
-.tgs .lvtag{{margin:0;padding:1px 5px;border-radius:4px;line-height:1.35;white-space:normal;text-align:center}}
-.tgs .lvtag span{{display:inline-block;white-space:nowrap}}
-.lvtag.tgt{{color:#c4a3ff;border-color:rgba(163,113,247,.65)}}
-.lvtag.tgt.hit{{color:#fff;background:#8957e5;border-color:#8957e5}}
-.lvtag.tgt.bad{{color:#ff9b95;border-color:rgba(248,81,73,.7)}}
-.tnote,.sig .tp{{color:#c4a3ff}}
-.fund-detail{{margin-top:6px}}
-.fund-detail summary{{margin-left:0;padding:7px 9px;cursor:pointer;list-style:none;touch-action:manipulation}}
-.fund-detail summary::-webkit-details-marker{{display:none}}
-.fund-detail summary::after{{content:"";display:inline-block;margin-left:6px;
-  border:4px solid transparent;border-top-color:currentColor;transform:translateY(2px)}}
-.fund-detail[open] summary::after{{transform:translateY(-2px) rotate(180deg)}}
-.fund-detail summary:focus-visible{{outline:2px solid #6ba3f0;outline-offset:3px}}
-.fund-body{{margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:6px;
-  font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}}
-.fund-body ul{{margin:4px 0 0;padding-left:16px}}
-.sig{{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}}
-.earn{{display:block;margin:0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}}
-.earn .unit{{display:block;color:var(--dim);font-size:11px}}
-.earn.soon{{color:#f0c674;font-weight:600}}
-table.stk{{table-layout:fixed}}
-.c-sym{{width:19%}} .c-earn{{width:29%}} .c-px{{width:13%}}
-.earn-cell{{vertical-align:middle;overflow-wrap:anywhere}}
-table.stk tr td:first-child{{padding-left:14px}}
-.stk td.sym{{overflow-wrap:anywhere}}
-.stk th{{font-size:13px;color:var(--dim);font-weight:600;letter-spacing:.3px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}}
-.stk th:first-child{{padding-left:14px}}
-.stk th.h-earn,.earn-cell{{text-align:center}}
-.px{{white-space:nowrap}}
-.px-price,.px-chg{{display:block}}
-.px-chg{{font-size:12.5px}}
-@media (max-width:600px){{
-  /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
-  .c-sym{{width:22%}} .c-earn{{width:23%}} .c-px{{width:19%}}
-  .stk td{{padding:8px 5px}}
-  table.stk tr td:first-child,.stk th:first-child{{padding-left:11px}}
-  .stk th{{padding:7px 5px;font-size:12px}}
-  .stk th.h-earn,.earn-cell{{text-align:left}}
-  .stk td.sym{{font-size:13.5px}}
-  .stk td.sym .note{{font-size:10.5px;line-height:1.35}}
-  .stk .earn{{font-size:10.5px;line-height:1.4}}
-  .stk .earn .unit{{font-size:10px;line-height:1.35}}
-  .stk .px-price{{font-size:13.5px}}
-  .stk .px-chg{{font-size:11.5px}} .stk .tgs .lvtag{{padding:1px 3px;font-size:9.5px;max-width:100%;box-sizing:border-box}} .stk .tgs .lvtag span{{white-space:normal;overflow-wrap:anywhere}}
-  .stk td.sig{{font-size:11.5px;line-height:1.45}}
-  .stk .fund-detail summary{{padding:6px 7px}}
-}}
-.fund-context{{margin-top:6px;color:var(--dim)}}
-.up{{color:var(--up)}} .down{{color:var(--down)}}
-tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
-tr.yellow td:first-child{{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}}
-tr.green td:first-child{{box-shadow:inset 2px 0 0 var(--green)}}
-tr.gray td{{color:var(--dim)}}
-.group-card tr.red td:first-child{{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}}
-.group-card tr.pur td.sig{{box-shadow:inset -2px 0 0 var(--purple);padding-right:12px}}
-#macroCard tr.mh td{{padding:5px 10px;font-size:11.5px;white-space:nowrap}} #macroCard tr.mh td:nth-child(3){{padding-left:2px}}
-.macro-help{{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}}
-.macro-help>summary{{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}}
-.macro-help p{{margin:6px 0}}
-.macro-help>summary:focus-visible{{outline:2px solid #6ba3f0;outline-offset:2px}}
-.unit{{display:block;font-size:10px;color:var(--dim);font-weight:400}}
-.foot{{color:var(--dim);font-size:11.5px;text-align:center;margin-top:22px;line-height:1.7}}
-.quiet{{color:var(--dim);font-size:12px;padding:8px 12px 12px}}
-.warn{{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
-  color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px}}
-.acts{{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}}
-.acts button{{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
-  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}}
-.acts button:disabled{{opacity:.5;cursor:not-allowed}}
-#runMsg{{font-size:12px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}}
-#runMsg.ok{{color:var(--green)}}
-#runMsg.err{{color:var(--red)}}
-.runbar{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}}
-.runbar button{{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
-  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}}
-.runbar button:disabled{{opacity:.5;cursor:not-allowed}}
-.runbar button.primary{{background:var(--blue);border-color:var(--blue);color:#fff}}
-.runbar a.btnlink{{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
-  border:1px solid #333a47;border-radius:8px;text-decoration:none;display:inline-block}}
-.statusrow{{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  margin:-4px 0 14px;font-size:12.5px;line-height:1.5}}
-.check-result{{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;
-  font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}}
-.check-result[data-phase="bad"]{{border-color:var(--red)}}
-.check-result[data-phase="busy"]{{border-color:var(--yellow)}}
-.check-result[hidden]{{display:none}}
-.group-card>summary.grp,.macro-card>summary.grp{{display:flex;align-items:center;gap:10px;cursor:pointer;
-  padding:12px;font-size:14px;font-weight:600;list-style:none;touch-action:manipulation}}
-.group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{{display:none}}
-.group-card>summary::before,.macro-card>summary::before{{content:"›";color:var(--dim);font-size:20px;line-height:1}}
-.group-card[open]>summary::before,.macro-card[open]>summary::before{{transform:rotate(90deg)}}
-.group-card[open]>summary,.macro-card[open]>summary{{border-bottom:1px solid var(--line)}}
-.group-stats{{margin-left:auto;color:var(--dim);font-size:11px;font-weight:400}}
-.group-card>summary .group-stats{{margin-left:6px;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-start;text-align:left}}
-.stat-count{{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}}
-.rs-spy{{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}}
-.rs-spy.up{{color:var(--up)}} .rs-spy.down{{color:var(--down)}}
-.stat-dot{{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}}
-.stat-dot.red{{background:var(--red)}} .stat-dot.yellow{{background:var(--yellow)}}
-.stat-dot.gray{{background:var(--dim)}} .stat-dot.green{{background:var(--green)}} .stat-dot.purple{{background:var(--purple)}}
-.market-risk-badge{{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}}
-.market-risk-badge[data-level="red"]{{color:var(--red)}}
-.market-risk-badge[data-level="yellow"]{{color:var(--yellow)}}
-.market-risk-badge[data-level="green"]{{color:var(--green)}}
-.macro-card>summary .group-stats{{margin-left:6px;text-align:left}}
-.quiet-list{{margin:8px 0}}
-.quiet-list>summary{{padding:8px 12px;color:var(--dim);font-size:12px;cursor:pointer}}
-.sym .note{{display:block;margin:3px 0 0;overflow-wrap:anywhere}}
-.group-card summary:focus-visible,.macro-card summary:focus-visible{{outline:2px solid #6ba3f0;outline-offset:-2px}}
-.runlight{{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}}
-.runlight .dot{{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}}
-.runlight[data-phase="busy"]{{color:var(--yellow)}}
-.runlight[data-phase="busy"] .dot{{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}}
-.runlight[data-phase="ok"]{{color:var(--green)}}
-.runlight[data-phase="ok"] .dot{{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}}
-.runlight[data-phase="bad"]{{color:var(--red)}}
-.runlight[data-phase="bad"] .dot{{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}}
-.dca{{background:rgba(139,147,161,.12);border:1px solid var(--line);border-radius:10px;
-  padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--dim)}}
-.dca b{{color:var(--text)}}
-.dca.on{{background:rgba(210,153,34,.14);border-color:rgba(210,153,34,.4);color:var(--yellow)}}
-.dca.on b{{color:var(--yellow)}}
-</style>
+{PAGE_CSS}</style>
 </head>
 <body><div class="wrap">
 <h1>AI监测市场</h1>
@@ -2976,7 +3252,7 @@ tr.gray td{{color:var(--dim)}}
 </details>
 
 {group_cards}
-{reg_line}
+{signal_card}{reg_line}
 
 <div class="foot">
 行情：{src_txt} · 垃圾债利差：FRED · 金融压力：NFCI原始周度数据／FRED同步备用<br>

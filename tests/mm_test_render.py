@@ -8,6 +8,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import monitor  # noqa: E402
 
+# 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
+monitor.S.clear()
+monitor.S.update(monitor.DEFAULT_SETTINGS)
+
 def item(sym, group, level, chg=1.0, etf=False, note=""):
     return {"symbol": sym, "note": note, "price": 100.0, "chg": chg, "rsi": {6: 50.0, 12: 50.0, 24: 50.0},
             "dist_high": -5.0, "dist_low": 10.0, "vol_ratio": 1.0,

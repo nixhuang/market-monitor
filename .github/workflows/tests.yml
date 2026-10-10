@@ -1,0 +1,44 @@
+name: 自动测试
+run-name: "自动测试 · ${{ github.event_name }}"
+
+# 八项离线测试（不联网、不读线上设置）。三种用法：
+#   1. 推送到 main / 提交 PR 时自动跑，红叉就是有问题；
+#   2. daily.yml 里作为「发布前检查」调用——测试不过，就不抓数据、不生成页面、不发布；
+#   3. 也可以手动点 Run workflow。
+# 机器人只提交 index.html / status.json，已排除，不会触发它。
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'index.html'
+      - 'status.json'
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 拉取仓库
+        uses: actions/checkout@v4
+
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 准备 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 安装依赖
+        run: pip install requests exchange-calendars
+
+      - name: 跑全部测试
+        run: python tests/run_all.py
