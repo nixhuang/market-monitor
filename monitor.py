@@ -3151,7 +3151,7 @@ tr:first-child td{border-top:none}
 .earn .unit{display:block;color:var(--dim);font-size:11px}
 .earn.soon{color:#f0c674;font-weight:600}
 table.stk{table-layout:fixed}
-.c-sym{width:19%} .c-earn{width:29%} .c-px{width:13%}
+.c-sym{width:18%} .c-earn{width:22%} .c-px{width:13%} .c-sig{width:47%}
 .earn-cell{vertical-align:middle;overflow-wrap:anywhere}
 table.stk tr td:first-child{padding-left:14px}
 .stk td.sym{overflow-wrap:anywhere}
@@ -3163,7 +3163,7 @@ table.stk tr td:first-child{padding-left:14px}
 .px-chg{font-size:12.5px}
 @media (max-width:600px){
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
-  .c-sym{width:22%} .c-earn{width:23%} .c-px{width:19%}
+  .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
   .stk td{padding:8px 5px}
   table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
   .stk th{padding:7px 5px;font-size:12px}
