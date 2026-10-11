@@ -18,8 +18,10 @@ MONTHS = {name: i for i, name in enumerate(
     ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"), 1)}
 RULES = ("美联储仅展示最近已核实的正式利率决议、目标区间、发布日期和官方来源；"
          "调整基点仅在声明明确且可核实时显示，不从区间或其他数据猜测。"
-         "决议信息为neutral中性状态，不作风险灯或买卖解读。正常缓存24小时，"
-         "官方下一次决议到期可提前查询；失败或待更新后至少1小时重试，到期不绕过错误限速。"
+         "决议信息为neutral中性状态，不作风险灯或买卖解读。成功后持久缓存，"
+         "日常仅本地比较下次公布时间，到期随下一次监测运行查询新决议，不按24小时重复抓取。"
+         "失败或待更新后至少1小时重试，到期不绕过错误限速；日程缺失仅补查日历，"
+         "已核实的同一声明不重复下载。仅按例行日程更新，临时决议可能延迟发现。"
          "旧正式决议不按天数或跨年删除，新决议到期或查询失败明确待更新并保留旧日期。"
          "原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。"
          "原油参考不计入综合灯，不是官方风险线、市场概率或交易指令。")
@@ -216,7 +218,8 @@ def fed_decision(data, now=None):
     if result.get("released_at") and released is None:
         valid = False
     due = moment(result.get("next_release"))
-    pending = bool(result.get("fetch_error") or result.get("pending_update") or (due and n >= due))
+    pending = bool(result.get("fetch_error") or result.get("pending_update") or result.get("schedule_error")
+                   or result.get("verification_pending") or (due and n >= due))
     if not valid:
         return {**result, "level": "neutral", "status": "unavailable", "incomplete": True,
                 "text": "美联储正式利率决议待更新：未取得可核实的动作、目标区间、日期和官方来源。"}
@@ -236,18 +239,27 @@ def update_policy(prev=None, now=None):
     cached = prev.get("fed")
     fields = ("date", "action", "low", "high", "change_bps", "published_date", "released_at",
               "next_release", "pending_release", "pending_update", "source", "url", "calendar_url",
-              "checked_at", "fetch_error")
+              "checked_at", "fetch_error", "schedule_error", "verification_pending")
     old = {k: v for k, v in cached.items() if k in fields} if isinstance(cached, dict) else {}
     # 首次从旧CPI/SEP组合迁移，立即核实正式决议，不能继承旧解析失败的等待窗口。
     legacy = "cpi" in prev or (isinstance(cached, dict) and any(k in cached for k in ("median", "projection_url", "year")))
+    if legacy:
+        # 迁移失败后也保留需核实正文的标记，不能把旧组合字段误认成已核实缓存。
+        old["verification_pending"] = True
     checked = None if legacy else moment(old.get("checked_at"))
     due = moment(old.get("next_release"))
     invalid = fed_decision(old, n)["status"] == "unavailable"
-    limited = bool(old.get("fetch_error") or old.get("pending_update") or invalid)
+    old_date = moment(old.get("date"))
+    schedule_valid = due is not None and old_date is not None and due > old_date
+    if not invalid and not schedule_valid:
+        old["schedule_error"] = "下次计划决议时间缺失或无效，待补查官方日历"
+    limited = bool(old.get("fetch_error") or old.get("pending_update") or old.get("schedule_error")
+                   or old.get("verification_pending") or invalid or not schedule_valid)
     fresh = checked is not None and checked <= n
-    # 错误限速必须先于到期检查；到期不能在一小时内反复打官方接口。
-    reuse = fresh and ((limited and n - checked < timedelta(hours=1))
-                      or (not limited and n - checked < timedelta(hours=24) and (not due or n < due)))
+    # 成功消息不按缓存年龄过期，未到公布时间只在本地比较，零网络请求。
+    # 缺少有效日程需补查日历；错误/待更新必须先限速，到期不绕过一小时窗口。
+    reuse = not legacy and ((fresh and limited and n - checked < timedelta(hours=1))
+                            or (not limited and n < due))
     fed = old
     if not reuse:
         calendar = None
@@ -256,19 +268,32 @@ def update_policy(prev=None, now=None):
             last, latest, nxt = calendar["latest_statement"], calendar["latest"], calendar["next"]
             if not last:
                 raise ValueError("官方日历尚无可用正式声明链接")
-            parsed = parse_statement(fetch_text(last["statement"]), last["date"])
+            if not invalid and old_date and last["date"] < old_date.date().isoformat():
+                raise ValueError("官方日历返回更旧决议，保留已核实缓存")
+            same_statement = (not old.get("verification_pending") and not invalid and last["statement"] == old.get("url")
+                              and last["date"] == old_date.date().isoformat())
+            if same_statement:
+                # 日历尚未挂新声明，或仅补全未来日程，不重新下载已核实正文。
+                parsed = {k: old[k] for k in ("action", "low", "high", "change_bps", "published_date", "released_at") if k in old}
+            else:
+                parsed = parse_statement(fetch_text(last["statement"]), last["date"])
             if last["unscheduled"] and not parsed.get("released_at") and last["date"] == n.astimezone(NY).date().isoformat():
                 raise ValueError("临时会议当日发布时间尚未确认")
             if parsed.get("released_at") and moment(parsed["released_at"]) > n:
                 raise ValueError("正式声明发布时间尚未到达")
-            if not invalid and moment(old.get("date")) and last["date"] < moment(old["date"]).date().isoformat():
-                raise ValueError("官方日历返回更旧决议，保留已核实缓存")
-            pending = latest["date"] > last["date"]
-            fed = {**parsed, "date": parsed.get("released_at", last["date"]),
+            pending_at = latest["at"] if latest["date"] > last["date"] else None
+            # 日历暂时漏列/撤下到期会议也不能把旧消息重新标为已更新。
+            for expected in (moment(old.get("pending_release")), due if schedule_valid else None):
+                if expected and expected <= n and last["date"] < expected.astimezone(NY).date().isoformat():
+                    if not pending_at or expected > moment(pending_at):
+                        pending_at = expected.isoformat()
+            pending = pending_at is not None
+            fed = {**parsed, "date": old["date"] if same_statement else parsed.get("released_at", last["date"]),
                    "next_release": nxt["at"] if nxt else None,
-                   "pending_release": latest["at"] if pending else None, "pending_update": pending,
+                   "pending_release": pending_at, "pending_update": pending,
                    "source": "美联储官方正式利率决议声明", "url": last["statement"], "calendar_url": FED_URL,
-                   "checked_at": n.isoformat(), "fetch_error": ""}
+                   "checked_at": n.isoformat(), "fetch_error": "",
+                   "schedule_error": "" if nxt else "官方日历未提供下次计划决议时间，待补查日程"}
         except Exception as exc:
             fed = {**old, "checked_at": n.isoformat(), "fetch_error": str(exc)[:180] or type(exc).__name__,
                    "pending_update": True}
@@ -278,6 +303,12 @@ def update_policy(prev=None, now=None):
                 if not old_date or latest["date"] > old_date.date().isoformat():
                     fed["pending_release"] = latest["at"]
                 fed["next_release"] = nxt["at"] if nxt else None
+            # 即使日历/声明异常，也保存尚未兑现的到期会议，不能被未来日程冲掉。
+            for expected in (moment(old.get("pending_release")), due if schedule_valid else None):
+                if expected and expected <= n and (invalid or old_date.date() < expected.astimezone(NY).date()):
+                    current = moment(fed.get("pending_release"))
+                    if not current or expected > current:
+                        fed["pending_release"] = expected.isoformat()
     rendered = fed_decision(fed, n)
     summary = {k: rendered[k] for k in ("level", "status", "text", "incomplete")}
     return {"fed": fed, "summary": summary, "rules": RULES}

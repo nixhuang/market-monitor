@@ -202,6 +202,7 @@ class TestDecisionAndCache(unittest.TestCase):
                 result = p.update_policy({'fed': {**data, 'checked_at': now.isoformat()}}, now)
             fetch.assert_not_called()
             self.assertEqual(result['fed']['date'], FED['date'])
+            self.assertEqual(result['summary']['status'], 'pending', '无下次日程必须提示待补查，不默认为最新')
 
     def test_due_and_failure_keep_old_date(self):
         due = p.moment(FED['next_release'])
@@ -260,19 +261,21 @@ class TestDecisionAndCache(unittest.TestCase):
         self.assertEqual(result['fed']['published_date'], '2025-06-18')
         self.assertEqual(result['fed']['fetch_error'], '')
 
-    def test_normal_cache_full_24_hours_and_not_mutated(self):
+    def test_success_cache_has_no_24h_expiry_and_not_mutated(self):
         prev = {'fed': {**FED, 'checked_at': NOW.isoformat()}}
         before = copy.deepcopy(prev)
-        with patch.object(p, 'fetch_text', side_effect=RuntimeError('offline')) as fetch:
-            p.update_policy(prev, NOW + timedelta(hours=23, minutes=59))
+        due = p.moment(FED['next_release'])
+        with patch.object(p, 'fetch_text', side_effect=RuntimeError('must not request')) as fetch:
+            for now in (NOW, NOW + timedelta(hours=23, minutes=59), NOW + timedelta(hours=24),
+                        NOW + timedelta(days=7), NOW + timedelta(days=20), due - timedelta(seconds=1)):
+                result = p.update_policy(prev, now)
+                self.assertEqual(result['fed']['checked_at'], NOW.isoformat())
+                self.assertEqual(result['summary']['status'], 'available')
             fetch.assert_not_called()
-            result = p.update_policy(prev, NOW + timedelta(hours=24))
-        self.assertEqual(fetch.call_count, 1)
         self.assertEqual(prev, before)
         self.assertEqual(result['fed']['date'], FED['date'])
-        self.assertEqual(result['summary']['status'], 'pending')
 
-    def test_due_bypasses_24h_cache_and_new_decision_replaces_old(self):
+    def test_due_exact_boundary_and_new_decision_replaces_old(self):
         due = p.moment(FED['next_release'])
         prev = {'fed': {**FED, 'checked_at': (due - timedelta(minutes=10)).isoformat()}}
         text = statement('lower', 'by 1/4 percentage point', date='July 30, 2025')
@@ -307,10 +310,14 @@ class TestDecisionAndCache(unittest.TestCase):
 
     def test_no_latest_link_keeps_formal_old_and_throttles_pending(self):
         now = datetime(2025, 8, 1, tzinfo=p.BJ)
-        with patch.object(p, 'fetch_text', side_effect=[calendar(), statement()]) as fetch:
+        with patch.object(p, 'fetch_text', side_effect=[calendar(), calendar()]) as fetch:
             result = p.update_policy({'fed': FED}, now)
             again = p.update_policy(result, now + timedelta(minutes=59))
+            self.assertEqual(fetch.call_count, 1, '新链接未出现，不重下载旧声明')
+            retried = p.update_policy(again, now + timedelta(hours=1))
         self.assertEqual(fetch.call_count, 2)
+        self.assertTrue(all(call.args == (p.FED_URL,) for call in fetch.call_args_list))
+        self.assertEqual(retried['summary']['status'], 'pending')
         self.assertEqual(again['fed']['date'], FED['date'])
         self.assertEqual(again['summary']['status'], 'pending')
         self.assertEqual(result['fed']['pending_release'], FED['next_release'])
@@ -362,12 +369,130 @@ class TestDecisionAndCache(unittest.TestCase):
         self.assertEqual(result['fed']['date'], '2020-03-15T17:00:00-04:00')
         self.assertEqual(result['fed']['change_bps'], 100)
 
-    def test_naive_now_and_invalid_checked_at_fetch(self):
-        prev = {'fed': {**FED, 'checked_at': 'bad'}}
-        with patch.object(p, 'fetch_text', side_effect=[calendar(), statement()]):
-            result = p.update_policy(prev, NOW.replace(tzinfo=None))
-        self.assertEqual(result['summary']['status'], 'available')
+    def test_naive_now_and_invalid_checked_at_does_not_expire_success(self):
+        for checked in ('bad', None, (NOW + timedelta(days=1)).isoformat()):
+            prev = {'fed': {**FED, 'checked_at': checked}}
+            with patch.object(p, 'fetch_text') as fetch:
+                result = p.update_policy(prev, NOW.replace(tzinfo=None))
+            fetch.assert_not_called()
+            self.assertEqual(result['summary']['status'], 'available')
+            self.assertEqual(result['fed']['checked_at'], checked)
+        prev = {'fed': {**FED, 'checked_at': 'bad', 'fetch_error': 'offline'}}
+        with patch.object(p, 'fetch_text', return_value=calendar()) as fetch:
+            result = p.update_policy(prev, NOW)
+        fetch.assert_called_once_with(p.FED_URL)
         self.assertEqual(result['fed']['checked_at'], NOW.isoformat())
+        self.assertEqual(result['summary']['status'], 'available')
+
+    def test_existing_24h_cache_migrates_without_refetch(self):
+        prev = {'fed': {**FED, 'checked_at': (NOW - timedelta(days=10)).isoformat()}}
+        with patch.object(p, 'fetch_text') as fetch:
+            result = p.update_policy(prev, NOW)
+        fetch.assert_not_called()
+        self.assertEqual(result['fed'], prev['fed'])
+        self.assertIn('成功后持久缓存', result['rules'])
+        self.assertNotIn('正常缓存24小时', result['rules'])
+
+    def test_cross_year_cache_only_uses_next_release_not_age(self):
+        data = {**FED, 'next_release': '2026-01-28T14:00:00-05:00', 'checked_at': NOW.isoformat()}
+        now = datetime(2026, 1, 1, tzinfo=p.BJ)
+        with patch.object(p, 'fetch_text') as fetch:
+            result = p.update_policy({'fed': data}, now)
+        fetch.assert_not_called()
+        self.assertEqual(result['summary']['status'], 'available')
+        self.assertEqual(result['fed']['date'], FED['date'])
+
+    def test_missing_or_invalid_schedule_fetches_only_calendar(self):
+        for due in (None, 'bad', FED['date'], '2025-01-01T14:00:00-05:00'):
+            prev = {'fed': {**FED, 'next_release': due, 'checked_at': (NOW - timedelta(hours=1)).isoformat()}}
+            before = copy.deepcopy(prev)
+            with patch.object(p, 'fetch_text', return_value=calendar()) as fetch:
+                result = p.update_policy(prev, NOW)
+                p.update_policy(result, NOW + timedelta(days=7))
+            fetch.assert_called_once_with(p.FED_URL)
+            self.assertEqual(result['fed']['next_release'], FED['next_release'])
+            self.assertEqual(result['fed']['date'], FED['date'])
+            self.assertEqual(result['summary']['status'], 'available')
+            self.assertEqual(prev, before)
+
+    def test_calendar_missing_future_keeps_message_and_throttles_calendar_only(self):
+        cal = '2025 FOMC Meetings' + row('June', '17-18', '20250618')
+        prev = {'fed': {**FED, 'next_release': None}}
+        with patch.object(p, 'fetch_text', return_value=cal) as fetch:
+            first = p.update_policy(prev, NOW)
+            p.update_policy(first, NOW + timedelta(minutes=59))
+            self.assertEqual(fetch.call_count, 1)
+            second = p.update_policy(first, NOW + timedelta(hours=1))
+        self.assertEqual(fetch.call_count, 2)
+        self.assertTrue(all(call.args == (p.FED_URL,) for call in fetch.call_args_list))
+        self.assertEqual(second['fed']['date'], FED['date'])
+        self.assertTrue(second['fed']['schedule_error'])
+        self.assertEqual(second['summary']['status'], 'pending')
+
+    def test_due_calendar_omission_cannot_clear_pending(self):
+        due = p.moment(FED['next_release'])
+        cal = '2025 FOMC Meetings' + row('June', '17-18', '20250618') + row('September', '16-17')
+        with patch.object(p, 'fetch_text', return_value=cal) as fetch:
+            first = p.update_policy({'fed': FED}, due)
+            second = p.update_policy(first, due + timedelta(hours=1))
+        self.assertEqual(fetch.call_count, 2)
+        self.assertTrue(all(call.args == (p.FED_URL,) for call in fetch.call_args_list))
+        self.assertEqual(second['fed']['pending_release'], FED['next_release'])
+        self.assertEqual(second['summary']['status'], 'pending')
+        self.assertEqual(second['fed']['next_release'], '2025-09-17T14:00:00-04:00')
+
+    def test_failed_new_decision_retry_then_long_cache(self):
+        due = p.moment(FED['next_release'])
+        with patch.object(p, 'fetch_text', side_effect=RuntimeError('offline')) as fetch:
+            first = p.update_policy({'fed': FED}, due)
+        fetch.assert_called_once_with(p.FED_URL)
+        text = statement('lower', 'by 1/4 percentage point', date='July 30, 2025')
+        with patch.object(p, 'fetch_text', side_effect=[calendar(True), text]) as fetch:
+            updated = p.update_policy(first, due + timedelta(hours=1))
+            cached = p.update_policy(updated, due + timedelta(days=20))
+        self.assertEqual(fetch.call_count, 2)
+        self.assertEqual(updated['fed']['published_date'], '2025-07-30')
+        self.assertEqual(updated['fed']['fetch_error'], '')
+        self.assertFalse(updated['fed']['pending_update'])
+        self.assertEqual(cached['fed'], updated['fed'])
+        self.assertEqual(cached['summary']['status'], 'available')
+
+    def test_future_invalid_error_clock_cannot_block_retry_forever(self):
+        prev = {'fed': {**FED, 'fetch_error': 'offline', 'checked_at': (NOW + timedelta(days=1)).isoformat()}}
+        with patch.object(p, 'fetch_text', return_value=calendar()) as fetch:
+            result = p.update_policy(prev, NOW)
+        fetch.assert_called_once_with(p.FED_URL)
+        self.assertEqual(result['fed']['checked_at'], NOW.isoformat())
+        self.assertEqual(result['summary']['status'], 'available')
+
+    def test_legacy_migration_failure_still_requires_statement_on_retry(self):
+        old = {k: v for k, v in FED.items() if k not in ('published_date', 'released_at')}
+        old.update(median=4.0, year=2025, checked_at=NOW.isoformat(), low=3.75, high=4.0)
+        with patch.object(p, 'fetch_text', side_effect=RuntimeError('offline')):
+            first = p.update_policy({'cpi': {}, 'fed': old}, NOW)
+        self.assertTrue(first['fed']['verification_pending'])
+        with patch.object(p, 'fetch_text', side_effect=[calendar(), statement()]) as fetch:
+            updated = p.update_policy(first, NOW + timedelta(hours=1))
+            p.update_policy(updated, NOW + timedelta(days=20))
+        self.assertEqual(fetch.call_count, 2, '迁移失败后重试必须核实正文，不能只复用旧字段')
+        self.assertEqual(updated['fed']['published_date'], '2025-06-18')
+        self.assertEqual(updated['fed']['low'], 4.25)
+        self.assertFalse(updated['fed'].get('verification_pending'))
+        self.assertEqual(updated['summary']['status'], 'available')
+
+    def test_due_calendar_failure_cannot_lose_pending_evidence(self):
+        due = p.moment(FED['next_release'])
+        no_link = '2025 FOMC Meetings' + row('June', '17-18') + row('September', '16-17')
+        restored = '2025 FOMC Meetings' + row('June', '17-18', '20250618') + row('September', '16-17')
+        with patch.object(p, 'fetch_text', side_effect=[no_link, restored]) as fetch:
+            first = p.update_policy({'fed': FED}, due)
+            second = p.update_policy(first, due + timedelta(hours=1))
+        self.assertEqual(fetch.call_count, 2)
+        self.assertTrue(all(call.args == (p.FED_URL,) for call in fetch.call_args_list))
+        self.assertEqual(first['fed']['pending_release'], FED['next_release'])
+        self.assertEqual(second['fed']['pending_release'], FED['next_release'])
+        self.assertEqual(second['summary']['status'], 'pending')
+        self.assertEqual(second['fed']['date'], FED['date'])
 
     def test_fetch_text_only_official_and_no_redirects_or_immediate_retries(self):
         for url in ('https://example.test/', 'http://www.federalreserve.gov/monetarypolicy/fomccalendars.htm',

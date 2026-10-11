@@ -246,8 +246,10 @@ check('data-level="neutral" data-status="available"' in _refcard and "维持不�
 check(not any(term in _refhtml for term in ("核心CPI", "SEP", "季度预测", "点阵图", "通胀／利率")), "页面移除CPI与预测依赖及旧标签")
 check('id="policyAlertDetails"><summary>美联储利率决议' in _refhtml
       and '<details class="macro-help" id="policyAlertDetails" open' not in _refhtml, "决议来源位于页底并默认折叠")
-check("3.50%–3.75%" in _refhtml and "2026-09-17 02:00" in _refhtml and "正常缓存24小时" in _refhtml,
-      "详情包含目标区间、双时区与抓取间隔")
+check("3.50%–3.75%" in _refhtml and "2026-09-17 02:00" in _refhtml
+      and "成功后持久缓存" in _refhtml and "不按24小时重复抓取" in _refhtml
+      and "正常缓存24小时" not in _refhtml and "临时决议可能延迟发现" in _refhtml,
+      "详情包含目标区间、双时区与按公布时间更新说明")
 check(_refsnap["summary"] == snapshot["summary"] and 'id="oilAlert"' in _refhtml, "原计数不变，WTI保留")
 _pending = _copy.deepcopy(_refsnap)
 _pending["reference_alerts"]["policy"]["fed"]["fetch_error"] = "模拟解析错误 <script>bad()</script>"

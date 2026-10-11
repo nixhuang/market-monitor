@@ -3638,14 +3638,19 @@ def _reference_card(snapshot, *, details_only=False):
                     f'／{next_fed.astimezone(TZ).strftime("%Y-%m-%d %H:%M")}（北京时间）；以官方实际发布为准。</p>')
     if fed.get("fetch_error"):
         details += f'<p>最近查询未成功：{esc(fed["fetch_error"])}。旧消息保留日期，不冒充最新结果。</p>'
+    if fed.get("schedule_error"):
+        details += f'<p>日程待更新：{esc(fed["schedule_error"])}。最近已核实决议继续保留。</p>'
     if valid:
         details += (f'<p><a href="{esc(fed["url"])}" target="_blank" rel="noopener noreferrer">美联储官方决议声明</a></p>')
     details += (f'<p><a href="{policy_alerts.FED_URL}" target="_blank" rel="noopener noreferrer">美联储官方会议日历</a></p>')
     checked = policy_alerts.moment(fed.get("checked_at"))
     if checked:
         details += f'<p>最近查询：{checked.astimezone(TZ).strftime("%Y-%m-%d %H:%M")}（北京时间）。</p>'
-    details += ('<p>正常缓存24小时；到计划决议公布时间，下一次运行会优先查询。失败后至少间隔1小时再试。'
+    details += ('<p>成功后持久缓存；日常只在本地比较下次公布时间，不按24小时重复抓取。'
+                '到计划决议公布时间，随下一次监测运行查询新消息；未取得新消息标记待更新，保留旧决议。'
+                '失败或待更新后至少间隔1小时再试；日程缺失只补查日历，已核实的同一声明不重复下载。'
                 '检查随现有监测任务运行，不额外启动定时任务；不是每小时自动抓取。</p>'
+                '<p>仅按例行会议日程更新，临时决议可能延迟发现；未额外增加每日公告检查。</p>'
                 '<p>仅展示已公布的加息／降息／维持不变，不展示预测，不解读市场安全与危险，不计入综合评分或个股信号。'
                 '最近正式消息保留至新消息核实；新决议应公布但未取得时标记待更新。</p>')
     if details_only:
