@@ -1,27 +1,28 @@
-"""独立通胀、利率与原油参考：规则型提示，不参与市场综合评分。
-纯解析/判定不联网；update_policy 才取数。调用方负责保存缓存。
+"""美联储正式利率决议信息与独立原油参考，不参与市场综合评分。
+纯解析/渲染不联网；update_policy 才取官方文本，调用方负责保存缓存。
 """
 import html
 import math
 import re
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
+from urllib.parse import urlparse, urljoin
 from zoneinfo import ZoneInfo
-from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
 NY = ZoneInfo("America/New_York")
 BJ = timezone(timedelta(hours=8))
-BLS_URL = "https://www.bls.gov/news.release/cpi.nr0.htm"
 FED_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
-FRED_URL = "https://fred.stlouisfed.org/series/CPILFESL"
 MONTHS = {name: i for i, name in enumerate(
     ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"), 1)}
-RULES = ("自定义参考规则：核心CPI季调环比≥0.3%注意、单月≥0.4%偏热，连续两月≥0.4%警惕；"
-         "新加息14天内警惕，之后保留收紧提示；年末利率预测高于当前区间中点提示可能进一步收紧。"
+RULES = ("美联储仅展示最近已核实的正式利率决议、目标区间、发布日期和官方来源；"
+         "调整基点仅在声明明确且可核实时显示，不从区间或其他数据猜测。"
+         "决议信息为neutral中性状态，不作风险灯或买卖解读。正常缓存24小时，"
+         "官方下一次决议到期可提前查询；失败或待更新后至少1小时重试，到期不绕过错误限速。"
+         "旧正式决议不按天数或跨年删除，新决议到期或查询失败明确待更新并保留旧日期。"
          "原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。"
-         "均不是官方风险线、市场概率或交易指令，不推断确定加息或股市跌幅。")
+         "原油参考不计入综合灯，不是官方风险线、市场概率或交易指令。")
 
 
 def plain(text):
@@ -37,291 +38,249 @@ def moment(value):
 
 
 def clock(now=None):
-    return now or datetime.now(BJ)
+    n = now or datetime.now(BJ)
+    return n.replace(tzinfo=BJ) if n.tzinfo is None else n
+
+
+def official_statement_url(url):
+    if not isinstance(url, str):
+        return None
+    parsed = urlparse(url)
+    if (parsed.scheme != "https" or parsed.netloc != "www.federalreserve.gov"
+            or parsed.query or parsed.fragment):
+        return None
+    return re.fullmatch(r"/newsevents/pressreleases/monetary(\d{8})a\.htm", parsed.path)
 
 
 def fetch_text(url):
-    for attempt in range(2):
-        try:
-            r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-            r.raise_for_status()
-            r.encoding = "utf-8"
-            return r.text
-        except requests.exceptions.RequestException:
-            if attempt or ("r" in locals() and r.status_code in (403, 429)):
-                raise
-
-
-def rounding(value):
-    return float(Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+    if url != FED_URL and not official_statement_url(url):
+        raise ValueError("仅允许美联储官方日历和正式声明链接")
+    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10, allow_redirects=False)
+    r.raise_for_status()
+    if r.status_code != 200:
+        raise ValueError("官方响应不是完整正文")
+    r.encoding = "utf-8"
+    return r.text
 
 
 def valid_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
-def parse_cpi(text):
-    """只认BLS核心季调环比行，不认整体CPI或同比段落。"""
-    flat = plain(text)
-    month = re.search(r"CONSUMER PRICE INDEX\s*[-–]\s*([A-Z]+)\s+(\d{4})", flat)
-    if not month or month[1].title() not in MONTHS:
-        raise ValueError("CPI统计月份无法确认")
-    y, m = int(month[2]), MONTHS[month[1].title()]
-    values = None
-    for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", text, re.S | re.I):
-        cells = re.findall(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", row, re.S | re.I)
-        if cells and plain(cells[0]).lower().rstrip(".") == "all items less food and energy":
-            nums = [plain(c) for c in cells[1:]]
-            if len(nums) == 8 and all(re.fullmatch(r"[-+]?\d+(?:\.\d+)?", v) for v in nums):
-                values = [float(v) for v in nums[:-1]][-3:]
-                break
-    if values is None or "Seasonally adjusted changes from preceding month" not in flat:
-        raise ValueError("未取得经确认的核心CPI季调环比表格")
-    release = re.search(r"8:30\s*a\.m\.\s*\(ET\).*?(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s*(\d{4})", flat)
-    upcoming = re.search(r"news release for .*?scheduled to be published on.*?(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),\s*(\d{4}),\s*at 8:30", flat, re.I)
-    if not release or not upcoming:
-        raise ValueError("CPI发布时间无法确认")
-    def stamp(match):
-        return datetime(int(match[3]), MONTHS[match[1].title()], int(match[2]), 8, 30, tzinfo=NY).isoformat()
-    return {"date": f"{y:04d}-{m:02d}", "mom": values[-1], "previous": values[-2],
-            "history": values, "released_at": stamp(release), "next_release": stamp(upcoming),
-            "source": "BLS季调核心CPI公告", "url": BLS_URL}
-
-
-def cpi_from_index(rows, now=None):
-    """FRED CPILFESL月度季调指数备用；禁止跨缺月计算。"""
-    n = clock(now)
-    unique = {}
-    for d, v in rows:
-        try:
-            dt = datetime.strptime(d, "%Y-%m-%d")
-            if dt.date() <= n.date() and math.isfinite(v) and v > 0:
-                unique[d[:7]] = float(v)
-        except (ValueError, TypeError):
-            continue
-    tail = sorted(unique.items())[-4:]
-    if len(tail) < 4:
-        raise ValueError("核心CPI连续月份不足")
-    for (a, _), (b, _) in zip(tail, tail[1:]):
-        ay, am = map(int, a.split("-")); by, bm = map(int, b.split("-"))
-        if by * 12 + bm != ay * 12 + am + 1:
-            raise ValueError("核心CPI缺月，不能跨月计算")
-    changes = [rounding((Decimal(str(b)) / Decimal(str(a)) - 1) * 100)
-               for (_, a), (_, b) in zip(tail, tail[1:])]
-    return {"date": tail[-1][0], "mom": changes[-1], "previous": changes[-2], "history": changes,
-            "source": "BLS / FRED CPILFESL季调指数计算", "url": FRED_URL}
-
-
-def cpi_warning(data, now=None):
-    n = clock(now)
-    result = dict(data or {})
-    if result.get("fetch_error"):
-        return {**result, "level": "gray", "text": "本期通胀数据未取得，不能确认压力是否缓解。"}
-    try:
-        dt = datetime.strptime(result["date"], "%Y-%m")
-        age = n.year * 12 + n.month - dt.year * 12 - dt.month
-        value = result["mom"]
-        if not valid_number(value):
-            raise ValueError("异常值")
-        due = moment(result.get("next_release"))
-        released = moment(result.get("released_at"))
-        # 无精确公布日的指数备用源只允许最近一个月，不能让两个月前的旧值亮绿。
-        if age < 1 or age > 2 or (not due and age > 1) or (due and n >= due) or (released and n < released):
-            return {**result, "level": "gray", "text": "通胀数据待更新，不能用旧月份判断当前压力。"}
-        history = result.get("history") or []
-        if not isinstance(history, list) or any(not valid_number(v) for v in history) or (history and history[-1] != value):
-            raise ValueError("环比历史与本期数据不一致")
-        if len(history) >= 2 and all(v >= .4 for v in history[-2:]):
-            lv, text = "red", "核心通胀连续偏热，利率压力上升；不代表美联储必然加息。"
-        elif value >= .4:
-            lv, text = "yellow", "本月核心通胀偏热，可能增加利率压力，需观察是否持续。"
-        elif value >= .3:
-            lv, text = "yellow", "核心通胀仍需留意，暂不能把降息当作确定的利好。"
-        else:
-            lv, text = "green", "本月核心通胀未触发偏热线；不等于整体市场安全。"
-        return {**result, "level": lv, "text": text}
-    except (KeyError, ValueError, TypeError):
-        return {**result, "level": "gray", "text": "未取得有效核心通胀数据，暂不能判断。"}
+def class_elements(text, name):
+    # 支持属性顺序、单双引号、附加class、嵌套行内标签和大小写。
+    pattern = (r"<(?P<tag>[a-z][\w]*)\b[^>]*\bclass\s*=\s*(?P<quote>[\"'])"
+               r"[^\"']*\b" + re.escape(name) + r"\b[^\"']*(?P=quote)[^>]*>"
+               r"(?P<body>.*?)</(?P=tag)\s*>")
+    return list(re.finditer(pattern, text, re.S | re.I))
 
 
 def parse_calendar(text, now=None):
     n = clock(now)
-    meetings = []
-    for match in re.finditer(r"(\d{4}) FOMC Meetings", text):
-        year = int(match[1])
-        section = text[match.end():]
-        end = re.search(r"\d{4} FOMC Meetings", section)
-        if end:
-            section = section[:end.start()]
-        months = list(re.finditer(r'<div[^>]*class="[^"]*fomc-meeting__month[^"]*"[^>]*>(.*?)</div>', section, re.S))
-        for i, month in enumerate(months):
-            name = plain(month[1])
-            if name not in MONTHS:
+    # 标题可含行内标签；保留会议中的真实href，不构造声明地址。
+    normalized = text
+    headings = list(re.finditer(r"\b(\d{4})(?:\s|<[^>]*>)+FOMC(?:\s|<[^>]*>)+Meetings\b", normalized, re.I))
+    meetings = {}
+    for i, heading in enumerate(headings):
+        year = int(heading[1])
+        section = normalized[heading.end():headings[i + 1].start() if i + 1 < len(headings) else len(normalized)]
+        # 月份元素在较深的div中，不能用一个外层div正则吞掉整个会议行。
+        months = list(re.finditer(r"<div\b[^>]*\bclass\s*=\s*([\"'])[^\"']*\bfomc-meeting__month\b[^\"']*\1[^>]*>(.*?)</div\s*>", section, re.S | re.I))
+        for j, month in enumerate(months):
+            names = [v.title() for v in re.findall(r"[A-Za-z]+", plain(month[2])) if v.title() in MONTHS]
+            if not names:
                 continue
-            block = section[month.end():months[i+1].start() if i+1 < len(months) else len(section)]
-            day = re.search(r'class="[^"]*fomc-meeting__date[^"]*"[^>]*>\s*(\d+)(?:\s*[-–]\s*(\d+))?(\*)?', block)
+            block = section[month.end():months[j + 1].start() if j + 1 < len(months) else len(section)]
+            dates = class_elements(block, "fomc-meeting__date")
+            if not dates:
+                continue
+            day = re.match(r"(\d{1,2})(?:\s*[-–—]\s*(\d{1,2}))?(?=\D|$)", plain(dates[0]["body"]))
             if not day:
                 continue
-            dt = datetime(year, MONTHS[name], int(day[2] or day[1]), 14, tzinfo=NY)
-            if dt.year < n.year - 1 or dt.year > n.year + 1:
+            try:
+                dt = datetime(year, MONTHS[names[-1]], int(day[2] or day[1]), 14, tzinfo=NY)
+            except ValueError:
                 continue
-            statements = re.findall(r'href="(/newsevents/pressreleases/monetary\d{8}a\.htm)"', block)
-            projections = re.findall(r'href="(/monetarypolicy/fomcprojtabl\d{8}\.htm)"', block)
-            meetings.append({"date": dt.date().isoformat(), "at": dt.isoformat(), "sep": bool(day[3]),
-                             "statement": "https://www.federalreserve.gov" + statements[0] if statements else "",
-                             "projection": "https://www.federalreserve.gov" + projections[0] if projections else ""})
-    # 页面导航有重复年份链接，按会议日期去重。
-    meetings = sorted({m["date"]: m for m in meetings}.values(), key=lambda m: m["date"])
-    if not meetings:
-        raise ValueError("FOMC官方日历解析失败")
-    past = [m for m in meetings if moment(m["at"]) <= n]
-    future = [m for m in meetings if moment(m["at"]) > n]
-    if not past or not future:
-        raise ValueError("未取得最新与下一次会议日程")
-    seps = [m for m in past if m["sep"]]
-    next_seps = [m for m in future if m["sep"]]
-    return {"latest": past[-1], "next": future[0], "latest_sep": seps[-1] if seps else None,
-            "next_sep": next_seps[0] if next_seps else None}
+            links = re.findall(r"\bhref\s*=\s*[\"']([^\"']+)[\"']", block, re.I)
+            statements = []
+            for link in links:
+                url = urljoin(FED_URL, html.unescape(link))
+                match = official_statement_url(url)
+                if match and match[1] == dt.strftime("%Y%m%d"):
+                    statements.append(url)
+            unscheduled = bool(re.search(r"unscheduled|notation vote|conference call", plain(month[2]) + " " + plain(dates[0]["body"]), re.I))
+            if unscheduled and not statements:
+                continue
+            meeting = {"date": dt.date().isoformat(), "at": dt.isoformat(),
+                       "statement": statements[0] if statements else "", "unscheduled": unscheduled}
+            # 临时会议的发布时间必须从真实声明确认，不能假定也是下午两点。
+            past = dt.date() <= n.astimezone(NY).date() if unscheduled else dt <= n
+            meeting["past"] = past
+            old = meetings.get(meeting["date"])
+            if old is None or meeting["statement"]:
+                meetings[meeting["date"]] = meeting
+    ordered = sorted(meetings.values(), key=lambda m: m["date"])
+    past = [m for m in ordered if m.pop("past")]
+    future = [m for m in ordered if m not in past]
+    statements = [m for m in past if m["statement"]]
+    if not past:
+        raise ValueError("FOMC官方日历未取得已到期的会议")
+    return {"latest": past[-1], "latest_statement": statements[-1] if statements else None,
+            "next": future[0] if future else None}
 
 
 def rate_number(text):
-    text = text.strip()
-    if re.fullmatch(r"\d+-\d+/\d+", text):
-        whole, fraction = text.split("-"); a, b = fraction.split("/")
-        return int(whole) + int(a) / int(b)
+    text = text.strip().replace("–", "-").replace("−", "-")
+    mixed = re.fullmatch(r"(\d+)[ -](\d+)/(\d+)", text)
+    fraction = re.fullmatch(r"(\d+)/(\d+)", text)
+    if mixed or fraction:
+        match = mixed or fraction
+        a, b = int(match[2 if mixed else 1]), int(match[3 if mixed else 2])
+        if not b or a >= b:
+            raise ValueError("利率分数异常")
+        return (int(match[1]) if mixed else 0) + a / b
     return float(text)
 
 
-def parse_statement(text):
-    flat = plain(text)
-    pat = r"decided to (raise|lower|maintain|keep).*?target range for the federal funds rate.*?\b(?:at|to)\s+(\d+(?:\.\d+|-\d+/\d+)?)\s+to\s+(\d+(?:\.\d+|-\d+/\d+)?)\s+percent"
-    match = re.search(pat, flat, re.I)
-    if not match:
-        raise ValueError("声明目标利率区间未识别")
-    low, high = rate_number(match[2]), rate_number(match[3])
-    if not 0 <= low <= high <= 25 or high-low > 1:
-        raise ValueError("声明利率区间异常")
-    return {"action": match[1].lower(), "low": low, "high": high}
-
-
-def parse_projection(text, year=None):
-    # 按官方Median年份列识别，跨年读取上年十二月SEP中的本年列。
-    columns = {int(plain(value)): key for key, value in re.findall(
-        r'<th[^>]*id="(xt1b\d+)"[^>]*>(.*?)</th>', text, re.S)
-        if re.fullmatch(r"\d{4}", plain(value))}
-    if not columns:
-        raise ValueError("SEP中位数年份表头无法确认")
-    year = min(columns) if year is None else year
-    if year not in columns:
-        raise ValueError("SEP缺少本年利率预测列")
-    rows = re.findall(r"<tr\b[^>]*>(.*?)</tr>", text, re.S | re.I)
-    for i, row in enumerate(rows):
-        if "Federal funds rate" not in plain(row):
+def parse_statement(text, expected_date):
+    expected = moment(expected_date)
+    dates = class_elements(text, "article__time")
+    if not expected or len(dates) != 1:
+        raise ValueError("声明发布日期无法确认")
+    try:
+        published = datetime.strptime(plain(dates[0]["body"]), "%B %d, %Y").date()
+    except ValueError as exc:
+        raise ValueError("声明发布日期无法确认") from exc
+    if published != expected.date():
+        raise ValueError("声明发布日期与官方日历不匹配")
+    numbers = r"(?:\d+[- ]\d+/\d+|\d+/\d+|\d+(?:\.\d+)?)"
+    pattern = (r"\bThe Committee (?:has )?decided to (raise|lower|maintain|keep)\s+"
+               r"the target range for the federal funds rate\s*"
+               r"((?:[^.!?;]|\.(?=\d))*?)\b(at|to)\s+(" + numbers + r")\s+to\s+(" + numbers + r")\s+percent\b")
+    paragraphs = re.findall(r"<p\b[^>]*>(.*?)</p\s*>", text, re.S | re.I)
+    decisions = []
+    for paragraph in paragraphs:
+        flat = plain(paragraph).replace("–", "-")
+        # 不在投票/异议段落取数；句子边界保留小数点，绝不跨句寻找目标区间。
+        if re.search(r"\bdissent\w*\b|voting against|\bpreferred\b|would have", flat, re.I):
             continue
-        def median(r):
-            for heads, value in re.findall(r'<td[^>]*headers="([^"]*)"[^>]*>(.*?)</td>', r, re.S):
-                if {"xt1a2", columns[year]} <= set(heads.split()):
-                    number = float(plain(value))
-                    if not valid_number(number) or not 0 <= number <= 25:
-                        raise ValueError("SEP利率中位数异常")
-                    return number
-            raise ValueError("SEP利率中位数缺失")
-        result = {"year": year, "median": median(row)}
-        if i+1 < len(rows) and "projection" in plain(rows[i+1]).lower():
-            result["previous_median"] = median(rows[i+1])
-        return result
-    raise ValueError("SEP利率预测行缺失")
+        for sentence in re.split(r"(?<=[.!?])\s+(?=[A-Z])", flat):
+            match = re.search(pattern, sentence, re.I)
+            if not match:
+                continue
+            action, adjustment, preposition = match[1].lower(), match[2].strip(), match[3].lower()
+            low, high = rate_number(match[4]), rate_number(match[5])
+            if not 0 <= low < high <= 25 or high - low > 1:
+                raise ValueError("声明利率区间异常")
+            if ((action in ("maintain", "keep") and (adjustment or preposition != "at"))
+                    or (action in ("raise", "lower") and (preposition != "to" or (adjustment and not adjustment.lower().startswith("by "))))):
+                raise ValueError("声明动作与目标区间表述不一致")
+            decision = {"action": action, "low": low, "high": high, "published_date": published.isoformat()}
+            amount = re.fullmatch(r"by\s+(\d+(?:\.\d+|/\d+)?|one-quarter|one-half|¼|½)\s+(percentage points?|basis points?)", adjustment, re.I)
+            if amount:
+                value = {"one-quarter": .25, "one-half": .5, "¼": .25, "½": .5}.get(amount[1].lower())
+                value = rate_number(amount[1]) if value is None else value
+                bps = value * (100 if amount[2].lower().startswith("percentage") else 1)
+                if not 0 < bps <= 1000:
+                    raise ValueError("声明调整幅度异常")
+                decision["change_bps"] = bps
+            decisions.append(decision)
+    if not decisions or any(d != decisions[0] for d in decisions[1:]):
+        raise ValueError("正式声明动作和目标利率区间无法唯一确认")
+    result = decisions[0]
+    release = re.search(r"For release at (\d{1,2}):(\d{2})\s*(a|p)\.m\.\s*(EST|EDT)", plain(text), re.I)
+    if release:
+        hour = int(release[1]) % 12 + (12 if release[3].lower() == "p" else 0)
+        if not 1 <= int(release[1]) <= 12 or not 0 <= int(release[2]) < 60:
+            raise ValueError("声明发布时间异常")
+        at = datetime(published.year, published.month, published.day, hour, int(release[2]), tzinfo=NY)
+        if at.tzname() != release[4].upper():
+            raise ValueError("声明发布时间时区不一致")
+        result["released_at"] = at.isoformat()
+    return result
 
 
-def fed_warning(data, now=None):
-    n = clock(now); result = dict(data or {})
-    if result.get("fetch_error") or not result.get("date"):
-        return {**result, "level": "gray", "text": "美联储数据待更新，暂不能确认利率压力。"}
-    dt = moment(result["date"])
-    due = moment(result.get("next_release")); sep_due = moment(result.get("next_sep"))
-    if not dt or dt > n or (n-dt).days > 75 or (due and n >= due) or (sep_due and n >= sep_due):
-        return {**result, "level": "gray", "text": "新会议结果尚未取得，旧判断暂不能代表当前政策。"}
-    low, high, median = result.get("low"), result.get("high"), result.get("median")
-    if (not valid_number(low) or not valid_number(high) or not 0 <= low <= high <= 25
-            or high-low > 1 or not valid_number(median) or result.get("year") != n.year
-            or not 0 <= median <= 25 or result.get("action") not in ("raise", "lower", "maintain", "keep")):
-        return {**result, "level": "gray", "text": "政策数据或本年预测不完整，暂不能确认利率压力。"}
-    midpoint = (low+high)/2
-    tightening = median-midpoint > .075
-    if result.get("action") == "raise":
-        lv = "red" if (n-dt).days <= 14 else "yellow"
-        text = "美联储最近一次会议已加息，利率压力仍需留意。"
-    elif tightening:
-        lv, text = "yellow", "最新利率预测仍指向进一步收紧，不能把降息当作确定利好。"
-    else:
-        lv, text = "green", "最新政策数据未触发进一步收紧提示；不等于经济风险消失。"
-    if tightening:
-        text += "年末预测仍高于当前利率，但不是加息承诺。"
-    return {**result, "level": lv, "text": text}
+def fed_decision(data, now=None):
+    n = clock(now)
+    result = dict(data) if isinstance(data, dict) else {}
+    dt = moment(result.get("date"))
+    released = moment(result.get("released_at"))
+    low, high, action = result.get("low"), result.get("high"), result.get("action")
+    url_date = official_statement_url(result.get("url"))
+    valid = (dt is not None and dt <= n and dt.date() <= n.astimezone(NY).date()
+             and (not released or (released <= n and released.astimezone(NY).date() == dt.date()))
+             and valid_number(low) and valid_number(high) and 0 <= low < high <= 25 and high - low <= 1
+             and action in ("raise", "lower", "maintain", "keep")
+             and url_date is not None and url_date[1] == dt.strftime("%Y%m%d")
+             and result.get("published_date", dt.date().isoformat()) == dt.date().isoformat())
+    if result.get("released_at") and released is None:
+        valid = False
+    due = moment(result.get("next_release"))
+    pending = bool(result.get("fetch_error") or result.get("pending_update") or (due and n >= due))
+    if not valid:
+        return {**result, "level": "neutral", "status": "unavailable", "incomplete": True,
+                "text": "美联储正式利率决议待更新：未取得可核实的动作、目标区间、日期和官方来源。"}
+    label = {"raise": "加息", "lower": "降息", "maintain": "维持", "keep": "维持"}[action]
+    amount = result.get("change_bps")
+    adjustment = f"{amount:g}个基点" if action in ("raise", "lower") and valid_number(amount) and 0 < amount <= 1000 else ""
+    text = f"最近已核实正式决议（{dt.date().isoformat()}）：{label}{adjustment}，目标区间{low:g}%–{high:g}%。"
+    if pending:
+        text += "新决议信息待更新；保留上述旧决议日期，不代表新会议结果已核实。"
+    return {**result, "level": "neutral", "status": "pending" if pending else "available",
+            "incomplete": pending, "text": text}
 
 
-def policy_summary(cpi, fed, now=None):
-    c = cpi_warning(cpi, now); f = fed_warning(fed, now)
-    levels = [c["level"], f["level"]]
-    missing = "gray" in levels
-    if "red" in levels:
-        lv, text = "red", "通胀或政策收紧压力较强，需警惕利率对市场的冲击。"
-    elif "yellow" in levels:
-        lv, text = "yellow", "通胀／利率压力仍需留意，暂不能把降息当作确定利好。"
-    elif missing:
-        lv, text = "gray", "关键数据待更新，暂不能确认通胀／利率风险是否缓解。"
-    else:
-        lv, text = "green", "当前数据未触发新增通胀／利率压力提示，不代表市场安全。"
-    if missing and lv != "gray":
-        text += "部分数据待更新，判断不完整。"
-    return {"level": lv, "text": text, "incomplete": missing}
-
-
-def update_policy(prev=None, now=None, fred_loader=None):
-    n = clock(now); prev = prev or {}
-    def update(key, loader):
-        old = prev.get(key) or {}
-        checked = moment(old.get("checked_at")); due = moment(old.get("next_release"))
-        invalid = (cpi_warning(old, n) if key == "cpi" else fed_warning(old, n))["level"] == "gray"
-        retry = timedelta(hours=1 if old.get("fetch_error") or invalid else 24)
-        year_changed = key == "fed" and old.get("year") != n.year
-        if checked and checked <= n and n-checked < retry and (not due or n < due) and not year_changed:
-            return old
+def update_policy(prev=None, now=None):
+    n = clock(now)
+    prev = prev if isinstance(prev, dict) else {}
+    cached = prev.get("fed")
+    fields = ("date", "action", "low", "high", "change_bps", "published_date", "released_at",
+              "next_release", "pending_release", "pending_update", "source", "url", "calendar_url",
+              "checked_at", "fetch_error")
+    old = {k: v for k, v in cached.items() if k in fields} if isinstance(cached, dict) else {}
+    # 首次从旧CPI/SEP组合迁移，立即核实正式决议，不能继承旧解析失败的等待窗口。
+    legacy = "cpi" in prev or (isinstance(cached, dict) and any(k in cached for k in ("median", "projection_url", "year")))
+    checked = None if legacy else moment(old.get("checked_at"))
+    due = moment(old.get("next_release"))
+    invalid = fed_decision(old, n)["status"] == "unavailable"
+    limited = bool(old.get("fetch_error") or old.get("pending_update") or invalid)
+    fresh = checked is not None and checked <= n
+    # 错误限速必须先于到期检查；到期不能在一小时内反复打官方接口。
+    reuse = fresh and ((limited and n - checked < timedelta(hours=1))
+                      or (not limited and n - checked < timedelta(hours=24) and (not due or n < due)))
+    fed = old
+    if not reuse:
+        calendar = None
         try:
-            return {**loader(), "checked_at": n.isoformat(), "fetch_error": ""}
+            calendar = parse_calendar(fetch_text(FED_URL), n)
+            last, latest, nxt = calendar["latest_statement"], calendar["latest"], calendar["next"]
+            if not last:
+                raise ValueError("官方日历尚无可用正式声明链接")
+            parsed = parse_statement(fetch_text(last["statement"]), last["date"])
+            if last["unscheduled"] and not parsed.get("released_at") and last["date"] == n.astimezone(NY).date().isoformat():
+                raise ValueError("临时会议当日发布时间尚未确认")
+            if parsed.get("released_at") and moment(parsed["released_at"]) > n:
+                raise ValueError("正式声明发布时间尚未到达")
+            if not invalid and moment(old.get("date")) and last["date"] < moment(old["date"]).date().isoformat():
+                raise ValueError("官方日历返回更旧决议，保留已核实缓存")
+            pending = latest["date"] > last["date"]
+            fed = {**parsed, "date": parsed.get("released_at", last["date"]),
+                   "next_release": nxt["at"] if nxt else None,
+                   "pending_release": latest["at"] if pending else None, "pending_update": pending,
+                   "source": "美联储官方正式利率决议声明", "url": last["statement"], "calendar_url": FED_URL,
+                   "checked_at": n.isoformat(), "fetch_error": ""}
         except Exception as exc:
-            # 保留原始证据供折叠查看，但不得把失败包装成成功。
-            return {**old, "checked_at": n.isoformat(), "fetch_error": str(exc)[:180]}
-    def cpi_loader():
-        try:
-            return parse_cpi(fetch_text(BLS_URL))
-        except Exception:
-            if not fred_loader:
-                raise
-            data = cpi_from_index(fred_loader("CPILFESL"), n)
-            # 保留已核实的下次发布日期；指数源本身不提供精确发布时间。
-            old = prev.get("cpi") or {}
-            if old.get("date") == data["date"]:
-                for key in ("next_release", "released_at"):
-                    if old.get(key): data[key] = old[key]
-            return data
-    def fed_loader():
-        calendar = parse_calendar(fetch_text(FED_URL), n)
-        last, nxt, sep = calendar["latest"], calendar["next"], calendar["latest_sep"]
-        if not last["statement"] or not sep or not sep["projection"]:
-            raise ValueError("最新政策文件尚未提供")
-        if (n-moment(sep["at"])).days > 110:
-            raise ValueError("季度预测已过期")
-        future_sep = (calendar.get("next_sep") or {}).get("at")
-        return {**parse_statement(fetch_text(last["statement"])),
-                **parse_projection(fetch_text(sep["projection"]), n.year),
-                "date": last["at"], "projection_date": sep["date"],
-                "next_release": nxt["at"], "next_has_sep": nxt["sep"], "next_sep": future_sep,
-                "source": "美联储官方声明／季度预测", "url": last["statement"], "projection_url": sep["projection"]}
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        a = pool.submit(update, "cpi", cpi_loader); b = pool.submit(update, "fed", fed_loader)
-        cpi, fed = a.result(), b.result()
-    return {"cpi": cpi, "fed": fed, "summary": policy_summary(cpi, fed, n), "rules": RULES}
+            fed = {**old, "checked_at": n.isoformat(), "fetch_error": str(exc)[:180] or type(exc).__name__,
+                   "pending_update": True}
+            if calendar:
+                latest, nxt = calendar["latest"], calendar["next"]
+                old_date = moment(old.get("date"))
+                if not old_date or latest["date"] > old_date.date().isoformat():
+                    fed["pending_release"] = latest["at"]
+                fed["next_release"] = nxt["at"] if nxt else None
+    rendered = fed_decision(fed, n)
+    summary = {k: rendered[k] for k in ("level", "status", "text", "incomplete")}
+    return {"fed": fed, "summary": summary, "rules": RULES}
 
 
 def oil_warning(continuous, contract=None, target=None):

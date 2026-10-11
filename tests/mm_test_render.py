@@ -226,6 +226,43 @@ html6 = monitor.render(macro, items, 10, snapshot=snapshot)
 check('&lt;script&gt;alert(1)&lt;/script&gt;' in html6 and '<script>alert(1)</script>' not in html6,
       "基本面展开内容保留 HTML 转义")
 
+# 正式利率决议仅为中性消息，不影响风险灯、个股信号或原油行。
+import copy as _copy
+from unittest.mock import patch as _patch
+import policy_alerts as _policy
+_ref_now = _policy.clock(_policy.moment("2026-10-11T12:00:00+08:00"))
+_fed = {"action": "maintain", "low": 3.5, "high": 3.75,
+        "date": "2026-09-16T14:00:00-04:00", "published_date": "2026-09-16",
+        "released_at": "2026-09-16T14:00:00-04:00", "next_release": "2026-10-28T14:00:00-04:00",
+        "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+        "checked_at": _ref_now.isoformat(), "fetch_error": ""}
+_refsnap = _copy.deepcopy(snapshot)
+_refsnap["reference_alerts"] = {"policy": {"fed": _fed}, "assessed_at": _ref_now.isoformat(),
+                               "oil": {"level": "gray", "text": "原油数据待更新"}}
+_refhtml = monitor.render(macro, _copy.deepcopy(items), 10, snapshot=_refsnap)
+_refcard = monitor._reference_card(_refsnap)
+check('data-level="neutral" data-status="available"' in _refcard and "维持不变" in _refcard
+      and "2026-09-16" in _refcard and "stat-dot" not in _refcard, "决议中性展示动作和日期，不显示风险灯")
+check(not any(term in _refhtml for term in ("核心CPI", "SEP", "季度预测", "点阵图", "通胀／利率")), "页面移除CPI与预测依赖及旧标签")
+check('id="policyAlertDetails"><summary>美联储利率决议' in _refhtml
+      and '<details class="macro-help" id="policyAlertDetails" open' not in _refhtml, "决议来源位于页底并默认折叠")
+check("3.50%–3.75%" in _refhtml and "2026-09-17 02:00" in _refhtml and "正常缓存24小时" in _refhtml,
+      "详情包含目标区间、双时区与抓取间隔")
+check(_refsnap["summary"] == snapshot["summary"] and 'id="oilAlert"' in _refhtml, "原计数不变，WTI保留")
+_pending = _copy.deepcopy(_refsnap)
+_pending["reference_alerts"]["policy"]["fed"]["fetch_error"] = "模拟解析错误 <script>bad()</script>"
+check('data-status="pending"' in monitor._reference_card(_pending) and "2026-09-16" in monitor._reference_card(_pending),
+      "失败仍保留旧决议日期并显示待更新")
+check("&lt;script&gt;bad()&lt;/script&gt;" in monitor._reference_card(_pending, details_only=True), "错误详情安全转义")
+_empty = {"reference_alerts": {"policy": {"fed": {}}}}
+check('data-status="unavailable"' in monitor._reference_card(_empty), "首次无数据不伪造消息")
+with _patch.object(monitor.policy_alerts, "update_policy", return_value={"fed": _fed}) as _load, \
+     _patch.object(monitor, "fetch_history", return_value=None), \
+     _patch.object(monitor, "fred_series", side_effect=AssertionError("决议不能依赖FRED")):
+    _built = monitor.build_reference_alerts(_refsnap["reference_alerts"])
+    check(_load.call_args.args == (_refsnap["reference_alerts"]["policy"], monitor.NOW)
+          and not _load.call_args.kwargs and "cpi" not in _built["policy"], "取数入口使用新接口且不抓CPI/FRED")
+
 print()
 if fail:
     print(f"{len(fail)} 项失败"); sys.exit(1)

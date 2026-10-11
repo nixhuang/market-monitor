@@ -3284,6 +3284,8 @@ tr.gray td{color:var(--dim)}
 .policy-reference .reference-top{gap:6px;font-size:11.5px}
 .policy-reference .stat-dot{width:8px;height:8px}
 .policy-reference .reference-status{font-size:10.5px}
+.policy-reference [data-status="pending"] .reference-status,.policy-reference [data-status="unavailable"] .reference-status{color:var(--dim)}
+.policy-reference [data-status="available"] .reference-status{color:var(--text)}
 .policy-reference .reference-conclusion{font-size:12px;line-height:1.55;margin:3px 0 0}
 .oil-reference-row td{font-size:12px;overflow-wrap:anywhere}
 .oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -3604,57 +3606,55 @@ def _signal_counts_card(snapshot):
 
 
 def _reference_card(snapshot, *, details_only=False):
-    """市场风险区只留结论；数据依据单独送入页底，不接入评分或个股灯。"""
+    """仅展示正式利率决议信息，数据来源折叠放页底，不接入任何风险评分。"""
     refs = snapshot.get("reference_alerts") or {}
     if not refs:
         return ""
-    policy = refs.get("policy") or {}
-    cpi, fed = policy.get("cpi") or {}, policy.get("fed") or {}
+    fed = (refs.get("policy") or {}).get("fed") or {}
     assessment_time = policy_alerts.moment(refs.get("assessed_at"))
-    summary = policy_alerts.policy_summary(cpi, fed, assessment_time)
-    esc = lambda text: html_lib.escape(str(text))
-    names = {"red": "警惕", "yellow": "注意", "green": "未触发", "gray": "待更新"}
-    def line(key, title, state):
-        lv = state.get("level", "gray")
-        if lv not in names:
-            lv = "gray"
-        return (f'<div class="reference-alert" id="{key}" data-level="{lv}">'
-                f'<div class="reference-top"><i class="stat-dot {lv}" aria-hidden="true"></i>{title}'
-                f'<span class="reference-status">{names[lv]}</span></div>'
-                f'<p class="reference-conclusion">{esc(state.get("text", "待更新"))}</p></div>')
-    def number(value, spec=".1f"):
-        return format(value, spec) if policy_alerts.valid_number(value) else "待更新"
-    cpi_data = (f'{cpi.get("date", "月份待更新")} 核心CPI环比 {number(cpi.get("mom"), "+.1f")}% · 前值 {number(cpi.get("previous"), "+.1f")}%'
-                if policy_alerts.valid_number(cpi.get("mom")) else "核心CPI尚未取得有效数据")
-    next_cpi = policy_alerts.moment(cpi.get("next_release"))
-    if next_cpi:
-        cpi_data += " · 下次公布 " + next_cpi.astimezone(TZ).strftime("%m-%d %H:%M") + " 北京时间"
-    policy_details = f'<p>{esc(cpi_data)}（季调月度口径，不是同比）</p>'
-    if fed.get("low") is not None:
-        policy_details += (f'<p>最近决议 {esc(str(fed.get("date", ""))[:10])}：目标区间 '
-                           f'{number(fed.get("low"), ".2f")}%—{number(fed.get("high"), ".2f")}%。'
-                           f'季度预测 {esc(fed.get("projection_date", ""))}：{esc(fed.get("year", "年份待更新"))}年末中位数 '
-                           f'{number(fed.get("median"))}%，不是加息承诺或市场概率。</p>')
+    decision = policy_alerts.fed_decision(fed, assessment_time)
+    esc = lambda value: html_lib.escape(str(value))
+    status = decision["status"]
+    status_name = {"available": "正式消息", "pending": "待更新", "unavailable": "待更新"}[status]
+    published = policy_alerts.moment(fed.get("date"))
+    valid = status != "unavailable"
+    label = {"raise": "加息", "lower": "降息", "maintain": "维持不变", "keep": "维持不变"}.get(fed.get("action"), "待更新")
+    bps = fed.get("change_bps")
+    if valid and fed.get("action") in ("raise", "lower") and policy_alerts.valid_number(bps) and 0 < bps <= 1000:
+        label += f" {bps:g} 个基点"
+    message = f'{label} · {published.date().isoformat()}（美东公布日）' if valid else "尚未取得可核实的正式决议"
+    if status == "pending":
+        message += " · 新决议信息待更新，以上为上次已核实消息"
+    details = f'<p>{esc(message)}</p>'
+    if valid:
+        details += f'<p>联邦基金目标利率区间：{fed["low"]:.2f}%–{fed["high"]:.2f}%。</p>'
+    released = policy_alerts.moment(fed.get("released_at"))
+    if valid and released:
+        details += (f'<p>正式公布：{released.astimezone(policy_alerts.NY).strftime("%Y-%m-%d %H:%M %Z")}（美东）'
+                    f'／{released.astimezone(TZ).strftime("%Y-%m-%d %H:%M")}（北京时间）。</p>')
     next_fed = policy_alerts.moment(fed.get("next_release"))
     if next_fed:
-        policy_details += (f'<p>下次决议 {next_fed.astimezone(TZ).strftime("%Y-%m-%d %H:%M")} 北京时间'
-                           f'（{"发布" if fed.get("next_has_sep") else "不发布新"}点阵图）。</p>')
-    for entry in (cpi, fed):
-        if entry.get("fetch_error"):
-            policy_details += f'<p>取数状态：{esc(entry["fetch_error"])}；旧值仅供参考，不认定风险缓解。</p>'
-        if entry.get("url"):
-            policy_details += f'<p><a href="{esc(entry["url"])}" target="_blank" rel="noopener noreferrer">{esc(entry.get("source", "官方来源"))}</a></p>'
-        checked = policy_alerts.moment(entry.get("checked_at"))
-        if checked:
-            policy_details += f'<p>最近核对：{checked.astimezone(TZ).strftime("%Y-%m-%d %H:%M")} 北京时间</p>'
-    if fed.get("projection_url"):
-        policy_details += f'<p><a href="{esc(fed["projection_url"])}" target="_blank" rel="noopener noreferrer">美联储季度预测原表</a></p>'
-    policy_details += f'<p>{esc(policy_alerts.RULES)}</p><p>CPI每月公布后、美联储每次决议及季度预测后更新；缺失或到期显示待更新。</p>'
+        details += (f'<p>下次计划决议：{next_fed.astimezone(policy_alerts.NY).strftime("%Y-%m-%d %H:%M %Z")}（美东）'
+                    f'／{next_fed.astimezone(TZ).strftime("%Y-%m-%d %H:%M")}（北京时间）；以官方实际发布为准。</p>')
+    if fed.get("fetch_error"):
+        details += f'<p>最近查询未成功：{esc(fed["fetch_error"])}。旧消息保留日期，不冒充最新结果。</p>'
+    if valid:
+        details += (f'<p><a href="{esc(fed["url"])}" target="_blank" rel="noopener noreferrer">美联储官方决议声明</a></p>')
+    details += (f'<p><a href="{policy_alerts.FED_URL}" target="_blank" rel="noopener noreferrer">美联储官方会议日历</a></p>')
+    checked = policy_alerts.moment(fed.get("checked_at"))
+    if checked:
+        details += f'<p>最近查询：{checked.astimezone(TZ).strftime("%Y-%m-%d %H:%M")}（北京时间）。</p>'
+    details += ('<p>正常缓存24小时；到计划决议公布时间，下一次运行会优先查询。失败后至少间隔1小时再试。'
+                '检查随现有监测任务运行，不额外启动定时任务；不是每小时自动抓取。</p>'
+                '<p>仅展示已公布的加息／降息／维持不变，不展示预测，不解读市场安全与危险，不计入综合评分或个股信号。'
+                '最近正式消息保留至新消息核实；新决议应公布但未取得时标记待更新。</p>')
     if details_only:
         return ('<details class="macro-help" id="policyAlertDetails">'
-                '<summary>通胀／利率 · 查看数据与来源</summary>' + policy_details + '</details>')
-    return ('<div id="referenceAlerts" class="policy-reference">'
-            + line("policyAlert", "通胀／利率", summary) + '</div>')
+                '<summary>美联储利率决议 · 查看数据与来源</summary>' + details + '</details>')
+    return (f'<div id="referenceAlerts" class="policy-reference">'
+            f'<div class="reference-alert" id="policyAlert" data-level="neutral" data-status="{status}">'
+            f'<div class="reference-top">美联储最近利率决议<span class="reference-status">{status_name}</span></div>'
+            f'<p class="reference-conclusion">{esc(message)}</p></div></div>')
 
 
 def _oil_reference_row(snapshot):
@@ -3700,7 +3700,7 @@ def _page_notes(snapshot):
     return f'''<section class="card page-notes" id="pageNotes" aria-label="规则与数据说明">
 <div class="grp">规则与数据说明</div>
 <details class="macro-help" id="marketRiskRules"><summary>综合判断规则</summary><p>{html_lib.escape(RISK_RULE_TEXT)}</p>
-{('<p>补充参考：通胀／利率、WTI原油不计入综合灯；综合灯仍依据原5项指标。</p>' if snapshot.get('reference_alerts') else '')}</details>
+{('<p>补充参考：美联储利率决议、WTI原油不计入综合灯；综合灯仍依据原5项指标。</p>' if snapshot.get('reference_alerts') else '')}</details>
 {_reference_card(snapshot, details_only=True)}
 <details class="macro-help" id="marketRiskNotes"><summary>指标阈值与数据说明</summary>
 <p>垃圾债利差：≥{S['hy_green']:.0f} bp 黄、≥{S['hy_red']:.0f} bp 红；一周扩大 ≥30 bp 为黄、≥50 bp 为红。VIX：≥{S['vix_green']:g} 黄、≥{S['vix_red']:g} 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
@@ -3886,10 +3886,13 @@ def build_reference_alerts(prev=None):
     """额外指标独立取数入口；任何失败只影响参考提示，不拖垮原行情。"""
     prev = prev or {}
     try:
-        policy = policy_alerts.update_policy(prev.get("policy"), NOW, fred_loader=fred_series)
+        policy = policy_alerts.update_policy(prev.get("policy"), NOW)
     except Exception as exc:
-        log(f"通胀政策独立参考取数失败：{str(exc)[:100]}")
-        policy = {"cpi": {"fetch_error": str(exc)[:180]}, "fed": {"fetch_error": str(exc)[:180]}}
+        log(f"美联储决议独立取数失败：{str(exc)[:100]}")
+        old_fed = (prev.get("policy") or {}).get("fed") or {}
+        fed = {**old_fed, "fetch_error": str(exc)[:180], "pending_update": True, "checked_at": NOW.isoformat()}
+        decision = policy_alerts.fed_decision(fed, NOW)
+        policy = {"fed": fed, "summary": {k: decision[k] for k in ("level", "status", "text", "incomplete")}}
     oil_continuous, oil_contract = None, None
     try:
         oil_continuous = fetch_history("CLMAIN")
