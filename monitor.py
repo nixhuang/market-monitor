@@ -30,6 +30,7 @@ from datetime import datetime, timedelta, timezone
 
 import requests
 import policy_alerts
+import earnings_sources
 
 # 北京时间与运行口径
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -1490,7 +1491,8 @@ def _period_label(period):
 
 
 # ---------------------------------------------------------------- 下一次财报日期
-# 数据源：Nasdaq analyst/earnings-date（Zacks 提供）。接口只给日期和盘前/盘后，不给具体钟点。
+# 主源 Nasdaq（Zacks）；缺失时按 earnings_sources 的官方白名单补查。
+# official-earnings.json 仅存已核验来源快照；活动钟点不当作文件发布钟点。
 # 全部非 ETF 个股都查，结果跨次缓存到 status.json（离财报越近刷新越勤）。ETF、指数、期货不适用。
 _EARN_CACHE = {}
 _EARN_RE = re.compile(
@@ -1546,6 +1548,79 @@ def nasdaq_earnings(sym, timeout=12):
     return res
 
 
+def verified_earnings_events(today):
+    """读取可追溯来源快照；无效、未来核查日和过期日期均不能补入。"""
+    try:
+        with open(os.path.join(BASE, "official-earnings.json"), encoding="utf-8") as f:
+            raw = json.load(f)
+        events = raw.get("events") if isinstance(raw, dict) else None
+        if not isinstance(events, dict):
+            return {}
+        return {sym: dict(e) for sym, e in events.items()
+                if _official_earnings_valid(e, sym, today)}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _official_earnings_valid(e, sym, today):
+    return (bool(_iso_date(today)) and isinstance(e, dict) and e.get("status") == "ok" and e.get("kind") == "official"
+            and bool(_iso_date(e.get("date"))) and e["date"] >= today
+            and bool(_iso_date(e.get("official_checked"))) and e["official_checked"] <= today
+            and isinstance(e.get("title"), str) and earnings_sources._is_earnings(e["title"])
+            and bool(earnings_sources._allowed_url(e.get("source_url"), sym)))
+
+
+def _official_seed_hash(e):
+    return hashlib.sha256(json.dumps({k: e.get(k) for k in
+        ("date", "source_url", "title", "official_checked")}, sort_keys=True).encode()).hexdigest()
+
+
+def _new_official_seed(seed, old, sym, today):
+    if not _official_earnings_valid(seed, sym, today):
+        return False
+    if not _official_earnings_valid(old, sym, today):
+        return True
+    return (seed["official_checked"] >= old["official_checked"]
+            and old.get("official_seed_sha") != _official_seed_hash(seed))
+
+
+def resolve_earnings(sym, today, previous=None, verified=None):
+    """主源缺失才补查官网；已核验官方事件优先，失败保留核查时间和来源。"""
+    old = previous if isinstance(previous, dict) else {}
+    seed = verified if _official_earnings_valid(verified, sym, today) else {}
+    trusted = old if _official_earnings_valid(old, sym, today) else seed
+    # 新核验的文件快照比旧运行记录更新时可直接接入，避免重复请求。
+    if _new_official_seed(seed, trusted, sym, today):
+        trusted = dict(seed, official_seed_sha=_official_seed_hash(seed))
+    if trusted and trusted["official_checked"] == today:
+        return dict(trusted, official_attempted=today)
+    try:
+        primary = nasdaq_earnings(sym)
+    except Exception:
+        primary = {"status": "error"}
+    if not isinstance(primary, dict):
+        primary = {"status": "error"}
+    if primary.get("status") == "ok" and not trusted:
+        return primary
+    if sym not in earnings_sources.SOURCES:
+        return primary
+    try:
+        official = earnings_sources.fetch_official_earnings(sym, today)
+    except Exception as exc:
+        official = {"status": "error", "reason": type(exc).__name__}
+    if not isinstance(official, dict):
+        official = {"status": "error", "reason": "invalid_official_result"}
+    if _official_earnings_valid(official, sym, today):
+        result = {**official, "official_attempted": today}
+        if trusted.get("official_seed_sha"):
+            result["official_seed_sha"] = trusted["official_seed_sha"]
+        return result
+    issue = str(official.get("reason") or "official_date_unavailable")[:160]
+    if trusted:
+        return {**trusted, "official_attempted": today, "official_error": issue}
+    return {**primary, "official_attempted": today, "official_error": issue}
+
+
 # 「强制刷新」按钮：清掉 Cache Storage / Service Worker，再带时间戳参数重新加载，绕开浏览器和 CDN 缓存
 HARD_REFRESH_JS = (
     "(function(){var b=document.getElementById('btnHardRefresh');if(!b)return;"
@@ -1569,7 +1644,7 @@ def earnings_label(e):
         return None
     status = e["status"]
     if status == "unknown":
-        return "时间待公布", "下一次财报时间供应商尚未提供"
+        return "日期待确认", "本站尚未取得下一次财报日期，不代表公司未公布"
     if status == "error":
         return "日期暂未取得", "下一次财报日期本轮读取失败，不代表没有财报"
     year, month, day = e["date"].split("-")
@@ -1579,7 +1654,12 @@ def earnings_label(e):
     nxt = (datetime(int(year), int(month), int(day)) + timedelta(days=1)).strftime("%m/%d")
     bj = {"pre": f"北京时间约{month}/{day}傍晚至晚间", "post": f"北京时间约{nxt}凌晨",
           "during": f"北京时间约{month}/{day}夜间至{nxt}凌晨"}.get(e.get("timing"), "北京时间待定")
-    kind = "预计" if e.get("kind") == "expected" else "算法估算，可能调整"
+    kind = {"expected": "预计", "official": "官方财报活动日期"}.get(e.get("kind"), "算法估算，可能调整")
+    if e.get("kind") == "official":
+        note = f"{kind} · 核实于{e.get('official_checked', '待确认')}；发布钟点未确认"
+        if e.get("official_error"):
+            note += " · 复查未取得新确认，保留已核验日期"
+        return f"美东 {date_txt}", note
     return f"美东 {date_txt} {timing}", f"{kind} · {bj}"
 
 
@@ -1603,9 +1683,10 @@ def earnings_soon(e, today=None):
 # 财报日一过（距今 < 0）一律立即重抓下一次；财报日当天及前 3 天，确认过的日期不再追抓。
 EARN_REFETCH_DAYS = {
     "expected": ((15, 14), (4, 7), (0, 3)),
+    "official": ((15, 7), (0, 3)),
     "estimated": ((15, 7), (0, 3)),
 }
-EARN_UNKNOWN_REFETCH_DAYS = 7    # 供应商还没公布：每 7 天问一次
+EARN_UNKNOWN_REFETCH_DAYS = 7    # 本站未取得：每 7 天查一次，不能据此断言公司未公布
 EARN_NA_REFETCH_DAYS = 30        # 不适用（如接口无此代码）：每 30 天复查一次
 EARN_MAX_FETCH_PER_RUN = 60      # 单次运行最多发这么多财报请求，其余留到下一轮，防止限流
 
@@ -1712,10 +1793,19 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
     if not targets:
         return stat
     due, resolved = [], {}
+    verified = verified_earnings_events(today)
     for d in targets:
         k = key_of(d)
         old = prev.get(k)
-        if isinstance(old, dict) and not earnings_refetch_due(old, today):
+        # 新增官方源后仅迁移待确认/不适用项，不重抓已有正常Nasdaq日期。
+        needs_official = (k in earnings_sources.SOURCES and isinstance(old, dict)
+                          and old.get("status") in ("unknown", "na")
+                          and not _iso_date(old.get("official_attempted")))
+        seed = verified.get(k)
+        if _new_official_seed(seed, old, k, today):
+            resolved[k] = dict(seed, fetched=today, official_attempted=today,
+                               official_seed_sha=_official_seed_hash(seed))
+        elif isinstance(old, dict) and not needs_official and not earnings_refetch_due(old, today):
             resolved[k] = old
         else:
             due.append(d)
@@ -1734,7 +1824,7 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
     try:
         if queue:
             with ThreadPoolExecutor(max_workers=4) as ex:
-                got = list(ex.map(nasdaq_earnings, queue))
+                got = list(ex.map(lambda k: resolve_earnings(k, today, prev.get(k), verified.get(k)), queue))
             for k, e in zip(queue, got):
                 stat["fetched"] += 1
                 if e.get("status") == "error":
@@ -1768,7 +1858,7 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
         stat[key] += 1
     active_prev = {key_of(d): prev.get(key_of(d)) for d in targets}
     stat["events"] = _remember_earnings_events(active_prev, resolved, prev_events, today)
-    log(f"  财报日期：已取得 {stat['dated']} · 待公布 {stat['pending']} · 失败 {stat['failed']}"
+    log(f"  财报日期：已取得 {stat['dated']} · 待确认 {stat['pending']} · 失败 {stat['failed']}"
         f" · 本轮请求 {stat['fetched']}")
     return stat
 
@@ -3446,8 +3536,14 @@ def _earnings_html(d):
     if not earn:
         return ""
     soon = " soon" if earnings_soon(d.get("earnings")) else ""
+    e = d.get("earnings") or {}
+    source = ""
+    sym = normalize_symbol(d.get("symbol") or "").upper()
+    url = earnings_sources._allowed_url(e.get("source_url"), sym) if e.get("kind") == "official" else None
+    if url:
+        source = f' <a href="{html_lib.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">官方来源</a>'
     return (f'<span class="earn{soon}">'
-            f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}</span></span>')
+            f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}{source}</span></span>')
 
 
 def _signals_html(d):
@@ -3607,10 +3703,14 @@ def _signal_counts_card(snapshot):
 
 def _reference_card(snapshot, *, details_only=False):
     """仅展示正式利率决议信息，数据来源折叠放页底，不接入任何风险评分。"""
-    refs = snapshot.get("reference_alerts") or {}
-    if not refs:
+    if "reference_alerts" not in snapshot:
         return ""
-    fed = (refs.get("policy") or {}).get("fed") or {}
+    refs = snapshot.get("reference_alerts")
+    refs = refs if isinstance(refs, dict) else {}
+    policy = refs.get("policy")
+    policy = policy if isinstance(policy, dict) else {}
+    fed = policy.get("fed")
+    fed = fed if isinstance(fed, dict) else {}
     assessment_time = policy_alerts.moment(refs.get("assessed_at"))
     decision = policy_alerts.fed_decision(fed, assessment_time)
     esc = lambda value: html_lib.escape(str(value))
@@ -3618,9 +3718,11 @@ def _reference_card(snapshot, *, details_only=False):
     status_name = {"available": "正式消息", "pending": "待更新", "unavailable": "待更新"}[status]
     published = policy_alerts.moment(fed.get("date"))
     valid = status != "unavailable"
-    label = {"raise": "加息", "lower": "降息", "maintain": "维持不变", "keep": "维持不变"}.get(fed.get("action"), "待更新")
+    action = fed.get("action")
+    action = action if isinstance(action, str) else ""
+    label = {"raise": "加息", "lower": "降息", "maintain": "维持不变", "keep": "维持不变"}.get(action, "待更新")
     bps = fed.get("change_bps")
-    if valid and fed.get("action") in ("raise", "lower") and policy_alerts.valid_number(bps) and 0 < bps <= 1000:
+    if valid and action in ("raise", "lower") and policy_alerts.valid_number(bps) and 0 < bps <= 1000:
         label += f" {bps:g} 个基点"
     message = f'{label} · {published.date().isoformat()}（美东公布日）' if valid else "尚未取得可核实的正式决议"
     if status == "pending":
@@ -3664,16 +3766,21 @@ def _reference_card(snapshot, *, details_only=False):
 
 def _oil_reference_row(snapshot):
     """风险表中的WTI报价行；日变化与风险灯分开，不进入综合评分。"""
-    refs = snapshot.get("reference_alerts") or {}
-    if not refs:
+    if "reference_alerts" not in snapshot:
         return ""
-    oil = refs.get("oil") or {}
+    refs = snapshot.get("reference_alerts")
+    refs = refs if isinstance(refs, dict) else {}
+    oil = refs.get("oil")
+    oil = oil if isinstance(oil, dict) else {}
     esc = lambda value: html_lib.escape(str(value))
     valid = policy_alerts.valid_number
     level = oil.get("level", "gray")
     names = {"red": "警惕", "yellow": "注意", "green": "未触发", "gray": "待更新"}
     price, day = oil.get("price"), oil.get("day")
-    if level not in names or oil.get("fetch_error") or not valid(price):
+    if (not isinstance(level, str) or level not in names or oil.get("fetch_error")
+            or not valid(price) or price <= 0 or not policy_alerts.moment(oil.get("date"))
+            or (level == "green" and (oil.get("incomplete")
+                or not all(valid(oil.get(key)) for key in ("day", "week", "month"))))):
         level = "gray"
     value = f'{price:.2f}<span class="unit">美元／桶</span>' if valid(price) else '—<span class="unit">美元／桶</span>'
     day_class = "oil-rise" if valid(day) and day > 0 else "oil-fall" if valid(day) and day < 0 else "dim"
@@ -3693,7 +3800,10 @@ def _oil_reference_row(snapshot):
         details += f'<p>最近核对：{checked.astimezone(TZ).strftime("%Y-%m-%d %H:%M")} 北京时间</p>'
     details += ('<p>自定义规则：5日涨≥10%注意／≥20%警惕，20日涨≥20%注意／≥30%警惕。'
                 '上涨速度反映价格冲击，不推断必然加息；不计入综合灯。</p></details>')
-    text = oil.get("text") or "原油数据待更新，暂不能判断成本压力。"
+    text = oil.get("text")
+    if (not isinstance(text, str) or not text.strip()
+            or (level == "gray" and oil.get("level") != "gray")):
+        text = "原油数据待更新，暂不能判断成本压力。"
     return (f'<tr class="{level} oil-reference-row" id="oilAlert" data-level="{level}">'
             f'<td>WTI原油<span class="unit">CLmain · 参考</span><span class="unit">{esc(oil.get("date") or "日线待更新")}</span></td>'
             f'<td class="num">{value}</td><td class="num {day_class}">{change}<span class="unit">日涨跌</span></td>'
@@ -3889,12 +3999,15 @@ def collect_quotes(symbols):
 
 def build_reference_alerts(prev=None):
     """额外指标独立取数入口；任何失败只影响参考提示，不拖垮原行情。"""
-    prev = prev or {}
+    prev = prev if isinstance(prev, dict) else {}
+    old_policy = prev.get("policy")
+    old_policy = old_policy if isinstance(old_policy, dict) else {}
     try:
-        policy = policy_alerts.update_policy(prev.get("policy"), NOW)
+        policy = policy_alerts.update_policy(old_policy, NOW)
     except Exception as exc:
         log(f"美联储决议独立取数失败：{str(exc)[:100]}")
-        old_fed = (prev.get("policy") or {}).get("fed") or {}
+        old_fed = old_policy.get("fed")
+        old_fed = old_fed if isinstance(old_fed, dict) else {}
         fed = {**old_fed, "fetch_error": str(exc)[:180], "pending_update": True, "checked_at": NOW.isoformat()}
         decision = policy_alerts.fed_decision(fed, NOW)
         policy = {"fed": fed, "summary": {k: decision[k] for k in ("level", "status", "text", "incomplete")}}

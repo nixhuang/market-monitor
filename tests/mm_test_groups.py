@@ -16,6 +16,127 @@ monitor.S.update(monitor.DEFAULT_SETTINGS)
 
 
 class TestGroups(unittest.TestCase):
+    def setUp(self):
+        # 财报测试独立于实际已核验日期文件；默认禁止访问官网，专项测试再注入样本。
+        self.addCleanup(patch.stopall)
+        patch.object(monitor, 'verified_earnings_events', return_value={}).start()
+        self.real_official_fetch = monitor.earnings_sources.fetch_official_earnings
+        patch.object(monitor.earnings_sources, 'fetch_official_earnings',
+                     return_value={'status': 'unknown', 'reason': 'fixture_empty'}).start()
+
+    def official_fixture(self):
+        return {'status': 'ok', 'kind': 'official', 'date': '2030-12-10', 'timing': '',
+                'source_url': 'https://investor.costco.com/events-and-presentations/events/event-details/2030/test/default.aspx',
+                'title': 'Q1 2031 Earnings Results', 'official_checked': '2030-10-11',
+                'source': '公司官方投资者关系'}
+
+    def test_official_event_parser_and_date_boundaries(self):
+        import earnings_sources as es
+        url = self.official_fixture()['source_url']
+        title = '<h1>Q1 2031 Earnings Results</h1>'
+        cases = [
+            (title + '<div class="module_date">December 10, 2030 01:15 PM PT</div>', '2030-12-10'),
+            (title + '<time datetime="2030-12-11T01:15:00Z"></time>', '2030-12-10'),
+            ('<script type="application/ld+json">' + json.dumps({'@type': 'Event', 'name': 'Q1 Earnings Results',
+              'startDate': '2030-12-10T13:15:00-08:00'}) + '</script>', '2030-12-10')]
+        for text, date in cases:
+            with self.subTest(text=text):
+                e = es.parse_official_event(text, url, '2030-10-11', 'COST')
+                self.assertEqual((e['status'], e['date'], e['kind'], e['timing']), ('ok', date, 'official', ''))
+        for text in ('<h1>Annual Shareholders Meeting</h1><time>December 10, 2030</time>',
+                     '<h1>Monthly Sales Results</h1><time>December 10, 2030</time>',
+                     title + '<time>December 10, 2029</time>', title,
+                     title + '<time>December 10, 2030</time><time>December 11, 2030</time>'):
+            self.assertEqual(es.parse_official_event(text, url, '2030-10-11', 'COST')['status'], 'unknown')
+        self.assertEqual(es.parse_official_event(cases[0][0], url, '2030-12-10', 'COST')['status'], 'ok')
+        for bad in ('https://evil.test/events', 'http://investor.costco.com/events',
+                    'https://investor.costco.com.evil.test/events'):
+            self.assertEqual(es.parse_official_event(cases[0][0], bad, '2030-10-11', 'COST')['status'], 'unknown')
+
+    def test_official_source_blocked_no_redirect_or_retry(self):
+        import earnings_sources as es
+        for code in (301, 403, 429, 500):
+            response = MagicMock(status_code=code)
+            response.__enter__.return_value = response
+            with patch.object(es.requests.Session, 'get', return_value=response) as get:
+                e = self.real_official_fetch('COST', '2030-10-11')
+            self.assertEqual(e['status'], 'error')
+            get.assert_called_once()
+            self.assertFalse(get.call_args.kwargs['allow_redirects'])
+
+    def test_official_fallback_preserves_verified_date_and_provenance(self):
+        e = self.official_fixture()
+        with patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                patch.object(monitor.earnings_sources, 'fetch_official_earnings', return_value=e):
+            got = monitor.resolve_earnings('COST', '2030-10-11')
+        self.assertEqual(got['kind'], 'official')
+        with patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                patch.object(monitor.earnings_sources, 'fetch_official_earnings',
+                             return_value={'status': 'error', 'reason': 'http_429'}):
+            kept = monitor.resolve_earnings('COST', '2030-10-20', got)
+        self.assertEqual(kept['date'], e['date'])
+        self.assertEqual(kept['official_checked'], '2030-10-11')
+        self.assertEqual(kept['official_error'], 'http_429')
+        self.assertEqual(kept['official_attempted'], '2030-10-20')
+        html = monitor._earnings_html({'symbol': 'COST', 'earnings': kept})
+        self.assertIn('官方来源', html)
+        self.assertIn('保留已核验日期', html)
+        self.assertNotIn('算法估算', html)
+        self.assertNotIn('盘后', html)
+
+    def test_official_verified_seed_used_once_without_network(self):
+        e = self.official_fixture()
+        rows = [{'symbol': 'COST', 'group': 'focus', 'level': 'green'}]
+        old = {'COST': {'status': 'unknown', 'fetched': '2030-10-10'}}
+        with patch.object(monitor, 'verified_earnings_events', return_value={'COST': e}), \
+                patch.object(monitor, 'nasdaq_earnings') as nasdaq, \
+                patch.object(monitor.earnings_sources, 'fetch_official_earnings') as official:
+            result = monitor.attach_earnings(rows, old, '2030-10-11')
+            again = monitor.attach_earnings(rows, result['data'], '2030-10-12')
+        nasdaq.assert_not_called(); official.assert_not_called()
+        self.assertEqual(result['dated'], 1)
+        self.assertEqual(result['fetched'], 0)
+        self.assertEqual(again['data']['COST']['official_checked'], '2030-10-11')
+        self.assertEqual(old['COST']['status'], 'unknown')
+
+    def test_pending_migration_does_not_repeat_daily(self):
+        rows = [{'symbol': 'MU', 'group': 'focus', 'level': 'green'}]
+        old = {'MU': {'status': 'unknown', 'fetched': '2030-10-10'}}
+        with patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}) as primary, \
+                patch.object(monitor.earnings_sources, 'fetch_official_earnings',
+                             return_value={'status': 'error', 'reason': 'http_403'}) as official:
+            result = monitor.attach_earnings(rows, old, '2030-10-11')
+            monitor.attach_earnings(rows, result['data'], '2030-10-12')
+        primary.assert_called_once(); official.assert_called_once()
+        self.assertEqual(result['data']['MU']['official_attempted'], '2030-10-11')
+        self.assertIn('不代表公司未公布', monitor.earnings_label(rows[0]['earnings'])[1])
+
+    def test_same_day_official_revision_once_and_invalid_results_safe(self):
+        original = self.official_fixture()
+        old = dict(original, fetched='2030-10-11', official_seed_sha=monitor._official_seed_hash(original))
+        revised = dict(original, date='2030-12-17')
+        self.assertTrue(monitor._new_official_seed(revised, old, 'COST', '2030-10-11'))
+        applied = dict(revised, official_seed_sha=monitor._official_seed_hash(revised))
+        self.assertFalse(monitor._new_official_seed(revised, applied, 'COST', '2030-10-11'))
+        self.assertFalse(monitor._new_official_seed(original, dict(old, official_checked='2030-10-12'), 'COST', '2030-10-12'))
+        for malformed in (None, [], 'bad'):
+            with patch.object(monitor, 'nasdaq_earnings', return_value=malformed), \
+                    patch.object(monitor.earnings_sources, 'fetch_official_earnings', return_value=malformed):
+                e = monitor.resolve_earnings('COST', '2030-10-20', old)
+            self.assertEqual(e['date'], original['date'])
+            self.assertIn('official_error', e)
+
+    def test_no_new_source_requests_when_primary_date_valid(self):
+        primary = {'status': 'ok', 'date': '2030-12-10', 'kind': 'expected', 'timing': 'post'}
+        with patch.object(monitor, 'nasdaq_earnings', return_value=primary), \
+                patch.object(monitor.earnings_sources, 'fetch_official_earnings') as official:
+            result = monitor.resolve_earnings('MU', '2030-10-11')
+        official.assert_not_called()
+        self.assertEqual(result, primary)
+        e = self.official_fixture()
+        self.assertFalse(monitor._official_earnings_valid(e, 'COST', '2031-01-01'))
+        self.assertFalse(monitor._official_earnings_valid({**e, 'source_url': 'javascript:alert(1)'}, 'COST', '2030-10-11'))
+
     def test_definitions_and_initial_config(self):
         labels = ['持仓', '重点关注', '指数基', 'IT软硬Ai', '医疗保健', '金融', '能源',
                   '工航防建机', '化材金纸', '公水电气', '必需消费品', '通信娱乐', '可选消费', '房地产']
@@ -540,7 +661,7 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(parse('X will report on 13/45/2026', '2026-10-09'), {'status': 'unknown'})
         self.assertEqual(monitor.earnings_label(None), None)
         self.assertEqual(monitor.earnings_label({'status': 'na'}), None)
-        self.assertEqual(monitor.earnings_label({'status': 'unknown'})[0], '时间待公布')
+        self.assertEqual(monitor.earnings_label({'status': 'unknown'})[0], '日期待确认')
         self.assertIn('不代表没有财报', monitor.earnings_label({'status': 'error'})[1])
         text, note = monitor.earnings_label(dict(ok, date='2026-10-30'))
         self.assertIn('美东 10/30 盘后', text)

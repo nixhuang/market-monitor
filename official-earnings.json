@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "description": "已核验公司官方事件的来源快照；不是算法估计，不在代码中固化日期。到期后不再作为下一次财报。",
+  "events": {
+    "COST": {
+      "status": "ok",
+      "date": "2026-12-10",
+      "kind": "official",
+      "timing": "",
+      "source": "公司官方投资者关系",
+      "source_url": "https://investor.costco.com/events-and-presentations/events/event-details/2026/Q1-2027-Earnings-Results-2026-Z57h_BiEq5/default.aspx",
+      "title": "Q1 2027 Earnings Results",
+      "official_checked": "2026-10-11",
+      "evidence": "Q1 2027 Earnings Results | December 10, 2026 01:15 PM PT",
+      "verification": "2026-10-11读取官方事件正文核验；此钟点为财报活动时间，不推定为财报文件发布钟点。"
+    }
+  }
+}

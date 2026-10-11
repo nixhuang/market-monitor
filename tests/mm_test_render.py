@@ -265,6 +265,137 @@ with _patch.object(monitor.policy_alerts, "update_policy", return_value={"fed": 
     check(_load.call_args.args == (_refsnap["reference_alerts"]["policy"], monitor.NOW)
           and not _load.call_args.kwargs and "cpi" not in _built["policy"], "取数入口使用新接口且不抓CPI/FRED")
 
+# 损坏缓存必须经过全页渲染验证，不能只测局部卡片；所有样本均为离线假数据。
+_oil = {"level": "green", "price": 70.0, "day": 1.0, "week": 2.0, "month": 3.0,
+        "date": "2026-10-09", "text": "原油暂未触发快速上涨警示。"}
+_bad_values = (None, False, True, 0, 1, "", "损坏", [], ["损坏"])
+
+
+def check_reference_render(refs, label, status="unavailable", oil_level="gray"):
+    snap = _copy.deepcopy(snapshot)
+    snap["reference_alerts"] = refs
+    render_macro, render_items = _copy.deepcopy(macro), _copy.deepcopy(items)
+    before = _copy.deepcopy((snap, render_macro, render_items))
+    page = monitor.render(render_macro, render_items, 10, snapshot=snap)
+    card = page.split('id="policyAlert"', 1)[1].split('</div></div>', 1)[0]
+    oil_row = page.split('id="oilAlert"', 1)[1].split('</tr>', 1)[0]
+    check(f'data-status="{status}"' in card and 'data-level="neutral"' in card
+          and f'data-level="{oil_level}"' in oil_row
+          and (status == "available" or "待更新" in card)
+          and (oil_level != "gray" or "待更新" in oil_row)
+          and 'id="policyAlertDetails"' in page and 'id="group_positions"' in page
+          and page.endswith('</body></html>')
+          and (snap, render_macro, render_items) == before,
+          label + "：全页完成、状态保守且输入不突变")
+    return page
+
+
+_corrupt_refs = []
+for _layer in ("reference_alerts", "policy", "fed", "oil"):
+    for _bad in (*_bad_values, {}):
+        _refs = _copy.deepcopy(_refsnap["reference_alerts"])
+        if _layer == "reference_alerts":
+            _refs = _copy.deepcopy(_bad)
+        elif _layer == "fed":
+            _refs["policy"]["fed"] = _copy.deepcopy(_bad)
+        else:
+            _refs[_layer] = _copy.deepcopy(_bad)
+        _label = f"损坏 {_layer}={_bad!r}"
+        _status = "available" if _layer == "oil" else "unavailable"
+        check_reference_render(_refs, _label, _status)
+        _corrupt_refs.append((_label, _refs, _status))
+
+for _layer in ("policy", "fed", "oil"):
+    _refs = _copy.deepcopy(_refsnap["reference_alerts"])
+    del (_refs["policy"] if _layer == "fed" else _refs)[_layer]
+    check_reference_render(_refs, f"缺失 {_layer}", "available" if _layer == "oil" else "unavailable")
+
+for _action in (*_bad_values, {}, {"action": "maintain"}, ["maintain"]):
+    _refs = _copy.deepcopy(_refsnap["reference_alerts"])
+    _refs["policy"]["fed"].update(action=_action, checked_at="")
+    _label = f"损坏 action={_action!r}"
+    check_reference_render(_refs, _label)
+    _corrupt_refs.append((_label, _refs, "unavailable"))
+
+for _field in ("action", "low", "high", "date", "url"):
+    for _bad in (None, [], {}, True, "损坏"):
+        _refs = _copy.deepcopy(_refsnap["reference_alerts"])
+        _refs["policy"]["fed"][_field] = _bad
+        check_reference_render(_refs, f"损坏 fed.{_field}={_bad!r}")
+    _refs = _copy.deepcopy(_refsnap["reference_alerts"])
+    del _refs["policy"]["fed"][_field]
+    check_reference_render(_refs, f"缺失 fed.{_field}")
+
+for _field in ("level", "price", "day", "week", "month", "date"):
+    for _bad in (*_bad_values, {}):
+        # 0/1 是有效涨幅；价格为正、日期可解析才可用。
+        if _field in ("price", "day", "week", "month") and type(_bad) in (int, float) and (_field != "price" or _bad > 0):
+            continue
+        _refs = _copy.deepcopy(_refsnap["reference_alerts"])
+        _refs["oil"] = dict(_oil, **{_field: _bad})
+        _page = check_reference_render(_refs, f"损坏 oil.{_field}={_bad!r}", "available")
+        _row = _page.split('id="oilAlert"', 1)[1].split('</tr>', 1)[0]
+        check("未触发" not in _row, f"损坏 oil.{_field} 不保留旧安全文案")
+    _refs = _copy.deepcopy(_refsnap["reference_alerts"])
+    _refs["oil"] = {k: v for k, v in _oil.items() if k != _field}
+    check_reference_render(_refs, f"缺失 oil.{_field}", "available")
+
+for _level, _week, _month in (("green", 2.0, 3.0), ("yellow", 12.0, 22.0), ("red", 25.0, None)):
+    _refs = _copy.deepcopy(_refsnap["reference_alerts"])
+    _refs["oil"] = dict(_oil, level=_level, week=_week, month=_month)
+    check_reference_render(_refs, f"有效原油 {_level} 保持原灯色", "available", _level)
+
+# 用真实 update_policy + mock 抓取，覆盖 unavailable 正常返回和入口异常两条路径。
+with _patch.object(monitor, "NOW", _ref_now), \
+     _patch.object(_policy, "fetch_text", side_effect=OSError("模拟离线失败")) as _fetch_text, \
+     _patch.object(monitor, "fetch_history", return_value=None), \
+     _patch.object(monitor, "yahoo_history", side_effect=AssertionError("不应抓取原油合约")), \
+     _patch.object(monitor, "log") as _log:
+    for _label, _refs, _status in _corrupt_refs:
+        _before = _copy.deepcopy(_refs)
+        _fetch_count = _fetch_text.call_count
+        _built = monitor.build_reference_alerts(_refs)
+        check(_refs == _before and _built["policy"]["summary"]["status"] == _status
+              and (not _label.startswith("损坏 action=") or _fetch_text.call_count == _fetch_count + 1),
+              "build " + _label + "：输入不突变、判定正确、损坏动作实际尝试更新")
+        check_reference_render(_built, "build→render " + _label, _status)
+    check(_fetch_text.call_count > 0 and not _log.called,
+          "真实 update_policy 消化取数错误并正常返回，不依靠入口异常兜底掩盖问题")
+
+    _fetch_text.reset_mock()
+    _old = _copy.deepcopy(_refsnap["reference_alerts"])
+    _old["policy"]["fed"]["checked_at"] = "2026-09-17T12:00:00+08:00"
+    _before = _copy.deepcopy(_old)
+    _built = monitor.build_reference_alerts(_old)
+    check(_fetch_text.call_count == 0 and _old == _before,
+          "有效旧缓存未到公布时间仍零网络请求，不改变持久缓存策略")
+    check_reference_render(_built, "build→render 有效旧缓存", "available")
+
+    _old["policy"]["fed"]["next_release"] = "2026-10-10T14:00:00-04:00"
+    _before = _copy.deepcopy(_old)
+    _built = monitor.build_reference_alerts(_old)
+    _page = check_reference_render(_built, "build→render 到期抓取失败", "pending")
+    check(_fetch_text.call_count == 1 and _old == _before and "维持不变" in _page
+          and "3.50%–3.75%" in _page and "2026-09-16" in _page,
+          "到期失败保留有效旧消息、日期和区间，不突变原缓存")
+    _before = _copy.deepcopy(_built)
+    _retry = monitor.build_reference_alerts(_built)
+    check(_fetch_text.call_count == 1 and _built == _before,
+          "失败后一小时内继续复用缓存，不因防护修改而重复抓取")
+    check_reference_render(_retry, "build→render 失败重试窗口", "pending")
+
+    for _label, _refs, _status in [*_corrupt_refs, ("有效旧消息", _old, "available")]:
+        _before = _copy.deepcopy(_refs)
+        with _patch.object(_policy, "update_policy", side_effect=RuntimeError("模拟入口异常")), \
+             _patch.object(monitor, "log"):
+            _built = monitor.build_reference_alerts(_refs)
+        _expected = "pending" if _status == "available" else "unavailable"
+        check(_refs == _before, "入口异常 " + _label + "：原缓存不突变")
+        _page = check_reference_render(_built, "入口异常→render " + _label, _expected)
+        if _status == "available":
+            check("维持不变" in _page and "3.50%–3.75%" in _page and "2026-09-16" in _page,
+                  "入口异常 " + _label + "：保留有效旧消息和来源日期")
+
 print()
 if fail:
     print(f"{len(fail)} 项失败"); sys.exit(1)

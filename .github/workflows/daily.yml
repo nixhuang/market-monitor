@@ -11,6 +11,8 @@ on:
       - 'settings.json'
       - 'monitor.py'
       - 'policy_alerts.py'
+      - 'earnings_sources.py'
+      - 'official-earnings.json'
       - 'groups.json'
       - '.github/workflows/daily.yml'
   schedule:
