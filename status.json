@@ -9,13 +9,13 @@
     "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "38118427297",
+  "run_id": "38128773299",
   "request_id": "",
-  "source_sha": "ae37031eea003bdaa928f4aa3586c679b8e18bdc",
-  "started_at": "2026-10-11T06:33:04+00:00",
-  "started_at_bj": "2026-10-11T14:33:04+08:00",
-  "finished_at": "2026-10-11T14:33:54.029900+08:00",
-  "finished_at_bj": "2026-10-11T14:33:54+08:00",
+  "source_sha": "9e72865238e39fc8db8d9c6b847d80780cc77937",
+  "started_at": "2026-10-11T09:33:07+00:00",
+  "started_at_bj": "2026-10-11T17:33:07+08:00",
+  "finished_at": "2026-10-11T17:33:55.161446+08:00",
+  "finished_at_bj": "2026-10-11T17:33:55+08:00",
   "event": "push",
   "target_trade_date": "2026-10-09",
   "mode": "closed",
@@ -1842,8 +1842,8 @@
     "dated": 82,
     "pending": 8,
     "failed": 0,
-    "fetched": 3,
-    "cached": 87,
+    "fetched": 0,
+    "cached": 90,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -2511,6 +2511,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-11T14:33:44.191366+08:00"
+    "assessed_at": "2026-10-11T17:33:45.305987+08:00"
   }
 }
