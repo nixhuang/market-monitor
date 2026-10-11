@@ -96,7 +96,7 @@ for _label, _css, _widths in (("电脑", _desktop_css, (18, 22, 13, 47)),
 _macro_u = dict(macro, ust10=dict(macro["ust10"], value=4.55, delta_week=0.12, month_ago=4.0, delta_month=0.55))
 _html_u = monitor.render(_macro_u, items, 10, snapshot=snapshot, dup_hidden=2)
 check('id="ust10Ref"' in _html_u and "一个月急升 +55 bp" in _html_u and "参考 · 不计入综合灯" in _html_u
-      and '<td class="num dim">+12</td>' in _html_u, "10Y美债参考行：一个月急升标黄，周变化按 bp 显示")
+      and '<td class="num dim">+12<span class="unit">周变化 bp</span></td>' in _html_u, "10Y美债参考行：一个月急升标黄，周变化按 bp 显示")
 check('id="ust10Ref"' in html and "无数据或已过期" in html.split('id="ust10Ref"')[1].split("</tr>")[0],
       "10Y美债缺一个月数据时显示无数据")
 _macro_b = dict(macro, breadth={"ok": True, "name": "上涨参与度", "date": "2026-10-06", "value": 47.0,

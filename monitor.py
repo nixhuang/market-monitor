@@ -29,6 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import requests
+import policy_alerts
 
 # 北京时间与运行口径
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -976,6 +977,9 @@ def yahoo_history(symbol):
                     "currency": meta.get("currency", ""),
                     "quote_symbol": meta.get("symbol", ""),
                     "quote_name": meta.get("shortName") or meta.get("longName") or "",
+                    "quote_type": meta.get("instrumentType", ""),
+                    "quote_exchange": meta.get("exchangeName", ""),
+                    "quote_timezone": meta.get("exchangeTimezoneName", ""),
                 }
             except requests.HTTPError as e:
                 last_err = str(e)[:60]
@@ -1902,6 +1906,16 @@ def valid_history(data):
         return False
 
 
+def valid_futures_identity(data, identity):
+    """主连只接受供应商明确返回的期货身份，不用ETF、现金指数或CFD冒充。
+    ESMAIN 接 Yahoo ES=F 的供应商连续序列；换月/复权口径不承诺与其他平台一致。
+    """
+    return (isinstance(data, dict) and data.get("quote_symbol") == identity
+            and data.get("quote_type") == "FUTURE" and data.get("currency") == "USD"
+            and data.get("quote_timezone") == "America/New_York"
+            and "CFD" not in str(data.get("quote_name", "")).upper())
+
+
 def fetch_history(symbol):
     """普通标的 Yahoo → stooq → Nasdaq；指数／期货只取经映射的 Yahoo 日线。
 
@@ -1914,7 +1928,8 @@ def fetch_history(symbol):
     """
     symbol = normalize_symbol(symbol)
     identity = instrument_identity(symbol)
-    alias = INDEX_YAHOO_ALIAS.get(symbol) or (identity if identity.startswith('^') or identity.endswith('=F') else None)
+    is_future = identity.endswith('=F')
+    alias = INDEX_YAHOO_ALIAS.get(symbol) or (identity if identity.startswith('^') or is_future else None)
     if identity == '^TNX':
         return None  # 国债收益率不使用报价指数替代百分比口径。
     loaders = (("yahoo", yahoo_history),) if alias else (
@@ -1924,6 +1939,9 @@ def fetch_history(symbol):
     for name, loader in loaders:
         data = loader(alias or symbol)
         if not data:
+            continue
+        if is_future and not valid_futures_identity(data, identity):
+            log(f"  ! {symbol} 期货身份/币种/日线时区不匹配，拒绝替代报价")
             continue
         if CLOSED_ONLY:
             data = trim_history(data, TARGET_DATE)
@@ -1950,6 +1968,11 @@ def fetch_history(symbol):
             return data if alias else apply_realtime(symbol, data)
         if fallback is None or data["dates"][-1] > fallback["dates"][-1]:
             fallback = data
+    # 期货按看板目标美股交易日日线观察，不宣称覆盖全部CME夜盘/节假日。
+    # 目标日缺失时不能把前一天的期货信号冒充本轮信号，也不借用SPY/标普现金指数。
+    if is_future:
+        log(f"  ! {symbol} 未取得 {TARGET_DATE} 的有效期货日线，显示无数据")
+        return None
     # Nasdaq 股票/ETF 实时报价不可套用在指数或期货别名上。
     return apply_realtime(symbol, fallback) if fallback and not CLOSED_ONLY and not alias else fallback
 
@@ -3190,6 +3213,10 @@ tr.gray td{color:var(--dim)}
 .macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
 .macro-help p{margin:6px 0}
 .macro-help>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
+.page-notes{margin-top:18px}
+.page-notes .macro-help{overflow-wrap:anywhere}
+.page-notes a{color:#8fb8f0}
+.page-notes .macro-help+ .macro-help{border-top:1px solid var(--line);padding-top:4px}
 .unit{display:block;font-size:10px;color:var(--dim);font-weight:400}
 .foot{color:var(--dim);font-size:11.5px;text-align:center;margin-top:22px;line-height:1.7}
 .quiet{color:var(--dim);font-size:12px;padding:8px 12px 12px}
@@ -3252,6 +3279,37 @@ tr.gray td{color:var(--dim)}
 .dca b{color:var(--text)}
 .dca.on{background:rgba(210,153,34,.14);border-color:rgba(210,153,34,.4);color:var(--yellow)}
 .dca.on b{color:var(--yellow)}
+.policy-reference{border-top:1px solid var(--line);margin-top:0}
+.policy-reference .reference-alert{padding:7px 12px}
+.policy-reference .reference-top{gap:6px;font-size:11.5px}
+.policy-reference .stat-dot{width:8px;height:8px}
+.policy-reference .reference-status{font-size:10.5px}
+.policy-reference .reference-conclusion{font-size:12px;line-height:1.55;margin:3px 0 0}
+.oil-reference-row td{font-size:12px;overflow-wrap:anywhere}
+.oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
+.oil-state{font-size:11px;font-weight:600}
+.oil-explanation{margin-top:3px;font-size:11.5px;line-height:1.55}
+.oil-reference-row.red .oil-state{color:var(--red)}
+.oil-reference-row.yellow .oil-state{color:var(--yellow)}
+.oil-reference-row.green .oil-state{color:var(--green)}
+.oil-rise{color:#f85149} .oil-fall{color:#3fb950}
+#macroCard td:nth-child(3) .unit{white-space:nowrap}
+@media(max-width:600px){.oil-reference-row td{padding:8px 6px}.oil-reference-row .reference-detail{font-size:10.5px}#macroCard td:nth-child(3) .unit{font-size:9px}}
+.reference-alert{padding:13px 14px;border-bottom:1px solid var(--line)}
+.reference-alert:last-of-type{border-bottom:0}
+.reference-top{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+.reference-top .reference-status{margin-left:auto;color:var(--dim);font-size:11px}
+.reference-alert[data-level="red"] .reference-status{color:var(--red)}
+.reference-alert[data-level="yellow"] .reference-status{color:var(--yellow)}
+.reference-alert[data-level="green"] .reference-status{color:var(--green)}
+.reference-conclusion{font-size:14px;line-height:1.65;margin:7px 0;color:var(--text)}
+.reference-data{font-size:11px;line-height:1.65;color:var(--dim);overflow-wrap:anywhere}
+.reference-detail{margin:8px 0 0;font-size:11px;color:var(--dim);line-height:1.7}
+.reference-detail summary{cursor:pointer;color:#8fb8f0;padding:3px 0}
+.reference-detail a{color:#8fb8f0}
+.reference-detail p{margin:5px 0}
+.reference-alert[data-level="gray"] .reference-conclusion{color:var(--dim)}
+.local-preview-banner{padding:11px 14px;border:1px solid rgba(107,163,240,.35);border-radius:10px;background:rgba(107,163,240,.08);color:#8fb8f0;font-size:12px;margin:14px 0}
 """
 
 
@@ -3291,7 +3349,7 @@ def _macro_rows(macro, risk):
             label += f'<span class="unit">{html_lib.escape(str(it["source"]))}</span>'
         rows_macro.append(
             f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
-            f'<td class="num dim">{dw_txt}</td><td>{txt}</td></tr>'
+            f'<td class="num dim">{dw_txt}<span class="unit">周变化</span></td><td>{txt}</td></tr>'
         )
 
     # 参考行：10Y 美债一个月变化。只看利率冲击，不进 RISK_INDICATORS，不影响综合灯和有效指标数
@@ -3305,7 +3363,7 @@ def _macro_rows(macro, risk):
                   f'<span class="unit">截至 {html_lib.escape(ut["date"])}</span>')
         rows_macro.append(
             f'<tr class="{ulv}" id="ust10Ref"><td>{ulabel}</td><td class="num">{ut["value"]:.2f}%</td>'
-            f'<td class="num dim">{uw_txt}</td><td>{utxt}</td></tr>')
+            f'<td class="num dim">{uw_txt}<span class="unit">周变化 bp</span></td><td>{utxt}</td></tr>')
     else:
         rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债<span class="unit">参考 · 不计入综合灯</span></td>'
                           '<td colspan="3">无数据或已过期</td></tr>')
@@ -3545,6 +3603,114 @@ def _signal_counts_card(snapshot):
             f'关掉这条规则它就变绿。紫色为目标价／共识价提示。</p></details>\n')
 
 
+def _reference_card(snapshot, *, details_only=False):
+    """市场风险区只留结论；数据依据单独送入页底，不接入评分或个股灯。"""
+    refs = snapshot.get("reference_alerts") or {}
+    if not refs:
+        return ""
+    policy = refs.get("policy") or {}
+    cpi, fed = policy.get("cpi") or {}, policy.get("fed") or {}
+    assessment_time = policy_alerts.moment(refs.get("assessed_at"))
+    summary = policy_alerts.policy_summary(cpi, fed, assessment_time)
+    esc = lambda text: html_lib.escape(str(text))
+    names = {"red": "警惕", "yellow": "注意", "green": "未触发", "gray": "待更新"}
+    def line(key, title, state):
+        lv = state.get("level", "gray")
+        if lv not in names:
+            lv = "gray"
+        return (f'<div class="reference-alert" id="{key}" data-level="{lv}">'
+                f'<div class="reference-top"><i class="stat-dot {lv}" aria-hidden="true"></i>{title}'
+                f'<span class="reference-status">{names[lv]}</span></div>'
+                f'<p class="reference-conclusion">{esc(state.get("text", "待更新"))}</p></div>')
+    def number(value, spec=".1f"):
+        return format(value, spec) if policy_alerts.valid_number(value) else "待更新"
+    cpi_data = (f'{cpi.get("date", "月份待更新")} 核心CPI环比 {number(cpi.get("mom"), "+.1f")}% · 前值 {number(cpi.get("previous"), "+.1f")}%'
+                if policy_alerts.valid_number(cpi.get("mom")) else "核心CPI尚未取得有效数据")
+    next_cpi = policy_alerts.moment(cpi.get("next_release"))
+    if next_cpi:
+        cpi_data += " · 下次公布 " + next_cpi.astimezone(TZ).strftime("%m-%d %H:%M") + " 北京时间"
+    policy_details = f'<p>{esc(cpi_data)}（季调月度口径，不是同比）</p>'
+    if fed.get("low") is not None:
+        policy_details += (f'<p>最近决议 {esc(str(fed.get("date", ""))[:10])}：目标区间 '
+                           f'{number(fed.get("low"), ".2f")}%—{number(fed.get("high"), ".2f")}%。'
+                           f'季度预测 {esc(fed.get("projection_date", ""))}：{esc(fed.get("year", "年份待更新"))}年末中位数 '
+                           f'{number(fed.get("median"))}%，不是加息承诺或市场概率。</p>')
+    next_fed = policy_alerts.moment(fed.get("next_release"))
+    if next_fed:
+        policy_details += (f'<p>下次决议 {next_fed.astimezone(TZ).strftime("%Y-%m-%d %H:%M")} 北京时间'
+                           f'（{"发布" if fed.get("next_has_sep") else "不发布新"}点阵图）。</p>')
+    for entry in (cpi, fed):
+        if entry.get("fetch_error"):
+            policy_details += f'<p>取数状态：{esc(entry["fetch_error"])}；旧值仅供参考，不认定风险缓解。</p>'
+        if entry.get("url"):
+            policy_details += f'<p><a href="{esc(entry["url"])}" target="_blank" rel="noopener noreferrer">{esc(entry.get("source", "官方来源"))}</a></p>'
+        checked = policy_alerts.moment(entry.get("checked_at"))
+        if checked:
+            policy_details += f'<p>最近核对：{checked.astimezone(TZ).strftime("%Y-%m-%d %H:%M")} 北京时间</p>'
+    if fed.get("projection_url"):
+        policy_details += f'<p><a href="{esc(fed["projection_url"])}" target="_blank" rel="noopener noreferrer">美联储季度预测原表</a></p>'
+    policy_details += f'<p>{esc(policy_alerts.RULES)}</p><p>CPI每月公布后、美联储每次决议及季度预测后更新；缺失或到期显示待更新。</p>'
+    if details_only:
+        return ('<details class="macro-help" id="policyAlertDetails">'
+                '<summary>通胀／利率 · 查看数据与来源</summary>' + policy_details + '</details>')
+    return ('<div id="referenceAlerts" class="policy-reference">'
+            + line("policyAlert", "通胀／利率", summary) + '</div>')
+
+
+def _oil_reference_row(snapshot):
+    """风险表中的WTI报价行；日变化与风险灯分开，不进入综合评分。"""
+    refs = snapshot.get("reference_alerts") or {}
+    if not refs:
+        return ""
+    oil = refs.get("oil") or {}
+    esc = lambda value: html_lib.escape(str(value))
+    valid = policy_alerts.valid_number
+    level = oil.get("level", "gray")
+    names = {"red": "警惕", "yellow": "注意", "green": "未触发", "gray": "待更新"}
+    price, day = oil.get("price"), oil.get("day")
+    if level not in names or oil.get("fetch_error") or not valid(price):
+        level = "gray"
+    value = f'{price:.2f}<span class="unit">美元／桶</span>' if valid(price) else '—<span class="unit">美元／桶</span>'
+    day_class = "oil-rise" if valid(day) and day > 0 else "oil-fall" if valid(day) and day < 0 else "dim"
+    change = f'{day:+.2f}%' if valid(day) else "—"
+    changes = ''.join(f'<p>{period}交易日涨幅：{oil[key]:+.1f}%</p>' if valid(oil.get(key))
+                      else f'<p>{period}交易日涨幅：待核实</p>' for period, key in ((5, "week"), (20, "month")))
+    details = (f'<details class="reference-detail"><summary>依据与来源</summary>{changes}'
+               f'<p>日变化：{esc(oil.get("day_from") or "前一日待核实")} → {esc(oil.get("date") or "本期待更新")}。'
+               f'主连价格来自CL=F；所有涨幅使用同一实际交割合约 '
+               f'{esc(oil.get("contract_symbol") or "未核实")} / {esc(oil.get("contract") or "未核实")}，避免换月误报。</p>'
+               f'<p><a href="{esc(oil.get("url") or "https://finance.yahoo.com/quote/CL=F/")}" target="_blank" rel="noopener noreferrer">'
+               f'{esc(oil.get("source") or "Yahoo NYMEX WTI期货")}</a> · 日线，非实时夜盘</p>')
+    if oil.get("fetch_error"):
+        details += f'<p>取数状态：{esc(oil["fetch_error"])}</p>'
+    checked = policy_alerts.moment(oil.get("checked_at") or refs.get("assessed_at"))
+    if checked:
+        details += f'<p>最近核对：{checked.astimezone(TZ).strftime("%Y-%m-%d %H:%M")} 北京时间</p>'
+    details += ('<p>自定义规则：5日涨≥10%注意／≥20%警惕，20日涨≥20%注意／≥30%警惕。'
+                '上涨速度反映价格冲击，不推断必然加息；不计入综合灯。</p></details>')
+    text = oil.get("text") or "原油数据待更新，暂不能判断成本压力。"
+    return (f'<tr class="{level} oil-reference-row" id="oilAlert" data-level="{level}">'
+            f'<td>WTI原油<span class="unit">CLmain · 参考</span><span class="unit">{esc(oil.get("date") or "日线待更新")}</span></td>'
+            f'<td class="num">{value}</td><td class="num {day_class}">{change}<span class="unit">日涨跌</span></td>'
+            f'<td><b class="oil-state">{names[level]}</b><div class="oil-explanation">{esc(text)}</div>{details}</td></tr>')
+
+
+def _page_notes(snapshot):
+    """页底集中收纳说明；不改变任何指标阈值和判断规则。"""
+    return f'''<section class="card page-notes" id="pageNotes" aria-label="规则与数据说明">
+<div class="grp">规则与数据说明</div>
+<details class="macro-help" id="marketRiskRules"><summary>综合判断规则</summary><p>{html_lib.escape(RISK_RULE_TEXT)}</p>
+{('<p>补充参考：通胀／利率、WTI原油不计入综合灯；综合灯仍依据原5项指标。</p>' if snapshot.get('reference_alerts') else '')}</details>
+{_reference_card(snapshot, details_only=True)}
+<details class="macro-help" id="marketRiskNotes"><summary>指标阈值与数据说明</summary>
+<p>垃圾债利差：≥{S['hy_green']:.0f} bp 黄、≥{S['hy_red']:.0f} bp 红；一周扩大 ≥30 bp 为黄、≥50 bp 为红。VIX：≥{S['vix_green']:g} 黄、≥{S['vix_red']:g} 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
+<p>10Y美债是参考行，不计入综合灯：一个月上行 ≥{UST_MONTH_YELLOW} bp 标黄（利率冲击风险），≥{UST_MONTH_WATCH} bp 只提示偏快；周变化列单位为 bp。</p>
+<p>上涨参与度：站上长期均线的股票不足一半为黄；不足三成且信用／金融压力也升高才为红。金融压力是周度数据，达到历史平均紧张程度为黄。指标缺失时显示无数据，不代表安全，也不预测具体跌幅。</p>
+<p>市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a>，数据依据当前成分股计算，回看历史可能有成分股选择偏差。</p>
+</details>
+</section>'''
+
+
 def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
     snapshot = snapshot or {}
     registered = snapshot.get("registered_counts", {})
@@ -3638,17 +3804,12 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <details class="card macro-card" id="macroCard">
 <summary class="grp"><span>市场风险参考</span><span class="group-stats">{macro_stats}</span></summary>
 <p class="macro-help" id="marketRiskReason">{html_lib.escape(risk['text'])} · 有效指标 {risk['valid_count']}/5</p>
-<details class="macro-help" id="marketRiskRules"><summary>综合判断规则</summary><p>{html_lib.escape(RISK_RULE_TEXT)}</p></details>
 <table>
-<tr class="gray mh"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">周变化</td><td style="color:var(--dim)">状态</td></tr>
+<tr class="gray mh"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">变化</td><td style="color:var(--dim)">状态</td></tr>
 {rows_macro}
+{_oil_reference_row(snapshot)}
 </table>
-<details class="macro-help" id="marketRiskNotes"><summary>指标阈值与数据说明</summary>
-<p>垃圾债利差：≥{S['hy_green']:.0f} bp 黄、≥{S['hy_red']:.0f} bp 红；一周扩大 ≥30 bp 为黄、≥50 bp 为红。VIX：≥{S['vix_green']:g} 黄、≥{S['vix_red']:g} 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
-<p>10Y美债是参考行，不计入综合灯：一个月上行 ≥{UST_MONTH_YELLOW} bp 标黄（利率冲击风险），≥{UST_MONTH_WATCH} bp 只提示偏快；周变化列单位为 bp。</p>
-<p>上涨参与度：站上长期均线的股票不足一半为黄；不足三成且信用／金融压力也升高才为红。金融压力是周度数据，达到历史平均紧张程度为黄。指标缺失时显示无数据，不代表安全，也不预测具体跌幅。</p>
-<p>市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a>，数据依据当前成分股计算，回看历史可能有成分股选择偏差。</p>
-</details>
+{_reference_card(snapshot)}
 </details>
 
 {group_cards}
@@ -3664,6 +3825,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <span id="runMsg"></span>
 </div>
 {RUN_JS}
+{_page_notes(snapshot)}
 </div></body></html>"""
 
 
@@ -3720,6 +3882,29 @@ def collect_quotes(symbols):
     return results
 
 
+def build_reference_alerts(prev=None):
+    """额外指标独立取数入口；任何失败只影响参考提示，不拖垮原行情。"""
+    prev = prev or {}
+    try:
+        policy = policy_alerts.update_policy(prev.get("policy"), NOW, fred_loader=fred_series)
+    except Exception as exc:
+        log(f"通胀政策独立参考取数失败：{str(exc)[:100]}")
+        policy = {"cpi": {"fetch_error": str(exc)[:180]}, "fed": {"fetch_error": str(exc)[:180]}}
+    oil_continuous, oil_contract = None, None
+    try:
+        oil_continuous = fetch_history("CLMAIN")
+        if oil_continuous:
+            code = policy_alerts.oil_contract_symbol(oil_continuous.get("quote_name"))
+            if code:
+                oil_contract = yahoo_history(code)
+                if oil_contract and CLOSED_ONLY:
+                    oil_contract = trim_history(oil_contract, TARGET_DATE)
+    except Exception as exc:
+        log(f"原油独立参考取数失败：{str(exc)[:100]}")
+    oil = policy_alerts.oil_warning(oil_continuous, oil_contract, TARGET_DATE)
+    return {"policy": policy, "oil": oil, "assessed_at": NOW.isoformat()}
+
+
 # ---------------------------------------------------------------- main
 
 def main(argv=None):
@@ -3765,6 +3950,7 @@ def main(argv=None):
         log("holdings.json 里没有自选股，跳过个股部分")
 
     macro = build_macro()
+    reference_alerts = build_reference_alerts(prev_status.get("reference_alerts"))
     items = []
     if universe:
         log("抓取 " + " + ".join(f"{group_counts[g['key']]} 只{g['label']}" for g in GROUPS
@@ -3911,6 +4097,7 @@ def main(argv=None):
     snapshot["consensus"] = {"source": CONSENSUS_SOURCE, "stat": cons_stat, "data": cons_data,
                              "quota": cons_stat.get("quota", _consensus_quota(prev_cons, quota_day))}
     snapshot["earnings"] = earn_stat
+    snapshot["reference_alerts"] = reference_alerts
     supported_items = [d for d in items if quote_supported(d["symbol"])]
     html = render(macro, items, len(universe), data_down=bool(supported_items)
                   and all(d["level"] == "gray" for d in supported_items), snapshot=snapshot,

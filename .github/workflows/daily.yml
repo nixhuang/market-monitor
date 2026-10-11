@@ -10,6 +10,7 @@ on:
       - 'holdings.json'
       - 'settings.json'
       - 'monitor.py'
+      - 'policy_alerts.py'
       - 'groups.json'
       - '.github/workflows/daily.yml'
   schedule:
@@ -64,7 +65,7 @@ jobs:
             echo "go=no" >> "$GITHUB_OUTPUT"
           fi
 
-  # 发布前自检：八项离线测试（tests.yml，不联网、不读线上设置）。
+  # 发布前自检：九项离线测试（tests.yml，不联网、不读线上设置）。
   # 不通过 → build 不会运行 → 不抓数据、不生成页面、不发布，页面保持上一次的内容，Actions 里这一轮显示红叉。
   test:
     needs: gate

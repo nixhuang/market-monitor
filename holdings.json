@@ -98,8 +98,8 @@
     }
   },
   "index_funds": {
-    "HYG": {
-      "note": "iShares高收益公司债ETF"
+    "ESMAIN": {
+      "note": "标普500期货主连·日线"
     },
     "IBIT": {
       "note": "iShares比特币ETF"
@@ -118,12 +118,6 @@
     },
     ".SOX": {
       "note": "费城半导体指数"
-    },
-    "VIG": {
-      "note": "先锋红利增值ETF"
-    },
-    "SPMO": {
-      "note": "景顺标普500动量ETF"
     }
   },
   "technology": {
@@ -180,9 +174,6 @@
     },
     "NTNX": {
       "note": "Nutanix-混合云"
-    },
-    "CBRS": {
-      "note": "Cerebras-AI芯片"
     },
     "COHR": {
       "note": "Coherent-光器件"

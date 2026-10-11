@@ -128,7 +128,9 @@ class TestGroups(unittest.TestCase):
                     'lows': [100.0] * 32, 'volumes': [0] * 32,
                     'price': 100.0, 'prev_close': 100.0}
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'CLOSED_ONLY', False), \
-                patch.object(monitor, 'yahoo_history', side_effect=lambda _: bars()) as yahoo, \
+                patch.object(monitor, 'yahoo_history', side_effect=lambda code: dict(
+                    bars(), quote_symbol=code, quote_type='FUTURE' if code.endswith('=F') else 'INDEX',
+                    currency='USD', quote_timezone='America/New_York')) as yahoo, \
                 patch.object(monitor, 'nasdaq_realtime') as realtime, \
                 patch.object(monitor, 'stooq_history') as stooq, patch.object(monitor, 'nasdaq_history') as nasdaq:
             for code, alias in monitor.INDEX_YAHOO_ALIAS.items():
@@ -259,6 +261,7 @@ class TestGroups(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_reference_alerts', return_value={}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}) as fetch, \
@@ -295,6 +298,7 @@ class TestGroups(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-02'), \
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_reference_alerts', return_value={}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'SP500_RS_ROWS', list(bench_rows)), \
                     patch.object(monitor, 'sp500_rows_fallback', return_value=list(fallback_rows or [])) as fallback, \
@@ -377,6 +381,7 @@ class TestGroups(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_reference_alerts', return_value={}), \
                     patch.object(monitor, 'build_macro', return_value=macro), patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}), \
                     patch.object(monitor, 'fetch_history', return_value=None) as fetch, \
                     patch.object(monitor, 'global_dca', return_value=None), \
@@ -413,6 +418,7 @@ class TestGroups(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_reference_alerts', return_value={}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'fetch_history', side_effect=fetch), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
@@ -445,6 +451,7 @@ class TestGroups(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_reference_alerts', return_value={}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'fetch_history', side_effect=slow_fail), \
                     patch.object(monitor, 'global_dca', return_value=None), \
@@ -2008,6 +2015,7 @@ class TestTargets(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_reference_alerts', return_value={}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
@@ -2042,6 +2050,7 @@ class TestTargets(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'build_reference_alerts', return_value={}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
@@ -2366,6 +2375,7 @@ class TestCacheAudit(unittest.TestCase):
             with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:
                 json.dump({}, f)
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-09'), \
+                    patch.object(monitor, 'build_reference_alerts', return_value={}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'collect_quotes', return_value={'AAA': {'price': 100}}), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
@@ -2400,6 +2410,91 @@ class TestCacheAudit(unittest.TestCase):
                     disabled = run('2026-10-11T20:15:00-04:00', {'status': 'unknown'})
                 self.assertEqual(fund.call_count, count)
                 self.assertEqual(disabled['fundamental']['data'], third['fundamental']['data'])
+
+
+class TestFuturesIdentity(unittest.TestCase):
+    """期货恢复：不冒充现金指数/ETF，不把过期数据当作当日行情。"""
+
+    def bars(self, end='2026-10-09', **extra):
+        from datetime import date, timedelta
+        dates = [(date.fromisoformat(end) - timedelta(days=i)).isoformat()
+                 for i in range(34, -1, -1)]
+        return dict(dates=dates, closes=[7800.0] * 35, highs=[7810.0] * 35,
+                    lows=[7790.0] * 35, volumes=[1000.0] * 35, price=7800.0,
+                    prev_close=7800.0, quote_symbol='ES=F', quote_type='FUTURE',
+                    currency='USD', quote_timezone='America/New_York',
+                    quote_name='E-Mini S&P 500 Dec 26', **extra)
+
+    def fetch(self, bars, symbol='ESMAIN', closed=True):
+        with patch.object(monitor, 'yahoo_history', return_value=bars) as yahoo, \
+                patch.object(monitor, 'stooq_history') as stooq, \
+                patch.object(monitor, 'nasdaq_history') as nasdaq, \
+                patch.object(monitor, 'nasdaq_realtime') as realtime, \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-09'), \
+                patch.object(monitor, 'CLOSED_ONLY', closed), patch.object(monitor, 'log'):
+            result = monitor.fetch_history(symbol)
+        yahoo.assert_called_once_with('ES=F')
+        stooq.assert_not_called(); nasdaq.assert_not_called(); realtime.assert_not_called()
+        return result
+
+    def test_alias_and_direct_future_use_only_verified_future(self):
+        for sym in ('ESMAIN', 'ESmain', 'ES=F'):
+            for closed in (True, False):
+                with self.subTest(symbol=sym, closed=closed):
+                    got = self.fetch(self.bars(), sym, closed)
+                    self.assertEqual((got['price'], got['source'], got['quote_symbol']),
+                                     (7800.0, 'yahoo', 'ES=F'))
+
+    def test_wrong_symbol_type_currency_or_timezone_is_rejected(self):
+        changes = ({'quote_symbol': 'SPY'}, {'quote_symbol': '^GSPC'},
+                   {'quote_symbol': 'MES=F'}, {'quote_type': 'ETF'}, {'quote_type': ''},
+                   {'currency': 'CNY'}, {'quote_timezone': 'UTC'},
+                   {'quote_name': 'S&P 500 CFD'})
+        for change in changes:
+            with self.subTest(change=change):
+                self.assertIsNone(self.fetch(dict(self.bars(), **change)))
+
+    def test_stale_future_never_becomes_current_signal(self):
+        for closed in (True, False):
+            self.assertIsNone(self.fetch(self.bars(end='2026-10-08'), closed=closed))
+
+    def test_future_bar_is_trimmed_for_closed_report_only(self):
+        got = self.fetch(self.bars(end='2026-10-10'))
+        self.assertEqual(got['dates'][-1], '2026-10-09')
+        self.assertIsNone(self.fetch(self.bars(end='2026-10-10'), closed=False))
+
+    def test_missing_and_corrupted_history_fail_closed(self):
+        for data in (None, dict(self.bars(), highs=[1] * 35),
+                     dict(self.bars(), closes=[float('nan')] * 35)):
+            self.assertIsNone(self.fetch(data))
+
+    def test_future_has_no_earnings_or_consensus_request(self):
+        self.assertFalse(monitor.is_etf('ESMAIN'))
+        self.assertFalse(monitor.consensus_wanted('ESMAIN', {}, 'index_funds'))
+        with patch.object(monitor, 'nasdaq_earnings') as api, patch.object(monitor, 'log'):
+            stat = monitor.attach_earnings([{'symbol': 'ESMAIN', 'group': 'index_funds',
+                                             'level': 'green'}], today='2026-10-10')
+        api.assert_not_called()
+        self.assertEqual(stat['targets'], 0)
+
+    def test_yahoo_parser_preserves_identity_and_exchange_day(self):
+        from datetime import datetime
+        base = self.bars()
+        ticks = [int(datetime.fromisoformat(d + 'T00:00:00-04:00').timestamp())
+                 for d in base['dates']]
+        payload = {'chart': {'result': [{'meta': {'symbol': 'ES=F', 'instrumentType': 'FUTURE',
+                    'currency': 'USD', 'exchangeName': 'CME', 'exchangeTimezoneName': 'America/New_York',
+                    'shortName': 'E-Mini S&P 500 Dec 26'}, 'timestamp': ticks,
+                    'indicators': {'quote': [{'close': base['closes'], 'high': base['highs'],
+                                              'low': base['lows'], 'volume': base['volumes']}]}}]}}
+        response = MagicMock(status_code=200)
+        response.json.return_value = payload
+        with patch.object(monitor.requests, 'get', return_value=response), \
+                patch.object(monitor, 'YAHOO_GATE', monitor.SourceGate()):
+            got = monitor.yahoo_history('ES=F')
+        self.assertTrue(monitor.valid_futures_identity(got, 'ES=F'))
+        self.assertEqual(got['quote_exchange'], 'CME')
+        self.assertEqual(got['dates'], base['dates'])
 
 
 class TestVolTier(unittest.TestCase):
