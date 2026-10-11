@@ -9,13 +9,13 @@
     "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "38106826347",
+  "run_id": "38110556246",
   "request_id": "",
-  "source_sha": "9b448f267365a45bed8f0b62d64b2aeb46e5925a",
-  "started_at": "2026-10-11T02:57:35+00:00",
-  "started_at_bj": "2026-10-11T10:57:35+08:00",
-  "finished_at": "2026-10-11T10:59:15.495763+08:00",
-  "finished_at_bj": "2026-10-11T10:59:15+08:00",
+  "source_sha": "407ff12e06631c56c15afe6eb5edc75d4cad279e",
+  "started_at": "2026-10-11T04:07:04+00:00",
+  "started_at_bj": "2026-10-11T12:07:04+08:00",
+  "finished_at": "2026-10-11T12:07:50.489767+08:00",
+  "finished_at_bj": "2026-10-11T12:07:50+08:00",
   "event": "push",
   "target_trade_date": "2026-10-09",
   "mode": "closed",
@@ -1309,10 +1309,10 @@
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 60,
+      "due": 48,
       "deferred": 48,
-      "tried": 12,
-      "ok": 12,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -1557,11 +1557,27 @@
         "try": "2026-10-10",
         "ne": "2026-11-04"
       },
+      "CIEN": {
+        "s": "ok",
+        "avg": 512.99,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11"
+      },
       "LITE": {
         "ne": "2026-11-05"
       },
       "MRVL": {
         "ne": "2026-12-01"
+      },
+      "CRDO": {
+        "s": "ok",
+        "avg": 279.09,
+        "upd": "2026-10-05",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11"
       },
       "PANW": {
         "ne": "2026-11-18"
@@ -1799,22 +1815,6 @@
       },
       "TSLA": {
         "ne": "2026-10-21"
-      },
-      "CIEN": {
-        "s": "ok",
-        "avg": 512.99,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-11"
-      },
-      "CRDO": {
-        "s": "ok",
-        "avg": 279.09,
-        "upd": "2026-10-05",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-11"
       }
     },
     "quota": {
@@ -2453,20 +2453,30 @@
   },
   "reference_alerts": {
     "policy": {
-      "cpi": {
-        "checked_at": "2026-10-11T10:58:19.865711+08:00",
-        "fetch_error": "核心CPI连续月份不足"
-      },
       "fed": {
-        "checked_at": "2026-10-11T10:58:19.865711+08:00",
-        "fetch_error": "SEP利率中位数缺失"
+        "action": "raise",
+        "low": 3.75,
+        "high": 4.0,
+        "published_date": "2026-09-16",
+        "change_bps": 25.0,
+        "released_at": "2026-09-16T14:00:00-04:00",
+        "date": "2026-09-16T14:00:00-04:00",
+        "next_release": "2026-10-28T14:00:00-04:00",
+        "pending_release": null,
+        "pending_update": false,
+        "source": "美联储官方正式利率决议声明",
+        "url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm",
+        "calendar_url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+        "checked_at": "2026-10-11T12:07:41.762937+08:00",
+        "fetch_error": ""
       },
       "summary": {
-        "level": "gray",
-        "text": "关键数据待更新，暂不能确认通胀／利率风险是否缓解。",
-        "incomplete": true
+        "level": "neutral",
+        "status": "available",
+        "text": "最近已核实正式决议（2026-09-16）：加息25个基点，目标区间3.75%–4%。",
+        "incomplete": false
       },
-      "rules": "自定义参考规则：核心CPI季调环比≥0.3%注意、单月≥0.4%偏热，连续两月≥0.4%警惕；新加息14天内警惕，之后保留收紧提示；年末利率预测高于当前区间中点提示可能进一步收紧。原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。均不是官方风险线、市场概率或交易指令，不推断确定加息或股市跌幅。"
+      "rules": "美联储仅展示最近已核实的正式利率决议、目标区间、发布日期和官方来源；调整基点仅在声明明确且可核实时显示，不从区间或其他数据猜测。决议信息为neutral中性状态，不作风险灯或买卖解读。正常缓存24小时，官方下一次决议到期可提前查询；失败或待更新后至少1小时重试，到期不绕过错误限速。旧正式决议不按天数或跨年删除，新决议到期或查询失败明确待更新并保留旧日期。原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。原油参考不计入综合灯，不是官方风险线、市场概率或交易指令。"
     },
     "oil": {
       "level": "green",
@@ -2483,6 +2493,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-11T10:58:19.865711+08:00"
+    "assessed_at": "2026-10-11T12:07:41.762937+08:00"
   }
 }
