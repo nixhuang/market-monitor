@@ -9,19 +9,19 @@
     "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "38048195978",
+  "run_id": "38106826347",
   "request_id": "",
-  "source_sha": "ca4cd9446c65f440281539eab79f0b057e72911b",
-  "started_at": "2026-10-10T11:22:49+00:00",
-  "started_at_bj": "2026-10-10T19:22:49+08:00",
-  "finished_at": "2026-10-10T19:23:52.992722+08:00",
-  "finished_at_bj": "2026-10-10T19:23:52+08:00",
+  "source_sha": "9b448f267365a45bed8f0b62d64b2aeb46e5925a",
+  "started_at": "2026-10-11T02:57:35+00:00",
+  "started_at_bj": "2026-10-11T10:57:35+08:00",
+  "finished_at": "2026-10-11T10:59:15.495763+08:00",
+  "finished_at_bj": "2026-10-11T10:59:15+08:00",
   "event": "push",
   "target_trade_date": "2026-10-09",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "10a9168831e765dd55b0b9a6bc929902adb313c1",
+    "holdings.json": "f503146a45d01ec14c729a4d77e2aadee426815c",
     "settings.json": "7d980cfc74476065d0f39687c35e4fea0d1c55f1"
   },
   "effective_settings": {
@@ -154,8 +154,8 @@
   "registered_counts": {
     "positions": 15,
     "focus": 8,
-    "index_funds": 9,
-    "technology": 37,
+    "index_funds": 7,
+    "technology": 36,
     "healthcare": 10,
     "financials": 17,
     "energy": 4,
@@ -170,8 +170,8 @@
   "list_counts": {
     "positions": 15,
     "focus": 8,
-    "index_funds": 7,
-    "technology": 28,
+    "index_funds": 5,
+    "technology": 27,
     "healthcare": 8,
     "financials": 14,
     "energy": 4,
@@ -187,17 +187,17 @@
     "dca": 1
   },
   "summary": {
-    "red": 11,
-    "yellow": 41,
+    "red": 10,
+    "yellow": 39,
     "green": 61,
     "gray": 0,
-    "total": 113,
+    "total": 110,
     "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 113,
+    "today_prices": 110,
     "prior_prices": 0,
     "missing_prices": 0
   },
@@ -233,9 +233,9 @@
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 37,
+      "yellow": 36,
       "purple": 0,
-      "sole_yellow": 22
+      "sole_yellow": 21
     },
     "boll_rsi": {
       "label": "布林+RSI",
@@ -260,10 +260,10 @@
     },
     "low52": {
       "label": "52周低位",
-      "red": 4,
-      "yellow": 1,
+      "red": 3,
+      "yellow": 0,
       "purple": 0,
-      "sole_yellow": 1
+      "sole_yellow": 0
     },
     "add_price": {
       "label": "加仓价",
@@ -1309,28 +1309,28 @@
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 61,
-      "deferred": 61,
-      "tried": 0,
-      "ok": 0,
+      "due": 60,
+      "deferred": 48,
+      "tried": 12,
+      "ok": 12,
       "none": 0,
       "fail": 0,
       "stopped": "",
       "quota": {
-        "date": "2026-10-10",
+        "date": "2026-10-11",
         "symbols": [
-          "ABBV",
-          "AMAT",
-          "AMZN",
-          "ANET",
-          "APP",
-          "ARM",
-          "AXON",
-          "AXP",
-          "BAC",
-          "BKNG",
-          "BX",
-          "CAT"
+          "CB",
+          "CEG",
+          "CIEN",
+          "COHR",
+          "COIN",
+          "CRCL",
+          "CRDO",
+          "CRWD",
+          "CVX",
+          "DD",
+          "DIS",
+          "FTNT"
         ],
         "retry_symbols": []
       }
@@ -1498,9 +1498,21 @@
         "ne": "2026-10-28"
       },
       "CRWD": {
+        "s": "ok",
+        "avg": 240.17,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-12-01"
       },
       "FTNT": {
+        "s": "ok",
+        "avg": 164.32,
+        "upd": "2026-10-07",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-10-28"
       },
       "QCOM": {
@@ -1515,10 +1527,13 @@
         "try": "2026-10-10",
         "ne": "2026-11-03"
       },
-      "CBRS": {
-        "ne": "2026-11-11"
-      },
       "COHR": {
+        "s": "ok",
+        "avg": 412.52,
+        "upd": "2026-10-07",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-11-04"
       },
       "INTC": {
@@ -1597,6 +1612,12 @@
         "ne": "2026-10-21"
       },
       "CB": {
+        "s": "ok",
+        "avg": 366.87,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-10-20"
       },
       "BAC": {
@@ -1636,9 +1657,21 @@
         "ne": "2026-11-12"
       },
       "CRCL": {
+        "s": "ok",
+        "avg": 105.56,
+        "upd": "2026-09-28",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-11-04"
       },
       "COIN": {
+        "s": "ok",
+        "avg": 211.31,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-10-29"
       },
       "HOOD": {
@@ -1648,6 +1681,12 @@
         "ne": "2026-10-13"
       },
       "CVX": {
+        "s": "ok",
+        "avg": 226.04,
+        "upd": "2026-10-08",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-10-30"
       },
       "XOM": {
@@ -1687,12 +1726,24 @@
         "ne": "2026-10-28"
       },
       "DD": {
+        "s": "ok",
+        "avg": 167.06,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-11-03"
       },
       "LIN": {
         "ne": "2026-10-29"
       },
       "CEG": {
+        "s": "ok",
+        "avg": 341.53,
+        "upd": "2026-10-07",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-11-06"
       },
       "NEE": {
@@ -1717,6 +1768,12 @@
         "ne": "2026-10-20"
       },
       "DIS": {
+        "s": "ok",
+        "avg": 126.49,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11",
         "ne": "2026-11-12"
       },
       "BKNG": {
@@ -1742,34 +1799,50 @@
       },
       "TSLA": {
         "ne": "2026-10-21"
+      },
+      "CIEN": {
+        "s": "ok",
+        "avg": 512.99,
+        "upd": "2026-10-09",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11"
+      },
+      "CRDO": {
+        "s": "ok",
+        "avg": 279.09,
+        "upd": "2026-10-05",
+        "r": "2026-10-10",
+        "r_tz": "America/New_York",
+        "try": "2026-10-11"
       }
     },
     "quota": {
-      "date": "2026-10-10",
+      "date": "2026-10-11",
       "symbols": [
-        "ABBV",
-        "AMAT",
-        "AMZN",
-        "ANET",
-        "APP",
-        "ARM",
-        "AXON",
-        "AXP",
-        "BAC",
-        "BKNG",
-        "BX",
-        "CAT"
+        "CB",
+        "CEG",
+        "CIEN",
+        "COHR",
+        "COIN",
+        "CRCL",
+        "CRDO",
+        "CRWD",
+        "CVX",
+        "DD",
+        "DIS",
+        "FTNT"
       ],
       "retry_symbols": []
     }
   },
   "earnings": {
-    "targets": 91,
-    "dated": 82,
+    "targets": 90,
+    "dated": 81,
     "pending": 9,
     "failed": 0,
-    "fetched": 31,
-    "cached": 60,
+    "fetched": 0,
+    "cached": 90,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -1972,13 +2045,6 @@
         "date": "2026-11-03",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-10"
-      },
-      "CBRS": {
-        "status": "ok",
-        "date": "2026-11-11",
-        "timing": "",
-        "kind": "estimated",
         "fetched": "2026-10-10"
       },
       "COHR": {
@@ -2384,5 +2450,39 @@
       }
     },
     "events": {}
+  },
+  "reference_alerts": {
+    "policy": {
+      "cpi": {
+        "checked_at": "2026-10-11T10:58:19.865711+08:00",
+        "fetch_error": "核心CPI连续月份不足"
+      },
+      "fed": {
+        "checked_at": "2026-10-11T10:58:19.865711+08:00",
+        "fetch_error": "SEP利率中位数缺失"
+      },
+      "summary": {
+        "level": "gray",
+        "text": "关键数据待更新，暂不能确认通胀／利率风险是否缓解。",
+        "incomplete": true
+      },
+      "rules": "自定义参考规则：核心CPI季调环比≥0.3%注意、单月≥0.4%偏热，连续两月≥0.4%警惕；新加息14天内警惕，之后保留收紧提示；年末利率预测高于当前区间中点提示可能进一步收紧。原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。均不是官方风险线、市场概率或交易指令，不推断确定加息或股市跌幅。"
+    },
+    "oil": {
+      "level": "green",
+      "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
+      "source": "Yahoo NYMEX WTI期货",
+      "url": "https://finance.yahoo.com/quote/CL=F/",
+      "price": 91.8499984741211,
+      "date": "2026-10-09",
+      "contract": "Crude Oil Nov 26",
+      "day": 0.39348630315591243,
+      "day_from": "2026-10-08",
+      "week": 0.8122026767777942,
+      "month": -4.2630851190389025,
+      "incomplete": false,
+      "contract_symbol": "CLX26.NYM"
+    },
+    "assessed_at": "2026-10-11T10:58:19.865711+08:00"
   }
 }
