@@ -195,6 +195,24 @@ check(src.includes('五指标综合市场风险')&&src.includes('同类只取最
   els.set_ma_short.value='251';check(T.settingsError().includes('ma_short'), '均线超过250日被拒绝');
   els.set_ma_short.value='200';els.set_ma_long.value='50';
   check(T.settingsError().includes('ma_short'), '均线顺序倒置被拒绝');
+  const unrelatedSettings=JSON.parse(T.setJsonText());
+  for(const [short,long] of [[0,0],[0,250],[50,0],[250,0],[0,2],[2,250],[50,50]]){
+    els.set_ma_short.value=String(short);els.set_ma_long.value=String(long);
+    check(T.settingsError()==='', '均线组合'+short+'／'+long+'可保存');
+    T.collectSettings();const saved=JSON.parse(T.setJsonText());
+    check(saved.ma_short===short&&saved.ma_long===long, '零值保留在settings JSON '+short+'／'+long);
+    check(Object.keys(unrelatedSettings).filter(k=>!['ma_short','ma_long'].includes(k)).every(k=>JSON.stringify(saved[k])===JSON.stringify(unrelatedSettings[k])), '均线关闭不改其他设置');
+    T.renderSettings();
+    check(String(els.set_ma_short.value)===String(short)&&String(els.set_ma_long.value)===String(long), '关闭值重新渲染仍为0');
+  }
+  for(const key of ['ma_short','ma_long']){
+    for(const bad of ['', ' ', '1', '-1', '0.5', '251', 'abc', 'Infinity']){
+      T.SET.ma_short=50;T.SET.ma_long=200;T.renderSettings();
+      els['set_'+key].value=bad;
+      check(T.settingsError().includes(key), key+' 拒绝非法值 '+JSON.stringify(bad));
+    }
+  }
+  check(src.includes('填0关闭对应均线警示')&&src.includes('min="0" max="250"'), '输入框及说明支持零值独立关闭');
   T.SET.ma_short=50;T.SET.ma_long=200;T.renderSettings();
   els.set_boll_n.value='0';
   check(T.settingsError().includes('boll_n'), '布林周期零被阻止');

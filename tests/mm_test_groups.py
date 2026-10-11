@@ -1225,6 +1225,28 @@ class TestGroups(unittest.TestCase):
             _, signals, _ = monitor.analyze_symbol('AAPL', {}, data)
             self.assertNotIn('上穿250日均线', signals)
 
+    def test_ma_zero_settings_validate_and_persist_independently(self):
+        import tempfile
+        legal = [(0, 0), (0, 250), (50, 0), (250, 0), (0, 2), (2, 250), (50, 50)]
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            for short, long in legal:
+                values = dict(monitor.DEFAULT_SETTINGS, ma_short=short, ma_long=long)
+                self.assertEqual(monitor.valid_settings(values), '', (short, long))
+                with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:
+                    json.dump(values, f)
+                with patch.object(monitor, 'BASE', directory):
+                    self.assertEqual(monitor.load_settings(), values)
+            for key in ('ma_short', 'ma_long'):
+                for bad in (1, -1, 0.5, 50.5, 251, True, None, '', '0', [], {}):
+                    values = dict(monitor.DEFAULT_SETTINGS, **{key: bad})
+                    self.assertTrue(monitor.valid_settings(values), (key, bad))
+                    with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:
+                        json.dump(values, f)
+                    with patch.object(monitor, 'BASE', directory):
+                        self.assertEqual(monitor.load_settings(), monitor.DEFAULT_SETTINGS)
+        self.assertTrue(monitor.valid_settings(dict(monitor.DEFAULT_SETTINGS, ma_short=250, ma_long=50)))
+        self.assertTrue(monitor.valid_settings(dict(monitor.DEFAULT_SETTINGS, ma_short=0, ma_long=0, boll_n=0)))
+
     def test_longer_history_keeps_52_week_low_window(self):
         from datetime import date, timedelta
         dates = [(date(2026, 10, 7) - timedelta(days=i)).isoformat() for i in range(499, -1, -1)]
@@ -2781,6 +2803,48 @@ class TestMaConfirm(unittest.TestCase):
     def test_single_ma_keeps_old_rule(self):
         _, signals, _ = self.run_sym(self.flat(last=(99.9, 100.05)), shorts=50, longs=50)
         self.assertTrue(any('上穿50日均线' in x for x in signals), signals)
+
+    def test_zero_disables_only_its_own_rule(self):
+        scenarios = [self.flat(last=(99.9, 100.05)), self.flat(last=(100, 100.9)),
+                     self.flat(last=(100, 99.1)), self.flat(last=(99, 105))]
+        for previous, price in ((95, 104), (105, 96)):
+            c = self.flat()
+            c[-6:-1] = [previous] * 5
+            c[-1] = price
+            scenarios.append(c)
+        for closes in scenarios:
+            _, all_signals, _ = self.run_sym(closes)
+            for short, long in ((0, 250), (50, 0), (0, 0)):
+                with self.subTest(price=closes[-1], short=short, long=long):
+                    _, signals, _ = self.run_sym(closes, shorts=short, longs=long)
+                    expected = [s for s in all_signals
+                                if not (short == 0 and re.search(r'(?<!\d)50日均线', s))
+                                and not (long == 0 and re.search(r'(?<!\d)250日均线', s))]
+                    self.assertEqual(signals, expected)
+                    self.assertFalse(any('0日均线' in s and not ('50日' in s or '250日' in s) for s in signals))
+        _, signals, _ = self.run_sym(scenarios[0], shorts=50, longs=0)
+        self.assertNotIn('上穿50日均线', signals, '关闭第二条不能把第一条改成简单穿越')
+        _, signals, _ = self.run_sym(scenarios[0], shorts=0, longs=250)
+        self.assertTrue(any('贴近250日均线' in s for s in signals))
+        self.assertNotIn('上穿250日均线', signals)
+
+    def test_disabled_mas_never_compute_zero_and_bollinger_is_unchanged(self):
+        closes = self.flat(last=(99, 104))
+        data = {'closes': closes, 'highs': closes[:], 'lows': closes[:], 'volumes': [1000]*len(closes),
+                'price': closes[-1], 'prev_close': closes[-2]}
+        with patch.dict(monitor.S, {'ma_short': 50, 'ma_long': 250}):
+            _, baseline, detail = monitor.analyze_symbol('X', {}, data)
+        original_sma = monitor.sma
+        def guarded_sma(vals, period):
+            self.assertGreater(period, 0)
+            return original_sma(vals, period)
+        with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 0}), \
+                patch.object(monitor, 'sma', side_effect=guarded_sma):
+            _, signals, disabled = monitor.analyze_symbol('X', {}, data)
+        self.assertEqual(signals, [s for s in baseline if '日均线' not in s])
+        self.assertTrue(any('布林' in s for s in signals))
+        for key in ('rsi', 'boll_up', 'boll_dn', 'price', 'chg', 'vol_ratio'):
+            self.assertEqual(disabled[key], detail[key], key)
 
 
 class Test52wLow(unittest.TestCase):

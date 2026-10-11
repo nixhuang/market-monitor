@@ -179,10 +179,10 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       </details>
       <div class="setsec">趋势均线穿越</div>
       <div class="setgrid">
-        <div class="setrow"><label for="set_ma_short">第一条均线周期（交易日，默认50）</label><input id="set_ma_short" type="number" min="2" max="250" step="1" inputmode="numeric"></div>
-        <div class="setrow"><label for="set_ma_long">第二条均线周期（交易日，默认200）</label><input id="set_ma_long" type="number" min="2" max="250" step="1" inputmode="numeric"></div>
+        <div class="setrow"><label for="set_ma_short">第一条均线周期（交易日，默认50）</label><input id="set_ma_short" type="number" min="0" max="250" step="1" inputmode="numeric"></div>
+        <div class="setrow"><label for="set_ma_long">第二条均线周期（交易日，默认200）</label><input id="set_ma_long" type="number" min="0" max="250" step="1" inputmode="numeric"></div>
       </div>
-      <p class="note">周期范围2～250，第一条不大于第二条；调整后点「保存规则」生效。与布林周期独立。</p>
+      <p class="note">填0关闭对应均线警示，填2～250的整数启用；不可留空或填1。两条都启用时第一条不大于第二条；调整后点「保存规则」生效。与布林周期独立。</p>
       <div class="setsec">个股</div>
       <div class="setgrid">
         <div class="setrow"><label>单日涨跌 ≥ x% → 红</label><input id="set_chg_red" inputmode="decimal"></div>
@@ -215,7 +215,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <p class="note">VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500距近一段高点回撤不足10%为绿、达到10%或15%为黄、达到20%为红，这些是已发生的跌幅。</p>
       <p class="note">上涨参与度：站上200日均线的股票不足50%为黄；不足30%且近期垃圾债利差或金融压力也达到警戒时为红；站上50日均线的股票不足30%也为黄。金融压力为周度：指数达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
       <div class="setsec">趋势均线穿越（周期可调整，默认50／200日）</div>
-      <p class="note">均线是最近所设周期交易日收盘价的简单平均（SMA）。两条均线按周期长短分工：<b>周期较短的一条</b>（默认50日）只报“确认穿越”——今天首次收盘于均线外侧一条缓冲带之外、昨天还在带内、且近10个交易日曾在另一侧：上穿／跌破 → 黄；贴着均线来回晃不报（缓冲带约0.5%～3%，随个股波动自动调整，日线不够时退回“昨日收盘价低于本轮均线、最新价达到或高于该均线＝上穿；反向＝跌破”的简单规则）。<b>周期较长的一条</b>（默认200日，设为250日同理）不再判穿越，只看是否贴近：现价在该均线上下1%以内 → 黄（写出偏离百分比），超出这个范围不报。只设置一条均线时按简单穿越规则。其他红色条件优先，不被均线黄灯覆盖。日线不足对应周期时不计算该周期。</p>
+      <p class="note">均线是最近所设周期交易日收盘价的简单平均（SMA）。两条均线按周期长短分工：<b>周期较短的一条</b>（默认50日）只报“确认穿越”——今天首次收盘于均线外侧一条缓冲带之外、昨天还在带内、且近10个交易日曾在另一侧：上穿／跌破 → 黄；贴着均线来回晃不报（缓冲带约0.5%～3%，随个股波动自动调整，日线不够时退回“昨日收盘价低于本轮均线、最新价达到或高于该均线＝上穿；反向＝跌破”的简单规则）。<b>周期较长的一条</b>（默认200日，设为250日同理）不再判穿越，只看是否贴近：现价在该均线上下1%以内 → 黄（写出偏离百分比），超出这个范围不报。填0仅关闭对应一条：第一条保留确认穿越、第二条保留贴近规则；两条都填0时关闭这两类均线警示，不影响布林等其他规则。其他红色条件优先，不被均线黄灯覆盖。日线不足对应周期时不计算该周期。</p>
       <p class="note">收盘运行用收盘价；常规盘中仅在取得有效报价时按最新价重算。50日观察中期变化，200日观察长期趋势。250日更接近一年交易日、反应更慢，不保证更有效；默认50／200日，可在上方改为250日。若两条周期相同，只生成一次均线警示（按简单穿越规则）。只调整标的穿越规则，不改变市场宽度源固定的50／200日统计口径。</p>
       <div class="setsec">五指标综合市场风险（固定判定）</div>
       <p class="note">信用／金融环境：垃圾债利差、金融压力；情绪：VIX；趋势：标普500回撤、上涨参与度。每项黄记1分、红记2分，同类只取最高分；信用／金融环境按2倍计分，情绪和趋势各按1倍，总分0至8。0至1分 → 综合绿（轻微提示写在说明里）；2至4分 → 综合黄；5分及以上 → 综合红。有指标缺失时最低为黄。综合灯不是买卖指令，也不预测涨跌。</p>
@@ -739,7 +739,7 @@ const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
   hy_green:350,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,
   dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
-const SET_LIMITS={ma_short:[2,250],ma_long:[2,250],boll_n:[2,250],boll_k:[.1,10],boll_near_pct:[0,100],chg_yellow:[0,100],chg_red:[0,100],
+const SET_LIMITS={ma_short:[0,250],ma_long:[0,250],boll_n:[2,250],boll_k:[.1,10],boll_near_pct:[0,100],chg_yellow:[0,100],chg_red:[0,100],
   rsi_low:[0,100],rsi_high:[0,100],near_52w_low_pct:[0,100],trigger_gap_pct:[0,100],reduce_gap_pct:[0,100],target_gap_pct:[0,100],target_space_pct:[0,1000],vol_ratio:[.1,100],
   quiet_chg:[0,100],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],
   hy_red:[0,10000],vix_green:[0,200],vix_yellow:[0,200],vix_red:[0,200],dca_every:[0,10000]};
@@ -749,6 +749,8 @@ function settingsError(){
   for(const [key,[lo,hi]] of Object.entries(SET_LIMITS)){
     const el=$('set_'+key);if(!el)continue;
     const raw=String(el.value).trim(),value=raw===''&&key==='dca_every'?0:Number(raw);
+    if(['ma_short','ma_long'].includes(key)&&(!raw||!Number.isInteger(value)||!(value===0||(value>=2&&value<=250))))
+      return key+' 必须填0（关闭）或2～250的整数';
     if((!raw&&key!=='dca_every')||!Number.isFinite(value)||value<lo||value>hi||
         (['boll_n','ma_short','ma_long','dca_every'].includes(key)&&!Number.isInteger(value)))
       return key+' 必须是 '+lo+'～'+hi+' 范围内的'+(['boll_n','ma_short','ma_long','dca_every'].includes(key)?'整数':'数字');
@@ -757,6 +759,7 @@ function settingsError(){
   if(!(values.rsi_low<values.rsi_high))return 'RSI 超卖线必须小于超买线';
   for(const keys of [['chg_yellow','chg_red'],['amp_yellow','amp_red'],
     ['hy_green','hy_red'],['vix_green','vix_yellow','vix_red'],['ma_short','ma_long']]){
+    if(keys[0]==='ma_short'&&(values.ma_short===0||values.ma_long===0))continue;
     if(keys.some((key,i)=>i&&values[key]<values[keys[i-1]]))return keys.join('、')+' 的阈值顺序不正确';
   }
   const start=$('set_dca_start').value.trim();

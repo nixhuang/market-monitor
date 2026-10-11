@@ -309,7 +309,7 @@ def trim_history(data, cutoff):
 
 SETTING_LIMITS = {
     "boll_n": (2, 250), "boll_k": (0.1, 10), "boll_near_pct": (0, 100),
-    "ma_short": (2, 250), "ma_long": (2, 250),
+    "ma_short": (0, 250), "ma_long": (0, 250),  # 0关闭对应警示；1仍不合法
     "chg_yellow": (0, 100), "chg_red": (0, 100),
     "rsi_low": (0, 100), "rsi_high": (0, 100),
     "near_52w_low_pct": (0, 100), "trigger_gap_pct": (0, 100), "reduce_gap_pct": (0, 100),
@@ -330,11 +330,15 @@ def valid_settings(s):
         v = s.get(k)
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not lo <= v <= hi:
             return k
+        if k in ("ma_short", "ma_long") and v == 1:
+            return k
     if any(s[k] != int(s[k]) for k in ("boll_n", "ma_short", "ma_long", "dca_every")) or s["use_realtime"] not in (0, 1):
         return "整数设置"
     if not s["rsi_low"] < s["rsi_high"]:
         return "RSI 上下限"
     for keys in SETTING_ORDER:
+        if keys == ("ma_short", "ma_long") and 0 in (s["ma_short"], s["ma_long"]):
+            continue  # 只在两条均启用时检查周期顺序
         if any(a > b for a, b in zip((s[k] for k in keys), (s[k] for k in keys[1:]))):
             return " / ".join(keys)
     start = s.get("dca_start")
@@ -373,6 +377,8 @@ def load_settings():
                 continue  # 类型不对就跳过，不让它污染默认值
             if k in SETTING_LIMITS and (not math.isfinite(v) or not SETTING_LIMITS[k][0] <= v <= SETTING_LIMITS[k][1]):
                 continue
+            if k in ("ma_short", "ma_long") and v == 1:
+                continue
             if k in ("boll_n", "ma_short", "ma_long", "dca_every", "use_realtime") and v != int(v):
                 continue
             s[k] = type(DEFAULT_SETTINGS[k])(v)
@@ -384,6 +390,8 @@ def load_settings():
         log("  ! RSI 上下限冲突，仅该组退回默认值")
         s["rsi_low"], s["rsi_high"] = DEFAULT_SETTINGS["rsi_low"], DEFAULT_SETTINGS["rsi_high"]
     for keys in SETTING_ORDER:
+        if keys == ("ma_short", "ma_long") and 0 in (s["ma_short"], s["ma_long"]):
+            continue
         if any(s[a] > s[b] for a, b in zip(keys, keys[1:])):
             log(f"  ! {'/'.join(keys)} 阈值顺序冲突，仅该组退回默认值")
             for k in keys:
@@ -2795,7 +2803,7 @@ def _analysis_context(sym, cfg, data, group):
     x.dist_low = (price / low52 - 1) * 100
     x.vol_ratio = (vols[-1] / sma(vols, 20)) if vols and sma(vols, 20) else None
     ma_periods = (int(S["ma_short"]), int(S["ma_long"]))
-    x.moving_averages = [(period, sma(closes, period)) for period in dict.fromkeys(ma_periods)]
+    x.moving_averages = [(period, sma(closes, period)) for period in dict.fromkeys(ma_periods) if period > 0]
     x.boll_mid, x.boll_up, x.boll_dn = boll(closes, int(S["boll_n"]), float(S["boll_k"]))
     return x
 
@@ -3000,8 +3008,8 @@ def _rule_amplitude(al, x):
 
 
 def _rule_moving_averages(al, x):
-    """均线：周期最短的一条（50 日）要「确认穿越」才报；周期最长的一条（250 日）只看是否贴近（±MA_LONG_BAND_PCT%）；
-    只设了一条均线时走最朴素的穿越规则。"""
+    """第一条确认穿越，第二条贴近；0独立关闭，不改变另一条的规则。
+    两条启用且同周期时，保留原先去重后的简单穿越规则。"""
     closes, price, mas = x.closes, x.price, x.moving_averages
     if len(closes) < 2:
         return
@@ -3010,8 +3018,8 @@ def _rule_moving_averages(al, x):
         ma_name = f"{period}日"
         if not ma_val:
             continue
-        weak = len(mas) > 1 and period == min(p_ for p_, _ in mas)
-        strong = len(mas) > 1 and period == max(p_ for p_, _ in mas)
+        weak = period == S["ma_short"] and S["ma_short"] != S["ma_long"]
+        strong = period == S["ma_long"] and S["ma_short"] != S["ma_long"]
         if strong:
             gap_ma = (price / ma_val - 1) * 100
             if abs(gap_ma) <= MA_LONG_BAND_PCT + 1e-9:
