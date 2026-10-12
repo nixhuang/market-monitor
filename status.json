@@ -2,23 +2,23 @@
   "dca_reminder": {
     "every": 20,
     "start": "2026-10-01",
-    "count": 7,
-    "date": "2026-10-09",
+    "count": 8,
+    "date": "2026-10-12",
     "times": 1,
     "due": false,
-    "next_in": 14,
+    "next_in": 13,
     "next_date": "2026-10-29"
   },
-  "run_id": "38212983138",
-  "request_id": "",
-  "source_sha": "63bd38ef2a97e093b0be0ffad4669fa4cb33e855",
-  "started_at": "2026-10-12T06:32:01+00:00",
-  "started_at_bj": "2026-10-12T14:32:01+08:00",
-  "finished_at": "2026-10-12T14:32:53.683485+08:00",
-  "finished_at_bj": "2026-10-12T14:32:53+08:00",
-  "event": "push",
-  "target_trade_date": "2026-10-09",
-  "mode": "closed",
+  "run_id": "38271450645",
+  "request_id": "intraday-fix-162f926a-d4f3-4f33-ac99-e9e5a8314787",
+  "source_sha": "6d3b00b7d5e6d27507c40c1965480de6ada41c7e",
+  "started_at": "2026-10-12T15:36:16+00:00",
+  "started_at_bj": "2026-10-12T23:36:16+08:00",
+  "finished_at": "2026-10-12T23:37:47.880448+08:00",
+  "finished_at_bj": "2026-10-12T23:37:47+08:00",
+  "event": "workflow_dispatch",
+  "target_trade_date": "2026-10-12",
+  "mode": "manual_or_config",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
     "holdings.json": "f16a42ba4fb2c167ac1ca89e1781fc28efb78d68",
@@ -188,58 +188,60 @@
   },
   "summary": {
     "red": 9,
-    "yellow": 35,
-    "green": 58,
+    "yellow": 30,
+    "green": 63,
     "gray": 0,
     "total": 102,
     "macro_ok": 6,
-    "stale_symbols": [],
+    "stale_symbols": [
+      ".VXN"
+    ],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 102,
-    "prior_prices": 0,
+    "today_prices": 101,
+    "prior_prices": 1,
     "missing_prices": 0
   },
   "signal_counts": {
     "chg": {
       "label": "涨跌幅",
       "red": 0,
-      "yellow": 2,
+      "yellow": 0,
       "purple": 0,
       "sole_yellow": 0
     },
     "amp": {
       "label": "振幅",
       "red": 0,
-      "yellow": 1,
+      "yellow": 0,
       "purple": 0,
       "sole_yellow": 0
     },
     "vol_ratio": {
       "label": "量比",
       "red": 0,
-      "yellow": 3,
+      "yellow": 0,
       "purple": 0,
       "sole_yellow": 0
     },
     "rsi": {
       "label": "RSI",
       "red": 0,
-      "yellow": 7,
+      "yellow": 9,
       "purple": 0,
       "sole_yellow": 0
     },
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 36,
+      "yellow": 35,
       "purple": 0,
       "sole_yellow": 24
     },
     "boll_rsi": {
       "label": "布林+RSI",
-      "red": 7,
+      "red": 9,
       "yellow": 0,
       "purple": 0,
       "sole_yellow": 0
@@ -247,23 +249,23 @@
     "ma_cross": {
       "label": "均线穿越",
       "red": 0,
-      "yellow": 2,
+      "yellow": 1,
       "purple": 0,
       "sole_yellow": 0
     },
     "ma_band": {
       "label": "长均线触及",
       "red": 0,
-      "yellow": 10,
+      "yellow": 5,
       "purple": 0,
-      "sole_yellow": 5
+      "sole_yellow": 3
     },
     "low52": {
       "label": "52周低位",
-      "red": 2,
-      "yellow": 0,
+      "red": 0,
+      "yellow": 1,
       "purple": 0,
-      "sole_yellow": 0
+      "sole_yellow": 1
     },
     "add_price": {
       "label": "加仓价",
@@ -283,26 +285,26 @@
       "label": "目标价/共识价",
       "red": 0,
       "yellow": 0,
-      "purple": 3,
+      "purple": 2,
       "sole_yellow": 0
     }
   },
   "actual_dates": {
     "min": "2026-10-09",
-    "max": "2026-10-09"
+    "max": "2026-10-12"
   },
   "macro_dates": {
     "hy_oas": "2026-10-08",
-    "vix": "2026-10-09",
-    "sp500": "2026-10-09",
-    "ust10": "2026-10-09",
+    "vix": "2026-10-12",
+    "sp500": "2026-10-12",
+    "ust10": "2026-10-12",
     "nfci": "2026-10-02",
     "breadth": "2026-10-09"
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.24399995803833,
-    "date": "2026-10-09",
+    "value": 5.240000247955322,
+    "date": "2026-10-12",
     "source": "Yahoo ^TNX",
     "unit": "%",
     "lagging": false,
@@ -310,10 +312,10 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.4070000648498535
+    "delta_month": 0.2650003433227539
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-09 收盘（美东交易日）",
+  "data_time_text": "2026-10-12 23:37:47（盘中快照，北京时间） · 当日价 101 只 / 较早日线 1 只 / 无数据 0 只",
   "market_risk": {
     "level": "green",
     "label": "风险平稳",
@@ -332,17 +334,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 14.84000015258789,
-      "date": "2026-10-09",
+      "value": 15.170000076293945,
+      "date": "2026-10-12",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7811.5400390625,
-      "date": "2026-10-09",
+      "value": 7808.4599609375,
+      "date": "2026-10-12",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.09451595745976205
+      "drawdown": -0.13390853490649057
     }
   },
   "fundamental": {
@@ -1877,8 +1879,8 @@
     "dated": 75,
     "pending": 7,
     "failed": 0,
-    "fetched": 1,
-    "cached": 81,
+    "fetched": 0,
+    "cached": 82,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -2483,16 +2485,16 @@
       "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 91.8499984741211,
-      "date": "2026-10-09",
+      "price": 93.69000244140625,
+      "date": "2026-10-12",
       "contract": "Crude Oil Nov 26",
-      "day": 0.39348630315591243,
-      "day_from": "2026-10-08",
-      "week": 0.8122026767777942,
-      "month": -4.2630851190389025,
+      "day": 2.003270547471565,
+      "day_from": "2026-10-09",
+      "week": 4.763504552939067,
+      "month": -3.551571927032391,
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-12T14:32:43.766460+08:00"
+    "assessed_at": "2026-10-12T23:37:00.809235+08:00"
   }
 }
