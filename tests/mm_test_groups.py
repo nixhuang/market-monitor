@@ -297,7 +297,9 @@ class TestGroups(unittest.TestCase):
                  'rsi': {}, 'dist_high': None, 'dist_low': None, 'vol_ratio': None,
                  'trigger': None, 'group': 'index_funds', 'data_date': '2026-10-07',
                  'boll_up': None, 'boll_dn': None, 'signals': [], 'level': 'green'}
+        # 此用例校验历史收盘快照；运行模式必须显式固定，不能随真实盘中时钟漂移。
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                patch.object(monitor, 'CLOSED_ONLY', True), \
                 patch.object(monitor, 'global_dca', return_value=None), patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):
             snap = monitor.build_snapshot({}, [reference, daily], cfg)
         self.assertEqual(snap['summary']['reference_dates'], {'BD#US10Y': '2026-10-06'})
@@ -311,6 +313,36 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('项参考值（截至', page)
         self.assertNotIn('当日行情未取得', page)
         self.assertIn('参考值 · 截至 2026-10-06', page)
+
+    def test_older_reference_fixture_is_independent_of_wall_clock_and_mode(self):
+        # 同一历史收盘样本在盘中、盘前、盘后、休市及冬令时均应稳定；
+        # 只固定样本模式，不把生产盘中显示强行改成收盘，也不修改全局默认。
+        real_datetime = monitor.datetime
+        moments = (
+            '2026-10-12T21:29:00+08:00',
+            '2026-10-12T21:30:00+08:00',
+            '2026-10-12T23:21:01+08:00',
+            '2026-10-13T04:00:00+08:00',
+            '2026-10-10T23:21:01+08:00',
+            '2026-12-09T22:29:00+08:00',
+            '2026-12-09T22:30:00+08:00',
+            '2026-12-10T05:00:00+08:00',
+        )
+        for iso in moments:
+            instant = real_datetime.fromisoformat(iso)
+
+            class FixtureClock(real_datetime):
+                @classmethod
+                def now(cls, tz=None):
+                    return instant.astimezone(tz) if tz else instant.replace(tzinfo=None)
+
+            for inherited_mode in (False, True):
+                with self.subTest(when=iso, closed_only=inherited_mode), \
+                        patch.object(monitor, 'datetime', FixtureClock), \
+                        patch.object(monitor, 'NOW', instant), \
+                        patch.object(monitor, 'CLOSED_ONLY', inherited_mode):
+                    self.test_older_reference_does_not_mark_all_daily_quotes_stale()
+                    self.assertEqual(monitor.CLOSED_ONLY, inherited_mode)
 
     def test_snapshot_all_groups(self):
         with patch.object(monitor, 'global_dca', return_value=None):
