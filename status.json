@@ -9,20 +9,20 @@
     "next_in": 14,
     "next_date": "2026-10-29"
   },
-  "run_id": "38128773299",
+  "run_id": "38208689121",
   "request_id": "",
-  "source_sha": "9e72865238e39fc8db8d9c6b847d80780cc77937",
-  "started_at": "2026-10-11T09:33:07+00:00",
-  "started_at_bj": "2026-10-11T17:33:07+08:00",
-  "finished_at": "2026-10-11T17:33:55.161446+08:00",
-  "finished_at_bj": "2026-10-11T17:33:55+08:00",
+  "source_sha": "8329030ac9576d41f7f67c9d76dbef87b023ac90",
+  "started_at": "2026-10-12T05:36:43+00:00",
+  "started_at_bj": "2026-10-12T13:36:43+08:00",
+  "finished_at": "2026-10-12T13:37:51.228272+08:00",
+  "finished_at_bj": "2026-10-12T13:37:51+08:00",
   "event": "push",
   "target_trade_date": "2026-10-09",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "f503146a45d01ec14c729a4d77e2aadee426815c",
-    "settings.json": "7d980cfc74476065d0f39687c35e4fea0d1c55f1"
+    "holdings.json": "2eb18be2a783a93be2f6b4681e5de77325cc1c1b",
+    "settings.json": "a3996325650bd399123d04628467db8c979335be"
   },
   "effective_settings": {
     "boll_n": 20,
@@ -41,7 +41,7 @@
     "quiet_chg": 2.0,
     "amp_yellow": 6.0,
     "amp_red": 10.0,
-    "ma_short": 50,
+    "ma_short": 0,
     "ma_long": 250,
     "hy_green": 350,
     "hy_red": 400,
@@ -156,14 +156,14 @@
     "focus": 8,
     "index_funds": 7,
     "technology": 36,
-    "healthcare": 10,
-    "financials": 17,
-    "energy": 4,
+    "healthcare": 8,
+    "financials": 14,
+    "energy": 2,
     "industrials": 11,
     "materials": 2,
     "utilities": 3,
-    "consumer_staples": 6,
-    "communications": 5,
+    "consumer_staples": 5,
+    "communications": 4,
     "consumer_discretionary": 6,
     "real_estate": 1
   },
@@ -172,14 +172,14 @@
     "focus": 8,
     "index_funds": 5,
     "technology": 27,
-    "healthcare": 8,
-    "financials": 14,
-    "energy": 4,
+    "healthcare": 6,
+    "financials": 11,
+    "energy": 2,
     "industrials": 8,
     "materials": 2,
     "utilities": 3,
-    "consumer_staples": 5,
-    "communications": 5,
+    "consumer_staples": 4,
+    "communications": 4,
     "consumer_discretionary": 5,
     "real_estate": 1,
     "triggers": 0,
@@ -187,17 +187,17 @@
     "dca": 1
   },
   "summary": {
-    "red": 10,
-    "yellow": 39,
-    "green": 61,
+    "red": 9,
+    "yellow": 34,
+    "green": 58,
     "gray": 0,
-    "total": 110,
+    "total": 101,
     "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 110,
+    "today_prices": 101,
     "prior_prices": 0,
     "missing_prices": 0
   },
@@ -219,23 +219,23 @@
     "vol_ratio": {
       "label": "量比",
       "red": 0,
-      "yellow": 5,
+      "yellow": 3,
       "purple": 0,
-      "sole_yellow": 1
+      "sole_yellow": 0
     },
     "rsi": {
       "label": "RSI",
       "red": 0,
-      "yellow": 8,
+      "yellow": 7,
       "purple": 0,
       "sole_yellow": 0
     },
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 36,
+      "yellow": 35,
       "purple": 0,
-      "sole_yellow": 21
+      "sole_yellow": 23
     },
     "boll_rsi": {
       "label": "布林+RSI",
@@ -245,22 +245,22 @@
       "sole_yellow": 0
     },
     "ma_cross": {
-      "label": "50日线穿越",
+      "label": "均线穿越",
       "red": 0,
-      "yellow": 9,
+      "yellow": 2,
+      "purple": 0,
+      "sole_yellow": 0
+    },
+    "ma_band": {
+      "label": "长均线触及",
+      "red": 0,
+      "yellow": 10,
       "purple": 0,
       "sole_yellow": 5
     },
-    "ma_band": {
-      "label": "250日线贴近",
-      "red": 0,
-      "yellow": 5,
-      "purple": 0,
-      "sole_yellow": 3
-    },
     "low52": {
       "label": "52周低位",
-      "red": 3,
+      "red": 2,
       "yellow": 0,
       "purple": 0,
       "sole_yellow": 0
@@ -1309,28 +1309,28 @@
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 48,
-      "deferred": 48,
-      "tried": 0,
-      "ok": 0,
+      "due": 42,
+      "deferred": 30,
+      "tried": 12,
+      "ok": 12,
       "none": 0,
       "fail": 0,
       "stopped": "",
       "quota": {
-        "date": "2026-10-11",
+        "date": "2026-10-12",
         "symbols": [
-          "CB",
-          "CEG",
-          "CIEN",
-          "COHR",
-          "COIN",
-          "CRCL",
-          "CRDO",
-          "CRWD",
-          "CVX",
-          "DD",
-          "DIS",
-          "FTNT"
+          "GS",
+          "HEI",
+          "HOOD",
+          "INTC",
+          "ISRG",
+          "JNJ",
+          "JPM",
+          "KO",
+          "LIN",
+          "LITE",
+          "LLY",
+          "LRCX"
         ],
         "retry_symbols": []
       }
@@ -1538,6 +1538,12 @@
         "ne": "2026-11-04"
       },
       "INTC": {
+        "s": "ok",
+        "avg": 118.05,
+        "upd": "2026-10-06",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-10-29"
       },
       "AMAT": {
@@ -1567,6 +1573,12 @@
         "try": "2026-10-11"
       },
       "LITE": {
+        "s": "ok",
+        "avg": 1177.34,
+        "upd": "2026-10-07",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-11-05"
       },
       "MRVL": {
@@ -1590,13 +1602,16 @@
         "ne": "2026-11-02"
       },
       "LRCX": {
+        "s": "ok",
+        "avg": 375.81,
+        "upd": "2026-10-08",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-10-21"
       },
       "NVDA": {
         "ne": "2026-11-18"
-      },
-      "MRNA": {
-        "ne": "2026-11-05"
       },
       "ABBV": {
         "s": "ok",
@@ -1611,22 +1626,31 @@
         "ne": "2026-10-21"
       },
       "ISRG": {
+        "s": "ok",
+        "avg": 478.1,
+        "upd": "2026-10-07",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-10-20"
       },
       "LLY": {
+        "s": "ok",
+        "avg": 1330.14,
+        "upd": "2026-10-09",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-10-29"
       },
-      "TEM": {
-        "ne": "2026-11-03"
-      },
       "JNJ": {
+        "s": "ok",
+        "avg": 279.82,
+        "upd": "2026-10-09",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-10-13"
-      },
-      "WFC": {
-        "ne": "2026-10-13"
-      },
-      "MCO": {
-        "ne": "2026-10-21"
       },
       "CB": {
         "s": "ok",
@@ -1636,15 +1660,6 @@
         "r_tz": "America/New_York",
         "try": "2026-10-11",
         "ne": "2026-10-20"
-      },
-      "BAC": {
-        "s": "ok",
-        "avg": 66.59,
-        "upd": "2026-10-08",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-10",
-        "ne": "2026-10-14"
       },
       "AXP": {
         "s": "ok",
@@ -1668,6 +1683,12 @@
         "ne": "2026-10-27"
       },
       "GS": {
+        "s": "ok",
+        "avg": 1069.1,
+        "upd": "2026-10-07",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-10-13"
       },
       "NU": {
@@ -1692,25 +1713,25 @@
         "ne": "2026-10-29"
       },
       "HOOD": {
+        "s": "ok",
+        "avg": 134.68,
+        "upd": "2026-10-09",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-10-27"
       },
       "JPM": {
-        "ne": "2026-10-13"
-      },
-      "CVX": {
         "s": "ok",
-        "avg": 226.04,
+        "avg": 372.14,
         "upd": "2026-10-08",
-        "r": "2026-10-10",
+        "r": "2026-10-12",
         "r_tz": "America/New_York",
-        "try": "2026-10-11",
-        "ne": "2026-10-30"
+        "try": "2026-10-12",
+        "ne": "2026-10-13"
       },
       "XOM": {
         "ne": "2026-10-30"
-      },
-      "OXY": {
-        "ne": "2026-11-09"
       },
       "AXON": {
         "s": "ok",
@@ -1752,6 +1773,12 @@
         "ne": "2026-11-03"
       },
       "LIN": {
+        "s": "ok",
+        "avg": 543.04,
+        "upd": "2026-10-08",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-10-29"
       },
       "CEG": {
@@ -1773,6 +1800,12 @@
         "ne": "2026-10-22"
       },
       "KO": {
+        "s": "ok",
+        "avg": 94.43,
+        "upd": "2026-10-09",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12",
         "ne": "2026-10-27"
       },
       "TTWO": {
@@ -1783,15 +1816,6 @@
       },
       "NFLX": {
         "ne": "2026-10-20"
-      },
-      "DIS": {
-        "s": "ok",
-        "avg": 126.49,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-11",
-        "ne": "2026-11-12"
       },
       "BKNG": {
         "s": "ok",
@@ -1816,34 +1840,42 @@
       },
       "TSLA": {
         "ne": "2026-10-21"
+      },
+      "HEI": {
+        "s": "ok",
+        "avg": 391.7,
+        "upd": "2026-10-09",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-12"
       }
     },
     "quota": {
-      "date": "2026-10-11",
+      "date": "2026-10-12",
       "symbols": [
-        "CB",
-        "CEG",
-        "CIEN",
-        "COHR",
-        "COIN",
-        "CRCL",
-        "CRDO",
-        "CRWD",
-        "CVX",
-        "DD",
-        "DIS",
-        "FTNT"
+        "GS",
+        "HEI",
+        "HOOD",
+        "INTC",
+        "ISRG",
+        "JNJ",
+        "JPM",
+        "KO",
+        "LIN",
+        "LITE",
+        "LLY",
+        "LRCX"
       ],
       "retry_symbols": []
     }
   },
   "earnings": {
-    "targets": 90,
-    "dated": 82,
-    "pending": 8,
+    "targets": 81,
+    "dated": 74,
+    "pending": 7,
     "failed": 0,
     "fetched": 0,
-    "cached": 90,
+    "cached": 81,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -2150,13 +2182,6 @@
         "kind": "estimated",
         "fetched": "2026-10-10"
       },
-      "MRNA": {
-        "status": "ok",
-        "date": "2026-11-05",
-        "timing": "",
-        "kind": "estimated",
-        "fetched": "2026-10-10"
-      },
       "ABBV": {
         "status": "ok",
         "date": "2026-10-30",
@@ -2185,30 +2210,9 @@
         "kind": "expected",
         "fetched": "2026-10-10"
       },
-      "TEM": {
-        "status": "ok",
-        "date": "2026-11-03",
-        "timing": "",
-        "kind": "estimated",
-        "fetched": "2026-10-10"
-      },
       "JNJ": {
         "status": "ok",
         "date": "2026-10-13",
-        "timing": "pre",
-        "kind": "expected",
-        "fetched": "2026-10-10"
-      },
-      "WFC": {
-        "status": "ok",
-        "date": "2026-10-13",
-        "timing": "pre",
-        "kind": "expected",
-        "fetched": "2026-10-10"
-      },
-      "MCO": {
-        "status": "ok",
-        "date": "2026-10-21",
         "timing": "pre",
         "kind": "expected",
         "fetched": "2026-10-10"
@@ -2217,13 +2221,6 @@
         "status": "ok",
         "date": "2026-10-20",
         "timing": "post",
-        "kind": "expected",
-        "fetched": "2026-10-10"
-      },
-      "BAC": {
-        "status": "ok",
-        "date": "2026-10-14",
-        "timing": "pre",
         "kind": "expected",
         "fetched": "2026-10-10"
       },
@@ -2290,25 +2287,11 @@
         "kind": "expected",
         "fetched": "2026-10-10"
       },
-      "CVX": {
-        "status": "ok",
-        "date": "2026-10-30",
-        "timing": "pre",
-        "kind": "expected",
-        "fetched": "2026-10-10"
-      },
       "XOM": {
         "status": "ok",
         "date": "2026-10-30",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-10"
-      },
-      "OXY": {
-        "status": "ok",
-        "date": "2026-11-09",
-        "timing": "post",
-        "kind": "expected",
         "fetched": "2026-10-10"
       },
       "AXON": {
@@ -2385,10 +2368,6 @@
         "kind": "expected",
         "fetched": "2026-10-10"
       },
-      "PEP": {
-        "status": "unknown",
-        "fetched": "2026-10-10"
-      },
       "WMT": {
         "status": "ok",
         "date": "2026-11-19",
@@ -2429,13 +2408,6 @@
         "date": "2026-10-20",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-10"
-      },
-      "DIS": {
-        "status": "ok",
-        "date": "2026-11-12",
-        "timing": "",
-        "kind": "estimated",
         "fetched": "2026-10-10"
       },
       "BKNG": {
@@ -2511,6 +2483,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-11T17:33:45.305987+08:00"
+    "assessed_at": "2026-10-12T13:37:21.825566+08:00"
   }
 }
