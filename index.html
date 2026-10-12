@@ -287,11 +287,5 @@ tr.gray td{color:var(--dim)}
 <details class="macro-help" id="marketRiskRules"><summary>综合判断规则</summary><p>五项指标分三类：信用／金融环境（垃圾债利差、金融压力）、情绪（VIX）、趋势（标普500回撤、上涨参与度）。每项黄记1分、红记2分；同类只取最高分，不重复计分；信用／金融环境类按2倍计分，情绪、趋势各按1倍，总分0至8。0至1分为绿灯（有轻微提示会写在说明里），2至4分为黄灯，5分及以上为红灯。数据缺失时最低为黄灯，缺失不代表安全。这是风险参考规则，不预测涨跌，也不是买卖指令。</p>
 <p>补充参考：美联储利率决议、WTI原油不计入综合灯；综合灯仍依据原5项指标。</p></details>
 <details class="macro-help" id="policyAlertDetails"><summary>美联储利率决议 · 查看数据与来源</summary><p>加息 25 个基点 · 2026-09-16（美东公布日）</p><p>联邦基金目标利率区间：3.75%–4.00%。</p><p>正式公布：2026-09-16 14:00 EDT（美东）／2026-09-17 02:00（北京时间）。</p><p>下次计划决议：2026-10-28 14:00 EDT（美东）／2026-10-29 02:00（北京时间）；以官方实际发布为准。</p><p><a href="https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm" target="_blank" rel="noopener noreferrer">美联储官方决议声明</a></p><p><a href="https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm" target="_blank" rel="noopener noreferrer">美联储官方会议日历</a></p><p>最近查询：2026-10-11 12:07（北京时间）。</p><p>成功后持久缓存；日常只在本地比较下次公布时间，不按24小时重复抓取。到计划决议公布时间，随下一次监测运行查询新消息；未取得新消息标记待更新，保留旧决议。失败或待更新后至少间隔1小时再试；日程缺失只补查日历，已核实的同一声明不重复下载。检查随现有监测任务运行，不额外启动定时任务；不是每小时自动抓取。</p><p>仅按例行会议日程更新，临时决议可能延迟发现；未额外增加每日公告检查。</p><p>仅展示已公布的加息／降息／维持不变，不展示预测，不解读市场安全与危险，不计入综合评分或个股信号。最近正式消息保留至新消息核实；新决议应公布但未取得时标记待更新。</p></details>
-<details class="macro-help" id="marketRiskNotes"><summary>指标阈值与数据说明</summary>
-<p>垃圾债利差：≥350 bp 黄、≥400 bp 红；一周扩大 ≥30 bp 为黄、≥50 bp 为红。VIX：≥20 黄、≥40 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
-<p>10Y美债是参考行，不计入综合灯：一个月上行 ≥50 bp 标黄（利率冲击风险），≥30 bp 只提示偏快；周变化列单位为 bp。</p>
-<p>上涨参与度：站上长期均线的股票不足一半为黄；不足三成且信用／金融压力也升高才为红。金融压力是周度数据，达到历史平均紧张程度为黄。指标缺失时显示无数据，不代表安全，也不预测具体跌幅。</p>
-<p>市场宽度：<a href="https://historyofmarket.com/zh-cn/sp500/sp500-breadth/" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a>，数据依据当前成分股计算，回看历史可能有成分股选择偏差。</p>
-</details>
 </section>
 </div></body></html>

@@ -1010,14 +1010,21 @@ class TestGroups(unittest.TestCase):
             self.assertNotIn('class="lvs"', cleared)
             self.assertNotIn('class="lvtag', cleared)
 
-    def test_market_risk_notes_are_folded_by_default(self):
+    def test_homepage_omits_duplicate_indicator_notes_and_keeps_other_notes(self):
         with patch.object(monitor, 'global_dca', return_value=None):
             page = monitor.render({}, [], 0, snapshot={})
-        m = re.search(r'<details class="macro-help" id="marketRiskNotes">(.*?)</details>', page, re.S)
+        self.assertNotIn('marketRiskNotes', page)
+        self.assertNotIn('指标阈值与数据说明', page)
+        m = re.search(r'<details class="macro-help" id="marketRiskRules">(.*?)</details>', page, re.S)
         self.assertIsNotNone(m)
         self.assertNotIn(' open', page[m.start():m.start() + 60])
-        self.assertIn('垃圾债利差：≥', m.group(1))
-        self.assertIn('可能有成分股选择偏差', m.group(1))
+        self.assertIn('综合判断规则', m.group(1))
+        self.assertIn(monitor.BREADTH_CREDIT, page)
+        self.assertIn('查看完整规则与阈值', page)
+        notes = monitor._page_notes({'reference_alerts': {}})
+        self.assertIn('id="policyAlertDetails"', notes)
+        self.assertNotIn('marketRiskNotes', notes)
+        self.assertNotIn(' open', notes)
 
     def test_reduce_price_only_applies_to_positions_and_bad_values_are_ignored(self):
         for group in ('focus', 'technology', 'index_funds'):
@@ -1693,7 +1700,7 @@ class TestGroups(unittest.TestCase):
                  'nfci': {'ok': True, 'name': '金融压力', 'value': 0.12, 'date': '2026-10-02'},
                  'breadth': {'ok': True, 'name': '上涨参与度', 'value': 28.0,
                              'pct50': 18.0, 'date': '2026-10-06', 'pressure_confirmed': True}}
-        page = monitor.render(macro, [], 0)
+        page = monitor.render(macro, [], 0, snapshot={'target_trade_date': '2026-10-09'})
         summary = page.split('id="macroCard"', 1)[1].split('</summary>', 1)[0]
         self.assertIn('id="marketRiskLight" data-level="red"', summary)
         self.assertIn('综合：风险升高', summary)
@@ -2728,7 +2735,12 @@ class TestVolTier(unittest.TestCase):
 
 
 class TestMaConfirm(unittest.TestCase):
-    """50 日线（周期最小那条）要「带宽确认」才算穿越；250 日线保持原规则。"""
+    """第一条确认穿越，第二条日内±1%触及与简单穿越独立；0分别关闭。"""
+
+    def setUp(self):
+        target = patch.object(monitor, 'TARGET_DATE', '')
+        target.start()
+        self.addCleanup(target.stop)
 
     @staticmethod
     def flat(n=300, last=(100, 100)):
@@ -2763,7 +2775,7 @@ class TestMaConfirm(unittest.TestCase):
     @staticmethod
     def run_sym(closes, shorts=50, longs=250):
         price = closes[-1]
-        data = {'closes': closes, 'highs': [c for c in closes], 'lows': [c * 0.995 for c in closes],
+        data = {'closes': closes, 'highs': [c for c in closes], 'lows': [c * 0.999 for c in closes],
                 'volumes': [1000] * len(closes), 'price': price, 'prev_close': closes[-2],
                 'dates': ['2026-10-09'] * len(closes), 'source': 't', 'realtime': False}
         with patch.dict(monitor.S, {'ma_short': shorts, 'ma_long': longs, 'near_52w_low_pct': 0.0,
@@ -2776,21 +2788,184 @@ class TestMaConfirm(unittest.TestCase):
     def test_marginal_cross_only_hits_long_ma(self):
         # 昨收略低、今收略高于均线：250 日线在 ±1% 带内亮黄，50 日线不报穿越
         level, signals, _ = self.run_sym(self.flat(last=(99.9, 100.05)))
-        self.assertTrue(any('贴近250日均线 +0.1%' in x for x in signals), signals)
+        self.assertTrue(any('日内触及250日均线' in x and '现价偏离 +0.1%' in x for x in signals), signals)
+        self.assertIn('上穿250日均线', signals)
+        self.assertEqual(level, 'yellow')
         self.assertFalse(any(('上穿50日' in x or '跌破50日' in x) for x in signals), signals)
 
     def test_long_ma_band_is_plus_minus_one_percent(self):
         for last, hit in ((100.9, True), (99.1, True), (101.5, False), (98.5, False)):
             with self.subTest(price=last):
                 lv, signals, _ = self.run_sym(self.flat(last=(100.0, last)))
-                self.assertEqual(any('250日均线' in x for x in signals), hit, signals)
+                self.assertEqual(any('日内触及250日均线' in x for x in signals), hit, signals)
                 if hit:
                     self.assertEqual(lv, 'yellow')
 
-    def test_long_ma_big_gap_cross_is_silent(self):
-        # 跳空 +5% 穿过均线，超出 ±1% 带：不再报"上穿250日均线"
-        _, signals, _ = self.run_sym(self.flat(last=(99.0, 105.0)))
-        self.assertFalse(any('250日' in x for x in signals), signals)
+    def test_long_ma_big_gap_cross_alerts_outside_band(self):
+        for last, expected in (((99.0, 105.0), '上穿250日均线'),
+                               ((101.0, 95.0), '跌破250日均线')):
+            with self.subTest(last=last):
+                _, signals, _ = self.run_sym(self.flat(last=last))
+                self.assertIn(expected, signals)
+                self.assertFalse(any('日内触及250日' in s for s in signals), signals)
+
+    def test_long_ma_price_staying_on_same_side_does_not_cross(self):
+        for last in ((103, 105), (97, 95)):
+            _, signals, _ = self.run_sym(self.flat(last=last), shorts=0)
+            self.assertFalse(any('上穿250日' in s or '跌破250日' in s for s in signals), signals)
+
+    def test_long_ma_history_requires_previous_average_for_cross_only(self):
+        for n in (249, 250, 251):
+            with self.subTest(n=n):
+                _, signals, _ = self.run_sym(self.flat(n=n, last=(99.9, 100.05)), shorts=0)
+                self.assertEqual(any('日内触及250日' in s for s in signals), n >= 250, signals)
+                self.assertEqual('上穿250日均线' in signals, n >= 251, signals)
+
+    def test_long_ma_uses_previous_day_average_and_exact_boundaries(self):
+        from types import SimpleNamespace
+        cases = [
+            (99, 100, 101, 100, '上穿250日均线', True),
+            (101, 100, 99, 100, '跌破250日均线', True),
+            (100, 100, 101, 100, None, True),
+            (100, 100, 99, 100, None, True),
+            (99, 100, 100, 100, '上穿250日均线', True),
+            (101, 100, 100, 100, '跌破250日均线', True),
+            (100.5, 100, 102, 101, None, True),
+            (99.5, 100, 98, 99, None, False),
+        ]
+        for prev, prev_ma, price, current_ma, cross, band in cases:
+            with self.subTest(prev=prev, prev_ma=prev_ma, price=price, current_ma=current_ma):
+                x = SimpleNamespace(closes=[100.0] * 249 + [prev, price], price=price,
+                                    moving_averages=[(250, current_ma)], vol_sigma=None)
+                al = monitor._Alerts()
+                with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 250}), \
+                        patch.object(monitor, 'sma', return_value=prev_ma) as sma_mock:
+                    monitor._rule_moving_averages(al, x)
+                sma_mock.assert_called_once_with(x.closes[:-1], 250)
+                actual = [s for s in al.signals if '上穿' in s or '跌破' in s]
+                self.assertEqual(actual, [cross] if cross else [])
+                self.assertEqual(any('现价贴近' in s for s in al.signals), band)
+
+    def test_long_ma_intraday_range_overlap_and_reset(self):
+        from types import SimpleNamespace
+        cases = [(102, 101, 104, True), (98, 96, 99, True),
+                 (104, 98, 104, True), (102, 101.0001, 104, False),
+                 (98, 96, 98.9999, False), (100, 100, 100, True)]
+        for price, low, high, hit in cases:
+            with self.subTest(price=price, low=low, high=high):
+                closes = [100.0] * 249 + [102, price]
+                x = SimpleNamespace(closes=closes, price=price,
+                                    moving_averages=[(250, 100)], vol_sigma=None,
+                                    data={'highs': [100.0] * 250 + [high],
+                                          'lows': [100.0] * 250 + [low]})
+                al = monitor._Alerts()
+                with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 250}), \
+                        patch.object(monitor, 'sma', return_value=100):
+                    monitor._rule_moving_averages(al, x)
+                self.assertEqual(any('日内触及250日' in s for s in al.signals), hit)
+                self.assertFalse(any(re.search(r'(?<!\d)50日', s) for s in al.signals))
+        # 昨日曾触及不延续到今天：只取最后一根，今天范围完全在上方。
+        x.data['highs'][-2:] = [104, 105]
+        x.data['lows'][-2:] = [98, 103]
+        x.price = 104
+        x.closes[-1] = 104
+        al = monitor._Alerts()
+        with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 250}):
+            monitor._rule_moving_averages(al, x)
+        self.assertFalse(any('日内触及' in s for s in al.signals))
+
+    def test_long_ma_bad_or_missing_ranges_only_use_current_price(self):
+        from types import SimpleNamespace
+        n = 251
+        invalid = [{}, {'highs': [], 'lows': []},
+                   {'highs': [104], 'lows': [98]},
+                   {'highs': [104] * n, 'lows': [98] * (n - 1)},
+                   {'highs': [float('nan')] * n, 'lows': [98] * n},
+                   {'highs': [104] * n, 'lows': [float('inf')] * n},
+                   {'highs': [True] * n, 'lows': [98] * n},
+                   {'highs': [97] * n, 'lows': [98] * n},
+                   {'highs': [104] * n, 'lows': [0] * n}]
+        for data in invalid:
+            for price, hit in ((100, True), (104, False)):
+                x = SimpleNamespace(closes=[100.0] * n, price=price,
+                                    moving_averages=[(250, 100)], data=data, vol_sigma=None)
+                al = monitor._Alerts()
+                with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 250}):
+                    monitor._rule_moving_averages(al, x)
+                bands = [s for s in al.signals if '日内高低缺失，仅按现价' in s]
+                self.assertEqual(bool(bands), hit)
+                self.assertFalse(any('日内触及' in s for s in al.signals))
+
+    def test_long_ma_old_or_missing_date_does_not_replay_events(self):
+        from types import SimpleNamespace
+        for date in ('2026-10-08', '', '2026-10-09'):
+            x = SimpleNamespace(closes=[100] * 249 + [99, 105], price=105,
+                                moving_averages=[(250, 100)], vol_sigma=None,
+                                data={'dates': [date] * 251, 'highs': [105] * 251, 'lows': [98] * 251})
+            al = monitor._Alerts()
+            with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 250}), \
+                    patch.object(monitor, 'TARGET_DATE', '2026-10-09'), \
+                    patch.object(monitor, 'sma', return_value=100):
+                monitor._rule_moving_averages(al, x)
+            self.assertEqual(len(al.signals), 2 if date == '2026-10-09' else 0)
+
+    def test_yahoo_missing_extremes_preserved_through_trim(self):
+        from datetime import datetime, timedelta
+        dates = [(datetime(2026, 1, 1) + timedelta(days=i)).strftime('%Y-%m-%d') for i in range(251)]
+        ticks = [int(datetime.fromisoformat(d + 'T12:00:00-04:00').timestamp()) for d in dates]
+        for key in ('high', 'low'):
+            quote = {'close': [100] * 251, 'high': [101] * 251, 'low': [99] * 251, 'volume': [1000] * 251}
+            quote[key][-1] = None
+            payload = {'chart': {'result': [{'timestamp': ticks, 'meta': {},
+                                            'indicators': {'quote': [quote]}}]}}
+            response = MagicMock(status_code=200)
+            response.json.return_value = payload
+            with patch.object(monitor.requests, 'get', return_value=response), \
+                    patch.object(monitor, 'YAHOO_GATE', monitor.SourceGate()):
+                got = monitor.yahoo_history('T')
+            self.assertTrue(monitor.valid_history(got))
+            got = monitor.trim_history(got, dates[-1])
+            x = monitor._analysis_context('T', {}, got, 'technology')
+            self.assertEqual(monitor._ma_day_range(x), (100, 100, False))
+            previous = monitor.trim_history(got, dates[-2])
+            x = monitor._analysis_context('T', {}, previous, 'technology')
+            self.assertEqual(monitor._ma_day_range(x), (99, 101, True))
+
+    def test_long_ma_intraday_touch_and_cross_integrate_without_new_red(self):
+        closes = self.flat(last=(99, 105))
+        data = {'closes': closes, 'highs': closes[:], 'lows': closes[:],
+                'volumes': [1000] * len(closes), 'price': 105, 'prev_close': 99}
+        data['lows'][-1] = 100
+        with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 250}), \
+                patch.object(monitor, 'boll', return_value=(None, None, None)), \
+                patch.object(monitor, 'calc_rsi', return_value=50):
+            level, signals, detail = monitor.analyze_symbol('T', {}, data, group='technology')
+        self.assertEqual(level, 'yellow')
+        self.assertIn('上穿250日均线', signals)
+        self.assertTrue(any('日内触及250日' in s for s in signals), signals)
+        counts = monitor.signal_counts([detail])
+        self.assertEqual(counts['ma_cross']['yellow'], 1)
+        self.assertEqual(counts['ma_band']['yellow'], 1)
+        self.assertEqual(counts['ma_band']['label'], '长均线触及')
+
+    def test_long_ma_dual_signals_count_independently_without_double_counting_stock(self):
+        level, signals, detail = self.run_sym(self.flat(last=(99.9, 100.05)), shorts=0)
+        self.assertEqual(level, 'yellow')
+        self.assertIn('上穿250日均线', signals)
+        self.assertTrue(any('日内触及250日' in s for s in signals))
+        counts = monitor.signal_counts([detail])
+        self.assertEqual(counts['ma_cross']['yellow'], 1)
+        self.assertEqual(counts['ma_band']['yellow'], 1)
+        self.assertEqual(counts['ma_cross']['sole_yellow'], 0)
+        self.assertEqual(counts['ma_band']['sole_yellow'], 0)
+        self.assertEqual(counts['ma_cross']['label'], '均线穿越')
+
+    def test_long_ma_follows_configured_period(self):
+        for period in (2, 50, 200, 250):
+            _, signals, _ = self.run_sym(self.flat(last=(99, 105)), shorts=0, longs=period)
+            self.assertIn(f'上穿{period}日均线', signals)
+            if period != 50:
+                self.assertFalse(any(re.search(r'(?<!\d)50日均线', s) for s in signals))
 
     def test_decisive_cross_hits_short_ma(self):
         c = [100.0] * 300
@@ -2825,8 +3000,8 @@ class TestMaConfirm(unittest.TestCase):
         _, signals, _ = self.run_sym(scenarios[0], shorts=50, longs=0)
         self.assertNotIn('上穿50日均线', signals, '关闭第二条不能把第一条改成简单穿越')
         _, signals, _ = self.run_sym(scenarios[0], shorts=0, longs=250)
-        self.assertTrue(any('贴近250日均线' in s for s in signals))
-        self.assertNotIn('上穿250日均线', signals)
+        self.assertTrue(any('日内触及250日均线' in s for s in signals))
+        self.assertIn('上穿250日均线', signals)
 
     def test_disabled_mas_never_compute_zero_and_bollinger_is_unchanged(self):
         closes = self.flat(last=(99, 104))

@@ -15,7 +15,7 @@
   "quiet_chg": 2,
   "amp_yellow": 6,
   "amp_red": 10,
-  "ma_short": 50,
+  "ma_short": 0,
   "ma_long": 250,
   "hy_green": 350,
   "hy_red": 400,

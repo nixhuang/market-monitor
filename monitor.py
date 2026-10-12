@@ -295,7 +295,7 @@ def trim_history(data, cutoff):
     if not keep:
         return None
     out = dict(data)
-    for key in ("dates", "closes", "volumes", "highs", "lows"):
+    for key in ("dates", "closes", "volumes", "highs", "lows", "ma_range_valid"):
         seq = data.get(key) or []
         if seq and len(seq) != len(dates):
             return None
@@ -966,6 +966,9 @@ def yahoo_history(symbol):
                 vols = aligned("volume", lambda i: 0)
                 highs = aligned("high", lambda i: raw[i])
                 lows = aligned("low", lambda i: raw[i])
+                # 兼容其他指标的旧填补行为，但长均线不能把填补值冒充真实日内高低。
+                range_valid = [all(i < len(q.get(key) or []) and (q.get(key) or [])[i] is not None
+                                   for key in ("high", "low")) for i in valid]
                 meta = res.get("meta", {})
                 if len(closes) < 30:
                     last_err = "历史数据不足"
@@ -981,6 +984,7 @@ def yahoo_history(symbol):
                     "volumes": vols,
                     "highs": highs,
                     "lows": lows,
+                    "ma_range_valid": range_valid,
                     "price": closes[-1],
                     "prev_close": closes[-2] if len(closes) >= 2 else None,
                     "currency": meta.get("currency", ""),
@@ -1116,6 +1120,8 @@ def apply_realtime(symbol, data):
         else:
             data["prev_close"] = data["price"]
             data["closes"].append(px)
+            # 报价接口仅有最新价；新补bar没有完整日内范围，不能当作真实高低。
+            data["ma_range_valid"] = list(data.get("ma_range_valid") or [True] * (len(data["closes"]) - 1)) + [False]
             if data.get("highs"):
                 data["highs"].append(px)
             if data.get("lows"):
@@ -2689,7 +2695,7 @@ def target_tag(t):
 
 MA_CONFIRM_LOOKBACK = 10   # 50 日线确认穿越：最近多少个交易日内收盘价曾在均线另一侧
 MA_CONFIRM_MIN, MA_CONFIRM_MAX, MA_CONFIRM_DEFAULT = 0.5, 3.0, 1.0
-MA_LONG_BAND_PCT = 1.0     # 长均线（250 日）：现价在均线 ±1% 内亮黄，超出不报
+MA_LONG_BAND_PCT = 1.0     # 第二条均线：当日日线高低范围触及本轮SMA±1%独立亮黄；穿越独立判断
 
 
 def ma_confirm_pct(vol_sigma):
@@ -2777,7 +2783,7 @@ class _Alerts:
 SIGNAL_KINDS = (
     ("chg", "涨跌幅"), ("amp", "振幅"), ("vol_ratio", "量比"),
     ("rsi", "RSI"), ("boll", "布林"), ("boll_rsi", "布林+RSI"),
-    ("ma_cross", "50日线穿越"), ("ma_band", "250日线贴近"), ("low52", "52周低位"),
+    ("ma_cross", "均线穿越"), ("ma_band", "长均线触及"), ("low52", "52周低位"),
     ("add_price", "加仓价"), ("reduce_price", "减仓价"), ("target", "目标价/共识价"),
 )
 
@@ -3007,8 +3013,26 @@ def _rule_amplitude(al, x):
         al.add("amp", text, "yellow")
 
 
+def _ma_day_range(x):
+    """只用与本轮收盘序列对齐的最后一根高低价；缺失/损坏退回现价，不冒充完整日内范围。"""
+    data = getattr(x, "data", {})
+    highs, lows = data.get("highs"), data.get("lows")
+    validity = data.get("ma_range_valid")
+    if validity is not None and (not isinstance(validity, (list, tuple))
+                                 or len(validity) != len(x.closes) or not validity or validity[-1] is not True):
+        return x.price, x.price, False
+    if (isinstance(highs, (list, tuple)) and isinstance(lows, (list, tuple))
+            and len(highs) == len(lows) == len(x.closes) and highs and lows):
+        high, low = highs[-1], lows[-1]
+        if (all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isfinite(v) and v > 0 for v in (high, low)) and low <= high):
+            return min(low, x.price), max(high, x.price), True
+    return x.price, x.price, False
+
+
 def _rule_moving_averages(al, x):
-    """第一条确认穿越，第二条贴近；0独立关闭，不改变另一条的规则。
+    """第一条确认穿越，第二条日内范围触及加简单穿越；0独立关闭。
+    第二条以昨日收盘/昨日SMA和现价/本轮SMA比较，不要求带宽确认。
     两条启用且同周期时，保留原先去重后的简单穿越规则。"""
     closes, price, mas = x.closes, x.price, x.moving_averages
     if len(closes) < 2:
@@ -3021,9 +3045,27 @@ def _rule_moving_averages(al, x):
         weak = period == S["ma_short"] and S["ma_short"] != S["ma_long"]
         strong = period == S["ma_long"] and S["ma_short"] != S["ma_long"]
         if strong:
+            # 源降级可能返回旧日线：不要把昨日触及/穿越重复说成本轮目标日事件。
+            dates = getattr(x, "data", {}).get("dates") or []
+            if TARGET_DATE and (not dates or dates[-1] != TARGET_DATE):
+                continue
             gap_ma = (price / ma_val - 1) * 100
-            if abs(gap_ma) <= MA_LONG_BAND_PCT + 1e-9:
-                al.add("ma_band", f"贴近{ma_name}均线 {gap_ma:+.1f}%", "yellow")
+            day_low, day_high, has_range = _ma_day_range(x)
+            band = MA_LONG_BAND_PCT / 100.0
+            eps = ma_val * 1e-11
+            if day_low <= ma_val * (1 + band) + eps and day_high >= ma_val * (1 - band) - eps:
+                if has_range:
+                    text = (f"日内触及{ma_name}均线 ±{MA_LONG_BAND_PCT:g}%区间"
+                            f"（日内 {day_low:,.2f}~{day_high:,.2f}，现价偏离 {gap_ma:+.1f}%）")
+                else:
+                    text = f"现价贴近{ma_name}均线 {gap_ma:+.1f}%（日内高低缺失，仅按现价）"
+                al.add("ma_band", text, "yellow")
+            prev_ma = sma(closes[:-1], period)
+            if prev_ma:
+                if prev_c < prev_ma and price >= ma_val:
+                    al.add("ma_cross", f"上穿{ma_name}均线", "yellow")
+                elif prev_c > prev_ma and price <= ma_val:
+                    al.add("ma_cross", f"跌破{ma_name}均线", "yellow")
             continue
         confirmed = ma_confirmed_cross(closes, price, period, ma_confirm_pct(x.vol_sigma)) if weak else "n/a"
         if confirmed == "up" or (confirmed == "n/a" and prev_c < ma_val <= price):
@@ -3825,12 +3867,6 @@ def _page_notes(snapshot):
 <details class="macro-help" id="marketRiskRules"><summary>综合判断规则</summary><p>{html_lib.escape(RISK_RULE_TEXT)}</p>
 {('<p>补充参考：美联储利率决议、WTI原油不计入综合灯；综合灯仍依据原5项指标。</p>' if snapshot.get('reference_alerts') else '')}</details>
 {_reference_card(snapshot, details_only=True)}
-<details class="macro-help" id="marketRiskNotes"><summary>指标阈值与数据说明</summary>
-<p>垃圾债利差：≥{S['hy_green']:.0f} bp 黄、≥{S['hy_red']:.0f} bp 红；一周扩大 ≥30 bp 为黄、≥50 bp 为红。VIX：≥{S['vix_green']:g} 黄、≥{S['vix_red']:g} 红。标普500回撤是已经发生的跌幅，不是提前预测。</p>
-<p>10Y美债是参考行，不计入综合灯：一个月上行 ≥{UST_MONTH_YELLOW} bp 标黄（利率冲击风险），≥{UST_MONTH_WATCH} bp 只提示偏快；周变化列单位为 bp。</p>
-<p>上涨参与度：站上长期均线的股票不足一半为黄；不足三成且信用／金融压力也升高才为红。金融压力是周度数据，达到历史平均紧张程度为黄。指标缺失时显示无数据，不代表安全，也不预测具体跌幅。</p>
-<p>市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a>，数据依据当前成分股计算，回看历史可能有成分股选择偏差。</p>
-</details>
 </section>'''
 
 
