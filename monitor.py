@@ -3203,6 +3203,16 @@ RUN_JS = '<script src="./run-status.js?v=20261013-2"></script>'
 
 # 本页展示交互独立于运行/令牌逻辑；不联网、不写用户配置。
 PAGE_INTERACTION_JS = r"""
+document.addEventListener("toggle", function(event) {
+  const card = event.target;
+  if (!(card instanceof HTMLDetailsElement) || card.id !== "signalCounts" || card.open) return;
+  card.querySelectorAll(".signal-members-panel").forEach(function(panel) {
+    panel.hidden = true;
+  });
+  card.querySelectorAll(".signal-count-toggle").forEach(function(button) {
+    button.setAttribute("aria-expanded", "false");
+  });
+}, true);
 document.addEventListener("click", function(event) {
   if (!(event.target instanceof Element)) return;
   const closeButton = event.target.closest(".collapse-group");
@@ -3340,7 +3350,7 @@ def _member_direction_markers(d, kind):
             elif s.startswith(("在目标价", "在共识价")) and " ±" in s:
                 add("■", "purple", "现价在目标价或共识价范围内")
             elif s.startswith(("目标价 ", "共识价 ")) and "，空间 +" in s:
-                add("▲", "purple", "目标价或共识价高于现价，存在空间")
+                add("□", "purple", "目标价或共识价上涨空间达到提示标准")
     return markers
 
 
@@ -3516,6 +3526,7 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
 #signalCounts .signal-member-direction{color:var(--dim);font-size:11px}
+#signalCounts .signal-members-panel p.signal-icon-key{font-size:11.5px;color:#c4a3ff;line-height:1.5;margin:4px 0 8px;overflow-wrap:anywhere}
 #signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:14px;font-weight:700;line-height:1;vertical-align:baseline}
 #signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
 #signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
@@ -4009,12 +4020,14 @@ def _member_icons(d, kind, level):
         if not isinstance(marker, dict):
             continue
         shape, tone, label = marker.get("shape"), marker.get("tone"), marker.get("label")
-        if shape not in ("▲", "▼", "■") or tone not in ("yellow", "red", "cyan", "purple"):
+        if shape not in ("▲", "▼", "■", "□") or tone not in ("yellow", "red", "cyan", "purple"):
+            continue
+        if shape == "□" and (kind != "target" or level != "purple" or tone != "purple"):
             continue
         if not isinstance(label, str) or not label or len(label) > 100:
             continue
         icons.append(f'<span class="signal-member-icon tone-{tone}" role="img" '
-                     f'aria-label="{esc(label)}" title="{esc(label)}">{shape}</span>')
+                     f'aria-label="{esc(label)}">{shape}</span>')
     return "".join(icons) or ' <span class="signal-member-direction">方向待下次更新</span>'
 
 
@@ -4058,6 +4071,8 @@ def _signal_counts_card(snapshot):
                     group = str(d.get("group") or "")
                     grouped.setdefault(group, []).append(d)
                 content = '<div class="signal-member-groups">'
+                if kind == "target" and level == "purple":
+                    content += '<p class="signal-icon-key">▲ 上穿 · ▼ 跌破 · ■ 附近 · □ 空间达标</p>'
                 for group in sorted(grouped, key=lambda name: group_order.get(name, len(GROUPS))):
                     group_members = grouped[group]
                     content += (f'<section class="signal-member-group"><h4>'

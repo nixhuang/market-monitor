@@ -3261,6 +3261,9 @@ class TestDisplayInteractions(unittest.TestCase):
                                                 + '</details>\n'))
         self.assertIn('card.open = false', monitor.PAGE_INTERACTION_JS)
         self.assertIn('heading.focus({preventScroll: true})', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('card.id !== "signalCounts" || card.open', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('card.querySelectorAll(".signal-members-panel")', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('card.querySelectorAll(".signal-count-toggle")', monitor.PAGE_INTERACTION_JS)
         self.assertNotIn('fetch(', monitor.PAGE_INTERACTION_JS)
         self.assertNotIn('localStorage', monitor.PAGE_INTERACTION_JS)
 
@@ -3445,6 +3448,7 @@ class TestSignalCounts(unittest.TestCase):
                             ('ma_cross', 'yellow'), ('ma_band', 'yellow'), ('target', 'purple')),
             self.member_row('LEVEL', 'technology', 'yellow', ('ma_band', 'yellow')),
             self.member_row('SPACE', 'focus', 'green', ('target', 'purple')),
+            self.member_row('CROSS', 'focus', 'green', ('target', 'purple')),
         ]
         rows[0].update(signals=['RSI 2条超买（≥70）：RSI6=80', '突破布林上轨 100',
                                 '上穿60日均线', '日内触及120日均线 ±1%区间',
@@ -3455,6 +3459,7 @@ class TestSignalCounts(unittest.TestCase):
                                 '今日跌破目标价 90'], ma_band_direction='down')
         rows[2].update(signals=['日内触及120日均线 ±1%区间'], ma_band_direction='level')
         rows[3].update(signals=['共识价 200，空间 +55%'])
+        rows[4].update(signals=['今日上穿共识价 200'])
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         cases = {
             ('rsi', 'yellow'): [('RSI超买', 'tone-yellow', '▲'), ('RSI超卖', 'tone-red', '▼')],
@@ -3464,7 +3469,8 @@ class TestSignalCounts(unittest.TestCase):
                                    ('现价在均线下方', 'tone-cyan', '▼'),
                                    ('现价与均线相等', 'tone-cyan', '■')],
             ('target', 'purple'): [('现价在目标价或共识价范围内', 'tone-purple', '■'),
-                                   ('目标价或共识价高于现价，存在空间', 'tone-purple', '▲'),
+                                   ('目标价或共识价上涨空间达到提示标准', 'tone-purple', '□'),
+                                   ('当日上穿目标价或共识价', 'tone-purple', '▲'),
                                    ('当日跌破目标价或共识价', 'tone-purple', '▼')],
         }
         output = monitor._signal_counts_card(snap)
@@ -3474,12 +3480,15 @@ class TestSignalCounts(unittest.TestCase):
             for label, tone, shape in expected:
                 with self.subTest(kind=kind, label=label):
                     self.assertRegex(panel, f'class="signal-member-icon {tone}"[^>]*aria-label="{re.escape(label)}[^\"]*"[^>]*>{shape}</span>')
-        self.assertEqual(snap['signal_counts']['target']['purple'], 3)
+        self.assertEqual(snap['signal_counts']['target']['purple'], 4)
         target = self.panel(output, 'target', 'purple')
-        self.assertEqual(target.count('tone-purple'), 3)
+        self.assertEqual(target.count('tone-purple'), 4)
+        self.assertIn('▲ 上穿 · ▼ 跌破 · ■ 附近 · □ 空间达标', target)
+        self.assertNotIn('title=', output)  # 手机不用悬停，读屏仍能使用 aria-label
+        self.assertNotIn('signal-icon-key', self.panel(output, 'rsi', 'yellow'))
         self.assertEqual(self.panel(output, 'ma_band', 'sole_yellow').count('tone-cyan'), 1)
 
-    def test_target_same_symbol_can_show_square_and_up_without_double_count(self):
+    def test_target_same_symbol_can_show_solid_and_hollow_squares_without_double_count(self):
         row = self.member_row('BOTH', 'focus', 'green', ('target', 'purple'), ('target', 'purple'))
         row['signals'] = ['在目标价 120 ±55% 内（偏离 -36.7%）', '目标价 120，空间 +58%']
         counts = monitor.signal_counts([row])
@@ -3488,8 +3497,9 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(len(members['target']['purple']), 1)
         output = self.panel(monitor._signal_counts_card({'signal_counts': counts,
                             'signal_members': members}), 'target', 'purple')
-        self.assertIn('tone-purple" role="img" aria-label="现价在目标价或共识价范围内" title="现价在目标价或共识价范围内">■', output)
-        self.assertIn('tone-purple" role="img" aria-label="目标价或共识价高于现价，存在空间" title="目标价或共识价高于现价，存在空间">▲', output)
+        self.assertIn('tone-purple" role="img" aria-label="现价在目标价或共识价范围内">■', output)
+        self.assertIn('tone-purple" role="img" aria-label="目标价或共识价上涨空间达到提示标准">□', output)
+        self.assertNotIn('title=', output)
         self.assertEqual(output.count('signal-member-icon'), 2)
 
     def test_old_snapshot_missing_icons_does_not_infer_direction(self):
@@ -3506,6 +3516,7 @@ class TestSignalCounts(unittest.TestCase):
         member = {'symbol': 'X', 'note': '', 'group': 'focus', 'indicators': [
             {'shape': '▲', 'tone': 'yellow', 'label': '<img src=x onerror=alert(1)>'},
             {'shape': '<svg>', 'tone': 'red', 'label': 'bad'},
+            {'shape': '□', 'tone': 'purple', 'label': '只允许目标价空间使用'},
             {'shape': '■', 'tone': '\" onclick=alert(1)', 'label': 'bad'},
         ]}
         panel = self.panel(monitor._signal_counts_card({'signal_counts': counts,
