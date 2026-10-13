@@ -9,13 +9,13 @@
     "next_in": 13,
     "next_date": "2026-10-29"
   },
-  "run_id": "38346965925",
+  "run_id": "38352218837",
   "request_id": "",
-  "source_sha": "8f44d48aa0bc8510de01ae0df1363a5a00154309",
-  "started_at": "2026-10-13T04:32:51+00:00",
-  "started_at_bj": "2026-10-13T12:32:51+08:00",
-  "finished_at": "2026-10-13T12:34:28.248705+08:00",
-  "finished_at_bj": "2026-10-13T12:34:28+08:00",
+  "source_sha": "a168129228f2cd2cd654128ebf5d45e9537f0036",
+  "started_at": "2026-10-13T05:36:00+00:00",
+  "started_at_bj": "2026-10-13T13:36:00+08:00",
+  "finished_at": "2026-10-13T13:36:51.754945+08:00",
+  "finished_at_bj": "2026-10-13T13:36:51+08:00",
   "event": "push",
   "target_trade_date": "2026-10-12",
   "mode": "closed",
@@ -192,7 +192,7 @@
     "green": 56,
     "gray": 0,
     "total": 99,
-    "macro_ok": 5,
+    "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
@@ -698,47 +698,56 @@
         {
           "symbol": "NTNX",
           "note": "Nutanix-混合云",
-          "group": "position"
+          "group": "position",
+          "direction": "上轨（超买）"
         },
         {
           "symbol": "COST",
           "note": "好市多",
-          "group": "focus"
+          "group": "focus",
+          "direction": "上轨（超买）"
         },
         {
           "symbol": "MA",
           "note": "万事达",
-          "group": "focus"
+          "group": "focus",
+          "direction": "上轨（超买）"
         },
         {
           "symbol": "V",
           "note": "Visa-支付",
-          "group": "focus"
+          "group": "focus",
+          "direction": "上轨（超买）"
         },
         {
           "symbol": "MSFT",
           "note": "微软",
-          "group": "focus"
+          "group": "focus",
+          "direction": "上轨（超买）"
         },
         {
           "symbol": "FTNT",
           "note": "Fortinet-防火墙",
-          "group": "technology"
+          "group": "technology",
+          "direction": "上轨（超买）"
         },
         {
           "symbol": "PLTR",
           "note": "Palantir-AI数据分析",
-          "group": "technology"
+          "group": "technology",
+          "direction": "上轨（超买）"
         },
         {
           "symbol": "ABBV",
           "note": "艾伯维",
-          "group": "healthcare"
+          "group": "healthcare",
+          "direction": "上轨（超买）"
         },
         {
           "symbol": "XOM",
           "note": "埃克森美孚",
-          "group": "energy"
+          "group": "energy",
+          "direction": "上轨（超买）"
         }
       ],
       "yellow": [],
@@ -865,7 +874,7 @@
   },
   "macro_dates": {
     "hy_oas": "2026-10-08",
-    "vix": "",
+    "vix": "2026-10-12",
     "sp500": "2026-10-12",
     "ust10": "2026-10-12",
     "nfci": "2026-10-02",
@@ -873,7 +882,7 @@
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.240000247955322,
+    "value": 5.239999771118164,
     "date": "2026-10-12",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -882,33 +891,31 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.2650003433227539
+    "delta_month": 0.2649998664855957
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-12 收盘（美东交易日）",
   "market_risk": {
-    "level": "yellow",
-    "label": "数据不足",
-    "text": "已取得的指标未触发警示；风险得分 0/8；缺失或过期：VIX",
+    "level": "green",
+    "label": "风险平稳",
+    "text": "已取得的指标未触发警示；风险得分 0/8",
     "score": 0,
     "levels": {
       "hy_oas": "green",
-      "vix": "gray",
+      "vix": "green",
       "sp500": "green",
       "breadth": "green",
       "nfci": "green"
     },
-    "valid_count": 4,
-    "missing": [
-      "VIX"
-    ]
+    "valid_count": 5,
+    "missing": []
   },
   "risk_quotes": {
     "vix": {
-      "ok": false,
-      "value": null,
-      "date": null,
-      "source": "Yahoo ^VIX",
+      "ok": true,
+      "value": 15.21,
+      "date": "2026-10-12",
+      "source": "Cboe VIX 官方日线",
       "drawdown": null
     },
     "sp500": {
@@ -923,233 +930,9 @@
     "checked": 17,
     "red": 4,
     "yellow": 6,
-    "fetched": 14,
-    "cached": 4,
+    "fetched": 1,
+    "cached": 17,
     "data": {
-      "AVGO": {
-        "attempted": "2026-10-10",
-        "fetched": "2026-10-10",
-        "data": {
-          "period": "8/2/2026",
-          "base_period": "11/2/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$29,591,000",
-              "value5": "$18,015,000"
-            },
-            "Income Tax": {
-              "value2": "$2,187,000",
-              "value5": "-$1,649,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "69.12913%",
-              "value5": "67.99334%"
-            },
-            "Operating Margin": {
-              "value2": "53.91842%",
-              "value5": "41.67638%"
-            },
-            "After Tax ROE": {
-              "value2": "13.1287%",
-              "value5": "10.47828%"
-            },
-            "Current Ratio": {
-              "value2": "250.37432%",
-              "value5": "170.53581%"
-            },
-            "Profit Margin": {
-              "value2": "44.22966%",
-              "value5": "47.28282%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$14,197,000",
-              "value5": "$7,703,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$88,458,000",
-              "value5": "$89,800,000"
-            },
-            "Total Equity": {
-              "value2": "$99,690,000",
-              "value5": "$81,292,000"
-            }
-          }
-        }
-      },
-      "NTNX": {
-        "attempted": "2026-10-10",
-        "fetched": "2026-10-10",
-        "data": {
-          "period": "7/31/2026",
-          "base_period": "10/31/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$757,078",
-              "value5": "$670,576"
-            },
-            "Income Tax": {
-              "value2": "-$1,186,917",
-              "value5": "$3,478"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "86.03486%",
-              "value5": "86.95599%"
-            },
-            "Operating Margin": {
-              "value2": "9.24462%",
-              "value5": "7.35711%"
-            },
-            "After Tax ROE": {
-              "value2": "180.71381%",
-              "value5": "-9.28708%"
-            },
-            "Current Ratio": {
-              "value2": "179.8304%",
-              "value5": "188.5197%"
-            },
-            "Profit Margin": {
-              "value2": "167.70161%",
-              "value5": "9.2601%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$315,013",
-              "value5": "$196,825"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$4,371,120",
-              "value5": "$3,992,620"
-            },
-            "Total Equity": {
-              "value2": "$702,565",
-              "value5": "-$668,628"
-            }
-          }
-        }
-      },
-      "ZS": {
-        "attempted": "2026-10-10",
-        "fetched": "2026-10-10",
-        "data": {
-          "period": "7/31/2026",
-          "base_period": "10/31/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$898,185",
-              "value5": "$788,112"
-            },
-            "Income Tax": {
-              "value2": "$18,273",
-              "value5": "$3,241"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "76.73486%",
-              "value5": "76.55752%"
-            },
-            "Operating Margin": {
-              "value2": "-1.72481%",
-              "value5": "-4.61381%"
-            },
-            "After Tax ROE": {
-              "value2": "-.12966%",
-              "value5": "-.58593%"
-            },
-            "Current Ratio": {
-              "value2": "169.89884%",
-              "value5": "182.41311%"
-            },
-            "Profit Margin": {
-              "value2": "-.37509%",
-              "value5": "-1.47378%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$279,285",
-              "value5": "$448,280"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$5,268,453",
-              "value5": "$4,520,759"
-            },
-            "Total Equity": {
-              "value2": "$2,598,261",
-              "value5": "$1,982,328"
-            }
-          }
-        }
-      },
-      "COST": {
-        "attempted": "2026-10-10",
-        "fetched": "2026-10-10",
-        "data": {
-          "period": "8/30/2026",
-          "base_period": "11/23/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$95,723,000",
-              "value5": "$67,307,000"
-            },
-            "Income Tax": {
-              "value2": "$1,011,000",
-              "value5": "$582,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "12.73675%",
-              "value5": "13.06996%"
-            },
-            "Operating Margin": {
-              "value2": "3.97083%",
-              "value5": "3.65935%"
-            },
-            "After Tax ROE": {
-              "value2": "8.3736%",
-              "value5": "6.60331%"
-            },
-            "Current Ratio": {
-              "value2": "105.9838%",
-              "value5": "103.84165%"
-            },
-            "Profit Margin": {
-              "value2": "3.13195%",
-              "value5": "2.97294%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$4,684,000",
-              "value5": "$4,688,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$53,242,000",
-              "value5": "$52,487,000"
-            },
-            "Total Equity": {
-              "value2": "$35,803,000",
-              "value5": "$30,303,000"
-            }
-          }
-        }
-      },
       "BRK-B": {
         "attempted": "2026-10-13",
         "fetched": "2026-10-13",
@@ -1314,6 +1097,62 @@
             "Total Equity": {
               "value2": "$15,491,600",
               "value5": "$12,520,300"
+            }
+          }
+        }
+      },
+      "AVGO": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "8/2/2026",
+          "base_period": "11/2/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$29,591,000",
+              "value5": "$18,015,000"
+            },
+            "Income Tax": {
+              "value2": "$2,187,000",
+              "value5": "-$1,649,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "69.12913%",
+              "value5": "67.99334%"
+            },
+            "Operating Margin": {
+              "value2": "53.91842%",
+              "value5": "41.67638%"
+            },
+            "After Tax ROE": {
+              "value2": "13.1287%",
+              "value5": "10.47828%"
+            },
+            "Current Ratio": {
+              "value2": "250.37432%",
+              "value5": "170.53581%"
+            },
+            "Profit Margin": {
+              "value2": "44.22966%",
+              "value5": "47.28282%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$14,197,000",
+              "value5": "$7,703,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$88,458,000",
+              "value5": "$89,800,000"
+            },
+            "Total Equity": {
+              "value2": "$99,690,000",
+              "value5": "$81,292,000"
             }
           }
         }
@@ -1486,6 +1325,62 @@
           }
         }
       },
+      "NTNX": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "7/31/2026",
+          "base_period": "10/31/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$757,078",
+              "value5": "$670,576"
+            },
+            "Income Tax": {
+              "value2": "-$1,186,917",
+              "value5": "$3,478"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "86.03486%",
+              "value5": "86.95599%"
+            },
+            "Operating Margin": {
+              "value2": "9.24462%",
+              "value5": "7.35711%"
+            },
+            "After Tax ROE": {
+              "value2": "180.71381%",
+              "value5": "-9.28708%"
+            },
+            "Current Ratio": {
+              "value2": "179.8304%",
+              "value5": "188.5197%"
+            },
+            "Profit Margin": {
+              "value2": "167.70161%",
+              "value5": "9.2601%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$315,013",
+              "value5": "$196,825"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$4,371,120",
+              "value5": "$3,992,620"
+            },
+            "Total Equity": {
+              "value2": "$702,565",
+              "value5": "-$668,628"
+            }
+          }
+        }
+      },
       "UNH": {
         "attempted": "2026-10-13",
         "fetched": "2026-10-13",
@@ -1597,6 +1492,118 @@
             "Total Equity": {
               "value2": "$27,316,000",
               "value5": "$28,134,000"
+            }
+          }
+        }
+      },
+      "ZS": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "7/31/2026",
+          "base_period": "10/31/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$898,185",
+              "value5": "$788,112"
+            },
+            "Income Tax": {
+              "value2": "$18,273",
+              "value5": "$3,241"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "76.73486%",
+              "value5": "76.55752%"
+            },
+            "Operating Margin": {
+              "value2": "-1.72481%",
+              "value5": "-4.61381%"
+            },
+            "After Tax ROE": {
+              "value2": "-.12966%",
+              "value5": "-.58593%"
+            },
+            "Current Ratio": {
+              "value2": "169.89884%",
+              "value5": "182.41311%"
+            },
+            "Profit Margin": {
+              "value2": "-.37509%",
+              "value5": "-1.47378%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$279,285",
+              "value5": "$448,280"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$5,268,453",
+              "value5": "$4,520,759"
+            },
+            "Total Equity": {
+              "value2": "$2,598,261",
+              "value5": "$1,982,328"
+            }
+          }
+        }
+      },
+      "COST": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "8/30/2026",
+          "base_period": "11/23/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$95,723,000",
+              "value5": "$67,307,000"
+            },
+            "Income Tax": {
+              "value2": "$1,011,000",
+              "value5": "$582,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "12.73675%",
+              "value5": "13.06996%"
+            },
+            "Operating Margin": {
+              "value2": "3.97083%",
+              "value5": "3.65935%"
+            },
+            "After Tax ROE": {
+              "value2": "8.3736%",
+              "value5": "6.60331%"
+            },
+            "Current Ratio": {
+              "value2": "105.9838%",
+              "value5": "103.84165%"
+            },
+            "Profit Margin": {
+              "value2": "3.13195%",
+              "value5": "2.97294%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$4,684,000",
+              "value5": "$4,688,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$53,242,000",
+              "value5": "$52,487,000"
+            },
+            "Total Equity": {
+              "value2": "$35,803,000",
+              "value5": "$30,303,000"
             }
           }
         }
@@ -2540,8 +2547,8 @@
     "dated": 71,
     "pending": 11,
     "failed": 0,
-    "fetched": 8,
-    "cached": 74,
+    "fetched": 0,
+    "cached": 82,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -3101,16 +3108,16 @@
       }
     },
     "events": {
-      "JPM": [
-        "2026-10-13"
-      ],
-      "UNH": [
-        "2026-10-13"
-      ],
       "JNJ": [
         "2026-10-13"
       ],
+      "JPM": [
+        "2026-10-13"
+      ],
       "GS": [
+        "2026-10-13"
+      ],
+      "UNH": [
         "2026-10-13"
       ]
     }
@@ -3157,6 +3164,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-13T12:33:49.983511+08:00"
+    "assessed_at": "2026-10-13T13:36:43.967941+08:00"
   }
 }
