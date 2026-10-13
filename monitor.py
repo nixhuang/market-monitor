@@ -3108,8 +3108,13 @@ def _boll_hits(x):
     if x.boll_up is not None:
         gap_up = (x.boll_up - x.touch_up) / x.boll_up * 100
         if gap_up <= S["boll_near_pct"]:
-            text = (f"突破布林上轨 {x.boll_up:,.2f}" if gap_up <= 0
-                    else f"逼近布林上轨 还差{gap_up:.2f}%")
+            if gap_up < 0:
+                action = "突破" if x.price >= x.boll_up else "盘中突破"
+                text = f"{action}布林上轨 {x.boll_up:,.2f}"
+            elif gap_up == 0:
+                text = f"触及布林上轨 {x.boll_up:,.2f}"
+            else:
+                text = f"逼近布林上轨 还差{gap_up:.2f}%"
             hits.append((gap_up, text + _touch_note(x.price, x.touch_up) + streak_tail(streak["up"], "上轨")))
     if x.boll_dn is not None:
         gap_dn = (x.touch_dn - x.boll_dn) / x.boll_dn * 100
@@ -3122,16 +3127,19 @@ def _boll_hits(x):
 
 
 def _rule_boll(al, x):
-    """持仓/重点关注上下轨均可报黄，其他组仅下轨报黄；组合红仍按原始触轨判断。
-    同侧只留最贴近的一条；极窄布林带同时命中两侧时，其他组的下轨黄灯不能
-    被已禁用的上轨黄灯挡掉，组合红的方向则仍沿用此前的最贴近轨道。"""
+    """持仓/重点关注上下轨均可报黄；其他组上轨只展示具体状态，下轨仍报黄。
+    极窄布林带同时命中两侧时，下轨黄灯不能被上轨挡掉；组合红的方向
+    仍沿用此前最贴近的轨道，展示文字不参与警示等级或计数。"""
     hits = _boll_hits(x)
     if not hits:
         return
     best = min(hits, key=lambda h: h[0])
     yellow_hits = hits if x.group in BOLL_UP_YELLOW_GROUPS else [hit for hit in hits if "布林下轨" in hit[1]]
     if yellow_hits:
-        al.add("boll", min(yellow_hits, key=lambda h: h[0])[1], "yellow")
+        x.boll_alert_text = min(yellow_hits, key=lambda h: h[0])[1]
+        al.add("boll", x.boll_alert_text, "yellow")
+    if x.group not in BOLL_UP_YELLOW_GROUPS:
+        al.signals.extend(hit[1] for hit in hits if "布林上轨" in hit[1])
     if max(x.high_hits, x.low_hits) >= 2:
         side = "上轨" if "布林上轨" in best[1] else "下轨"
         if x.high_hits >= 2 and x.low_hits >= 2:
@@ -3251,6 +3259,7 @@ def _analysis_detail(x, al):
         "boll_up": x.boll_up,
         "boll_dn": x.boll_dn,
         "boll_rsi_direction": getattr(x, "boll_rsi_direction", ""),
+        "boll_alert_text": getattr(x, "boll_alert_text", ""),
         "ma_band_direction": getattr(x, "ma_band_direction", ""),
         # ETF 标签：静态表命中，或行情源明确给出 assetclass=etf
         "etf": is_etf(x.sym) or x.data.get("asset") == "etf",
@@ -3415,7 +3424,10 @@ def _member_direction_markers(d, kind):
         if any(s.startswith("RSI ") and "条超卖" in s for s in signals):
             add("▼", "red", "RSI超卖")
     elif kind == "boll":
-        if any(s.startswith(("突破布林上轨", "逼近布林上轨")) for s in signals):
+        # 新快照只取真正触发黄灯的那条；非核心组的上轨说明不产生黄灯图标。
+        if "boll_alert_text" in d:
+            signals = [d["boll_alert_text"]] if d["boll_alert_text"] else []
+        if any(s.startswith(("突破布林上轨", "盘中突破布林上轨", "触及布林上轨", "逼近布林上轨")) for s in signals):
             add("▲", "yellow", "布林上轨")
         if any(s.startswith(("跌破布林下轨", "触及布林下轨", "逼近布林下轨")) for s in signals):
             add("▼", "red", "布林下轨")

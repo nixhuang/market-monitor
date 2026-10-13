@@ -174,7 +174,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
         <div class="setrow"><label>距上下轨不足 x% 就算命中</label><input id="set_boll_near_pct" inputmode="decimal"></div>
       </div>
       <details class="set"><summary>布林判定说明</summary>
-      <p class="note">持仓和重点关注：布林上、下轨逼近、触碰或穿越均报黄；其他分组仅下轨报黄，上轨单独命中不报黄。所有分组的布林＋RSI 双重信号红灯保持原规则：触轨且 RSI 至少两条同侧达到或越过阈值即报红。其他红警示仍保留。</p>
+      <p class="note">持仓和重点关注：布林上、下轨逼近、触碰或穿越均报黄；其他分组仅下轨报黄，上轨仍显示逼近、触及或盘中突破等具体状态，但单独命中不报黄、不计入布林黄灯。所有分组的布林＋RSI 双重信号红灯保持原规则：触轨且 RSI 至少两条同侧达到或越过阈值即报红。其他红警示仍保留。</p>
       </details>
       <div class="setsec">趋势均线穿越</div>
       <div class="setgrid">
