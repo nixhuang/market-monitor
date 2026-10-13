@@ -3181,14 +3181,17 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertNotIn('fetch(', monitor.PAGE_INTERACTION_JS)
         self.assertNotIn('localStorage', monitor.PAGE_INTERACTION_JS)
 
-    def test_collapse_button_css_has_larger_icon_and_shorter_transparent_strip(self):
+    def test_collapse_button_css_has_full_width_short_transparent_strip(self):
         button_rule = re.search(r'\.collapse-group\{([^}]+)\}', monitor.PAGE_CSS)
         self.assertIsNotNone(button_rule)
-        for declaration in ('width:44px', 'height:26px', 'padding:0', 'background:transparent', 'border:0',
-                            'display:inline-flex', 'align-items:center', 'justify-content:center', 'vertical-align:top'):
+        for declaration in ('width:100%', 'height:26px', 'padding:0', 'background:transparent', 'border:0',
+                            'display:flex', 'align-items:center', 'justify-content:center', 'box-sizing:border-box'):
             self.assertIn(declaration, button_rule.group(1))
+        self.assertNotIn('width:44px', button_rule.group(1))
         self.assertIn('.collapse-group .collapse-icon{font-size:16px;line-height:1}', monitor.PAGE_CSS)
         strip_rule = re.search(r'\.group-bottom\{([^}]+)\}', monitor.PAGE_CSS)
+        self.assertRegex(strip_rule.group(1), r'(?:^|;)padding:0(?:;|$)')
+        self.assertIn('margin:0 -4px -6px', strip_rule.group(1))
         self.assertIn('line-height:0', strip_rule.group(1))
         self.assertIn('.collapse-group:hover{color:var(--text);background:transparent}', monitor.PAGE_CSS)
 

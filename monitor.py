@@ -3373,9 +3373,9 @@ tr:first-child td{border-top:none}
 .fund-body ul{margin:4px 0 0;padding-left:16px}
 .sig{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}
 .signal-magenta{color:#ef8de4} .signal-red{color:#ff8580} .signal-yellow{color:#f0c674} .signal-cyan{color:#4dd0e1}
-.group-bottom{padding:0 12px;border-top:1px solid var(--line);text-align:center;line-height:0}
-.collapse-group{width:44px;height:26px;padding:0;font:inherit;color:var(--dim);
-  display:inline-flex;align-items:center;justify-content:center;vertical-align:top;
+.group-bottom{padding:0;margin:0 -4px -6px;border-top:1px solid var(--line);text-align:center;line-height:0}
+.collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);
+  display:flex;align-items:center;justify-content:center;box-sizing:border-box;
   background:transparent;border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
 .collapse-group .collapse-icon{font-size:16px;line-height:1}
 .collapse-group:hover{color:var(--text);background:transparent}
