@@ -276,6 +276,31 @@ class TestGroups(unittest.TestCase):
                 patch.object(monitor.requests, 'get', return_value=Response()):
             self.assertEqual(monitor.financial_conditions_series(), [('2026-10-02', -0.3)])
 
+    def test_nfci_holiday_week_freshness_and_stale_guard(self):
+        # 10/12 联邦假日使 10/09 当周数据顺延至 10/15 发布；10/13 的最新已发布周为 10/02。
+        original = [('2026-04-17', -0.49), ('2026-04-24', -0.518)]
+        backup = [('2026-09-25', -0.510), ('2026-10-02', -0.494)]
+        def fred(series, days=400, alias=None, source_info=None):
+            return backup if series == 'NFCI' else []
+        with patch.object(monitor, 'financial_conditions_series', return_value=original), \
+                patch.object(monitor, 'fred_series', side_effect=fred), \
+                patch.object(monitor, 'cboe_vix_series', return_value=[]), \
+                patch.object(monitor, 'market_index_series', return_value=[]), \
+                patch.object(monitor, 'treasury_yield_series', return_value=[]), \
+                patch.object(monitor, 'market_breadth', return_value={'ok': False, 'name': '上涨参与度'}), \
+                patch.object(monitor, 'MACRO_RETRY_WAIT', 0):
+            with patch.object(monitor, 'TARGET_DATE', '2026-10-13'):
+                macro = monitor.build_macro()
+                self.assertTrue(macro['nfci']['ok'])
+                self.assertEqual(macro['nfci']['date'], '2026-10-02')
+                self.assertAlmostEqual(macro['nfci']['value'], -0.494)
+                self.assertIn('FRED同步备用', macro['nfci']['source'])
+                self.assertEqual(monitor.market_risk_summary(macro)['levels']['nfci'], 'green')
+            with patch.object(monitor, 'TARGET_DATE', '2026-10-16'):
+                stale = monitor.build_macro()
+                self.assertFalse(stale['nfci']['ok'])
+                self.assertEqual(monitor.market_risk_summary(stale)['levels']['nfci'], 'gray')
+
     def test_special_assets_are_preserved_without_fake_stock_quotes(self):
         cfg = {'index_funds': {s: {'note': s} for s in ['.SPX', 'BD#US10Y', 'ESMAIN', 'CLMAIN', '2USDCNY', '2XAUUSD']},
                'group_monitoring': {'index_funds': True}}

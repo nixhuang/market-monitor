@@ -617,6 +617,9 @@ def market_breadth(target_date):
 
 
 MACRO_RETRY_WAIT = 20  # 风险参考的 VIX/标普/10Y 首次失败后的重试间隔（秒）
+# NFCI 周五观测通常次周三发布，联邦假日可顺延到周四；旧10日上限会在假日周误杀仍属最新的观测。
+# 最多容纳顺延至周四的 13 天；再旧仍判缺失，绝不把数月前的官方CSV当作最新。
+NFCI_MAX_LAG_DAYS = 13
 NFCI_URL = "https://www.chicagofed.org/-/media/publications/nfci/nfci-data-series-csv.csv"
 
 
@@ -768,7 +771,7 @@ def build_macro():
             rows = financial_conditions_series()
             source_info['source'] = 'NFCI原始周度数据'
             target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
-            if not rows or (datetime.fromisoformat(target) - datetime.fromisoformat(rows[-1][0])).days > 10:
+            if not rows or (datetime.fromisoformat(target) - datetime.fromisoformat(rows[-1][0])).days > NFCI_MAX_LAG_DAYS:
                 backup = fred_series('NFCI')
                 if backup and (not rows or backup[-1][0] > rows[-1][0]):
                     rows = backup
@@ -810,7 +813,7 @@ def build_macro():
             item["drawdown"] = dd
         if key == "ust10":
             item["month_ago"], item["delta_month"] = month_change(rows)
-        limit = 10 if key == "nfci" else 7
+        limit = NFCI_MAX_LAG_DAYS if key == "nfci" else 7
         try:
             age = (datetime.strptime(TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat(), "%Y-%m-%d") -
                    datetime.strptime(item["date"], "%Y-%m-%d")).days
@@ -838,7 +841,7 @@ def build_macro():
         macro["breadth"]["pressure_confirmed"] = bool(
             recent(macro["breadth"], 5) and (
                 recent(hy, 5) and macro_status("hy_oas", hy)[0] == "red"
-                or recent(nfci, 8) and nfci["value"] >= 0))
+                or recent(nfci, NFCI_MAX_LAG_DAYS) and nfci["value"] >= 0))
     return macro
 
 
@@ -948,7 +951,7 @@ def market_risk_summary(macro, target_date=None):
         try:
             age = (datetime.strptime(target_date, "%Y-%m-%d") -
                    datetime.strptime(item["date"], "%Y-%m-%d")).days
-            limit = 10 if key == "nfci" else 5 if key == "breadth" else 7
+            limit = NFCI_MAX_LAG_DAYS if key == "nfci" else 5 if key == "breadth" else 7
             fields = ("value", "drawdown") if key == "sp500" else (
                 ("value", "pct50") if key == "breadth" else ("value",))
             valid = item.get("ok") and 0 <= age <= limit and all(

@@ -302,6 +302,17 @@ check(src.includes('五指标综合市场风险')&&src.includes('同类只取最
   els.set_target_gap_pct.value='101';check(T.settingsError().includes('target_gap_pct'), '目标价 ±x% 超过 100% 被拒绝');
   els.set_target_gap_pct.value='3';els.set_target_space_pct.value='-1';check(T.settingsError().includes('target_space_pct'), '空间阈值为负被拒绝');
   els.set_target_space_pct.value='50';T.renderSettings();
+
+  // 手动新增只要求有效代码；名称备注不在静态表中时也可留空。
+  check(els.groupEditor.innerHTML.includes('placeholder="名称备注（选填）"'), '新增栏明确标注名称备注选填');
+  doc.getElementById('newSym_energy').value='ZZZX';doc.getElementById('newNote_energy').value='  ';
+  T.addSymbol('energy');
+  cfg2=JSON.parse(T.configText());
+  check(!!cfg2.energy.ZZZX&&!('note' in cfg2.energy.ZZZX), '不填名称的未知代码可添加并保存，无空备注字段');
+  check(els.list_energy.innerHTML.includes('ZZZX'), '未填备注的标的仍显示股票代码');
+  check(els.newSym_energy.value===''&&els.msg.textContent.includes('已添加 ZZZX'), '添加成功后清空代码并反馈');
+  els.newSym_energy.value='';els.newNote_energy.value='  ';T.addSymbol('energy');
+  check(Object.keys(JSON.parse(T.configText()).energy).length===Object.keys(cfg2.energy).length, '空代码仍不能添加');
   console.log();
   if (fails) { console.error(fails + ' 项失败'); process.exitCode = 1; }
   else console.log('全部通过');

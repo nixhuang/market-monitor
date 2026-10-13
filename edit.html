@@ -218,7 +218,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <p class="note">穿越在收盘运行用收盘价，常规盘中仅在取得有效报价时按最新价重算；日内触及用同日日线高低范围与本轮SMA区间比较，不是逐笔还原触及当时的均线。只有日线范围重叠不能证明区间内实际成交过；盘中高低数据可能不完整，不保证即时不漏报，收盘后以完整日线复核。下一交易日重新判断，不累积昨日触及记录；如果源只返回旧日线，本轮不重报该条均线的触及或穿越，需结合行情日期查看数据是否更新；不新增盘中定时抓取。50日观察中期变化，200日观察长期趋势。250日更接近一年交易日、反应更慢，不保证更有效；默认50／200日，可在上方改为250日。若两条周期相同，只生成一次均线警示（按简单穿越规则）。只调整标的穿越规则，不改变市场宽度源固定的50／200日统计口径。</p>
       <div class="setsec">五指标综合市场风险（固定判定）</div>
       <p class="note">信用／金融环境：垃圾债利差、金融压力；情绪：VIX；趋势：标普500回撤、上涨参与度。每项黄记1分、红记2分，同类只取最高分；信用／金融环境按2倍计分，情绪和趋势各按1倍，总分0至8。0至1分 → 综合绿（轻微提示写在说明里）；2至4分 → 综合黄；5分及以上 → 综合红。有指标缺失时最低为黄。综合灯不是买卖指令，也不预测涨跌。</p>
-      <p class="note">综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力最多10日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且信用压力最多落后5日或金融压力最多8日达到警戒。</p>
+      <p class="note">综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力最多13日（涵盖节假日顺延，超期仍判缺失）。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且信用压力最多落后5日或金融压力最多13日达到警戒。</p>
       <div class="setsec">其他个股规则（固定判定）</div>
       <p class="note">涨跌幅按绝对值判断：达到黄色线为黄，达到红色线为红；日内振幅＝（最高−最低）÷昨收，分别按黄/红线判定。<b>涨跌幅和振幅只对持仓和重点关注生效</b>，其他分组不报这两类；上面设置的阈值是“中档”，系统按每只股最近60个交易日的平时波动自动分档：波动小的 ×0.6、中等 ×1.0、波动大的 ×1.4，不足40个交易日的新股按中档，警示文字里会写“平时约 ±x%”。布林轨道逼近、碰到或穿过均按当日最高／最低计算；持仓与重点关注的上、下轨均可报黄，其余分组仅下轨报黄、上轨单独命中不报黄；所有分组的布林＋RSI 组合红规则不变，触轨且 RSI 6／12／24 中至少两条同侧达到超买／超卖线仍报红。单独 RSI 两条同侧为黄、三条为红，只有一条不报警。</p>
       <p class="note">距52周低点不超过设置百分比：刚进入低位区或再创新低的那一天为红，之后仍在低位区但没再创新低降为黄（写“仍在52周低位”），离开低位区后不报，再创新低重新红；已跌破或距“加仓价”不超过设置百分比：红；仅持仓分组可填“减仓价”，现价落在减仓价正负“x%”（按减仓价算，不分涨跌方向）以内为红；持仓和重点关注可填“目标价”（不填则首页自动显示 S&P Global 共识价，手填优先、只显示一个）：现价在目标价正负“x%”以内、当日跨越目标价、或目标价高出现价超过“x%”，只显示紫色提醒，不改红黄绿；其他分组的美股个股也会显示共识价和空间，但只显示、不报警；共识价每只约 14 天更新一次，美东财报日过后至少 2 个自然日提前更新；每个北京时间自然日最多请求 12 只，同日修改清单不重置额度。明确无覆盖约 30 天复查；失败首次次日重试，连续失败按 2／4／7 天退避，失败重试每天最多占 3 个名额；目标价高出现价超过 100% 视为数据异常，按红色提示；量比达到设置倍数、第一条均线确认上穿或跌破、第二条均线简单上穿或跌破、当日日线高低范围触及第二条均线±1%（默认50／200日）：黄。量比＝当日成交量÷最近20日平均成交量（含本轮）；没有有效成交量时不触发量比。布林连续贴轨只补充天数，不会单独升级红；连续2日起显示天数，远离一天就重新计数；同日同时命中上下轨时，组合红的方向仍按更贴近的一侧；非持仓与重点关注的独立黄灯仅从下轨产生。标的在清单中明确配置 quiet=true 时，跳过常规技术指标，仅在单日涨跌达到 quiet 阈值时为黄；当前清单未配置 quiet 标的。</p>
@@ -538,7 +538,7 @@ function initGroups(groups){
     +'<div class="pane"><div class="monitor-note" id="monitorNote_'+g.key+'"></div>'
     +'<div id="list_'+g.key+'"></div><div class="pager" id="pager_'+g.key+'"></div>'
     +'<div class="add row"><input class="s" id="newSym_'+g.key+'" placeholder="股票代码" aria-label="'+esc(g.label)+'股票代码">'
-    +'<input class="n" id="newNote_'+g.key+'" placeholder="中文名 / 英文公司名" aria-label="'+esc(g.label)+'名称备注">'
+    +'<input class="n" id="newNote_'+g.key+'" placeholder="名称备注（选填）" aria-label="'+esc(g.label)+'名称备注（选填）">'
     +'<input class="t" id="newTrig_'+g.key+'" placeholder="加仓价" inputmode="decimal">'
     +(hasReduce(g.key)?'<input class="t r" id="newReduce_'+g.key+'" placeholder="减仓价" inputmode="decimal" aria-label="减仓价">':'')
     +(hasTarget(g.key)?'<input class="t g" id="newTarget_'+g.key+'" placeholder="目标价" inputmode="decimal" aria-label="目标价">':'')
@@ -560,7 +560,6 @@ function addSymbol(kind){
   if(!isTicker(symbol)){setMsg('请填写有效代码，A股、港股和 SGOV 不导入','err');return;}
   if(Object.keys(data[kind]).some(s=>normTicker(s)===symbol)){setMsg(symbol+' 已在该分组中','err');return;}
   const note=$('newNote_'+kind).value.trim()||NAMES[symbol]||'';
-  if(!note){setMsg('请补充中文名或英文公司名称，作为首页备注显示','err');$('newNote_'+kind).focus();return;}
   const trigger=$('newTrig_'+kind).value.trim();
   if(trigger&&!Number.isFinite(Number(trigger))){setMsg('加仓价应填写数字','err');return;}
   let reduce='';
@@ -573,7 +572,7 @@ function addSymbol(kind){
     target=$('newTarget_'+kind).value.trim();
     if(target&&!(Number.isFinite(Number(target))&&Number(target)>0)){setMsg('目标价应填写大于 0 的数字','err');return;}
   }
-  data[kind][symbol]={note,...(trigger?{trigger:Number(trigger)}:{}),...(reduce?{reduce:Number(reduce)}:{}),
+  data[kind][symbol]={...(note?{note}:{}),...(trigger?{trigger:Number(trigger)}:{}),...(reduce?{reduce:Number(reduce)}:{}),
     ...(target?{target:Number(target),target_at:monthNow()}:{})};
   ['newSym_','newNote_','newTrig_'].concat(hasReduce(kind)?['newReduce_']:[]).concat(hasTarget(kind)?['newTarget_']:[]).forEach(id=>$(id+kind).value='');
   render();touch();setMsg('已添加 '+symbol+' 到「'+KIND_LABEL[kind]+'」','ok');
