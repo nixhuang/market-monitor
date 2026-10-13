@@ -151,7 +151,7 @@ check(src.includes('持仓和重点关注：布林上、下轨')&&src.includes('
   src.includes('所有分组的布林＋RSI 双重信号红灯保持原规则'), '设置页说明上轨黄灯只在核心两组，下轨与组合红保持');
 check(!src.includes('布林轨道逼近、碰到或穿过都为黄（所有分组都报）'), '移除过时的全分组上轨黄色说明');
 check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x bp 黄')&&src.includes('垃圾债利差 ≥ x bp 红'), '信用利差仅保留有效的黄红两条阈值');
-check(src.includes('一周扩大至少 30 bp 为黄、至少 50 bp 为红')&&src.includes('同类只取最高分')&&src.includes('信用／金融环境按2倍计分')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力为周度'), '设置页明确说明信用急升和新增市场风险规则');
+check(src.includes('一周扩大至少 30 bp 为黄、至少 50 bp 为红')&&src.includes('同类只取最高分')&&src.includes('信用／金融环境按2倍计分')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力NFCI为周度'), '设置页明确说明信用急升和新增市场风险规则');
 check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');
 check(src.includes('距52周低点')&&src.includes('第一条均线确认上穿或跌破')&&src.includes('基本面单独提示'), '设置页覆盖其他固定个股与基本面规则');
 check(src.includes('涨跌幅和振幅只对持仓和重点关注生效')&&src.includes('×0.6')&&src.includes('×1.4'), '设置页说明涨跌/振幅分档且只对持仓和重点关注生效');

@@ -276,6 +276,163 @@ class TestGroups(unittest.TestCase):
                 patch.object(monitor.requests, 'get', return_value=Response()):
             self.assertEqual(monitor.financial_conditions_series(), [('2026-10-02', -0.3)])
 
+    def test_nfci_cache_follows_weekly_release_without_new_timer(self):
+        from datetime import datetime
+        old = [('2026-09-25', -0.510), ('2026-10-02', -0.494)]
+        new = old + [('2026-10-09', -0.480)]
+        official_old = [('2026-04-17', -0.49), ('2026-04-24', -0.518)]
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-13'), \
+                patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T22:30:00+08:00')), \
+                patch.object(monitor, 'financial_conditions_series', return_value=official_old) as official, \
+                patch.object(monitor, 'fred_series', return_value=old) as fred:
+            cache = {}
+            rows, source = monitor.cached_financial_conditions({}, cache)
+            self.assertEqual(rows[-1], ('2026-10-02', -0.494))
+            self.assertEqual(source, 'NFCI周度数据（FRED同步备用）')
+            self.assertEqual(cache['result'], 'ok')
+            self.assertEqual(len(cache['rows']), 2)
+            self.assertEqual((official.call_count, fred.call_count), (1, 1))
+        previous = {'nfci_cache': cache}
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'financial_conditions_series') as official, \
+                patch.object(monitor, 'fred_series') as fred:
+            for now in ('2026-10-14T08:29:00-04:00', '2026-10-14T08:29:59-04:00'):
+                with patch.object(monitor, 'NOW', datetime.fromisoformat(now)):
+                    self.assertEqual(monitor.cached_financial_conditions(previous)[0][-1], old[-1])
+            official.assert_not_called()
+            fred.assert_not_called()
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-14T20:15:00-04:00')), \
+                patch.object(monitor, 'financial_conditions_series', return_value=official_old) as official, \
+                patch.object(monitor, 'fred_series', return_value=old) as fred:
+            pending = {}
+            self.assertEqual(monitor.cached_financial_conditions(previous, pending)[0][-1], old[-1])
+            self.assertEqual(pending['result'], 'pending')
+            self.assertEqual((official.call_count, fred.call_count), (1, 1))
+            with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-14T20:45:00-04:00')):
+                self.assertEqual(monitor.cached_financial_conditions({'nfci_cache': pending})[0][-1], old[-1])
+            self.assertEqual((official.call_count, fred.call_count), (1, 1))
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-15'), \
+                patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-15T20:15:00-04:00')), \
+                patch.object(monitor, 'financial_conditions_series', return_value=old) as official, \
+                patch.object(monitor, 'fred_series', return_value=new) as fred:
+            updated = {}
+            self.assertEqual(monitor.cached_financial_conditions({'nfci_cache': pending}, updated)[0][-1], new[-1])
+            self.assertEqual(updated['result'], 'ok')
+            self.assertEqual(updated['source'], 'NFCI周度数据（FRED同步备用）')
+            self.assertEqual((official.call_count, fred.call_count), (1, 1))
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-16'), \
+                patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-16T20:15:00-04:00')), \
+                patch.object(monitor, 'financial_conditions_series') as official, \
+                patch.object(monitor, 'fred_series') as fred:
+            state = {}
+            self.assertEqual(monitor.cached_financial_conditions({'nfci_cache': updated}, state)[0][-1], new[-1])
+            official.assert_not_called()
+            fred.assert_not_called()
+
+    def test_nfci_cache_historical_target_cannot_use_later_publication(self):
+        from datetime import datetime, timedelta
+        old = [('2026-10-02', -0.494)]
+        new = old + [('2026-10-09', -0.480)]
+        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-15T20:15:00-04:00')), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-13'), \
+                patch.object(monitor, 'financial_conditions_series', return_value=[]), \
+                patch.object(monitor, 'fred_series', return_value=new):
+            state = {}
+            self.assertEqual(monitor.cached_financial_conditions({}, state)[0][-1], old[-1])
+            self.assertEqual(state['rows'][-1], old[-1])
+        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-16T20:15:00-04:00')), \
+                patch.object(monitor, 'TARGET_DATE', '2026-07-03'), \
+                patch.object(monitor, 'financial_conditions_series', return_value=[]), \
+                patch.object(monitor, 'fred_series', return_value=[
+                    ((datetime(2026, 5, 1) + timedelta(days=7 * i)).date().isoformat(), -0.5)
+                    for i in range(24)]):
+            self.assertEqual(monitor.cached_financial_conditions({})[0][-1][0], '2026-06-26')
+
+    def test_nfci_cache_retries_same_day_and_requires_valid_metadata(self):
+        from datetime import datetime
+        old = [('2026-10-02', -0.494)]
+        new = old + [('2026-10-09', -0.480)]
+        prior = {'rows': old, 'source': 'NFCI周度数据（FRED同步备用）',
+                 'checked_at': '2026-10-14T09:00:00-04:00', 'result': 'pending'}
+        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-14T20:15:00-04:00')), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'financial_conditions_series', return_value=old) as official, \
+                patch.object(monitor, 'fred_series', return_value=new) as fred:
+            state = {}
+            self.assertEqual(monitor.cached_financial_conditions({'nfci_cache': prior}, state)[0][-1], new[-1])
+            self.assertEqual((official.call_count, fred.call_count), (1, 1))
+        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-14T07:00:00-04:00')), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'financial_conditions_series', return_value=old) as official, \
+                patch.object(monitor, 'fred_series', return_value=[]):
+            for bad in (dict(prior, checked_at=''), dict(prior, result='unknown')):
+                self.assertEqual(monitor.cached_financial_conditions({'nfci_cache': bad})[0][-1], old[-1])
+            self.assertEqual(official.call_count, 2)
+
+    def test_nfci_cache_rejects_bad_state_and_never_makes_stale_data_green(self):
+        from datetime import datetime
+        old = [('2026-09-25', -0.510), ('2026-10-02', -0.494)]
+        prior = {'rows': old, 'source': 'NFCI周度数据（FRED同步备用）',
+                 'checked_at': '2026-10-15T20:15:00-04:00', 'result': 'pending'}
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-16'), \
+                patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-16T20:15:00-04:00')), \
+                patch.object(monitor, 'financial_conditions_series', return_value=[]) as official, \
+                patch.object(monitor, 'fred_series', return_value=[]) as fred, \
+                patch.object(monitor, 'cboe_vix_series', return_value=[]), \
+                patch.object(monitor, 'market_index_series', return_value=[]), \
+                patch.object(monitor, 'treasury_yield_series', return_value=[]), \
+                patch.object(monitor, 'market_breadth', return_value={'ok': False, 'name': '上涨参与度'}), \
+                patch.object(monitor, 'MACRO_RETRY_WAIT', 0):
+            state = {}
+            macro = monitor.build_macro({'nfci_cache': prior}, state)
+            self.assertEqual(official.call_count, 1)
+            self.assertEqual(sum(call.args == ('NFCI',) for call in fred.call_args_list), 1)
+            self.assertFalse(macro['nfci']['ok'])
+            self.assertEqual(state['rows'][-1], old[-1])
+            self.assertEqual(state['result'], 'error')
+            self.assertIn('金融压力NFCI', monitor.market_risk_summary(macro)['missing'])
+        bad = [dict(prior, rows=[['2026-10-16', 0.0]]),
+               dict(prior, rows=[[old[-1][0], float('nan')]]),
+               dict(prior, source='未核实来源'),
+               dict(prior, rows=[['2026-10-09', -0.48]])]
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-13'), \
+                patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T22:30:00+08:00')), \
+                patch.object(monitor, 'financial_conditions_series', return_value=old) as official, \
+                patch.object(monitor, 'fred_series', return_value=[]):
+            for invalid in bad:
+                with self.subTest(invalid=invalid):
+                    state = {}
+                    self.assertEqual(monitor.cached_financial_conditions({'nfci_cache': invalid}, state)[0][-1], old[-1])
+                    self.assertEqual(state['result'], 'ok')
+            self.assertEqual(official.call_count, len(bad))
+
+    def test_nfci_new_snapshot_state_survives_existing_build_path(self):
+        from datetime import datetime
+        rows = [('2026-09-25', -0.510), ('2026-10-02', -0.494)]
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-13'), \
+                patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T22:30:00+08:00')), \
+                patch.object(monitor, 'financial_conditions_series', return_value=[]), \
+                patch.object(monitor, 'fred_series', return_value=rows) as fred, \
+                patch.object(monitor, 'cboe_vix_series', return_value=[]), \
+                patch.object(monitor, 'market_index_series', return_value=[]), \
+                patch.object(monitor, 'treasury_yield_series', return_value=[]), \
+                patch.object(monitor, 'market_breadth', return_value={'ok': False, 'name': '上涨参与度'}), \
+                patch.object(monitor, 'MACRO_RETRY_WAIT', 0):
+            first_state = {}
+            macro = monitor.build_macro({}, first_state)
+            snapshot = monitor.build_snapshot(macro, [], {'positions': {}, 'focus': {}})
+            snapshot['nfci_cache'] = first_state
+            saved = json.loads(json.dumps(snapshot))
+            self.assertEqual(saved['nfci_cache']['rows'][-1], ['2026-10-02', -0.494])
+            self.assertTrue(saved['market_risk']['valid_count'] >= 1)
+            self.assertEqual(macro['nfci']['name'], '金融压力NFCI')
+            second_state = {}
+            macro2 = monitor.build_macro(saved, second_state)
+            self.assertEqual(macro2['nfci']['value'], -0.494)
+            self.assertEqual(second_state['rows'][-1], ('2026-10-02', -0.494))
+            self.assertEqual(sum(call.args == ('NFCI',) for call in fred.call_args_list), 1)
+
     def test_nfci_holiday_week_freshness_and_stale_guard(self):
         # 10/12 联邦假日使 10/09 当周数据顺延至 10/15 发布；10/13 的最新已发布周为 10/02。
         original = [('2026-04-17', -0.49), ('2026-04-24', -0.518)]
@@ -292,6 +449,7 @@ class TestGroups(unittest.TestCase):
             with patch.object(monitor, 'TARGET_DATE', '2026-10-13'):
                 macro = monitor.build_macro()
                 self.assertTrue(macro['nfci']['ok'])
+                self.assertEqual(macro['nfci']['name'], '金融压力NFCI')
                 self.assertEqual(macro['nfci']['date'], '2026-10-02')
                 self.assertAlmostEqual(macro['nfci']['value'], -0.494)
                 self.assertIn('FRED同步备用', macro['nfci']['source'])
@@ -3216,7 +3374,8 @@ class TestDisplayInteractions(unittest.TestCase):
             ('RSI 2条超买（≥70）：RSI6=80', ''),
             ('贴近布林上轨（距 0.2%）', ''),
             ('突破布林上轨 101.00', ''),
-            ('逼近布林下轨 还差0.30%', ''),
+            ('逼近布林下轨 还差0.30%', 'signal-yellow'),
+            ('逼近布林下轨 还差0.08%（盘中触及 50.04）', 'signal-yellow'),
             ('触及布林下轨 99.00', 'signal-yellow'),
             ('跌破布林下轨', 'signal-yellow'),
             ('布林 + RSI 双重信号 → 红', 'signal-red'),
@@ -3238,6 +3397,13 @@ class TestDisplayInteractions(unittest.TestCase):
                         self.assertNotIn('<span', rendered)
         with patch.dict(monitor.S, {'ma_long': 0}):
             self.assertNotIn('signal-cyan', monitor._signal_text_html('上穿250日均线'))
+
+    def test_lower_boll_approach_renders_yellow_text_without_changing_level(self):
+        row = {'signals': ['逼近布林下轨 还差0.08%（盘中触及 50.04）'],
+               'target': {}, 'level': 'yellow', 'signal_marks': [('boll', 'yellow')]}
+        self.assertIn('<span class="signal-yellow">逼近布林下轨', monitor._signals_html(row))
+        self.assertEqual(row['level'], 'yellow')
+        self.assertEqual(row['signal_marks'], [('boll', 'yellow')])
 
     def test_signal_text_order_and_original_data_are_unchanged(self):
         import copy

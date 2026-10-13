@@ -154,7 +154,7 @@ FRED_SERIES = {
     "ust10":    {"id": "DGS10",        "name": "10Y美债",     "unit": "%",   "scale": 1},
     "curve":    {"id": "T10Y2Y",       "name": "收益率曲线",   "unit": "",    "scale": 1},
     "dxy":      {"id": "DTWEXBGS",     "name": "美元指数",     "unit": "",    "scale": 1},
-    "nfci":     {"id": "NFCI",         "name": "金融压力",     "unit": "",    "scale": 1},
+    "nfci":     {"id": "NFCI",         "name": "金融压力NFCI", "unit": "",    "scale": 1},
 }
 
 # ---------------------------------------------------------------- 可调阈值
@@ -647,6 +647,99 @@ def financial_conditions_series(days=400):
         return []
 
 
+def cached_financial_conditions(previous=None, state=None):
+    """金融压力NFCI：复用已核验的周度观测，仅在既有运行中按公布节奏重新查询。"""
+    prior = previous.get('nfci_cache') if isinstance(previous, dict) else None
+    prior = prior if isinstance(prior, dict) else {}
+    now_et = NOW.astimezone(US_TZ)
+    target = TARGET_DATE or now_et.date().isoformat()
+    target_end = datetime.strptime(target, '%Y-%m-%d').replace(hour=23, minute=59, second=59, tzinfo=US_TZ)
+    sources = ('NFCI原始周度数据', 'NFCI周度数据（FRED同步备用）')
+
+    def release_time(friday, next_week=False):
+        # 本周周五观测次周三（+5日）公布；下一个观测的预期公布为+12日。
+        # 假日周官网可顺延周四：周三未更新记 pending，下一美东自然日随原运行重查。
+        day = datetime.strptime(friday, '%Y-%m-%d').date() + timedelta(days=12 if next_week else 5)
+        return datetime(day.year, day.month, day.day, 8, 30, tzinfo=US_TZ)
+
+    def valid_rows(values, cached=False):
+        if not isinstance(values, list):
+            return []
+        checked, previous_day = [], ''
+        try:
+            for item in values:
+                if not isinstance(item, (list, tuple)) or len(item) != 2:
+                    return []
+                day, value = item
+                date = datetime.strptime(day, '%Y-%m-%d').date()
+                if (date.isoformat() != day or date.weekday() != 4 or
+                        not isinstance(value, (int, float)) or isinstance(value, bool) or
+                        not math.isfinite(value) or abs(value) > 20 or day <= previous_day):
+                    return []
+                previous_day = day
+                if day > target or release_time(day) > min(now_et, target_end):
+                    if cached:
+                        return []  # 缓存不可包含目标日之后或目标交易日尚未发布的观测
+                    continue     # 原始完整序列可能含历史回测目标日以后的数据
+                checked.append((day, value))
+                if len(checked) > 8:
+                    checked.pop(0)
+        except (ValueError, TypeError, OverflowError):
+            return []
+        return checked
+
+    source = prior.get('source') if prior.get('source') in sources else ''
+    rows = valid_rows(prior.get('rows'), cached=True) if source else []
+    checked_at = None
+    try:
+        stamp = datetime.fromisoformat(prior.get('checked_at', ''))
+        if stamp.tzinfo is not None and stamp <= now_et:
+            checked_at = stamp.astimezone(US_TZ)
+    except (TypeError, ValueError):
+        pass
+    if not checked_at or prior.get('result') not in ('ok', 'pending', 'error'):
+        rows, source = [], ''
+    due = release_time(rows[-1][0], next_week=True) if rows else None
+    # 到期未发布或取源失败，至少隔一小时再试；避免白天先查一次后漏掉夜间正式运行。
+    throttled = bool(rows and checked_at and prior.get('result') in ('pending', 'error') and
+                     now_et - checked_at < timedelta(hours=1))
+    if rows and ((due and now_et < due) or throttled):
+        if state is not None:
+            state.update(rows=rows, source=source, checked_at=prior.get('checked_at', ''),
+                         result=prior.get('result', 'ok'))
+        log(f"  · 金融压力NFCI沿用已核验周度缓存（截至 {rows[-1][0]}）")
+        return rows, source
+
+    try:
+        official = valid_rows(financial_conditions_series())
+    except Exception as exc:
+        log(f'  ! 金融压力NFCI原始数据异常：{str(exc)[:90]}')
+        official = []
+    selected, selected_source = official, sources[0]
+    # 官网上一周的值仍在13日窗口内，不代表新周已发布；到点但没有推进时也查FRED。
+    official_due = release_time(official[-1][0], next_week=True) if official else None
+    if (not official or official_due <= now_et or
+            (rows and official[-1][0] <= rows[-1][0])):
+        try:
+            backup = valid_rows(fred_series('NFCI'))
+        except Exception as exc:
+            log(f'  ! 金融压力NFCI备用数据异常：{str(exc)[:90]}')
+            backup = []
+        if backup and (not selected or backup[-1][0] > selected[-1][0]):
+            selected, selected_source = backup, sources[1]
+
+    advanced = bool(selected and (not rows or selected[-1][0] > rows[-1][0]))
+    if selected and (not rows or selected[-1][0] >= rows[-1][0]):
+        rows, source = selected, selected_source
+    fresh = bool(rows and (datetime.strptime(target, '%Y-%m-%d').date() -
+                           datetime.strptime(rows[-1][0], '%Y-%m-%d').date()).days <= NFCI_MAX_LAG_DAYS)
+    result = ('ok' if advanced and fresh else
+              'pending' if selected and fresh and rows and selected[-1][0] >= rows[-1][0] else 'error')
+    if state is not None:
+        state.update(rows=rows, source=source, checked_at=now_et.isoformat(), result=result)
+    return rows, source
+
+
 SP500_RS_ROWS = []   # build_macro 取到的标普500指数日线（最近约 60 根），供板块「相对标普500」强弱使用
 RS_BENCH_NAME = "标普500"
 HOM_PRICE_URL = "https://historyofmarket.com/api/sp500/price.json"
@@ -751,7 +844,7 @@ def month_change(rows, days=30):
     return base[-1], rows[-1][1] - base[-1]
 
 
-def build_macro():
+def build_macro(previous=None, nfci_state=None):
     log("抓取宏观指标...")
     macro = {}
     SP500_RS_ROWS.clear()
@@ -768,14 +861,7 @@ def build_macro():
         elif key == "ust10":
             rows = treasury_yield_series(source_info=source_info)
         elif key == "nfci":
-            rows = financial_conditions_series()
-            source_info['source'] = 'NFCI原始周度数据'
-            target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
-            if not rows or (datetime.fromisoformat(target) - datetime.fromisoformat(rows[-1][0])).days > NFCI_MAX_LAG_DAYS:
-                backup = fred_series('NFCI')
-                if backup and (not rows or backup[-1][0] > rows[-1][0]):
-                    rows = backup
-                    source_info['source'] = 'NFCI周度数据（FRED同步备用）'
+            rows, source_info['source'] = cached_financial_conditions(previous, nfci_state)
         else:
             continue
         if not rows and key in ("vix", "sp500", "ust10"):
@@ -930,9 +1016,9 @@ def macro_status(key, item, drawdown=None):
 
 RISK_INDICATORS = ("hy_oas", "vix", "sp500", "breadth", "nfci")
 RISK_LABELS = {"hy_oas": "垃圾债利差", "vix": "VIX", "sp500": "标普500回撤",
-               "breadth": "上涨参与度", "nfci": "金融压力"}
+               "breadth": "上涨参与度", "nfci": "金融压力NFCI"}
 RISK_RULE_TEXT = (
-    "五项指标分三类：信用／金融环境（垃圾债利差、金融压力）、情绪（VIX）、趋势（标普500回撤、上涨参与度）。"
+    "五项指标分三类：信用／金融环境（垃圾债利差、金融压力NFCI）、情绪（VIX）、趋势（标普500回撤、上涨参与度）。"
     "每项黄记1分、红记2分；同类只取最高分，不重复计分；信用／金融环境类按2倍计分，情绪、趋势各按1倍，总分0至8。"
     "0至1分为绿灯（有轻微提示会写在说明里），2至4分为黄灯，5分及以上为红灯。"
     "数据缺失时最低为黄灯，缺失不代表安全。这是风险参考规则，不预测涨跌，也不是买卖指令。"
@@ -3834,8 +3920,7 @@ def _signal_text_html(text):
         cls = "signal-red"
     elif text.startswith("RSI") and "超卖" in text:
         cls = "signal-magenta"
-    elif ("布林下轨" in text and
-          (text.startswith("跌破布林下轨") or text.startswith("触及布林下轨"))):
+    elif any(text.startswith(prefix) for prefix in ("逼近布林下轨", "触及布林下轨", "跌破布林下轨")):
         cls = "signal-yellow"
     elif "均线" in text and ("触及" in text or "贴近" in text or "上穿" in text or "跌破" in text):
         period = re.search(r"(\d+)日(?:弱)?均线", text)
@@ -4471,7 +4556,8 @@ def main(argv=None):
     if not universe:
         log("holdings.json 里没有自选股，跳过个股部分")
 
-    macro = build_macro()
+    nfci_state = {}
+    macro = build_macro(prev_status, nfci_state)
     reference_alerts = build_reference_alerts(prev_status.get("reference_alerts"))
     items = []
     if universe:
@@ -4615,6 +4701,7 @@ def main(argv=None):
             f"红 {fund_stat['red']} · 黄 {fund_stat['yellow']}")
 
     snapshot = build_snapshot(macro, items, cfg, group_counts=group_counts)
+    snapshot["nfci_cache"] = nfci_state
     snapshot["fundamental"] = {**fund_stat, "data": fund_data}
     snapshot["consensus"] = {"source": CONSENSUS_SOURCE, "stat": cons_stat, "data": cons_data,
                              "quota": cons_stat.get("quota", _consensus_quota(prev_cons, quota_day))}

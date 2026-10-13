@@ -68,6 +68,9 @@
     },
     "XLI": {
       "note": "工业精选行业ETF"
+    },
+    "GEHC": {
+      "note": "ge医疗"
     }
   },
   "focus": {
@@ -98,9 +101,6 @@
     },
     "SYK": {
       "note": "医疗机器人"
-    },
-    "GEHC": {
-      "note": "ge医疗"
     }
   },
   "index_funds": {
