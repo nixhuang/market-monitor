@@ -9,13 +9,13 @@
     "next_in": 12,
     "next_date": "2026-10-29"
   },
-  "run_id": "38417793583",
+  "run_id": "38427826355",
   "request_id": "",
-  "source_sha": "5910ca05bc50e6805e90d54c96e0f849bb6ac64b",
-  "started_at": "2026-10-13T14:57:03+00:00",
-  "started_at_bj": "2026-10-13T22:57:03+08:00",
-  "finished_at": "2026-10-13T22:58:43.712571+08:00",
-  "finished_at_bj": "2026-10-13T22:58:43+08:00",
+  "source_sha": "feceeb8cda63391a7aa8a43333aafa3e97026339",
+  "started_at": "2026-10-13T16:06:58+00:00",
+  "started_at_bj": "2026-10-14T00:06:58+08:00",
+  "finished_at": "2026-10-14T00:09:08.828720+08:00",
+  "finished_at_bj": "2026-10-14T00:09:08+08:00",
   "event": "push",
   "target_trade_date": "2026-10-13",
   "mode": "manual_or_config",
@@ -187,8 +187,8 @@
     "dca": 1
   },
   "summary": {
-    "red": 8,
-    "yellow": 27,
+    "red": 9,
+    "yellow": 26,
     "green": 65,
     "gray": 0,
     "total": 100,
@@ -233,9 +233,9 @@
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 27,
+      "yellow": 28,
       "purple": 0,
-      "sole_yellow": 19
+      "sole_yellow": 18
     },
     "boll_rsi": {
       "label": "布林+RSI",
@@ -247,23 +247,23 @@
     "ma_cross": {
       "label": "均线穿越",
       "red": 0,
-      "yellow": 1,
+      "yellow": 2,
       "purple": 0,
       "sole_yellow": 0
     },
     "ma_band": {
       "label": "长均线触及",
       "red": 0,
-      "yellow": 6,
+      "yellow": 7,
       "purple": 0,
-      "sole_yellow": 3
+      "sole_yellow": 2
     },
     "low52": {
       "label": "52周低位",
-      "red": 1,
-      "yellow": 1,
+      "red": 2,
+      "yellow": 0,
       "purple": 0,
-      "sole_yellow": 1
+      "sole_yellow": 0
     },
     "add_price": {
       "label": "加仓价",
@@ -419,6 +419,18 @@
           ]
         },
         {
+          "symbol": "HII",
+          "note": "亨廷顿英格尔斯工业",
+          "group": "position",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "red",
+              "label": "布林下轨"
+            }
+          ]
+        },
+        {
           "symbol": "CRSP",
           "note": "CRISPR-基因编辑",
           "group": "position",
@@ -926,18 +938,6 @@
           ]
         },
         {
-          "symbol": "CAT",
-          "note": "卡特彼勒",
-          "group": "industrials",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
-            }
-          ]
-        },
-        {
           "symbol": "VRT",
           "note": "维谛技术",
           "group": "industrials",
@@ -1026,6 +1026,18 @@
               "label": "跌破250日均线"
             }
           ]
+        },
+        {
+          "symbol": "XLB",
+          "note": "原材料精选行业ETF",
+          "group": "materials",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "cyan",
+              "label": "跌破250日均线"
+            }
+          ]
         }
       ],
       "purple": [],
@@ -1083,14 +1095,26 @@
           ]
         },
         {
-          "symbol": "XLB",
-          "note": "原材料精选行业ETF",
-          "group": "materials",
+          "symbol": "CAT",
+          "note": "卡特彼勒",
+          "group": "industrials",
           "indicators": [
             {
               "shape": "▲",
               "tone": "cyan",
               "label": "现价在均线上方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "XLB",
+          "note": "原材料精选行业ETF",
+          "group": "materials",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "cyan",
+              "label": "现价在均线下方，日内触及"
             }
           ]
         },
@@ -1122,18 +1146,6 @@
           ]
         },
         {
-          "symbol": "XLB",
-          "note": "原材料精选行业ETF",
-          "group": "materials",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "cyan",
-              "label": "现价在均线上方，日内触及"
-            }
-          ]
-        },
-        {
           "symbol": "XLC",
           "note": "通信服务精选行业ETF",
           "group": "communications",
@@ -1150,26 +1162,19 @@
     "low52": {
       "red": [
         {
+          "symbol": "HII",
+          "note": "亨廷顿英格尔斯工业",
+          "group": "position"
+        },
+        {
           "symbol": "NOC",
           "note": "诺斯罗普格鲁曼",
           "group": "industrials"
         }
       ],
-      "yellow": [
-        {
-          "symbol": "HII",
-          "note": "亨廷顿英格尔斯工业",
-          "group": "position"
-        }
-      ],
+      "yellow": [],
       "purple": [],
-      "sole_yellow": [
-        {
-          "symbol": "HII",
-          "note": "亨廷顿英格尔斯工业",
-          "group": "position"
-        }
-      ]
+      "sole_yellow": []
     },
     "add_price": {
       "red": [],
@@ -1220,7 +1225,7 @@
     "max": "2026-10-13"
   },
   "macro_dates": {
-    "hy_oas": "2026-10-09",
+    "hy_oas": "2026-10-12",
     "vix": "2026-10-13",
     "sp500": "2026-10-13",
     "ust10": "2026-10-13",
@@ -1229,7 +1234,7 @@
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.218999862670898,
+    "value": 5.2230000495910645,
     "date": "2026-10-13",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -1238,10 +1243,10 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.24399995803833008
+    "delta_month": 0.2480001449584961
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-13 22:58:43（盘中快照，北京时间） · 当日价 100 只 / 较早日线 0 只 / 无数据 0 只",
+  "data_time_text": "2026-10-14 00:09:08（盘中快照，北京时间） · 当日价 100 只 / 较早日线 0 只 / 无数据 0 只",
   "market_risk": {
     "level": "green",
     "label": "风险平稳",
@@ -1260,17 +1265,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 15.229999542236328,
+      "value": 15.369999885559082,
       "date": "2026-10-13",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7796.5,
+      "value": 7794.080078125,
       "date": "2026-10-13",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.2868701379470817
+      "drawdown": -0.31781966455234345
     }
   },
   "nfci_cache": {
@@ -2392,27 +2397,27 @@
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
       "due": 21,
-      "deferred": 21,
-      "tried": 0,
-      "ok": 0,
+      "deferred": 9,
+      "tried": 12,
+      "ok": 12,
       "none": 0,
       "fail": 0,
       "stopped": "",
       "quota": {
-        "date": "2026-10-13",
+        "date": "2026-10-14",
         "symbols": [
-          "MCD",
-          "META",
-          "MRVL",
-          "MU",
-          "NEE",
-          "NFLX",
-          "NOC",
-          "NOW",
-          "NU",
-          "NVDA",
-          "NXPI",
-          "PANW"
+          "GEHC",
+          "PG",
+          "PLTR",
+          "QCOM",
+          "RTX",
+          "SKHY",
+          "SNDK",
+          "SNOW",
+          "SPCX",
+          "SPGI",
+          "STX",
+          "SYK"
         ],
         "retry_symbols": []
       }
@@ -2493,6 +2498,12 @@
         "ne": "2026-11-04"
       },
       "GEHC": {
+        "s": "ok",
+        "avg": 82.7,
+        "upd": "2026-10-12",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-10-28"
       },
       "ZS": {
@@ -2560,6 +2571,12 @@
         "ne": "2026-10-28"
       },
       "SYK": {
+        "s": "ok",
+        "avg": 362.62,
+        "upd": "2026-10-13",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-10-29"
       },
       "U": {
@@ -2575,6 +2592,12 @@
         "ne": "2026-10-27"
       },
       "SNOW": {
+        "s": "ok",
+        "avg": 425.14,
+        "upd": "2026-10-12",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-12-02"
       },
       "MU": {
@@ -2586,9 +2609,21 @@
         "try": "2026-10-13"
       },
       "SNDK": {
+        "s": "ok",
+        "avg": 2173.0,
+        "upd": "2026-10-09",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-10-29"
       },
       "STX": {
+        "s": "ok",
+        "avg": 1144.35,
+        "upd": "2026-10-09",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-10-27"
       },
       "NOW": {
@@ -2619,6 +2654,12 @@
         "ne": "2026-10-28"
       },
       "QCOM": {
+        "s": "ok",
+        "avg": 194.13,
+        "upd": "2026-09-23",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-11-04"
       },
       "ANET": {
@@ -2713,6 +2754,12 @@
         "ne": "2026-10-27"
       },
       "PLTR": {
+        "s": "ok",
+        "avg": 205.27,
+        "upd": "2026-10-12",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-11-02"
       },
       "LRCX": {
@@ -2806,6 +2853,12 @@
         "ne": "2026-10-22"
       },
       "SPGI": {
+        "s": "ok",
+        "avg": 516.43,
+        "upd": "2026-10-13",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-10-27"
       },
       "GS": {
@@ -2889,6 +2942,12 @@
         "try": "2026-10-12"
       },
       "SPCX": {
+        "s": "ok",
+        "avg": 221.26,
+        "upd": "2026-10-12",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-11-03"
       },
       "CAT": {
@@ -2910,6 +2969,12 @@
         "ne": "2026-10-20"
       },
       "RTX": {
+        "s": "ok",
+        "avg": 230.13,
+        "upd": "2026-10-13",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-10-20"
       },
       "VRT": {
@@ -2955,6 +3020,12 @@
         "ne": "2026-11-19"
       },
       "PG": {
+        "s": "ok",
+        "avg": 161.22,
+        "upd": "2026-10-09",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14",
         "ne": "2026-10-22"
       },
       "KO": {
@@ -3016,23 +3087,31 @@
       },
       "TSLA": {
         "ne": "2026-10-21"
+      },
+      "SKHY": {
+        "s": "ok",
+        "avg": 252.21,
+        "upd": "2026-10-06",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14"
       }
     },
     "quota": {
-      "date": "2026-10-13",
+      "date": "2026-10-14",
       "symbols": [
-        "MCD",
-        "META",
-        "MRVL",
-        "MU",
-        "NEE",
-        "NFLX",
-        "NOC",
-        "NOW",
-        "NU",
-        "NVDA",
-        "NXPI",
-        "PANW"
+        "GEHC",
+        "PG",
+        "PLTR",
+        "QCOM",
+        "RTX",
+        "SKHY",
+        "SNDK",
+        "SNOW",
+        "SPCX",
+        "SPGI",
+        "STX",
+        "SYK"
       ],
       "retry_symbols": []
     }
@@ -3610,16 +3689,16 @@
       }
     },
     "events": {
-      "GS": [
-        "2026-10-13"
-      ],
-      "JPM": [
+      "JNJ": [
         "2026-10-13"
       ],
       "UNH": [
         "2026-10-13"
       ],
-      "JNJ": [
+      "GS": [
+        "2026-10-13"
+      ],
+      "JPM": [
         "2026-10-13"
       ]
     }
@@ -3656,16 +3735,16 @@
       "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 93.69000244140625,
+      "price": 94.16999816894531,
       "date": "2026-10-13",
       "contract": "Crude Oil Nov 26",
-      "day": -0.053334140711137366,
+      "day": 0.4587159323394597,
       "day_from": "2026-10-12",
-      "week": 4.751788779058063,
-      "month": -7.007441745502481,
+      "week": 5.288456617202985,
+      "month": -6.531019187151057,
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-13T22:57:52.218726+08:00"
+    "assessed_at": "2026-10-14T00:07:46.286593+08:00"
   }
 }
