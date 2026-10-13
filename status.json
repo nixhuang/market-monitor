@@ -9,13 +9,13 @@
     "next_in": 13,
     "next_date": "2026-10-29"
   },
-  "run_id": "38374787359",
+  "run_id": "38377119680",
   "request_id": "",
-  "source_sha": "a103b6cb4eda2c1c70e7dc35bf8bc66a747058e0",
-  "started_at": "2026-10-13T09:13:37+00:00",
-  "started_at_bj": "2026-10-13T17:13:37+08:00",
-  "finished_at": "2026-10-13T17:14:23.803248+08:00",
-  "finished_at_bj": "2026-10-13T17:14:23+08:00",
+  "source_sha": "882d6b080111944dbf2fa0bd195b90c491dfbcd3",
+  "started_at": "2026-10-13T09:33:04+00:00",
+  "started_at_bj": "2026-10-13T17:33:04+08:00",
+  "finished_at": "2026-10-13T17:34:05.115793+08:00",
+  "finished_at_bj": "2026-10-13T17:34:05+08:00",
   "event": "push",
   "target_trade_date": "2026-10-12",
   "mode": "closed",
@@ -1420,9 +1420,9 @@
           "group": "position",
           "indicators": [
             {
-              "shape": "▲",
+              "shape": "□",
               "tone": "purple",
-              "label": "目标价或共识价高于现价，存在空间"
+              "label": "目标价或共识价上涨空间达到提示标准"
             }
           ]
         },
@@ -3685,10 +3685,10 @@
       "UNH": [
         "2026-10-13"
       ],
-      "GS": [
+      "JNJ": [
         "2026-10-13"
       ],
-      "JNJ": [
+      "GS": [
         "2026-10-13"
       ],
       "JPM": [
@@ -3738,6 +3738,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-13T17:14:16.425780+08:00"
+    "assessed_at": "2026-10-13T17:33:56.787511+08:00"
   }
 }
