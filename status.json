@@ -9,19 +9,19 @@
     "next_in": 13,
     "next_date": "2026-10-29"
   },
-  "run_id": "38377119680",
+  "run_id": "38381659100",
   "request_id": "",
-  "source_sha": "882d6b080111944dbf2fa0bd195b90c491dfbcd3",
-  "started_at": "2026-10-13T09:33:04+00:00",
-  "started_at_bj": "2026-10-13T17:33:04+08:00",
-  "finished_at": "2026-10-13T17:34:05.115793+08:00",
-  "finished_at_bj": "2026-10-13T17:34:05+08:00",
+  "source_sha": "492d83625162ba74249c1783d2837d35eec4e908",
+  "started_at": "2026-10-13T10:11:29+00:00",
+  "started_at_bj": "2026-10-13T18:11:29+08:00",
+  "finished_at": "2026-10-13T18:12:21.491394+08:00",
+  "finished_at_bj": "2026-10-13T18:12:21+08:00",
   "event": "push",
   "target_trade_date": "2026-10-12",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "9c8ced4961468213c67a0bfc9fe1d61dd5e9109d",
+    "holdings.json": "aa24dab0eddd237d896f7dcc53a4076824f8cec5",
     "settings.json": "a3996325650bd399123d04628467db8c979335be"
   },
   "effective_settings": {
@@ -155,7 +155,7 @@
     "positions": 15,
     "focus": 8,
     "index_funds": 2,
-    "technology": 37,
+    "technology": 36,
     "healthcare": 8,
     "financials": 14,
     "energy": 2,
@@ -171,7 +171,7 @@
     "positions": 15,
     "focus": 8,
     "index_funds": 2,
-    "technology": 28,
+    "technology": 27,
     "healthcare": 6,
     "financials": 11,
     "energy": 2,
@@ -187,17 +187,17 @@
     "dca": 1
   },
   "summary": {
-    "red": 11,
-    "yellow": 32,
-    "green": 56,
+    "red": 10,
+    "yellow": 16,
+    "green": 72,
     "gray": 0,
-    "total": 99,
+    "total": 98,
     "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 99,
+    "today_prices": 98,
     "prior_prices": 0,
     "missing_prices": 0
   },
@@ -233,9 +233,9 @@
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 37,
+      "yellow": 15,
       "purple": 0,
-      "sole_yellow": 26
+      "sole_yellow": 10
     },
     "boll_rsi": {
       "label": "布林+RSI",
@@ -256,11 +256,11 @@
       "red": 0,
       "yellow": 5,
       "purple": 0,
-      "sole_yellow": 2
+      "sole_yellow": 4
     },
     "low52": {
       "label": "52周低位",
-      "red": 2,
+      "red": 1,
       "yellow": 1,
       "purple": 0,
       "sole_yellow": 1
@@ -593,30 +593,6 @@
           ]
         },
         {
-          "symbol": "U",
-          "note": "Unity-游戏引擎",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "SNOW",
-          "note": "Snowflake-数据云",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
           "symbol": "SKHY",
           "note": "SK海力士ADR",
           "group": "technology",
@@ -637,246 +613,6 @@
               "shape": "▼",
               "tone": "red",
               "label": "布林下轨"
-            }
-          ]
-        },
-        {
-          "symbol": "NOW",
-          "note": "ServiceNow-工作流软件",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "FTNT",
-          "note": "Fortinet-防火墙",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "PANW",
-          "note": "Palo Alto-网络安全",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "PLTR",
-          "note": "Palantir-AI数据分析",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "XLV",
-          "note": "医疗保健精选行业ETF",
-          "group": "healthcare",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "ABBV",
-          "note": "艾伯维",
-          "group": "healthcare",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "ISRG",
-          "note": "直觉外科",
-          "group": "healthcare",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "CB",
-          "note": "安达保险",
-          "group": "financials",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "SPGI",
-          "note": "标普全球",
-          "group": "financials",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "XLE",
-          "note": "能源精选行业ETF",
-          "group": "energy",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "XOM",
-          "note": "埃克森美孚",
-          "group": "energy",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "LIN",
-          "note": "林德-工业气体",
-          "group": "materials",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "CEG",
-          "note": "Constellation-核电",
-          "group": "utilities",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "XLP",
-          "note": "必需消费精选行业ETF",
-          "group": "consumer_staples",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "WMT",
-          "note": "沃尔玛",
-          "group": "consumer_staples",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "PG",
-          "note": "宝洁",
-          "group": "consumer_staples",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "KO",
-          "note": "可口可乐",
-          "group": "consumer_staples",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "TTWO",
-          "note": "Take-Two-游戏",
-          "group": "communications",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "XLY",
-          "note": "非必需消费精选行业ETF",
-          "group": "consumer_discretionary",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "AMZN",
-          "note": "亚马逊",
-          "group": "consumer_discretionary",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
             }
           ]
         }
@@ -980,30 +716,6 @@
           ]
         },
         {
-          "symbol": "U",
-          "note": "Unity-游戏引擎",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "SNOW",
-          "note": "Snowflake-数据云",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
           "symbol": "SKHY",
           "note": "SK海力士ADR",
           "group": "technology",
@@ -1024,174 +736,6 @@
               "shape": "▼",
               "tone": "red",
               "label": "布林下轨"
-            }
-          ]
-        },
-        {
-          "symbol": "NOW",
-          "note": "ServiceNow-工作流软件",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "PANW",
-          "note": "Palo Alto-网络安全",
-          "group": "technology",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "XLV",
-          "note": "医疗保健精选行业ETF",
-          "group": "healthcare",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "ISRG",
-          "note": "直觉外科",
-          "group": "healthcare",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "CB",
-          "note": "安达保险",
-          "group": "financials",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "SPGI",
-          "note": "标普全球",
-          "group": "financials",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "XLE",
-          "note": "能源精选行业ETF",
-          "group": "energy",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "LIN",
-          "note": "林德-工业气体",
-          "group": "materials",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "WMT",
-          "note": "沃尔玛",
-          "group": "consumer_staples",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "PG",
-          "note": "宝洁",
-          "group": "consumer_staples",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "KO",
-          "note": "可口可乐",
-          "group": "consumer_staples",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "TTWO",
-          "note": "Take-Two-游戏",
-          "group": "communications",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "XLY",
-          "note": "非必需消费精选行业ETF",
-          "group": "consumer_discretionary",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "AMZN",
-          "note": "亚马逊",
-          "group": "consumer_discretionary",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
             }
           ]
         }
@@ -1366,6 +910,30 @@
               "label": "现价在均线上方，日内触及"
             }
           ]
+        },
+        {
+          "symbol": "CEG",
+          "note": "Constellation-核电",
+          "group": "utilities",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "cyan",
+              "label": "现价在均线下方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "XLP",
+          "note": "必需消费精选行业ETF",
+          "group": "consumer_staples",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "现价在均线上方，日内触及"
+            }
+          ]
         }
       ]
     },
@@ -1375,11 +943,6 @@
           "symbol": "HII",
           "note": "亨廷顿英格尔斯工业",
           "group": "position"
-        },
-        {
-          "symbol": "APP",
-          "note": "AppLovin-广告",
-          "group": "technology"
         }
       ],
       "yellow": [
@@ -1452,7 +1015,7 @@
     "sp500": "2026-10-12",
     "ust10": "2026-10-12",
     "nfci": "2026-10-02",
-    "breadth": "2026-10-09"
+    "breadth": "2026-10-12"
   },
   "treasury_reference": {
     "ok": true,
@@ -2632,15 +2195,6 @@
         "try": "2026-10-09",
         "ne": "2026-10-28"
       },
-      "APP": {
-        "s": "ok",
-        "avg": 487.66,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
-        "r_tz": "America/New_York",
-        "try": "2026-10-10",
-        "ne": "2026-11-04"
-      },
       "U": {
         "ne": "2026-11-04"
       },
@@ -3117,12 +2671,12 @@
     }
   },
   "earnings": {
-    "targets": 82,
-    "dated": 71,
+    "targets": 81,
+    "dated": 70,
     "pending": 11,
     "failed": 0,
     "fetched": 0,
-    "cached": 82,
+    "cached": 81,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -3246,13 +2800,6 @@
       "MSFT": {
         "status": "ok",
         "date": "2026-10-28",
-        "timing": "post",
-        "kind": "expected",
-        "fetched": "2026-10-10"
-      },
-      "APP": {
-        "status": "ok",
-        "date": "2026-11-04",
         "timing": "post",
         "kind": "expected",
         "fetched": "2026-10-10"
@@ -3685,13 +3232,13 @@
       "UNH": [
         "2026-10-13"
       ],
-      "JNJ": [
-        "2026-10-13"
-      ],
       "GS": [
         "2026-10-13"
       ],
       "JPM": [
+        "2026-10-13"
+      ],
+      "JNJ": [
         "2026-10-13"
       ]
     }
@@ -3738,6 +3285,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-13T17:33:56.787511+08:00"
+    "assessed_at": "2026-10-13T18:12:11.814995+08:00"
   }
 }
