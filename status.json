@@ -9,13 +9,13 @@
     "next_in": 12,
     "next_date": "2026-10-29"
   },
-  "run_id": "38409660973",
+  "run_id": "38412140988",
   "request_id": "",
-  "source_sha": "7daa115f737b8a20c57d2eba7657dd8df2278d2a",
-  "started_at": "2026-10-13T14:00:23+00:00",
-  "started_at_bj": "2026-10-13T22:00:23+08:00",
-  "finished_at": "2026-10-13T22:02:16.221837+08:00",
-  "finished_at_bj": "2026-10-13T22:02:16+08:00",
+  "source_sha": "3aec60441ce3483a0bae1352b1fcbb91a220c7f9",
+  "started_at": "2026-10-13T14:17:54+00:00",
+  "started_at_bj": "2026-10-13T22:17:54+08:00",
+  "finished_at": "2026-10-13T22:19:27.045579+08:00",
+  "finished_at_bj": "2026-10-13T22:19:27+08:00",
   "event": "push",
   "target_trade_date": "2026-10-13",
   "mode": "manual_or_config",
@@ -187,12 +187,12 @@
     "dca": 1
   },
   "summary": {
-    "red": 12,
-    "yellow": 25,
+    "red": 11,
+    "yellow": 26,
     "green": 63,
     "gray": 0,
     "total": 100,
-    "macro_ok": 5,
+    "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
@@ -226,20 +226,20 @@
     "rsi": {
       "label": "RSI",
       "red": 0,
-      "yellow": 11,
+      "yellow": 10,
       "purple": 0,
       "sole_yellow": 0
     },
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 26,
+      "yellow": 27,
       "purple": 0,
-      "sole_yellow": 17
+      "sole_yellow": 18
     },
     "boll_rsi": {
       "label": "布林+RSI",
-      "red": 11,
+      "red": 10,
       "yellow": 0,
       "purple": 0,
       "sole_yellow": 0
@@ -247,7 +247,7 @@
     "ma_cross": {
       "label": "均线穿越",
       "red": 0,
-      "yellow": 2,
+      "yellow": 1,
       "purple": 0,
       "sole_yellow": 0
     },
@@ -256,7 +256,7 @@
       "red": 0,
       "yellow": 6,
       "purple": 0,
-      "sole_yellow": 2
+      "sole_yellow": 3
     },
     "low52": {
       "label": "52周低位",
@@ -424,18 +424,6 @@
           ]
         },
         {
-          "symbol": "XLE",
-          "note": "能源精选行业ETF",
-          "group": "energy",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI超买"
-            }
-          ]
-        },
-        {
           "symbol": "XOM",
           "note": "埃克森美孚",
           "group": "energy",
@@ -765,6 +753,18 @@
               "label": "布林下轨"
             }
           ]
+        },
+        {
+          "symbol": "TTWO",
+          "note": "Take-Two-游戏",
+          "group": "communications",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "red",
+              "label": "布林下轨"
+            }
+          ]
         }
       ],
       "purple": [],
@@ -972,6 +972,18 @@
               "label": "布林下轨"
             }
           ]
+        },
+        {
+          "symbol": "TTWO",
+          "note": "Take-Two-游戏",
+          "group": "communications",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "red",
+              "label": "布林下轨"
+            }
+          ]
         }
       ]
     },
@@ -1032,12 +1044,6 @@
           "direction": "上轨（超买）"
         },
         {
-          "symbol": "XLE",
-          "note": "能源精选行业ETF",
-          "group": "energy",
-          "direction": "上轨（超买）"
-        },
-        {
           "symbol": "XOM",
           "note": "埃克森美孚",
           "group": "energy",
@@ -1055,18 +1061,6 @@
           "symbol": "XLI",
           "note": "工业精选行业ETF",
           "group": "position",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ]
-        },
-        {
-          "symbol": "XLB",
-          "note": "原材料精选行业ETF",
-          "group": "materials",
           "indicators": [
             {
               "shape": "▼",
@@ -1136,9 +1130,9 @@
           "group": "materials",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "▲",
               "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
+              "label": "现价在均线上方，日内触及"
             }
           ]
         },
@@ -1166,6 +1160,18 @@
               "shape": "▼",
               "tone": "cyan",
               "label": "现价在均线下方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "XLB",
+          "note": "原材料精选行业ETF",
+          "group": "materials",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "现价在均线上方，日内触及"
             }
           ]
         },
@@ -1251,9 +1257,9 @@
           "group": "focus",
           "indicators": [
             {
-              "shape": "▲",
+              "shape": "■",
               "tone": "purple",
-              "label": "当日上穿目标价或共识价"
+              "label": "现价在目标价或共识价范围内"
             }
           ]
         }
@@ -1270,12 +1276,12 @@
     "vix": "2026-10-13",
     "sp500": "2026-10-13",
     "ust10": "2026-10-13",
-    "nfci": "",
+    "nfci": "2026-10-02",
     "breadth": "2026-10-12"
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.206000328063965,
+    "value": 5.2270002365112305,
     "date": "2026-10-13",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -1284,49 +1290,47 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.23100042343139648
+    "delta_month": 0.2520003318786621
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-13 22:02:16（盘中快照，北京时间） · 当日价 100 只 / 较早日线 0 只 / 无数据 0 只",
+  "data_time_text": "2026-10-13 22:19:27（盘中快照，北京时间） · 当日价 100 只 / 较早日线 0 只 / 无数据 0 只",
   "market_risk": {
-    "level": "yellow",
-    "label": "数据不足",
-    "text": "已取得的指标未触发警示；风险得分 0/8；缺失或过期：金融压力",
+    "level": "green",
+    "label": "风险平稳",
+    "text": "已取得的指标未触发警示；风险得分 0/8",
     "score": 0,
     "levels": {
       "hy_oas": "green",
       "vix": "green",
       "sp500": "green",
       "breadth": "green",
-      "nfci": "gray"
+      "nfci": "green"
     },
-    "valid_count": 4,
-    "missing": [
-      "金融压力"
-    ]
+    "valid_count": 5,
+    "missing": []
   },
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 15.1899995803833,
+      "value": 15.3100004196167,
       "date": "2026-10-13",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7807.2099609375,
+      "value": 7800.8701171875,
       "date": "2026-10-13",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.14989537673648634
+      "drawdown": -0.23097864014299807
     }
   },
   "fundamental": {
     "checked": 19,
     "red": 4,
     "yellow": 6,
-    "fetched": 3,
-    "cached": 17,
+    "fetched": 1,
+    "cached": 19,
     "data": {
       "BRK-B": {
         "attempted": "2026-10-13",
@@ -3051,8 +3055,8 @@
     "dated": 72,
     "pending": 11,
     "failed": 0,
-    "fetched": 2,
-    "cached": 81,
+    "fetched": 0,
+    "cached": 83,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -3619,16 +3623,16 @@
       }
     },
     "events": {
-      "UNH": [
+      "JNJ": [
+        "2026-10-13"
+      ],
+      "GS": [
         "2026-10-13"
       ],
       "JPM": [
         "2026-10-13"
       ],
-      "JNJ": [
-        "2026-10-13"
-      ],
-      "GS": [
+      "UNH": [
         "2026-10-13"
       ]
     }
@@ -3665,16 +3669,16 @@
       "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 93.12999725341797,
+      "price": 93.45999908447266,
       "date": "2026-10-13",
       "contract": "Crude Oil Nov 26",
-      "day": -0.650736744455725,
+      "day": -0.2986972324277057,
       "day_from": "2026-10-12",
-      "week": 4.125664927647002,
-      "month": -7.563278160379186,
+      "week": 4.49462939773507,
+      "month": -7.2357329186375585,
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-13T22:01:12.469333+08:00"
+    "assessed_at": "2026-10-13T22:18:31.183459+08:00"
   }
 }
