@@ -9,13 +9,13 @@
     "next_in": 13,
     "next_date": "2026-10-29"
   },
-  "run_id": "38334261220",
+  "run_id": "38334479240",
   "request_id": "",
-  "source_sha": "63711b4f7363c8befacce36ef1c17be1663fcb21",
-  "started_at": "2026-10-13T01:53:14+00:00",
-  "started_at_bj": "2026-10-13T09:53:14+08:00",
-  "finished_at": "2026-10-13T09:54:32.802210+08:00",
-  "finished_at_bj": "2026-10-13T09:54:32+08:00",
+  "source_sha": "b769fabede4f16f0f2f13ede9e2bb970da1e77dd",
+  "started_at": "2026-10-13T01:56:02+00:00",
+  "started_at_bj": "2026-10-13T09:56:02+08:00",
+  "finished_at": "2026-10-13T09:56:51.962987+08:00",
+  "finished_at_bj": "2026-10-13T09:56:51+08:00",
   "event": "push",
   "target_trade_date": "2026-10-12",
   "mode": "closed",
@@ -1881,10 +1881,10 @@
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 31,
+      "due": 19,
       "deferred": 19,
-      "tried": 12,
-      "ok": 12,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -2066,6 +2066,14 @@
       },
       "SNOW": {
         "ne": "2026-12-02"
+      },
+      "MU": {
+        "s": "ok",
+        "avg": 1555.13,
+        "upd": "2026-10-08",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13"
       },
       "SNDK": {
         "ne": "2026-10-29"
@@ -2489,14 +2497,6 @@
       },
       "TSLA": {
         "ne": "2026-10-21"
-      },
-      "MU": {
-        "s": "ok",
-        "avg": 1555.13,
-        "upd": "2026-10-08",
-        "r": "2026-10-12",
-        "r_tz": "America/New_York",
-        "try": "2026-10-13"
       }
     },
     "quota": {
@@ -3129,16 +3129,16 @@
       "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 92.7300033569336,
+      "price": 92.7699966430664,
       "date": "2026-10-12",
       "contract": "Crude Oil Nov 26",
-      "day": 0.958089164324203,
+      "day": 1.0016311205541404,
       "day_from": "2026-10-09",
-      "week": 3.6900403002311424,
-      "month": -4.53983535147601,
+      "week": 3.7347605126837027,
+      "month": -4.498664581057968,
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-13T09:53:58.485323+08:00"
+    "assessed_at": "2026-10-13T09:56:44.338271+08:00"
   }
 }
