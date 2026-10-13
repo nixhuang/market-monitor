@@ -2905,10 +2905,13 @@ class TestMaConfirm(unittest.TestCase):
     def test_long_ma_band_is_plus_minus_one_percent(self):
         for last, hit in ((100.9, True), (99.1, True), (101.5, False), (98.5, False)):
             with self.subTest(price=last):
-                lv, signals, _ = self.run_sym(self.flat(last=(100.0, last)))
+                lv, signals, detail = self.run_sym(self.flat(last=(100.0, last)))
                 self.assertEqual(any('日内触及250日均线' in x for x in signals), hit, signals)
                 if hit:
                     self.assertEqual(lv, 'yellow')
+                    self.assertEqual(detail['ma_band_direction'], 'up' if last > 100 else 'down')
+                else:
+                    self.assertEqual(detail['ma_band_direction'], '')
 
     def test_long_ma_big_gap_cross_alerts_outside_band(self):
         for last, expected in (((99.0, 105.0), '上穿250日均线'),
@@ -3429,8 +3432,89 @@ class TestSignalCounts(unittest.TestCase):
                     self.assertEqual(len(snap['signal_members'][kind][level]), counts[level])
         output = monitor._signal_counts_card(snap)
         self.assertNotIn('明细待下次更新', output)
-        self.assertIn('红色信号 · 1 只', self.panel(output, 'chg', 'red'))
+        for kind, level in (('chg', 'red'), ('rsi', 'yellow'), ('boll', 'yellow'), ('boll', 'sole_yellow')):
+            panel = self.panel(output, kind, level)
+            self.assertNotRegex(panel, r'信号 · .*? 只|仅此一条黄灯 · \d+ 只')
         self.assertIn('signal-member-symbol">AAA', self.panel(output, 'rsi', 'yellow'))
+
+    def test_member_icons_cover_single_indicators_cross_touch_and_target(self):
+        rows = [
+            self.member_row('UP', 'position', 'yellow', ('rsi', 'yellow'), ('boll', 'yellow'),
+                            ('ma_cross', 'yellow'), ('ma_band', 'yellow'), ('target', 'purple')),
+            self.member_row('DOWN', 'focus', 'yellow', ('rsi', 'yellow'), ('boll', 'yellow'),
+                            ('ma_cross', 'yellow'), ('ma_band', 'yellow'), ('target', 'purple')),
+            self.member_row('LEVEL', 'technology', 'yellow', ('ma_band', 'yellow')),
+            self.member_row('SPACE', 'focus', 'green', ('target', 'purple')),
+        ]
+        rows[0].update(signals=['RSI 2条超买（≥70）：RSI6=80', '突破布林上轨 100',
+                                '上穿60日均线', '日内触及120日均线 ±1%区间',
+                                '在共识价 200 ±3% 内（偏离 +1%）'],
+                       ma_band_direction='up')
+        rows[1].update(signals=['RSI 3条超卖（≤30）：RSI6=20', '触及布林下轨 90',
+                                '跌破120日均线', '现价贴近120日均线 -0.1%（仅按现价）',
+                                '今日跌破目标价 90'], ma_band_direction='down')
+        rows[2].update(signals=['日内触及120日均线 ±1%区间'], ma_band_direction='level')
+        rows[3].update(signals=['共识价 200，空间 +55%'])
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        cases = {
+            ('rsi', 'yellow'): [('RSI超买', 'tone-yellow', '▲'), ('RSI超卖', 'tone-red', '▼')],
+            ('boll', 'yellow'): [('布林上轨', 'tone-yellow', '▲'), ('布林下轨', 'tone-red', '▼')],
+            ('ma_cross', 'yellow'): [('上穿60日均线', 'tone-cyan', '▲'), ('跌破120日均线', 'tone-cyan', '▼')],
+            ('ma_band', 'yellow'): [('现价在均线上方', 'tone-cyan', '▲'),
+                                   ('现价在均线下方', 'tone-cyan', '▼'),
+                                   ('现价与均线相等', 'tone-cyan', '■')],
+            ('target', 'purple'): [('现价在目标价或共识价范围内', 'tone-purple', '■'),
+                                   ('目标价或共识价高于现价，存在空间', 'tone-purple', '▲'),
+                                   ('当日跌破目标价或共识价', 'tone-purple', '▼')],
+        }
+        output = monitor._signal_counts_card(snap)
+        for (kind, level), expected in cases.items():
+            panel = self.panel(output, kind, level)
+            self.assertNotRegex(panel, r'<p><strong>.*?信号.*?</strong></p>')
+            for label, tone, shape in expected:
+                with self.subTest(kind=kind, label=label):
+                    self.assertRegex(panel, f'class="signal-member-icon {tone}"[^>]*aria-label="{re.escape(label)}[^\"]*"[^>]*>{shape}</span>')
+        self.assertEqual(snap['signal_counts']['target']['purple'], 3)
+        target = self.panel(output, 'target', 'purple')
+        self.assertEqual(target.count('tone-purple'), 3)
+        self.assertEqual(self.panel(output, 'ma_band', 'sole_yellow').count('tone-cyan'), 1)
+
+    def test_target_same_symbol_can_show_square_and_up_without_double_count(self):
+        row = self.member_row('BOTH', 'focus', 'green', ('target', 'purple'), ('target', 'purple'))
+        row['signals'] = ['在目标价 120 ±55% 内（偏离 -36.7%）', '目标价 120，空间 +58%']
+        counts = monitor.signal_counts([row])
+        members = monitor.signal_count_members([row])
+        self.assertEqual(counts['target']['purple'], 1)
+        self.assertEqual(len(members['target']['purple']), 1)
+        output = self.panel(monitor._signal_counts_card({'signal_counts': counts,
+                            'signal_members': members}), 'target', 'purple')
+        self.assertIn('tone-purple" role="img" aria-label="现价在目标价或共识价范围内" title="现价在目标价或共识价范围内">■', output)
+        self.assertIn('tone-purple" role="img" aria-label="目标价或共识价高于现价，存在空间" title="目标价或共识价高于现价，存在空间">▲', output)
+        self.assertEqual(output.count('signal-member-icon'), 2)
+
+    def test_old_snapshot_missing_icons_does_not_infer_direction(self):
+        row = self.member_row('OLDER', 'position', 'yellow', ('rsi', 'yellow'), ('boll', 'yellow'))
+        snap = monitor.build_snapshot({}, [row], {}, group_counts={})
+        output = monitor._signal_counts_card(snap)
+        for kind in ('rsi', 'boll'):
+            panel = self.panel(output, kind, 'yellow')
+            self.assertIn('方向待下次更新', panel)
+            self.assertNotIn('signal-member-icon', panel)
+
+    def test_icon_data_is_whitelisted_and_escaped(self):
+        counts = {'rsi': {'label': 'RSI', 'yellow': 1}}
+        member = {'symbol': 'X', 'note': '', 'group': 'focus', 'indicators': [
+            {'shape': '▲', 'tone': 'yellow', 'label': '<img src=x onerror=alert(1)>'},
+            {'shape': '<svg>', 'tone': 'red', 'label': 'bad'},
+            {'shape': '■', 'tone': '\" onclick=alert(1)', 'label': 'bad'},
+        ]}
+        panel = self.panel(monitor._signal_counts_card({'signal_counts': counts,
+            'signal_members': {'rsi': {'yellow': [member]}}}), 'rsi', 'yellow')
+        self.assertIn('&lt;img src=x onerror=alert(1)&gt;', panel)
+        self.assertNotIn('<img ', panel)
+        self.assertNotIn('<svg>', panel)
+        self.assertNotIn('onclick=', panel)
+        self.assertEqual(panel.count('signal-member-icon'), 1)
 
     def test_combined_red_members_show_direction_without_guessing_old_snapshot(self):
         rows = [self.member_row('UP', 'position', 'red', ('boll_rsi', 'red'), note='上方'),
@@ -3446,10 +3530,13 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(len(members['boll_rsi']['red']), 4)
         output = self.panel(monitor._signal_counts_card({'signal_counts': counts,
                                                             'signal_members': members}), 'boll_rsi', 'red')
-        for label in ('上轨（超买）', '下轨（超卖）', '上轨（RSI超卖，方向不一致）', '方向待下次更新'):
+        for label in ('aria-label="上轨（超买）"', 'aria-label="下轨（超卖）"',
+                      '上轨（RSI超卖，方向不一致）', '方向待下次更新'):
             self.assertIn(label, output)
+        self.assertIn('signal-member-icon tone-yellow', output)
+        self.assertIn('signal-member-icon tone-red', output)
         self.assertIn('上方', output)
-        self.assertEqual(output.count('class="signal-member-direction"'), 4)
+        self.assertEqual(output.count('class="signal-member-direction"'), 2)
 
     def test_members_deduplicate_marks_not_cross_kind_or_level(self):
         row = self.member_row('AAA', 'position', 'red', ('rsi', 'red'), ('rsi', 'red'),
@@ -3478,7 +3565,7 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(members['rsi']['sole_yellow'], [])
         output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
         sole = self.panel(output, 'boll', 'sole_yellow')
-        self.assertIn('仅此一条黄灯 · 1 只', sole)
+        self.assertNotIn('仅此一条黄灯 · 1 只', sole)
         self.assertIn('>SOLE</span>', sole)
         self.assertNotIn('MULTI', sole)
         self.assertNotIn('>RED</span>', sole)
@@ -3495,7 +3582,7 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(snap['signal_members']['target']['sole_yellow'], [])
         output = monitor._signal_counts_card(snap)
         panel = self.panel(output, 'target', 'purple')
-        self.assertIn('紫色提示 · 2 只', panel)
+        self.assertNotIn('紫色提示 · 2 只', panel)
         self.assertIn('>GRAY</span>', panel)
         self.assertIn('>PURPLE</span>', panel)
         self.assertEqual(output.count('class="signal-count-toggle"'), 1)
@@ -3522,7 +3609,7 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(panel.count('class="signal-member-list"'), len(monitor.GROUPS))
         self.assertEqual(panel.count('class="signal-member-symbol"'), len(rows) + 1)
         self.assertIn('class="note">同组备注</span>', panel)
-        self.assertIn(f'红色信号 · {len(rows) + 1} 只', panel)
+        self.assertNotIn(f'红色信号 · {len(rows) + 1} 只', panel)
 
     def test_same_identity_keeps_priority_group_and_first_note(self):
         rows = [self.member_row('BRK-B', 'technology', 'yellow', ('boll', 'yellow'), note='行业备注'),
@@ -3613,7 +3700,7 @@ class TestSignalCounts(unittest.TestCase):
         for level in ('yellow', 'sole_yellow'):
             panel = self.panel(output, 'boll', level)
             self.assertIn('明细待下次更新', panel)
-            self.assertIn('1 只', panel)
+            self.assertNotIn('布林 · ', panel)
         self.assertNotIn('SECRET', output)
         self.assertNotIn('不可拼名单', output)
         self.assertNotIn('class="signal-member-symbol"', output)
@@ -3630,7 +3717,7 @@ class TestSignalCounts(unittest.TestCase):
                 output = monitor._signal_counts_card({'signal_counts': counts,
                            'signal_members': {'chg': {'red': entries}, 'target': {'purple': [good]}}})
                 panel = self.panel(output, 'chg', 'red')
-                self.assertIn('红色信号 · 2 只', panel)
+                self.assertNotIn('红色信号 · 2 只', panel)
                 self.assertIn('明细待下次更新', panel)
                 self.assertNotIn('class="signal-member-symbol"', panel)
                 self.assertNotIn('不可信', output)

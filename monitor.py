@@ -3118,6 +3118,7 @@ def _rule_moving_averages(al, x):
                             f"（日内 {day_low:,.2f}~{day_high:,.2f}，现价偏离 {gap_ma:+.1f}%）")
                 else:
                     text = f"现价贴近{ma_name}均线 {gap_ma:+.1f}%（日内高低缺失，仅按现价）"
+                x.ma_band_direction = "up" if price > ma_val else "down" if price < ma_val else "level"
                 al.add("ma_band", text, "yellow")
             prev_ma = sma(closes[:-1], period)
             if prev_ma:
@@ -3158,6 +3159,7 @@ def _analysis_detail(x, al):
         "boll_up": x.boll_up,
         "boll_dn": x.boll_dn,
         "boll_rsi_direction": getattr(x, "boll_rsi_direction", ""),
+        "ma_band_direction": getattr(x, "ma_band_direction", ""),
         # ETF 标签：静态表命中，或行情源明确给出 assetclass=etf
         "etf": is_etf(x.sym) or x.data.get("asset") == "etf",
         "signals": al.signals,
@@ -3297,6 +3299,51 @@ def signal_counts(items):
     return out
 
 
+def _member_direction_markers(d, kind):
+    """仅从本轮已经触发的信号取方向；图形只描述触轨/穿越位置，不预测后续涨跌。"""
+    signals = [s for s in (d.get("signals") or []) if isinstance(s, str)]
+    markers = []
+    def add(shape, tone, label):
+        marker = {"shape": shape, "tone": tone, "label": label}
+        if marker not in markers:
+            markers.append(marker)
+    if kind == "rsi":
+        if any(s.startswith("RSI ") and "条超买" in s for s in signals):
+            add("▲", "yellow", "RSI超买")
+        if any(s.startswith("RSI ") and "条超卖" in s for s in signals):
+            add("▼", "red", "RSI超卖")
+    elif kind == "boll":
+        if any(s.startswith(("突破布林上轨", "逼近布林上轨")) for s in signals):
+            add("▲", "yellow", "布林上轨")
+        if any(s.startswith(("跌破布林下轨", "触及布林下轨", "逼近布林下轨")) for s in signals):
+            add("▼", "red", "布林下轨")
+    elif kind == "ma_cross":
+        for s in signals:
+            match = re.match(r"^(上穿|跌破)(\d+)日(?:弱)?均线", s)
+            if match:
+                add("▲" if match[1] == "上穿" else "▼", "cyan",
+                    f"{match[1]}{match[2]}日均线")
+    elif kind == "ma_band":
+        side = d.get("ma_band_direction")
+        if side in ("up", "down", "level") and any(
+                s.startswith(("日内触及", "现价贴近")) and "均线" in s for s in signals):
+            shape = {"up": "▲", "down": "▼", "level": "■"}[side]
+            label = {"up": "现价在均线上方，日内触及", "down": "现价在均线下方，日内触及",
+                     "level": "现价与均线相等，日内触及"}[side]
+            add(shape, "cyan", label)
+    elif kind == "target":
+        for s in signals:
+            if s.startswith(("今日上穿目标价", "今日上穿共识价")):
+                add("▲", "purple", "当日上穿目标价或共识价")
+            elif s.startswith(("今日跌破目标价", "今日跌破共识价")):
+                add("▼", "purple", "当日跌破目标价或共识价")
+            elif s.startswith(("在目标价", "在共识价")) and " ±" in s:
+                add("■", "purple", "现价在目标价或共识价范围内")
+            elif s.startswith(("目标价 ", "共识价 ")) and "，空间 +" in s:
+                add("▲", "purple", "目标价或共识价高于现价，存在空间")
+    return markers
+
+
 def signal_count_members(items):
     """按原信号口径收集标的；重复身份沿用首页分类优先级，只保留第一条。"""
     levels = ("red", "yellow", "purple", "sole_yellow")
@@ -3319,11 +3366,19 @@ def signal_count_members(items):
                     entry = dict(member)
                     if kind == "boll_rsi" and level == "red" and d.get("boll_rsi_direction"):
                         entry["direction"] = d["boll_rsi_direction"]
+                    indicators = _member_direction_markers(d, kind) if kind != "target" or level == "purple" else []
+                    if indicators:
+                        entry["indicators"] = indicators
                     out[kind][level].append(entry)
         if d.get("level") == "yellow":
             yellow_kinds = {k for k, m in marks if m == "yellow"}
             if len(yellow_kinds) == 1 and next(iter(yellow_kinds)) in out:
-                out[next(iter(yellow_kinds))]["sole_yellow"].append(dict(member))
+                kind = next(iter(yellow_kinds))
+                entry = dict(member)
+                indicators = _member_direction_markers(d, kind)
+                if indicators:
+                    entry["indicators"] = indicators
+                out[kind]["sole_yellow"].append(entry)
     return out
 
 
@@ -3460,7 +3515,10 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel ul{margin:0;padding-left:18px}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
-#signalCounts .signal-member-direction{color:#f0c674;font-size:11px}
+#signalCounts .signal-member-direction{color:var(--dim);font-size:11px}
+#signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:14px;font-weight:700;line-height:1;vertical-align:baseline}
+#signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
+#signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
 .earn{display:block;margin:0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:11px}
@@ -3926,6 +3984,40 @@ def _run_light(snapshot, finished_txt):
                   f"绿{summary.get('green', 0)}{gray_txt} · {coverage}")
 
 
+def _member_icons(d, kind, level):
+    """只渲染已验证的方向标记；旧快照缺方向时显示待更新，绝不按当前报价反推。"""
+    esc = lambda value: html_lib.escape(str(value), quote=True)
+    if kind == "boll_rsi" and level == "red":
+        direction = str(d.get("direction") or "")
+        if direction == "上轨（超买）":
+            markers = [{"shape": "▲", "tone": "yellow", "label": direction}]
+        elif direction == "下轨（超卖）":
+            markers = [{"shape": "▼", "tone": "red", "label": direction}]
+        else:
+            known = ("上轨（RSI超卖，方向不一致）", "下轨（RSI超买，方向不一致）",
+                     "上轨（RSI超买/超卖均命中）", "下轨（RSI超买/超卖均命中）")
+            value = direction if direction in known else "方向待下次更新"
+            return f' <span class="signal-member-direction">{esc(value)}</span>'
+    elif kind in ("rsi", "boll", "ma_cross", "ma_band") or (kind == "target" and level == "purple"):
+        markers = d.get("indicators")
+        if not isinstance(markers, list) or not markers:
+            return ' <span class="signal-member-direction">方向待下次更新</span>'
+    else:
+        return ""
+    icons = []
+    for marker in markers[:4]:
+        if not isinstance(marker, dict):
+            continue
+        shape, tone, label = marker.get("shape"), marker.get("tone"), marker.get("label")
+        if shape not in ("▲", "▼", "■") or tone not in ("yellow", "red", "cyan", "purple"):
+            continue
+        if not isinstance(label, str) or not label or len(label) > 100:
+            continue
+        icons.append(f'<span class="signal-member-icon tone-{tone}" role="img" '
+                     f'aria-label="{esc(label)}" title="{esc(label)}">{shape}</span>')
+    return "".join(icons) or ' <span class="signal-member-direction">方向待下次更新</span>'
+
+
 def _signal_counts_card(snapshot):
     """各信号计数及分组明细；空计数不显示，缺失或不一致的成员等待下次更新。"""
     counts = snapshot.get("signal_counts") or {}
@@ -3958,15 +4050,14 @@ def _signal_counts_card(snapshot):
                              and d["symbol"].strip() for d in entries))
             if valid:
                 valid = len({instrument_identity(d["symbol"]) for d in entries}) == n
-            content = f'<p><strong>{label} · {level_name} · {esc(n)} 只</strong></p>'
             if not valid:
-                content += '<p>明细待下次更新：当前快照缺少成员或成员人数与计数不一致，暂不展示名单。</p>'
+                content = '<p>明细待下次更新：当前快照缺少成员或成员人数与计数不一致，暂不展示名单。</p>'
             else:
                 grouped = {}
                 for d in entries:
                     group = str(d.get("group") or "")
                     grouped.setdefault(group, []).append(d)
-                content += '<div class="signal-member-groups">'
+                content = '<div class="signal-member-groups">'
                 for group in sorted(grouped, key=lambda name: group_order.get(name, len(GROUPS))):
                     group_members = grouped[group]
                     content += (f'<section class="signal-member-group"><h4>'
@@ -3974,14 +4065,7 @@ def _signal_counts_card(snapshot):
                                 f'<ul class="signal-member-list">')
                     for d in group_members:
                         note = f'<span class="note">{esc(d["note"])}</span>' if d.get("note") else ""
-                        direction = ""
-                        if kind == "boll_rsi" and level == "red":
-                            value = str(d.get("direction") or "")
-                            known = ("上轨（超买）", "下轨（超卖）", "上轨（RSI超卖，方向不一致）",
-                                     "下轨（RSI超买，方向不一致）", "上轨（RSI超买/超卖均命中）",
-                                     "下轨（RSI超买/超卖均命中）")
-                            value = value if value in known else "方向待下次更新"
-                            direction = f' <span class="signal-member-direction">{esc(value)}</span>'
+                        direction = _member_icons(d, kind, level)
                         content += f'<li><span class="signal-member-symbol">{esc(d["symbol"])}</span>{direction}{note}</li>'
                     content += '</ul></section>'
                 content += '</div>'
