@@ -9,19 +9,19 @@
     "next_in": 13,
     "next_date": "2026-10-29"
   },
-  "run_id": "38271450645",
-  "request_id": "intraday-fix-162f926a-d4f3-4f33-ac99-e9e5a8314787",
-  "source_sha": "6d3b00b7d5e6d27507c40c1965480de6ada41c7e",
-  "started_at": "2026-10-12T15:36:16+00:00",
-  "started_at_bj": "2026-10-12T23:36:16+08:00",
-  "finished_at": "2026-10-12T23:37:47.880448+08:00",
-  "finished_at_bj": "2026-10-12T23:37:47+08:00",
-  "event": "workflow_dispatch",
+  "run_id": "38334261220",
+  "request_id": "",
+  "source_sha": "63711b4f7363c8befacce36ef1c17be1663fcb21",
+  "started_at": "2026-10-13T01:53:14+00:00",
+  "started_at_bj": "2026-10-13T09:53:14+08:00",
+  "finished_at": "2026-10-13T09:54:32.802210+08:00",
+  "finished_at_bj": "2026-10-13T09:54:32+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-12",
-  "mode": "manual_or_config",
+  "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "f16a42ba4fb2c167ac1ca89e1781fc28efb78d68",
+    "holdings.json": "9c8ced4961468213c67a0bfc9fe1d61dd5e9109d",
     "settings.json": "a3996325650bd399123d04628467db8c979335be"
   },
   "effective_settings": {
@@ -154,7 +154,7 @@
   "registered_counts": {
     "positions": 15,
     "focus": 8,
-    "index_funds": 7,
+    "index_funds": 2,
     "technology": 37,
     "healthcare": 8,
     "financials": 14,
@@ -170,7 +170,7 @@
   "list_counts": {
     "positions": 15,
     "focus": 8,
-    "index_funds": 5,
+    "index_funds": 2,
     "technology": 28,
     "healthcare": 6,
     "financials": 11,
@@ -187,20 +187,18 @@
     "dca": 1
   },
   "summary": {
-    "red": 9,
-    "yellow": 30,
-    "green": 63,
+    "red": 11,
+    "yellow": 32,
+    "green": 56,
     "gray": 0,
-    "total": 102,
+    "total": 99,
     "macro_ok": 6,
-    "stale_symbols": [
-      ".VXN"
-    ],
+    "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 101,
-    "prior_prices": 1,
+    "today_prices": 99,
+    "prior_prices": 0,
     "missing_prices": 0
   },
   "signal_counts": {
@@ -221,9 +219,9 @@
     "vol_ratio": {
       "label": "量比",
       "red": 0,
-      "yellow": 0,
+      "yellow": 1,
       "purple": 0,
-      "sole_yellow": 0
+      "sole_yellow": 1
     },
     "rsi": {
       "label": "RSI",
@@ -235,9 +233,9 @@
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 35,
+      "yellow": 37,
       "purple": 0,
-      "sole_yellow": 24
+      "sole_yellow": 26
     },
     "boll_rsi": {
       "label": "布林+RSI",
@@ -258,11 +256,11 @@
       "red": 0,
       "yellow": 5,
       "purple": 0,
-      "sole_yellow": 3
+      "sole_yellow": 2
     },
     "low52": {
       "label": "52周低位",
-      "red": 0,
+      "red": 2,
       "yellow": 1,
       "purple": 0,
       "sole_yellow": 1
@@ -289,8 +287,580 @@
       "sole_yellow": 0
     }
   },
+  "signal_members": {
+    "chg": {
+      "red": [],
+      "yellow": [],
+      "purple": [],
+      "sole_yellow": []
+    },
+    "amp": {
+      "red": [],
+      "yellow": [],
+      "purple": [],
+      "sole_yellow": []
+    },
+    "vol_ratio": {
+      "red": [],
+      "yellow": [
+        {
+          "symbol": "SPYM",
+          "note": "SPDR标普500指数ETF",
+          "group": "position"
+        }
+      ],
+      "purple": [],
+      "sole_yellow": [
+        {
+          "symbol": "SPYM",
+          "note": "SPDR标普500指数ETF",
+          "group": "position"
+        }
+      ]
+    },
+    "rsi": {
+      "red": [],
+      "yellow": [
+        {
+          "symbol": "NTNX",
+          "note": "Nutanix-混合云",
+          "group": "position"
+        },
+        {
+          "symbol": "COST",
+          "note": "好市多",
+          "group": "focus"
+        },
+        {
+          "symbol": "MA",
+          "note": "万事达",
+          "group": "focus"
+        },
+        {
+          "symbol": "V",
+          "note": "Visa-支付",
+          "group": "focus"
+        },
+        {
+          "symbol": "MSFT",
+          "note": "微软",
+          "group": "focus"
+        },
+        {
+          "symbol": "FTNT",
+          "note": "Fortinet-防火墙",
+          "group": "technology"
+        },
+        {
+          "symbol": "PLTR",
+          "note": "Palantir-AI数据分析",
+          "group": "technology"
+        },
+        {
+          "symbol": "ABBV",
+          "note": "艾伯维",
+          "group": "healthcare"
+        },
+        {
+          "symbol": "XOM",
+          "note": "埃克森美孚",
+          "group": "energy"
+        }
+      ],
+      "purple": [],
+      "sole_yellow": []
+    },
+    "boll": {
+      "red": [],
+      "yellow": [
+        {
+          "symbol": "BRK-B",
+          "note": "伯克希尔哈撒韦",
+          "group": "position"
+        },
+        {
+          "symbol": "GOOGL",
+          "note": "谷歌（Alphabet）",
+          "group": "position"
+        },
+        {
+          "symbol": "NTNX",
+          "note": "Nutanix-混合云",
+          "group": "position"
+        },
+        {
+          "symbol": "UNH",
+          "note": "联合健康",
+          "group": "position"
+        },
+        {
+          "symbol": "UBER",
+          "note": "优步",
+          "group": "position"
+        },
+        {
+          "symbol": "DRAM",
+          "note": "Memory ETF-存储芯片",
+          "group": "position"
+        },
+        {
+          "symbol": "ZS",
+          "note": "Zscaler-云安全",
+          "group": "focus"
+        },
+        {
+          "symbol": "COST",
+          "note": "好市多",
+          "group": "focus"
+        },
+        {
+          "symbol": "MA",
+          "note": "万事达",
+          "group": "focus"
+        },
+        {
+          "symbol": "PDD",
+          "note": "拼多多",
+          "group": "focus"
+        },
+        {
+          "symbol": "V",
+          "note": "Visa-支付",
+          "group": "focus"
+        },
+        {
+          "symbol": "AAPL",
+          "note": "苹果",
+          "group": "focus"
+        },
+        {
+          "symbol": "MSFT",
+          "note": "微软",
+          "group": "focus"
+        },
+        {
+          "symbol": "U",
+          "note": "Unity-游戏引擎",
+          "group": "technology"
+        },
+        {
+          "symbol": "SNOW",
+          "note": "Snowflake-数据云",
+          "group": "technology"
+        },
+        {
+          "symbol": "SKHY",
+          "note": "SK海力士ADR",
+          "group": "technology"
+        },
+        {
+          "symbol": "SNDK",
+          "note": "闪迪",
+          "group": "technology"
+        },
+        {
+          "symbol": "NOW",
+          "note": "ServiceNow-工作流软件",
+          "group": "technology"
+        },
+        {
+          "symbol": "FTNT",
+          "note": "Fortinet-防火墙",
+          "group": "technology"
+        },
+        {
+          "symbol": "PANW",
+          "note": "Palo Alto-网络安全",
+          "group": "technology"
+        },
+        {
+          "symbol": "PLTR",
+          "note": "Palantir-AI数据分析",
+          "group": "technology"
+        },
+        {
+          "symbol": "XLV",
+          "note": "医疗保健精选行业ETF",
+          "group": "healthcare"
+        },
+        {
+          "symbol": "ABBV",
+          "note": "艾伯维",
+          "group": "healthcare"
+        },
+        {
+          "symbol": "ISRG",
+          "note": "直觉外科",
+          "group": "healthcare"
+        },
+        {
+          "symbol": "CB",
+          "note": "安达保险",
+          "group": "financials"
+        },
+        {
+          "symbol": "SPGI",
+          "note": "标普全球",
+          "group": "financials"
+        },
+        {
+          "symbol": "XLE",
+          "note": "能源精选行业ETF",
+          "group": "energy"
+        },
+        {
+          "symbol": "XOM",
+          "note": "埃克森美孚",
+          "group": "energy"
+        },
+        {
+          "symbol": "LIN",
+          "note": "林德-工业气体",
+          "group": "materials"
+        },
+        {
+          "symbol": "CEG",
+          "note": "Constellation-核电",
+          "group": "utilities"
+        },
+        {
+          "symbol": "XLP",
+          "note": "必需消费精选行业ETF",
+          "group": "consumer_staples"
+        },
+        {
+          "symbol": "WMT",
+          "note": "沃尔玛",
+          "group": "consumer_staples"
+        },
+        {
+          "symbol": "PG",
+          "note": "宝洁",
+          "group": "consumer_staples"
+        },
+        {
+          "symbol": "KO",
+          "note": "可口可乐",
+          "group": "consumer_staples"
+        },
+        {
+          "symbol": "TTWO",
+          "note": "Take-Two-游戏",
+          "group": "communications"
+        },
+        {
+          "symbol": "XLY",
+          "note": "非必需消费精选行业ETF",
+          "group": "consumer_discretionary"
+        },
+        {
+          "symbol": "AMZN",
+          "note": "亚马逊",
+          "group": "consumer_discretionary"
+        }
+      ],
+      "purple": [],
+      "sole_yellow": [
+        {
+          "symbol": "BRK-B",
+          "note": "伯克希尔哈撒韦",
+          "group": "position"
+        },
+        {
+          "symbol": "GOOGL",
+          "note": "谷歌（Alphabet）",
+          "group": "position"
+        },
+        {
+          "symbol": "UNH",
+          "note": "联合健康",
+          "group": "position"
+        },
+        {
+          "symbol": "UBER",
+          "note": "优步",
+          "group": "position"
+        },
+        {
+          "symbol": "DRAM",
+          "note": "Memory ETF-存储芯片",
+          "group": "position"
+        },
+        {
+          "symbol": "ZS",
+          "note": "Zscaler-云安全",
+          "group": "focus"
+        },
+        {
+          "symbol": "PDD",
+          "note": "拼多多",
+          "group": "focus"
+        },
+        {
+          "symbol": "AAPL",
+          "note": "苹果",
+          "group": "focus"
+        },
+        {
+          "symbol": "U",
+          "note": "Unity-游戏引擎",
+          "group": "technology"
+        },
+        {
+          "symbol": "SNOW",
+          "note": "Snowflake-数据云",
+          "group": "technology"
+        },
+        {
+          "symbol": "SKHY",
+          "note": "SK海力士ADR",
+          "group": "technology"
+        },
+        {
+          "symbol": "SNDK",
+          "note": "闪迪",
+          "group": "technology"
+        },
+        {
+          "symbol": "NOW",
+          "note": "ServiceNow-工作流软件",
+          "group": "technology"
+        },
+        {
+          "symbol": "PANW",
+          "note": "Palo Alto-网络安全",
+          "group": "technology"
+        },
+        {
+          "symbol": "XLV",
+          "note": "医疗保健精选行业ETF",
+          "group": "healthcare"
+        },
+        {
+          "symbol": "ISRG",
+          "note": "直觉外科",
+          "group": "healthcare"
+        },
+        {
+          "symbol": "CB",
+          "note": "安达保险",
+          "group": "financials"
+        },
+        {
+          "symbol": "SPGI",
+          "note": "标普全球",
+          "group": "financials"
+        },
+        {
+          "symbol": "XLE",
+          "note": "能源精选行业ETF",
+          "group": "energy"
+        },
+        {
+          "symbol": "LIN",
+          "note": "林德-工业气体",
+          "group": "materials"
+        },
+        {
+          "symbol": "WMT",
+          "note": "沃尔玛",
+          "group": "consumer_staples"
+        },
+        {
+          "symbol": "PG",
+          "note": "宝洁",
+          "group": "consumer_staples"
+        },
+        {
+          "symbol": "KO",
+          "note": "可口可乐",
+          "group": "consumer_staples"
+        },
+        {
+          "symbol": "TTWO",
+          "note": "Take-Two-游戏",
+          "group": "communications"
+        },
+        {
+          "symbol": "XLY",
+          "note": "非必需消费精选行业ETF",
+          "group": "consumer_discretionary"
+        },
+        {
+          "symbol": "AMZN",
+          "note": "亚马逊",
+          "group": "consumer_discretionary"
+        }
+      ]
+    },
+    "boll_rsi": {
+      "red": [
+        {
+          "symbol": "NTNX",
+          "note": "Nutanix-混合云",
+          "group": "position"
+        },
+        {
+          "symbol": "COST",
+          "note": "好市多",
+          "group": "focus"
+        },
+        {
+          "symbol": "MA",
+          "note": "万事达",
+          "group": "focus"
+        },
+        {
+          "symbol": "V",
+          "note": "Visa-支付",
+          "group": "focus"
+        },
+        {
+          "symbol": "MSFT",
+          "note": "微软",
+          "group": "focus"
+        },
+        {
+          "symbol": "FTNT",
+          "note": "Fortinet-防火墙",
+          "group": "technology"
+        },
+        {
+          "symbol": "PLTR",
+          "note": "Palantir-AI数据分析",
+          "group": "technology"
+        },
+        {
+          "symbol": "ABBV",
+          "note": "艾伯维",
+          "group": "healthcare"
+        },
+        {
+          "symbol": "XOM",
+          "note": "埃克森美孚",
+          "group": "energy"
+        }
+      ],
+      "yellow": [],
+      "purple": [],
+      "sole_yellow": []
+    },
+    "ma_cross": {
+      "red": [],
+      "yellow": [
+        {
+          "symbol": "COST",
+          "note": "好市多",
+          "group": "focus"
+        }
+      ],
+      "purple": [],
+      "sole_yellow": []
+    },
+    "ma_band": {
+      "red": [],
+      "yellow": [
+        {
+          "symbol": "XLI",
+          "note": "工业精选行业ETF",
+          "group": "position"
+        },
+        {
+          "symbol": "COST",
+          "note": "好市多",
+          "group": "focus"
+        },
+        {
+          "symbol": "XLB",
+          "note": "原材料精选行业ETF",
+          "group": "materials"
+        },
+        {
+          "symbol": "CEG",
+          "note": "Constellation-核电",
+          "group": "utilities"
+        },
+        {
+          "symbol": "XLP",
+          "note": "必需消费精选行业ETF",
+          "group": "consumer_staples"
+        }
+      ],
+      "purple": [],
+      "sole_yellow": [
+        {
+          "symbol": "XLI",
+          "note": "工业精选行业ETF",
+          "group": "position"
+        },
+        {
+          "symbol": "XLB",
+          "note": "原材料精选行业ETF",
+          "group": "materials"
+        }
+      ]
+    },
+    "low52": {
+      "red": [
+        {
+          "symbol": "HII",
+          "note": "亨廷顿英格尔斯工业",
+          "group": "position"
+        },
+        {
+          "symbol": "APP",
+          "note": "AppLovin-广告",
+          "group": "technology"
+        }
+      ],
+      "yellow": [
+        {
+          "symbol": "MCD",
+          "note": "麦当劳",
+          "group": "consumer_discretionary"
+        }
+      ],
+      "purple": [],
+      "sole_yellow": [
+        {
+          "symbol": "MCD",
+          "note": "麦当劳",
+          "group": "consumer_discretionary"
+        }
+      ]
+    },
+    "add_price": {
+      "red": [],
+      "yellow": [],
+      "purple": [],
+      "sole_yellow": []
+    },
+    "reduce_price": {
+      "red": [],
+      "yellow": [],
+      "purple": [],
+      "sole_yellow": []
+    },
+    "target": {
+      "red": [],
+      "yellow": [],
+      "purple": [
+        {
+          "symbol": "CRSP",
+          "note": "CRISPR-基因编辑",
+          "group": "position"
+        },
+        {
+          "symbol": "ZS",
+          "note": "Zscaler-云安全",
+          "group": "focus"
+        }
+      ],
+      "sole_yellow": []
+    }
+  },
   "actual_dates": {
-    "min": "2026-10-09",
+    "min": "2026-10-12",
     "max": "2026-10-12"
   },
   "macro_dates": {
@@ -315,7 +885,7 @@
     "delta_month": 0.2650003433227539
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-12 23:37:47（盘中快照，北京时间） · 当日价 101 只 / 较早日线 1 只 / 无数据 0 只",
+  "data_time_text": "2026-10-12 收盘（美东交易日）",
   "market_risk": {
     "level": "green",
     "label": "风险平稳",
@@ -334,17 +904,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 15.170000076293945,
+      "value": 15.210000038146973,
       "date": "2026-10-12",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7808.4599609375,
+      "value": 7807.240234375,
       "date": "2026-10-12",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.13390853490649057
+      "drawdown": -0.14950819541091898
     }
   },
   "fundamental": {
@@ -1312,27 +1882,27 @@
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
       "due": 31,
-      "deferred": 31,
-      "tried": 0,
-      "ok": 0,
+      "deferred": 19,
+      "tried": 12,
+      "ok": 12,
       "none": 0,
       "fail": 0,
       "stopped": "",
       "quota": {
-        "date": "2026-10-12",
+        "date": "2026-10-13",
         "symbols": [
-          "GS",
-          "HEI",
-          "HOOD",
-          "INTC",
-          "ISRG",
-          "JNJ",
-          "JPM",
-          "KO",
-          "LIN",
-          "LITE",
-          "LLY",
-          "LRCX"
+          "MCD",
+          "META",
+          "MRVL",
+          "MU",
+          "NEE",
+          "NFLX",
+          "NOC",
+          "NOW",
+          "NU",
+          "NVDA",
+          "NXPI",
+          "PANW"
         ],
         "retry_symbols": []
       }
@@ -1486,6 +2056,12 @@
         "ne": "2026-11-04"
       },
       "NXPI": {
+        "s": "ok",
+        "avg": 306.72,
+        "upd": "2026-10-08",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-10-27"
       },
       "SNOW": {
@@ -1498,6 +2074,12 @@
         "ne": "2026-10-27"
       },
       "NOW": {
+        "s": "ok",
+        "avg": 148.73,
+        "upd": "2026-10-12",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-10-28"
       },
       "CRWD": {
@@ -1584,6 +2166,12 @@
         "ne": "2026-11-05"
       },
       "MRVL": {
+        "s": "ok",
+        "avg": 337.99,
+        "upd": "2026-10-07",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-12-01"
       },
       "CRDO": {
@@ -1595,6 +2183,12 @@
         "try": "2026-10-11"
       },
       "PANW": {
+        "s": "ok",
+        "avg": 396.92,
+        "upd": "2026-10-12",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-11-18"
       },
       "TER": {
@@ -1613,6 +2207,12 @@
         "ne": "2026-10-21"
       },
       "NVDA": {
+        "s": "ok",
+        "avg": 328.72,
+        "upd": "2026-10-09",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-11-18"
       },
       "WDC": {
@@ -1697,6 +2297,12 @@
         "ne": "2026-10-13"
       },
       "NU": {
+        "s": "ok",
+        "avg": 18.77,
+        "upd": "2026-10-06",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-11-12"
       },
       "CRCL": {
@@ -1768,6 +2374,12 @@
         "ne": "2026-11-04"
       },
       "NOC": {
+        "s": "ok",
+        "avg": 622.17,
+        "upd": "2026-10-09",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-10-20"
       },
       "RTX": {
@@ -1804,6 +2416,12 @@
         "ne": "2026-11-06"
       },
       "NEE": {
+        "s": "ok",
+        "avg": 97.05,
+        "upd": "2026-10-12",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-10-21"
       },
       "WMT": {
@@ -1825,9 +2443,21 @@
         "ne": "2026-11-05"
       },
       "META": {
+        "s": "ok",
+        "avg": 799.0,
+        "upd": "2026-10-12",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-11-04"
       },
       "NFLX": {
+        "s": "ok",
+        "avg": 92.55,
+        "upd": "2026-10-08",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-10-20"
       },
       "BKNG": {
@@ -1849,27 +2479,41 @@
         "ne": "2026-10-29"
       },
       "MCD": {
+        "s": "ok",
+        "avg": 292.21,
+        "upd": "2026-10-08",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
         "ne": "2026-11-04"
       },
       "TSLA": {
         "ne": "2026-10-21"
+      },
+      "MU": {
+        "s": "ok",
+        "avg": 1555.13,
+        "upd": "2026-10-08",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13"
       }
     },
     "quota": {
-      "date": "2026-10-12",
+      "date": "2026-10-13",
       "symbols": [
-        "GS",
-        "HEI",
-        "HOOD",
-        "INTC",
-        "ISRG",
-        "JNJ",
-        "JPM",
-        "KO",
-        "LIN",
-        "LITE",
-        "LLY",
-        "LRCX"
+        "MCD",
+        "META",
+        "MRVL",
+        "MU",
+        "NEE",
+        "NFLX",
+        "NOC",
+        "NOW",
+        "NU",
+        "NVDA",
+        "NXPI",
+        "PANW"
       ],
       "retry_symbols": []
     }
@@ -2485,16 +3129,16 @@
       "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 93.69000244140625,
+      "price": 92.7300033569336,
       "date": "2026-10-12",
       "contract": "Crude Oil Nov 26",
-      "day": 2.003270547471565,
+      "day": 0.958089164324203,
       "day_from": "2026-10-09",
-      "week": 4.763504552939067,
-      "month": -3.551571927032391,
+      "week": 3.6900403002311424,
+      "month": -4.53983535147601,
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-12T23:37:00.809235+08:00"
+    "assessed_at": "2026-10-13T09:53:58.485323+08:00"
   }
 }
