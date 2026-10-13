@@ -428,6 +428,15 @@
       if (!total) return {phase: 'idle', text: Object.values(snap.registered_counts || {}).some(n => n > 0)
         ? '没有开启的监测标的，未抓取报价' : '清单为空，未抓取报价'};
       if (unsupported >= total) return {phase: 'idle', text: '清单中 ' + unsupported + ' 个特殊代码暂不支持报价，未抓取报价'};
+      const risk = snap.market_risk || {};
+      const missingRisk = Array.isArray(risk.missing) ? risk.missing : [];
+      if (missingRisk.length) {
+        const valid = risk.valid_count ?? (5 - missingRisk.length);
+        return {phase: 'partial', text: kind + '运行已完成 · 市场风险数据缺失或过期：' +
+          missingRisk.join('、') + '（有效指标 ' + valid + '/5） · 个股行情 ' +
+          (total - unsupported) + '/' + total + ' 已更新 · 完成于 ' +
+          (finished || '未记录') + '（北京时间）' + suffix, reload: !!oldPage};
+      }
       if (unsupported) {
         return {phase: 'ok', text: success + cnt + ' · ' +
           (total - unsupported) + ' 项数据已更新 · ' + unsupported + ' 个特殊代码暂不支持报价' + suffix, reload: !!oldPage};

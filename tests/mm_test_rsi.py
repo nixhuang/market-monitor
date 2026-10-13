@@ -81,6 +81,26 @@ class TestRSI(unittest.TestCase):
                     self.assertEqual(sum('布林' in s and '双重' not in s for s in signals), 1)
                     self.assertEqual('布林 + RSI 双重信号 → 红' in signals, combined)
 
+    def test_combined_direction_matches_selected_band_and_rsi_side(self):
+        cases = [((100, 101, 90), [80, 80, 50], '上轨（超买）'),
+                 ((100, 110, 99), [20, 20, 50], '下轨（超卖）'),
+                 ((100, 101, 90), [20, 20, 50], '上轨（RSI超卖，方向不一致）'),
+                 ((100, 110, 99), [80, 80, 50], '下轨（RSI超买，方向不一致）')]
+        for bands, values, direction in cases:
+            with self.subTest(bands=bands, values=values):
+                level, signals, detail = self.analyze(values, bands=bands)
+                self.assertEqual(level, 'red')
+                self.assertEqual(detail['boll_rsi_direction'], direction)
+                self.assertIn(('boll_rsi', 'red'), detail['signal_marks'])
+                self.assertIn('布林 + RSI 双重信号 → 红', signals)
+
+    def test_lower_band_exact_touch_is_not_labeled_as_breakthrough(self):
+        level, signals, detail = self.analyze([50, 50, 50], bands=(100, 110, 99))
+        self.assertEqual(level, 'yellow')
+        self.assertTrue(any(s.startswith('触及布林下轨') for s in signals), signals)
+        self.assertNotIn('boll_rsi_direction', {k for k, v in detail.items() if v})
+        self.assertIn('signal-yellow', monitor._signal_text_html(next(s for s in signals if '布林' in s)))
+
     def test_bollinger_near_or_intraday_touch_is_yellow_in_every_group(self):
         data = neutral_data()
         data['highs'] = data['highs'][:-1] + [103]       # 盘中冲过上轨，收盘回到轨内

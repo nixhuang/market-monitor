@@ -8,13 +8,16 @@
 - 生成 index.html 供 GitHub Pages 展示
 
 数据来源：
+  Cboe  https://cdn-api.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv
   FRED  https://fred.stlouisfed.org/graph/fredgraph.csv?id=<SERIES_ID>
   Yahoo https://query1.finance.yahoo.com/v8/finance/chart/<SYMBOL>
 """
 
 import argparse
+import csv
 import hashlib
 import html as html_lib
+import io
 import json
 import math
 from types import SimpleNamespace
@@ -581,6 +584,7 @@ def pct_from_high(series):
 
 BREADTH_URL = "https://historyofmarket.com/api/sp500/breadth.json"
 BREADTH_CREDIT = "https://historyofmarket.com/zh-cn/sp500/sp500-breadth/"
+CBOE_VIX_URL = "https://cdn-api.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv"
 
 
 def market_breadth(target_date):
@@ -676,6 +680,50 @@ def sp500_rows_fallback(target=None, keep=60):
         return []
 
 
+def cboe_vix_series(days=400):
+    """Cboe 官方 VIX 指数日收盘；仅接受完整、升序且真实日期的 CSV，不拿期货/旧指数替代。"""
+    target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+    try:
+        response = requests.get(CBOE_VIX_URL, headers=UA, timeout=15)
+        response.raise_for_status()
+        reader = csv.DictReader(io.StringIO(response.text))
+        fields = ('DATE', 'OPEN', 'HIGH', 'LOW', 'CLOSE')
+        if tuple(reader.fieldnames or ()) != fields:
+            raise ValueError('Cboe VIX 文件字段不符')
+        rows = []
+        previous = ''
+        for row in reader:
+            if set(row) != set(fields) or any(row[field] is None for field in fields):
+                raise ValueError('Cboe VIX 行字段不完整')
+            day = datetime.strptime(row['DATE'], '%m/%d/%Y').date().isoformat()
+            close = float(row['CLOSE'])
+            if day <= previous or not math.isfinite(close) or not 0 < close < 200:
+                raise ValueError('Cboe VIX 日期顺序或收盘值异常')
+            previous = day
+            if day <= target:
+                rows.append((day, close))
+        return rows[-days:] if len(rows) >= 30 else []
+    except (requests.RequestException, ValueError, TypeError, KeyError, csv.Error) as e:
+        log(f'  ! Cboe VIX 官方日线暂不可用：{str(e)[:100]}')
+        return []
+
+
+def vix_index_series(source_info, days=400):
+    """官方最新目标日优先；官方未更新时，用日期更近的 Yahoo ^VIX 收盘兜底。"""
+    target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
+    official = cboe_vix_series(days)
+    if official and official[-1][0] == target:
+        source_info['source'] = 'Cboe VIX 官方日线'
+        return official
+    yahoo = market_index_series('^VIX', days)
+    if yahoo and (not official or yahoo[-1][0] > official[-1][0]):
+        source_info['source'] = 'Yahoo ^VIX'
+        return yahoo
+    if official:
+        source_info['source'] = 'Cboe VIX 官方日线'
+    return official
+
+
 def market_index_series(alias, days=400):
     data = yahoo_history(alias)
     if not data or not valid_history(data):
@@ -709,10 +757,11 @@ def build_macro():
         if key == "hy_oas":
             rows = fred_series(cfg["id"])
             source_info['source'] = 'FRED'
-        elif key in ('vix', 'sp500'):
-            alias = FRED_YAHOO_ALIAS[key]
-            rows = market_index_series(alias)
-            source_info['source'] = 'Yahoo ' + alias
+        elif key == 'vix':
+            rows = vix_index_series(source_info)
+        elif key == 'sp500':
+            rows = market_index_series('^GSPC')
+            source_info['source'] = 'Yahoo ^GSPC'
         elif key == "ust10":
             rows = treasury_yield_series(source_info=source_info)
         elif key == "nfci":
@@ -730,10 +779,12 @@ def build_macro():
             # 只有 3 个请求，值得多等一会儿再试一次：这三项决定风险参考的综合灯
             log(f"  · {cfg['name']} 首次取数失败，稍后重试一次")
             time.sleep(MACRO_RETRY_WAIT)
-            if key == "ust10":
+            if key == 'vix':
+                rows = vix_index_series(source_info)
+            elif key == "ust10":
                 rows = treasury_yield_series(source_info=source_info)
             else:
-                rows = market_index_series(FRED_YAHOO_ALIAS[key])
+                rows = market_index_series('^GSPC')
         if not rows:
             macro[key] = {"ok": False, "name": cfg["name"], **source_info}
             continue
@@ -2973,14 +3024,15 @@ def _boll_hits(x):
     if x.boll_dn is not None:
         gap_dn = (x.touch_dn - x.boll_dn) / x.boll_dn * 100
         if gap_dn <= S["boll_near_pct"]:
-            text = (f"跌破布林下轨 {x.boll_dn:,.2f}" if gap_dn <= 0
+            text = (f"跌破布林下轨 {x.boll_dn:,.2f}" if gap_dn < 0
+                    else f"触及布林下轨 {x.boll_dn:,.2f}" if gap_dn == 0
                     else f"逼近布林下轨 还差{gap_dn:.2f}%")
             hits.append((gap_dn, text + _touch_note(x.price, x.touch_dn) + streak_tail(streak["dn"], "下轨")))
     return hits
 
 
 def _rule_boll(al, x):
-    """布林带：逼近即算，盘中不用等收盘真的穿过去；逼近 / 盘中触及 / 收盘穿出一律黄。
+    """布林信号等级沿用原规则：逼近即算黄灯，盘中触及也命中；仅下轨触及/跌破的文字标黄。
     上下轨都命中时只留更贴近的那条：SGOV 这类短债/货币 ETF 波动极小，布林带宽不到 1%，
     上下轨会同时命中，两条一起显示等于自相矛盾（既逼近上轨又逼近下轨）。"""
     hits = _boll_hits(x)
@@ -2989,6 +3041,13 @@ def _rule_boll(al, x):
     best = min(hits, key=lambda h: h[0])
     al.add("boll", best[1], "yellow")
     if max(x.high_hits, x.low_hits) >= 2:
+        side = "上轨" if "布林上轨" in best[1] else "下轨"
+        if x.high_hits >= 2 and x.low_hits >= 2:
+            x.boll_rsi_direction = f"{side}（RSI超买/超卖均命中）"
+        elif (side == "上轨" and x.high_hits >= 2) or (side == "下轨" and x.low_hits >= 2):
+            x.boll_rsi_direction = f"{side}（{'超买' if side == '上轨' else '超卖'}）"
+        else:
+            x.boll_rsi_direction = f"{side}（RSI{'超卖' if side == '上轨' else '超买'}，方向不一致）"
         al.add("boll_rsi", "布林 + RSI 双重信号 → 红", "red")
 
 
@@ -3098,6 +3157,7 @@ def _analysis_detail(x, al):
         "group": x.group,
         "boll_up": x.boll_up,
         "boll_dn": x.boll_dn,
+        "boll_rsi_direction": getattr(x, "boll_rsi_direction", ""),
         # ETF 标签：静态表命中，或行情源明确给出 assetclass=etf
         "etf": is_etf(x.sym) or x.data.get("asset") == "etf",
         "signals": al.signals,
@@ -3137,7 +3197,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261009-1"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261013-2"></script>'
 
 # 本页展示交互独立于运行/令牌逻辑；不联网、不写用户配置。
 PAGE_INTERACTION_JS = r"""
@@ -3256,7 +3316,10 @@ def signal_count_members(items):
                 continue
             for level in levels[:3]:
                 if any(k == kind and m == level for k, m in marks):
-                    out[kind][level].append(dict(member))
+                    entry = dict(member)
+                    if kind == "boll_rsi" and level == "red" and d.get("boll_rsi_direction"):
+                        entry["direction"] = d["boll_rsi_direction"]
+                    out[kind][level].append(entry)
         if d.get("level") == "yellow":
             yellow_kinds = {k for k, m in marks if m == "yellow"}
             if len(yellow_kinds) == 1 and next(iter(yellow_kinds)) in out:
@@ -3397,6 +3460,7 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel ul{margin:0;padding-left:18px}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
+#signalCounts .signal-member-direction{color:#f0c674;font-size:11px}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
 .earn{display:block;margin:0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:11px}
@@ -3498,6 +3562,8 @@ tr.gray td{color:var(--dim)}
 .runlight .dot{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}
 .runlight[data-phase="busy"]{color:var(--yellow)}
 .runlight[data-phase="busy"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
+.runlight[data-phase="partial"]{color:var(--yellow)}
+.runlight[data-phase="partial"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
 .runlight[data-phase="ok"]{color:var(--green)}
 .runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}
 .runlight[data-phase="bad"]{color:var(--red)}
@@ -3693,7 +3759,8 @@ def _signal_text_html(text):
         cls = "signal-red"
     elif text.startswith("RSI") and "超卖" in text:
         cls = "signal-magenta"
-    elif "布林" in text:
+    elif ("布林下轨" in text and
+          (text.startswith("跌破布林下轨") or text.startswith("触及布林下轨"))):
         cls = "signal-yellow"
     elif "均线" in text and ("触及" in text or "贴近" in text or "上穿" in text or "跌破" in text):
         period = re.search(r"(\d+)日(?:弱)?均线", text)
@@ -3825,7 +3892,7 @@ def _group_card(group, g, items_by_symbol, snapshot):
 
 
 def _run_light(snapshot, finished_txt):
-    """首页状态灯（第三排）的 (状态, 文案)：取数失败 / 空清单 / 成功。"""
+    """首页状态灯（第三排）：个股行情失败、市场风险部分缺失、空清单或完整成功。"""
     summary = snapshot.get("summary", {})
     registered = snapshot.get("registered_counts", {})
     gray_txt = f" 灰{summary.get('gray')}" if summary.get("gray") else ""
@@ -3841,6 +3908,15 @@ def _run_light(snapshot, finished_txt):
         return "idle", ("没有开启的监测标的，未抓取报价" if has_registered else "清单为空，未抓取报价")
     if unsupported_count >= total:
         return "idle", f"清单中 {unsupported_count} 个特殊代码暂不支持报价，未抓取报价"
+    risk = snapshot.get("market_risk") or {}
+    missing_risk = risk.get("missing") or []
+    if isinstance(missing_risk, list) and missing_risk:
+        names = "、".join(html_lib.escape(str(name)) for name in missing_risk)
+        valid = risk.get("valid_count", 5 - len(missing_risk))
+        kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
+        return "partial", (f"{kind}运行已完成 · 市场风险数据缺失或过期：{names}（有效指标 {valid}/5） · "
+                           f"个股行情 {total - unsupported_count}/{total} 已更新 · "
+                           f"完成于 {finished_txt}（北京时间）")
     coverage = (f"{total - unsupported_count} 项数据已更新 · "
                 f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
                 else f"{total} 项数据已更新")
@@ -3898,7 +3974,15 @@ def _signal_counts_card(snapshot):
                                 f'<ul class="signal-member-list">')
                     for d in group_members:
                         note = f'<span class="note">{esc(d["note"])}</span>' if d.get("note") else ""
-                        content += f'<li><span class="signal-member-symbol">{esc(d["symbol"])}</span>{note}</li>'
+                        direction = ""
+                        if kind == "boll_rsi" and level == "red":
+                            value = str(d.get("direction") or "")
+                            known = ("上轨（超买）", "下轨（超卖）", "上轨（RSI超卖，方向不一致）",
+                                     "下轨（RSI超买，方向不一致）", "上轨（RSI超买/超卖均命中）",
+                                     "下轨（RSI超买/超卖均命中）")
+                            value = value if value in known else "方向待下次更新"
+                            direction = f' <span class="signal-member-direction">{esc(value)}</span>'
+                        content += f'<li><span class="signal-member-symbol">{esc(d["symbol"])}</span>{direction}{note}</li>'
                     content += '</ul></section>'
                 content += '</div>'
             panels.append(f'<div class="signal-members-panel" id="{panel_id}" hidden>{content}</div>')

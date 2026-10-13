@@ -181,7 +181,7 @@ class TestGroups(unittest.TestCase):
         self.assertNotEqual(monitor.instrument_identity('ESMAIN'), monitor.instrument_identity('.SPX'))
         self.assertNotEqual(monitor.instrument_identity('HYG'), 'hy_oas')
 
-    def test_macro_uses_new_yahoo_quotes_and_only_credit_spread_from_fred(self):
+    def test_macro_prefers_official_vix_and_only_credit_spread_from_fred(self):
         from datetime import date, timedelta
         def bars(alias):
             prices = {'^VIX': 15.08, '^GSPC': 7801.77, '^TNX': 5.3}
@@ -192,14 +192,17 @@ class TestGroups(unittest.TestCase):
                     'quote_symbol':alias, 'quote_name':'Treasury Yield 10 Years' if alias == '^TNX' else alias}
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
                 patch.object(monitor, 'fred_series', return_value=[('2026-10-06', 3.0)]) as fred, \
+                patch.object(monitor, 'cboe_vix_series', return_value=[('2026-10-06', 15.01), ('2026-10-07', 15.08)]) as cboe, \
                 patch.object(monitor, 'yahoo_history', side_effect=bars) as yahoo, \
                 patch.object(monitor, 'financial_conditions_series', return_value=[('2026-10-02', -0.3)]), \
                 patch.object(monitor, 'market_breadth', return_value={'ok':True,'name':'上涨参与度',
                                     'date':'2026-10-06','value':65,'pct50':60}):
             macro = monitor.build_macro()
             self.assertEqual(fred.call_args_list, [unittest.mock.call('BAMLH0A0HYM2')])
-            self.assertEqual([call.args[0] for call in yahoo.call_args_list], ['^VIX', '^GSPC', '^TNX'])
+            cboe.assert_called_once()
+            self.assertEqual([call.args[0] for call in yahoo.call_args_list], ['^GSPC', '^TNX'])
             self.assertEqual((macro['vix']['value'], macro['vix']['date']), (15.08, '2026-10-07'))
+            self.assertEqual(macro['vix']['source'], 'Cboe VIX 官方日线')
             cfg = {'index_funds': {'.VIX': {}, '.SPX': {}, 'SPY': {}}, 'group_monitoring':{'index_funds':True}}
             with patch.object(monitor, 'global_dca', return_value=None):
                 snap = monitor.build_snapshot(macro, [], cfg)
@@ -208,10 +211,61 @@ class TestGroups(unittest.TestCase):
         self.assertIn('15.08', risk)
         self.assertIn('7,801.77', risk)
         self.assertIn('截至 2026-10-07', risk)
-        self.assertIn('Yahoo ^VIX', risk)
+        self.assertIn('Cboe VIX 官方日线', risk)
         self.assertNotIn('.VIX</td>', page)
         self.assertNotIn('.SPX</td>', page)
         self.assertEqual(snap['risk_quotes']['vix']['value'], 15.08)
+
+    def test_cboe_vix_csv_checks_dates_values_and_target(self):
+        from datetime import date, timedelta
+        days = [date(2026, 10, 12) - timedelta(days=i) for i in range(55, -1, -1)]
+        days = [d for d in days if d.weekday() < 5]
+        csv_rows = ['DATE,OPEN,HIGH,LOW,CLOSE'] + [
+            f'{d:%m/%d/%Y},15,16,14,{15.21 if d.isoformat() == "2026-10-12" else 15.0}' for d in days]
+        csv_rows.append('10/13/2026,15,16,14,99.0')  # 不把测试目标日后的值混进旧快照
+
+        class Response:
+            def __init__(self, text):
+                self.text = text
+            def raise_for_status(self):
+                pass
+
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-12'), \
+                patch.object(monitor.requests, 'get', return_value=Response('\n'.join(csv_rows))) as get:
+            rows = monitor.cboe_vix_series()
+        self.assertEqual((len(rows), rows[-1]), (len(days), ('2026-10-12', 15.21)))
+        self.assertEqual(get.call_args.args[0], monitor.CBOE_VIX_URL)
+        for bad in ('DATE,OPEN,HIGH,LOW,SETTLE',
+                    '\n'.join(csv_rows[:-1] + ['10/13/2026,15,16,14,999']),
+                    '\n'.join(csv_rows[:-1] + [csv_rows[-2]]),
+                    '\n'.join(csv_rows[:-1] + ['02/30/2026,15,16,14,15'])):
+            with self.subTest(bad=bad[-40:]), patch.object(monitor, 'TARGET_DATE', '2026-10-12'), \
+                    patch.object(monitor.requests, 'get', return_value=Response(bad)):
+                self.assertEqual(monitor.cboe_vix_series(), [])
+        with patch.object(monitor.requests, 'get', side_effect=monitor.requests.Timeout('offline')):
+            self.assertEqual(monitor.cboe_vix_series(), [])
+
+    def test_vix_source_prefers_current_official_then_newer_yahoo(self):
+        official = [('2026-10-09', 14.84), ('2026-10-12', 15.21)]
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-12'), \
+                patch.object(monitor, 'cboe_vix_series', return_value=official), \
+                patch.object(monitor, 'market_index_series') as yahoo:
+            source = {}
+            self.assertEqual(monitor.vix_index_series(source), official)
+            self.assertEqual(source['source'], 'Cboe VIX 官方日线')
+            yahoo.assert_not_called()
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-12'), \
+                patch.object(monitor, 'cboe_vix_series', return_value=official[:-1]), \
+                patch.object(monitor, 'market_index_series', return_value=official):
+            source = {}
+            self.assertEqual(monitor.vix_index_series(source), official)
+            self.assertEqual(source['source'], 'Yahoo ^VIX')
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-12'), \
+                patch.object(monitor, 'cboe_vix_series', return_value=official), \
+                patch.object(monitor, 'market_index_series', return_value=official[:-1]):
+            source = {}
+            self.assertEqual(monitor.vix_index_series(source), official)
+            self.assertEqual(source['source'], 'Cboe VIX 官方日线')
 
     def test_nfci_original_series_parser(self):
         class Response:
@@ -309,7 +363,9 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(snap['data_time_text'], '2026-10-07 收盘（美东交易日）')
         with patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):
             page = monitor.render({}, [reference, daily], 2, snapshot=snap)
-        self.assertIn('2 项数据已更新', page)
+        self.assertIn('个股行情 2/2 已更新', page)
+        self.assertIn('市场风险数据缺失或过期', page)
+        self.assertNotIn('抓取成功', page)
         self.assertNotIn('项参考值（截至', page)
         self.assertNotIn('当日行情未取得', page)
         self.assertIn('参考值 · 截至 2026-10-06', page)
@@ -1403,6 +1459,7 @@ class TestGroups(unittest.TestCase):
             return [] if attempts.count(alias) == 1 else rows
         with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), patch.object(monitor, 'MACRO_RETRY_WAIT', 0), \
                 patch.object(monitor, 'fred_series', return_value=[]), \
+                patch.object(monitor, 'cboe_vix_series', return_value=[]), \
                 patch.object(monitor, 'market_index_series', side_effect=flaky), \
                 patch.object(monitor, 'treasury_yield_series', return_value=[]), \
                 patch.object(monitor, 'financial_conditions_series', return_value=[]), \
@@ -1414,6 +1471,7 @@ class TestGroups(unittest.TestCase):
 
     def test_macro_old_values_are_gray_and_yahoo_fallback_uses_real_dates(self):
         with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), patch.object(monitor, 'MACRO_RETRY_WAIT', 0), \
+                patch.object(monitor, 'cboe_vix_series', return_value=[]), \
                 patch.object(monitor, 'fred_series', return_value=[('2026-09-01', 2), ('2026-09-02', 2)]), \
                 patch.object(monitor, 'market_index_series', return_value=[]), \
                 patch.object(monitor, 'treasury_yield_series', return_value=[]), \
@@ -1702,6 +1760,7 @@ class TestGroups(unittest.TestCase):
             return [('2026-09-25', value), (nfci_date, value)]
         with patch.object(monitor, 'TARGET_DATE', '2026-10-08'), patch.object(monitor, 'MACRO_RETRY_WAIT', 0), \
                 patch.object(monitor, 'fred_series', side_effect=fred), \
+                patch.object(monitor, 'cboe_vix_series', return_value=[]), \
                 patch.object(monitor, 'market_index_series', return_value=[]), \
                 patch.object(monitor, 'treasury_yield_series', return_value=[]), \
                 patch.object(monitor, 'financial_conditions_series', side_effect=lambda: fred('NFCI')), \
@@ -1752,6 +1811,24 @@ class TestGroups(unittest.TestCase):
         duplicate_failure = monitor.render({}, [], 0, snapshot={'summary': {
             'total': 1, 'missing_symbols': ['AAPL'], 'stale_symbols': ['AAPL']}})
         self.assertIn('当日行情未取得 1 只：AAPL', duplicate_failure)
+
+    def test_run_light_partial_market_risk_does_not_claim_complete_success(self):
+        snap = {'event': 'push', 'finished_at_bj': '2026-10-13T12:34:28+08:00',
+                'summary': {'red': 11, 'yellow': 32, 'green': 56, 'total': 99,
+                            'missing_symbols': [], 'stale_symbols': []},
+                'market_risk': {'missing': ['VIX'], 'valid_count': 4}}
+        phase, text = monitor._run_light(snap, '2026-10-13 12:34:28')
+        self.assertEqual(phase, 'partial')
+        self.assertIn('市场风险数据缺失或过期：VIX（有效指标 4/5）', text)
+        self.assertIn('个股行情 99/99 已更新', text)
+        self.assertNotIn('抓取成功', text)
+        page = monitor.render({}, [], 0, snapshot=snap)
+        self.assertIn('id="runLight" data-phase="partial"', page)
+        self.assertIn('市场风险数据缺失或过期：VIX', page)
+        complete = dict(snap, market_risk={'missing': [], 'valid_count': 5})
+        self.assertEqual(monitor._run_light(complete, '2026-10-13 12:34:28')[0], 'ok')
+        bad_quote = dict(snap, summary=dict(snap['summary'], missing_symbols=['NTNX']))
+        self.assertEqual(monitor._run_light(bad_quote, '2026-10-13 12:34:28')[0], 'bad')
 
     def test_empty_render_and_safe_names(self):
         row = dict(symbol='MSFT', note='<公司 & 名称>', price=100, chg=0,
@@ -3109,7 +3186,10 @@ class TestDisplayInteractions(unittest.TestCase):
             ('RSI 2条超卖（≤30）：RSI6=20', 'signal-magenta'),
             ('RSI 3条超卖（≤30）：RSI6=20', 'signal-magenta'),
             ('RSI 2条超买（≥70）：RSI6=80', ''),
-            ('贴近布林上轨（距 0.2%）', 'signal-yellow'),
+            ('贴近布林上轨（距 0.2%）', ''),
+            ('突破布林上轨 101.00', ''),
+            ('逼近布林下轨 还差0.30%', ''),
+            ('触及布林下轨 99.00', 'signal-yellow'),
             ('跌破布林下轨', 'signal-yellow'),
             ('布林 + RSI 双重信号 → 红', 'signal-red'),
             ('日内触及250日均线±1%（现价偏离 +3.0%）', 'signal-cyan'),
@@ -3351,6 +3431,25 @@ class TestSignalCounts(unittest.TestCase):
         self.assertNotIn('明细待下次更新', output)
         self.assertIn('红色信号 · 1 只', self.panel(output, 'chg', 'red'))
         self.assertIn('signal-member-symbol">AAA', self.panel(output, 'rsi', 'yellow'))
+
+    def test_combined_red_members_show_direction_without_guessing_old_snapshot(self):
+        rows = [self.member_row('UP', 'position', 'red', ('boll_rsi', 'red'), note='上方'),
+                self.member_row('DOWN', 'focus', 'red', ('boll_rsi', 'red')),
+                self.member_row('LEGACY', 'technology', 'red', ('boll_rsi', 'red')),
+                self.member_row('CONFLICT', 'energy', 'red', ('boll_rsi', 'red'))]
+        rows[0]['boll_rsi_direction'] = '上轨（超买）'
+        rows[1]['boll_rsi_direction'] = '下轨（超卖）'
+        rows[3]['boll_rsi_direction'] = '上轨（RSI超卖，方向不一致）'
+        counts = monitor.signal_counts(rows)
+        members = monitor.signal_count_members(rows)
+        self.assertEqual(counts['boll_rsi']['red'], 4)
+        self.assertEqual(len(members['boll_rsi']['red']), 4)
+        output = self.panel(monitor._signal_counts_card({'signal_counts': counts,
+                                                            'signal_members': members}), 'boll_rsi', 'red')
+        for label in ('上轨（超买）', '下轨（超卖）', '上轨（RSI超卖，方向不一致）', '方向待下次更新'):
+            self.assertIn(label, output)
+        self.assertIn('上方', output)
+        self.assertEqual(output.count('class="signal-member-direction"'), 4)
 
     def test_members_deduplicate_marks_not_cross_kind_or_level(self):
         row = self.member_row('AAA', 'position', 'red', ('rsi', 'red'), ('rsi', 'red'),

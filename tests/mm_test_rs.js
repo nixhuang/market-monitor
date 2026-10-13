@@ -104,6 +104,17 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.match(f.els.runLightTxt.textContent, /取数失败 2 只/);
     assert.equal(f.els.ruleLight.dataset.phase, 'ok');
   });
+  await check('市场风险缺项时运行灯为部分数据待补，个股行情单独准确显示', async () => {
+    const page = snapshot(); page.event = 'push'; page.market_risk = {missing: ['VIX'], valid_count: 4};
+    const f = fixture(page); await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.runLight.dataset.phase, 'partial');
+    assert.match(f.els.runLightTxt.textContent, /市场风险数据缺失或过期：VIX（有效指标 4\/5）/);
+    assert.match(f.els.runLightTxt.textContent, /个股行情 129\/129 已更新/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent, /抓取成功/);
+    page.market_risk = {missing: [], valid_count: 5};
+    const ok = fixture(page); await ok.win.MMRunStatus.refresh();
+    assert.equal(ok.els.runLight.dataset.phase, 'ok');
+  });
   await check('对应规则运行失败红灯，别误用行情绿灯', async () => {
     const f = fixture(); f.data.sha = C; f.data.run.status = 'completed'; f.data.run.conclusion = 'failure';
     await f.win.MMRunStatus.refresh(); assert.equal(f.els.ruleLight.dataset.phase, 'bad');
