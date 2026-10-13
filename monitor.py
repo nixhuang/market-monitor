@@ -3139,6 +3139,40 @@ def fmt(v, unit="", nd=2):
 
 RUN_JS = '<script src="./run-status.js?v=20261009-1"></script>'
 
+# 本页展示交互独立于运行/令牌逻辑；不联网、不写用户配置。
+PAGE_INTERACTION_JS = r"""
+document.addEventListener("click", function(event) {
+  if (!(event.target instanceof Element)) return;
+  const closeButton = event.target.closest(".collapse-group");
+  if (closeButton) {
+    const card = closeButton.closest("details");
+    if (!card) return;
+    card.open = false;
+    const heading = card.querySelector(":scope > summary");
+    if (heading) {
+      heading.focus({preventScroll: true});
+      heading.scrollIntoView({block: "start", behavior: "auto"});
+    }
+    return;
+  }
+  const button = event.target.closest(".signal-count-toggle[data-target]");
+  if (!button) return;
+  const panel = document.getElementById(button.dataset.target);
+  if (!panel || !panel.classList.contains("signal-members-panel")) return;
+  const owner = button.closest("tr");
+  const opening = panel.hidden;
+  if (owner) {
+    owner.querySelectorAll(".signal-count-toggle[data-target]").forEach(function(other) {
+      const otherPanel = document.getElementById(other.dataset.target);
+      if (otherPanel) otherPanel.hidden = true;
+      other.setAttribute("aria-expanded", "false");
+    });
+  }
+  panel.hidden = !opening;
+  button.setAttribute("aria-expanded", String(opening));
+});
+"""
+
 
 def config_hash(filename):
     """与GitHub Contents API content.sha一致，用于精确验证哪版配置已生效。"""
@@ -3203,6 +3237,33 @@ def signal_counts(items):
     return out
 
 
+def signal_count_members(items):
+    """按原信号口径收集标的；重复身份沿用首页分类优先级，只保留第一条。"""
+    levels = ("red", "yellow", "purple", "sole_yellow")
+    out = {kind: {level: [] for level in levels} for kind, _ in SIGNAL_KINDS}
+    priority = {g["item_group"]: i for i, g in enumerate(GROUPS)}
+    seen = set(RISK_IDENTITIES)
+    for d in sorted(items, key=lambda item: priority.get(item.get("group"), len(GROUPS))):
+        symbol = normalize_symbol(d.get("symbol"))
+        identity = instrument_identity(symbol)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        member = {"symbol": symbol, "note": d.get("note") or "", "group": d.get("group") or ""}
+        marks = d.get("signal_marks") or []
+        for kind in {k for k, _ in marks}:
+            if kind not in out:
+                continue
+            for level in levels[:3]:
+                if any(k == kind and m == level for k, m in marks):
+                    out[kind][level].append(dict(member))
+        if d.get("level") == "yellow":
+            yellow_kinds = {k for k, m in marks if m == "yellow"}
+            if len(yellow_kinds) == 1 and next(iter(yellow_kinds)) in out:
+                out[next(iter(yellow_kinds))]["sole_yellow"].append(dict(member))
+    return out
+
+
 def build_snapshot(macro, items, cfg, group_counts=None):
     dates = sorted({d.get("data_date") for d in items if d.get("data_date") and not d.get("reference_only")})
     references = {normalize_symbol(d["symbol"]): d["data_date"] for d in items
@@ -3246,6 +3307,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
                     "prior_prices": sum(not d.get("reference_only") and d.get("price") is not None and d.get("data_date") != TARGET_DATE for d in items),
                     "missing_prices": sum(d.get("price") is None for d in items)},
         "signal_counts": signal_counts(items),
+        "signal_members": signal_count_members(items),
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
         "treasury_reference": {key: macro.get("ust10", {}).get(key) for key in
@@ -3310,6 +3372,32 @@ tr:first-child td{border-top:none}
   font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}
 .fund-body ul{margin:4px 0 0;padding-left:16px}
 .sig{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}
+.signal-magenta{color:#ef8de4} .signal-red{color:#ff8580} .signal-yellow{color:#f0c674} .signal-cyan{color:#4dd0e1}
+.group-bottom{padding:0 12px;border-top:1px solid var(--line);text-align:center;line-height:0}
+.collapse-group{width:44px;height:26px;padding:0;font:inherit;color:var(--dim);
+  display:inline-flex;align-items:center;justify-content:center;vertical-align:top;
+  background:transparent;border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
+.collapse-group .collapse-icon{font-size:16px;line-height:1}
+.collapse-group:hover{color:var(--text);background:transparent}
+.collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
+#signalCounts{border:1px solid #6686c6;box-shadow:inset 3px 0 0 #8fb8f0;background:#182131}
+#signalCounts>summary{color:#bfd5ff}
+#signalCounts table{table-layout:fixed}
+#signalCounts td{padding:7px 5px;font-size:12px;overflow-wrap:anywhere}
+#signalCounts td:first-child{width:26%}
+#signalCounts .signal-count-toggle{min-height:44px;min-width:44px;max-width:100%;padding:4px 2px;
+  color:#bfd5ff;font:inherit;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:3px;touch-action:manipulation}
+#signalCounts .signal-count-toggle::after{content:"▾";font-size:10px}
+#signalCounts .signal-count-toggle[aria-expanded="true"]::after{content:"▴"}
+#signalCounts .signal-members-row>td{padding:0;width:auto;border-top:0}
+#signalCounts .signal-members-panel{padding:10px 12px;background:#121a27;border-top:1px solid #465e87;text-align:left}
+#signalCounts .signal-members-panel[hidden]{display:none}
+#signalCounts .signal-members-panel h4{font-size:12px;margin:12px 0 5px;color:#bfd5ff}
+#signalCounts .signal-members-panel ul{margin:0;padding-left:18px}
+#signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
+#signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
+#signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
 .earn{display:block;margin:0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:11px}
 .earn.soon{color:#f0c674;font-weight:600}
@@ -3596,11 +3684,31 @@ def _earnings_html(d):
             f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}{source}</span></span>')
 
 
+def _signal_text_html(text):
+    """只为提示文字着色，不改变信号等级、计数或公式；组合信号优先。"""
+    text = str(text)
+    if "共识价" in text or "目标价" in text:
+        cls = "tp"
+    elif "布林" in text and "RSI" in text:
+        cls = "signal-red"
+    elif text.startswith("RSI") and "超卖" in text:
+        cls = "signal-magenta"
+    elif "布林" in text:
+        cls = "signal-yellow"
+    elif "均线" in text and ("触及" in text or "贴近" in text or "上穿" in text or "跌破" in text):
+        period = re.search(r"(\d+)日(?:弱)?均线", text)
+        cls = "signal-cyan" if period and int(period.group(1)) == S.get("ma_long") and S.get("ma_long", 0) > 0 else ""
+    else:
+        cls = ""
+    escaped = html_lib.escape(text)
+    return f'<span class="{cls}">{escaped}</span>' if cls else escaped
+
+
 def _signals_html(d):
-    """警示文字：目标价 / 共识价相关的一律用紫色，并统一排在最后；手填目标价没触发时也写出空间。"""
+    """目标价 / 共识价仍用紫色并排最后，其他警示按类型独立着色。"""
     is_tp = lambda x: "共识价" in x or "目标价" in x
-    parts = ([x for x in d["signals"] if not is_tp(x)]
-             + [f'<span class="tp">{x}</span>' for x in d["signals"] if is_tp(x)])
+    signals = d["signals"]
+    parts = [_signal_text_html(x) for x in signals if not is_tp(x)] + [_signal_text_html(x) for x in signals if is_tp(x)]
     sig = " · ".join(parts) if parts else "—"
     tg = d.get("target") or {}
     if tg.get("kind") == "manual" and tg.get("space") is not None and not tg.get("hit") and not tg.get("anomaly"):
@@ -3671,6 +3779,20 @@ def _sort_group_items(g, group):
     return g
 
 
+def _display_groups():
+    """首页指数基置底；不改变 GROUPS 的清单去重、抓取与监测优先级。"""
+    return [g for g in GROUPS if g["key"] != "index_funds"] + [g for g in GROUPS if g["key"] == "index_funds"]
+
+
+def _collapse_button(card_id, label):
+    """只显示小三角，保留触控区域及读屏名称。"""
+    card_id = html_lib.escape(str(card_id), quote=True)
+    label = html_lib.escape(str(label), quote=True)
+    return (f'<div class="group-bottom"><button type="button" class="collapse-group" '
+            f'aria-controls="{card_id}" aria-label="收起{label}">'
+            f'<span class="collapse-icon" aria-hidden="true">▲</span></button></div>')
+
+
 def _group_card(group, g, items_by_symbol, snapshot):
     """一个分组的折叠卡片：展开的警示表 + 「无异动 N 只」折叠表。"""
     monitoring = snapshot.get("group_monitoring", {})
@@ -3693,6 +3815,7 @@ def _group_card(group, g, items_by_symbol, snapshot):
     if not g and enabled:
         parts.append('<div class="quiet">本组标的已在优先分组展示，避免重复信号</div>' if registered.get(group["key"], 0)
                      else '<div class="quiet">暂无标的，去设置页录入或导入 CSV / EBK</div>')
+    parts.append(_collapse_button(f'group_{group["key"]}', group["label"]))
     body = "\n".join(parts)
     stats = _group_stats_html(g, group, items_by_symbol, enabled)
     expanded = " open" if enabled and group["key"] in ("positions", "focus") else ""
@@ -3728,27 +3851,69 @@ def _run_light(snapshot, finished_txt):
 
 
 def _signal_counts_card(snapshot):
-    """首页最末尾的折叠卡片「各信号计数」：哪类信号点亮了多少只标的、哪些黄灯只由一类信号造成。
-    快照里没有 signal_counts 或一条信号都没有，就整块不显示。"""
+    """各信号计数及分组明细；空计数不显示，缺失或不一致的成员等待下次更新。"""
     counts = snapshot.get("signal_counts") or {}
+    members = snapshot.get("signal_members") or {}
+    levels = (("red", "红色信号"), ("yellow", "黄色信号"),
+              ("purple", "紫色提示"), ("sole_yellow", "仅此一条黄灯"))
+    group_order = {g["item_group"]: i for i, g in enumerate(_display_groups())}
+    group_labels = {g["item_group"]: g["label"] for g in GROUPS}
+    esc = lambda value: html_lib.escape(str(value), quote=True)
     rows = ""
-    for v in counts.values():
-        if not (v.get("red") or v.get("yellow") or v.get("purple")):
+    for kind, v in counts.items():
+        if not any(v.get(level) for level, _ in levels):
             continue
-        cell = lambda n: f'<td class="num">{n if n else "—"}</td>'
-        rows += (f'<tr><td>{html_lib.escape(str(v.get("label", "")))}</td>'
-                 f'{cell(v.get("red"))}{cell(v.get("yellow"))}{cell(v.get("purple"))}{cell(v.get("sole_yellow"))}</tr>')
+        label = esc(v.get("label", ""))
+        kind_id = hashlib.sha256(str(kind).encode("utf-8")).hexdigest()
+        cells, panels = [], []
+        kind_members = members.get(kind) if isinstance(members, dict) else None
+        for level, level_name in levels:
+            n = v.get(level, 0)
+            if not n:
+                cells.append('<td class="num">—</td>')
+                continue
+            panel_id = f"signal-members-{kind_id}-{level}"
+            cells.append(f'<td class="num"><button type="button" class="signal-count-toggle" '
+                         f'data-target="{panel_id}" aria-controls="{panel_id}" aria-expanded="false" '
+                         f'aria-label="{label} · {level_name} · {esc(n)} 只，展开或收起标的">{esc(n)}</button></td>')
+            entries = kind_members.get(level) if isinstance(kind_members, dict) else None
+            valid = (isinstance(entries, list) and len(entries) == n
+                     and all(isinstance(d, dict) and isinstance(d.get("symbol"), str)
+                             and d["symbol"].strip() for d in entries))
+            if valid:
+                valid = len({instrument_identity(d["symbol"]) for d in entries}) == n
+            content = f'<p><strong>{label} · {level_name} · {esc(n)} 只</strong></p>'
+            if not valid:
+                content += '<p>明细待下次更新：当前快照缺少成员或成员人数与计数不一致，暂不展示名单。</p>'
+            else:
+                grouped = {}
+                for d in entries:
+                    group = str(d.get("group") or "")
+                    grouped.setdefault(group, []).append(d)
+                content += '<div class="signal-member-groups">'
+                for group in sorted(grouped, key=lambda name: group_order.get(name, len(GROUPS))):
+                    group_members = grouped[group]
+                    content += (f'<section class="signal-member-group"><h4>'
+                                f'{esc(group_labels.get(group, group or "未分类"))} · {len(group_members)} 只</h4>'
+                                f'<ul class="signal-member-list">')
+                    for d in group_members:
+                        note = f'<span class="note">{esc(d["note"])}</span>' if d.get("note") else ""
+                        content += f'<li><span class="signal-member-symbol">{esc(d["symbol"])}</span>{note}</li>'
+                    content += '</ul></section>'
+                content += '</div>'
+            panels.append(f'<div class="signal-members-panel" id="{panel_id}" hidden>{content}</div>')
+        rows += (f'<tr><td>{label}</td>{"".join(cells)}</tr>'
+                 f'<tr class="signal-members-row"><td colspan="5">{"".join(panels)}</td></tr>')
     if not rows:
         return ""
     dim = 'style="color:var(--dim)"'
     head = (f'<tr class="gray mh"><td {dim}>信号</td><td class="num" {dim}>红</td><td class="num" {dim}>黄</td>'
             f'<td class="num" {dim}>紫</td><td class="num" {dim}>仅此一条黄灯</td></tr>')
-    yellow = (snapshot.get("summary") or {}).get("yellow", 0)
+    yellow = esc((snapshot.get("summary") or {}).get("yellow", 0))
     return (f'<details class="card group-card" id="signalCounts"><summary class="grp"><span>各信号计数</span>'
             f'<span class="group-stats">本轮黄灯 {yellow} 只</span></summary>'
             f'<table>{head}{rows}</table>'
-            f'<p class="macro-help">每只标的每类信号只算一次；“仅此一条黄灯”＝这只标的的黄灯完全由这一类信号造成，'
-            f'关掉这条规则它就变绿。紫色为目标价／共识价提示。</p></details>\n')
+            f'{_collapse_button("signalCounts", "各信号计数")}</details>\n')
 
 
 def _reference_card(snapshot, *, details_only=False):
@@ -3885,7 +4050,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     # 板块 ETF 可能因去重落在持仓／重点关注里，按代码在全部条目里找，不限本组
     items_by_symbol = {normalize_symbol(d["symbol"]): d for d in items}
     group_cards = "".join(_group_card(group, items_by_group[group["item_group"]], items_by_symbol, snapshot)
-                          for group in GROUPS)
+                          for group in _display_groups())
 
     src_name = {"yahoo": "Yahoo Finance", "stooq": "Stooq", "nasdaq": "Nasdaq"}
     srcs = sorted({d.get("source") for d in items if d.get("source")})
@@ -3960,6 +4125,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 
 {('<div class="warn">本轮标的均未取得可用报价；可能是接口故障、异常行情或抓取时间预算不足，请查看个股原因。宏观数据另行展示。</div>' if data_down else "")}
 
+{signal_card}
 <details class="card macro-card" id="macroCard">
 <summary class="grp"><span>市场风险参考</span><span class="group-stats">{macro_stats}</span></summary>
 <p class="macro-help" id="marketRiskReason">{html_lib.escape(risk['text'])} · 有效指标 {risk['valid_count']}/5</p>
@@ -3969,10 +4135,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 {_oil_reference_row(snapshot)}
 </table>
 {_reference_card(snapshot)}
+{_collapse_button("macroCard", "市场风险参考")}
 </details>
 
 {group_cards}
-{signal_card}{reg_line}
+{reg_line}
 
 <div class="foot">
 行情：{src_txt} · 垃圾债利差：FRED · 金融压力：NFCI原始周度数据／FRED同步备用<br>
@@ -3984,6 +4151,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <span id="runMsg"></span>
 </div>
 {RUN_JS}
+<script>{PAGE_INTERACTION_JS}</script>
 {_page_notes(snapshot)}
 </div></body></html>"""
 

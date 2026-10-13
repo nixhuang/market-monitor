@@ -130,7 +130,7 @@ check("财报 美东" not in html and "下一次财报" not in html.split("<styl
 check('无异动 1 只 · 点击查看' in html and 'SPYM' in html, "无异动标的可展开查看")
 pos_card = html.split('id="group_positions"')[1].split('id="group_focus"')[0]
 check('NTNX' in pos_card and 'SPYM' in pos_card, "持仓包含警示及无异动标的")
-focus_card = html.split('id="group_focus"')[1].split('id="group_index_funds"')[0]
+focus_card = html.split('id="group_focus"')[1].split('id="group_technology"')[0]
 check('TEM' in focus_card and 'SOXL' in focus_card, "重点关注仍包含 TEM/SOXL")
 tech_card = html.split('id="group_technology"')[1].split('id="group_healthcare"')[0]
 check('MCD' in tech_card and 'XLU' in tech_card and 'PG' in tech_card, "IT 分类包含警示与无异动标的")

@@ -29,7 +29,10 @@ assert.equal(audit.ignored.length,11);
 assert.deepEqual(audit.missing_after,['TLT','TXN','2USDCNY','IAUM','.DJI','VOO','2XAUUSD']);
 assert.deepEqual(audit.extra_after,[]);
 assert.deepEqual(audit.supplemented,[]);
-assert(actual.size>=100,'清单不应被意外清空');
+// 允许用户主动精简清单，不以首次导入后的固定数量拦截正常删除。
+// 空清单、关键持仓与重点关注的保护仍分别检查。
+assert(actual.size>0,'清单不应被意外清空');
+for(const g of groups)assert(cfg[g.key] && typeof cfg[g.key]==='object' && !Array.isArray(cfg[g.key]),'Missing group object '+g.key);
 for(const s of ['SPYM','SCHD','QQQM'])assert(s in cfg.positions,'Holdings must be preserved '+s);
 for(const g of groups) for(const [s,c] of Object.entries(cfg[g.key])) {
   assert(!I.ignoredReason(s),'Excluded '+s);

@@ -275,7 +275,7 @@ class TestGroups(unittest.TestCase):
         with patch.object(monitor, 'global_dca', return_value=None), patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):   # 旧的参考行渲染路径：临时放开 ^TNX
             snap = monitor.build_snapshot(macro, rows, cfg)
             page = monitor.render(macro, rows, len(rows), snapshot=snap)
-        index = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
+        index = page.split('id="group_index_funds"', 1)[1].split('<div class="group-bottom">', 1)[0]
         self.assertIn('BD#US10Y', index)
         self.assertNotIn('.VIX', index)
         self.assertNotIn('.SPX', index)
@@ -545,7 +545,7 @@ class TestGroups(unittest.TestCase):
                 page = f.read()
             with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
                 snap = json.load(f)
-        index = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
+        index = page.split('id="group_index_funds"', 1)[1].split('<div class="group-bottom">', 1)[0]
         self.assertIn('4.25%', index)
         self.assertNotIn('.VIX', index)
         self.assertNotIn('.SPX', index)
@@ -1388,7 +1388,7 @@ class TestGroups(unittest.TestCase):
             self.assertIn(f'tr.{color} td:first-child{{box-shadow:inset {width}px', page)
         self.assertNotIn('0.51 个百分点', page)
         risk = page.split('id="macroCard"', 1)[1].split('id="group_positions"', 1)[0]
-        reference = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
+        reference = page.split('id="group_index_funds"', 1)[1].split('<div class="group-bottom">', 1)[0]
         self.assertNotIn('收益率曲线', risk)
         self.assertNotIn('收益率曲线', reference)
         self.assertNotIn('id="yieldCurveHelp"', page)
@@ -1558,7 +1558,7 @@ class TestGroups(unittest.TestCase):
             snap = monitor.build_snapshot(macro, [], cfg)
         page = monitor.render(macro, [], 0, snapshot=snap)
         risk = page.split('id="macroCard"', 1)[1].split('id="group_positions"', 1)[0]
-        index = page.split('id="group_index_funds"', 1)[1].split('id="group_technology"', 1)[0]
+        index = page.split('id="group_index_funds"', 1)[1].split('<div class="group-bottom">', 1)[0]
         self.assertEqual(risk.count('id="ust10Ref"'), 1)      # 风险参考里的 10Y 参考行还在
         self.assertNotIn('BD#US10Y', index)
 
@@ -1571,7 +1571,7 @@ class TestGroups(unittest.TestCase):
             snap = monitor.build_snapshot(macro, [], cfg)
         page = monitor.render(macro, [], 0, snapshot=snap)
         risk = page.split('id="macroCard"',1)[1].split('id="group_positions"',1)[0]
-        index = page.split('id="group_index_funds"',1)[1].split('id="group_technology"',1)[0]
+        index = page.split('id="group_index_funds"',1)[1].split('<div class="group-bottom">',1)[0]
         self.assertFalse(snap['group_monitoring']['index_funds'])
         self.assertEqual(snap['summary']['total'], 0)
         self.assertEqual(snap['registered_counts']['index_funds'], 1)
@@ -3101,6 +3101,120 @@ class Test52wLow(unittest.TestCase):
         self.assertFalse(any('52周' in x for x in sig), sig)
 
 
+class TestDisplayInteractions(unittest.TestCase):
+    """展示改动不改变业务信号；颜色、局部收起与计数位置均覆盖。"""
+
+    def test_signal_color_priority_and_html_escape(self):
+        cases = [
+            ('RSI 2条超卖（≤30）：RSI6=20', 'signal-magenta'),
+            ('RSI 3条超卖（≤30）：RSI6=20', 'signal-magenta'),
+            ('RSI 2条超买（≥70）：RSI6=80', ''),
+            ('贴近布林上轨（距 0.2%）', 'signal-yellow'),
+            ('跌破布林下轨', 'signal-yellow'),
+            ('布林 + RSI 双重信号 → 红', 'signal-red'),
+            ('日内触及250日均线±1%（现价偏离 +3.0%）', 'signal-cyan'),
+            ('上穿250日均线', 'signal-cyan'),
+            ('跌破250日均线', 'signal-cyan'),
+            ('上穿50日均线', ''),
+            ('距目标价 100 还差 1%', 'tp'),
+            ('其他<script>alert(1)</script>', ''),
+        ]
+        with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 250}):
+            for text, cls in cases:
+                with self.subTest(text=text):
+                    rendered = monitor._signal_text_html(text)
+                    self.assertNotIn('<script>', rendered)
+                    if cls:
+                        self.assertTrue(rendered.startswith(f'<span class="{cls}">'), rendered)
+                    else:
+                        self.assertNotIn('<span', rendered)
+        with patch.dict(monitor.S, {'ma_long': 0}):
+            self.assertNotIn('signal-cyan', monitor._signal_text_html('上穿250日均线'))
+
+    def test_signal_text_order_and_original_data_are_unchanged(self):
+        import copy
+        row = {'signals': ['距目标价 100 还差 1%', '跌破布林下轨', 'RSI 2条超卖'],
+               'target': {}, 'level': 'yellow', 'signal_marks': [('boll', 'yellow')]}
+        old = copy.deepcopy(row)
+        output = monitor._signals_html(row)
+        self.assertLess(output.index('跌破布林'), output.index('距目标价'))
+        self.assertEqual(row, old)
+
+    def test_render_moves_index_funds_below_real_estate_without_changing_groups(self):
+        import copy
+        original = copy.deepcopy(monitor.GROUPS)
+        original_keys = ['positions', 'focus', 'index_funds', 'technology', 'healthcare',
+                         'financials', 'energy', 'industrials', 'materials', 'utilities',
+                         'consumer_staples', 'communications', 'consumer_discretionary', 'real_estate']
+        self.assertEqual([g['key'] for g in monitor.GROUPS], original_keys)
+        expected = [key for key in original_keys if key != 'index_funds'] + ['index_funds']
+        self.assertEqual([g['key'] for g in monitor._display_groups()], expected)
+        page = monitor.render({}, [], 0, snapshot={})
+        rendered = re.findall(r'<details class="card group-card" id="group_([^"]+)"', page)
+        self.assertEqual(rendered, expected)
+        self.assertEqual(rendered[-2:], ['real_estate', 'index_funds'])
+        self.assertEqual([key for key in rendered if key != 'index_funds'],
+                         [key for key in original_keys if key != 'index_funds'])
+        self.assertEqual(monitor.GROUPS, original)
+
+    def test_every_group_has_local_bottom_collapse_button(self):
+        self.assertEqual(len(monitor.GROUPS), 14)
+        for group in monitor.GROUPS:
+            with self.subTest(group=group['key']):
+                with patch.object(monitor, '_collapse_button', wraps=monitor._collapse_button) as helper:
+                    output = monitor._group_card(group, [], {}, {})
+                card_id = f'group_{group["key"]}'
+                helper.assert_called_once_with(card_id, group['label'])
+                buttons = re.findall(r'<button\b([^>]*)>(.*?)</button>', output, re.S)
+                self.assertEqual(len(buttons), 1)
+                attrs, content = buttons[0]
+                self.assertIn('class="collapse-group"', attrs)
+                self.assertIn(f'aria-controls="{card_id}"', attrs)
+                self.assertIn('type="button"', attrs)
+                self.assertIn(f'aria-label="收起{group["label"]}"', attrs)
+                self.assertNotIn('title=', attrs)
+                self.assertEqual(content, '<span class="collapse-icon" aria-hidden="true">▲</span>')
+                self.assertTrue(output.endswith(monitor._collapse_button(card_id, group['label'])
+                                                + '</details>\n'))
+        self.assertIn('card.open = false', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('heading.focus({preventScroll: true})', monitor.PAGE_INTERACTION_JS)
+        self.assertNotIn('fetch(', monitor.PAGE_INTERACTION_JS)
+        self.assertNotIn('localStorage', monitor.PAGE_INTERACTION_JS)
+
+    def test_collapse_button_css_has_larger_icon_and_shorter_transparent_strip(self):
+        button_rule = re.search(r'\.collapse-group\{([^}]+)\}', monitor.PAGE_CSS)
+        self.assertIsNotNone(button_rule)
+        for declaration in ('width:44px', 'height:26px', 'padding:0', 'background:transparent', 'border:0',
+                            'display:inline-flex', 'align-items:center', 'justify-content:center', 'vertical-align:top'):
+            self.assertIn(declaration, button_rule.group(1))
+        self.assertIn('.collapse-group .collapse-icon{font-size:16px;line-height:1}', monitor.PAGE_CSS)
+        strip_rule = re.search(r'\.group-bottom\{([^}]+)\}', monitor.PAGE_CSS)
+        self.assertIn('line-height:0', strip_rule.group(1))
+        self.assertIn('.collapse-group:hover{color:var(--text);background:transparent}', monitor.PAGE_CSS)
+
+    def test_counts_panel_precedes_market_risk_and_has_distinct_frame(self):
+        snap = {'signal_counts': {'ma_band': {'label': '长均线触及', 'red': 0,
+                 'yellow': 5, 'purple': 0, 'sole_yellow': 3}}, 'summary': {'yellow': 5}}
+        page = monitor.render({}, [], 0, snapshot=snap)
+        self.assertLess(page.index('id="signalCounts"'), page.index('id="macroCard"'))
+        self.assertIn('#signalCounts{border:1px solid #6686c6', page)
+        self.assertIn(monitor.PAGE_INTERACTION_JS, page)
+        controls = re.findall(r'<button type="button" class="collapse-group" aria-controls="([^"]+)"', page)
+        self.assertEqual(controls, ['signalCounts', 'macroCard'] + [f'group_{g["key"]}' for g in monitor._display_groups()])
+        self.assertEqual(len(controls), 16)
+        self.assertEqual(page.count('<span class="collapse-icon" aria-hidden="true">▲</span>'), 16)
+
+    def test_market_risk_has_local_bottom_button_after_reference_content(self):
+        page = monitor.render({}, [], 0, snapshot={})
+        macro = page.split('id="macroCard"', 1)[1].split('<details class="card group-card"', 1)[0]
+        button = monitor._collapse_button('macroCard', '市场风险参考')
+        self.assertEqual(macro.count('class="collapse-group"'), 1)
+        self.assertIn(button + '\n</details>', macro)
+        self.assertGreater(macro.index(button), macro.index('</table>'))
+        self.assertIn('aria-label="收起市场风险参考"', button)
+        self.assertNotIn('title=', button)
+
+
 class TestSignalCounts(unittest.TestCase):
     """status.json 的 signal_counts：各类信号各触发多少、哪些黄灯只由一类信号造成。"""
 
@@ -3161,9 +3275,274 @@ class TestSignalCounts(unittest.TestCase):
         self.assertNotIn('id="signalCounts"', quiet)
         self.assertNotIn('id="signalCounts"', monitor.render({}, [], 0, snapshot={}))
 
+    def test_counts_card_has_only_triangle_after_table_and_no_long_help(self):
+        snap = {'signal_counts': monitor.signal_counts([self.row('yellow', ('boll', 'yellow'))])}
+        with patch.object(monitor, '_collapse_button', wraps=monitor._collapse_button) as helper:
+            output = monitor._signal_counts_card(snap)
+        helper.assert_called_once_with('signalCounts', '各信号计数')
+        self.assertNotIn('macro-help', output)
+        self.assertTrue(output.endswith('</table>' + monitor._collapse_button('signalCounts', '各信号计数')
+                                        + '</details>\n'))
+        buttons = re.findall(r'<button\b([^>]*\bclass="collapse-group"[^>]*)>(.*?)</button>', output, re.S)
+        self.assertEqual(len(buttons), 1)
+        attrs, content = buttons[0]
+        for attribute in ('type="button"', 'aria-controls="signalCounts"',
+                          'aria-label="收起各信号计数"'):
+            self.assertIn(attribute, attrs)
+        self.assertEqual(content, '<span class="collapse-icon" aria-hidden="true">▲</span>')
+
+    def test_earnings_is_not_added_to_signal_kinds_counts_or_members(self):
+        expected = ['chg', 'amp', 'vol_ratio', 'rsi', 'boll', 'boll_rsi',
+                    'ma_cross', 'ma_band', 'low52', 'add_price', 'reduce_price', 'target']
+        self.assertEqual([kind for kind, _ in monitor.SIGNAL_KINDS], expected)
+        rows = [self.member_row('AAA', 'position', 'red', *((kind, 'red') for kind in expected)),
+                self.member_row('BBB', 'focus', 'yellow', ('earnings', 'yellow'))]
+        rows[1].update(earnings={'status': 'ok', 'date': '2026-10-15'}, signals=['财报临近'])
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        self.assertEqual(list(snap['signal_counts']), expected)
+        self.assertEqual(list(snap['signal_members']), expected)
+        for kind in expected:
+            with self.subTest(kind=kind):
+                self.assertEqual(snap['signal_counts'][kind]['red'], 1)
+                self.assertEqual(snap['signal_counts'][kind]['yellow'], 0)
+                self.assertEqual(snap['signal_counts'][kind]['sole_yellow'], 0)
+                self.assertEqual([d['symbol'] for d in snap['signal_members'][kind]['red']], ['AAA'])
+        output = monitor._signal_counts_card(snap)
+        self.assertEqual(output.count('class="signal-members-row"'), len(expected))
+        self.assertNotIn('财报', output)
+        self.assertNotIn('earnings', output)
+        self.assertNotIn('BBB', output)
+
     def test_snapshot_carries_signal_counts(self):
         snap = monitor.build_snapshot({}, [self.row('red', ('chg', 'red'))], {}, group_counts={})
         self.assertEqual(snap['signal_counts']['chg']['red'], 1)
+        self.assertEqual(snap['signal_members']['chg']['red'],
+                         [{'symbol': 'T', 'note': '', 'group': ''}])
+
+    @staticmethod
+    def member_row(symbol, group, level, *marks, note=''):
+        return {'symbol': symbol, 'group': group, 'note': note,
+                'level': level, 'signal_marks': list(marks)}
+
+    def panel(self, output, kind, level):
+        import hashlib
+        panel_id = f'signal-members-{hashlib.sha256(kind.encode("utf-8")).hexdigest()}-{level}'
+        match = re.search(r'<div class="signal-members-panel" id="' + panel_id
+                          + r'" hidden>(.*?)</div>(?=<div class="signal-members-panel"|</td>)',
+                          output, re.S)
+        self.assertIsNotNone(match, output)
+        return match.group(1)
+
+    def test_member_counts_match_every_kind_and_level(self):
+        rows = [self.member_row('AAA', 'position', 'red', ('chg', 'red'), ('rsi', 'yellow')),
+                self.member_row('BBB', 'focus', 'yellow', ('boll', 'yellow')),
+                self.member_row('CCC', 'technology', 'yellow', ('boll', 'yellow'), ('vol_ratio', 'yellow')),
+                self.member_row('DDD', 'focus', 'green', ('target', 'purple'))]
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        self.assertEqual(list(snap['signal_members']), [k for k, _ in monitor.SIGNAL_KINDS])
+        for kind, counts in snap['signal_counts'].items():
+            for level in ('red', 'yellow', 'purple', 'sole_yellow'):
+                with self.subTest(kind=kind, level=level):
+                    self.assertEqual(len(snap['signal_members'][kind][level]), counts[level])
+        output = monitor._signal_counts_card(snap)
+        self.assertNotIn('明细待下次更新', output)
+        self.assertIn('红色信号 · 1 只', self.panel(output, 'chg', 'red'))
+        self.assertIn('signal-member-symbol">AAA', self.panel(output, 'rsi', 'yellow'))
+
+    def test_members_deduplicate_marks_not_cross_kind_or_level(self):
+        row = self.member_row('AAA', 'position', 'red', ('rsi', 'red'), ('rsi', 'red'),
+                              ('rsi', 'yellow'), ('rsi', 'yellow'), ('boll', 'yellow'))
+        members = monitor.signal_count_members([row])
+        counts = monitor.signal_counts([row])
+        for kind, level in (('rsi', 'red'), ('rsi', 'yellow'), ('boll', 'yellow')):
+            self.assertEqual(members[kind][level], [{'symbol': 'AAA', 'note': '', 'group': 'position'}])
+            self.assertEqual(counts[kind][level], 1)
+        self.assertEqual(members['rsi']['sole_yellow'], [])
+        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
+        self.assertEqual(output.count('class="signal-member-symbol">AAA'), 3)
+        self.assertNotIn('各计数不能相加当作唯一标的总数', output)
+        self.assertNotIn('不代表标的综合灯色', output)
+
+    def test_sole_yellow_is_subset_and_excludes_red_or_multiple_kinds(self):
+        rows = [self.member_row('SOLE', 'position', 'yellow', ('boll', 'yellow'),
+                                ('boll', 'yellow'), ('target', 'purple')),
+                self.member_row('MULTI', 'focus', 'yellow', ('boll', 'yellow'), ('rsi', 'yellow')),
+                self.member_row('RED', 'technology', 'red', ('chg', 'red'), ('boll', 'yellow'))]
+        members = monitor.signal_count_members(rows)
+        counts = monitor.signal_counts(rows)
+        self.assertEqual([d['symbol'] for d in members['boll']['yellow']], ['SOLE', 'MULTI', 'RED'])
+        self.assertEqual([d['symbol'] for d in members['boll']['sole_yellow']], ['SOLE'])
+        self.assertEqual(counts['boll']['sole_yellow'], 1)
+        self.assertEqual(members['rsi']['sole_yellow'], [])
+        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
+        sole = self.panel(output, 'boll', 'sole_yellow')
+        self.assertIn('仅此一条黄灯 · 1 只', sole)
+        self.assertIn('>SOLE</span>', sole)
+        self.assertNotIn('MULTI', sole)
+        self.assertNotIn('>RED</span>', sole)
+        self.assertNotIn('“仅此一条黄灯”是黄列的子集', output)
+        self.assertNotIn('仍可能有灰灯或紫色提示', output)
+        self.assertNotIn('关掉这条规则它就变绿', output)
+
+    def test_purple_only_and_gray_members_keep_original_levels(self):
+        rows = [self.member_row('PURPLE', 'focus', 'green', ('target', 'purple'), ('target', 'purple')),
+                self.member_row('GRAY', 'position', 'gray', ('target', 'purple'))]
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        self.assertEqual(snap['signal_counts']['target']['purple'], 2)
+        self.assertEqual((snap['summary']['green'], snap['summary']['gray'], snap['summary']['yellow']), (1, 1, 0))
+        self.assertEqual(snap['signal_members']['target']['sole_yellow'], [])
+        output = monitor._signal_counts_card(snap)
+        panel = self.panel(output, 'target', 'purple')
+        self.assertIn('紫色提示 · 2 只', panel)
+        self.assertIn('>GRAY</span>', panel)
+        self.assertIn('>PURPLE</span>', panel)
+        self.assertEqual(output.count('class="signal-count-toggle"'), 1)
+        self.assertEqual(output.count('<td class="num">—</td>'), 3)
+        self.assertNotIn('不改变综合灯色', output)
+
+    def test_groups_use_item_group_order_and_show_group_sizes(self):
+        rows = [self.member_row(f'GROUP{i}', group['item_group'], 'red', ('chg', 'red'), note=f'备注{i}')
+                for i, group in reversed(list(enumerate(monitor.GROUPS)))]
+        counts = monitor.signal_counts(rows)
+        members = monitor.signal_count_members(rows)
+        self.assertEqual([d['group'] for d in members['chg']['red']],
+                         [g['item_group'] for g in monitor.GROUPS])
+        # 成员去重仍按 GROUPS 优先级；乱序快照的明细标题按 _display_groups 展示顺序。
+        members['chg']['red'].reverse()
+        members['chg']['red'].append({'symbol': 'EXTRA', 'group': 'position', 'note': '同组备注'})
+        counts['chg']['red'] += 1
+        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
+        panel = self.panel(output, 'chg', 'red')
+        headings = re.findall(r'<h4>(.*?)</h4>', panel)
+        self.assertEqual(headings, [f'{g["label"]} · {2 if g["item_group"] == "position" else 1} 只'
+                                    for g in monitor._display_groups()])
+        self.assertEqual(panel.count('class="signal-member-group"'), len(monitor.GROUPS))
+        self.assertEqual(panel.count('class="signal-member-list"'), len(monitor.GROUPS))
+        self.assertEqual(panel.count('class="signal-member-symbol"'), len(rows) + 1)
+        self.assertIn('class="note">同组备注</span>', panel)
+        self.assertIn(f'红色信号 · {len(rows) + 1} 只', panel)
+
+    def test_same_identity_keeps_priority_group_and_first_note(self):
+        rows = [self.member_row('BRK-B', 'technology', 'yellow', ('boll', 'yellow'), note='行业备注'),
+                self.member_row('BRK.B', 'focus', 'yellow', ('rsi', 'yellow'), note='关注备注'),
+                self.member_row('BRK.B-US', 'position', 'yellow', ('ma_cross', 'yellow'), note='持仓备注'),
+                self.member_row('BRK-B', 'position', 'yellow', ('chg', 'yellow'), note='后来备注')]
+        members = monitor.signal_count_members(rows)
+        expected = [{'symbol': 'BRK-B', 'note': '持仓备注', 'group': 'position'}]
+        self.assertEqual(members['ma_cross']['yellow'], expected)
+        self.assertEqual(members['ma_cross']['sole_yellow'], expected)
+        for kind in ('boll', 'rsi', 'chg'):
+            self.assertEqual(members[kind]['yellow'], [])
+        # 旧统计逐行计算，不为了成员身份去重而改变统计口径。
+        counts = monitor.signal_counts(rows)
+        self.assertEqual([counts[k]['yellow'] for k in ('boll', 'rsi', 'ma_cross', 'chg')], [1, 1, 1, 1])
+        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
+        self.assertIn('持仓备注', self.panel(output, 'ma_cross', 'yellow'))
+        self.assertNotIn('行业备注', output)
+        self.assertIn('明细待下次更新', self.panel(output, 'boll', 'yellow'))
+
+    def test_every_nonzero_cell_has_accessible_hidden_adjacent_panel(self):
+        rows = [self.member_row('AAA', 'position', 'red', ('rsi', 'red'), ('rsi', 'yellow'), ('target', 'purple')),
+                self.member_row('BBB', 'focus', 'yellow', ('rsi', 'yellow'))]
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        output = monitor._signal_counts_card(snap)
+        buttons = re.findall(r'<button type="button" class="signal-count-toggle" data-target="([^"]+)" '
+                             r'aria-controls="([^"]+)" aria-expanded="false" aria-label="([^"]+)">(\d+)</button>', output)
+        expected_buttons = sum(bool(v[level]) for v in snap['signal_counts'].values()
+                               for level in ('red', 'yellow', 'purple', 'sole_yellow'))
+        self.assertEqual(len(buttons), expected_buttons)
+        self.assertEqual(len({b[0] for b in buttons}), expected_buttons)
+        panels = re.findall(r'<div class="signal-members-panel" id="([^"]+)" hidden>', output)
+        self.assertEqual([b[0] for b in buttons], panels)
+        for target, controls, label, n in buttons:
+            self.assertEqual(target, controls)
+            self.assertIn(f'{n} 只', label)
+        pairs = re.findall(r'<tr><td>.*?</tr><tr class="signal-members-row"><td colspan="5">.*?</td></tr>', output, re.S)
+        self.assertEqual(len(pairs), 2)
+        self.assertIn('button.closest("tr")', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('owner.querySelectorAll(".signal-count-toggle[data-target]")', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('panel.hidden = !opening', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('button.setAttribute("aria-expanded", String(opening))', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('.signal-members-panel[hidden]{display:none}', monitor.PAGE_CSS)
+
+    def test_panel_ids_are_stable_unique_and_do_not_embed_user_kind(self):
+        kind = '\"><script>alert(1)</script>'
+        member = {'symbol': 'AAA', 'note': '', 'group': 'position'}
+        counts = {kind: {'label': '自定义', 'red': 1}, 'safe': {'label': '另一类', 'red': 1}}
+        members = {k: {'red': [member]} for k in counts}
+        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
+        reverse = monitor._signal_counts_card({'signal_counts': dict(reversed(list(counts.items()))),
+                                               'signal_members': members})
+        ids = re.findall(r'id="(signal-members-[^"]+)"', output)
+        self.assertEqual(len(ids), 2)
+        self.assertEqual(len(set(ids)), 2)
+        self.assertEqual(set(ids), set(re.findall(r'id="(signal-members-[^"]+)"', reverse)))
+        self.assertTrue(all(re.fullmatch(r'signal-members-[0-9a-f]{64}-red', value) for value in ids))
+        self.assertNotIn(kind, output)
+        self.assertNotIn('<script>', output)
+
+    def test_html_escapes_labels_groups_symbols_notes_and_summary(self):
+        import html
+        label = '<img src=x onerror="alert(1)"> & \'信号\''
+        group = '<svg onload="alert(2)"> & \'分类\''
+        symbol = '<script>alert("代码")</script>&'
+        note = '<img src=x onerror="alert(3)"> & \'备注\''
+        group_label = '<b onclick="alert(4)">持仓</b>&'
+        entries = [{'symbol': symbol, 'note': note, 'group': 'position'},
+                   {'symbol': 'BBB', 'note': '', 'group': group},
+                   {'symbol': 'CCC', 'note': '', 'group': ''}]
+        groups = [dict(g, label=group_label) if g['item_group'] == 'position' else g for g in monitor.GROUPS]
+        with patch.object(monitor, 'GROUPS', groups):
+            output = monitor._signal_counts_card({'signal_counts': {'chg': {'label': label, 'red': 3}},
+                                                  'signal_members': {'chg': {'red': entries}},
+                                                  'summary': {'yellow': '<svg onload="alert(5)">'}})
+        for value in (label, group, symbol, note, group_label, '<svg onload="alert(5)">'):
+            self.assertIn(html.escape(value, quote=True), output)
+            self.assertNotIn(value, output)
+        self.assertNotRegex(output, r'<(?:script|img|svg)\b|<b onclick=')
+        self.assertIn('<h4>未分类 · 1 只</h4>', output)
+        self.assertEqual(output.count('class="note"'), 1)
+
+    def test_old_snapshot_keeps_counts_but_does_not_invent_members(self):
+        rows = [self.member_row('SECRET', 'position', 'yellow', ('boll', 'yellow'), note='不可拼名单')]
+        snap = {'signal_counts': monitor.signal_counts(rows), 'items': rows}
+        output = monitor._signal_counts_card(snap)
+        self.assertEqual(output.count('class="signal-count-toggle"'), 2)
+        for level in ('yellow', 'sole_yellow'):
+            panel = self.panel(output, 'boll', level)
+            self.assertIn('明细待下次更新', panel)
+            self.assertIn('1 只', panel)
+        self.assertNotIn('SECRET', output)
+        self.assertNotIn('不可拼名单', output)
+        self.assertNotIn('class="signal-member-symbol"', output)
+
+    def test_member_count_mismatch_and_duplicate_identity_degrade_locally(self):
+        counts = {'chg': {'label': '涨跌幅', 'red': 2}, 'target': {'label': '目标价', 'purple': 1}}
+        good = {'symbol': 'GOOD', 'note': '有效备注', 'group': 'focus'}
+        invalid_lists = (None, [], [{'symbol': 'ONE', 'note': '不可信', 'group': 'position'}],
+                         [{'symbol': 'A'}, {'symbol': 'B'}, {'symbol': 'C'}],
+                         [{'symbol': 'BRK.B'}, {'symbol': 'BRK-B'}],
+                         [{'symbol': ''}, {'symbol': 'B'}], ['A', 'B'])
+        for entries in invalid_lists:
+            with self.subTest(entries=entries):
+                output = monitor._signal_counts_card({'signal_counts': counts,
+                           'signal_members': {'chg': {'red': entries}, 'target': {'purple': [good]}}})
+                panel = self.panel(output, 'chg', 'red')
+                self.assertIn('红色信号 · 2 只', panel)
+                self.assertIn('明细待下次更新', panel)
+                self.assertNotIn('class="signal-member-symbol"', panel)
+                self.assertNotIn('不可信', output)
+                target = self.panel(output, 'target', 'purple')
+                self.assertIn('>GOOD</span>', target)
+                self.assertNotIn('明细待下次更新', target)
+
+    def test_zero_counts_hide_card_and_sole_nonzero_still_expands(self):
+        for snap in ({}, {'signal_counts': {}}, {'signal_counts': monitor.signal_counts([])}):
+            self.assertEqual(monitor._signal_counts_card(snap), '')
+        output = monitor._signal_counts_card({'signal_counts': {'boll': {'label': '布林', 'sole_yellow': 1}}})
+        self.assertEqual(output.count('class="signal-count-toggle"'), 1)
+        self.assertEqual(output.count('<td class="num">—</td>'), 3)
+        self.assertIn('明细待下次更新', self.panel(output, 'boll', 'sole_yellow'))
 
 
 if __name__ == '__main__':
