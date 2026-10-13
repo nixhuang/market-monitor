@@ -101,19 +101,60 @@ class TestRSI(unittest.TestCase):
         self.assertNotIn('boll_rsi_direction', {k for k, v in detail.items() if v})
         self.assertIn('signal-yellow', monitor._signal_text_html(next(s for s in signals if '布林' in s)))
 
-    def test_bollinger_near_or_intraday_touch_is_yellow_in_every_group(self):
+    def test_upper_band_yellow_only_in_positions_and_focus(self):
         data = neutral_data()
-        data['highs'] = data['highs'][:-1] + [103]       # 盘中冲过上轨，收盘回到轨内
-        for group in ('position', 'focus', 'index_funds', 'technology', 'healthcare', 'real_estate'):
-            for bands in [(100, 100.3, 90), (100, 101, 90), (100, 110, 99.6)]:
+        data['highs'] = data['highs'][:-1] + [103]  # 上轨盘中冲过后收回
+        def analyze(group, bands, rsi):
+            with patch.dict(monitor.S, {'near_52w_low_pct': 0, 'ma_short': 0, 'ma_long': 0}), \
+                    patch.object(monitor, 'calc_rsi', side_effect=rsi), \
+                    patch.object(monitor, 'vol_profile', return_value=('mid', None)), \
+                    patch.object(monitor, 'boll', return_value=bands), \
+                    patch.object(monitor, 'boll_streak', return_value={'up': 0, 'dn': 0}):
+                return monitor.analyze_symbol('T', {}, data, group=group)
+
+        # 上轨逼近或日内突破：非核心组不产出独立黄灯/文字/计数，但核心组原样保留。
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for bands in ((100, 103.3, 90), (100, 101, 90)):
                 with self.subTest(group=group, bands=bands):
-                    with patch.object(monitor, 'calc_rsi', side_effect=[50, 50, 50]), \
-                            patch.object(monitor, 'vol_profile', return_value=('mid', None)), \
-                            patch.object(monitor, 'boll', return_value=bands), \
-                            patch.object(monitor, 'boll_streak', return_value={'up': 0, 'dn': 0}):
-                        level, signals, _ = monitor.analyze_symbol('T', {}, data, group=group)
-                    self.assertEqual(level, 'yellow')
-                    self.assertTrue(any('布林' in x for x in signals), signals)
+                    level, signals, detail = analyze(group, bands, [50, 50, 50])
+                    active = group in ('position', 'focus')
+                    self.assertEqual(('boll', 'yellow') in detail['signal_marks'], active)
+                    self.assertEqual(any('布林上轨' in s for s in signals), active)
+                    self.assertEqual(level, 'yellow' if active else 'green')
+                    counts = monitor.signal_counts([detail])
+                    self.assertEqual(counts['boll']['yellow'], int(active))
+                    self.assertEqual(counts['boll']['sole_yellow'], int(active))
+                    self.assertEqual(counts['boll_rsi']['red'], 0)
+
+            # 下轨的黄灯和方向图标在所有分组保持不变。
+            with self.subTest(group=group, band='lower'):
+                level, signals, detail = analyze(group, (100, 110, 99.6), [50, 50, 50])
+                self.assertEqual(level, 'yellow')
+                self.assertEqual(detail['signal_marks'].count(('boll', 'yellow')), 1)
+                self.assertTrue(any('布林下轨' in s for s in signals))
+                self.assertEqual(monitor.signal_counts([detail])['boll']['sole_yellow'], 1)
+                self.assertEqual(monitor._member_direction_markers(detail, 'boll')[0]['shape'], '▼')
+
+            # 上轨＋两条 RSI：所有分组照旧报组合红，非核心组无独立布林黄灯。
+            with self.subTest(group=group, band='upper + RSI'):
+                level, signals, detail = analyze(group, (100, 101, 90), [80, 80, 50])
+                self.assertEqual(level, 'red')
+                self.assertIn(('boll_rsi', 'red'), detail['signal_marks'])
+                self.assertEqual(detail['boll_rsi_direction'], '上轨（超买）')
+                self.assertIn('布林 + RSI 双重信号 → 红', signals)
+                self.assertEqual(('boll', 'yellow') in detail['signal_marks'], group in ('position', 'focus'))
+                self.assertEqual(monitor.signal_counts([detail])['boll_rsi']['red'], 1)
+
+        # 极窄布林带：原来上轨更近时，非核心组的下轨黄灯不应被上轨遮蔽。
+        for rsi in ([50, 50, 50], [80, 80, 50]):
+            level, signals, detail = analyze('technology', (100, 101, 99.6), rsi)
+            self.assertEqual(sum('布林下轨' in s for s in signals), 1)
+            self.assertFalse(any('布林上轨' in s for s in signals))
+            self.assertEqual(detail['signal_marks'].count(('boll', 'yellow')), 1)
+            if rsi[0] == 80:
+                self.assertEqual(level, 'red')
+                self.assertEqual(detail['boll_rsi_direction'], '上轨（超买）')
+                self.assertIn(('boll_rsi', 'red'), detail['signal_marks'])
 
     def test_bollinger_misses_do_not_upgrade_rsi(self):
         for bands in [(100, 102, 90), (100, 110, 98), (None, None, None)]:

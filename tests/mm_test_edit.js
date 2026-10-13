@@ -102,8 +102,9 @@ check(els.pager_technology._html.includes('第 1/3 页'), '分页器显示 3 页
 T.pageState.technology = 2; T.render();
 check(els.list_technology._html.includes('S119'), '第 3 页包含最后一只');
 
-els.filter_technology.oninput({target:{value:'S11'}});
-check(els.list_technology._html.includes('S119')&&!els.list_technology._html.includes('S000'), '分类代码筛选生效');
+check(!src.includes('id="filterAll"') && !src.includes('group-filter') &&
+  !els.groupEditor.innerHTML.includes('id="filter_'), '设置页不展示全组或分组搜索控件');
+check(els.pager_technology._html.includes('第 3/3 页'), '移除搜索后分页仍可翻到最后一页');
 T.previewCsv('symbol,name\nXLV,医疗\nABC,Example Company\n','healthcare');
 check(!Object.keys(T.data.healthcare).length, 'CSV 预览前不修改目标组');
 els.btnApply.onclick();
@@ -146,7 +147,9 @@ check(!('hy_yellow' in saved), '保存规则不保留无效的旧黄色信用利
 check(src.includes('id="set_amp_yellow"') && src.includes('id="set_amp_red"'), '编辑页确实有两个振幅输入项');
 check(src.includes('RSI 周期固定为 6 / 12 / 24') && src.includes('同侧两条达到或越过阈值为黄，三条为红'), '编辑页说明三线 RSI 分级规则');
 check(!src.includes('RSI ≥ x → 超买红') && !src.includes('RSI ≤ x → 超卖红'), '旧单条 RSI 红灯说明已删除');
-check(src.includes('布林上、下轨逼近、触碰、穿越均为黄')&&src.includes('同时出现 RSI 至少两条同侧达到或越过阈值时为红'), '设置页说明布林独立黄与RSI双信号红');
+check(src.includes('持仓和重点关注：布林上、下轨')&&src.includes('其他分组仅下轨报黄，上轨单独命中不报黄')&&
+  src.includes('所有分组的布林＋RSI 双重信号红灯保持原规则'), '设置页说明上轨黄灯只在核心两组，下轨与组合红保持');
+check(!src.includes('布林轨道逼近、碰到或穿过都为黄（所有分组都报）'), '移除过时的全分组上轨黄色说明');
 check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x bp 黄')&&src.includes('垃圾债利差 ≥ x bp 红'), '信用利差仅保留有效的黄红两条阈值');
 check(src.includes('一周扩大至少 30 bp 为黄、至少 50 bp 为红')&&src.includes('同类只取最高分')&&src.includes('信用／金融环境按2倍计分')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力为周度'), '设置页明确说明信用急升和新增市场风险规则');
 check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');

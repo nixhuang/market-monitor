@@ -2411,6 +2411,7 @@ CONSENSUS_MAX_PER_DAY = 12           # 北京自然日的独立台账，删除/�
 CONSENSUS_RETRY_PER_DAY = 3          # 失败重试最多占用 3 个名额，避免挤掉正常到期项
 CONSENSUS_RETRY_BACKOFF = (1, 2, 4, 7)  # 连续失败：首次次日重试，此后逐步退避
 CHG_AMP_GROUPS = ("position", "focus")   # 涨跌幅、振幅警示只对这两组生效
+BOLL_UP_YELLOW_GROUPS = ("position", "focus")  # 上轨单项黄灯只对持仓和重点关注生效
 TARGET_ANOMALY_PCT = 100.0
 _CONS_SPG = re.compile(r'Targets:\{source:"spg",currency:"([A-Z]+)",avg:([0-9.]+)')
 _CONS_UPD = re.compile(r'targets:\{low:[0-9.]+,high:[0-9.]+,count:\d+,median:[0-9.]+,average:[0-9.]+,updated:"(\d{4}-\d{2}-\d{2})"')
@@ -3032,14 +3033,16 @@ def _boll_hits(x):
 
 
 def _rule_boll(al, x):
-    """布林信号等级沿用原规则：逼近即算黄灯，盘中触及也命中；仅下轨触及/跌破的文字标黄。
-    上下轨都命中时只留更贴近的那条：SGOV 这类短债/货币 ETF 波动极小，布林带宽不到 1%，
-    上下轨会同时命中，两条一起显示等于自相矛盾（既逼近上轨又逼近下轨）。"""
+    """持仓/重点关注上下轨均可报黄，其他组仅下轨报黄；组合红仍按原始触轨判断。
+    同侧只留最贴近的一条；极窄布林带同时命中两侧时，其他组的下轨黄灯不能
+    被已禁用的上轨黄灯挡掉，组合红的方向则仍沿用此前的最贴近轨道。"""
     hits = _boll_hits(x)
     if not hits:
         return
     best = min(hits, key=lambda h: h[0])
-    al.add("boll", best[1], "yellow")
+    yellow_hits = hits if x.group in BOLL_UP_YELLOW_GROUPS else [hit for hit in hits if "布林下轨" in hit[1]]
+    if yellow_hits:
+        al.add("boll", min(yellow_hits, key=lambda h: h[0])[1], "yellow")
     if max(x.high_hits, x.low_hits) >= 2:
         side = "上轨" if "布林上轨" in best[1] else "下轨"
         if x.high_hits >= 2 and x.low_hits >= 2:
