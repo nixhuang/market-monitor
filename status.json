@@ -9,13 +9,13 @@
     "next_in": 12,
     "next_date": "2026-10-29"
   },
-  "run_id": "38558857779",
+  "run_id": "38570226505",
   "request_id": "",
-  "source_sha": "16edf802257adf6dbf3c3cc2b43ca2f3dfc5518b",
-  "started_at": "2026-10-14T11:45:44+00:00",
-  "started_at_bj": "2026-10-14T19:45:44+08:00",
-  "finished_at": "2026-10-14T19:46:35.086338+08:00",
-  "finished_at_bj": "2026-10-14T19:46:35+08:00",
+  "source_sha": "878dcb83a85ec4b2546b12d09157fef95920e3c1",
+  "started_at": "2026-10-14T13:15:06+00:00",
+  "started_at_bj": "2026-10-14T21:15:06+08:00",
+  "finished_at": "2026-10-14T21:15:59.492742+08:00",
+  "finished_at_bj": "2026-10-14T21:15:59+08:00",
   "event": "push",
   "target_trade_date": "2026-10-13",
   "mode": "closed",
@@ -281,7 +281,7 @@
       "sole_yellow": 0
     },
     "target": {
-      "label": "目标价/共识价",
+      "label": "共识价",
       "red": 0,
       "yellow": 0,
       "purple": 2,
@@ -1724,8 +1724,8 @@
       ]
     ],
     "source": "NFCI周度数据（FRED同步备用）",
-    "checked_at": "2026-10-13T10:57:52.218726-04:00",
-    "result": "ok"
+    "checked_at": "2026-10-14T09:15:52.579071-04:00",
+    "result": "pending"
   },
   "fundamental": {
     "checked": 19,
@@ -4155,6 +4155,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-14T19:46:28.473674+08:00"
+    "assessed_at": "2026-10-14T21:15:52.579071+08:00"
   }
 }
