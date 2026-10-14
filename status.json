@@ -9,13 +9,13 @@
     "next_in": 12,
     "next_date": "2026-10-29"
   },
-  "run_id": "38523345907",
+  "run_id": "38548623067",
   "request_id": "",
-  "source_sha": "3312241a39982effc4c50dcb88d33b461eadb340",
-  "started_at": "2026-10-14T06:37:59+00:00",
-  "started_at_bj": "2026-10-14T14:37:59+08:00",
-  "finished_at": "2026-10-14T14:38:55.073585+08:00",
-  "finished_at_bj": "2026-10-14T14:38:55+08:00",
+  "source_sha": "40ebaf5e7405bb63db2a185ef260e44d7ef3420d",
+  "started_at": "2026-10-14T10:18:18+00:00",
+  "started_at_bj": "2026-10-14T18:18:18+08:00",
+  "finished_at": "2026-10-14T18:19:22.844499+08:00",
+  "finished_at_bj": "2026-10-14T18:19:22+08:00",
   "event": "push",
   "target_trade_date": "2026-10-13",
   "mode": "closed",
@@ -300,7 +300,15 @@
         {
           "symbol": "UNH",
           "note": "联合健康",
-          "group": "position"
+          "group": "position",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌0.20%"
+            }
+          ],
+          "metric": "振幅 7.2%"
         }
       ],
       "purple": [],
@@ -312,47 +320,119 @@
         {
           "symbol": "UNH",
           "note": "联合健康",
-          "group": "position"
+          "group": "position",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌0.20%"
+            }
+          ],
+          "metric": "量比 2.5×（2026-10-13完整日）"
         },
         {
           "symbol": "DRAM",
           "note": "Memory ETF-存储芯片",
-          "group": "position"
+          "group": "position",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌3.44%"
+            }
+          ],
+          "metric": "量比 1.7×（2026-10-13完整日）"
         },
         {
           "symbol": "PDD",
           "note": "拼多多",
-          "group": "focus"
+          "group": "focus",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-10-13股价上涨1.29%"
+            }
+          ],
+          "metric": "量比 1.6×（2026-10-13完整日）"
         },
         {
           "symbol": "ANET",
           "note": "Arista-数据中心网络",
-          "group": "technology"
+          "group": "technology",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌3.02%"
+            }
+          ],
+          "metric": "量比 1.6×（2026-10-13完整日）"
         },
         {
           "symbol": "AMAT",
           "note": "应用材料",
-          "group": "technology"
+          "group": "technology",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌6.69%"
+            }
+          ],
+          "metric": "量比 1.8×（2026-10-13完整日）"
         },
         {
           "symbol": "JNJ",
           "note": "强生",
-          "group": "healthcare"
+          "group": "healthcare",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌5.73%"
+            }
+          ],
+          "metric": "量比 2.4×（2026-10-13完整日）"
         },
         {
           "symbol": "GS",
           "note": "高盛",
-          "group": "financials"
+          "group": "financials",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌0.23%"
+            }
+          ],
+          "metric": "量比 2.2×（2026-10-13完整日）"
         },
         {
           "symbol": "JPM",
           "note": "摩根大通",
-          "group": "financials"
+          "group": "financials",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌0.86%"
+            }
+          ],
+          "metric": "量比 1.6×（2026-10-13完整日）"
         },
         {
           "symbol": "TTWO",
           "note": "Take-Two-游戏",
-          "group": "communications"
+          "group": "communications",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌4.07%"
+            }
+          ],
+          "metric": "量比 2.1×（2026-10-13完整日）"
         }
       ],
       "purple": [],
@@ -360,17 +440,41 @@
         {
           "symbol": "ANET",
           "note": "Arista-数据中心网络",
-          "group": "technology"
+          "group": "technology",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌3.02%"
+            }
+          ],
+          "metric": "量比 1.6×（2026-10-13完整日）"
         },
         {
           "symbol": "AMAT",
           "note": "应用材料",
-          "group": "technology"
+          "group": "technology",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌6.69%"
+            }
+          ],
+          "metric": "量比 1.8×（2026-10-13完整日）"
         },
         {
           "symbol": "JPM",
           "note": "摩根大通",
-          "group": "financials"
+          "group": "financials",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-13股价下跌0.86%"
+            }
+          ],
+          "metric": "量比 1.6×（2026-10-13完整日）"
         }
       ]
     },
@@ -385,9 +489,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "RSI超买"
+              "label": "RSI2条超买"
             }
-          ]
+          ],
+          "rsi_hits": "2条超买"
         },
         {
           "symbol": "MA",
@@ -397,9 +502,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "RSI超买"
+              "label": "RSI2条超买"
             }
-          ]
+          ],
+          "rsi_hits": "2条超买"
         },
         {
           "symbol": "V",
@@ -409,9 +515,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "RSI超买"
+              "label": "RSI2条超买"
             }
-          ]
+          ],
+          "rsi_hits": "2条超买"
         },
         {
           "symbol": "MSFT",
@@ -421,9 +528,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "RSI超买"
+              "label": "RSI2条超买"
             }
-          ]
+          ],
+          "rsi_hits": "2条超买"
         },
         {
           "symbol": "PLTR",
@@ -433,9 +541,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "RSI超买"
+              "label": "RSI2条超买"
             }
-          ]
+          ],
+          "rsi_hits": "2条超买"
         },
         {
           "symbol": "BX",
@@ -444,10 +553,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "RSI超卖"
+              "tone": "yellow",
+              "label": "RSI2条超卖"
             }
-          ]
+          ],
+          "rsi_hits": "2条超卖"
         },
         {
           "symbol": "XLE",
@@ -457,9 +567,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "RSI超买"
+              "label": "RSI2条超买"
             }
-          ]
+          ],
+          "rsi_hits": "2条超买"
         },
         {
           "symbol": "XOM",
@@ -469,9 +580,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "RSI超买"
+              "label": "RSI2条超买"
             }
-          ]
+          ],
+          "rsi_hits": "2条超买"
         }
       ],
       "purple": [],
@@ -483,10 +595,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "RSI超卖"
+              "tone": "yellow",
+              "label": "RSI2条超卖"
             }
-          ]
+          ],
+          "rsi_hits": "2条超卖"
         }
       ]
     },
@@ -501,9 +614,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "突破上轨"
             }
-          ]
+          ],
+          "boll_state": "突破上轨"
         },
         {
           "symbol": "HII",
@@ -512,10 +626,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "white",
+              "label": "逼近下轨"
             }
-          ]
+          ],
+          "boll_state": "逼近下轨"
         },
         {
           "symbol": "CRSP",
@@ -524,10 +639,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "GOOGL",
@@ -537,9 +653,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "NTNX",
@@ -549,9 +666,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "UNH",
@@ -561,9 +679,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "DRAM",
@@ -572,10 +691,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "XLI",
@@ -584,10 +704,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "GEHC",
@@ -597,9 +718,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "突破上轨"
             }
-          ]
+          ],
+          "boll_state": "突破上轨"
         },
         {
           "symbol": "ZS",
@@ -609,9 +731,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "COST",
@@ -621,9 +744,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "MA",
@@ -633,9 +757,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "突破上轨"
             }
-          ]
+          ],
+          "boll_state": "突破上轨"
         },
         {
           "symbol": "PDD",
@@ -645,9 +770,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "突破上轨"
             }
-          ]
+          ],
+          "boll_state": "突破上轨"
         },
         {
           "symbol": "V",
@@ -657,9 +783,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "突破上轨"
             }
-          ]
+          ],
+          "boll_state": "突破上轨"
         },
         {
           "symbol": "AAPL",
@@ -669,9 +796,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "MSFT",
@@ -681,9 +809,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "SYK",
@@ -693,9 +822,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "SKHY",
@@ -704,10 +834,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "MU",
@@ -716,10 +847,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "SNDK",
@@ -728,10 +860,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "STX",
@@ -740,10 +873,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "INTC",
@@ -752,10 +886,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "WDC",
@@ -764,10 +899,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "JNJ",
@@ -776,10 +912,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "HEI",
@@ -788,10 +925,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "CAT",
@@ -800,10 +938,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "VRT",
@@ -812,10 +951,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "TTWO",
@@ -824,10 +964,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         }
       ],
       "purple": [],
@@ -839,10 +980,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "GOOGL",
@@ -852,9 +994,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "NTNX",
@@ -864,9 +1007,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "GEHC",
@@ -876,9 +1020,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "突破上轨"
             }
-          ]
+          ],
+          "boll_state": "突破上轨"
         },
         {
           "symbol": "ZS",
@@ -888,9 +1033,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "AAPL",
@@ -900,9 +1046,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "SYK",
@@ -912,9 +1059,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "布林上轨"
+              "label": "盘中突破上轨"
             }
-          ]
+          ],
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "SKHY",
@@ -923,10 +1071,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "MU",
@@ -935,10 +1084,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "SNDK",
@@ -947,10 +1097,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "STX",
@@ -959,10 +1110,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "INTC",
@@ -971,10 +1123,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "HEI",
@@ -983,10 +1136,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "VRT",
@@ -995,10 +1149,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
-          ]
+          ],
+          "boll_state": "盘中跌破下轨"
         }
       ]
     },
@@ -1008,43 +1163,50 @@
           "symbol": "BRK-B",
           "note": "伯克希尔哈撒韦",
           "group": "position",
-          "direction": "上轨（超买）"
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "MA",
           "note": "万事达",
           "group": "focus",
-          "direction": "上轨（超买）"
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "V",
           "note": "Visa-支付",
           "group": "focus",
-          "direction": "上轨（超买）"
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "MSFT",
           "note": "微软",
           "group": "focus",
-          "direction": "上轨（超买）"
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "PLTR",
           "note": "Palantir-AI数据分析",
           "group": "technology",
-          "direction": "上轨（超买）"
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "XLE",
           "note": "能源精选行业ETF",
           "group": "energy",
-          "direction": "上轨（超买）"
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "XOM",
           "note": "埃克森美孚",
           "group": "energy",
-          "direction": "上轨（超买）"
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         }
       ],
       "yellow": [],
@@ -1283,6 +1445,101 @@
       "sole_yellow": []
     }
   },
+  "earnings_week": {
+    "asof": "2026-10-14",
+    "members": [
+      {
+        "symbol": "TSM",
+        "note": "台积电",
+        "group": "focus",
+        "level": "green",
+        "date": "2026-10-15",
+        "timing": "pre",
+        "kind": "expected"
+      },
+      {
+        "symbol": "ISRG",
+        "note": "直觉外科",
+        "group": "healthcare",
+        "level": "green",
+        "date": "2026-10-20",
+        "timing": "post",
+        "kind": "expected"
+      },
+      {
+        "symbol": "CB",
+        "note": "安达保险",
+        "group": "financials",
+        "level": "green",
+        "date": "2026-10-20",
+        "timing": "post",
+        "kind": "expected"
+      },
+      {
+        "symbol": "NOC",
+        "note": "诺斯罗普格鲁曼",
+        "group": "industrials",
+        "level": "red",
+        "date": "2026-10-20",
+        "timing": "pre",
+        "kind": "expected"
+      },
+      {
+        "symbol": "RTX",
+        "note": "RTX-航空防务",
+        "group": "industrials",
+        "level": "green",
+        "date": "2026-10-20",
+        "timing": "pre",
+        "kind": "expected"
+      },
+      {
+        "symbol": "NFLX",
+        "note": "奈飞",
+        "group": "communications",
+        "level": "green",
+        "date": "2026-10-20",
+        "timing": "post",
+        "kind": "expected"
+      },
+      {
+        "symbol": "LRCX",
+        "note": "拉姆研究",
+        "group": "technology",
+        "level": "green",
+        "date": "2026-10-21",
+        "timing": "post",
+        "kind": "expected"
+      },
+      {
+        "symbol": "TMO",
+        "note": "赛默飞世尔科技",
+        "group": "healthcare",
+        "level": "green",
+        "date": "2026-10-21",
+        "timing": "pre",
+        "kind": "expected"
+      },
+      {
+        "symbol": "NEE",
+        "note": "新纪元能源",
+        "group": "utilities",
+        "level": "green",
+        "date": "2026-10-21",
+        "timing": "pre",
+        "kind": "expected"
+      },
+      {
+        "symbol": "TSLA",
+        "note": "特斯拉",
+        "group": "consumer_discretionary",
+        "level": "green",
+        "date": "2026-10-21",
+        "timing": "post",
+        "kind": "expected"
+      }
+    ]
+  },
   "actual_dates": {
     "min": "2026-10-13",
     "max": "2026-10-13"
@@ -1293,7 +1550,7 @@
     "sp500": "2026-10-13",
     "ust10": "2026-10-13",
     "nfci": "2026-10-02",
-    "breadth": "2026-10-12"
+    "breadth": "2026-10-13"
   },
   "treasury_reference": {
     "ok": true,
@@ -1384,8 +1641,8 @@
     "checked": 19,
     "red": 4,
     "yellow": 6,
-    "fetched": 2,
-    "cached": 18,
+    "fetched": 1,
+    "cached": 19,
     "data": {
       "BRK-B": {
         "attempted": "2026-10-13",
@@ -1834,6 +2091,65 @@
             }
           }
         }
+      },
+      "UNH": {
+        "attempted": "2026-10-14",
+        "fetched": "2026-10-14",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$112,032,000",
+              "value5": "$113,161,000"
+            },
+            "Income Tax": {
+              "value2": "$1,298,000",
+              "value5": "$686,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "32.73529%",
+              "value5": "29.34138%"
+            },
+            "Operating Margin": {
+              "value2": "7.13278%",
+              "value5": "3.81315%"
+            },
+            "After Tax ROE": {
+              "value2": "5.57051%",
+              "value5": "2.45127%"
+            },
+            "Current Ratio": {
+              "value2": "NaN",
+              "value5": "NaN"
+            },
+            "Profit Margin": {
+              "value2": "4.89503%",
+              "value5": "2.07492%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$11,052,000",
+              "value5": "$5,945,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$203,778,000",
+              "value5": "$209,456,000"
+            },
+            "Total Equity": {
+              "value2": "$98,447,000",
+              "value5": "$95,787,000"
+            }
+          }
+        },
+        "event_date": "2026-10-13",
+        "event_base": "2026-06-30",
+        "event_checked": "2026-10-14"
       },
       "UBER": {
         "attempted": "2026-10-13",
@@ -2394,65 +2710,6 @@
             }
           }
         }
-      },
-      "UNH": {
-        "attempted": "2026-10-14",
-        "fetched": "2026-10-14",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$112,032,000",
-              "value5": "$113,161,000"
-            },
-            "Income Tax": {
-              "value2": "$1,298,000",
-              "value5": "$686,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "32.73529%",
-              "value5": "29.34138%"
-            },
-            "Operating Margin": {
-              "value2": "7.13278%",
-              "value5": "3.81315%"
-            },
-            "After Tax ROE": {
-              "value2": "5.57051%",
-              "value5": "2.45127%"
-            },
-            "Current Ratio": {
-              "value2": "NaN",
-              "value5": "NaN"
-            },
-            "Profit Margin": {
-              "value2": "4.89503%",
-              "value5": "2.07492%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$11,052,000",
-              "value5": "$5,945,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$203,778,000",
-              "value5": "$209,456,000"
-            },
-            "Total Equity": {
-              "value2": "$98,447,000",
-              "value5": "$95,787,000"
-            }
-          }
-        },
-        "event_date": "2026-10-13",
-        "event_base": "2026-06-30",
-        "event_checked": "2026-10-14"
       }
     }
   },
@@ -3184,8 +3441,8 @@
     "dated": 72,
     "pending": 11,
     "failed": 0,
-    "fetched": 1,
-    "cached": 82,
+    "fetched": 0,
+    "cached": 83,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -3752,16 +4009,16 @@
       }
     },
     "events": {
-      "JPM": [
-        "2026-10-13"
-      ],
-      "UNH": [
-        "2026-10-13"
-      ],
       "GS": [
         "2026-10-13"
       ],
       "JNJ": [
+        "2026-10-13"
+      ],
+      "JPM": [
+        "2026-10-13"
+      ],
+      "UNH": [
         "2026-10-13"
       ]
     }
@@ -3808,6 +4065,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-14T14:38:45.498781+08:00"
+    "assessed_at": "2026-10-14T18:19:15.537673+08:00"
   }
 }
