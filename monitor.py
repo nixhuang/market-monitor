@@ -2957,7 +2957,7 @@ SIGNAL_KINDS = (
     ("chg", "涨跌幅"), ("amp", "振幅"), ("vol_ratio", "量比"),
     ("rsi", "RSI"), ("boll", "布林"), ("boll_rsi", "布林+RSI"),
     ("ma_cross", "均线穿越"), ("ma_band", "长均线触及"), ("low52", "52周低位"),
-    ("add_price", "加仓价"), ("reduce_price", "减仓价"), ("target", "目标价/共识价"),
+    ("add_price", "加仓价"), ("reduce_price", "减仓价"), ("target", "共识价"),
 )
 
 
@@ -3893,10 +3893,10 @@ tr:first-child td{border-top:none}
 #signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-purple{color:var(--purple)} #signalCounts .count-earn{color:var(--text)}
 #signalCounts table{table-layout:fixed}
-#signalCounts td{padding:7px 5px;font-size:12px;overflow-wrap:anywhere}
+#signalCounts td{padding:6.3px 5px;font-size:12px;line-height:1.2;overflow-wrap:anywhere;vertical-align:middle}
 #signalCounts td:first-child{width:26%}
-#signalCounts .signal-count-toggle{min-height:44px;min-width:44px;max-width:100%;padding:4px 2px;
-  color:#bfd5ff;font:inherit;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
+#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;max-width:100%;padding:0 4px;
+  color:#bfd5ff;font:inherit;font-size:11px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;gap:3px;touch-action:manipulation}
 #signalCounts .signal-count-toggle::after{content:"▾";font-size:10px}
 #signalCounts .signal-count-toggle[aria-expanded="true"]::after{content:"▴"}
@@ -3914,25 +3914,25 @@ tr:first-child td{border-top:none}
 #signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
 #signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;background:#182130;color:var(--text)}
-#signalCounts .earnings-week summary{padding:9px 0;color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
+#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
 #signalCounts .earnings-week summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts .earnings-week ul{list-style:none;margin:0;padding:0 0 9px}
-#signalCounts .earnings-week li{font-size:12px;padding:4px 0;overflow-wrap:anywhere}
+#signalCounts .earnings-week ul{list-style:none;margin:0;padding:0 0 8.1px}
+#signalCounts .earnings-week li{font-size:12px;padding:3.6px 0;overflow-wrap:anywhere}
 #signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
 #signalCounts .earnings-week-meta{color:var(--text);margin-left:5px}
 #signalCounts .earnings-week-group{color:#8fb8f0}
-#signalCounts .signal-filter-toggle{min-height:32px;max-width:100%;padding:3px 7px;font:inherit;color:var(--text);
-  background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:left;touch-action:manipulation}
+#signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:13px;line-height:1;color:var(--text);
+  display:inline-flex;align-items:center;white-space:nowrap;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:left;touch-action:manipulation}
 #signalCounts .signal-filter-toggle[aria-pressed="true"]{background:#2f6bd8;border-color:#2f6bd8;color:#fff}
 #signalCounts .signal-filter-toggle:focus-visible,#signalCounts .signal-filter-clear:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts .signal-filter{padding:9px 12px;border-top:1px solid #465e87;background:#121a27;font-size:12px}
+#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;background:#121a27;font-size:12px}
 #signalCounts .signal-filter[hidden]{display:none}
 #signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:#bfd5ff;font-weight:600}
-#signalCounts .signal-filter-clear{margin-left:auto;min-height:32px;padding:3px 10px;font:inherit;font-weight:400;color:var(--text);
+#signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:38px;padding:0 10px;font:inherit;font-weight:400;color:var(--text);
   background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer}
 #signalCounts .signal-filter p{margin:6px 0 0;color:var(--dim)}
 #signalCounts .signal-filter ul{list-style:none;margin:6px 0 0;padding:0}
-#signalCounts .signal-filter li{padding:5px 0;overflow-wrap:anywhere}
+#signalCounts .signal-filter li{padding:4.5px 0;overflow-wrap:anywhere}
 #signalCounts .signal-filter li+li{border-top:1px solid var(--line)}
 #signalCounts .signal-filter .note{margin-left:5px}
 #signalCounts .signal-filter-group{color:#8fb8f0}

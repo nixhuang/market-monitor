@@ -182,7 +182,7 @@ class TestGroups(unittest.TestCase):
         self.assertNotEqual(monitor.instrument_identity('HYG'), 'hy_oas')
 
     def test_macro_prefers_official_vix_and_only_credit_spread_from_fred(self):
-        from datetime import date, timedelta
+        from datetime import date, datetime, timedelta  # 固定时钟：NFCI按真实时间判断到期，不能依赖跑测试的时刻
         def bars(alias):
             prices = {'^VIX': 15.08, '^GSPC': 7801.77, '^TNX': 5.3}
             value = prices[alias]
@@ -191,6 +191,7 @@ class TestGroups(unittest.TestCase):
                     'volumes': [0]*40, 'price':value, 'prev_close':value,
                     'quote_symbol':alias, 'quote_name':'Treasury Yield 10 Years' if alias == '^TNX' else alias}
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
+                patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-07T20:15:00-04:00')), \
                 patch.object(monitor, 'fred_series', return_value=[('2026-10-06', 3.0)]) as fred, \
                 patch.object(monitor, 'cboe_vix_series', return_value=[('2026-10-06', 15.01), ('2026-10-07', 15.08)]) as cboe, \
                 patch.object(monitor, 'yahoo_history', side_effect=bars) as yahoo, \
@@ -3811,7 +3812,10 @@ class TestSignalCounts(unittest.TestCase):
             self.assertNotIn('美东 2026-10-14 至 2026-10-21', panel)
             self.assertNotIn('预计或估算日期可能调整', panel)
             self.assertIn('if (earnings) earnings.open = false;', monitor.PAGE_INTERACTION_JS)
-            self.assertIn('#signalCounts .earnings-week summary{padding:9px 0;color:var(--text)', monitor.PAGE_CSS)
+            self.assertIn('#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text)', monitor.PAGE_CSS)
+            self.assertIn('#signalCounts td{padding:6.3px 5px;', monitor.PAGE_CSS)  # 统计面板压缩上下留白
+            self.assertIn('.signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;', monitor.PAGE_CSS)  # 数字胶囊扁长方形
+            self.assertIn('.signal-filter-toggle{box-sizing:border-box;height:38px;', monitor.PAGE_CSS)  # 与信号名胶囊同高对齐
             green = '<i class="stat-dot green" role="img" aria-label="绿灯"></i>'
             self.assertIn('10/14 盘后 · 预计 · <span class="earnings-week-group">IT软硬Ai</span>' + green, panel)
             self.assertIn('10/21 盘后 · 官方活动日期 · <span class="earnings-week-group">持仓</span>' + green, panel)
