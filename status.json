@@ -9,20 +9,20 @@
     "next_in": 12,
     "next_date": "2026-10-29"
   },
-  "run_id": "38548623067",
+  "run_id": "38558857779",
   "request_id": "",
-  "source_sha": "40ebaf5e7405bb63db2a185ef260e44d7ef3420d",
-  "started_at": "2026-10-14T10:18:18+00:00",
-  "started_at_bj": "2026-10-14T18:18:18+08:00",
-  "finished_at": "2026-10-14T18:19:22.844499+08:00",
-  "finished_at_bj": "2026-10-14T18:19:22+08:00",
+  "source_sha": "16edf802257adf6dbf3c3cc2b43ca2f3dfc5518b",
+  "started_at": "2026-10-14T11:45:44+00:00",
+  "started_at_bj": "2026-10-14T19:45:44+08:00",
+  "finished_at": "2026-10-14T19:46:35.086338+08:00",
+  "finished_at_bj": "2026-10-14T19:46:35+08:00",
   "event": "push",
   "target_trade_date": "2026-10-13",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "1701508f520a15cbe2af220bd9fc14a4123f3d7c",
-    "settings.json": "a3996325650bd399123d04628467db8c979335be"
+    "holdings.json": "b69a834b268399bc9bca2a8b5f096bd7deb0cde2",
+    "settings.json": "75fb989514120d798a9aa266139b64fe20c65362"
   },
   "effective_settings": {
     "boll_n": 20,
@@ -38,7 +38,7 @@
     "target_space_pct": 50.0,
     "target_gap_pct": 3.0,
     "vol_ratio": 1.5,
-    "quiet_chg": 2.0,
+    "vol_ratio_red": 3.0,
     "amp_yellow": 6.0,
     "amp_red": 10.0,
     "ma_short": 0,
@@ -60,7 +60,7 @@
     },
     {
       "key": "focus",
-      "label": "重点关注",
+      "label": "重点",
       "item_group": "focus"
     },
     {
@@ -191,6 +191,7 @@
     "yellow": 32,
     "green": 59,
     "gray": 0,
+    "purple": 2,
     "total": 100,
     "macro_ok": 6,
     "stale_symbols": [],
@@ -301,6 +302,7 @@
           "symbol": "UNH",
           "note": "联合健康",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -321,6 +323,7 @@
           "symbol": "UNH",
           "note": "联合健康",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -334,6 +337,7 @@
           "symbol": "DRAM",
           "note": "Memory ETF-存储芯片",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -347,6 +351,7 @@
           "symbol": "PDD",
           "note": "拼多多",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -360,6 +365,7 @@
           "symbol": "ANET",
           "note": "Arista-数据中心网络",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -373,6 +379,7 @@
           "symbol": "AMAT",
           "note": "应用材料",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -386,6 +393,7 @@
           "symbol": "JNJ",
           "note": "强生",
           "group": "healthcare",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -399,6 +407,7 @@
           "symbol": "GS",
           "note": "高盛",
           "group": "financials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -412,6 +421,7 @@
           "symbol": "JPM",
           "note": "摩根大通",
           "group": "financials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -425,6 +435,7 @@
           "symbol": "TTWO",
           "note": "Take-Two-游戏",
           "group": "communications",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -441,6 +452,7 @@
           "symbol": "ANET",
           "note": "Arista-数据中心网络",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -454,6 +466,7 @@
           "symbol": "AMAT",
           "note": "应用材料",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -467,6 +480,7 @@
           "symbol": "JPM",
           "note": "摩根大通",
           "group": "financials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -485,6 +499,7 @@
           "symbol": "BRK-B",
           "note": "伯克希尔哈撒韦",
           "group": "position",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -498,6 +513,7 @@
           "symbol": "MA",
           "note": "万事达",
           "group": "focus",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -511,6 +527,7 @@
           "symbol": "V",
           "note": "Visa-支付",
           "group": "focus",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -524,6 +541,7 @@
           "symbol": "MSFT",
           "note": "微软",
           "group": "focus",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -537,6 +555,7 @@
           "symbol": "PLTR",
           "note": "Palantir-AI数据分析",
           "group": "technology",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -550,6 +569,7 @@
           "symbol": "BX",
           "note": "黑石",
           "group": "financials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -563,6 +583,7 @@
           "symbol": "XLE",
           "note": "能源精选行业ETF",
           "group": "energy",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -576,6 +597,7 @@
           "symbol": "XOM",
           "note": "埃克森美孚",
           "group": "energy",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -592,6 +614,7 @@
           "symbol": "BX",
           "note": "黑石",
           "group": "financials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -610,6 +633,7 @@
           "symbol": "BRK-B",
           "note": "伯克希尔哈撒韦",
           "group": "position",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -623,6 +647,7 @@
           "symbol": "HII",
           "note": "亨廷顿英格尔斯工业",
           "group": "position",
+          "level": "red",
           "indicators": [
             {
               "shape": "▼",
@@ -636,6 +661,7 @@
           "symbol": "CRSP",
           "note": "CRISPR-基因编辑",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -649,6 +675,7 @@
           "symbol": "GOOGL",
           "note": "谷歌（Alphabet）",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -662,6 +689,7 @@
           "symbol": "NTNX",
           "note": "Nutanix-混合云",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -675,6 +703,7 @@
           "symbol": "UNH",
           "note": "联合健康",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -688,6 +717,7 @@
           "symbol": "DRAM",
           "note": "Memory ETF-存储芯片",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -701,6 +731,7 @@
           "symbol": "XLI",
           "note": "工业精选行业ETF",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -714,6 +745,7 @@
           "symbol": "GEHC",
           "note": "ge医疗",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -727,6 +759,7 @@
           "symbol": "ZS",
           "note": "Zscaler-云安全",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -740,6 +773,7 @@
           "symbol": "COST",
           "note": "好市多",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -753,6 +787,7 @@
           "symbol": "MA",
           "note": "万事达",
           "group": "focus",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -766,6 +801,7 @@
           "symbol": "PDD",
           "note": "拼多多",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -779,6 +815,7 @@
           "symbol": "V",
           "note": "Visa-支付",
           "group": "focus",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -792,6 +829,7 @@
           "symbol": "AAPL",
           "note": "苹果",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -805,6 +843,7 @@
           "symbol": "MSFT",
           "note": "微软",
           "group": "focus",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
@@ -818,6 +857,7 @@
           "symbol": "SYK",
           "note": "医疗机器人",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -831,6 +871,7 @@
           "symbol": "SKHY",
           "note": "SK海力士ADR",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -844,6 +885,7 @@
           "symbol": "MU",
           "note": "美光科技",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -857,6 +899,7 @@
           "symbol": "SNDK",
           "note": "闪迪",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -870,6 +913,7 @@
           "symbol": "STX",
           "note": "希捷科技",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -883,6 +927,7 @@
           "symbol": "INTC",
           "note": "英特尔",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -896,6 +941,7 @@
           "symbol": "WDC",
           "note": "西部数据",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -909,6 +955,7 @@
           "symbol": "JNJ",
           "note": "强生",
           "group": "healthcare",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -922,6 +969,7 @@
           "symbol": "HEI",
           "note": "HEICO-航空零部件",
           "group": "industrials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -935,6 +983,7 @@
           "symbol": "CAT",
           "note": "卡特彼勒",
           "group": "industrials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -948,6 +997,7 @@
           "symbol": "VRT",
           "note": "维谛技术",
           "group": "industrials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -961,6 +1011,7 @@
           "symbol": "TTWO",
           "note": "Take-Two-游戏",
           "group": "communications",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -977,6 +1028,7 @@
           "symbol": "CRSP",
           "note": "CRISPR-基因编辑",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -990,6 +1042,7 @@
           "symbol": "GOOGL",
           "note": "谷歌（Alphabet）",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1003,6 +1056,7 @@
           "symbol": "NTNX",
           "note": "Nutanix-混合云",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1016,6 +1070,7 @@
           "symbol": "GEHC",
           "note": "ge医疗",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1029,6 +1084,7 @@
           "symbol": "ZS",
           "note": "Zscaler-云安全",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1042,6 +1098,7 @@
           "symbol": "AAPL",
           "note": "苹果",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1055,6 +1112,7 @@
           "symbol": "SYK",
           "note": "医疗机器人",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1068,6 +1126,7 @@
           "symbol": "SKHY",
           "note": "SK海力士ADR",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1081,6 +1140,7 @@
           "symbol": "MU",
           "note": "美光科技",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1094,6 +1154,7 @@
           "symbol": "SNDK",
           "note": "闪迪",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1107,6 +1168,7 @@
           "symbol": "STX",
           "note": "希捷科技",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1120,6 +1182,7 @@
           "symbol": "INTC",
           "note": "英特尔",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1133,6 +1196,7 @@
           "symbol": "HEI",
           "note": "HEICO-航空零部件",
           "group": "industrials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1146,6 +1210,7 @@
           "symbol": "VRT",
           "note": "维谛技术",
           "group": "industrials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1163,6 +1228,7 @@
           "symbol": "BRK-B",
           "note": "伯克希尔哈撒韦",
           "group": "position",
+          "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         },
@@ -1170,6 +1236,7 @@
           "symbol": "MA",
           "note": "万事达",
           "group": "focus",
+          "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         },
@@ -1177,6 +1244,7 @@
           "symbol": "V",
           "note": "Visa-支付",
           "group": "focus",
+          "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         },
@@ -1184,6 +1252,7 @@
           "symbol": "MSFT",
           "note": "微软",
           "group": "focus",
+          "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         },
@@ -1191,6 +1260,7 @@
           "symbol": "PLTR",
           "note": "Palantir-AI数据分析",
           "group": "technology",
+          "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         },
@@ -1198,6 +1268,7 @@
           "symbol": "XLE",
           "note": "能源精选行业ETF",
           "group": "energy",
+          "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         },
@@ -1205,6 +1276,7 @@
           "symbol": "XOM",
           "note": "埃克森美孚",
           "group": "energy",
+          "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         }
@@ -1220,6 +1292,7 @@
           "symbol": "XLI",
           "note": "工业精选行业ETF",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1239,6 +1312,7 @@
           "symbol": "XLI",
           "note": "工业精选行业ETF",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1251,6 +1325,7 @@
           "symbol": "COST",
           "note": "好市多",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1263,6 +1338,7 @@
           "symbol": "WDC",
           "note": "西部数据",
           "group": "technology",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1275,6 +1351,7 @@
           "symbol": "GS",
           "note": "高盛",
           "group": "financials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1287,6 +1364,7 @@
           "symbol": "CAT",
           "note": "卡特彼勒",
           "group": "industrials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1299,6 +1377,7 @@
           "symbol": "XLB",
           "note": "原材料精选行业ETF",
           "group": "materials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1311,6 +1390,7 @@
           "symbol": "CEG",
           "note": "Constellation-核电",
           "group": "utilities",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1323,6 +1403,7 @@
           "symbol": "XLC",
           "note": "通信服务精选行业ETF",
           "group": "communications",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1338,6 +1419,7 @@
           "symbol": "XLB",
           "note": "原材料精选行业ETF",
           "group": "materials",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -1350,6 +1432,7 @@
           "symbol": "CEG",
           "note": "Constellation-核电",
           "group": "utilities",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1362,6 +1445,7 @@
           "symbol": "XLC",
           "note": "通信服务精选行业ETF",
           "group": "communications",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1377,19 +1461,22 @@
         {
           "symbol": "HII",
           "note": "亨廷顿英格尔斯工业",
-          "group": "position"
+          "group": "position",
+          "level": "red"
         },
         {
           "symbol": "NOC",
           "note": "诺斯罗普格鲁曼",
-          "group": "industrials"
+          "group": "industrials",
+          "level": "red"
         }
       ],
       "yellow": [
         {
           "symbol": "MCD",
           "note": "麦当劳",
-          "group": "consumer_discretionary"
+          "group": "consumer_discretionary",
+          "level": "yellow"
         }
       ],
       "purple": [],
@@ -1397,7 +1484,8 @@
         {
           "symbol": "MCD",
           "note": "麦当劳",
-          "group": "consumer_discretionary"
+          "group": "consumer_discretionary",
+          "level": "yellow"
         }
       ]
     },
@@ -1421,6 +1509,7 @@
           "symbol": "CRSP",
           "note": "CRISPR-基因编辑",
           "group": "position",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "□",
@@ -1433,6 +1522,7 @@
           "symbol": "ZS",
           "note": "Zscaler-云安全",
           "group": "focus",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "■",
@@ -1569,7 +1659,7 @@
   "data_time_text": "2026-10-13 收盘（美东交易日）",
   "market_risk": {
     "level": "green",
-    "label": "风险平稳",
+    "label": "平稳",
     "text": "已取得的指标未触发警示；风险得分 0/8",
     "score": 0,
     "levels": {
@@ -4009,16 +4099,16 @@
       }
     },
     "events": {
-      "GS": [
+      "UNH": [
         "2026-10-13"
       ],
-      "JNJ": [
+      "GS": [
         "2026-10-13"
       ],
       "JPM": [
         "2026-10-13"
       ],
-      "UNH": [
+      "JNJ": [
         "2026-10-13"
       ]
     }
@@ -4065,6 +4155,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-14T18:19:15.537673+08:00"
+    "assessed_at": "2026-10-14T19:46:28.473674+08:00"
   }
 }
