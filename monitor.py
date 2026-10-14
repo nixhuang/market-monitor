@@ -3943,7 +3943,8 @@ tr:first-child td{border-top:none}
 .earn .unit{display:block;color:var(--dim);font-size:11px}
 .earn.soon{color:#f0c674;font-weight:600}
 table.stk{table-layout:fixed}
-.stk tr.range52-row td{padding:0 12px 0 18px;border-top:0;box-shadow:none}
+.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}  /* 股票行下边距让给位置条，条靠近本股、远离下一只 */
+.stk tr.range52-row td{padding:0 12px 12px 18px;border-top:0;box-shadow:none}
 .range52-rail{position:relative;height:15px;font-variant-numeric:tabular-nums}
 .range52-percent{position:absolute;top:0;left:clamp(18px,var(--range-pos),calc(100% - 18px));transform:translateX(-50%);color:var(--text);font-size:9px;line-height:10px;white-space:nowrap}
 .range52-track{position:absolute;right:3px;bottom:1px;left:3px;height:2.1px;background:#9fa3aa;border-radius:99px}
@@ -3963,7 +3964,8 @@ table.stk tr td:first-child{padding-left:14px}
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
   .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
   .stk td{padding:8px 5px}
-  .stk tr.range52-row td{padding:0 8px 0 12px}
+  .stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}
+  .stk tr.range52-row td{padding:0 8px 10px 12px}
   table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
   .stk th{padding:7px 5px;font-size:12px}
   .stk th.h-earn,.earn-cell{text-align:left}
@@ -3984,6 +3986,16 @@ tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}
 tr.gray td{color:var(--dim)}
 .group-card tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
 .group-card tr.pur td.sig{box-shadow:inset -2px 0 0 var(--purple);padding-right:12px}
+/* 有52周条的股票：左侧灯条顶部再减去整只股票高度（主行+位置条）的约15%（85%-6.1px，位置条行约22px），延伸覆盖自己的位置条、在条下方4px处结束，与上下股票留出空隙 */
+.stk tr:has(+tr.range52-row)>td{--lc:transparent;--lw:0px}
+.stk tr.red:has(+tr.range52-row)>td:first-child{--lc:var(--red);--lw:6px}
+.stk tr.yellow:has(+tr.range52-row)>td:first-child{--lc:var(--yellow);--lw:4px}
+.stk tr.green:has(+tr.range52-row)>td:first-child{--lc:var(--green);--lw:2px}
+.stk tr:has(+tr.range52-row)>td:first-child{box-shadow:none;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom;background-repeat:no-repeat}
+.stk tr.pur:has(+tr.range52-row)>td.sig{box-shadow:none;background-image:linear-gradient(var(--purple),var(--purple));background-size:2px calc(100% - 4px);background-position:right bottom;background-repeat:no-repeat}
+.stk tr.range52-row>td{--lc:transparent;--lw:0px;--pc:transparent;--pw:0px;background-image:linear-gradient(var(--lc),var(--lc)),linear-gradient(var(--pc),var(--pc));background-size:var(--lw) 18px,var(--pw) 18px;background-position:left top,right top;background-repeat:no-repeat}
+.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px} .stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}
+.stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px} .stk tr.pur+tr.range52-row>td{--pc:var(--purple);--pw:2px}
 #macroCard tr.mh td{padding:5px 10px;font-size:11.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
 .macro-help{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}
 .macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}

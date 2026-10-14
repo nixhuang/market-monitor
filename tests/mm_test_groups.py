@@ -3541,6 +3541,10 @@ class Test52wRangeBar(unittest.TestCase):
         output = monitor._stock_row(row, {})
         self.assertIn('HII', output)
         self.assertEqual(output.count('class="range52-row"'), 1)
+        self.assertIn('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}', monitor.PAGE_CSS)  # 位置条贴近本股
+        self.assertIn('.stk tr.range52-row td{padding:0 12px 12px 18px;', monitor.PAGE_CSS)  # 与下一只股票拉开
+        self.assertIn('.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px}', monitor.PAGE_CSS)  # 灯条延伸到本股位置条
+        self.assertIn('background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom', monitor.PAGE_CSS)  # 灯条顶部下移
         self.assertIn('</tr><tr class="range52-row"><td colspan="4">', output)
         self.assertEqual(monitor.signal_counts([row])['low52']['red'], 0)
 
