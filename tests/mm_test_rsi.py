@@ -131,8 +131,11 @@ class TestRSI(unittest.TestCase):
                     self.assertEqual(counts['boll']['yellow'], int(active))
                     self.assertEqual(counts['boll']['sole_yellow'], int(active))
                     self.assertEqual(counts['boll_rsi']['red'], 0)
+                    style = {'逼近布林上轨': ('white', '逼近上轨'),
+                             '触及布林上轨': ('white', '触及上轨'),
+                             '盘中突破布林上轨': ('yellow', '盘中突破上轨')}[prefix]
                     self.assertEqual(monitor._member_direction_markers(detail, 'boll'),
-                                     [{'shape': '▲', 'tone': 'yellow', 'label': '布林上轨'}] if active else [])
+                                     [{'shape': '▲', 'tone': style[0], 'label': style[1]}] if active else [])
 
             # 下轨的黄灯和方向图标在所有分组保持不变。
             with self.subTest(group=group, band='lower'):
@@ -180,7 +183,7 @@ class TestRSI(unittest.TestCase):
             self.assertEqual(detail['signal_marks'].count(('boll', 'yellow')), 1)
             self.assertIn('布林下轨', detail['boll_alert_text'])
             self.assertEqual(monitor._member_direction_markers(detail, 'boll'),
-                             [{'shape': '▼', 'tone': 'red', 'label': '布林下轨'}])
+                             [{'shape': '▼', 'tone': 'yellow', 'label': '盘中跌破下轨'}])
             self.assertEqual(monitor.signal_counts([detail])['boll']['yellow'], 1)
             members = monitor.signal_count_members([detail])['boll']['yellow']
             self.assertEqual(len(members), 1)

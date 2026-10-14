@@ -3435,6 +3435,81 @@ class Test52wLow(unittest.TestCase):
         self.assertFalse(any('52周' in x for x in sig), sig)
 
 
+class Test52wRangeBar(unittest.TestCase):
+    """区间条与旧52周低位报警相互独立，只渲染有真实日内高低价的快照。"""
+
+    @staticmethod
+    def history():
+        from datetime import date, timedelta
+        dates = [date(2025, 9, 30).isoformat()] + [
+            (date(2025, 10, 14) + timedelta(weeks=i)).isoformat() for i in range(53)]
+        count = len(dates)
+        return {'dates': dates, 'highs': [500.0] + [200.0] * (count - 1),
+                'lows': [1.0] + [100.0] * (count - 1), 'price': 150.0,
+                'ma_range_valid': [True] * count}
+
+    def test_52_week_high_low_position_uses_aligned_intraday_extremes(self):
+        data = self.history()
+        result = monitor._range52_from_history(data)
+        self.assertEqual((result['low'], result['high'], result['scope']), (100.0, 200.0, '52周'))
+        self.assertEqual(result['position'], 50.0)
+        row = monitor._range52_row({'range52': result, 'price': 150.0, 'data_date': result['to']})
+        self.assertIn('style="--range-pos:50.0%"', row)
+        self.assertIn('<span class="range52-percent" aria-hidden="true">50.0%</span>', row)
+        self.assertIn('style="left:50.0%"', row)
+        self.assertIn('.range52-track{position:absolute;right:3px;bottom:1px;left:3px;height:2.1px;', monitor.PAGE_CSS)
+        self.assertIn('.range52-marker{position:absolute;top:50%;width:8.4px;height:8.4px;', monitor.PAGE_CSS)
+        self.assertIn('height:2.1px;background:#9fa3aa;border-radius:99px}', monitor.PAGE_CSS)
+        self.assertIn('background:#713caf;border:1px solid #efd9ff;', monitor.PAGE_CSS)
+        visible = re.sub(r' aria-label="[^"]*"', '', row)
+        for text in ('52周低 100.00', '52周高 200.00', '区间位置 50.0%',
+                     '本轮价 150.00', '日线盘中高低价', '未满52周'):
+            self.assertNotIn(text, visible)
+        self.assertNotIn('500.00', row)  # 窗口外旧高点不能污染标尺
+        old_invalid = dict(data, ma_range_valid=[False] + data['ma_range_valid'][1:])
+        self.assertEqual(monitor._range52_from_history(old_invalid)['position'], 50.0)
+        self.assertNotIn('title=', row)
+        self.assertEqual(monitor._range52_row({'range52': result, 'price': 100.0, 'data_date': result['to']}).count('left:0.0%'), 1)
+        self.assertEqual(monitor._range52_row({'range52': result, 'price': 200.0, 'data_date': result['to']}).count('left:100.0%'), 1)
+        self.assertEqual(monitor._range52_row({'reference_only': True, 'range52': result, 'price': 150.0}), '')
+
+    def test_short_history_and_missing_or_filled_range_do_not_claim_52_weeks(self):
+        data = self.history()
+        short = {**data, **{key: data[key][-30:] for key in ('dates', 'highs', 'lows', 'ma_range_valid')}}
+        result = monitor._range52_from_history(short)
+        self.assertEqual(result['scope'], '可用历史')
+        short_row = monitor._range52_row({'range52': result, 'price': 150.0, 'data_date': result['to']})
+        self.assertIn('aria-label="可用历史低', short_row)
+        self.assertIn('>50.0%</span>', short_row)
+        self.assertNotIn('未满52周', short_row)
+        self.assertIn('数据待更新', monitor._range52_row({'range52': result, 'price': 150.0,
+                                                           'data_date': '2026-10-14'}))
+        forged = {**result, 'position': '50%;color:red'}
+        self.assertIn('数据待更新', monitor._range52_row({'range52': forged, 'price': 150.0,
+                                                           'data_date': result['to']}))
+        invalid = [dict(data, ma_range_valid=data['ma_range_valid'][:-1] + [False]),
+                   dict(data, highs=data['highs'][:-1]), dict(data, lows=[]),
+                   dict(data, price=201.0), dict(data, price=float('nan')),
+                   dict(data, dates=data['dates'][:-1] + [None])]
+        for sample in invalid:
+            with self.subTest(sample=sample.get('price'), keys=len(sample.get('lows', []))):
+                self.assertIsNone(monitor._range52_from_history(sample))
+        self.assertIn('数据待更新', monitor._range52_row({'price': None}))
+        self.assertNotIn('range52-track', monitor._range52_row({'price': None}))
+        self.assertIn('数据待更新', monitor._range52_row({'price': 150,
+            'range52': {**result, 'high': '<script>'}}))
+
+    def test_stock_row_uses_one_full_width_bar_without_changing_score_or_counts(self):
+        interval = monitor._range52_from_history(self.history())
+        row = {'symbol': 'HII', 'note': '', 'price': 150.0, 'chg': -2.34,
+               'level': 'yellow', 'signals': [], 'range52': interval, 'data_date': interval['to']}
+        output = monitor._stock_row(row, {})
+        self.assertIn('HII', output)
+        self.assertEqual(output.count('class="range52-row"'), 1)
+        self.assertIn('</tr><tr class="range52-row"><td colspan="4">', output)
+        self.assertEqual(monitor.signal_counts([row])['low52']['red'], 0)
+
+
 class TestDisplayInteractions(unittest.TestCase):
     """展示改动不改变业务信号；颜色、局部收起与计数位置均覆盖。"""
 
@@ -3663,9 +3738,63 @@ class TestSignalCounts(unittest.TestCase):
                 self.assertEqual([d['symbol'] for d in snap['signal_members'][kind]['red']], ['AAA'])
         output = monitor._signal_counts_card(snap)
         self.assertEqual(output.count('class="signal-members-row"'), len(expected))
-        self.assertNotIn('财报', output)
-        self.assertNotIn('earnings', output)
-        self.assertNotIn('BBB', output)
+        self.assertNotIn('<td>财报</td>', output)  # 不混入12类红黄紫交易信号
+        self.assertIn('未来一周财报', output)
+        self.assertIn('<strong>BBB</strong>', output)
+        self.assertNotIn('>BBB</span>', output.split('earnings-week', 1)[0])
+
+    def test_next_week_earnings_members_use_us_calendar_day_and_keep_green_visible(self):
+        with patch.object(monitor, '_earn_today', return_value='2026-10-14'):
+            def item(symbol, group, date, level='green', status='ok', kind='expected'):
+                row = self.member_row(symbol, group, level)
+                row.update(price=100.0, chg=0.0, signals=[], earnings={
+                    'status': status, 'date': date, 'timing': 'post', 'kind': kind},
+                    data_date='2026-10-13')
+                return row
+            rows = [item('AAPL', 'technology', '2026-10-14'),
+                    item('BRK.B-US', 'position', '2026-10-21', kind='official'),
+                    item('BRK-B', 'technology', '2026-10-21'),  # 持仓优先，不能重复
+                    item('LATE', 'focus', '2026-10-22'),
+                    item('PAST', 'position', '2026-10-13'),
+                    item('UNKNOWN', 'technology', '2026-10-15', status='unknown')]
+            snap = monitor.build_snapshot({}, rows, {'group_monitoring': {'technology': True}}, group_counts={})
+            self.assertEqual(snap['earnings_week']['asof'], '2026-10-14')
+            self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], ['AAPL', 'BRK-B'])
+            self.assertEqual(snap['signal_counts']['chg']['red'], 0)
+            self.assertEqual(snap['summary']['green'], 6)  # 财报只提升可见性，绿灯不改黄
+            panel = monitor._signal_counts_card(snap)
+            self.assertIn('<details class="earnings-week"><summary>未来一周财报 · 2 只</summary>', panel)
+            self.assertNotIn('<details class="earnings-week" open>', panel)
+            self.assertNotIn('美东 2026-10-14 至 2026-10-21', panel)
+            self.assertNotIn('预计或估算日期可能调整', panel)
+            self.assertIn('if (earnings) earnings.open = false;', monitor.PAGE_INTERACTION_JS)
+            self.assertIn('#signalCounts .earnings-week summary{padding:9px 0;color:var(--text)', monitor.PAGE_CSS)
+            self.assertIn('10/14 盘后 · 预计 · IT软硬Ai · 绿灯', panel)
+            self.assertIn('10/21 盘后 · 官方活动日期 · 持仓 · 绿灯', panel)
+            self.assertNotIn('<strong>LATE</strong>', panel)
+            self.assertNotIn('<table>', panel)  # 只有财报名单仍显示各信号计数板块，不伪造信号
+            page = monitor.render({}, rows, len(rows), snapshot=snap)
+            technology = page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
+            self.assertTrue(technology.startswith(' open>'))  # 平时折叠的分类有近期财报则默认展开
+            disabled = monitor.render({}, rows, len(rows), snapshot={
+                **snap, 'group_monitoring': {**snap['group_monitoring'], 'technology': False}})
+            self.assertFalse(disabled.split('id="group_technology"', 1)[1].startswith(' open>'))  # 关闭监测的分类不因财报自动展开
+            self.assertIn('<tr class="green"><td class="sym">AAPL', technology.split('<details class="quiet-list">')[0])
+            self.assertIn('无异动 1 只', technology)
+            position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
+            self.assertIn('<tr class="green"><td class="sym">BRK-B', position.split('<details class="quiet-list">')[0])
+
+    def test_earnings_week_rejects_bad_date_missing_and_expired(self):
+        with patch.object(monitor, '_earn_today', return_value='2026-10-14'):
+            rows = [self.member_row(name, 'position', 'green') for name in ('UNKNOWN', 'BROKEN', 'OLD', 'FUTURE')]
+            for row, e in zip(rows, ({'status': 'unknown', 'date': '2026-10-15'},
+                                     {'status': 'ok', 'date': '2026-10-50'},
+                                     {'status': 'ok', 'date': '2026-10-13'},
+                                     {'status': 'ok', 'date': '2026-10-22'})):
+                row.update(price=100.0, chg=0.0, signals=[], earnings=e)
+            self.assertEqual(monitor.earnings_week_members(rows, '2026-10-14'), [])
+            self.assertNotIn('未来一周财报', monitor._signal_counts_card(
+                monitor.build_snapshot({}, rows, {}, group_counts={})))
 
     def test_snapshot_carries_signal_counts(self):
         snap = monitor.build_snapshot({}, [self.row('red', ('chg', 'red'))], {}, group_counts={})
@@ -3709,7 +3838,7 @@ class TestSignalCounts(unittest.TestCase):
         rows = [
             self.member_row('UP', 'position', 'yellow', ('rsi', 'yellow'), ('boll', 'yellow'),
                             ('ma_cross', 'yellow'), ('ma_band', 'yellow'), ('target', 'purple')),
-            self.member_row('DOWN', 'focus', 'yellow', ('rsi', 'yellow'), ('boll', 'yellow'),
+            self.member_row('DOWN', 'focus', 'red', ('rsi', 'red'), ('boll', 'yellow'),
                             ('ma_cross', 'yellow'), ('ma_band', 'yellow'), ('target', 'purple')),
             self.member_row('LEVEL', 'technology', 'yellow', ('ma_band', 'yellow')),
             self.member_row('SPACE', 'focus', 'green', ('target', 'purple')),
@@ -3727,8 +3856,9 @@ class TestSignalCounts(unittest.TestCase):
         rows[4].update(signals=['今日上穿共识价 200'])
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         cases = {
-            ('rsi', 'yellow'): [('RSI超买', 'tone-yellow', '▲'), ('RSI超卖', 'tone-red', '▼')],
-            ('boll', 'yellow'): [('布林上轨', 'tone-yellow', '▲'), ('布林下轨', 'tone-red', '▼')],
+            ('rsi', 'yellow'): [('RSI2条超买', 'tone-yellow', '▲')],
+            ('rsi', 'red'): [('RSI3条超卖', 'tone-red', '▼')],
+            ('boll', 'yellow'): [('突破上轨', 'tone-yellow', '▲'), ('触及下轨', 'tone-white', '▼')],
             ('ma_cross', 'yellow'): [('上穿60日均线', 'tone-cyan', '▲'), ('跌破120日均线', 'tone-cyan', '▼')],
             ('ma_band', 'yellow'): [('现价在均线上方', 'tone-cyan', '▲'),
                                    ('现价在均线下方', 'tone-cyan', '▼'),
@@ -3748,10 +3878,118 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(snap['signal_counts']['target']['purple'], 4)
         target = self.panel(output, 'target', 'purple')
         self.assertEqual(target.count('tone-purple'), 4)
-        self.assertIn('▲ 上穿 · ▼ 跌破 · ■ 附近 · □ 空间达标', target)
+        self.assertNotIn('▲ 上穿 · ▼ 跌破 · ■ 附近 · □ 空间达标', target)
+        self.assertNotIn('signal-icon-key', output)
+        self.assertNotIn('signal-member-help', output)
         self.assertNotIn('title=', output)  # 手机不用悬停，读屏仍能使用 aria-label
-        self.assertNotIn('signal-icon-key', self.panel(output, 'rsi', 'yellow'))
         self.assertEqual(self.panel(output, 'ma_band', 'sole_yellow').count('tone-cyan'), 1)
+
+    def test_amplitude_and_volume_members_show_value_and_price_change_direction(self):
+        rows = [self.member_row('UP', 'position', 'yellow', ('amp', 'yellow'), ('vol_ratio', 'yellow')),
+                self.member_row('DOWN', 'focus', 'red', ('amp', 'red'), ('vol_ratio', 'yellow')),
+                self.member_row('FLAT', 'position', 'yellow', ('amp', 'yellow'), ('vol_ratio', 'yellow'))]
+        rows[0].update(chg=1.6, amp=5.37, vol_ratio=2.43,
+                       vol_ratio_date='2026-10-13', data_date='2026-10-14')
+        rows[1].update(chg=-3.2, amp=7.14, vol_ratio=1.61,
+                       vol_ratio_date='2026-10-13', data_date='2026-10-14')
+        rows[2].update(chg=0, amp=5.01, vol_ratio=1.52, vol_ratio_date='2026-10-13')
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        self.assertEqual(snap['signal_counts']['amp']['red'], 1)
+        self.assertEqual(snap['signal_counts']['amp']['yellow'], 2)
+        self.assertEqual(snap['signal_counts']['vol_ratio']['yellow'], 3)
+        self.assertEqual(snap['signal_members']['amp']['red'][0]['metric'], '振幅 7.1%')
+        self.assertEqual(snap['signal_members']['vol_ratio']['yellow'][0]['metric'],
+                         '量比 2.4×（2026-10-13完整日）')
+        output = monitor._signal_counts_card(snap)
+        amp_yellow = self.panel(output, 'amp', 'yellow')
+        amp_red = self.panel(output, 'amp', 'red')
+        volume = self.panel(output, 'vol_ratio', 'yellow')
+        for panel in (amp_yellow, volume):
+            self.assertIn('tone-white" role="img" aria-label="2026-10-14股价上涨1.60%">▲', panel)
+            self.assertIn('平盘', panel)
+        self.assertIn('tone-white" role="img" aria-label="2026-10-14股价下跌3.20%">▼', volume)
+        self.assertIn('振幅 5.4%', amp_yellow)
+        self.assertIn('振幅 7.1%', amp_red)
+        self.assertIn('量比 2.4×（2026-10-13完整日）', volume)
+        self.assertIn('量比 1.6×（2026-10-13完整日）', volume)
+        self.assertNotIn('量比数字取标注的完整交易日，不一定与股价三角同日', volume)
+        self.assertNotIn('振幅为本轮行情日高低价之差占昨收的比例', amp_yellow)
+        self.assertIn('tone-white" role="img" aria-label="2026-10-14股价下跌3.20%">▼', amp_red)
+        self.assertNotIn('title=', output)
+
+    def test_change_members_show_signed_percent_and_white_direction(self):
+        rows = [self.member_row('UP', 'position', 'red', ('chg', 'red')),
+                self.member_row('DOWN', 'focus', 'yellow', ('chg', 'yellow'))]
+        rows[0].update(chg=6.237, data_date='2026-10-14')
+        rows[1].update(chg=-1.45, data_date='2026-10-14')
+        page = monitor._signal_counts_card(monitor.build_snapshot({}, rows, {}, group_counts={}))
+        red, yellow = self.panel(page, 'chg', 'red'), self.panel(page, 'chg', 'yellow')
+        self.assertIn('tone-white" role="img" aria-label="2026-10-14股价上涨6.24%">▲', red)
+        self.assertIn('涨跌幅 +6.24%', red)
+        self.assertIn('tone-white" role="img" aria-label="2026-10-14股价下跌1.45%">▼', yellow)
+        self.assertIn('涨跌幅 -1.45%', yellow)
+        self.assertNotIn('tone-red', red)
+        self.assertNotIn('白▲ / 白▼', yellow)
+
+    def test_boll_range_entry_is_white_and_intraday_break_is_yellow(self):
+        cases = [('逼近布林上轨 还差0.4%', 'tone-white', '▲', '逼近上轨'),
+                 ('触及布林上轨 100', 'tone-white', '▲', '触及上轨'),
+                 ('盘中突破布林上轨 100（盘中触及 102）', 'tone-yellow', '▲', '盘中突破上轨'),
+                 ('突破布林上轨 100', 'tone-yellow', '▲', '突破上轨'),
+                 ('逼近布林下轨 还差0.4%', 'tone-white', '▼', '逼近下轨'),
+                 ('触及布林下轨 90', 'tone-white', '▼', '触及下轨'),
+                 ('跌破布林下轨 90（盘中触及 89）', 'tone-yellow', '▼', '盘中跌破下轨')]
+        for text, tone, shape, name in cases:
+            with self.subTest(text=text):
+                row = self.member_row('BOLL', 'position', 'yellow', ('boll', 'yellow'))
+                row.update(boll_alert_text=text, signals=[text])
+                page = self.panel(monitor._signal_counts_card(monitor.build_snapshot({}, [row], {}, group_counts={})),
+                                  'boll', 'yellow')
+                self.assertIn(f'class="signal-member-icon {tone}" role="img" aria-label="{name}">{shape}', page)
+                self.assertIn(f'<span class="signal-member-metric">{name}</span>', page)
+                self.assertNotIn('tone-red', page)
+        row = self.member_row('INFO', 'technology', 'green', ('boll', 'yellow'))
+        row.update(boll_alert_text='', signals=['盘中突破布林上轨 100'])
+        member = monitor.signal_count_members([row])['boll']['yellow'][0]
+        self.assertNotIn('indicators', member)  # 其他组只有上轨说明，不能伪造黄灯图标
+
+    def test_rsi_icon_tone_depends_on_hit_count_not_side_or_overall_lamp(self):
+        rows = [self.member_row('BX', 'position', 'red', ('rsi', 'yellow'), ('chg', 'red')),
+                self.member_row('TWO_HIGH', 'focus', 'yellow', ('rsi', 'yellow')),
+                self.member_row('THREE_LOW', 'focus', 'red', ('rsi', 'red')),
+                self.member_row('THREE_HIGH', 'technology', 'red', ('rsi', 'red'))]
+        rows[0]['signals'] = ['RSI 2条超卖（≤30）：RSI6=22 / RSI12=27 / RSI24=33']
+        rows[1]['signals'] = ['RSI 2条超买（≥70）：RSI6=81 / RSI12=72 / RSI24=67']
+        rows[2]['signals'] = ['RSI 3条超卖（≤30）：RSI6=19 / RSI12=24 / RSI24=29']
+        rows[3]['signals'] = ['RSI 3条超买（≥70）：RSI6=85 / RSI12=79 / RSI24=71']
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        self.assertEqual((snap['signal_counts']['rsi']['yellow'], snap['signal_counts']['rsi']['red']), (2, 2))
+        self.assertEqual(snap['signal_members']['rsi']['yellow'][0]['rsi_hits'], '2条超卖')
+        output = monitor._signal_counts_card(snap)
+        yellow = self.panel(output, 'rsi', 'yellow')
+        red = self.panel(output, 'rsi', 'red')
+        self.assertIn('>BX</span><span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超卖">▼', yellow)
+        self.assertIn('>TWO_HIGH</span><span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超买">▲', yellow)
+        self.assertIn('>THREE_LOW</span><span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超卖">▼', red)
+        self.assertIn('>THREE_HIGH</span><span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超买">▲', red)
+        self.assertIn('2条超卖', yellow)
+        self.assertIn('3条超买', red)
+        self.assertNotIn('2条过界为黄，3条过界为红', yellow)
+        self.assertNotIn('tone-red" role="img" aria-label="RSI2条超卖"', yellow)
+
+    def test_metric_fields_do_not_invent_values_from_old_or_invalid_snapshots(self):
+        rows = [self.member_row('OLD', 'position', 'yellow', ('amp', 'yellow'), ('vol_ratio', 'yellow'),
+                                ('rsi', 'yellow'))]
+        rows[0].update(chg=float('nan'), amp=float('inf'), vol_ratio='<script>',
+                       signals=[], vol_ratio_date='<script>')
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        page = monitor._signal_counts_card(snap)
+        for kind in ('amp', 'vol_ratio'):
+            panel = self.panel(page, kind, 'yellow')
+            self.assertIn('数值待下次更新', panel)
+            self.assertIn('方向待下次更新', panel)
+            self.assertNotIn('<script>', panel)
+        self.assertIn('条数待下次更新', self.panel(page, 'rsi', 'yellow'))
 
     def test_target_same_symbol_can_show_solid_and_hollow_squares_without_double_count(self):
         row = self.member_row('BOTH', 'focus', 'green', ('target', 'purple'), ('target', 'purple'))
@@ -3797,22 +4035,51 @@ class TestSignalCounts(unittest.TestCase):
                 self.member_row('DOWN', 'focus', 'red', ('boll_rsi', 'red')),
                 self.member_row('LEGACY', 'technology', 'red', ('boll_rsi', 'red')),
                 self.member_row('CONFLICT', 'energy', 'red', ('boll_rsi', 'red'))]
-        rows[0]['boll_rsi_direction'] = '上轨（超买）'
-        rows[1]['boll_rsi_direction'] = '下轨（超卖）'
-        rows[3]['boll_rsi_direction'] = '上轨（RSI超卖，方向不一致）'
+        rows[0].update(boll_rsi_direction='上轨（超买）', boll_rsi_hits=2)
+        rows[1].update(boll_rsi_direction='下轨（超卖）', boll_rsi_hits=3)
+        rows[3].update(boll_rsi_direction='上轨（RSI超卖，方向不一致）', boll_rsi_hits=3)
         counts = monitor.signal_counts(rows)
         members = monitor.signal_count_members(rows)
         self.assertEqual(counts['boll_rsi']['red'], 4)
         self.assertEqual(len(members['boll_rsi']['red']), 4)
         output = self.panel(monitor._signal_counts_card({'signal_counts': counts,
                                                             'signal_members': members}), 'boll_rsi', 'red')
-        for label in ('aria-label="上轨（超买）"', 'aria-label="下轨（超卖）"',
+        for label in ('aria-label="上轨（超买），RSI2条过界"', 'aria-label="下轨（超卖），RSI3条过界"',
                       '上轨（RSI超卖，方向不一致）', '方向待下次更新'):
             self.assertIn(label, output)
         self.assertIn('signal-member-icon tone-yellow', output)
         self.assertIn('signal-member-icon tone-red', output)
+        self.assertIn('RSI 2条过界', output)
+        self.assertIn('RSI 3条过界', output)
         self.assertIn('上方', output)
         self.assertEqual(output.count('class="signal-member-direction"'), 2)
+
+    def test_combination_counts_follow_matching_rsi_side_but_red_lamp_stays_unchanged(self):
+        cases = [('上轨（超买）', 2, 'tone-yellow', '▲'),
+                 ('上轨（超买）', 3, 'tone-red', '▲'),
+                 ('下轨（超卖）', 2, 'tone-yellow', '▼'),
+                 ('下轨（超卖）', 3, 'tone-red', '▼')]
+        for direction, hits, tone, shape in cases:
+            with self.subTest(direction=direction, hits=hits):
+                row = self.member_row('MATCH', 'position', 'red', ('boll_rsi', 'red'))
+                row.update(boll_rsi_direction=direction, boll_rsi_hits=hits)
+                snap = monitor.build_snapshot({}, [row], {}, group_counts={})
+                page = self.panel(monitor._signal_counts_card(snap), 'boll_rsi', 'red')
+                self.assertIn(f'signal-member-icon {tone}" role="img" aria-label="{direction}，RSI{hits}条过界">{shape}', page)
+                self.assertIn(f'RSI {hits}条过界', page)
+                self.assertEqual(snap['signal_counts']['boll_rsi']['red'], 1)
+        conflict = self.member_row('CONFLICT', 'position', 'red', ('boll_rsi', 'red'))
+        conflict.update(boll_rsi_direction='下轨（RSI超买，方向不一致）', boll_rsi_hits=3)
+        page = self.panel(monitor._signal_counts_card(monitor.build_snapshot({}, [conflict], {}, group_counts={})),
+                          'boll_rsi', 'red')
+        self.assertIn('方向不一致', page)
+        self.assertNotIn('class="signal-member-icon', page)
+        legacy = dict(conflict, boll_rsi_direction='上轨（超买）')
+        legacy.pop('boll_rsi_hits')
+        page = self.panel(monitor._signal_counts_card(monitor.build_snapshot({}, [legacy], {}, group_counts={})),
+                          'boll_rsi', 'red')
+        self.assertIn('条数待下次更新', page)
+        self.assertNotIn('class="signal-member-icon', page)
 
     def test_members_deduplicate_marks_not_cross_kind_or_level(self):
         row = self.member_row('AAA', 'position', 'red', ('rsi', 'red'), ('rsi', 'red'),

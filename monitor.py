@@ -1820,6 +1820,19 @@ def earnings_label(e):
 EARN_SOON_DAYS = 14   # 财报日距今 0~14 天（含）时，页面上的财报文字标黄
 
 
+def earnings_within_week(e, today=None):
+    """美东自然日今天起至第7天（含）；仅已取得有效日期，不把未知或历史日期算作临近财报。"""
+    if not isinstance(e, dict) or e.get("status") != "ok" or not isinstance(e.get("date"), str):
+        return False
+    try:
+        today = today or _earn_today()
+        start = datetime.strptime(today, "%Y-%m-%d").date()
+        event = datetime.strptime(e["date"], "%Y-%m-%d").date()
+        return 0 <= (event - start).days <= 7
+    except (ValueError, TypeError):
+        return False
+
+
 def earnings_soon(e, today=None):
     """财报日期落在今天起 EARN_SOON_DAYS 天内（含当天、含第 14 天）返回 True；待公布、失败、已过期都不算。"""
     if not e or e.get("status") != "ok" or not e.get("date"):
@@ -2967,6 +2980,39 @@ def completed_day_volume_ratio(sym, data, asof=None):
         return None, ''
 
 
+def _range52_from_history(data):
+    """仅用同一日线序列的真实高低价给价格位置条供数；缺失/错位不拿收盘价冒充极值。"""
+    dates, highs, lows = (data.get(key) for key in ("dates", "highs", "lows"))
+    validity = data.get("ma_range_valid")
+    price = data.get("price")
+    valid_num = lambda value: (isinstance(value, (int, float)) and not isinstance(value, bool)
+                               and math.isfinite(value) and value > 0)
+    if (not isinstance(dates, list) or len(dates) < 30 or any(not isinstance(day, str) for day in dates)
+            or not isinstance(highs, list) or not isinstance(lows, list)
+            or len(dates) != len(highs) or len(dates) != len(lows)
+            or not valid_num(price)
+            or (validity is not None and (not isinstance(validity, list)
+                or len(validity) != len(dates)))):
+        return None
+    try:
+        end = datetime.fromisoformat(dates[-1]).date()
+        cutoff = (end - timedelta(weeks=52)).isoformat()
+        start = next((i for i, day in enumerate(dates) if day >= cutoff), len(dates))
+        if (start >= len(dates) or (validity is not None and not all(v is True for v in validity[start:]))
+                or any(not valid_num(high) or not valid_num(low) or low > high
+                       for high, low in zip(highs[start:], lows[start:]))):
+            return None
+        low, high = min(lows[start:]), max(highs[start:])
+        if low >= high or not low <= price <= high:
+            return None
+        first = datetime.fromisoformat(dates[start]).date()
+        scope = "52周" if (end - first).days >= 357 else "可用历史"
+        return {"low": low, "high": high, "position": (price - low) / (high - low) * 100,
+                "scope": scope, "from": dates[start], "to": dates[-1]}
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
 def _analysis_context(sym, cfg, data, group):
     """把一只标的需要的指标一次算好，各条规则只读不算。"""
     closes = data["closes"]
@@ -2985,6 +3031,7 @@ def _analysis_context(sym, cfg, data, group):
     low52 = min((data["lows"] or closes)[start52:])
     x.dist_high = (price / high52 - 1) * 100
     x.dist_low = (price / low52 - 1) * 100
+    x.range52 = _range52_from_history(data)
     x.vol_ratio, x.vol_ratio_date = completed_day_volume_ratio(sym, data)
     ma_periods = (int(S["ma_short"]), int(S["ma_long"]))
     x.moving_averages = [(period, sma(closes, period)) for period in dict.fromkeys(ma_periods) if period > 0]
@@ -3000,7 +3047,8 @@ def _quiet_result(x):
     detail = {
         "symbol": x.sym, "note": x.cfg.get("note", ""), "price": x.price,
         "chg": x.chg, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": x.dist_high,
-        "dist_low": x.dist_low, "vol_ratio": x.vol_ratio, "vol_ratio_date": x.vol_ratio_date,
+        "dist_low": x.dist_low, "range52": x.range52,
+        "vol_ratio": x.vol_ratio, "vol_ratio_date": x.vol_ratio_date,
         "trigger": x.cfg.get("trigger"), "source": x.data.get("source", ""),
         "data_date": (x.data.get("dates") or [""])[-1],
         "group": x.group, "boll_up": x.boll_up, "boll_dn": x.boll_dn,
@@ -3183,6 +3231,7 @@ def _rule_boll(al, x):
             x.boll_rsi_direction = f"{side}（RSI超买/超卖均命中）"
         elif (side == "上轨" and x.high_hits >= 2) or (side == "下轨" and x.low_hits >= 2):
             x.boll_rsi_direction = f"{side}（{'超买' if side == '上轨' else '超卖'}）"
+            x.boll_rsi_hits = x.high_hits if side == "上轨" else x.low_hits
         else:
             x.boll_rsi_direction = f"{side}（RSI{'超卖' if side == '上轨' else '超买'}，方向不一致）"
         al.add("boll_rsi", "布林 + RSI 双重信号 → 红", "red")
@@ -3280,6 +3329,7 @@ def _analysis_detail(x, al):
         "rsi": x.rsi,
         "dist_high": x.dist_high,
         "dist_low": x.dist_low,
+        "range52": x.range52,
         "vol_ratio": x.vol_ratio,
         "vol_ratio_date": x.vol_ratio_date,
         "amp": x.amp,
@@ -3297,6 +3347,7 @@ def _analysis_detail(x, al):
         "boll_up": x.boll_up,
         "boll_dn": x.boll_dn,
         "boll_rsi_direction": getattr(x, "boll_rsi_direction", ""),
+        "boll_rsi_hits": getattr(x, "boll_rsi_hits", None),
         "boll_alert_text": getattr(x, "boll_alert_text", ""),
         "ma_band_direction": getattr(x, "ma_band_direction", ""),
         # ETF 标签：静态表命中，或行情源明确给出 assetclass=etf
@@ -3351,6 +3402,8 @@ document.addEventListener("toggle", function(event) {
   card.querySelectorAll(".signal-count-toggle").forEach(function(button) {
     button.setAttribute("aria-expanded", "false");
   });
+  const earnings = card.querySelector(".earnings-week");
+  if (earnings) earnings.open = false;
 }, true);
 document.addEventListener("click", function(event) {
   if (!(event.target instanceof Element)) return;
@@ -3457,18 +3510,35 @@ def _member_direction_markers(d, kind):
         if marker not in markers:
             markers.append(marker)
     if kind == "rsi":
-        if any(s.startswith("RSI ") and "条超买" in s for s in signals):
-            add("▲", "yellow", "RSI超买")
-        if any(s.startswith("RSI ") and "条超卖" in s for s in signals):
-            add("▼", "red", "RSI超卖")
+        for s in signals:
+            match = re.match(r"^RSI ([23])条(超买|超卖)（", s)
+            if match:
+                count, side = int(match[1]), match[2]
+                add("▲" if side == "超买" else "▼", "red" if count == 3 else "yellow",
+                    f"RSI{count}条{side}")
+    elif kind in ("chg", "amp", "vol_ratio"):
+        chg = d.get("chg")
+        if isinstance(chg, (int, float)) and not isinstance(chg, bool) and math.isfinite(chg) and chg != 0:
+            day = d.get("data_date")
+            day = day if isinstance(day, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else "本轮行情日"
+            add("▲" if chg > 0 else "▼", "white",
+                f"{day}股价{'上涨' if chg > 0 else '下跌'}{abs(chg):.2f}%")
     elif kind == "boll":
-        # 新快照只取真正触发黄灯的那条；非核心组的上轨说明不产生黄灯图标。
+        # 新快照只取真正触发黄灯的那条；上轨仅作说明时不制造黄灯图标。
         if "boll_alert_text" in d:
             signals = [d["boll_alert_text"]] if d["boll_alert_text"] else []
-        if any(s.startswith(("突破布林上轨", "盘中突破布林上轨", "触及布林上轨", "逼近布林上轨")) for s in signals):
-            add("▲", "yellow", "布林上轨")
-        if any(s.startswith(("跌破布林下轨", "触及布林下轨", "逼近布林下轨")) for s in signals):
-            add("▼", "red", "布林下轨")
+        for s in signals:
+            for prefix, shape, tone, label in (
+                    ("盘中突破布林上轨", "▲", "yellow", "盘中突破上轨"),
+                    ("突破布林上轨", "▲", "yellow", "突破上轨"),
+                    ("跌破布林下轨", "▼", "yellow", "盘中跌破下轨"),
+                    ("触及布林上轨", "▲", "white", "触及上轨"),
+                    ("逼近布林上轨", "▲", "white", "逼近上轨"),
+                    ("触及布林下轨", "▼", "white", "触及下轨"),
+                    ("逼近布林下轨", "▼", "white", "逼近下轨")):
+                if s.startswith(prefix):
+                    add(shape, tone, label)
+                    break
     elif kind == "ma_cross":
         for s in signals:
             match = re.match(r"^(上穿|跌破)(\d+)日(?:弱)?均线", s)
@@ -3496,6 +3566,41 @@ def _member_direction_markers(d, kind):
     return markers
 
 
+def _member_metric(d, kind):
+    """仅把本轮已触发信号的数值带入成员明细；旧快照缺值时不回查行情。"""
+    if kind not in ("chg", "amp", "vol_ratio"):
+        return ""
+    value = d.get({"chg": "chg", "amp": "amp", "vol_ratio": "vol_ratio"}[kind])
+    if (not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value)
+            or (kind != "chg" and value < 0)):
+        return ""
+    if kind == "chg":
+        return f"涨跌幅 {value:+.2f}%"
+    if kind == "amp":
+        return f"振幅 {value:.1f}%"
+    day = d.get("vol_ratio_date")
+    date_text = f"（{day}完整日）" if isinstance(day, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
+    return f"量比 {value:.1f}×{date_text}"
+
+
+def _member_signal_details(d, kind, member, level):
+    indicators = _member_direction_markers(d, kind)
+    if kind == "rsi":
+        # 同只股票可能另有红灯；计数格只展示与本格告警等级相符的 RSI 条数。
+        indicators = [marker for marker in indicators if marker["tone"] == level]
+    if indicators:
+        member["indicators"] = indicators
+    metric = _member_metric(d, kind)
+    if metric:
+        member["metric"] = metric
+    if kind == "rsi" and indicators:
+        member["rsi_hits"] = " / ".join(marker["label"][3:] for marker in indicators)
+    if kind == "boll" and indicators:
+        member["boll_state"] = " / ".join(marker["label"] for marker in indicators)
+    if kind in ("chg", "amp", "vol_ratio") and d.get("chg") == 0 and not isinstance(d.get("chg"), bool):
+        member["flat"] = True
+
+
 def signal_count_members(items):
     """按原信号口径收集标的；重复身份沿用首页分类优先级，只保留第一条。"""
     levels = ("red", "yellow", "purple", "sole_yellow")
@@ -3518,20 +3623,40 @@ def signal_count_members(items):
                     entry = dict(member)
                     if kind == "boll_rsi" and level == "red" and d.get("boll_rsi_direction"):
                         entry["direction"] = d["boll_rsi_direction"]
-                    indicators = _member_direction_markers(d, kind) if kind != "target" or level == "purple" else []
-                    if indicators:
-                        entry["indicators"] = indicators
+                        if type(d.get("boll_rsi_hits")) is int and d["boll_rsi_hits"] in (2, 3):
+                            entry["boll_rsi_hits"] = d["boll_rsi_hits"]
+                    if kind != "target" or level == "purple":
+                        _member_signal_details(d, kind, entry, level)
                     out[kind][level].append(entry)
         if d.get("level") == "yellow":
             yellow_kinds = {k for k, m in marks if m == "yellow"}
             if len(yellow_kinds) == 1 and next(iter(yellow_kinds)) in out:
                 kind = next(iter(yellow_kinds))
                 entry = dict(member)
-                indicators = _member_direction_markers(d, kind)
-                if indicators:
-                    entry["indicators"] = indicators
+                _member_signal_details(d, kind, entry, "yellow")
                 out[kind]["sole_yellow"].append(entry)
     return out
+
+
+def earnings_week_members(items, today):
+    """独立信息名单，复用首页分类优先级去重，不进入警示信号或灯级。"""
+    priority = {group["item_group"]: index for index, group in enumerate(GROUPS)}
+    seen = set(RISK_IDENTITIES)
+    members = []
+    for d in sorted(items, key=lambda item: priority.get(item.get("group"), len(GROUPS))):
+        symbol = normalize_symbol(d.get("symbol"))
+        identity = instrument_identity(symbol)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if (d.get("reference_only") or d.get("etf") or is_etf(symbol)
+                or not earnings_within_week(d.get("earnings"), today)):
+            continue
+        e = d["earnings"]
+        members.append({"symbol": symbol, "note": d.get("note") or "", "group": d.get("group") or "",
+                        "level": d.get("level") or "", "date": e["date"],
+                        "timing": e.get("timing") or "", "kind": e.get("kind") or ""})
+    return sorted(members, key=lambda m: (m["date"], priority.get(m["group"], len(GROUPS)), m["symbol"]))
 
 
 def build_snapshot(macro, items, cfg, group_counts=None):
@@ -3547,6 +3672,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
     positions = cfg.get("positions", {}) if monitoring["positions"] else {}
     counts = group_counts if group_counts is not None else grouped_universe(cfg)[1]
     dca = global_dca(TARGET_DATE)
+    earnings_asof = _earn_today()
     snapshot = {
         "dca_reminder": dca,
         "run_id": str(os.environ.get("GITHUB_RUN_ID") or "local-" + NOW.strftime("%Y%m%d%H%M%S")),
@@ -3578,6 +3704,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
                     "missing_prices": sum(d.get("price") is None for d in items)},
         "signal_counts": signal_counts(items),
         "signal_members": signal_count_members(items),
+        "earnings_week": {"asof": earnings_asof, "members": earnings_week_members(items, earnings_asof)},
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
         "treasury_reference": {key: macro.get("ust10", {}).get(key) for key in
@@ -3668,15 +3795,28 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
 #signalCounts .signal-member-direction{color:var(--dim);font-size:11px}
-#signalCounts .signal-members-panel p.signal-icon-key{font-size:11.5px;color:#c4a3ff;line-height:1.5;margin:4px 0 8px;overflow-wrap:anywhere}
+#signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:12px}
 #signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:14px;font-weight:700;line-height:1;vertical-align:baseline}
-#signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
+#signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
 #signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
+#signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;background:#182130;color:var(--text)}
+#signalCounts .earnings-week summary{padding:9px 0;color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
+#signalCounts .earnings-week summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
+#signalCounts .earnings-week ul{list-style:none;margin:0;padding:0 0 9px}
+#signalCounts .earnings-week li{font-size:12px;padding:4px 0;overflow-wrap:anywhere}
+#signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
+#signalCounts .earnings-week-meta{color:var(--text);margin-left:5px}
 .earn{display:block;margin:0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:11px}
 .earn.soon{color:#f0c674;font-weight:600}
 table.stk{table-layout:fixed}
+.stk tr.range52-row td{padding:0 12px 0 18px;border-top:0;box-shadow:none}
+.range52-rail{position:relative;height:15px;font-variant-numeric:tabular-nums}
+.range52-percent{position:absolute;top:0;left:clamp(18px,var(--range-pos),calc(100% - 18px));transform:translateX(-50%);color:var(--text);font-size:9px;line-height:10px;white-space:nowrap}
+.range52-track{position:absolute;right:3px;bottom:1px;left:3px;height:2.1px;background:#9fa3aa;border-radius:99px}
+.range52-marker{position:absolute;top:50%;width:8.4px;height:8.4px;border-radius:2px;background:#713caf;border:1px solid #efd9ff;transform:translate(-50%,-50%)}
+.range52-missing{display:block;color:var(--dim);font-size:10px;line-height:15px}
 .c-sym{width:18%} .c-earn{width:22%} .c-px{width:13%} .c-sig{width:47%}
 .earn-cell{vertical-align:middle;overflow-wrap:anywhere}
 table.stk tr td:first-child{padding-left:14px}
@@ -3691,6 +3831,7 @@ table.stk tr td:first-child{padding-left:14px}
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
   .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
   .stk td{padding:8px 5px}
+  .stk tr.range52-row td{padding:0 8px 0 12px}
   table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
   .stk th{padding:7px 5px;font-size:12px}
   .stk th.h-earn,.earn-cell{text-align:left}
@@ -3993,6 +4134,35 @@ def _signals_html(d):
     return sig
 
 
+def _range52_row(d):
+    """每只标的下面显示当前价在已核验的日线高低区间的位置；旧快照绝不推算极值。"""
+    if d.get("reference_only"):
+        return ""
+    value = d.get("range52")
+    price = d.get("price")
+    valid = lambda n: isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) and n > 0
+    if not isinstance(value, dict):
+        return '<tr class="range52-row"><td colspan="4"><span class="range52-missing">52周区间：数据待更新</span></td></tr>'
+    low, high = value.get("low"), value.get("high")
+    if (not all(valid(n) for n in (price, low, high)) or not low < high or not low <= price <= high
+            or value.get("scope") not in ("52周", "可用历史")
+            or not all(isinstance(value.get(key), str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value[key])
+                       for key in ("from", "to"))
+            or value["from"] > value["to"] or value["to"] != d.get("data_date")
+            or value.get("position") is None or type(value["position"]) not in (int, float)
+            or not math.isfinite(value["position"])):
+        return '<tr class="range52-row"><td colspan="4"><span class="range52-missing">52周区间：数据待更新</span></td></tr>'
+    pos = (price - low) / (high - low) * 100
+    scope = value["scope"]
+    caption = (f'{scope}低 {fmt(low)}，本轮价 {fmt(price)} 位于区间 {pos:.1f}%，'
+               f'{scope}高 {fmt(high)}；{value["from"]} 至 {value["to"]} 日线高低价')
+    return (f'<tr class="range52-row"><td colspan="4">'
+            f'<div class="range52-rail" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
+            f'<span class="range52-percent" aria-hidden="true">{pos:.1f}%</span>'
+            f'<div class="range52-track"><span class="range52-marker" style="left:{pos:.1f}%"></span>'
+            f'</div></div></td></tr>')
+
+
 def _stock_row(d, snapshot):
     cls = d["level"] + (" pur" if d.get("purple") else "")
     chg_cls = "up" if (d["chg"] or 0) > 0 else (
@@ -4007,6 +4177,7 @@ def _stock_row(d, snapshot):
         f'<td class="num px"><span class="px-price">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
         f'<span class="px-chg {chg_cls}">{chg_txt}</span>{tg_html}</td>'
         f'<td class="sig">{_signals_html(d)}{_fund_detail_html(d)}</td></tr>'
+        + _range52_row(d)
     )
 
 
@@ -4075,10 +4246,12 @@ def _group_card(group, g, items_by_symbol, snapshot):
     monitoring = snapshot.get("group_monitoring", {})
     registered = snapshot.get("registered_counts", {})
     g = _sort_group_items(g, group)
+    earnings_week = (snapshot.get("earnings_week") or {}).get("asof") or _earn_today()
+    upcoming = any(earnings_within_week(d.get("earnings"), earnings_week) for d in g)
     shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or _fund_alert(d) or d.get("reference_only")
-             or d.get("purple")]
+             or d.get("purple") or earnings_within_week(d.get("earnings"), earnings_week)]
     quiet = [d for d in g if d["level"] == "green" and not _fund_alert(d) and not d.get("reference_only")
-             and not d.get("purple")]
+             and not d.get("purple") and not earnings_within_week(d.get("earnings"), earnings_week)]
     parts = []
     enabled = monitoring.get(group["key"], True)
     if not enabled:
@@ -4095,7 +4268,7 @@ def _group_card(group, g, items_by_symbol, snapshot):
     parts.append(_collapse_button(f'group_{group["key"]}', group["label"]))
     body = "\n".join(parts)
     stats = _group_stats_html(g, group, items_by_symbol, enabled)
-    expanded = " open" if enabled and group["key"] in ("positions", "focus") else ""
+    expanded = " open" if enabled and (group["key"] in ("positions", "focus") or upcoming) else ""
     return (f'<details class="card group-card" id="group_{group["key"]}"{expanded}>'
             f'<summary class="grp"><span>{group["label"]} ({len(g)})</span>'
             f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
@@ -4140,18 +4313,22 @@ def _member_icons(d, kind, level):
     """只渲染已验证的方向标记；旧快照缺方向时显示待更新，绝不按当前报价反推。"""
     esc = lambda value: html_lib.escape(str(value), quote=True)
     if kind == "boll_rsi" and level == "red":
-        direction = str(d.get("direction") or "")
-        if direction == "上轨（超买）":
-            markers = [{"shape": "▲", "tone": "yellow", "label": direction}]
-        elif direction == "下轨（超卖）":
-            markers = [{"shape": "▼", "tone": "red", "label": direction}]
+        direction = d.get("direction") if isinstance(d.get("direction"), str) else ""
+        hits = d.get("boll_rsi_hits")
+        if direction in ("上轨（超买）", "下轨（超卖）") and type(hits) is int and hits in (2, 3):
+            shape = "▲" if direction.startswith("上轨") else "▼"
+            markers = [{"shape": shape, "tone": "yellow" if hits == 2 else "red",
+                        "label": f"{direction}，RSI{hits}条过界"}]
         else:
-            known = ("上轨（RSI超卖，方向不一致）", "下轨（RSI超买，方向不一致）",
-                     "上轨（RSI超买/超卖均命中）", "下轨（RSI超买/超卖均命中）")
+            known = ("上轨（超买）", "下轨（超卖）", "上轨（RSI超卖，方向不一致）",
+                     "下轨（RSI超买，方向不一致）", "上轨（RSI超买/超卖均命中）",
+                     "下轨（RSI超买/超卖均命中）")
             value = direction if direction in known else "方向待下次更新"
             return f' <span class="signal-member-direction">{esc(value)}</span>'
-    elif kind in ("rsi", "boll", "ma_cross", "ma_band") or (kind == "target" and level == "purple"):
+    elif kind in ("rsi", "boll", "ma_cross", "ma_band", "chg", "amp", "vol_ratio") or (kind == "target" and level == "purple"):
         markers = d.get("indicators")
+        if kind in ("chg", "amp", "vol_ratio") and d.get("flat") is True:
+            return ' <span class="signal-member-direction">平盘</span>'
         if not isinstance(markers, list) or not markers:
             return ' <span class="signal-member-direction">方向待下次更新</span>'
     else:
@@ -4161,7 +4338,15 @@ def _member_icons(d, kind, level):
         if not isinstance(marker, dict):
             continue
         shape, tone, label = marker.get("shape"), marker.get("tone"), marker.get("label")
-        if shape not in ("▲", "▼", "■", "□") or tone not in ("yellow", "red", "cyan", "purple"):
+        if shape not in ("▲", "▼", "■", "□") or tone not in ("white", "yellow", "red", "cyan", "purple"):
+            continue
+        allowed = {"chg": ("white",), "amp": ("white",), "vol_ratio": ("white",),
+                   "rsi": ("yellow", "red"), "boll": ("white", "yellow"),
+                   "boll_rsi": ("yellow", "red"), "ma_cross": ("cyan",),
+                   "ma_band": ("cyan",), "target": ("purple",)}
+        if tone not in allowed.get(kind, ()):
+            continue
+        if shape not in ("▲", "▼") and kind not in ("target", "ma_band"):
             continue
         if shape == "□" and (kind != "target" or level != "purple" or tone != "purple"):
             continue
@@ -4170,6 +4355,40 @@ def _member_icons(d, kind, level):
         icons.append(f'<span class="signal-member-icon tone-{tone}" role="img" '
                      f'aria-label="{esc(label)}">{shape}</span>')
     return "".join(icons) or ' <span class="signal-member-direction">方向待下次更新</span>'
+
+
+def _earnings_week_panel(snapshot):
+    """计数表下方的未来一周财报名单，不是交易信号，不挤进红黄紫列。"""
+    data = snapshot.get("earnings_week")
+    if not isinstance(data, dict):
+        return ""
+    asof, members = data.get("asof"), data.get("members")
+    if not isinstance(asof, str) or not isinstance(members, list):
+        return '<details class="earnings-week"><summary>未来一周财报 · 名单待下次更新</summary></details>'
+    try:
+        asof = datetime.strptime(asof, "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        return '<details class="earnings-week"><summary>未来一周财报 · 名单待下次更新</summary></details>'
+    esc = lambda value: html_lib.escape(str(value), quote=True)
+    lines = []
+    for entry in members:
+        if (not isinstance(entry, dict) or not isinstance(entry.get("symbol"), str)
+                or not entry["symbol"].strip() or not isinstance(entry.get("note", ""), str)
+                or not earnings_within_week({"status": "ok", "date": entry.get("date")}, asof)):
+            return '<details class="earnings-week"><summary>未来一周财报 · 名单待下次更新</summary></details>'
+        date = entry["date"]
+        timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(entry.get("timing"), "时段待定")
+        kind = {"official": "官方活动日期", "expected": "预计", "estimated": "算法估算"}.get(entry.get("kind"), "来源待确认")
+        note = f' <span class="note">{esc(entry["note"])}</span>' if entry.get("note") else ""
+        group = next((g["label"] for g in GROUPS if g["item_group"] == entry.get("group")), "未分类")
+        lamp = " · 绿灯" if entry.get("level") == "green" else ""
+        lines.append(f'<li><strong>{esc(entry["symbol"])}</strong>{note} <span class="earnings-week-meta">'
+                     f'美东 {esc(date[5:].replace("-", "/"))} {timing} · {kind} · {esc(group)}{lamp}</span></li>')
+    if not lines:
+        return ""
+    summary = f'未来一周财报 · {len(lines)} 只'
+    return (f'<details class="earnings-week"><summary>{summary}</summary>'
+            f'<ul>{"".join(lines)}</ul></details>')
 
 
 def _signal_counts_card(snapshot):
@@ -4212,8 +4431,6 @@ def _signal_counts_card(snapshot):
                     group = str(d.get("group") or "")
                     grouped.setdefault(group, []).append(d)
                 content = '<div class="signal-member-groups">'
-                if kind == "target" and level == "purple":
-                    content += '<p class="signal-icon-key">▲ 上穿 · ▼ 跌破 · ■ 附近 · □ 空间达标</p>'
                 for group in sorted(grouped, key=lambda name: group_order.get(name, len(GROUPS))):
                     group_members = grouped[group]
                     content += (f'<section class="signal-member-group"><h4>'
@@ -4222,13 +4439,26 @@ def _signal_counts_card(snapshot):
                     for d in group_members:
                         note = f'<span class="note">{esc(d["note"])}</span>' if d.get("note") else ""
                         direction = _member_icons(d, kind, level)
-                        content += f'<li><span class="signal-member-symbol">{esc(d["symbol"])}</span>{direction}{note}</li>'
+                        if kind in ("chg", "amp", "vol_ratio"):
+                            metric = d.get("metric") or "数值待下次更新"
+                        elif kind == "rsi":
+                            metric = d.get("rsi_hits") or "条数待下次更新"
+                        elif kind == "boll":
+                            metric = d.get("boll_state") or "状态待下次更新"
+                        elif kind == "boll_rsi" and d.get("direction") in ("上轨（超买）", "下轨（超卖）"):
+                            hits = d.get("boll_rsi_hits")
+                            metric = f"RSI {hits}条过界" if type(hits) is int and hits in (2, 3) else "条数待下次更新"
+                        else:
+                            metric = ""
+                        value = f' <span class="signal-member-metric">{esc(metric)}</span>' if metric else ""
+                        content += f'<li><span class="signal-member-symbol">{esc(d["symbol"])}</span>{direction}{value}{note}</li>'
                     content += '</ul></section>'
                 content += '</div>'
             panels.append(f'<div class="signal-members-panel" id="{panel_id}" hidden>{content}</div>')
         rows += (f'<tr><td>{label}</td>{"".join(cells)}</tr>'
                  f'<tr class="signal-members-row"><td colspan="5">{"".join(panels)}</td></tr>')
-    if not rows:
+    earnings_panel = _earnings_week_panel(snapshot)
+    if not rows and not earnings_panel:
         return ""
     dim = 'style="color:var(--dim)"'
     head = (f'<tr class="gray mh"><td {dim}>信号</td><td class="num" {dim}>红</td><td class="num" {dim}>黄</td>'
@@ -4236,7 +4466,7 @@ def _signal_counts_card(snapshot):
     yellow = esc((snapshot.get("summary") or {}).get("yellow", 0))
     return (f'<details class="card group-card" id="signalCounts"><summary class="grp"><span>各信号计数</span>'
             f'<span class="group-stats">本轮黄灯 {yellow} 只</span></summary>'
-            f'<table>{head}{rows}</table>'
+            f'{f"<table>{head}{rows}</table>" if rows else ""}{earnings_panel}'
             f'{_collapse_button("signalCounts", "各信号计数")}</details>\n')
 
 
