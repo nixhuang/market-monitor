@@ -2929,10 +2929,47 @@ SIGNAL_KINDS = (
 )
 
 
+def completed_day_volume_ratio(sym, data, asof=None):
+    """最近一个已结束的美股交易日成交量 / 此前20个完整交易日均量。
+
+    盘中排除今天未完结的日线，收盘后留15分钟给日线汇总；行情源缺量、
+    落后于最近完整交易日或历史不足时不报放量。期货/指数没有同一股票日历口径。
+    """
+    if instrument_identity(sym).startswith('^') or instrument_identity(sym).endswith('=F'):
+        return None, ''
+    dates, volumes = data.get('dates') or [], data.get('volumes') or []
+    if len(dates) != len(volumes) or len(dates) < 21:
+        return None, ''
+    import exchange_calendars as xcals
+    calendar = xcals.get_calendar('XNYS')
+    now = (asof or NOW).astimezone(US_TZ)
+    today = now.date().isoformat()
+    try:
+        latest = calendar.date_to_session(today, direction='previous')
+        if (latest.date() == now.date() and
+                now.astimezone(timezone.utc) < calendar.session_close(latest) + timedelta(minutes=15)):
+            latest = calendar.previous_session(latest)
+        expected = latest.date().isoformat()
+        # 目标交易日是历史锚点时，绝不能向后读取未来日线。
+        if TARGET_DATE and expected > TARGET_DATE:
+            expected = TARGET_DATE
+        if expected not in dates:
+            return None, ''
+        index = dates.index(expected)
+        # 不跳过缺量日凑均值：分子与此前20根日线必须来自同一行情源且有效。
+        sample = volumes[index-20:index+1]
+        if len(sample) != 21 or any(not isinstance(v, (int, float)) or isinstance(v, bool)
+                                    or not math.isfinite(v) or v <= 0 for v in sample):
+            return None, ''
+        average = sum(sample[:-1]) / 20
+        return (sample[-1] / average, expected) if average > 0 else (None, '')
+    except (ValueError, KeyError, OverflowError):
+        return None, ''
+
+
 def _analysis_context(sym, cfg, data, group):
     """把一只标的需要的指标一次算好，各条规则只读不算。"""
     closes = data["closes"]
-    vols = data["volumes"]
     price = data["price"]
     prev = data["prev_close"]
     x = SimpleNamespace(sym=sym, cfg=cfg, data=data, group=group,
@@ -2948,7 +2985,7 @@ def _analysis_context(sym, cfg, data, group):
     low52 = min((data["lows"] or closes)[start52:])
     x.dist_high = (price / high52 - 1) * 100
     x.dist_low = (price / low52 - 1) * 100
-    x.vol_ratio = (vols[-1] / sma(vols, 20)) if vols and sma(vols, 20) else None
+    x.vol_ratio, x.vol_ratio_date = completed_day_volume_ratio(sym, data)
     ma_periods = (int(S["ma_short"]), int(S["ma_long"]))
     x.moving_averages = [(period, sma(closes, period)) for period in dict.fromkeys(ma_periods) if period > 0]
     x.boll_mid, x.boll_up, x.boll_dn = boll(closes, int(S["boll_n"]), float(S["boll_k"]))
@@ -2963,7 +3000,7 @@ def _quiet_result(x):
     detail = {
         "symbol": x.sym, "note": x.cfg.get("note", ""), "price": x.price,
         "chg": x.chg, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": x.dist_high,
-        "dist_low": x.dist_low, "vol_ratio": x.vol_ratio,
+        "dist_low": x.dist_low, "vol_ratio": x.vol_ratio, "vol_ratio_date": x.vol_ratio_date,
         "trigger": x.cfg.get("trigger"), "source": x.data.get("source", ""),
         "data_date": (x.data.get("dates") or [""])[-1],
         "group": x.group, "boll_up": x.boll_up, "boll_dn": x.boll_dn,
@@ -3153,7 +3190,7 @@ def _rule_boll(al, x):
 
 def _rule_vol_ratio(al, x):
     if x.vol_ratio and x.vol_ratio >= S["vol_ratio"]:
-        al.add("vol_ratio", f"量比 {x.vol_ratio:.1f}x", "yellow")
+        al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{x.vol_ratio:.1f}x", "yellow")
 
 
 def _rule_amplitude(al, x):
@@ -3244,6 +3281,7 @@ def _analysis_detail(x, al):
         "dist_high": x.dist_high,
         "dist_low": x.dist_low,
         "vol_ratio": x.vol_ratio,
+        "vol_ratio_date": x.vol_ratio_date,
         "amp": x.amp,
         "vol_tier": x.vol_tier,
         "vol_sigma": x.vol_sigma,

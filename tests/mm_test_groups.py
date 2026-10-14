@@ -2854,6 +2854,77 @@ class TestCacheAudit(unittest.TestCase):
                 self.assertEqual(disabled['fundamental']['data'], third['fundamental']['data'])
 
 
+class TestCompletedDayVolume(unittest.TestCase):
+    """量比只比较同源的已完整日线，不把盘中/补报价的零成交量冒充完整日。"""
+
+    def history(self, end):
+        import exchange_calendars as xcals
+        cal = xcals.get_calendar('XNYS')
+        sessions = cal.sessions_in_range('2026-09-01', end)[-23:]
+        dates = [d.date().isoformat() for d in sessions]
+        volumes = [1000] * 23
+        volumes[-2], volumes[-1] = 2000, 4000
+        return {'dates': dates, 'volumes': volumes, 'closes': [100] * 23,
+                'highs': [100] * 23, 'lows': [100] * 23,
+                'price': 100, 'prev_close': 100}
+
+    def measure(self, data, time, target):
+        from datetime import datetime
+        with patch.object(monitor, 'NOW', datetime.fromisoformat(time)), \
+                patch.object(monitor, 'TARGET_DATE', target):
+            return monitor.completed_day_volume_ratio('AAPL', data)
+
+    def test_summer_intraday_and_after_close_only_use_complete_day(self):
+        from datetime import datetime
+        data = self.history('2026-10-13')
+        previous, latest = data['dates'][-2:]
+        for time in ('2026-10-13T09:31:00-04:00', '2026-10-13T12:00:00-04:00',
+                     '2026-10-13T16:10:00-04:00'):
+            with self.subTest(time=time):
+                self.assertEqual(self.measure(data, time, latest), (2.0, previous))
+        ratio, day = self.measure(data, '2026-10-13T16:16:00-04:00', latest)
+        self.assertEqual(day, latest)
+        self.assertAlmostEqual(ratio, 4000 / 1050)
+        self.assertEqual(self.measure(data, '2026-10-13T20:15:00-04:00', latest)[1], latest)
+        # CLOSED_ONLY 是整页口径，不可令盘中尚未完结的量混入量比。
+        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T12:00:00-04:00')), \
+                patch.object(monitor, 'TARGET_DATE', latest), patch.object(monitor, 'CLOSED_ONLY', True):
+            self.assertEqual(monitor._analysis_context('AAPL', {}, data, 'technology').vol_ratio_date, previous)
+
+    def test_winter_half_day_holiday_and_incomplete_source(self):
+        data = self.history('2026-11-27')  # 感恩节次日13:00美东提前收盘
+        previous, latest = data['dates'][-2:]
+        self.assertEqual(self.measure(data, '2026-11-27T13:14:00-05:00', latest), (2.0, previous))
+        self.assertEqual(self.measure(data, '2026-11-27T13:16:00-05:00', latest)[1], latest)
+        self.assertEqual(self.measure(data, '2026-11-26T20:15:00-05:00', latest)[1], previous)
+        self.assertEqual(self.measure(data, '2026-11-27T20:15:00-05:00', previous)[1], previous)
+        for bad in (dict(data, volumes=data['volumes'][:-1] + [0]),
+                    dict(data, volumes=data['volumes'][:-2] + [0, 4000]),
+                    dict(data, volumes=data['volumes'][:-2] + [None, 4000]),
+                    dict(data, dates=data['dates'][:-1], volumes=data['volumes'][:-1])):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.measure(bad, '2026-11-27T20:15:00-05:00', latest), (None, ''))
+        self.assertEqual(monitor.completed_day_volume_ratio('ESMAIN', data), (None, ''))
+        self.assertEqual(monitor.completed_day_volume_ratio('^VIX', data), (None, ''))
+
+    def test_alert_uses_completed_day_and_date_without_inventing_current_volume(self):
+        data = self.history('2026-10-13')
+        latest = data['dates'][-1]
+        from datetime import datetime
+        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T12:00:00-04:00')), \
+                patch.object(monitor, 'TARGET_DATE', latest):
+            level, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
+            self.assertEqual(detail['vol_ratio_date'], data['dates'][-2])
+            self.assertAlmostEqual(detail['vol_ratio'], 2.0)
+            self.assertTrue(any('最近完整日量比' in text and data['dates'][-2] in text
+                                for text in signals), signals)
+            self.assertIn(('vol_ratio', 'yellow'), detail['signal_marks'])
+            data['volumes'][-2] = 0
+            _, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
+            self.assertIsNone(detail['vol_ratio'])
+            self.assertFalse(any('量比' in text for text in signals))
+
+
 class TestFuturesIdentity(unittest.TestCase):
     """期货恢复：不冒充现金指数/ETF，不把过期数据当作当日行情。"""
 
