@@ -9,16 +9,16 @@
     "next_in": 12,
     "next_date": "2026-10-29"
   },
-  "run_id": "38427826355",
+  "run_id": "38523345907",
   "request_id": "",
-  "source_sha": "feceeb8cda63391a7aa8a43333aafa3e97026339",
-  "started_at": "2026-10-13T16:06:58+00:00",
-  "started_at_bj": "2026-10-14T00:06:58+08:00",
-  "finished_at": "2026-10-14T00:09:08.828720+08:00",
-  "finished_at_bj": "2026-10-14T00:09:08+08:00",
+  "source_sha": "3312241a39982effc4c50dcb88d33b461eadb340",
+  "started_at": "2026-10-14T06:37:59+00:00",
+  "started_at_bj": "2026-10-14T14:37:59+08:00",
+  "finished_at": "2026-10-14T14:38:55.073585+08:00",
+  "finished_at_bj": "2026-10-14T14:38:55+08:00",
   "event": "push",
   "target_trade_date": "2026-10-13",
-  "mode": "manual_or_config",
+  "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
     "holdings.json": "1701508f520a15cbe2af220bd9fc14a4123f3d7c",
@@ -188,8 +188,8 @@
   },
   "summary": {
     "red": 9,
-    "yellow": 26,
-    "green": 65,
+    "yellow": 32,
+    "green": 59,
     "gray": 0,
     "total": 100,
     "macro_ok": 6,
@@ -219,23 +219,23 @@
     "vol_ratio": {
       "label": "量比",
       "red": 0,
-      "yellow": 0,
+      "yellow": 9,
       "purple": 0,
-      "sole_yellow": 0
+      "sole_yellow": 3
     },
     "rsi": {
       "label": "RSI",
       "red": 0,
-      "yellow": 7,
+      "yellow": 8,
       "purple": 0,
-      "sole_yellow": 0
+      "sole_yellow": 1
     },
     "boll": {
       "label": "布林",
       "red": 0,
       "yellow": 28,
       "purple": 0,
-      "sole_yellow": 18
+      "sole_yellow": 14
     },
     "boll_rsi": {
       "label": "布林+RSI",
@@ -247,23 +247,23 @@
     "ma_cross": {
       "label": "均线穿越",
       "red": 0,
-      "yellow": 2,
+      "yellow": 1,
       "purple": 0,
       "sole_yellow": 0
     },
     "ma_band": {
       "label": "长均线触及",
       "red": 0,
-      "yellow": 7,
+      "yellow": 8,
       "purple": 0,
-      "sole_yellow": 2
+      "sole_yellow": 3
     },
     "low52": {
       "label": "52周低位",
       "red": 2,
-      "yellow": 0,
+      "yellow": 1,
       "purple": 0,
-      "sole_yellow": 0
+      "sole_yellow": 1
     },
     "add_price": {
       "label": "加仓价",
@@ -308,9 +308,71 @@
     },
     "vol_ratio": {
       "red": [],
-      "yellow": [],
+      "yellow": [
+        {
+          "symbol": "UNH",
+          "note": "联合健康",
+          "group": "position"
+        },
+        {
+          "symbol": "DRAM",
+          "note": "Memory ETF-存储芯片",
+          "group": "position"
+        },
+        {
+          "symbol": "PDD",
+          "note": "拼多多",
+          "group": "focus"
+        },
+        {
+          "symbol": "ANET",
+          "note": "Arista-数据中心网络",
+          "group": "technology"
+        },
+        {
+          "symbol": "AMAT",
+          "note": "应用材料",
+          "group": "technology"
+        },
+        {
+          "symbol": "JNJ",
+          "note": "强生",
+          "group": "healthcare"
+        },
+        {
+          "symbol": "GS",
+          "note": "高盛",
+          "group": "financials"
+        },
+        {
+          "symbol": "JPM",
+          "note": "摩根大通",
+          "group": "financials"
+        },
+        {
+          "symbol": "TTWO",
+          "note": "Take-Two-游戏",
+          "group": "communications"
+        }
+      ],
       "purple": [],
-      "sole_yellow": []
+      "sole_yellow": [
+        {
+          "symbol": "ANET",
+          "note": "Arista-数据中心网络",
+          "group": "technology"
+        },
+        {
+          "symbol": "AMAT",
+          "note": "应用材料",
+          "group": "technology"
+        },
+        {
+          "symbol": "JPM",
+          "note": "摩根大通",
+          "group": "financials"
+        }
+      ]
     },
     "rsi": {
       "red": [],
@@ -376,6 +438,18 @@
           ]
         },
         {
+          "symbol": "BX",
+          "note": "黑石",
+          "group": "financials",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "red",
+              "label": "RSI超卖"
+            }
+          ]
+        },
+        {
           "symbol": "XLE",
           "note": "能源精选行业ETF",
           "group": "energy",
@@ -401,7 +475,20 @@
         }
       ],
       "purple": [],
-      "sole_yellow": []
+      "sole_yellow": [
+        {
+          "symbol": "BX",
+          "note": "黑石",
+          "group": "financials",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "red",
+              "label": "RSI超卖"
+            }
+          ]
+        }
+      ]
     },
     "boll": {
       "red": [],
@@ -782,18 +869,6 @@
           ]
         },
         {
-          "symbol": "DRAM",
-          "note": "Memory ETF-存储芯片",
-          "group": "position",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
-            }
-          ]
-        },
-        {
           "symbol": "GEHC",
           "note": "ge医疗",
           "group": "position",
@@ -808,18 +883,6 @@
         {
           "symbol": "ZS",
           "note": "Zscaler-云安全",
-          "group": "focus",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "布林上轨"
-            }
-          ]
-        },
-        {
-          "symbol": "PDD",
-          "note": "拼多多",
           "group": "focus",
           "indicators": [
             {
@@ -914,18 +977,6 @@
           ]
         },
         {
-          "symbol": "JNJ",
-          "note": "强生",
-          "group": "healthcare",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
-            }
-          ]
-        },
-        {
           "symbol": "HEI",
           "note": "HEICO-航空零部件",
           "group": "industrials",
@@ -941,18 +992,6 @@
           "symbol": "VRT",
           "note": "维谛技术",
           "group": "industrials",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "red",
-              "label": "布林下轨"
-            }
-          ]
-        },
-        {
-          "symbol": "TTWO",
-          "note": "Take-Two-游戏",
-          "group": "communications",
           "indicators": [
             {
               "shape": "▼",
@@ -1019,18 +1058,6 @@
           "symbol": "XLI",
           "note": "工业精选行业ETF",
           "group": "position",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ]
-        },
-        {
-          "symbol": "XLB",
-          "note": "原材料精选行业ETF",
-          "group": "materials",
           "indicators": [
             {
               "shape": "▼",
@@ -1112,6 +1139,18 @@
           "group": "materials",
           "indicators": [
             {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "现价在均线上方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "CEG",
+          "note": "Constellation-核电",
+          "group": "utilities",
+          "indicators": [
+            {
               "shape": "▼",
               "tone": "cyan",
               "label": "现价在均线下方，日内触及"
@@ -1134,9 +1173,21 @@
       "purple": [],
       "sole_yellow": [
         {
-          "symbol": "GS",
-          "note": "高盛",
-          "group": "financials",
+          "symbol": "XLB",
+          "note": "原材料精选行业ETF",
+          "group": "materials",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "现价在均线上方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "CEG",
+          "note": "Constellation-核电",
+          "group": "utilities",
           "indicators": [
             {
               "shape": "▼",
@@ -1172,9 +1223,21 @@
           "group": "industrials"
         }
       ],
-      "yellow": [],
+      "yellow": [
+        {
+          "symbol": "MCD",
+          "note": "麦当劳",
+          "group": "consumer_discretionary"
+        }
+      ],
       "purple": [],
-      "sole_yellow": []
+      "sole_yellow": [
+        {
+          "symbol": "MCD",
+          "note": "麦当劳",
+          "group": "consumer_discretionary"
+        }
+      ]
     },
     "add_price": {
       "red": [],
@@ -1234,7 +1297,7 @@
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.2230000495910645,
+    "value": 5.2170000076293945,
     "date": "2026-10-13",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -1243,10 +1306,10 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.2480001449584961
+    "delta_month": 0.24200010299682617
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-14 00:09:08（盘中快照，北京时间） · 当日价 100 只 / 较早日线 0 只 / 无数据 0 只",
+  "data_time_text": "2026-10-13 收盘（美东交易日）",
   "market_risk": {
     "level": "green",
     "label": "风险平稳",
@@ -1265,17 +1328,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 15.369999885559082,
+      "value": 15.27,
       "date": "2026-10-13",
-      "source": "Yahoo ^VIX",
+      "source": "Cboe VIX 官方日线",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7794.080078125,
+      "value": 7805.4501953125,
       "date": "2026-10-13",
       "source": "Yahoo ^GSPC",
-      "drawdown": -0.31781966455234345
+      "drawdown": -0.17240185250028128
     }
   },
   "nfci_cache": {
@@ -1321,8 +1384,8 @@
     "checked": 19,
     "red": 4,
     "yellow": 6,
-    "fetched": 1,
-    "cached": 19,
+    "fetched": 2,
+    "cached": 18,
     "data": {
       "BRK-B": {
         "attempted": "2026-10-13",
@@ -1771,65 +1834,6 @@
             }
           }
         }
-      },
-      "UNH": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$112,032,000",
-              "value5": "$113,161,000"
-            },
-            "Income Tax": {
-              "value2": "$1,298,000",
-              "value5": "$686,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "32.73529%",
-              "value5": "29.34138%"
-            },
-            "Operating Margin": {
-              "value2": "7.13278%",
-              "value5": "3.81315%"
-            },
-            "After Tax ROE": {
-              "value2": "5.57051%",
-              "value5": "2.45127%"
-            },
-            "Current Ratio": {
-              "value2": "NaN",
-              "value5": "NaN"
-            },
-            "Profit Margin": {
-              "value2": "4.89503%",
-              "value5": "2.07492%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$11,052,000",
-              "value5": "$5,945,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$203,778,000",
-              "value5": "$209,456,000"
-            },
-            "Total Equity": {
-              "value2": "$98,447,000",
-              "value5": "$95,787,000"
-            }
-          }
-        },
-        "event_date": "2026-10-13",
-        "event_base": "2026-06-30",
-        "event_checked": "2026-10-13"
       },
       "UBER": {
         "attempted": "2026-10-13",
@@ -2390,16 +2394,75 @@
             }
           }
         }
+      },
+      "UNH": {
+        "attempted": "2026-10-14",
+        "fetched": "2026-10-14",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$112,032,000",
+              "value5": "$113,161,000"
+            },
+            "Income Tax": {
+              "value2": "$1,298,000",
+              "value5": "$686,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "32.73529%",
+              "value5": "29.34138%"
+            },
+            "Operating Margin": {
+              "value2": "7.13278%",
+              "value5": "3.81315%"
+            },
+            "After Tax ROE": {
+              "value2": "5.57051%",
+              "value5": "2.45127%"
+            },
+            "Current Ratio": {
+              "value2": "NaN",
+              "value5": "NaN"
+            },
+            "Profit Margin": {
+              "value2": "4.89503%",
+              "value5": "2.07492%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$11,052,000",
+              "value5": "$5,945,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$203,778,000",
+              "value5": "$209,456,000"
+            },
+            "Total Equity": {
+              "value2": "$98,447,000",
+              "value5": "$95,787,000"
+            }
+          }
+        },
+        "event_date": "2026-10-13",
+        "event_base": "2026-06-30",
+        "event_checked": "2026-10-14"
       }
     }
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 21,
+      "due": 9,
       "deferred": 9,
-      "tried": 12,
-      "ok": 12,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -2599,6 +2662,14 @@
         "r_tz": "America/New_York",
         "try": "2026-10-14",
         "ne": "2026-12-02"
+      },
+      "SKHY": {
+        "s": "ok",
+        "avg": 252.21,
+        "upd": "2026-10-06",
+        "r": "2026-10-13",
+        "r_tz": "America/New_York",
+        "try": "2026-10-14"
       },
       "MU": {
         "s": "ok",
@@ -3087,14 +3158,6 @@
       },
       "TSLA": {
         "ne": "2026-10-21"
-      },
-      "SKHY": {
-        "s": "ok",
-        "avg": 252.21,
-        "upd": "2026-10-06",
-        "r": "2026-10-13",
-        "r_tz": "America/New_York",
-        "try": "2026-10-14"
       }
     },
     "quota": {
@@ -3121,8 +3184,8 @@
     "dated": 72,
     "pending": 11,
     "failed": 0,
-    "fetched": 0,
-    "cached": 83,
+    "fetched": 1,
+    "cached": 82,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -3587,7 +3650,7 @@
         "date": "2026-10-28",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-10"
+        "fetched": "2026-10-14"
       },
       "DD": {
         "status": "ok",
@@ -3689,7 +3752,7 @@
       }
     },
     "events": {
-      "JNJ": [
+      "JPM": [
         "2026-10-13"
       ],
       "UNH": [
@@ -3698,7 +3761,7 @@
       "GS": [
         "2026-10-13"
       ],
-      "JPM": [
+      "JNJ": [
         "2026-10-13"
       ]
     }
@@ -3735,16 +3798,16 @@
       "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 94.16999816894531,
+      "price": 94.13999938964844,
       "date": "2026-10-13",
       "contract": "Crude Oil Nov 26",
-      "day": 0.4587159323394597,
+      "day": 0.4267138201349484,
       "day_from": "2026-10-12",
-      "week": 5.288456617202985,
-      "month": -6.531019187151057,
+      "week": 5.254915943591619,
+      "month": -6.560794650473013,
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-14T00:07:46.286593+08:00"
+    "assessed_at": "2026-10-14T14:38:45.498781+08:00"
   }
 }
