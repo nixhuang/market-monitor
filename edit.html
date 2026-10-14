@@ -8,7 +8,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <link rel="manifest" href="./manifest.webmanifest">
-<title>编辑清单 · AI监测市场</title>
+<title>编辑清单 · AI监测</title>
 <style>
 :root{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
@@ -174,7 +174,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
         <div class="setrow"><label>距上下轨不足 x% 就算命中</label><input id="set_boll_near_pct" inputmode="decimal"></div>
       </div>
       <details class="set"><summary>布林判定说明</summary>
-      <p class="note">持仓和重点关注：布林上、下轨逼近、触碰或穿越均报黄；其他分组仅下轨报黄，上轨仍显示逼近、触及或盘中突破等具体状态，但单独命中不报黄、不计入布林黄灯。所有分组的布林＋RSI 双重信号红灯保持原规则：触轨且 RSI 至少两条同侧达到或越过阈值即报红。其他红警示仍保留。</p>
+      <p class="note">持仓和重点：布林上、下轨逼近、触碰或穿越均报黄；其他分组仅下轨报黄，上轨仍显示逼近、触及或盘中突破等具体状态，但单独命中不报黄、不计入布林黄灯。所有分组的布林＋RSI 双重信号红灯保持原规则：触轨且 RSI 至少两条同侧达到或越过阈值即报红。其他红警示仍保留。</p>
       </details>
       <div class="setsec">趋势均线穿越</div>
       <div class="setgrid">
@@ -192,10 +192,10 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
         <div class="setrow"><label>距 52 周低点不足 x% → 红</label><input id="set_near_52w_low_pct" inputmode="decimal"></div>
         <div class="setrow"><label>距加仓价不足 x% → 红</label><input id="set_trigger_gap_pct" inputmode="decimal"></div>
         <div class="setrow"><label>距减仓价不足 x% → 红（已涨到减仓价直接红，仅持仓）</label><input id="set_reduce_gap_pct" inputmode="decimal"></div>
-        <div class="setrow"><label>现价在目标价 ±x% 内，或当日跨越目标价 → 紫（仅持仓和重点关注）</label><input id="set_target_gap_pct" inputmode="decimal"></div>
-        <div class="setrow"><label>目标价高出现价超过 x% → 紫（仅持仓和重点关注）</label><input id="set_target_space_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>现价在目标价 ±x% 内，或当日跨越目标价 → 紫（仅持仓和重点）</label><input id="set_target_gap_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>目标价高出现价超过 x% → 紫（仅持仓和重点）</label><input id="set_target_space_pct" inputmode="decimal"></div>
         <div class="setrow"><label>最近完整交易日量比 ≥ x 倍 → 黄</label><input id="set_vol_ratio" inputmode="decimal"></div>
-        <div class="setrow"><label>quiet 标的涨跌 ≥ x% → 黄</label><input id="set_quiet_chg" inputmode="decimal"></div>
+        <div class="setrow"><label>最近完整交易日量比 ≥ x 倍 → 红（所有分组）</label><input id="set_vol_ratio_red" inputmode="decimal"></div>
         <div class="setrow"><label>日内振幅 ≥ x% → 黄</label><input id="set_amp_yellow" inputmode="decimal"></div>
         <div class="setrow"><label>日内振幅 ≥ x% → 红</label><input id="set_amp_red" inputmode="decimal"></div>
       </div>
@@ -220,15 +220,15 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <p class="note">信用／金融环境：垃圾债利差、金融压力NFCI；情绪：VIX；趋势：标普500回撤、上涨参与度。每项黄记1分、红记2分，同类只取最高分；信用／金融环境按2倍计分，情绪和趋势各按1倍，总分0至8。0至1分 → 综合绿（轻微提示写在说明里）；2至4分 → 综合黄；5分及以上 → 综合红。有指标缺失时最低为黄。综合灯不是买卖指令，也不预测涨跌。</p>
       <p class="note">综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力NFCI最多13日（涵盖节假日顺延，超期仍判缺失）。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且信用压力最多落后5日或金融压力NFCI最多13日达到警戒。</p>
       <div class="setsec">其他个股规则（固定判定）</div>
-      <p class="note">涨跌幅按绝对值判断：达到黄色线为黄，达到红色线为红；日内振幅＝（最高−最低）÷昨收，分别按黄/红线判定。<b>涨跌幅和振幅只对持仓和重点关注生效</b>，其他分组不报这两类；上面设置的阈值是“中档”，系统按每只股最近60个交易日的平时波动自动分档：波动小的 ×0.6、中等 ×1.0、波动大的 ×1.4，不足40个交易日的新股按中档，警示文字里会写“平时约 ±x%”。布林轨道逼近、碰到或穿过均按当日最高／最低计算；持仓与重点关注的上、下轨均可报黄，其余分组仅下轨报黄、上轨单独命中不报黄；所有分组的布林＋RSI 组合红规则不变，触轨且 RSI 6／12／24 中至少两条同侧达到超买／超卖线仍报红。单独 RSI 两条同侧为黄、三条为红，只有一条不报警。</p>
-      <p class="note">距52周低点不超过设置百分比：刚进入低位区或再创新低的那一天为红，之后仍在低位区但没再创新低降为黄（写“仍在52周低位”），离开低位区后不报，再创新低重新红；已跌破或距“加仓价”不超过设置百分比：红；仅持仓分组可填“减仓价”，现价落在减仓价正负“x%”（按减仓价算，不分涨跌方向）以内为红；持仓和重点关注可填“目标价”（不填则首页自动显示 S&P Global 共识价，手填优先、只显示一个）：现价在目标价正负“x%”以内、当日跨越目标价、或目标价高出现价超过“x%”，只显示紫色提醒，不改红黄绿；其他分组的美股个股也会显示共识价和空间，但只显示、不报警；共识价每只约 14 天更新一次，美东财报日过后至少 2 个自然日提前更新；每个北京时间自然日最多请求 12 只，同日修改清单不重置额度。明确无覆盖约 30 天复查；失败首次次日重试，连续失败按 2／4／7 天退避，失败重试每天最多占 3 个名额；目标价高出现价超过 100% 视为数据异常，按红色提示；量比达到设置倍数、第一条均线确认上穿或跌破、第二条均线简单上穿或跌破、当日日线高低范围触及第二条均线±1%（默认50／200日）：黄。最近完整日量比＝最近一个已结束的美股交易日日线成交量÷该日以前20根完整日线的平均成交量；盘中沿用上一完整日，收盘后至少等待15分钟汇总才使用当日，假日及提前收盘按交易所日历判断；最新完整日数据缺失或历史不足时不报，不能当成今日盘中量比。日线是否包含盘前盘后及未来夜盘成交，仍以实际行情源口径为准，不作保证。布林连续贴轨只补充天数，不会单独升级红；连续2日起显示天数，远离一天就重新计数；同日同时命中上下轨时，组合红的方向仍按更贴近的一侧；非持仓与重点关注的独立黄灯仅从下轨产生。标的在清单中明确配置 quiet=true 时，跳过常规技术指标，仅在单日涨跌达到 quiet 阈值时为黄；当前清单未配置 quiet 标的。</p>
+      <p class="note">涨跌幅按绝对值判断：达到黄色线为黄，达到红色线为红；日内振幅＝（最高−最低）÷昨收，分别按黄/红线判定。<b>涨跌幅和振幅只对持仓和重点生效</b>，其他分组不报这两类；上面设置的阈值是“中档”，系统按每只股最近60个交易日的平时波动自动分档：波动小的 ×0.6、中等 ×1.0、波动大的 ×1.4，不足40个交易日的新股按中档，警示文字里会写“平时约 ±x%”。布林轨道逼近、碰到或穿过均按当日最高／最低计算；持仓与重点的上、下轨均可报黄，其余分组仅下轨报黄、上轨单独命中不报黄；所有分组的布林＋RSI 组合红规则不变，触轨且 RSI 6／12／24 中至少两条同侧达到超买／超卖线仍报红。单独 RSI 两条同侧为黄、三条为红，只有一条不报警。</p>
+      <p class="note">距52周低点不超过设置百分比：刚进入低位区或再创新低的那一天为红，之后仍在低位区但没再创新低降为黄（写“仍在52周低位”），离开低位区后不报，再创新低重新红；已跌破或距“加仓价”不超过设置百分比：红；仅持仓分组可填“减仓价”，现价落在减仓价正负“x%”（按减仓价算，不分涨跌方向）以内为红；持仓和重点可填“目标价”（不填则首页自动显示 S&P Global 共识价，手填优先、只显示一个）：现价在目标价正负“x%”以内、当日跨越目标价、或目标价高出现价超过“x%”，只显示紫色提醒，不改红黄绿；其他分组的美股个股也会显示共识价和空间，但只显示、不报警；共识价每只约 14 天更新一次，美东财报日过后至少 2 个自然日提前更新；每个北京时间自然日最多请求 12 只，同日修改清单不重置额度。明确无覆盖约 30 天复查；失败首次次日重试，连续失败按 2／4／7 天退避，失败重试每天最多占 3 个名额；目标价高出现价超过 100% 视为数据异常，按红色提示；量比达到黄线倍数为黄、达到红线倍数为红（所有分组）；第一条均线确认上穿或跌破、第二条均线简单上穿或跌破、当日日线高低范围触及第二条均线±1%（默认50／200日）：黄。最近完整日量比＝最近一个已结束的美股交易日日线成交量÷该日以前20根完整日线的平均成交量；盘中沿用上一完整日，收盘后至少等待15分钟汇总才使用当日，假日及提前收盘按交易所日历判断；最新完整日数据缺失或历史不足时不报，不能当成今日盘中量比。日线是否包含盘前盘后及未来夜盘成交，仍以实际行情源口径为准，不作保证。布林连续贴轨只补充天数，不会单独升级红；连续2日起显示天数，远离一天就重新计数；同日同时命中上下轨时，组合红的方向仍按更贴近的一侧；非持仓与重点的独立黄灯仅从下轨产生。</p>
       <div class="setsec">基本面单独提示（固定判定，不改变股价红黄等级）</div>
-      <p class="note">仅持仓与重点关注的非 ETF 有季度财报时检查。基本面缓存遇到已知财报事件会提前刷新：财报后两周按日检查，之后每 3 天复查，直到观察到报告期推进；首次没有旧报告期对照时先建立基准，不把一次抓取成功当成已更新。接口失败沿用旧值并标注；关闭基本面检查时不发请求。财报接口只提供最近4个季度，<b>取不到去年同期</b>，所以所有“下降／下滑”都是最新季与<b>3个季度前</b>比较，页面会写明具体报告期（例如 2025/9→2026/6），不是同比。营收较基准下降至少20%、营业亏损、经营现金流由正转负 → 基本面红；营收下降至少10%、营业利润率或毛利率下滑至少3个百分点、经营现金流为负、负债／权益上升至少30%且债务额也升、流动比率下降至少20%、季度ROE下降至少30% → 基本面黄。</p>
+      <p class="note">仅持仓与重点的非 ETF 有季度财报时检查。基本面缓存遇到已知财报事件会提前刷新：财报后两周按日检查，之后每 3 天复查，直到观察到报告期推进；首次没有旧报告期对照时先建立基准，不把一次抓取成功当成已更新。接口失败沿用旧值并标注；关闭基本面检查时不发请求。财报接口只提供最近4个季度，<b>取不到去年同期</b>，所以所有“下降／下滑”都是最新季与<b>3个季度前</b>比较，页面会写明具体报告期（例如 2025/9→2026/6），不是同比。营收较基准下降至少20%、营业亏损、经营现金流由正转负 → 基本面红；营收下降至少10%、营业利润率或毛利率下滑至少3个百分点、经营现金流为负、负债／权益上升至少30%且债务额也升、流动比率下降至少20%、季度ROE下降至少30% → 基本面黄。</p>
       <p class="note">流动比率、ROE 的数据源以百分比给出（84%＝0.84倍），页面统一显示为倍数。最新季的净利含一次性损益（净利率远高于营业利率、税项为负等）时，ROE 不参与比较；只有对比基准季含一次性损益时仍照常比较，并在提示里注明“基准季含一次性收益，仅供参考”。银行、保险、券商等行业流动比率意义有限；单项比率变化只是提示核查，需结合行业、营业利润率和经营现金流判断，不等于主营恶化。</p>
       <div class="setsec">下一次财报日期</div>
-      <p class="note">持仓和重点关注的个股常驻显示下一次财报日期；所有个股都显示（ETF、指数、期货除外）；日期会缓存、按远近分档刷新：供应商已确认的日期约 2 周、1 周才复查一次，算法估算的日期约 1 周、3 天复查一次，财报日一过立即查下一次；接口错误保留仍有效的旧日期，超过每轮 60 只请求上限的条目也保留旧缓存，下一轮继续查；财报日 14 天内文字标黄；无警示的持仓／重点关注仍在折叠的“无异动”里，点开可见。数据源只给美东日期和盘前／盘后／盘中，不含具体钟点，页面据此标注北京时间大致时段；“预计”为供应商给出的日期，“算法估算”可能调整；尚未公布显示“待公布”。ETF、指数、期货不适用。</p>
+      <p class="note">持仓和重点的个股常驻显示下一次财报日期；所有个股都显示（ETF、指数、期货除外）；日期会缓存、按远近分档刷新：供应商已确认的日期约 2 周、1 周才复查一次，算法估算的日期约 1 周、3 天复查一次，财报日一过立即查下一次；接口错误保留仍有效的旧日期，超过每轮 60 只请求上限的条目也保留旧缓存，下一轮继续查；财报日 14 天内文字标黄；无警示的持仓／重点仍在折叠的“无异动”里，点开可见。数据源只给美东日期和盘前／盘后／盘中，不含具体钟点，页面据此标注北京时间大致时段；“预计”为供应商给出的日期，“算法估算”可能调整；尚未公布显示“待公布”。ETF、指数、期货不适用。</p>
       <div class="setsec">优先级与数据来源</div>
-      <p class="note">一级为市场风险参考和持仓，二级重点关注，三级其他组；相同实质标的只在最高优先级显示和报警，清单记录不删除。VIX（.VIX／^VIX）和标普指数（.SPX／^GSPC）只在风险参考显示。指数本身、跟踪ETF和期货不是同一标的，不互相去重。</p>
+      <p class="note">一级为市场风险和持仓，二级重点，三级其他组；相同实质标的只在最高优先级显示和报警，清单记录不删除。VIX（.VIX／^VIX）和标普指数（.SPX／^GSPC）只在市场风险显示。指数本身、跟踪ETF和期货不是同一标的，不互相去重。</p>
       <p class="note">垃圾债利差使用FRED；VIX、标普指数和10年收益率使用Yahoo指数/收益率数据；金融压力NFCI使用芝加哥联储原始周度数据，原文件过期或不可用时采用同一NFCI的FRED同步备用（不是报价替代）；上涨参与度使用市场宽度源，两者不能以ETF价格替代。股票日线沿现有来源降级；Nasdaq盘中报价仅覆盖股票/ETF，不把指数日线冒充实时价。来源和真实观测日期会标明，获取失败或数据过期不当作安全。</p>
       </details>
       <div class="setsec">行情源开关</div>
@@ -269,7 +269,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     <h2>分类清单</h2><span id="groupTotal"></span>
     <button id="btnExpandGroups">全部展开</button><button id="btnCollapseGroups">全部收起</button>
   </div>
-  <p class="note" style="margin-bottom:12px">持仓和重点关注始终监测，无需开关。其他分组的监测开关改完点分类下方「保存清单与分组」才生效；关闭后清单仍保留，不抓取该组普通标的。行业组已有的 XL 板块 ETF 继续监测和报警，不自动添加基金。</p>
+  <p class="note" style="margin-bottom:12px">持仓和重点始终监测，无需开关。其他分组的监测开关改完点分类下方「保存清单与分组」才生效；关闭后清单仍保留，不抓取该组普通标的。行业组已有的 XL 板块 ETF 继续监测和报警，不自动添加基金。</p>
   <fieldset id="groupEditor" disabled style="border:0;padding:0;margin:0;min-width:0"></fieldset>
   <div class="savebar">
     <span class="sp" id="dirty"></span>
@@ -725,14 +725,14 @@ $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定
 
 /* ---------- 规则阈值（settings.json） ---------- */
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
-  rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,target_gap_pct:3,target_space_pct:50,vol_ratio:1.5,quiet_chg:2,
+  rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,target_gap_pct:3,target_space_pct:50,vol_ratio:1.5,vol_ratio_red:3,
   amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,
   hy_green:350,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,
   dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
 const SET_LIMITS={ma_short:[0,250],ma_long:[0,250],boll_n:[2,250],boll_k:[.1,10],boll_near_pct:[0,100],chg_yellow:[0,100],chg_red:[0,100],
   rsi_low:[0,100],rsi_high:[0,100],near_52w_low_pct:[0,100],trigger_gap_pct:[0,100],reduce_gap_pct:[0,100],target_gap_pct:[0,100],target_space_pct:[0,1000],vol_ratio:[.1,100],
-  quiet_chg:[0,100],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],
+  vol_ratio_red:[.1,100],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],
   hy_red:[0,10000],vix_green:[0,200],vix_yellow:[0,200],vix_red:[0,200],dca_every:[0,10000]};
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
 function settingsError(){
@@ -748,7 +748,7 @@ function settingsError(){
     values[key]=value;
   }
   if(!(values.rsi_low<values.rsi_high))return 'RSI 超卖线必须小于超买线';
-  for(const keys of [['chg_yellow','chg_red'],['amp_yellow','amp_red'],
+  for(const keys of [['chg_yellow','chg_red'],['amp_yellow','amp_red'],['vol_ratio','vol_ratio_red'],
     ['hy_green','hy_red'],['vix_green','vix_yellow','vix_red'],['ma_short','ma_long']]){
     if(keys[0]==='ma_short'&&(values.ma_short===0||values.ma_long===0))continue;
     if(keys.some((key,i)=>i&&values[key]<values[keys[i-1]]))return keys.join('、')+' 的阈值顺序不正确';

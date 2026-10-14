@@ -177,7 +177,7 @@ DEFAULT_SETTINGS = {
     "target_space_pct": 50.0,  # 目标价（共识价 / 手填）高出现价超过 x% → 紫色（竖条 + 实心标签 + 警示栏，不改红黄绿）
     "target_gap_pct": 3.0,     # 现价在目标价 ±x% 内、或当日跨越目标价 → 紫色
     "vol_ratio": 1.5,       # 量比 >= x 倍 → 黄
-    "quiet_chg": 2.0,       # quiet 标的（货币基金等）单日涨跌 >= x% → 黄
+    "vol_ratio_red": 3.0,   # 量比 >= x 倍 → 红（所有分组）
     "amp_yellow": 5.0,      # 日内振幅（最高-最低）/昨收 >= x% → 黄
     "amp_red": 8.0,         # 日内振幅 >= x% → 红（上下插针、剧烈震荡）
     "ma_short": 50,
@@ -317,13 +317,13 @@ SETTING_LIMITS = {
     "rsi_low": (0, 100), "rsi_high": (0, 100),
     "near_52w_low_pct": (0, 100), "trigger_gap_pct": (0, 100), "reduce_gap_pct": (0, 100),
     "target_space_pct": (0, 1000), "target_gap_pct": (0, 100),
-    "vol_ratio": (0.1, 100), "quiet_chg": (0, 100),
+    "vol_ratio": (0.1, 100), "vol_ratio_red": (0.1, 100),
     "amp_yellow": (0, 100), "amp_red": (0, 100),
     "hy_green": (0, 10000), "hy_red": (0, 10000),
     "vix_green": (0, 200), "vix_yellow": (0, 200), "vix_red": (0, 200),
     "dca_every": (0, 10000), "use_realtime": (0, 1),
 }
-SETTING_ORDER = (("chg_yellow", "chg_red"), ("amp_yellow", "amp_red"),
+SETTING_ORDER = (("chg_yellow", "chg_red"), ("amp_yellow", "amp_red"), ("vol_ratio", "vol_ratio_red"),
                  ("hy_green", "hy_red"),
                  ("vix_green", "vix_yellow", "vix_red"), ("ma_short", "ma_long"))
 
@@ -1052,7 +1052,7 @@ def market_risk_summary(macro, target_date=None):
                 for category, weight in zip(RISK_CATEGORIES, RISK_CATEGORY_WEIGHT))
     warnings = [RISK_LABELS[key] for key in RISK_INDICATORS if levels[key] in ("red", "yellow")]
     level = "red" if score >= 5 else "yellow" if score >= 2 or missing else "green"
-    label = {"red": "风险升高", "yellow": "留意风险", "green": "风险平稳"}[level]
+    label = {"red": "升高", "yellow": "留意", "green": "平稳"}[level]
     if not warnings and missing:
         label = "数据不足"
     if warnings:
@@ -2423,8 +2423,10 @@ def global_dca(target_date):
         first = cal.date_to_session(start, direction="next")
         last = cal.date_to_session(target_date, direction="previous")
         if first > last:
+            # 尚未开始：距首个定投日还差几个交易日（last 本身是交易日，不计入）
             return {"every": every, "start": start, "pending": True,
-                    "first": first.date().isoformat()}
+                    "first": first.date().isoformat(),
+                    "next_in": len(cal.sessions_in_range(last, first)) - 1}
         count = len(cal.sessions_in_range(first, last))
         rem = (-(count - 1)) % every
         upcoming = cal.sessions_window(last, rem + 1)
@@ -2446,6 +2448,23 @@ def dca_text(d):
     if d["due"]:
         return f"今天是定投日（{d['date']}，第 {d['times']} 次）"
     return f"还有 {d['next_in']} 个交易日（{d['next_date']}）"
+
+
+def dca_badge(d):
+    """市场风险标题右侧的短提醒「定投：N」（N=距定投日还差几个美股交易日）；仅定投日当天黄字。
+    完整日期放读屏标签；天数缺失或异常时不显示，避免给出错误天数。"""
+    if not isinstance(d, dict):
+        return ""
+    n = d.get("next_in")
+    if type(n) is not int or n < 0:
+        return ""
+    due = d.get("due") is True and not d.get("pending")
+    try:
+        detail = f"定投提醒：{dca_text(d)}"
+    except (KeyError, TypeError):
+        detail = "定投提醒"
+    return (f'<span class="dca-badge{" on" if due else ""}" '
+            f'aria-label="{html_lib.escape(detail, quote=True)}">定投：{n}</span>')
 
 
 # ---------------------------------------------------------------- 筛选
@@ -3039,25 +3058,6 @@ def _analysis_context(sym, cfg, data, group):
     return x
 
 
-def _quiet_result(x):
-    """quiet 标的（如 SGOV 货币基金）：波动极小，RSI/均线无意义，只在真正异动（>=2%）时才出声，避免噪音。"""
-    hot = x.chg is not None and abs(x.chg) >= S["quiet_chg"]
-    signals = [f"异动 {x.chg:+.1f}%"] if hot else []
-    level = "yellow" if hot else "green"
-    detail = {
-        "symbol": x.sym, "note": x.cfg.get("note", ""), "price": x.price,
-        "chg": x.chg, "rsi": {period: None for period in RSI_PERIODS}, "dist_high": x.dist_high,
-        "dist_low": x.dist_low, "range52": x.range52,
-        "vol_ratio": x.vol_ratio, "vol_ratio_date": x.vol_ratio_date,
-        "trigger": x.cfg.get("trigger"), "source": x.data.get("source", ""),
-        "data_date": (x.data.get("dates") or [""])[-1],
-        "group": x.group, "boll_up": x.boll_up, "boll_dn": x.boll_dn,
-        "signals": signals, "level": level,
-        "signal_marks": [("chg", "yellow")] if hot else [],
-    }
-    return level, signals, detail
-
-
 def _apply_vol_tier(x):
     """涨跌 / 振幅阈值：设置页的值是中档，按这只股自己的平时波动缩放；
     涨跌幅 / 振幅警示只对「持仓」和「重点关注」生效，其他分组不报这两类。"""
@@ -3238,8 +3238,12 @@ def _rule_boll(al, x):
 
 
 def _rule_vol_ratio(al, x):
-    if x.vol_ratio and x.vol_ratio >= S["vol_ratio"]:
-        al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{x.vol_ratio:.1f}x", "yellow")
+    """最近完整日量比：达到红线报红、达到黄线报黄，所有分组适用；不分涨跌方向。"""
+    if not x.vol_ratio:
+        return
+    level = "red" if x.vol_ratio >= S["vol_ratio_red"] else "yellow" if x.vol_ratio >= S["vol_ratio"] else ""
+    if level:
+        al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{x.vol_ratio:.1f}x", level)
 
 
 def _rule_amplitude(al, x):
@@ -3362,8 +3366,6 @@ def analyze_symbol(sym, cfg, data, group="technology"):
     """返回等级、信号和详情，分组定义见 groups.json。
     规则按「红 → 加减仓价/目标价 → 布林 → 黄」的顺序依次跑，顺序也是页面上警示文字的顺序。"""
     x = _analysis_context(sym, cfg, data, group)
-    if cfg.get("quiet"):
-        return _quiet_result(x)
     al = _Alerts()
     _apply_vol_tier(x)
     _intraday_extremes(x)
@@ -3404,7 +3406,102 @@ document.addEventListener("toggle", function(event) {
   });
   const earnings = card.querySelector(".earnings-week");
   if (earnings) earnings.open = false;
+  card.querySelectorAll(".signal-filter-toggle").forEach(function(button) {
+    button.setAttribute("aria-pressed", "false");
+  });
+  renderSignalFilter();
 }, true);
+function signalFilterData() {
+  const node = document.getElementById("signalFilterResult");
+  if (!node || !node.dataset.filter) return null;
+  try { return JSON.parse(node.dataset.filter); } catch (error) { return null; }
+}
+function intersectSignals(data, kinds) {
+  // 返回 {pending: [信号名...]} 或 {members: [...]}；任一条件名单缺失就不拼残缺结果
+  const pending = kinds.filter(function(kind) { return !data[kind] || !data[kind].ok; })
+    .map(function(kind) { return data[kind] ? data[kind].label : kind; });
+  if (pending.length) return {pending: pending};
+  const maps = kinds.map(function(kind) {
+    const map = new Map();
+    data[kind].members.forEach(function(m) { map.set(m.id, m); });
+    return map;
+  });
+  const members = data[kinds[0]].members.filter(function(m) {
+    return maps.every(function(map) { return map.has(m.id); });
+  }).map(function(m) {
+    return Object.assign({}, m, {details: maps.map(function(map) { return map.get(m.id).d.join(" / "); })});
+  });
+  return {members: members};
+}
+function renderSignalFilter() {
+  const box = document.getElementById("signalFilterResult");
+  if (!box) return;
+  const buttons = Array.from(document.querySelectorAll(".signal-filter-toggle[aria-pressed='true']"));
+  box.textContent = "";
+  if (!buttons.length) { box.hidden = true; return; }
+  const data = signalFilterData() || {};
+  const kinds = buttons.map(function(b) { return b.dataset.kind; });
+  const names = kinds.map(function(kind) { return data[kind] ? data[kind].label : kind; });
+  const head = document.createElement("div");
+  head.className = "signal-filter-head";
+  const title = document.createElement("span");
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.className = "signal-filter-clear";
+  clear.textContent = "清除";
+  head.append(title, clear);
+  box.append(head);
+  box.hidden = false;
+  if (kinds.length < 2) {
+    title.textContent = "已选：" + names[0] + " · 再点一项信号，查看同时满足的标的";
+    return;
+  }
+  const result = intersectSignals(data, kinds);
+  if (result.pending) {
+    title.textContent = "同时满足：" + names.join(" + ");
+    const p = document.createElement("p");
+    p.textContent = result.pending.join("、") + " 明细待下次更新，暂不计算";
+    box.append(p);
+    return;
+  }
+  title.textContent = "同时满足：" + names.join(" + ") + " · " + result.members.length + " 只";
+  if (!result.members.length) {
+    const p = document.createElement("p");
+    p.textContent = "无同时满足的标的";
+    box.append(p);
+    return;
+  }
+  const list = document.createElement("ul");
+  result.members.forEach(function(m) {
+    const li = document.createElement("li");
+    const sym = document.createElement("strong");
+    sym.textContent = m.s;
+    li.append(sym);
+    if (m.n) {
+      const note = document.createElement("span");
+      note.className = "note";
+      note.textContent = m.n;
+      li.append(note);
+    }
+    const group = document.createElement("span");
+    group.className = "signal-filter-group";
+    group.textContent = m.g;
+    li.append(" ", group);
+    if (["red", "yellow", "green", "gray"].indexOf(m.l) >= 0) {
+      const dot = document.createElement("i");
+      dot.className = "stat-dot " + m.l;
+      dot.setAttribute("role", "img");
+      dot.setAttribute("aria-label", {red: "红灯", yellow: "黄灯", green: "绿灯", gray: "无数据"}[m.l]);
+      li.append(dot);
+    }
+    const detail = document.createElement("span");
+    detail.className = "signal-filter-detail";
+    detail.textContent = m.details.join(" · ");
+    li.append(detail);
+    list.append(li);
+  });
+  box.append(list);
+}
 document.addEventListener("click", function(event) {
   if (!(event.target instanceof Element)) return;
   const closeButton = event.target.closest(".collapse-group");
@@ -3417,6 +3514,17 @@ document.addEventListener("click", function(event) {
       heading.focus({preventScroll: true});
       heading.scrollIntoView({block: "start", behavior: "auto"});
     }
+    return;
+  }
+  const filterButton = event.target.closest(".signal-filter-toggle");
+  if (filterButton) {
+    filterButton.setAttribute("aria-pressed", String(filterButton.getAttribute("aria-pressed") !== "true"));
+    renderSignalFilter();
+    return;
+  }
+  if (event.target.closest(".signal-filter-clear")) {
+    document.querySelectorAll(".signal-filter-toggle").forEach(function(b) { b.setAttribute("aria-pressed", "false"); });
+    renderSignalFilter();
     return;
   }
   const button = event.target.closest(".signal-count-toggle[data-target]");
@@ -3613,7 +3721,8 @@ def signal_count_members(items):
         if identity in seen:
             continue
         seen.add(identity)
-        member = {"symbol": symbol, "note": d.get("note") or "", "group": d.get("group") or ""}
+        member = {"symbol": symbol, "note": d.get("note") or "", "group": d.get("group") or "",
+                  "level": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else ""}
         marks = d.get("signal_marks") or []
         for kind in {k for k, _ in marks}:
             if kind not in out:
@@ -3696,6 +3805,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
                         "reduces": sum(bool(reduce_rule(c)) for c in positions.values()),
                         "dca": 1 if dca else 0},
         "summary": {**{lv: sum(d["level"] == lv for d in items) for lv in ("red", "yellow", "green", "gray")},
+                    "purple": sum(bool(d.get("purple")) for d in items),
                     "total": len(items), "macro_ok": sum(bool(m.get("ok")) for m in macro.values()),
                     "stale_symbols": stale, "missing_symbols": missing,
                     "unsupported_symbols": unsupported, "reference_dates": references,
@@ -3779,6 +3889,9 @@ tr:first-child td{border-top:none}
 .collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
 #signalCounts{border:1px solid #6686c6;box-shadow:inset 3px 0 0 #8fb8f0;background:#182131}
 #signalCounts>summary{color:#bfd5ff}
+#signalCounts>summary .count-total{white-space:nowrap;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+#signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
+#signalCounts .count-purple{color:var(--purple)} #signalCounts .count-earn{color:var(--text)}
 #signalCounts table{table-layout:fixed}
 #signalCounts td{padding:7px 5px;font-size:12px;overflow-wrap:anywhere}
 #signalCounts td:first-child{width:26%}
@@ -3807,6 +3920,25 @@ tr:first-child td{border-top:none}
 #signalCounts .earnings-week li{font-size:12px;padding:4px 0;overflow-wrap:anywhere}
 #signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
 #signalCounts .earnings-week-meta{color:var(--text);margin-left:5px}
+#signalCounts .earnings-week-group{color:#8fb8f0}
+#signalCounts .signal-filter-toggle{min-height:32px;max-width:100%;padding:3px 7px;font:inherit;color:var(--text);
+  background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:left;touch-action:manipulation}
+#signalCounts .signal-filter-toggle[aria-pressed="true"]{background:#2f6bd8;border-color:#2f6bd8;color:#fff}
+#signalCounts .signal-filter-toggle:focus-visible,#signalCounts .signal-filter-clear:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
+#signalCounts .signal-filter{padding:9px 12px;border-top:1px solid #465e87;background:#121a27;font-size:12px}
+#signalCounts .signal-filter[hidden]{display:none}
+#signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:#bfd5ff;font-weight:600}
+#signalCounts .signal-filter-clear{margin-left:auto;min-height:32px;padding:3px 10px;font:inherit;font-weight:400;color:var(--text);
+  background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer}
+#signalCounts .signal-filter p{margin:6px 0 0;color:var(--dim)}
+#signalCounts .signal-filter ul{list-style:none;margin:6px 0 0;padding:0}
+#signalCounts .signal-filter li{padding:5px 0;overflow-wrap:anywhere}
+#signalCounts .signal-filter li+li{border-top:1px solid var(--line)}
+#signalCounts .signal-filter .note{margin-left:5px}
+#signalCounts .signal-filter-group{color:#8fb8f0}
+#signalCounts .signal-filter .stat-dot{width:9px;height:9px;margin-left:6px;vertical-align:-1px}
+#signalCounts .signal-filter-detail{display:block;margin-top:2px;color:var(--text)}
+#signalCounts .earnings-week .stat-dot{width:9px;height:9px;margin-left:6px;vertical-align:-1px}
 .earn{display:block;margin:0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:11px}
 .earn.soon{color:#f0c674;font-weight:600}
@@ -3925,6 +4057,8 @@ tr.gray td{color:var(--dim)}
 .dca b{color:var(--text)}
 .dca.on{background:rgba(210,153,34,.14);border-color:rgba(210,153,34,.4);color:var(--yellow)}
 .dca.on b{color:var(--yellow)}
+.dca-badge{margin-left:auto;white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
+.dca-badge.on{color:var(--yellow)}
 .policy-reference{border-top:1px solid var(--line);margin-top:0}
 .policy-reference .reference-alert{padding:7px 12px}
 .policy-reference .reference-top{gap:6px;font-size:11.5px}
@@ -4247,7 +4381,6 @@ def _group_card(group, g, items_by_symbol, snapshot):
     registered = snapshot.get("registered_counts", {})
     g = _sort_group_items(g, group)
     earnings_week = (snapshot.get("earnings_week") or {}).get("asof") or _earn_today()
-    upcoming = any(earnings_within_week(d.get("earnings"), earnings_week) for d in g)
     shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or _fund_alert(d) or d.get("reference_only")
              or d.get("purple") or earnings_within_week(d.get("earnings"), earnings_week)]
     quiet = [d for d in g if d["level"] == "green" and not _fund_alert(d) and not d.get("reference_only")
@@ -4268,8 +4401,8 @@ def _group_card(group, g, items_by_symbol, snapshot):
     parts.append(_collapse_button(f'group_{group["key"]}', group["label"]))
     body = "\n".join(parts)
     stats = _group_stats_html(g, group, items_by_symbol, enabled)
-    expanded = " open" if enabled and (group["key"] in ("positions", "focus") or upcoming) else ""
-    return (f'<details class="card group-card" id="group_{group["key"]}"{expanded}>'
+    # 打开网页时只展开「统计」；所有分组（含持仓、重点）默认折叠。一周内财报只让绿灯股留在可见表。
+    return (f'<details class="card group-card" id="group_{group["key"]}">'
             f'<summary class="grp"><span>{group["label"]} ({len(g)})</span>'
             f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
 
@@ -4357,33 +4490,57 @@ def _member_icons(d, kind, level):
     return "".join(icons) or ' <span class="signal-member-direction">方向待下次更新</span>'
 
 
-def _earnings_week_panel(snapshot):
-    """计数表下方的未来一周财报名单，不是交易信号，不挤进红黄紫列。"""
+def _filter_detail(d, kind, label):
+    """同时满足筛选里每个条件的简短数值，与计数明细口径一致；缺值时只写信号名。"""
+    if kind in ("chg", "amp", "vol_ratio") and isinstance(d.get("metric"), str) and d["metric"]:
+        return d["metric"]
+    if kind == "rsi" and isinstance(d.get("rsi_hits"), str) and d["rsi_hits"]:
+        return f"RSI {d['rsi_hits']}"
+    if kind == "boll" and isinstance(d.get("boll_state"), str) and d["boll_state"]:
+        return f"布林 {d['boll_state']}"
+    if kind == "boll_rsi" and isinstance(d.get("direction"), str) and d["direction"]:
+        hits = d.get("boll_rsi_hits")
+        extra = f" RSI{hits}条" if type(hits) is int and hits in (2, 3) else ""
+        return f"布林+RSI {d['direction']}{extra}"
+    marks = [m.get("label") for m in d.get("indicators") or []
+             if isinstance(m, dict) and isinstance(m.get("label"), str) and m.get("label")]
+    return f"{label} {' / '.join(marks)}" if marks else label
+
+
+def _earnings_week_panel(snapshot, count_only=False):
+    """计数表下方的未来一周财报名单，不是交易信号，不挤进红黄紫列。
+    count_only=True 时只返回已核验名单条数；快照缺失或无效返回 None，不当作 0。"""
+    pending = None if count_only else '<details class="earnings-week"><summary>未来一周财报 · 名单待下次更新</summary></details>'
     data = snapshot.get("earnings_week")
     if not isinstance(data, dict):
-        return ""
+        return None if count_only else ""
     asof, members = data.get("asof"), data.get("members")
     if not isinstance(asof, str) or not isinstance(members, list):
-        return '<details class="earnings-week"><summary>未来一周财报 · 名单待下次更新</summary></details>'
+        return pending
     try:
         asof = datetime.strptime(asof, "%Y-%m-%d").date().isoformat()
     except ValueError:
-        return '<details class="earnings-week"><summary>未来一周财报 · 名单待下次更新</summary></details>'
+        return pending
     esc = lambda value: html_lib.escape(str(value), quote=True)
     lines = []
     for entry in members:
         if (not isinstance(entry, dict) or not isinstance(entry.get("symbol"), str)
                 or not entry["symbol"].strip() or not isinstance(entry.get("note", ""), str)
                 or not earnings_within_week({"status": "ok", "date": entry.get("date")}, asof)):
-            return '<details class="earnings-week"><summary>未来一周财报 · 名单待下次更新</summary></details>'
+            return pending
         date = entry["date"]
         timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(entry.get("timing"), "时段待定")
         kind = {"official": "官方活动日期", "expected": "预计", "estimated": "算法估算"}.get(entry.get("kind"), "来源待确认")
         note = f' <span class="note">{esc(entry["note"])}</span>' if entry.get("note") else ""
         group = next((g["label"] for g in GROUPS if g["item_group"] == entry.get("group")), "未分类")
-        lamp = " · 绿灯" if entry.get("level") == "green" else ""
+        level = entry.get("level")
+        lamp_name = {"red": "红灯", "yellow": "黄灯", "green": "绿灯", "gray": "无数据"}.get(level)
+        lamp = (f'<i class="stat-dot {level}" role="img" aria-label="{lamp_name}"></i>' if lamp_name else "")
         lines.append(f'<li><strong>{esc(entry["symbol"])}</strong>{note} <span class="earnings-week-meta">'
-                     f'美东 {esc(date[5:].replace("-", "/"))} {timing} · {kind} · {esc(group)}{lamp}</span></li>')
+                     f'美东 {esc(date[5:].replace("-", "/"))} {timing} · {kind} · '
+                     f'<span class="earnings-week-group">{esc(group)}</span>{lamp}</span></li>')
+    if count_only:
+        return len(lines)
     if not lines:
         return ""
     summary = f'未来一周财报 · {len(lines)} 只'
@@ -4401,10 +4558,13 @@ def _signal_counts_card(snapshot):
     group_labels = {g["item_group"]: g["label"] for g in GROUPS}
     esc = lambda value: html_lib.escape(str(value), quote=True)
     rows = ""
+    filters = {}  # 同时满足筛选：每类信号的已核验成员（红/黄/紫合并，仅此一条黄灯是黄色子集不重复算）
     for kind, v in counts.items():
         if not any(v.get(level) for level, _ in levels):
             continue
-        label = esc(v.get("label", ""))
+        raw_label = str(v.get("label", ""))
+        label = esc(raw_label)
+        flt = filters.setdefault(kind, {"label": raw_label, "ok": True, "members": {}})
         kind_id = hashlib.sha256(str(kind).encode("utf-8")).hexdigest()
         cells, panels = [], []
         kind_members = members.get(kind) if isinstance(members, dict) else None
@@ -4423,6 +4583,20 @@ def _signal_counts_card(snapshot):
                              and d["symbol"].strip() for d in entries))
             if valid:
                 valid = len({instrument_identity(d["symbol"]) for d in entries}) == n
+            if level != "sole_yellow":
+                if not valid:
+                    flt["ok"] = False
+                else:
+                    for d in entries:
+                        rec = flt["members"].setdefault(instrument_identity(d["symbol"]), {
+                            "s": d["symbol"], "n": d.get("note") if isinstance(d.get("note"), str) else "",
+                            "g": group_labels.get(str(d.get("group") or ""), str(d.get("group") or "") or "未分类"),
+                            "o": group_order.get(str(d.get("group") or ""), len(GROUPS)),
+                            "l": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "",
+                            "d": []})
+                        text = _filter_detail(d, kind, raw_label)
+                        if text not in rec["d"]:
+                            rec["d"].append(text)
             if not valid:
                 content = '<p>明细待下次更新：当前快照缺少成员或成员人数与计数不一致，暂不展示名单。</p>'
             else:
@@ -4455,19 +4629,42 @@ def _signal_counts_card(snapshot):
                     content += '</ul></section>'
                 content += '</div>'
             panels.append(f'<div class="signal-members-panel" id="{panel_id}" hidden>{content}</div>')
-        rows += (f'<tr><td>{label}</td>{"".join(cells)}</tr>'
+        rows += (f'<tr><td><button type="button" class="signal-filter-toggle" data-kind="{esc(kind)}" '
+                 f'aria-pressed="false">{label}</button></td>{"".join(cells)}</tr>'
                  f'<tr class="signal-members-row"><td colspan="5">{"".join(panels)}</td></tr>')
     earnings_panel = _earnings_week_panel(snapshot)
     if not rows and not earnings_panel:
         return ""
+    if "boll" in filters and "boll_rsi" in filters:  # 点「布林」时也算上布林+RSI组合里的标的
+        merged = {key: {**rec, "d": list(rec["d"])} for key, rec in filters["boll"]["members"].items()}
+        for key, rec in filters["boll_rsi"]["members"].items():
+            target = merged.setdefault(key, {**rec, "d": []})
+            target["d"] += [t for t in rec["d"] if t not in target["d"]]
+        filters["boll"] = {**filters["boll"], "ok": filters["boll"]["ok"] and filters["boll_rsi"]["ok"],
+                           "members": merged}
+    filter_data = {kind: {"label": f["label"], "ok": f["ok"],
+                          "members": sorted(({"id": key, **rec} for key, rec in f["members"].items()),
+                                            key=lambda m: (m["o"], m["s"]))}
+                   for kind, f in filters.items()}
+    filter_json = json.dumps(filter_data, ensure_ascii=False, separators=(",", ":"))
+    filter_html = (f'<div class="signal-filter" id="signalFilterResult" role="status" '
+                   f'data-filter="{esc(filter_json)}" hidden></div>') if rows else ""
     dim = 'style="color:var(--dim)"'
     head = (f'<tr class="gray mh"><td {dim}>信号</td><td class="num" {dim}>红</td><td class="num" {dim}>黄</td>'
             f'<td class="num" {dim}>紫</td><td class="num" {dim}>仅此一条黄灯</td></tr>')
-    yellow = esc((snapshot.get("summary") or {}).get("yellow", 0))
-    return (f'<details class="card group-card" id="signalCounts"><summary class="grp"><span>各信号计数</span>'
-            f'<span class="group-stats">本轮黄灯 {yellow} 只</span></summary>'
-            f'{f"<table>{head}{rows}</table>" if rows else ""}{earnings_panel}'
-            f'{_collapse_button("signalCounts", "各信号计数")}</details>\n')
+    summary = snapshot.get("summary") or {}
+    whole = lambda n: n if type(n) is int and n >= 0 else None
+    purple = whole(summary.get("purple"))
+    if purple is None:  # 旧快照无紫灯总数：紫色只来自目标价/共识价，按该类紫色计数补
+        purple = whole(((counts.get("target") or {}) if isinstance(counts, dict) else {}).get("purple"))
+    totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
+              ("purple", "紫", purple), ("earn", "财报", _earnings_week_panel(snapshot, count_only=True)))
+    stats = "".join(f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>'
+                    for key, name, n in totals)
+    return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span>统计</span>'
+            f'<span class="group-stats">{stats}</span></summary>'
+            f'{f"<table>{head}{rows}</table>" if rows else ""}{filter_html}{earnings_panel}'
+            f'{_collapse_button("signalCounts", "统计")}</details>\n')
 
 
 def _reference_card(snapshot, *, details_only=False):
@@ -4617,6 +4814,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
                    f'role="status" aria-label="{risk_title}">'
                    f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
                    f'综合：{html_lib.escape(risk["label"])}</span>')
+    dca_title = dca_badge(snapshot.get("dca_reminder"))  # 标题行最右侧，字体同「市场风险」
     snapshot_json = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
     snapshot_json = snapshot_json.replace("</", "<\\/")
     summary = snapshot.get("summary", {})
@@ -4625,7 +4823,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     finished_txt = finished_iso[:19].replace("T", " ") if finished_iso else "未记录"
     # 一行摘要升级为状态灯文案（首页第三排）
     init_light_phase, init_light = _run_light(snapshot, finished_txt)
-    dca_info = dca_text(snapshot.get("dca_reminder"))
     # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
     ny_now = datetime.now(US_TZ)
     bj_auto = "夏令时次日 08:15" if ny_now.dst() != timedelta(0) else "冬令时次日 09:15"
@@ -4635,12 +4832,10 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     reg_line = ('<div class="quiet">在册：' + ' · '.join(
                     f"{g['label']} {lc.get(g['key'], 0)}" for g in GROUPS if lc.get(g['key'], 0))
                 + (f" · 本轮监测 {summary.get('total', 0)} 个唯一标的" if registered else "")
-                + (f' · 已隐藏 {dup_hidden} 只重复标的（风险参考／持仓优先，其次重点关注，最后其他）'
+                + (f' · 已隐藏 {dup_hidden} 只重复标的（市场风险／持仓优先，其次重点，最后其他）'
                    if dup_hidden else "") + "</div>")
     consensus_credit = (f'共识价来源：{CONSENSUS_SOURCE}，每只约 {CONSENSUS_REFETCH_DAYS} 天更新一次，财报后提前更新<br>\n'
                         if any((d.get("target") or {}).get("kind") == "consensus" for d in items) else "")
-    dca_html = (f'<div class="dca {"on" if (snapshot.get("dca_reminder") or {}).get("due") else ""}">'
-                f'定投提醒：{dca_info}</div>') if dca_info else ""
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -4653,12 +4848,12 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <link rel="manifest" href="./manifest.webmanifest">
-<title>AI监测市场</title>
+<title>AI监测</title>
 <style>
 {PAGE_CSS}</style>
 </head>
 <body><div class="wrap">
-<h1>AI监测市场</h1>
+<h1>AI监测</h1>
 <div class="sub">{sub_line}</div>
 
 <div class="runbar">
@@ -4674,14 +4869,13 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 </div>
 <div id="checkResult" class="check-result" role="status" hidden></div>
 
-{dca_html}
 <div class="script-data" hidden><script id="snapshotData" type="application/json">{snapshot_json}</script></div>
 
 {('<div class="warn">本轮标的均未取得可用报价；可能是接口故障、异常行情或抓取时间预算不足，请查看个股原因。宏观数据另行展示。</div>' if data_down else "")}
 
 {signal_card}
 <details class="card macro-card" id="macroCard">
-<summary class="grp"><span>市场风险参考</span><span class="group-stats">{macro_stats}</span></summary>
+<summary class="grp"><span>市场风险</span><span class="group-stats">{macro_stats}</span>{dca_title}</summary>
 <p class="macro-help" id="marketRiskReason">{html_lib.escape(risk['text'])} · 有效指标 {risk['valid_count']}/5</p>
 <table>
 <tr class="gray mh"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">变化</td><td style="color:var(--dim)">状态</td></tr>
@@ -4689,7 +4883,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 {_oil_reference_row(snapshot)}
 </table>
 {_reference_card(snapshot)}
-{_collapse_button("macroCard", "市场风险参考")}
+{_collapse_button("macroCard", "市场风险")}
 </details>
 
 {group_cards}

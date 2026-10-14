@@ -1,6 +1,6 @@
 [
   {"key":"positions","label":"持仓","item_group":"position"},
-  {"key":"focus","label":"重点关注","item_group":"focus"},
+  {"key":"focus","label":"重点","item_group":"focus"},
   {"key":"index_funds","label":"指数基","item_group":"index_funds"},
   {"key":"technology","label":"IT软硬Ai","item_group":"technology","sector_etf":"XLK"},
   {"key":"healthcare","label":"医疗保健","item_group":"healthcare","sector_etf":"XLV"},

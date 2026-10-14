@@ -147,20 +147,20 @@ check(!('hy_yellow' in saved), '保存规则不保留无效的旧黄色信用利
 check(src.includes('id="set_amp_yellow"') && src.includes('id="set_amp_red"'), '编辑页确实有两个振幅输入项');
 check(src.includes('RSI 周期固定为 6 / 12 / 24') && src.includes('同侧两条达到或越过阈值为黄，三条为红'), '编辑页说明三线 RSI 分级规则');
 check(!src.includes('RSI ≥ x → 超买红') && !src.includes('RSI ≤ x → 超卖红'), '旧单条 RSI 红灯说明已删除');
-check(src.includes('持仓和重点关注：布林上、下轨')&&src.includes('其他分组仅下轨报黄，上轨仍显示逼近、触及或盘中突破等具体状态，但单独命中不报黄、不计入布林黄灯')&&
+check(src.includes('持仓和重点：布林上、下轨')&&src.includes('其他分组仅下轨报黄，上轨仍显示逼近、触及或盘中突破等具体状态，但单独命中不报黄、不计入布林黄灯')&&
   src.includes('所有分组的布林＋RSI 双重信号红灯保持原规则'), '设置页说明上轨状态在各组可见，黄灯只在核心两组，下轨与组合红保持');
 check(!src.includes('布林轨道逼近、碰到或穿过都为黄（所有分组都报）'), '移除过时的全分组上轨黄色说明');
 check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x bp 黄')&&src.includes('垃圾债利差 ≥ x bp 红'), '信用利差仅保留有效的黄红两条阈值');
 check(src.includes('一周扩大至少 30 bp 为黄、至少 50 bp 为红')&&src.includes('同类只取最高分')&&src.includes('信用／金融环境按2倍计分')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力NFCI为周度'), '设置页明确说明信用急升和新增市场风险规则');
 check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');
 check(src.includes('距52周低点')&&src.includes('第一条均线确认上穿或跌破')&&src.includes('基本面单独提示'), '设置页覆盖其他固定个股与基本面规则');
-check(src.includes('涨跌幅和振幅只对持仓和重点关注生效')&&src.includes('×0.6')&&src.includes('×1.4'), '设置页说明涨跌/振幅分档且只对持仓和重点关注生效');
+check(src.includes('涨跌幅和振幅只对持仓和重点生效')&&src.includes('×0.6')&&src.includes('×1.4'), '设置页说明涨跌/振幅分档且只对持仓和重点关注生效');
 check(src.includes('均线上下1%区间有重叠')&&src.includes('第一条均线')&&src.includes('确认穿越')&&src.includes('第二条均线')&&src.includes('同时判断日内触及与简单穿越'), '设置页说明第一条确认穿越与第二条贴近加简单穿越');
 check(!src.includes('不再判穿越，只看是否贴近')&&src.includes('昨日收盘低于昨日均线')&&src.includes('即使跳空穿越后远离±1%仍报穿越')&&src.includes('同日日内触及与穿越都满足时显示两条提示'), '长线简单穿越与贴近独立，旧静默说明已移除');
 check(src.includes('仍在52周低位')&&src.includes('降为黄')&&src.includes('基准季含一次性收益，仅供参考'), '设置页说明52周新低降级与ROE基准季备注');
 check(src.includes('id="set_ma_short"')&&src.includes('id="set_ma_long"')&&src.includes('昨日收盘价低于本轮均线')&&src.includes('日线不足对应周期时不计算')&&src.includes('可在上方改为250日'), '均线周期实际可调，规则说明与数据不足处理齐全');
 check(src.includes('<details class="set" id="ruleDetails">')&&!src.includes('id="ruleDetails" open'), '完整规则默认折叠');
-check(src.includes('五指标综合市场风险')&&src.includes('同类只取最高分')&&src.includes('一级为市场风险参考和持仓'), '完整说明综合风险及最高优先级去重');
+check(src.includes('五指标综合市场风险')&&src.includes('同类只取最高分')&&src.includes('一级为市场风险和持仓'), '完整说明综合风险及最高优先级去重');
 
 (async () => {
   let resolve;

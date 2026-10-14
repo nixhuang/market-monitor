@@ -230,15 +230,6 @@ class TestRSI(unittest.TestCase):
         self.assertTrue(any(s.startswith('RSI') for s in signals))
         self.assertTrue(any(s.startswith('异动') for s in signals))
 
-    def test_quiet_exemption(self):
-        for prev, expected in [(100, 'green'), (95, 'yellow')]:
-            data = neutral_data()
-            data['prev_close'] = prev
-            level, signals, detail = self.analyze([90, 90, 90], cfg={'quiet': True}, data=data)
-            self.assertEqual(level, expected)
-            self.assertFalse(any(s.startswith('RSI') for s in signals))
-            self.assertEqual(detail['rsi'], {6: None, 12: None, 24: None})
-
     def test_algorithm_periods_and_flat(self):
         for period in (6, 12, 24):
             self.assertIsNone(monitor.calc_rsi(list(range(period)), period))

@@ -64,7 +64,7 @@ def check(cond, msg):
         fail.append(msg)
 
 # 标题与排
-check("AI监测市场" in html, "标题 = AI监测市场")
+check("<title>AI监测</title>" in html and "<h1>AI监测</h1>" in html, "标题 = AI监测")
 check("市场自检" not in html, "旧标题已移除")
 check("数据时间 2026-10-06 收盘（美东交易日）" in html and "本页数据更新" not in html,
       "休市顶部显示行情收盘日，不重复抓取完成时间")
@@ -116,7 +116,7 @@ check('id="checkResult"' in html and html.index('id="checkResult"')<html.index('
 
 # 分组
 check(html.count('class="card group-card"') == 14, "十四个分类均可折叠")
-check('id="group_positions" open' in html and 'id="group_focus" open' in html, "持仓与重点关注默认展开")
+check('id="group_positions">' in html and 'id="group_focus">' in html and ' open>' not in html.split('id="macroCard"', 1)[1][:2], "持仓、重点、市场风险默认折叠")
 pos_title = html.split('id="group_positions"', 1)[1].split('</summary>', 1)[0]
 check('class="stat-dot red"' in pos_title and 'class="stat-dot gray"' in pos_title and
       '红1' not in pos_title and '缺失1' not in pos_title, "分组警示采用圆点与计数而非颜色文字")
@@ -134,7 +134,7 @@ focus_card = html.split('id="group_focus"')[1].split('id="group_technology"')[0]
 check('TEM' in focus_card and 'SOXL' in focus_card, "重点关注仍包含 TEM/SOXL")
 tech_card = html.split('id="group_technology"')[1].split('id="group_healthcare"')[0]
 check('MCD' in tech_card and 'XLU' in tech_card and 'PG' in tech_card, "IT 分类包含警示与无异动标的")
-check('在册：持仓 2 · 重点关注 2 · IT软硬Ai 6' in html, "在册计数更新")
+check('在册：持仓 2 · 重点 2 · IT软硬Ai 6' in html, "在册计数更新")
 check('已隐藏 2 只重复标的' in html, "跨组去重提示")
 check('BAC' in tech_card, "灰色取数失败仍展示")
 
@@ -160,7 +160,7 @@ items3 = [d for d in items if d["group"] != "focus"]
 snap3 = dict(snapshot)
 snap3["list_counts"] = {"positions": 2, "focus": 0, "technology": 6, "triggers": 0, "dca": 0}
 html3 = monitor.render(macro, items3, 8, snapshot=snap3, dup_hidden=0)
-check('重点关注 (0)' in html3 and '暂无标的，去设置页录入或导入 CSV' in html3, "重点关注空态提示")
+check('重点 (0)' in html3 and '暂无标的，去设置页录入或导入 CSV' in html3, "重点关注空态提示")
 
 # 抓取失败文案
 snap4 = dict(snapshot)

@@ -12,7 +12,7 @@
   "target_gap_pct": 3,
   "target_space_pct": 50,
   "vol_ratio": 1.5,
-  "quiet_chg": 2,
+  "vol_ratio_red": 3,
   "amp_yellow": 6,
   "amp_red": 10,
   "ma_short": 0,
