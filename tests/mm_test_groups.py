@@ -109,7 +109,7 @@ class TestGroups(unittest.TestCase):
             monitor.attach_earnings(rows, result['data'], '2030-10-12')
         primary.assert_called_once(); official.assert_called_once()
         self.assertEqual(result['data']['MU']['official_attempted'], '2030-10-11')
-        self.assertIn('不代表公司未公布', monitor.earnings_label(rows[0]['earnings'])[1])
+        self.assertIn('未取得', monitor.earnings_label(rows[0]['earnings'])[1])
 
     def test_same_day_official_revision_once_and_invalid_results_safe(self):
         original = self.official_fixture()
@@ -212,7 +212,7 @@ class TestGroups(unittest.TestCase):
         self.assertIn('15.08', risk)
         self.assertIn('7,801.77', risk)
         self.assertIn('截至 2026-10-07', risk)
-        self.assertIn('Cboe VIX 官方日线', risk)
+        self.assertNotIn('Cboe VIX 官方日线', risk)   # 2026-10-15：指标行不再逐条展示数据来源
         self.assertNotIn('.VIX</td>', page)
         self.assertNotIn('.SPX</td>', page)
         self.assertEqual(snap['risk_quotes']['vix']['value'], 15.08)
@@ -718,7 +718,7 @@ class TestGroups(unittest.TestCase):
         self.assertAlmostEqual(rs['etf'], (131 / 111 - 1) * 100, places=6)
         self.assertAlmostEqual(rs['bench'], (5310 / 5110 - 1) * 100, places=6)
         head = page.split('id="group_technology"', 1)[1].split('</summary>', 1)[0]
-        self.assertIn('20日相对标普500', head)
+        self.assertIn('20日对.SPX', head)
         self.assertNotIn('SPY', head)
         self.assertIn('− 标普500 +3.9%', head)
 
@@ -730,14 +730,14 @@ class TestGroups(unittest.TestCase):
         fallback.assert_called_once()
         self.assertEqual(rs['bench_name'], '标普500')
         self.assertEqual(rs['end'], '2026-10-01')           # 终点退到双方共有的最新日，不按下标错位
-        self.assertIn('20日相对标普500', page.split('id="group_technology"', 1)[1].split('</summary>', 1)[0])
+        self.assertIn('20日对.SPX', page.split('id="group_technology"', 1)[1].split('</summary>', 1)[0])
 
     def test_main_relative_strength_falls_back_to_spy_only_when_no_index_data(self):
         rs, page, fetched, fallback = self._run_main_for_rs([], [])
         self.assertEqual(fetched, ['XLK', 'SPY'])
         self.assertEqual(rs['bench_name'], 'SPY')
         head = page.split('id="group_technology"', 1)[1].split('</summary>', 1)[0]
-        self.assertIn('20日相对SPY', head)                   # 明确标注是 SPY 近似，不冒充指数
+        self.assertIn('20日对SPY', head)                   # 明确标注是 SPY 近似，不冒充指数
 
     def test_sp500_rows_fallback_validates_license_order_and_staleness(self):
         def body(rows, lic='CC BY 4.0', **extra):
@@ -1161,15 +1161,15 @@ class TestGroups(unittest.TestCase):
         def head(key):
             return page.split(f'id="group_{key}"', 1)[1].split('</summary>', 1)[0]
         tech = head('technology')
-        self.assertIn('20日相对标普500 +1.8%', tech)
+        self.assertIn('20日对.SPX +1.8%', tech)
         self.assertIn('class="rs-spy up"', tech)
         self.assertLess(tech.index('stat-dot red'), tech.index('rs-spy'))      # 在红黄灯后面
         self.assertIn('XLK 20日 +5.2% − 标普500 +3.4% = +1.8 个百分点', tech)
         self.assertIn('class="rs-spy down"', head('healthcare'))
-        self.assertIn('20日相对标普500 -3.0%', head('healthcare'))
+        self.assertIn('20日对.SPX -3.0%', head('healthcare'))
         self.assertIn('class="rs-spy "', head('financials'))                    # ±0.5 内持平不着色
         self.assertNotIn('rs-spy', head('energy'))
-        self.assertIn('20日相对标普500 +1.8%', head('industrials'))
+        self.assertIn('20日对.SPX +1.8%', head('industrials'))
         self.assertNotIn('rs-spy', head('positions'))                            # 持仓/关注/指数基不是板块组
 
     def test_dca_text_short_form_and_only_due_day_turns_yellow(self):
@@ -1616,6 +1616,161 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(run('2026-10-10T01:45:00+00:00'), 0)   # 夏令时美东21:45
         self.assertEqual(run('2026-12-10T00:45:00+00:00'), 0)   # 冬令时美东19:45
 
+    def test_ensure_schedule_run_dispatches_when_daily_bar_lags(self):
+        """结果存在但日线仍停在目标交易日之前（数据源未刷新）时，只在美东 20:00-21:00 窗口内补跑。"""
+        import tempfile
+        real = monitor.datetime
+
+        def at(iso):
+            class F(real):
+                @classmethod
+                def now(cls, tz=None):
+                    return real.fromisoformat(iso)
+            return F
+
+        def run(iso, actual):
+            """actual=None 不写快照；'target' 表示日线已到目标日；其余日期表示日线落后。"""
+            get = MagicMock()
+            get.return_value.json.return_value = {'workflow_runs': []}
+            post = MagicMock()
+            target = monitor.plan_run('schedule', real.fromisoformat(iso))['target']
+            with tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(monitor, 'BASE', tmp), \
+                    patch.object(monitor, 'datetime', at(iso)), \
+                    patch.object(monitor.requests, 'get', get), \
+                    patch.object(monitor.requests, 'post', post):
+                if actual is not None:
+                    day = target if actual == 'target' else actual
+                    with open(os.path.join(tmp, 'status.json'), 'w', encoding='utf-8') as f:
+                        json.dump({'target_trade_date': target, 'mode': 'closed',
+                                   'summary': {'total': 100},
+                                   'actual_dates': {'min': day, 'max': day}}, f)
+                self.assertEqual(monitor.ensure_schedule_run(), 0)
+            return post.call_count
+
+        # 夏令时美东 20:45：日线已到目标日不补跑，日线落后则补跑
+        self.assertEqual(run('2026-10-10T00:45:00+00:00', 'target'), 0)
+        self.assertEqual(run('2026-10-10T00:45:00+00:00', '2026-10-08'), 1)
+        # 冬令时美东 20:45（UTC 01:45）同样有效
+        self.assertEqual(run('2026-12-10T01:45:00+00:00', '2026-12-08'), 1)
+        # 抓取只允许在美东 20:00-21:00：美东 22:30 那两档（夏/冬）一律不跑
+        self.assertEqual(run('2026-10-10T02:30:00+00:00', '2026-10-08'), 0)
+        self.assertEqual(run('2026-12-10T03:30:00+00:00', '2026-12-08'), 0)
+        # 错季节时点（美东 19:45）也不跑
+        self.assertEqual(run('2026-12-10T00:45:00+00:00', 'target'), 0)
+
+    def test_fetch_history_records_lag_when_no_source_has_target_bar(self):
+        """收盘口径下所有源都停在目标日之前：仍返回最新日线，但要记进滞后统计而不是当成已抓到。"""
+        from datetime import date, timedelta
+
+        def hist(last):
+            d = date.fromisoformat(last)
+            dates, closes = [], []
+            while len(dates) < 40:
+                if d.weekday() < 5:
+                    dates.append(d.isoformat())
+                    closes.append(round(100 + len(dates) * 0.1, 2))
+                d -= timedelta(days=1)
+            dates.reverse()
+            closes.reverse()
+            return {"dates": dates, "closes": closes,
+                    "highs": [round(c * 1.01, 4) for c in closes],
+                    "lows": [round(c * 0.99, 4) for c in closes],
+                    "volumes": [1000000.0] * len(closes),
+                    "price": closes[-1], "prev_close": closes[-2], "currency": "USD"}
+
+        monitor._LAG.clear()
+        monitor._LAG_SRC.clear()
+        self.addCleanup(monitor._LAG.clear)
+        self.addCleanup(monitor._LAG_SRC.clear)
+        with patch.object(monitor, 'CLOSED_ONLY', True), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'nasdaq_history', return_value=None), \
+                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-13')), \
+                patch.object(monitor, 'stooq_history', return_value=None):
+            data = monitor.fetch_history('AAPL')
+        self.assertEqual(data['dates'][-1], '2026-10-13')
+        self.assertEqual(monitor.lag_summary(), {'2026-10-13': ['AAPL']})
+        # 滞后要能分源看：这轮是 yahoo 停在 10-13，nasdaq 没给出可用日线
+        self.assertEqual(monitor.lag_source_summary()['yahoo'],
+                         {'latest': '2026-10-13', 'symbols': 1})
+        self.assertNotIn('nasdaq', monitor.lag_source_summary())
+        # 源补齐到目标日时不再记滞后
+        monitor._LAG.clear()
+        monitor._LAG_SRC.clear()
+        with patch.object(monitor, 'CLOSED_ONLY', True), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'nasdaq_history', return_value=None), \
+                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
+                patch.object(monitor, 'stooq_history', return_value=None):
+            self.assertEqual(monitor.fetch_history('AAPL')['dates'][-1], '2026-10-14')
+        self.assertEqual(monitor.lag_summary(), {})
+
+    def test_closed_mode_prefers_nasdaq_then_yahoo_for_us_symbols(self):
+        """收盘口径美股/ETF 先问 Nasdaq（当日 bar 落地更早），盘中仍 Yahoo 优先，指数/期货只走 Yahoo。"""
+        from datetime import date, timedelta
+
+        def hist(last):
+            d = date.fromisoformat(last)
+            dates, closes = [], []
+            while len(dates) < 40:
+                if d.weekday() < 5:
+                    dates.append(d.isoformat())
+                    closes.append(round(100 + len(dates) * 0.1, 2))
+                d -= timedelta(days=1)
+            dates.reverse()
+            closes.reverse()
+            return {"dates": dates, "closes": closes,
+                    "highs": [round(c * 1.01, 4) for c in closes],
+                    "lows": [round(c * 0.99, 4) for c in closes],
+                    "volumes": [1000000.0] * len(closes),
+                    "price": closes[-1], "prev_close": closes[-2], "currency": "USD"}
+
+        monitor._LAG.clear()
+        monitor._LAG_SRC.clear()
+        self.addCleanup(monitor._LAG.clear)
+        self.addCleanup(monitor._LAG_SRC.clear)
+        # 收盘口径：Nasdaq 给出目标日 bar 就直接用，不再问 Yahoo
+        with patch.object(monitor, 'CLOSED_ONLY', True), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')), \
+                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-13')) as yah, \
+                patch.object(monitor, 'stooq_history', return_value=None):
+            data = monitor.fetch_history('AAPL')
+        self.assertEqual(data['source'], 'nasdaq')
+        self.assertEqual(data['dates'][-1], '2026-10-14')
+        yah.assert_not_called()
+        # Nasdaq 只有前一日就自动回退 Yahoo，并记下 Nasdaq 的滞后
+        monitor._LAG_SRC.clear()
+        with patch.object(monitor, 'CLOSED_ONLY', True), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-13')), \
+                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
+                patch.object(monitor, 'stooq_history', return_value=None):
+            data = monitor.fetch_history('AAPL')
+        self.assertEqual(data['source'], 'yahoo')
+        self.assertEqual(data['dates'][-1], '2026-10-14')
+        self.assertEqual(monitor.lag_source_summary()['nasdaq'],
+                         {'latest': '2026-10-13', 'symbols': 1})
+        # 盘中口径维持 Yahoo 优先
+        with patch.object(monitor, 'CLOSED_ONLY', False), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'apply_realtime', side_effect=lambda s, d: d), \
+                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
+                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')) as nas, \
+                patch.object(monitor, 'stooq_history', return_value=None):
+            data = monitor.fetch_history('AAPL')
+        self.assertEqual(data['source'], 'yahoo')
+        nas.assert_not_called()
+        # 期货/指数不碰 Nasdaq（那个源没有期货与指数日线）
+        with patch.object(monitor, 'CLOSED_ONLY', True), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')) as nas2, \
+                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
+                patch.object(monitor, 'stooq_history', return_value=None):
+            monitor.fetch_history('ESMAIN')
+        nas2.assert_not_called()
+
     def test_intraday_summary_and_per_stock_fallback_labels(self):
         rows = [dict(symbol=s, note=s, group='position', price=price, chg=0, level=level,
                      source='yahoo', data_date=date, signals=[]) for s, price, level, date in [
@@ -1842,11 +1997,12 @@ class TestGroups(unittest.TestCase):
         self.assertIn('指数基 (0)', page)          # 括号里是页面实际显示数，不是登记数
         for name in ('10Y美债','美元指数','收益率曲线'):
             self.assertNotIn(name, index)
-        # 风险卡里不出现美元指数、收益率曲线；10Y美债只作为「参考 · 不计入综合灯」的参考行出现
+        # 风险卡里不出现美元指数、收益率曲线；10Y美债只作为「参考」的参考行出现（2026-10-15 去掉「不计入综合灯」）
         for name in ('美元指数','收益率曲线'):
             self.assertNotIn(name, risk)
         self.assertEqual(risk.count('id="ust10Ref"'), 1)
-        self.assertIn('参考 · 不计入综合灯', risk)
+        self.assertIn('<span class="unit">参考</span>', risk)
+        self.assertNotIn('不计入综合灯', risk)
         self.assertNotIn('市场参考（独立指标，不属于清单标的）', page)
         self.assertNotIn('index-reference', page)
         self.assertNotIn('原指数基成员及监测开关保持不变', index)
@@ -2203,15 +2359,25 @@ class TestTargets(unittest.TestCase):
     def test_tag_html_variants(self):
         tag = monitor.target_tag
         self.assertEqual(tag(None), '')
-        self.assertEqual(tag({'kind': 'consensus', 'price': 429.47, 'month': 10}),
-                         '<span class="tgs"><span class="lvtag tgt"><span>共识</span> <span>429.47</span> <span>· 10月</span></span></span>')
+        # 共识价胶囊不再写「共识」，开头是距现价的百分比
+        self.assertEqual(tag({'kind': 'consensus', 'price': 429.47, 'month': 10, 'space': 60.0}),
+                         '<span class="tgs"><span class="lvtag tgt"><span>+60%</span> <span>429.47</span> <span>· 10月</span></span></span>')
+        self.assertNotIn('共识', tag({'kind': 'consensus', 'price': 429.47, 'month': 10, 'space': 60.0}))
         self.assertIn('lvtag tgt hit', tag({'kind': 'consensus', 'price': 87.56, 'month': 10, 'hit': True}))
-        self.assertIn('<span>目标</span> <span>108</span> <span>· 10月</span>', tag({'kind': 'manual', 'price': 108.0, 'month': 10}))
+        # 手填目标价同样不写「目标」，开头也是距现价的空间百分比（2026-10-15 改）
+        self.assertEqual(tag({'kind': 'manual', 'price': 108.0, 'month': 10, 'space': 12.0}),
+                         '<span class="tgs"><span class="lvtag tgt"><span>+12%</span> <span>108</span> <span>· 10月</span></span></span>')
+        self.assertNotIn('目标', tag({'kind': 'manual', 'price': 108.0, 'month': 10, 'space': 12.0}))
+        self.assertEqual(tag({'kind': 'manual', 'price': 500.0, 'month': 12, 'space': 8.0}),
+                         '<span class="tgs"><span class="lvtag tgt"><span>+8%</span> <span>500</span> <span>· 12月</span></span></span>')
         self.assertNotIn('月', tag({'kind': 'manual', 'price': 108.0, 'month': None}))
         failed = tag({'kind': 'consensus', 'price': 429.0, 'month': 8, 'failed': True})
         self.assertIn('lvtag tgt bad', failed)
         self.assertIn('<span>429</span>', failed)
-        self.assertIn('<span>共识</span> <span>获取失败</span>', tag({'kind': 'consensus', 'price': None, 'month': None, 'failed': True}))
+        self.assertNotIn('共识', failed)                     # 失败时也不写「共识」
+        self.assertIn('<span>获取失败</span>', tag({'kind': 'consensus', 'price': None, 'month': None, 'failed': True}))
+        self.assertEqual(tag({'kind': 'consensus', 'price': 87.56, 'month': None}),
+                         '<span class="tgs"><span class="lvtag tgt"><span>87.56</span></span></span>')  # 无空间数据只显示价格
         # 数据异常：标签不变红
         self.assertNotIn('bad', tag({'kind': 'consensus', 'price': 250.0, 'month': 10, 'anomaly': True}))
 
@@ -2431,7 +2597,9 @@ class TestTargets(unittest.TestCase):
         t = {'kind': 'manual', 'price': 108.0, 'month': 10, 'failed': False, 'hit': False, 'anomaly': False, 'space': 8.0}
         page = self._page([self._row('MAN', 'yellow', False, t, ['波动 +2.1%'])])
         self.assertIn('波动 +2.1% · <span class="tnote">目标价 108，空间 +8%</span>', page)
-        self.assertIn('<span>目标</span> <span>108</span> <span>· 10月</span>', page)
+        # 手填目标价胶囊同样不写「目标」，开头是距现价的空间百分比（2026-10-15 改）
+        self.assertIn('<span>+8%</span> <span>108</span> <span>· 10月</span>', page)
+        self.assertNotIn('<span>目标</span>', page)
         self.assertNotIn('共识价来源', page)               # 只有手填：不显示共识来源
 
     def test_page_target_alert_text_is_purple_last_and_purple_bar_on_right(self):
@@ -3566,7 +3734,7 @@ class TestDisplayInteractions(unittest.TestCase):
             ('逼近布林下轨 还差0.08%（盘中触及 50.04）', 'signal-yellow'),
             ('触及布林下轨 99.00', 'signal-yellow'),
             ('跌破布林下轨', 'signal-yellow'),
-            ('布林 + RSI 双重信号 → 红', 'signal-red'),
+            ('布林 + RSI → 红', 'signal-red'),
             ('日内触及250日均线±1%（现价偏离 +3.0%）', 'signal-cyan'),
             ('上穿250日均线', 'signal-cyan'),
             ('跌破250日均线', 'signal-cyan'),
@@ -3640,7 +3808,15 @@ class TestDisplayInteractions(unittest.TestCase):
                                                 + '</details>\n'))
         self.assertIn('card.open = false', monitor.PAGE_INTERACTION_JS)
         self.assertIn('heading.focus({preventScroll: true})', monitor.PAGE_INTERACTION_JS)
-        self.assertIn('card.id !== "signalCounts" || card.open', monitor.PAGE_INTERACTION_JS)
+        # 统计面板：展开和收起都要归一化一次（修掉「收起后重开、内层依旧占位」的留白）
+        self.assertIn('card.id !== "signalCounts") return;', monitor.PAGE_INTERACTION_JS)
+        self.assertNotIn('card.id !== "signalCounts" || card.open', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('normalizeSignalCard(card);', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('void card.offsetHeight;', monitor.PAGE_INTERACTION_JS)
+        # 移动端兜底：点标题后下一帧再归一化一次 + bfcache 返回时复位（2026-10-15 手机端仍留白）
+        self.assertIn('target.closest("#signalCounts > summary")', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('requestAnimationFrame(function() { normalizeSignalCard(card); });', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('window.addEventListener("pageshow"', monitor.PAGE_INTERACTION_JS)
         self.assertIn('card.querySelectorAll(".signal-members-panel")', monitor.PAGE_INTERACTION_JS)
         self.assertIn('card.querySelectorAll(".signal-count-toggle")', monitor.PAGE_INTERACTION_JS)
         self.assertNotIn('fetch(', monitor.PAGE_INTERACTION_JS)
@@ -3815,7 +3991,9 @@ class TestSignalCounts(unittest.TestCase):
                 self.assertIn(text, old)
             self.assertNotIn('美东 2026-10-14 至 2026-10-21', panel)
             self.assertNotIn('预计或估算日期可能调整', panel)
-            self.assertIn('if (earnings) earnings.open = false;', monitor.PAGE_INTERACTION_JS)
+            self.assertIn('earnings.open = false;', monitor.PAGE_INTERACTION_JS)
+            # 折叠态绝对不占高度：移动端内核不重排时用 CSS 兜底
+            self.assertIn('#signalCounts .earnings-week:not([open])>*:not(summary){display:none}', monitor.PAGE_CSS)
             self.assertIn('#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text)', monitor.PAGE_CSS)
             self.assertIn('#signalCounts td{padding:6.3px 5px;', monitor.PAGE_CSS)  # 统计面板压缩上下留白
             self.assertIn('.signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;', monitor.PAGE_CSS)  # 数字胶囊扁长方形

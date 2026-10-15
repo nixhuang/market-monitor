@@ -95,7 +95,7 @@ for _label, _css, _widths in (("电脑", _desktop_css, (18, 22, 13, 47)),
     check(sum(_widths) == 100, _label + "端四栏宽度合计100%")
 _macro_u = dict(macro, ust10=dict(macro["ust10"], value=4.55, delta_week=0.12, month_ago=4.0, delta_month=0.55))
 _html_u = monitor.render(_macro_u, items, 10, snapshot=snapshot, dup_hidden=2)
-check('id="ust10Ref"' in _html_u and "一个月急升 +55 bp" in _html_u and "参考 · 不计入综合灯" in _html_u
+check('id="ust10Ref"' in _html_u and "一个月急升 +55 bp" in _html_u and '<span class="unit">参考</span>' in _html_u and "不计入综合灯" not in _html_u
       and '<td class="num dim">+12<span class="unit">周变化 bp</span></td>' in _html_u, "10Y美债参考行：一个月急升标黄，周变化按 bp 显示")
 check('id="ust10Ref"' in html and "无数据或已过期" in html.split('id="ust10Ref"')[1].split("</tr>")[0],
       "10Y美债缺一个月数据时显示无数据")
@@ -125,7 +125,9 @@ check('.group-card>summary .group-stats{margin-left:6px' in html and
 check('id="group_technology"' in html and 'IT软硬Ai (5)' in html, "IT 分类展示计数")
 check('其他关注' not in html, "旧其他关注分类已移除")
 check("<h2>个股</h2>" not in html and "<h2>ETF 基金</h2>" not in html, "个股与 ETF 不再分区")
-check(html.count('<thead><tr><th>名称</th><th class="h-earn">财报</th>') >= 3, "表头：名称｜财报")
+check('<thead' not in html and '<th>名称</th>' not in html and 'class="h-earn"' not in html,
+      "表头「名称｜财报」整行已删除（2026-10-15）")
+check(monitor.STK_HEAD == '', "STK_HEAD 不再输出表头")
 check("财报 美东" not in html and "下一次财报" not in html.split("<style>")[-1].split("</style>")[-1], "每行不再重复写「财报」二字")
 check('无异动 1 只 · 点击查看' in html and 'SPYM' in html, "无异动标的可展开查看")
 pos_card = html.split('id="group_positions"')[1].split('id="group_focus"')[0]
@@ -134,8 +136,8 @@ focus_card = html.split('id="group_focus"')[1].split('id="group_technology"')[0]
 check('TEM' in focus_card and 'SOXL' in focus_card, "重点关注仍包含 TEM/SOXL")
 tech_card = html.split('id="group_technology"')[1].split('id="group_healthcare"')[0]
 check('MCD' in tech_card and 'XLU' in tech_card and 'PG' in tech_card, "IT 分类包含警示与无异动标的")
-check('在册：持仓 2 · 重点 2 · IT软硬Ai 6' in html, "在册计数更新")
-check('已隐藏 2 只重复标的' in html, "跨组去重提示")
+check('在册：' not in html and '已隐藏' not in html and '本轮监测' not in html,
+      "首页不再展示在册计数与去重说明（2026-10-15 整行删除）")
 check('BAC' in tech_card, "灰色取数失败仍展示")
 
 # 盘中口径

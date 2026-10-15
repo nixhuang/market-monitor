@@ -94,6 +94,7 @@ class SourceGate:
 
 YAHOO_GATE = SourceGate(threshold=3, cooldown=90)
 STOOQ_GATE = SourceGate(threshold=3, cooldown=3600)
+NASDAQ_GATE = SourceGate(threshold=4, cooldown=60)
 
 
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -253,11 +254,17 @@ def prepare_run():
 
 def ensure_schedule_run():
     """保险：GitHub 定时任务可能被延迟或丢弃。若今晚（美东20:00之后）的收盘结果还没生成，
-    就补派发一次与定时任务等价的运行；已有结果或已有任务在排队/运行则不重复派发。"""
+    或结果已生成但日线仍停在目标交易日之前（数据源当日 bar 未落地），就补派发一次等价运行；
+    结果已完整或已有任务在排队/运行则不重复派发。
+
+    检查窗口固定为美东 20:00-21:00：抓取只允许落在这个时段内，20:45 那一档保险会在窗口内
+    再给一次补齐机会（日线仍停在目标交易日之前就补派发一次）。窗口外一律不跑，避免抓到盘中价。
+    """
     now_ny = datetime.now(timezone.utc).astimezone(US_TZ)
-    if not 20 * 60 <= now_ny.hour * 60 + now_ny.minute < 21 * 60:
-        # 夏冬令时两组时点每天都会触发；不在休盘窗口内（错季节的时点或被严重拖延）就什么都不做，避免抓到新一轮盘中价
-        print(f"美东 {now_ny:%H:%M} 不在 20:00-21:00 休盘窗口内，不补跑")
+    minute_of_day = now_ny.hour * 60 + now_ny.minute
+    if not (20 * 60 <= minute_of_day < 21 * 60):
+        # 夏冬令时两组时点每天都会触发；不在检查窗口内（错季节的时点或被严重拖延）就什么都不做，避免抓到新一轮盘中价
+        print(f"美东 {now_ny:%H:%M} 不在 20:00-21:00 检查窗口内，不补跑")
         return 0
     plan = plan_run("schedule", datetime.now(timezone.utc))
     try:
@@ -267,8 +274,12 @@ def ensure_schedule_run():
         snap = {}
     if snap.get("target_trade_date") == plan["target"] and snap.get("mode") == "closed" \
             and (snap.get("summary") or {}).get("total"):
-        print(f"目标交易日 {plan['target']} 的收盘结果已存在，无需补跑")
-        return 0
+        actual = snap.get("actual_dates") or {}
+        if actual.get("max") and actual["max"] >= plan["target"]:
+            print(f"目标交易日 {plan['target']} 的收盘结果已存在且日线已到该日，无需补跑")
+            return 0
+        print(f"目标交易日 {plan['target']} 的结果日线仍停在 {actual.get('max') or '未知'}，"
+              f"数据源尚未补齐当日 bar，等待补跑")
     repo, token = os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GH_TOKEN", "")
     headers = {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"}
     base = f"https://api.github.com/repos/{repo}/actions/workflows/daily.yml"
@@ -1286,7 +1297,11 @@ def nasdaq_history(symbol):
       - ETF（QQQ/SPY/TLT/HYG/SGOV/XLV）必须 assetclass=etf，股票用 stocks，逐个试
       - 返回行是「新→旧」，要反转成「旧→新」
       - BRK-B 这类含连字符的 B 股，这个源要写成 BRK.B，代码里已做变体尝试
+      - 收盘口径下它是美股/ETF 的主源（Yahoo 个股日线在美东 20:00-21:00 常还没落地当日 bar），
+        被限流时由 NASDAQ_GATE 熔断，自动回退 Yahoo。
     """
+    if not NASDAQ_GATE.allow():
+        return None
     end = NOW.date()
     start = end - timedelta(days=560)  # 留足 200 日均线所需的交易日
     base = ("https://api.nasdaq.com/api/quote/{s}/historical"
@@ -1302,6 +1317,10 @@ def nasdaq_history(symbol):
             url = base.format(s=sym, ac=ac, f=start.isoformat(), t=end.isoformat())
             try:
                 r = requests.get(url, headers=UA, timeout=quote_timeout(8))
+                if r.status_code in (403, 429, 503):
+                    if NASDAQ_GATE.fail():
+                        log("  ! Nasdaq 连续限流，暂停约60秒，期间改用 Yahoo/stooq")
+                    return None
                 r.raise_for_status()
                 j = r.json()
                 rows = ((j.get("data") or {}).get("tradesTable") or {}).get("rows") or []
@@ -1324,6 +1343,7 @@ def nasdaq_history(symbol):
                 if len(parsed) < 30:
                     continue
                 parsed.reverse()  # 旧 → 新
+                NASDAQ_GATE.ok()
                 return {
                     "closes": [p["c"] for p in parsed],
                     "dates": [p["d"] for p in parsed],
@@ -1788,8 +1808,8 @@ HARD_REFRESH_JS = (
 
 # 个股/ETF 表统一用固定列宽，三张表（警示 / ETF / 折叠的无异动）栏位才能上下对齐
 STK_COLS = ('<colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>')
-# 表头：「财报」两个字只在这里写一次，每行只写日期和时段；价格、信号两列不写表头
-STK_HEAD = '<thead><tr><th>名称</th><th class="h-earn">财报</th><th></th><th></th></tr></thead>'
+# 表头已于 2026-10-15 按用户要求整行删除：各行自己写「美东 10/22 盘后」，不需要「名称｜财报」提示
+STK_HEAD = ''
 
 
 def earnings_label(e):
@@ -1798,7 +1818,7 @@ def earnings_label(e):
         return None
     status = e["status"]
     if status == "unknown":
-        return "日期待确认", "本站尚未取得下一次财报日期，不代表公司未公布"
+        return "日期待确认", "未取得"
     if status == "error":
         return "日期暂未取得", "下一次财报日期本轮读取失败，不代表没有财报"
     year, month, day = e["date"].split("-")
@@ -1808,7 +1828,7 @@ def earnings_label(e):
     nxt = (datetime(int(year), int(month), int(day)) + timedelta(days=1)).strftime("%m/%d")
     bj = {"pre": f"北京时间约{month}/{day}傍晚至晚间", "post": f"北京时间约{nxt}凌晨",
           "during": f"北京时间约{month}/{day}夜间至{nxt}凌晨"}.get(e.get("timing"), "北京时间待定")
-    kind = {"expected": "预计", "official": "官方财报活动日期"}.get(e.get("kind"), "算法估算，可能调整")
+    kind = {"expected": "预计", "official": "官方财报活动日期"}.get(e.get("kind"), "估算")
     if e.get("kind") == "official":
         note = f"{kind} · 核实于{e.get('official_checked', '待确认')}；发布钟点未确认"
         if e.get("official_error"):
@@ -2173,8 +2193,30 @@ def valid_futures_identity(data, identity):
             and "CFD" not in str(data.get("quote_name", "")).upper())
 
 
+_LAG_LOCK = threading.Lock()
+_LAG = {}       # 日线停留日期 -> 标的集合；只在收盘口径且日线早于目标交易日时记录
+_LAG_SRC = {}   # 数据源 -> 日线停留日期 -> 标的集合：用来比较哪个源当日 bar 落地更早
+
+
+def lag_summary():
+    """本轮日线停在目标交易日之前的标的统计（数据源未刷新，与抓取失败区分开）。"""
+    with _LAG_LOCK:
+        return {d: sorted(syms) for d, syms in _LAG.items()}
+
+
+def lag_source_summary():
+    """按数据源统计各自最新的日线日期与标的数，用于判断哪个源当日 bar 落地更早。"""
+    with _LAG_LOCK:
+        out = {}
+        for src, by_date in _LAG_SRC.items():
+            best = max(by_date) if by_date else None
+            out[src] = {"latest": best, "symbols": sum(len(v) for v in by_date.values())}
+        return out
+
+
 def fetch_history(symbol):
-    """普通标的 Yahoo → stooq → Nasdaq；指数／期货只取经映射的 Yahoo 日线。
+    """收盘口径：美股/ETF 走 Nasdaq → Yahoo → stooq；盘中口径：Yahoo → stooq → Nasdaq。
+    指数／期货只取经映射的 Yahoo 日线。
 
     GitHub Actions（美国 IP）走 Yahoo 正常；中国大陆本地跑 Yahoo 会被整段封禁
     （返回 403 且提示 mainland China 不可访问），stooq 也上了 JS 人机验证，
@@ -2189,8 +2231,15 @@ def fetch_history(symbol):
     alias = INDEX_YAHOO_ALIAS.get(symbol) or (identity if identity.startswith('^') or is_future else None)
     if identity == '^TNX':
         return None  # 国债收益率不使用报价指数替代百分比口径。
-    loaders = (("yahoo", yahoo_history),) if alias else (
-        ("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history))
+    if alias:
+        loaders = (("yahoo", yahoo_history),)
+    elif CLOSED_ONLY:
+        # 收盘口径：Yahoo 的美股/ETF 当日日线在美东 20:00-21:00 常常还没落地（实测 20:17 仍是
+        # 前一交易日，22:29 才补齐），Nasdaq 收盘后更新更早，所以放到第一位；它没给到当日 bar
+        # 就照样回退 Yahoo/stooq，最坏情况与原来一致。
+        loaders = (("nasdaq", nasdaq_history), ("yahoo", yahoo_history), ("stooq", stooq_history))
+    else:
+        loaders = (("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history))
     fallback = None
     suspicious = None
     for name, loader in loaders:
@@ -2221,6 +2270,10 @@ def fetch_history(symbol):
         if CLOSED_ONLY:
             if data["dates"][-1] == TARGET_DATE:
                 return data
+            # 该源当天 bar 还没落地：记下来继续换源，最后取日期最新的那份，不静默当成已完成
+            with _LAG_LOCK:
+                _LAG.setdefault(data["dates"][-1], set()).add(symbol)
+                _LAG_SRC.setdefault(name, {}).setdefault(data["dates"][-1], set()).add(symbol)
         elif data["dates"][-1] == TARGET_DATE:
             return data if alias else apply_realtime(symbol, data)
         if fallback is None or data["dates"][-1] > fallback["dates"][-1]:
@@ -2853,15 +2906,21 @@ def target_alerts(price, prev, target, label, space_pct, gap_pct):
 
 def target_tag(t):
     """价格涨跌幅下面的标签：正常 = 空心紫色胶囊；命中紫色警示 = 实心紫色；共识价取数失败 = 红色。
-    手填写「目标 108 · 10月」，共识价写「共识 429 · 10月」。没有目标价返回空串。"""
+    手填目标价和共识价一视同仁：都不写「目标」「共识」，开头统一是距现价的空间百分比，
+    如「+75% 429.47 · 10月」；没有空间数据时只显示价格（和月份）。没有目标价返回空串。"""
     if not t:
         return ""
-    manual = t.get("kind") == "manual"
-    month = f'<span>· {t["month"]}月</span>' if t.get("month") else ""
     if t.get("price") is None:
-        body, cls = '<span>共识</span> <span>获取失败</span>', "tgt bad"
+        body, cls = '<span>获取失败</span>', "tgt bad"
     else:
-        body = f'<span>{"目标" if manual else "共识"}</span> <span>{_price_text(t["price"])}</span> {month}'
+        parts = []
+        space = t.get("space")
+        if isinstance(space, (int, float)) and not isinstance(space, bool) and math.isfinite(space):
+            parts.append(f'<span>{space:+.0f}%</span>')
+        parts.append(f'<span>{_price_text(t["price"])}</span>')
+        if t.get("month"):
+            parts.append(f'<span>· {t["month"]}月</span>')
+        body = " ".join(parts)
         cls = "tgt bad" if t.get("failed") else ("tgt hit" if t.get("hit") else "tgt")
     return f'<span class="tgs"><span class="lvtag {cls}">{body}</span></span>'
 
@@ -3234,7 +3293,7 @@ def _rule_boll(al, x):
             x.boll_rsi_hits = x.high_hits if side == "上轨" else x.low_hits
         else:
             x.boll_rsi_direction = f"{side}（RSI{'超卖' if side == '上轨' else '超买'}，方向不一致）"
-        al.add("boll_rsi", "布林 + RSI 双重信号 → 红", "red")
+        al.add("boll_rsi", "布林 + RSI → 红", "red")
 
 
 def _rule_vol_ratio(al, x):
@@ -3395,9 +3454,8 @@ RUN_JS = '<script src="./run-status.js?v=20261013-2"></script>'
 
 # 本页展示交互独立于运行/令牌逻辑；不联网、不写用户配置。
 PAGE_INTERACTION_JS = r"""
-document.addEventListener("toggle", function(event) {
-  const card = event.target;
-  if (!(card instanceof HTMLDetailsElement) || card.id !== "signalCounts" || card.open) return;
+function normalizeSignalCard(card) {
+  // 统计面板内部全部回到初始折叠态：明细面板收起、计数按钮回位、一周财报关掉、筛选清空。
   card.querySelectorAll(".signal-members-panel").forEach(function(panel) {
     panel.hidden = true;
   });
@@ -3405,12 +3463,41 @@ document.addEventListener("toggle", function(event) {
     button.setAttribute("aria-expanded", "false");
   });
   const earnings = card.querySelector(".earnings-week");
-  if (earnings) earnings.open = false;
+  if (earnings) {
+    earnings.open = false;
+    // 移动端（iOS Safari / 部分安卓内核）在父面板不可见期间改 open，偶尔不重算子元素
+    // 高度，再展开就会留一块空白。这里显式绕一次 display，逼它按折叠态重排。
+    earnings.style.display = "none";
+    void earnings.offsetHeight;
+    earnings.style.display = "";
+  }
   card.querySelectorAll(".signal-filter-toggle").forEach(function(button) {
     button.setAttribute("aria-pressed", "false");
   });
   renderSignalFilter();
+  void card.offsetHeight;   // 强制重排，确保恢复出来的高度按折叠态重算
+}
+document.addEventListener("toggle", function(event) {
+  const card = event.target;
+  if (!(card instanceof HTMLDetailsElement) || card.id !== "signalCounts") return;
+  // 展开和收起都归一化一次：只在收起时做的话，内层「未来一周财报」是在面板已经不可见
+  // 的状态下被脚本关掉的，部分移动端浏览器会留下旧高度，再展开就多出一块空白。
+  normalizeSignalCard(card);
 }, true);
+// 兜底一：少数移动内核的 toggle 事件不稳，点标题后用下一帧再归一化一次。
+document.addEventListener("click", function(event) {
+  const target = event.target;
+  if (!target || !target.closest) return;
+  if (!target.closest("#signalCounts > summary")) return;
+  const card = document.getElementById("signalCounts");
+  if (!card) return;
+  requestAnimationFrame(function() { normalizeSignalCard(card); });
+}, true);
+// 兜底二：iOS Safari 往返缓存（bfcache）会原样恢复 details 状态，回到页面时统一复位。
+window.addEventListener("pageshow", function() {
+  const card = document.getElementById("signalCounts");
+  if (card) normalizeSignalCard(card);
+});
 function signalFilterData() {
   const node = document.getElementById("signalFilterResult");
   if (!node || !node.dataset.filter) return null;
@@ -3838,7 +3925,7 @@ body{margin:0;background:var(--bg);color:var(--text);
   font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
   padding:env(safe-area-inset-top) 14px 40px}
 .wrap{max-width:720px;margin:0 auto}
-h1{font-size:19px;margin:18px 0 4px;font-weight:600}
+h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 .sub{color:var(--dim);font-size:12px;margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:6px 4px;margin-bottom:14px;overflow:hidden}
@@ -3847,18 +3934,18 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
 tr:first-child td{border-top:none}
 .num{text-align:right;font-variant-numeric:tabular-nums}
-.dim{color:var(--dim);font-size:12px}
+.dim{color:var(--dim);font-size:13px}
 .sym{font-weight:600}
-.note{color:var(--dim);font-weight:400;font-size:11px;margin-left:6px}
+.note{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
 .tag{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;
-  font-size:10px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
+  font-size:11px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
   color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}
 .tag.f-red{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}
 .tag.f-yellow{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}
 .tag.quote-note{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}
 .lvs{display:block;margin:4px 0 0;line-height:1.5}
 .lvtag{display:inline-block;margin:0 4px 2px 0;padding:0 7px;border-radius:999px;border:1px solid;
-  background:transparent;font-size:10px;font-weight:400;line-height:16px;white-space:nowrap;font-variant-numeric:tabular-nums}
+  background:transparent;font-size:11px;font-weight:400;line-height:17px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .lvtag.add{color:#ffa94d;border-color:rgba(255,169,77,.6)}
 .lvtag.cut{color:#4dd0e1;border-color:rgba(77,208,225,.6)}
 .tgs{display:block;margin:3px 0 0;line-height:1.4;white-space:normal}
@@ -3878,7 +3965,7 @@ tr:first-child td{border-top:none}
 .fund-body{margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:6px;
   font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}
 .fund-body ul{margin:4px 0 0;padding-left:16px}
-.sig{font-size:12.5px;color:var(--text);overflow-wrap:anywhere}
+.sig{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
 .signal-magenta{color:#ef8de4} .signal-red{color:#ff8580} .signal-yellow{color:#f0c674} .signal-cyan{color:#4dd0e1}
 .group-bottom{padding:0;margin:0 -4px -6px;border-top:1px solid var(--line);text-align:center;line-height:0}
 .collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);
@@ -3889,43 +3976,45 @@ tr:first-child td{border-top:none}
 .collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
 #signalCounts{border:1px solid #6686c6;box-shadow:inset 3px 0 0 #8fb8f0;background:#182131}
 #signalCounts>summary{color:#bfd5ff}
-#signalCounts>summary .count-total{white-space:nowrap;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+#signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 #signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-purple{color:var(--purple)} #signalCounts .count-earn{color:var(--text)}
 #signalCounts table{table-layout:fixed}
-#signalCounts td{padding:6.3px 5px;font-size:12px;line-height:1.2;overflow-wrap:anywhere;vertical-align:middle}
+#signalCounts td{padding:6.3px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
 #signalCounts td:first-child{width:26%}
 #signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;max-width:100%;padding:0 4px;
-  color:#bfd5ff;font:inherit;font-size:11px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
+  color:#bfd5ff;font:inherit;font-size:14px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;gap:3px;touch-action:manipulation}
 #signalCounts .signal-count-toggle::after{content:"▾";font-size:10px}
 #signalCounts .signal-count-toggle[aria-expanded="true"]::after{content:"▴"}
 #signalCounts .signal-members-row>td{padding:0;width:auto;border-top:0}
 #signalCounts .signal-members-panel{padding:10px 12px;background:#121a27;border-top:1px solid #465e87;text-align:left}
 #signalCounts .signal-members-panel[hidden]{display:none}
-#signalCounts .signal-members-panel h4{font-size:12px;margin:12px 0 5px;color:#bfd5ff}
+#signalCounts .signal-members-panel h4{font-size:13px;margin:12px 0 5px;color:#bfd5ff}
 #signalCounts .signal-members-panel ul{margin:0;padding-left:18px}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
-#signalCounts .signal-member-direction{color:var(--dim);font-size:11px}
-#signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:12px}
+#signalCounts .signal-member-direction{color:var(--dim);font-size:12px}
+#signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}
 #signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:14px;font-weight:700;line-height:1;vertical-align:baseline}
 #signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
 #signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
 #signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;background:#182130;color:var(--text)}
-#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
+/* 折叠态绝对不占高度：个别移动内核在父面板隐藏期间改 open 后不重排，这里用 CSS 兜底 */
+#signalCounts .earnings-week:not([open])>*:not(summary){display:none}
+#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:13.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
 #signalCounts .earnings-week summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
 #signalCounts .earnings-week ul{list-style:none;margin:0;padding:0 0 8.1px}
-#signalCounts .earnings-week li{font-size:12px;padding:3.6px 0;overflow-wrap:anywhere}
+#signalCounts .earnings-week li{font-size:13px;padding:3.6px 0;overflow-wrap:anywhere}
 #signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
 #signalCounts .earnings-week-meta{color:var(--text);margin-left:5px}
 #signalCounts .earnings-week-group{color:#8fb8f0}
-#signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:13px;line-height:1;color:var(--text);
+#signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;line-height:1;color:var(--text);
   display:inline-flex;align-items:center;white-space:nowrap;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:left;touch-action:manipulation}
 #signalCounts .signal-filter-toggle[aria-pressed="true"]{background:#2f6bd8;border-color:#2f6bd8;color:#fff}
 #signalCounts .signal-filter-toggle:focus-visible,#signalCounts .signal-filter-clear:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;background:#121a27;font-size:12px}
+#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;background:#121a27;font-size:13px}
 #signalCounts .signal-filter[hidden]{display:none}
 #signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:#bfd5ff;font-weight:600}
 #signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:38px;padding:0 10px;font:inherit;font-weight:400;color:var(--text);
@@ -3939,17 +4028,17 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-filter .stat-dot{width:9px;height:9px;margin-left:6px;vertical-align:-1px}
 #signalCounts .signal-filter-detail{display:block;margin-top:2px;color:var(--text)}
 #signalCounts .earnings-week .stat-dot{width:9px;height:9px;margin-left:6px;vertical-align:-1px}
-.earn{display:block;margin:0;color:#8fb8f0;font-size:11.5px;font-weight:400;line-height:1.5}
-.earn .unit{display:block;color:var(--dim);font-size:11px}
+.earn{display:block;margin:0;color:#8fb8f0;font-size:12.5px;font-weight:400;line-height:1.5}
+.earn .unit{display:block;color:var(--dim);font-size:12px}
 .earn.soon{color:#f0c674;font-weight:600}
 table.stk{table-layout:fixed}
 .stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}  /* 股票行下边距让给位置条，条靠近本股、远离下一只 */
 .stk tr.range52-row td{padding:0 12px 12px 18px;border-top:0;box-shadow:none}
 .range52-rail{position:relative;height:15px;font-variant-numeric:tabular-nums}
-.range52-percent{position:absolute;top:0;left:clamp(18px,var(--range-pos),calc(100% - 18px));transform:translateX(-50%);color:var(--text);font-size:9px;line-height:10px;white-space:nowrap}
+.range52-percent{position:absolute;top:0;left:clamp(18px,var(--range-pos),calc(100% - 18px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
 .range52-track{position:absolute;right:3px;bottom:1px;left:3px;height:2.1px;background:#9fa3aa;border-radius:99px}
 .range52-marker{position:absolute;top:50%;width:8.4px;height:8.4px;border-radius:2px;background:#713caf;border:1px solid #efd9ff;transform:translate(-50%,-50%)}
-.range52-missing{display:block;color:var(--dim);font-size:10px;line-height:15px}
+.range52-missing{display:block;color:var(--dim);font-size:11px;line-height:15px}
 .c-sym{width:18%} .c-earn{width:22%} .c-px{width:13%} .c-sig{width:47%}
 .earn-cell{vertical-align:middle;overflow-wrap:anywhere}
 table.stk tr td:first-child{padding-left:14px}
@@ -3958,8 +4047,10 @@ table.stk tr td:first-child{padding-left:14px}
 .stk th:first-child{padding-left:14px}
 .stk th.h-earn,.earn-cell{text-align:center}
 .px{white-space:nowrap}
+/* 价格列改为居中显示（与共识价胶囊一致），不再靠右 */
+td.px{text-align:center}
 .px-price,.px-chg{display:block}
-.px-chg{font-size:12.5px}
+.px-chg{font-size:13.5px}
 @media (max-width:600px){
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
   .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
@@ -3969,13 +4060,13 @@ table.stk tr td:first-child{padding-left:14px}
   table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
   .stk th{padding:7px 5px;font-size:12px}
   .stk th.h-earn,.earn-cell{text-align:left}
-  .stk td.sym{font-size:13.5px}
-  .stk td.sym .note{font-size:10.5px;line-height:1.35}
-  .stk .earn{font-size:10.5px;line-height:1.4}
-  .stk .earn .unit{font-size:10px;line-height:1.35}
-  .stk .px-price{font-size:13.5px}
-  .stk .px-chg{font-size:11.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:9.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
-  .stk td.sig{font-size:11.5px;line-height:1.45}
+  .stk td.sym{font-size:14px}
+  .stk td.sym .note{font-size:11.5px;line-height:1.35}
+  .stk .earn{font-size:11.5px;line-height:1.4}
+  .stk .earn .unit{font-size:11px;line-height:1.35}
+  .stk .px-price{font-size:14px}
+  .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:10.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
+  .stk td.sig{font-size:12.5px;line-height:1.45}
   .stk .fund-detail summary{padding:6px 7px}
 }
 .fund-context{margin-top:6px;color:var(--dim)}
@@ -3992,12 +4083,12 @@ tr.gray td{color:var(--dim)}
 .stk tr.yellow:has(+tr.range52-row)>td:first-child{--lc:var(--yellow);--lw:4px}
 .stk tr.green:has(+tr.range52-row)>td:first-child{--lc:var(--green);--lw:2px}
 .stk tr:has(+tr.range52-row)>td:first-child{box-shadow:none;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom;background-repeat:no-repeat}
-.stk tr.pur:has(+tr.range52-row)>td.sig{box-shadow:none;background-image:linear-gradient(var(--purple),var(--purple));background-size:2px calc(100% - 4px);background-position:right bottom;background-repeat:no-repeat}
+.stk tr.pur:has(+tr.range52-row)>td.sig{box-shadow:none;background-image:linear-gradient(var(--purple),var(--purple));background-size:2px calc(85% - 2.1px);background-position:right bottom;background-repeat:no-repeat}
 .stk tr.range52-row>td{--lc:transparent;--lw:0px;--pc:transparent;--pw:0px;background-image:linear-gradient(var(--lc),var(--lc)),linear-gradient(var(--pc),var(--pc));background-size:var(--lw) 18px,var(--pw) 18px;background-position:left top,right top;background-repeat:no-repeat}
 .stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px} .stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}
 .stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px} .stk tr.pur+tr.range52-row>td{--pc:var(--purple);--pw:2px}
-#macroCard tr.mh td{padding:5px 10px;font-size:11.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
-.macro-help{margin:8px 12px;color:var(--dim);font-size:12px;line-height:1.7}
+#macroCard tr.mh td{padding:5px 10px;font-size:12.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
+.macro-help{margin:8px 12px;color:var(--dim);font-size:13px;line-height:1.7}
 .macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
 .macro-help p{margin:6px 0}
 .macro-help>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
@@ -4005,40 +4096,41 @@ tr.gray td{color:var(--dim)}
 .page-notes .macro-help{overflow-wrap:anywhere}
 .page-notes a{color:#8fb8f0}
 .page-notes .macro-help+ .macro-help{border-top:1px solid var(--line);padding-top:4px}
-.unit{display:block;font-size:10px;color:var(--dim);font-weight:400}
-.foot{color:var(--dim);font-size:11.5px;text-align:center;margin-top:22px;line-height:1.7}
-.quiet{color:var(--dim);font-size:12px;padding:8px 12px 12px}
+.unit{display:block;font-size:11px;color:var(--dim);font-weight:400}
+.foot{color:var(--dim);font-size:12.5px;text-align:center;margin-top:22px;line-height:1.7}
+.quiet{color:var(--dim);font-size:13px;padding:8px 12px 12px}
 .warn{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
-  color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px}
+  color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:14px}
 .acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
 .acts button{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
   border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
 .acts button:disabled{opacity:.5;cursor:not-allowed}
-#runMsg{font-size:12px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}
+#runMsg{font-size:13px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}
 #runMsg.ok{color:var(--green)}
 #runMsg.err{color:var(--red)}
 .runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-.runbar button{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
+.runbar button{padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
   border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
 .runbar button:disabled{opacity:.5;cursor:not-allowed}
 .runbar button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-.runbar a.btnlink{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
+.runbar a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
   border:1px solid #333a47;border-radius:8px;text-decoration:none;display:inline-block}
 .statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  margin:-4px 0 14px;font-size:12.5px;line-height:1.5}
+  margin:-4px 0 14px;font-size:13.5px;line-height:1.5}
 .check-result{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;
-  font-size:12px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+  font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
 .check-result[data-phase="bad"]{border-color:var(--red)}
 .check-result[data-phase="busy"]{border-color:var(--yellow)}
 .check-result[hidden]{display:none}
 .group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:10px;cursor:pointer;
-  padding:12px;font-size:14px;font-weight:600;list-style:none;touch-action:manipulation}
+  padding:12px;font-size:16px;font-weight:600;list-style:none;touch-action:manipulation}
 .group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{display:none}
 .group-card>summary::before,.macro-card>summary::before{content:"›";color:var(--dim);font-size:20px;line-height:1}
 .group-card[open]>summary::before,.macro-card[open]>summary::before{transform:rotate(90deg)}
 .group-card[open]>summary,.macro-card[open]>summary{border-bottom:1px solid var(--line)}
-.group-stats{margin-left:auto;color:var(--dim);font-size:11px;font-weight:400}
-.group-card>summary .group-stats{margin-left:6px;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-start;text-align:left}
+.group-stats{margin-left:auto;color:var(--dim);font-size:14px;font-weight:400}
+.group-card>summary .group-stats{margin-left:6px;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
+.group-card>summary .rs-spy{margin-left:auto}
 .stat-count{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
 .rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
 .rs-spy.up{color:var(--up)} .rs-spy.down{color:var(--down)}
@@ -4051,10 +4143,10 @@ tr.gray td{color:var(--dim)}
 .market-risk-badge[data-level="green"]{color:var(--green)}
 .macro-card>summary .group-stats{margin-left:6px;text-align:left}
 .quiet-list{margin:8px 0}
-.quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:12px;cursor:pointer}
+.quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:13px;cursor:pointer}
 .sym .note{display:block;margin:3px 0 0;overflow-wrap:anywhere}
 .group-card summary:focus-visible,.macro-card summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
-.runlight{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--dim);line-height:1.4}
+.runlight{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--dim);line-height:1.4}
 .runlight .dot{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}
 .runlight[data-phase="busy"]{color:var(--yellow)}
 .runlight[data-phase="busy"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
@@ -4065,7 +4157,7 @@ tr.gray td{color:var(--dim)}
 .runlight[data-phase="bad"]{color:var(--red)}
 .runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}
 .dca{background:rgba(139,147,161,.12);border:1px solid var(--line);border-radius:10px;
-  padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--dim)}
+  padding:10px 14px;margin-bottom:14px;font-size:14px;color:var(--dim)}
 .dca b{color:var(--text)}
 .dca.on{background:rgba(210,153,34,.14);border-color:rgba(210,153,34,.4);color:var(--yellow)}
 .dca.on b{color:var(--yellow)}
@@ -4073,16 +4165,16 @@ tr.gray td{color:var(--dim)}
 .dca-badge.on{color:var(--yellow)}
 .policy-reference{border-top:1px solid var(--line);margin-top:0}
 .policy-reference .reference-alert{padding:7px 12px}
-.policy-reference .reference-top{gap:6px;font-size:11.5px}
+.policy-reference .reference-top{gap:6px;font-size:12.5px}
 .policy-reference .stat-dot{width:8px;height:8px}
-.policy-reference .reference-status{font-size:10.5px}
+.policy-reference .reference-status{font-size:11.5px}
 .policy-reference [data-status="pending"] .reference-status,.policy-reference [data-status="unavailable"] .reference-status{color:var(--dim)}
 .policy-reference [data-status="available"] .reference-status{color:var(--text)}
-.policy-reference .reference-conclusion{font-size:12px;line-height:1.55;margin:3px 0 0}
-.oil-reference-row td{font-size:12px;overflow-wrap:anywhere}
+.policy-reference .reference-conclusion{font-size:13px;line-height:1.55;margin:3px 0 0}
+.oil-reference-row td{font-size:13px;overflow-wrap:anywhere}
 .oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
-.oil-state{font-size:11px;font-weight:600}
-.oil-explanation{margin-top:3px;font-size:11.5px;line-height:1.55}
+.oil-state{font-size:12px;font-weight:600}
+.oil-explanation{margin-top:3px;font-size:12.5px;line-height:1.55}
 .oil-reference-row.red .oil-state{color:var(--red)}
 .oil-reference-row.yellow .oil-state{color:var(--yellow)}
 .oil-reference-row.green .oil-state{color:var(--green)}
@@ -4092,18 +4184,18 @@ tr.gray td{color:var(--dim)}
 .reference-alert{padding:13px 14px;border-bottom:1px solid var(--line)}
 .reference-alert:last-of-type{border-bottom:0}
 .reference-top{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
-.reference-top .reference-status{margin-left:auto;color:var(--dim);font-size:11px}
+.reference-top .reference-status{margin-left:auto;color:var(--dim);font-size:12px}
 .reference-alert[data-level="red"] .reference-status{color:var(--red)}
 .reference-alert[data-level="yellow"] .reference-status{color:var(--yellow)}
 .reference-alert[data-level="green"] .reference-status{color:var(--green)}
 .reference-conclusion{font-size:14px;line-height:1.65;margin:7px 0;color:var(--text)}
-.reference-data{font-size:11px;line-height:1.65;color:var(--dim);overflow-wrap:anywhere}
-.reference-detail{margin:8px 0 0;font-size:11px;color:var(--dim);line-height:1.7}
+.reference-data{font-size:12px;line-height:1.65;color:var(--dim);overflow-wrap:anywhere}
+.reference-detail{margin:8px 0 0;font-size:12px;color:var(--dim);line-height:1.7}
 .reference-detail summary{cursor:pointer;color:#8fb8f0;padding:3px 0}
 .reference-detail a{color:#8fb8f0}
 .reference-detail p{margin:5px 0}
 .reference-alert[data-level="gray"] .reference-conclusion{color:var(--dim)}
-.local-preview-banner{padding:11px 14px;border:1px solid rgba(107,163,240,.35);border-radius:10px;background:rgba(107,163,240,.08);color:#8fb8f0;font-size:12px;margin:14px 0}
+.local-preview-banner{padding:11px 14px;border:1px solid rgba(107,163,240,.35);border-radius:10px;background:rgba(107,163,240,.08);color:#8fb8f0;font-size:13px;margin:14px 0}
 """
 
 
@@ -4139,8 +4231,7 @@ def _macro_rows(macro, risk):
         dw_txt = f'{dw:+.0f}' if (key == "hy_oas" and dw is not None) else "—"
         label = html_lib.escape(str(it.get("name") or RISK_LABELS[key]))
         label += f'<span class="unit">截至 {html_lib.escape(it["date"])}</span>'
-        if it.get("source"):
-            label += f'<span class="unit">{html_lib.escape(str(it["source"]))}</span>'
+        # 数据来源（FRED / Cboe / Yahoo …）按 2026-10-15 要求不再在指标行里展示，页底仍保留整体来源说明
         rows_macro.append(
             f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
             f'<td class="num dim">{dw_txt}<span class="unit">周变化</span></td><td>{txt}</td></tr>'
@@ -4153,13 +4244,13 @@ def _macro_rows(macro, risk):
         uw = ut.get("delta_week")
         uw_txt = f'{uw * 100:+.0f}' if uw is not None else "—"
         ulabel = (f'{html_lib.escape(str(ut.get("name") or "10Y美债"))}'
-                  f'<span class="unit">参考 · 不计入综合灯</span>'
+                  f'<span class="unit">参考</span>'
                   f'<span class="unit">截至 {html_lib.escape(ut["date"])}</span>')
         rows_macro.append(
             f'<tr class="{ulv}" id="ust10Ref"><td>{ulabel}</td><td class="num">{ut["value"]:.2f}%</td>'
             f'<td class="num dim">{uw_txt}<span class="unit">周变化 bp</span></td><td>{utxt}</td></tr>')
     else:
-        rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债<span class="unit">参考 · 不计入综合灯</span></td>'
+        rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债<span class="unit">参考</span></td>'
                           '<td colspan="3">无数据或已过期</td></tr>')
     return "".join(rows_macro)
 
@@ -4353,7 +4444,7 @@ def _group_stats_html(g, group, items_by_symbol, enabled):
             f'{group["sector_etf"]} {rs["days"]}日 {rs["etf"]:+.1f}% − {bn} {rs["bench"]:+.1f}% = {diff:+.1f} 个百分点'
             f'（{rs["start"]} → {rs["end"]}）')
         stats += (f'<span class="rs-spy {rs_cls}" aria-label="{rs_tip}">'
-                  f'{rs["days"]}日相对{html_lib.escape(bn)} {diff:+.1f}%</span>')
+                  f'{rs["days"]}日对{".SPX" if bn == RS_BENCH_NAME else html_lib.escape(bn)} {diff:+.1f}%</span>')
     if not enabled:
         note = "仅板块ETF" if g else "监测关闭"
         stats = f'<span class="monitor-note">{note}</span>' + stats
@@ -4542,7 +4633,7 @@ def _earnings_week_panel(snapshot, count_only=False):
             return pending
         date = entry["date"]
         timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(entry.get("timing"), "时段待定")
-        kind = {"official": "官方活动日期", "expected": "预计", "estimated": "算法估算"}.get(entry.get("kind"), "来源待确认")
+        kind = {"official": "官方活动日期", "expected": "预计", "estimated": "估算"}.get(entry.get("kind"), "来源待确认")
         note = f' <span class="note">{esc(entry["note"])}</span>' if entry.get("note") else ""
         group = next((g["label"] for g in GROUPS if g["item_group"] == entry.get("group")), "未分类")
         level = entry.get("level")
@@ -4777,7 +4868,7 @@ def _oil_reference_row(snapshot):
     if checked:
         details += f'<p>最近核对：{checked.astimezone(TZ).strftime("%Y-%m-%d %H:%M")} 北京时间</p>'
     details += ('<p>自定义规则：5日涨≥10%注意／≥20%警惕，20日涨≥20%注意／≥30%警惕。'
-                '上涨速度反映价格冲击，不推断必然加息；不计入综合灯。</p></details>')
+                '上涨速度反映价格冲击，不推断必然加息。</p></details>')  # 「不计入综合灯」2026-10-15 从面板移除，页底规则仍写明
     text = oil.get("text")
     if (not isinstance(text, str) or not text.strip()
             or (level == "gray" and oil.get("level") != "gray")):
@@ -4800,7 +4891,6 @@ def _page_notes(snapshot):
 
 def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
     snapshot = snapshot or {}
-    registered = snapshot.get("registered_counts", {})
     risk = market_risk_summary(macro, snapshot.get("target_trade_date"))
     rows_macro = _macro_rows(macro, risk)
 
@@ -4829,8 +4919,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     dca_title = dca_badge(snapshot.get("dca_reminder"))  # 标题行最右侧，字体同「市场风险」
     snapshot_json = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
     snapshot_json = snapshot_json.replace("</", "<\\/")
-    summary = snapshot.get("summary", {})
-    counts = snapshot.get("list_counts", {})
     finished_iso = beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
     finished_txt = finished_iso[:19].replace("T", " ") if finished_iso else "未记录"
     # 一行摘要升级为状态灯文案（首页第三排）
@@ -4840,12 +4928,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     bj_auto = "夏令时次日 08:15" if ny_now.dst() != timedelta(0) else "冬令时次日 09:15"
     sub_line = (f"数据时间 {market_data_time(snapshot)} · "
                 f"自动计划：美东周一至五 20:15（北京 {bj_auto}）")
-    lc = registered or counts
-    reg_line = ('<div class="quiet">在册：' + ' · '.join(
-                    f"{g['label']} {lc.get(g['key'], 0)}" for g in GROUPS if lc.get(g['key'], 0))
-                + (f" · 本轮监测 {summary.get('total', 0)} 个唯一标的" if registered else "")
-                + (f' · 已隐藏 {dup_hidden} 只重复标的（市场风险／持仓优先，其次重点，最后其他）'
-                   if dup_hidden else "") + "</div>")
+    # 「在册：…」一整行按 2026-10-15 要求删除，不再在首页展示分组在册数与去重说明。
     consensus_credit = (f'共识价来源：{CONSENSUS_SOURCE}，每只约 {CONSENSUS_REFETCH_DAYS} 天更新一次，财报后提前更新<br>\n'
                         if any((d.get("target") or {}).get("kind") == "consensus" for d in items) else "")
 
@@ -4899,7 +4982,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 </details>
 
 {group_cards}
-{reg_line}
 
 <div class="foot">
 行情：{src_txt} · 垃圾债利差：FRED · 金融压力：NFCI原始周度数据／FRED同步备用<br>
@@ -4963,6 +5045,7 @@ def collect_quotes(symbols):
             time.sleep(3)
         YAHOO_GATE.reset(True)
         STOOQ_GATE.reset(True)
+        NASDAQ_GATE.reset(True)
         run(failed, max(1, QUOTE_WORKERS // 2), keep_better=True)
     done = sum(isinstance(v, dict) for v in results.values())
     log(f"行情抓取完成：成功 {done}/{len(symbols)}")
@@ -5053,6 +5136,7 @@ def main(argv=None):
         QUOTE_DEADLINE = time.monotonic() + QUOTE_BUDGET_SECONDS
         YAHOO_GATE.reset(True)
         STOOQ_GATE.reset(True)
+        NASDAQ_GATE.reset(True)
         to_fetch = [sym for sym, _, _ in universe
                     if quote_supported(sym) and instrument_identity(sym) != '^TNX']
         sector_etfs = {g["sector_etf"] for g in GROUPS if g.get("sector_etf")}
@@ -5076,6 +5160,7 @@ def main(argv=None):
             bench_data = fetched[spy_key]
         YAHOO_GATE.reset(False)
         STOOQ_GATE.reset(False)
+        NASDAQ_GATE.reset(False)
         # 先用旧共识价解析当前技术信号，为财报请求提供持仓/红黄优先级；刷新后仅重算变化项。
         for sym, sc, grp in universe:
             supported = quote_supported(sym)
@@ -5188,6 +5273,12 @@ def main(argv=None):
 
     snapshot = build_snapshot(macro, items, cfg, group_counts=group_counts)
     snapshot["nfci_cache"] = nfci_state
+    stale = lag_summary()
+    if stale:
+        snapshot["data_lag"] = {"target": TARGET_DATE,
+                                "stale_dates": {d: len(v) for d, v in stale.items()},
+                                "by_source": lag_source_summary(),
+                                "symbols": sum(len(v) for v in stale.values())}
     snapshot["fundamental"] = {**fund_stat, "data": fund_data}
     snapshot["consensus"] = {"source": CONSENSUS_SOURCE, "stat": cons_stat, "data": cons_data,
                              "quota": cons_stat.get("quota", _consensus_quota(prev_cons, quota_day))}
@@ -5204,6 +5295,12 @@ def main(argv=None):
     with open(status_path, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
         f.write("\n")
+    if stale:
+        worst = max(stale)
+        log(f"  ! 数据源日线未刷新：{sum(len(v) for v in stale.values())} 只标的的日线停在 {worst}"
+            f"（目标交易日 {TARGET_DATE}），本轮按已落地的最新日线显示")
+        for src, info in sorted((lag_source_summary() or {}).items()):
+            log(f"      {src}: 最新日线 {info['latest']}，{info['symbols']} 只未到目标交易日")
     log(f"已生成 {out} 与 {status_path}；目标交易日 {TARGET_DATE}，实际行情日期 {snapshot['actual_dates']}")
 
     try:

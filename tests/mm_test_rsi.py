@@ -78,8 +78,8 @@ class TestRSI(unittest.TestCase):
                     level, signals, detail = self.analyze(values, bands=bands)
                     self.assertEqual(level, expected)
                     self.assertEqual(detail['level'], expected)
-                    self.assertEqual(sum('布林' in s and '双重' not in s for s in signals), 1)
-                    self.assertEqual('布林 + RSI 双重信号 → 红' in signals, combined)
+                    self.assertEqual(sum('布林' in s and 'RSI' not in s for s in signals), 1)
+                    self.assertEqual('布林 + RSI → 红' in signals, combined)
 
     def test_combined_direction_matches_selected_band_and_rsi_side(self):
         cases = [((100, 101, 90), [80, 80, 50], '上轨（超买）'),
@@ -92,7 +92,7 @@ class TestRSI(unittest.TestCase):
                 self.assertEqual(level, 'red')
                 self.assertEqual(detail['boll_rsi_direction'], direction)
                 self.assertIn(('boll_rsi', 'red'), detail['signal_marks'])
-                self.assertIn('布林 + RSI 双重信号 → 红', signals)
+                self.assertIn('布林 + RSI → 红', signals)
 
     def test_lower_band_exact_touch_is_not_labeled_as_breakthrough(self):
         level, signals, detail = self.analyze([50, 50, 50], bands=(100, 110, 99))
@@ -154,7 +154,7 @@ class TestRSI(unittest.TestCase):
                 self.assertEqual(detail['boll_rsi_direction'], '上轨（超买）')
                 self.assertTrue(any(s.startswith('盘中突破布林上轨') for s in signals), signals)
                 self.assertIn('盘中突破布林上轨', monitor._signals_html(detail))
-                self.assertIn('布林 + RSI 双重信号 → 红', signals)
+                self.assertIn('布林 + RSI → 红', signals)
                 active = group in ('position', 'focus')
                 self.assertEqual(('boll', 'yellow') in detail['signal_marks'], active)
                 self.assertEqual(monitor.signal_counts([detail])['boll']['yellow'], int(active))
@@ -204,7 +204,7 @@ class TestRSI(unittest.TestCase):
         level, signals, _ = self.analyze([50, 50, 50], bands=(100, 101, 90), streak=streak)
         self.assertEqual(level, 'yellow')
         self.assertTrue(any('连续第6日' in s for s in signals))
-        self.assertFalse(any('双重信号' in s for s in signals))
+        self.assertFalse(any('布林 + RSI → 红' in s for s in signals))
 
     def test_other_yellow_is_not_an_rsi_signal(self):
         data = neutral_data()
@@ -212,7 +212,7 @@ class TestRSI(unittest.TestCase):
         level, signals, _ = self.analyze([50, 50, 50], bands=(100, 101, 90), data=data)
         self.assertEqual(level, 'yellow')
         self.assertTrue(any(s.startswith('波动') for s in signals))
-        self.assertFalse(any('双重信号' in s for s in signals))
+        self.assertFalse(any('布林 + RSI → 红' in s for s in signals))
 
     def test_other_red_with_bollinger_stays_red(self):
         for cfg, prev in [({}, 100 / (1 + (monitor.S['chg_red'] + 0.5) / 100)), ({'trigger': 100}, 100)]:
@@ -220,7 +220,7 @@ class TestRSI(unittest.TestCase):
             data['prev_close'] = prev
             level, signals, _ = self.analyze([50, 50, 50], cfg=cfg, data=data, bands=(100, 101, 90))
             self.assertEqual(level, 'red')
-            self.assertFalse(any('双重信号' in s for s in signals))
+            self.assertFalse(any('布林 + RSI → 红' in s for s in signals))
 
     def test_other_red_not_downgraded(self):
         data = neutral_data()
