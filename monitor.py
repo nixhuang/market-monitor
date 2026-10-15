@@ -1301,8 +1301,9 @@ def nasdaq_history(symbol):
       - ETF（QQQ/SPY/TLT/HYG/SGOV/XLV）必须 assetclass=etf，股票用 stocks，逐个试
       - 返回行是「新→旧」，要反转成「旧→新」
       - BRK-B 这类含连字符的 B 股，这个源要写成 BRK.B，代码里已做变体尝试
-      - 收盘口径下它是美股/ETF 的主源（Yahoo 个股日线在美东 20:00-21:00 常还没落地当日 bar），
-        被限流时由 NASDAQ_GATE 熔断，自动回退 Yahoo。
+      - 它是第三级兜底源（Yahoo/stooq 都取不到时才用）；连续失败由 NASDAQ_GATE 熔断一小段时间。
+      - 2026-10-15 曾短暂把它提为收盘主源，实测 GitHub Actions 上读超时 72 次且不带
+        ma_range_valid（暴露 52 周区间判废 bug），已撤回；盘中实时价仍是 Nasdaq，不受影响。
     """
     if not NASDAQ_GATE.allow():
         return None
@@ -2219,8 +2220,7 @@ def lag_source_summary():
 
 
 def fetch_history(symbol):
-    """美股/ETF 统一走 Yahoo → stooq → Nasdaq（收盘与盘中口径一致）；
-    指数／期货只取经映射的 Yahoo 日线。
+    """普通标的 Yahoo → stooq → Nasdaq；指数／期货只取经映射的 Yahoo 日线。
 
     GitHub Actions（美国 IP）走 Yahoo 正常；中国大陆本地跑 Yahoo 会被整段封禁
     （返回 403 且提示 mainland China 不可访问），stooq 也上了 JS 人机验证，
@@ -2235,13 +2235,10 @@ def fetch_history(symbol):
     alias = INDEX_YAHOO_ALIAS.get(symbol) or (identity if identity.startswith('^') or is_future else None)
     if identity == '^TNX':
         return None  # 国债收益率不使用报价指数替代百分比口径。
-    if alias:
-        loaders = (("yahoo", yahoo_history),)
-    else:
-        # 2026-10-15 撤回收盘口径的 Nasdaq 首位：同一轮里 api.nasdaq.com 读超时 72 次，
-        # 白烧抓取预算；而且 Nasdaq 日线不带 ma_range_valid，暴露出 52 周区间的判废 bug。
-        # 恢复 Yahoo → stooq → Nasdaq（Nasdaq 仍作兜底，熔断保留）。
-        loaders = (("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history))
+    # 普通标的 Yahoo → stooq → Nasdaq；只有指数／期货别名走单源 Yahoo。
+    # （2026-10-15 曾把 Nasdaq 提为收盘首位，实测不划算已撤回，盘中/收盘都不再区分）
+    loaders = (("yahoo", yahoo_history),) if alias else (
+        ("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history))
     fallback = None
     suspicious = None
     for name, loader in loaders:
