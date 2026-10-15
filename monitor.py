@@ -299,7 +299,11 @@ def trim_history(data, cutoff):
         return None
     out = dict(data)
     for key in ("dates", "closes", "volumes", "highs", "lows", "ma_range_valid"):
-        seq = data.get(key) or []
+        seq = data.get(key)
+        # 源本身没有这个字段就别补空列表：会被下游当成「有效位清单长度不符」，
+        # 52周区间和日内高低判断会整段判废。stooq / Nasdaq 都不带 ma_range_valid。
+        if seq is None:
+            continue
         if seq and len(seq) != len(dates):
             return None
         out[key] = [seq[i] for i in keep] if seq else []
@@ -1519,6 +1523,7 @@ FUND_CELLS = {
 }
 FUND_QUIET_DAYS = 105     # 无已知财报事件时的保守缓存窗口，不保证下一份季报尚未发布
 FUND_POLL_DAYS = 3        # 常规新季报轮询间隔；已知财报后先按日检查，报告期推进才结束
+FUND_NO_DATA_RETRY_DAYS = 7  # 源一次都没给过数据（如外国发行人 TSM）时的重试间隔，别天天试
 FUND_MAX_AGE_DAYS = 30    # 无事件时的最大正常复用期；抓取失败的旧值需明确标注
 FUND_EVENT_DAILY_DAYS = 14  # 财后两周每日检查，供应商长期未推进则退回每 3 天，事件不丢失
 
@@ -1551,6 +1556,13 @@ def _fund_sync_event(entry, events, today):
 def fundamentals_refetch_due(entry, today=None):
     """财报事件优先于静默期；未见报告期推进就继续轮询，不用抓取成功时间掩盖旧季报。"""
     today = today or _earn_today()
+    # 源根本不覆盖这只标的（Nasdaq 财报接口没有外国发行人的 20-F 数据，典型是 TSM）：
+    # 一次都没取到过就别天天重取，隔 FUND_NO_DATA_RETRY_DAYS 天再确认一次。
+    entry = entry if isinstance(entry, dict) else {}
+    if not isinstance(entry.get("data"), dict) and not entry.get("fetched") and entry.get("fetch_error"):
+        attempted = _iso_date(entry.get("attempted"))
+        if attempted and 0 <= _days_between(today, attempted) < FUND_NO_DATA_RETRY_DAYS:
+            return False
     try:
         event = _iso_date(entry.get("event_date"))
         if event and event <= today:
@@ -1569,6 +1581,24 @@ def fundamentals_refetch_due(entry, today=None):
     if since < 0:
         return True
     return False if since < FUND_QUIET_DAYS else age >= FUND_POLL_DAYS
+
+
+def _fund_cache_note(cache):
+    """基本面缓存状态 → 名称旁那句说明；没什么可说的返回空串。
+
+    一次都没取到过（源不覆盖这只标的，如外国发行人 TSM 不在 Nasdaq 财报接口里）时
+    绝不能写「沿用缓存」——压根没有缓存可沿用。
+    """
+    if not isinstance(cache, dict):
+        return ""
+    if not cache.get("fetch_error") and not cache.get("event_date"):
+        return ""
+    last = cache.get("fetched")
+    if cache.get("fetch_error") and not last:
+        return "该源暂无财报数据"
+    if cache.get("fetch_error"):
+        return f"读取失败，沿用缓存（上次成功取数 {last}）"
+    return f"财报已到期，等待供应商更新报告期（上次成功取数 {last or '未知'}）"
 
 
 def update_fundamentals(symbols, prev=None, today=None, earnings_events=None):
@@ -3008,7 +3038,7 @@ def completed_day_volume_ratio(sym, data, asof=None):
 def _range52_from_history(data):
     """仅用同一日线序列的真实高低价给价格位置条供数；缺失/错位不拿收盘价冒充极值。"""
     dates, highs, lows = (data.get(key) for key in ("dates", "highs", "lows"))
-    validity = data.get("ma_range_valid")
+    validity = data.get("ma_range_valid") or None   # 空列表当「源没给有效位」，不当成整段无效
     price = data.get("price")
     valid_num = lambda value: (isinstance(value, (int, float)) and not isinstance(value, bool)
                                and math.isfinite(value) and value > 0)
@@ -3272,7 +3302,7 @@ def _ma_day_range(x):
     """只用与本轮收盘序列对齐的最后一根高低价；缺失/损坏退回现价，不冒充完整日内范围。"""
     data = getattr(x, "data", {})
     highs, lows = data.get("highs"), data.get("lows")
-    validity = data.get("ma_range_valid")
+    validity = data.get("ma_range_valid") or None   # 空列表当「源没给有效位」，与缺失同处理
     if validity is not None and (not isinstance(validity, (list, tuple))
                                  or len(validity) != len(x.closes) or not validity or validity[-1] is not True):
         return x.price, x.price, False
@@ -5188,10 +5218,9 @@ def main(argv=None):
         try:
             for d in fund_targets:
                 cache = fund_data.get(normalize_symbol(d["symbol"]).upper(), {})
-                if cache.get("fetch_error") or cache.get("event_date"):
-                    d["fund_cache_note"] = (
-                        f"{'读取失败，沿用缓存' if cache.get('fetch_error') else '财报已到期，等待供应商更新报告期'}"
-                        f"（上次成功取数 {cache.get('fetched') or '未知'}）")
+                note = _fund_cache_note(cache)
+                if note:
+                    d["fund_cache_note"] = note
                 fd = fundamental_check(d["symbol"], fund_facts.get(normalize_symbol(d["symbol"]).upper(), {}))
                 if not fd:
                     continue

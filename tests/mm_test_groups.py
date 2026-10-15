@@ -1650,6 +1650,52 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(run('2026-10-10T01:45:00+00:00'), 0)   # 夏令时美东21:45
         self.assertEqual(run('2026-12-10T00:45:00+00:00'), 0)   # 冬令时美东19:45
 
+    def test_trim_history_keeps_missing_validity_key_missing(self):
+        """源没给 ma_range_valid 时，裁剪不能补空列表，否则 52周区间与日内高低整段判废。
+
+        逐个数据源核对：只有 yahoo_history 输出 ma_range_valid，stooq_history / nasdaq_history 都不带，
+        所以只要回退到这两个源，该标的的位置条就会消失（页面只写「数据待更新」，不报错）。
+        """
+        from datetime import date as _date, timedelta as _td
+        n = 400          # 跨度要过 357 天，scope 才是「52周」而不是「可用历史」
+        dates = [(_date(2026, 10, 14) - _td(days=i)).isoformat() for i in range(n)][::-1]
+        data = {'dates': dates, 'closes': [100.0] * n, 'highs': [101.0] * n,
+                'lows': [99.0] * n, 'volumes': [1000] * n, 'price': 100.0,
+                'prev_close': 100.0}          # 故意不带 ma_range_valid（stooq / Nasdaq 就是这样）
+        out = monitor.trim_history(data, dates[-1])
+        self.assertIsNotNone(out)
+        self.assertNotIn('ma_range_valid', out)
+        r = monitor._range52_from_history(out)
+        self.assertIsNotNone(r, "源没给有效位时仍要能算 52 周区间")
+        self.assertEqual(r['scope'], '52周')
+        x = monitor._analysis_context('T', {}, out, 'technology')
+        self.assertEqual(monitor._ma_day_range(x), (99.0, 101.0, True))  # 日内高低也不该被误判缺失
+        empty = dict(out, ma_range_valid=[])   # 防御：万一别处补了空列表，下游也当「没给」
+        self.assertIsNotNone(monitor._range52_from_history(empty))
+        self.assertEqual(monitor._ma_day_range(monitor._analysis_context('T', {}, empty, 'technology')),
+                         (99.0, 101.0, True))
+
+    def test_fund_cache_note_and_no_data_backoff(self):
+        """源不覆盖这只标的（TSM 那种外国发行人）时：文案不能再写「沿用缓存」，且别天天重取。"""
+        note = monitor._fund_cache_note
+        self.assertEqual(note({'fetch_error': True, 'fetched': None, 'event_date': '2026-10-15'}),
+                         '该源暂无财报数据')
+        self.assertNotIn('沿用缓存', note({'fetch_error': True, 'fetched': None}))
+        self.assertIn('读取失败，沿用缓存（上次成功取数 2026-10-01）',
+                      note({'fetch_error': True, 'fetched': '2026-10-01'}))
+        self.assertIn('财报已到期，等待供应商更新报告期',
+                      note({'event_date': '2026-10-15', 'fetched': '2026-10-01'}))
+        self.assertEqual(note({}), '')
+        self.assertEqual(note(None), '')
+        # 一次都没取到过：重试间隔内不再取，过了间隔再确认一次
+        due = monitor.fundamentals_refetch_due
+        empty_err = {'fetch_error': True, 'attempted': '2026-10-10', 'event_date': '2026-10-09'}
+        self.assertFalse(due(empty_err, '2026-10-12'))     # 距上次 2 天 < 7 天
+        self.assertTrue(due(empty_err, '2026-10-20'))      # 10 天后重新确认
+        # 有缓存的失败仍按天重试，不受这条影响
+        self.assertTrue(due({'fetch_error': True, 'fetched': '2026-10-01', 'attempted': '2026-10-10',
+                             'event_date': '2026-10-09'}, '2026-10-12'))
+
     def test_intraday_summary_and_per_stock_fallback_labels(self):
         rows = [dict(symbol=s, note=s, group='position', price=price, chg=0, level=level,
                      source='yahoo', data_date=date, signals=[]) for s, price, level, date in [
