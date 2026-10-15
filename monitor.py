@@ -2219,7 +2219,7 @@ def lag_source_summary():
 
 
 def fetch_history(symbol):
-    """收盘口径：美股/ETF 走 Nasdaq → Yahoo → stooq；盘中口径：Yahoo → stooq → Nasdaq。
+    """美股/ETF 统一走 Yahoo → stooq → Nasdaq（收盘与盘中口径一致）；
     指数／期货只取经映射的 Yahoo 日线。
 
     GitHub Actions（美国 IP）走 Yahoo 正常；中国大陆本地跑 Yahoo 会被整段封禁
@@ -2237,12 +2237,10 @@ def fetch_history(symbol):
         return None  # 国债收益率不使用报价指数替代百分比口径。
     if alias:
         loaders = (("yahoo", yahoo_history),)
-    elif CLOSED_ONLY:
-        # 收盘口径：Yahoo 的美股/ETF 当日日线在美东 20:00-21:00 常常还没落地（实测 20:17 仍是
-        # 前一交易日，22:29 才补齐），Nasdaq 收盘后更新更早，所以放到第一位；它没给到当日 bar
-        # 就照样回退 Yahoo/stooq，最坏情况与原来一致。
-        loaders = (("nasdaq", nasdaq_history), ("yahoo", yahoo_history), ("stooq", stooq_history))
     else:
+        # 2026-10-15 撤回收盘口径的 Nasdaq 首位：同一轮里 api.nasdaq.com 读超时 72 次，
+        # 白烧抓取预算；而且 Nasdaq 日线不带 ma_range_valid，暴露出 52 周区间的判废 bug。
+        # 恢复 Yahoo → stooq → Nasdaq（Nasdaq 仍作兜底，熔断保留）。
         loaders = (("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history))
     fallback = None
     suspicious = None

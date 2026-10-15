@@ -1710,8 +1710,12 @@ class TestGroups(unittest.TestCase):
             self.assertEqual(monitor.fetch_history('AAPL')['dates'][-1], '2026-10-14')
         self.assertEqual(monitor.lag_summary(), {})
 
-    def test_closed_mode_prefers_nasdaq_then_yahoo_for_us_symbols(self):
-        """收盘口径美股/ETF 先问 Nasdaq（当日 bar 落地更早），盘中仍 Yahoo 优先，指数/期货只走 Yahoo。"""
+    def test_us_symbols_always_try_yahoo_before_nasdaq(self):
+        """美股/ETF 收盘与盘中都是 Yahoo → stooq → Nasdaq；指数/期货只走 Yahoo。
+
+        2026-10-15 曾把 Nasdaq 提到收盘首位，同一轮 api.nasdaq.com 读超时 72 次白烧预算，
+        且 Nasdaq 日线不带 ma_range_valid，暴露 52 周区间判废的 bug，已撤回。
+        """
         from datetime import date, timedelta
 
         def hist(last):
@@ -1734,46 +1738,46 @@ class TestGroups(unittest.TestCase):
         monitor._LAG_SRC.clear()
         self.addCleanup(monitor._LAG.clear)
         self.addCleanup(monitor._LAG_SRC.clear)
-        # 收盘口径：Nasdaq 给出目标日 bar 就直接用，不再问 Yahoo
+        # 收盘口径：Yahoo 给出目标日 bar 就直接用，不再问 Nasdaq
         with patch.object(monitor, 'CLOSED_ONLY', True), \
                 patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')), \
-                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-13')) as yah, \
-                patch.object(monitor, 'stooq_history', return_value=None):
-            data = monitor.fetch_history('AAPL')
-        self.assertEqual(data['source'], 'nasdaq')
-        self.assertEqual(data['dates'][-1], '2026-10-14')
-        yah.assert_not_called()
-        # Nasdaq 只有前一日就自动回退 Yahoo，并记下 Nasdaq 的滞后
-        monitor._LAG_SRC.clear()
-        with patch.object(monitor, 'CLOSED_ONLY', True), \
-                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-13')), \
-                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
-                patch.object(monitor, 'stooq_history', return_value=None):
-            data = monitor.fetch_history('AAPL')
-        self.assertEqual(data['source'], 'yahoo')
-        self.assertEqual(data['dates'][-1], '2026-10-14')
-        self.assertEqual(monitor.lag_source_summary()['nasdaq'],
-                         {'latest': '2026-10-13', 'symbols': 1})
-        # 盘中口径维持 Yahoo 优先
-        with patch.object(monitor, 'CLOSED_ONLY', False), \
-                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'apply_realtime', side_effect=lambda s, d: d), \
                 patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
                 patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')) as nas, \
                 patch.object(monitor, 'stooq_history', return_value=None):
             data = monitor.fetch_history('AAPL')
         self.assertEqual(data['source'], 'yahoo')
+        self.assertEqual(data['dates'][-1], '2026-10-14')
         nas.assert_not_called()
+        # Yahoo 只有前一日：先试 stooq，再回退 Nasdaq，并记下 Yahoo 的滞后
+        monitor._LAG_SRC.clear()
+        with patch.object(monitor, 'CLOSED_ONLY', True), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-13')), \
+                patch.object(monitor, 'stooq_history', return_value=None), \
+                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')):
+            data = monitor.fetch_history('AAPL')
+        self.assertEqual(data['source'], 'nasdaq')
+        self.assertEqual(data['dates'][-1], '2026-10-14')
+        self.assertEqual(monitor.lag_source_summary()['yahoo'],
+                         {'latest': '2026-10-13', 'symbols': 1})
+        # 盘中口径同样是 Yahoo 优先
+        with patch.object(monitor, 'CLOSED_ONLY', False), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
+                patch.object(monitor, 'apply_realtime', side_effect=lambda s, d: d), \
+                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
+                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')) as nas2, \
+                patch.object(monitor, 'stooq_history', return_value=None):
+            data = monitor.fetch_history('AAPL')
+        self.assertEqual(data['source'], 'yahoo')
+        nas2.assert_not_called()
         # 期货/指数不碰 Nasdaq（那个源没有期货与指数日线）
         with patch.object(monitor, 'CLOSED_ONLY', True), \
                 patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')) as nas2, \
+                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')) as nas3, \
                 patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
                 patch.object(monitor, 'stooq_history', return_value=None):
             monitor.fetch_history('ESMAIN')
-        nas2.assert_not_called()
+        nas3.assert_not_called()
 
     def test_intraday_summary_and_per_stock_fallback_labels(self):
         rows = [dict(symbol=s, note=s, group='position', price=price, chg=0, level=level,
