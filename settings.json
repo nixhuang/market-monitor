@@ -23,6 +23,7 @@
   "vix_yellow": 30,
   "vix_red": 40,
   "use_realtime": 1,
+  "signal_single_open": 1,
   "dca_every": 20,
-  "dca_start": "2026-10-01"
+  "dca_start": "2026-10-15"
 }
