@@ -197,6 +197,9 @@ DEFAULT_SETTINGS = {
     # dca_every=0 或 dca_start 为空 = 不提醒
     "dca_every": 0,
     "dca_start": "",
+
+    # 统计面板：展开新的灯详情时，是否自动收起已打开的那些（1=只留一个打开，0=可以同时开多个）
+    "signal_single_open": 1,
 }
 
 
@@ -325,7 +328,7 @@ SETTING_LIMITS = {
     "amp_yellow": (0, 100), "amp_red": (0, 100),
     "hy_green": (0, 10000), "hy_red": (0, 10000),
     "vix_green": (0, 200), "vix_yellow": (0, 200), "vix_red": (0, 200),
-    "dca_every": (0, 10000), "use_realtime": (0, 1),
+    "dca_every": (0, 10000), "use_realtime": (0, 1), "signal_single_open": (0, 1),
 }
 SETTING_ORDER = (("chg_yellow", "chg_red"), ("amp_yellow", "amp_red"), ("vol_ratio", "vol_ratio_red"),
                  ("hy_green", "hy_red"),
@@ -339,7 +342,7 @@ def valid_settings(s):
             return k
         if k in ("ma_short", "ma_long") and v == 1:
             return k
-    if any(s[k] != int(s[k]) for k in ("boll_n", "ma_short", "ma_long", "dca_every")) or s["use_realtime"] not in (0, 1):
+    if any(s[k] != int(s[k]) for k in ("boll_n", "ma_short", "ma_long", "dca_every")) or s["use_realtime"] not in (0, 1) or s["signal_single_open"] not in (0, 1):
         return "整数设置"
     if not s["rsi_low"] < s["rsi_high"]:
         return "RSI 上下限"
@@ -386,7 +389,8 @@ def load_settings():
                 continue
             if k in ("ma_short", "ma_long") and v == 1:
                 continue
-            if k in ("boll_n", "ma_short", "ma_long", "dca_every", "use_realtime") and v != int(v):
+            if k in ("boll_n", "ma_short", "ma_long", "dca_every", "use_realtime",
+                    "signal_single_open") and v != int(v):
                 continue
             s[k] = type(DEFAULT_SETTINGS[k])(v)
     except FileNotFoundError:
@@ -3708,8 +3712,12 @@ document.addEventListener("click", function(event) {
   if (!panel || !panel.classList.contains("signal-members-panel")) return;
   const owner = button.closest("tr");
   const opening = panel.hidden;
-  if (owner) {
-    owner.querySelectorAll(".signal-count-toggle[data-target]").forEach(function(other) {
+  // 设置里的 signal_single_open=1（默认）时，展开新的灯详情会收起整块统计面板里已打开的那些；
+  // 关掉后只收同一行的，其它行的可以同时开着对比。
+  const singleOpen = !(window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0);
+  const scope = (singleOpen && button.closest("#signalCounts")) || owner;
+  if (scope) {
+    scope.querySelectorAll(".signal-count-toggle[data-target]").forEach(function(other) {
       const otherPanel = document.getElementById(other.dataset.target);
       if (otherPanel) otherPanel.hidden = true;
       other.setAttribute("aria-expanded", "false");
@@ -4069,6 +4077,7 @@ tr:first-child td{border-top:none}
 #signalCounts .count-purple{color:var(--purple)} #signalCounts .count-earn{color:var(--text)}
 #signalCounts table{table-layout:fixed}
 #signalCounts td{padding:6.3px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
+#signalCounts td.num{text-align:center}   /* 计数列居中：破折号与展开按钮对齐 */
 #signalCounts td:first-child{width:26%}
 #signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;max-width:100%;padding:0 4px;
   color:#bfd5ff;font:inherit;font-size:14px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
@@ -4156,9 +4165,9 @@ td.px{text-align:center}
   .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:10.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
   .stk td.sig{font-size:12.5px;line-height:1.45}
   .stk .fund-detail summary{padding:6px 7px}
-  .group-card>summary.grp,.macro-card>summary.grp{gap:7px;padding:12px 10px}
-  .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:7px}
-  .stat-badge{min-width:20px;height:20px;padding:0 5px;font-size:12px}
+  .group-card>summary.grp,.macro-card>summary.grp{gap:5px;padding:12px 10px}
+  .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
+  .stat-badge{min-width:16px;height:16px;padding:0 2px;font-size:12px}
 }
 .fund-context{margin-top:6px;color:var(--dim)}
 .up{color:var(--up)} .down{color:var(--down)}
@@ -4213,24 +4222,27 @@ tr.gray td{color:var(--dim)}
 .check-result[data-phase="bad"]{border-color:var(--red)}
 .check-result[data-phase="busy"]{border-color:var(--yellow)}
 .check-result[hidden]{display:none}
-.group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:10px;cursor:pointer;
+.group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:8px;cursor:pointer;
   padding:12px;font-size:16px;font-weight:600;list-style:none;touch-action:manipulation}
 .group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{display:none}
 .group-card>summary::before,.macro-card>summary::before{content:"›";color:var(--dim);font-size:20px;line-height:1}
 .group-card[open]>summary::before,.macro-card[open]>summary::before{transform:rotate(90deg)}
 .group-card[open]>summary,.macro-card[open]>summary{border-bottom:1px solid var(--line)}
 .group-stats{margin-left:auto;color:var(--dim);font-size:14px;font-weight:400}
-.group-card>summary .group-stats{margin-left:6px;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
+.group-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
 .group-card>summary .rs-spy{margin-left:auto}
 .stat-count{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
-/* 灯级计数徽章：数字放在灯色圆里 */
+/* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
 .stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
-  min-width:21px;height:21px;padding:0 6px;border-radius:999px;font-size:12.5px;font-weight:700;
-  line-height:1;font-variant-numeric:tabular-nums;color:#fff}
-.stat-badge.red{background:var(--red)} .stat-badge.purple{background:var(--purple)}
-.stat-badge.gray{background:var(--dim)}
-.stat-badge.yellow{background:var(--yellow);color:#241d05}
-.stat-badge.green{background:var(--green);color:#08240f}
+  box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-radius:999px;
+  border:1.5px solid var(--dim);background:transparent;
+  font-size:12.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;color:#fff;
+  position:relative;top:2px}   /* 与分组名文字底部对齐（圆底原本比文字底高 2px） */
+.stat-badge.red{border-color:var(--red)}
+.stat-badge.yellow{border-color:var(--yellow)}
+.stat-badge.gray{border-color:var(--dim)}
+.stat-badge.purple{border-color:var(--purple)}
+.stat-badge.green{border-color:var(--green)}
 /* 分组标题：名称不参与挤压，避免手机上「IT软硬Ai (27)」被拆成两行 */
 .group-card>summary .grp-name,.macro-card>summary .grp-name{white-space:nowrap;flex:none}
 .rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
@@ -4242,7 +4254,7 @@ tr.gray td{color:var(--dim)}
 .market-risk-badge[data-level="red"]{color:var(--red)}
 .market-risk-badge[data-level="yellow"]{color:var(--yellow)}
 .market-risk-badge[data-level="green"]{color:var(--green)}
-.macro-card>summary .group-stats{margin-left:6px;text-align:left}
+.macro-card>summary .group-stats{margin-left:0;text-align:left}
 .quiet-list{margin:8px 0}
 .quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:13px;cursor:pointer}
 .sym .note{display:block;margin:3px 0 0;overflow-wrap:anywhere}
@@ -5100,6 +5112,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <span id="runMsg"></span>
 </div>
 {RUN_JS}
+<script>window.MM_SETTINGS={{"signal_single_open":{int(S.get("signal_single_open", 1))}}};</script>
 <script>{PAGE_INTERACTION_JS}</script>
 {_page_notes(snapshot)}
 </div></body></html>"""

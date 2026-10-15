@@ -121,8 +121,16 @@ pos_title = html.split('id="group_positions"', 1)[1].split('</summary>', 1)[0]
 check('class="stat-badge red"' in pos_title and 'class="stat-badge gray"' in pos_title and
       '红1' not in pos_title and '缺失1' not in pos_title,
       "分组警示采用灯色圆里带数字的徽章而非颜色文字（2026-10-15）")
-check('.group-card>summary .group-stats{margin-left:6px' in html and
-      '.group-stats{margin-left:auto' in html, "警示在分组名称右侧左对齐，宏观标题保持原样")
+# 2026-10-15 再调：名称与灯圈之间不再留 6px，靠得更近
+check('.group-card>summary .group-stats{margin-left:0' in html and
+      '.group-stats{margin-left:auto' in html, "警示紧贴分组名称右侧左对齐，宏观标题保持原样")
+check('window.MM_SETTINGS={"signal_single_open":1}' in html and
+      'window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0' in html,
+      "设置里的「灯详情只留一个打开」注入页面，默认开")
+check('box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-radius:999px' in html
+      and 'border:1.5px solid var(--dim);background:transparent' in html
+      and '.stat-badge.red{border-color:var(--red)}' in html,
+      "灯圈改成空心描边圆 17px，数字白色、字号仍是 12.5px")
 check('id="group_technology"' in html and 'IT软硬Ai (5)' in html, "IT 分类展示计数")
 check('其他关注' not in html, "旧其他关注分类已移除")
 check("<h2>个股</h2>" not in html and "<h2>ETF 基金</h2>" not in html, "个股与 ETF 不再分区")

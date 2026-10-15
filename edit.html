@@ -237,6 +237,17 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
           <select id="set_use_realtime"><option value="1">开</option><option value="0">关</option></select></div>
       </div>
     </details>
+    <details class="card fold" id="displayCard" open>
+      <summary>显示与交互 <span>（统计面板 / 灯圈计数）</span></summary>
+      <div class="pane">
+        <div class="setgrid">
+          <div class="setrow"><label>统计面板：灯详情只留一个打开（展开新的自动收起已打开的）</label>
+            <select id="set_signal_single_open"><option value="1">开</option><option value="0">关</option></select></div>
+        </div>
+        <p class="note">统计面板里点开某个信号的标的明细时，是否自动收起其它已经展开的明细。关掉后可以同时展开多个做对比；不影响信号判定和计数。</p>
+      </div>
+    </details>
+
     <div class="row" style="margin-top:10px">
       <button class="primary" id="btnSaveRules">保存规则</button>
       <button id="btnResetRules">恢复默认</button>
@@ -727,12 +738,12 @@ $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,chg_red:4,chg_yellow:2,
   rsi_high:70,rsi_low:30,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,target_gap_pct:3,target_space_pct:50,vol_ratio:1.5,vol_ratio_red:3,
   amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,
-  hy_green:350,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,
+  hy_green:350,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,signal_single_open:1,
   dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
 const SET_LIMITS={ma_short:[0,250],ma_long:[0,250],boll_n:[2,250],boll_k:[.1,10],boll_near_pct:[0,100],chg_yellow:[0,100],chg_red:[0,100],
   rsi_low:[0,100],rsi_high:[0,100],near_52w_low_pct:[0,100],trigger_gap_pct:[0,100],reduce_gap_pct:[0,100],target_gap_pct:[0,100],target_space_pct:[0,1000],vol_ratio:[.1,100],
-  vol_ratio_red:[.1,100],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],
+  vol_ratio_red:[.1,100],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],signal_single_open:[0,1],
   hy_red:[0,10000],vix_green:[0,200],vix_yellow:[0,200],vix_red:[0,200],dca_every:[0,10000]};
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
 function settingsError(){
@@ -767,6 +778,7 @@ function renderSettings(){
   SET_KEYS.forEach(k=>{
     const el=$('set_'+k);if(!el)return;
     if(k==='use_realtime')el.value=String(SET[k]||0);
+    else if(k==='signal_single_open')el.value=String(SET[k]?1:0);
     else if(k==='dca_every')el.value=SET[k]?String(SET[k]):'';
     else el.value=SET[k];
   });
@@ -776,6 +788,7 @@ function collectSettings(){
     const el=$('set_'+k);if(!el)return;
     const v=String(el.value).trim();
     if(k==='use_realtime'){SET[k]=v==='0'?0:1;return;}
+    if(k==='signal_single_open'){SET[k]=v==='0'?0:1;return;}
     if(k==='dca_start'){                 // 日期格式不对就保持原值
       if(v===''||DATE_RE.test(v))SET[k]=v;
       return;

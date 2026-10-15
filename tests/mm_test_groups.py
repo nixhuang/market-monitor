@@ -4470,7 +4470,11 @@ class TestSignalCounts(unittest.TestCase):
         pairs = re.findall(r'<tr><td>.*?</tr><tr class="signal-members-row"><td colspan="5">.*?</td></tr>', output, re.S)
         self.assertEqual(len(pairs), 2)
         self.assertIn('button.closest("tr")', monitor.PAGE_INTERACTION_JS)
-        self.assertIn('owner.querySelectorAll(".signal-count-toggle[data-target]")', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('scope.querySelectorAll(".signal-count-toggle[data-target]")', monitor.PAGE_INTERACTION_JS)
+        # 2026-10-15：展开范围受设置控制——默认关掉整块统计面板里已打开的，关掉开关只收同一行的
+        self.assertIn('window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('const scope = (singleOpen && button.closest("#signalCounts")) || owner;',
+                      monitor.PAGE_INTERACTION_JS)
         self.assertIn('panel.hidden = !opening', monitor.PAGE_INTERACTION_JS)
         self.assertIn('button.setAttribute("aria-expanded", String(opening))', monitor.PAGE_INTERACTION_JS)
         self.assertIn('.signal-members-panel[hidden]{display:none}', monitor.PAGE_CSS)
