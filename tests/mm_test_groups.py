@@ -1167,7 +1167,7 @@ class TestGroups(unittest.TestCase):
         tech = head('technology')
         self.assertIn('20日对.SPX +1.8%', tech)
         self.assertIn('class="rs-spy up"', tech)
-        self.assertLess(tech.index('stat-dot red'), tech.index('rs-spy'))      # 在红黄灯后面
+        self.assertLess(tech.index('stat-badge red'), tech.index('rs-spy'))    # 在红黄灯后面
         self.assertIn('XLK 20日 +5.2% − 标普500 +3.4% = +1.8 个百分点', tech)
         self.assertIn('class="rs-spy down"', head('healthcare'))
         self.assertIn('20日对.SPX -3.0%', head('healthcare'))
@@ -1686,8 +1686,8 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('沿用缓存', note({'fetch_error': True, 'fetched': None}))
         self.assertIn('读取失败，沿用缓存（上次成功取数 2026-10-01）',
                       note({'fetch_error': True, 'fetched': '2026-10-01'}))
-        self.assertIn('财报已到期，等待供应商更新报告期',
-                      note({'event_date': '2026-10-15', 'fetched': '2026-10-01'}))
+        self.assertEqual(note({'event_date': '2026-10-15', 'fetched': '2026-10-01'}),
+                         '财报已到期2026-10-01待更新')
         self.assertEqual(note({}), '')
         self.assertEqual(note(None), '')
         # 一次都没取到过：重试间隔内不再取，过了间隔再确认一次
@@ -2147,7 +2147,7 @@ class TestGroups(unittest.TestCase):
     def test_macro_collapses_and_shows_only_existing_alert_counts(self):
         quiet = monitor.render({}, [], 0)
         summary = quiet.split('id="macroCard"', 1)[1].split('</summary>', 1)[0]
-        self.assertIn('<span>市场风险</span>', summary)
+        self.assertIn('<span class="grp-name">市场风险</span>', summary)
         self.assertNotIn('open', summary)
         self.assertNotIn('红', summary)
         self.assertNotIn('黄', summary)
@@ -2621,7 +2621,7 @@ class TestTargets(unittest.TestCase):
         t = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True}
         with_pur = self._page([self._row('PUR', 'green', True, t, ['在共识价 160 ±3% 内（偏离 +0.0%）'])])
         self.assertIn('aria-label="紫色警示 1 项"', with_pur)
-        self.assertIn('stat-dot purple', with_pur.split('</style>')[1])
+        self.assertIn('stat-badge purple', with_pur.split('</style>')[1])
         without = self._page([self._row('AAPL', 'red', signals=['异动 +5.0%'])])
         self.assertNotIn('紫色警示', without)
         self.assertNotIn('stat-dot purple', without.split('</style>')[1])
@@ -2955,9 +2955,12 @@ class TestCacheAudit(unittest.TestCase):
     def test_fund_cache_warning_visible_even_without_red_yellow(self):
         row = self._row('AAA')
         row['fund_cache_note'] = '读取失败，沿用缓存 <旧>'
-        markup = monitor._row_tags(row, {})
+        # 2026-10-15：基本面状态挪到财报列显示，名称列只留名称/备注/加减仓标签
+        markup = monitor._earnings_html(row)
         self.assertIn('读取失败，沿用缓存', markup)
         self.assertIn('&lt;旧&gt;', markup)
+        self.assertIn('基本面：', markup)
+        self.assertNotIn('基本面', monitor._row_tags(row, {}))
 
     def test_first_post_event_fetch_establishes_baseline_not_completion(self):
         events = {'AAA': ['2026-10-09']}
@@ -3915,7 +3918,7 @@ class TestSignalCounts(unittest.TestCase):
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         page = monitor.render({}, [], 0, snapshot=snap)
         self.assertIn('id="signalCounts"', page)
-        self.assertIn('<span>统计</span>', page)
+        self.assertIn('<span class="grp-name">统计</span>', page)
         self.assertIn('仅此一条黄灯', page)
         self.assertLess(page.index('id="signalCounts"'), page.index('class="foot"'))
         # 没有任何信号 / 旧快照没有该字段：整块不显示
@@ -3985,10 +3988,11 @@ class TestSignalCounts(unittest.TestCase):
             panel = monitor._signal_counts_card(snap)
             self.assertIn('<details class="earnings-week"><summary>未来一周财报 · 2 只</summary>', panel)
             self.assertNotIn('<details class="earnings-week" open>', panel)
-            self.assertIn('<summary class="grp"><span>统计</span><span class="group-stats">'
-                          '<span class="count-total count-red">红 0</span><span class="count-total count-yellow">黄 0</span>'
-                          '<span class="count-total count-purple">紫 0</span><span class="count-total count-earn">财报 2</span>'
-                          '</span></summary>', panel)
+            self.assertIn('<summary class="grp"><span class="grp-name">统计</span><span class="group-stats">'
+                          '<span class="stat-badge red" aria-label="红 0 项">0</span>'
+                          '<span class="stat-badge yellow" aria-label="黄 0 项">0</span>', panel)
+            self.assertIn('紫 0', panel)          # 无紫灯总数时按目标价紫色计数补
+            self.assertIn('财报 2', panel)
             old = monitor._signal_counts_card({'summary': {'red': 4, 'yellow': 32},
                                                'signal_counts': {'target': {'label': '目标价', 'purple': 3}}})
             for text in ('红 4', '黄 32', '紫 3', '财报 —'):  # 旧快照无紫总数/财报名单时不冒充0

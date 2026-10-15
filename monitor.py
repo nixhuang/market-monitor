@@ -1703,7 +1703,7 @@ def _fund_cache_note(cache):
         return "该源暂无财报数据"
     if cache.get("fetch_error"):
         return f"读取失败，沿用缓存（上次成功取数 {last}）"
-    return f"财报已到期，等待供应商更新报告期（上次成功取数 {last or '未知'}）"
+    return f"财报已到期{last or '未知'}待更新"
 
 
 def update_fundamentals(symbols, prev=None, today=None, earnings_events=None):
@@ -4156,6 +4156,9 @@ td.px{text-align:center}
   .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:10.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
   .stk td.sig{font-size:12.5px;line-height:1.45}
   .stk .fund-detail summary{padding:6px 7px}
+  .group-card>summary.grp,.macro-card>summary.grp{gap:7px;padding:12px 10px}
+  .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:7px}
+  .stat-badge{min-width:20px;height:20px;padding:0 5px;font-size:12px}
 }
 .fund-context{margin-top:6px;color:var(--dim)}
 .up{color:var(--up)} .down{color:var(--down)}
@@ -4220,6 +4223,16 @@ tr.gray td{color:var(--dim)}
 .group-card>summary .group-stats{margin-left:6px;display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
 .group-card>summary .rs-spy{margin-left:auto}
 .stat-count{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+/* 灯级计数徽章：数字放在灯色圆里 */
+.stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
+  min-width:21px;height:21px;padding:0 6px;border-radius:999px;font-size:12.5px;font-weight:700;
+  line-height:1;font-variant-numeric:tabular-nums;color:#fff}
+.stat-badge.red{background:var(--red)} .stat-badge.purple{background:var(--purple)}
+.stat-badge.gray{background:var(--dim)}
+.stat-badge.yellow{background:var(--yellow);color:#241d05}
+.stat-badge.green{background:var(--green);color:#08240f}
+/* 分组标题：名称不参与挤压，避免手机上「IT软硬Ai (27)」被拆成两行 */
+.group-card>summary .grp-name,.macro-card>summary .grp-name{white-space:nowrap;flex:none}
 .rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
 .rs-spy.up{color:var(--up)} .rs-spy.down{color:var(--down)}
 .stat-dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
@@ -4372,11 +4385,11 @@ def _dedupe_items(items):
 
 
 def _row_tags(d, snapshot):
-    """名称旁的小标签：ETF、无数据、参考值、日线日期。"""
+    """名称旁的小标签：ETF、无数据、参考值、日线日期。
+
+    2026-10-15：财报类状态说明（基本面取数状态）不再放这里，统一挪到「财报」列。"""
     # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
     tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
-    if d.get("fund_cache_note"):
-        tag += f'<span class="unit">基本面：{html_lib.escape(str(d["fund_cache_note"]))}</span>'
     if d.get("price") is None:
         tag += '<span class="tag quote-note">无数据</span>'
     elif d.get("reference_only"):
@@ -4413,14 +4426,19 @@ def _fund_detail_html(d):
 
 
 def _earnings_html(d):
+    """财报列：主行是财报日期/时段，副行优先放基本面取数状态（2026-10-15 从名称列挪过来）。
+
+    有基本面状态时副行就写它，否则仍是财报本身的那句说明（预计/估算/未取得…）。
+    """
     earn = earnings_label(d.get("earnings"))
-    if not earn:
+    fund_note = html_lib.escape(str(d.get("fund_cache_note") or "")).strip()
+    if not earn and not fund_note:
         return ""
     soon = " soon" if earnings_soon(d.get("earnings")) else ""
-    e = d.get("earnings") or {}
-    # 2026-10-15：说明文字精简后不再挂「官方来源」链接，官方来源仍在 status.json 里留痕。
-    return (f'<span class="earn{soon}">'
-            f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}</span></span>')
+    main = html_lib.escape(earn[0]) if earn else ""
+    sub = f"基本面：{fund_note}" if fund_note else (html_lib.escape(earn[1]) if earn else "")
+    unit = f'<span class="unit">{sub}</span>' if sub else ""
+    return f'<span class="earn{soon}">{main}{unit}</span>'
 
 
 def _signal_text_html(text):
@@ -4507,17 +4525,20 @@ def _stock_rows(lst, snapshot):
     return out or '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
 
 
+def _count_badge(level, count, label):
+    """灯级计数徽章：数字直接放在灯色圆里（比「圆点 + 数字」省版面，手机上一眼看到数）。"""
+    return (f'<span class="stat-badge {level}" aria-label="{html_lib.escape(label)} {count} 项">'
+            f'{count}</span>')
+
+
 def _group_stats_html(g, group, items_by_symbol, enabled):
     """分组标题右侧的小圆点计数：红、黄、灰、紫，板块组再跟「相对标普500的强弱」。"""
-    stats = ''.join(
-        f'<span class="stat-count" aria-label="{label} {count} 项">'
-        f'<i class="stat-dot {lv}" aria-hidden="true"></i>{count}</span>'
-        for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "无数据"))
-        if (count := sum(d["level"] == lv for d in g)))
+    stats = ''.join(_count_badge(lv, count, label)
+                    for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "无数据"))
+                    if (count := sum(d["level"] == lv for d in g)))
     # 紫色（目标价 / 共识价警示）：条数跟在红黄灯后面；一条都没有就不显示
     if (n_pur := sum(bool(d.get("purple")) for d in g)):
-        stats += (f'<span class="stat-count" aria-label="紫色警示 {n_pur} 项">'
-                  f'<i class="stat-dot purple" aria-hidden="true"></i>{n_pur}</span>')
+        stats += _count_badge("purple", n_pur, "紫色警示")
     # 板块组：红黄灯后面跟「板块 ETF 近 20 日相对标普500的强弱」，折叠时也能看到
     rs = (items_by_symbol.get(group["sector_etf"]) or {}).get("rs_spy") if group.get("sector_etf") else None
     if rs:
@@ -4590,7 +4611,7 @@ def _group_card(group, g, items_by_symbol, snapshot):
     stats = _group_stats_html(g, group, items_by_symbol, enabled)
     # 打开网页时只展开「统计」；所有分组（含持仓、重点）默认折叠。一周内财报只让绿灯股留在可见表。
     return (f'<details class="card group-card" id="group_{group["key"]}">'
-            f'<summary class="grp"><span>{group["label"]} ({len(g)})</span>'
+            f'<summary class="grp"><span class="grp-name">{group["label"]} ({len(g)})</span>'
             f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
 
 
@@ -4846,9 +4867,11 @@ def _signal_counts_card(snapshot):
         purple = whole(((counts.get("target") or {}) if isinstance(counts, dict) else {}).get("purple"))
     totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
               ("purple", "紫", purple), ("earn", "财报", _earnings_week_panel(snapshot, count_only=True)))
-    stats = "".join(f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>'
-                    for key, name, n in totals)
-    return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span>统计</span>'
+    stats = "".join(
+        (_count_badge(key, n, name) if n is not None and key in ("red", "yellow", "purple")
+         else f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>')
+        for key, name, n in totals)
+    return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'
             f'<span class="group-stats">{stats}</span></summary>'
             f'{f"<table>{head}{rows}</table>" if rows else ""}{filter_html}{earnings_panel}'
             f'{_collapse_button("signalCounts", "统计")}</details>\n')
@@ -5054,7 +5077,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 
 {signal_card}
 <details class="card macro-card" id="macroCard">
-<summary class="grp"><span>市场风险</span><span class="group-stats">{macro_stats}</span>{dca_title}</summary>
+<summary class="grp"><span class="grp-name">市场风险</span><span class="group-stats">{macro_stats}</span>{dca_title}</summary>
 <p class="macro-help" id="marketRiskReason">{html_lib.escape(risk['text'])} · 有效指标 {risk['valid_count']}/5</p>
 <table>
 <tr class="gray mh"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">变化</td><td style="color:var(--dim)">状态</td></tr>
