@@ -9,13 +9,13 @@
     "next_in": 11,
     "next_date": "2026-10-29"
   },
-  "run_id": "38702515901",
+  "run_id": "38709388680",
   "request_id": "",
-  "source_sha": "310cc91048d3662ae922e4602a4736e7d82a140f",
-  "started_at": "2026-10-15T07:59:42+00:00",
-  "started_at_bj": "2026-10-15T15:59:42+08:00",
-  "finished_at": "2026-10-15T16:03:09.951747+08:00",
-  "finished_at_bj": "2026-10-15T16:03:09+08:00",
+  "source_sha": "0f423188f562718d0550f4d166f72b59c6e301dd",
+  "started_at": "2026-10-15T08:57:27+00:00",
+  "started_at_bj": "2026-10-15T16:57:27+08:00",
+  "finished_at": "2026-10-15T16:59:10.741773+08:00",
+  "finished_at_bj": "2026-10-15T16:59:10+08:00",
   "event": "push",
   "target_trade_date": "2026-10-14",
   "mode": "closed",
@@ -188,8 +188,8 @@
   },
   "summary": {
     "red": 12,
-    "yellow": 32,
-    "green": 56,
+    "yellow": 34,
+    "green": 54,
     "gray": 0,
     "purple": 2,
     "total": 100,
@@ -236,7 +236,7 @@
       "red": 0,
       "yellow": 32,
       "purple": 0,
-      "sole_yellow": 21
+      "sole_yellow": 20
     },
     "boll_rsi": {
       "label": "布林+RSI",
@@ -255,9 +255,9 @@
     "ma_band": {
       "label": "长均线触及",
       "red": 0,
-      "yellow": 5,
+      "yellow": 11,
       "purple": 0,
-      "sole_yellow": 2
+      "sole_yellow": 4
     },
     "low52": {
       "label": "52周低位",
@@ -316,7 +316,7 @@
               "label": "2026-10-14股价下跌3.40%"
             }
           ],
-          "metric": "量比 1.5×（2026-10-14完整日）"
+          "metric": "量比 1.6×（2026-10-14完整日）"
         },
         {
           "symbol": "XLK",
@@ -389,7 +389,7 @@
               "label": "2026-10-14股价下跌3.40%"
             }
           ],
-          "metric": "量比 1.5×（2026-10-14完整日）"
+          "metric": "量比 1.6×（2026-10-14完整日）"
         },
         {
           "symbol": "TER",
@@ -1091,20 +1091,6 @@
             }
           ],
           "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "XLI",
-          "note": "工业精选行业ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "GEHC",
@@ -1499,9 +1485,74 @@
       "red": [],
       "yellow": [
         {
+          "symbol": "XLI",
+          "note": "工业精选行业ETF",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "cyan",
+              "label": "现价在均线下方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "COST",
+          "note": "好市多",
+          "group": "focus",
+          "level": "red",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "现价在均线上方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "QCOM",
+          "note": "高通",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "现价在均线上方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "COHR",
+          "note": "Coherent-光器件",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "cyan",
+              "label": "现价在均线下方，日内触及"
+            }
+          ]
+        },
+        {
           "symbol": "CIEN",
           "note": "Ciena-光网络",
           "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "现价在均线上方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "XLF",
+          "note": "金融精选行业ETF",
+          "group": "financials",
           "level": "yellow",
           "indicators": [
             {
@@ -1538,6 +1589,19 @@
           ]
         },
         {
+          "symbol": "CAT",
+          "note": "卡特彼勒",
+          "group": "industrials",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "cyan",
+              "label": "现价在均线下方，日内触及"
+            }
+          ]
+        },
+        {
           "symbol": "XLB",
           "note": "原材料精选行业ETF",
           "group": "materials",
@@ -1567,9 +1631,35 @@
       "purple": [],
       "sole_yellow": [
         {
+          "symbol": "QCOM",
+          "note": "高通",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "现价在均线上方，日内触及"
+            }
+          ]
+        },
+        {
           "symbol": "CIEN",
           "note": "Ciena-光网络",
           "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "现价在均线上方，日内触及"
+            }
+          ]
+        },
+        {
+          "symbol": "XLF",
+          "note": "金融精选行业ETF",
+          "group": "financials",
           "level": "yellow",
           "indicators": [
             {
@@ -1787,7 +1877,7 @@
     "sp500": "2026-10-14",
     "ust10": "2026-10-14",
     "nfci": "2026-10-02",
-    "breadth": "2026-10-13"
+    "breadth": "2026-10-14"
   },
   "treasury_reference": {
     "ok": true,
@@ -1878,8 +1968,8 @@
     "checked": 19,
     "red": 4,
     "yellow": 6,
-    "fetched": 2,
-    "cached": 18,
+    "fetched": 1,
+    "cached": 19,
     "data": {
       "BRK-B": {
         "attempted": "2026-10-13",
@@ -2328,6 +2418,65 @@
             }
           }
         }
+      },
+      "UNH": {
+        "attempted": "2026-10-15",
+        "fetched": "2026-10-15",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$112,032,000",
+              "value5": "$113,161,000"
+            },
+            "Income Tax": {
+              "value2": "$1,298,000",
+              "value5": "$686,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "32.73529%",
+              "value5": "29.34138%"
+            },
+            "Operating Margin": {
+              "value2": "7.13278%",
+              "value5": "3.81315%"
+            },
+            "After Tax ROE": {
+              "value2": "5.57051%",
+              "value5": "2.45127%"
+            },
+            "Current Ratio": {
+              "value2": "NaN",
+              "value5": "NaN"
+            },
+            "Profit Margin": {
+              "value2": "4.89503%",
+              "value5": "2.07492%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$11,052,000",
+              "value5": "$5,945,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$203,778,000",
+              "value5": "$209,456,000"
+            },
+            "Total Equity": {
+              "value2": "$98,447,000",
+              "value5": "$95,787,000"
+            }
+          }
+        },
+        "event_date": "2026-10-13",
+        "event_base": "2026-06-30",
+        "event_checked": "2026-10-15"
       },
       "UBER": {
         "attempted": "2026-10-13",
@@ -2889,65 +3038,6 @@
           }
         }
       },
-      "UNH": {
-        "attempted": "2026-10-15",
-        "fetched": "2026-10-15",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$112,032,000",
-              "value5": "$113,161,000"
-            },
-            "Income Tax": {
-              "value2": "$1,298,000",
-              "value5": "$686,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "32.73529%",
-              "value5": "29.34138%"
-            },
-            "Operating Margin": {
-              "value2": "7.13278%",
-              "value5": "3.81315%"
-            },
-            "After Tax ROE": {
-              "value2": "5.57051%",
-              "value5": "2.45127%"
-            },
-            "Current Ratio": {
-              "value2": "NaN",
-              "value5": "NaN"
-            },
-            "Profit Margin": {
-              "value2": "4.89503%",
-              "value5": "2.07492%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$11,052,000",
-              "value5": "$5,945,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$203,778,000",
-              "value5": "$209,456,000"
-            },
-            "Total Equity": {
-              "value2": "$98,447,000",
-              "value5": "$95,787,000"
-            }
-          }
-        },
-        "event_date": "2026-10-13",
-        "event_base": "2026-06-30",
-        "event_checked": "2026-10-15"
-      },
       "TSM": {
         "event_date": "2026-10-15",
         "event_base": "",
@@ -2960,10 +3050,10 @@
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 20,
+      "due": 17,
       "deferred": 17,
-      "tried": 3,
-      "ok": 3,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -3731,8 +3821,8 @@
     "dated": 72,
     "pending": 11,
     "failed": 0,
-    "fetched": 3,
-    "cached": 80,
+    "fetched": 0,
+    "cached": 83,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -4302,17 +4392,17 @@
       "JPM": [
         "2026-10-13"
       ],
+      "GS": [
+        "2026-10-13"
+      ],
       "JNJ": [
         "2026-10-13"
       ],
-      "GS": [
+      "UNH": [
         "2026-10-13"
       ],
       "TSM": [
         "2026-10-15"
-      ],
-      "UNH": [
-        "2026-10-13"
       ]
     }
   },
@@ -4358,6 +4448,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-15T16:00:24.417215+08:00"
+    "assessed_at": "2026-10-15T16:58:20.771850+08:00"
   }
 }
