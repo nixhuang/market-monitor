@@ -1453,6 +1453,7 @@ def fund_rule(key):
 
 
 _FUND_CACHE = {}
+_SA_FUND_CACHE = {}   # 备用财报源单独缓存：Nasdaq 缓存的 None 不能挡住兜底
 _FUND_TLS = threading.local()
 
 
@@ -1526,6 +1527,110 @@ FUND_POLL_DAYS = 3        # 常规新季报轮询间隔；已知财报后先按�
 FUND_NO_DATA_RETRY_DAYS = 7  # 源一次都没给过数据（如外国发行人 TSM）时的重试间隔，别天天试
 FUND_MAX_AGE_DAYS = 30    # 无事件时的最大正常复用期；抓取失败的旧值需明确标注
 FUND_EVENT_DAILY_DAYS = 14  # 财后两周每日检查，供应商长期未推进则退回每 3 天，事件不丢失
+
+
+# 备用财报源：stockanalysis.com 的季度报表页（服务端渲染的 HTML 表格）。
+# Nasdaq 的财报接口不覆盖外国发行人（TSM 交 20-F 不是 10-Q），实测返回空，用它兜底。
+# 单位：stockanalysis 给「百万」，Nasdaq 给「千」，所以金额一律 ×1000 对齐；
+# 百分比（毛利率/营业利润率/净利率/ROE）和倍数（流动比率）原样带过去。
+SA_FIN_URL = "https://stockanalysis.com/stocks/{slug}/financials/{page}/?p=quarterly"
+SA_FIN_ROWS = {
+    "income-statement": {"Revenue": ("inc", "Total Revenue", 1000.0),
+                         "Income Tax Expense": ("inc", "Income Tax", 1000.0),
+                         "Gross Margin": ("rt", "Gross Margin", None),
+                         "Operating Margin": ("rt", "Operating Margin", None),
+                         "Profit Margin": ("rt", "Profit Margin", None)},
+    "balance-sheet": {"Total Liabilities": ("bs", "Total Liabilities", 1000.0),
+                      "Shareholders' Equity": ("bs", "Total Equity", 1000.0)},
+    "cash-flow-statement": {"Operating Cash Flow": ("cf", "Net Cash Flow-Operating", 1000.0)},
+    "ratios": {"Current Ratio": ("rt", "Current Ratio", None),
+               "Return on Equity (ROE)": ("rt", "After Tax ROE", None)},
+}
+_SA_MONTH = {m: i for i, m in enumerate(
+    "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(), 1)}
+
+
+def _sa_period_end(text):
+    """stockanalysis 的列头 "Jun '26 Jun 30, 2026" → "6/30/2026"（与 Nasdaq 同格式）。"""
+    m = re.search(r"([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})", str(text))
+    if not m:
+        return ""
+    month = _SA_MONTH.get(m.group(1).title())
+    return f"{month}/{int(m.group(2))}/{m.group(3)}" if month else ""
+
+
+def _sa_parse_table(html, wanted):
+    """季度报表页 → ({标签: {期间结束日: 原始值}}, [期间结束日...])。
+
+    一页里有多张表，每张开头都有一行 Period Ending 给出各列对应的日期，
+    所以按文档顺序跟踪「当前列 → 日期」，避免直接按下标取值错列。
+    """
+    rows, dates = {}, []
+    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", html or "", re.S):
+        cells = [re.sub(r"<[^>]+>", "", c).strip()
+                 for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", tr, re.S)]
+        if len(cells) < 2:
+            continue
+        label = cells[0]
+        if label == "Period Ending":
+            dates = [_sa_period_end(c) for c in cells[1:]]
+            continue
+        if label in wanted and dates:
+            rows.setdefault(label, {}).update({d: v for d, v in zip(dates, cells[1:]) if d})
+    return rows, [d for d in dates if d]
+
+
+def stockanalysis_financials(sym, timeout=12):
+    """备用源取最近 4 个季度财报，结构对齐 nasdaq_financials；取不到返回 None。
+
+    只在 Nasdaq 没有数据时使用（外国发行人 / 该源缺页），不改变 Nasdaq 能取到时的任何数字。
+    """
+    key = normalize_symbol(sym).upper()
+    if key in _SA_FUND_CACHE:
+        return _SA_FUND_CACHE[key]
+    slug = key.lower().replace(".", "-").replace(" ", "-")
+    picked, all_dates = {}, []
+    try:
+        for page, wanted in SA_FIN_ROWS.items():
+            r = _fund_session().get(SA_FIN_URL.format(slug=slug, page=page), timeout=timeout)
+            if r.status_code != 200:
+                continue
+            rows, dates = _sa_parse_table(r.text, wanted)
+            # 只认第一张表（利润表）的列日期：比率页多一列「当前」快照(如 10/14/2026)，
+            # 拿它当最新季会跟其他三张表对不上。各表都按日期对齐取值，不看列下标。
+            if dates and not all_dates:
+                all_dates = dates
+            picked.update(rows)
+    except Exception as e:
+        log(f"  · {key} 备用财报源读取失败：{str(e)[:60]}")
+    res = None
+    # Nasdaq 只给最近 4 个季度：value2 = 最新季，value5 = 3 个季度前
+    if len(all_dates) >= 4 and picked:
+        now, base = all_dates[0], all_dates[3]
+        out = {"period": now, "base_period": base,
+               "inc": {}, "bs": {}, "cf": {}, "rt": {}}
+        def conv(v, scale):
+            if v in (None, "", "-", "--"):
+                return None
+            n = _fund_num(v)
+            if n is None:
+                return str(v)
+            return f"{n * scale:,.0f}" if scale else str(v)
+
+        for page_map in SA_FIN_ROWS.values():
+            for label, (table, target, scale) in page_map.items():
+                cell = picked.get(label) or {}
+                out[table][target] = {"value2": conv(cell.get(now), scale),
+                                      "value5": conv(cell.get(base), scale)}
+        if out["inc"].get("Total Revenue", {}).get("value2"):
+            res = out
+    _SA_FUND_CACHE[key] = res
+    return res
+
+
+def financials_any_source(sym, timeout=12):
+    """先 Nasdaq，取不到再上备用源；两处调用（缓存刷新 / 判定）共用，避免口径不一致。"""
+    return nasdaq_financials(sym, timeout) or stockanalysis_financials(sym, timeout)
 
 
 def compact_financials(f):
@@ -1621,7 +1726,12 @@ def update_fundamentals(symbols, prev=None, today=None, earnings_events=None):
 
     def fetch(k):
         try:
-            return compact_financials(nasdaq_financials(k))
+            raw = nasdaq_financials(k)
+            if raw is None:
+                raw = stockanalysis_financials(k)
+                if raw:
+                    log(f"  · {k} 用备用财报源（Nasdaq 无数据，多为外国发行人）")
+            return compact_financials(raw)
         except Exception as e:
             log(f"  ! {k} 基本面读取异常，沿用旧值：{str(e)[:60]}")
             return None
@@ -2073,7 +2183,8 @@ def fundamental_check(sym, facts=None):
     # ETF / 基金没有财报，直接跳过，省掉一次必然无结果的请求
     if is_etf(sym):
         return None
-    f = nasdaq_financials(sym) if facts is None else facts   # 传入 facts（含 {}）时不再联网
+    f = nasdaq_financials(sym) if facts is None else facts   # 传入 facts（含 {}）时不再联网；
+    # 备用源只在 update_fundamentals 刷新缓存那条路上用（那里才需要覆盖 Nasdaq 不收录的标的）
     if not f:
         return None
     inc, bs, cf, rt = f["inc"], f["bs"], f["cf"], f["rt"]

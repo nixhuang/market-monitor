@@ -1411,7 +1411,9 @@ class TestGroups(unittest.TestCase):
         def fetch(sym):
             asked.append(sym)
             return None if sym == 'MSFT' else dict(fresh, period='9/30/2026')
-        with patch.object(monitor, 'nasdaq_financials', side_effect=fetch):
+        # 备用源也要关掉：这个用例断言的是「Nasdaq 取不到就沿用旧值」，不能让它真去联网兜底
+        with patch.object(monitor, 'nasdaq_financials', side_effect=fetch), \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None):
             facts, stat = monitor.update_fundamentals(['AAPL', 'MSFT', 'NEW'], prev, today)
         self.assertEqual(sorted(asked), ['MSFT', 'NEW'])                   # AAPL 命中缓存
         self.assertEqual((stat['fetched'], stat['cached']), (2, 1))
@@ -1419,7 +1421,8 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(stat['data']['MSFT']['fetched'], '2026-09-01')    # 没取到：沿用旧数据，不刷新时间
         self.assertIn('MSFT', facts)
         for bad in (None, [], 'x', {'AAPL': 'x'}, {'AAPL': {'data': 1}}):
-            with patch.object(monitor, 'nasdaq_financials', return_value=None):
+            with patch.object(monitor, 'nasdaq_financials', return_value=None), \
+                    patch.object(monitor, 'stockanalysis_financials', return_value=None):
                 monitor.update_fundamentals(['AAPL'], bad, today)
 
     def test_daily_source_validation_and_intraday_fallback(self):
@@ -1695,6 +1698,80 @@ class TestGroups(unittest.TestCase):
         # 有缓存的失败仍按天重试，不受这条影响
         self.assertTrue(due({'fetch_error': True, 'fetched': '2026-10-01', 'attempted': '2026-10-10',
                              'event_date': '2026-10-09'}, '2026-10-12'))
+
+    def test_stockanalysis_fallback_when_nasdaq_returns_nothing(self):
+        """Nasdaq 财报接口不覆盖的标的（外国发行人，如 TSM）由 stockanalysis 季度表兜底。
+
+        单位：stockanalysis 是「百万」，Nasdaq 是「千」（AAPL 实测 109,417 vs $109,417,000），
+        所以金额 ×1000；百分比和倍数原样带过去。各表按「期间结束日」对齐，不按列下标。
+        """
+        from unittest.mock import MagicMock
+
+        dates = ["Jun '26 Jun 30, 2026", "Mar '26 Mar 31, 2026",
+                 "Dec '25 Dec 31, 2025", "Sep '25 Sep 30, 2025"]
+
+        def page(rows, extra=None):
+            cols = ([extra] + dates) if extra else dates
+            out = ['<table>', '<tr><th>Fiscal Quarter</th>' + ''.join(f'<th>{c}</th>' for c in cols) + '</tr>',
+                   '<tr><td>Period Ending</td>' + ''.join(f'<td>{c}</td>' for c in cols) + '</tr>']
+            for label, vals in rows:
+                out.append(f'<tr><td>{label}</td>' + ''.join(f'<td>{v}</td>' for v in vals) + '</tr>')
+            return "".join(out) + '</table>'
+
+        pages = {
+            'income-statement': page([('Revenue', ['1,270,380', '1,134,103', '1,046,090', '989,918']),
+                                      ('Income Tax Expense', ['155,649', '114,998', '107,212', '73,614']),
+                                      ('Gross Margin', ['67.72%', '66.25%', '62.33%', '59.45%']),
+                                      ('Operating Margin', ['60.34%', '58.10%', '53.92%', '50.58%']),
+                                      ('Profit Margin', ['55.62%', '50.48%', '46.41%', '45.69%'])]),
+            'balance-sheet': page([('Total Liabilities', ['2,901,184', '2,728,561', '2,536,623', '2,318,529']),
+                                   ("Shareholders' Equity", ['6,474,471', '5,932,389', '5,396,219', '5,035,578'])]),
+            'cash-flow-statement': page([('Operating Cash Flow', ['783,365', '698,976', '725,509', '426,829'])]),
+            # 比率页多一列「当前」快照(10/14)，必须按日期取值而不是按列下标
+            'ratios': page([('Current Ratio', ['2.46', '2.46', '2.49', '2.51', '2.69']),
+                            ('Return on Equity (ROE)', ['45.57%', '40.45%', '37.20%', '37.44%', '34.50%'])],
+                           extra="Oct '26 Oct 14, 2026"),
+        }
+        monitor._SA_FUND_CACHE.clear()
+        self.addCleanup(monitor._SA_FUND_CACHE.clear)
+
+        def get(url, timeout=None):
+            resp = MagicMock()
+            hit = next((v for k, v in pages.items() if '/' + k + '/' in url), None)
+            resp.status_code = 200 if hit else 404
+            resp.text = hit or ''
+            return resp
+
+        with patch.object(monitor, '_fund_session') as sess, \
+                patch.object(monitor, 'nasdaq_financials', return_value=None):
+            sess.return_value.get.side_effect = get
+            f = monitor.financials_any_source('TSM')
+        self.assertIsNotNone(f, "Nasdaq 没数据时必须走备用源")
+        self.assertEqual(f['period'], '6/30/2026')
+        self.assertEqual(f['base_period'], '9/30/2025')
+        self.assertEqual(f['inc']['Total Revenue']['value2'], '1,270,380,000')   # 百万 → 千
+        self.assertEqual(f['inc']['Total Revenue']['value5'], '989,918,000')
+        self.assertEqual(f['cf']['Net Cash Flow-Operating']['value2'], '783,365,000')
+        self.assertEqual(f['bs']['Total Equity']['value2'], '6,474,471,000')
+        self.assertEqual(f['rt']['Operating Margin']['value2'], '60.34%')         # 百分比原样
+        self.assertEqual(f['rt']['After Tax ROE']['value2'], '40.45%')            # 6/30 那列，不是首列
+        self.assertEqual(f['rt']['Current Ratio']['value2'], '2.46')
+        # 备用源的数据能直接喂给判定（生产里就是 update_fundamentals 刷新后这样传）
+        got = monitor.fundamental_check('TSM', monitor.compact_financials(f))
+        self.assertIsNotNone(got)
+        self.assertEqual(got['period'], '6/30/2026')
+        self.assertEqual(got['level'], 'green')
+
+    def test_stockanalysis_not_consulted_when_nasdaq_has_data(self):
+        """Nasdaq 取得到就绝不动用备用源，数字口径保持原样。"""
+        from unittest.mock import MagicMock
+        monitor._SA_FUND_CACHE.clear()
+        self.addCleanup(monitor._SA_FUND_CACHE.clear)
+        with patch.object(monitor, 'nasdaq_financials', return_value={'period': '6/27/2026', 'inc': {}}) as nas, \
+                patch.object(monitor, 'stockanalysis_financials') as sa:
+            monitor.financials_any_source('AAPL')
+        nas.assert_called_once()
+        sa.assert_not_called()
 
     def test_intraday_summary_and_per_stock_fallback_labels(self):
         rows = [dict(symbol=s, note=s, group='position', price=price, chg=0, level=level,
@@ -2850,7 +2927,9 @@ class TestCacheAudit(unittest.TestCase):
 
     def test_fundamental_failure_keeps_event_and_old_timestamp(self):
         prev = {'AAA': {'fetched': '2026-10-01', 'data': self._financials()}}
-        with patch.object(monitor, 'nasdaq_financials', return_value=None):
+        # 备用源也关掉：这个用例要的是「Nasdaq 取不到 → 保留旧值和事件」
+        with patch.object(monitor, 'nasdaq_financials', return_value=None), \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None):
             facts, st = monitor.update_fundamentals(['AAA'], prev, '2026-10-10', {'AAA': ['2026-10-09']})
         self.assertEqual(facts['AAA']['period'], '6/30/2026')
         entry = st['data']['AAA']
