@@ -9,13 +9,13 @@
     "next_in": 11,
     "next_date": "2026-10-29"
   },
-  "run_id": "38717543936",
+  "run_id": "38719564168",
   "request_id": "",
-  "source_sha": "6d31a6687b706efae6aad31c995266bf4a0c2c8f",
-  "started_at": "2026-10-15T10:03:46+00:00",
-  "started_at_bj": "2026-10-15T18:03:46+08:00",
-  "finished_at": "2026-10-15T18:04:42.929833+08:00",
-  "finished_at_bj": "2026-10-15T18:04:42+08:00",
+  "source_sha": "63e66a946c57c51195903123f77d1697f20b24f5",
+  "started_at": "2026-10-15T10:20:29+00:00",
+  "started_at_bj": "2026-10-15T18:20:29+08:00",
+  "finished_at": "2026-10-15T18:21:31.342825+08:00",
+  "finished_at_bj": "2026-10-15T18:21:31+08:00",
   "event": "push",
   "target_trade_date": "2026-10-14",
   "mode": "closed",
@@ -1961,11 +1961,11 @@
       ]
     ],
     "source": "NFCI周度数据（FRED同步备用）",
-    "checked_at": "2026-10-15T05:10:10.181656-04:00",
+    "checked_at": "2026-10-15T06:21:14.243740-04:00",
     "result": "pending"
   },
   "fundamental": {
-    "checked": 19,
+    "checked": 20,
     "red": 4,
     "yellow": 6,
     "fetched": 1,
@@ -3040,10 +3040,62 @@
       },
       "TSM": {
         "event_date": "2026-10-15",
-        "event_base": "",
+        "event_base": "2026-06-30",
         "attempted": "2026-10-15",
         "event_checked": "2026-10-15",
-        "fetch_error": true
+        "fetched": "2026-10-15",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "1,270,380,000",
+              "value5": "989,918,000"
+            },
+            "Income Tax": {
+              "value2": "155,649,000",
+              "value5": "73,614,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "67.72%",
+              "value5": "59.45%"
+            },
+            "Operating Margin": {
+              "value2": "60.34%",
+              "value5": "50.58%"
+            },
+            "After Tax ROE": {
+              "value2": "40.45%",
+              "value5": "34.50%"
+            },
+            "Current Ratio": {
+              "value2": "2.46",
+              "value5": "2.69"
+            },
+            "Profit Margin": {
+              "value2": "55.62%",
+              "value5": "45.69%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "783,365,000",
+              "value5": "426,829,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "2,901,184,000",
+              "value5": "2,318,529,000"
+            },
+            "Total Equity": {
+              "value2": "6,474,471,000",
+              "value5": "5,035,578,000"
+            }
+          }
+        }
       }
     }
   },
@@ -4389,10 +4441,7 @@
       }
     },
     "events": {
-      "TSM": [
-        "2026-10-15"
-      ],
-      "GS": [
+      "JPM": [
         "2026-10-13"
       ],
       "UNH": [
@@ -4401,7 +4450,10 @@
       "JNJ": [
         "2026-10-13"
       ],
-      "JPM": [
+      "TSM": [
+        "2026-10-15"
+      ],
+      "GS": [
         "2026-10-13"
       ]
     }
@@ -4448,6 +4500,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-15T18:04:36.466633+08:00"
+    "assessed_at": "2026-10-15T18:21:14.243740+08:00"
   }
 }
