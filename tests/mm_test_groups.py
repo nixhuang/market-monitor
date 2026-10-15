@@ -1620,9 +1620,9 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(run('2026-10-10T01:45:00+00:00'), 0)   # 夏令时美东21:45
         self.assertEqual(run('2026-12-10T00:45:00+00:00'), 0)   # 冬令时美东19:45
 
-    def test_ensure_schedule_run_dispatches_when_daily_bar_lags(self):
-        """结果存在但日线仍停在目标交易日之前（数据源未刷新）时，只在美东 20:00-21:00 窗口内补跑。"""
+    def test_ensure_schedule_run_only_acts_inside_pause_window(self):
         import tempfile
+        from unittest.mock import MagicMock
         real = monitor.datetime
 
         def at(iso):
@@ -1632,152 +1632,23 @@ class TestGroups(unittest.TestCase):
                     return real.fromisoformat(iso)
             return F
 
-        def run(iso, actual):
-            """actual=None 不写快照；'target' 表示日线已到目标日；其余日期表示日线落后。"""
+        def run(iso):
             get = MagicMock()
             get.return_value.json.return_value = {'workflow_runs': []}
             post = MagicMock()
-            target = monitor.plan_run('schedule', real.fromisoformat(iso))['target']
             with tempfile.TemporaryDirectory() as tmp, \
                     patch.object(monitor, 'BASE', tmp), \
                     patch.object(monitor, 'datetime', at(iso)), \
                     patch.object(monitor.requests, 'get', get), \
                     patch.object(monitor.requests, 'post', post):
-                if actual is not None:
-                    day = target if actual == 'target' else actual
-                    with open(os.path.join(tmp, 'status.json'), 'w', encoding='utf-8') as f:
-                        json.dump({'target_trade_date': target, 'mode': 'closed',
-                                   'summary': {'total': 100},
-                                   'actual_dates': {'min': day, 'max': day}}, f)
                 self.assertEqual(monitor.ensure_schedule_run(), 0)
             return post.call_count
-
-        # 夏令时美东 20:45：日线已到目标日不补跑，日线落后则补跑
-        self.assertEqual(run('2026-10-10T00:45:00+00:00', 'target'), 0)
-        self.assertEqual(run('2026-10-10T00:45:00+00:00', '2026-10-08'), 1)
-        # 冬令时美东 20:45（UTC 01:45）同样有效
-        self.assertEqual(run('2026-12-10T01:45:00+00:00', '2026-12-08'), 1)
-        # 抓取只允许在美东 20:00-21:00：美东 22:30 那两档（夏/冬）一律不跑
-        self.assertEqual(run('2026-10-10T02:30:00+00:00', '2026-10-08'), 0)
-        self.assertEqual(run('2026-12-10T03:30:00+00:00', '2026-12-08'), 0)
-        # 错季节时点（美东 19:45）也不跑
-        self.assertEqual(run('2026-12-10T00:45:00+00:00', 'target'), 0)
-
-    def test_fetch_history_records_lag_when_no_source_has_target_bar(self):
-        """收盘口径下所有源都停在目标日之前：仍返回最新日线，但要记进滞后统计而不是当成已抓到。"""
-        from datetime import date, timedelta
-
-        def hist(last):
-            d = date.fromisoformat(last)
-            dates, closes = [], []
-            while len(dates) < 40:
-                if d.weekday() < 5:
-                    dates.append(d.isoformat())
-                    closes.append(round(100 + len(dates) * 0.1, 2))
-                d -= timedelta(days=1)
-            dates.reverse()
-            closes.reverse()
-            return {"dates": dates, "closes": closes,
-                    "highs": [round(c * 1.01, 4) for c in closes],
-                    "lows": [round(c * 0.99, 4) for c in closes],
-                    "volumes": [1000000.0] * len(closes),
-                    "price": closes[-1], "prev_close": closes[-2], "currency": "USD"}
-
-        monitor._LAG.clear()
-        monitor._LAG_SRC.clear()
-        self.addCleanup(monitor._LAG.clear)
-        self.addCleanup(monitor._LAG_SRC.clear)
-        with patch.object(monitor, 'CLOSED_ONLY', True), \
-                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'nasdaq_history', return_value=None), \
-                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-13')), \
-                patch.object(monitor, 'stooq_history', return_value=None):
-            data = monitor.fetch_history('AAPL')
-        self.assertEqual(data['dates'][-1], '2026-10-13')
-        self.assertEqual(monitor.lag_summary(), {'2026-10-13': ['AAPL']})
-        # 滞后要能分源看：这轮是 yahoo 停在 10-13，nasdaq 没给出可用日线
-        self.assertEqual(monitor.lag_source_summary()['yahoo'],
-                         {'latest': '2026-10-13', 'symbols': 1})
-        self.assertNotIn('nasdaq', monitor.lag_source_summary())
-        # 源补齐到目标日时不再记滞后
-        monitor._LAG.clear()
-        monitor._LAG_SRC.clear()
-        with patch.object(monitor, 'CLOSED_ONLY', True), \
-                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'nasdaq_history', return_value=None), \
-                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
-                patch.object(monitor, 'stooq_history', return_value=None):
-            self.assertEqual(monitor.fetch_history('AAPL')['dates'][-1], '2026-10-14')
-        self.assertEqual(monitor.lag_summary(), {})
-
-    def test_us_symbols_always_try_yahoo_before_nasdaq(self):
-        """美股/ETF 收盘与盘中都是 Yahoo → stooq → Nasdaq；指数/期货只走 Yahoo。
-
-        2026-10-15 曾把 Nasdaq 提到收盘首位，同一轮 api.nasdaq.com 读超时 72 次白烧预算，
-        且 Nasdaq 日线不带 ma_range_valid，暴露 52 周区间判废的 bug，已撤回。
-        """
-        from datetime import date, timedelta
-
-        def hist(last):
-            d = date.fromisoformat(last)
-            dates, closes = [], []
-            while len(dates) < 40:
-                if d.weekday() < 5:
-                    dates.append(d.isoformat())
-                    closes.append(round(100 + len(dates) * 0.1, 2))
-                d -= timedelta(days=1)
-            dates.reverse()
-            closes.reverse()
-            return {"dates": dates, "closes": closes,
-                    "highs": [round(c * 1.01, 4) for c in closes],
-                    "lows": [round(c * 0.99, 4) for c in closes],
-                    "volumes": [1000000.0] * len(closes),
-                    "price": closes[-1], "prev_close": closes[-2], "currency": "USD"}
-
-        monitor._LAG.clear()
-        monitor._LAG_SRC.clear()
-        self.addCleanup(monitor._LAG.clear)
-        self.addCleanup(monitor._LAG_SRC.clear)
-        # 收盘口径：Yahoo 给出目标日 bar 就直接用，不再问 Nasdaq
-        with patch.object(monitor, 'CLOSED_ONLY', True), \
-                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
-                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')) as nas, \
-                patch.object(monitor, 'stooq_history', return_value=None):
-            data = monitor.fetch_history('AAPL')
-        self.assertEqual(data['source'], 'yahoo')
-        self.assertEqual(data['dates'][-1], '2026-10-14')
-        nas.assert_not_called()
-        # Yahoo 只有前一日：先试 stooq，再回退 Nasdaq，并记下 Yahoo 的滞后
-        monitor._LAG_SRC.clear()
-        with patch.object(monitor, 'CLOSED_ONLY', True), \
-                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-13')), \
-                patch.object(monitor, 'stooq_history', return_value=None), \
-                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')):
-            data = monitor.fetch_history('AAPL')
-        self.assertEqual(data['source'], 'nasdaq')
-        self.assertEqual(data['dates'][-1], '2026-10-14')
-        self.assertEqual(monitor.lag_source_summary()['yahoo'],
-                         {'latest': '2026-10-13', 'symbols': 1})
-        # 盘中口径同样是 Yahoo 优先
-        with patch.object(monitor, 'CLOSED_ONLY', False), \
-                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'apply_realtime', side_effect=lambda s, d: d), \
-                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
-                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')) as nas2, \
-                patch.object(monitor, 'stooq_history', return_value=None):
-            data = monitor.fetch_history('AAPL')
-        self.assertEqual(data['source'], 'yahoo')
-        nas2.assert_not_called()
-        # 期货/指数不碰 Nasdaq（那个源没有期货与指数日线）
-        with patch.object(monitor, 'CLOSED_ONLY', True), \
-                patch.object(monitor, 'TARGET_DATE', '2026-10-14'), \
-                patch.object(monitor, 'nasdaq_history', return_value=hist('2026-10-14')) as nas3, \
-                patch.object(monitor, 'yahoo_history', return_value=hist('2026-10-14')), \
-                patch.object(monitor, 'stooq_history', return_value=None):
-            monitor.fetch_history('ESMAIN')
-        nas3.assert_not_called()
+        # 对的时点：夏令时 00:45 UTC(美东20:45)、冬令时 01:45 UTC(美东20:45) -> 结果缺失才补派发
+        self.assertEqual(run('2026-10-10T00:45:00+00:00'), 1)
+        self.assertEqual(run('2026-12-10T01:45:00+00:00'), 1)
+        # 错季节或被拖过21:00的时点：什么都不做
+        self.assertEqual(run('2026-10-10T01:45:00+00:00'), 0)   # 夏令时美东21:45
+        self.assertEqual(run('2026-12-10T00:45:00+00:00'), 0)   # 冬令时美东19:45
 
     def test_intraday_summary_and_per_stock_fallback_labels(self):
         rows = [dict(symbol=s, note=s, group='position', price=price, chg=0, level=level,
@@ -3507,31 +3378,6 @@ class TestMaConfirm(unittest.TestCase):
             previous = monitor.trim_history(got, dates[-2])
             x = monitor._analysis_context('T', {}, previous, 'technology')
             self.assertEqual(monitor._ma_day_range(x), (99, 101, True))
-
-    def test_trim_history_keeps_missing_validity_key_missing(self):
-        """回归：源本身没给 ma_range_valid 时，裁剪不能补成空列表。
-
-        2026-10-15 收盘主源改 Nasdaq 后，Nasdaq 数据没有 ma_range_valid，
-        trim_history 补成 []，被 52周区间和日内高低判断当成「有效位全缺」，
-        结果 100 行里 74 行丢掉位置条。源没给就保持缺失。
-        """
-        from datetime import date as _date, timedelta as _td
-        n = 400          # 跨度要过 357 天，scope 才会是「52周」而不是「可用历史」
-        dates = [(_date(2026, 10, 14) - _td(days=i)).isoformat() for i in range(n)][::-1]
-        data = {'dates': dates, 'closes': [100.0] * n, 'highs': [101.0] * n,
-                'lows': [99.0] * n, 'volumes': [1000] * n, 'price': 100.0,
-                'prev_close': 100.0}          # 故意不带 ma_range_valid（Nasdaq 就是这样）
-        out = monitor.trim_history(data, dates[-1])
-        self.assertIsNotNone(out)
-        self.assertNotIn('ma_range_valid', out)
-        r = monitor._range52_from_history(out)
-        self.assertIsNotNone(r, "源没给有效位时仍要能算 52 周区间")
-        self.assertEqual(r['scope'], '52周')
-        x = monitor._analysis_context('T', {}, out, 'technology')
-        self.assertEqual(monitor._ma_day_range(x), (99.0, 101.0, True))  # 日内高低也不该被误判缺失
-        # 防御：万一别处还是补了空列表，下游也要当「没给」处理
-        empty = dict(out, ma_range_valid=[])
-        self.assertIsNotNone(monitor._range52_from_history(empty))
 
     def test_long_ma_intraday_touch_and_cross_integrate_without_new_red(self):
         closes = self.flat(last=(99, 105))

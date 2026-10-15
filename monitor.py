@@ -94,7 +94,6 @@ class SourceGate:
 
 YAHOO_GATE = SourceGate(threshold=3, cooldown=90)
 STOOQ_GATE = SourceGate(threshold=3, cooldown=3600)
-NASDAQ_GATE = SourceGate(threshold=4, cooldown=60)
 
 
 UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
@@ -254,17 +253,11 @@ def prepare_run():
 
 def ensure_schedule_run():
     """保险：GitHub 定时任务可能被延迟或丢弃。若今晚（美东20:00之后）的收盘结果还没生成，
-    或结果已生成但日线仍停在目标交易日之前（数据源当日 bar 未落地），就补派发一次等价运行；
-    结果已完整或已有任务在排队/运行则不重复派发。
-
-    检查窗口固定为美东 20:00-21:00：抓取只允许落在这个时段内，20:45 那一档保险会在窗口内
-    再给一次补齐机会（日线仍停在目标交易日之前就补派发一次）。窗口外一律不跑，避免抓到盘中价。
-    """
+    就补派发一次与定时任务等价的运行；已有结果或已有任务在排队/运行则不重复派发。"""
     now_ny = datetime.now(timezone.utc).astimezone(US_TZ)
-    minute_of_day = now_ny.hour * 60 + now_ny.minute
-    if not (20 * 60 <= minute_of_day < 21 * 60):
-        # 夏冬令时两组时点每天都会触发；不在检查窗口内（错季节的时点或被严重拖延）就什么都不做，避免抓到新一轮盘中价
-        print(f"美东 {now_ny:%H:%M} 不在 20:00-21:00 检查窗口内，不补跑")
+    if not 20 * 60 <= now_ny.hour * 60 + now_ny.minute < 21 * 60:
+        # 夏冬令时两组时点每天都会触发；不在休盘窗口内（错季节的时点或被严重拖延）就什么都不做，避免抓到新一轮盘中价
+        print(f"美东 {now_ny:%H:%M} 不在 20:00-21:00 休盘窗口内，不补跑")
         return 0
     plan = plan_run("schedule", datetime.now(timezone.utc))
     try:
@@ -274,12 +267,8 @@ def ensure_schedule_run():
         snap = {}
     if snap.get("target_trade_date") == plan["target"] and snap.get("mode") == "closed" \
             and (snap.get("summary") or {}).get("total"):
-        actual = snap.get("actual_dates") or {}
-        if actual.get("max") and actual["max"] >= plan["target"]:
-            print(f"目标交易日 {plan['target']} 的收盘结果已存在且日线已到该日，无需补跑")
-            return 0
-        print(f"目标交易日 {plan['target']} 的结果日线仍停在 {actual.get('max') or '未知'}，"
-              f"数据源尚未补齐当日 bar，等待补跑")
+        print(f"目标交易日 {plan['target']} 的收盘结果已存在，无需补跑")
+        return 0
     repo, token = os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GH_TOKEN", "")
     headers = {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"}
     base = f"https://api.github.com/repos/{repo}/actions/workflows/daily.yml"
@@ -310,11 +299,7 @@ def trim_history(data, cutoff):
         return None
     out = dict(data)
     for key in ("dates", "closes", "volumes", "highs", "lows", "ma_range_valid"):
-        seq = data.get(key)
-        # 源本身没有这个字段就别补：补成空列表会被下游当成「有效位全缺」，
-        # 52周区间和日内高低判断会整体失效（Nasdaq 主源因此整片丢位置条）。
-        if seq is None:
-            continue
+        seq = data.get(key) or []
         if seq and len(seq) != len(dates):
             return None
         out[key] = [seq[i] for i in keep] if seq else []
@@ -1301,12 +1286,7 @@ def nasdaq_history(symbol):
       - ETF（QQQ/SPY/TLT/HYG/SGOV/XLV）必须 assetclass=etf，股票用 stocks，逐个试
       - 返回行是「新→旧」，要反转成「旧→新」
       - BRK-B 这类含连字符的 B 股，这个源要写成 BRK.B，代码里已做变体尝试
-      - 它是第三级兜底源（Yahoo/stooq 都取不到时才用）；连续失败由 NASDAQ_GATE 熔断一小段时间。
-      - 2026-10-15 曾短暂把它提为收盘主源，实测 GitHub Actions 上读超时 72 次且不带
-        ma_range_valid（暴露 52 周区间判废 bug），已撤回；盘中实时价仍是 Nasdaq，不受影响。
     """
-    if not NASDAQ_GATE.allow():
-        return None
     end = NOW.date()
     start = end - timedelta(days=560)  # 留足 200 日均线所需的交易日
     base = ("https://api.nasdaq.com/api/quote/{s}/historical"
@@ -1322,10 +1302,6 @@ def nasdaq_history(symbol):
             url = base.format(s=sym, ac=ac, f=start.isoformat(), t=end.isoformat())
             try:
                 r = requests.get(url, headers=UA, timeout=quote_timeout(8))
-                if r.status_code in (403, 429, 503):
-                    if NASDAQ_GATE.fail():
-                        log("  ! Nasdaq 连续限流，暂停约60秒，期间改用 Yahoo/stooq")
-                    return None
                 r.raise_for_status()
                 j = r.json()
                 rows = ((j.get("data") or {}).get("tradesTable") or {}).get("rows") or []
@@ -1348,7 +1324,6 @@ def nasdaq_history(symbol):
                 if len(parsed) < 30:
                     continue
                 parsed.reverse()  # 旧 → 新
-                NASDAQ_GATE.ok()
                 return {
                     "closes": [p["c"] for p in parsed],
                     "dates": [p["d"] for p in parsed],
@@ -2198,27 +2173,6 @@ def valid_futures_identity(data, identity):
             and "CFD" not in str(data.get("quote_name", "")).upper())
 
 
-_LAG_LOCK = threading.Lock()
-_LAG = {}       # 日线停留日期 -> 标的集合；只在收盘口径且日线早于目标交易日时记录
-_LAG_SRC = {}   # 数据源 -> 日线停留日期 -> 标的集合：用来比较哪个源当日 bar 落地更早
-
-
-def lag_summary():
-    """本轮日线停在目标交易日之前的标的统计（数据源未刷新，与抓取失败区分开）。"""
-    with _LAG_LOCK:
-        return {d: sorted(syms) for d, syms in _LAG.items()}
-
-
-def lag_source_summary():
-    """按数据源统计各自最新的日线日期与标的数，用于判断哪个源当日 bar 落地更早。"""
-    with _LAG_LOCK:
-        out = {}
-        for src, by_date in _LAG_SRC.items():
-            best = max(by_date) if by_date else None
-            out[src] = {"latest": best, "symbols": sum(len(v) for v in by_date.values())}
-        return out
-
-
 def fetch_history(symbol):
     """普通标的 Yahoo → stooq → Nasdaq；指数／期货只取经映射的 Yahoo 日线。
 
@@ -2235,8 +2189,6 @@ def fetch_history(symbol):
     alias = INDEX_YAHOO_ALIAS.get(symbol) or (identity if identity.startswith('^') or is_future else None)
     if identity == '^TNX':
         return None  # 国债收益率不使用报价指数替代百分比口径。
-    # 普通标的 Yahoo → stooq → Nasdaq；只有指数／期货别名走单源 Yahoo。
-    # （2026-10-15 曾把 Nasdaq 提为收盘首位，实测不划算已撤回，盘中/收盘都不再区分）
     loaders = (("yahoo", yahoo_history),) if alias else (
         ("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history))
     fallback = None
@@ -2269,10 +2221,6 @@ def fetch_history(symbol):
         if CLOSED_ONLY:
             if data["dates"][-1] == TARGET_DATE:
                 return data
-            # 该源当天 bar 还没落地：记下来继续换源，最后取日期最新的那份，不静默当成已完成
-            with _LAG_LOCK:
-                _LAG.setdefault(data["dates"][-1], set()).add(symbol)
-                _LAG_SRC.setdefault(name, {}).setdefault(data["dates"][-1], set()).add(symbol)
         elif data["dates"][-1] == TARGET_DATE:
             return data if alias else apply_realtime(symbol, data)
         if fallback is None or data["dates"][-1] > fallback["dates"][-1]:
@@ -3060,7 +3008,7 @@ def completed_day_volume_ratio(sym, data, asof=None):
 def _range52_from_history(data):
     """仅用同一日线序列的真实高低价给价格位置条供数；缺失/错位不拿收盘价冒充极值。"""
     dates, highs, lows = (data.get(key) for key in ("dates", "highs", "lows"))
-    validity = data.get("ma_range_valid") or None   # 空列表当作「源没给有效位」，不当成整段无效
+    validity = data.get("ma_range_valid")
     price = data.get("price")
     valid_num = lambda value: (isinstance(value, (int, float)) and not isinstance(value, bool)
                                and math.isfinite(value) and value > 0)
@@ -3324,7 +3272,7 @@ def _ma_day_range(x):
     """只用与本轮收盘序列对齐的最后一根高低价；缺失/损坏退回现价，不冒充完整日内范围。"""
     data = getattr(x, "data", {})
     highs, lows = data.get("highs"), data.get("lows")
-    validity = data.get("ma_range_valid") or None   # 空列表当作「源没给有效位」，与缺失同处理
+    validity = data.get("ma_range_valid")
     if validity is not None and (not isinstance(validity, (list, tuple))
                                  or len(validity) != len(x.closes) or not validity or validity[-1] is not True):
         return x.price, x.price, False
@@ -5040,7 +4988,6 @@ def collect_quotes(symbols):
             time.sleep(3)
         YAHOO_GATE.reset(True)
         STOOQ_GATE.reset(True)
-        NASDAQ_GATE.reset(True)
         run(failed, max(1, QUOTE_WORKERS // 2), keep_better=True)
     done = sum(isinstance(v, dict) for v in results.values())
     log(f"行情抓取完成：成功 {done}/{len(symbols)}")
@@ -5131,7 +5078,6 @@ def main(argv=None):
         QUOTE_DEADLINE = time.monotonic() + QUOTE_BUDGET_SECONDS
         YAHOO_GATE.reset(True)
         STOOQ_GATE.reset(True)
-        NASDAQ_GATE.reset(True)
         to_fetch = [sym for sym, _, _ in universe
                     if quote_supported(sym) and instrument_identity(sym) != '^TNX']
         sector_etfs = {g["sector_etf"] for g in GROUPS if g.get("sector_etf")}
@@ -5155,7 +5101,6 @@ def main(argv=None):
             bench_data = fetched[spy_key]
         YAHOO_GATE.reset(False)
         STOOQ_GATE.reset(False)
-        NASDAQ_GATE.reset(False)
         # 先用旧共识价解析当前技术信号，为财报请求提供持仓/红黄优先级；刷新后仅重算变化项。
         for sym, sc, grp in universe:
             supported = quote_supported(sym)
@@ -5268,12 +5213,6 @@ def main(argv=None):
 
     snapshot = build_snapshot(macro, items, cfg, group_counts=group_counts)
     snapshot["nfci_cache"] = nfci_state
-    stale = lag_summary()
-    if stale:
-        snapshot["data_lag"] = {"target": TARGET_DATE,
-                                "stale_dates": {d: len(v) for d, v in stale.items()},
-                                "by_source": lag_source_summary(),
-                                "symbols": sum(len(v) for v in stale.values())}
     snapshot["fundamental"] = {**fund_stat, "data": fund_data}
     snapshot["consensus"] = {"source": CONSENSUS_SOURCE, "stat": cons_stat, "data": cons_data,
                              "quota": cons_stat.get("quota", _consensus_quota(prev_cons, quota_day))}
@@ -5290,12 +5229,6 @@ def main(argv=None):
     with open(status_path, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
         f.write("\n")
-    if stale:
-        worst = max(stale)
-        log(f"  ! 数据源日线未刷新：{sum(len(v) for v in stale.values())} 只标的的日线停在 {worst}"
-            f"（目标交易日 {TARGET_DATE}），本轮按已落地的最新日线显示")
-        for src, info in sorted((lag_source_summary() or {}).items()):
-            log(f"      {src}: 最新日线 {info['latest']}，{info['symbols']} 只未到目标交易日")
     log(f"已生成 {out} 与 {status_path}；目标交易日 {TARGET_DATE}，实际行情日期 {snapshot['actual_dates']}")
 
     try:
