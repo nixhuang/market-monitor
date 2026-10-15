@@ -310,7 +310,11 @@ def trim_history(data, cutoff):
         return None
     out = dict(data)
     for key in ("dates", "closes", "volumes", "highs", "lows", "ma_range_valid"):
-        seq = data.get(key) or []
+        seq = data.get(key)
+        # 源本身没有这个字段就别补：补成空列表会被下游当成「有效位全缺」，
+        # 52周区间和日内高低判断会整体失效（Nasdaq 主源因此整片丢位置条）。
+        if seq is None:
+            continue
         if seq and len(seq) != len(dates):
             return None
         out[key] = [seq[i] for i in keep] if seq else []
@@ -1820,19 +1824,19 @@ def earnings_label(e):
     if status == "unknown":
         return "日期待确认", "未取得"
     if status == "error":
-        return "日期暂未取得", "下一次财报日期本轮读取失败，不代表没有财报"
+        return "日期暂未取得", "本轮读取失败，不代表没有财报"
     year, month, day = e["date"].split("-")
     this_year = datetime.now(US_TZ).year
     date_txt = f"{month}/{day}" if int(year) == this_year else f"{year}/{month}/{day}"
     timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(e.get("timing"), "具体时段待定")
     nxt = (datetime(int(year), int(month), int(day)) + timedelta(days=1)).strftime("%m/%d")
-    bj = {"pre": f"北京时间约{month}/{day}傍晚至晚间", "post": f"北京时间约{nxt}凌晨",
-          "during": f"北京时间约{month}/{day}夜间至{nxt}凌晨"}.get(e.get("timing"), "北京时间待定")
-    kind = {"expected": "预计", "official": "官方财报活动日期"}.get(e.get("kind"), "估算")
+    # 说明文字按 2026-10-15 要求精简：只留来源性质 + 北京时间的落点，不写核实日期、钟点状态
+    bj = {"pre": f"北京 {month}/{day} 晚间", "post": f"北京 {nxt} 凌晨",
+          "during": f"北京 {month}/{day} 夜–{nxt} 凌晨"}.get(e.get("timing"), "北京 待定")
+    kind = {"expected": "预计", "official": "官方"}.get(e.get("kind"), "估算")
     if e.get("kind") == "official":
-        note = f"{kind} · 核实于{e.get('official_checked', '待确认')}；发布钟点未确认"
-        if e.get("official_error"):
-            note += " · 复查未取得新确认，保留已核验日期"
+        # 官方活动日期：不给钟点，也不再挂来源链接；复查没拿到新确认时多标一个「待复核」
+        note = "官方 · 待复核" if e.get("official_error") else "官方"
         return f"美东 {date_txt}", note
     return f"美东 {date_txt} {timing}", f"{kind} · {bj}"
 
@@ -3061,7 +3065,7 @@ def completed_day_volume_ratio(sym, data, asof=None):
 def _range52_from_history(data):
     """仅用同一日线序列的真实高低价给价格位置条供数；缺失/错位不拿收盘价冒充极值。"""
     dates, highs, lows = (data.get(key) for key in ("dates", "highs", "lows"))
-    validity = data.get("ma_range_valid")
+    validity = data.get("ma_range_valid") or None   # 空列表当作「源没给有效位」，不当成整段无效
     price = data.get("price")
     valid_num = lambda value: (isinstance(value, (int, float)) and not isinstance(value, bool)
                                and math.isfinite(value) and value > 0)
@@ -3325,7 +3329,7 @@ def _ma_day_range(x):
     """只用与本轮收盘序列对齐的最后一根高低价；缺失/损坏退回现价，不冒充完整日内范围。"""
     data = getattr(x, "data", {})
     highs, lows = data.get("highs"), data.get("lows")
-    validity = data.get("ma_range_valid")
+    validity = data.get("ma_range_valid") or None   # 空列表当作「源没给有效位」，与缺失同处理
     if validity is not None and (not isinstance(validity, (list, tuple))
                                  or len(validity) != len(x.closes) or not validity or validity[-1] is not True):
         return x.price, x.price, False
@@ -4330,13 +4334,9 @@ def _earnings_html(d):
         return ""
     soon = " soon" if earnings_soon(d.get("earnings")) else ""
     e = d.get("earnings") or {}
-    source = ""
-    sym = normalize_symbol(d.get("symbol") or "").upper()
-    url = earnings_sources._allowed_url(e.get("source_url"), sym) if e.get("kind") == "official" else None
-    if url:
-        source = f' <a href="{html_lib.escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">官方来源</a>'
+    # 2026-10-15：说明文字精简后不再挂「官方来源」链接，官方来源仍在 status.json 里留痕。
     return (f'<span class="earn{soon}">'
-            f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}{source}</span></span>')
+            f'{html_lib.escape(earn[0])}<span class="unit">{html_lib.escape(earn[1])}</span></span>')
 
 
 def _signal_text_html(text):

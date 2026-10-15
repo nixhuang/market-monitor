@@ -79,8 +79,12 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(kept['official_error'], 'http_429')
         self.assertEqual(kept['official_attempted'], '2030-10-20')
         html = monitor._earnings_html({'symbol': 'COST', 'earnings': kept})
-        self.assertIn('官方来源', html)
-        self.assertIn('保留已核验日期', html)
+        # 2026-10-15 精简：不再挂「官方来源」链接，说明只写「官方 · 待复核」
+        self.assertNotIn('官方来源', html)
+        self.assertNotIn('<a ', html)
+        self.assertIn('官方 · 待复核', html)
+        self.assertNotIn('核实于', html)
+        self.assertNotIn('发布钟点', html)
         self.assertNotIn('算法估算', html)
         self.assertNotIn('盘后', html)
 
@@ -938,7 +942,7 @@ class TestGroups(unittest.TestCase):
         text, note = monitor.earnings_label(dict(ok, date='2026-10-30'))
         self.assertIn('美东 10/30 盘后', text)
         self.assertNotIn('财报', text)   # 「财报」二字只写在表头
-        self.assertIn('北京时间约10/31凌晨', note)
+        self.assertIn('北京 10/31 凌晨', note)   # 2026-10-15 精简：北京时间说明去掉「约」与冗余字
         self.assertNotIn('不含具体钟点', note)
         self.assertNotIn('数据源只给', note)
         self.assertIn('具体时段待定', monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'})[0])
@@ -3499,6 +3503,31 @@ class TestMaConfirm(unittest.TestCase):
             previous = monitor.trim_history(got, dates[-2])
             x = monitor._analysis_context('T', {}, previous, 'technology')
             self.assertEqual(monitor._ma_day_range(x), (99, 101, True))
+
+    def test_trim_history_keeps_missing_validity_key_missing(self):
+        """回归：源本身没给 ma_range_valid 时，裁剪不能补成空列表。
+
+        2026-10-15 收盘主源改 Nasdaq 后，Nasdaq 数据没有 ma_range_valid，
+        trim_history 补成 []，被 52周区间和日内高低判断当成「有效位全缺」，
+        结果 100 行里 74 行丢掉位置条。源没给就保持缺失。
+        """
+        from datetime import date as _date, timedelta as _td
+        n = 400          # 跨度要过 357 天，scope 才会是「52周」而不是「可用历史」
+        dates = [(_date(2026, 10, 14) - _td(days=i)).isoformat() for i in range(n)][::-1]
+        data = {'dates': dates, 'closes': [100.0] * n, 'highs': [101.0] * n,
+                'lows': [99.0] * n, 'volumes': [1000] * n, 'price': 100.0,
+                'prev_close': 100.0}          # 故意不带 ma_range_valid（Nasdaq 就是这样）
+        out = monitor.trim_history(data, dates[-1])
+        self.assertIsNotNone(out)
+        self.assertNotIn('ma_range_valid', out)
+        r = monitor._range52_from_history(out)
+        self.assertIsNotNone(r, "源没给有效位时仍要能算 52 周区间")
+        self.assertEqual(r['scope'], '52周')
+        x = monitor._analysis_context('T', {}, out, 'technology')
+        self.assertEqual(monitor._ma_day_range(x), (99.0, 101.0, True))  # 日内高低也不该被误判缺失
+        # 防御：万一别处还是补了空列表，下游也要当「没给」处理
+        empty = dict(out, ma_range_valid=[])
+        self.assertIsNotNone(monitor._range52_from_history(empty))
 
     def test_long_ma_intraday_touch_and_cross_integrate_without_new_red(self):
         closes = self.flat(last=(99, 105))
