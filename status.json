@@ -9,13 +9,13 @@
     "next_in": 0,
     "next_date": "2026-10-15"
   },
-  "run_id": "38859511925",
+  "run_id": "38891151613",
   "request_id": "",
-  "source_sha": "612d0566ad3968ab6739192e6f81b17f554f0758",
-  "started_at": "2026-10-16T06:08:16+00:00",
-  "started_at_bj": "2026-10-16T14:08:16+08:00",
-  "finished_at": "2026-10-16T14:09:11.184428+08:00",
-  "finished_at_bj": "2026-10-16T14:09:11+08:00",
+  "source_sha": "8cc6813c4ddc23482aa28da4979db07245d859dc",
+  "started_at": "2026-10-16T11:02:27+00:00",
+  "started_at_bj": "2026-10-16T19:02:27+08:00",
+  "finished_at": "2026-10-16T19:03:13.111188+08:00",
+  "finished_at_bj": "2026-10-16T19:03:13+08:00",
   "event": "push",
   "target_trade_date": "2026-10-15",
   "mode": "closed",
@@ -40,6 +40,8 @@
     "target_gap_pct": 3.0,
     "vol_ratio": 1.5,
     "vol_ratio_red": 3.0,
+    "vol_ratio_z": 1.8,
+    "vol_ratio_red_z": 3.6,
     "amp_yellow": 6.0,
     "amp_red": 10.0,
     "ma_short": 0,
@@ -189,9 +191,9 @@
     "dca": 1
   },
   "summary": {
-    "red": 0,
-    "yellow": 40,
-    "green": 60,
+    "red": 1,
+    "yellow": 38,
+    "green": 61,
     "gray": 0,
     "purple": 3,
     "total": 100,
@@ -219,8 +221,8 @@
     },
     "vol_ratio": {
       "label": "量比",
-      "red": 0,
-      "yellow": 22,
+      "red": 1,
+      "yellow": 18,
       "purple": 0
     },
     "rsi": {
@@ -296,8 +298,37 @@
       "purple": []
     },
     "vol_ratio": {
-      "red": [],
+      "red": [
+        {
+          "symbol": "TSM",
+          "note": "台积电",
+          "group": "focus",
+          "level": "red",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-15股价下跌1.80%"
+            }
+          ],
+          "metric": "量比 2.3×（2026-10-15完整日）"
+        }
+      ],
       "yellow": [
+        {
+          "symbol": "APH",
+          "note": "安费诺",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-15股价下跌1.45%"
+            }
+          ],
+          "metric": "量比 1.3×（2026-10-15完整日）"
+        },
         {
           "symbol": "UNH",
           "note": "联合健康",
@@ -341,34 +372,6 @@
           "metric": "量比 2.8×（2026-10-15完整日）"
         },
         {
-          "symbol": "NXPI",
-          "note": "恩智浦半导体",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-10-15股价上涨4.65%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-15完整日）"
-        },
-        {
-          "symbol": "TSM",
-          "note": "台积电",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-15股价下跌1.80%"
-            }
-          ],
-          "metric": "量比 2.3×（2026-10-15完整日）"
-        },
-        {
           "symbol": "XLK",
           "note": "科技精选行业ETF",
           "group": "technology",
@@ -397,15 +400,15 @@
           "metric": "量比 1.7×（2026-10-15完整日）"
         },
         {
-          "symbol": "SNDK",
-          "note": "闪迪",
+          "symbol": "MU",
+          "note": "美光科技",
           "group": "technology",
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "▲",
               "tone": "white",
-              "label": "2026-10-15股价下跌0.61%"
+              "label": "2026-10-15股价上涨1.87%"
             }
           ],
           "metric": "量比 1.5×（2026-10-15完整日）"
@@ -453,20 +456,6 @@
           "metric": "量比 1.9×（2026-10-15完整日）"
         },
         {
-          "symbol": "LITE",
-          "note": "Lumentum-光模块",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-15股价下跌2.99%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-15完整日）"
-        },
-        {
           "symbol": "TER",
           "note": "泰瑞达",
           "group": "technology",
@@ -479,20 +468,6 @@
             }
           ],
           "metric": "量比 1.8×（2026-10-15完整日）"
-        },
-        {
-          "symbol": "LRCX",
-          "note": "拉姆研究",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-15股价下跌3.30%"
-            }
-          ],
-          "metric": "量比 1.5×（2026-10-15完整日）"
         },
         {
           "symbol": "ABBV",
@@ -535,20 +510,6 @@
             }
           ],
           "metric": "量比 1.6×（2026-10-15完整日）"
-        },
-        {
-          "symbol": "BX",
-          "note": "黑石",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-10-15股价上涨2.82%"
-            }
-          ],
-          "metric": "量比 1.7×（2026-10-15完整日）"
         },
         {
           "symbol": "CAT",
@@ -650,7 +611,7 @@
           "symbol": "TSM",
           "note": "台积电",
           "group": "focus",
-          "level": "yellow",
+          "level": "red",
           "direction": "下轨（超卖）",
           "boll_rsi_hits": 2
         },
@@ -1076,7 +1037,7 @@
           "symbol": "APH",
           "note": "安费诺",
           "group": "position",
-          "level": "green",
+          "level": "yellow",
           "fund_hits": [
             "负债/权益 1.16→1.88倍（2025/9→2026/6）"
           ],
@@ -1143,301 +1104,352 @@
       "kind": "boll_rsi",
       "shape": "▲",
       "detail": "突破布林上轨",
-      "group": "position"
-    },
-    {
-      "symbol": "APH",
-      "kind": "boll",
-      "shape": "▼",
-      "detail": "跌破布林下轨",
-      "group": "position"
+      "group": "position",
+      "note": "伯克希尔哈撒韦"
     },
     {
       "symbol": "AVGO",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "position"
+      "group": "position",
+      "note": "博通"
     },
     {
       "symbol": "CRSP",
       "kind": "boll",
       "shape": "▼",
       "detail": "逼近布林下轨 还差1.17%",
-      "group": "position"
+      "group": "position",
+      "note": "CRISPR-基因编辑"
     },
     {
       "symbol": "GOOGL",
       "kind": "boll",
       "shape": "▼",
       "detail": "逼近布林下轨 还差1.04%",
-      "group": "position"
+      "group": "position",
+      "note": "谷歌（Alphabet）"
     },
     {
       "symbol": "LMT",
       "kind": "boll",
       "shape": "▲",
       "detail": "逼近布林上轨 还差0.39%",
-      "group": "position"
+      "group": "position",
+      "note": "洛克希德马丁"
     },
     {
       "symbol": "NTNX",
       "kind": "boll",
       "shape": "▼",
       "detail": "逼近布林下轨 还差0.08%",
-      "group": "position"
+      "group": "position",
+      "note": "Nutanix-混合云"
     },
     {
       "symbol": "UBER",
       "kind": "boll",
       "shape": "▲",
       "detail": "逼近布林上轨 还差0.74%",
-      "group": "position"
+      "group": "position",
+      "note": "优步"
     },
     {
       "symbol": "SCHD",
       "kind": "boll",
       "shape": "▲",
       "detail": "突破布林上轨",
-      "group": "position"
+      "group": "position",
+      "note": "嘉信美国红利股票ETF"
     },
     {
       "symbol": "QQQM",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "position"
+      "group": "position",
+      "note": "景顺纳斯达克100指数ETF"
     },
     {
       "symbol": "GEHC",
       "kind": "boll",
       "shape": "▲",
       "detail": "突破布林上轨",
-      "group": "position"
+      "group": "position",
+      "note": "ge医疗"
+    },
+    {
+      "symbol": "NXPI",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "position",
+      "note": "恩智浦半导体"
     },
     {
       "symbol": "PDD",
       "kind": "boll",
       "shape": "▲",
       "detail": "盘中突破布林上轨",
-      "group": "focus"
+      "group": "focus",
+      "note": "拼多多"
     },
     {
       "symbol": "AAPL",
       "kind": "boll",
       "shape": "▲",
       "detail": "盘中突破布林上轨",
-      "group": "focus"
+      "group": "focus",
+      "note": "苹果"
     },
     {
       "symbol": "SYK",
       "kind": "boll",
       "shape": "▲",
       "detail": "突破布林上轨",
-      "group": "focus"
+      "group": "focus",
+      "note": "医疗机器人"
     },
     {
       "symbol": "ESMAIN",
       "kind": "boll",
       "shape": "▼",
       "detail": "逼近布林下轨 还差0.49%",
-      "group": "index_funds"
+      "group": "index_funds",
+      "note": "标普500期货主连·日线"
     },
     {
       "symbol": "IBIT",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "index_funds"
+      "group": "index_funds",
+      "note": "iShares比特币ETF"
     },
     {
       "symbol": "SNOW",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "technology"
-    },
-    {
-      "symbol": "MU",
-      "kind": "boll",
-      "shape": "▼",
-      "detail": "跌破布林下轨",
-      "group": "technology"
+      "group": "technology",
+      "note": "Snowflake-数据云"
     },
     {
       "symbol": "CRWD",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "technology"
+      "group": "technology",
+      "note": "CrowdStrike-终端安全"
     },
     {
       "symbol": "ARM",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "technology"
+      "group": "technology",
+      "note": "Arm Holdings-芯片架构"
+    },
+    {
+      "symbol": "LITE",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology",
+      "note": "Lumentum-光模块"
     },
     {
       "symbol": "MRVL",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "technology"
+      "group": "technology",
+      "note": "迈威尔科技"
     },
     {
       "symbol": "PANW",
       "kind": "boll",
       "shape": "▼",
       "detail": "逼近布林下轨 还差0.24%",
-      "group": "technology"
+      "group": "technology",
+      "note": "Palo Alto-网络安全"
     },
     {
       "symbol": "NVDA",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "technology"
+      "group": "technology",
+      "note": "英伟达"
     },
     {
       "symbol": "XLV",
       "kind": "boll",
       "shape": "▲",
       "detail": "突破布林上轨",
-      "group": "healthcare"
+      "group": "healthcare",
+      "note": "医疗保健精选行业ETF"
     },
     {
       "symbol": "ISRG",
       "kind": "boll",
       "shape": "▲",
       "detail": "逼近布林上轨 还差0.22%",
-      "group": "healthcare"
+      "group": "healthcare",
+      "note": "直觉外科"
     },
     {
       "symbol": "CB",
       "kind": "boll_rsi",
       "shape": "▲",
       "detail": "突破布林上轨",
-      "group": "financials"
+      "group": "financials",
+      "note": "安达保险"
     },
     {
       "symbol": "AXP",
       "kind": "boll",
       "shape": "▲",
       "detail": "盘中突破布林上轨",
-      "group": "financials"
+      "group": "financials",
+      "note": "美国运通"
+    },
+    {
+      "symbol": "BX",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差1.09%",
+      "group": "financials",
+      "note": "黑石"
     },
     {
       "symbol": "SPGI",
       "kind": "boll",
       "shape": "▲",
       "detail": "突破布林上轨",
-      "group": "financials"
+      "group": "financials",
+      "note": "标普全球"
     },
     {
       "symbol": "GS",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "financials"
+      "group": "financials",
+      "note": "高盛"
     },
     {
       "symbol": "COIN",
       "kind": "boll",
       "shape": "▼",
       "detail": "跌破布林下轨",
-      "group": "financials"
+      "group": "financials",
+      "note": "Coinbase-加密交易所"
     },
     {
       "symbol": "XLE",
       "kind": "boll",
       "shape": "▲",
       "detail": "盘中突破布林上轨",
-      "group": "energy"
+      "group": "energy",
+      "note": "能源精选行业ETF"
     },
     {
       "symbol": "XOM",
       "kind": "boll",
       "shape": "▲",
       "detail": "盘中突破布林上轨",
-      "group": "energy"
+      "group": "energy",
+      "note": "埃克森美孚"
     },
     {
       "symbol": "AXON",
       "kind": "boll",
       "shape": "▼",
       "detail": "逼近布林下轨 还差1.12%",
-      "group": "industrials"
+      "group": "industrials",
+      "note": "Axon-执法科技"
     },
     {
       "symbol": "HEI",
       "kind": "boll",
       "shape": "▲",
       "detail": "逼近布林上轨 还差0.91%",
-      "group": "industrials"
+      "group": "industrials",
+      "note": "HEICO-航空零部件"
     },
     {
       "symbol": "SPCX",
       "kind": "boll",
       "shape": "▼",
       "detail": "逼近布林下轨 还差0.69%",
-      "group": "industrials"
+      "group": "industrials",
+      "note": "SpaceX-商业航天"
     },
     {
       "symbol": "LIN",
       "kind": "boll",
       "shape": "▲",
       "detail": "盘中突破布林上轨",
-      "group": "materials"
+      "group": "materials",
+      "note": "林德-工业气体"
     },
     {
       "symbol": "XLU",
       "kind": "boll",
       "shape": "▲",
       "detail": "逼近布林上轨 还差0.25%",
-      "group": "utilities"
+      "group": "utilities",
+      "note": "公用事业精选行业ETF"
     },
     {
       "symbol": "KO",
       "kind": "boll_rsi",
       "shape": "▲",
       "detail": "突破布林上轨",
-      "group": "consumer_staples"
+      "group": "consumer_staples",
+      "note": "可口可乐"
     },
     {
       "symbol": "TTWO",
       "kind": "boll",
       "shape": "▲",
       "detail": "逼近布林上轨 还差0.59%",
-      "group": "communications"
+      "group": "communications",
+      "note": "Take-Two-游戏"
     },
     {
       "symbol": "NFLX",
       "kind": "boll",
       "shape": "▲",
       "detail": "逼近布林上轨 还差0.84%",
-      "group": "communications"
+      "group": "communications",
+      "note": "奈飞"
     },
     {
       "symbol": "XLY",
       "kind": "boll",
       "shape": "▲",
       "detail": "逼近布林上轨 还差0.14%",
-      "group": "consumer_discretionary"
+      "group": "consumer_discretionary",
+      "note": "非必需消费精选行业ETF"
     },
     {
       "symbol": "BKNG",
       "kind": "boll",
       "shape": "▲",
       "detail": "盘中突破布林上轨",
-      "group": "consumer_discretionary"
+      "group": "consumer_discretionary",
+      "note": "Booking-在线旅游"
     },
     {
       "symbol": "TSLA",
       "kind": "boll",
       "shape": "▼",
       "detail": "逼近布林下轨 还差1.01%",
-      "group": "consumer_discretionary"
+      "group": "consumer_discretionary",
+      "note": "特斯拉"
     }
   ],
   "earnings_week": {
@@ -1546,7 +1558,7 @@
         "symbol": "BX",
         "note": "黑石",
         "group": "financials",
-        "level": "yellow",
+        "level": "green",
         "date": "2026-10-22",
         "timing": "pre",
         "kind": "expected"
@@ -1581,7 +1593,7 @@
     "sp500": "2026-10-15",
     "ust10": "2026-10-15",
     "nfci": "2026-10-09",
-    "breadth": "2026-10-14"
+    "breadth": "2026-10-15"
   },
   "treasury_reference": {
     "ok": true,
@@ -1672,233 +1684,9 @@
     "checked": 22,
     "red": 4,
     "yellow": 7,
-    "fetched": 18,
-    "cached": 4,
+    "fetched": 0,
+    "cached": 22,
     "data": {
-      "AVGO": {
-        "attempted": "2026-10-10",
-        "fetched": "2026-10-10",
-        "data": {
-          "period": "8/2/2026",
-          "base_period": "11/2/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$29,591,000",
-              "value5": "$18,015,000"
-            },
-            "Income Tax": {
-              "value2": "$2,187,000",
-              "value5": "-$1,649,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "69.12913%",
-              "value5": "67.99334%"
-            },
-            "Operating Margin": {
-              "value2": "53.91842%",
-              "value5": "41.67638%"
-            },
-            "After Tax ROE": {
-              "value2": "13.1287%",
-              "value5": "10.47828%"
-            },
-            "Current Ratio": {
-              "value2": "250.37432%",
-              "value5": "170.53581%"
-            },
-            "Profit Margin": {
-              "value2": "44.22966%",
-              "value5": "47.28282%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$14,197,000",
-              "value5": "$7,703,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$88,458,000",
-              "value5": "$89,800,000"
-            },
-            "Total Equity": {
-              "value2": "$99,690,000",
-              "value5": "$81,292,000"
-            }
-          }
-        }
-      },
-      "NTNX": {
-        "attempted": "2026-10-10",
-        "fetched": "2026-10-10",
-        "data": {
-          "period": "7/31/2026",
-          "base_period": "10/31/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$757,078",
-              "value5": "$670,576"
-            },
-            "Income Tax": {
-              "value2": "-$1,186,917",
-              "value5": "$3,478"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "86.03486%",
-              "value5": "86.95599%"
-            },
-            "Operating Margin": {
-              "value2": "9.24462%",
-              "value5": "7.35711%"
-            },
-            "After Tax ROE": {
-              "value2": "180.71381%",
-              "value5": "-9.28708%"
-            },
-            "Current Ratio": {
-              "value2": "179.8304%",
-              "value5": "188.5197%"
-            },
-            "Profit Margin": {
-              "value2": "167.70161%",
-              "value5": "9.2601%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$315,013",
-              "value5": "$196,825"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$4,371,120",
-              "value5": "$3,992,620"
-            },
-            "Total Equity": {
-              "value2": "$702,565",
-              "value5": "-$668,628"
-            }
-          }
-        }
-      },
-      "ZS": {
-        "attempted": "2026-10-10",
-        "fetched": "2026-10-10",
-        "data": {
-          "period": "7/31/2026",
-          "base_period": "10/31/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$898,185",
-              "value5": "$788,112"
-            },
-            "Income Tax": {
-              "value2": "$18,273",
-              "value5": "$3,241"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "76.73486%",
-              "value5": "76.55752%"
-            },
-            "Operating Margin": {
-              "value2": "-1.72481%",
-              "value5": "-4.61381%"
-            },
-            "After Tax ROE": {
-              "value2": "-.12966%",
-              "value5": "-.58593%"
-            },
-            "Current Ratio": {
-              "value2": "169.89884%",
-              "value5": "182.41311%"
-            },
-            "Profit Margin": {
-              "value2": "-.37509%",
-              "value5": "-1.47378%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$279,285",
-              "value5": "$448,280"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$5,268,453",
-              "value5": "$4,520,759"
-            },
-            "Total Equity": {
-              "value2": "$2,598,261",
-              "value5": "$1,982,328"
-            }
-          }
-        }
-      },
-      "COST": {
-        "attempted": "2026-10-10",
-        "fetched": "2026-10-10",
-        "data": {
-          "period": "8/30/2026",
-          "base_period": "11/23/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$95,723,000",
-              "value5": "$67,307,000"
-            },
-            "Income Tax": {
-              "value2": "$1,011,000",
-              "value5": "$582,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "12.73675%",
-              "value5": "13.06996%"
-            },
-            "Operating Margin": {
-              "value2": "3.97083%",
-              "value5": "3.65935%"
-            },
-            "After Tax ROE": {
-              "value2": "8.3736%",
-              "value5": "6.60331%"
-            },
-            "Current Ratio": {
-              "value2": "105.9838%",
-              "value5": "103.84165%"
-            },
-            "Profit Margin": {
-              "value2": "3.13195%",
-              "value5": "2.97294%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$4,684,000",
-              "value5": "$4,688,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$53,242,000",
-              "value5": "$52,487,000"
-            },
-            "Total Equity": {
-              "value2": "$35,803,000",
-              "value5": "$30,303,000"
-            }
-          }
-        }
-      },
       "BRK-B": {
         "attempted": "2026-10-16",
         "fetched": "2026-10-16",
@@ -2067,6 +1855,62 @@
           }
         }
       },
+      "AVGO": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "8/2/2026",
+          "base_period": "11/2/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$29,591,000",
+              "value5": "$18,015,000"
+            },
+            "Income Tax": {
+              "value2": "$2,187,000",
+              "value5": "-$1,649,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "69.12913%",
+              "value5": "67.99334%"
+            },
+            "Operating Margin": {
+              "value2": "53.91842%",
+              "value5": "41.67638%"
+            },
+            "After Tax ROE": {
+              "value2": "13.1287%",
+              "value5": "10.47828%"
+            },
+            "Current Ratio": {
+              "value2": "250.37432%",
+              "value5": "170.53581%"
+            },
+            "Profit Margin": {
+              "value2": "44.22966%",
+              "value5": "47.28282%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$14,197,000",
+              "value5": "$7,703,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$88,458,000",
+              "value5": "$89,800,000"
+            },
+            "Total Equity": {
+              "value2": "$99,690,000",
+              "value5": "$81,292,000"
+            }
+          }
+        }
+      },
       "CRSP": {
         "attempted": "2026-10-16",
         "fetched": "2026-10-16",
@@ -2231,6 +2075,62 @@
             "Total Equity": {
               "value2": "$8,768,000",
               "value5": "$6,181,000"
+            }
+          }
+        }
+      },
+      "NTNX": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "7/31/2026",
+          "base_period": "10/31/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$757,078",
+              "value5": "$670,576"
+            },
+            "Income Tax": {
+              "value2": "-$1,186,917",
+              "value5": "$3,478"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "86.03486%",
+              "value5": "86.95599%"
+            },
+            "Operating Margin": {
+              "value2": "9.24462%",
+              "value5": "7.35711%"
+            },
+            "After Tax ROE": {
+              "value2": "180.71381%",
+              "value5": "-9.28708%"
+            },
+            "Current Ratio": {
+              "value2": "179.8304%",
+              "value5": "188.5197%"
+            },
+            "Profit Margin": {
+              "value2": "167.70161%",
+              "value5": "9.2601%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$315,013",
+              "value5": "$196,825"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$4,371,120",
+              "value5": "$3,992,620"
+            },
+            "Total Equity": {
+              "value2": "$702,565",
+              "value5": "-$668,628"
             }
           }
         }
@@ -2514,6 +2414,118 @@
             "Total Equity": {
               "value2": "$11,399,000",
               "value5": "$10,045,000"
+            }
+          }
+        }
+      },
+      "ZS": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "7/31/2026",
+          "base_period": "10/31/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$898,185",
+              "value5": "$788,112"
+            },
+            "Income Tax": {
+              "value2": "$18,273",
+              "value5": "$3,241"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "76.73486%",
+              "value5": "76.55752%"
+            },
+            "Operating Margin": {
+              "value2": "-1.72481%",
+              "value5": "-4.61381%"
+            },
+            "After Tax ROE": {
+              "value2": "-.12966%",
+              "value5": "-.58593%"
+            },
+            "Current Ratio": {
+              "value2": "169.89884%",
+              "value5": "182.41311%"
+            },
+            "Profit Margin": {
+              "value2": "-.37509%",
+              "value5": "-1.47378%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$279,285",
+              "value5": "$448,280"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$5,268,453",
+              "value5": "$4,520,759"
+            },
+            "Total Equity": {
+              "value2": "$2,598,261",
+              "value5": "$1,982,328"
+            }
+          }
+        }
+      },
+      "COST": {
+        "attempted": "2026-10-10",
+        "fetched": "2026-10-10",
+        "data": {
+          "period": "8/30/2026",
+          "base_period": "11/23/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$95,723,000",
+              "value5": "$67,307,000"
+            },
+            "Income Tax": {
+              "value2": "$1,011,000",
+              "value5": "$582,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "12.73675%",
+              "value5": "13.06996%"
+            },
+            "Operating Margin": {
+              "value2": "3.97083%",
+              "value5": "3.65935%"
+            },
+            "After Tax ROE": {
+              "value2": "8.3736%",
+              "value5": "6.60331%"
+            },
+            "Current Ratio": {
+              "value2": "105.9838%",
+              "value5": "103.84165%"
+            },
+            "Profit Margin": {
+              "value2": "3.13195%",
+              "value5": "2.97294%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$4,684,000",
+              "value5": "$4,688,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$53,242,000",
+              "value5": "$52,487,000"
+            },
+            "Total Equity": {
+              "value2": "$35,803,000",
+              "value5": "$30,303,000"
             }
           }
         }
@@ -3694,8 +3706,8 @@
     "dated": 71,
     "pending": 12,
     "failed": 0,
-    "fetched": 4,
-    "cached": 79,
+    "fetched": 0,
+    "cached": 83,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -4259,20 +4271,20 @@
       }
     },
     "events": {
-      "GS": [
-        "2026-10-13"
+      "TSM": [
+        "2026-10-15"
       ],
-      "UNH": [
+      "JPM": [
         "2026-10-13"
       ],
       "JNJ": [
         "2026-10-13"
       ],
-      "JPM": [
+      "GS": [
         "2026-10-13"
       ],
-      "TSM": [
-        "2026-10-15"
+      "UNH": [
+        "2026-10-13"
       ]
     }
   },
@@ -4318,6 +4330,6 @@
       "incomplete": false,
       "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-16T14:08:51.642198+08:00"
+    "assessed_at": "2026-10-16T19:03:08.107321+08:00"
   }
 }
