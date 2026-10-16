@@ -9,16 +9,16 @@
     "next_in": 0,
     "next_date": "2026-10-15"
   },
-  "run_id": "38750465296",
+  "run_id": "38828496442",
   "request_id": "",
-  "source_sha": "d2fbcdd994dfabe5ef635ec40aab7cafd03287ba",
-  "started_at": "2026-10-15T14:20:11+00:00",
-  "started_at_bj": "2026-10-15T22:20:11+08:00",
-  "finished_at": "2026-10-15T22:21:53.485273+08:00",
-  "finished_at_bj": "2026-10-15T22:21:53+08:00",
-  "event": "push",
+  "source_sha": "0c84164b1c974390d38929dfaa6d5f2ee37464ab",
+  "started_at": "2026-10-16T00:15:58+00:00",
+  "started_at_bj": "2026-10-16T08:15:58+08:00",
+  "finished_at": "2026-10-16T08:18:04.693730+08:00",
+  "finished_at_bj": "2026-10-16T08:18:04+08:00",
+  "event": "schedule",
   "target_trade_date": "2026-10-15",
-  "mode": "manual_or_config",
+  "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
     "holdings.json": "b69a834b268399bc9bca2a8b5f096bd7deb0cde2",
@@ -188,19 +188,119 @@
     "dca": 1
   },
   "summary": {
-    "red": 24,
-    "yellow": 37,
-    "green": 39,
+    "red": 12,
+    "yellow": 27,
+    "green": 61,
     "gray": 0,
     "purple": 2,
     "total": 100,
     "macro_ok": 6,
-    "stale_symbols": [],
+    "stale_symbols": [
+      "BRK-B",
+      "HII",
+      "APH",
+      "AVGO",
+      "CRSP",
+      "GOOGL",
+      "LMT",
+      "NTNX",
+      "UNH",
+      "UBER",
+      "DRAM",
+      "SPYM",
+      "SCHD",
+      "QQQM",
+      "XLI",
+      "GEHC",
+      "ZS",
+      "COST",
+      "TSM",
+      "MA",
+      "PDD",
+      "V",
+      "AAPL",
+      "MSFT",
+      "SYK",
+      "IBIT",
+      "XLK",
+      "U",
+      "NXPI",
+      "SNOW",
+      "SKHY",
+      "MU",
+      "SNDK",
+      "STX",
+      "NOW",
+      "CRWD",
+      "FTNT",
+      "QCOM",
+      "ANET",
+      "COHR",
+      "INTC",
+      "AMAT",
+      "ARM",
+      "CIEN",
+      "LITE",
+      "MRVL",
+      "CRDO",
+      "PANW",
+      "TER",
+      "PLTR",
+      "LRCX",
+      "NVDA",
+      "WDC",
+      "XLV",
+      "ABBV",
+      "TMO",
+      "ISRG",
+      "LLY",
+      "JNJ",
+      "XLF",
+      "CB",
+      "AXP",
+      "BX",
+      "SPGI",
+      "GS",
+      "NU",
+      "CRCL",
+      "COIN",
+      "HOOD",
+      "JPM",
+      "XLE",
+      "XOM",
+      "AXON",
+      "HEI",
+      "SPCX",
+      "CAT",
+      "NOC",
+      "RTX",
+      "VRT",
+      "DD",
+      "XLB",
+      "LIN",
+      "XLU",
+      "CEG",
+      "NEE",
+      "XLP",
+      "WMT",
+      "PG",
+      "KO",
+      "XLC",
+      "TTWO",
+      "META",
+      "NFLX",
+      "XLY",
+      "BKNG",
+      "AMZN",
+      "MCD",
+      "TSLA",
+      "XLRE"
+    ],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 100,
-    "prior_prices": 0,
+    "today_prices": 1,
+    "prior_prices": 99,
     "missing_prices": 0
   },
   "signal_counts": {
@@ -221,27 +321,27 @@
     "vol_ratio": {
       "label": "量比",
       "red": 0,
-      "yellow": 5,
+      "yellow": 0,
       "purple": 0,
       "sole_yellow": 0
     },
     "rsi": {
       "label": "RSI",
       "red": 0,
-      "yellow": 25,
+      "yellow": 13,
       "purple": 0,
-      "sole_yellow": 0
+      "sole_yellow": 1
     },
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 46,
+      "yellow": 32,
       "purple": 0,
       "sole_yellow": 26
     },
     "boll_rsi": {
       "label": "布林+RSI",
-      "red": 24,
+      "red": 12,
       "yellow": 0,
       "purple": 0,
       "sole_yellow": 0
@@ -249,16 +349,16 @@
     "ma_cross": {
       "label": "均线穿越",
       "red": 0,
-      "yellow": 5,
+      "yellow": 0,
       "purple": 0,
-      "sole_yellow": 1
+      "sole_yellow": 0
     },
     "ma_band": {
       "label": "长均线触及",
       "red": 0,
-      "yellow": 5,
+      "yellow": 0,
       "purple": 0,
-      "sole_yellow": 4
+      "sole_yellow": 0
     },
     "low52": {
       "label": "52周低位",
@@ -304,78 +404,7 @@
     },
     "vol_ratio": {
       "red": [],
-      "yellow": [
-        {
-          "symbol": "TSM",
-          "note": "台积电",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-15股价下跌3.70%"
-            }
-          ],
-          "metric": "量比 1.5×（2026-10-14完整日）"
-        },
-        {
-          "symbol": "XLK",
-          "note": "科技精选行业ETF",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-15股价下跌2.01%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-14完整日）"
-        },
-        {
-          "symbol": "TER",
-          "note": "泰瑞达",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-15股价下跌6.66%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-14完整日）"
-        },
-        {
-          "symbol": "BX",
-          "note": "黑石",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-15股价下跌0.16%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-14完整日）"
-        },
-        {
-          "symbol": "VRT",
-          "note": "维谛技术",
-          "group": "industrials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-15股价下跌6.72%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-14完整日）"
-        }
-      ],
+      "yellow": [],
       "purple": [],
       "sole_yellow": []
     },
@@ -385,20 +414,6 @@
         {
           "symbol": "BRK-B",
           "note": "伯克希尔哈撒韦",
-          "group": "position",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "UNH",
-          "note": "联合健康",
           "group": "position",
           "level": "red",
           "indicators": [
@@ -453,20 +468,6 @@
           "rsi_hits": "2条超买"
         },
         {
-          "symbol": "V",
-          "note": "Visa-支付",
-          "group": "focus",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
           "symbol": "SKHY",
           "note": "SK海力士ADR",
           "group": "technology",
@@ -481,121 +482,9 @@
           "rsi_hits": "2条超卖"
         },
         {
-          "symbol": "SNDK",
-          "note": "闪迪",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "STX",
-          "note": "希捷科技",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "AMAT",
-          "note": "应用材料",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "LRCX",
-          "note": "拉姆研究",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "WDC",
-          "note": "西部数据",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "XLV",
-          "note": "医疗保健精选行业ETF",
-          "group": "healthcare",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
           "symbol": "ABBV",
           "note": "艾伯维",
           "group": "healthcare",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "LLY",
-          "note": "礼来",
-          "group": "healthcare",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "CB",
-          "note": "安达保险",
-          "group": "financials",
           "level": "red",
           "indicators": [
             {
@@ -635,8 +524,8 @@
           "rsi_hits": "2条超卖"
         },
         {
-          "symbol": "XOM",
-          "note": "埃克森美孚",
+          "symbol": "XLE",
+          "note": "能源精选行业ETF",
           "group": "energy",
           "level": "red",
           "indicators": [
@@ -649,37 +538,9 @@
           "rsi_hits": "2条超买"
         },
         {
-          "symbol": "CAT",
-          "note": "卡特彼勒",
-          "group": "industrials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "VRT",
-          "note": "维谛技术",
-          "group": "industrials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "XLP",
-          "note": "必需消费精选行业ETF",
-          "group": "consumer_staples",
+          "symbol": "XOM",
+          "note": "埃克森美孚",
+          "group": "energy",
           "level": "red",
           "indicators": [
             {
@@ -734,7 +595,22 @@
         }
       ],
       "purple": [],
-      "sole_yellow": []
+      "sole_yellow": [
+        {
+          "symbol": "BX",
+          "note": "黑石",
+          "group": "financials",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "RSI2条超卖"
+            }
+          ],
+          "rsi_hits": "2条超卖"
+        }
+      ]
     },
     "boll": {
       "red": [],
@@ -754,8 +630,8 @@
           "boll_state": "突破上轨"
         },
         {
-          "symbol": "APH",
-          "note": "安费诺",
+          "symbol": "CRSP",
+          "note": "CRISPR-基因编辑",
           "group": "position",
           "level": "yellow",
           "indicators": [
@@ -768,38 +644,24 @@
           "boll_state": "盘中跌破下轨"
         },
         {
-          "symbol": "AVGO",
-          "note": "博通",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "LMT",
-          "note": "洛克希德马丁",
+          "symbol": "GOOGL",
+          "note": "谷歌（Alphabet）",
           "group": "position",
           "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
-              "tone": "white",
-              "label": "逼近上轨"
+              "tone": "yellow",
+              "label": "盘中突破上轨"
             }
           ],
-          "boll_state": "逼近上轨"
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "UNH",
           "note": "联合健康",
           "group": "position",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -814,34 +676,6 @@
           "note": "Memory ETF-存储芯片",
           "group": "position",
           "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "SCHD",
-          "note": "嘉信美国红利股票ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "QQQM",
-          "note": "景顺纳斯达克100指数ETF",
-          "group": "position",
-          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -874,10 +708,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "突破上轨"
+              "label": "盘中突破上轨"
             }
           ],
-          "boll_state": "突破上轨"
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "COST",
@@ -892,20 +726,6 @@
             }
           ],
           "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "TSM",
-          "note": "台积电",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
         },
         {
           "symbol": "MA",
@@ -939,15 +759,15 @@
           "symbol": "V",
           "note": "Visa-支付",
           "group": "focus",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "突破上轨"
+              "label": "盘中突破上轨"
             }
           ],
-          "boll_state": "突破上轨"
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "AAPL",
@@ -964,6 +784,20 @@
           "boll_state": "盘中突破上轨"
         },
         {
+          "symbol": "MSFT",
+          "note": "微软",
+          "group": "focus",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "逼近上轨"
+            }
+          ],
+          "boll_state": "逼近上轨"
+        },
+        {
           "symbol": "SYK",
           "note": "医疗机器人",
           "group": "focus",
@@ -972,24 +806,10 @@
             {
               "shape": "▲",
               "tone": "yellow",
-              "label": "突破上轨"
+              "label": "盘中突破上轨"
             }
           ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "IBIT",
-          "note": "iShares比特币ETF",
-          "group": "index_funds",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "boll_state": "盘中突破上轨"
         },
         {
           "symbol": "XLK",
@@ -999,29 +819,15 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
+              "tone": "white",
+              "label": "逼近下轨"
             }
           ],
-          "boll_state": "盘中跌破下轨"
+          "boll_state": "逼近下轨"
         },
         {
           "symbol": "NXPI",
           "note": "恩智浦半导体",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "SNOW",
-          "note": "Snowflake-数据云",
           "group": "technology",
           "level": "yellow",
           "indicators": [
@@ -1065,7 +871,7 @@
           "symbol": "SNDK",
           "note": "闪迪",
           "group": "technology",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1078,20 +884,6 @@
         {
           "symbol": "STX",
           "note": "希捷科技",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "CRWD",
-          "note": "CrowdStrike-终端安全",
           "group": "technology",
           "level": "yellow",
           "indicators": [
@@ -1146,120 +938,8 @@
           "boll_state": "盘中跌破下轨"
         },
         {
-          "symbol": "AMAT",
-          "note": "应用材料",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
           "symbol": "ARM",
           "note": "Arm Holdings-芯片架构",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "LITE",
-          "note": "Lumentum-光模块",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "MRVL",
-          "note": "迈威尔科技",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "CRDO",
-          "note": "Credo-高速互连",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "PANW",
-          "note": "Palo Alto-网络安全",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
-            }
-          ],
-          "boll_state": "逼近下轨"
-        },
-        {
-          "symbol": "TER",
-          "note": "泰瑞达",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "LRCX",
-          "note": "拉姆研究",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "NVDA",
-          "note": "英伟达",
           "group": "technology",
           "level": "yellow",
           "indicators": [
@@ -1275,7 +955,21 @@
           "symbol": "WDC",
           "note": "西部数据",
           "group": "technology",
-          "level": "red",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "JNJ",
+          "note": "强生",
+          "group": "healthcare",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1300,8 +994,8 @@
           "boll_state": "逼近下轨"
         },
         {
-          "symbol": "CRCL",
-          "note": "Circle-稳定币",
+          "symbol": "HOOD",
+          "note": "Robinhood-零售券商",
           "group": "financials",
           "level": "yellow",
           "indicators": [
@@ -1314,9 +1008,348 @@
           "boll_state": "盘中跌破下轨"
         },
         {
-          "symbol": "COIN",
-          "note": "Coinbase-加密交易所",
-          "group": "financials",
+          "symbol": "AXON",
+          "note": "Axon-执法科技",
+          "group": "industrials",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "逼近下轨"
+            }
+          ],
+          "boll_state": "逼近下轨"
+        },
+        {
+          "symbol": "CAT",
+          "note": "卡特彼勒",
+          "group": "industrials",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "VRT",
+          "note": "维谛技术",
+          "group": "industrials",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "DD",
+          "note": "杜邦",
+          "group": "industrials",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        }
+      ],
+      "purple": [],
+      "sole_yellow": [
+        {
+          "symbol": "CRSP",
+          "note": "CRISPR-基因编辑",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "GOOGL",
+          "note": "谷歌（Alphabet）",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "yellow",
+              "label": "盘中突破上轨"
+            }
+          ],
+          "boll_state": "盘中突破上轨"
+        },
+        {
+          "symbol": "UNH",
+          "note": "联合健康",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "yellow",
+              "label": "突破上轨"
+            }
+          ],
+          "boll_state": "突破上轨"
+        },
+        {
+          "symbol": "XLI",
+          "note": "工业精选行业ETF",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "GEHC",
+          "note": "ge医疗",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "yellow",
+              "label": "盘中突破上轨"
+            }
+          ],
+          "boll_state": "盘中突破上轨"
+        },
+        {
+          "symbol": "PDD",
+          "note": "拼多多",
+          "group": "focus",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "yellow",
+              "label": "盘中突破上轨"
+            }
+          ],
+          "boll_state": "盘中突破上轨"
+        },
+        {
+          "symbol": "V",
+          "note": "Visa-支付",
+          "group": "focus",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "yellow",
+              "label": "盘中突破上轨"
+            }
+          ],
+          "boll_state": "盘中突破上轨"
+        },
+        {
+          "symbol": "AAPL",
+          "note": "苹果",
+          "group": "focus",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "yellow",
+              "label": "盘中突破上轨"
+            }
+          ],
+          "boll_state": "盘中突破上轨"
+        },
+        {
+          "symbol": "MSFT",
+          "note": "微软",
+          "group": "focus",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "逼近上轨"
+            }
+          ],
+          "boll_state": "逼近上轨"
+        },
+        {
+          "symbol": "SYK",
+          "note": "医疗机器人",
+          "group": "focus",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "yellow",
+              "label": "盘中突破上轨"
+            }
+          ],
+          "boll_state": "盘中突破上轨"
+        },
+        {
+          "symbol": "XLK",
+          "note": "科技精选行业ETF",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "逼近下轨"
+            }
+          ],
+          "boll_state": "逼近下轨"
+        },
+        {
+          "symbol": "NXPI",
+          "note": "恩智浦半导体",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "MU",
+          "note": "美光科技",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "SNDK",
+          "note": "闪迪",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "STX",
+          "note": "希捷科技",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "逼近下轨"
+            }
+          ],
+          "boll_state": "逼近下轨"
+        },
+        {
+          "symbol": "ANET",
+          "note": "Arista-数据中心网络",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "COHR",
+          "note": "Coherent-光器件",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "INTC",
+          "note": "英特尔",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "ARM",
+          "note": "Arm Holdings-芯片架构",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "WDC",
+          "note": "西部数据",
+          "group": "technology",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
+            }
+          ],
+          "boll_state": "盘中跌破下轨"
+        },
+        {
+          "symbol": "JNJ",
+          "note": "强生",
+          "group": "healthcare",
           "level": "yellow",
           "indicators": [
             {
@@ -1342,10 +1375,24 @@
           "boll_state": "盘中跌破下轨"
         },
         {
+          "symbol": "AXON",
+          "note": "Axon-执法科技",
+          "group": "industrials",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "逼近下轨"
+            }
+          ],
+          "boll_state": "逼近下轨"
+        },
+        {
           "symbol": "CAT",
           "note": "卡特彼勒",
           "group": "industrials",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -1359,373 +1406,6 @@
           "symbol": "VRT",
           "note": "维谛技术",
           "group": "industrials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "DD",
-          "note": "杜邦",
-          "group": "industrials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
-            }
-          ],
-          "boll_state": "逼近下轨"
-        }
-      ],
-      "purple": [],
-      "sole_yellow": [
-        {
-          "symbol": "APH",
-          "note": "安费诺",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "AVGO",
-          "note": "博通",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "LMT",
-          "note": "洛克希德马丁",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "逼近上轨"
-            }
-          ],
-          "boll_state": "逼近上轨"
-        },
-        {
-          "symbol": "SCHD",
-          "note": "嘉信美国红利股票ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "QQQM",
-          "note": "景顺纳斯达克100指数ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "XLI",
-          "note": "工业精选行业ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "GEHC",
-          "note": "ge医疗",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "PDD",
-          "note": "拼多多",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "盘中突破上轨"
-            }
-          ],
-          "boll_state": "盘中突破上轨"
-        },
-        {
-          "symbol": "AAPL",
-          "note": "苹果",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "盘中突破上轨"
-            }
-          ],
-          "boll_state": "盘中突破上轨"
-        },
-        {
-          "symbol": "SYK",
-          "note": "医疗机器人",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "IBIT",
-          "note": "iShares比特币ETF",
-          "group": "index_funds",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "NXPI",
-          "note": "恩智浦半导体",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "SNOW",
-          "note": "Snowflake-数据云",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "MU",
-          "note": "美光科技",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "CRWD",
-          "note": "CrowdStrike-终端安全",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
-            }
-          ],
-          "boll_state": "逼近下轨"
-        },
-        {
-          "symbol": "ANET",
-          "note": "Arista-数据中心网络",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "COHR",
-          "note": "Coherent-光器件",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "INTC",
-          "note": "英特尔",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "ARM",
-          "note": "Arm Holdings-芯片架构",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "LITE",
-          "note": "Lumentum-光模块",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "MRVL",
-          "note": "迈威尔科技",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "PANW",
-          "note": "Palo Alto-网络安全",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
-            }
-          ],
-          "boll_state": "逼近下轨"
-        },
-        {
-          "symbol": "NVDA",
-          "note": "英伟达",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "CRCL",
-          "note": "Circle-稳定币",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "COIN",
-          "note": "Coinbase-加密交易所",
-          "group": "financials",
           "level": "yellow",
           "indicators": [
             {
@@ -1744,11 +1424,11 @@
           "indicators": [
             {
               "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
+              "tone": "yellow",
+              "label": "盘中跌破下轨"
             }
           ],
-          "boll_state": "逼近下轨"
+          "boll_state": "盘中跌破下轨"
         }
       ]
     },
@@ -1757,14 +1437,6 @@
         {
           "symbol": "BRK-B",
           "note": "伯克希尔哈撒韦",
-          "group": "position",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "UNH",
-          "note": "联合健康",
           "group": "position",
           "level": "red",
           "direction": "上轨（超买）",
@@ -1795,14 +1467,6 @@
           "boll_rsi_hits": 2
         },
         {
-          "symbol": "V",
-          "note": "Visa-支付",
-          "group": "focus",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
           "symbol": "SKHY",
           "note": "SK海力士ADR",
           "group": "technology",
@@ -1811,73 +1475,9 @@
           "boll_rsi_hits": 2
         },
         {
-          "symbol": "SNDK",
-          "note": "闪迪",
-          "group": "technology",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "STX",
-          "note": "希捷科技",
-          "group": "technology",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "AMAT",
-          "note": "应用材料",
-          "group": "technology",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "LRCX",
-          "note": "拉姆研究",
-          "group": "technology",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "WDC",
-          "note": "西部数据",
-          "group": "technology",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "XLV",
-          "note": "医疗保健精选行业ETF",
-          "group": "healthcare",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
           "symbol": "ABBV",
           "note": "艾伯维",
           "group": "healthcare",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "LLY",
-          "note": "礼来",
-          "group": "healthcare",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "CB",
-          "note": "安达保险",
-          "group": "financials",
           "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
@@ -1891,33 +1491,17 @@
           "boll_rsi_hits": 2
         },
         {
-          "symbol": "XOM",
-          "note": "埃克森美孚",
+          "symbol": "XLE",
+          "note": "能源精选行业ETF",
           "group": "energy",
           "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         },
         {
-          "symbol": "CAT",
-          "note": "卡特彼勒",
-          "group": "industrials",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "VRT",
-          "note": "维谛技术",
-          "group": "industrials",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "XLP",
-          "note": "必需消费精选行业ETF",
-          "group": "consumer_staples",
+          "symbol": "XOM",
+          "note": "埃克森美孚",
+          "group": "energy",
           "level": "red",
           "direction": "上轨（超买）",
           "boll_rsi_hits": 2
@@ -1953,214 +1537,15 @@
     },
     "ma_cross": {
       "red": [],
-      "yellow": [
-        {
-          "symbol": "CIEN",
-          "note": "Ciena-光网络",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ]
-        },
-        {
-          "symbol": "CRDO",
-          "note": "Credo-高速互连",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ]
-        },
-        {
-          "symbol": "WDC",
-          "note": "西部数据",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ]
-        },
-        {
-          "symbol": "HOOD",
-          "note": "Robinhood-零售券商",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ]
-        },
-        {
-          "symbol": "WMT",
-          "note": "沃尔玛",
-          "group": "consumer_staples",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "cyan",
-              "label": "上穿250日均线"
-            }
-          ]
-        }
-      ],
+      "yellow": [],
       "purple": [],
-      "sole_yellow": [
-        {
-          "symbol": "CIEN",
-          "note": "Ciena-光网络",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ]
-        }
-      ]
+      "sole_yellow": []
     },
     "ma_band": {
       "red": [],
-      "yellow": [
-        {
-          "symbol": "QCOM",
-          "note": "高通",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "cyan",
-              "label": "现价在均线上方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "CRDO",
-          "note": "Credo-高速互连",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "NU",
-          "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "RTX",
-          "note": "RTX-航空防务",
-          "group": "industrials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "XLB",
-          "note": "原材料精选行业ETF",
-          "group": "materials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "cyan",
-              "label": "现价在均线上方，日内触及"
-            }
-          ]
-        }
-      ],
+      "yellow": [],
       "purple": [],
-      "sole_yellow": [
-        {
-          "symbol": "QCOM",
-          "note": "高通",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "cyan",
-              "label": "现价在均线上方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "NU",
-          "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "RTX",
-          "note": "RTX-航空防务",
-          "group": "industrials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "XLB",
-          "note": "原材料精选行业ETF",
-          "group": "materials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "cyan",
-              "label": "现价在均线上方，日内触及"
-            }
-          ]
-        }
-      ]
+      "sole_yellow": []
     },
     "low52": {
       "red": [],
@@ -2188,7 +1573,7 @@
           "symbol": "AVGO",
           "note": "博通",
           "group": "position",
-          "level": "yellow",
+          "level": "green",
           "indicators": [
             {
               "shape": "□",
@@ -2201,7 +1586,7 @@
           "symbol": "CRSP",
           "note": "CRISPR-基因编辑",
           "group": "position",
-          "level": "green",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "□",
@@ -2221,7 +1606,7 @@
         "symbol": "TSM",
         "note": "台积电",
         "group": "focus",
-        "level": "yellow",
+        "level": "green",
         "date": "2026-10-15",
         "timing": "pre",
         "kind": "expected"
@@ -2239,7 +1624,7 @@
         "symbol": "CB",
         "note": "安达保险",
         "group": "financials",
-        "level": "red",
+        "level": "green",
         "date": "2026-10-20",
         "timing": "post",
         "kind": "expected"
@@ -2257,7 +1642,7 @@
         "symbol": "RTX",
         "note": "RTX-航空防务",
         "group": "industrials",
-        "level": "yellow",
+        "level": "green",
         "date": "2026-10-20",
         "timing": "pre",
         "kind": "expected"
@@ -2275,7 +1660,7 @@
         "symbol": "LRCX",
         "note": "拉姆研究",
         "group": "technology",
-        "level": "red",
+        "level": "green",
         "date": "2026-10-21",
         "timing": "post",
         "kind": "expected"
@@ -2311,7 +1696,7 @@
         "symbol": "LMT",
         "note": "洛克希德马丁",
         "group": "position",
-        "level": "yellow",
+        "level": "green",
         "date": "2026-10-22",
         "timing": "pre",
         "kind": "expected"
@@ -2320,7 +1705,7 @@
         "symbol": "WDC",
         "note": "西部数据",
         "group": "technology",
-        "level": "red",
+        "level": "yellow",
         "date": "2026-10-22",
         "timing": "post",
         "kind": "expected"
@@ -2346,11 +1731,11 @@
     ]
   },
   "actual_dates": {
-    "min": "2026-10-15",
+    "min": "2026-10-14",
     "max": "2026-10-15"
   },
   "macro_dates": {
-    "hy_oas": "2026-10-13",
+    "hy_oas": "2026-10-14",
     "vix": "2026-10-15",
     "sp500": "2026-10-15",
     "ust10": "2026-10-15",
@@ -2359,7 +1744,7 @@
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.053999900817871,
+    "value": 5.0889997482299805,
     "date": "2026-10-15",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -2368,10 +1753,10 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.05800008773803711
+    "delta_month": 0.09299993515014648
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-15 22:21:53（盘中快照，北京时间） · 当日价 100 只 / 较早日线 0 只 / 无数据 0 只",
+  "data_time_text": "2026-10-14～2026-10-15 收盘（美东交易日）",
   "market_risk": {
     "level": "green",
     "label": "平稳",
@@ -2390,17 +1775,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 17.469999313354492,
+      "value": 16.459999084472656,
       "date": "2026-10-15",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7702.240234375,
+      "value": 7744.06005859375,
       "date": "2026-10-15",
       "source": "Yahoo ^GSPC",
-      "drawdown": -1.492402909130608
+      "drawdown": -0.9575493770158761
     }
   },
   "nfci_cache": {
@@ -3581,27 +2966,27 @@
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
       "due": 17,
-      "deferred": 17,
-      "tried": 0,
-      "ok": 0,
+      "deferred": 5,
+      "tried": 12,
+      "ok": 12,
       "none": 0,
       "fail": 0,
       "stopped": "",
       "quota": {
-        "date": "2026-10-15",
+        "date": "2026-10-16",
         "symbols": [
-          "GS",
-          "JNJ",
-          "TER",
-          "TMO",
-          "TSLA",
-          "TTWO",
-          "U",
-          "UNH",
-          "VRT",
-          "WDC",
-          "WMT",
-          "XOM"
+          "AAPL",
+          "APH",
+          "AVGO",
+          "COST",
+          "CRSP",
+          "GOOGL",
+          "HII",
+          "JPM",
+          "LMT",
+          "MA",
+          "MSFT",
+          "NTNX"
         ],
         "retry_symbols": []
       }
@@ -3609,57 +2994,64 @@
     "data": {
       "HII": {
         "s": "ok",
-        "avg": 363.0,
-        "upd": "2026-10-07",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "avg": 356.42,
+        "upd": "2026-10-14",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-10-29"
       },
       "APH": {
         "s": "ok",
-        "avg": 101.66,
-        "upd": "2026-10-08",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "avg": 102.97,
+        "upd": "2026-10-13",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-10-28"
       },
       "AVGO": {
         "s": "ok",
-        "avg": 531.31,
+        "avg": 527.59,
         "upd": "2026-10-02",
-        "r": "2026-10-01",
-        "try": "2026-10-09"
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16"
       },
       "CRSP": {
         "s": "ok",
-        "avg": 87.56,
-        "upd": "2026-10-09",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "avg": 85.63,
+        "upd": "2026-10-14",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-11-09"
       },
       "GOOGL": {
         "s": "ok",
-        "avg": 429.47,
-        "upd": "2026-10-09",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "avg": 430.51,
+        "upd": "2026-10-15",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-10-28"
       },
       "LMT": {
         "s": "ok",
-        "avg": 625.76,
-        "upd": "2026-10-08",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "avg": 618.86,
+        "upd": "2026-10-14",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-10-22"
       },
       "NTNX": {
         "s": "ok",
         "avg": 77.79,
         "upd": "2026-09-28",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-11-24"
       },
       "UNH": {
@@ -3697,10 +3089,11 @@
       },
       "COST": {
         "s": "ok",
-        "avg": 1057.94,
-        "upd": "2026-10-09",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "avg": 1060.8,
+        "upd": "2026-10-15",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-12-10"
       },
       "TSM": {
@@ -3716,10 +3109,11 @@
       },
       "MA": {
         "s": "ok",
-        "avg": 668.07,
-        "upd": "2026-10-09",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "avg": 671.23,
+        "upd": "2026-10-15",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-10-29"
       },
       "PDD": {
@@ -3740,18 +3134,20 @@
       },
       "AAPL": {
         "s": "ok",
-        "avg": 328.09,
-        "upd": "2026-10-08",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "avg": 329.38,
+        "upd": "2026-10-15",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-11-02"
       },
       "MSFT": {
         "s": "ok",
-        "avg": 587.63,
-        "upd": "2026-10-08",
-        "r": "2026-10-01",
-        "try": "2026-10-09",
+        "avg": 596.22,
+        "upd": "2026-10-15",
+        "r": "2026-10-15",
+        "r_tz": "America/New_York",
+        "try": "2026-10-16",
         "ne": "2026-10-28"
       },
       "SYK": {
@@ -4119,15 +3515,11 @@
       },
       "JPM": {
         "s": "ok",
-        "avg": 372.14,
-        "upd": "2026-10-08",
-        "r": "2026-10-12",
+        "avg": 372.57,
+        "upd": "2026-10-15",
+        "r": "2026-10-15",
         "r_tz": "America/New_York",
-        "try": "2026-10-12",
-        "ne": "2026-10-13",
-        "earn_pending": [
-          "2026-10-13"
-        ]
+        "try": "2026-10-16"
       },
       "XOM": {
         "s": "ok",
@@ -4328,20 +3720,20 @@
       }
     },
     "quota": {
-      "date": "2026-10-15",
+      "date": "2026-10-16",
       "symbols": [
-        "GS",
-        "JNJ",
-        "TER",
-        "TMO",
-        "TSLA",
-        "TTWO",
-        "U",
-        "UNH",
-        "VRT",
-        "WDC",
-        "WMT",
-        "XOM"
+        "AAPL",
+        "APH",
+        "AVGO",
+        "COST",
+        "CRSP",
+        "GOOGL",
+        "HII",
+        "JPM",
+        "LMT",
+        "MA",
+        "MSFT",
+        "NTNX"
       ],
       "retry_symbols": []
     }
@@ -4919,20 +4311,20 @@
       }
     },
     "events": {
+      "TSM": [
+        "2026-10-15"
+      ],
+      "GS": [
+        "2026-10-13"
+      ],
       "JPM": [
         "2026-10-13"
       ],
       "UNH": [
         "2026-10-13"
       ],
-      "GS": [
-        "2026-10-13"
-      ],
       "JNJ": [
         "2026-10-13"
-      ],
-      "TSM": [
-        "2026-10-15"
       ]
     }
   },
@@ -4968,10 +4360,10 @@
       "text": "同月份原油历史不足或口径不一致，暂不判定涨幅。",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 94.97000122070312,
+      "price": 95.91999816894531,
       "date": "2026-10-15",
       "contract": "Crude Oil Nov 26"
     },
-    "assessed_at": "2026-10-15T22:21:00.439431+08:00"
+    "assessed_at": "2026-10-16T08:16:48.041905+08:00"
   }
 }
