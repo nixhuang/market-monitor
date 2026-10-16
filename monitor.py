@@ -24,6 +24,7 @@ import math
 from types import SimpleNamespace
 import os
 import re
+import statistics
 import subprocess
 import sys
 import threading
@@ -178,8 +179,14 @@ DEFAULT_SETTINGS = {
     "reduce_gap_pct": 3.0,   # 持仓的减仓价：现价在减仓价 ±x%（按减仓价算）内 → 红，不分涨跌方向
     "target_space_pct": 50.0,  # 目标价（共识价 / 手填）高出现价超过 x% → 紫色（竖条 + 实心标签 + 警示栏，不改红黄绿）
     "target_gap_pct": 3.0,     # 现价在目标价 ±x% 内、或当日跨越目标价 → 紫色
-    "vol_ratio": 1.5,       # 量比 >= x 倍 → 黄
+    "vol_ratio": 1.5,       # 量比 >= x 倍 → 黄（盘后 z 值不可用时的固定兜底）
     "vol_ratio_red": 3.0,   # 量比 >= x 倍 → 红（所有分组）
+    # 收盘后量比「自身波动」自适应：把最近完整日量比换算成这只股自己 60 日放量分布的 z 值，
+    # z >= vol_ratio_z 黄、>= vol_ratio_red_z 红。两者任一为 0 = 关闭自适应，退回上面两条固定倍数。
+    # 1.8 / 3.6 是按真实日线标定的等效值：黄灯命中率与旧的固定 1.5× 相当（约 8%），
+    # 红灯约 1.6%（旧 3× 只有 0.6%，对高波动股几乎永不触发）。
+    "vol_ratio_z": 1.8,
+    "vol_ratio_red_z": 3.6,
     "amp_yellow": 5.0,      # 日内振幅（最高-最低）/昨收 >= x% → 黄
     "amp_red": 8.0,         # 日内振幅 >= x% → 红（上下插针、剧烈震荡）
     "ma_short": 50,
@@ -328,12 +335,14 @@ SETTING_LIMITS = {
     "near_52w_low_pct": (0, 100), "trigger_gap_pct": (0, 100), "reduce_gap_pct": (0, 100),
     "target_space_pct": (0, 1000), "target_gap_pct": (0, 100),
     "vol_ratio": (0.1, 100), "vol_ratio_red": (0.1, 100),
+    "vol_ratio_z": (0, 10), "vol_ratio_red_z": (0, 10),  # 0 = 关闭自适应
     "amp_yellow": (0, 100), "amp_red": (0, 100),
     "hy_green": (0, 10000), "hy_red": (0, 10000),
     "vix_green": (0, 200), "vix_yellow": (0, 200), "vix_red": (0, 200),
     "dca_every": (0, 10000), "use_realtime": (0, 1), "signal_single_open": (0, 1),
 }
 SETTING_ORDER = (("chg_yellow", "chg_red"), ("amp_yellow", "amp_red"), ("vol_ratio", "vol_ratio_red"),
+                 ("vol_ratio_z", "vol_ratio_red_z"),
                  ("hy_green", "hy_red"),
                  ("vix_green", "vix_yellow", "vix_red"), ("ma_short", "ma_long"))
 
@@ -352,6 +361,8 @@ def valid_settings(s):
     for keys in SETTING_ORDER:
         if keys == ("ma_short", "ma_long") and 0 in (s["ma_short"], s["ma_long"]):
             continue  # 只在两条均启用时检查周期顺序
+        if keys == ("vol_ratio_z", "vol_ratio_red_z") and 0 in (s["vol_ratio_z"], s["vol_ratio_red_z"]):
+            continue  # 任一为 0 = 关闭自适应，此时固定倍数生效，不比顺序
         if any(a > b for a, b in zip((s[k] for k in keys), (s[k] for k in keys[1:]))):
             return " / ".join(keys)
     start = s.get("dca_start")
@@ -406,6 +417,8 @@ def load_settings():
     for keys in SETTING_ORDER:
         if keys == ("ma_short", "ma_long") and 0 in (s["ma_short"], s["ma_long"]):
             continue
+        if keys == ("vol_ratio_z", "vol_ratio_red_z") and 0 in (s["vol_ratio_z"], s["vol_ratio_red_z"]):
+            continue  # 0 = 主动关闭自适应，不能当成顺序冲突翻回默认
         if any(s[a] > s[b] for a, b in zip(keys, keys[1:])):
             log(f"  ! {'/'.join(keys)} 阈值顺序冲突，仅该组退回默认值")
             for k in keys:
@@ -3136,6 +3149,34 @@ SIGNAL_KINDS = (
 
 
 
+VOL_RATIO_BASE = 20    # 量比的均量窗口：最近完整日量 ÷ 此前 20 个完整交易日均量
+VOL_Z_WINDOW = 60      # 量比 z 值的回看长度：这只股自己 60 个交易日的放量分布
+
+
+def _latest_completed_session_index(dates, asof=None):
+    """最近一个已结束的美股交易日在日线序列里的下标；不可用返回 None。
+
+    盘中排除今天未完结的日线，收盘后留 15 分钟给日线汇总；历史锚点不向后读未来日线。
+    """
+    if not isinstance(dates, list) or not dates:
+        return None
+    import exchange_calendars as xcals
+    calendar = xcals.get_calendar('XNYS')
+    now = (asof or NOW).astimezone(US_TZ)
+    try:
+        latest = calendar.date_to_session(now.date().isoformat(), direction='previous')
+        if (latest.date() == now.date() and
+                now.astimezone(timezone.utc) < calendar.session_close(latest) + timedelta(minutes=15)):
+            latest = calendar.previous_session(latest)
+        expected = latest.date().isoformat()
+        # 目标交易日是历史锚点时，绝不能向后读取未来日线。
+        if TARGET_DATE and expected > TARGET_DATE:
+            expected = TARGET_DATE
+        return dates.index(expected) if expected in dates else None
+    except (ValueError, KeyError, OverflowError):
+        return None
+
+
 def completed_day_volume_ratio(sym, data, asof=None):
     """最近一个已结束的美股交易日成交量 / 此前20个完整交易日均量。
 
@@ -3145,33 +3186,66 @@ def completed_day_volume_ratio(sym, data, asof=None):
     if instrument_identity(sym).startswith('^') or instrument_identity(sym).endswith('=F'):
         return None, ''
     dates, volumes = data.get('dates') or [], data.get('volumes') or []
-    if len(dates) != len(volumes) or len(dates) < 21:
+    if len(dates) != len(volumes) or len(dates) < VOL_RATIO_BASE + 1:
         return None, ''
-    import exchange_calendars as xcals
-    calendar = xcals.get_calendar('XNYS')
-    now = (asof or NOW).astimezone(US_TZ)
-    today = now.date().isoformat()
+    index = _latest_completed_session_index(dates, asof)
+    if index is None:
+        return None, ''
+    # 不跳过缺量日凑均值：分子与此前20根日线必须来自同一行情源且有效。
+    sample = volumes[index-VOL_RATIO_BASE:index+1]
+    if len(sample) != VOL_RATIO_BASE + 1 or any(not isinstance(v, (int, float)) or isinstance(v, bool)
+                                                or not math.isfinite(v) or v <= 0 for v in sample):
+        return None, ''
+    average = sum(sample[:-1]) / VOL_RATIO_BASE
+    return (sample[-1] / average, dates[index]) if average > 0 else (None, '')
+
+
+def _volume_ratio_zscore(volumes, index, window=VOL_Z_WINDOW, base=VOL_RATIO_BASE):
+    """把 index 那天的量比换算成这只股自己的「放量 z 值」。
+
+    样本：此前 window 个完整交易日各自的 ln(当日量 ÷ 此前 base 日均量)。
+    尺度用中位数与 MAD（1.4826×MAD ≈ 标准差），单日天量不会把门槛整体抬走；
+    平稳的票 1.3× 也可能是异常，常年巨量的票 2× 也未必异常，门槛随股而异。
+    数据不足、量非正、分布尺度为 0（天天一模一样）时返回 None，调用方退回固定倍数。
+    """
+    start = index - window
+    if start - base < 0:
+        return None
+    window_vols = volumes[start - base:index + 1]
+    if len(window_vols) != window + base + 1:
+        return None
+    if any(not isinstance(v, (int, float)) or isinstance(v, bool) or not math.isfinite(v) or v <= 0
+           for v in window_vols):
+        return None
+    logs = []
+    for t in range(base, len(window_vols)):
+        mean_prev = sum(window_vols[t - base:t]) / base
+        if mean_prev <= 0:
+            return None
+        logs.append(math.log(window_vols[t] / mean_prev))
+    if len(logs) != window + 1:
+        return None
+    median = statistics.median(logs)
+    scale = 1.4826 * statistics.median([abs(value - median) for value in logs])
+    if not math.isfinite(scale) or scale <= 0:
+        return None
+    return (logs[-1] - median) / scale
+
+
+def completed_day_volume_z(sym, data, asof=None):
+    """最近完整日量比的「自身波动 z 值」；算不出返回 None，由调用方退回固定倍数。"""
+    if instrument_identity(sym).startswith('^') or instrument_identity(sym).endswith('=F'):
+        return None
+    dates, volumes = data.get('dates') or [], data.get('volumes') or []
+    if not isinstance(dates, list) or not isinstance(volumes, list) or len(dates) != len(volumes):
+        return None
+    index = _latest_completed_session_index(dates, asof)
+    if index is None:
+        return None
     try:
-        latest = calendar.date_to_session(today, direction='previous')
-        if (latest.date() == now.date() and
-                now.astimezone(timezone.utc) < calendar.session_close(latest) + timedelta(minutes=15)):
-            latest = calendar.previous_session(latest)
-        expected = latest.date().isoformat()
-        # 目标交易日是历史锚点时，绝不能向后读取未来日线。
-        if TARGET_DATE and expected > TARGET_DATE:
-            expected = TARGET_DATE
-        if expected not in dates:
-            return None, ''
-        index = dates.index(expected)
-        # 不跳过缺量日凑均值：分子与此前20根日线必须来自同一行情源且有效。
-        sample = volumes[index-20:index+1]
-        if len(sample) != 21 or any(not isinstance(v, (int, float)) or isinstance(v, bool)
-                                    or not math.isfinite(v) or v <= 0 for v in sample):
-            return None, ''
-        average = sum(sample[:-1]) / 20
-        return (sample[-1] / average, expected) if average > 0 else (None, '')
-    except (ValueError, KeyError, OverflowError):
-        return None, ''
+        return _volume_ratio_zscore(volumes, index)
+    except (ValueError, TypeError, ZeroDivisionError, OverflowError):
+        return None
 
 
 INTRADAY_VOL_QUIET_MIN = 15   # 开盘后这段分钟数内不报盘中量比：分母太小会把比值放大到没有意义
@@ -3272,8 +3346,10 @@ def _analysis_context(sym, cfg, data, group):
     low52 = min((data["lows"] or closes)[start52:])
     x.dist_high = (price / high52 - 1) * 100
     x.dist_low = (price / low52 - 1) * 100
+    x.low52 = low52          # 52 周区间最低价本身：统计名单里要写出这个价格
     x.range52 = _range52_from_history(data)
     x.vol_ratio, x.vol_ratio_date = completed_day_volume_ratio(sym, data)
+    x.vol_ratio_z = completed_day_volume_z(sym, data)
     x.rt_vol_ratio, x.rt_vol_time = intraday_volume_ratio(sym, data)
     x.vol_ratio_intraday = bool(x.rt_vol_ratio)
     ma_periods = (int(S["ma_short"]), int(S["ma_long"]))
@@ -3489,8 +3565,14 @@ def _rule_boll(al, x):
     al.add("boll_rsi", f"布林 + RSI → {'红' if level == 'red' else '黄'}", level)
 
 
+def _vol_ratio_z_enabled():
+    """收盘后的「自身波动」自适应开关：两条 z 阈值都大于 0 才生效，否则退回固定倍数。"""
+    return S.get("vol_ratio_z", 0) > 0 and S.get("vol_ratio_red_z", 0) > 0
+
+
 def _rule_vol_ratio(al, x):
     """量比：盘中用当日累计量按已开盘分钟数折算的「盘中量比」，收盘后回落到最近完整日量比。
+    收盘后先按这只股自己的放量分布（z 值）判灯，z 算不出才退回固定倍数；盘中始终用固定倍数。
     达到红线报红、达到黄线报黄，所有分组适用；不分涨跌方向。"""
     if getattr(x, "vol_ratio_intraday", False):
         ratio = x.rt_vol_ratio
@@ -3500,9 +3582,19 @@ def _rule_vol_ratio(al, x):
         return   # 盘中已拿到当时量比，不再叠加昨天的完整日口径
     if not x.vol_ratio:
         return
-    level = "red" if x.vol_ratio >= S["vol_ratio_red"] else "yellow" if x.vol_ratio >= S["vol_ratio"] else ""
+    ratio = x.vol_ratio
+    if _vol_ratio_z_enabled() and ratio >= 1.0 and isinstance(getattr(x, "vol_ratio_z", None), (int, float)) \
+            and not isinstance(x.vol_ratio_z, bool) and math.isfinite(x.vol_ratio_z):
+        # 缩量（<1×）不报灯：z 值只用来判断「放得有多异常」，方向仍然是放量。
+        z = x.vol_ratio_z
+        level = "red" if z >= S["vol_ratio_red_z"] else "yellow" if z >= S["vol_ratio_z"] else ""
+        if level:
+            # 不把 σ 写进文案：z 只是内部判定尺度，页面只需要「哪天、放量到几倍」
+            al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{ratio:.1f}x", level)
+        return
+    level = "red" if ratio >= S["vol_ratio_red"] else "yellow" if ratio >= S["vol_ratio"] else ""
     if level:
-        al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{x.vol_ratio:.1f}x", level)
+        al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{ratio:.1f}x", level)
 
 
 def _rule_amplitude(al, x):
@@ -3592,8 +3684,10 @@ def _analysis_detail(x, al):
         "rsi": x.rsi,
         "dist_high": x.dist_high,
         "dist_low": x.dist_low,
+        "low52": getattr(x, "low52", None),
         "range52": x.range52,
         "vol_ratio": x.vol_ratio,
+        "vol_ratio_z": getattr(x, "vol_ratio_z", None),
         "vol_ratio_date": x.vol_ratio_date,
         "rt_vol_ratio": x.rt_vol_ratio,
         "rt_vol_time": x.rt_vol_time,
@@ -3836,6 +3930,7 @@ document.addEventListener("click", function(event) {
     });
   }
   panel.hidden = !opening;
+  // 胶囊高亮完全靠 CSS 认 aria-expanded，这里不用额外加类
   button.setAttribute("aria-expanded", String(opening));
 });
 
@@ -3987,7 +4082,8 @@ def text_only_members(items):
                     if _TEXT_RSI_RE.match(t) or t.startswith(_TEXT_BOLL_PREFIX)]
         detail = re.split(r"（", pool[0])[0].strip() if pool else ""
         out.append({"symbol": symbol, "kind": kind, "shape": _text_only_shape(texts),
-                    "detail": detail, "group": d.get("group") or ""})
+                    "detail": detail, "group": d.get("group") or "",
+                    "note": str(d.get("note") or "")})
     return out
 
 
@@ -4079,7 +4175,64 @@ def _member_metric(d, kind):
         return f"振幅 {value:.1f}%"
     day = d.get("vol_ratio_date")
     date_text = f"（{day}完整日）" if isinstance(day, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
+    # σ 不出现在页面上：判灯照常用 z，展示只留「哪天、几倍」
     return f"量比 {value:.1f}×{date_text}"
+
+
+# 方向提到「框标题」上的栏目：名单里不再逐条画三角，▲/▼ 只出现在每个框的标题里。
+# 只改这两栏——涨跌幅、振幅等栏目行内三角照旧，别把没要求的栏目一起改了。
+_BLOCK_PANEL_KINDS = ("vol_ratio", "boll_rsi")
+
+
+def _member_block(d, kind):
+    """分框栏目里这一行归到哪个框，返回 (图标, 框标题)。
+
+    量比按当天股价涨跌分上下；布林+RSI 按轨道 + RSI 条数分上下；
+    方向算不出来时给「平盘 / 方向待下次更新」，不硬塞进 ▲ 或 ▼。"""
+    if kind == "vol_ratio":
+        # 名单里存的是已经算好的方向标记，不回查 chg（成员字典里没有行情字段）
+        for marker in d.get("indicators") or []:
+            if isinstance(marker, dict) and marker.get("shape") in ("▲", "▼"):
+                return (marker["shape"], "上涨" if marker["shape"] == "▲" else "下跌")
+        return ("", "平盘")   # 平盘或旧快照缺方向
+    if kind == "boll_rsi":
+        state = str(d.get("direction") or "")
+        hits = d.get("boll_rsi_hits")
+        side = next((s for s in ("上轨", "下轨") if state.startswith(s)), "")
+        if side and type(hits) is int and hits in (2, 3):
+            tail = ("方向不一致" if "不一致" in state
+                    else "双向命中" if "均命中" in state else "")
+            title = f"{side} · RSI {hits}条过界" + (f" · {tail}" if tail else "")
+            return ("▲" if side == "上轨" else "▼", title)
+        return ("", "方向待下次更新")
+    return None
+
+
+def _member_metric_text(d, kind):
+    """成员行里跟在代码后面的数值；只带本轮已算出来的值，缺就留空不编。"""
+    if kind in ("chg", "amp", "vol_ratio"):
+        return d.get("metric") or "数值待下次更新"
+    if kind == "rsi":
+        return d.get("rsi_hits") or "条数待下次更新"
+    if kind == "boll":
+        return d.get("boll_state") or "状态待下次更新"
+    if kind == "boll_rsi":
+        # 轨道方向要写成可见文字（手机没有悬停提示），不能只靠箭头上的 title
+        state = str(d.get("direction") or "")
+        hits = d.get("boll_rsi_hits")
+        side = next((s for s in ("上轨", "下轨") if state.startswith(s)), "")
+        if side and type(hits) is int and hits in (2, 3):
+            tail = ("方向不一致" if "不一致" in state
+                    else "双向命中" if "均命中" in state else "")
+            return f"{side} · RSI {hits}条过界" + (f" · {tail}" if tail else "")
+        return "条数待下次更新"
+    if kind == "low52":
+        # 52周低位把低点价本身写出来：只说「距低点 +2.6%」看不见价格
+        price = d.get("low52_price")
+        return f"52周低 {price}" if price else ""
+    if kind in ("add_price", "reduce_price"):
+        return d.get("level_price") or ""
+    return ""   # 基本面：命中项不复述，个股行自己有点开的详情
 
 
 def _member_signal_details(d, kind, member, level):
@@ -4092,6 +4245,12 @@ def _member_signal_details(d, kind, member, level):
     metric = _member_metric(d, kind)
     if metric:
         member["metric"] = metric
+    if kind == "low52":
+        # 52周低位那一栏把低点价本身写出来：只说「距低点 +2.6%」看不见价格
+        low = d.get("low52")
+        if (isinstance(low, (int, float)) and not isinstance(low, bool)
+                and math.isfinite(low) and low > 0):
+            member["low52_price"] = f"{low:,.2f}"
     if kind == "rsi" and indicators:
         member["rsi_hits"] = " / ".join(marker["label"][3:] for marker in indicators)
     if kind == "boll" and indicators:
@@ -4121,6 +4280,12 @@ def signal_count_members(items):
             for level in levels:
                 if any(k == kind and m == level for k, m in marks):
                     entry = dict(member)
+                    # 加减仓价：名单里把价位本身写出来，光看代码不知道挂在哪一档。
+                    # 用「加 325」这套跟个股行胶囊一致的缩写，不再写「加仓价」长名。
+                    if kind in ("add_price", "reduce_price"):
+                        price = _level_num(d.get("trigger" if kind == "add_price" else "reduce"))
+                        if price:
+                            entry["level_price"] = ("加" if kind == "add_price" else "减") + f" {price}"
                     # 组合信号现在红黄两档都有，方向说明不能只给红
                     if kind == "boll_rsi" and level in ("red", "yellow") and d.get("boll_rsi_direction"):
                         entry["direction"] = d["boll_rsi_direction"]
@@ -4303,15 +4468,30 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel h4{font-size:13px;margin:12px 0 5px;color:#bfd5ff}
 #signalCounts .signal-members-panel ul{margin:0;padding-left:18px}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
+/* 名单前面的圆点按这一格的灯色走，不再是默认的白点；灰灯没有灯，用灰点 */
+#signalCounts .signal-members-panel li::marker{color:var(--dim)}
+#signalCounts .signal-members-panel.tone-red li::marker{color:var(--red)}
+#signalCounts .signal-members-panel.tone-yellow li::marker{color:var(--yellow)}
+#signalCounts .signal-members-panel.tone-purple li::marker{color:var(--purple)}
+/* 基本面也用上面那套 marker 圆点，不再单独画一个大的：整张统计表只有一种灯 */
+#signalCounts .text-only .signal-member-list li::marker{color:#9fa3aa}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
 #signalCounts .signal-member-direction{color:var(--dim);font-size:12px}
 #signalCounts .signal-member-belong{color:var(--dim);font-size:12px}
 #signalCounts .signal-member-split{list-style:none;height:0;margin:9px 0;border-top:1px solid #465e87}
 #signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}
+/* 分框展示：方向写在框标题上（「▲ 上涨」/「▲ 上轨 · RSI 3条过界」），名单里不再逐条画三角 */
+#signalCounts .signal-member-block{margin:0 0 10px}
+#signalCounts .signal-member-block:last-child{margin-bottom:0}
+#signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:#bfd5ff}
+#signalCounts .signal-member-block h5:first-letter{letter-spacing:0}
+#signalCounts .signal-member-block ul{padding-left:18px}
 #signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:14px;font-weight:700;line-height:1;vertical-align:baseline}
 #signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
 #signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
+/* 点开的是哪个数字胶囊，就亮哪个胶囊本身（不整行高亮） */
+#signalCounts .signal-count-toggle[aria-expanded="true"]{background:#2f4f86;border-color:#8fb8f0;color:#fff}
 #signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted #465e87}
 #signalCounts .signal-member-jump:hover,.signal-member-jump:focus-visible{color:#bfd5ff;border-bottom-color:#bfd5ff}
 #signalCounts .text-only{margin:8px 0 0;border:1px solid #2b3546;border-radius:8px;background:#12161f;text-align:left}
@@ -4321,16 +4501,27 @@ tr:first-child td{border-top:none}
 #signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
 #signalCounts .text-only li{margin:5px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
 tr[id^="s-"]{scroll-margin-top:64px}
-tr.stk-flash td{animation:stkflash 1.6s ease-out 1}
-@keyframes stkflash{0%{background:#2b3f63}100%{background:transparent}}
+/* 闪烁只改 background-color：带 52 周条的行，灯条是用 background-image 画的，
+   用 background 简写做动画会把灯条一起清掉（看起来就是高亮盖住了灯）。
+   位置条是主行的下一个兄弟行，一起闪才不会断成两截。 */
+tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out 1}
+@keyframes stkflash{0%,55%{background-color:#2b3f63}100%{background-color:transparent}}
 #signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;background:#182130;color:var(--text)}
 /* 折叠态绝对不占高度：个别移动内核在父面板隐藏期间改 open 后不重排，这里用 CSS 兜底 */
 #signalCounts .earnings-week:not([open])>*:not(summary){display:none}
 #signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:13.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
 #signalCounts .earnings-week summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts .earnings-week ul{list-style:none;margin:0;padding:0 0 8.1px}
+#signalCounts .earnings-week ul{list-style:disc;margin:0;padding:0 0 8.1px 18px}
 #signalCounts .earnings-week li{font-size:13px;padding:3.6px 0;overflow-wrap:anywhere}
 #signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
+/* 财报名单的灯也用行首圆点，和 52周低位/布林+RSI 等栏目同一位置同一大小 */
+#signalCounts .earnings-week li::marker{color:var(--dim)}
+#signalCounts .earnings-week li.lamp-red::marker{color:var(--red)}
+#signalCounts .earnings-week li.lamp-yellow::marker{color:var(--yellow)}
+#signalCounts .earnings-week li.lamp-green::marker{color:var(--green)}
+#signalCounts .earnings-week li.lamp-gray::marker{color:var(--dim)}
+#signalCounts .earnings-week .lamp-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
+  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 #signalCounts .earnings-week-meta{color:var(--text);margin-left:5px}
 #signalCounts .earnings-week-group{color:#8fb8f0}
 #signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;line-height:1;color:var(--text);
@@ -4350,7 +4541,6 @@ tr.stk-flash td{animation:stkflash 1.6s ease-out 1}
 #signalCounts .signal-filter-group{color:#8fb8f0}
 #signalCounts .signal-filter .stat-dot{width:9px;height:9px;margin-left:6px;vertical-align:-1px}
 #signalCounts .signal-filter-detail{display:block;margin-top:2px;color:var(--text)}
-#signalCounts .earnings-week .stat-dot{width:9px;height:9px;margin-left:6px;vertical-align:-1px}
 .earn{display:block;margin:0;color:#8fb8f0;font-size:12.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:12px}
 .earn.soon{color:#f0c674;font-weight:600}
@@ -4904,12 +5094,13 @@ def _run_light(snapshot, finished_txt):
 def _member_icons(d, kind, level):
     """只渲染已验证的方向标记；旧快照缺方向时显示待更新，绝不按当前报价反推。"""
     esc = lambda value: html_lib.escape(str(value), quote=True)
-    if kind == "boll_rsi" and level == "red":
+    # 组合信号现在红黄两档都有，箭头不能只给红档
+    if kind == "boll_rsi" and level in ("red", "yellow"):
         direction = d.get("direction") if isinstance(d.get("direction"), str) else ""
         hits = d.get("boll_rsi_hits")
-        if direction in ("上轨（超买）", "下轨（超卖）") and type(hits) is int and hits in (2, 3):
+        if direction.startswith(("上轨", "下轨")) and type(hits) is int and hits in (2, 3):
             shape = "▲" if direction.startswith("上轨") else "▼"
-            markers = [{"shape": shape, "tone": "yellow" if hits == 2 else "red",
+            markers = [{"shape": shape, "tone": "red" if level == "red" else "yellow",
                         "label": f"{direction}，RSI{hits}条过界"}]
         else:
             known = ("上轨（超买）", "下轨（超卖）", "上轨（RSI超卖，方向不一致）",
@@ -5005,10 +5196,13 @@ def _earnings_week_panel(snapshot, count_only=False):
         group = next((g["label"] for g in GROUPS if g["item_group"] == entry.get("group")), "未分类")
         level = entry.get("level")
         lamp_name = {"red": "红灯", "yellow": "黄灯", "green": "绿灯", "gray": "缺失"}.get(level)
-        lamp = (f'<i class="stat-dot {level}" role="img" aria-label="{lamp_name}"></i>' if lamp_name else "")
-        lines.append(f'<li><strong>{esc(entry["symbol"])}</strong>{note} <span class="earnings-week-meta">'
+        # 灯跟统计表其它栏目同一套：行首的列表圆点，颜色跟着这只股自己的灯级。
+        # marker 读屏读不到，补一段不可见文字，别让灯级信息只靠颜色传达。
+        lamp_cls = f' class="lamp-{level}"' if lamp_name else ""
+        lamp_text = f'<span class="lamp-text">（{lamp_name}）</span>' if lamp_name else ""
+        lines.append(f'<li{lamp_cls}><strong>{esc(entry["symbol"])}</strong>{note} <span class="earnings-week-meta">'
                      f'美东 {esc(date[5:].replace("-", "/"))} {timing} · {kind} · '
-                     f'<span class="earnings-week-group">{esc(group)}</span>{lamp}</span></li>')
+                     f'<span class="earnings-week-group">{esc(group)}</span></span>{lamp_text}</li>')
     if count_only:
         return len(lines)
     if not lines:
@@ -5072,42 +5266,50 @@ def _signal_counts_card(snapshot):
                 content = '<p>明细待下次更新：当前快照缺少成员或成员人数与计数不一致，暂不展示名单。</p>'
             else:
                 # 明细按方向分两段：先全部 ▲，一条横线，再全部 ▼，最后是没有三角的
-                # （文字方向/方向待更新）。不写分组标题，分组名放行尾括号，去掉中文备注名。
-                def _member_row(d):
+                # （文字方向/方向待更新）。不写分组标题，也不写分组名——点名字直接跳过去。
+                # 中文备注名保留，跟在代码后面，跟首页个股行一致。
+                def _member_row(d, icon=True):
                     # 分组名不再写在名单里：点名字直接跳到个股所在行，比括号里的分组名直观
-                    direction = _member_icons(d, kind, level).strip()
-                    if kind in ("chg", "amp", "vol_ratio"):
-                        metric = d.get("metric") or "数值待下次更新"
-                    elif kind == "rsi":
-                        metric = d.get("rsi_hits") or "条数待下次更新"
-                    elif kind == "boll":
-                        metric = d.get("boll_state") or "状态待下次更新"
-                    elif kind == "boll_rsi":
-                        hits = d.get("boll_rsi_hits")
-                        metric = (f"RSI {hits}条过界" if type(hits) is int and hits in (2, 3)
-                                  else "条数待下次更新")
-                    elif kind == "fund":
-                        # 基本面不改灯级，名单里直接把命中项写出来才有用
-                        hits = d.get("fund_hits") or []
-                        metric = "；".join(hits) if hits else "命中项待下次更新"
-                    else:
-                        metric = ""
+                    direction = _member_icons(d, kind, level).strip() if icon else ""
+                    metric = _member_metric_text(d, kind)
                     value = f' <span class="signal-member-metric">{esc(metric)}</span>' if metric else ""
-                    return (f'<li><a class="signal-member-jump" href="#{_stock_anchor_id(d["symbol"])}">'
-                            f'<span class="signal-member-symbol">{esc(d["symbol"])}</span></a>'
+                    note = (f'<span class="note">{esc(d["note"])}</span>'
+                            if isinstance(d.get("note"), str) and d["note"].strip() else "")
+                    # 灯统一用列表圆点（marker）画在最前面，基本面不再另起一套：
+                    # 52周低位、布林+RSI 等栏目都是这个位置、这个大小、按这一格灯色着色。
+                    return (f'<li>'
+                            f'<a class="signal-member-jump" href="#{_stock_anchor_id(d["symbol"])}">'
+                            f'<span class="signal-member-symbol">{esc(d["symbol"])}</span>{note}</a>'
                             f'{direction}{value}</li>')
 
-                buckets = {"up": [], "down": [], "other": []}
-                for d in sorted(entries, key=lambda x: group_order.get(str(x.get("group") or ""), len(GROUPS))):
-                    row = _member_row(d)
-                    buckets["up" if "▲" in row else "down" if "▼" in row else "other"].append(row)
-                parts = ["".join(buckets[name]) for name in ("up", "down", "other") if buckets[name]]
-                # 分隔线必须单独成变量：写成相邻字符串字面量会先被隐式拼接，
-                # 结果把 <div>/<ul> 一起当成连接符插进每一段之间。
-                divider = '<li class="signal-member-split" role="separator"></li>'
-                content = ('<div class="signal-member-groups"><ul class="signal-member-list">'
-                           + divider.join(parts) + '</ul></div>')
-            panels.append(f'<div class="signal-members-panel" id="{panel_id}" hidden>{content}</div>')
+                ordered = sorted(entries, key=lambda x: group_order.get(str(x.get("group") or ""), len(GROUPS)))
+                if kind in _BLOCK_PANEL_KINDS:
+                    # 方向放到框标题上：▲ 一框、▼ 一框，名单里不再逐条画三角
+                    blocks, order = {}, []
+                    for d in ordered:
+                        shape, title = _member_block(d, kind)
+                        if (shape, title) not in blocks:
+                            blocks[(shape, title)] = []
+                            order.append((shape, title))
+                        blocks[(shape, title)].append(_member_row(d, icon=False))
+                    order.sort(key=lambda k: (0 if k[0] == "▲" else 1 if k[0] == "▼" else 2))
+                    content = '<div class="signal-member-groups">' + "".join(
+                        f'<div class="signal-member-block"><h5>{esc(f"{shape} {title}".strip())}</h5>'
+                        f'<ul class="signal-member-list">{"".join(blocks[(shape, title)])}</ul></div>'
+                        for shape, title in order) + '</div>'
+                else:
+                    buckets = {"up": [], "down": [], "other": []}
+                    for d in ordered:
+                        row = _member_row(d)
+                        buckets["up" if "▲" in row else "down" if "▼" in row else "other"].append(row)
+                    parts = ["".join(buckets[name]) for name in ("up", "down", "other") if buckets[name]]
+                    # 分隔线必须单独成变量：写成相邻字符串字面量会先被隐式拼接，
+                    # 结果把 <div>/<ul> 一起当成连接符插进每一段之间。
+                    divider = '<li class="signal-member-split" role="separator"></li>'
+                    content = ('<div class="signal-member-groups"><ul class="signal-member-list">'
+                               + divider.join(parts) + '</ul></div>')
+            # tone-* 只用来给名单前面的圆点上色：这一格是红档，圆点就是红的
+            panels.append(f'<div class="signal-members-panel tone-{level}" id="{panel_id}" hidden>{content}</div>')
         rows += (f'<tr><td><button type="button" class="signal-filter-toggle" data-kind="{esc(kind)}" '
                  f'aria-pressed="false">{label}</button></td>{"".join(cells)}</tr>'
                  f'<tr class="signal-members-row"><td colspan="4">{"".join(panels)}</td></tr>')
@@ -5161,8 +5363,9 @@ def _text_only_panel(snapshot):
     order = {"rsi": 0, "boll": 1, "boll_rsi": 2}
 
     def cell(r):
+        note = f'<span class="note">{esc(r.get("note"))}</span>' if str(r.get("note") or "").strip() else ""
         return (f'<li><a class="signal-member-jump" href="#{_stock_anchor_id(str(r.get("symbol") or ""))}">'
-                f'<span class="signal-member-symbol">{esc(r.get("symbol"))}</span></a>'
+                f'<span class="signal-member-symbol">{esc(r.get("symbol"))}</span>{note}</a>'
                 f' {esc(r.get("shape") or "")}'
                 f' <span class="signal-member-metric">{esc(r.get("detail") or "")}</span></li>')
 

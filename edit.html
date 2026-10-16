@@ -197,6 +197,9 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
         <div class="setrow"><label>目标价高出现价超过 x% → 紫（仅持仓和重点）</label><input id="set_target_space_pct" inputmode="decimal"></div>
         <div class="setrow"><label>最近完整交易日量比 ≥ x 倍 → 黄</label><input id="set_vol_ratio" inputmode="decimal"></div>
         <div class="setrow"><label>最近完整交易日量比 ≥ x 倍 → 红（所有分组）</label><input id="set_vol_ratio_red" inputmode="decimal"></div>
+        <div class="setrow"><label>收盘后量比「自身波动」≥ x σ → 黄（0 = 关闭自适应，退回上面的固定倍数）</label><input id="set_vol_ratio_z" inputmode="decimal"></div>
+        <div class="setrow"><label>收盘后量比「自身波动」≥ x σ → 红（0 = 关闭自适应）</label><input id="set_vol_ratio_red_z" inputmode="decimal"></div>
+        <details class="set"><summary>量比判定说明</summary><p class="note">收盘后：先把最近完整日量比换算成这只股自己的「自身波动 σ」——用近 60 个交易日的 ln(当日量÷前20日均量) 分布取中位数与 MAD 当尺子，平稳的票 1.3× 也可能算异常，常年巨量的票 2× 也未必算；默认 1.8σ / 3.6σ 是用真实日线标定的等效值：黄灯数量与旧的固定 1.5× 相当（每 100 只每天约 7 只），红灯约 2 只（旧的 3× 太严，几乎不亮）。σ 算不出（历史不足 80 根日线、量缺失、量恒定）或量比不足 1×（缩量）时，退回上面的固定倍数，缩量不报灯。盘中：始终按固定倍数判定，且开盘后 15 分钟内不报、改用昨日完整日口径。</p></details>
         <div class="setrow"><label>日内振幅 ≥ x% → 黄</label><input id="set_amp_yellow" inputmode="decimal"></div>
         <div class="setrow"><label>日内振幅 ≥ x% → 红</label><input id="set_amp_red" inputmode="decimal"></div>
       </div>
@@ -751,14 +754,14 @@ $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定
 
 /* ---------- 规则阈值（settings.json） ---------- */
 const SET_DEFS={boll_n:20,boll_k:2,boll_near_pct:0.5,boll_near_band_pct:15,chg_red:4,chg_yellow:2,
-  rsi_high:70,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,target_gap_pct:3,target_space_pct:50,vol_ratio:1.5,vol_ratio_red:3,
+  rsi_high:70,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,target_gap_pct:3,target_space_pct:50,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:1.8,vol_ratio_red_z:3.6,
   amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,
   hy_green:350,hy_red:400,vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,signal_single_open:1,
   dca_every:0,dca_start:''};
 const SET_KEYS=Object.keys(SET_DEFS);
 const SET_LIMITS={ma_short:[0,250],ma_long:[0,250],boll_n:[2,250],boll_k:[.1,10],boll_near_pct:[0,100],boll_near_band_pct:[0,100],chg_yellow:[0,100],chg_red:[0,100],
   rsi_low:[0,100],rsi_high:[0,100],near_52w_low_pct:[0,100],trigger_gap_pct:[0,100],reduce_gap_pct:[0,100],target_gap_pct:[0,100],target_space_pct:[0,1000],vol_ratio:[.1,100],
-  vol_ratio_red:[.1,100],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],signal_single_open:[0,1],
+  vol_ratio_red:[.1,100],vol_ratio_z:[0,10],vol_ratio_red_z:[0,10],amp_yellow:[0,100],amp_red:[0,100],hy_green:[0,10000],signal_single_open:[0,1],
   hy_red:[0,10000],vix_green:[0,200],vix_yellow:[0,200],vix_red:[0,200],dca_every:[0,10000]};
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
 function settingsError(){
@@ -775,8 +778,10 @@ function settingsError(){
   }
   if(!(values.rsi_low<values.rsi_high))return 'RSI 超卖线必须小于超买线';
   for(const keys of [['chg_yellow','chg_red'],['amp_yellow','amp_red'],['vol_ratio','vol_ratio_red'],
+    ['vol_ratio_z','vol_ratio_red_z'],
     ['hy_green','hy_red'],['vix_green','vix_yellow','vix_red'],['ma_short','ma_long']]){
     if(keys[0]==='ma_short'&&(values.ma_short===0||values.ma_long===0))continue;
+    if(keys[0]==='vol_ratio_z'&&(values.vol_ratio_z===0||values.vol_ratio_red_z===0))continue;  // 0 = 关闭自适应，不比顺序
     if(keys.some((key,i)=>i&&values[key]<values[keys[i-1]]))return keys.join('、')+' 的阈值顺序不正确';
   }
   const start=$('set_dca_start').value.trim();

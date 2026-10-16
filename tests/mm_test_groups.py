@@ -3,6 +3,7 @@ import json
 import re
 import os
 import sys
+import tempfile
 import unittest
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
@@ -3233,6 +3234,163 @@ class TestIntradayVolumeRatio(unittest.TestCase):
         self.assertFalse(any('盘中量比' in text for text in signals), signals)
 
 
+class TestVolumeRatioZscore(unittest.TestCase):
+    """收盘后量比改按这只股自己的放量分布（z 值）判灯；z 算不出就退回固定倍数，盘中口径完全不动。"""
+
+    CLOSE = '2026-10-13T20:15:00-04:00'
+
+    def history(self, last=None, days=120, flat=False):
+        import random
+        import exchange_calendars as xcals
+        cal = xcals.get_calendar('XNYS')
+        sessions = cal.sessions_in_range('2026-04-01', '2026-10-13')[-days:]
+        rng = random.Random(11)
+        volumes = ([1000.0] * days if flat
+                   else [1000 * (1 + rng.uniform(-0.2, 0.2)) for _ in range(days)])
+        if last is not None:
+            volumes[-1] = last
+        return {'dates': [d.date().isoformat() for d in sessions], 'volumes': volumes,
+                'closes': [100.0] * days, 'highs': [100.0] * days, 'lows': [100.0] * days,
+                'price': 100.0, 'prev_close': 100.0}
+
+    def measure(self, data):
+        from datetime import datetime
+        with patch.object(monitor, 'NOW', datetime.fromisoformat(self.CLOSE)), \
+                patch.object(monitor, 'TARGET_DATE', None):
+            return (monitor.completed_day_volume_ratio('AAPL', data),
+                    monitor.completed_day_volume_z('AAPL', data))
+
+    def context(self, ratio=1.3, z=1.6, intraday=False, rt=0.0):
+        from types import SimpleNamespace
+        return SimpleNamespace(vol_ratio=ratio, vol_ratio_z=z, vol_ratio_date='2026-10-13',
+                               vol_ratio_intraday=intraday, rt_vol_ratio=rt, rt_vol_time='12:00')
+
+    @staticmethod
+    def run_rule(x, **overrides):
+        al = monitor._Alerts()
+        with patch.object(monitor, 'S', {**monitor.S, **overrides}):
+            monitor._rule_vol_ratio(al, x)
+        return al
+
+    def base_mean(self, data):
+        return sum(data['volumes'][-21:-1]) / 20
+
+    def test_z_grows_with_volume_and_flat_history_has_no_scale(self):
+        normal_z = self.measure(self.history())[1]
+        big = self.history(last=self.base_mean(self.history()) * 3)
+        (ratio, _), big_z = self.measure(big)
+        self.assertIsInstance(normal_z, float)
+        self.assertLess(abs(normal_z), 1.5)          # 平时的量不该被判成异常
+        self.assertGreater(big_z, normal_z)
+        self.assertGreater(big_z, 2.0)               # 3 倍量在这条波动序列上远超 2σ
+        self.assertAlmostEqual(ratio, 3.0, places=6)
+        # 量恒定 → 分布尺度为 0，无法定门槛，只能退回固定倍数
+        flat = self.history(flat=True, last=1300.0)
+        self.assertIsNone(self.measure(flat)[1])
+        self.assertAlmostEqual(self.measure(flat)[0][0], 1.3, places=6)
+        # 历史不足 80 根日线也算不出
+        self.assertIsNone(self.measure(self.history(days=40))[1])
+
+    def test_rule_uses_z_when_available(self):
+        # 默认黄 1.8σ / 红 3.6σ（按真实日线标定，命中率与旧的 1.5× / 3× 相当）
+        for z, level in ((0.5, None), (1.7, None), (1.8, 'yellow'), (2.5, 'yellow'),
+                         (3.6, 'red'), (5.0, 'red')):
+            with self.subTest(z=z):
+                al = self.run_rule(self.context(z=z))
+                if level is None:
+                    self.assertEqual(al.marks, [])
+                else:
+                    self.assertEqual(al.marks, [('vol_ratio', level)])
+                    # σ 只是内部判定尺度，页面文案里不出现
+                    self.assertEqual(al.signals[0], '最近完整日量比（2026-10-13）1.3x')
+        # 阈值本身可调
+        self.assertEqual(self.run_rule(self.context(z=1.6), vol_ratio_z=2.0, vol_ratio_red_z=3.0).marks, [])
+        self.assertEqual(self.run_rule(self.context(z=2.5), vol_ratio_red_z=3.0).marks,
+                         [('vol_ratio', 'yellow')])
+
+    def test_falls_back_to_fixed_multiple_when_z_unusable_or_disabled(self):
+        # z 缺失（历史不足 / 量恒定）→ 固定倍数
+        al = self.run_rule(self.context(ratio=1.6, z=None))
+        self.assertEqual(al.marks, [('vol_ratio', 'yellow')])
+        self.assertNotIn('自身波动', al.signals[0])
+        # 任一条 z 阈值设为 0 = 关闭自适应
+        for disabled in ({'vol_ratio_z': 0}, {'vol_ratio_red_z': 0}, {'vol_ratio_z': 0, 'vol_ratio_red_z': 0}):
+            with self.subTest(disabled=disabled):
+                al = self.run_rule(self.context(ratio=1.6, z=4.0), **disabled)
+                self.assertEqual(al.marks, [('vol_ratio', 'yellow')])
+                self.assertNotIn('自身波动', al.signals[0])
+                # 关掉自适应后，1.3× 这种低于固定黄线的不再报
+                self.assertEqual(self.run_rule(self.context(ratio=1.3, z=4.0), **disabled).marks, [])
+
+    def test_shrinking_volume_never_lights_even_with_extreme_z(self):
+        # 缩量方向不报灯：z 只回答「放得有多异常」，不把地量当放量
+        al = self.run_rule(self.context(ratio=0.8, z=3.0))
+        self.assertEqual(al.marks, [])
+        self.assertEqual(self.run_rule(self.context(ratio=1.0, z=0.2)).marks, [])
+
+    def test_intraday_keeps_fixed_multiple_and_shows_no_sigma(self):
+        # 盘中口径一点不动：仍按固定倍数、仍带时刻、不叠加昨日完整日
+        al = self.run_rule(self.context(intraday=True, rt=1.6, z=9.9))
+        self.assertEqual(al.marks, [('vol_ratio', 'yellow')])
+        self.assertIn('盘中量比（截至 12:00 ET）1.6x', al.signals[0])
+        self.assertNotIn('自身波动', al.signals[0])
+        self.assertEqual(len(al.signals), 1)
+        self.assertEqual(self.run_rule(self.context(intraday=True, rt=1.2, z=9.9)).marks, [])
+
+    def test_detail_carries_z_but_page_never_prints_sigma(self):
+        d = {'vol_ratio': 1.3, 'vol_ratio_z': 1.6, 'vol_ratio_date': '2026-10-13'}
+        self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×（2026-10-13完整日）')
+        with patch.object(monitor, 'S', {**monitor.S, 'vol_ratio_z': 0}):
+            self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×（2026-10-13完整日）')
+        # 自适应开着也不把 σ 写出来：用户看不懂，判定照用
+        self.assertNotIn('σ', monitor._member_metric(d, 'vol_ratio'))
+        self.assertEqual(monitor._member_metric(dict(d, vol_ratio_z=None), 'vol_ratio'),
+                         '量比 1.3×（2026-10-13完整日）')
+
+    def test_end_to_end_after_close_lights_by_own_swing(self):
+        from datetime import datetime
+        data = self.history()
+        data = dict(data, volumes=data['volumes'][:-1] + [self.base_mean(data) * 1.5])
+        with patch.object(monitor, 'NOW', datetime.fromisoformat(self.CLOSE)), \
+                patch.object(monitor, 'TARGET_DATE', None):
+            _, signals, detail = monitor.analyze_symbol('AAPL', {}, data, 'technology')
+        self.assertIsInstance(detail.get('vol_ratio_z'), float)
+        self.assertGreater(detail['vol_ratio_z'], 1.8)   # 这条波动序列上 1.5× 已超过 1.8σ
+        self.assertIn(('vol_ratio', 'yellow'), detail['signal_marks'])
+        self.assertTrue(any(text == '最近完整日量比（2026-10-13）1.5x' for text in signals), signals)
+        # 同一只股放到 3× 量：z 更高，直接红
+        huge = dict(data, volumes=data['volumes'][:-1] + [self.base_mean(data) * 3])
+        with patch.object(monitor, 'NOW', datetime.fromisoformat(self.CLOSE)), \
+                patch.object(monitor, 'TARGET_DATE', None):
+            _, _, huge_detail = monitor.analyze_symbol('AAPL', {}, huge, 'technology')
+        self.assertGreater(huge_detail['vol_ratio_z'], 3.6)
+        self.assertIn(('vol_ratio', 'red'), huge_detail['signal_marks'])
+        # 量恒定 + 1.3×：算不出 σ，固定倍数也没到线，不报灯也不硬写 σ
+        flat = self.history(flat=True, last=1300.0)
+        with patch.object(monitor, 'NOW', datetime.fromisoformat(self.CLOSE)), \
+                patch.object(monitor, 'TARGET_DATE', None):
+            _, flat_signals, flat_detail = monitor.analyze_symbol('AAPL', {}, flat, 'technology')
+        self.assertIsNone(flat_detail.get('vol_ratio_z'))
+        self.assertFalse(any(k == 'vol_ratio' for k, _ in flat_detail['signal_marks']))
+        self.assertFalse(any('量比' in text for text in flat_signals), flat_signals)
+
+    def test_settings_zero_disables_without_being_overridden(self):
+        self.assertFalse(monitor.valid_settings(
+            {**monitor.DEFAULT_SETTINGS, 'vol_ratio_z': 0, 'vol_ratio_red_z': 0}))
+        self.assertFalse(monitor.valid_settings({**monitor.DEFAULT_SETTINGS}))
+        self.assertEqual(monitor.valid_settings(
+            {**monitor.DEFAULT_SETTINGS, 'vol_ratio_z': 3.0, 'vol_ratio_red_z': 2.0}),
+            'vol_ratio_z / vol_ratio_red_z')
+        self.assertEqual(monitor.valid_settings({**monitor.DEFAULT_SETTINGS, 'vol_ratio_z': 11}),
+                         'vol_ratio_z')
+        with tempfile.TemporaryDirectory() as tmp:
+            with open(os.path.join(tmp, 'settings.json'), 'w', encoding='utf-8') as f:
+                json.dump({'vol_ratio_z': 0, 'vol_ratio_red_z': 0}, f)
+            with patch.object(monitor, 'BASE', tmp):
+                loaded = monitor.load_settings()
+        self.assertEqual((loaded['vol_ratio_z'], loaded['vol_ratio_red_z']), (0, 0))
+
+
 class TestMaCrossConflict(unittest.TestCase):
     """同一格出现上下箭头时（不同周期均线方向相反），跟布林+RSI 方向不一致一样改用文字。"""
 
@@ -3274,8 +3432,8 @@ class TestMemberDetailDirectionSplit(unittest.TestCase):
             {'signal_counts': {kind: {'label': '涨跌幅', level: len(entries)}},
              'signal_members': {kind: {level: entries}}})
         panel_id = f'signal-members-{hashlib.sha256(kind.encode("utf-8")).hexdigest()}-{level}'
-        match = re.search(r'<div class="signal-members-panel" id="' + panel_id
-                          + r'" hidden>(.*?)</div>(?=<div class="signal-members-panel"|</td>)',
+        match = re.search(r'<div class="signal-members-panel tone-' + level + r'" id="' + panel_id
+                          + r'" hidden>(.*?)</div>(?=<div class="signal-members-panel|</td>)',
                           output, re.S)
         self.assertIsNotNone(match, output)
         return match.group(1)
@@ -3297,8 +3455,9 @@ class TestMemberDetailDirectionSplit(unittest.TestCase):
             self.assertNotIn(sym, head, body)
         self.assertLess(head.index('UP_POS'), head.index('UP_FOCUS'))   # 同向按分组顺序
         self.assertLess(tail.index('DN_POS'), tail.index('DN_FOCUS'))
-        self.assertNotIn('上备注', body)                      # 中文备注名去掉
-        self.assertNotIn('下备注', body)
+        # 中文备注名跟在代码后面（放在跳转链接内），分组名仍然不写
+        self.assertIn('>UP_FOCUS</span><span class="note">上备注</span></a>', body)
+        self.assertIn('>DN_FOCUS</span><span class="note">下备注</span></a>', body)
         self.assertIn('class="signal-member-jump"', body)     # 名字可点跳转，不再写分组名
         self.assertEqual(body.count('class="signal-member-list"'), 1)
 
@@ -4030,6 +4189,21 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('line-height:0', strip_rule.group(1))
         self.assertIn('.collapse-group:hover{color:var(--text);background:transparent}', monitor.PAGE_CSS)
 
+    def test_jump_flash_never_overwrites_the_lamp_bar(self):
+        """闪烁只能用 background-color：带 52 周条的行灯条是 background-image 画的，
+        background 简写会把灯条一起清掉，看起来就是高亮盖住了灯条。"""
+        rule = re.search(r'tr\.stk-flash[^{]*\{([^}]+)\}', monitor.PAGE_CSS)
+        self.assertIsNotNone(rule)
+        self.assertIn('animation:stkflash', rule.group(1))
+        # 位置条是主行的下一个兄弟行，一起闪才不会断成两截
+        self.assertIn('tr.stk-flash+tr.range52-row>td', monitor.PAGE_CSS)
+        frames = re.search(r'@keyframes stkflash\{(.*?)\}\s', monitor.PAGE_CSS + ' ', re.S)
+        self.assertIsNotNone(frames)
+        self.assertIn('background-color:#2b3f63', frames.group(1))
+        self.assertIn('background-color:transparent', frames.group(1))
+        for bad in ('background:#2b3f63', 'background:transparent'):   # 简写会清掉灯条的 background-image
+            self.assertNotIn(bad, frames.group(1))
+
     def test_counts_panel_precedes_market_risk_and_has_distinct_frame(self):
         snap = {'signal_counts': {'ma_band': {'label': '长均线触及', 'red': 0,
                  'yellow': 5, 'purple': 0}}, 'summary': {'yellow': 5}}
@@ -4198,16 +4372,21 @@ class TestSignalCounts(unittest.TestCase):
             self.assertIn('#signalCounts td{padding:6.3px 5px;', monitor.PAGE_CSS)  # 统计面板压缩上下留白
             self.assertIn('.signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;', monitor.PAGE_CSS)  # 数字胶囊扁长方形
             self.assertIn('.signal-filter-toggle{box-sizing:border-box;height:38px;', monitor.PAGE_CSS)  # 与信号名胶囊同高对齐
-            green = '<i class="stat-dot green" role="img" aria-label="绿灯"></i>'
-            self.assertIn('10/14 盘后 · 预计 · <span class="earnings-week-group">IT软硬Ai</span>' + green, panel)
-            self.assertIn('10/21 盘后 · 官方活动日期 · <span class="earnings-week-group">持仓</span>' + green, panel)
+            # 财报的灯跟统计表其它栏目一致：行首圆点（marker），不再在行尾挂一个 stat-dot
+            self.assertIn('<li class="lamp-green"><strong>AAPL</strong>', panel)
+            self.assertIn('10/14 盘后 · 预计 · <span class="earnings-week-group">IT软硬Ai</span>'
+                          '</span><span class="lamp-text">（绿灯）</span>', panel)
+            self.assertIn('10/21 盘后 · 官方活动日期 · <span class="earnings-week-group">持仓</span>'
+                          '</span><span class="lamp-text">（绿灯）</span>', panel)
+            self.assertNotIn('stat-dot', panel)
             self.assertNotIn('· 绿灯', panel)
             self.assertIn('#signalCounts .earnings-week-group{color:#8fb8f0}', monitor.PAGE_CSS)
             red = monitor._earnings_week_panel({'earnings_week': {'asof': '2026-10-14', 'members': [
                 {'symbol': 'NOC', 'group': 'position', 'level': 'red', 'date': '2026-10-20'},
                 {'symbol': 'BAD', 'group': 'position', 'level': '<x>', 'date': '2026-10-20'}]}})
-            self.assertIn('<i class="stat-dot red" role="img" aria-label="红灯"></i>', red)
-            self.assertEqual(red.count('stat-dot'), 1)  # 未知灯级不画点、不注入
+            self.assertIn('<li class="lamp-red"><strong>NOC</strong>', red)
+            self.assertIn('<li><strong>BAD</strong>', red)          # 未知灯级不画灯、不注入
+            self.assertEqual(red.count('class="lamp-red"'), 1)   # 只有 NOC 有灯
             self.assertNotIn('<strong>LATE</strong>', panel)
             self.assertNotIn('<table>', panel)  # 只有财报名单时不画信号计数表，不伪造信号
             page = monitor.render({}, rows, len(rows), snapshot=snap)
@@ -4280,8 +4459,8 @@ class TestSignalCounts(unittest.TestCase):
     def panel(self, output, kind, level):
         import hashlib
         panel_id = f'signal-members-{hashlib.sha256(kind.encode("utf-8")).hexdigest()}-{level}'
-        match = re.search(r'<div class="signal-members-panel" id="' + panel_id
-                          + r'" hidden>(.*?)</div>(?=<div class="signal-members-panel"|</td>)',
+        match = re.search(r'<div class="signal-members-panel tone-' + level + r'" id="' + panel_id
+                          + r'" hidden>(.*?)</div>(?=<div class="signal-members-panel|</td>)',
                           output, re.S)
         self.assertIsNotNone(match, output)
         return match.group(1)
@@ -4308,14 +4487,129 @@ class TestSignalCounts(unittest.TestCase):
         self.assertIn('>基本面</button>', output)
         red_panel = self.panel(output, 'fund', 'red')
         self.assertIn('>AAA</span>', red_panel)
-        self.assertIn('营收较基准下降 24%', red_panel)
-        self.assertIn('毛利率下滑 3.4 个百分点', self.panel(output, 'fund', 'yellow'))
+        # 命中项不在统计名单里复述（个股行自己有点开的折叠详情），只在行首挂灯色圆点
+        self.assertNotIn('营收较基准下降 24%', red_panel)
+        self.assertNotIn('毛利率下滑 3.4 个百分点', self.panel(output, 'fund', 'yellow'))
+        # 灯就是其它栏目那个行首圆点，基本面不再自己画一个大的
+        self.assertNotIn('signal-member-dot', output)
+        self.assertIn('<div class="signal-members-panel tone-red"', output)
+        self.assertIn('<div class="signal-members-panel tone-yellow"', output)
         self.assertNotIn('CCC', output)  # 基本面绿灯不进统计
         # 这一轮没有基本面警示：整块统计也不该出现
         quiet = [self.member_row('ZZZ', 'position', 'green')]
         self.assertEqual(monitor._signal_counts_card(
             {'signal_counts': monitor.signal_counts(quiet),
              'signal_members': monitor.signal_count_members(quiet)}), '')
+
+    def test_fund_detail_lists_hits_without_any_lights(self):
+        """个股行折叠里的基本面详情就是一份清单：不挂红/黄圆点，也不猜每条命中的等级。"""
+        fund = {'level': 'red', 'period': '2026/6',
+                'hits': ['营收较2025/9 -24%', '毛利率 50.0%→46.1%', '本季净利含一次性损益，ROE未参与判定']}
+        html = monitor._fund_detail_html({'symbol': 'AAA', 'fund': fund})
+        self.assertIn('<li>营收较2025/9 -24%</li>', html)
+        self.assertIn('<li>毛利率 50.0%→46.1%</li>', html)
+        self.assertNotIn('signal-member-dot', html)   # 详情里没有灯
+        self.assertNotIn('hit_levels', html)
+
+    def test_add_and_reduce_price_members_print_the_price(self):
+        """统计面板的加仓价/减仓价名单里补上价位，写法跟个股行胶囊一致（加 325 / 减 400）。"""
+        rows = [self.member_row('AAA', 'position', 'red', ('add_price', 'red')),
+                self.member_row('BBB', 'position', 'red', ('reduce_price', 'red')),
+                self.member_row('CCC', 'position', 'red', ('add_price', 'red'))]
+        rows[0].update(trigger=325)
+        rows[1].update(reduce=400.5)
+        rows[2].update(trigger='写坏了')      # 无效价不占位，也不写空标签
+        members = monitor.signal_count_members(rows)
+        output = monitor._signal_counts_card({'signal_counts': monitor.signal_counts(rows),
+                                              'signal_members': members})
+        add_panel = self.panel(output, 'add_price', 'red')
+        self.assertIn('>加 325</span>', add_panel)
+        self.assertNotIn('加仓价 325', add_panel)      # 不在统计里另写长名
+        self.assertIn('>减 400.5</span>', self.panel(output, 'reduce_price', 'red'))
+        self.assertNotIn('待下次更新', add_panel)
+
+    def test_low52_members_print_the_52_week_low_price(self):
+        """52周低位那一栏把低点价本身写出来：只说「距低点 +2.6%」看不见价格。"""
+        rows = [self.member_row('LOW', 'position', 'red', ('low52', 'red'))]
+        rows[0].update(low52=12.3456)
+        members = monitor.signal_count_members(rows)
+        self.assertEqual(members['low52']['red'][0]['low52_price'], '12.35')
+        panel = self.panel(monitor._signal_counts_card(
+            {'signal_counts': monitor.signal_counts(rows), 'signal_members': members}), 'low52', 'red')
+        self.assertIn('52周低 12.35', panel)
+        # 旧快照没有低点价就不硬写
+        old = [self.member_row('OLD', 'position', 'red', ('low52', 'red'))]
+        old_panel = self.panel(monitor._signal_counts_card(
+            {'signal_counts': monitor.signal_counts(old),
+             'signal_members': monitor.signal_count_members(old)}), 'low52', 'red')
+        self.assertNotIn('52周低', old_panel)
+
+    def test_add_and_reduce_price_stay_two_rows_so_buy_and_sell_never_mix(self):
+        """加仓价（该买）与减仓价（该卖）动作相反，统计面板各占一行、各带自己的价位。
+
+        曾试过合并成「加/减仓价」一行：计数从标的数变成命中次数，同一只票两端都命中时
+        表头会多算一只，而且「同时满足」筛选项也没法再单独挑减仓价，故改回两行。"""
+        rows = [self.member_row('AAA', 'position', 'red', ('add_price', 'red'), ('reduce_price', 'red'))]
+        rows[0].update(trigger=325, reduce=400.5)
+        counts = monitor.signal_counts(rows)
+        output = monitor._signal_counts_card({'signal_counts': counts,
+                                              'signal_members': monitor.signal_count_members(rows)})
+        self.assertIn('>加仓价</button>', output)
+        self.assertIn('>减仓价</button>', output)
+        self.assertEqual(counts['add_price']['red'], 1)
+        self.assertEqual(counts['reduce_price']['red'], 1)
+        self.assertIn('>加 325</span>', self.panel(output, 'add_price', 'red'))
+        self.assertIn('>减 400.5</span>', self.panel(output, 'reduce_price', 'red'))
+        self.assertEqual(output.count('class="signal-member-block"'), 0)   # 这两栏不分框
+
+    def test_fund_members_show_a_light_dot_at_the_front_instead_of_the_hits(self):
+        """基本面那一栏：行首挂灯色圆点（与其它栏目的方向图标位置一致），
+        不再把命中项复述在代码后面。"""
+        # 基本面只走 d['fund']，不进 signal_marks（进了会被算两遍，名单与计数对不上）
+        rows = [self.member_row('AAA', 'position', 'red', note='甲'),
+                self.member_row('BBB', 'position', 'yellow')]
+        rows[0]['fund'] = {'level': 'red', 'hits': ['营收较基准下降 24%'], 'period': '2026/6'}
+        rows[1]['fund'] = {'level': 'yellow', 'hits': ['毛利率下滑 3.4 个百分点'], 'period': '2026/6'}
+        output = monitor._signal_counts_card({'signal_counts': monitor.signal_counts(rows),
+                                              'signal_members': monitor.signal_count_members(rows)})
+        red_panel = self.panel(output, 'fund', 'red')
+        # 行首圆点就是灯，和 52周低位 / 布林+RSI 那几栏同一个位置同一个大小，不再单画
+        self.assertIn('<li><a class="signal-member-jump" href="#s-aaa">', red_panel)
+        self.assertNotIn('signal-member-dot', red_panel)
+        self.assertNotIn('signal-member-fund', red_panel)
+        self.assertNotIn('营收较基准下降 24%', red_panel)   # 命中项不在统计名单里复述
+        self.assertNotIn('毛利率下滑 3.4 个百分点', self.panel(output, 'fund', 'yellow'))
+        self.assertIn('#signalCounts .signal-members-panel.tone-red li::marker{color:var(--red)}', monitor.PAGE_CSS)
+        self.assertIn('#signalCounts .earnings-week li.lamp-red::marker{color:var(--red)}', monitor.PAGE_CSS)
+
+    def test_member_panels_are_toned_so_bullets_follow_the_light(self):
+        """名单前的圆点靠面板上的 tone-* 上色：这一格红档，圆点就是红的。"""
+        rows = [self.member_row('AAA', 'position', 'red', ('chg', 'red'), ('rsi', 'yellow')),
+                self.member_row('BBB', 'focus', 'green', ('target', 'purple'))]
+        output = monitor._signal_counts_card(monitor.build_snapshot({}, rows, {}, group_counts={}))
+        self.assertIn('<div class="signal-members-panel tone-red" id="'
+                      + self.panel_id('chg') + '-red" hidden>', output)
+        self.assertIn('<div class="signal-members-panel tone-yellow" id="'
+                      + self.panel_id('rsi') + '-yellow" hidden>', output)
+        self.assertIn('<div class="signal-members-panel tone-purple" id="'
+                      + self.panel_id('target') + '-purple" hidden>', output)
+        self.assertIn('#signalCounts .signal-members-panel.tone-red li::marker{color:var(--red)}', monitor.PAGE_CSS)
+        self.assertIn('#signalCounts .text-only .signal-member-list li::marker{color:#9fa3aa}', monitor.PAGE_CSS)
+
+    def test_expanding_a_count_lights_only_that_count_capsule(self):
+        """点开哪一格，就只亮那一格的数字胶囊（认 aria-expanded），不整行高亮。"""
+        css = monitor.PAGE_CSS
+        self.assertIn('#signalCounts .signal-count-toggle[aria-expanded="true"]', css)
+        for dropped in ('tr.signal-open', 'tr.signal-picked'):
+            self.assertNotIn(dropped, css)
+            self.assertNotIn(dropped, monitor.PAGE_INTERACTION_JS)
+        # 收起整块统计时把 aria-expanded 复位，胶囊的亮色跟着灭
+        self.assertIn('button.setAttribute("aria-expanded", "false");', monitor.PAGE_INTERACTION_JS)
+
+    @staticmethod
+    def panel_id(kind):
+        import hashlib
+        return f'signal-members-{hashlib.sha256(kind.encode("utf-8")).hexdigest()}'
 
     def test_member_counts_match_every_kind_and_level(self):
         rows = [self.member_row('AAA', 'position', 'red', ('chg', 'red'), ('rsi', 'yellow')),
@@ -4405,10 +4699,13 @@ class TestSignalCounts(unittest.TestCase):
         amp_yellow = self.panel(output, 'amp', 'yellow')
         amp_red = self.panel(output, 'amp', 'red')
         volume = self.panel(output, 'vol_ratio', 'yellow')
-        for panel in (amp_yellow, volume):
-            self.assertIn('tone-white" role="img" aria-label="2026-10-14股价上涨1.60%">▲', panel)
-            self.assertIn('平盘', panel)
-        self.assertIn('tone-white" role="img" aria-label="2026-10-14股价下跌3.20%">▼', volume)
+        # 量比的方向放到框标题上，名单里不再逐条画三角
+        self.assertIn('tone-white" role="img" aria-label="2026-10-14股价上涨1.60%">▲', amp_yellow)
+        self.assertIn('tone-white" role="img" aria-label="2026-10-14股价下跌3.20%">▼', amp_red)
+        self.assertIn('<h5>▲ 上涨</h5>', volume)
+        self.assertIn('<h5>▼ 下跌</h5>', volume)
+        self.assertIn('<h5>平盘</h5>', volume)
+        self.assertNotIn('signal-member-icon', volume)
         self.assertIn('振幅 5.4%', amp_yellow)
         self.assertIn('振幅 7.1%', amp_red)
         self.assertIn('量比 2.4×（2026-10-13完整日）', volume)
@@ -4488,8 +4785,9 @@ class TestSignalCounts(unittest.TestCase):
         for kind in ('amp', 'vol_ratio'):
             panel = self.panel(page, kind, 'yellow')
             self.assertIn('数值待下次更新', panel)
-            self.assertIn('方向待下次更新', panel)
             self.assertNotIn('<script>', panel)
+        self.assertIn('方向待下次更新', self.panel(page, 'amp', 'yellow'))
+        self.assertIn('<h5>平盘</h5>', self.panel(page, 'vol_ratio', 'yellow'))  # 量比方向不明归「平盘」框
         self.assertIn('条数待下次更新', self.panel(page, 'rsi', 'yellow'))
 
     def test_target_same_symbol_can_show_solid_and_hollow_squares_without_double_count(self):
@@ -4535,52 +4833,67 @@ class TestSignalCounts(unittest.TestCase):
         rows = [self.member_row('UP', 'position', 'red', ('boll_rsi', 'red'), note='上方'),
                 self.member_row('DOWN', 'focus', 'red', ('boll_rsi', 'red')),
                 self.member_row('LEGACY', 'technology', 'red', ('boll_rsi', 'red')),
-                self.member_row('CONFLICT', 'energy', 'red', ('boll_rsi', 'red'))]
+                self.member_row('CONFLICT', 'energy', 'red', ('boll_rsi', 'red')),
+                self.member_row('MILD', 'healthcare', 'yellow', ('boll_rsi', 'yellow'))]
         rows[0].update(boll_rsi_direction='上轨（超买）', boll_rsi_hits=2)
         rows[1].update(boll_rsi_direction='下轨（超卖）', boll_rsi_hits=3)
         rows[3].update(boll_rsi_direction='上轨（RSI超卖，方向不一致）', boll_rsi_hits=3)
+        rows[4].update(boll_rsi_direction='下轨（超卖）', boll_rsi_hits=2)
         counts = monitor.signal_counts(rows)
         members = monitor.signal_count_members(rows)
         self.assertEqual(counts['boll_rsi']['red'], 4)
         self.assertEqual(len(members['boll_rsi']['red']), 4)
         output = self.panel(monitor._signal_counts_card({'signal_counts': counts,
                                                             'signal_members': members}), 'boll_rsi', 'red')
-        for label in ('aria-label="上轨（超买），RSI2条过界"', 'aria-label="下轨（超卖），RSI3条过界"',
-                      '上轨（RSI超卖，方向不一致）', '方向待下次更新'):
+        # 轨道 + RSI 条数写在框标题上，名单里不再逐条画三角
+        for label in ('<h5>▲ 上轨 · RSI 2条过界</h5>', '<h5>▼ 下轨 · RSI 3条过界</h5>',
+                      '<h5>▲ 上轨 · RSI 3条过界 · 方向不一致</h5>', '<h5>方向待下次更新</h5>'):
             self.assertIn(label, output)
-        self.assertIn('signal-member-icon tone-yellow', output)
-        self.assertIn('signal-member-icon tone-red', output)
+        # 黄档同样分框
+        yellow = self.panel(monitor._signal_counts_card({'signal_counts': counts,
+                                                         'signal_members': members}), 'boll_rsi', 'yellow')
+        self.assertIn('<h5>▼ 下轨 · RSI 2条过界</h5>', yellow)
         self.assertIn('RSI 2条过界', output)
         self.assertIn('RSI 3条过界', output)
-        self.assertNotIn('上方', output)                 # 中文备注名已不再输出
+        self.assertIn('>UP</span><span class="note">上方</span></a>', output)  # 备注名回到代码后面
         self.assertIn('class="signal-member-jump"', output)  # 名字可点跳转，不再写分组名
-        self.assertEqual(output.count('class="signal-member-direction"'), 2)
+        # 方向全在框标题上：名单行里既没有三角图标，也没有方向文字
+        self.assertEqual(output.count('class="signal-member-direction"'), 0)
+        self.assertEqual(output.count('class="signal-member-icon'), 0)
 
     def test_combination_counts_follow_matching_rsi_side_but_red_lamp_stays_unchanged(self):
-        cases = [('上轨（超买）', 2, 'tone-yellow', '▲'),
-                 ('上轨（超买）', 3, 'tone-red', '▲'),
-                 ('下轨（超卖）', 2, 'tone-yellow', '▼'),
-                 ('下轨（超卖）', 3, 'tone-red', '▼')]
-        for direction, hits, tone, shape in cases:
-            with self.subTest(direction=direction, hits=hits):
-                row = self.member_row('MATCH', 'position', 'red', ('boll_rsi', 'red'))
+        # 三角按轨道方向画，颜色跟灯级走：红档红、黄档黄（方向不一致 3 条也是黄）
+        cases = [('red', '上轨（超买）', 2, 'tone-red', '▲'),
+                 ('red', '上轨（超买）', 3, 'tone-red', '▲'),
+                 ('red', '下轨（超卖）', 2, 'tone-red', '▼'),
+                 ('red', '下轨（超卖）', 3, 'tone-red', '▼'),
+                 ('yellow', '上轨（超买）', 2, 'tone-yellow', '▲'),
+                 ('yellow', '下轨（超卖）', 2, 'tone-yellow', '▼'),
+                 ('yellow', '下轨（RSI超买，方向不一致）', 3, 'tone-yellow', '▼')]
+        for level, direction, hits, tone, shape in cases:
+            with self.subTest(level=level, direction=direction, hits=hits):
+                row = self.member_row('MATCH', 'position', level, ('boll_rsi', level))
                 row.update(boll_rsi_direction=direction, boll_rsi_hits=hits)
                 snap = monitor.build_snapshot({}, [row], {}, group_counts={})
-                page = self.panel(monitor._signal_counts_card(snap), 'boll_rsi', 'red')
-                self.assertIn(f'signal-member-icon {tone}" role="img" aria-label="{direction}，RSI{hits}条过界">{shape}', page)
+                page = self.panel(monitor._signal_counts_card(snap), 'boll_rsi', level)
+                tail = ' · 方向不一致' if '不一致' in direction else ''
+                head = ('上轨' if direction.startswith('上轨') else '下轨') + f' · RSI {hits}条过界' + tail
+                self.assertIn(f'<h5>{shape} {head}</h5>', page)   # 方向 + 条数写在框标题上
                 self.assertIn(f'RSI {hits}条过界', page)
-                self.assertEqual(snap['signal_counts']['boll_rsi']['red'], 1)
+                self.assertIn('上轨' if direction.startswith('上轨') else '下轨', page)  # 轨道方向要可见
+                self.assertNotIn('signal-member-icon', page)      # 名单里不再逐条画三角
+                self.assertEqual(snap['signal_counts']['boll_rsi'][level], 1)
         conflict = self.member_row('CONFLICT', 'position', 'red', ('boll_rsi', 'red'))
         conflict.update(boll_rsi_direction='下轨（RSI超买，方向不一致）', boll_rsi_hits=3)
         page = self.panel(monitor._signal_counts_card(monitor.build_snapshot({}, [conflict], {}, group_counts={})),
                           'boll_rsi', 'red')
-        self.assertIn('方向不一致', page)
-        self.assertNotIn('class="signal-member-icon', page)
+        self.assertIn('<h5>▼ 下轨 · RSI 3条过界 · 方向不一致</h5>', page)  # 轨道方向明确，照样分框
         legacy = dict(conflict, boll_rsi_direction='上轨（超买）')
         legacy.pop('boll_rsi_hits')
         page = self.panel(monitor._signal_counts_card(monitor.build_snapshot({}, [legacy], {}, group_counts={})),
                           'boll_rsi', 'red')
         self.assertIn('条数待下次更新', page)
+        self.assertIn('<h5>方向待下次更新</h5>', page)
         self.assertNotIn('class="signal-member-icon', page)
 
     def test_members_deduplicate_marks_not_cross_kind_or_level(self):
@@ -4661,9 +4974,8 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(panel.count('class="signal-member-group"'), 0)
         self.assertEqual(panel.count('class="signal-member-list"'), 1)
         self.assertEqual(panel.count('class="signal-member-symbol"'), len(rows) + 1)
-        # 中文备注名去掉，分组名改放行尾括号
-        self.assertNotIn('同组备注', panel)
-        self.assertNotIn('class="note"', panel)
+        # 中文备注名保留在代码后面，分组名仍然不写
+        self.assertIn('<span class="note">同组备注</span>', panel)
         self.assertIn('class="signal-member-jump"', panel)   # 名单不再写分组名，改点名字跳转
         self.assertNotIn(f'红色信号 · {len(rows) + 1} 只', panel)
 
@@ -4696,7 +5008,7 @@ class TestSignalCounts(unittest.TestCase):
                                for level in ('red', 'yellow', 'purple'))
         self.assertEqual(len(buttons), expected_buttons)
         self.assertEqual(len({b[0] for b in buttons}), expected_buttons)
-        panels = re.findall(r'<div class="signal-members-panel" id="([^"]+)" hidden>', output)
+        panels = re.findall(r'<div class="signal-members-panel tone-\w+" id="([^"]+)" hidden>', output)
         self.assertEqual([b[0] for b in buttons], panels)
         for target, controls, label, n in buttons:
             self.assertEqual(target, controls)
@@ -4753,13 +5065,13 @@ class TestSignalCounts(unittest.TestCase):
             self.assertNotIn(value, output)
             self.assertNotIn(value, html.unescape(output.split('data-filter="')[1].split('"', 1)[0]))
         self.assertNotIn('alert(2)', output.split('data-filter=')[0])
-        # 备注名不再出现在明细里（只保留在「同时满足」筛选数据中，那里也已转义）
-        self.assertNotIn(html.escape(note, quote=True), output.split('data-filter=')[0])
+        # 备注名回到名单里，但必须完整转义，不能变成真的标签
+        self.assertIn(html.escape(note, quote=True), output.split('data-filter=')[0])
         self.assertNotIn('alert(5)', output)  # 统计标题只接受非负整数，异常值显示 —
         self.assertIn('<span class="count-total count-yellow">黄 —</span>', output)
         self.assertNotRegex(output, r'<(?:script|img|svg)\b|<b onclick=')
         self.assertNotIn('<h4>', output)
-        self.assertEqual(output.count('class="note"'), 0)
+        self.assertEqual(output.count('class="note"'), 1)
         # 分组名从名单里去掉了：点名字直接跳到个股所在行，比括号里的分组名直观
         self.assertNotIn('class="signal-member-belong"', output)
 
