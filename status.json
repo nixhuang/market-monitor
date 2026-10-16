@@ -9,29 +9,30 @@
     "next_in": 0,
     "next_date": "2026-10-15"
   },
-  "run_id": "38840850612",
-  "request_id": "97d0d0ea-cd07-4ca9-840a-f13b5b5f1a87",
-  "source_sha": "51039ae4ef14326b0986df6ede17b44ee71cbfe0",
-  "started_at": "2026-10-16T02:31:16+00:00",
-  "started_at_bj": "2026-10-16T10:31:16+08:00",
-  "finished_at": "2026-10-16T10:32:04.657127+08:00",
-  "finished_at_bj": "2026-10-16T10:32:04+08:00",
-  "event": "workflow_dispatch",
+  "run_id": "38859511925",
+  "request_id": "",
+  "source_sha": "612d0566ad3968ab6739192e6f81b17f554f0758",
+  "started_at": "2026-10-16T06:08:16+00:00",
+  "started_at_bj": "2026-10-16T14:08:16+08:00",
+  "finished_at": "2026-10-16T14:09:11.184428+08:00",
+  "finished_at_bj": "2026-10-16T14:09:11+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-15",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "b69a834b268399bc9bca2a8b5f096bd7deb0cde2",
-    "settings.json": "45ee3d72797ada87230fdb1753e42755ceb77b61"
+    "holdings.json": "26e64617c8f00f8dc9cdc3076b39c3b53a8915be",
+    "settings.json": "f0da4338913af3951a2ffd42d435cc5d23f8060a"
   },
   "effective_settings": {
     "boll_n": 20,
     "boll_k": 2.0,
     "boll_near_pct": 0.5,
+    "boll_near_band_pct": 15.0,
     "chg_red": 8.0,
     "chg_yellow": 5.0,
     "rsi_high": 70,
-    "rsi_low": 30,
+    "rsi_low": 35,
     "near_52w_low_pct": 3.0,
     "trigger_gap_pct": 3.0,
     "reduce_gap_pct": 3.0,
@@ -153,7 +154,7 @@
     "real_estate": false
   },
   "registered_counts": {
-    "positions": 16,
+    "positions": 18,
     "focus": 9,
     "index_funds": 2,
     "technology": 36,
@@ -169,14 +170,14 @@
     "real_estate": 1
   },
   "list_counts": {
-    "positions": 16,
+    "positions": 18,
     "focus": 9,
     "index_funds": 2,
-    "technology": 27,
+    "technology": 26,
     "healthcare": 6,
     "financials": 11,
     "energy": 2,
-    "industrials": 8,
+    "industrials": 7,
     "materials": 2,
     "utilities": 3,
     "consumer_staples": 4,
@@ -188,121 +189,111 @@
     "dca": 1
   },
   "summary": {
-    "red": 17,
-    "yellow": 46,
-    "green": 36,
-    "gray": 1,
-    "purple": 2,
+    "red": 0,
+    "yellow": 40,
+    "green": 60,
+    "gray": 0,
+    "purple": 3,
     "total": 100,
     "macro_ok": 6,
     "stale_symbols": [],
-    "missing_symbols": [
-      "ESMAIN"
-    ],
+    "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 99,
+    "today_prices": 100,
     "prior_prices": 0,
-    "missing_prices": 1
+    "missing_prices": 0
   },
   "signal_counts": {
     "chg": {
       "label": "涨跌幅",
       "red": 0,
       "yellow": 0,
-      "purple": 0,
-      "sole_yellow": 0
+      "purple": 0
     },
     "amp": {
       "label": "振幅",
       "red": 0,
       "yellow": 0,
-      "purple": 0,
-      "sole_yellow": 0
+      "purple": 0
     },
     "vol_ratio": {
       "label": "量比",
       "red": 0,
       "yellow": 22,
-      "purple": 0,
-      "sole_yellow": 4
+      "purple": 0
     },
     "rsi": {
       "label": "RSI",
       "red": 0,
-      "yellow": 17,
-      "purple": 0,
-      "sole_yellow": 0
+      "yellow": 0,
+      "purple": 0
     },
     "boll": {
       "label": "布林",
       "red": 0,
-      "yellow": 47,
-      "purple": 0,
-      "sole_yellow": 22
+      "yellow": 0,
+      "purple": 0
     },
     "boll_rsi": {
       "label": "布林+RSI",
-      "red": 17,
-      "yellow": 0,
-      "purple": 0,
-      "sole_yellow": 0
+      "red": 0,
+      "yellow": 17,
+      "purple": 0
     },
     "ma_cross": {
       "label": "均线穿越",
       "red": 0,
       "yellow": 3,
-      "purple": 0,
-      "sole_yellow": 0
+      "purple": 0
     },
     "ma_band": {
       "label": "长均线触及",
       "red": 0,
       "yellow": 11,
-      "purple": 0,
-      "sole_yellow": 5
+      "purple": 0
     },
     "low52": {
       "label": "52周低位",
       "red": 0,
       "yellow": 0,
-      "purple": 0,
-      "sole_yellow": 0
+      "purple": 0
     },
     "add_price": {
       "label": "加仓价",
       "red": 0,
       "yellow": 0,
-      "purple": 0,
-      "sole_yellow": 0
+      "purple": 0
     },
     "reduce_price": {
       "label": "减仓价",
       "red": 0,
       "yellow": 0,
-      "purple": 0,
-      "sole_yellow": 0
+      "purple": 0
     },
     "target": {
       "label": "共识价",
       "red": 0,
       "yellow": 0,
-      "purple": 2,
-      "sole_yellow": 0
+      "purple": 3
+    },
+    "fund": {
+      "label": "基本面",
+      "red": 4,
+      "yellow": 7,
+      "purple": 0
     }
   },
   "signal_members": {
     "chg": {
       "red": [],
       "yellow": [],
-      "purple": [],
-      "sole_yellow": []
+      "purple": []
     },
     "amp": {
       "red": [],
       "yellow": [],
-      "purple": [],
-      "sole_yellow": []
+      "purple": []
     },
     "vol_ratio": {
       "red": [],
@@ -311,7 +302,7 @@
           "symbol": "UNH",
           "note": "联合健康",
           "group": "position",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -325,7 +316,7 @@
           "symbol": "DRAM",
           "note": "Memory ETF-存储芯片",
           "group": "position",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -334,6 +325,34 @@
             }
           ],
           "metric": "量比 2.5×（2026-10-15完整日）"
+        },
+        {
+          "symbol": "VRT",
+          "note": "维谛技术",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-15股价下跌3.63%"
+            }
+          ],
+          "metric": "量比 2.8×（2026-10-15完整日）"
+        },
+        {
+          "symbol": "NXPI",
+          "note": "恩智浦半导体",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-10-15股价上涨4.65%"
+            }
+          ],
+          "metric": "量比 1.6×（2026-10-15完整日）"
         },
         {
           "symbol": "TSM",
@@ -364,24 +383,10 @@
           "metric": "量比 1.8×（2026-10-15完整日）"
         },
         {
-          "symbol": "NXPI",
-          "note": "恩智浦半导体",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-10-15股价上涨4.65%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-15完整日）"
-        },
-        {
           "symbol": "SKHY",
           "note": "SK海力士ADR",
           "group": "technology",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -493,7 +498,7 @@
           "symbol": "ABBV",
           "note": "艾伯维",
           "group": "healthcare",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -549,7 +554,7 @@
           "symbol": "CAT",
           "note": "卡特彼勒",
           "group": "industrials",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -558,20 +563,6 @@
             }
           ],
           "metric": "量比 1.8×（2026-10-15完整日）"
-        },
-        {
-          "symbol": "VRT",
-          "note": "维谛技术",
-          "group": "industrials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-15股价下跌3.63%"
-            }
-          ],
-          "metric": "量比 2.8×（2026-10-15完整日）"
         },
         {
           "symbol": "DD",
@@ -591,7 +582,7 @@
           "symbol": "XLP",
           "note": "必需消费精选行业ETF",
           "group": "consumer_staples",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -605,7 +596,7 @@
           "symbol": "PG",
           "note": "宝洁",
           "group": "consumer_staples",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -616,1348 +607,138 @@
           "metric": "量比 2.1×（2026-10-15完整日）"
         }
       ],
-      "purple": [],
-      "sole_yellow": [
-        {
-          "symbol": "NOW",
-          "note": "ServiceNow-工作流软件",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-10-15股价上涨6.14%"
-            }
-          ],
-          "metric": "量比 1.7×（2026-10-15完整日）"
-        },
-        {
-          "symbol": "TMO",
-          "note": "赛默飞世尔科技",
-          "group": "healthcare",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-10-15股价上涨3.46%"
-            }
-          ],
-          "metric": "量比 1.7×（2026-10-15完整日）"
-        },
-        {
-          "symbol": "LLY",
-          "note": "礼来",
-          "group": "healthcare",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-10-15股价上涨3.55%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-15完整日）"
-        },
-        {
-          "symbol": "BX",
-          "note": "黑石",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-10-15股价上涨2.82%"
-            }
-          ],
-          "metric": "量比 1.7×（2026-10-15完整日）"
-        }
-      ]
+      "purple": []
     },
     "rsi": {
       "red": [],
+      "yellow": [],
+      "purple": []
+    },
+    "boll": {
+      "red": [],
+      "yellow": [],
+      "purple": []
+    },
+    "boll_rsi": {
+      "red": [],
       "yellow": [
-        {
-          "symbol": "BRK-B",
-          "note": "伯克希尔哈撒韦",
-          "group": "position",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "UNH",
-          "note": "联合健康",
-          "group": "position",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
         {
           "symbol": "DRAM",
           "note": "Memory ETF-存储芯片",
           "group": "position",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "COST",
-          "note": "好市多",
-          "group": "focus",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "MA",
-          "note": "万事达",
-          "group": "focus",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "V",
-          "note": "Visa-支付",
-          "group": "focus",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "SKHY",
-          "note": "SK海力士ADR",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "STX",
-          "note": "希捷科技",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "WDC",
-          "note": "西部数据",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "ABBV",
-          "note": "艾伯维",
-          "group": "healthcare",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "CB",
-          "note": "安达保险",
-          "group": "financials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "CAT",
-          "note": "卡特彼勒",
-          "group": "industrials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
+          "level": "yellow",
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "VRT",
           "note": "维谛技术",
-          "group": "industrials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "RSI2条超卖"
-            }
-          ],
-          "rsi_hits": "2条超卖"
-        },
-        {
-          "symbol": "XLP",
-          "note": "必需消费精选行业ETF",
-          "group": "consumer_staples",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "WMT",
-          "note": "沃尔玛",
-          "group": "consumer_staples",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "PG",
-          "note": "宝洁",
-          "group": "consumer_staples",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        },
-        {
-          "symbol": "KO",
-          "note": "可口可乐",
-          "group": "consumer_staples",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "RSI2条超买"
-            }
-          ],
-          "rsi_hits": "2条超买"
-        }
-      ],
-      "purple": [],
-      "sole_yellow": []
-    },
-    "boll": {
-      "red": [],
-      "yellow": [
-        {
-          "symbol": "BRK-B",
-          "note": "伯克希尔哈撒韦",
-          "group": "position",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "APH",
-          "note": "安费诺",
           "group": "position",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "AVGO",
-          "note": "博通",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "LMT",
-          "note": "洛克希德马丁",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "逼近上轨"
-            }
-          ],
-          "boll_state": "逼近上轨"
-        },
-        {
-          "symbol": "NTNX",
-          "note": "Nutanix-混合云",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
-            }
-          ],
-          "boll_state": "逼近下轨"
-        },
-        {
-          "symbol": "UNH",
-          "note": "联合健康",
-          "group": "position",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "DRAM",
-          "note": "Memory ETF-存储芯片",
-          "group": "position",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "SCHD",
-          "note": "嘉信美国红利股票ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "QQQM",
-          "note": "景顺纳斯达克100指数ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "XLI",
-          "note": "工业精选行业ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "GEHC",
-          "note": "ge医疗",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "COST",
           "note": "好市多",
           "group": "focus",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "盘中突破上轨"
-            }
-          ],
-          "boll_state": "盘中突破上轨"
+          "level": "yellow",
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "TSM",
           "note": "台积电",
           "group": "focus",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "MA",
           "note": "万事达",
           "group": "focus",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "PDD",
-          "note": "拼多多",
-          "group": "focus",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "盘中突破上轨"
-            }
-          ],
-          "boll_state": "盘中突破上轨"
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "V",
           "note": "Visa-支付",
           "group": "focus",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "AAPL",
-          "note": "苹果",
-          "group": "focus",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "盘中突破上轨"
-            }
-          ],
-          "boll_state": "盘中突破上轨"
-        },
-        {
-          "symbol": "SYK",
-          "note": "医疗机器人",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "IBIT",
-          "note": "iShares比特币ETF",
-          "group": "index_funds",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "XLK",
-          "note": "科技精选行业ETF",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "NXPI",
-          "note": "恩智浦半导体",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "SNOW",
-          "note": "Snowflake-数据云",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "SKHY",
           "note": "SK海力士ADR",
           "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "MU",
-          "note": "美光科技",
-          "group": "technology",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "SNDK",
           "note": "闪迪",
           "group": "technology",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "STX",
           "note": "希捷科技",
           "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "CRWD",
-          "note": "CrowdStrike-终端安全",
-          "group": "technology",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "ANET",
           "note": "Arista-数据中心网络",
           "group": "technology",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "COHR",
           "note": "Coherent-光器件",
           "group": "technology",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "INTC",
           "note": "英特尔",
           "group": "technology",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "AMAT",
           "note": "应用材料",
           "group": "technology",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "ARM",
-          "note": "Arm Holdings-芯片架构",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "LITE",
-          "note": "Lumentum-光模块",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "MRVL",
-          "note": "迈威尔科技",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "CRDO",
-          "note": "Credo-高速互连",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "PANW",
-          "note": "Palo Alto-网络安全",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
-            }
-          ],
-          "boll_state": "逼近下轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "TER",
           "note": "泰瑞达",
           "group": "technology",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
         },
         {
           "symbol": "LRCX",
           "note": "拉姆研究",
           "group": "technology",
           "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "NVDA",
-          "note": "英伟达",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "WDC",
-          "note": "西部数据",
-          "group": "technology",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "GS",
-          "note": "高盛",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "CRCL",
-          "note": "Circle-稳定币",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "COIN",
-          "note": "Coinbase-加密交易所",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "HOOD",
-          "note": "Robinhood-零售券商",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "CAT",
-          "note": "卡特彼勒",
-          "group": "industrials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "VRT",
-          "note": "维谛技术",
-          "group": "industrials",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "DD",
-          "note": "杜邦",
-          "group": "industrials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
-            }
-          ],
-          "boll_state": "逼近下轨"
-        }
-      ],
-      "purple": [],
-      "sole_yellow": [
-        {
-          "symbol": "APH",
-          "note": "安费诺",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "AVGO",
-          "note": "博通",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "LMT",
-          "note": "洛克希德马丁",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "逼近上轨"
-            }
-          ],
-          "boll_state": "逼近上轨"
-        },
-        {
-          "symbol": "NTNX",
-          "note": "Nutanix-混合云",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
-            }
-          ],
-          "boll_state": "逼近下轨"
-        },
-        {
-          "symbol": "SCHD",
-          "note": "嘉信美国红利股票ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "QQQM",
-          "note": "景顺纳斯达克100指数ETF",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "GEHC",
-          "note": "ge医疗",
-          "group": "position",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "PDD",
-          "note": "拼多多",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "盘中突破上轨"
-            }
-          ],
-          "boll_state": "盘中突破上轨"
-        },
-        {
-          "symbol": "AAPL",
-          "note": "苹果",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "盘中突破上轨"
-            }
-          ],
-          "boll_state": "盘中突破上轨"
-        },
-        {
-          "symbol": "SYK",
-          "note": "医疗机器人",
-          "group": "focus",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "yellow",
-              "label": "突破上轨"
-            }
-          ],
-          "boll_state": "突破上轨"
-        },
-        {
-          "symbol": "IBIT",
-          "note": "iShares比特币ETF",
-          "group": "index_funds",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "SNOW",
-          "note": "Snowflake-数据云",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "MU",
-          "note": "美光科技",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "CRWD",
-          "note": "CrowdStrike-终端安全",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "COHR",
-          "note": "Coherent-光器件",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "INTC",
-          "note": "英特尔",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "ARM",
-          "note": "Arm Holdings-芯片架构",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "MRVL",
-          "note": "迈威尔科技",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "PANW",
-          "note": "Palo Alto-网络安全",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "逼近下轨"
-            }
-          ],
-          "boll_state": "逼近下轨"
-        },
-        {
-          "symbol": "NVDA",
-          "note": "英伟达",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "GS",
-          "note": "高盛",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        },
-        {
-          "symbol": "COIN",
-          "note": "Coinbase-加密交易所",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "yellow",
-              "label": "盘中跌破下轨"
-            }
-          ],
-          "boll_state": "盘中跌破下轨"
-        }
-      ]
-    },
-    "boll_rsi": {
-      "red": [
-        {
-          "symbol": "BRK-B",
-          "note": "伯克希尔哈撒韦",
-          "group": "position",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "UNH",
-          "note": "联合健康",
-          "group": "position",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "DRAM",
-          "note": "Memory ETF-存储芯片",
-          "group": "position",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "COST",
-          "note": "好市多",
-          "group": "focus",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "MA",
-          "note": "万事达",
-          "group": "focus",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "V",
-          "note": "Visa-支付",
-          "group": "focus",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "SKHY",
-          "note": "SK海力士ADR",
-          "group": "technology",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "STX",
-          "note": "希捷科技",
-          "group": "technology",
-          "level": "red",
           "direction": "下轨（超卖）",
           "boll_rsi_hits": 2
         },
@@ -1965,78 +746,20 @@
           "symbol": "WDC",
           "note": "西部数据",
           "group": "technology",
-          "level": "red",
+          "level": "yellow",
           "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "ABBV",
-          "note": "艾伯维",
-          "group": "healthcare",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "CB",
-          "note": "安达保险",
-          "group": "financials",
-          "level": "red",
-          "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         },
         {
           "symbol": "CAT",
           "note": "卡特彼勒",
           "group": "industrials",
-          "level": "red",
+          "level": "yellow",
           "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "VRT",
-          "note": "维谛技术",
-          "group": "industrials",
-          "level": "red",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "XLP",
-          "note": "必需消费精选行业ETF",
-          "group": "consumer_staples",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "WMT",
-          "note": "沃尔玛",
-          "group": "consumer_staples",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "PG",
-          "note": "宝洁",
-          "group": "consumer_staples",
-          "level": "red",
-          "direction": "上轨（超买）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "KO",
-          "note": "可口可乐",
-          "group": "consumer_staples",
-          "level": "red",
-          "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         }
       ],
-      "yellow": [],
-      "purple": [],
-      "sole_yellow": []
+      "purple": []
     },
     "ma_cross": {
       "red": [],
@@ -2058,7 +781,7 @@
           "symbol": "WDC",
           "note": "西部数据",
           "group": "technology",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -2071,7 +794,7 @@
           "symbol": "WMT",
           "note": "沃尔玛",
           "group": "consumer_staples",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
@@ -2081,8 +804,7 @@
           ]
         }
       ],
-      "purple": [],
-      "sole_yellow": []
+      "purple": []
     },
     "ma_band": {
       "red": [],
@@ -2143,7 +865,7 @@
           "symbol": "WDC",
           "note": "西部数据",
           "group": "technology",
-          "level": "red",
+          "level": "yellow",
           "indicators": [
             {
               "shape": "▼",
@@ -2231,92 +953,22 @@
           ]
         }
       ],
-      "purple": [],
-      "sole_yellow": [
-        {
-          "symbol": "QCOM",
-          "note": "高通",
-          "group": "technology",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "cyan",
-              "label": "现价在均线上方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "NU",
-          "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "RTX",
-          "note": "RTX-航空防务",
-          "group": "industrials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "XLB",
-          "note": "原材料精选行业ETF",
-          "group": "materials",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "cyan",
-              "label": "现价在均线上方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "XLC",
-          "note": "通信服务精选行业ETF",
-          "group": "communications",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        }
-      ]
+      "purple": []
     },
     "low52": {
       "red": [],
       "yellow": [],
-      "purple": [],
-      "sole_yellow": []
+      "purple": []
     },
     "add_price": {
       "red": [],
       "yellow": [],
-      "purple": [],
-      "sole_yellow": []
+      "purple": []
     },
     "reduce_price": {
       "red": [],
       "yellow": [],
-      "purple": [],
-      "sole_yellow": []
+      "purple": []
     },
     "target": {
       "red": [],
@@ -2326,7 +978,7 @@
           "symbol": "AVGO",
           "note": "博通",
           "group": "position",
-          "level": "yellow",
+          "level": "green",
           "indicators": [
             {
               "shape": "□",
@@ -2347,23 +999,450 @@
               "label": "目标价或共识价上涨空间达到提示标准"
             }
           ]
+        },
+        {
+          "symbol": "VRT",
+          "note": "维谛技术",
+          "group": "position",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "□",
+              "tone": "purple",
+              "label": "目标价或共识价上涨空间达到提示标准"
+            }
+          ]
+        }
+      ]
+    },
+    "fund": {
+      "red": [
+        {
+          "symbol": "HII",
+          "note": "亨廷顿英格尔斯工业",
+          "group": "position",
+          "level": "green",
+          "fund_hits": [
+            "经营现金流转负"
+          ],
+          "fund_period": "6/30/2026"
+        },
+        {
+          "symbol": "CRSP",
+          "note": "CRISPR-基因编辑",
+          "group": "position",
+          "level": "green",
+          "fund_hits": [
+            "营业亏损 -1152%",
+            "经营现金流为负 -83M",
+            "负债/权益 0.17→0.52倍（2025/9→2026/6）",
+            "本季净利含一次性损益，ROE未参与判定"
+          ],
+          "fund_period": "6/30/2026"
+        },
+        {
+          "symbol": "ZS",
+          "note": "Zscaler-云安全",
+          "group": "focus",
+          "level": "green",
+          "fund_hits": [
+            "营业亏损 -2%"
+          ],
+          "fund_period": "7/31/2026"
+        },
+        {
+          "symbol": "PDD",
+          "note": "拼多多",
+          "group": "focus",
+          "level": "green",
+          "fund_hits": [
+            "营业亏损 -18%"
+          ],
+          "fund_period": "3/31/2018"
         }
       ],
-      "sole_yellow": []
+      "yellow": [
+        {
+          "symbol": "BRK-B",
+          "note": "伯克希尔哈撒韦",
+          "group": "position",
+          "level": "green",
+          "fund_hits": [
+            "营业利率 32.3%→27.0%（2025/9→2026/6）"
+          ],
+          "fund_period": "6/30/2026"
+        },
+        {
+          "symbol": "APH",
+          "note": "安费诺",
+          "group": "position",
+          "level": "green",
+          "fund_hits": [
+            "负债/权益 1.16→1.88倍（2025/9→2026/6）"
+          ],
+          "fund_period": "6/30/2026"
+        },
+        {
+          "symbol": "UBER",
+          "note": "优步",
+          "group": "position",
+          "level": "green",
+          "fund_hits": [
+            "流动比率 1.15→0.84倍（2025/9→2026/6）",
+            "季度ROE 23.6%→8.8%（2025/9→2026/6）（基准季含一次性收益，仅供参考）"
+          ],
+          "fund_period": "6/30/2026"
+        },
+        {
+          "symbol": "VRT",
+          "note": "维谛技术",
+          "group": "position",
+          "level": "yellow",
+          "fund_hits": [
+            "流动比率 1.83→1.38倍（2025/9→2026/6）"
+          ],
+          "fund_period": "6/30/2026"
+        },
+        {
+          "symbol": "MA",
+          "note": "万事达",
+          "group": "focus",
+          "level": "yellow",
+          "fund_hits": [
+            "负债/权益 5.74→9.28倍（2025/9→2026/6）"
+          ],
+          "fund_period": "6/30/2026"
+        },
+        {
+          "symbol": "V",
+          "note": "Visa-支付",
+          "group": "focus",
+          "level": "yellow",
+          "fund_hits": [
+            "毛利率 83.8%→78.9%（2025/9→2026/6）"
+          ],
+          "fund_period": "6/30/2026"
+        },
+        {
+          "symbol": "MSFT",
+          "note": "微软",
+          "group": "focus",
+          "level": "green",
+          "fund_hits": [
+            "营业利率 48.9%→45.1%（2025/9→2026/6）"
+          ],
+          "fund_period": "6/30/2026"
+        }
+      ],
+      "purple": []
     }
   },
+  "text_only": [
+    {
+      "symbol": "BRK-B",
+      "kind": "boll_rsi",
+      "shape": "▲",
+      "detail": "突破布林上轨",
+      "group": "position"
+    },
+    {
+      "symbol": "APH",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "position"
+    },
+    {
+      "symbol": "AVGO",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "position"
+    },
+    {
+      "symbol": "CRSP",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差1.17%",
+      "group": "position"
+    },
+    {
+      "symbol": "GOOGL",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差1.04%",
+      "group": "position"
+    },
+    {
+      "symbol": "LMT",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "逼近布林上轨 还差0.39%",
+      "group": "position"
+    },
+    {
+      "symbol": "NTNX",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.08%",
+      "group": "position"
+    },
+    {
+      "symbol": "UBER",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "逼近布林上轨 还差0.74%",
+      "group": "position"
+    },
+    {
+      "symbol": "SCHD",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "突破布林上轨",
+      "group": "position"
+    },
+    {
+      "symbol": "QQQM",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "position"
+    },
+    {
+      "symbol": "GEHC",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "突破布林上轨",
+      "group": "position"
+    },
+    {
+      "symbol": "PDD",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "盘中突破布林上轨",
+      "group": "focus"
+    },
+    {
+      "symbol": "AAPL",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "盘中突破布林上轨",
+      "group": "focus"
+    },
+    {
+      "symbol": "SYK",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "突破布林上轨",
+      "group": "focus"
+    },
+    {
+      "symbol": "ESMAIN",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.49%",
+      "group": "index_funds"
+    },
+    {
+      "symbol": "IBIT",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "index_funds"
+    },
+    {
+      "symbol": "SNOW",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology"
+    },
+    {
+      "symbol": "MU",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology"
+    },
+    {
+      "symbol": "CRWD",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology"
+    },
+    {
+      "symbol": "ARM",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology"
+    },
+    {
+      "symbol": "MRVL",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology"
+    },
+    {
+      "symbol": "PANW",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.24%",
+      "group": "technology"
+    },
+    {
+      "symbol": "NVDA",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology"
+    },
+    {
+      "symbol": "XLV",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "突破布林上轨",
+      "group": "healthcare"
+    },
+    {
+      "symbol": "ISRG",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "逼近布林上轨 还差0.22%",
+      "group": "healthcare"
+    },
+    {
+      "symbol": "CB",
+      "kind": "boll_rsi",
+      "shape": "▲",
+      "detail": "突破布林上轨",
+      "group": "financials"
+    },
+    {
+      "symbol": "AXP",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "盘中突破布林上轨",
+      "group": "financials"
+    },
+    {
+      "symbol": "SPGI",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "突破布林上轨",
+      "group": "financials"
+    },
+    {
+      "symbol": "GS",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "financials"
+    },
+    {
+      "symbol": "COIN",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "financials"
+    },
+    {
+      "symbol": "XLE",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "盘中突破布林上轨",
+      "group": "energy"
+    },
+    {
+      "symbol": "XOM",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "盘中突破布林上轨",
+      "group": "energy"
+    },
+    {
+      "symbol": "AXON",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差1.12%",
+      "group": "industrials"
+    },
+    {
+      "symbol": "HEI",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "逼近布林上轨 还差0.91%",
+      "group": "industrials"
+    },
+    {
+      "symbol": "SPCX",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.69%",
+      "group": "industrials"
+    },
+    {
+      "symbol": "LIN",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "盘中突破布林上轨",
+      "group": "materials"
+    },
+    {
+      "symbol": "XLU",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "逼近布林上轨 还差0.25%",
+      "group": "utilities"
+    },
+    {
+      "symbol": "KO",
+      "kind": "boll_rsi",
+      "shape": "▲",
+      "detail": "突破布林上轨",
+      "group": "consumer_staples"
+    },
+    {
+      "symbol": "TTWO",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "逼近布林上轨 还差0.59%",
+      "group": "communications"
+    },
+    {
+      "symbol": "NFLX",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "逼近布林上轨 还差0.84%",
+      "group": "communications"
+    },
+    {
+      "symbol": "XLY",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "逼近布林上轨 还差0.14%",
+      "group": "consumer_discretionary"
+    },
+    {
+      "symbol": "BKNG",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "盘中突破布林上轨",
+      "group": "consumer_discretionary"
+    },
+    {
+      "symbol": "TSLA",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差1.01%",
+      "group": "consumer_discretionary"
+    }
+  ],
   "earnings_week": {
-    "asof": "2026-10-15",
+    "asof": "2026-10-16",
     "members": [
-      {
-        "symbol": "TSM",
-        "note": "台积电",
-        "group": "focus",
-        "level": "yellow",
-        "date": "2026-10-15",
-        "timing": "pre",
-        "kind": "expected"
-      },
       {
         "symbol": "ISRG",
         "note": "直觉外科",
@@ -2377,7 +1456,7 @@
         "symbol": "CB",
         "note": "安达保险",
         "group": "financials",
-        "level": "red",
+        "level": "green",
         "date": "2026-10-20",
         "timing": "post",
         "kind": "expected"
@@ -2449,7 +1528,7 @@
         "symbol": "LMT",
         "note": "洛克希德马丁",
         "group": "position",
-        "level": "yellow",
+        "level": "green",
         "date": "2026-10-22",
         "timing": "pre",
         "kind": "expected"
@@ -2458,7 +1537,7 @@
         "symbol": "WDC",
         "note": "西部数据",
         "group": "technology",
-        "level": "red",
+        "level": "yellow",
         "date": "2026-10-22",
         "timing": "post",
         "kind": "expected"
@@ -2476,8 +1555,17 @@
         "symbol": "PG",
         "note": "宝洁",
         "group": "consumer_staples",
-        "level": "red",
+        "level": "yellow",
         "date": "2026-10-22",
+        "timing": "pre",
+        "kind": "expected"
+      },
+      {
+        "symbol": "AXP",
+        "note": "美国运通",
+        "group": "financials",
+        "level": "green",
+        "date": "2026-10-23",
         "timing": "pre",
         "kind": "expected"
       }
@@ -2497,7 +1585,7 @@
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.0889997482299805,
+    "value": 5.089000225067139,
     "date": "2026-10-15",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -2506,7 +1594,7 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.09299993515014648
+    "delta_month": 0.09300041198730469
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-15 收盘（美东交易日）",
@@ -2581,180 +1669,12 @@
     "result": "ok"
   },
   "fundamental": {
-    "checked": 20,
+    "checked": 22,
     "red": 4,
-    "yellow": 6,
-    "fetched": 0,
-    "cached": 20,
+    "yellow": 7,
+    "fetched": 18,
+    "cached": 4,
     "data": {
-      "BRK-B": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$117,885,000",
-              "value5": "$116,911,000"
-            },
-            "Income Tax": {
-              "value2": "$6,291,000",
-              "value5": "$7,241,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "82.78407%",
-              "value5": "83.50711%"
-            },
-            "Operating Margin": {
-              "value2": "26.98817%",
-              "value5": "32.3109%"
-            },
-            "After Tax ROE": {
-              "value2": "3.43183%",
-              "value5": "4.41105%"
-            },
-            "Current Ratio": {
-              "value2": "NaN",
-              "value5": "NaN"
-            },
-            "Profit Margin": {
-              "value2": "21.77291%",
-              "value5": "26.34141%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$11,215,000",
-              "value5": "$13,789,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$512,894,000",
-              "value5": "$525,522,000"
-            },
-            "Total Equity": {
-              "value2": "$747,910,000",
-              "value5": "$698,155,000"
-            }
-          }
-        }
-      },
-      "HII": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$3,418,000",
-              "value5": "$3,192,000"
-            },
-            "Income Tax": {
-              "value2": "$46,000",
-              "value5": "$59,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "12.60971%",
-              "value5": "12.34336%"
-            },
-            "Operating Margin": {
-              "value2": "6.14394%",
-              "value5": "5.04386%"
-            },
-            "After Tax ROE": {
-              "value2": "3.91566%",
-              "value5": "2.90931%"
-            },
-            "Current Ratio": {
-              "value2": "123.01557%",
-              "value5": "113.91562%"
-            },
-            "Profit Margin": {
-              "value2": "6.08543%",
-              "value5": "4.54261%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "-$31,000",
-              "value5": "$118,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$7,370,000",
-              "value5": "$7,325,000"
-            },
-            "Total Equity": {
-              "value2": "$5,312,000",
-              "value5": "$4,984,000"
-            }
-          }
-        }
-      },
-      "APH": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$8,758,100",
-              "value5": "$6,194,400"
-            },
-            "Income Tax": {
-              "value2": "$604,100",
-              "value5": "$385,900"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "40.51107%",
-              "value5": "38.08763%"
-            },
-            "Operating Margin": {
-              "value2": "29.51097%",
-              "value5": "27.48127%"
-            },
-            "After Tax ROE": {
-              "value2": "11.42038%",
-              "value5": "9.94944%"
-            },
-            "Current Ratio": {
-              "value2": "188.77728%",
-              "value5": "206.95366%"
-            },
-            "Profit Margin": {
-              "value2": "20.20073%",
-              "value5": "20.1101%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$1,557,200",
-              "value5": "$1,470,800"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$29,184,500",
-              "value5": "$14,536,100"
-            },
-            "Total Equity": {
-              "value2": "$15,491,600",
-              "value5": "$12,520,300"
-            }
-          }
-        }
-      },
       "AVGO": {
         "attempted": "2026-10-10",
         "fetched": "2026-10-10",
@@ -2811,174 +1731,6 @@
           }
         }
       },
-      "CRSP": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$10,181",
-              "value5": "$889"
-            },
-            "Income Tax": {
-              "value2": "$960",
-              "value5": "$619"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "100%",
-              "value5": "100%"
-            },
-            "Operating Margin": {
-              "value2": "-1151.84167%",
-              "value5": "-14854.78065%"
-            },
-            "After Tax ROE": {
-              "value2": "-5.21909%",
-              "value5": "-5.55543%"
-            },
-            "Current Ratio": {
-              "value2": "1784.68125%",
-              "value5": "1621.6717%"
-            },
-            "Profit Margin": {
-              "value2": "-895.33445%",
-              "value5": "-11973.11586%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "-$83,498",
-              "value5": "-$84,634"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$904,219",
-              "value5": "$329,326"
-            },
-            "Total Equity": {
-              "value2": "$1,746,551",
-              "value5": "$1,915,982"
-            }
-          }
-        }
-      },
-      "GOOGL": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$119,796,000",
-              "value5": "$102,345,000"
-            },
-            "Income Tax": {
-              "value2": "$26,560,000",
-              "value5": "$9,008,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "61.64897%",
-              "value5": "59.57985%"
-            },
-            "Operating Margin": {
-              "value2": "34.03286%",
-              "value5": "30.51248%"
-            },
-            "After Tax ROE": {
-              "value2": "17.51702%",
-              "value5": "9.04161%"
-            },
-            "Current Ratio": {
-              "value2": "272.39813%",
-              "value5": "174.7333%"
-            },
-            "Profit Margin": {
-              "value2": "93.65338%",
-              "value5": "34.17754%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$39,069,000",
-              "value5": "$48,414,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$281,503,000",
-              "value5": "$149,602,000"
-            },
-            "Total Equity": {
-              "value2": "$640,480,000",
-              "value5": "$386,867,000"
-            }
-          }
-        }
-      },
-      "LMT": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
-        "data": {
-          "period": "6/28/2026",
-          "base_period": "9/28/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$20,063,000",
-              "value5": "$18,609,000"
-            },
-            "Income Tax": {
-              "value2": "$342,000",
-              "value5": "$319,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "12.1916%",
-              "value5": "12.03719%"
-            },
-            "Operating Margin": {
-              "value2": "12.35608%",
-              "value5": "12.25214%"
-            },
-            "After Tax ROE": {
-              "value2": "20.93978%",
-              "value5": "26.19317%"
-            },
-            "Current Ratio": {
-              "value2": "119.28682%",
-              "value5": "112.89284%"
-            },
-            "Profit Margin": {
-              "value2": "9.15117%",
-              "value5": "8.70009%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$3,235,000",
-              "value5": "$3,728,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$53,682,000",
-              "value5": "$54,095,000"
-            },
-            "Total Equity": {
-              "value2": "$8,768,000",
-              "value5": "$6,181,000"
-            }
-          }
-        }
-      },
       "NTNX": {
         "attempted": "2026-10-10",
         "fetched": "2026-10-10",
@@ -3031,177 +1783,6 @@
             "Total Equity": {
               "value2": "$702,565",
               "value5": "-$668,628"
-            }
-          }
-        }
-      },
-      "UNH": {
-        "attempted": "2026-10-15",
-        "fetched": "2026-10-15",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$112,032,000",
-              "value5": "$113,161,000"
-            },
-            "Income Tax": {
-              "value2": "$1,298,000",
-              "value5": "$686,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "32.73529%",
-              "value5": "29.34138%"
-            },
-            "Operating Margin": {
-              "value2": "7.13278%",
-              "value5": "3.81315%"
-            },
-            "After Tax ROE": {
-              "value2": "5.57051%",
-              "value5": "2.45127%"
-            },
-            "Current Ratio": {
-              "value2": "NaN",
-              "value5": "NaN"
-            },
-            "Profit Margin": {
-              "value2": "4.89503%",
-              "value5": "2.07492%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$11,052,000",
-              "value5": "$5,945,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$203,778,000",
-              "value5": "$209,456,000"
-            },
-            "Total Equity": {
-              "value2": "$98,447,000",
-              "value5": "$95,787,000"
-            }
-          }
-        },
-        "event_date": "2026-10-13",
-        "event_base": "2026-06-30",
-        "event_checked": "2026-10-15"
-      },
-      "UBER": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$14,191,000",
-              "value5": "$13,467,000"
-            },
-            "Income Tax": {
-              "value2": "$840,000",
-              "value5": "-$4,046,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "39.25728%",
-              "value5": "34.32836%"
-            },
-            "Operating Margin": {
-              "value2": "13.3183%",
-              "value5": "8.26465%"
-            },
-            "After Tax ROE": {
-              "value2": "8.76409%",
-              "value5": "23.55157%"
-            },
-            "Current Ratio": {
-              "value2": "84.25123%",
-              "value5": "115.37993%"
-            },
-            "Profit Margin": {
-              "value2": "16.86985%",
-              "value5": "49.20175%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$2,862,000",
-              "value5": "$2,328,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$37,402,000",
-              "value5": "$34,189,000"
-            },
-            "Total Equity": {
-              "value2": "$27,316,000",
-              "value5": "$28,134,000"
-            }
-          }
-        }
-      },
-      "GEHC": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
-        "data": {
-          "period": "6/30/2026",
-          "base_period": "9/30/2025",
-          "inc": {
-            "Total Revenue": {
-              "value2": "$5,294,000",
-              "value5": "$5,143,000"
-            },
-            "Income Tax": {
-              "value2": "$119,000",
-              "value5": "$179,000"
-            }
-          },
-          "rt": {
-            "Gross Margin": {
-              "value2": "41.17869%",
-              "value5": "38.69337%"
-            },
-            "Operating Margin": {
-              "value2": "13.9592%",
-              "value5": "12.69687%"
-            },
-            "After Tax ROE": {
-              "value2": "5.11162%",
-              "value5": "4.46312%"
-            },
-            "Current Ratio": {
-              "value2": "126.43941%",
-              "value5": "118.0681%"
-            },
-            "Profit Margin": {
-              "value2": "10.5969%",
-              "value5": "8.67198%"
-            }
-          },
-          "cf": {
-            "Net Cash Flow-Operating": {
-              "value2": "$168,000",
-              "value5": "$593,000"
-            }
-          },
-          "bs": {
-            "Total Liabilities": {
-              "value2": "$26,027,000",
-              "value5": "$25,907,000"
-            },
-            "Total Equity": {
-              "value2": "$10,975,000",
-              "value5": "$9,993,000"
             }
           }
         }
@@ -3318,68 +1899,685 @@
           }
         }
       },
-      "TSM": {
-        "event_date": "2026-10-15",
-        "event_base": "2026-06-30",
-        "attempted": "2026-10-15",
-        "event_checked": "2026-10-15",
-        "fetched": "2026-10-15",
+      "BRK-B": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
         "data": {
           "period": "6/30/2026",
           "base_period": "9/30/2025",
           "inc": {
             "Total Revenue": {
-              "value2": "1,270,380,000",
-              "value5": "989,918,000"
+              "value2": "$117,885,000",
+              "value5": "$116,911,000"
             },
             "Income Tax": {
-              "value2": "155,649,000",
-              "value5": "73,614,000"
+              "value2": "$6,291,000",
+              "value5": "$7,241,000"
             }
           },
           "rt": {
             "Gross Margin": {
-              "value2": "67.72%",
-              "value5": "59.45%"
+              "value2": "82.78407%",
+              "value5": "83.50711%"
             },
             "Operating Margin": {
-              "value2": "60.34%",
-              "value5": "50.58%"
+              "value2": "26.98817%",
+              "value5": "32.3109%"
             },
             "After Tax ROE": {
-              "value2": "40.45%",
-              "value5": "34.50%"
+              "value2": "3.43183%",
+              "value5": "4.41105%"
             },
             "Current Ratio": {
-              "value2": "2.46",
-              "value5": "2.69"
+              "value2": "NaN",
+              "value5": "NaN"
             },
             "Profit Margin": {
-              "value2": "55.62%",
-              "value5": "45.69%"
+              "value2": "21.77291%",
+              "value5": "26.34141%"
             }
           },
           "cf": {
             "Net Cash Flow-Operating": {
-              "value2": "783,365,000",
-              "value5": "426,829,000"
+              "value2": "$11,215,000",
+              "value5": "$13,789,000"
             }
           },
           "bs": {
             "Total Liabilities": {
-              "value2": "2,901,184,000",
-              "value5": "2,318,529,000"
+              "value2": "$512,894,000",
+              "value5": "$525,522,000"
             },
             "Total Equity": {
-              "value2": "6,474,471,000",
-              "value5": "5,035,578,000"
+              "value2": "$747,910,000",
+              "value5": "$698,155,000"
             }
           }
         }
       },
+      "HII": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$3,418,000",
+              "value5": "$3,192,000"
+            },
+            "Income Tax": {
+              "value2": "$46,000",
+              "value5": "$59,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "12.60971%",
+              "value5": "12.34336%"
+            },
+            "Operating Margin": {
+              "value2": "6.14394%",
+              "value5": "5.04386%"
+            },
+            "After Tax ROE": {
+              "value2": "3.91566%",
+              "value5": "2.90931%"
+            },
+            "Current Ratio": {
+              "value2": "123.01557%",
+              "value5": "113.91562%"
+            },
+            "Profit Margin": {
+              "value2": "6.08543%",
+              "value5": "4.54261%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "-$31,000",
+              "value5": "$118,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$7,370,000",
+              "value5": "$7,325,000"
+            },
+            "Total Equity": {
+              "value2": "$5,312,000",
+              "value5": "$4,984,000"
+            }
+          }
+        }
+      },
+      "APH": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$8,758,100",
+              "value5": "$6,194,400"
+            },
+            "Income Tax": {
+              "value2": "$604,100",
+              "value5": "$385,900"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "40.51107%",
+              "value5": "38.08763%"
+            },
+            "Operating Margin": {
+              "value2": "29.51097%",
+              "value5": "27.48127%"
+            },
+            "After Tax ROE": {
+              "value2": "11.42038%",
+              "value5": "9.94944%"
+            },
+            "Current Ratio": {
+              "value2": "188.77728%",
+              "value5": "206.95366%"
+            },
+            "Profit Margin": {
+              "value2": "20.20073%",
+              "value5": "20.1101%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$1,557,200",
+              "value5": "$1,470,800"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$29,184,500",
+              "value5": "$14,536,100"
+            },
+            "Total Equity": {
+              "value2": "$15,491,600",
+              "value5": "$12,520,300"
+            }
+          }
+        }
+      },
+      "CRSP": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$10,181",
+              "value5": "$889"
+            },
+            "Income Tax": {
+              "value2": "$960",
+              "value5": "$619"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "100%",
+              "value5": "100%"
+            },
+            "Operating Margin": {
+              "value2": "-1151.84167%",
+              "value5": "-14854.78065%"
+            },
+            "After Tax ROE": {
+              "value2": "-5.21909%",
+              "value5": "-5.55543%"
+            },
+            "Current Ratio": {
+              "value2": "1784.68125%",
+              "value5": "1621.6717%"
+            },
+            "Profit Margin": {
+              "value2": "-895.33445%",
+              "value5": "-11973.11586%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "-$83,498",
+              "value5": "-$84,634"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$904,219",
+              "value5": "$329,326"
+            },
+            "Total Equity": {
+              "value2": "$1,746,551",
+              "value5": "$1,915,982"
+            }
+          }
+        }
+      },
+      "GOOGL": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$119,796,000",
+              "value5": "$102,345,000"
+            },
+            "Income Tax": {
+              "value2": "$26,560,000",
+              "value5": "$9,008,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "61.64897%",
+              "value5": "59.57985%"
+            },
+            "Operating Margin": {
+              "value2": "34.03286%",
+              "value5": "30.51248%"
+            },
+            "After Tax ROE": {
+              "value2": "17.51702%",
+              "value5": "9.04161%"
+            },
+            "Current Ratio": {
+              "value2": "272.39813%",
+              "value5": "174.7333%"
+            },
+            "Profit Margin": {
+              "value2": "93.65338%",
+              "value5": "34.17754%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$39,069,000",
+              "value5": "$48,414,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$281,503,000",
+              "value5": "$149,602,000"
+            },
+            "Total Equity": {
+              "value2": "$640,480,000",
+              "value5": "$386,867,000"
+            }
+          }
+        }
+      },
+      "LMT": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/28/2026",
+          "base_period": "9/28/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$20,063,000",
+              "value5": "$18,609,000"
+            },
+            "Income Tax": {
+              "value2": "$342,000",
+              "value5": "$319,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "12.1916%",
+              "value5": "12.03719%"
+            },
+            "Operating Margin": {
+              "value2": "12.35608%",
+              "value5": "12.25214%"
+            },
+            "After Tax ROE": {
+              "value2": "20.93978%",
+              "value5": "26.19317%"
+            },
+            "Current Ratio": {
+              "value2": "119.28682%",
+              "value5": "112.89284%"
+            },
+            "Profit Margin": {
+              "value2": "9.15117%",
+              "value5": "8.70009%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$3,235,000",
+              "value5": "$3,728,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$53,682,000",
+              "value5": "$54,095,000"
+            },
+            "Total Equity": {
+              "value2": "$8,768,000",
+              "value5": "$6,181,000"
+            }
+          }
+        }
+      },
+      "UNH": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$112,032,000",
+              "value5": "$113,161,000"
+            },
+            "Income Tax": {
+              "value2": "$1,298,000",
+              "value5": "$686,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "32.73529%",
+              "value5": "29.34138%"
+            },
+            "Operating Margin": {
+              "value2": "7.13278%",
+              "value5": "3.81315%"
+            },
+            "After Tax ROE": {
+              "value2": "5.57051%",
+              "value5": "2.45127%"
+            },
+            "Current Ratio": {
+              "value2": "NaN",
+              "value5": "NaN"
+            },
+            "Profit Margin": {
+              "value2": "4.89503%",
+              "value5": "2.07492%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$11,052,000",
+              "value5": "$5,945,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$203,778,000",
+              "value5": "$209,456,000"
+            },
+            "Total Equity": {
+              "value2": "$98,447,000",
+              "value5": "$95,787,000"
+            }
+          }
+        },
+        "event_date": "2026-10-13",
+        "event_base": "2026-06-30",
+        "event_checked": "2026-10-16"
+      },
+      "UBER": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$14,191,000",
+              "value5": "$13,467,000"
+            },
+            "Income Tax": {
+              "value2": "$840,000",
+              "value5": "-$4,046,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "39.25728%",
+              "value5": "34.32836%"
+            },
+            "Operating Margin": {
+              "value2": "13.3183%",
+              "value5": "8.26465%"
+            },
+            "After Tax ROE": {
+              "value2": "8.76409%",
+              "value5": "23.55157%"
+            },
+            "Current Ratio": {
+              "value2": "84.25123%",
+              "value5": "115.37993%"
+            },
+            "Profit Margin": {
+              "value2": "16.86985%",
+              "value5": "49.20175%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$2,862,000",
+              "value5": "$2,328,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$37,402,000",
+              "value5": "$34,189,000"
+            },
+            "Total Equity": {
+              "value2": "$27,316,000",
+              "value5": "$28,134,000"
+            }
+          }
+        }
+      },
+      "GEHC": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$5,294,000",
+              "value5": "$5,143,000"
+            },
+            "Income Tax": {
+              "value2": "$119,000",
+              "value5": "$179,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "41.17869%",
+              "value5": "38.69337%"
+            },
+            "Operating Margin": {
+              "value2": "13.9592%",
+              "value5": "12.69687%"
+            },
+            "After Tax ROE": {
+              "value2": "5.11162%",
+              "value5": "4.46312%"
+            },
+            "Current Ratio": {
+              "value2": "126.43941%",
+              "value5": "118.0681%"
+            },
+            "Profit Margin": {
+              "value2": "10.5969%",
+              "value5": "8.67198%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$168,000",
+              "value5": "$593,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$26,027,000",
+              "value5": "$25,907,000"
+            },
+            "Total Equity": {
+              "value2": "$10,975,000",
+              "value5": "$9,993,000"
+            }
+          }
+        }
+      },
+      "VRT": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/30/2026",
+          "base_period": "9/30/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$3,274,300",
+              "value5": "$2,675,800"
+            },
+            "Income Tax": {
+              "value2": "$122,200",
+              "value5": "$93,700"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "37.71493%",
+              "value5": "37.77188%"
+            },
+            "Operating Margin": {
+              "value2": "19.48203%",
+              "value5": "19.31011%"
+            },
+            "After Tax ROE": {
+              "value2": "10.46326%",
+              "value5": "11.35748%"
+            },
+            "Current Ratio": {
+              "value2": "137.85586%",
+              "value5": "183.10221%"
+            },
+            "Profit Margin": {
+              "value2": "15.20325%",
+              "value5": "14.89274%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$1,099,800",
+              "value5": "$508,700"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$11,143,300",
+              "value5": "$7,307,600"
+            },
+            "Total Equity": {
+              "value2": "$4,757,600",
+              "value5": "$3,508,700"
+            }
+          }
+        }
+      },
+      "NXPI": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "6/28/2026",
+          "base_period": "9/28/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "$3,496,000",
+              "value5": "$3,173,000"
+            },
+            "Income Tax": {
+              "value2": "$189,000",
+              "value5": "$148,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "57.26545%",
+              "value5": "56.31894%"
+            },
+            "Operating Margin": {
+              "value2": "30.63501%",
+              "value5": "28.14371%"
+            },
+            "After Tax ROE": {
+              "value2": "6.72866%",
+              "value5": "6.28173%"
+            },
+            "Current Ratio": {
+              "value2": "204.03611%",
+              "value5": "237.48256%"
+            },
+            "Profit Margin": {
+              "value2": "21.93936%",
+              "value5": "19.88654%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "$860,000",
+              "value5": "$585,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "$14,904,000",
+              "value5": "$15,927,000"
+            },
+            "Total Equity": {
+              "value2": "$11,399,000",
+              "value5": "$10,045,000"
+            }
+          }
+        }
+      },
+      "TSM": {
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
+        "data": {
+          "period": "9/30/2026",
+          "base_period": "12/31/2025",
+          "inc": {
+            "Total Revenue": {
+              "value2": "1,494,243,000",
+              "value5": "1,046,090,000"
+            },
+            "Income Tax": {
+              "value2": "147,975,000",
+              "value5": "107,212,000"
+            }
+          },
+          "rt": {
+            "Gross Margin": {
+              "value2": "66.41%",
+              "value5": "62.33%"
+            },
+            "Operating Margin": {
+              "value2": "58.66%",
+              "value5": "53.92%"
+            },
+            "After Tax ROE": {
+              "value2": "45.57%",
+              "value5": "37.44%"
+            },
+            "Current Ratio": {
+              "value2": "2.51",
+              "value5": "2.51"
+            },
+            "Profit Margin": {
+              "value2": "51.07%",
+              "value5": "46.41%"
+            }
+          },
+          "cf": {
+            "Net Cash Flow-Operating": {
+              "value2": "919,770,000",
+              "value5": "725,509,000"
+            }
+          },
+          "bs": {
+            "Total Liabilities": {
+              "value2": "3,009,660,000",
+              "value5": "2,536,623,000"
+            },
+            "Total Equity": {
+              "value2": "7,043,230,000",
+              "value5": "5,396,219,000"
+            }
+          }
+        },
+        "event_done": "2026-10-15"
+      },
       "MA": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
         "data": {
           "period": "6/30/2026",
           "base_period": "9/30/2025",
@@ -3434,8 +2632,8 @@
         }
       },
       "PDD": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
         "data": {
           "period": "3/31/2018",
           "base_period": "",
@@ -3490,8 +2688,8 @@
         }
       },
       "V": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
         "data": {
           "period": "6/30/2026",
           "base_period": "9/30/2025",
@@ -3546,8 +2744,8 @@
         }
       },
       "AAPL": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
         "data": {
           "period": "6/27/2026",
           "base_period": "9/27/2025",
@@ -3602,8 +2800,8 @@
         }
       },
       "MSFT": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
         "data": {
           "period": "6/30/2026",
           "base_period": "9/30/2025",
@@ -3658,8 +2856,8 @@
         }
       },
       "SYK": {
-        "attempted": "2026-10-13",
-        "fetched": "2026-10-13",
+        "attempted": "2026-10-16",
+        "fetched": "2026-10-16",
         "data": {
           "period": "6/30/2026",
           "base_period": "9/30/2025",
@@ -3832,6 +3030,24 @@
         "try": "2026-10-14",
         "ne": "2026-10-28"
       },
+      "VRT": {
+        "s": "ok",
+        "avg": 335.14,
+        "upd": "2026-10-12",
+        "r": "2026-10-14",
+        "r_tz": "America/New_York",
+        "try": "2026-10-15",
+        "ne": "2026-10-28"
+      },
+      "NXPI": {
+        "s": "ok",
+        "avg": 306.72,
+        "upd": "2026-10-08",
+        "r": "2026-10-12",
+        "r_tz": "America/New_York",
+        "try": "2026-10-13",
+        "ne": "2026-10-27"
+      },
       "ZS": {
         "s": "ok",
         "avg": 233.38,
@@ -3920,15 +3136,6 @@
         "r_tz": "America/New_York",
         "try": "2026-10-15",
         "ne": "2026-11-04"
-      },
-      "NXPI": {
-        "s": "ok",
-        "avg": 306.72,
-        "upd": "2026-10-08",
-        "r": "2026-10-12",
-        "r_tz": "America/New_York",
-        "try": "2026-10-13",
-        "ne": "2026-10-27"
       },
       "SNOW": {
         "s": "ok",
@@ -4336,15 +3543,6 @@
         "try": "2026-10-14",
         "ne": "2026-10-20"
       },
-      "VRT": {
-        "s": "ok",
-        "avg": 335.14,
-        "upd": "2026-10-12",
-        "r": "2026-10-14",
-        "r_tz": "America/New_York",
-        "try": "2026-10-15",
-        "ne": "2026-10-28"
-      },
       "DD": {
         "s": "ok",
         "avg": 167.06,
@@ -4493,11 +3691,11 @@
   },
   "earnings": {
     "targets": 83,
-    "dated": 72,
-    "pending": 11,
+    "dated": 71,
+    "pending": 12,
     "failed": 0,
-    "fetched": 0,
-    "cached": 83,
+    "fetched": 4,
+    "cached": 79,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -4568,6 +3766,20 @@
         "kind": "expected",
         "fetched": "2026-10-13"
       },
+      "VRT": {
+        "status": "ok",
+        "date": "2026-10-28",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-14"
+      },
+      "NXPI": {
+        "status": "ok",
+        "date": "2026-10-27",
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-10"
+      },
       "ZS": {
         "status": "ok",
         "date": "2026-11-24",
@@ -4591,11 +3803,8 @@
         "official_seed_sha": "29362937a358db1cde711a79113c5e389dd96aae9be2360fff5d7ff2e9e41bac"
       },
       "TSM": {
-        "status": "ok",
-        "date": "2026-10-15",
-        "timing": "pre",
-        "kind": "expected",
-        "fetched": "2026-10-13"
+        "status": "unknown",
+        "fetched": "2026-10-16"
       },
       "MA": {
         "status": "ok",
@@ -4646,13 +3855,6 @@
         "kind": "estimated",
         "fetched": "2026-10-10"
       },
-      "NXPI": {
-        "status": "ok",
-        "date": "2026-10-27",
-        "timing": "post",
-        "kind": "expected",
-        "fetched": "2026-10-10"
-      },
       "SNOW": {
         "status": "ok",
         "date": "2026-12-02",
@@ -4680,9 +3882,9 @@
       "STX": {
         "status": "ok",
         "date": "2026-10-27",
-        "timing": "",
-        "kind": "estimated",
-        "fetched": "2026-10-13"
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-16"
       },
       "NOW": {
         "status": "ok",
@@ -4783,9 +3985,9 @@
       "TER": {
         "status": "ok",
         "date": "2026-10-27",
-        "timing": "",
-        "kind": "estimated",
-        "fetched": "2026-10-13"
+        "timing": "post",
+        "kind": "expected",
+        "fetched": "2026-10-16"
       },
       "PLTR": {
         "status": "ok",
@@ -4916,7 +4118,7 @@
         "date": "2026-10-30",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-10"
+        "fetched": "2026-10-16"
       },
       "AXON": {
         "status": "ok",
@@ -4956,13 +4158,6 @@
         "timing": "pre",
         "kind": "expected",
         "fetched": "2026-10-10"
-      },
-      "VRT": {
-        "status": "ok",
-        "date": "2026-10-28",
-        "timing": "",
-        "kind": "estimated",
-        "fetched": "2026-10-14"
       },
       "DD": {
         "status": "ok",
@@ -5064,20 +4259,20 @@
       }
     },
     "events": {
-      "UNH": [
-        "2026-10-13"
-      ],
-      "TSM": [
-        "2026-10-15"
-      ],
-      "JPM": [
-        "2026-10-13"
-      ],
       "GS": [
+        "2026-10-13"
+      ],
+      "UNH": [
         "2026-10-13"
       ],
       "JNJ": [
         "2026-10-13"
+      ],
+      "JPM": [
+        "2026-10-13"
+      ],
+      "TSM": [
+        "2026-10-15"
       ]
     }
   },
@@ -5109,11 +4304,20 @@
       "rules": "美联储仅展示最近已核实的正式利率决议、目标区间、发布日期和官方来源；调整基点仅在声明明确且可核实时显示，不从区间或其他数据猜测。决议信息为neutral中性状态，不作风险灯或买卖解读。成功后持久缓存，日常仅本地比较下次公布时间，到期随下一次监测运行查询新决议，不按24小时重复抓取。失败或待更新后至少1小时重试，到期不绕过错误限速；日程缺失仅补查日历，已核实的同一声明不重复下载。仅按例行日程更新，临时决议可能延迟发现。旧正式决议不按天数或跨年删除，新决议到期或查询失败明确待更新并保留旧日期。原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。原油参考不计入综合灯，不是官方风险线、市场概率或交易指令。"
     },
     "oil": {
-      "level": "gray",
-      "text": "原油数据待更新，暂不能判断成本压力。",
+      "level": "green",
+      "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
       "source": "Yahoo NYMEX WTI期货",
-      "url": "https://finance.yahoo.com/quote/CL=F/"
+      "url": "https://finance.yahoo.com/quote/CL=F/",
+      "price": 97.97000122070312,
+      "date": "2026-10-15",
+      "contract": "Crude Oil Nov 26",
+      "day": 3.0287148950755625,
+      "day_from": "2026-10-14",
+      "week": 7.0827451177586065,
+      "month": 0.7610797472185316,
+      "incomplete": false,
+      "contract_symbol": "CLX26.NYM"
     },
-    "assessed_at": "2026-10-16T10:31:57.562529+08:00"
+    "assessed_at": "2026-10-16T14:08:51.642198+08:00"
   }
 }
