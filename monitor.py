@@ -14,6 +14,7 @@
 """
 
 import argparse
+import atexit
 import csv
 import hashlib
 import html as html_lib
@@ -164,13 +165,14 @@ DEFAULT_SETTINGS = {
     # 布林带
     "boll_n": 20,           # 均线周期
     "boll_k": 2.0,          # 标准差倍数
-    "boll_near_pct": 0.5,   # 距上/下轨不足 x% 就算命中（盘中不用等真的穿过去）
+    "boll_near_pct": 0.5,   # 距上/下轨不足 x% 就算命中（盘中不用等真的穿过去）；仅在算不出个股波动时兜底
+    "boll_near_band_pct": 15.0,  # 自适应：距轨道不足「布林带宽的 x%」就算命中，替代固定百分比
 
     # 个股
     "chg_red": 4.0,         # 单日涨跌 >= x% → 红
     "chg_yellow": 2.0,      # 单日涨跌 >= x% 且 < chg_red → 黄
     "rsi_high": 70,         # RSI 6/12/24 同侧 >= x：两条黄、三条红
-    "rsi_low": 30,          # RSI 6/12/24 同侧 <= x：两条黄、三条红
+    "rsi_low": 35,          # RSI 6/12/24 同侧 <= x：进布林区间后两条黄、三条红（超卖侧放宽到 35）
     "near_52w_low_pct": 1.0,  # 距 52 周低点不足 x% → 红
     "trigger_gap_pct": 5.0,  # 距加仓价不足 x% → 红（已跌破则无视这条直接红）
     "reduce_gap_pct": 3.0,   # 持仓的减仓价：现价在减仓价 ±x%（按减仓价算）内 → 红，不分涨跌方向
@@ -319,6 +321,7 @@ def trim_history(data, cutoff):
 
 SETTING_LIMITS = {
     "boll_n": (2, 250), "boll_k": (0.1, 10), "boll_near_pct": (0, 100),
+    "boll_near_band_pct": (0, 100),
     "ma_short": (0, 250), "ma_long": (0, 250),  # 0关闭对应警示；1仍不合法
     "chg_yellow": (0, 100), "chg_red": (0, 100),
     "rsi_low": (0, 100), "rsi_high": (0, 100),
@@ -1233,7 +1236,14 @@ def nasdaq_realtime(symbol):
                 px = float(str(p.get("lastSalePrice", "")).replace("$", "").replace(",", ""))
                 if px <= 0:
                     continue
-                return {"price": px, "ts": p.get("lastTradeTimestamp", "")}
+                # 当日累计成交量：实测实时递增（35 秒内 VRT/AAPL/UNH 全部增加），且不含盘前量。
+                # 源给的是带小数的加权值（如 6,549,805.577674），取整后用于盘中量比。
+                try:
+                    vol = float(str(p.get("volume", "")).replace(",", "") or 0)
+                except ValueError:
+                    vol = 0.0
+                return {"price": px, "ts": p.get("lastTradeTimestamp", ""),
+                        "volume": int(round(vol)) if math.isfinite(vol) and vol > 0 else 0}
             except Exception:
                 continue
     return None
@@ -1256,6 +1266,7 @@ def apply_realtime(symbol, data):
     if not rt:
         return data
     px = rt["price"]
+    rt_vol = rt.get("volume") or 0
     dates = data.get("dates") or []
     today = now_ny.strftime("%Y-%m-%d")
     try:
@@ -1265,6 +1276,8 @@ def apply_realtime(symbol, data):
                 data["highs"][-1] = max(data["highs"][-1], px)
             if data.get("lows"):
                 data["lows"][-1] = min(data["lows"][-1], px)
+            if isinstance(data.get("volumes"), list) and data["volumes"]:
+                data["volumes"][-1] = rt_vol   # 换成实时累计量；0 表示源没给，不拿昨量冒充
         else:
             data["prev_close"] = data["price"]
             data["closes"].append(px)
@@ -1278,10 +1291,12 @@ def apply_realtime(symbol, data):
             if isinstance(data.get("dates"), list):
                 data["dates"].append(today)
             if isinstance(data.get("volumes"), list):
-                data["volumes"].append(0)  # 报价接口没返回当日成交量，不拿昨量冒充今天。
+                data["volumes"].append(rt_vol)  # 报价接口没返回当日成交量时是 0，不拿昨量冒充今天。
         data["price"] = px
         data["realtime"] = True
         data["rt_ts"] = rt["ts"]
+        if rt_vol > 0:
+            data["rt_volume"] = rt_vol
     except Exception as e:
         log(f"  ! {symbol} 实时价合并失败: {e}")
     return data
@@ -2677,7 +2692,13 @@ CONSENSUS_MAX_PER_DAY = 12           # 北京自然日的独立台账，删除/�
 CONSENSUS_RETRY_PER_DAY = 3          # 失败重试最多占用 3 个名额，避免挤掉正常到期项
 CONSENSUS_RETRY_BACKOFF = (1, 2, 4, 7)  # 连续失败：首次次日重试，此后逐步退避
 CHG_AMP_GROUPS = ("position", "focus")   # 涨跌幅、振幅警示只对这两组生效
-BOLL_UP_YELLOW_GROUPS = ("position", "focus")  # 上轨单项黄灯只对持仓和重点关注生效
+BOLL_UP_SIGNAL_GROUPS = ("position", "focus")  # 上轨方向的组合黄/红只对持仓和重点关注生效；
+# 其他分组的上轨只展示状态文字。持仓内部再按 hold=long/short 区分（见 _is_long_position）。
+
+
+def _is_long_position(x):
+    """长持仓：持仓组里显式标了 hold=long 的。缺省按短持仓处理，规则不缩水。"""
+    return x.group == "position" and str((x.cfg or {}).get("hold") or "short").lower() == "long"
 TARGET_ANOMALY_PCT = 100.0
 _CONS_SPG = re.compile(r'Targets:\{source:"spg",currency:"([A-Z]+)",avg:([0-9.]+)')
 _CONS_UPD = re.compile(r'targets:\{low:[0-9.]+,high:[0-9.]+,count:\d+,median:[0-9.]+,average:[0-9.]+,updated:"(\d{4}-\d{2}-\d{2})"')
@@ -3109,7 +3130,10 @@ SIGNAL_KINDS = (
     ("rsi", "RSI"), ("boll", "布林"), ("boll_rsi", "布林+RSI"),
     ("ma_cross", "均线穿越"), ("ma_band", "长均线触及"), ("low52", "52周低位"),
     ("add_price", "加仓价"), ("reduce_price", "减仓价"), ("target", "共识价"),
+    # 基本面是独立判定：不改股价灯级，红黄照常报，所以单独作为一行统计
+    ("fund", "基本面"),
 )
+
 
 
 def completed_day_volume_ratio(sym, data, asof=None):
@@ -3146,6 +3170,52 @@ def completed_day_volume_ratio(sym, data, asof=None):
             return None, ''
         average = sum(sample[:-1]) / 20
         return (sample[-1] / average, expected) if average > 0 else (None, '')
+    except (ValueError, KeyError, OverflowError):
+        return None, ''
+
+
+INTRADAY_VOL_QUIET_MIN = 15   # 开盘后这段分钟数内不报盘中量比：分母太小会把比值放大到没有意义
+
+
+def intraday_volume_ratio(sym, data, asof=None):
+    """盘中量比 =（当日累计成交量 ÷ 已开盘分钟数）÷（此前20个完整交易日均量 ÷ 当日总交易分钟数）。
+
+    用「每分钟成交速度」相比，时间进度天然被约掉，所以盘中不用等到收盘也能算。
+    /info 的累计量实测实时递增且不含盘前；均量窗口沿用 completed_day_volume_ratio 的 20 日。
+    期货/指数不走同一股票日历口径；静默期内、非交易时段、源没给量或历史不足时一律不报。
+    """
+    if instrument_identity(sym).startswith('^') or instrument_identity(sym).endswith('=F'):
+        return None, ''
+    vol = data.get("rt_volume")
+    if not isinstance(vol, (int, float)) or isinstance(vol, bool) or not math.isfinite(vol) or vol <= 0:
+        return None, ''
+    dates, volumes = data.get('dates') or [], data.get('volumes') or []
+    if len(dates) != len(volumes) or len(dates) < 22:
+        return None, ''
+    import exchange_calendars as xcals
+    calendar = xcals.get_calendar('XNYS')
+    now = (asof or NOW).astimezone(US_TZ)
+    try:
+        session = calendar.date_to_session(now.date(), direction='previous')
+        if session.date() != now.date():
+            return None, ''
+        open_ts, close_ts = calendar.session_open(session), calendar.session_close(session)
+        now_utc = now.astimezone(timezone.utc)
+        if not (open_ts <= now_utc < close_ts):
+            return None, ''
+        elapsed = (now_utc - open_ts).total_seconds() / 60
+        total = (close_ts - open_ts).total_seconds() / 60
+        if elapsed < INTRADAY_VOL_QUIET_MIN or total <= 0:
+            return None, ''
+        # 最后一根是今天（实时或未定稿），不能进均量样本；取它之前的 20 个完整日。
+        sample = volumes[-21:-1]
+        if len(sample) != 20 or any(not isinstance(v, (int, float)) or isinstance(v, bool)
+                                    or not math.isfinite(v) or v <= 0 for v in sample):
+            return None, ''
+        average = sum(sample) / 20
+        if average <= 0:
+            return None, ''
+        return (vol / elapsed) / (average / total), now.strftime("%H:%M")
     except (ValueError, KeyError, OverflowError):
         return None, ''
 
@@ -3190,6 +3260,7 @@ def _analysis_context(sym, cfg, data, group):
     prev = data["prev_close"]
     x = SimpleNamespace(sym=sym, cfg=cfg, data=data, group=group,
                         closes=closes, price=price, prev=prev)
+    x.hold = str((cfg or {}).get("hold") or "short").lower()
     x.chg = (price / prev - 1) * 100 if prev else None
     x.rsi = {period: calc_rsi(closes, period) for period in RSI_PERIODS}
     x.dates = data.get("dates") or []
@@ -3203,6 +3274,8 @@ def _analysis_context(sym, cfg, data, group):
     x.dist_low = (price / low52 - 1) * 100
     x.range52 = _range52_from_history(data)
     x.vol_ratio, x.vol_ratio_date = completed_day_volume_ratio(sym, data)
+    x.rt_vol_ratio, x.rt_vol_time = intraday_volume_ratio(sym, data)
+    x.vol_ratio_intraday = bool(x.rt_vol_ratio)
     ma_periods = (int(S["ma_short"]), int(S["ma_long"]))
     x.moving_averages = [(period, sma(closes, period)) for period in dict.fromkeys(ma_periods) if period > 0]
     x.boll_mid, x.boll_up, x.boll_dn = boll(closes, int(S["boll_n"]), float(S["boll_k"]))
@@ -3231,14 +3304,16 @@ def _rule_chg_yellow(al, x):
 
 
 def _rule_rsi(al, x):
+    """RSI 不再单独报灯：条数照样算、状态照样展示，但只是文字，不进灯级也不进统计。
+    灯级全部由 _rule_boll 的组合规则判定——RSI 是布林的「强度放大器」，
+    只有同时进了布林报警区间才谈得上黄或红。"""
     x.high_hits = sum(v is not None and math.isfinite(v) and v >= S["rsi_high"] for v in x.rsi.values())
     x.low_hits = sum(v is not None and math.isfinite(v) and v <= S["rsi_low"] for v in x.rsi.values())
     for count, tag, boundary in ((x.high_hits, "超买", f"≥{S['rsi_high']:g}"),
                                  (x.low_hits, "超卖", f"≤{S['rsi_low']:g}")):
         if count >= 2:
-            values = " / ".join(f"RSI{period}={v:.1f}" if v is not None and math.isfinite(v)
-                                else f"RSI{period}=无数据" for period, v in x.rsi.items())
-            al.add("rsi", f"RSI {count}条{tag}（{boundary}）：{values}", "red" if count == 3 else "yellow")
+            # 只报条数和阈值，不再列出 RSI6=xx.x 这类逐周期数值（具体数值在设置页的规则说明里看口径）
+            al.signals.append(f"RSI {count}条{tag}（{boundary}）")
 
 
 def _fresh_52w_low(x):
@@ -3335,61 +3410,94 @@ def _touch_note(price, touch):
     return f"（盘中触及 {touch:,.2f}）"
 
 
+# 随机游走下，20 日窗口内「收盘价 − MA20」的标准差 ≈ 1.29 × 日收益率标准差。
+# 用它把 vol_profile 估出的日波动换算成布林带宽（带宽 = 上下各 2σ ≈ 5.16 × 日σ），
+# 逼近门槛就随个股波动自动缩放。刻意不用「当日带宽」：财报、暴跌会让带宽暴涨，
+# 门槛跟着变宽等于越危险越迟钝；vol_profile 用的是 60 日中位数绝对偏差，抗异常值。
+_BOLL_SIGMA_FACTOR = 1.29
+
+
+def _boll_near_pct(x):
+    """本只标的的「算不算贴近轨道」门槛（%）。
+    优先按个股平时波动归一化后的布林带宽取比例；算不出波动（新股、样本不足）才回退固定百分比。"""
+    band_pct = float(S.get("boll_near_band_pct") or 0)
+    sigma = getattr(x, "vol_sigma", None)
+    if band_pct > 0 and isinstance(sigma, (int, float)) and not isinstance(sigma, bool) \
+            and math.isfinite(sigma) and sigma > 0:
+        return band_pct / 100 * 4 * _BOLL_SIGMA_FACTOR * sigma
+    return float(S["boll_near_pct"])
+
+
 def _boll_hits(x):
     """布林上下轨命中情况 → [(还差百分之多少, 文字)]；<=0 表示已经穿过去了。
     另外标出「连续第几日贴近轨道」——远离一天就断，再贴近重新从第一日算。"""
-    streak = boll_streak(x.closes, int(S["boll_n"]), float(S["boll_k"]), S["boll_near_pct"],
+    near = _boll_near_pct(x)
+    streak = boll_streak(x.closes, int(S["boll_n"]), float(S["boll_k"]), near,
                          highs=x.data.get("highs"), lows=x.data.get("lows"))
     hits = []
     if x.boll_up is not None:
         gap_up = (x.boll_up - x.touch_up) / x.boll_up * 100
-        if gap_up <= S["boll_near_pct"]:
+        if gap_up <= near:
             if gap_up < 0:
                 action = "突破" if x.price >= x.boll_up else "盘中突破"
-                text = f"{action}布林上轨 {x.boll_up:,.2f}"
+                text = f"{action}布林上轨"
             elif gap_up == 0:
-                text = f"触及布林上轨 {x.boll_up:,.2f}"
+                text = f"触及布林上轨"
             else:
                 text = f"逼近布林上轨 还差{gap_up:.2f}%"
             hits.append((gap_up, text + _touch_note(x.price, x.touch_up) + streak_tail(streak["up"], "上轨")))
     if x.boll_dn is not None:
         gap_dn = (x.touch_dn - x.boll_dn) / x.boll_dn * 100
-        if gap_dn <= S["boll_near_pct"]:
-            text = (f"跌破布林下轨 {x.boll_dn:,.2f}" if gap_dn < 0
-                    else f"触及布林下轨 {x.boll_dn:,.2f}" if gap_dn == 0
+        if gap_dn <= near:
+            text = (f"跌破布林下轨" if gap_dn < 0
+                    else f"触及布林下轨" if gap_dn == 0
                     else f"逼近布林下轨 还差{gap_dn:.2f}%")
             hits.append((gap_dn, text + _touch_note(x.price, x.touch_dn) + streak_tail(streak["dn"], "下轨")))
     return hits
 
 
 def _rule_boll(al, x):
-    """持仓/重点关注上下轨均可报黄；其他组上轨只展示具体状态，下轨仍报黄。
-    极窄布林带同时命中两侧时，下轨黄灯不能被上轨挡掉；组合红的方向
-    仍沿用此前最贴近的轨道，展示文字不参与警示等级或计数。"""
+    """布林不再单独报灯：任何分组的逼近 / 触及 / 穿破都只作为文字展示，不进灯级也不进统计。
+    灯级一律由「进了布林报警区间 + RSI 同侧条数」决定：2 条黄、3 条红；方向不一致（比如
+    跌破下轨却配 RSI 超买）只给黄。方向沿用最贴近的那条轨道；极窄带同时命中两侧时两条都展示。"""
     hits = _boll_hits(x)
     if not hits:
         return
     best = min(hits, key=lambda h: h[0])
-    yellow_hits = hits if x.group in BOLL_UP_YELLOW_GROUPS else [hit for hit in hits if "布林下轨" in hit[1]]
-    if yellow_hits:
-        x.boll_alert_text = min(yellow_hits, key=lambda h: h[0])[1]
-        al.add("boll", x.boll_alert_text, "yellow")
-    if x.group not in BOLL_UP_YELLOW_GROUPS:
-        al.signals.extend(hit[1] for hit in hits if "布林上轨" in hit[1])
-    if max(x.high_hits, x.low_hits) >= 2:
-        side = "上轨" if "布林上轨" in best[1] else "下轨"
-        if x.high_hits >= 2 and x.low_hits >= 2:
-            x.boll_rsi_direction = f"{side}（RSI超买/超卖均命中）"
-        elif (side == "上轨" and x.high_hits >= 2) or (side == "下轨" and x.low_hits >= 2):
-            x.boll_rsi_direction = f"{side}（{'超买' if side == '上轨' else '超卖'}）"
-            x.boll_rsi_hits = x.high_hits if side == "上轨" else x.low_hits
-        else:
-            x.boll_rsi_direction = f"{side}（RSI{'超卖' if side == '上轨' else '超买'}，方向不一致）"
-        al.add("boll_rsi", "布林 + RSI → 红", "red")
+    x.boll_alert_text = best[1]
+    al.signals.extend(hit[1] for hit in hits)
+    if max(x.high_hits, x.low_hits) < 2:
+        return
+    up = "布林上轨" in best[1]
+    side = "上轨" if up else "下轨"
+    same_hits = x.high_hits if up else x.low_hits
+    oppo_hits = x.low_hits if up else x.high_hits
+    if up and x.group not in BOLL_UP_SIGNAL_GROUPS:
+        return          # 其他分组的上轨只展示，不参与灯级
+    if up and _is_long_position(x) and same_hits < 3:
+        return          # 长持仓不看一般过热，但 RSI 三条全过界仍要提醒
+    if same_hits >= 2:
+        level = "red" if same_hits >= 3 else "yellow"
+        x.boll_rsi_direction = f"{side}（{'超买' if up else '超卖'}）"
+        x.boll_rsi_hits = same_hits
+    elif oppo_hits >= 2:
+        level = "yellow"    # 方向不一致：看得见就行，不算危险
+        x.boll_rsi_direction = f"{side}（RSI{'超卖' if up else '超买'}，方向不一致）"
+        x.boll_rsi_hits = oppo_hits
+    else:
+        return
+    al.add("boll_rsi", f"布林 + RSI → {'红' if level == 'red' else '黄'}", level)
 
 
 def _rule_vol_ratio(al, x):
-    """最近完整日量比：达到红线报红、达到黄线报黄，所有分组适用；不分涨跌方向。"""
+    """量比：盘中用当日累计量按已开盘分钟数折算的「盘中量比」，收盘后回落到最近完整日量比。
+    达到红线报红、达到黄线报黄，所有分组适用；不分涨跌方向。"""
+    if getattr(x, "vol_ratio_intraday", False):
+        ratio = x.rt_vol_ratio
+        level = "red" if ratio >= S["vol_ratio_red"] else "yellow" if ratio >= S["vol_ratio"] else ""
+        if level:
+            al.add("vol_ratio", f"盘中量比（截至 {x.rt_vol_time} ET）{ratio:.1f}x", level)
+        return   # 盘中已拿到当时量比，不再叠加昨天的完整日口径
     if not x.vol_ratio:
         return
     level = "red" if x.vol_ratio >= S["vol_ratio_red"] else "yellow" if x.vol_ratio >= S["vol_ratio"] else ""
@@ -3487,6 +3595,9 @@ def _analysis_detail(x, al):
         "range52": x.range52,
         "vol_ratio": x.vol_ratio,
         "vol_ratio_date": x.vol_ratio_date,
+        "rt_vol_ratio": x.rt_vol_ratio,
+        "rt_vol_time": x.rt_vol_time,
+        "vol_ratio_intraday": x.vol_ratio_intraday,
         "amp": x.amp,
         "vol_tier": x.vol_tier,
         "vol_sigma": x.vol_sigma,
@@ -3499,6 +3610,7 @@ def _analysis_detail(x, al):
         "realtime": bool(x.data.get("realtime")),
         "rt_ts": x.data.get("rt_ts", ""),
         "group": x.group,
+        "hold": getattr(x, "hold", ""),
         "boll_up": x.boll_up,
         "boll_dn": x.boll_dn,
         "boll_rsi_direction": getattr(x, "boll_rsi_direction", ""),
@@ -3670,7 +3782,7 @@ function renderSignalFilter() {
       const dot = document.createElement("i");
       dot.className = "stat-dot " + m.l;
       dot.setAttribute("role", "img");
-      dot.setAttribute("aria-label", {red: "红灯", yellow: "黄灯", green: "绿灯", gray: "无数据"}[m.l]);
+      dot.setAttribute("aria-label", {red: "红灯", yellow: "黄灯", green: "绿灯", gray: "缺失"}[m.l]);
       li.append(dot);
     }
     const detail = document.createElement("span");
@@ -3726,6 +3838,30 @@ document.addEventListener("click", function(event) {
   panel.hidden = !opening;
   button.setAttribute("aria-expanded", String(opening));
 });
+
+// 统计面板里的标的名字 → 跳到首页该股所在行。
+// 个股可能躺在两层折叠里（分组卡片 + 「无异动 N 只」列表），跳转前必须逐层撑开祖先 details。
+document.addEventListener("click", function(event) {
+  if (!(event.target instanceof Element)) return;
+  const link = event.target.closest("a.signal-member-jump");
+  if (!link) return;
+  const hash = link.getAttribute("href") || "";
+  if (hash.charAt(0) !== "#") return;
+  const target = document.getElementById(hash.slice(1));
+  if (!target) return;                       // 目标不在本页（比如该股这轮没进表），交给浏览器默认行为
+  event.preventDefault();
+  let node = target;
+  while (node && node !== document.body) {   // 从里到外把所有祖先 details 打开
+    if (node.tagName === "DETAILS") node.open = true;
+    node = node.parentElement;
+  }
+  target.classList.remove("stk-flash");
+  void target.offsetWidth;                   // 强制重排，保证连点同一个名字也能再闪一次
+  target.classList.add("stk-flash");
+  target.scrollIntoView({block: "center", behavior: "smooth"});
+  if (history.replaceState) history.replaceState(null, "", hash);
+  window.setTimeout(function() { target.classList.remove("stk-flash"); }, 1800);
+});
 """
 
 
@@ -3773,10 +3909,13 @@ def market_data_time(snapshot):
 
 def signal_counts(items):
     """各类信号的触发数量，写进 status.json，方便看「黄灯到底是被哪条规则点亮的」。
-    red / yellow：这一类信号以红 / 黄级别触发的标的数；purple：目标价提示数；
-    sole_yellow：整只标的是黄灯、且黄灯只由这一类信号造成的数量（删掉这条规则就会少几盏黄灯）。"""
-    out = {kind: {"label": label, "red": 0, "yellow": 0, "purple": 0, "sole_yellow": 0}
+    red / yellow：这一类信号以红 / 黄级别触发的标的数；purple：目标价提示数。
+    只出文字不报灯的标的（灰灯）不在这里统计，单独走 text_only_members()。
+    基本面（fund）不进 signal_marks——它不改变股价灯级，这里单独按标的身份去重统计，
+    保证计数和 signal_count_members 的名单条数一致。"""
+    out = {kind: {"label": label, "red": 0, "yellow": 0, "purple": 0}
            for kind, label in SIGNAL_KINDS}
+    fund_ids = set()
     for d in items:
         marks = d.get("signal_marks") or []
         for kind in {k for k, _ in marks}:
@@ -3785,10 +3924,70 @@ def signal_counts(items):
             for lv in ("red", "yellow", "purple"):
                 if any(k == kind and m == lv for k, m in marks):
                     out[kind][lv] += 1
-        if d.get("level") == "yellow":
-            yellow_kinds = {k for k, m in marks if m == "yellow"}
-            if len(yellow_kinds) == 1 and next(iter(yellow_kinds)) in out:
-                out[next(iter(yellow_kinds))]["sole_yellow"] += 1
+        level = (d.get("fund") or {}).get("level")
+        if level in ("red", "yellow"):
+            fund_ids.add((instrument_identity(normalize_symbol(d.get("symbol"))), level))
+    for _, level in fund_ids:
+        out["fund"][level] += 1
+    return out
+
+
+_TEXT_RSI_RE = re.compile(r"^RSI [23]条(超买|超卖)")
+_TEXT_BOLL_PREFIX = ("逼近布林", "触及布林", "跌破布林", "突破布林", "盘中突破布林")
+
+
+def _text_only_kind(signals):
+    """按页面文字反推「只出文字不报灯」的归因：只有 RSI 文字 → rsi；只有布林文字 → boll；
+    两者都有 → 进了布林区间且 RSI 也够，但被分组或长持仓挡下，归 boll_rsi。"""
+    texts = [str(s) for s in (signals or []) if isinstance(s, str)]
+    has_rsi = any(_TEXT_RSI_RE.match(t) for t in texts)
+    has_boll = any(t.startswith(_TEXT_BOLL_PREFIX) for t in texts)
+    if has_rsi and has_boll:
+        return "boll_rsi"
+    if has_rsi:
+        return "rsi"
+    if has_boll:
+        return "boll"
+    return ""
+
+
+def _text_only_shape(signals):
+    """灰灯名单里的方向：优先看布林轨道，没有布林文字才看 RSI 的买卖方向。"""
+    texts = [str(s) for s in (signals or []) if isinstance(s, str)]
+    boll = next((t for t in texts if t.startswith(_TEXT_BOLL_PREFIX)), "")
+    if boll:
+        return "▲" if "上轨" in boll else "▼"
+    rsi = next((_TEXT_RSI_RE.match(t) for t in texts if _TEXT_RSI_RE.match(t)), None)
+    return ("▲" if rsi.group(1) == "超买" else "▼") if rsi else ""
+
+
+def text_only_members(items):
+    """灰灯名单：最终是绿灯、但页面上有 RSI / 布林文字的标的（只写文字、不报灯、不进统计）。
+    重复身份沿用首页分类优先级，只保留第一条。"""
+    priority = {g["item_group"]: i for i, g in enumerate(GROUPS)}
+    seen = set(RISK_IDENTITIES)
+    out = []
+    for d in sorted(items, key=lambda item: priority.get(item.get("group"), len(GROUPS))):
+        symbol = normalize_symbol(d.get("symbol"))
+        identity = instrument_identity(symbol)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if d.get("level") != "green" or d.get("reference_only"):
+            continue
+        kind = _text_only_kind(d.get("signals"))
+        if not kind:
+            continue
+        texts = [str(s) for s in (d.get("signals") or []) if isinstance(s, str)]
+        # 只留主句：括号里的「盘中触及 / 连续第几日贴近」太长，占满一行反而不好看。
+        # 组合被挡下的（boll_rsi）优先说轨道，因为那才是被规则拦下的原因。
+        pool = [t for t in texts if t.startswith(_TEXT_BOLL_PREFIX)]
+        if kind != "boll_rsi":
+            pool = [t for t in texts
+                    if _TEXT_RSI_RE.match(t) or t.startswith(_TEXT_BOLL_PREFIX)]
+        detail = re.split(r"（", pool[0])[0].strip() if pool else ""
+        out.append({"symbol": symbol, "kind": kind, "shape": _text_only_shape(texts),
+                    "detail": detail, "group": d.get("group") or ""})
     return out
 
 
@@ -3861,6 +4060,15 @@ def _member_metric(d, kind):
     """仅把本轮已触发信号的数值带入成员明细；旧快照缺值时不回查行情。"""
     if kind not in ("chg", "amp", "vol_ratio"):
         return ""
+    if kind == "vol_ratio" and d.get("vol_ratio_intraday"):
+        value = d.get("rt_vol_ratio")
+        if (not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value)
+                or value < 0):
+            return ""
+        moment = d.get("rt_vol_time")
+        moment_text = (f"（截至 {moment} ET）" if isinstance(moment, str)
+                       and re.fullmatch(r"\d{2}:\d{2}", moment) else "")
+        return f"盘中量比 {value:.1f}×{moment_text}"
     value = d.get({"chg": "chg", "amp": "amp", "vol_ratio": "vol_ratio"}[kind])
     if (not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value)
             or (kind != "chg" and value < 0)):
@@ -3894,7 +4102,7 @@ def _member_signal_details(d, kind, member, level):
 
 def signal_count_members(items):
     """按原信号口径收集标的；重复身份沿用首页分类优先级，只保留第一条。"""
-    levels = ("red", "yellow", "purple", "sole_yellow")
+    levels = ("red", "yellow", "purple")
     out = {kind: {level: [] for level in levels} for kind, _ in SIGNAL_KINDS}
     priority = {g["item_group"]: i for i, g in enumerate(GROUPS)}
     seen = set(RISK_IDENTITIES)
@@ -3910,23 +4118,27 @@ def signal_count_members(items):
         for kind in {k for k, _ in marks}:
             if kind not in out:
                 continue
-            for level in levels[:3]:
+            for level in levels:
                 if any(k == kind and m == level for k, m in marks):
                     entry = dict(member)
-                    if kind == "boll_rsi" and level == "red" and d.get("boll_rsi_direction"):
+                    # 组合信号现在红黄两档都有，方向说明不能只给红
+                    if kind == "boll_rsi" and level in ("red", "yellow") and d.get("boll_rsi_direction"):
                         entry["direction"] = d["boll_rsi_direction"]
                         if type(d.get("boll_rsi_hits")) is int and d["boll_rsi_hits"] in (2, 3):
                             entry["boll_rsi_hits"] = d["boll_rsi_hits"]
                     if kind != "target" or level == "purple":
                         _member_signal_details(d, kind, entry, level)
                     out[kind][level].append(entry)
-        if d.get("level") == "yellow":
-            yellow_kinds = {k for k, m in marks if m == "yellow"}
-            if len(yellow_kinds) == 1 and next(iter(yellow_kinds)) in out:
-                kind = next(iter(yellow_kinds))
-                entry = dict(member)
-                _member_signal_details(d, kind, entry, "yellow")
-                out[kind]["sole_yellow"].append(entry)
+        # 基本面是独立判定，不走 signal_marks：红黄各归各档，成员带上命中项
+        fund = d.get("fund") or {}
+        if fund.get("level") in levels:
+            entry = dict(member)
+            hits = [str(h) for h in (fund.get("hits") or []) if str(h).strip()]
+            if hits:
+                entry["fund_hits"] = hits
+            if fund.get("period"):
+                entry["fund_period"] = str(fund["period"])
+            out["fund"][fund["level"]].append(entry)
     return out
 
 
@@ -3997,6 +4209,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
                     "missing_prices": sum(d.get("price") is None for d in items)},
         "signal_counts": signal_counts(items),
         "signal_members": signal_count_members(items),
+        "text_only": text_only_members(items),
         "earnings_week": {"asof": earnings_asof, "members": earnings_week_members(items, earnings_asof)},
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
         "macro_dates": {k: m.get("date", "") for k, m in macro.items()},
@@ -4092,11 +4305,24 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
 #signalCounts .signal-member-direction{color:var(--dim);font-size:12px}
+#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}
+#signalCounts .signal-member-split{list-style:none;height:0;margin:9px 0;border-top:1px solid #465e87}
 #signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}
 #signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:14px;font-weight:700;line-height:1;vertical-align:baseline}
 #signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
 #signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
+#signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted #465e87}
+#signalCounts .signal-member-jump:hover,.signal-member-jump:focus-visible{color:#bfd5ff;border-bottom-color:#bfd5ff}
+#signalCounts .text-only{margin:8px 0 0;border:1px solid #2b3546;border-radius:8px;background:#12161f;text-align:left}
+#signalCounts .text-only>summary{cursor:pointer;padding:8px 12px;color:var(--text);font-size:13px}
+#signalCounts .text-only[open]>summary{border-bottom:1px solid #2b3546}
+#signalCounts .text-only .text-only-kind{margin:10px 0 4px;padding:0 12px;color:#bfd5ff;font-size:12.5px}
+#signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
+#signalCounts .text-only li{margin:5px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
+tr[id^="s-"]{scroll-margin-top:64px}
+tr.stk-flash td{animation:stkflash 1.6s ease-out 1}
+@keyframes stkflash{0%{background:#2b3f63}100%{background:transparent}}
 #signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;background:#182130;color:var(--text)}
 /* 折叠态绝对不占高度：个别移动内核在父面板隐藏期间改 open 后不重排，这里用 CSS 兜底 */
 #signalCounts .earnings-week:not([open])>*:not(summary){display:none}
@@ -4459,7 +4685,8 @@ def _signal_text_html(text):
     if "共识价" in text or "目标价" in text:
         cls = "tp"
     elif "布林" in text and "RSI" in text:
-        cls = "signal-red"
+        # 组合信号现在红黄两档都有，文案里带「→ 红 / → 黄」，按文案分色，别一律染红
+        cls = "signal-red" if "→ 红" in text else "signal-yellow"
     elif text.startswith("RSI") and "超卖" in text:
         cls = "signal-magenta"
     elif any(text.startswith(prefix) for prefix in ("逼近布林下轨", "触及布林下轨", "跌破布林下轨")):
@@ -4514,6 +4741,12 @@ def _range52_row(d):
             f'</div></div></td></tr>')
 
 
+def _stock_anchor_id(symbol):
+    """个股行的锚点 id；同身份的标的只会在优先分组出现一次，不会撞 id。"""
+    ident = instrument_identity(normalize_symbol(symbol))
+    return "s-" + re.sub(r"[^0-9A-Za-z]+", "-", str(ident)).strip("-").lower()
+
+
 def _stock_row(d, snapshot):
     cls = d["level"] + (" pur" if d.get("purple") else "")
     chg_cls = "up" if (d["chg"] or 0) > 0 else (
@@ -4522,8 +4755,13 @@ def _stock_row(d, snapshot):
     note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
     lv_html = level_note(d.get("trigger"), d.get("reduce"))
     tg_html = target_tag(d.get("target") or {})
+    # 持仓内部分长短：长持仓屏蔽上轨普通过热，页面上标出来，不然看不出区别
+    hold_html = ('<span class="unit" title="长持仓：不看一般过热，RSI 三条全过界才提醒">长</span>'
+                 if d.get("group") == "position" and str(d.get("hold") or "") == "long" else "")
     return (
-        f'<tr class="{cls}"><td class="sym">{normalize_symbol(d["symbol"])}{note}{lv_html}{_row_tags(d, snapshot)}</td>'
+        f'<tr class="{cls}" id="{_stock_anchor_id(d["symbol"])}"><td class="sym">'
+        f'{normalize_symbol(d["symbol"])}{note}{hold_html}'
+        f'{lv_html}{_row_tags(d, snapshot)}</td>'
         f'<td class="earn-cell">{_earnings_html(d)}</td>'
         f'<td class="num px"><span class="px-price">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
         f'<span class="px-chg {chg_cls}">{chg_txt}</span>{tg_html}</td>'
@@ -4546,7 +4784,7 @@ def _count_badge(level, count, label):
 def _group_stats_html(g, group, items_by_symbol, enabled):
     """分组标题右侧的小圆点计数：红、黄、灰、紫，板块组再跟「相对标普500的强弱」。"""
     stats = ''.join(_count_badge(lv, count, label)
-                    for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "无数据"))
+                    for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"), ("gray", "缺失"))
                     if (count := sum(d["level"] == lv for d in g)))
     # 紫色（目标价 / 共识价警示）：条数跟在红黄灯后面；一条都没有就不显示
     if (n_pur := sum(bool(d.get("purple")) for d in g)):
@@ -4631,7 +4869,8 @@ def _run_light(snapshot, finished_txt):
     """首页状态灯（第三排）：个股行情失败、市场风险部分缺失、空清单或完整成功。"""
     summary = snapshot.get("summary", {})
     registered = snapshot.get("registered_counts", {})
-    gray_txt = f" 灰{summary.get('gray')}" if summary.get("gray") else ""
+    # 无数据状态改叫「缺失」，避免和统计面板里「只出文字不报灯」的灰灯撞名
+    gray_txt = f" 缺失 {summary.get('gray')}" if summary.get("gray") else ""
     bad = list(dict.fromkeys(summary.get("stale_symbols", []) + summary.get("missing_symbols", [])))
     if bad:
         reason = "取数失败" if not summary.get("stale_symbols") else "当日行情未取得"
@@ -4684,6 +4923,14 @@ def _member_icons(d, kind, level):
             return ' <span class="signal-member-direction">平盘</span>'
         if not isinstance(markers, list) or not markers:
             return ' <span class="signal-member-direction">方向待下次更新</span>'
+        if kind == "ma_cross" and {"▲", "▼"} <= {m.get("shape") for m in markers
+                                                 if isinstance(m, dict)}:
+            # 不同周期均线方向相反（如站上短均线却跌破长均线）：同格上下箭头会互相打架，
+            # 跟布林+RSI 方向不一致时一样改成文字，不画三角。
+            labels = [m.get("label") for m in markers
+                      if isinstance(m, dict) and isinstance(m.get("label"), str) and m["label"]]
+            return (f' <span class="signal-member-direction">'
+                    f'{esc(" / ".join(labels) or "多周期均线方向不一致")}</span>')
     else:
         return ""
     icons = []
@@ -4722,6 +4969,9 @@ def _filter_detail(d, kind, label):
         hits = d.get("boll_rsi_hits")
         extra = f" RSI{hits}条" if type(hits) is int and hits in (2, 3) else ""
         return f"布林+RSI {d['direction']}{extra}"
+    if kind == "fund":
+        hits = [str(h) for h in (d.get("fund_hits") or []) if str(h).strip()]
+        return f"基本面 {'；'.join(hits)}" if hits else label
     marks = [m.get("label") for m in d.get("indicators") or []
              if isinstance(m, dict) and isinstance(m.get("label"), str) and m.get("label")]
     return f"{label} {' / '.join(marks)}" if marks else label
@@ -4754,7 +5004,7 @@ def _earnings_week_panel(snapshot, count_only=False):
         note = f' <span class="note">{esc(entry["note"])}</span>' if entry.get("note") else ""
         group = next((g["label"] for g in GROUPS if g["item_group"] == entry.get("group")), "未分类")
         level = entry.get("level")
-        lamp_name = {"red": "红灯", "yellow": "黄灯", "green": "绿灯", "gray": "无数据"}.get(level)
+        lamp_name = {"red": "红灯", "yellow": "黄灯", "green": "绿灯", "gray": "缺失"}.get(level)
         lamp = (f'<i class="stat-dot {level}" role="img" aria-label="{lamp_name}"></i>' if lamp_name else "")
         lines.append(f'<li><strong>{esc(entry["symbol"])}</strong>{note} <span class="earnings-week-meta">'
                      f'美东 {esc(date[5:].replace("-", "/"))} {timing} · {kind} · '
@@ -4772,14 +5022,16 @@ def _signal_counts_card(snapshot):
     """各信号计数及分组明细；空计数不显示，缺失或不一致的成员等待下次更新。"""
     counts = snapshot.get("signal_counts") or {}
     members = snapshot.get("signal_members") or {}
-    levels = (("red", "红色信号"), ("yellow", "黄色信号"),
-              ("purple", "紫色提示"), ("sole_yellow", "仅此一条黄灯"))
+    levels = (("red", "红色信号"), ("yellow", "黄色信号"), ("purple", "紫色提示"))
     group_order = {g["item_group"]: i for i, g in enumerate(_display_groups())}
     group_labels = {g["item_group"]: g["label"] for g in GROUPS}
     esc = lambda value: html_lib.escape(str(value), quote=True)
     rows = ""
-    filters = {}  # 同时满足筛选：每类信号的已核验成员（红/黄/紫合并，仅此一条黄灯是黄色子集不重复算）
+    filters = {}  # 同时满足筛选：每类信号的已核验成员（红/黄/紫合并）
     for kind, v in counts.items():
+        # 只显示这一轮真的有计数的信号：全 0 的行不占位。
+        # 布林和 RSI 现在都不再单独报灯，计数恒为 0，这两行会自然消失——
+        # 不需要在这里写死排除，免得以后规则再变时要改两处。
         if not any(v.get(level) for level, _ in levels):
             continue
         raw_label = str(v.get("label", ""))
@@ -4803,55 +5055,62 @@ def _signal_counts_card(snapshot):
                              and d["symbol"].strip() for d in entries))
             if valid:
                 valid = len({instrument_identity(d["symbol"]) for d in entries}) == n
-            if level != "sole_yellow":
-                if not valid:
-                    flt["ok"] = False
-                else:
-                    for d in entries:
-                        rec = flt["members"].setdefault(instrument_identity(d["symbol"]), {
-                            "s": d["symbol"], "n": d.get("note") if isinstance(d.get("note"), str) else "",
-                            "g": group_labels.get(str(d.get("group") or ""), str(d.get("group") or "") or "未分类"),
-                            "o": group_order.get(str(d.get("group") or ""), len(GROUPS)),
-                            "l": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "",
-                            "d": []})
-                        text = _filter_detail(d, kind, raw_label)
-                        if text not in rec["d"]:
-                            rec["d"].append(text)
+            if not valid:
+                flt["ok"] = False
+            else:
+                for d in entries:
+                    rec = flt["members"].setdefault(instrument_identity(d["symbol"]), {
+                        "s": d["symbol"], "n": d.get("note") if isinstance(d.get("note"), str) else "",
+                        "g": group_labels.get(str(d.get("group") or ""), str(d.get("group") or "") or "未分类"),
+                        "o": group_order.get(str(d.get("group") or ""), len(GROUPS)),
+                        "l": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "",
+                        "d": []})
+                    text = _filter_detail(d, kind, raw_label)
+                    if text not in rec["d"]:
+                        rec["d"].append(text)
             if not valid:
                 content = '<p>明细待下次更新：当前快照缺少成员或成员人数与计数不一致，暂不展示名单。</p>'
             else:
-                grouped = {}
-                for d in entries:
-                    group = str(d.get("group") or "")
-                    grouped.setdefault(group, []).append(d)
-                content = '<div class="signal-member-groups">'
-                for group in sorted(grouped, key=lambda name: group_order.get(name, len(GROUPS))):
-                    group_members = grouped[group]
-                    content += (f'<section class="signal-member-group"><h4>'
-                                f'{esc(group_labels.get(group, group or "未分类"))} · {len(group_members)} 只</h4>'
-                                f'<ul class="signal-member-list">')
-                    for d in group_members:
-                        note = f'<span class="note">{esc(d["note"])}</span>' if d.get("note") else ""
-                        direction = _member_icons(d, kind, level)
-                        if kind in ("chg", "amp", "vol_ratio"):
-                            metric = d.get("metric") or "数值待下次更新"
-                        elif kind == "rsi":
-                            metric = d.get("rsi_hits") or "条数待下次更新"
-                        elif kind == "boll":
-                            metric = d.get("boll_state") or "状态待下次更新"
-                        elif kind == "boll_rsi" and d.get("direction") in ("上轨（超买）", "下轨（超卖）"):
-                            hits = d.get("boll_rsi_hits")
-                            metric = f"RSI {hits}条过界" if type(hits) is int and hits in (2, 3) else "条数待下次更新"
-                        else:
-                            metric = ""
-                        value = f' <span class="signal-member-metric">{esc(metric)}</span>' if metric else ""
-                        content += f'<li><span class="signal-member-symbol">{esc(d["symbol"])}</span>{direction}{value}{note}</li>'
-                    content += '</ul></section>'
-                content += '</div>'
+                # 明细按方向分两段：先全部 ▲，一条横线，再全部 ▼，最后是没有三角的
+                # （文字方向/方向待更新）。不写分组标题，分组名放行尾括号，去掉中文备注名。
+                def _member_row(d):
+                    # 分组名不再写在名单里：点名字直接跳到个股所在行，比括号里的分组名直观
+                    direction = _member_icons(d, kind, level).strip()
+                    if kind in ("chg", "amp", "vol_ratio"):
+                        metric = d.get("metric") or "数值待下次更新"
+                    elif kind == "rsi":
+                        metric = d.get("rsi_hits") or "条数待下次更新"
+                    elif kind == "boll":
+                        metric = d.get("boll_state") or "状态待下次更新"
+                    elif kind == "boll_rsi":
+                        hits = d.get("boll_rsi_hits")
+                        metric = (f"RSI {hits}条过界" if type(hits) is int and hits in (2, 3)
+                                  else "条数待下次更新")
+                    elif kind == "fund":
+                        # 基本面不改灯级，名单里直接把命中项写出来才有用
+                        hits = d.get("fund_hits") or []
+                        metric = "；".join(hits) if hits else "命中项待下次更新"
+                    else:
+                        metric = ""
+                    value = f' <span class="signal-member-metric">{esc(metric)}</span>' if metric else ""
+                    return (f'<li><a class="signal-member-jump" href="#{_stock_anchor_id(d["symbol"])}">'
+                            f'<span class="signal-member-symbol">{esc(d["symbol"])}</span></a>'
+                            f'{direction}{value}</li>')
+
+                buckets = {"up": [], "down": [], "other": []}
+                for d in sorted(entries, key=lambda x: group_order.get(str(x.get("group") or ""), len(GROUPS))):
+                    row = _member_row(d)
+                    buckets["up" if "▲" in row else "down" if "▼" in row else "other"].append(row)
+                parts = ["".join(buckets[name]) for name in ("up", "down", "other") if buckets[name]]
+                # 分隔线必须单独成变量：写成相邻字符串字面量会先被隐式拼接，
+                # 结果把 <div>/<ul> 一起当成连接符插进每一段之间。
+                divider = '<li class="signal-member-split" role="separator"></li>'
+                content = ('<div class="signal-member-groups"><ul class="signal-member-list">'
+                           + divider.join(parts) + '</ul></div>')
             panels.append(f'<div class="signal-members-panel" id="{panel_id}" hidden>{content}</div>')
         rows += (f'<tr><td><button type="button" class="signal-filter-toggle" data-kind="{esc(kind)}" '
                  f'aria-pressed="false">{label}</button></td>{"".join(cells)}</tr>'
-                 f'<tr class="signal-members-row"><td colspan="5">{"".join(panels)}</td></tr>')
+                 f'<tr class="signal-members-row"><td colspan="4">{"".join(panels)}</td></tr>')
     earnings_panel = _earnings_week_panel(snapshot)
     if not rows and not earnings_panel:
         return ""
@@ -4871,7 +5130,7 @@ def _signal_counts_card(snapshot):
                    f'data-filter="{esc(filter_json)}" hidden></div>') if rows else ""
     dim = 'style="color:var(--dim)"'
     head = (f'<tr class="gray mh"><td {dim}>信号</td><td class="num" {dim}>红</td><td class="num" {dim}>黄</td>'
-            f'<td class="num" {dim}>紫</td><td class="num" {dim}>仅此一条黄灯</td></tr>')
+            f'<td class="num" {dim}>紫</td></tr>')
     summary = snapshot.get("summary") or {}
     whole = lambda n: n if type(n) is int and n >= 0 else None
     purple = whole(summary.get("purple"))
@@ -4886,7 +5145,41 @@ def _signal_counts_card(snapshot):
     return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'
             f'<span class="group-stats">{stats}</span></summary>'
             f'{f"<table>{head}{rows}</table>" if rows else ""}{filter_html}{earnings_panel}'
+            f'{_text_only_panel(snapshot)}'
             f'{_collapse_button("signalCounts", "统计")}</details>\n')
+
+
+def _text_only_panel(snapshot):
+    """灰灯：只出文字、不报灯、不进表头计数的标的。默认折叠；展开后按归因分类
+    （RSI / 布林 / 布林+RSI），每组内 ▲ 在上、▼ 在下，中间一条横线。
+    标的名字可直接点，跳到首页该股所在行（会自动展开它所在的分组和无异动列表）。"""
+    rows = snapshot.get("text_only") or []
+    if not isinstance(rows, list) or not rows:
+        return ""
+    esc = lambda v: html_lib.escape(str(v), quote=True)
+    labels = {kind: label for kind, label in SIGNAL_KINDS}
+    order = {"rsi": 0, "boll": 1, "boll_rsi": 2}
+
+    def cell(r):
+        return (f'<li><a class="signal-member-jump" href="#{_stock_anchor_id(str(r.get("symbol") or ""))}">'
+                f'<span class="signal-member-symbol">{esc(r.get("symbol"))}</span></a>'
+                f' {esc(r.get("shape") or "")}'
+                f' <span class="signal-member-metric">{esc(r.get("detail") or "")}</span></li>')
+
+    parts = []
+    # 分隔线单独成变量：相邻字符串字面量会被隐式拼接，把 <ul> 一起插进每一段之间
+    divider = '<li class="signal-member-split" role="separator"></li>'
+    for kind in sorted({str(r.get("kind") or "") for r in rows}, key=lambda k: order.get(k, 9)):
+        picked = [r for r in rows if str(r.get("kind") or "") == kind]
+        shape = lambda r: str(r.get("shape") or "")
+        up = [cell(r) for r in picked if shape(r) == "▲"]
+        dn = [cell(r) for r in picked if shape(r) == "▼"]
+        other = [cell(r) for r in picked if shape(r) not in ("▲", "▼")]
+        segs = [s for s in ("".join(up), "".join(dn), "".join(other)) if s]
+        parts.append(f'<p class="text-only-kind">{esc(labels.get(kind, kind))} · {len(picked)} 只</p>'
+                     f'<ul class="signal-member-list">{divider.join(segs)}</ul>')
+    return (f'<details class="text-only"><summary>灰灯 {len(rows)} 只 · 只出文字、不报灯</summary>'
+            f'{"".join(parts)}</details>')
 
 
 def _reference_card(snapshot, *, details_only=False):
@@ -5202,17 +5495,93 @@ def build_reference_alerts(prev=None):
 
 # ---------------------------------------------------------------- main
 
+class _ReplayResponse:
+    """回放用的假响应，只覆盖代码里实际用到的字段。"""
+
+    def __init__(self, status, text):
+        self.status_code = status
+        self.text = text or ""
+        self.content = self.text.encode("utf-8")
+        self.encoding = "utf-8"
+        self.headers = {"Content-Type": "application/json"}
+        self.ok = 200 <= status < 300
+
+    def json(self):
+        return json.loads(self.text)
+
+    def raise_for_status(self):
+        if not self.ok:
+            raise RuntimeError(f"replay http {self.status_code}")
+
+
+def install_http_snapshot(mode=None, path=None):
+    """把 requests 的底层请求换成「记录 / 回放」。
+
+    mode='dump'   边跑边记下成功的 GET 响应；
+    mode='replay' 只读快照，未命中的一律按取数失败处理（不联网）。
+    POST（派发、推送）不参与快照，照常走原逻辑。
+    """
+    state = {"mode": mode, "path": path, "data": {}, "miss": 0}
+    if mode == "replay" and path:
+        try:
+            with open(path, encoding="utf-8") as f:
+                state["data"] = json.load(f)
+        except Exception as e:
+            log(f"HTTP 快照读取失败，本次全部按取数失败处理：{e}")
+    original = requests.Session.request
+
+    def patched(self, method, url, *a, **kw):
+        if str(method).upper() != "GET":
+            return original(self, method, url, *a, **kw)
+        key = f"GET {url}"
+        if state["mode"] == "replay":
+            hit = state["data"].get(key)
+            if hit is None:
+                state["miss"] += 1
+                return _ReplayResponse(599, "")
+            return _ReplayResponse(hit.get("status", 200), hit.get("text", ""))
+        resp = original(self, method, url, *a, **kw)
+        if state["mode"] == "dump" and getattr(resp, "status_code", 0) == 200:
+            try:
+                state["data"][key] = {"status": resp.status_code, "text": resp.text}
+            except Exception:
+                pass
+        return resp
+
+    requests.Session.request = patched
+    return state
+
+
+def dump_http_snapshot(state):
+    if not isinstance(state, dict) or state.get("mode") != "dump" or not state.get("path"):
+        return
+    try:
+        with open(state["path"], "w", encoding="utf-8") as f:
+            json.dump(state["data"], f, ensure_ascii=False)
+        log(f"HTTP 快照已写入 {state['path']}（{len(state['data'])} 条请求）")
+    except Exception as e:
+        log(f"HTTP 快照写入失败：{e}")
+
+
 def main(argv=None):
     global TARGET_DATE, CLOSED_ONLY, QUOTE_DEADLINE
     parser = argparse.ArgumentParser(description="市场自检生成器")
     parser.add_argument("--prepare-run", action="store_true", help="锁定本次运行目标交易日并输出 GitHub Actions 环境变量")
     parser.add_argument("--ensure-schedule-run", action="store_true", help="定时任务保险：缺失时补派发一次运行")
+    parser.add_argument("--dump-http", metavar="PATH", help="记录本次成功的 GET 响应，供 --replay-http 离线重跑")
+    parser.add_argument("--replay-http", metavar="PATH", help="只读 HTTP 快照渲染，全程零网络（未命中的按取数失败）")
     args = parser.parse_args(argv)
     if args.prepare_run:
         prepare_run()
         return 0
     if args.ensure_schedule_run:
         return ensure_schedule_run()
+    if args.dump_http or args.replay_http:
+        snap_mode = "dump" if args.dump_http else "replay"
+        snap_path = args.dump_http or args.replay_http
+        snap_state = install_http_snapshot(snap_mode, snap_path)
+        atexit.register(dump_http_snapshot, snap_state)
+        log(f"HTTP 快照模式：{snap_mode}（{snap_path}）")
 
     if not TARGET_DATE:
         plan = plan_run(EVENT, datetime.now(timezone.utc))

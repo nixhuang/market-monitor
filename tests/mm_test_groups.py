@@ -4,6 +4,7 @@ import re
 import os
 import sys
 import unittest
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1496,7 +1497,7 @@ class TestGroups(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory):
                 loaded = monitor.load_settings()
         self.assertEqual(loaded['boll_n'], 20)
-        self.assertEqual(loaded['rsi_low'], 30)
+        self.assertEqual(loaded['rsi_low'], 35)
         self.assertEqual(loaded['amp_red'], 8)
         self.assertEqual(loaded['chg_red'], 4.5)
         self.assertEqual(monitor.valid_settings(monitor.DEFAULT_SETTINGS), '')
@@ -2575,10 +2576,10 @@ class TestTargets(unittest.TestCase):
                 self._row('CCC', 'yellow', True, t_hit, ['x']),
                 self._row('DDD', 'green', False, t_ok)]
         page = self._page(rows)
-        self.assertIn('<tr class="green pur"><td class="sym">AAA', page)
-        self.assertIn('<tr class="red pur"><td class="sym">BBB', page)
-        self.assertIn('<tr class="yellow pur"><td class="sym">CCC', page)
-        self.assertIn('<tr class="green"><td class="sym">DDD', page)
+        self.assertIn('<tr class="green pur" id="s-aaa"><td class="sym">AAA', page)
+        self.assertIn('<tr class="red pur" id="s-bbb"><td class="sym">BBB', page)
+        self.assertIn('<tr class="yellow pur" id="s-ccc"><td class="sym">CCC', page)
+        self.assertIn('<td class="sym">DDD', page)
         shown, folded = page.split('无异动 1 只', 1)
         self.assertIn('>AAA', shown)                      # 紫色的绿灯行不折叠
         self.assertNotIn('>DDD', shown)                   # 普通绿灯行仍然折叠
@@ -3135,6 +3136,194 @@ class TestCompletedDayVolume(unittest.TestCase):
             self.assertFalse(any('量比' in text for text in signals))
 
 
+class TestIntradayVolumeRatio(unittest.TestCase):
+    """盘中量比：当日累计量按已开盘分钟数折算；静默期/非交易时段/缺量不报，收盘后回落完整日口径。"""
+
+    def history(self, end):
+        import exchange_calendars as xcals
+        cal = xcals.get_calendar('XNYS')
+        sessions = cal.sessions_in_range('2026-09-01', end)[-23:]
+        dates = [d.date().isoformat() for d in sessions]
+        volumes = [1000] * 23
+        volumes[-1] = 0          # 今天这根未定稿，不能进均量样本
+        return {'dates': dates, 'volumes': volumes, 'closes': [100] * 23,
+                'highs': [100] * 23, 'lows': [100] * 23,
+                'price': 100, 'prev_close': 100}
+
+    def measure(self, data, time, realtime_volume=None):
+        from datetime import datetime
+        if realtime_volume is not None:
+            data['rt_volume'] = realtime_volume
+        with patch.object(monitor, 'NOW', datetime.fromisoformat(time)):
+            return monitor.intraday_volume_ratio('AAPL', data)
+
+    def test_midday_uses_elapsed_minutes(self):
+        data = self.history('2026-10-13')
+        # 20 日均量 1000/全日 390 分钟 = 2.5641/分钟；12:00 已开盘 150 分钟，1500 股 → 10/分钟
+        ratio, moment = self.measure(data, '2026-10-13T12:00:00-04:00', 1500)
+        self.assertEqual(moment, '12:00')
+        self.assertAlmostEqual(ratio, (1500 / 150) / (1000 / 390), places=4)
+
+    def test_quiet_window_and_closed_hours_report_nothing(self):
+        data = self.history('2026-10-13')
+        for time in ('2026-10-13T09:31:00-04:00', '2026-10-13T09:44:00-04:00',
+                     '2026-10-13T16:05:00-04:00', '2026-10-13T20:15:00-04:00',
+                     '2026-10-11T12:00:00-04:00'):   # 周日
+            with self.subTest(time=time):
+                self.assertEqual(self.measure(data, time, 1500), (None, ''))
+
+    def test_missing_or_invalid_realtime_volume(self):
+        data = self.history('2026-10-13')
+        self.assertEqual(self.measure(data, '2026-10-13T12:00:00-04:00'), (None, ''))
+        for bad in (0, -5, None, '3000'):
+            with self.subTest(bad=bad):
+                self.assertEqual(self.measure(dict(data), '2026-10-13T12:00:00-04:00', bad), (None, ''))
+        # 均量样本里出现 0/None 也不硬算
+        broken = dict(data, volumes=data['volumes'][:-21] + [0] + data['volumes'][-20:])
+        self.assertEqual(self.measure(broken, '2026-10-13T12:00:00-04:00', 1500), (None, ''))
+
+    def test_futures_and_index_not_supported(self):
+        data = self.history('2026-10-13')
+        from datetime import datetime
+        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T12:00:00-04:00')):
+            self.assertEqual(monitor.intraday_volume_ratio('ESMAIN', dict(data, rt_volume=1500)), (None, ''))
+            self.assertEqual(monitor.intraday_volume_ratio('^VIX', dict(data, rt_volume=1500)), (None, ''))
+
+    def test_half_day_uses_shortened_session(self):
+        data = self.history('2026-11-27')     # 感恩节次日 13:00 提前收盘 → 全日 210 分钟
+        ratio, _ = self.measure(data, '2026-11-27T11:00:00-05:00', 900)   # 已开盘 90 分钟
+        self.assertAlmostEqual(ratio, (900 / 90) / (1000 / 210), places=4)
+
+    def test_alert_prefers_intraday_over_completed_day(self):
+        data = self.history('2026-10-13')
+        data['volumes'][-2] = 2600            # 昨日放量 → 20 日均量 1080
+        data['rt_volume'] = 1500              # 盘中折算 3.6×（也应报黄）
+        average = (2600 + 19 * 1000) / 20
+        from datetime import datetime
+        # 两段都必须固定 NOW/TARGET_DATE：否则第二次调用会读真实时钟，
+        # 收盘后跑测试时盘中量比根本不触发（2026-10-12 踩过同样的坑）。
+        midday = datetime.fromisoformat('2026-10-13T12:00:00-04:00')
+        with patch.object(monitor, 'NOW', midday), \
+                patch.object(monitor, 'TARGET_DATE', data['dates'][-1]):
+            _, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
+        self.assertTrue(detail['vol_ratio_intraday'])
+        self.assertAlmostEqual(detail['rt_vol_ratio'], (1500 / 150) / (average / 390), places=4)
+        self.assertTrue(any('盘中量比（截至 12:00 ET）' in text for text in signals), signals)
+        self.assertFalse(any('最近完整日量比' in text for text in signals), signals)
+        self.assertIn(('vol_ratio', 'red'), detail['signal_marks'])     # 3.6× ≥ 默认红线 3.0
+        self.assertEqual(monitor._member_metric(detail, 'vol_ratio'), '盘中量比 3.6×（截至 12:00 ET）')
+        with patch.object(monitor, 'NOW', midday), \
+                patch.object(monitor, 'TARGET_DATE', data['dates'][-1]), \
+                patch.object(monitor, 'S', {**monitor.S, 'vol_ratio_red': 4.0}):
+            _, _, y_detail = monitor.analyze_symbol('AAPL', {}, data)
+        self.assertIn(('vol_ratio', 'yellow'), y_detail['signal_marks'])  # 只到黄线时报黄
+
+    def test_after_close_falls_back_to_completed_day(self):
+        data = self.history('2026-10-13')
+        data['volumes'][-2] = 2600
+        data['volumes'][-1] = 2000            # 今日已收盘，日线给出完整量 → 完整日量比 1.9×
+        data['rt_volume'] = 1500              # 已收盘：实时量不该再参与
+        from datetime import datetime
+        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T18:00:00-04:00')), \
+                patch.object(monitor, 'TARGET_DATE', data['dates'][-1]):
+            _, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
+        self.assertFalse(detail['vol_ratio_intraday'])
+        self.assertAlmostEqual(detail['vol_ratio'], 2000 / ((2600 + 19 * 1000) / 20), places=4)
+        self.assertTrue(any('最近完整日量比' in text for text in signals), signals)
+        self.assertFalse(any('盘中量比' in text for text in signals), signals)
+
+
+class TestMaCrossConflict(unittest.TestCase):
+    """同一格出现上下箭头时（不同周期均线方向相反），跟布林+RSI 方向不一致一样改用文字。"""
+
+    def row(self, markers):
+        return {'symbol': 'MIX', 'indicators': markers}
+
+    def test_conflicting_directions_render_text(self):
+        mixed = self.row([{'shape': '▲', 'tone': 'cyan', 'label': '上穿60日均线'},
+                          {'shape': '▼', 'tone': 'cyan', 'label': '跌破250日均线'}])
+        icons = monitor._member_icons(mixed, 'ma_cross', 'yellow')
+        self.assertNotIn('▲', icons)
+        self.assertNotIn('▼', icons)
+        self.assertIn('上穿60日均线', icons)
+        self.assertIn('跌破250日均线', icons)
+
+    def test_single_direction_still_draws_triangle(self):
+        up = self.row([{'shape': '▲', 'tone': 'cyan', 'label': '上穿250日均线'}])
+        self.assertIn('▲', monitor._member_icons(up, 'ma_cross', 'yellow'))
+        self.assertIn('上穿250日均线', monitor._member_icons(up, 'ma_cross', 'yellow'))
+
+    def test_other_kinds_keep_icons(self):
+        # 只有均线穿越做这条防冲突处理；布林/RSI 本身不会产生同格反向标记
+        boll = self.row([{'shape': '▼', 'tone': 'yellow', 'label': '盘中跌破下轨'}])
+        self.assertIn('▼', monitor._member_icons(boll, 'boll', 'yellow'))
+
+
+class TestMemberDetailDirectionSplit(unittest.TestCase):
+    """统计面板明细改版：▲ 一段 → 一条横线 → ▼ 一段；无分组小标题、无中文备注名、
+    分组名放行尾括号。同向内部仍按分组展示顺序稳定排列。"""
+
+    @staticmethod
+    def _entry(symbol, group, shape, note=''):
+        return {'symbol': symbol, 'group': group, 'note': note, 'level': 'red',
+                'indicators': [{'shape': shape, 'tone': 'white', 'label': '方向'}]}
+
+    def _panel(self, entries, kind='chg', level='red'):
+        import hashlib
+        output = monitor._signal_counts_card(
+            {'signal_counts': {kind: {'label': '涨跌幅', level: len(entries)}},
+             'signal_members': {kind: {level: entries}}})
+        panel_id = f'signal-members-{hashlib.sha256(kind.encode("utf-8")).hexdigest()}-{level}'
+        match = re.search(r'<div class="signal-members-panel" id="' + panel_id
+                          + r'" hidden>(.*?)</div>(?=<div class="signal-members-panel"|</td>)',
+                          output, re.S)
+        self.assertIsNotNone(match, output)
+        return match.group(1)
+
+    def test_up_block_then_divider_then_down_block(self):
+        entries = [self._entry('DN_FOCUS', 'focus', '▼', '下备注'),
+                   self._entry('UP_FOCUS', 'focus', '▲', '上备注'),
+                   self._entry('DN_POS', 'position', '▼'),
+                   self._entry('UP_POS', 'position', '▲')]
+        body = self._panel(entries)
+        self.assertNotIn('<h4>', body)                       # 没有分组小标题
+        self.assertEqual(body.count('class="signal-member-split"'), 1)
+        head, tail = body.split('class="signal-member-split"', 1)
+        for sym in ('UP_POS', 'UP_FOCUS'):
+            self.assertIn(sym, head, body)
+            self.assertNotIn(sym, tail, body)
+        for sym in ('DN_POS', 'DN_FOCUS'):
+            self.assertIn(sym, tail, body)
+            self.assertNotIn(sym, head, body)
+        self.assertLess(head.index('UP_POS'), head.index('UP_FOCUS'))   # 同向按分组顺序
+        self.assertLess(tail.index('DN_POS'), tail.index('DN_FOCUS'))
+        self.assertNotIn('上备注', body)                      # 中文备注名去掉
+        self.assertNotIn('下备注', body)
+        self.assertIn('class="signal-member-jump"', body)     # 名字可点跳转，不再写分组名
+        self.assertEqual(body.count('class="signal-member-list"'), 1)
+
+    def test_single_direction_has_no_divider(self):
+        body = self._panel([self._entry('UP_A', 'position', '▲'),
+                            self._entry('UP_B', 'focus', '▲')])
+        self.assertNotIn('class="signal-member-split"', body)
+        self.assertEqual(body.count('class="signal-member-symbol"'), 2)
+
+    def test_text_direction_falls_into_trailing_block(self):
+        entries = [self._entry('UP_A', 'position', '▲'),
+                   {'symbol': 'TXT', 'group': 'focus', 'note': '', 'level': 'red'},
+                   self._entry('DN_B', 'position', '▼')]
+        body = self._panel(entries)
+        # 顺序固定为 ▲ 段 → 横线 → ▼ 段 → 横线 → 文字段
+        self.assertEqual(body.count('class="signal-member-split"'), 2)
+        up, rest = body.split('class="signal-member-split"', 1)
+        down, text = rest.split('class="signal-member-split"', 1)
+        self.assertIn('UP_A', up)
+        self.assertNotIn('方向待下次更新', up)
+        self.assertIn('DN_B', down)
+        self.assertIn('TXT', text)
+        self.assertIn('方向待下次更新', text)
+
+
 class TestFuturesIdentity(unittest.TestCase):
     """期货恢复：不冒充现金指数/ETF，不把过期数据当作当日行情。"""
 
@@ -3532,8 +3721,6 @@ class TestMaConfirm(unittest.TestCase):
         counts = monitor.signal_counts([detail])
         self.assertEqual(counts['ma_cross']['yellow'], 1)
         self.assertEqual(counts['ma_band']['yellow'], 1)
-        self.assertEqual(counts['ma_cross']['sole_yellow'], 0)
-        self.assertEqual(counts['ma_band']['sole_yellow'], 0)
         self.assertEqual(counts['ma_cross']['label'], '均线穿越')
 
     def test_long_ma_follows_configured_period(self):
@@ -3845,7 +4032,7 @@ class TestDisplayInteractions(unittest.TestCase):
 
     def test_counts_panel_precedes_market_risk_and_has_distinct_frame(self):
         snap = {'signal_counts': {'ma_band': {'label': '长均线触及', 'red': 0,
-                 'yellow': 5, 'purple': 0, 'sole_yellow': 3}}, 'summary': {'yellow': 5}}
+                 'yellow': 5, 'purple': 0}}, 'summary': {'yellow': 5}}
         page = monitor.render({}, [], 0, snapshot=snap)
         self.assertLess(page.index('id="signalCounts"'), page.index('id="macroCard"'))
         self.assertIn('#signalCounts{border:1px solid #6686c6', page)
@@ -3883,9 +4070,9 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(out['rsi']['yellow'], 1)
         self.assertEqual(out['boll']['yellow'], 2)
         self.assertEqual(out['target']['purple'], 1)
-        # 只有第二行的黄灯是「只由布林造成」的；第三行有两类黄信号，不算单独
-        self.assertEqual(out['boll']['sole_yellow'], 1)
-        self.assertEqual(out['vol_ratio']['sole_yellow'], 0)
+        # 「只出文字不报灯」的灰灯不再按信号类分列，单独走 text_only_members()；
+        # 这三行都没有 RSI / 布林文字，灰灯名单应为空
+        self.assertEqual(monitor.text_only_members(rows), [])
 
     def test_one_stock_counts_once_per_kind(self):
         out = monitor.signal_counts([self.row('yellow', ('ma_cross', 'yellow'), ('ma_cross', 'yellow'))])
@@ -3894,7 +4081,7 @@ class TestSignalCounts(unittest.TestCase):
     def test_every_kind_is_listed_even_when_zero(self):
         out = monitor.signal_counts([])
         self.assertEqual(list(out), [k for k, _ in monitor.SIGNAL_KINDS])
-        self.assertTrue(all(v['red'] == v['yellow'] == v['purple'] == v['sole_yellow'] == 0 for v in out.values()))
+        self.assertTrue(all(v['red'] == v['yellow'] == v['purple'] == 0 for v in out.values()))
 
     def test_unknown_kind_is_ignored(self):
         out = monitor.signal_counts([self.row('yellow', ('mystery', 'yellow'))])
@@ -3909,7 +4096,9 @@ class TestSignalCounts(unittest.TestCase):
         with patch.object(monitor, 'vol_profile', return_value=('mid', None)):
             lv, sigs, det = monitor.analyze_symbol('T', {}, data, 'position')
         marks = det['signal_marks']
-        self.assertEqual(len(marks), len(sigs))
+        # marks 只记录会亮灯的信号；RSI 条数与布林轨道状态现在只是文字，不进 marks，
+        # 所以 signals 会比 marks 多。这里保证「有灯必有对应条目」，不再要求一一相等。
+        self.assertTrue(0 < len(marks) <= len(sigs), (marks, sigs))
         self.assertIn(('chg', 'red'), marks)
 
     def test_signal_counts_card_on_homepage(self):
@@ -3919,11 +4108,12 @@ class TestSignalCounts(unittest.TestCase):
         page = monitor.render({}, [], 0, snapshot=snap)
         self.assertIn('id="signalCounts"', page)
         self.assertIn('<span class="grp-name">统计</span>', page)
-        self.assertIn('仅此一条黄灯', page)
+        self.assertNotIn('仅此一条黄灯', page)
         self.assertLess(page.index('id="signalCounts"'), page.index('class="foot"'))
-        # 没有任何信号 / 旧快照没有该字段：整块不显示
+        # 这一轮一条都没触发：整块统计不出现，只有旧快照完全没有该字段时才同样不显示
         quiet = monitor.render({}, [], 0, snapshot=monitor.build_snapshot({}, [], {}, group_counts={}))
         self.assertNotIn('id="signalCounts"', quiet)
+        # 旧快照完全没有 signal_counts 字段时才整块不显示
         self.assertNotIn('id="signalCounts"', monitor.render({}, [], 0, snapshot={}))
 
     def test_counts_card_has_only_triangle_after_table_and_no_long_help(self):
@@ -3945,11 +4135,14 @@ class TestSignalCounts(unittest.TestCase):
 
     def test_earnings_is_not_added_to_signal_kinds_counts_or_members(self):
         expected = ['chg', 'amp', 'vol_ratio', 'rsi', 'boll', 'boll_rsi',
-                    'ma_cross', 'ma_band', 'low52', 'add_price', 'reduce_price', 'target']
+                    'ma_cross', 'ma_band', 'low52', 'add_price', 'reduce_price', 'target',
+                    'fund']
         self.assertEqual([kind for kind, _ in monitor.SIGNAL_KINDS], expected)
         rows = [self.member_row('AAA', 'position', 'red', *((kind, 'red') for kind in expected)),
                 self.member_row('BBB', 'focus', 'yellow', ('earnings', 'yellow'))]
-        rows[1].update(earnings={'status': 'ok', 'date': '2026-10-15'}, signals=['财报临近'])
+        # 日期必须落在「美东今天起一周内」才会进「未来一周财报」，写死日期会随当天时间失效
+        soon = (monitor.NOW.astimezone(monitor.TZ).date() + timedelta(days=2)).isoformat()
+        rows[1].update(earnings={'status': 'ok', 'date': soon}, signals=['财报临近'])
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         self.assertEqual(list(snap['signal_counts']), expected)
         self.assertEqual(list(snap['signal_members']), expected)
@@ -3957,11 +4150,10 @@ class TestSignalCounts(unittest.TestCase):
             with self.subTest(kind=kind):
                 self.assertEqual(snap['signal_counts'][kind]['red'], 1)
                 self.assertEqual(snap['signal_counts'][kind]['yellow'], 0)
-                self.assertEqual(snap['signal_counts'][kind]['sole_yellow'], 0)
                 self.assertEqual([d['symbol'] for d in snap['signal_members'][kind]['red']], ['AAA'])
         output = monitor._signal_counts_card(snap)
         self.assertEqual(output.count('class="signal-members-row"'), len(expected))
-        self.assertNotIn('<td>财报</td>', output)  # 不混入12类红黄紫交易信号
+        self.assertNotIn('<td>财报</td>', output)  # 不混入红黄紫交易信号
         self.assertIn('未来一周财报', output)
         self.assertIn('<strong>BBB</strong>', output)
         self.assertNotIn('>BBB</span>', output.split('earnings-week', 1)[0])
@@ -4017,15 +4209,15 @@ class TestSignalCounts(unittest.TestCase):
             self.assertIn('<i class="stat-dot red" role="img" aria-label="红灯"></i>', red)
             self.assertEqual(red.count('stat-dot'), 1)  # 未知灯级不画点、不注入
             self.assertNotIn('<strong>LATE</strong>', panel)
-            self.assertNotIn('<table>', panel)  # 只有财报名单仍显示各信号计数板块，不伪造信号
+            self.assertNotIn('<table>', panel)  # 只有财报名单时不画信号计数表，不伪造信号
             page = monitor.render({}, rows, len(rows), snapshot=snap)
             technology = page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
             self.assertTrue(technology.startswith('>'))  # 近期财报不自动展开分类，用户点开后才看到
             self.assertEqual(re.findall(r'<details class="card[^"]*" id="(\w+)" open>', page), ['signalCounts'])  # 只默认展开统计
-            self.assertIn('<tr class="green"><td class="sym">AAPL', technology.split('<details class="quiet-list">')[0])
+            self.assertIn('<td class="sym">AAPL', technology.split('<details class="quiet-list">')[0])
             self.assertIn('无异动 1 只', technology)
             position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
-            self.assertIn('<tr class="green"><td class="sym">BRK-B', position.split('<details class="quiet-list">')[0])
+            self.assertIn('<td class="sym">BRK-B', position.split('<details class="quiet-list">')[0])
 
     def test_earnings_week_rejects_bad_date_missing_and_expired(self):
         with patch.object(monitor, '_earn_today', return_value='2026-10-14'):
@@ -4094,6 +4286,37 @@ class TestSignalCounts(unittest.TestCase):
         self.assertIsNotNone(match, output)
         return match.group(1)
 
+    def test_fund_is_counted_from_fund_field_and_deduped(self):
+        """基本面不改变股价灯级，所以走 d['fund'] 单独统计；重复分组只算一只。"""
+        rows = [self.member_row('AAA', 'position', 'green', ('target', 'purple')),
+                self.member_row('BBB', 'focus', 'green'),
+                self.member_row('CCC', 'technology', 'green')]
+        rows[0]['fund'] = {'level': 'red', 'hits': ['营收较基准下降 24%'], 'period': '2026/6'}
+        rows[1]['fund'] = {'level': 'yellow',
+                           'hits': ['毛利率下滑 3.4 个百分点', '经营现金流为负']}
+        rows[2]['fund'] = {'level': 'green', 'hits': []}
+        counts = monitor.signal_counts(rows)
+        members = monitor.signal_count_members(rows)
+        self.assertEqual((counts['fund']['red'], counts['fund']['yellow']), (1, 1))
+        self.assertEqual([d['symbol'] for d in members['fund']['red']], ['AAA'])
+        self.assertEqual([d['symbol'] for d in members['fund']['yellow']], ['BBB'])
+        # 同一只票同时出现在持仓和其他分类时，统计和名单都只算一次
+        duplicated = [dict(rows[0]), dict(rows[0], group='technology')]
+        self.assertEqual(monitor.signal_counts(duplicated)['fund']['red'], 1)
+        self.assertEqual(len(monitor.signal_count_members(duplicated)['fund']['red']), 1)
+        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
+        self.assertIn('>基本面</button>', output)
+        red_panel = self.panel(output, 'fund', 'red')
+        self.assertIn('>AAA</span>', red_panel)
+        self.assertIn('营收较基准下降 24%', red_panel)
+        self.assertIn('毛利率下滑 3.4 个百分点', self.panel(output, 'fund', 'yellow'))
+        self.assertNotIn('CCC', output)  # 基本面绿灯不进统计
+        # 这一轮没有基本面警示：整块统计也不该出现
+        quiet = [self.member_row('ZZZ', 'position', 'green')]
+        self.assertEqual(monitor._signal_counts_card(
+            {'signal_counts': monitor.signal_counts(quiet),
+             'signal_members': monitor.signal_count_members(quiet)}), '')
+
     def test_member_counts_match_every_kind_and_level(self):
         rows = [self.member_row('AAA', 'position', 'red', ('chg', 'red'), ('rsi', 'yellow')),
                 self.member_row('BBB', 'focus', 'yellow', ('boll', 'yellow')),
@@ -4102,12 +4325,12 @@ class TestSignalCounts(unittest.TestCase):
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         self.assertEqual(list(snap['signal_members']), [k for k, _ in monitor.SIGNAL_KINDS])
         for kind, counts in snap['signal_counts'].items():
-            for level in ('red', 'yellow', 'purple', 'sole_yellow'):
+            for level in ('red', 'yellow', 'purple'):
                 with self.subTest(kind=kind, level=level):
                     self.assertEqual(len(snap['signal_members'][kind][level]), counts[level])
         output = monitor._signal_counts_card(snap)
         self.assertNotIn('明细待下次更新', output)
-        for kind, level in (('chg', 'red'), ('rsi', 'yellow'), ('boll', 'yellow'), ('boll', 'sole_yellow')):
+        for kind, level in (('chg', 'red'), ('rsi', 'yellow'), ('boll', 'yellow')):
             panel = self.panel(output, kind, level)
             self.assertNotRegex(panel, r'信号 · .*? 只|仅此一条黄灯 · \d+ 只')
         self.assertIn('signal-member-symbol">AAA', self.panel(output, 'rsi', 'yellow'))
@@ -4160,7 +4383,7 @@ class TestSignalCounts(unittest.TestCase):
         self.assertNotIn('signal-icon-key', output)
         self.assertNotIn('signal-member-help', output)
         self.assertNotIn('title=', output)  # 手机不用悬停，读屏仍能使用 aria-label
-        self.assertEqual(self.panel(output, 'ma_band', 'sole_yellow').count('tone-cyan'), 1)
+        self.assertEqual(self.panel(output, 'ma_band', 'yellow').count('tone-cyan'), 3)
 
     def test_amplitude_and_volume_members_show_value_and_price_change_direction(self):
         rows = [self.member_row('UP', 'position', 'yellow', ('amp', 'yellow'), ('vol_ratio', 'yellow')),
@@ -4246,10 +4469,10 @@ class TestSignalCounts(unittest.TestCase):
         output = monitor._signal_counts_card(snap)
         yellow = self.panel(output, 'rsi', 'yellow')
         red = self.panel(output, 'rsi', 'red')
-        self.assertIn('>BX</span><span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超卖">▼', yellow)
-        self.assertIn('>TWO_HIGH</span><span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超买">▲', yellow)
-        self.assertIn('>THREE_LOW</span><span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超卖">▼', red)
-        self.assertIn('>THREE_HIGH</span><span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超买">▲', red)
+        self.assertIn('>BX</span></a><span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超卖">▼', yellow)
+        self.assertIn('>TWO_HIGH</span></a><span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超买">▲', yellow)
+        self.assertIn('>THREE_LOW</span></a><span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超卖">▼', red)
+        self.assertIn('>THREE_HIGH</span></a><span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超买">▲', red)
         self.assertIn('2条超卖', yellow)
         self.assertIn('3条超买', red)
         self.assertNotIn('2条过界为黄，3条过界为红', yellow)
@@ -4329,7 +4552,8 @@ class TestSignalCounts(unittest.TestCase):
         self.assertIn('signal-member-icon tone-red', output)
         self.assertIn('RSI 2条过界', output)
         self.assertIn('RSI 3条过界', output)
-        self.assertIn('上方', output)
+        self.assertNotIn('上方', output)                 # 中文备注名已不再输出
+        self.assertIn('class="signal-member-jump"', output)  # 名字可点跳转，不再写分组名
         self.assertEqual(output.count('class="signal-member-direction"'), 2)
 
     def test_combination_counts_follow_matching_rsi_side_but_red_lamp_stays_unchanged(self):
@@ -4367,32 +4591,41 @@ class TestSignalCounts(unittest.TestCase):
         for kind, level in (('rsi', 'red'), ('rsi', 'yellow'), ('boll', 'yellow')):
             self.assertEqual(members[kind][level], [{'symbol': 'AAA', 'note': '', 'group': 'position', 'level': 'red'}])
             self.assertEqual(counts[kind][level], 1)
-        self.assertEqual(members['rsi']['sole_yellow'], [])
         output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
         self.assertEqual(output.count('class="signal-member-symbol">AAA'), 3)
         self.assertNotIn('各计数不能相加当作唯一标的总数', output)
         self.assertNotIn('不代表标的综合灯色', output)
 
-    def test_sole_yellow_is_subset_and_excludes_red_or_multiple_kinds(self):
-        rows = [self.member_row('SOLE', 'position', 'yellow', ('boll', 'yellow'),
-                                ('boll', 'yellow'), ('target', 'purple')),
-                self.member_row('MULTI', 'focus', 'yellow', ('boll', 'yellow'), ('rsi', 'yellow')),
-                self.member_row('RED', 'technology', 'red', ('chg', 'red'), ('boll', 'yellow'))]
-        members = monitor.signal_count_members(rows)
+    def test_text_only_members_cover_text_signals_without_a_light(self):
+        """灰灯 = 最终是绿灯、但页面上有 RSI / 布林文字的标的：不进红黄紫计数，
+        按归因分类（只有 RSI 文字→rsi，只有布林文字→boll，两者都有→boll_rsi）。"""
+        rows = [{'symbol': 'RSIONLY', 'group': 'position', 'level': 'green',
+                 'signal_marks': [], 'signals': ['RSI 2条超买（≥70）']},
+                {'symbol': 'BOLLONLY', 'group': 'focus', 'level': 'green',
+                 'signal_marks': [], 'signals': ['逼近布林下轨 还差0.30%']},
+                {'symbol': 'BOTH', 'group': 'technology', 'level': 'green',
+                 'signal_marks': [], 'signals': ['RSI 2条超买（≥70）', '触及布林上轨']},
+                {'symbol': 'LIT', 'group': 'position', 'level': 'yellow',
+                 'signal_marks': [('boll', 'yellow')], 'signals': ['逼近布林下轨 还差0.10%']},
+                {'symbol': 'QUIET', 'group': 'technology', 'level': 'green',
+                 'signal_marks': [], 'signals': []}]
+        members = monitor.text_only_members(rows)
+        self.assertEqual([(m['symbol'], m['kind'], m['shape']) for m in members],
+                         [('RSIONLY', 'rsi', '▲'), ('BOLLONLY', 'boll', '▼'), ('BOTH', 'boll_rsi', '▲')])
+        # 灰灯三行不进红黄紫计数；LIT 行是真黄灯，本来就该计进 boll.yellow
         counts = monitor.signal_counts(rows)
-        self.assertEqual([d['symbol'] for d in members['boll']['yellow']], ['SOLE', 'MULTI', 'RED'])
-        self.assertEqual([d['symbol'] for d in members['boll']['sole_yellow']], ['SOLE'])
-        self.assertEqual(counts['boll']['sole_yellow'], 1)
-        self.assertEqual(members['rsi']['sole_yellow'], [])
-        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
-        sole = self.panel(output, 'boll', 'sole_yellow')
-        self.assertNotIn('仅此一条黄灯 · 1 只', sole)
-        self.assertIn('>SOLE</span>', sole)
-        self.assertNotIn('MULTI', sole)
-        self.assertNotIn('>RED</span>', sole)
-        self.assertNotIn('“仅此一条黄灯”是黄列的子集', output)
-        self.assertNotIn('仍可能有灰灯或紫色提示', output)
-        self.assertNotIn('关掉这条规则它就变绿', output)
+        self.assertEqual([(k, v['yellow']) for k, v in counts.items() if v['yellow']], [('boll', 1)])
+        output = monitor._signal_counts_card({'signal_counts': counts,
+                                              'signal_members': monitor.signal_count_members(rows),
+                                              'text_only': members})
+        self.assertNotIn('仅此一条黄灯', output)
+        self.assertIn('灰灯 3 只', output)
+        # 默认折叠，展开后按归因分类，每组先 ▲ 后 ▼
+        self.assertIn('class="text-only"', output)
+        self.assertLess(output.index('RSI · 1 只'), output.index('布林 · 1 只'))
+        self.assertIn('signal-member-jump', output)
+        self.assertNotIn('(持仓)', output)
+        self.assertNotIn('(IT软硬Ai)', output)
 
     def test_purple_only_and_gray_members_keep_original_levels(self):
         rows = [self.member_row('PURPLE', 'focus', 'green', ('target', 'purple'), ('target', 'purple')),
@@ -4400,14 +4633,14 @@ class TestSignalCounts(unittest.TestCase):
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         self.assertEqual(snap['signal_counts']['target']['purple'], 2)
         self.assertEqual((snap['summary']['green'], snap['summary']['gray'], snap['summary']['yellow']), (1, 1, 0))
-        self.assertEqual(snap['signal_members']['target']['sole_yellow'], [])
         output = monitor._signal_counts_card(snap)
         panel = self.panel(output, 'target', 'purple')
         self.assertNotIn('紫色提示 · 2 只', panel)
         self.assertIn('>GRAY</span>', panel)
         self.assertIn('>PURPLE</span>', panel)
         self.assertEqual(output.count('class="signal-count-toggle"'), 1)
-        self.assertEqual(output.count('<td class="num">—</td>'), 3)
+        # 只有目标价行有计数：红、黄两格为空
+        self.assertEqual(output.count('<td class="num">—</td>'), 2)
         self.assertNotIn('不改变综合灯色', output)
 
     def test_groups_use_item_group_order_and_show_group_sizes(self):
@@ -4423,13 +4656,15 @@ class TestSignalCounts(unittest.TestCase):
         counts['chg']['red'] += 1
         output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
         panel = self.panel(output, 'chg', 'red')
-        headings = re.findall(r'<h4>(.*?)</h4>', panel)
-        self.assertEqual(headings, [f'{g["label"]} · {2 if g["item_group"] == "position" else 1} 只'
-                                    for g in monitor._display_groups()])
-        self.assertEqual(panel.count('class="signal-member-group"'), len(monitor.GROUPS))
-        self.assertEqual(panel.count('class="signal-member-list"'), len(monitor.GROUPS))
+        # 明细不再按分组切块：没有小标题、只有一个列表
+        self.assertEqual(re.findall(r'<h4>(.*?)</h4>', panel), [])
+        self.assertEqual(panel.count('class="signal-member-group"'), 0)
+        self.assertEqual(panel.count('class="signal-member-list"'), 1)
         self.assertEqual(panel.count('class="signal-member-symbol"'), len(rows) + 1)
-        self.assertIn('class="note">同组备注</span>', panel)
+        # 中文备注名去掉，分组名改放行尾括号
+        self.assertNotIn('同组备注', panel)
+        self.assertNotIn('class="note"', panel)
+        self.assertIn('class="signal-member-jump"', panel)   # 名单不再写分组名，改点名字跳转
         self.assertNotIn(f'红色信号 · {len(rows) + 1} 只', panel)
 
     def test_same_identity_keeps_priority_group_and_first_note(self):
@@ -4440,14 +4675,13 @@ class TestSignalCounts(unittest.TestCase):
         members = monitor.signal_count_members(rows)
         expected = [{'symbol': 'BRK-B', 'note': '持仓备注', 'group': 'position', 'level': 'yellow'}]
         self.assertEqual(members['ma_cross']['yellow'], expected)
-        self.assertEqual(members['ma_cross']['sole_yellow'], expected)
         for kind in ('boll', 'rsi', 'chg'):
             self.assertEqual(members[kind]['yellow'], [])
         # 旧统计逐行计算，不为了成员身份去重而改变统计口径。
         counts = monitor.signal_counts(rows)
         self.assertEqual([counts[k]['yellow'] for k in ('boll', 'rsi', 'ma_cross', 'chg')], [1, 1, 1, 1])
         output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
-        self.assertIn('持仓备注', self.panel(output, 'ma_cross', 'yellow'))
+        self.assertIn('class="signal-member-jump"', self.panel(output, 'ma_cross', 'yellow'))
         self.assertNotIn('行业备注', output)
         self.assertIn('明细待下次更新', self.panel(output, 'boll', 'yellow'))
 
@@ -4459,7 +4693,7 @@ class TestSignalCounts(unittest.TestCase):
         buttons = re.findall(r'<button type="button" class="signal-count-toggle" data-target="([^"]+)" '
                              r'aria-controls="([^"]+)" aria-expanded="false" aria-label="([^"]+)">(\d+)</button>', output)
         expected_buttons = sum(bool(v[level]) for v in snap['signal_counts'].values()
-                               for level in ('red', 'yellow', 'purple', 'sole_yellow'))
+                               for level in ('red', 'yellow', 'purple'))
         self.assertEqual(len(buttons), expected_buttons)
         self.assertEqual(len({b[0] for b in buttons}), expected_buttons)
         panels = re.findall(r'<div class="signal-members-panel" id="([^"]+)" hidden>', output)
@@ -4467,7 +4701,8 @@ class TestSignalCounts(unittest.TestCase):
         for target, controls, label, n in buttons:
             self.assertEqual(target, controls)
             self.assertIn(f'{n} 只', label)
-        pairs = re.findall(r'<tr><td>.*?</tr><tr class="signal-members-row"><td colspan="5">.*?</td></tr>', output, re.S)
+        # 只有有计数的行才出现（RSI 行 + 目标价行）
+        pairs = re.findall(r'<tr><td>.*?</tr><tr class="signal-members-row"><td colspan="4">.*?</td></tr>', output, re.S)
         self.assertEqual(len(pairs), 2)
         self.assertIn('button.closest("tr")', monitor.PAGE_INTERACTION_JS)
         self.assertIn('scope.querySelectorAll(".signal-count-toggle[data-target]")', monitor.PAGE_INTERACTION_JS)
@@ -4510,21 +4745,30 @@ class TestSignalCounts(unittest.TestCase):
             output = monitor._signal_counts_card({'signal_counts': {'chg': {'label': label, 'red': 3}},
                                                   'signal_members': {'chg': {'red': entries}},
                                                   'summary': {'yellow': '<svg onload="alert(5)">'}})
-        for value in (label, group, symbol, note, group_label):
+        for value in (label, symbol):
             self.assertIn(html.escape(value, quote=True), output)
             self.assertNotIn(value, output)
+        # 分组名 / 分组标签不再写进可见名单，只能出现在 data-filter 的 JSON 里（经 JSON + HTML 双重编码）
+        for value in (group, group_label):
+            self.assertNotIn(value, output)
+            self.assertNotIn(value, html.unescape(output.split('data-filter="')[1].split('"', 1)[0]))
+        self.assertNotIn('alert(2)', output.split('data-filter=')[0])
+        # 备注名不再出现在明细里（只保留在「同时满足」筛选数据中，那里也已转义）
+        self.assertNotIn(html.escape(note, quote=True), output.split('data-filter=')[0])
         self.assertNotIn('alert(5)', output)  # 统计标题只接受非负整数，异常值显示 —
         self.assertIn('<span class="count-total count-yellow">黄 —</span>', output)
         self.assertNotRegex(output, r'<(?:script|img|svg)\b|<b onclick=')
-        self.assertIn('<h4>未分类 · 1 只</h4>', output)
-        self.assertEqual(output.count('class="note"'), 1)
+        self.assertNotIn('<h4>', output)
+        self.assertEqual(output.count('class="note"'), 0)
+        # 分组名从名单里去掉了：点名字直接跳到个股所在行，比括号里的分组名直观
+        self.assertNotIn('class="signal-member-belong"', output)
 
     def test_old_snapshot_keeps_counts_but_does_not_invent_members(self):
         rows = [self.member_row('SECRET', 'position', 'yellow', ('boll', 'yellow'), note='不可拼名单')]
         snap = {'signal_counts': monitor.signal_counts(rows), 'items': rows}
         output = monitor._signal_counts_card(snap)
-        self.assertEqual(output.count('class="signal-count-toggle"'), 2)
-        for level in ('yellow', 'sole_yellow'):
+        self.assertEqual(output.count('class="signal-count-toggle"'), 1)
+        for level in ('yellow',):
             panel = self.panel(output, 'boll', level)
             self.assertIn('明细待下次更新', panel)
             self.assertNotIn('布林 · ', panel)
@@ -4552,13 +4796,14 @@ class TestSignalCounts(unittest.TestCase):
                 self.assertIn('>GOOD</span>', target)
                 self.assertNotIn('明细待下次更新', target)
 
-    def test_zero_counts_hide_card_and_sole_nonzero_still_expands(self):
+    def test_zero_counts_hide_card_and_nonzero_still_expands(self):
+        # 整块统计只在有计数时出现：旧快照、空对象、全 0 都不显示
         for snap in ({}, {'signal_counts': {}}, {'signal_counts': monitor.signal_counts([])}):
             self.assertEqual(monitor._signal_counts_card(snap), '')
-        output = monitor._signal_counts_card({'signal_counts': {'boll': {'label': '布林', 'sole_yellow': 1}}})
+        output = monitor._signal_counts_card({'signal_counts': {'boll': {'label': '布林', 'yellow': 1}}})
         self.assertEqual(output.count('class="signal-count-toggle"'), 1)
-        self.assertEqual(output.count('<td class="num">—</td>'), 3)
-        self.assertIn('明细待下次更新', self.panel(output, 'boll', 'sole_yellow'))
+        self.assertEqual(output.count('<td class="num">—</td>'), 2)
+        self.assertIn('明细待下次更新', self.panel(output, 'boll', 'yellow'))
 
 
 if __name__ == '__main__':

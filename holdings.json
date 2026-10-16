@@ -24,52 +24,76 @@
   },
   "positions": {
     "BRK-B": {
-      "note": "伯克希尔哈撒韦"
+      "note": "伯克希尔哈撒韦",
+      "hold": "long"
     },
     "HII": {
-      "note": "亨廷顿英格尔斯工业"
+      "note": "亨廷顿英格尔斯工业",
+      "hold": "short"
     },
     "APH": {
-      "note": "安费诺"
+      "note": "安费诺",
+      "hold": "long"
     },
     "AVGO": {
-      "note": "博通"
+      "note": "博通",
+      "hold": "long"
     },
     "CRSP": {
-      "note": "CRISPR-基因编辑"
+      "note": "CRISPR-基因编辑",
+      "hold": "short"
     },
     "GOOGL": {
-      "note": "谷歌（Alphabet）"
+      "note": "谷歌（Alphabet）",
+      "hold": "long"
     },
     "LMT": {
-      "note": "洛克希德马丁"
+      "note": "洛克希德马丁",
+      "hold": "long"
     },
     "NTNX": {
-      "note": "Nutanix-混合云"
+      "note": "Nutanix-混合云",
+      "hold": "short"
     },
     "UNH": {
-      "note": "联合健康"
+      "note": "联合健康",
+      "hold": "long"
     },
     "UBER": {
-      "note": "优步"
+      "note": "优步",
+      "hold": "short"
     },
     "DRAM": {
-      "note": "Memory ETF-存储芯片"
+      "note": "Memory ETF-存储芯片",
+      "hold": "short"
     },
     "SPYM": {
-      "note": "SPDR标普500指数ETF"
+      "note": "SPDR标普500指数ETF",
+      "hold": "long"
     },
     "SCHD": {
-      "note": "嘉信美国红利股票ETF"
+      "note": "嘉信美国红利股票ETF",
+      "hold": "long"
     },
     "QQQM": {
-      "note": "景顺纳斯达克100指数ETF"
+      "note": "景顺纳斯达克100指数ETF",
+      "hold": "long"
     },
     "XLI": {
-      "note": "工业精选行业ETF"
+      "note": "工业精选行业ETF",
+      "hold": "long"
     },
     "GEHC": {
-      "note": "ge医疗"
+      "note": "ge医疗",
+      "hold": "short"
+    },
+    "VRT": {
+      "note": "维谛技术",
+      "hold": "short"
+    },
+    "NXPI": {
+      "note": "恩智浦半导体",
+      "hold": "short"
     }
   },
   "focus": {
