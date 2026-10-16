@@ -4514,7 +4514,7 @@ class TestSignalCounts(unittest.TestCase):
         snap = monitor.build_snapshot({}, [self.row('red', ('chg', 'red'))], {}, group_counts={})
         self.assertEqual(snap['signal_counts']['chg']['red'], 1)
         self.assertEqual(snap['signal_members']['chg']['red'],
-                         [{'symbol': 'T', 'note': '', 'group': '', 'level': 'red'}])
+                         [{'symbol': 'T', 'note': '', 'group': '', 'hold': '', 'level': 'red'}])
 
     @staticmethod
     def member_row(symbol, group, level, *marks, note=''):
@@ -4754,10 +4754,6 @@ class TestSignalCounts(unittest.TestCase):
             ('rsi', 'yellow'): [('RSI2条超买', 'tone-yellow', '▲')],
             ('rsi', 'red'): [('RSI3条超卖', 'tone-red', '▼')],
             ('boll', 'yellow'): [('突破上轨', 'tone-yellow', '▲'), ('触及下轨', 'tone-white', '▼')],
-            ('ma_cross', 'yellow'): [('上穿60日均线', 'tone-cyan', '▲'), ('跌破120日均线', 'tone-cyan', '▼')],
-            ('ma_band', 'yellow'): [('现价在均线上方', 'tone-cyan', '▲'),
-                                   ('现价在均线下方', 'tone-cyan', '▼'),
-                                   ('现价与均线相等', 'tone-cyan', '■')],
             ('target', 'purple'): [('现价在目标价或共识价范围内', 'tone-purple', '■'),
                                    ('目标价或共识价上涨空间达到提示标准', 'tone-purple', '□'),
                                    ('当日上穿目标价或共识价', 'tone-purple', '▲'),
@@ -4770,6 +4766,17 @@ class TestSignalCounts(unittest.TestCase):
             for label, tone, shape in expected:
                 with self.subTest(kind=kind, label=label):
                     self.assertRegex(panel, f'class="signal-member-icon {tone}"[^>]*aria-label="{re.escape(label)}[^\"]*"[^>]*>{shape}</span>')
+        # 均线两栏改成跟量比一样的分框：周期和方向写在框标题上，行内不再逐个画三角
+        for kind, titles in (('ma_cross', ['▲ 60日均线上穿', '▼ 120日均线跌破']),
+                             ('ma_band', ['▲ 现价在均线上方，日内触及',
+                                          '▼ 现价在均线下方，日内触及',
+                                          '■ 现价与均线相等，日内触及'])):
+            panel = self.panel(output, kind, 'yellow')
+            with self.subTest(kind=kind):
+                self.assertEqual(panel.count('class="signal-member-block"'), len(titles))
+                for title in titles:
+                    self.assertIn(f'<h5>{title}</h5>', panel)
+                self.assertNotIn('signal-member-icon', panel)
         self.assertEqual(snap['signal_counts']['target']['purple'], 4)
         target = self.panel(output, 'target', 'purple')
         self.assertEqual(target.count('tone-purple'), 4)
@@ -4777,7 +4784,6 @@ class TestSignalCounts(unittest.TestCase):
         self.assertNotIn('signal-icon-key', output)
         self.assertNotIn('signal-member-help', output)
         self.assertNotIn('title=', output)  # 手机不用悬停，读屏仍能使用 aria-label
-        self.assertEqual(self.panel(output, 'ma_band', 'yellow').count('tone-cyan'), 3)
 
     def test_amplitude_and_volume_members_show_value_and_price_change_direction(self):
         rows = [self.member_row('UP', 'position', 'yellow', ('amp', 'yellow'), ('vol_ratio', 'yellow')),
@@ -4866,10 +4872,15 @@ class TestSignalCounts(unittest.TestCase):
         output = monitor._signal_counts_card(snap)
         yellow = self.panel(output, 'rsi', 'yellow')
         red = self.panel(output, 'rsi', 'red')
-        self.assertIn('>BX</span></a><span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超卖">▼', yellow)
-        self.assertIn('>TWO_HIGH</span></a><span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超买">▲', yellow)
-        self.assertIn('>THREE_LOW</span></a><span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超卖">▼', red)
-        self.assertIn('>THREE_HIGH</span></a><span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超买">▲', red)
+        # 分组跟在代码后面，方向图标排在其后
+        self.assertIn('>BX</span></a><span class="signal-member-belong">（短持仓）</span>'
+                      '<span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超卖">▼', yellow)
+        self.assertIn('>TWO_HIGH</span></a><span class="signal-member-belong">（重点）</span>'
+                      '<span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超买">▲', yellow)
+        self.assertIn('>THREE_LOW</span></a><span class="signal-member-belong">（重点）</span>'
+                      '<span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超卖">▼', red)
+        self.assertIn('>THREE_HIGH</span></a><span class="signal-member-belong">（IT软硬Ai）</span>'
+                      '<span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超买">▲', red)
         self.assertIn('2条超卖', yellow)
         self.assertIn('3条超买', red)
         self.assertNotIn('2条过界为黄，3条过界为红', yellow)
@@ -4992,9 +5003,47 @@ class TestSignalCounts(unittest.TestCase):
         legacy.pop('boll_rsi_hits')
         page = self.panel(monitor._signal_counts_card(monitor.build_snapshot({}, [legacy], {}, group_counts={})),
                           'boll_rsi', 'red')
-        self.assertIn('条数待下次更新', page)
         self.assertIn('<h5>方向待下次更新</h5>', page)
         self.assertNotIn('class="signal-member-icon', page)
+        # 框标题已经说了「方向待下次更新」，行尾不再重复同一句
+        self.assertNotIn('条数待下次更新', page)
+
+    def test_ma_panels_split_up_and_down_with_group_labels_on_every_member(self):
+        """均线穿越 / 长均线触及跟量比一样按方向分框：周期与方向写在框标题上，
+        行内不再逐个重复；每只标的后面用括号标出分组，持仓再分长 / 短。"""
+        rows = [self.member_row('CROSSUP', 'position', 'yellow', ('ma_cross', 'yellow')),
+                self.member_row('CROSSDN', 'focus', 'yellow', ('ma_cross', 'yellow')),
+                self.member_row('TOUCHUP', 'position', 'yellow', ('ma_band', 'yellow')),
+                self.member_row('TOUCHDN', 'financials', 'yellow', ('ma_band', 'yellow'))]
+        rows[0].update(signals=['上穿250日均线'], hold='long')
+        rows[1].update(signals=['跌破120日均线'])
+        rows[2].update(signals=['日内触及250日均线 ±1%区间'], ma_band_direction='up', hold='short')
+        rows[3].update(signals=['日内触及250日均线 ±1%区间'], ma_band_direction='down')
+        output = monitor._signal_counts_card({'signal_counts': monitor.signal_counts(rows),
+                                              'signal_members': monitor.signal_count_members(rows)})
+        cross = self.panel(output, 'ma_cross', 'yellow')
+        self.assertIn('<h5>▲ 250日均线上穿</h5>', cross)
+        self.assertIn('<h5>▼ 120日均线跌破</h5>', cross)
+        self.assertNotIn('signal-member-icon', cross)   # 方向已经写在框标题上
+        self.assertIn('<span class="signal-member-belong">（长持仓）</span>', cross)
+        self.assertIn('<span class="signal-member-belong">（重点）</span>', cross)
+        band = self.panel(output, 'ma_band', 'yellow')
+        self.assertIn('<h5>▲ 现价在均线上方，日内触及</h5>', band)
+        self.assertIn('<h5>▼ 现价在均线下方，日内触及</h5>', band)
+        self.assertIn('<span class="signal-member-belong">（短持仓）</span>', band)
+        self.assertIn('<span class="signal-member-belong">（金融）</span>', band)
+        self.assertNotIn('signal-member-icon', band)
+
+    def test_boll_rsi_states_the_direction_only_in_the_block_title(self):
+        """布林+RSI 的框标题已经写了「下轨 · RSI 2条过界」，行尾不再重复同一句。"""
+        row = self.member_row('BOTH', 'position', 'yellow', ('boll_rsi', 'yellow'))
+        row.update(boll_rsi_direction='下轨（超卖）', boll_rsi_hits=2, hold='long')
+        output = monitor._signal_counts_card({'signal_counts': monitor.signal_counts([row]),
+                                              'signal_members': monitor.signal_count_members([row])})
+        page = self.panel(output, 'boll_rsi', 'yellow')
+        self.assertIn('<h5>▼ 下轨 · RSI 2条过界</h5>', page)
+        self.assertEqual(page.count('RSI 2条过界'), 1)   # 只有框标题一处
+        self.assertIn('<span class="signal-member-belong">（长持仓）</span>', page)
 
     def test_members_deduplicate_marks_not_cross_kind_or_level(self):
         row = self.member_row('AAA', 'position', 'red', ('rsi', 'red'), ('rsi', 'red'),
@@ -5002,7 +5051,8 @@ class TestSignalCounts(unittest.TestCase):
         members = monitor.signal_count_members([row])
         counts = monitor.signal_counts([row])
         for kind, level in (('rsi', 'red'), ('rsi', 'yellow'), ('boll', 'yellow')):
-            self.assertEqual(members[kind][level], [{'symbol': 'AAA', 'note': '', 'group': 'position', 'level': 'red'}])
+            self.assertEqual(members[kind][level], [{'symbol': 'AAA', 'note': '', 'group': 'position',
+                                                     'hold': '', 'level': 'red'}])
             self.assertEqual(counts[kind][level], 1)
         output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
         self.assertEqual(output.count('class="signal-member-symbol">AAA'), 3)
@@ -5085,7 +5135,8 @@ class TestSignalCounts(unittest.TestCase):
                 self.member_row('BRK.B-US', 'position', 'yellow', ('ma_cross', 'yellow'), note='持仓备注'),
                 self.member_row('BRK-B', 'position', 'yellow', ('chg', 'yellow'), note='后来备注')]
         members = monitor.signal_count_members(rows)
-        expected = [{'symbol': 'BRK-B', 'note': '持仓备注', 'group': 'position', 'level': 'yellow'}]
+        expected = [{'symbol': 'BRK-B', 'note': '持仓备注', 'group': 'position', 'hold': '',
+                     'level': 'yellow'}]
         self.assertEqual(members['ma_cross']['yellow'], expected)
         for kind in ('boll', 'rsi', 'chg'):
             self.assertEqual(members[kind]['yellow'], [])
@@ -5172,8 +5223,12 @@ class TestSignalCounts(unittest.TestCase):
         self.assertNotRegex(output, r'<(?:script|img|svg)\b|<b onclick=')
         self.assertNotIn('<h4>', output)
         self.assertEqual(output.count('class="note"'), 1)
-        # 分组名从名单里去掉了：点名字直接跳到个股所在行，比括号里的分组名直观
-        self.assertNotIn('class="signal-member-belong"', output)
+        # 分组回到名单里，且必须完整转义（不能变成真的标签）。
+        # 持仓组写「长持仓 / 短持仓」而不是配置里的分组名，所以原始标签不出现在可见部分。
+        visible = output.split('data-filter=')[0]
+        self.assertIn('class="signal-member-belong"', visible)
+        self.assertIn('（短持仓）', visible)
+        self.assertNotIn(group_label, visible)
 
     def test_old_snapshot_keeps_counts_but_does_not_invent_members(self):
         rows = [self.member_row('SECRET', 'position', 'yellow', ('boll', 'yellow'), note='不可拼名单')]

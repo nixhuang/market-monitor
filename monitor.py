@@ -4126,6 +4126,7 @@ def text_only_members(items):
         detail = re.split(r"（", pool[0])[0].strip() if pool else ""
         out.append({"symbol": symbol, "kind": kind, "shape": _text_only_shape(texts),
                     "detail": detail, "group": d.get("group") or "",
+                    "hold": str(d.get("hold") or ""),
                     "note": str(d.get("note") or "")})
     return out
 
@@ -4223,8 +4224,13 @@ def _member_metric(d, kind):
 
 
 # 方向提到「框标题」上的栏目：名单里不再逐条画三角，▲/▼ 只出现在每个框的标题里。
-# 只改这两栏——涨跌幅、振幅等栏目行内三角照旧，别把没要求的栏目一起改了。
-_BLOCK_PANEL_KINDS = ("vol_ratio", "boll_rsi")
+# 量比按涨跌、布林+RSI 按上下轨、均线穿越按上穿/跌破、长均线触及按现价在均线哪一侧。
+# 只改这几栏——涨跌幅、振幅等栏目行内三角照旧，别把没要求的栏目一起改了。
+_BLOCK_PANEL_KINDS = ("vol_ratio", "boll_rsi", "ma_cross", "ma_band")
+
+# 框标题已经写明方向的栏目，行尾不再重复同一句话（布林+RSI 曾经标题行尾都写
+# 「上轨 · RSI 2条过界」）。量比那种带数值的照旧保留。
+_NO_ROW_METRIC_KINDS = ("boll_rsi",)
 
 
 def _member_block(d, kind):
@@ -4248,7 +4254,27 @@ def _member_block(d, kind):
             title = f"{side} · RSI {hits}条过界" + (f" · {tail}" if tail else "")
             return ("▲" if side == "上轨" else "▼", title)
         return ("", "方向待下次更新")
+    if kind in ("ma_cross", "ma_band"):
+        # 均线两栏照量比那套：周期和方向写在框标题上，行内不再逐个重复。
+        for marker in d.get("indicators") or []:
+            if not (isinstance(marker, dict) and marker.get("shape") in ("▲", "▼", "■")):
+                continue
+            label = str(marker.get("label") or "")
+            match = re.match(r"^(上穿|跌破)(\d+)日均线$", label)
+            if match:
+                # 标题说「250日均线上穿」，跟用户口头说法一致
+                label = f"{match.group(2)}日均线{match.group(1)}"
+            return (marker["shape"], label or ("均线穿越" if kind == "ma_cross" else "日内触及长均线"))
+        return ("", "方向待下次更新")
     return None
+
+
+def _member_belong(d):
+    """名单里的分组标识，写在代码后面；持仓内部按 hold 分长短，跟首页两区一致。"""
+    group = str(d.get("group") or "")
+    if group == "position":
+        return "长持仓" if str(d.get("hold") or "short").lower() == "long" else "短持仓"
+    return GROUP_LABELS.get(group) or "未分类"
 
 
 def _member_metric_text(d, kind):
@@ -4315,6 +4341,8 @@ def signal_count_members(items):
             continue
         seen.add(identity)
         member = {"symbol": symbol, "note": d.get("note") or "", "group": d.get("group") or "",
+                  # hold 只给持仓组用：统计面板要在名单里标「长持仓 / 短持仓」
+                  "hold": str(d.get("hold") or ""),
                   "level": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else ""}
         marks = d.get("signal_marks") or []
         for kind in {k for k, _ in marks}:
@@ -4707,6 +4735,20 @@ tr.gray td{color:var(--dim)}
   justify-content:flex-start;text-align:left;flex:1 1 auto}
 .zone-card>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
 .zone-card .quiet{font-size:12px;color:var(--dim);padding:8px 10px 0;line-height:1.6}
+/* 展开的那一组整条标题高亮：左边一条蓝＋向左渐隐的底色提亮，
+   一眼就能看出「持仓」和里面的「长持仓」到底有没有打开（两条叠在一起时尤其重要）。
+   统计面板本来就有蓝边框＋左侧蓝条＋#bfd5ff 组名，默认又是展开的，再叠一层高亮是多余的，故排除。 */
+.group-card[open]:not(#signalCounts)>summary,.macro-card[open]>summary,.zone-card[open]>summary{
+  background:linear-gradient(90deg,rgba(143,184,240,.20),rgba(143,184,240,.05) 72%,transparent);
+  box-shadow:inset 3px 0 0 #8fb8f0}
+/* 鼠标／触摸点标题时不要再套一圈蓝描边：那条 2px 线会被误当成高亮，
+   而且点完失焦就消失，看着像「闪一下」。键盘 Tab 过去的 :focus-visible 照旧显示。 */
+.group-card>summary:focus:not(:focus-visible),.macro-card>summary:focus:not(:focus-visible),
+.zone-card>summary:focus:not(:focus-visible){outline:none}
+.group-card[open]:not(#signalCounts)>summary .grp-name,.macro-card[open]>summary .grp-name,
+.zone-card[open]>summary .zone-name{color:#bfd5ff}
+.group-card[open]:not(#signalCounts)>summary::before,.macro-card[open]>summary::before,
+.zone-card[open]>summary::before{color:#8fb8f0}
 /* 子区自己的收起条和外层「持仓」卡底部收起条之间拉开距离，两条 ▲ 挨太近会误点 */
 .zone-card + .group-bottom,.zone-card + .quiet + .group-bottom{margin-top:22px}
 /* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
@@ -5373,18 +5415,20 @@ def _signal_counts_card(snapshot):
                 # （文字方向/方向待更新）。不写分组标题，也不写分组名——点名字直接跳过去。
                 # 中文备注名保留，跟在代码后面，跟首页个股行一致。
                 def _member_row(d, icon=True):
-                    # 分组名不再写在名单里：点名字直接跳到个股所在行，比括号里的分组名直观
                     direction = _member_icons(d, kind, level).strip() if icon else ""
-                    metric = _member_metric_text(d, kind)
+                    # 分框栏目的框标题已经写了方向，行尾不再重复同一句
+                    metric = "" if kind in _NO_ROW_METRIC_KINDS else _member_metric_text(d, kind)
                     value = f' <span class="signal-member-metric">{esc(metric)}</span>' if metric else ""
                     note = (f'<span class="note">{esc(d["note"])}</span>'
                             if isinstance(d.get("note"), str) and d["note"].strip() else "")
+                    # 分组写在代码后面的括号里：持仓内部标长/短，跟首页分区对得上
+                    belong = f'<span class="signal-member-belong">（{esc(_member_belong(d))}）</span>'
                     # 灯统一用列表圆点（marker）画在最前面，基本面不再另起一套：
                     # 52周低位、布林+RSI 等栏目都是这个位置、这个大小、按这一格灯色着色。
                     return (f'<li>'
                             f'<a class="signal-member-jump" href="#{_stock_anchor_id(d["symbol"])}">'
                             f'<span class="signal-member-symbol">{esc(d["symbol"])}</span>{note}</a>'
-                            f'{direction}{value}</li>')
+                            f'{belong}{direction}{value}</li>')
 
                 ordered = sorted(entries, key=lambda x: group_order.get(str(x.get("group") or ""), len(GROUPS)))
                 if kind in _BLOCK_PANEL_KINDS:
@@ -5468,9 +5512,10 @@ def _text_only_panel(snapshot):
 
     def cell(r):
         note = f'<span class="note">{esc(r.get("note"))}</span>' if str(r.get("note") or "").strip() else ""
+        belong = f'<span class="signal-member-belong">（{esc(_member_belong(r))}）</span>'
         return (f'<li><a class="signal-member-jump" href="#{_stock_anchor_id(str(r.get("symbol") or ""))}">'
                 f'<span class="signal-member-symbol">{esc(r.get("symbol"))}</span>{note}</a>'
-                f' {esc(r.get("shape") or "")}'
+                f'{belong} {esc(r.get("shape") or "")}'
                 f' <span class="signal-member-metric">{esc(r.get("detail") or "")}</span></li>')
 
     parts = []
