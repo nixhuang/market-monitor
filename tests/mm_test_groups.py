@@ -4175,6 +4175,18 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertNotIn('fetch(', monitor.PAGE_INTERACTION_JS)
         self.assertNotIn('localStorage', monitor.PAGE_INTERACTION_JS)
 
+    def test_opening_a_signal_list_keeps_it_in_view(self):
+        # 「同时只开一个」会先收起上一个清单、把整页拉上去，新点开的清单容易跳到视口外。
+        # 展开后必须：先把被点按钮拉回原屏幕位置，再把新清单整块带进视口。
+        js = monitor.PAGE_INTERACTION_JS
+        self.assertIn('const buttonTopBefore = button.getBoundingClientRect().top;', js)
+        self.assertIn('revealSignalPanel(panel);', js)
+        self.assertIn('window.scrollBy(0, delta);', js)
+        self.assertIn('window.scrollTo({ top: target < 0 ? 0 : target, behavior: "smooth" });', js)
+        # 只在展开时定位，收起时不该乱滚
+        self.assertIn('if (opening) {\n    //', js)
+        self.assertIn('function revealSignalPanel(panel) {', js)
+
     def test_collapse_button_css_has_full_width_short_transparent_strip(self):
         button_rule = re.search(r'\.collapse-group\{([^}]+)\}', monitor.PAGE_CSS)
         self.assertIsNotNone(button_rule)
@@ -4225,6 +4237,94 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertGreater(macro.index(button), macro.index('</table>'))
         self.assertIn('aria-label="收起市场风险"', button)
         self.assertNotIn('title=', button)
+
+
+class TestPositionZones(unittest.TestCase):
+    """首页持仓：内部按 hold 拆成「长持仓」「短持仓」两个可折叠区，各自统计、各自收起。"""
+
+    class _Row(dict):
+        """个股行字段很多，测试只关心 level / hold，缺失字段按空值处理。"""
+        def __missing__(self, key):
+            return ''
+
+    @classmethod
+    def item(cls, symbol, level, hold=None):
+        row = cls._Row(symbol=symbol, level=level, group='position', chg=0.0, price=100.0, signal_marks=[])
+        if hold:
+            row['hold'] = hold
+        return row
+
+    @staticmethod
+    def positions_group():
+        return next(g for g in monitor.GROUPS if g['key'] == 'positions')
+
+    def card(self, items):
+        return monitor._group_card(self.positions_group(), items, {}, {})
+
+    def test_only_the_long_zone_is_a_sub_section(self):
+        """用户 2026-10-16 定稿：短持仓不再单包一层，展开「持仓」直接就是短持仓的表，
+        上方只多一条可展开的「长持仓」。"""
+        out = self.card([self.item('AAA', 'green', 'long'),
+                         self.item('BBB', 'red', 'short'),
+                         self.item('CCC', 'yellow')])
+        self.assertEqual(re.findall(r'<details class="zone-card" id="([^"]+)" open>', out),
+                         ['group_positions_long'])
+        self.assertEqual(re.findall(r'<span class="zone-name">([^<]+)</span>', out), ['长持仓 (1)'])
+        self.assertNotIn('短持仓 (', out)
+        self.assertNotIn('group_positions_short', out)
+        # 长持仓区一条收起条 + 外层「持仓」卡一条
+        self.assertEqual(re.findall(r'aria-controls="([^"]+)"', out),
+                         ['group_positions_long', 'group_positions'])
+        long_part = out.split('</details>', 1)[0] if False else out.split('<details class="zone-card"', 1)[1]
+        long_zone = long_part.split('</details>', 1)[0]
+        self.assertIn('AAA', long_zone)
+        self.assertNotIn('BBB', long_zone)
+        # 短持仓在长持仓区之后、直接作为卡片主体
+        self.assertIn('BBB', out.split('</details>', 1)[1])
+        self.assertTrue(out.rstrip().endswith(monitor._collapse_button('group_positions', '持仓')
+                                              + '</details>'))
+
+    def test_empty_zone_is_not_rendered(self):
+        out = self.card([self.item('BBB', 'red', 'short')])
+        self.assertNotIn('group_positions_long', out)
+        self.assertNotIn('zone-card', out)
+
+    def test_unmarked_positions_count_as_short(self):
+        # 没标 hold 的算短持仓，因此不会出现长持仓区，标的落在卡片主体表里
+        out = self.card([self.item('CCC', 'green')])
+        self.assertNotIn('长持仓 (', out)
+        self.assertNotIn('zone-card', out)
+        self.assertIn('CCC', out)
+
+    def test_long_zone_does_not_repeat_the_rule_text(self):
+        # 用户 2026-10-16 定稿：首页长持仓区不再挂那段规则说明（规则只在设置页和页底折叠里讲一次）
+        out = self.card([self.item('AAA', 'green', 'long')])
+        self.assertNotIn('长持仓不看一般过热', out)
+        self.assertNotIn('class="quiet"', out.split('zone-card', 1)[-1].split('<table', 1)[0])
+
+    def test_quiet_list_starts_collapsed_and_resets_when_the_zone_closes(self):
+        # 用户 2026-10-16 定稿：区里的「无异动 N 只」默认折叠；关掉区再打开时不该还留着上次的展开态。
+        out = self.card([self.item('AAA', 'red', 'long'),
+                         self.item('BBB', 'green', 'long'),
+                         self.item('CCC', 'green', 'short')])
+        # 渲染时不带 open 属性 —— 第一次进来就是折叠的
+        self.assertNotIn('<details class="quiet-list" open>', out)
+        self.assertIn('<details class="quiet-list"><summary>无异动 1 只 · 点击查看</summary>', out)
+        # 收起卡片时把内部已展开的无异动清单一并复位（浏览器不会自己忘掉 details 的 open）
+        js = monitor.PAGE_INTERACTION_JS
+        self.assertIn('function resetQuietLists(card) {', js)
+        self.assertIn('card.querySelectorAll("details.quiet-list[open]")', js)
+        self.assertIn('if (!card.querySelector("details.quiet-list[open]")) return;', js)
+        self.assertIn('resetQuietLists(card);', js)
+
+    def test_zone_collapse_bar_is_spaced_from_the_outer_one(self):
+        # 子区收起条紧贴外层「持仓」卡收起条时会误点，两条之间必须有间距
+        self.assertIn('.zone-card + .group-bottom,.zone-card + .quiet + .group-bottom{margin-top:22px}',
+                      monitor.PAGE_CSS)
+
+    def test_other_groups_keep_one_body(self):
+        group = next(g for g in monitor.GROUPS if g['key'] == 'focus')
+        self.assertNotIn('zone-card', monitor._group_card(group, [], {}, {}))
 
 
 class TestSignalCounts(unittest.TestCase):

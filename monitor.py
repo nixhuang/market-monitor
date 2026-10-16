@@ -3752,6 +3752,19 @@ RUN_JS = '<script src="./run-status.js?v=20261013-2"></script>'
 
 # 本页展示交互独立于运行/令牌逻辑；不联网、不写用户配置。
 PAGE_INTERACTION_JS = r"""
+function revealSignalPanel(panel) {
+  // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从清单开头对齐。
+  var pad = 12;
+  var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+  if (!vh) return;
+  var rect = panel.getBoundingClientRect();
+  if (rect.top >= pad && rect.bottom <= vh - pad) return;   // 已经完整可见就不动，避免无谓跳动
+  var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+  var target = (rect.height + pad * 2 <= vh && rect.bottom > vh - pad)
+    ? y + rect.bottom - (vh - pad)                          // 整块往上推
+    : y + rect.top - pad;                                   // 太高，从开头看起
+  window.scrollTo({ top: target < 0 ? 0 : target, behavior: "smooth" });
+}
 function normalizeSignalCard(card) {
   // 统计面板内部全部回到初始折叠态：明细面板收起、计数按钮回位、一周财报关掉、筛选清空。
   card.querySelectorAll(".signal-members-panel").forEach(function(panel) {
@@ -3796,6 +3809,25 @@ window.addEventListener("pageshow", function() {
   const card = document.getElementById("signalCounts");
   if (card) normalizeSignalCard(card);
 });
+// 卡片收起时，里面的「无异动 N 只」跟着回到默认折叠。否则浏览器会记住 details 的 open 状态，
+// 下次再展开（长/短持仓区尤其明显：关掉区再打开）刚点开的那份清单还是开着的。
+function resetQuietLists(card) {
+  card.querySelectorAll("details.quiet-list[open]").forEach(function(sub) {
+    sub.open = false;
+    // 同统计面板的处理：父容器不可见期间改 open，部分移动端内核不重算高度，会留一块空白
+    sub.style.display = "none";
+    void sub.offsetHeight;
+    sub.style.display = "";
+  });
+  void card.offsetHeight;
+}
+document.addEventListener("toggle", function(event) {
+  const card = event.target;
+  if (!(card instanceof HTMLDetailsElement) || card.open) return;
+  // 只处理装着「无异动」清单的卡片；长/短持仓子区自身不在这里复位（两区默认展开是定好的）
+  if (!card.querySelector("details.quiet-list[open]")) return;
+  resetQuietLists(card);
+}, true);
 function signalFilterData() {
   const node = document.getElementById("signalFilterResult");
   if (!node || !node.dataset.filter) return null;
@@ -3918,6 +3950,7 @@ document.addEventListener("click", function(event) {
   if (!panel || !panel.classList.contains("signal-members-panel")) return;
   const owner = button.closest("tr");
   const opening = panel.hidden;
+  const buttonTopBefore = button.getBoundingClientRect().top;
   // 设置里的 signal_single_open=1（默认）时，展开新的灯详情会收起整块统计面板里已打开的那些；
   // 关掉后只收同一行的，其它行的可以同时开着对比。
   const singleOpen = !(window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0);
@@ -3932,6 +3965,16 @@ document.addEventListener("click", function(event) {
   panel.hidden = !opening;
   // 胶囊高亮完全靠 CSS 认 aria-expanded，这里不用额外加类
   button.setAttribute("aria-expanded", String(opening));
+  if (opening) {
+    // 展开的清单往往比一屏长，且「同时只开一个」会先收起上一个、把整页拉上去，
+    // 结果新打开的清单跳到别处。这里两步定位：先把刚点的按钮拉回原来的屏幕位置，
+    // 再把新清单整块带进视口（放不下就从开头对齐）。
+    requestAnimationFrame(function() {
+      const delta = button.getBoundingClientRect().top - buttonTopBefore;
+      if (Math.abs(delta) > 1) window.scrollBy(0, delta);
+      revealSignalPanel(panel);
+    });
+  }
 });
 
 // 统计面板里的标的名字 → 跳到首页该股所在行。
@@ -4583,6 +4626,9 @@ td.px{text-align:center}
   .stk .fund-detail summary{padding:6px 7px}
   .group-card>summary.grp,.macro-card>summary.grp{gap:5px;padding:12px 10px}
   .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
+  .zone-card{margin:8px 0 10px}
+  .zone-card>summary{padding:8px 8px}
+  .zone-card>summary .zone-name{font-size:14px}
   .stat-badge{min-width:16px;height:16px;padding:0 2px;font-size:12px}
 }
 .fund-context{margin-top:6px;color:var(--dim)}
@@ -4648,6 +4694,21 @@ tr.gray td{color:var(--dim)}
 .group-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
 .group-card>summary .rs-spy{margin-left:auto}
 .stat-count{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+/* 持仓里的「长持仓」区：可折叠，默认展开；下方就是短持仓主体，所以底部要留出间距 */
+.zone-card{margin:10px 0 12px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.02)}
+.zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;
+  list-style:none;touch-action:manipulation}
+.zone-card>summary::-webkit-details-marker{display:none}
+.zone-card>summary::before{content:"›";color:var(--dim);font-size:18px;line-height:1}
+.zone-card[open]>summary::before{transform:rotate(90deg)}
+.zone-card[open]>summary{border-bottom:1px solid var(--line)}
+.zone-card>summary .zone-name{color:var(--text);font-size:15px;font-weight:600;white-space:nowrap;flex:none}
+.zone-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;
+  justify-content:flex-start;text-align:left;flex:1 1 auto}
+.zone-card>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
+.zone-card .quiet{font-size:12px;color:var(--dim);padding:8px 10px 0;line-height:1.6}
+/* 子区自己的收起条和外层「持仓」卡底部收起条之间拉开距离，两条 ▲ 挨太近会误点 */
+.zone-card + .group-bottom,.zone-card + .quiet + .group-bottom{margin-top:22px}
 /* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
 .stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
   box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-radius:999px;
@@ -5023,33 +5084,76 @@ def _collapse_button(card_id, label):
             f'<span class="collapse-icon" aria-hidden="true">▲</span></button></div>')
 
 
-def _group_card(group, g, items_by_symbol, snapshot):
-    """一个分组的折叠卡片：展开的警示表 + 「无异动 N 只」折叠表。"""
-    monitoring = snapshot.get("group_monitoring", {})
-    registered = snapshot.get("registered_counts", {})
-    g = _sort_group_items(g, group)
-    earnings_week = (snapshot.get("earnings_week") or {}).get("asof") or _earn_today()
+POSITION_ZONES = (("long", "长持仓"), ("short", "短持仓"))
+
+
+def _position_zone(d):
+    """持仓内部按 hold 分两区；没标的一律算短持仓，规则不缩水。"""
+    return "long" if str(d.get("hold") or "short").lower() == "long" else "short"
+
+
+def _group_body(g, group, snapshot, earnings_week, enabled, collapse_id, collapse_label, empty_note=""):
+    """分组（或持仓内部某个区）的展开内容：空提示 + 警示表 + 「无异动 N 只」折叠表 + 底部收起条。"""
     shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or _fund_alert(d) or d.get("reference_only")
              or d.get("purple") or earnings_within_week(d.get("earnings"), earnings_week)]
     quiet = [d for d in g if d["level"] == "green" and not _fund_alert(d) and not d.get("reference_only")
              and not d.get("purple") and not earnings_within_week(d.get("earnings"), earnings_week)]
     parts = []
-    enabled = monitoring.get(group["key"], True)
-    if not enabled:
-        note = f"行业监测关闭 · {group['sector_etf']} 仍监测（仅限原组已有标的）" if group.get("sector_etf") else "分组监测已关闭"
-        parts.append(f'<div class="quiet">{note} · 清单保留，普通标的暂停抓取和报警</div>')
+    if empty_note:
+        parts.append(f'<div class="quiet">{empty_note}</div>')
     if shown:
         parts.append(f'<table class="stk">{STK_COLS}{STK_HEAD}{_stock_rows(shown, snapshot)}</table>')
     if quiet:
         parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只 · 点击查看</summary>'
                      f'<table class="stk">{STK_COLS}{STK_HEAD}{_stock_rows(quiet, snapshot)}</table></details>')
+    parts.append(_collapse_button(collapse_id, collapse_label))
+    return "\n".join(parts)
+
+
+def _position_long_zone_card(g, group, items_by_symbol, snapshot, earnings_week, enabled):
+    """持仓里只有「长持仓」单独成一块可折叠区；没有长持仓就不占位。
+
+    短持仓不再单包一层——展开「持仓」直接就是短持仓的表，少一次多余折叠。
+    """
+    zlabel = dict(POSITION_ZONES)["long"]
+    zg = [d for d in g if _position_zone(d) == "long"]
+    if not zg:
+        return ""
+    zid = "group_positions_long"
+    zbody = _group_body(zg, group, snapshot, earnings_week, enabled, zid, zlabel)
+    zstats = _group_stats_html(zg, group, items_by_symbol, enabled)
+    return (f'<details class="zone-card" id="{zid}" open>'
+            f'<summary><span class="zone-name">{zlabel} ({len(zg)})</span>'
+            f'<span class="group-stats">{zstats}</span></summary>{zbody}</details>')
+
+
+def _group_card(group, g, items_by_symbol, snapshot):
+    """一个分组的折叠卡片：展开的警示表 + 「无异动 N 只」折叠表。持仓内部再分长/短两区。"""
+    monitoring = snapshot.get("group_monitoring", {})
+    registered = snapshot.get("registered_counts", {})
+    g = _sort_group_items(g, group)
+    earnings_week = (snapshot.get("earnings_week") or {}).get("asof") or _earn_today()
+    parts = []
+    enabled = monitoring.get(group["key"], True)
+    if not enabled:
+        note = f"行业监测关闭 · {group['sector_etf']} 仍监测（仅限原组已有标的）" if group.get("sector_etf") else "分组监测已关闭"
+        parts.append(f'<div class="quiet">{note} · 清单保留，普通标的暂停抓取和报警</div>')
+    empty_note = ''
     if not g and enabled:
-        parts.append('<div class="quiet">本组标的已在优先分组展示，避免重复信号</div>' if registered.get(group["key"], 0)
-                     else '<div class="quiet">暂无标的，去设置页录入或导入 CSV / EBK</div>')
-    parts.append(_collapse_button(f'group_{group["key"]}', group["label"]))
+        empty_note = ('本组标的已在优先分组展示，避免重复信号' if registered.get(group["key"], 0)
+                      else '暂无标的，去设置页录入或导入 CSV / EBK')
+    if group["key"] == "positions":
+        # 上方是「长持仓」可折叠区（没有就不出现），下方主体就是短持仓，不再多包一层
+        parts.append(_position_long_zone_card(g, group, items_by_symbol, snapshot, earnings_week, enabled))
+        short_g = [d for d in g if _position_zone(d) == "short"]
+        parts.append(_group_body(short_g, group, snapshot, earnings_week, enabled,
+                                 f'group_{group["key"]}', group["label"], empty_note))
+    else:
+        parts.append(_group_body(g, group, snapshot, earnings_week, enabled,
+                                 f'group_{group["key"]}', group["label"], empty_note))
     body = "\n".join(parts)
     stats = _group_stats_html(g, group, items_by_symbol, enabled)
-    # 打开网页时只展开「统计」；所有分组（含持仓、重点）默认折叠。一周内财报只让绿灯股留在可见表。
+    # 打开网页时只展开「统计」；所有分组（含持仓、重点）默认折叠。持仓点开后长/短两区默认展开。
     return (f'<details class="card group-card" id="group_{group["key"]}">'
             f'<summary class="grp"><span class="grp-name">{group["label"]} ({len(g)})</span>'
             f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')

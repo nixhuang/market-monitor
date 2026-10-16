@@ -82,6 +82,35 @@ check(pos.indexOf('BRK-B') < pos.indexOf('NTNX'), '持仓保持载入顺序（BR
 check(pos.indexOf('NTNX') < pos.indexOf('— ETF 基金 —') && pos.indexOf('— ETF 基金 —') < pos.indexOf('SPYM'),
       '持仓内 ETF（SPYM）分区到尾部');
 
+// 长持仓 / 短持仓：设置页每行只留一个下拉，两个区和其它分组都在里面选；列表按两区显示。
+const rowN = (pos.match(/<div class="row"/g) || []).length;
+const selN = (pos.match(/<select class="move"/g) || []).length;
+check(rowN > 0 && selN === rowN, '持仓每行只有一个下拉（不再单独一个长/短控件）');
+const sel0 = (pos.match(/<select class="move"[\s\S]*?<\/select>/) || [''])[0];
+check(sel0.includes('>长持仓<') && sel0.includes('>短持仓<') && sel0.includes('>重点<'),
+      '一个下拉里就能选长持仓 / 短持仓 / 其它分组');
+check(src.indexOf('class="hold"') === -1, '已移除独立的长/短持仓下拉');
+check(src.includes('.edit-group .move{grid-column:2 / span 2;grid-row:3'),
+      '手机上这个下拉独占一格，不会和其它控件叠在一起');
+T.data.positions['BRK-B'].hold = 'long';
+T.render();
+const pos2 = els.list_positions._html;
+check(pos2.indexOf('— 长持仓 —') >= 0 && pos2.indexOf('— 长持仓 —') < pos2.indexOf('— 短持仓 —'),
+      '设置页持仓按「长持仓 → 短持仓」两区显示');
+check(/<option value="positions:long"[^>]*>长持仓<\/option>/.test(pos2) &&
+      /<option value="positions:long" selected>/.test(pos2),
+      '长持仓区的标的，下拉里回显为「长持仓」');
+check(T.configText().includes('"hold": "long"'), '长持仓写回 holdings.json 的 hold 字段');
+T.moveSymbol('positions', 'positions:short', 'BRK-B');
+check(T.data.positions['BRK-B'].hold === 'short', '下拉改选「短持仓」后写回 hold=short');
+T.moveSymbol('positions', 'focus', 'BRK-B');
+check(!('hold' in (T.data.focus['BRK-B'] || {})), '移出持仓时清掉 hold');
+T.moveSymbol('focus', 'positions:long', 'BRK-B');
+check(T.data.positions['BRK-B'].hold === 'long', '从其它分组也能直接挪进长持仓区');
+check(els.list_technology._html.includes('>长持仓<'), '其它分组的行同样提供长/短持仓两个区可选');
+delete T.data.positions['BRK-B'].hold;
+T.render();
+
 const focus = els.list_focus._html;
 check(focus.indexOf('TEM') < focus.indexOf('— ETF 基金 —') &&
       focus.indexOf('— ETF 基金 —') < focus.indexOf('SOXL'),

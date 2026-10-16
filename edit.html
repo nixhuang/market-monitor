@@ -48,7 +48,7 @@ button.danger{color:var(--red)}
 .del:hover{background:#3a2528}
 .add{margin-top:10px}
 .add input.s{width:104px}
-.add select{width:82px}
+.add select{width:104px}   /* 「长持仓 / 短持仓 / 各分组」要一眼看全 */
 .edit-group>summary{color:var(--text);font-size:14px;list-style:none;display:flex;gap:8px;align-items:center}
 .edit-group>summary::-webkit-details-marker{display:none}
 .edit-group>summary{flex-wrap:wrap}
@@ -64,14 +64,14 @@ button.danger{color:var(--red)}
 .group-tools h2{margin:0 auto 0 0;color:var(--text);font-size:14px}
 .group-tools button{padding:5px 9px;font-size:12px}
 @media(max-width:480px){.edit-group .row{display:grid;grid-template-columns:82px minmax(0,1fr) 42px;gap:6px}
-.edit-group .sym{width:82px;grid-column:1}
-.edit-group .row input.n{min-width:0;width:100%;grid-column:2}
+.edit-group .sym{width:82px;grid-column:1;grid-row:1}
+.edit-group .row input.n{min-width:0;width:100%;grid-column:2;grid-row:1}
 .edit-group .del{grid-column:3;grid-row:1;padding:7px}
-.edit-group .row input.t{grid-column:1;width:82px;font-size:13px}
-.edit-group .row input.r{grid-row:3}
-.edit-group .move{grid-column:2;grid-row:2;max-width:none;width:100%}
-.edit-group .row input.g,.edit-group .add input.g{grid-row:auto}
-.edit-group .add .s{width:82px;font-size:13px}
+.edit-group .row input.t{grid-column:1;grid-row:2;width:82px;font-size:13px}
+.edit-group .row input.r{grid-column:1;grid-row:3}
+.edit-group .row input.g,.edit-group .add input.g{grid-column:2;grid-row:2}
+/* 每行只剩一个下拉（分区/分组都在这里选），手机上占满下半行 */
+.edit-group .move{grid-column:2 / span 2;grid-row:3;max-width:none;width:100%}.edit-group .add .s{width:82px;font-size:13px}
 .edit-group .add button{grid-column:3;grid-row:1;padding:7px 3px;font-size:12px}
 .edit-group .add .t{grid-row:2}}
 .edit-group summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
@@ -362,8 +362,27 @@ const pageState={};
 let monitoring={};
 function hasReduce(key){return key==='positions';}
 function hasTarget(key){return key==='positions'||key==='focus';}
-/* 长持仓：只屏蔽上轨方向的普通过热（上轨 + RSI 两条），RSI 三条全过界仍报红；下轨和减仓价照常 */
-function hasHold(key){return key==='positions';}
+/* 持仓内部分「长持仓」「短持仓」两区：长持仓只屏蔽上轨方向的普通过热（上轨 + RSI 两条），
+   RSI 三条全过界仍报红；下轨和减仓价照常。设置页每行只留一个下拉：两区和其它分组都在里面选。 */
+const POS_ZONES=[{v:'long',label:'长持仓'},{v:'short',label:'短持仓'}];
+const ZONE_LABEL={long:'长持仓',short:'短持仓'};
+const isLongHeld=c=>String((c&&c.hold)||'').toLowerCase()==='long';
+function targetOf(key){return key==='positions'?'positions:short':key;}
+function parseTarget(v){
+  const parts=String(v||'').split(':');
+  return {group:parts[0]||'',hold:parts[0]==='positions'?(parts[1]||'short'):null};
+}
+// 一个下拉选全部：长持仓、短持仓、重点、各分类
+function moveOptions(sel){
+  return POS_ZONES.map(z=>{const v='positions:'+z.v;
+      return '<option value="'+v+'"'+(v===sel?' selected':'')+'>'+z.label+'</option>';}).join('')
+    +GROUPS.filter(g=>g.key!=='positions').map(g=>
+      '<option value="'+g.key+'"'+(g.key===sel?' selected':'')+'>'+esc(g.label)+'</option>').join('');
+}
+function zoneOf(kind,c){return kind==='positions'?(isLongHeld(c)?'long':'short'):null;}
+function targetLabel(t){
+  return t.group==='positions'?(ZONE_LABEL[t.hold]||'短持仓'):(KIND_LABEL[t.group]||t.group);
+}
 // 手填目标价的“月份”：保存时按北京时间记当月，首页标签上显示「目标 108 · 10月」
 function monthNow(){return new Date(Date.now()+8*3600*1000).toISOString().slice(0,7);}
 function alwaysMonitored(key){return key==='positions'||key==='focus';}
@@ -559,7 +578,7 @@ function initGroups(groups){
     +'<input class="t" id="newTrig_'+g.key+'" placeholder="加仓价" inputmode="decimal">'
     +(hasReduce(g.key)?'<input class="t r" id="newReduce_'+g.key+'" placeholder="减仓价" inputmode="decimal" aria-label="减仓价">':'')
     +(hasTarget(g.key)?'<input class="t g" id="newTarget_'+g.key+'" placeholder="目标价" inputmode="decimal" aria-label="目标价">':'')
-    +(hasHold(g.key)?'<select class="move hold" id="newHold_'+g.key+'" aria-label="新增为长持仓或短持仓"><option value="short">短持仓</option><option value="long">长持仓</option></select>':'')
+    +'<select class="move" id="newMove_'+g.key+'" aria-label="新增到分区或分组">'+moveOptions(targetOf(g.key))+'</select>'
     +'<button class="primary" id="add_'+g.key+'">添加</button></div></div></details>').join('');
   groups.forEach(g=>{
     data[g.key] ||= {}; pageState[g.key]=0;
@@ -590,21 +609,33 @@ function addSymbol(kind){
     target=$('newTarget_'+kind).value.trim();
     if(target&&!(Number.isFinite(Number(target))&&Number(target)>0)){setMsg('目标价应填写大于 0 的数字','err');return;}
   }
-  const hold=hasHold(kind)?($('newHold_'+kind).value==='long'?'long':'short'):null;
-  data[kind][symbol]={...(note?{note}:{}),...(trigger?{trigger:Number(trigger)}:{}),...(reduce?{reduce:Number(reduce)}:{}),
-    ...(target?{target:Number(target),target_at:monthNow()}:{}),...(hold?{hold}:{})};
-  ['newSym_','newNote_','newTrig_'].concat(hasReduce(kind)?['newReduce_']:[]).concat(hasTarget(kind)?['newTarget_']:[])
-    .concat(hasHold(kind)?['newHold_']:[]).forEach(id=>{const el=$(id+kind);if(el&&el.tagName!=='SELECT')el.value='';});
-  render();touch();setMsg('已添加 '+symbol+' 到「'+KIND_LABEL[kind]+'」','ok');
+  const sel=$('newMove_'+kind);
+  let t=sel?parseTarget(sel.value):{group:''};
+  if(!KIND_LABEL[t.group])t={group:kind,hold:kind==='positions'?'short':null};
+  const to=t.group;
+  if(Object.keys(data[to]).some(s=>normTicker(s)===symbol)){setMsg(symbol+' 已在该分组中','err');return;}
+  data[to][symbol]={...(note?{note}:{}),...(trigger?{trigger:Number(trigger)}:{}),...(reduce?{reduce:Number(reduce)}:{}),
+    ...(target?{target:Number(target),target_at:monthNow()}:{}),...(to==='positions'?{hold:t.hold||'short'}:{})};
+  ['newSym_','newNote_','newTrig_'].concat(hasReduce(to)?['newReduce_']:[]).concat(hasTarget(to)?['newTarget_']:[])
+    .forEach(id=>{const el=$(id+kind);if(el&&el.tagName!=='SELECT')el.value='';});
+  render();touch();setMsg('已添加 '+symbol+' 到「'+targetLabel(t)+'」','ok');
 }
 function moveSymbol(from,to,symbol){
-  if(!KIND_LABEL[to]||from===to)return;
-  if(Object.keys(data[to]).some(s=>normTicker(s)===normTicker(symbol))){setMsg('目标分组已包含 '+symbol+'，未移动','err');render();return;}
-  data[to][symbol]=data[from][symbol];delete data[from][symbol];
-  if(!hasReduce(to))delete data[to][symbol].reduce;
-  if(!hasTarget(to)){delete data[to][symbol].target;delete data[to][symbol].target_at;}
-  if(!hasHold(to))delete data[to][symbol].hold;   // 长/短只对持仓有意义
-  $('fold_'+to).open=true;render();touch();
+  const t=parseTarget(to);
+  if(!KIND_LABEL[t.group])return;
+  const curZone=zoneOf(from,data[from][symbol]);
+  const sameGroup=t.group===from;
+  if(sameGroup&&(t.group!=='positions'||t.hold===curZone))return;   // 原地不动（同区改选也不算移动）
+  // 同组内换区时不能拿自己当重复项
+  if(!sameGroup&&Object.keys(data[t.group]).some(s=>normTicker(s)===normTicker(symbol))){setMsg('目标分组已包含 '+symbol+'，未移动','err');render();return;}
+  const rec=data[from][symbol];
+  delete data[from][symbol];
+  data[t.group][symbol]=rec;
+  if(!hasReduce(t.group))delete data[t.group][symbol].reduce;
+  if(!hasTarget(t.group)){delete data[t.group][symbol].target;delete data[t.group][symbol].target_at;}
+  if(t.group==='positions')data[t.group][symbol].hold=t.hold||'short';
+  else delete data[t.group][symbol].hold;   // 长/短只对持仓有意义
+  $('fold_'+t.group).open=true;render();touch();
 }
 $('btnExpandGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=true);
 $('btnCollapseGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=false);
@@ -616,14 +647,22 @@ function render(){
     const sectorPresent=group.sector_etf&&Object.keys(data[K.k]||{}).some(s=>normTicker(s)===group.sector_etf);
     const toggle=alwaysMonitored(K.k)?null:$('monitor_'+K.k);
     if(toggle){toggle.textContent=enabled?'监测开启':'监测关闭';toggle.setAttribute('aria-checked',String(enabled));}
-    $('monitorNote_'+K.k).textContent=alwaysMonitored(K.k)?'本组始终开启监测，无需开关；跨组重复只抓取一次。':enabled?'监测本组全部标的，跨组重复只抓取一次。':sectorPresent
+    let note=alwaysMonitored(K.k)?'本组始终开启监测，无需开关；跨组重复只抓取一次。':enabled?'监测本组全部标的，跨组重复只抓取一次。':sectorPresent
       ?'分组监测已关闭；本组已有的 '+group.sector_etf+' 仍正常抓取和报警。普通标的保留但暂停监测。'
       :'分组监测已关闭；清单仍保留，本组独有标的不抓取、不报警。';
+    if(K.k==='positions')note+=' 内部分「长持仓」「短持仓」两区：长持仓不看一般过热（布林上轨 + RSI 两条不报灯），RSI 三条全过界仍报红；下轨、加仓价、减仓价都不受影响。每行右侧的下拉可以把标的挪到任意区或分组。';
+    $('monitorNote_'+K.k).textContent=note;
     const box=$(K.list),pager=$(K.pager);
     let keys=Object.keys(data[K.k]||{});
     if(K.sort)keys=keys.slice().sort(bySym);
     // 个股在前、ETF 在后，各自保持原有顺序（持仓不重排，只分区）
-    keys=keys.filter(s=>!isEtf(s)).concat(keys.filter(isEtf));
+    if(K.k==='positions'){
+      // 长持仓区整块在前，短持仓区在后；区内再各自「个股 → ETF」
+      const L=keys.filter(s=>isLongHeld(data[K.k][s])),S=keys.filter(s=>!isLongHeld(data[K.k][s]));
+      keys=[...L.filter(s=>!isEtf(s)),...L.filter(isEtf),...S.filter(s=>!isEtf(s)),...S.filter(isEtf)];
+    }else{
+      keys=keys.filter(s=>!isEtf(s)).concat(keys.filter(isEtf));
+    }
     let page=pageState[K.k];
     const pages=Math.max(1,Math.ceil(keys.length/PAGE_SIZE));
     if(page>=pages)page=pages-1;
@@ -634,8 +673,10 @@ function render(){
       box.innerHTML='<div class="empty">（空）</div>';
     }else{
     let h='';
-    let prevEtf=false;
+    let prevEtf=false,curZone=null;
     slice.forEach(s=>{
+      const z=zoneOf(K.k,data[K.k][s]);
+      if(z&&z!==curZone){h+='<div class="subsec">— '+ZONE_LABEL[z]+' —</div>';curZone=z;prevEtf=false;}
       const e=isEtf(s);
       if(e&&!prevEtf){h+='<div class="subsec">— ETF 基金 —</div>';}
       prevEtf=e;
@@ -649,10 +690,8 @@ function render(){
         +'<input class="t" value="'+esc(tv)+'" placeholder="加仓价" data-f="trigger" inputmode="decimal">'
         +(hasReduce(K.k)?'<input class="t r" value="'+esc(rv)+'" placeholder="减仓价" data-f="reduce" inputmode="decimal" aria-label="减仓价">':'')
         +(hasTarget(K.k)?'<input class="t g" value="'+esc(gv)+'" placeholder="目标价" data-f="target" inputmode="decimal" aria-label="目标价">':'')
-        +(hasHold(K.k)?'<select class="move hold" data-f="hold" aria-label="'+esc(s)+' 持仓方式">'
-          +'<option value="short"'+((c.hold||'short')!=='long'?' selected':'')+'>短持仓</option>'
-          +'<option value="long"'+(String(c.hold||'').toLowerCase()==='long'?' selected':'')+'>长持仓</option></select>':'')
-        +'<select class="move" aria-label="移动 '+esc(s)+' 到分组">'+GROUPS.map(g=>'<option value="'+g.key+'"'+(g.key===K.k?' selected':'')+'>'+esc(g.label)+'</option>').join('')+'</select>'
+        +'<select class="move" aria-label="移动 '+esc(s)+' 到分区或分组">'
+        +moveOptions(K.k==='positions'?('positions:'+zoneOf(K.k,c)):K.k)+'</select>'
         +'<button class="del" aria-label="删除">×</button></div>';
     });
     box.innerHTML=h;
@@ -700,12 +739,8 @@ function render(){
         if(!confirm('从「'+KIND_LABEL[k]+'」里删除 '+s+' ？'))return;
         delete data[k][s];render();touch();setMsg('已删 '+s+'，点保存才生效','ok');
       };
-      const holdSel=row.querySelector('.hold');
-      if(holdSel)holdSel.onchange=()=>{
-        const k=row.dataset.k,s=row.dataset.s,o=data[k][s]||(data[k][s]={});
-        o.hold=holdSel.value==='long'?'long':'short';touch();
-      };
-      row.querySelector('.move:not(.hold)').onchange=e=>moveSymbol(row.dataset.k,e.target.value,row.dataset.s);
+      const moveSel=row.querySelector('.move');
+      if(moveSel)moveSel.onchange=e=>moveSymbol(row.dataset.k,e.target.value,row.dataset.s);
     });
   });
   $('groupTotal').textContent=GROUPS.length+' 个分组 · '+Object.values(data).reduce((n,g)=>n+Object.keys(g).length,0)+' 条记录';
