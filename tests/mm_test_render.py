@@ -105,8 +105,10 @@ _html_b = monitor.render(_macro_b, items, 10, snapshot=snapshot, dup_hidden=2)
 check("47.0%<span class=\"unit\">的成分股站上200日线（长期趋势）</span>" in _html_b
       and "站上50日线（短期）：29.3%" in _html_b and "站上200日均线 · 50日" not in _html_b, "上涨参与度文案已改写")
 # 2026-10-19：顶栏不再重复念灯级计数（统计卡里已有一份），只保留时间＋数据量；「缺失 N」是告警要留
-check("红2 黄2 绿4" not in html and "10 项数据已更新" in html,
-      "运行灯不再重复灯级计数，只报完成时间与数据量")
+# 2026-10-19：一切正常时只报完成时间；「N 项数据已更新」只在有缺失/不支持代码时才写
+check("红2 黄2 绿4" not in html and "10 项数据已更新" not in html
+      and "抓取成功 · 完成于 2026-10-07 20:40:28（北京时间） · 缺失 2" in html,
+      "运行灯只报完成时间与缺失，正常时不写数据量与灯级计数")
 check('id="runLight" data-phase="ok"' in html, "运行灯初始为绿")
 check('id="ruleLight" data-phase="idle"' in html and 'id="ruleLightTxt"' in html,
       "独立规则灯初始待核验，不预先宣称最新规则生效")

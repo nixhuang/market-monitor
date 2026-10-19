@@ -4054,8 +4054,19 @@ def market_data_time(snapshot):
         plan = plan_run("local", when)
         if not plan["closed_only"]:
             counts = snapshot.get("summary", {})
-            detail = (f" · 当日价 {counts['today_prices']} 只 / 较早日线 {counts['prior_prices']} 只 / "
-                      f"无数据 {counts['missing_prices']} 只" if "today_prices" in counts else "")
+            # 全部拿到当日价时这一串（当日价 99 只 / 较早日线 0 只 / 无数据 0 只）是废话，
+            # 只在真的有「较早日线」或「无数据」时才写出来，且只写非零的那几项
+            detail = ""
+            if "today_prices" in counts:
+                parts = []
+                if counts.get("prior_prices") or counts.get("missing_prices"):
+                    if counts.get("today_prices"):
+                        parts.append(f"当日价 {counts['today_prices']} 只")
+                    if counts.get("prior_prices"):
+                        parts.append(f"较早日线 {counts['prior_prices']} 只")
+                    if counts.get("missing_prices"):
+                        parts.append(f"无数据 {counts['missing_prices']} 只")
+                detail = (" · " + " / ".join(parts)) if parts else ""
             if latest == plan["target"]:
                 return finished[:19].replace("T", " ") + "（盘中快照，北京时间）" + detail
             return finished[:19].replace("T", " ") + f"（盘中运行，北京时间 · 仍为 {date_text} 日线）" + detail
@@ -5264,7 +5275,7 @@ def _run_light(snapshot, finished_txt):
     summary = snapshot.get("summary", {})
     registered = snapshot.get("registered_counts", {})
     # 无数据状态改叫「缺失」，避免和统计面板里「只出文字不报灯」的灰灯撞名
-    gray_txt = f" 缺失 {summary.get('gray')}" if summary.get("gray") else ""
+    # （具体文案在下面按「有没有异常」拼，不再单独拼一段）
     bad = list(dict.fromkeys(summary.get("stale_symbols", []) + summary.get("missing_symbols", [])))
     if bad:
         reason = "取数失败" if not summary.get("stale_symbols") else "当日行情未取得"
@@ -5286,14 +5297,16 @@ def _run_light(snapshot, finished_txt):
         return "partial", (f"{kind}运行已完成 · 市场风险数据缺失或过期：{names}（有效指标 {valid}/5） · "
                            f"个股行情 {total - unsupported_count}/{total} 已更新 · "
                            f"完成于 {finished_txt}（北京时间）")
-    coverage = (f"{total - unsupported_count} 项数据已更新 · "
-                f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
-                else f"{total} 项数据已更新")
     kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
-    # 2026-10-19：灯级计数（红N 黄N 绿N）在统计卡里已经有一份，顶栏再念一遍是废话 → 删掉。
-    # 「缺失 N」保留：它不是计数，是「有几个标的行情没取到」的告警。
-    return "ok", (f"{kind}抓取成功 · 完成于 {finished_txt}（北京时间）"
-                  f"{gray_txt} · {coverage}")
+    # 一切正常时只报完成时间就行了：「N 项数据已更新」「红N 黄N 绿N」都是废话。
+    # 只有真的有缺失（缺失 N）或不支持报价的特殊代码时才补一句。
+    parts = [f"完成于 {finished_txt}（北京时间）"]
+    if summary.get("gray"):
+        parts.append(f"缺失 {summary.get('gray')}")
+    if unsupported_count:
+        parts.append(f"{total - unsupported_count} 项数据已更新 · "
+                     f"{unsupported_count} 个特殊代码暂不支持报价")
+    return "ok", f"{kind}抓取成功 · " + " · ".join(parts)
 
 
 def _member_icons(d, kind, level):
