@@ -4652,12 +4652,17 @@ table.stk{table-layout:fixed}
   font-variant-numeric:tabular-nums}
 .range52-lo,.range52-hi{flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
 .range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
-/* 百分比要抬到紫方块上沿之上（紫块直径 8.4px、向上伸出 4.2px），否则文字底被方块压住 */
-.range52-percent{position:absolute;bottom:calc(100% + 6px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
-.range52-marker{position:absolute;top:50%;width:8.4px;height:8.4px;border-radius:2px;background:#713caf;border:1px solid #efd9ff;transform:translate(-50%,-50%);z-index:1}
-/* 成本价：黄色竖线，跟紫色现价方块一样横跨位置条（2026-10-19 改；原来是条下方的白三角）。
-   高度 10.5px 比紫方块的 8.4px 上下各多露约 1px，两根线叠在一起时也分得清；
-   z-index 高于紫块 —— 成本≈现价时黄压紫，成本价优先可见 */
+/* 百分比要抬到倒三角尖顶之上（三角高 6px），否则文字压住三角 */
+.range52-percent{position:absolute;bottom:calc(100% + 9px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
+/* 现价标记：倒三角（斜边 45°，底 12px、高 6px），尖角朝下**顶在灰轨上沿**，
+   不再压在轨道中间（原来是个 8.4px 的紫方块）。外层浅紫描边 + 内层深紫实心 */
+.range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;
+  border-left:6px solid transparent;border-right:6px solid transparent;
+  border-top:6px solid #efd9ff;transform:translateX(-50%);z-index:1}
+.range52-marker::before{content:"";position:absolute;left:-5px;top:-6px;width:0;height:0;
+  border-left:5px solid transparent;border-right:5px solid transparent;border-top:5px solid #713caf}
+/* 成本价：黄色竖线，横跨灰轨（2026-10-19 改；原来是条下方的白三角）。
+   高度 10.5px 上下各露约 4px；z-index 高于现价标记，成本≈现价时黄压紫，成本价优先可见 */
 .range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;background:#f0c674;transform:translate(-50%,-50%);z-index:2}
 /* 成本价落在 52 周区间之外（比低点还低 / 比高点还高）：竖线贴到对应端点并稍淡，
    端点外侧补一个朝外的小箭头，避免被当成「成本刚好等于最高价／最低价」 */
@@ -5090,8 +5095,8 @@ def _range52_row(d):
         else:
             cost_html = f'<span class="range52-cost" style="left:{cpos:.1f}%"></span>'
             caption += f'；成本价 {fmt(cost)} 位于区间 {cpos:.1f}%'
-    # 左右两端直接写区间最低价／最高价；百分比浮在轨道上方跟随紫方块；
-    # 成本价是横跨轨道的黄色竖线（画在紫方块之后，成本≈现价时也能看见）
+    # 左右两端直接写区间最低价／最高价；百分比浮在倒三角之上跟随现价位置；
+    # 成本价是横跨灰轨的黄色竖线（画在三角之后，成本≈现价时也能看见）
     return (f'<tr class="range52-row"><td colspan="4">'
             f'<div class="range52-rail" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
             f'<span class="range52-lo" aria-hidden="true">{fmt(low)}</span>'
