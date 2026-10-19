@@ -445,15 +445,31 @@
      有 token 才发；编辑态不发（还在敲数字）；1.2 秒防抖，连续点几下只发一次。
      silent＝后台补传（用户这轮什么都没改）：失败也不弹「上传失败」，免得每次开页面都报错。 */
   var _pushTimer=null, _retryN=0, _retryTimer=null;
-  function autoPush(silent){
-    if(!ghToken()||editing) return;
-    if(_pushTimer) clearTimeout(_pushTimer);
-    _pushTimer=setTimeout(function(){
-      _pushTimer=null;
-      DATA.updated_at=nowStr(); write(LS_LOCAL, DATA);
-      var wasDirty=dirty;
-      if(!silent||wasDirty){ SYNC='loading'; paint(); }
-      pushCloud(DATA, function(ok,msg){
+  /* 提交节流：每次上传都是一个 GitHub commit，而 commit 会触发 Pages 重新构建
+     —— 几秒一次会把上一轮构建顶掉（实测 pages build 连续 cancelled，站点一直没发布）。
+     所以：① 跟云端内容一样就不传；② 两次上传至少隔 30 秒。 */
+  var _lastPushAt=0;
+  function sameAsCloud(){
+    if(!CLOUD) return false;
+    var a={items:DATA.items,cash:num(DATA.cash),fixed:num(DATA.fixed),
+           fixed_cost:num(DATA.fixed_cost),acks:DATA.acks||{}};
+    var b={items:CLOUD.items,cash:num(CLOUD.cash),fixed:num(CLOUD.fixed),
+           fixed_cost:num(CLOUD.fixed_cost),acks:CLOUD.acks||{}};
+    return JSON.stringify(a)===JSON.stringify(b);
+  }
+  function doPush(silent){
+    // 云端已经是这份内容 → 不用再提交一次（也顺手把「未同步」清掉）
+    if(sameAsCloud()){
+      setPending(false); SYNC='synced'; SYNC_MSG=''; _retryN=0; paint(); return;
+    }
+    var wait=30000-(Date.now()-_lastPushAt);
+    if(wait>0){ _pushTimer=setTimeout(function(){ _pushTimer=null; doPush(silent); }, wait+300); return; }
+    _pushTimer=null;
+    DATA.updated_at=nowStr(); write(LS_LOCAL, DATA);
+    _lastPushAt=Date.now();
+    var wasDirty=dirty;
+    if(!silent||wasDirty){ SYNC='loading'; paint(); }
+    pushCloud(DATA, function(ok,msg){
         if(ok){ CLOUD=JSON.parse(JSON.stringify(DATA)); write(LS_CLOUD,DATA);
                 SYNC='synced'; SYNC_MSG=''; setPending(false); _retryN=0; }
         else if(wasDirty||!silent){ SYNC='error'; SYNC_MSG=msg||''; setPending(true);
@@ -463,7 +479,11 @@
         else if(SYNC!=='nocloud'){ SYNC='synced'; SYNC_MSG=''; }
         paint();
       });
-    },1200);
+  }
+  function autoPush(silent){
+    if(!ghToken()||editing) return;
+    if(_pushTimer) clearTimeout(_pushTimer);
+    _pushTimer=setTimeout(function(){ doPush(silent); },1200);
   }
   /* 容错：上传失败后不干等，自动再试 2 次（15 秒 / 60 秒后）。只在「用户真改过」时重试，
      后台补传失败不重试（免得一台没配好的设备反复打 GitHub API）。 */
@@ -664,7 +684,12 @@
       SYNC='local'; SYNC_MSG='未填 GitHub token';
       editing=false; snapshot=null; setPending(true); syncEditUI(); paint(); return;
     }
-    SYNC='loading'; _retryN=0; paint();     // 手动保存＝重新给 2 次自动重试机会
+    // 内容跟云端一样就别再提交（省一次 commit，也就少一次 Pages 构建）
+    if(sameAsCloud()){
+      SYNC='synced'; SYNC_MSG=''; setPending(false); _retryN=0;
+      editing=false; snapshot=null; syncEditUI(); paint(); return;
+    }
+    SYNC='loading'; _retryN=0; _lastPushAt=Date.now(); paint();   // 手动保存＝重新给 2 次自动重试机会
     // position-costs.json 不在 daily.yml 的 push.paths 白名单里 → 不跑行情抓取；Pages 会自动发布
     pushCloud(DATA, function(ok,msg){
       if(ok){ CLOUD=JSON.parse(JSON.stringify(DATA)); write(LS_CLOUD, DATA); SYNC='synced'; SYNC_MSG=''; setPending(false); }
