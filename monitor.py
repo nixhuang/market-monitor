@@ -2624,7 +2624,7 @@ def dca_text(d):
 
 
 def dca_badge(d):
-    """市场风险标题右侧的短提醒「定投：N」（N=距定投日还差几个美股交易日）；仅定投日当天黄字。
+    """顶栏最右侧的短提醒「定投：N」（N=距定投日还差几个美股交易日）；仅定投日当天黄字。
     完整日期放读屏标签；天数缺失或异常时不显示，避免给出错误天数。"""
     if not isinstance(d, dict):
         return ""
@@ -2651,6 +2651,21 @@ def reduce_rule(cfg):
         return None
     if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
         log(f"  ! 减仓价无效，已忽略：{v!r}")
+        return None
+    return float(v)
+
+
+def cost_rule(cfg):
+    """读成本价，返回价格；没填或写错一律返回 None。
+
+    cost 必须是大于 0 的有限数字（布尔、字符串都不算），写错就忽略并记一条日志。
+    成本价只在 52 周位置条上画一条黄色竖线（在区间外则贴端点并加朝外箭头），
+    不参与任何灯级与统计计数。"""
+    v = cfg.get("cost")
+    if v is None or v == "":
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0:
+        log(f"  ! 成本价无效，已忽略：{v!r}")
         return None
     return float(v)
 
@@ -3335,6 +3350,7 @@ def _analysis_context(sym, cfg, data, group):
     x = SimpleNamespace(sym=sym, cfg=cfg, data=data, group=group,
                         closes=closes, price=price, prev=prev)
     x.hold = str((cfg or {}).get("hold") or "short").lower()
+    x.cost = cost_rule(cfg or {})   # 成本价：只在位置条上画黄竖线，不参与报灯
     x.chg = (price / prev - 1) * 100 if prev else None
     x.rsi = {period: calc_rsi(closes, period) for period in RSI_PERIODS}
     x.dates = data.get("dates") or []
@@ -3697,6 +3713,7 @@ def _analysis_detail(x, al):
         "vol_sigma": x.vol_sigma,
         "trigger": x.trig,
         "reduce": x.reduce,
+        "cost": getattr(x, "cost", None),
         "target": x.tgt,
         "purple": bool(x.tgt and x.tgt.get("hit")),
         "source": x.data.get("source", ""),
@@ -4617,11 +4634,28 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 .earn.soon{color:#f0c674;font-weight:600}
 table.stk{table-layout:fixed}
 .stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}  /* 股票行下边距让给位置条，条靠近本股、远离下一只 */
-.stk tr.range52-row td{padding:0 12px 12px 18px;border-top:0;box-shadow:none}
-.range52-rail{position:relative;height:15px;font-variant-numeric:tabular-nums}
-.range52-percent{position:absolute;top:0;left:clamp(18px,var(--range-pos),calc(100% - 18px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
-.range52-track{position:absolute;right:3px;bottom:1px;left:3px;height:2.1px;background:#9fa3aa;border-radius:99px}
-.range52-marker{position:absolute;top:50%;width:8.4px;height:8.4px;border-radius:2px;background:#713caf;border:1px solid #efd9ff;transform:translate(-50%,-50%)}
+/* 位置条改成 20px 高（左右要放最低/最高价），底内边距相应从 12px 收到 7px，整行高度不变 */
+.stk tr.range52-row td{padding:0 12px 7px 18px;border-top:0;box-shadow:none}
+/* 位置条：左端写区间最低价、右端写最高价，中间是灰轨；百分比浮在轨道上方跟随紫方块 */
+.range52-rail{position:relative;display:flex;align-items:flex-end;gap:7px;height:20px;
+  font-variant-numeric:tabular-nums}
+.range52-lo,.range52-hi{flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
+.range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
+/* 百分比要抬到紫方块上沿之上（紫块直径 8.4px、向上伸出 4.2px），否则文字底被方块压住 */
+.range52-percent{position:absolute;bottom:calc(100% + 6px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
+.range52-marker{position:absolute;top:50%;width:8.4px;height:8.4px;border-radius:2px;background:#713caf;border:1px solid #efd9ff;transform:translate(-50%,-50%);z-index:1}
+/* 成本价：黄色竖线，跟紫色现价方块一样横跨位置条（2026-10-19 改；原来是条下方的白三角）。
+   高度 10.5px 比紫方块的 8.4px 上下各多露约 1px，两根线叠在一起时也分得清；
+   z-index 高于紫块 —— 成本≈现价时黄压紫，成本价优先可见 */
+.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;background:#f0c674;transform:translate(-50%,-50%);z-index:2}
+/* 成本价落在 52 周区间之外（比低点还低 / 比高点还高）：竖线贴到对应端点并稍淡，
+   端点外侧补一个朝外的小箭头，避免被当成「成本刚好等于最高价／最低价」 */
+.range52-cost.out-lo{left:0;opacity:.85}
+.range52-cost.out-hi{left:100%;opacity:.85}
+.range52-cost.out-lo::after,.range52-cost.out-hi::after{content:"";position:absolute;top:50%;
+  transform:translateY(-50%);border-top:3.2px solid transparent;border-bottom:3.2px solid transparent}
+.range52-cost.out-lo::after{right:calc(100% + 1px);border-right:4px solid #f0c674}
+.range52-cost.out-hi::after{left:calc(100% + 1px);border-left:4px solid #f0c674}
 .range52-missing{display:block;color:var(--dim);font-size:11px;line-height:15px}
 .c-sym{width:18%} .c-earn{width:22%} .c-px{width:13%} .c-sig{width:47%}
 .earn-cell{vertical-align:middle;overflow-wrap:anywhere}
@@ -4640,7 +4674,7 @@ td.px{text-align:center}
   .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
   .stk td{padding:8px 5px}
   .stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}
-  .stk tr.range52-row td{padding:0 8px 10px 12px}
+  .stk tr.range52-row td{padding:0 8px 6px 12px}
   table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
   .stk th{padding:7px 5px;font-size:12px}
   .stk th.h-earn,.earn-cell{text-align:left}
@@ -4795,6 +4829,8 @@ tr.gray td{color:var(--dim)}
 .dca.on b{color:var(--yellow)}
 .dca-badge{margin-left:auto;white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
 .dca-badge.on{color:var(--yellow)}
+/* 定投提醒挂在顶栏最右侧，字号跟顶栏按钮对齐 */
+.runbar .dca-badge{font-size:14px;margin-left:auto}
 .policy-reference{border-top:1px solid var(--line);margin-top:0}
 .policy-reference .reference-alert{padding:7px 12px}
 .policy-reference .reference-top{gap:6px;font-size:12.5px}
@@ -5027,11 +5063,33 @@ def _range52_row(d):
     scope = value["scope"]
     caption = (f'{scope}低 {fmt(low)}，本轮价 {fmt(price)} 位于区间 {pos:.1f}%，'
                f'{scope}高 {fmt(high)}；{value["from"]} 至 {value["to"]} 日线高低价')
+    # 成本价：紫方块是本轮价，黄竖线是成本价，形状区分开。
+    # 成本价落在 52 周区间外时不再按 0~100% 夹取了事：竖线贴到对应端点，
+    # 再加一个朝外的小箭头（class out-lo / out-hi），读屏标签里写清实际数值与方向
+    cost_html = ""
+    if valid(d.get("cost")):
+        cost = d["cost"]
+        cpos = (cost - low) / (high - low) * 100
+        if cpos < 0:
+            cost_html = '<span class="range52-cost out-lo"></span>'
+            caption += f'；成本价 {fmt(cost)} 低于{scope}低点 {fmt(low)}'
+        elif cpos > 100:
+            cost_html = '<span class="range52-cost out-hi"></span>'
+            caption += f'；成本价 {fmt(cost)} 高于{scope}高点 {fmt(high)}'
+        else:
+            cost_html = f'<span class="range52-cost" style="left:{cpos:.1f}%"></span>'
+            caption += f'；成本价 {fmt(cost)} 位于区间 {cpos:.1f}%'
+    # 左右两端直接写区间最低价／最高价；百分比浮在轨道上方跟随紫方块；
+    # 成本价是横跨轨道的黄色竖线（画在紫方块之后，成本≈现价时也能看见）
     return (f'<tr class="range52-row"><td colspan="4">'
             f'<div class="range52-rail" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
+            f'<span class="range52-lo" aria-hidden="true">{fmt(low)}</span>'
+            f'<div class="range52-track">'
             f'<span class="range52-percent" aria-hidden="true">{pos:.1f}%</span>'
-            f'<div class="range52-track"><span class="range52-marker" style="left:{pos:.1f}%"></span>'
-            f'</div></div></td></tr>')
+            f'<span class="range52-marker" style="left:{pos:.1f}%"></span>'
+            f'{cost_html}</div>'
+            f'<span class="range52-hi" aria-hidden="true">{fmt(high)}</span>'
+            f'</div></td></tr>')
 
 
 def _stock_anchor_id(symbol):
@@ -5653,6 +5711,57 @@ def _page_notes(snapshot):
 </section>'''
 
 
+def _cost_seed_json():
+    """页面里的持仓种子：成本价来自 holdings.json 的 cost（本来就公开）；
+    数量 / 现金 / 固定收益来自本机的 position-costs.local.json（可缺失，Actions 上就没有）。
+    只是「第一次打开时的兜底值」——本机 localStorage 和云端 position-costs.json 都优先于它。"""
+    import json as _json
+    items, cash, fixed, fixed_cost = {}, 0, 0, 0
+    try:
+        import io as _io
+        h = _json.load(_io.open(os.path.join(BASE, "holdings.json"), encoding="utf-8"))
+        for sym, c in (h.get("positions") or {}).items():
+            cost = (c or {}).get("cost")
+            if isinstance(cost, (int, float)) and cost > 0:
+                items[sym] = {"cost": cost, "qty": 0}
+    except Exception as e:
+        log(f"  ! 持仓成本种子读取失败：{e}")
+    p = os.path.join(BASE, "position-costs.local.json")
+    if os.path.exists(p):
+        try:
+            import io as _io
+            loc = _json.load(_io.open(p, encoding="utf-8"))
+            for sym, q in (loc.get("positions") or {}).items():
+                if sym in items and isinstance(q, (int, float)) and q > 0:
+                    items[sym]["qty"] = q
+            c = loc.get("cash")
+            cash = c if isinstance(c, (int, float)) else ((c or {}).get("cash") or 0)
+            fi = loc.get("fixed_income") or {}
+            fixed, fixed_cost = fi.get("market") or 0, fi.get("cost") or 0
+        except Exception as e:
+            log(f"  ! 持仓数量种子读取失败（只用成本价）：{e}")
+    return _json.dumps({"asof": "", "cash": cash, "fixed": fixed,
+                        "fixed_cost": fixed_cost, "items": items}, ensure_ascii=False)
+
+
+def _cost_panel_assets():
+    """仓位管理面板：CSS / JS 放在仓库根的 cost_panel.css / cost_panel.js 两个独立文件里，
+    构建时内联进 index.html。文件缺失就跳过这块，页面其它部分照常生成。"""
+    css = js = ""
+    try:
+        import io as _io
+        import re as _re
+        css = _io.open(os.path.join(BASE, "cost_panel.css"), encoding="utf-8").read()
+        # 这个文件自带 <style>…</style>，但这里是插进页面已有的 <style> 里，必须剥掉标签，
+        # 否则 HTML 里出现嵌套 <style>，浏览器会把后面的 </style> 当正文渲染出来
+        css = _re.sub(r"</?style[^>]*>", "", css)
+        js = _io.open(os.path.join(BASE, "cost_panel.js"), encoding="utf-8").read()
+    except Exception as e:
+        log(f"  ! 仓位面板资源缺失，跳过：{e}")
+        return "", ""
+    return css, js.replace("__MM_REAL__", _cost_seed_json())
+
+
 def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
     snapshot = snapshot or {}
     risk = market_risk_summary(macro, snapshot.get("target_trade_date"))
@@ -5680,7 +5789,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
                    f'role="status" aria-label="{risk_title}">'
                    f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
                    f'综合：{html_lib.escape(risk["label"])}</span>')
-    dca_title = dca_badge(snapshot.get("dca_reminder"))  # 标题行最右侧，字体同「市场风险」
+    dca_title = dca_badge(snapshot.get("dca_reminder"))  # 顶栏最右侧（2026-10-19：从市场风险标题挪过来）
     snapshot_json = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
     snapshot_json = snapshot_json.replace("</", "<\\/")
     finished_iso = beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
@@ -5696,6 +5805,8 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     consensus_credit = (f'共识价来源：{CONSENSUS_SOURCE}，每只约 {CONSENSUS_REFETCH_DAYS} 天更新一次，财报后提前更新<br>\n'
                         if any((d.get("target") or {}).get("kind") == "consensus" for d in items) else "")
 
+    cost_css, cost_js = _cost_panel_assets()
+
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -5709,17 +5820,19 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <link rel="manifest" href="./manifest.webmanifest">
 <title>AI监测</title>
 <style>
-{PAGE_CSS}</style>
+{PAGE_CSS}
+{cost_css}</style>
 </head>
 <body><div class="wrap">
 <h1>AI监测</h1>
 <div class="sub">{sub_line}</div>
 
 <div class="runbar">
-  <button class="primary" id="btnRunNow">立即运行</button>
-  <button id="btnCheckStatus">查运行状态</button>
-  <button id="btnHardRefresh">强制刷新</button>
+  <button class="primary" id="btnRunNow">运行</button>
+  <button id="btnCheckStatus">状态</button>
+  <button id="btnHardRefresh">刷新</button>
   <a class="btnlink" href="./edit.html">设置</a>
+  {dca_title}
   <script>{HARD_REFRESH_JS}</script>
 </div>
 <div class="statusrow">
@@ -5734,7 +5847,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 
 {signal_card}
 <details class="card macro-card" id="macroCard">
-<summary class="grp"><span class="grp-name">市场风险</span><span class="group-stats">{macro_stats}</span>{dca_title}</summary>
+<summary class="grp"><span class="grp-name">市场风险</span><span class="group-stats">{macro_stats}</span></summary>
 <p class="macro-help" id="marketRiskReason">{html_lib.escape(risk['text'])} · 有效指标 {risk['valid_count']}/5</p>
 <table>
 <tr class="gray mh"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">变化</td><td style="color:var(--dim)">状态</td></tr>
@@ -5747,19 +5860,20 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 
 {group_cards}
 
+<div class="acts">
+<span id="runMsg"></span>
+</div>
+{_page_notes(snapshot)}
+{RUN_JS}
+<script>window.MM_SETTINGS={{"signal_single_open":{int(S.get("signal_single_open", 1))}}};</script>
+<script>{PAGE_INTERACTION_JS}</script>
+{cost_js}
+<!-- 数据源与「查看完整规则与阈值」整块沉到页面最底部：放在「规则与数据说明」之后 -->
 <div class="foot">
 行情：{src_txt} · 垃圾债利差：FRED · 金融压力：NFCI原始周度数据／FRED同步备用<br>
 市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 基本面：Nasdaq<br>
 {consensus_credit}<a href="./edit.html?rules=1" style="color:#6ba3f0;text-decoration:none">查看完整规则与阈值</a>
 </div>
-
-<div class="acts">
-<span id="runMsg"></span>
-</div>
-{RUN_JS}
-<script>window.MM_SETTINGS={{"signal_single_open":{int(S.get("signal_single_open", 1))}}};</script>
-<script>{PAGE_INTERACTION_JS}</script>
-{_page_notes(snapshot)}
 </div></body></html>"""
 
 

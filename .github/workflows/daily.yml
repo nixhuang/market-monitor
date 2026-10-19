@@ -14,6 +14,8 @@ on:
       - 'earnings_sources.py'
       - 'official-earnings.json'
       - 'groups.json'
+      - 'cost_panel.css'
+      - 'cost_panel.js'
       - '.github/workflows/daily.yml'
   schedule:
     # 目标：美东周一至周五 20:15（落在纳斯达克 23/5 交易的 20:00–21:00 休盘窗口内）= 夏令时北京次日 08:15 / 冬令时北京次日 09:15。

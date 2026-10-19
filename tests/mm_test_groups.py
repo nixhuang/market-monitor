@@ -1190,7 +1190,8 @@ class TestGroups(unittest.TestCase):
             snap = {'dca_reminder': d, 'registered_counts': {}, 'list_counts': {}, 'summary': {}}
             with patch.object(monitor, 'global_dca', return_value=None):
                 return monitor.render({}, [], 0, snapshot=snap)
-        title = lambda html: html.split('id="macroCard"', 1)[1].split('</summary>', 1)[0]
+        # 2026-10-19：定投提醒挪到了顶栏最右侧，不再挂在市场风险标题里
+        title = lambda html: html
         quiet = page({**base, 'due': False, 'next_in': 5, 'next_date': '2026-10-15'})
         self.assertIn('<span class="dca-badge" aria-label="定投提醒：还有 5 个交易日（2026-10-15）">定投：5</span>',
                       title(quiet))  # 放在市场风险标题右侧，平时不黄
@@ -1200,9 +1201,9 @@ class TestGroups(unittest.TestCase):
                       title(due))
         pending = page({**base, 'pending': True, 'first': '2026-10-20', 'next_in': 3})
         self.assertIn('>定投：3</span>', title(pending))
-        self.assertNotIn('dca-badge on', pending)
+        self.assertNotIn('class="dca-badge on"', pending)
         for broken in ({**base, 'due': False}, {**base, 'next_in': '5'}, {**base, 'next_in': -1}, None):
-            self.assertNotIn('dca-badge', title(page(broken)))  # 天数缺失/异常不显示，不猜
+            self.assertNotIn('class="dca-badge"', title(page(broken)))  # 天数缺失/异常不显示，不猜
         with patch.object(monitor, 'S', {**monitor.S, 'dca_every': 20, 'dca_start': '2026-10-01'}):
             real = monitor.global_dca('2026-10-13')
             ahead = monitor.global_dca('2026-09-25')  # 起点前：周五→10/01 还差 4 个交易日
@@ -4013,7 +4014,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('style="--range-pos:50.0%"', row)
         self.assertIn('<span class="range52-percent" aria-hidden="true">50.0%</span>', row)
         self.assertIn('style="left:50.0%"', row)
-        self.assertIn('.range52-track{position:absolute;right:3px;bottom:1px;left:3px;height:2.1px;', monitor.PAGE_CSS)
+        self.assertIn('.range52-track{position:relative;flex:1 1 auto;height:2.1px;', monitor.PAGE_CSS)
         self.assertIn('.range52-marker{position:absolute;top:50%;width:8.4px;height:8.4px;', monitor.PAGE_CSS)
         self.assertIn('height:2.1px;background:#9fa3aa;border-radius:99px}', monitor.PAGE_CSS)
         self.assertIn('background:#713caf;border:1px solid #efd9ff;', monitor.PAGE_CSS)
@@ -4028,6 +4029,34 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertEqual(monitor._range52_row({'range52': result, 'price': 100.0, 'data_date': result['to']}).count('left:0.0%'), 1)
         self.assertEqual(monitor._range52_row({'range52': result, 'price': 200.0, 'data_date': result['to']}).count('left:100.0%'), 1)
         self.assertEqual(monitor._range52_row({'reference_only': True, 'range52': result, 'price': 150.0}), '')
+
+    def test_cost_price_draws_a_white_triangle_without_touching_the_range_bar(self):
+        """成本价只在位置条上多一个白三角：紫方块是本轮价（条上），白三角是成本价（条下）。
+        成本价不参与灯级，写错或没写都不能画出来。"""
+        result = monitor._range52_from_history(self.history())   # 低 100 / 高 200 / 本轮价 150
+        base = {'range52': result, 'price': 150.0, 'data_date': result['to']}
+        row = monitor._range52_row({**base, 'cost': 125.0})
+        self.assertIn('<span class="range52-cost" style="left:25.0%"></span>', row)
+        self.assertIn('成本价 125.00 位于区间 25.0%', row)
+        self.assertNotIn('低于区间', row)
+        self.assertIn('style="left:50.0%"', row)          # 本轮价的紫方块位置不变
+        self.assertIn('>50.0%</span>', row)               # 百分比文字仍然是本轮价
+        below = monitor._range52_row({**base, 'cost': 40.0})
+        self.assertIn('<span class="range52-cost out-lo"></span>', below)   # 区间外：朝外箭头，不再夹成 0% 假位置
+        self.assertIn('range52-cost out-lo', below)
+        self.assertIn('成本价 40.00 低于52周低点 100.00', below)
+        above = monitor._range52_row({**base, 'cost': 260.0})
+        self.assertIn('<span class="range52-cost out-hi"></span>', above)   # 高于区间：朝外箭头，不再夹成 100% 假位置
+        self.assertIn('成本价 260.00 高于52周高点 200.00', above)
+        self.assertEqual(monitor.cost_rule({'cost': 288.5}), 288.5)
+        for bad in (0, -1, '300', True, None, float('nan'), float('inf'), ''):
+            with self.subTest(bad=bad):
+                self.assertIsNone(monitor.cost_rule({'cost': bad}))
+                self.assertNotIn('range52-cost', monitor._range52_row({**base, 'cost': bad}))
+        plain = monitor._range52_row(base)
+        self.assertNotIn('range52-cost', plain)
+        self.assertIn('.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;', monitor.PAGE_CSS)
+        self.assertIn('background:#f0c674', monitor.PAGE_CSS)
 
     def test_short_history_and_missing_or_filled_range_do_not_claim_52_weeks(self):
         data = self.history()
@@ -4063,7 +4092,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('HII', output)
         self.assertEqual(output.count('class="range52-row"'), 1)
         self.assertIn('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}', monitor.PAGE_CSS)  # 位置条贴近本股
-        self.assertIn('.stk tr.range52-row td{padding:0 12px 12px 18px;', monitor.PAGE_CSS)  # 与下一只股票拉开
+        self.assertIn('.stk tr.range52-row td{padding:0 12px 7px 18px;', monitor.PAGE_CSS)  # 与下一只股票拉开
         self.assertIn('.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px}', monitor.PAGE_CSS)  # 灯条延伸到本股位置条
         self.assertIn('background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom', monitor.PAGE_CSS)  # 灯条顶部下移
         self.assertIn('</tr><tr class="range52-row"><td colspan="4">', output)
@@ -4226,7 +4255,9 @@ class TestDisplayInteractions(unittest.TestCase):
         controls = re.findall(r'<button type="button" class="collapse-group" aria-controls="([^"]+)"', page)
         self.assertEqual(controls, ['signalCounts', 'macroCard'] + [f'group_{g["key"]}' for g in monitor._display_groups()])
         self.assertEqual(len(controls), 16)
-        self.assertEqual(page.count('<span class="collapse-icon" aria-hidden="true">▲</span>'), 16)
+        # 只看真正的 HTML：仓位面板的收起条是运行时 JS 建的，不能把 <script> 源码里的同一串也算进去
+        self.assertEqual(re.sub(r"<script.*?</script>", "", page, flags=re.S)
+                         .count('<span class="collapse-icon" aria-hidden="true">▲</span>'), 16)
 
     def test_market_risk_has_local_bottom_button_after_reference_content(self):
         page = monitor.render({}, [], 0, snapshot={})

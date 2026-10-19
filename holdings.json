@@ -3,7 +3,8 @@
     "positions = 持仓；focus = 重点关注；其余分类及顺序见 groups.json",
     "note    = 备注，会显示在代码旁边",
     "trigger = 加仓触发价，跌到这里会标红提醒；不需要就删掉这一行",
-    "改完直接 Commit，下次运行生效。成本价和数量不要写在这里（仓库是公开的）",
+    "cost    = 成本价，首页 52 周位置条上用白三角标出，不参与任何灯级判定；不需要就不写",
+    "改完直接 Commit，下次运行生效。数量不要写在这里（仓库是公开的）",
     "同一代码首页按 groups.json 顺序只展示一次；编辑页各组保留独立清单"
   ],
   "group_monitoring": {
@@ -25,75 +26,88 @@
   "positions": {
     "BRK-B": {
       "note": "伯克希尔哈撒韦",
-      "hold": "long"
+      "hold": "long",
+      "cost": 505.0
     },
     "HII": {
       "note": "亨廷顿英格尔斯工业",
-      "hold": "short"
+      "hold": "short",
+      "cost": 272.0
     },
     "APH": {
       "note": "安费诺",
-      "hold": "long"
+      "hold": "long",
+      "cost": 79.2
     },
     "AVGO": {
       "note": "博通",
-      "hold": "long"
+      "hold": "long",
+      "cost": 364.92
     },
     "CRSP": {
       "note": "CRISPR-基因编辑",
-      "hold": "short"
+      "hold": "short",
+      "cost": 46.36
     },
     "GOOGL": {
       "note": "谷歌（Alphabet）",
-      "hold": "long"
+      "hold": "long",
+      "cost": 338.91
     },
     "LMT": {
       "note": "洛克希德马丁",
-      "hold": "long"
+      "hold": "long",
+      "cost": 513.0
     },
     "NTNX": {
       "note": "Nutanix-混合云",
-      "hold": "short"
+      "hold": "short",
+      "cost": 58.27
     },
     "UNH": {
       "note": "联合健康",
-      "hold": "long"
+      "hold": "long",
+      "cost": 387.6
     },
     "UBER": {
       "note": "优步",
-      "hold": "short"
+      "hold": "short",
+      "cost": 69.36
     },
     "DRAM": {
       "note": "Memory ETF-存储芯片",
-      "hold": "short"
+      "hold": "short",
+      "cost": 49.58
     },
     "SPYM": {
       "note": "SPDR标普500指数ETF",
-      "hold": "long"
+      "hold": "long",
+      "cost": 88.77
     },
     "SCHD": {
       "note": "嘉信美国红利股票ETF",
-      "hold": "long"
+      "hold": "long",
+      "cost": 32.88
     },
     "QQQM": {
-      "note": "景顺纳斯达克100指数ETF",
-      "hold": "long"
+      "note": "纳斯达克100指数ETF",
+      "hold": "long",
+      "cost": 296.8
     },
     "XLI": {
       "note": "工业精选行业ETF",
-      "hold": "long"
-    },
-    "GEHC": {
-      "note": "ge医疗",
-      "hold": "short"
+      "hold": "long",
+      "cost": 167.9
     },
     "VRT": {
       "note": "维谛技术",
-      "hold": "short"
+      "hold": "short",
+      "cost": 208.98
     },
     "NXPI": {
       "note": "恩智浦半导体",
-      "hold": "short"
+      "hold": "short",
+      "cost": 220.0
     }
   },
   "focus": {

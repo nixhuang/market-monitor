@@ -361,6 +361,8 @@ let GROUPS=[], KINDS=[], KIND_LABEL={}, NAMES={};
 const pageState={};
 let monitoring={};
 function hasReduce(key){return key==='positions';}
+/* 成本价：只对「持仓」开放。只用于在首页 52 周位置条上画白三角，不参与任何灯级判定。 */
+function hasCost(key){return key==='positions';}
 function hasTarget(key){return key==='positions'||key==='focus';}
 /* 持仓内部分「长持仓」「短持仓」两区：长持仓只屏蔽上轨方向的普通过热（上轨 + RSI 两条），
    RSI 三条全过界仍报红；下轨和减仓价照常。设置页每行只留一个下拉：两区和其它分组都在里面选。 */
@@ -632,6 +634,7 @@ function moveSymbol(from,to,symbol){
   delete data[from][symbol];
   data[t.group][symbol]=rec;
   if(!hasReduce(t.group))delete data[t.group][symbol].reduce;
+  if(!hasCost(t.group))delete data[t.group][symbol].cost;
   if(!hasTarget(t.group)){delete data[t.group][symbol].target;delete data[t.group][symbol].target_at;}
   if(t.group==='positions')data[t.group][symbol].hold=t.hold||'short';
   else delete data[t.group][symbol].hold;   // 长/短只对持仓有意义
@@ -684,12 +687,14 @@ function render(){
       const tv=(c.trigger===null||c.trigger===undefined)?'':c.trigger;
       const rv=(c.reduce===null||c.reduce===undefined)?'':c.reduce;
       const gv=(c.target===null||c.target===undefined)?'':c.target;
+      const cv2=(c.cost===null||c.cost===undefined)?'':c.cost;
       h+='<div class="row" data-k="'+K.k+'" data-s="'+esc(s)+'">'
         +'<span class="sym">'+esc(s)+'</span>'
         +'<input class="n" value="'+esc(c.note||'')+'" placeholder="备注" data-f="note">'
         +'<input class="t" value="'+esc(tv)+'" placeholder="加仓价" data-f="trigger" inputmode="decimal">'
         +(hasReduce(K.k)?'<input class="t r" value="'+esc(rv)+'" placeholder="减仓价" data-f="reduce" inputmode="decimal" aria-label="减仓价">':'')
         +(hasTarget(K.k)?'<input class="t g" value="'+esc(gv)+'" placeholder="目标价" data-f="target" inputmode="decimal" aria-label="目标价">':'')
+        +(hasCost(K.k)?'<input class="t" value="'+esc(cv2)+'" placeholder="成本价" data-f="cost" inputmode="decimal" aria-label="成本价">':'')
         +'<select class="move" aria-label="移动 '+esc(s)+' 到分区或分组">'
         +moveOptions(K.k==='positions'?('positions:'+zoneOf(K.k,c)):K.k)+'</select>'
         +'<button class="del" aria-label="删除">×</button></div>';
@@ -725,6 +730,10 @@ function render(){
           else if(f==='reduce'){
             if(v==='')delete o.reduce;
             else{const n=Number(v); if(Number.isFinite(n)&&n>0)o.reduce=n;}
+          }
+          else if(f==='cost'){
+            if(v==='')delete o.cost;
+            else{const n=Number(v); if(Number.isFinite(n)&&n>0)o.cost=n;}
           }
           else if(f==='target'){
             if(v===''){delete o.target;delete o.target_at;}
