@@ -5711,7 +5711,18 @@ def _page_notes(snapshot):
 </section>'''
 
 
-def _cost_seed_json():
+def _position_symbols():
+    """持仓标的符号（holdings.json 的 positions 键）。抓数时据此给持仓个股也算 20 日收益率。"""
+    try:
+        import io as _io
+        import json as _json
+        h = _json.load(_io.open(os.path.join(BASE, "holdings.json"), encoding="utf-8"))
+        return [str(s) for s in (h.get("positions") or {}).keys()]
+    except Exception:
+        return []
+
+
+def _cost_seed_json(fetched=None):
     """页面里的持仓种子：成本价来自 holdings.json 的 cost（本来就公开）；
     数量 / 现金 / 固定收益来自 position-costs.seed.json（公开入库，构建环境也读得到；
     旧名 position-costs.local.json 仍兼容）。只是「第一次打开时的兜底值」——
@@ -5743,11 +5754,34 @@ def _cost_seed_json():
             fixed, fixed_cost = fi.get("market") or 0, fi.get("cost") or 0
         except Exception as e:
             log(f"  ! 持仓数量种子读取失败（只用成本价）：{e}")
+    # rs20：持仓组合「20日对.SPX」用的快照——每只持仓自己的 20 日涨跌 + 同期基准涨跌。
+    # 只提供收益率，市值加权在浏览器里按本机数量即时算（改数量不用重跑抓数）。
+    rs20 = None
+    try:
+        pos = {str(s).upper() for s in _position_symbols()}
+        rs_items, bench, meta = {}, None, None
+        for it in fetched or []:
+            rs = (it or {}).get("rs_spy") or {} if isinstance(it, dict) else {}
+            if isinstance(rs.get("bench"), (int, float)) and rs.get("days"):
+                bench, meta = rs["bench"], rs
+            sym = str(it.get("symbol") or "").upper()
+            if sym in pos and isinstance(rs.get("etf"), (int, float)):
+                rs_items[sym] = round(float(rs["etf"]), 4)
+        if bench is not None and meta and rs_items:
+            rs20 = {"asof": meta.get("end") or "", "start": meta.get("start") or "",
+                    "end": meta.get("end") or "", "days": meta.get("days") or 20,
+                    "bench": round(float(bench), 4),
+                    "bench_name": meta.get("bench_name") or "标普500", "items": rs_items}
+            # 这里刻意不打日志：本函数在页面渲染路径上执行，
+            # render 期间调 log 会破坏离线测试契约（tests/mm_test_render 断言 log 未被调用）
+            pass
+    except Exception:
+        rs20 = None
     return _json.dumps({"asof": "", "cash": cash, "fixed": fixed,
-                        "fixed_cost": fixed_cost, "items": items}, ensure_ascii=False)
+                        "fixed_cost": fixed_cost, "items": items, "rs20": rs20}, ensure_ascii=False)
 
 
-def _cost_panel_assets():
+def _cost_panel_assets(items=None):
     """仓位管理面板：CSS / JS 放在仓库根的 cost_panel.css / cost_panel.js 两个独立文件里，
     构建时内联进 index.html。文件缺失就跳过这块，页面其它部分照常生成。"""
     css = js = ""
@@ -5762,7 +5796,7 @@ def _cost_panel_assets():
     except Exception as e:
         log(f"  ! 仓位面板资源缺失，跳过：{e}")
         return "", ""
-    return css, js.replace("__MM_REAL__", _cost_seed_json())
+    return css, js.replace("__MM_REAL__", _cost_seed_json(items))
 
 
 def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
@@ -5808,7 +5842,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     consensus_credit = (f'共识价来源：{CONSENSUS_SOURCE}，每只约 {CONSENSUS_REFETCH_DAYS} 天更新一次，财报后提前更新<br>\n'
                         if any((d.get("target") or {}).get("kind") == "consensus" for d in items) else "")
 
-    cost_css, cost_js = _cost_panel_assets()
+    cost_css, cost_js = _cost_panel_assets(items)
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -6096,6 +6130,11 @@ def main(argv=None):
         to_fetch = [sym for sym, _, _ in universe
                     if quote_supported(sym) and instrument_identity(sym) != '^TNX']
         sector_etfs = {g["sector_etf"] for g in GROUPS if g.get("sector_etf")}
+        # 持仓个股也要算 20 日收益率：页面「持仓」卡标题的「20日对.SPX」按市值加权，
+        # 需要每只持仓自己的 20 日涨跌（此前只给板块 ETF 算，持仓卡就永远没这个数）。
+        # 只扩大「谁算rs」，不扩大「要不要抓基准」——基准本来就因为板块 ETF 而取，
+        # 持仓是蹭现成数据，绝不为它额外发一次请求。
+        rs_targets = sector_etfs | {normalize_symbol(s) for s in _position_symbols()}
         # 板块 ETF 相对强弱的基准是标普500指数本身，来源优先级：
         #   1) 风险参考已取的 Yahoo ^GSPC 日线（不额外请求）  2) History of Market 日线  3) 都没有才抓 SPY 作近似
         need_bench = any(normalize_symbol(s) in sector_etfs for s in to_fetch)
@@ -6131,7 +6170,7 @@ def main(argv=None):
             if data:
                 cons = cons_data.get(normalize_symbol(sym))
                 lv, sig, detail = analyze_symbol(sym, {**sc, "_consensus": cons} if cons else sc, data, group=grp)
-                if bench_data and normalize_symbol(sym) in sector_etfs:
+                if bench_data and normalize_symbol(sym) in rs_targets:
                     rs = relative_strength(data, bench_data, bench_name=bench_name)
                     if rs:
                         detail["rs_spy"] = rs

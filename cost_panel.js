@@ -480,7 +480,7 @@
   // 跟统计 / 持仓 / 市场风险完全同级：card + group-card，底部一条整宽收起条
   panel.className='card group-card cost-manage';
   panel.id='costManage';
-  panel.setAttribute('open','');   // DEMO：默认展开，打开页面就能看到浮亏提醒与「已读」
+  // 跟其它分组一致：默认折叠（全站只有「统计」默认展开）
   panel.innerHTML='<summary class="grp">'
     +'<span class="grp-name">仓位管理</span>'
     // 顺序：仓位管理 → 已同步/未同步 → 总资产·盈亏
@@ -1028,19 +1028,9 @@
   paint();
   syncEditUI();
 
-  // DEMO：默认展开统计 / 持仓 / 仓位管理 / 分区里的「无异动」
-  // 页面自己的初始化会反复对统计卡做归一化，所以这里定时重试几次兜住。
-  function reveal(){
-    var gp=document.getElementById('group_positions'); if(gp) gp.open=true;
-    var gl=document.getElementById('group_positions_long'); if(gl) gl.open=true;
-    sc.open=true;
-    if(!editing) panel.open=true;
-    Array.prototype.forEach.call(
-      document.querySelectorAll('#group_positions details.quiet-list'),
-      function(q){ q.open=true; });
-  }
-  [60, 300, 900, 1600, 2600].forEach(function(ms){ setTimeout(reveal, ms); });
-  window.addEventListener('load', reveal);
+  /* 默认展开的只有「统计」（monitor.py 生成时就带 open），持仓 / 重点 / 市场风险 / 仓位管理
+     全部默认折叠——10-14 定的口径。2026-10-19 修：这段 DEMO 残留会把持仓和仓位管理强行展开，
+     还定时重试 5 次，用户手动收起后又被弹开。*/
 
   // 只为截图核对：?focus=panel 落到「仓位管理」卡片，?focus=shorts 落到短持仓框，
   //               ?focus=editor 落到编辑后的按钮区，?focus=rules 落到页底报灯规则，

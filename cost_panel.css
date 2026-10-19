@@ -79,6 +79,10 @@
 .cost-manage .t-wt,.cost-manage .cost-cell.wt{color:var(--text);font-weight:600}
 .cost-manage .t-wt .k{color:var(--dim);font-weight:400}
 .cost-state{font-size:11px;white-space:nowrap;color:var(--dim)}
+/* 全局 .warn 是「带背景边框的整块警告框」（padding 11px 14px / 14px / 圆角），
+   标题右侧只是个小状态字，必须整块样式还原成纯文字 */
+.cost-state .warn,.cost-state .ok{background:none;border:0;padding:0;margin:0;border-radius:0;
+  font-size:11px;line-height:inherit;display:inline}
 .cost-state .warn{color:#f0c674}
 .cost-state .ok{color:#7fbf7f}
 .cost-edit-btn{flex:none;background:#1b2434;border:1px solid #33415a;
