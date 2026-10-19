@@ -303,14 +303,14 @@
   document.addEventListener('click', function(e){
     if(!e.target||!e.target.closest) return;
     var cl=e.target.closest('[data-ack-clear]');
-    if(cl){ DATA.acks={}; dirty=true; write(LS_LOCAL,DATA); paint(); autoPush(); return; }
+    if(cl){ DATA.acks={}; setPending(true); write(LS_LOCAL,DATA); paint(); autoPush(); return; }
     var el=e.target.closest('[data-ack]');
     if(!el) return;
     e.preventDefault(); e.stopPropagation();
     var k=el.getAttribute('data-ack');
     if(!DATA.acks) DATA.acks={};
     if(DATA.acks[k]) delete DATA.acks[k]; else DATA.acks[k]=nowStr();
-    dirty=true; write(LS_LOCAL, DATA); paint(); autoPush();   // 已读也自动上传，另一台设备不会再亮同一条
+    setPending(true); write(LS_LOCAL, DATA); paint(); autoPush();   // 已读也自动上传，另一台设备不会再亮同一条
   });
   /* 键盘：已读按钮本身就是 <button>，Enter / 空格由浏览器直接触发，不需要额外接管
      （胶囊不再承担点击已读，所以这里不再处理 .lvtag） */
@@ -318,7 +318,12 @@
   /* ---------- 1.9 云端同步：GitHub API 写 position-costs.json → Pages 发布 → 其它设备 fetch ---------- */
   var GH={owner:'nixhuang', repo:'market-monitor', path:'position-costs.json', branch:'main'};
   var LS_TOKEN='mm_gh_token_v1';
-  var CLOUD=null, SYNC='local', SYNC_MSG='';   // local(未同步) / loading / synced / error
+  /* 同步状态只看「本机这一轮有没有改过持仓」：
+     没动过 → 已同步（页面显示的就是权威数据，不再拿云端比对结果吓人——云端缺文件、
+     字段顺序不同、另一台设备先改过，都会让比对永远不相等，状态就永远卡在「未同步」）。
+     只有真编辑过（成本价 / 数量 / 现金 / 固定收益 / 已读 / 导入）才标未同步，
+     上传成功后立刻回到已同步；上传失败显示「上传失败」。 */
+  var CLOUD=null, SYNC='synced', SYNC_MSG='';   // synced(已同步) / local(未同步) / loading / error
   function ghToken(){ try{ return (localStorage.getItem(LS_TOKEN)||'').trim(); }catch(e){ return ''; } }
   function ghHead(json){
     var t=ghToken(); if(!t) return null;
@@ -338,6 +343,25 @@
   function pullCloud(cb){
     fetch(cloudUrl(),{cache:'no-store'}).then(function(r){ return r.ok?r.json():null; })
       .then(function(j){ cb(j); }).catch(function(){ cb(null); });
+  }
+  /* 取云端失败不能只试一次就认命：Pages 发布有延迟（刚上传完可能要等一会儿才 404 变 200）、
+     弱网也会偶发失败 → 最多拉 3 次（立刻 / 5 秒 / 20 秒）。点提示条上的「重试」可重开一轮。 */
+  var _pullTry=0, _pullTimer=null;
+  function startPull(){
+    pullCloud(function(j){
+      var changed=mergeCloud(j);
+      if(CLOUD){ _pullTry=0; SYNC=dirty?'local':'synced'; }
+      else{
+        SYNC=dirty?'local':'nocloud';
+        // 第一次没取到：顺手静默补传一份（云端要是压根没文件，补上以后别人就取得到了）
+        if(_pullTry===0 && DATA.items && Object.keys(DATA.items).length) autoPush(true);
+        if(_pullTry<2){ _pullTry++; _pullTimer=setTimeout(startPull, _pullTry===1?5000:20000); }
+      }
+      /* 有改动没传 → 顺手补传（含「上次改完没保存就关了页面」这种）；
+         本机干净时数据就是云端那份，没必要再传一遍 */
+      if(dirty) autoPush(true);
+      paint();
+    });
   }
   function pushCloud(data, cb){
     var h=ghHead(true);
@@ -359,12 +383,30 @@
       })
       .catch(function(){ cb(false,'网络失败'); });
   }
-  /* 合并云端数据：本机永远优先——本机有数字的一律不动，只补本机没有的项；
-     已读（acks）跨设备取并集；云端那份留作「已上传快照」用于判断 dirty。 */
+  /* 合并云端数据（10-19 晚用户选定「D 简单粗暴」口径）：
+     ① 本机「干净」（没有待上传的改动）→ **云端全量覆盖**：以最后上传的那台设备为准，
+        换设备/刷新就能拿到别处改的数字（含已读）；
+     ② 本机还有没上传的改动（dirty）→ 退回「本机永远优先」，只补本机没有的项，
+        绝不静默冲掉用户刚改还没上传的数字。
+     判据用 dirty 而不是 updated_at：各设备时钟不一定准，updated_at 会被本机每次按键顶新。 */
   function mergeCloud(j){
     if(!j||!j.items) return false;
     CLOUD=j;
     var changed=false;
+    if(!dirty){
+      var nd={updated_at:j.updated_at||nowStr(), cash:num(j.cash), fixed:num(j.fixed),
+              fixed_cost:num(j.fixed_cost), items:{}, acks:{}, real:true};
+      Object.keys(j.items).forEach(function(k){
+        nd.items[k]={cost:num(j.items[k].cost), qty:num(j.items[k].qty)};
+      });
+      Object.keys(j.acks||{}).forEach(function(k){ nd.acks[k]=j.acks[k]; });
+      changed = JSON.stringify(nd.items)!==JSON.stringify(DATA.items)
+             || num(nd.cash)!==num(DATA.cash) || num(nd.fixed)!==num(DATA.fixed)
+             || num(nd.fixed_cost)!==num(DATA.fixed_cost)
+             || JSON.stringify(nd.acks)!==JSON.stringify(DATA.acks||{});
+      if(changed){ DATA=nd; write(LS_LOCAL,DATA); }
+      return changed;
+    }
     if(!local&&!DATA.real){
       DATA={updated_at:j.updated_at||nowStr(), cash:num(j.cash), fixed:num(j.fixed),
             fixed_cost:num(j.fixed_cost), items:{}, acks:{}, real:true};
@@ -389,33 +431,50 @@
     return changed;
   }
   /* 静默自动上传：点了「已读」这类小改动也要跨设备生效，不用再手动点保存。
-     有 token 才发；编辑态不发（还在敲数字）；1.2 秒防抖，连续点几下只发一次。 */
-  var _pushTimer=null;
-  function autoPush(){
+     有 token 才发；编辑态不发（还在敲数字）；1.2 秒防抖，连续点几下只发一次。
+     silent＝后台补传（用户这轮什么都没改）：失败也不弹「上传失败」，免得每次开页面都报错。 */
+  var _pushTimer=null, _retryN=0, _retryTimer=null;
+  function autoPush(silent){
     if(!ghToken()||editing) return;
     if(_pushTimer) clearTimeout(_pushTimer);
     _pushTimer=setTimeout(function(){
       _pushTimer=null;
       DATA.updated_at=nowStr(); write(LS_LOCAL, DATA);
-      SYNC='loading'; paint();
+      var wasDirty=dirty;
+      if(!silent||wasDirty){ SYNC='loading'; paint(); }
       pushCloud(DATA, function(ok,msg){
-        if(ok){ CLOUD=JSON.parse(JSON.stringify(DATA)); write(LS_CLOUD,DATA); SYNC='synced'; SYNC_MSG=''; }
-        else  { SYNC='error'; SYNC_MSG=msg||''; }
-        dirty=!cloudSame(); paint();
+        if(ok){ CLOUD=JSON.parse(JSON.stringify(DATA)); write(LS_CLOUD,DATA);
+                SYNC='synced'; SYNC_MSG=''; setPending(false); _retryN=0; }
+        else if(wasDirty||!silent){ SYNC='error'; SYNC_MSG=msg||''; setPending(true);
+                if(wasDirty) scheduleRetry(); }   // 用户改过却没传上去 → 报错并自动重试
+        /* 后台补传失败：本机数据照样完整，不当成错误；
+           但「云端未取到」这个事实不能被它抹掉——同步压根还没建立起来 */
+        else if(SYNC!=='nocloud'){ SYNC='synced'; SYNC_MSG=''; }
+        paint();
       });
     },1200);
   }
-  function cloudSame(){
-    if(!CLOUD) return false;
-    var a={items:DATA.items,cash:num(DATA.cash),fixed:num(DATA.fixed)};
-    var b={items:CLOUD.items,cash:num(CLOUD.cash),fixed:num(CLOUD.fixed)};
-    return JSON.stringify(a)===JSON.stringify(b);
+  /* 容错：上传失败后不干等，自动再试 2 次（15 秒 / 60 秒后）。只在「用户真改过」时重试，
+     后台补传失败不重试（免得一台没配好的设备反复打 GitHub API）。 */
+  function scheduleRetry(){
+    if(_retryN>=2 || !ghToken()) return;
+    _retryN++;
+    if(_retryTimer) clearTimeout(_retryTimer);
+    _retryTimer=setTimeout(function(){
+      _retryTimer=null;
+      if(dirty && !editing) autoPush();     // dirty 为真 → 这次会显示「上传中…」并按失败处理
+    }, _retryN===1?15000:60000);
   }
 
   /* ---------- 2. 数据（本地 / 云端） ---------- */
   var seedItems={}; ROWS.forEach(function(r){ seedItems[r.sym]=r.seed; });
   var SEED={updated_at:nowStr(), cash:5914, fixed:0, fixed_cost:0, items:seedItems};
   var local=read(LS_LOCAL), cloud=read(LS_CLOUD);
+  // 这台设备进页面前有没有自己的持仓数据：没有＝新设备（换设备首次打开），
+  // 此时如果再取不到云端，看到的就是默认值而不是你的持仓 → 「云端未取到」要标成黄字提醒
+  var hadOwn=!!(local&&local.items&&Object.keys(local.items).length);
+  // 内置快照的日期（构建时注入）：换设备又取不到云端时，要告诉用户眼前这份数据是哪天的
+  var seedAsOf=(REAL&&REAL.asof)?String(REAL.asof).slice(0,10):'';
   var DATA;
   /* 有真实持仓数据时，第一次打开就用它覆盖本机的旧示意值（real 标记只认一次）；
      之后仍以本机/远端为准，用户在页面里改过的数字不会被冲掉。 */
@@ -457,21 +516,18 @@
       if(DATA.items[k]) DATA.items[k].cost=num(DATA.items[k].cost)*fac;
     });
   }
+  /* dirty＝本机改过但还没上传成功。刷新/重开页面会重置脚本变量，所以另外单独存一个
+     pending 标记：改过没上传就刷新，D 方案也不会拿云端把它冲掉（10-19 晚）。 */
+  var LS_PENDING='mm_position_pending_v1';
+  function setPending(v){
+    dirty=!!v;
+    try{ if(dirty) localStorage.setItem(LS_PENDING,'1'); else localStorage.removeItem(LS_PENDING); }catch(e){}
+  }
   var dirty=false;
-  if(DATA.real){ dirty=true; }        // 云端还没校验过，等 pullCloud 回来比对再定已同步/未同步
-  else if(local&&cloud){
-    dirty=JSON.stringify(local.items)!==JSON.stringify(cloud.items)||num(local.cash)!==num(cloud.cash);
-  } else if(!cloud){ dirty=true; }   // 从没上传过 → 本机有数据但云端没有
+  try{ dirty=(localStorage.getItem(LS_PENDING)==='1'); }catch(e){}
 
   // 打开页面就拉云端 position-costs.json（Pages 会直接发布它）：本机优先，只补本机没有的项
-  try{
-    pullCloud(function(j){
-      var changed=mergeCloud(j);
-      if(CLOUD) dirty=!cloudSame();
-      SYNC=CLOUD?(dirty?'local':'synced'):'local';
-      if(changed||CLOUD) paint();
-    });
-  }catch(e){}
+  try{ startPull(); }catch(e){ SYNC=dirty?'local':'nocloud'; }
 
   /* ---------- 3. 「仓位管理」独立面板（统计面板上方；编辑功能内置） ---------- */
   var sc=document.getElementById('signalCounts'); if(!sc) return;
@@ -488,7 +544,11 @@
     +'<span class="group-stats">'
     +'<span class="cost-state" id="costState"></span>'
     +'<span class="cost-sum"></span>'
-    +'</span></summary>'
+    +'</span>'
+    // 「编辑」放在表头（标题行）最右侧：跟 10-19 定的标题行口径一致
+    // （仓位管理 → 已同步/未同步 → 总资产·盈亏 → 最右「编辑」）
+    +'<button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false"'
+    +' aria-label="就地编辑成本价与数量">编辑</button></summary>'
     +'<div class="cost-body">'
     +'<div class="signal-members-panel" id="'+PID+'"></div>'
     +'<div class="cost-acts" id="costActs" hidden>'
@@ -497,12 +557,10 @@
     +'<button type="button" id="costExport">导出</button>'
     +'<button type="button" id="costImport">导入</button>'
     +'<span class="hint">成本价与数量可填到小数点后四位；现金填一个总额（券商余额＋货币市场 ETF）</span>'
-    +'<input type="file" id="costFile" accept=".json" hidden>'
     +'</div>'
+    // 文件选择框放在 acts 外面：没进编辑态也要能用「导入备份」救急
+    +'<input type="file" id="costFile" accept=".json" hidden>'
     +'<div class="cost-foot" id="costFoot"></div>'
-    +'<div class="cost-bottom" id="costBottom">'
-    +'<button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false"'
-    +' aria-label="就地编辑成本价与数量">编辑</button></div>'
     +'</div>'
     +'<div class="group-bottom"><button type="button" class="collapse-group"'
     +' aria-controls="costManage" aria-label="收起仓位管理">'
@@ -512,7 +570,6 @@
   var footEl=panel.querySelector('#costFoot');
   var actsEl=panel.querySelector('#costActs');
   var editBtn=panel.querySelector('#costEditBtn');
-  var bottomEl=panel.querySelector('#costBottom');
 
   /* 排序：只能按「盈亏」或「仓位」排，固定降序，点一次切换，选择存在本机、下次打开自动保持 */
   var LS_SORT='mm_position_sort_v1';
@@ -541,6 +598,18 @@
     var t=e.target && e.target.closest ? e.target.closest('.sortable') : null;
     if(t) setSort(t.getAttribute('data-sort'));
   });
+  /* 「云端未取到」提示条上的两个出口（paint 每次重画，所以走事件委托）：
+     重试＝重开一轮拉取；导入备份＝选一个从别的设备导出的 position-costs.json */
+  panel.addEventListener('click', function(e){
+    var t=e.target && e.target.closest ? e.target.closest('#costRetry,#costImportBak') : null;
+    if(!t) return;
+    e.preventDefault(); e.stopPropagation();
+    if(t.id==='costRetry'){
+      _pullTry=0; if(_pullTimer){ clearTimeout(_pullTimer); _pullTimer=null; }
+      SYNC='pulling'; paint(); startPull(); return;
+    }
+    var f=panel.querySelector('#costFile'); if(f) f.click();
+  });
   panel.addEventListener('keydown', function(e){
     if(e.key!=='Enter' && e.key!==' ') return;
     var t=e.target && e.target.closest ? e.target.closest('.sortable') : null;
@@ -554,8 +623,8 @@
     editBtn.textContent=editing?'编辑中':'编辑';
     editBtn.setAttribute('aria-pressed', editing?'true':'false');
     if(editing) editBtn.className='cost-edit-btn on'; else editBtn.className='cost-edit-btn';
-    // 编辑中由上面的「保存并上传／取消」接管，底部这颗收起来，免得出现两个「退出」入口
-    bottomEl.hidden=editing;
+    // 编辑中由下面的「保存并上传／取消」接管，表头这颗收起来，免得出现两个「退出」入口
+    editBtn.hidden=editing;
     actsEl.hidden=!editing;
   }
   function enterEdit(){
@@ -569,7 +638,7 @@
     var first=panel.querySelector('#'+PID+' input'); if(first) first.focus();
   }
   function exitEdit(restore){
-    if(restore && snapshot){ DATA=snapshot; write(LS_LOCAL, DATA); dirty=prevDirty; }
+    if(restore && snapshot){ DATA=snapshot; write(LS_LOCAL, DATA); setPending(prevDirty); }
     editing=false; snapshot=null; syncEditUI(); paint();
   }
   editBtn.addEventListener('click', function(e){
@@ -580,15 +649,16 @@
     DATA.updated_at=nowStr();
     write(LS_LOCAL, DATA);
     if(!ghToken()){
-      SYNC='error'; SYNC_MSG='未填 GitHub token：点标题右侧「未同步」填一个';
-      editing=false; snapshot=null; syncEditUI(); paint(); return;
+      // 没 token 就上传不了 → 明确告诉用户「未同步 · 未填 token」，点那颗字可以补填
+      SYNC='local'; SYNC_MSG='未填 GitHub token';
+      editing=false; snapshot=null; setPending(true); syncEditUI(); paint(); return;
     }
-    SYNC='loading'; paint();
+    SYNC='loading'; _retryN=0; paint();     // 手动保存＝重新给 2 次自动重试机会
     // position-costs.json 不在 daily.yml 的 push.paths 白名单里 → 不跑行情抓取；Pages 会自动发布
     pushCloud(DATA, function(ok,msg){
-      if(ok){ CLOUD=JSON.parse(JSON.stringify(DATA)); write(LS_CLOUD, DATA); SYNC='synced'; SYNC_MSG=''; }
-      else  { SYNC='error'; SYNC_MSG=msg||'上传失败'; }
-      editing=false; snapshot=null; dirty=!cloudSame(); syncEditUI(); paint();
+      if(ok){ CLOUD=JSON.parse(JSON.stringify(DATA)); write(LS_CLOUD, DATA); SYNC='synced'; SYNC_MSG=''; setPending(false); }
+      else  { SYNC='error'; SYNC_MSG=msg||'上传失败'; setPending(true); scheduleRetry(); }
+      editing=false; snapshot=null; syncEditUI(); paint();
     });
   });
   panel.querySelector('#costCancel').addEventListener('click', function(){ exitEdit(true); });
@@ -597,6 +667,13 @@
     var st=e.target&&e.target.closest?e.target.closest('#costState'):null;
     if(!st) return;
     e.preventDefault(); e.stopPropagation();     // 别让点击把整张卡折叠掉
+    /* 上传失败时点这颗字＝看失败原因（手机上没有 hover，不能只塞 title） */
+    if(SYNC==='error'){
+      window.alert('上传失败：'+(SYNC_MSG||'未知原因')
+        +'\n\n改动已经存在本机，不会丢；会自动再重试 2 次。'
+        +'也可以点「编辑」改一笔再保存，或用「导出 / 导入」把数据搬到另一台设备。');
+      return;
+    }
     var cur=ghToken();
     var v=window.prompt(
       'GitHub token（只存在这台设备的浏览器里，不进仓库、不上传）\n'
@@ -607,7 +684,12 @@
       if(v.trim()) localStorage.setItem(LS_TOKEN, v.trim());
       else localStorage.removeItem(LS_TOKEN);
     }catch(err){}
-    SYNC='local'; SYNC_MSG=''; paint();
+    SYNC_MSG='';
+    // 换设备刚填完 token：立刻重开一轮云端拉取（原来只补传，取不到就是取不到）
+    _pullTry=0; if(_pullTimer){ clearTimeout(_pullTimer); _pullTimer=null; }
+    SYNC='pulling'; startPull();
+    if(dirty){ SYNC='local'; autoPush(); }   // 还有没传上去的改动，顺手补传
+    paint();
   });
   // 卡片被收起时自动退出编辑态：已敲进去的数字保留（变成「未同步」），不偷偷丢
   panel.addEventListener('toggle', function(){
@@ -629,7 +711,7 @@
         var j=JSON.parse(fr.result);
         if(j&&j.items){ DATA={updated_at:j.updated_at||nowStr(),cash:num(j.cash),
           fixed:num(j.fixed),fixed_cost:num(j.fixed_cost),items:j.items};
-          dirty=true; write(LS_LOCAL,DATA); paint(); }
+          setPending(true); write(LS_LOCAL,DATA); paint(); }
       }catch(err){}
     };
     fr.readAsText(file);
@@ -647,7 +729,7 @@
     else if(f==='fixed') DATA.fixed=num(raw);
     else if(f==='fixed_cost') DATA.fixed_cost=num(raw);
     else { if(!DATA.items[sym]) DATA.items[sym]={cost:0,qty:0}; DATA.items[sym][f]=num(raw); }
-    DATA.updated_at=nowStr(); dirty=true; write(LS_LOCAL, DATA);
+    DATA.updated_at=nowStr(); setPending(true); write(LS_LOCAL, DATA);
     paint();
     var again=panel.querySelector('input[data-sym="'+sym+'"][data-f="'+f+'"]');
     if(again){
@@ -985,18 +1067,38 @@
       html+='<div class="ack-bar">已读提醒 '+ackN+' 条 · 条件消失后自动恢复'
         +'<button type="button" data-ack-clear="1" aria-label="把已读全部清掉，重新提醒">恢复全部</button></div>';
     }
+    /* 换设备／清了缓存后第一次打开，又没取到云端：眼前这份是构建时注入的内置快照，
+       不是你的最新持仓 —— 必须在页面里说清楚，并给「重试」「导入备份」两个出口 */
+    if(SYNC==='nocloud' && !hadOwn){
+      html='<div class="cost-nocloud">'
+        +'<span>本机没有持仓数据，也没取到云端 —— 下面是内置快照'
+        +(seedAsOf?('（'+esc(seedAsOf)+'）'):'')+'，可能不是最新。</span>'
+        +'<span class="nb-acts">'
+        +'<button type="button" id="costRetry">重试</button>'
+        +'<button type="button" id="costImportBak">导入备份</button>'
+        +'</span></div>'+html;
+    }
     document.getElementById(PID).innerHTML=html;
     applyLights();
     // 条件消失自动清掉的「已读」要落盘，否则刷新页面又会亮一次
     if(ACK_PRUNED){ ACK_PRUNED=false; write(LS_LOCAL, DATA); autoPush(); }
 
-    // 标题右侧的状态只写「已同步 / 未同步」，底部一行写总资产拆分
+    // 标题行只写「已同步 / 未同步」+ 总资产·盈亏；底部横条下面只留比例图例，不再重复总资产
     // 标题右侧：同步状态。点一下可以填 / 改 GitHub token（只存本机 localStorage）
     var tk=ghToken(), msg=String(SYNC_MSG||'').replace(/[<>&"']/g,'');
-    stateEl.innerHTML = SYNC==='loading' ? '<span class="warn">上传中…</span>'
+    /* 「云端未取到」要不要刺眼，看这台设备原本有没有自己的数据：
+       新设备（第一次打开、本机没存过）取不到云端 → 黄字，因为显示的不是你的持仓；
+       老设备本机数据完整 → 灰字小注，知道一声就行 */
+    var ncCls=hadOwn?'dim':'warn';
+    var ncTip='没取到云端持仓数据：'+(tk?'点这里更换 GitHub token':'点这里填 GitHub token')
+      +'；本机数据不受影响';
+    var okTip='已同步'+(CLOUD&&CLOUD.updated_at?('：云端数据 '+esc(String(CLOUD.updated_at).slice(0,16))):'');
+    stateEl.innerHTML = SYNC==='pulling' ? '<span class="warn">拉取中…</span>'
+      : SYNC==='loading' ? '<span class="warn">上传中…</span>'
       : SYNC==='error' ? '<span class="warn" aria-label="'+msg+'">上传失败</span>'
       : dirty ? '<span class="warn">未同步'+(tk?'':' · 未填 token')+'</span>'
-      : '<span class="ok">已同步</span>';
+      : SYNC==='nocloud' ? '<span class="'+ncCls+'" aria-label="'+ncTip+'">云端未取到</span>'
+      : '<span class="ok" aria-label="'+okTip+'">已同步</span>';
     /* 底部：一条横条画资产结构占比（长持仓深绿 / 短持仓浅绿 / 现金青 / 固定收益橙），
        下面只留「颜色图标 + 比例」，不再写名称和金额——横条本身已经用颜色分段，
        读屏标签里仍保留完整说明 */
@@ -1021,8 +1123,9 @@
     });
     footEl.innerHTML='<div class="cost-bar" role="img" aria-label="资产结构：'
       +aria.join('，')+'">'+bar+'</div>'
-      +'<div class="cost-footrow"><div class="cost-legend">'+leg+'</div>'
-      +'<span class="cost-total">总资产 <b>'+plain(totalAsset)+'</b></span></div>';
+      // 2026-10-19：横条下面不再写「总资产 $xx」——总资产已经在卡片表头（标题行）显示了，
+      // 这里重复一份反而抢视线。下面只留「颜色方块 + 比例」。
+      +'<div class="cost-footrow"><div class="cost-legend">'+leg+'</div></div>';
   }
 
   paint();

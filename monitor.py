@@ -5290,9 +5290,10 @@ def _run_light(snapshot, finished_txt):
                 f"{unsupported_count} 个特殊代码暂不支持报价" if unsupported_count
                 else f"{total} 项数据已更新")
     kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
-    return "ok", (f"{kind}抓取成功 · 完成于 {finished_txt}（北京时间） · "
-                  f"红{summary.get('red', 0)} 黄{summary.get('yellow', 0)} "
-                  f"绿{summary.get('green', 0)}{gray_txt} · {coverage}")
+    # 2026-10-19：灯级计数（红N 黄N 绿N）在统计卡里已经有一份，顶栏再念一遍是废话 → 删掉。
+    # 「缺失 N」保留：它不是计数，是「有几个标的行情没取到」的告警。
+    return "ok", (f"{kind}抓取成功 · 完成于 {finished_txt}（北京时间）"
+                  f"{gray_txt} · {coverage}")
 
 
 def _member_icons(d, kind, level):
@@ -5738,6 +5739,7 @@ def _cost_seed_json(fetched=None):
                 items[sym] = {"cost": cost, "qty": 0}
     except Exception as e:
         log(f"  ! 持仓成本种子读取失败：{e}")
+    asof = ""
     p = os.path.join(BASE, "position-costs.seed.json")
     if not os.path.exists(p):
         p = os.path.join(BASE, "position-costs.local.json")
@@ -5745,6 +5747,7 @@ def _cost_seed_json(fetched=None):
         try:
             import io as _io
             loc = _json.load(_io.open(p, encoding="utf-8"))
+            asof = str(loc.get("asof") or "")[:10]
             for sym, q in (loc.get("positions") or {}).items():
                 if sym in items and isinstance(q, (int, float)) and q > 0:
                     items[sym]["qty"] = q
@@ -5777,7 +5780,8 @@ def _cost_seed_json(fetched=None):
             pass
     except Exception:
         rs20 = None
-    return _json.dumps({"asof": "", "cash": cash, "fixed": fixed,
+    # asof＝内置快照的日期（种子文件里的券商截图日期）：换设备取不到云端时页面要拿它说明数据来源
+    return _json.dumps({"asof": asof, "cash": cash, "fixed": fixed,
                         "fixed_cost": fixed_cost, "items": items, "rs20": rs20}, ensure_ascii=False)
 
 
