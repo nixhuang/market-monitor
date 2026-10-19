@@ -3765,6 +3765,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
+# run-status.js 是独立文件，改完必须 bump 这里的 ?v=，否则浏览器继续吃旧缓存（改完记得同步 tests/mm_test_amp.py 里那条版本号断言）
 RUN_JS = '<script src="./run-status.js?v=20261020"></script>'
 
 # 本页展示交互独立于运行/令牌逻辑；不联网、不写用户配置。
