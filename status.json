@@ -2,23 +2,23 @@
   "dca_reminder": {
     "every": 20,
     "start": "2026-10-15",
-    "count": 2,
-    "date": "2026-10-16",
+    "count": 3,
+    "date": "2026-10-19",
     "times": 1,
     "due": false,
-    "next_in": 19,
+    "next_in": 18,
     "next_date": "2026-11-12"
   },
-  "run_id": "39259551768",
+  "run_id": "39277265290",
   "request_id": "",
-  "source_sha": "7b2d54ff47f3120d11ff0c5668452708dd301b53",
-  "started_at": "2026-10-19T13:22:09+00:00",
-  "started_at_bj": "2026-10-19T21:22:09+08:00",
-  "finished_at": "2026-10-19T21:23:09.579139+08:00",
-  "finished_at_bj": "2026-10-19T21:23:09+08:00",
+  "source_sha": "7a83f62f2ad79f0f56288814939330bdb311a87d",
+  "started_at": "2026-10-19T15:22:02+00:00",
+  "started_at_bj": "2026-10-19T23:22:02+08:00",
+  "finished_at": "2026-10-19T23:24:15.687614+08:00",
+  "finished_at_bj": "2026-10-19T23:24:15+08:00",
   "event": "push",
-  "target_trade_date": "2026-10-16",
-  "mode": "closed",
+  "target_trade_date": "2026-10-19",
+  "mode": "manual_or_config",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
     "holdings.json": "e9afd134dbd02b6a7e32b8a13dcb26dc2fab906d",
@@ -192,8 +192,8 @@
   },
   "summary": {
     "red": 0,
-    "yellow": 48,
-    "green": 51,
+    "yellow": 22,
+    "green": 77,
     "gray": 0,
     "purple": 3,
     "total": 99,
@@ -216,13 +216,13 @@
     "amp": {
       "label": "振幅",
       "red": 0,
-      "yellow": 2,
+      "yellow": 0,
       "purple": 0
     },
     "vol_ratio": {
       "label": "量比",
       "red": 0,
-      "yellow": 12,
+      "yellow": 8,
       "purple": 0
     },
     "rsi": {
@@ -240,19 +240,19 @@
     "boll_rsi": {
       "label": "布林+RSI",
       "red": 0,
-      "yellow": 28,
+      "yellow": 10,
       "purple": 0
     },
     "ma_cross": {
       "label": "均线穿越",
       "red": 0,
-      "yellow": 4,
+      "yellow": 1,
       "purple": 0
     },
     "ma_band": {
       "label": "长均线触及",
       "red": 0,
-      "yellow": 11,
+      "yellow": 7,
       "purple": 0
     },
     "low52": {
@@ -294,43 +294,27 @@
     },
     "amp": {
       "red": [],
-      "yellow": [
-        {
-          "symbol": "NTNX",
-          "note": "Nutanix-混合云",
-          "group": "position",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-16股价下跌4.34%"
-            }
-          ],
-          "metric": "振幅 7.2%"
-        },
-        {
-          "symbol": "ZS",
-          "note": "Zscaler-云安全",
-          "group": "focus",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-16股价下跌5.92%"
-            }
-          ],
-          "metric": "振幅 10.3%"
-        }
-      ],
+      "yellow": [],
       "purple": []
     },
     "vol_ratio": {
       "red": [],
       "yellow": [
+        {
+          "symbol": "DRAM",
+          "note": "Memory ETF-存储芯片",
+          "group": "position",
+          "hold": "short",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-10-19股价上涨5.98%"
+            }
+          ],
+          "metric": "盘中量比 1.7×（截至 11:23 ET）"
+        },
         {
           "symbol": "TSM",
           "note": "台积电",
@@ -339,102 +323,57 @@
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "▲",
               "tone": "white",
-              "label": "2026-10-16股价下跌2.28%"
+              "label": "2026-10-19股价上涨3.36%"
             }
           ],
-          "metric": "量比 1.6×（2026-10-16完整日）"
+          "metric": "盘中量比 1.7×（截至 11:23 ET）"
         },
         {
-          "symbol": "AAPL",
-          "note": "苹果",
-          "group": "focus",
+          "symbol": "SKHY",
+          "note": "SK海力士ADR",
+          "group": "technology",
           "hold": "short",
           "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-10-16股价上涨0.43%"
+              "label": "2026-10-19股价上涨6.19%"
             }
           ],
-          "metric": "量比 1.6×（2026-10-16完整日）"
+          "metric": "盘中量比 1.8×（截至 11:23 ET）"
         },
         {
-          "symbol": "XLK",
-          "note": "科技精选行业ETF",
+          "symbol": "SNDK",
+          "note": "闪迪",
           "group": "technology",
           "hold": "short",
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "▲",
               "tone": "white",
-              "label": "2026-10-16股价下跌3.02%"
+              "label": "2026-10-19股价上涨8.00%"
             }
           ],
-          "metric": "量比 2.0×（2026-10-16完整日）"
+          "metric": "盘中量比 1.7×（截至 11:23 ET）"
         },
         {
-          "symbol": "SNOW",
-          "note": "Snowflake-数据云",
-          "group": "technology",
+          "symbol": "ISRG",
+          "note": "直觉外科",
+          "group": "healthcare",
           "hold": "short",
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "▲",
               "tone": "white",
-              "label": "2026-10-16股价下跌8.43%"
+              "label": "2026-10-19股价上涨1.02%"
             }
           ],
-          "metric": "量比 2.1×（2026-10-16完整日）"
-        },
-        {
-          "symbol": "FTNT",
-          "note": "Fortinet-防火墙",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-16股价下跌7.03%"
-            }
-          ],
-          "metric": "量比 1.5×（2026-10-16完整日）"
-        },
-        {
-          "symbol": "PANW",
-          "note": "Palo Alto-网络安全",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-16股价下跌7.63%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-16完整日）"
-        },
-        {
-          "symbol": "PLTR",
-          "note": "Palantir-AI数据分析",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-16股价下跌7.22%"
-            }
-          ],
-          "metric": "量比 1.4×（2026-10-16完整日）"
+          "metric": "盘中量比 1.6×（截至 11:23 ET）"
         },
         {
           "symbol": "RTX",
@@ -444,57 +383,27 @@
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▲",
+              "shape": "▼",
               "tone": "white",
-              "label": "2026-10-16股价上涨3.73%"
+              "label": "2026-10-19股价下跌0.95%"
             }
           ],
-          "metric": "量比 1.8×（2026-10-16完整日）"
+          "metric": "盘中量比 1.9×（截至 11:23 ET）"
         },
         {
-          "symbol": "XLP",
-          "note": "必需消费精选行业ETF",
-          "group": "consumer_staples",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-10-16股价上涨1.08%"
-            }
-          ],
-          "metric": "量比 2.0×（2026-10-16完整日）"
-        },
-        {
-          "symbol": "PG",
-          "note": "宝洁",
-          "group": "consumer_staples",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-10-16股价上涨1.45%"
-            }
-          ],
-          "metric": "量比 1.6×（2026-10-16完整日）"
-        },
-        {
-          "symbol": "XLY",
-          "note": "非必需消费精选行业ETF",
+          "symbol": "AMZN",
+          "note": "亚马逊",
           "group": "consumer_discretionary",
           "hold": "short",
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "▲",
               "tone": "white",
-              "label": "2026-10-16股价下跌0.84%"
+              "label": "2026-10-19股价上涨4.85%"
             }
           ],
-          "metric": "量比 2.5×（2026-10-16完整日）"
+          "metric": "盘中量比 2.0×（截至 11:23 ET）"
         },
         {
           "symbol": "TSLA",
@@ -504,12 +413,12 @@
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "▲",
               "tone": "white",
-              "label": "2026-10-16股价下跌2.13%"
+              "label": "2026-10-19股价上涨3.72%"
             }
           ],
-          "metric": "量比 1.8×（2026-10-16完整日）"
+          "metric": "盘中量比 1.7×（截至 11:23 ET）"
         }
       ],
       "purple": []
@@ -528,28 +437,10 @@
       "red": [],
       "yellow": [
         {
-          "symbol": "AVGO",
-          "note": "博通",
-          "group": "position",
-          "hold": "long",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
           "symbol": "DRAM",
           "note": "Memory ETF-存储芯片",
           "group": "position",
           "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "QQQM",
-          "note": "纳斯达克100指数ETF",
-          "group": "position",
-          "hold": "long",
           "level": "yellow",
           "direction": "下轨（超卖）",
           "boll_rsi_hits": 2
@@ -573,15 +464,6 @@
           "boll_rsi_hits": 2
         },
         {
-          "symbol": "TSM",
-          "note": "台积电",
-          "group": "focus",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
           "symbol": "MA",
           "note": "万事达",
           "group": "focus",
@@ -600,53 +482,8 @@
           "boll_rsi_hits": 2
         },
         {
-          "symbol": "XLK",
-          "note": "科技精选行业ETF",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
           "symbol": "SKHY",
           "note": "SK海力士ADR",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "MU",
-          "note": "美光科技",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "SNDK",
-          "note": "闪迪",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "STX",
-          "note": "希捷科技",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "ANET",
-          "note": "Arista-数据中心网络",
           "group": "technology",
           "hold": "short",
           "level": "yellow",
@@ -663,99 +500,9 @@
           "boll_rsi_hits": 2
         },
         {
-          "symbol": "INTC",
-          "note": "英特尔",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
           "symbol": "AMAT",
           "note": "应用材料",
           "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "ARM",
-          "note": "Arm Holdings-芯片架构",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "LITE",
-          "note": "Lumentum-光模块",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "MRVL",
-          "note": "迈威尔科技",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "PANW",
-          "note": "Palo Alto-网络安全",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "TER",
-          "note": "泰瑞达",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "LRCX",
-          "note": "拉姆研究",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "NVDA",
-          "note": "英伟达",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "WDC",
-          "note": "西部数据",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "HOOD",
-          "note": "Robinhood-零售券商",
-          "group": "financials",
           "hold": "short",
           "level": "yellow",
           "direction": "下轨（超卖）",
@@ -786,51 +533,9 @@
       "red": [],
       "yellow": [
         {
-          "symbol": "LMT",
-          "note": "洛克希德马丁",
-          "group": "position",
-          "hold": "long",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "cyan",
-              "label": "上穿250日均线"
-            }
-          ]
-        },
-        {
           "symbol": "CRDO",
           "note": "Credo-高速互连",
           "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ]
-        },
-        {
-          "symbol": "HOOD",
-          "note": "Robinhood-零售券商",
-          "group": "financials",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ]
-        },
-        {
-          "symbol": "RTX",
-          "note": "RTX-航空防务",
-          "group": "industrials",
           "hold": "short",
           "level": "yellow",
           "indicators": [
@@ -883,9 +588,9 @@
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "▲",
               "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
+              "label": "现价在均线上方，日内触及"
             }
           ]
         },
@@ -906,20 +611,6 @@
         {
           "symbol": "NU",
           "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "CRCL",
-          "note": "Circle-稳定币",
           "group": "financials",
           "hold": "short",
           "level": "yellow",
@@ -958,48 +649,6 @@
               "label": "现价在均线上方，日内触及"
             }
           ]
-        },
-        {
-          "symbol": "DD",
-          "note": "杜邦",
-          "group": "industrials",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "XLC",
-          "note": "通信服务精选行业ETF",
-          "group": "communications",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
-        },
-        {
-          "symbol": "XLRE",
-          "note": "房地产精选行业ETF",
-          "group": "real_estate",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "现价在均线下方，日内触及"
-            }
-          ]
         }
       ],
       "purple": []
@@ -1028,7 +677,7 @@
           "note": "博通",
           "group": "position",
           "hold": "long",
-          "level": "yellow",
+          "level": "green",
           "indicators": [
             {
               "shape": "□",
@@ -1099,7 +748,7 @@
           "note": "Zscaler-云安全",
           "group": "focus",
           "hold": "short",
-          "level": "yellow",
+          "level": "green",
           "fund_hits": [
             "营业亏损 -2%"
           ],
@@ -1205,100 +854,82 @@
       "symbol": "BRK-B",
       "kind": "boll_rsi",
       "shape": "▲",
-      "detail": "突破布林上轨",
+      "detail": "盘中突破布林上轨",
       "group": "position",
       "hold": "long",
       "note": "伯克希尔哈撒韦"
     },
     {
-      "symbol": "HII",
-      "kind": "boll",
-      "shape": "▲",
-      "detail": "逼近布林上轨 还差0.92%",
-      "group": "position",
-      "hold": "short",
-      "note": "亨廷顿英格尔斯工业"
-    },
-    {
       "symbol": "APH",
       "kind": "boll",
       "shape": "▼",
-      "detail": "跌破布林下轨",
+      "detail": "逼近布林下轨 还差0.77%",
       "group": "position",
       "hold": "long",
       "note": "安费诺"
     },
     {
+      "symbol": "AVGO",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.52%",
+      "group": "position",
+      "hold": "long",
+      "note": "博通"
+    },
+    {
       "symbol": "CRSP",
       "kind": "boll",
       "shape": "▼",
-      "detail": "逼近布林下轨 还差1.17%",
+      "detail": "逼近布林下轨 还差1.95%",
       "group": "position",
       "hold": "short",
       "note": "CRISPR-基因编辑"
     },
     {
-      "symbol": "GOOGL",
+      "symbol": "NTNX",
       "kind": "boll",
       "shape": "▼",
-      "detail": "逼近布林下轨 还差0.80%",
+      "detail": "逼近布林下轨 还差1.17%",
       "group": "position",
-      "hold": "long",
-      "note": "谷歌（Alphabet）"
+      "hold": "short",
+      "note": "Nutanix-混合云"
     },
     {
       "symbol": "UNH",
       "kind": "boll",
       "shape": "▲",
-      "detail": "突破布林上轨",
+      "detail": "盘中突破布林上轨",
       "group": "position",
       "hold": "long",
       "note": "联合健康"
     },
     {
-      "symbol": "UBER",
-      "kind": "boll",
-      "shape": "▲",
-      "detail": "逼近布林上轨 还差0.12%",
-      "group": "position",
-      "hold": "short",
-      "note": "优步"
-    },
-    {
-      "symbol": "SPYM",
-      "kind": "boll",
-      "shape": "▼",
-      "detail": "逼近布林下轨 还差0.04%",
-      "group": "position",
-      "hold": "long",
-      "note": "SPDR标普500指数ETF"
-    },
-    {
       "symbol": "SCHD",
       "kind": "boll",
       "shape": "▲",
-      "detail": "突破布林上轨",
+      "detail": "盘中突破布林上轨",
       "group": "position",
       "hold": "long",
       "note": "嘉信美国红利股票ETF"
     },
     {
-      "symbol": "PDD",
+      "symbol": "QQQM",
       "kind": "boll",
-      "shape": "▲",
-      "detail": "盘中突破布林上轨",
-      "group": "focus",
-      "hold": "short",
-      "note": "拼多多"
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "position",
+      "hold": "long",
+      "note": "纳斯达克100指数ETF"
     },
     {
-      "symbol": "MSFT",
+      "symbol": "AAPL",
       "kind": "boll",
       "shape": "▲",
-      "detail": "逼近布林上轨 还差0.94%",
+      "detail": "逼近布林上轨 还差0.03%",
       "group": "focus",
       "hold": "short",
-      "note": "微软"
+      "note": "苹果"
     },
     {
       "symbol": "SYK",
@@ -1322,16 +953,52 @@
       "symbol": "IBIT",
       "kind": "boll",
       "shape": "▼",
-      "detail": "跌破布林下轨",
+      "detail": "逼近布林下轨 还差0.96%",
       "group": "index_funds",
       "hold": "short",
       "note": "iShares比特币ETF"
     },
     {
+      "symbol": "XLK",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology",
+      "hold": "short",
+      "note": "科技精选行业ETF"
+    },
+    {
+      "symbol": "SNOW",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology",
+      "hold": "short",
+      "note": "Snowflake-数据云"
+    },
+    {
+      "symbol": "MU",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.89%",
+      "group": "technology",
+      "hold": "short",
+      "note": "美光科技"
+    },
+    {
+      "symbol": "STX",
+      "kind": "rsi",
+      "shape": "▼",
+      "detail": "RSI 2条超卖",
+      "group": "technology",
+      "hold": "short",
+      "note": "希捷科技"
+    },
+    {
       "symbol": "NOW",
       "kind": "boll",
       "shape": "▲",
-      "detail": "盘中突破布林上轨",
+      "detail": "逼近布林上轨 还差1.33%",
       "group": "technology",
       "hold": "short",
       "note": "ServiceNow-工作流软件"
@@ -1346,17 +1013,98 @@
       "note": "CrowdStrike-终端安全"
     },
     {
+      "symbol": "FTNT",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差1.51%",
+      "group": "technology",
+      "hold": "short",
+      "note": "Fortinet-防火墙"
+    },
+    {
+      "symbol": "ANET",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology",
+      "hold": "short",
+      "note": "Arista-数据中心网络"
+    },
+    {
+      "symbol": "LITE",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差3.55%",
+      "group": "technology",
+      "hold": "short",
+      "note": "Lumentum-光模块"
+    },
+    {
+      "symbol": "MRVL",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.35%",
+      "group": "technology",
+      "hold": "short",
+      "note": "迈威尔科技"
+    },
+    {
+      "symbol": "PANW",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "跌破布林下轨",
+      "group": "technology",
+      "hold": "short",
+      "note": "Palo Alto-网络安全"
+    },
+    {
+      "symbol": "TER",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.58%",
+      "group": "technology",
+      "hold": "short",
+      "note": "泰瑞达"
+    },
+    {
+      "symbol": "LRCX",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差1.39%",
+      "group": "technology",
+      "hold": "short",
+      "note": "拉姆研究"
+    },
+    {
+      "symbol": "NVDA",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.04%",
+      "group": "technology",
+      "hold": "short",
+      "note": "英伟达"
+    },
+    {
+      "symbol": "WDC",
+      "kind": "rsi",
+      "shape": "▼",
+      "detail": "RSI 2条超卖",
+      "group": "technology",
+      "hold": "short",
+      "note": "西部数据"
+    },
+    {
       "symbol": "XLV",
       "kind": "boll",
       "shape": "▲",
-      "detail": "突破布林上轨",
+      "detail": "盘中突破布林上轨",
       "group": "healthcare",
       "hold": "short",
       "note": "医疗保健精选行业ETF"
     },
     {
       "symbol": "ABBV",
-      "kind": "boll_rsi",
+      "kind": "boll",
       "shape": "▲",
       "detail": "盘中突破布林上轨",
       "group": "healthcare",
@@ -1367,25 +1115,16 @@
       "symbol": "TMO",
       "kind": "boll",
       "shape": "▲",
-      "detail": "盘中突破布林上轨",
+      "detail": "逼近布林上轨 还差0.16%",
       "group": "healthcare",
       "hold": "short",
       "note": "赛默飞世尔科技"
     },
     {
-      "symbol": "ISRG",
+      "symbol": "LLY",
       "kind": "boll",
       "shape": "▲",
       "detail": "盘中突破布林上轨",
-      "group": "healthcare",
-      "hold": "short",
-      "note": "直觉外科"
-    },
-    {
-      "symbol": "LLY",
-      "kind": "boll_rsi",
-      "shape": "▲",
-      "detail": "突破布林上轨",
       "group": "healthcare",
       "hold": "short",
       "note": "礼来"
@@ -1394,16 +1133,16 @@
       "symbol": "XLF",
       "kind": "boll",
       "shape": "▲",
-      "detail": "盘中突破布林上轨",
+      "detail": "逼近布林上轨 还差0.30%",
       "group": "financials",
       "hold": "short",
       "note": "金融精选行业ETF"
     },
     {
       "symbol": "CB",
-      "kind": "boll_rsi",
+      "kind": "boll",
       "shape": "▲",
-      "detail": "突破布林上轨",
+      "detail": "盘中突破布林上轨",
       "group": "financials",
       "hold": "short",
       "note": "安达保险"
@@ -1412,25 +1151,16 @@
       "symbol": "AXP",
       "kind": "boll",
       "shape": "▲",
-      "detail": "盘中突破布林上轨",
+      "detail": "突破布林上轨",
       "group": "financials",
       "hold": "short",
       "note": "美国运通"
     },
     {
-      "symbol": "BX",
-      "kind": "rsi",
-      "shape": "▼",
-      "detail": "RSI 3条超卖",
-      "group": "financials",
-      "hold": "short",
-      "note": "黑石"
-    },
-    {
       "symbol": "COIN",
       "kind": "boll",
       "shape": "▼",
-      "detail": "逼近布林下轨 还差0.17%",
+      "detail": "逼近布林下轨 还差2.03%",
       "group": "financials",
       "hold": "short",
       "note": "Coinbase-加密交易所"
@@ -1439,16 +1169,16 @@
       "symbol": "JPM",
       "kind": "boll",
       "shape": "▲",
-      "detail": "逼近布林上轨 还差0.43%",
+      "detail": "逼近布林上轨 还差0.30%",
       "group": "financials",
       "hold": "short",
       "note": "摩根大通"
     },
     {
       "symbol": "XLE",
-      "kind": "boll_rsi",
+      "kind": "boll",
       "shape": "▲",
-      "detail": "突破布林上轨",
+      "detail": "逼近布林上轨 还差0.26%",
       "group": "energy",
       "hold": "short",
       "note": "能源精选行业ETF"
@@ -1457,7 +1187,7 @@
       "symbol": "XOM",
       "kind": "boll_rsi",
       "shape": "▲",
-      "detail": "突破布林上轨",
+      "detail": "逼近布林上轨 还差0.15%",
       "group": "energy",
       "hold": "short",
       "note": "埃克森美孚"
@@ -1466,16 +1196,25 @@
       "symbol": "HEI",
       "kind": "boll",
       "shape": "▲",
-      "detail": "盘中突破布林上轨",
+      "detail": "逼近布林上轨 还差0.96%",
       "group": "industrials",
       "hold": "short",
       "note": "HEICO-航空零部件"
     },
     {
+      "symbol": "DD",
+      "kind": "boll",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.91%",
+      "group": "industrials",
+      "hold": "short",
+      "note": "杜邦"
+    },
+    {
       "symbol": "XLB",
       "kind": "boll",
       "shape": "▲",
-      "detail": "突破布林上轨",
+      "detail": "盘中突破布林上轨",
       "group": "materials",
       "hold": "short",
       "note": "原材料精选行业ETF"
@@ -1490,49 +1229,58 @@
       "note": "林德-工业气体"
     },
     {
-      "symbol": "XLU",
-      "kind": "boll",
-      "shape": "▲",
-      "detail": "逼近布林上轨 还差0.48%",
-      "group": "utilities",
-      "hold": "short",
-      "note": "公用事业精选行业ETF"
-    },
-    {
       "symbol": "NEE",
       "kind": "boll",
       "shape": "▲",
-      "detail": "盘中突破布林上轨",
+      "detail": "逼近布林上轨 还差0.50%",
       "group": "utilities",
       "hold": "short",
       "note": "新纪元能源"
     },
     {
+      "symbol": "XLP",
+      "kind": "boll_rsi",
+      "shape": "▲",
+      "detail": "盘中突破布林上轨",
+      "group": "consumer_staples",
+      "hold": "short",
+      "note": "必需消费精选行业ETF"
+    },
+    {
       "symbol": "WMT",
       "kind": "boll_rsi",
       "shape": "▲",
-      "detail": "突破布林上轨",
+      "detail": "逼近布林上轨 还差0.26%",
       "group": "consumer_staples",
       "hold": "short",
       "note": "沃尔玛"
     },
     {
+      "symbol": "PG",
+      "kind": "boll",
+      "shape": "▲",
+      "detail": "逼近布林上轨 还差0.40%",
+      "group": "consumer_staples",
+      "hold": "short",
+      "note": "宝洁"
+    },
+    {
       "symbol": "KO",
       "kind": "boll_rsi",
       "shape": "▲",
-      "detail": "突破布林上轨 · 连续第5日贴近上轨",
+      "detail": "突破布林上轨",
       "group": "consumer_staples",
       "hold": "short",
       "note": "可口可乐"
     },
     {
-      "symbol": "TTWO",
+      "symbol": "XLC",
       "kind": "boll",
-      "shape": "▲",
-      "detail": "盘中突破布林上轨",
+      "shape": "▼",
+      "detail": "逼近布林下轨 还差0.08%",
       "group": "communications",
       "hold": "short",
-      "note": "Take-Two-游戏"
+      "note": "通信服务精选行业ETF"
     },
     {
       "symbol": "META",
@@ -1544,22 +1292,13 @@
       "note": "Meta-社交广告"
     },
     {
-      "symbol": "BKNG",
+      "symbol": "XLY",
       "kind": "boll",
       "shape": "▲",
-      "detail": "盘中突破布林上轨",
+      "detail": "突破布林上轨",
       "group": "consumer_discretionary",
       "hold": "short",
-      "note": "Booking-在线旅游"
-    },
-    {
-      "symbol": "MCD",
-      "kind": "boll",
-      "shape": "▲",
-      "detail": "逼近布林上轨 还差0.61%",
-      "group": "consumer_discretionary",
-      "hold": "short",
-      "note": "麦当劳"
+      "note": "非必需消费精选行业ETF"
     }
   ],
   "earnings_week": {
@@ -1569,7 +1308,7 @@
         "symbol": "ISRG",
         "note": "直觉外科",
         "group": "healthcare",
-        "level": "green",
+        "level": "yellow",
         "date": "2026-10-20",
         "timing": "post",
         "kind": "expected"
@@ -1614,7 +1353,7 @@
         "symbol": "LRCX",
         "note": "拉姆研究",
         "group": "technology",
-        "level": "yellow",
+        "level": "green",
         "date": "2026-10-21",
         "timing": "post",
         "kind": "expected"
@@ -1668,7 +1407,7 @@
         "symbol": "WDC",
         "note": "西部数据",
         "group": "technology",
-        "level": "yellow",
+        "level": "green",
         "date": "2026-10-22",
         "timing": "post",
         "kind": "expected"
@@ -1686,7 +1425,7 @@
         "symbol": "PG",
         "note": "宝洁",
         "group": "consumer_staples",
-        "level": "yellow",
+        "level": "green",
         "date": "2026-10-22",
         "timing": "pre",
         "kind": "expected"
@@ -1703,21 +1442,21 @@
     ]
   },
   "actual_dates": {
-    "min": "2026-10-16",
-    "max": "2026-10-16"
+    "min": "2026-10-19",
+    "max": "2026-10-19"
   },
   "macro_dates": {
-    "hy_oas": "2026-10-15",
-    "vix": "2026-10-16",
-    "sp500": "2026-10-16",
-    "ust10": "2026-10-16",
+    "hy_oas": "2026-10-16",
+    "vix": "2026-10-19",
+    "sp500": "2026-10-19",
+    "ust10": "2026-10-19",
     "nfci": "2026-10-09",
     "breadth": "2026-10-16"
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.0980000495910645,
-    "date": "2026-10-16",
+    "value": 5.126999855041504,
+    "date": "2026-10-19",
     "source": "Yahoo ^TNX",
     "unit": "%",
     "lagging": false,
@@ -1725,10 +1464,10 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": 0.09200000762939453
+    "delta_month": 0.1289997100830078
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-10-16 收盘（美东交易日）",
+  "data_time_text": "2026-10-19 23:24:15（盘中快照，北京时间） · 当日价 99 只 / 较早日线 0 只 / 无数据 0 只",
   "market_risk": {
     "level": "green",
     "label": "平稳",
@@ -1747,17 +1486,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 19.99,
-      "date": "2026-10-16",
-      "source": "Cboe VIX 官方日线",
+      "value": 17.780000686645508,
+      "date": "2026-10-19",
+      "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7659.43994140625,
-      "date": "2026-10-16",
+      "value": 7721.9501953125,
+      "date": "2026-10-19",
       "source": "Yahoo ^GSPC",
-      "drawdown": -2.0397961203057258
+      "drawdown": -1.2403228867440275
     }
   },
   "nfci_cache": {
@@ -4306,19 +4045,19 @@
       }
     },
     "events": {
-      "UNH": [
-        "2026-10-13"
-      ],
       "JPM": [
         "2026-10-13"
       ],
       "TSM": [
         "2026-10-15"
       ],
-      "GS": [
+      "JNJ": [
         "2026-10-13"
       ],
-      "JNJ": [
+      "UNH": [
+        "2026-10-13"
+      ],
+      "GS": [
         "2026-10-13"
       ]
     }
@@ -4351,14 +4090,20 @@
       "rules": "美联储仅展示最近已核实的正式利率决议、目标区间、发布日期和官方来源；调整基点仅在声明明确且可核实时显示，不从区间或其他数据猜测。决议信息为neutral中性状态，不作风险灯或买卖解读。成功后持久缓存，日常仅本地比较下次公布时间，到期随下一次监测运行查询新决议，不按24小时重复抓取。失败或待更新后至少1小时重试，到期不绕过错误限速；日程缺失仅补查日历，已核实的同一声明不重复下载。仅按例行日程更新，临时决议可能延迟发现。旧正式决议不按天数或跨年删除，新决议到期或查询失败明确待更新并保留旧日期。原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。原油参考不计入综合灯，不是官方风险线、市场概率或交易指令。"
     },
     "oil": {
-      "level": "gray",
-      "text": "同月份原油历史不足或口径不一致，暂不判定涨幅。",
+      "level": "green",
+      "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 101.41000366210938,
-      "date": "2026-10-16",
-      "contract": "Crude Oil Dec 26"
+      "price": 97.63999938964844,
+      "date": "2026-10-19",
+      "contract": "Crude Oil Dec 26",
+      "day": -1.3936551203817784,
+      "day_from": "2026-10-16",
+      "week": 5.14753257363648,
+      "month": 9.510986293445871,
+      "incomplete": false,
+      "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-10-19T21:23:05.090240+08:00"
+    "assessed_at": "2026-10-19T23:23:24.783788+08:00"
   }
 }
