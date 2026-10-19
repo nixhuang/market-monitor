@@ -67,7 +67,8 @@ if m:
     check('runLight' not in bar, "灯已从第三排移走")
 check('.statusrow{' in src, "statusrow 样式已定义")
 check('改自选清单' not in src, "旧的「改自选清单」已删除")
-check('v=20261013-2' in src, "运行状态脚本版本号已随部分数据灯更新")
+# 2026-10-20：运行灯文案改版 → 版本号跟着 bump（改 run-status.js 后必须 bump，否则浏览器还吃旧缓存）
+check('run-status.js?v=20261020' in src, "运行状态脚本版本号已随本次脚本改动更新")
 
 print()
 if fails:
