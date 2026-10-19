@@ -336,13 +336,24 @@
     for(var i=0;i<bytes.length;i++) s+=String.fromCharCode(bytes[i]);
     return btoa(s);
   }
-  function cloudUrl(){
-    // Pages 有 CDN 缓存，必须带时间戳，否则另一台设备可能拿到旧文件
-    return location.href.split(/[?#]/)[0].replace(/[^/]*$/,'')+'position-costs.json?t='+Date.now();
+  /* 两个候选地址，按顺序试：
+     ① raw.githubusercontent.com —— 文件一提交就能读到（实测 API 上传后立刻 200）；
+     ② 站点同目录的 position-costs.json —— Pages 要等下一次构建才会发布新文件，常滞后几分钟。
+     都带时间戳绕过 CDN 缓存。 */
+  function cloudUrls(){
+    var t=Date.now();
+    return ['https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/'+GH.branch+'/'+GH.path+'?t='+t,
+            location.href.split(/[?#]/)[0].replace(/[^/]*$/,'')+GH.path+'?t='+t];
   }
   function pullCloud(cb){
-    fetch(cloudUrl(),{cache:'no-store'}).then(function(r){ return r.ok?r.json():null; })
-      .then(function(j){ cb(j); }).catch(function(){ cb(null); });
+    var us=cloudUrls(), i=0;
+    (function next(){
+      if(i>=us.length){ cb(null); return; }
+      var u=us[i++];
+      fetch(u,{cache:'no-store'}).then(function(r){ return r.ok?r.json():null; })
+        .then(function(j){ if(j&&j.items) cb(j); else next(); })
+        .catch(function(){ next(); });
+    })();
   }
   /* 取云端失败不能只试一次就认命：Pages 发布有延迟（刚上传完可能要等一会儿才 404 变 200）、
      弱网也会偶发失败 → 最多拉 3 次（立刻 / 5 秒 / 20 秒）。点提示条上的「重试」可重开一轮。 */
