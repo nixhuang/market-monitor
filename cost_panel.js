@@ -50,23 +50,9 @@
     if(t && sd.firstChild) sd.insertBefore(t, sd.firstChild.nextSibling);
   });
   var ROWS=[], idx=0;
-  var ADD_F=[0.985,0.86,0.78];   // 示意加仓价系数：第一个落在触发区内（跌破/逼近）
-  /* DEMO 试用：真实持仓目前最大浮亏只有 AVGO −5.6%，页面上永远看不到浮亏提醒与已读按钮，
-     所以给一个开关按现价反推成本，造出 −12.4% / −22.1% / −11.3% 三档（黄 10% / 红 20%） */
-  /* 演示浮亏组合（都按现价反推成本）：
-     UNH  −10.6% 原绿灯 → 红，点掉已读后回绿灯
-     DRAM −12.0% 原黄灯 → 红，点掉后回黄灯（其它黄灯照旧）
-     HII  −11.3% 原绿灯 → 红
-     AVGO −22.1% 点掉后仍是红灯（它另有一条「示意加仓价」红灯没读） */
-  var DEMO_LOSS={UNH:0.106, DRAM:0.120, HII:0.113, AVGO:0.221};
-  /* 示意减仓价＝现价 × 系数：0.98 → 现价已高出约 2%（命中）。
-     LMT 是「减仓价演示」那只：原绿灯 → 红，点 ✓ 回绿 */
-  var CUT_DEMO=(/[?&]demoloss=1/.test(location.search))?{LMT:0.98}:{};
-  // 默认就造出演示浮亏（用户要「一直 −10% 让我试点」）；?realcost=1 才看真实成本
-  var demoLoss=/[?&]demoloss=1/.test(location.search);
-  var ACK_PRUNED=false;   // paint 里清掉了过期「已读」→ 结束后要写回 localStorage
-  // 默认也把 AAPL 的加仓价抬到现价之上（模拟「已跌破」），让用户直接点胶囊已读；?notrig=1 关掉
-  var demoTrig=/[?&]demotrig=1/.test(location.search);
+  /* 加仓价 / 减仓价只认 holdings.json 里真实填的 trigger / reduce：没填就不画胶囊、不报灯。
+     2026-10-19 修：此前这段会给每只持仓按现价 ×0.985/0.86/0.78 造一个「示意加仓价」，
+     线上每只票都挂着一个假价位，还有 1/3 直接落进触发区报红灯 —— 全部去掉 */
   var EXTRA=[];           // 非持仓但带真实加仓价胶囊的行（AAPL）
   /* 行灯级合成：一只标的可能同时有几条规则命中（页面原有灯 + 加仓价 + 浮亏 10%），
      取最严重的那个；关掉其中一条已读，其它规则该红还红、该黄还黄。 */
@@ -155,39 +141,10 @@
       var pcEl=rail.querySelector('.range52-percent');
       if(pcEl&&pcEl.parentNode!==track) track.insertBefore(pcEl, track.firstChild);
     }
-    /* 示意加仓价：holdings.json 里现在一条 add 都没填，快照里自然没有「加 325」胶囊，
-       这里按现价造一个（1/3 的标的落在触发区内）来演示「已读」按钮。正式实现读 holdings.add */
-    var trig=Math.round(price*ADD_F[ROWS.length%ADD_F.length]*100)/100;
-    /* 示意减仓价：只给 CUT_DEMO 里这几只造（现价已涨到它之上 → 命中），
-       用来演示减仓价的「已读」。正式实现读 holdings.json 的 reduce，只对持仓生效 */
-    var cut=0, cutCap=null;
-    if(CUT_DEMO[sym]>0) cut=Math.round(price*CUT_DEMO[sym]*100)/100;
-    // 页面已经带了真实加仓价胶囊的（focus 组 AAPL 那种），交给 EXTRA 统一处理，不重复造
-    var hasReal=!!sd.querySelector('.lvtag.add');
-    // 「无异动」折叠里的标的不注入：真实实现里加仓价一旦报红就不该还在无异动名单里
-    var inQuiet=!!(tr.closest && tr.closest('.quiet-list'))||hasReal;
+    /* 加仓价 / 减仓价只认页面里已带上的真实胶囊（monitor.py 读 holdings.json 的 trigger / reduce 生成），
+       这里不再按现价造示意值。持仓没填 trigger 就是 0：不画胶囊、不报灯 */
+    var trig=0, cut=0;
     var cap=null, sigAdd=null;
-    if(!inQuiet){
-      cap=document.createElement('span');
-      cap.className='lvtag add';       // 胶囊只显示价位，「已读」统一走提醒行里的 ✓
-      cap.setAttribute('aria-label','示意加仓价（已读按钮在下面那行提醒里）');
-      sd.appendChild(cap);
-      var sigCell=tr.querySelector('td.sig');
-      if(sigCell){
-        sigAdd=document.createElement('span');
-        sigAdd.className='signal-red';
-        sigCell.insertBefore(sigAdd, sigCell.firstChild);
-      }
-    }
-    // 减仓价胶囊排在加仓价后面（跟 monitor.py 的 level_note 一致：加在前、减在后）
-    if(cut>0){
-      cutCap=document.createElement('span');
-      cutCap.className='lvtag cut';
-      cutCap.textContent='减 '+cut;
-      cutCap.setAttribute('aria-label','示意减仓价（已读按钮在下面那行提醒里）');
-      sd.appendChild(cutCap);
-    }
-
     var tick=document.createElement('span');
     tick.className='range52-cost'; tick.style.display='none';
     // 挂到灰轨上（而不是整条 rail）：rail 里还夹着左右两个价格文字，
@@ -209,7 +166,7 @@
     td.insertBefore(warn, warnCut.nextSibling);
     ROWS.push({sym:sym,note:note,isLong:isLong,isEtf:isEtf,lv:lv,price:price,chg:chg,low:low,high:high,
                rail:rail,lab0:lab,lowTxt:m[1],highTxt:m[4],tr:tr,origCls:tr.className||'',
-               trig:trig,cut:cut,cap:cap,cutCap:cutCap,sigAdd:sigAdd,
+               trig:trig,cut:cut,cap:cap,cutCap:null,sigAdd:sigAdd,
                tick:tick,info:info,warnAdd:warnAdd,warnCut:warnCut,warn:warn,seed:seed});
   });
   if(!ROWS.length){ return; }
@@ -260,7 +217,7 @@
           r.cap.className='lvtag add';
           r.cap.removeAttribute('data-ack'); r.cap.removeAttribute('role');
           r.cap.removeAttribute('tabindex'); r.cap.removeAttribute('aria-pressed');
-          r.cap.setAttribute('aria-label','示意加仓价（已读按钮在下面那行提醒里）');
+          r.cap.setAttribute('aria-label','加仓价（已读按钮在下面那行提醒里）');
           r.cap.innerHTML='<span class="t">加 '+r.trig+'</span>';
         }
         if(on){
@@ -292,7 +249,7 @@
     });
     EXTRA.forEach(function(e){
       // AAPL 这类「非持仓但有真实加仓价」的行：可开关模拟跌破
-      var trig=(demoTrig && e.sym==='AAPL')?Math.round(e.price*1.01*100)/100:e.realTrig;
+      var trig=e.realTrig;   // 只认页面自带的真实加仓价，不再模拟
       var gap=(e.price/trig-1)*100, on=gap<=GAP_ADD;
       var k=e.sym+'|add|'+trig;
       if(!on && A[k]){ delete A[k]; ACK_PRUNED=true; }
@@ -345,31 +302,6 @@
   }
   document.addEventListener('click', function(e){
     if(!e.target||!e.target.closest) return;
-    var dm=e.target.closest('[data-demo]');
-    if(dm){
-      var v=dm.getAttribute('data-demo');
-      if(v==='loss') demoLoss=true;
-      else if(v==='real') demoLoss=false;
-      else if(v==='trig'||v==='notrig'){
-        demoTrig=(v==='trig');
-        /* 重点组是折叠的，AAPL 还套在组内的「无异动」折叠里（真实实现中报红的标的
-           不会留在无异动名单，DEMO 只负责把它展开），两层都展开再滚过去 */
-        var gf=document.getElementById('group_focus');
-        if(gf) gf.setAttribute('open','');
-        setTimeout(function(){
-          var t=document.getElementById('s-aapl'); if(!t) return;
-          var ql=t.closest?t.closest('.quiet-list'):null;
-          if(ql) ql.setAttribute('open','');
-          if(t.scrollIntoView) t.scrollIntoView({block:'center'});
-        },80);
-        // 价位一换就是另一条规则：清掉 AAPL 旧的加仓价已读
-        if(DATA.acks) Object.keys(DATA.acks).forEach(function(k){
-          if(k.indexOf('AAPL|add|')===0) delete DATA.acks[k];
-        });
-        write(LS_LOCAL, DATA);   // paint() 开头会复位 ACK_PRUNED，这里必须自己落盘
-      }
-      syncDemoBar(); paint(); return;
-    }
     var cl=e.target.closest('[data-ack-clear]');
     if(cl){ DATA.acks={}; dirty=true; write(LS_LOCAL,DATA); paint(); autoPush(); return; }
     var el=e.target.closest('[data-ack]');
@@ -498,6 +430,22 @@
   } else {
     DATA=local||cloud||JSON.parse(JSON.stringify(SEED));
   }
+  /* 2026-10-19：线上构建环境读不到本机数量文件，早期版本注入的 qty / cash / fixed 全是 0。
+     这里只「补 0」——本机已有数字的项一律不动（本机永远优先），只把缺失的补成种子值。 */
+  if(REAL && REAL.items){
+    var sd_=false;
+    Object.keys(REAL.items).forEach(function(k){
+      var it=DATA.items[k]||(DATA.items[k]={cost:0,qty:0});
+      var rc=num(REAL.items[k].cost), rq=num(REAL.items[k].qty);
+      if(!num(it.cost) && rc>0){ it.cost=rc; sd_=true; }
+      if(!num(it.qty) && rq>0){ it.qty=rq; sd_=true; }
+    });
+    if(!num(DATA.cash) && num(REAL.cash)>0){ DATA.cash=num(REAL.cash); sd_=true; }
+    if(!num(DATA.fixed) && num(REAL.fixed)>0){ DATA.fixed=num(REAL.fixed); sd_=true; }
+    if(!num(DATA.fixed_cost) && num(REAL.fixed_cost)>0){ DATA.fixed_cost=num(REAL.fixed_cost); sd_=true; }
+    DATA.real=true;
+    if(sd_) write(LS_LOCAL, DATA);
+  }
   if(!DATA.items) DATA.items={};
   if(!DATA.acks) DATA.acks={};   // 「已读」状态：随 DATA 一起保存/导出/上传
   /* 只为核对页面：?loss=AVGO,UNH（成本 ×1.3，造出 10% 以上浮亏）、?loss=UNH:1.6（×1.6，20% 以上） */
@@ -612,7 +560,6 @@
   }
   function enterEdit(){
     // 编辑的是真实成本/数量，不能拿演示浮亏反推出来的假成本当输入值 → 进编辑态先切回真实
-    if(demoLoss){ demoLoss=false; syncDemoBar(); }
     snapshot=JSON.parse(JSON.stringify(DATA)); prevDirty=dirty;
     // 记下当前行顺序：编辑期间不再重排，否则边打字边跳行
     editOrder={};
@@ -843,8 +790,6 @@
     ROWS.forEach(function(r){
       var it=DATA.items[r.sym]||{cost:0,qty:0};
       var cost=num(it.cost), qty=num(it.qty);
-      /* DEMO 试用：按现价反推一个成本，让浮亏正好落在 10%/20% 两档上（真实数据目前最大只 −5.6%） */
-      if(demoLoss && DEMO_LOSS[r.sym]>0) cost=Math.round(r.price/(1-DEMO_LOSS[r.sym])*100)/100;
       var has=cost>0&&qty>0;
       r.has=has;
       if(!has){
@@ -1134,61 +1079,6 @@
         +' sum='+panel.querySelector('summary').getBoundingClientRect().width;
     },1500);
   }
-  /* ---------- DEMO 试用条：真实数据没有 ≥10% 的浮亏，给开关造出来试用 ---------- */
-  (function(){
-    if(!demoLoss&&!demoTrig) return;
-    var bar=document.createElement('div');
-    bar.className='demo-bar'; bar.id='demoBar';
-    bar.innerHTML='<b>DEMO</b>'
-      +'<span><span class="sp">当前＝演示状态</span>：持仓成本已改写成能触发提醒的演示值（UNH −10.6% · DRAM −12.0% · HII −11.3% · AVGO −22.1%），'
-      +'AAPL 加仓价抬到 345.42 模拟「已跌破」，LMT 造了示意减仓价（现价已高出约 2%）'
-      +'<span class="only-desk">；真实数据最大浮亏只有 AVGO −5.6%，平时看不到这些提醒</span>。'
-      +'持仓个股的「加 …」胶囊本身也是<span class="sp">示意值</span>（holdings.json 里持仓只填了 note / hold / cost，没有 trigger 加仓价）。'
-      +'要还原真实数据点下面两组「恢复」：</span><br>'
-      +'<button type="button" data-demo="loss" id="demoLossBtn" aria-label="UNH −10.6% · DRAM −12.0% · HII −11.3% · AVGO −22.1%">造浮亏试用</button>'
-      +'<button type="button" data-demo="real" id="demoRealBtn">恢复真实成本</button>'
-      +'<span class="sp">|</span>'
-      +'<button type="button" data-demo="trig" id="demoTrigBtn">AAPL 模拟跌破加仓价</button>'
-      +'<button type="button" data-demo="notrig" id="demoNoTrigBtn">恢复真实 325</button>'
-      +'<span class="st" id="demoState"></span>'
-      +'<ol>'
-      +'<li><b>UNH</b>（提醒挂在下方「持仓」里该行成本价下面，原绿灯）浮亏 −10.6% → 行变红灯；点提醒后面的 ✓ → 变回<b>绿灯</b></li>'
-      +'<li><b>DRAM</b>（原黄灯）浮亏 −12.0% → 行变红；点 ✓ → 变回<b>黄灯</b>（其它规则照旧）</li>'
-      +'<li><b>AVGO</b> 同时有浮亏 −22.1% 和「加仓价」两条提醒：只点掉浮亏<b>仍是红灯</b>，两条都读才回绿</li>'
-      +'<li><b>LMT</b>（减仓价演示）已涨到示意减仓价之上 → 行变红，点提醒后面的 ✓ → 变回<b>绿灯</b></li>'
-      +'<li><b>AAPL</b>（重点组，真实加仓价 325、现价 342，本来没触发）：模拟成加仓价 345.42「已跌破」→ 行变红 → 点提醒后的 ✓ → 回绿灯</li>'
-      +'</ol>';
-    document.body.insertBefore(bar, document.body.firstChild);
-    syncDemoBar();
-    /* 演示标的默认藏在折叠里：浮亏提醒挂在「持仓」个股行下面，AAPL 在「重点关注」组里，
-       两者还都套在「无异动」折叠中（真实实现里报红的标的不该留在无异动名单，DEMO 只负责展开）。
-       默认的演示状态下把这些层都打开，否则打开页面什么都看不到。 */
-    function openDemo(sym){
-      var t=document.getElementById('s-'+String(sym).toLowerCase()); if(!t||!t.closest) return;
-      var q=t.closest('.quiet-list'); if(q) q.setAttribute('open','');
-      var g=t.closest('details.group-card'); if(g) g.setAttribute('open','');
-      var z=t.closest('.zone-card'); if(z) z.setAttribute('open','');
-    }
-    setTimeout(function(){
-      var gp=document.getElementById('group_positions'); if(gp) gp.setAttribute('open','');
-      var gf0=document.getElementById('group_focus');
-      if(demoTrig && gf0) gf0.setAttribute('open','');
-      Object.keys(DEMO_LOSS).forEach(openDemo);          // 浮亏演示的四只
-      Object.keys(CUT_DEMO).forEach(openDemo);           // 减仓价演示（LMT）
-      openDemo('AVGO'); openDemo('AAPL');                // 加仓价演示的两只
-    },80);
-  })();
-  function syncDemoBar(){
-    var bl=document.getElementById('demoLossBtn'), br=document.getElementById('demoRealBtn'),
-        bt=document.getElementById('demoTrigBtn'), bn=document.getElementById('demoNoTrigBtn'),
-        st=document.getElementById('demoState');
-    if(!bl||!br||!bt||!bn||!st) return;
-    bl.className=demoLoss?'on':''; br.className=demoLoss?'':'on';
-    bt.className=demoTrig?'on':''; bn.className=demoTrig?'':'on';
-    st.textContent='浮亏：'+(demoLoss?'演示值':'真实成本')
-      +' · AAPL 加仓价：'+(demoTrig?'模拟跌破 345.42':'真实 325（未触发）');
-  }
-
   /* DEMO 预览同步正式版（monitor.py 已改）：顶栏按钮改名「运行 / 状态 / 刷新 / 设置」，
      并把「定投：N」从市场风险标题挪到顶栏最右侧 */
   (function(){

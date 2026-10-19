@@ -16,6 +16,7 @@ on:
       - 'groups.json'
       - 'cost_panel.css'
       - 'cost_panel.js'
+      - 'position-costs.seed.json'    # 持仓数量/现金/固定收益的种子：改了要重跑才会注入新页面
       - '.github/workflows/daily.yml'
   schedule:
     # 目标：美东周一至周五 20:15（落在纳斯达克 23/5 交易的 20:00–21:00 休盘窗口内）= 夏令时北京次日 08:15 / 冬令时北京次日 09:15。

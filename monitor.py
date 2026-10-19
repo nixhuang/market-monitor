@@ -5713,8 +5713,9 @@ def _page_notes(snapshot):
 
 def _cost_seed_json():
     """页面里的持仓种子：成本价来自 holdings.json 的 cost（本来就公开）；
-    数量 / 现金 / 固定收益来自本机的 position-costs.local.json（可缺失，Actions 上就没有）。
-    只是「第一次打开时的兜底值」——本机 localStorage 和云端 position-costs.json 都优先于它。"""
+    数量 / 现金 / 固定收益来自 position-costs.seed.json（公开入库，构建环境也读得到；
+    旧名 position-costs.local.json 仍兼容）。只是「第一次打开时的兜底值」——
+    本机 localStorage 和云端 position-costs.json 都优先于它。"""
     import json as _json
     items, cash, fixed, fixed_cost = {}, 0, 0, 0
     try:
@@ -5726,7 +5727,9 @@ def _cost_seed_json():
                 items[sym] = {"cost": cost, "qty": 0}
     except Exception as e:
         log(f"  ! 持仓成本种子读取失败：{e}")
-    p = os.path.join(BASE, "position-costs.local.json")
+    p = os.path.join(BASE, "position-costs.seed.json")
+    if not os.path.exists(p):
+        p = os.path.join(BASE, "position-costs.local.json")
     if os.path.exists(p):
         try:
             import io as _io
