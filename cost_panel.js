@@ -368,9 +368,10 @@
         if(_pullTry===0 && DATA.items && Object.keys(DATA.items).length) autoPush(true);
         if(_pullTry<2){ _pullTry++; _pullTimer=setTimeout(startPull, _pullTry===1?5000:20000); }
       }
-      /* 有改动没传 → 顺手补传（含「上次改完没保存就关了页面」这种）；
-         本机干净时数据就是云端那份，没必要再传一遍 */
-      if(dirty) autoPush(true);
+      /* 打开页面**不再**自动上传：pending 标记只用来「别让云端覆盖本机改动」，
+         上传只在用户真的动了数据时发生（编辑保存 / 点已读 / 导入）。
+         ——10-20 事故：加载即上传 + 状态面板发现新提交就自动刷新页面 = 两边互相触发的提交风暴，
+         每次提交都会顶掉上一轮 Pages 构建，站点就一直发不出去。 */
       paint();
     });
   }
