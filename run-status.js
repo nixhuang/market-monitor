@@ -223,10 +223,10 @@
   function shortSummary(s) {
     const info = s.summary || {}, dates = s.actual_dates || {};
     const bad = [...(info.stale_symbols || []), ...(info.missing_symbols || [])];
-    return '数据日期 ' + (dates.max || '未知') + ' · 红' + (info.red ?? 0) +
-      ' 黄' + (info.yellow ?? 0) + ' 绿' + (info.green ?? 0) +
-      (info.gray ? ' 灰' + info.gray : '') + ' · ' +
+    // 红/黄/绿计数统计卡里已经有一份，这里不再重复念（2026-10-20）；只报数据日期 + 有没有没更新到的
+    return '数据日期 ' + (dates.max || '未知') + ' · ' +
       (bad.length ? bad.length + ' 只未更新' : (info.total ?? 0) + ' 只全部更新') +
+      (info.gray ? ' · 缺失 ' + info.gray : '') +
       ' · 规则已按当前设置生成';
   }
   function compactLegacySummary(s) {
@@ -391,13 +391,11 @@
     const oldPage = current && snap && !samePublication(current, snap);
     const finished = completedTime(snap);
     const kind = {schedule: '自动', workflow_dispatch: '手动', push: '保存后'}[snap && snap.event] || '';
-    const success = kind + '抓取成功 · 完成于 ' + (finished || '未记录') + '（北京时间） · ';
+    // 一切正常只报完成时间：红/黄/绿计数统计卡里已有一份，「N 项数据已更新」也是废话（2026-10-20）。
+    // 只有真有缺失（灰）或不支持报价的特殊代码时才补一句，跟 monitor.py 的静态文案同一口径。
+    const success = kind + '抓取成功 · 完成于 ' + (finished || '未记录') + '（北京时间）';
     const suffix = oldPage ? ' · 新结果已发布，本页仍是旧数据' : '';
     const info = snap ? (snap.summary || {}) : {};
-    const cnt = info.red != null
-      ? '红' + (info.red ?? 0) + ' 黄' + (info.yellow ?? 0) + ' 绿' + (info.green ?? 0) +
-        (info.gray ? ' 灰' + info.gray : '')
-      : '';
     const busyText = phase => {
       if (phase === 'dispatching' || phase === 'queued') return '正在提交运行请求…';
       if (phase === 'running') return '正在抓取最新行情…';
@@ -438,10 +436,12 @@
           (finished || '未记录') + '（北京时间）' + suffix, reload: !!oldPage};
       }
       if (unsupported) {
-        return {phase: 'ok', text: success + cnt + ' · ' +
-          (total - unsupported) + ' 项数据已更新 · ' + unsupported + ' 个特殊代码暂不支持报价' + suffix, reload: !!oldPage};
+        const extra = (info.gray ? '缺失 ' + info.gray + ' · ' : '') +
+          (total - unsupported) + ' 项数据已更新 · ' + unsupported + ' 个特殊代码暂不支持报价';
+        return {phase: 'ok', text: success + ' · ' + extra + suffix, reload: !!oldPage};
       }
-      return {phase: 'ok', text: success + cnt + ' · ' + total + ' 项数据已更新' + suffix, reload: !!oldPage};
+      if (info.gray) return {phase: 'ok', text: success + ' · 缺失 ' + info.gray + suffix, reload: !!oldPage};
+      return {phase: 'ok', text: success + suffix, reload: !!oldPage};
     }
     if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
     return {phase: 'idle', text: '点「立即运行」抓最新行情'};

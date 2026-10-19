@@ -3765,7 +3765,7 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-RUN_JS = '<script src="./run-status.js?v=20261013-2"></script>'
+RUN_JS = '<script src="./run-status.js?v=20261020"></script>'
 
 # 本页展示交互独立于运行/令牌逻辑；不联网、不写用户配置。
 PAGE_INTERACTION_JS = r"""

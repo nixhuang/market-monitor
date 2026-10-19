@@ -74,7 +74,10 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     const f = fixture(); await f.win.MMRunStatus.refresh();
     assert.equal(f.els.ruleLight.dataset.phase, 'ok');
     assert.match(f.els.ruleLightTxt.textContent, /规则按当前设置生效/);
-    assert.match(f.els.runLightTxt.textContent, /红44 黄20 绿65/);
+    // 2026-10-20：运行灯不再重复念灯级计数，也不报「N 项数据已更新」，只报完成时间
+    assert.match(f.els.runLightTxt.textContent, /抓取成功 · 完成于/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent, /红44 黄20 绿65/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent, /项数据已更新/);
     assert.doesNotMatch(f.els.runLightTxt.textContent, /规则/);
   });
   await check('最新设置已保存、Pages 设置尚旧也能检测黄灯', async () => {
@@ -93,7 +96,9 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.equal(f.data.reloads.length, 1);
     assert.equal(new URL(f.data.reloads[0]).pathname, '/market-monitor/index.html');
     assert.equal(new URL(f.data.reloads[0]).searchParams.get('mm_refreshed_run'), '2');
-    assert.match(f.els.runLightTxt.textContent, /红44/);
+    // 计数已从运行灯移除（2026-10-20）：只核对仍是「本页成功」这条，且不再念计数
+    assert.match(f.els.runLightTxt.textContent, /抓取成功 · 完成于/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent, /红\d/);
     f.els.snapshotData.textContent = JSON.stringify(f.data.published);
     await f.win.MMRunStatus.refresh(); assert.equal(f.els.ruleLight.dataset.phase, 'ok');
   });
@@ -278,7 +283,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     const result=await f.win.MMRunStatus.refresh();
     assert.equal(result.manual.phase,'published');
     assert.match(f.els.runLightTxt.textContent,/完成于 2026-10-08 10:11:12/);
-    assert.match(f.els.runLightTxt.textContent,/红1/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/红\d/);
     assert.match(f.els.runLightTxt.textContent,/本页仍是旧数据/);
     assert.equal(f.els.runLightTxt.children.at(-1).textContent,'刷新当前看板');
     assert.equal(JSON.parse(f.els.snapshotData.textContent).run_id,'1');
@@ -354,8 +359,8 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
       reference_dates:{'BD#US10Y':'2026-10-06'},today_prices:1,prior_prices:0,missing_prices:0};
     const f=fixture(page);await f.win.MMRunStatus.refresh();
     assert.equal(f.els.runLight.dataset.phase,'ok');
-    assert.match(f.els.runLightTxt.textContent,/2 项数据已更新/);
-    assert.doesNotMatch(f.els.runLightTxt.textContent,/当日行情未取得|项参考值|只日线/);
+    assert.match(f.els.runLightTxt.textContent,/抓取成功 · 完成于/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/项数据已更新|当日行情未取得|项参考值|只日线/);
   });
   await check('取消的运行不叫失败，且说明看板仍是上次成功数据', async () => {
     const f=fixture();f.data.run={id:9,event:'workflow_dispatch',head_sha:D,status:'completed',conclusion:'cancelled'};
@@ -374,7 +379,8 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
       stale_symbols:[],missing_symbols:[],unsupported_symbols:[],
       reference_dates:{'BD#US10Y':'2026-10-07'},today_prices:42,prior_prices:0,missing_prices:0};
     const f=fixture(page);await f.win.MMRunStatus.refresh();
-    assert.match(f.els.runLightTxt.textContent,/红3 黄14 绿26 · 43 项数据已更新/);
+    assert.match(f.els.runLightTxt.textContent,/抓取成功 · 完成于/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/红3 黄14 绿26|项数据已更新/);
     assert.doesNotMatch(f.els.runLightTxt.textContent,/项参考值|42 只/);
   });
   console.log('全部通过');
