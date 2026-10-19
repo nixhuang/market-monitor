@@ -9,13 +9,13 @@
     "next_in": 19,
     "next_date": "2026-11-12"
   },
-  "run_id": "39256515076",
+  "run_id": "39259551768",
   "request_id": "",
-  "source_sha": "1a45d9040cc7558ca0dc0e4344384a0ad12d8a31",
-  "started_at": "2026-10-19T13:00:26+00:00",
-  "started_at_bj": "2026-10-19T21:00:26+08:00",
-  "finished_at": "2026-10-19T21:01:51.935264+08:00",
-  "finished_at_bj": "2026-10-19T21:01:51+08:00",
+  "source_sha": "7b2d54ff47f3120d11ff0c5668452708dd301b53",
+  "started_at": "2026-10-19T13:22:09+00:00",
+  "started_at_bj": "2026-10-19T21:22:09+08:00",
+  "finished_at": "2026-10-19T21:23:09.579139+08:00",
+  "finished_at_bj": "2026-10-19T21:23:09+08:00",
   "event": "push",
   "target_trade_date": "2026-10-16",
   "mode": "closed",
@@ -197,7 +197,7 @@
     "gray": 0,
     "purple": 3,
     "total": 99,
-    "macro_ok": 5,
+    "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
@@ -1707,7 +1707,7 @@
     "max": "2026-10-16"
   },
   "macro_dates": {
-    "hy_oas": "",
+    "hy_oas": "2026-10-15",
     "vix": "2026-10-16",
     "sp500": "2026-10-16",
     "ust10": "2026-10-16",
@@ -1730,21 +1730,19 @@
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-10-16 收盘（美东交易日）",
   "market_risk": {
-    "level": "yellow",
-    "label": "数据不足",
-    "text": "已取得的指标未触发警示；风险得分 0/8；缺失或过期：垃圾债利差",
+    "level": "green",
+    "label": "平稳",
+    "text": "已取得的指标未触发警示；风险得分 0/8",
     "score": 0,
     "levels": {
-      "hy_oas": "gray",
+      "hy_oas": "green",
       "vix": "green",
       "sp500": "green",
       "breadth": "green",
       "nfci": "green"
     },
-    "valid_count": 4,
-    "missing": [
-      "垃圾债利差"
-    ]
+    "valid_count": 5,
+    "missing": []
   },
   "risk_quotes": {
     "vix": {
@@ -3744,8 +3742,8 @@
     "dated": 73,
     "pending": 9,
     "failed": 0,
-    "fetched": 3,
-    "cached": 79,
+    "fetched": 0,
+    "cached": 82,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -4317,10 +4315,10 @@
       "TSM": [
         "2026-10-15"
       ],
-      "JNJ": [
+      "GS": [
         "2026-10-13"
       ],
-      "GS": [
+      "JNJ": [
         "2026-10-13"
       ]
     }
@@ -4361,6 +4359,6 @@
       "date": "2026-10-16",
       "contract": "Crude Oil Dec 26"
     },
-    "assessed_at": "2026-10-19T21:01:05.563905+08:00"
+    "assessed_at": "2026-10-19T21:23:05.090240+08:00"
   }
 }
