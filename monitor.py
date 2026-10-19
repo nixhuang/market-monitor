@@ -4652,15 +4652,15 @@ table.stk{table-layout:fixed}
   font-variant-numeric:tabular-nums}
 .range52-lo,.range52-hi{flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
 .range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
-/* 百分比要抬到倒三角尖顶之上（三角高 6px），否则文字压住三角 */
-.range52-percent{position:absolute;bottom:calc(100% + 9px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
-/* 现价标记：倒三角（斜边 45°，底 12px、高 6px），尖角朝下**顶在灰轨上沿**，
+/* 百分比紧贴倒三角的上边缘（只留 1px）：三角高 9px，文字底 = 轨道上沿 + 10px */
+.range52-percent{position:absolute;bottom:calc(100% + 10px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
+/* 现价标记：倒三角，尖角 60°（等边：底 10.4px、高 9px），尖角朝下**顶在灰轨上沿**，
    不再压在轨道中间（原来是个 8.4px 的紫方块）。外层浅紫描边 + 内层深紫实心 */
 .range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;
-  border-left:6px solid transparent;border-right:6px solid transparent;
-  border-top:6px solid #efd9ff;transform:translateX(-50%);z-index:1}
-.range52-marker::before{content:"";position:absolute;left:-5px;top:-6px;width:0;height:0;
-  border-left:5px solid transparent;border-right:5px solid transparent;border-top:5px solid #713caf}
+  border-left:5.2px solid transparent;border-right:5.2px solid transparent;
+  border-top:9px solid #efd9ff;transform:translateX(-50%);z-index:1}
+.range52-marker::before{content:"";position:absolute;left:-4.2px;top:-8px;width:0;height:0;
+  border-left:4.2px solid transparent;border-right:4.2px solid transparent;border-top:7px solid #713caf}
 /* 成本价：黄色竖线，横跨灰轨（2026-10-19 改；原来是条下方的白三角）。
    高度 10.5px 上下各露约 4px；z-index 高于现价标记，成本≈现价时黄压紫，成本价优先可见 */
 .range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;background:#f0c674;transform:translate(-50%,-50%);z-index:2}

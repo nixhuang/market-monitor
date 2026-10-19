@@ -4017,7 +4017,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('.range52-track{position:relative;flex:1 1 auto;height:2.1px;', monitor.PAGE_CSS)
         # 2026-10-20：现价标记从「压在轨道中间的紫方块」改成「尖角朝下、顶在灰轨上沿的倒三角」
         self.assertIn('.range52-marker{position:absolute;bottom:100%;width:0;height:0;', monitor.PAGE_CSS)
-        self.assertIn('border-top:6px solid #efd9ff;', monitor.PAGE_CSS)
+        self.assertIn('border-top:9px solid #efd9ff;', monitor.PAGE_CSS)   # 顶角 60°（底 10.4 / 高 9）
         self.assertIn('.range52-marker::before{', monitor.PAGE_CSS)
         self.assertNotIn('width:8.4px;height:8.4px;border-radius:2px;background:#713caf', monitor.PAGE_CSS)
         self.assertIn('height:2.1px;background:#9fa3aa;border-radius:99px}', monitor.PAGE_CSS)
