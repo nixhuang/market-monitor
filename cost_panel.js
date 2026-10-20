@@ -953,12 +953,14 @@
       if(!r.has){ if(r.info) r.info.innerHTML=''; return; }
       var w=totalAsset>0?r.mv/totalAsset*100:0;
       var cls=r.pnlPct>=0?'up':'down';
-      r.info.innerHTML='<span class="k">成本</span> <b>'+trim(r.cost)+'</b>'
-        +' <b class="'+cls+'">'+pct(r.pnlPct)+'</b>'
-        +' <b class="'+cls+'">'+money(r.pnlAmt)+'</b>'
-        +' <span class="sep">·</span> <span class="k">市值</span> <b>'+plain(r.mv)+'</b>'
-        +' <span class="sep">·</span> <span class="k">仓位</span> <b'
-        +(w>10?' class="wt-hi"':'')+'>'+(totalAsset>0?w.toFixed(1)+'%':'—')+'</b>';
+      /* 三组各自成块（inline-block + nowrap）：手机放不下时**整组换行**，
+         不会像以前那样把「仓位 2.6%」截成「仓位 2....」；组内数字间留 5px，组间用细点分隔 */
+      r.info.innerHTML='<span class="cg"><span class="k">成本</span> <b>'+trim(r.cost)+'</b>'
+        +'<b class="pct '+cls+'">'+pct(r.pnlPct)+'</b>'
+        +'<b class="amt '+cls+'">'+money(r.pnlAmt)+'</b></span>'
+        +'<span class="sep">·</span><span class="cg"><span class="k">市值</span> <b>'+plain(r.mv)+'</b></span>'
+        +'<span class="sep">·</span><span class="cg"><span class="k">仓位</span> <b'
+        +(w>10?' class="wt-hi"':'')+'>'+(totalAsset>0?w.toFixed(1)+'%':'—')+'</b></span>';
       /* 浮亏 10%/20%：这里也做成可手动关闭的临时提醒——按钮挂在成本价那一排的提醒后面。
          浮亏收窄到阈值以内时 key 自动清掉，下次再跌破会重新提醒 */
       var lv=r.pnlPct<=-20?2:(r.pnlPct<=-10?1:0);

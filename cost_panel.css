@@ -11,12 +11,14 @@
 /* 字号跟「报警描述」（td.sig）一致：桌面 13.5px / 手机 12.5px（页面 .stk td.sig 在 ≤600px 就是 12.5px）。
    整行 nowrap：手机上不折行，「成本 364.92」这种标签＋数字也不会被拆开 */
 /* 成本排与上面那条 52 周位置条之间要留出空隙（2026-10-20：原来 2px，贴着位置条太挤） */
-.cost-info{display:block;font-size:13.5px;color:var(--dim);white-space:nowrap;
-  font-variant-numeric:tabular-nums;line-height:1.45;margin:5px 0 0;
-  overflow:hidden;text-overflow:ellipsis}
+/* 三组内容各自 inline-block（见 cost_panel.js）：窄屏放不下就整组折行，绝不截断 */
+.cost-info{display:block;font-size:13.5px;color:var(--dim);
+  font-variant-numeric:tabular-nums;line-height:1.45;margin:5px 0 0}
+.cost-info .cg{display:inline-block;white-space:nowrap;vertical-align:top}
 .cost-info .k{color:var(--dim)}
-/* 分隔点两侧留 5px；成本价 / 盈亏比例 / 盈亏金额三者之间也各留 6px，不再挤成一坨 */
-.cost-info .sep{color:#3f4a5c;margin:0 5px}
+/* 「·」只是分隔符，不能占地方：左右各 2px 就够了。
+   真正要拉开的是成本价 / 盈亏比例 / 盈亏金额这三个数字（各留 6px） */
+.cost-info .sep{color:#3f4a5c;margin:0 2px}
 .cost-info b.pct,.cost-info b.amt{margin-left:6px}
 .cost-info b{font-weight:600;color:var(--text)}
 /* 盈亏比例与金额：绿涨红跌。注意 .cost-info b 的字色会盖掉页面的 .up/.down
@@ -36,7 +38,7 @@
 @media (max-width:600px){
   /* 手机：跟 .stk td.sig 的 12.5px 同字号；极窄屏再降一档，保证这一行不折也不被截 */
   .cost-info{font-size:12.5px;margin-top:7px}
-  .cost-info .sep{margin:0 4px}
+  .cost-info .sep{margin:0 2px}
   .cost-info b.pct,.cost-info b.amt{margin-left:5px}
   .cost-warn{font-size:12px}
 }
