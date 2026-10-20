@@ -4648,13 +4648,15 @@ table.stk{table-layout:fixed}
 .stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}  /* 股票行下边距让给位置条，条靠近本股、远离下一只 */
 /* 位置条改成 20px 高（左右要放最低/最高价），底内边距相应从 12px 收到 7px，整行高度不变 */
 .stk tr.range52-row td{padding:0 12px 7px 18px;border-top:0;box-shadow:none}
+/* 个股之间的横线原来是继承全局 td 的 --line(#252a33)，太淡；股票表这里提亮一档（2026-10-20） */
+table.stk tr>td{border-top-color:#39424f}
 /* 位置条：左端写区间最低价、右端写最高价，中间是灰轨；百分比浮在轨道上方跟随紫方块 */
 .range52-rail{position:relative;display:flex;align-items:flex-end;gap:7px;height:20px;
   font-variant-numeric:tabular-nums}
 .range52-lo,.range52-hi{flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
 .range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
-/* 百分比紧贴倒三角的上边缘（只留 1px）：三角高 9px，文字底 = 轨道上沿 + 10px */
-.range52-percent{position:absolute;bottom:calc(100% + 10px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
+/* 百分比紧贴倒三角的上边缘，但**不能重叠**：三角高 9px，文字底 = 轨道上沿 + 11px（留 2px） */
+.range52-percent{position:absolute;bottom:calc(100% + 11px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
 /* 现价标记：倒三角，尖角 60°（等边：底 10.4px、高 9px），尖角朝下**顶在灰轨上沿**，
    不再压在轨道中间（原来是个 8.4px 的紫方块）。外层浅紫描边 + 内层深紫实心 */
 .range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;

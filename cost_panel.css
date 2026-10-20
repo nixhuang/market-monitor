@@ -10,13 +10,14 @@
    位置条和成本信息都会挤成一小段。位置条保持原样满宽，成本信息作为块接在它下面一行。 */
 /* 字号跟「报警描述」（td.sig）一致：桌面 13.5px / 手机 12.5px（页面 .stk td.sig 在 ≤600px 就是 12.5px）。
    整行 nowrap：手机上不折行，「成本 364.92」这种标签＋数字也不会被拆开 */
+/* 成本排与上面那条 52 周位置条之间要留出空隙（2026-10-20：原来 2px，贴着位置条太挤） */
 .cost-info{display:block;font-size:13.5px;color:var(--dim);white-space:nowrap;
-  font-variant-numeric:tabular-nums;line-height:1.45;margin:2px 0 0;
+  font-variant-numeric:tabular-nums;line-height:1.45;margin:5px 0 0;
   overflow:hidden;text-overflow:ellipsis}
 .cost-info .k{color:var(--dim)}
-/* 分隔点两侧各留 2px（原来 3px）：375px 宽的手机上，最长的那一行（-$1,281 + 6 位市值）
-   就差 3px 会被省略号截掉，收 1px×2 处正好放得下 */
-.cost-info .sep{color:#3f4a5c;margin:0 2px}
+/* 分隔点两侧留 5px；成本价 / 盈亏比例 / 盈亏金额三者之间也各留 6px，不再挤成一坨 */
+.cost-info .sep{color:#3f4a5c;margin:0 5px}
+.cost-info b.pct,.cost-info b.amt{margin-left:6px}
 .cost-info b{font-weight:600;color:var(--text)}
 /* 盈亏比例与金额：绿涨红跌。注意 .cost-info b 的字色会盖掉页面的 .up/.down
    （.cost-info b 是 0-1-1、.up 是 0-1-0），必须显式补回来，否则盈亏永远是普通白字 */
@@ -27,35 +28,17 @@
 .cost-warn{display:block;font-size:12.5px;margin:2px 0 0;line-height:1.4;white-space:normal}
 .cost-warn.lv1{color:#ff8580}      /* 浮亏 ≥10%：红字＋行级红灯（不再分黄/红两档颜色） */
 .cost-warn.lv2{color:#ff5f5a}      /* ≥20%：更亮的红，只区别于文案 */
-/* ===== 1.4 52 周条：把快照里的旧条覆盖成 monitor.py 的最新版 =====
-   旧条 = 百分比浮在上方、轨道绝对定位贴底，且左右不写价格；
-   新版 = rail 用 flex：左端最低价 / 中间灰轨（百分比＋紫方块＋黄竖线）/ 右端最高价。
-   轨道那几条旧定位（position:absolute + right/bottom/left:3px）必须逐个复位，否则新布局不生效 */
-.stk tr.range52-row td{padding:0 12px 7px 18px}
-.range52-rail{display:flex;align-items:flex-end;gap:7px;height:20px}
-.range52-lo,.range52-hi{flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
-.range52-track{position:relative;flex:1 1 auto;height:2.1px;right:auto;bottom:auto;left:auto;
-  background:#9fa3aa;border-radius:99px}
-.range52-percent{top:auto;bottom:calc(100% + 6px);
-  left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);
-  color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
-/* 成本价黄竖条：比紫方块（8.4px）上下各多露约 1px；z-index 高于紫块，重叠时黄压紫 */
-.range52-marker{z-index:1}
-.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;
-  background:#f0c674;transform:translate(-50%,-50%);z-index:2}
-/* 成本价落在 52 周区间之外：贴到对应端点，端点外侧加一个朝外的小箭头 */
-.range52-cost.out-lo{left:0;opacity:.85}
-.range52-cost.out-hi{left:100%;opacity:.85}
-.range52-cost.out-lo::after,.range52-cost.out-hi::after{content:"";position:absolute;
-  top:50%;transform:translateY(-50%);
-  border-top:3.2px solid transparent;border-bottom:3.2px solid transparent}
-.range52-cost.out-lo::after{right:calc(100% + 1px);border-right:4px solid #f0c674}
-.range52-cost.out-hi::after{left:calc(100% + 1px);border-left:4px solid #f0c674}
+/* ===== 1.4 52 周条 =====
+   这套几何（rail / 灰轨 / 倒三角 / 百分比 / 黄竖线）现在**只在 monitor.py 的 PAGE_CSS 里定义**。
+   这里原来还留着一份旧副本（百分比 bottom:100%+6px、紫方块尺寸…），它比 monitor.py 后加载，
+   会把新值盖掉 —— 2026-10-20 手机上「比例数字和紫三角重叠」就是它干的，已整块删除。
+   以后改 52 周条只改 monitor.py 一处。 */
 @media (max-width:600px){
   /* 手机：跟 .stk td.sig 的 12.5px 同字号；极窄屏再降一档，保证这一行不折也不被截 */
-  .cost-info{font-size:12.5px}
+  .cost-info{font-size:12.5px;margin-top:7px}
+  .cost-info .sep{margin:0 4px}
+  .cost-info b.pct,.cost-info b.amt{margin-left:5px}
   .cost-warn{font-size:12px}
-  .stk tr.range52-row td{padding:0 8px 6px 12px}
 }
 @media (max-width:360px){
   .cost-info{font-size:11.5px}
@@ -130,6 +113,12 @@
   display:grid;align-items:center;gap:0 8px;
   grid-template-columns:minmax(110px,1.55fr) .9fr .85fr 1.05fr 1.45fr .8fr}
 .cost-manage .signal-member-list{margin:0;padding-left:16px}
+/* 列间竖向细分隔线（2026-10-20）：列头 / 合计行 / 每行用同一套 —— 都画在列的左边缘，
+   因为三处共用同一组列宽，线自然上下对齐。颜色很淡，只用来分开数字，不抢视线。 */
+.cost-colhead span+span,
+.cost-block-title .t-mv,.cost-block-title .t-pnl,.cost-block-title .t-wt,
+.cost-manage .signal-member-list li>.cost-grid>:nth-child(n+2){
+  border-left:1px solid rgba(255,255,255,.075);padding-left:7px}
 .cost-colhead{font-size:10.5px;color:var(--dim);padding:2px 0 3px 16px;border-bottom:1px solid #1a2029}
 .cost-colhead span{text-align:right;white-space:nowrap}
 .cost-colhead span:first-child{text-align:left}
@@ -343,10 +332,19 @@
 @media (max-width:560px){
   .cost-body{padding:2px 2px 10px}
   .cost-manage .signal-member-list{padding-left:12px}
-  /* 五列各收紧几 px，把宽度让给第 1 列的代码：原来 52/52/50/56/30 加起来把
-     名称挤到 25~55px，GOOGL / BRK-B 直接被截成「G…」「B…」 */
+  /* 五列重新分配（2026-10-20）：名称列让出约 20px 给数值列，右侧五列不再挤成一坨；
+     名称列留 85px 左右，代码行不换行、中文备注最多两行（超了省略号），避免行高忽高忽低 */
   .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 44px 46px 46px 44px 32px;gap:0 3px}
+    grid-template-columns:minmax(0,1fr) 42px 48px 46px 48px 38px;gap:0 3px}
+  .cost-name{min-width:0}
+  .cost-name .syrow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .cost-name .sy{flex:none}
+  .cost-name .cn{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden;word-break:break-word}
+  .cost-colhead span+span,
+  .cost-block-title .t-mv,.cost-block-title .t-pnl,.cost-block-title .t-wt,
+  .cost-manage .signal-member-list li>.cost-grid>:nth-child(n+2){
+    border-left-color:rgba(255,255,255,.065);padding-left:3px}
   .cost-colhead{font-size:9.5px;padding-left:12px}
   .cost-block-title{font-size:10.5px;padding-left:12px}
   .cost-block-title .cnt{font-size:10px}
@@ -386,10 +384,24 @@
   .cost-contrib li{grid-template-columns:minmax(0,1fr) 54px 40px 56px;gap:0 4px;font-size:10.5px}
   .cost-contrib .cbar{height:6px}
 }
+/* 375 / 360 / 320 这类窄屏：数值列再收几 px，把宽度让给代码行（否则 GOOGL/QQQM 会被压扁） */
+@media (max-width:400px){
+  .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
+    grid-template-columns:minmax(0,1fr) 40px 46px 44px 46px 36px;gap:0 3px}
+}
+@media (max-width:365px){
+  .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
+    grid-template-columns:minmax(0,1fr) 36px 44px 42px 42px 32px;gap:0 2px}
+}
+/* 320 这类超窄屏：名称列只剩 40 多 px，代码 + ETF 胶囊放不下一行 →
+   允许它们折成两行（宁可多一行，也别把 QQQM 截成 Q…） */
+@media (max-width:340px){
+  .cost-name .syrow{flex-wrap:wrap;overflow:visible}
+}
 
 /* 列头「盈亏 / 仓位」可点排序：固定降序，只切换按哪一列排；当前列高亮 */
 .cost-colhead .sortable{cursor:pointer;color:var(--dim);user-select:none;
-  border-bottom:1px dashed transparent;padding-bottom:1px}
+  border-bottom:1px dashed transparent;padding-bottom:3px}
 .cost-colhead .sortable:hover{color:#bfd5ff}
 .cost-colhead .sortable.on{color:#bfd5ff;border-bottom-color:#8fb8f0}
 .cost-colhead .sortable .arw{font-size:9px;margin-left:2px;opacity:.9}
