@@ -1679,21 +1679,26 @@ class TestGroups(unittest.TestCase):
                     with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                         json.dump(content, f)
                 out_file = os.path.join(directory, 'gh_output')
-                with patch.dict(os.environ, {'GITHUB_OUTPUT': out_file}), \
-                        patch.object(monitor, 'EVENT', event), patch.object(monitor, 'CLOSED_ONLY', True), \
-                        patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-16'), \
-                        patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
-                        patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
-                        patch.object(monitor, 'build_reference_alerts', return_value={}), \
-                        patch.object(monitor, 'build_macro', return_value={}), \
-                        patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
-                        patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
-                        patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
-                        patch.object(monitor, 'fundamental_check', return_value=None), \
-                        patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
-                        patch.object(monitor, 'update_consensus', return_value=({}, {})), \
-                        patch.object(monitor, 'global_dca', return_value=None), \
-                        patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
+                # 用 ExitStack：CI 的 Python 3.11 限制一条 with 最多 20 层（3.13 本地不报），补丁太多会 SyntaxError
+                from contextlib import ExitStack
+                with ExitStack() as stack:
+                    for p in (patch.dict(os.environ, {'GITHUB_OUTPUT': out_file}),
+                              patch.object(monitor, 'EVENT', event), patch.object(monitor, 'CLOSED_ONLY', True),
+                              patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-16'),
+                              patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0),
+                              patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}),
+                              patch.object(monitor, 'build_reference_alerts', return_value={}),
+                              patch.object(monitor, 'build_macro', return_value={}),
+                              patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]),
+                              patch.object(monitor, 'fetch_history', return_value={'price': 100}),
+                              patch.object(monitor, 'analyze_symbol', side_effect=analyzed),
+                              patch.object(monitor, 'fundamental_check', return_value=None),
+                              patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})),
+                              patch.object(monitor, 'update_consensus', return_value=({}, {})),
+                              patch.object(monitor, 'global_dca', return_value=None),
+                              patch.object(monitor.time, 'sleep')):
+                        stack.enter_context(p)
+                    notify = stack.enter_context(patch.object(monitor, 'push_serverchan'))
                     self.assertEqual(monitor.main([]), 0)
                 gh = open(out_file, encoding='utf-8').read() if os.path.exists(out_file) else ''
                 wrote = os.path.exists(os.path.join(directory, 'status.json'))
