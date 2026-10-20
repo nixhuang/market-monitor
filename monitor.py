@@ -4765,12 +4765,12 @@ tr.gray td{color:var(--dim)}
 .check-result[data-phase="bad"]{border-color:var(--red)}
 .check-result[data-phase="busy"]{border-color:var(--yellow)}
 .check-result[hidden]{display:none}
-.group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:8px;cursor:pointer;
+.group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:6px;cursor:pointer;
   /* 2026-10-20：左内边距 12px → 4px —— 展开箭头和分类名整体往左挪，贴着卡片左边缘 */
   padding:12px 12px 12px 4px;font-size:16px;font-weight:600;list-style:none;touch-action:manipulation}
 .group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{display:none}
 /* 箭头给固定宽度并居中：左内边距收到 4px 后，展开状态旋转 90° 的「›」会贴到卡片边缘被裁掉 */
-.group-card>summary::before,.macro-card>summary::before{content:"›";display:inline-block;width:14px;
+.group-card>summary::before,.macro-card>summary::before{content:"›";display:inline-block;width:10px;
   text-align:center;flex:none;color:var(--dim);font-size:20px;line-height:1}
 .group-card[open]>summary::before,.macro-card[open]>summary::before{transform:rotate(90deg)}
 .group-card[open]>summary,.macro-card[open]>summary{border-bottom:1px solid var(--line)}
@@ -5827,6 +5827,105 @@ def _cost_panel_assets(items=None):
     return css, js.replace("__MM_REAL__", _cost_seed_json(items))
 
 
+RULES_SUMMARY = "完整报灯规则 · 全局 + 分组差异"
+
+RULES_BODY = """
+<div class="rules-body">
+  <h4>全局规则（四组一致）</h4>
+
+  <h5>报灯</h5>
+  <ul>
+    <li><b>量比</b> — 收盘后按本股自适应：最近完整日量 ÷ 此前 20 日均量，取对数后放进本股过去 60 日
+        分布算 z（中位数 + 1.4826×MAD）→ z ≥ <b>3.6σ</b> <span class="lamp-red">红</span>、
+        z ≥ <b>1.8σ</b> <span class="lamp-yellow">黄</span>；固定 <b>3×</b>／<b>1.5×</b>
+        只在 z 算不出时兜底（历史不足 80 日、成交量为 0、尺度为 0、指数 ^／期货 =F）。
+        盘中量比无 z 值，一律 1.5×／3×，开盘 15 分钟内不报。缩量不报灯，不分涨跌方向。</li>
+    <li><b>52 周低位</b> — 创新低或刚进入低位区 → <span class="lamp-red">红</span>；
+        仍在低位区（距低点 ≤ 3%）→ <span class="lamp-yellow">黄</span></li>
+    <li><b>长均线 250 日</b> — 日内触及 ±1% 区间、上穿或跌破 → <span class="lamp-yellow">黄</span></li>
+    <li><b>基本面</b> — 核心三项（营收同比、营业利润率、经营现金流）恶化 → <span class="lamp-red">红</span>；
+        扩展四项（毛利率、负债/权益、流动比率、ROE）→ <span class="lamp-yellow">黄</span>；ETF 不判</li>
+    <li><b>加仓价</b> — 已跌破、或距离 ≤ 3% → <span class="lamp-red">红</span></li>
+    <li><b>布林 + RSI</b> — 进布林区间且 RSI 同向 2 条 → <span class="lamp-yellow">黄</span>、
+        3 条 → <span class="lamp-red">红</span>；方向不一致 → <span class="lamp-yellow">黄</span>。
+        <b>上轨部分只对持仓、重点关注生效，见下面分组</b></li>
+  </ul>
+
+  <h5>只出文字，不报灯（灯级不变，不进红黄紫）</h5>
+  <ul>
+    <li><b>RSI</b> 超卖 2 条以上 → <span class="lamp-magenta">品红字</span>；超买不着色</li>
+    <li><b>布林</b> 下轨逼近／触及／跌破 → <span class="lamp-sig-yellow">黄字</span>；上轨 → 普通字</li>
+    <li><b>财报</b> — 只显示日期，不进红黄紫、也不进灰灯区块；统计面板单列「未来一周财报」一栏（默认折叠）
+      <ul class="rules-sub">
+        <li>距今 <b>0~14 天</b>：财报列文字<span class="lamp-sig-yellow">标黄加粗</span>，
+            <b>不改灯级、不进统计</b>（待公布／取数失败／已过期都不算临近）</li>
+        <li>距今 <b>0~7 天</b>：这只股<b>不折叠</b>进「无异动 N 只」，即使是绿灯也留在组内可见表里</li>
+      </ul>
+    </li>
+    <li>字的染色和灯级各管各的：长均线是<span class="lamp-cyan">青字</span>同时报黄灯，
+        组合是<span class="lamp-sig-red">红字</span>／<span class="lamp-sig-yellow">黄字</span>同时报对应灯</li>
+  </ul>
+
+  <h5>只显示（不是信号，统计面板任何区块都不收）</h5>
+  <ul>
+    <li>52 周位置条与成本标记、现价、涨跌幅数值、目标价胶囊与空间、
+        RS 强弱（分组标题的「20 日对 .SPX」）、成本／盈亏／仓位 —— 常驻展示，
+        其中某项达标时<b>另算信号</b>，那是另一回事</li>
+    <li><b>振幅、量比没有常显数值</b>：达到阈值才会作为一条信号文字出现，没到就整条不出现</li>
+  </ul>
+
+  <h5>两个「灰」</h5>
+  <ul>
+    <li><b>灰灯区块</b>（统计面板，默认折叠）— 收<b>最终是绿灯</b>、但页面已经写了 RSI／布林文字的标的：
+        「有动静，规则判它还不够格」。按 RSI／布林／布林+RSI 三类归因，▲▼ 分上下；
+        <b>布林+RSI</b> 那类是够格却被分组规则拦下的（如其他分组的上轨、长持仓的上轨 2 条黄）</li>
+    <li><b>缺失</b> — 行情未取到或 52 周待更新，行标灰，不进红黄紫；和灰灯不是一回事</li>
+  </ul>
+
+  <h4>分组差异（在全局规则上增减）</h4>
+
+  <h5>长持仓 ＝ 全局 ＋ 下列</h5>
+  <ul>
+    <li><b>涨跌幅／振幅</b>：阈值按本股平时波动 <b>×0.6／×1.0／×1.4</b> 缩放 →
+        涨跌幅 ±8% <span class="lamp-red">红</span>、±5% <span class="lamp-yellow">黄</span>；
+        振幅 10% <span class="lamp-red">红</span>、6% <span class="lamp-yellow">黄</span></li>
+    <li><b>布林 + RSI 上轨</b>：只报 RSI 3 条全过界的<span class="lamp-red">红</span>，
+        2 条<span class="lamp-yellow">黄</span>屏蔽；下轨不受影响</li>
+    <li><b>减仓价</b>：已涨到、或距离 ≤ 3% → <span class="lamp-red">红</span></li>
+    <li><b>目标价／共识价</b>：跨越、±3% 内、或空间 &gt; 50% →
+        <span class="lamp-purple">紫</span>（不改红黄绿）；空间 &gt; 100% 疑似异常 → <span class="lamp-red">红</span></li>
+  </ul>
+
+  <h5>短持仓 ＝ 长持仓，唯一区别</h5>
+  <ul>
+    <li><b>布林 + RSI 上轨照常报</b>：2 条<span class="lamp-yellow">黄</span>、3 条<span class="lamp-red">红</span></li>
+  </ul>
+
+  <h5>重点关注 ＝ 全局 ＋ 下列</h5>
+  <ul>
+    <li><b>涨跌幅／振幅</b>：同长持仓</li>
+    <li><b>布林 + RSI 上轨</b>：照报，2 条<span class="lamp-yellow">黄</span>、3 条<span class="lamp-red">红</span></li>
+    <li><b>目标价／共识价</b>：同长持仓出<span class="lamp-purple">紫</span></li>
+    <li><b>不报减仓价</b>（减仓价仅持仓组）</li>
+  </ul>
+
+  <h5>其他分组（科技、指数基等）＝ 全局 − 下列</h5>
+  <ul>
+    <li>不报<b>涨跌幅／振幅</b></li>
+    <li><b>布林 + RSI 上轨</b>不报灯，只显示文字</li>
+    <li><b>目标价／共识价</b>只显示不警示（手填目标价无效）</li>
+    <li>不报<b>减仓价</b></li>
+  </ul>
+</div>
+"""
+
+# 页底「完整报灯规则」模板：cost_panel.js 会拿它替换掉「美联储利率决议」那个折叠块。
+# 2026-10-20：这段以前只存在于 Temp/make_cost_ui_demo.py（DEMO 注入），
+# monitor.py 从不输出 → 线上每轮生成的页面都没有 #rulesTpl → 替换永远不触发。
+RULES_TEMPLATE = ('<template id="rulesTpl"><summary>' + RULES_SUMMARY + '</summary>'
+                  + RULES_BODY + '</template>')
+
+
 def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
     snapshot = snapshot or {}
     risk = market_risk_summary(macro, snapshot.get("target_trade_date"))
@@ -5888,7 +5987,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 {PAGE_CSS}
 {cost_css}</style>
 </head>
-<body><div class="wrap">
+<body>{RULES_TEMPLATE}<div class="wrap">
 <h1>AI监测</h1>
 <div class="sub">{sub_line}</div>
 
