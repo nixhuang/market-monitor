@@ -315,8 +315,11 @@
   /* 键盘：已读按钮本身就是 <button>，Enter / 空格由浏览器直接触发，不需要额外接管
      （胶囊不再承担点击已读，所以这里不再处理 .lvtag） */
 
-  /* ---------- 1.9 云端同步：GitHub API 写 position-costs.json → Pages 发布 → 其它设备 fetch ---------- */
-  var GH={owner:'nixhuang', repo:'market-monitor', path:'position-costs.json', branch:'main'};
+  /* ---------- 1.9 云端同步：GitHub API 写 data 分支的 position-costs.json → 其它设备读回 ---------- */
+  /* 10-20 起持仓**不再写 main**：main 的每个提交都会触发一次 Pages 构建，同步频繁时会互相顶掉，
+     站点就一直发不出去（10-19 事故）。data 分支不参与 Pages 发布，写多少次都不影响站点。 */
+  var GH={owner:'nixhuang', repo:'market-monitor', path:'position-costs.json', branch:'data'};
+  var GH_API='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/'+GH.path;
   var LS_TOKEN='mm_gh_token_v1';
   /* 同步状态只看「本机这一轮有没有改过持仓」：
      没动过 → 已同步（页面显示的就是权威数据，不再拿云端比对结果吓人——云端缺文件、
@@ -336,22 +339,34 @@
     for(var i=0;i<bytes.length;i++) s+=String.fromCharCode(bytes[i]);
     return btoa(s);
   }
-  /* 两个候选地址，按顺序试：
-     ① raw.githubusercontent.com —— 文件一提交就能读到（实测 API 上传后立刻 200）；
-     ② 站点同目录的 position-costs.json —— Pages 要等下一次构建才会发布新文件，常滞后几分钟。
-     都带时间戳绕过 CDN 缓存。 */
-  function cloudUrls(){
-    var t=Date.now();
-    return ['https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/'+GH.branch+'/'+GH.path+'?t='+t,
-            location.href.split(/[?#]/)[0].replace(/[^/]*$/,'')+GH.path+'?t='+t];
+  function unb64(str){
+    var bin=atob(String(str||'').replace(/\s+/g,'')), bytes=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  /* 两个候选来源，按顺序试：
+     ① 填了 token：GitHub API 直接读 data 分支 —— 没有 CDN 缓存，刚上传完立刻就是新的
+        （raw 地址有约 5 分钟 CDN 缓存；本机「干净」时云端会全量覆盖本机，读到旧缓存就会把刚传的数字冲回去）；
+     ② 没 token（只读设备）：raw.githubusercontent.com 的 data 分支，带时间戳。
+     站点同目录那份已不再更新（main 里的副本已删除），不再读取。 */
+  function cloudSources(){
+    var list=[], h=ghHead();
+    if(h) list.push(function(){
+      return fetch(GH_API+'?ref='+GH.branch+'&t='+Date.now(),{headers:h,cache:'no-store'})
+        .then(function(r){ return r.ok?r.json():null; })
+        .then(function(m){ return m&&m.content?JSON.parse(unb64(m.content)):null; });
+    });
+    list.push(function(){
+      return fetch('https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/'+GH.branch+'/'+GH.path+'?t='+Date.now(),
+                   {cache:'no-store'}).then(function(r){ return r.ok?r.json():null; });
+    });
+    return list;
   }
   function pullCloud(cb){
-    var us=cloudUrls(), i=0;
+    var us=cloudSources(), i=0;
     (function next(){
       if(i>=us.length){ cb(null); return; }
-      var u=us[i++];
-      fetch(u,{cache:'no-store'}).then(function(r){ return r.ok?r.json():null; })
-        .then(function(j){ if(j&&j.items) cb(j); else next(); })
+      us[i++]().then(function(j){ if(j&&j.items) cb(j); else next(); })
         .catch(function(){ next(); });
     })();
   }
@@ -378,8 +393,8 @@
   function pushCloud(data, cb){
     var h=ghHead(true);
     if(!h){ cb(false,'未填 token'); return; }
-    var api='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/'+GH.path;
-    fetch(api+'?ref='+GH.branch,{headers:ghHead(),cache:'no-store'})
+    var api=GH_API;
+    fetch(api+'?ref='+GH.branch+'&t='+Date.now(),{headers:ghHead(),cache:'no-store'})
       .then(function(r){ return r.ok?r.json():null; })
       .then(function(meta){
         var body={message:'持仓同步 '+new Date().toISOString().slice(0,19).replace('T',' '),
@@ -558,7 +573,7 @@
   var dirty=false;
   try{ dirty=(localStorage.getItem(LS_PENDING)==='1'); }catch(e){}
 
-  // 打开页面就拉云端 position-costs.json（Pages 会直接发布它）：本机优先，只补本机没有的项
+  // 打开页面就拉云端（data 分支的 position-costs.json）：本机有未上传改动时只补缺项，干净时云端全量覆盖
   try{ startPull(); }catch(e){ SYNC=dirty?'local':'nocloud'; }
 
   /* ---------- 3. 「仓位管理」独立面板（统计面板上方；编辑功能内置） ---------- */
@@ -691,7 +706,7 @@
       editing=false; snapshot=null; syncEditUI(); paint(); return;
     }
     SYNC='loading'; _retryN=0; _lastPushAt=Date.now(); paint();   // 手动保存＝重新给 2 次自动重试机会
-    // position-costs.json 不在 daily.yml 的 push.paths 白名单里 → 不跑行情抓取；Pages 会自动发布
+    // 写的是 data 分支：不触发任何 workflow，也不触发 Pages 构建
     pushCloud(DATA, function(ok,msg){
       if(ok){ CLOUD=JSON.parse(JSON.stringify(DATA)); write(LS_CLOUD, DATA); SYNC='synced'; SYNC_MSG=''; setPending(false); }
       else  { SYNC='error'; SYNC_MSG=msg||'上传失败'; setPending(true); scheduleRetry(); }

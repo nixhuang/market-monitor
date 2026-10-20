@@ -465,9 +465,6 @@ S = load_settings()
 # 因为盘中价格一直在动，等收盘才确认会错过时机
 BOLL_NEAR_PCT = S["boll_near_pct"]
 
-def log(msg):
-    print(f"[{datetime.now(TZ).strftime('%H:%M:%S')}] {msg}", flush=True)
-
 
 # ---------------------------------------------------------------- FRED
 
@@ -2590,35 +2587,6 @@ def boll_streak(closes, n=20, k=2.0, near_pct=0.5, max_days=120, highs=None, low
             i -= 1
         out[side] = {"days": days, "cross": cross}
     return out
-
-
-def dca_status(dates, start, every):
-    """定投节奏：从 start 那个交易日算起，每 every 个交易日提醒一次。
-
-    无状态设计——不用记「上次提醒是哪天」，只按日历推，所以改间隔、改起始日随时生效，
-    也不存在脚本写回持仓文件导致的循环触发。
-
-    返回 None（没配置 / 数据不够）或
-      {"count": int, "due": bool, "next_in": int}
-        count   从 start 到今天一共经过几个交易日（start 当天算第 1 个）
-        due     今天是不是定投日
-        next_in 距下一个定投日还差几个交易日（0 = 就是今天）
-    """
-    if not dates or not start or not every:
-        return None
-    try:
-        every = int(every)
-    except (TypeError, ValueError):
-        return None
-    if every <= 0:
-        return None
-    start = str(start).strip()
-    cnt = sum(1 for d in dates if d and str(d) >= start)
-    if cnt == 0:
-        return None                      # 起始日在数据范围之后，还没开始
-    idx = cnt - 1
-    rem = (-idx) % every
-    return {"count": cnt, "due": rem == 0, "next_in": rem, "every": every}
 
 
 def streak_tail(st, rail="上轨"):
@@ -4922,7 +4890,7 @@ tr.gray td{color:var(--dim)}
 .oil-reference-row.red .oil-state{color:var(--red)}
 .oil-reference-row.yellow .oil-state{color:var(--yellow)}
 .oil-reference-row.green .oil-state{color:var(--green)}
-.oil-rise{color:#f85149} .oil-fall{color:#3fb950}
+.oil-rise{color:var(--up)} .oil-fall{color:var(--down)}
 #macroCard td:nth-child(3) .unit{white-space:nowrap}
 @media(max-width:600px){.oil-reference-row td{padding:8px 6px}.oil-reference-row .reference-detail{font-size:10.5px}#macroCard td:nth-child(3) .unit{font-size:9px}}
 .reference-alert{padding:13px 14px;border-bottom:1px solid var(--line)}

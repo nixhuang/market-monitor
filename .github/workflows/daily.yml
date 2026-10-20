@@ -18,15 +18,9 @@ on:
       - 'cost_panel.js'
       - 'position-costs.seed.json'    # 持仓数量/现金/固定收益的种子：改了要重跑才会注入新页面
       - '.github/workflows/daily.yml'
-  schedule:
-    # 目标：美东周一至周五 20:15（落在纳斯达克 23/5 交易的 20:00–21:00 休盘窗口内）= 夏令时北京次日 08:15 / 冬令时北京次日 09:15。
-    # 不用 GitHub 的 timezone 写法（实测定时触发时间对不上），改用普通 UTC cron，夏冬令时各排一个时点：
-    #   夏令时(EDT) 美东 20:15 = 00:15 UTC；冬令时(EST) 美东 20:15 = 01:15 UTC。
-    # 两个时点每天都会触发，由下面的 gate 任务按美东当地时间只放行对的那一个。
-    # 美东周一~周五晚 = UTC 周二~周六。
-    # 用等价的星期名称重新登记原定时配置；执行时点与频率不变，不增加新任务。
-    - cron: '15 0 * * TUE-SAT'
-    - cron: '15 1 * * TUE-SAT'
+  # 不再使用 GitHub 自带的 schedule：实测每次都迟到 4–6 小时，到了也落在美东 20:00–21:00 窗口外被挡掉，白跑。
+  # 定时改由 Cloudflare Worker（cloudflare/market-monitor-trigger.js）在美东 20:15 / 20:45 派发 ensure-morning.yml，
+  # 由它判断要不要派发本工作流（source=schedule-fallback，按定时口径跑）。
   workflow_dispatch:
     inputs:
       request_id:
@@ -48,39 +42,14 @@ permissions:
   contents: write
 
 jobs:
-  gate:
-    # 只对定时触发做判断：美东当地时间在 20:00–21:00（休盘窗口）之间才放行，其余时点（夏冬令时里不对的那一个、或被拖过 21:00）直接跳过。
-    # 手动运行、保存清单触发、自动补跑都不受影响。
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    outputs:
-      go: ${{ steps.g.outputs.go }}
-    steps:
-      - id: g
-        run: |
-          if [ "${{ github.event_name }}" != "schedule" ]; then
-            echo "go=yes" >> "$GITHUB_OUTPUT"; exit 0
-          fi
-          hm=$(TZ=America/New_York date +%H%M)
-          m=$(( 10#${hm:0:2} * 60 + 10#${hm:2:2} ))
-          echo "美东当地时间 ${hm:0:2}:${hm:2:2}（分钟数 $m）"
-          if [ "$m" -ge 1200 ] && [ "$m" -lt 1260 ]; then
-            echo "go=yes" >> "$GITHUB_OUTPUT"
-          else
-            echo "不在美东 20:00–21:00 休盘窗口，本次是冬夏令时里不对的那个时点（或被拖过 21:00），跳过"
-            echo "go=no" >> "$GITHUB_OUTPUT"
-          fi
-
   # 发布前自检：九项离线测试（tests.yml，不联网、不读线上设置）。
   # 不通过 → build 不会运行 → 不抓数据、不生成页面、不发布，页面保持上一次的内容，Actions 里这一轮显示红叉。
+  # （原来的 gate 任务只拦 GitHub 原生 schedule，schedule 删掉后一并删除；时间窗口由 ensure_schedule_run 把关。）
   test:
-    needs: gate
-    if: needs.gate.outputs.go == 'yes'
     uses: ./.github/workflows/tests.yml
 
   build:
-    needs: [gate, test]
-    if: needs.gate.outputs.go == 'yes'
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

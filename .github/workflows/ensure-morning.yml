@@ -1,16 +1,11 @@
 name: 早间自动结果保险
 run-name: "自动结果保险 · ${{ github.event_name }}"
 
-# GitHub 的 schedule 触发只是尽力而为，高负载时可能延迟或丢弃。
-# 这里在主定时任务之后再检查一次：当晚收盘结果还没生成，才补派发一次；已有结果或已有任务在跑则什么都不做。
+# 唯一入口：Cloudflare Worker（cloudflare/market-monitor-trigger.js）在美东 20:15 / 20:45 各派发一次。
+# monitor.py --ensure-schedule-run 判断：不在美东 20:00–21:00 → 不做；当晚结果已存在且当日日线齐 → 不做；
+# 主任务正在排队/运行 → 不做；否则派发 daily.yml（source=schedule-fallback，按定时口径跑）。
+# GitHub 自带 schedule 已删除（实测每次迟到 4–6 小时，全被窗口挡掉）。
 on:
-  schedule:
-    # 同样改用普通 UTC cron（美东周一~周五晚 = UTC 周二~周六）：
-    # 00:45 / 01:45 UTC 分别是夏令时、冬令时的美东 20:45（落在 20:00-21:00 休盘窗口内，晚于主任务 30 分钟）。
-    # 不对的那个时点（美东不在 20:00-21:00）monitor.py 会直接退出，什么都不做。
-    # 等价的星期名称用于重新登记原定时配置，仍只有原两组夏冬令时检查时点。
-    - cron: '45 0 * * TUE-SAT'
-    - cron: '45 1 * * TUE-SAT'
   workflow_dispatch:
 
 permissions:

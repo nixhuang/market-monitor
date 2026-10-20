@@ -6,8 +6,8 @@ run-name: "自动测试 · ${{ github.event_name }}"
 #   2. daily.yml 里作为「发布前检查」调用——测试不过，就不抓数据、不生成页面、不发布；
 #   3. 也可以手动点 Run workflow。
 # 机器人只提交 index.html / status.json，已排除，不会触发它。
-# position-costs.json 是网页端保存的持仓成本/数量（纯数据，不参与任何判定），
-# 每次保存都跑一遍离线测试没意义，一并排除，让保存彻底不触发任何 workflow。
+# position-costs.json 已迁到 data 分支（网页端持仓同步只写 data，不再写 main），这条排除保留作兜底。
+# （以前每次保存都会在 main 上提交、触发 Pages 构建，10-19 曾因此连续顶掉构建。）
 on:
   push:
     branches: [main]

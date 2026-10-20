@@ -1,9 +1,5 @@
 <style>
-/* ===== 0. 涨跌色统一「绿涨红跌」 ===== */
-/* 页面自带 --up:#3fb950（绿） / --down:#f85149（红），个股涨跌幅本来就是这个方向。
-   唯一写反的残留是 WTI 原油行，这里在 DEMO 里先扳正；正式落 monitor.py 时改那一行。 */
-.oil-rise{color:var(--up)!important}
-.oil-fall{color:var(--down)!important}
+/* 涨跌色「绿涨红跌」：WTI 原油行的 .oil-rise/.oil-fall 已在 monitor.py 改正，这里不再覆盖。 */
 
 /* ===== 1. 持仓行的成本信息 + 位置条黄色竖条 ===== */
 /* 千万不要把 td 改成 display:flex —— 那样它会脱离 table-cell 语义、宽度塌成内容宽，
