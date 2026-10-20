@@ -263,9 +263,36 @@ def prepare_run():
     print("MM_STARTED_AT=" + when.isoformat())
 
 
+# 收盘口径下，「停在较早日线 + 本该有价却没取到」占比超过这个比例，视为源端当日日线还没就绪。
+# 实测：美东 20:15 前后各源会出现 99/100 停在前一交易日的空档（10-15/16/17 三次），19:12 与 22:30 后正常。
+FRESH_MAX_STALE_RATIO = 0.2
+
+
+def snapshot_freshness(snap, target=None):
+    """快照是否「当日数据齐」。返回 (fresh, today, expected)。
+
+    expected = 当日 + 较早 + 缺价（扣掉不支持的代码）；参考点位（reference_only）不计。
+    旧快照没有 today_prices 字段时退回看 actual_dates.max 是否到目标日。
+    """
+    snap = snap if isinstance(snap, dict) else {}
+    su = snap.get("summary") or {}
+    today, prior, missing = su.get("today_prices"), su.get("prior_prices"), su.get("missing_prices")
+    if not isinstance(today, int) or not isinstance(prior, int):
+        latest = (snap.get("actual_dates") or {}).get("max") or ""
+        return bool(target) and latest >= target, None, None
+    unsupported = su.get("unsupported_symbols")
+    unsupported = len(unsupported) if isinstance(unsupported, list) else 0
+    missing = max(0, (missing if isinstance(missing, int) else 0) - unsupported)
+    expected = today + prior + missing
+    if expected <= 0:
+        return False, today, expected
+    return (prior + missing) / expected <= FRESH_MAX_STALE_RATIO, today, expected
+
+
 def ensure_schedule_run():
     """保险：GitHub 定时任务可能被延迟或丢弃。若今晚（美东20:00之后）的收盘结果还没生成，
-    就补派发一次与定时任务等价的运行；已有结果或已有任务在排队/运行则不重复派发。"""
+    或生成了但当日日线不齐（源端还没出当日数据），就补派发一次与定时任务等价的运行；
+    结果齐全或已有任务在排队/运行则不重复派发。"""
     now_ny = datetime.now(timezone.utc).astimezone(US_TZ)
     if not 20 * 60 <= now_ny.hour * 60 + now_ny.minute < 21 * 60:
         # 夏冬令时两组时点每天都会触发；不在休盘窗口内（错季节的时点或被严重拖延）就什么都不做，避免抓到新一轮盘中价
@@ -279,8 +306,11 @@ def ensure_schedule_run():
         snap = {}
     if snap.get("target_trade_date") == plan["target"] and snap.get("mode") == "closed" \
             and (snap.get("summary") or {}).get("total"):
-        print(f"目标交易日 {plan['target']} 的收盘结果已存在，无需补跑")
-        return 0
+        fresh, today, expected = snapshot_freshness(snap, plan["target"])
+        if fresh:
+            print(f"目标交易日 {plan['target']} 的收盘结果已存在且当日数据齐（{today}/{expected}），无需补跑")
+            return 0
+        print(f"目标交易日 {plan['target']} 的结果已存在但当日日线不齐（当日 {today}/{expected}），补跑")
     repo, token = os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GH_TOKEN", "")
     headers = {"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json"}
     base = f"https://api.github.com/repos/{repo}/actions/workflows/daily.yml"
@@ -2346,6 +2376,24 @@ def valid_futures_identity(data, identity):
             and "CFD" not in str(data.get("quote_name", "")).upper())
 
 
+_SRC_DAYS = {}               # 本轮各数据源返回的最新日线日期分布：{源: {日期或"无数据": 只数}}
+_SRC_DAYS_LOCK = threading.Lock()
+
+
+def _note_source_day(name, data):
+    """记一笔「这个源给到哪天」。只用于日志与 status.json 的 data_lag，不参与取舍。"""
+    day = (data.get("dates") or [""])[-1] if isinstance(data, dict) else ""
+    with _SRC_DAYS_LOCK:
+        bucket = _SRC_DAYS.setdefault(name, {})
+        key = day or "无数据"
+        bucket[key] = bucket.get(key, 0) + 1
+
+
+def source_day_summary():
+    with _SRC_DAYS_LOCK:
+        return {name: dict(sorted(days.items(), reverse=True)) for name, days in _SRC_DAYS.items()}
+
+
 def fetch_history(symbol):
     """普通标的 Yahoo → stooq → Nasdaq；指数／期货只取经映射的 Yahoo 日线。
 
@@ -2369,12 +2417,18 @@ def fetch_history(symbol):
     for name, loader in loaders:
         data = loader(alias or symbol)
         if not data:
+            _note_source_day(name, None)
             continue
         if is_future and not valid_futures_identity(data, identity):
             log(f"  ! {symbol} 期货身份/币种/日线时区不匹配，拒绝替代报价")
             continue
         if CLOSED_ONLY:
+            raw_last = (data.get("dates") or [""])[-1]
             data = trim_history(data, TARGET_DATE)
+            # 记录「裁剪后」给到哪天；源给了目标日之后的K线（被裁掉）单独标出来，便于判断是不是换日把当日K线挪走了
+            _note_source_day(name if raw_last <= TARGET_DATE else f"{name}(含>{TARGET_DATE}的K线)", data)
+        else:
+            _note_source_day(name, data)
         if not data or not valid_history(data) or data["dates"][-1] > TARGET_DATE:
             log(f"  ! {symbol} {name} 日线不合法或超过目标交易日，换源")
             continue
@@ -6090,7 +6144,7 @@ def collect_quotes(symbols):
         STOOQ_GATE.reset(True)
         run(failed, max(1, QUOTE_WORKERS // 2), keep_better=True)
     done = sum(isinstance(v, dict) for v in results.values())
-    log(f"行情抓取完成：成功 {done}/{len(symbols)}")
+    log(f"行情抓取完成：取到 {done}/{len(symbols)}（是不是目标交易日的日线，看下面「当日日线」那行）")
     return results
 
 
@@ -6274,7 +6328,11 @@ def main(argv=None):
                 if not spy_key:
                     spy_key = "SPY"
                     to_fetch = to_fetch + [spy_key]
+        with _SRC_DAYS_LOCK:
+            _SRC_DAYS.clear()
         fetched = collect_quotes(to_fetch)
+        for src, days in source_day_summary().items():
+            log(f"  {src} 最新日线：" + "，".join(f"{d} {n} 只" for d, n in days.items()))
         bench_data = None
         if bench_rows:
             bench_data = {"dates": [d for d, _ in bench_rows], "closes": [v for _, v in bench_rows]}
@@ -6398,6 +6456,23 @@ def main(argv=None):
                              "quota": cons_stat.get("quota", _consensus_quota(prev_cons, quota_day))}
     snapshot["earnings"] = earn_stat
     snapshot["reference_alerts"] = reference_alerts
+    fresh, today_n, expected_n = snapshot_freshness(snapshot, TARGET_DATE)
+    snapshot["data_lag"] = {"target": TARGET_DATE, "fresh": fresh, "today": today_n, "expected": expected_n,
+                            "by_source": source_day_summary()}
+    if universe:
+        log(f"当日日线 {today_n}/{expected_n}（目标交易日 {TARGET_DATE}）" + ("" if fresh else " —— 不齐"))
+    # 发布门槛：只拦定时口径（含保险补跑）。当日日线不齐就不覆盖线上页面，也不推送，
+    # 让 status.json 保持旧的目标日 → 20:45 保险会判「缺失」再补跑一次。手动/保存触发照常发布。
+    if EVENT == "schedule" and CLOSED_ONLY and universe and not fresh:
+        msg = (f"定时运行：目标交易日 {TARGET_DATE} 当日日线只有 {today_n}/{expected_n}，"
+               f"源端当日数据未就绪，本轮不发布、不推送（页面保留上一版）")
+        log("! " + msg)
+        print(f"::warning title=当日数据不齐，未发布::{msg}", flush=True)
+        gh_out = os.environ.get("GITHUB_OUTPUT")
+        if gh_out:
+            with open(gh_out, "a", encoding="utf-8") as f:
+                f.write("publish=no\n")
+        return 0
     supported_items = [d for d in items if quote_supported(d["symbol"])]
     html = render(macro, items, len(universe), data_down=bool(supported_items)
                   and all(d["level"] == "gray" for d in supported_items), snapshot=snapshot,

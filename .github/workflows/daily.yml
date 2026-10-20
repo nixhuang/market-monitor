@@ -105,8 +105,10 @@ jobs:
           python monitor.py --prepare-run >> "$GITHUB_ENV"
 
       - name: 抓数据并生成页面
+        id: gen
         # FRED_API_KEY 是可选 Secret：配置了才能拿到跑路价签和收益率曲线
         # （Actions 访问 fred.stlouisfed.org 的 CSV 接口会被 CDN 掐断，只有官方 API 域名通）
+        # 定时口径下当日日线不齐时 monitor.py 不写页面并输出 publish=no，下一步整步跳过（绝不能拿旧文件去覆盖 main）。
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           # 微信推送（Server酱）：没配就只生成页面、不推送
@@ -114,6 +116,7 @@ jobs:
         run: python monitor.py
 
       - name: 提交更新
+        if: steps.gen.outputs.publish != 'no'
         # 抓取要几分钟，期间你保存的清单/设置可能已先推送到 main，直接 git push 会被拒绝，
         # 白白丢掉整轮结果。这里每次先同步最新 main，再把本轮生成的两个文件放上去重试。
         run: |

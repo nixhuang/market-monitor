@@ -653,7 +653,7 @@ class TestGroups(unittest.TestCase):
             detail = dict(symbol=symbol, note='', price=100, chg=0, level='yellow',
                           group=group, signals=['板块异动'], data_date='2026-10-07')
             return 'yellow', detail['signals'], detail
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             for name, content in [('holdings.json', cfg), ('settings.json', {})]:
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
@@ -690,7 +690,7 @@ class TestGroups(unittest.TestCase):
             detail = dict(symbol=symbol, note='', price=100, chg=0, level='green',
                           group=group, signals=[], data_date='2026-10-02')
             return 'green', [], detail
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             for name, content in [('holdings.json', cfg), ('settings.json', {})]:
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
@@ -773,7 +773,7 @@ class TestGroups(unittest.TestCase):
         macro = {k: {'ok': True, 'name': monitor.FRED_SERIES[k]['name'], 'value': v,
                      'prev': v, 'date': '2026-10-07'}
                  for k, v in (('vix', 21.3), ('sp500', 6700.5), ('ust10', 4.25))}
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             for name, content in [('holdings.json', cfg), ('settings.json', {})]:
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
@@ -810,7 +810,7 @@ class TestGroups(unittest.TestCase):
             d = dict(symbol=symbol, note='', price=100, chg=0, level='green',
                      group=group, signals=[], data_date='2026-10-07')
             return 'green', [], d
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             for name, content in [('holdings.json', cfg), ('settings.json', {})]:
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
@@ -838,7 +838,7 @@ class TestGroups(unittest.TestCase):
         import tempfile
         cfg = {'positions': {s: {} for s in ('FIRST', 'SECOND', 'THIRD')}}
         fetched = []
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             for name, content in [('holdings.json', cfg), ('settings.json', {})]:
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
@@ -1493,7 +1493,7 @@ class TestGroups(unittest.TestCase):
         bad = dict(monitor.DEFAULT_SETTINGS, boll_n=0, rsi_low=80, rsi_high=70,
                    amp_red=3, amp_yellow=5, chg_red=4.5)
         self.assertEqual(monitor.valid_settings(bad), 'boll_n')
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:
                 json.dump(bad, f)
             with patch.object(monitor, 'BASE', directory):
@@ -1506,7 +1506,7 @@ class TestGroups(unittest.TestCase):
 
     def test_moving_average_periods_are_configurable_and_validated(self):
         import tempfile
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             for values in ({'ma_short': 20, 'ma_long': 250},
                            {'ma_short': 50.5, 'ma_long': 999},
                            {'ma_short': 200, 'ma_long': 50}):
@@ -1539,7 +1539,7 @@ class TestGroups(unittest.TestCase):
     def test_ma_zero_settings_validate_and_persist_independently(self):
         import tempfile
         legal = [(0, 0), (0, 250), (50, 0), (250, 0), (0, 2), (2, 250), (50, 50)]
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             for short, long in legal:
                 values = dict(monitor.DEFAULT_SETTINGS, ma_short=short, ma_long=long)
                 self.assertEqual(monitor.valid_settings(values), '', (short, long))
@@ -1626,35 +1626,88 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(run('2026-10-10T01:45:00+00:00'), 0)   # 夏令时美东21:45
         self.assertEqual(run('2026-12-10T00:45:00+00:00'), 0)   # 冬令时美东19:45
 
-    def test_ensure_schedule_run_only_acts_inside_pause_window(self):
+    def test_ensure_schedule_run_redispatches_when_daily_bars_stale(self):
+        """结果存在但当日日线不齐（源端换日空档）→ 保险必须补跑；齐了才跳过。"""
         import tempfile
         from unittest.mock import MagicMock
         real = monitor.datetime
 
-        def at(iso):
-            class F(real):
-                @classmethod
-                def now(cls, tz=None):
-                    return real.fromisoformat(iso)
-            return F
+        class At(real):
+            @classmethod
+            def now(cls, tz=None):
+                return real.fromisoformat('2026-10-17T00:45:00+00:00')   # 美东 10-16 20:45
 
-        def run(iso):
+        def run(summary, actual=None):
             get = MagicMock()
             get.return_value.json.return_value = {'workflow_runs': []}
             post = MagicMock()
+            snap = {'target_trade_date': '2026-10-16', 'mode': 'closed',
+                    'summary': {'total': 100, **summary}}
+            if actual:
+                snap['actual_dates'] = actual
             with tempfile.TemporaryDirectory() as tmp, \
-                    patch.object(monitor, 'BASE', tmp), \
-                    patch.object(monitor, 'datetime', at(iso)), \
-                    patch.object(monitor.requests, 'get', get), \
-                    patch.object(monitor.requests, 'post', post):
+                    patch.object(monitor, 'BASE', tmp), patch.object(monitor, 'datetime', At), \
+                    patch.object(monitor.requests, 'get', get), patch.object(monitor.requests, 'post', post):
+                with open(os.path.join(tmp, 'status.json'), 'w', encoding='utf-8') as f:
+                    json.dump(snap, f)
                 self.assertEqual(monitor.ensure_schedule_run(), 0)
             return post.call_count
-        # 对的时点：夏令时 00:45 UTC(美东20:45)、冬令时 01:45 UTC(美东20:45) -> 结果缺失才补派发
-        self.assertEqual(run('2026-10-10T00:45:00+00:00'), 1)
-        self.assertEqual(run('2026-12-10T01:45:00+00:00'), 1)
-        # 错季节或被拖过21:00的时点：什么都不做
-        self.assertEqual(run('2026-10-10T01:45:00+00:00'), 0)   # 夏令时美东21:45
-        self.assertEqual(run('2026-12-10T00:45:00+00:00'), 0)   # 冬令时美东19:45
+        # 10-17 那次的真实形态：当日 1、较早 99 → 补跑
+        self.assertEqual(run({'today_prices': 1, 'prior_prices': 99, 'missing_prices': 0}), 1)
+        # 大面积缺价（源全挂）也算不齐
+        self.assertEqual(run({'today_prices': 10, 'prior_prices': 0, 'missing_prices': 90}), 1)
+        # 齐：少数停牌/不支持代码不影响
+        self.assertEqual(run({'today_prices': 97, 'prior_prices': 1, 'missing_prices': 2,
+                              'unsupported_symbols': ['X', 'Y']}), 0)
+        # 旧快照没有计数字段：看 actual_dates.max
+        self.assertEqual(run({}, {'min': '2026-10-16', 'max': '2026-10-16'}), 0)
+        self.assertEqual(run({}, {'min': '2026-10-15', 'max': '2026-10-15'}), 1)
+
+    def test_schedule_run_with_stale_bars_does_not_publish(self):
+        """定时口径当日日线不齐：不写 index.html/status.json、不推送、输出 publish=no；手动口径照常发布。"""
+        import tempfile
+        cfg = {'positions': {'AAPL': {}, 'MSFT': {}}}
+
+        def analyzed(symbol, settings, data, group):
+            detail = dict(symbol=symbol, note='', price=100, chg=0, level='green',
+                          group=group, signals=[], data_date='2026-10-15')   # 停在前一交易日
+            return 'green', [], detail
+
+        def run(event):
+            with tempfile.TemporaryDirectory() as directory:
+                for name, content in [('holdings.json', cfg), ('settings.json', {})]:
+                    with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
+                        json.dump(content, f)
+                out_file = os.path.join(directory, 'gh_output')
+                with patch.dict(os.environ, {'GITHUB_OUTPUT': out_file}), \
+                        patch.object(monitor, 'EVENT', event), patch.object(monitor, 'CLOSED_ONLY', True), \
+                        patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-16'), \
+                        patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
+                        patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                        patch.object(monitor, 'build_reference_alerts', return_value={}), \
+                        patch.object(monitor, 'build_macro', return_value={}), \
+                        patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
+                        patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
+                        patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
+                        patch.object(monitor, 'fundamental_check', return_value=None), \
+                        patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
+                        patch.object(monitor, 'update_consensus', return_value=({}, {})), \
+                        patch.object(monitor, 'global_dca', return_value=None), \
+                        patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
+                    self.assertEqual(monitor.main([]), 0)
+                gh = open(out_file, encoding='utf-8').read() if os.path.exists(out_file) else ''
+                wrote = os.path.exists(os.path.join(directory, 'status.json'))
+                status = json.load(open(os.path.join(directory, 'status.json'), encoding='utf-8')) if wrote else None
+                return gh, wrote, notify.called, status
+        gh, wrote, notified, _ = run('schedule')
+        self.assertIn('publish=no', gh)
+        self.assertFalse(wrote)
+        self.assertFalse(notified)
+        gh, wrote, notified, status = run('workflow_dispatch')
+        self.assertNotIn('publish=no', gh)
+        self.assertTrue(wrote)
+        self.assertEqual(status['data_lag']['fresh'], False)
+        self.assertEqual((status['data_lag']['today'], status['data_lag']['expected']), (0, 2))
 
     def test_trim_history_keeps_missing_validity_key_missing(self):
         """源没给 ma_range_valid 时，裁剪不能补空列表，否则 52周区间与日内高低整段判废。
@@ -2644,7 +2697,7 @@ class TestTargets(unittest.TestCase):
             return 'green', [], dict(symbol=symbol, note='', price=100, chg=0, level='green', group=group,
                                      signals=[], data_date='2026-10-07')
         cache = {'AAPL': {'s': 'ok', 'avg': 328.09, 'upd': '2026-10-07', 'r': '2026-10-01'}}
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             for name, content in [('holdings.json', cfg), ('settings.json', {})]:
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
@@ -2681,7 +2734,7 @@ class TestTargets(unittest.TestCase):
         def analyzed(symbol, settings, data, group):
             return 'green', [], dict(symbol=symbol, note='', price=100, chg=0, level='green', group=group,
                                      signals=[], data_date='2026-10-07')
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             for name, content in [('holdings.json', cfg), ('settings.json', {})]:
                 with open(os.path.join(directory, name), 'w', encoding='utf-8') as f:
                     json.dump(content, f)
@@ -3012,7 +3065,7 @@ class TestCacheAudit(unittest.TestCase):
         def analyzed(symbol, settings, data, group):
             return 'green', [], dict(symbol=symbol, note='', price=100, chg=0, level='green', group=group,
                                      signals=[], data_date='2026-10-09')
-        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             with open(os.path.join(directory, 'holdings.json'), 'w', encoding='utf-8') as f:
                 json.dump(cfg, f)
             with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:

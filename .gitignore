@@ -5,3 +5,6 @@ preview.html
 preview-data.json
 最新分组看板.html
 Temp/
+
+# 测试临时目录（Windows 下沙箱删不掉会残留）
+tmp*/
