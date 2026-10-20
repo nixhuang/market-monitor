@@ -4,6 +4,7 @@ run-name: "市场自检 · ${{ github.event_name }} · ${{ inputs.request_id || 
 on:
   # 改了清单或脚本就立刻重跑，不用再去点 Run workflow
   # 只监听这几个文件：workflow 自己提交 index.html 不会触发，避免空转
+  # 只改 tests/ 不会触发本工作流（tests.yml 单独跑）；要发布就动下面任一文件，或在页面点「运行」
   push:
     branches: [main]
     paths:
