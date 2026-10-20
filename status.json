@@ -9,15 +9,15 @@
     "next_in": 18,
     "next_date": "2026-11-12"
   },
-  "run_id": "39393969926",
+  "run_id": "39414118360",
   "request_id": "",
-  "source_sha": "9d78b07bbbf7c4c96e25e0205309767bba8e2738",
-  "input_hash": "e7f5b9805e322a29c76d5ed08c80fd00c292c5adba77e89f8d91181580c4bb37",
-  "build_id": "39393969926-1",
-  "started_at": "2026-10-20T08:31:05+00:00",
-  "started_at_bj": "2026-10-20T16:31:05+08:00",
-  "finished_at": "2026-10-20T16:32:12.428679+08:00",
-  "finished_at_bj": "2026-10-20T16:32:12+08:00",
+  "source_sha": "97f7716604beb2dd609357f98ecbebccbd8075bf",
+  "input_hash": "9afbe826b6b34a10bad2cec758e9cf82cebe02f629b292a5119abafe20ec226d",
+  "build_id": "39414118360-1",
+  "started_at": "2026-10-20T11:19:23+00:00",
+  "started_at_bj": "2026-10-20T19:19:23+08:00",
+  "finished_at": "2026-10-20T19:20:23.060970+08:00",
+  "finished_at_bj": "2026-10-20T19:20:23+08:00",
   "event": "push",
   "target_trade_date": "2026-10-19",
   "mode": "closed",
@@ -1575,7 +1575,7 @@
     "checked_at": "2026-10-15T09:37:08.463966-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-20T08:32:09.473380+00:00"
+    "asof": "2026-10-20T11:20:19.012301+00:00"
   },
   "fundamental": {
     "checked": 21,
@@ -2767,7 +2767,7 @@
       }
     },
     "schema_version": 2,
-    "asof": "2026-10-20T08:32:12.409579+00:00",
+    "asof": "2026-10-20T11:20:23.041504+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -3888,7 +3888,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-20T08:32:12.369668+00:00",
+    "asof": "2026-10-20T11:20:23.002271+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -5870,7 +5870,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-20T08:32:12.337298+00:00",
+    "asof": "2026-10-20T11:20:22.969982+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -7304,9 +7304,9 @@
       "date": "2026-10-19",
       "contract": "Crude Oil Dec 26"
     },
-    "assessed_at": "2026-10-20T16:32:08.730296+08:00",
+    "assessed_at": "2026-10-20T19:20:17.598475+08:00",
     "schema_version": 2,
-    "asof": "2026-10-20T08:32:09.644296+00:00"
+    "asof": "2026-10-20T11:20:19.306407+00:00"
   },
   "data_lag": {
     "target": "2026-10-19",
