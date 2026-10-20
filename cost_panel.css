@@ -65,6 +65,10 @@
 .cost-manage .t-wt,.cost-manage .cost-cell.wt{color:var(--text);font-weight:600}
 .cost-manage .t-wt .k{color:var(--dim);font-weight:400}
 .cost-state{font-size:11px;white-space:nowrap;color:var(--dim)}
+.cost-manage .cost-sum,.cost-manage .cost-legend b,.cost-subhead .cnt b{text-align:center}
+.cost-notice{margin-top:6px;color:#f0c674;white-space:normal}
+.cost-notice button{margin-left:6px;background:#1b2434;border:1px solid #33415a;
+  color:#cfd8e6;border-radius:5px;font:inherit;cursor:pointer}
 /* 全局 .warn 是「带背景边框的整块警告框」（padding 11px 14px / 14px / 圆角），
    标题右侧只是个小状态字，必须整块样式还原成纯文字 */
 .cost-state .warn,.cost-state .ok{background:none;border:0;padding:0;margin:0;border-radius:0;
@@ -97,7 +101,7 @@
 /* 框与框之间留一口气：否则上一个列表的最后一行紧贴下一个框的合计条 */
 .cost-manage .signal-member-block+.signal-member-block{margin-top:9px}
 .cost-manage .signal-members-panel{margin-top:6px}
-/* 每行：名称（代码 / 中文备注名 上下两行）+ 5 个右对齐数值列。
+/* 每行：名称（代码 / 中文备注名 上下两行）靠左，5 个数值列格内居中。
    注意 grid 要放在 li 里面的 .cost-grid 上：直接把 li 设成 display:grid 会覆盖
    display:list-item，行首那个列表圆点（::marker）就没了。 */
 .cost-manage .signal-member-block h5{margin-bottom:2px}
@@ -118,7 +122,7 @@
 .cost-manage .signal-member-list li>.cost-grid>:nth-child(n+2){
   border-left:1px solid rgba(255,255,255,.075);padding-left:7px}
 .cost-colhead{font-size:10.5px;color:var(--dim);padding:2px 0 3px 16px;border-bottom:1px solid #1a2029}
-.cost-colhead span{text-align:right;white-space:nowrap}
+.cost-colhead span{text-align:center;white-space:nowrap}
 .cost-colhead span:first-child{text-align:left}
 .cost-manage .signal-member-list li{padding:4px 0}
 /* 框标题＝合计行：放在「标的／成本价／…」那一排栏目名称的下方，
@@ -127,7 +131,7 @@
 .cost-block-title{margin:3px 0 4px;font-size:12.5px;font-weight:600;color:#bfd5ff;
   font-variant-numeric:tabular-nums;white-space:nowrap;padding:3px 0 4px 16px;
   background:rgba(143,184,240,.10);border-radius:5px}
-.cost-block-title>span{text-align:right;min-width:0}
+.cost-block-title>span{text-align:center;min-width:0}
 .cost-block-title .t-name{grid-column:1;text-align:left;overflow:hidden;text-overflow:ellipsis}
 /* 名称与数量之间必须有间隔：grid 容器会把两个 span 之间的空白文本节点吃掉，
    靠字面空格是排不出来的，只能给 margin */
@@ -144,7 +148,7 @@
 #costMembers li.lv-green::marker{color:var(--green)}
 #costMembers li.lv-gray::marker{color:var(--dim)}
 #costMembers li.is-cash::marker{color:var(--dim)}
-.cost-name{min-width:0;line-height:1.3}
+.cost-name{min-width:0;line-height:1.3;text-align:left}
 /* 名称两行：① 代码 + ETF 胶囊（同一行，胶囊紧贴代码右侧）② 中文备注名（灰、小字） */
 .cost-name .syrow{display:flex;align-items:center;gap:4px;min-width:0}
 .cost-name .sy{font-size:12.5px;font-weight:600;color:var(--text);min-width:0;
@@ -154,7 +158,7 @@
 .cost-name .tag{flex:none;margin-left:0;font-size:10px;font-weight:600;letter-spacing:.3px;padding:0 4px;
   line-height:1.5;border-radius:4px;color:#8fb8f0;background:rgba(107,163,240,.14);
   border:1px solid rgba(107,163,240,.32)}
-.cost-cell{text-align:right;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;
+.cost-cell{text-align:center;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;
   color:var(--text)}
 /* 名称链接：跟统计面板名单里那一条完全同款（灰蓝虚线下划线），
    不用浏览器默认的蓝色实线——两个面板里点名字的手感必须一致。
@@ -182,7 +186,7 @@
 .cost-manage li.is-cash .cost-name .cn{color:var(--text)}
 /* 编辑态：成本价 / 数量 / 现金 / 固定收益 就地换成输入框，列宽与版式不变 */
 .cost-cell input{width:100%;min-width:0;background:#0d121b;border:1px solid #2a3342;color:var(--text);
-  border-radius:6px;padding:2px 5px;font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+  border-radius:6px;padding:2px 5px;font-size:12px;text-align:center;font-variant-numeric:tabular-nums}
 .cost-cell input:focus{outline:none;border-color:#8fb8f0}
 .cost-cell input::placeholder{color:#5a6473}
 /* [hidden] 只是 UA 的 display:none，作者写的 display:flex 会盖掉它 → 必须显式再压一次 */
@@ -218,14 +222,14 @@
 .cost-mini .t-name{grid-column:1;text-align:left;color:#bfd5ff;font-weight:600;
   overflow:hidden;text-overflow:ellipsis}
 .cost-mini .t-name .cnt{font-size:11.5px;font-weight:400;color:var(--dim);margin-left:5px}
-.cost-mini .c-cost{grid-column:2;text-align:right;font-size:12px}
-.cost-mini .t-mv{grid-column:4;text-align:right;font-size:12px}
-.cost-mini .t-pnl{grid-column:5;text-align:right;font-size:12px}
-.cost-mini .t-wt{grid-column:6;text-align:right;font-size:12px}
+.cost-mini .c-cost{grid-column:2;text-align:center;font-size:12px}
+.cost-mini .t-mv{grid-column:4;text-align:center;font-size:12px}
+.cost-mini .t-pnl{grid-column:5;text-align:center;font-size:12px}
+.cost-mini .t-wt{grid-column:6;text-align:center;font-size:12px}
 .cost-mini .dim{color:var(--dim)}
 .cost-mini .k{font-size:11px;font-weight:400;color:var(--dim);margin-right:3px}
 .cost-mini input{width:100%;min-width:0;background:#0d121b;border:1px solid #2a3342;color:var(--text);
-  border-radius:6px;padding:2px 5px;font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+  border-radius:6px;padding:2px 5px;font-size:12px;text-align:center;font-variant-numeric:tabular-nums}
 .cost-mini input:focus{outline:none;border-color:#8fb8f0}
 
 /* ===== 当日盈亏贡献：只看今天谁在赚、谁在亏（总盈亏券商里能看到，这里不重复） ===== */
@@ -251,7 +255,7 @@
 .cost-contrib{list-style:none;margin:0;padding:0 0 0 16px}
 .cost-contrib li{display:grid;align-items:center;gap:0 8px;padding:2px 0;font-size:12px;
   grid-template-columns:minmax(70px,1.4fr) minmax(70px,1.6fr) 48px 64px;font-variant-numeric:tabular-nums}
-.cost-contrib .cn-name{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cost-contrib .cn-name{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
 /* 贡献条：中间一条基线，正贡献往右（绿）、负贡献往左（红），长度按最大那条的绝对值归一 */
 .cost-contrib .cbar{position:relative;height:7px;background:#121924;border:1px solid #1d2635;
   border-radius:3px;overflow:hidden}
@@ -260,7 +264,7 @@
 .cost-contrib .cbar i{position:absolute;top:0;bottom:0;display:block}
 .cost-contrib .cbar i.up{background:var(--up);left:50%}
 .cost-contrib .cbar i.down{background:var(--down);right:50%}
-.cost-contrib .cv,.cost-contrib .ca{text-align:right;white-space:nowrap}
+.cost-contrib .cv,.cost-contrib .ca{text-align:center;white-space:nowrap}
 .cost-contrib .cv.up,.cost-contrib .ca.up{color:var(--up)}
 .cost-contrib .cv.down,.cost-contrib .ca.down{color:var(--down)}
 .cost-contrib li.is-bond .cn-name{color:var(--dim)}

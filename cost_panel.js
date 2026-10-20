@@ -2,6 +2,9 @@
 (function(){
   var LS_LOCAL='mm_position_costs_local_v1';
   var LS_CLOUD='mm_position_costs_cloud_v1';
+  var isolated=location.protocol==='file:' || !(navigator.locks && navigator.locks.request);
+  var SESSION_LOCAL='mm_position_costs_preview_v2';
+  var ISOLATED_NOTICE='隔离预览：仅保存在当前标签页会话中，刷新可恢复；关闭标签页前请导出。不会修改共享本地仓位或上传云端。';
   /* 真实持仓（券商截图 2026-10-19）：成本价来自 holdings.json、数量来自 position-costs.local.json */
   var REAL=__MM_REAL__;
 
@@ -13,10 +16,32 @@
     return s===''?'0':s; }
   function nowStr(){ var d=new Date(),p=function(x){return (x<10?'0':'')+x;};
     return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
-  function read(k){ try{ return JSON.parse(localStorage.getItem(k)||'null'); }catch(e){ return null; } }
-  function write(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  var storageErrors={}, NOTICE='';
+  function read(k){
+    try{
+      if(isolated && k===LS_CLOUD) return null;
+      var v=isolated && k===LS_LOCAL?sessionStorage.getItem(SESSION_LOCAL):localStorage.getItem(k);
+      // 隔离会话第一次打开可只读参考本机旧值，之后只读写本 tab 的 sessionStorage。
+      if(isolated && k===LS_LOCAL && v===null) v=localStorage.getItem(k);
+      var parsed=v===null?null:JSON.parse(v); delete storageErrors[k]; return parsed;
+    }
+    catch(e){ storageErrors[k]='本地数据读取失败'; return null; }
+  }
+  function write(k,v){
+    try{
+      if(isolated){
+        if(k!==LS_LOCAL) return false;
+        sessionStorage.setItem(SESSION_LOCAL,JSON.stringify(v));
+      }else localStorage.setItem(k,JSON.stringify(v));
+      delete storageErrors[k]; return true;
+    }
+    catch(e){ storageErrors[k]='本地保存失败，尚未持久化；请导出备份，刷新可能丢失改动'; return false; }
+  }
   function num(v){ var n=parseFloat(v); return isFinite(n)?n:0; }
-  function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function clone(v){ return JSON.parse(JSON.stringify(v)); }
+  function own(o,k){ return Object.prototype.hasOwnProperty.call(o,k); }
 
   /* 备注名个别修正：名字太长或带错的前缀，这里按代码替换（正式实现改 holdings.json） */
   var NOTE_FIX={'景顺纳斯达克100指数ETF':'纳斯达克100指数ETF'};
@@ -40,20 +65,21 @@
     notes.parentNode.insertBefore(foot, notes.nextSibling);
   })();
 
-  /* ---------- 1. 扫描持仓行，收集结构 ---------- */
-  var FACTORS=[0.72,0.83,0.88,0.94,1.05,1.12,1.21,0.91,0.97,1.02,0.79,1.15,0.86,1.08,0.68,1.25,0.99,1.03];
-  var QTYS=[40,25,15,60,12,30,18,22,35,10,28,16,50,14,20,26,44,13];
+  /* ---------- 1. 扫描行情行；是否持仓只由实际 positions 分组决定 ---------- */
+  function isPosition(r){
+    // 后端 group=position 渲染为 #group_positions，含长持仓子组；DATA.items 仅是成本档案。
+    return document.documentElement.contains(r.tr) && !!r.tr.closest('#group_positions');
+  }
   // ETF 胶囊必须在代码后面（第一行），不能留到中文备注后面。全站所有个股行都处理。
   // 正式实现改 monitor.py 的个股行：<td class="sym">CODE<span class="tag">ETF</span><span class="note">…</span></td>
   Array.prototype.forEach.call(document.querySelectorAll('td.sym'), function(sd){
     var t=sd.querySelector('.tag');
     if(t && sd.firstChild) sd.insertBefore(t, sd.firstChild.nextSibling);
   });
-  var ROWS=[], idx=0;
+  var ROWS=[];
   /* 加仓价 / 减仓价只认 holdings.json 里真实填的 trigger / reduce：没填就不画胶囊、不报灯。
      2026-10-19 修：此前这段会给每只持仓按现价 ×0.985/0.86/0.78 造一个「示意加仓价」，
      线上每只票都挂着一个假价位，还有 1/3 直接落进触发区报红灯 —— 全部去掉 */
-  var EXTRA=[];           // 非持仓但带真实加仓价胶囊的行（AAPL）
   /* 行灯级合成：一只标的可能同时有几条规则命中（页面原有灯 + 加仓价 + 浮亏 10%），
      取最严重的那个；关掉其中一条已读，其它规则该红还红、该黄还黄。 */
   var LV_ORDER=['red','yellow','green','gray'];
@@ -66,28 +92,11 @@
     if(lv) parts.push(lv);
     return parts.join(' ');
   }
-  var GAP_ADD=3;                 // settings.json 里 trigger_gap_pct 的生效值就是 3（默认 5 已被覆盖）
-  /* 已清仓的标的：正式实现靠 holdings.json 删掉，DEMO 快照是旧页面，这里手动剔除 */
-  var SKIP=['GEHC'];
-  SKIP.forEach(function(s){
-    var tr=document.getElementById('s-'+s.toLowerCase());
-    // 统计面板/名单里指向它的行一并去掉，避免留下点不开的死链
-    Array.prototype.forEach.call(document.querySelectorAll('a[href="#s-'+s.toLowerCase()+'"]'), function(a){
-      var li=a.closest('li');
-      if(li&&li.parentNode) li.parentNode.removeChild(li);
-    });
-    if(!tr) return;
-    var nx=tr.nextElementSibling;
-    if(nx&&nx.querySelector&&nx.querySelector('.range52-rail')) nx.parentNode.removeChild(nx);
-    tr.parentNode.removeChild(tr);
-  });
-  // 快照里的「持仓 (18)」是旧数字，剔除已清仓标的后按实际行数重算
-  (function(){
-    var sm=document.querySelector('#group_positions>summary .grp-name'); if(!sm) return;
-    var n=document.querySelectorAll('#group_positions tr[id^="s-"]').length;
-    if(n) sm.textContent='持仓 ('+n+')';
-  })();
-  Array.prototype.forEach.call(document.querySelectorAll('#group_positions tr[id^="s-"]'), function(tr){
+  var RULES=window.__MM_RULES__||{};
+  var GAP_TRIGGER=own(RULES,'trigger_gap_pct')?RULES.trigger_gap_pct:3;
+  var GAP_REDUCE=own(RULES,'reduce_gap_pct')?RULES.reduce_gap_pct:3;
+  // 清仓通过移组完成，不能按代码硬删除行；移回 positions 时沿用保留的成本/数量供用户复核。
+  Array.prototype.forEach.call(document.querySelectorAll('tr[id^="s-"]'), function(tr){
     var sym=tr.id.slice(2).toUpperCase();
     var pxEl=tr.querySelector('.px-price'); if(!pxEl) return;
     var price=num((pxEl.textContent||'').replace(/,/g,'')); if(!(price>0)) return;
@@ -115,19 +124,17 @@
     var lv=(tr.className||'').split(/\s+/)[0];
     if(!lv) lv='green';
     var railTr=tr.nextElementSibling;
-    var rail=railTr&&railTr.querySelector('.range52-rail'); if(!rail) return;
-    var lab=rail.getAttribute('aria-label')||'';
+    var rail=railTr&&railTr.querySelector('.range52-rail');
+    var lab=rail?(rail.getAttribute('aria-label')||''):'';
     var m=lab.match(/([\d,]+\.\d{2})[低高]*，本轮价 ([\d,]+\.\d{2}) 位于区间 ([\d.]+)%，[^，]*高 ([\d,]+\.\d{2})/);
-    if(!m) return;
-    var low=num(m[1].replace(/,/g,'')), high=num(m[4].replace(/,/g,''));
-    var f=FACTORS[idx%FACTORS.length], q=QTYS[idx%QTYS.length]; idx++;
-    var seed={cost:Math.round(price*f*100)/100, qty:q};
+    // 52 周范围缺失不能把真实持仓从市值统计里丢掉，只禁用范围内成本刻度。
+    var low=m?num(m[1].replace(/,/g,'')):0, high=m?num(m[4].replace(/,/g,'')):0;
 
     /* 把旧条重建为新版结构：左端写最低价、右端写最高价，百分比与紫方块都挪进灰轨里。
        快照的 rail 只有「百分比 + 轨道」两个孩子，百分比还挂在 rail 上（旧版式），
        新版要用轨道做定位基准，所以先把它挪进去，不然 left% 会按整条宽度算 */
-    var track=rail.querySelector('.range52-track');
-    if(track){
+    var track=rail&&rail.querySelector('.range52-track');
+    if(track&&m){
       if(!rail.querySelector('.range52-lo')){
         var lo=document.createElement('span');
         lo.className='range52-lo'; lo.setAttribute('aria-hidden','true'); lo.textContent=m[1];
@@ -143,13 +150,16 @@
     }
     /* 加仓价 / 减仓价只认页面里已带上的真实胶囊（monitor.py 读 holdings.json 的 trigger / reduce 生成），
        这里不再按现价造示意值。持仓没填 trigger 就是 0：不画胶囊、不报灯 */
-    var trig=0, cut=0;
-    var cap=null, sigAdd=null;
+    var cap=tr.querySelector('.lvtag.add,.lvtag.add-ck');
+    var cutCap=tr.querySelector('.lvtag.reduce,.lvtag.cut');
+    var trig=cap?num(cap.textContent.replace(/[^\d.]/g,'')):0;
+    var cut=cutCap?num(cutCap.textContent.replace(/[^\d.]/g,'')):0;
+    var sigAdd=null;
     var tick=document.createElement('span');
     tick.className='range52-cost'; tick.style.display='none';
     // 挂到灰轨上（而不是整条 rail）：rail 里还夹着左右两个价格文字，
     // 挂 rail 的话 left% 会按整条宽度算，跟紫方块对不上
-    (rail.querySelector('.range52-track')||rail).appendChild(tick);
+    if(rail) (track||rail).appendChild(tick);
     var info=document.createElement('span');
     info.className='cost-info';
     /* 三条可手动关闭的提醒，模式完全一致：一行文字 + ✓ 按钮（再点一下撤销）
@@ -160,21 +170,21 @@
     warnCut.className='cost-warn'; warnCut.style.display='none';
     var warn=document.createElement('span');
     warn.className='cost-warn'; warn.style.display='none';
-    var td=rail.parentNode; td.insertBefore(info, rail.nextSibling);
+    var td=rail?rail.parentNode:(tr.querySelector('td.sig')||sd);
+    td.insertBefore(info,rail?rail.nextSibling:null);
     td.insertBefore(warnAdd, info.nextSibling);
     td.insertBefore(warnCut, warnAdd.nextSibling);
     td.insertBefore(warn, warnCut.nextSibling);
     ROWS.push({sym:sym,note:note,isLong:isLong,isEtf:isEtf,lv:lv,price:price,chg:chg,low:low,high:high,
-               rail:rail,lab0:lab,lowTxt:m[1],highTxt:m[4],tr:tr,origCls:tr.className||'',
-               trig:trig,cut:cut,cap:cap,cutCap:null,sigAdd:sigAdd,
-               tick:tick,info:info,warnAdd:warnAdd,warnCut:warnCut,warn:warn,seed:seed});
+               rail:rail,lab0:lab,lowTxt:m?m[1]:'',highTxt:m?m[4]:'',tr:tr,origCls:tr.className||'',
+               trig:trig,cut:cut,cap:cap,cutCap:cutCap,sigAdd:sigAdd,
+               tick:tick,info:info,warnAdd:warnAdd,warnCut:warnCut,warn:warn});
   });
-  if(!ROWS.length){ return; }
 
   /* ---------- 1.5 「已读」：临时提醒可以手动关 ----------
      规则：点一下＝已知晓，这条规则本轮不再亮红灯；**条件消失后自动失效**
      （价格回到加仓价 3% 之外、或浮亏收窄到 10% 以内），下次再触发会重新亮，
-     不会「关一次就永远不提醒」。已读随 DATA 一起保存/导出/上传，跨设备取并集。 */
+     不会「关一次就永远不提醒」。已读及撤销记录随 DATA 保存/导出/上传，旧已读不能覆盖撤销。 */
   /* 灯级合成：页面原有灯 + 加仓价规则 + 浮亏 10% 规则，取最严重的一个。
      点掉某一条的已读，只撤它自己那一份红灯；别的规则照旧。 */
   /* 三条提醒共用一个渲染函数：一行文字 + ✓ 按钮（已读后再点是撤销），
@@ -191,17 +201,6 @@
           +'" aria-label="标记已读">✓</button>');
   }
   function hideWarn(el){ if(el){ el.style.display='none'; el.textContent=''; } }
-  /* 非持仓行（AAPL）没有成本排：提醒挂到它下面那条 52 周条所在格子里，位置跟持仓行对齐 */
-  function ensureWarn(tr){
-    if(tr.__warnAdd) return tr.__warnAdd;
-    var host=null, nx=tr.nextElementSibling;
-    if(nx&&nx.querySelector&&nx.querySelector('.range52-rail')) host=nx.querySelector('td')||nx;
-    if(!host) host=tr.querySelector('td.sig')||tr;
-    var w=document.createElement('span');
-    w.className='cost-warn'; w.style.display='none';
-    host.appendChild(w); tr.__warnAdd=w;
-    return w;
-  }
   function applyLights(){
     if(!DATA.acks) DATA.acks={};
     var A=DATA.acks;
@@ -209,9 +208,9 @@
       var want=null, sigTxt='';
       // ① 加仓价：已跌破、或距加仓价不足 3%（跟 monitor.py 判定一致）
       if(r.trig>0){
-        var gap=(r.price/r.trig-1)*100, on=gap<=GAP_ADD;
+        var gap=(r.price/r.trig-1)*100, on=gap<=GAP_TRIGGER;
         var k=r.sym+'|add|'+r.trig;
-        if(!on && A[k]){ delete A[k]; ACK_PRUNED=true; }   // 条件消失 → 已读自动失效
+        if(!on) pruneAck(k);   // 条件消失 → 已读自动失效
         var acked=!!A[k];
         if(r.cap){
           r.cap.className='lvtag add';
@@ -230,9 +229,9 @@
       }
       // ② 减仓价：已涨到它之上（不管高出多少）→ 红；还差不足 3% → 也红（跟 monitor.py 对称）
       if(r.cut>0){
-        var rgap=(r.price/r.cut-1)*100, onR=(rgap>=0)||(-rgap<=GAP_ADD);
+        var rgap=(r.price/r.cut-1)*100, onR=(rgap>=0)||(-rgap<=GAP_REDUCE);
         var kc=r.sym+'|cut|'+r.cut;
-        if(!onR && A[kc]){ delete A[kc]; ACK_PRUNED=true; }
+        if(!onR) pruneAck(kc);
         var aR=!!A[kc];
         if(onR){
           renderWarn(r.warnCut, (rgap>=0?'已涨到减仓价 '+r.cut+'（高出 '+rgap.toFixed(1)+'%）'
@@ -247,70 +246,22 @@
       if(r.lossLv>0 && !r.lossAcked) want='red';
       if(r.tr) r.tr.className=withLv(r.origCls, want);
     });
-    EXTRA.forEach(function(e){
-      // AAPL 这类「非持仓但有真实加仓价」的行：可开关模拟跌破
-      var trig=e.realTrig;   // 只认页面自带的真实加仓价，不再模拟
-      var gap=(e.price/trig-1)*100, on=gap<=GAP_ADD;
-      var k=e.sym+'|add|'+trig;
-      if(!on && A[k]){ delete A[k]; ACK_PRUNED=true; }
-      var acked=!!A[k];
-      e.cap.className='lvtag add';
-      e.cap.removeAttribute('data-ack'); e.cap.removeAttribute('role');
-      e.cap.removeAttribute('tabindex'); e.cap.removeAttribute('aria-pressed');
-      e.cap.setAttribute('aria-label','加仓价（已读按钮在下面那行提醒里）');
-      e.cap.innerHTML='<span class="t">加 '+trig+'</span>';
-      if(!e.warnAdd) e.warnAdd=ensureWarn(e.tr);
-      if(on){
-        renderWarn(e.warnAdd, (gap<=0?'已跌破加仓价 '+trig
-          :'距加仓价 '+trig+' 还差 '+gap.toFixed(1)+'%'), k, acked);
-        if(e.sigAdd) e.sigAdd.textContent=(!acked)
-          ? ((gap<=0?'已跌破加仓价 ':'距加仓价 ')+trig+(gap<=0?'':' 还差 '+gap.toFixed(1)+'%'))+' · ' : '';
-      } else { hideWarn(e.warnAdd); if(e.sigAdd) e.sigAdd.textContent=''; }
-      e.tr.className=withLv(e.origCls, (on&&!acked)?'red':null);
-    });
-  }
-
-  /* 非持仓行里带真实加仓价胶囊的（focus 组 AAPL：holdings.json 里写了 trigger 325） */
-  var EXTRA=[];
-  function collectExtra(){
-    EXTRA.length=0;
-    Array.prototype.forEach.call(document.querySelectorAll('tr[id^="s-"]'), function(tr){
-      var inRows=ROWS.some(function(r){ return r.tr===tr; });
-      if(inRows) return;
-      var cap=tr.querySelector('.lvtag.add,.lvtag.add-ck'); if(!cap) return;
-      var pxEl=tr.querySelector('.px-price');
-      var price=num(((pxEl&&pxEl.textContent)||'').replace(/,/g,''));
-      /* 原始灯级和真实加仓价都只认第一次读到的值：之后 className 和胶囊文字都会被
-         演示层改写（注入红灯、换成模拟价位），再读就等于把改后的值当成原始值了 */
-      if(!tr.__origCls) tr.__origCls=tr.className||'';
-      if(!tr.__realTrig) tr.__realTrig=num((cap.textContent||'').replace(/[^\d.]/g,''));
-      var real=tr.__realTrig;
-      if(!(price>0)||!(real>0)) return;
-      // 胶囊只显示价位；「已读」统一走下面提醒行里的 ✓ 按钮（跟浮亏 −10% 同一模式）
-      cap.classList.remove('add-ck');
-      cap.setAttribute('aria-label','加仓价（已读按钮在下面那行提醒里）');
-      var sigCell=tr.querySelector('td.sig');
-      var sigAdd=sigCell?sigCell.querySelector('.signal-red'):null;
-      if(sigCell && !sigAdd){
-        sigAdd=document.createElement('span');
-        sigAdd.className='signal-red';
-        sigCell.insertBefore(sigAdd, sigCell.firstChild);
-      }
-      EXTRA.push({sym:tr.id.slice(2).toUpperCase(), tr:tr, origCls:tr.__origCls,
-                  price:price, realTrig:real, cap:cap, sigAdd:sigAdd});
-    });
   }
   document.addEventListener('click', function(e){
     if(!e.target||!e.target.closest) return;
     var cl=e.target.closest('[data-ack-clear]');
-    if(cl){ DATA.acks={}; setPending(true); write(LS_LOCAL,DATA); paint(); autoPush(); return; }
+    if(cl){
+      if(!writer){ window.alert(NOTICE||'本页只读，请先点击编辑接管'); return; }
+      Object.keys(DATA.acks).forEach(function(k){ setAck(k,false); });
+      changed(); paint(); autoPush(); return;
+    }
     var el=e.target.closest('[data-ack]');
     if(!el) return;
     e.preventDefault(); e.stopPropagation();
     var k=el.getAttribute('data-ack');
-    if(!DATA.acks) DATA.acks={};
-    if(DATA.acks[k]) delete DATA.acks[k]; else DATA.acks[k]=nowStr();
-    setPending(true); write(LS_LOCAL, DATA); paint(); autoPush();   // 已读也自动上传，另一台设备不会再亮同一条
+    if(!writer){ window.alert(NOTICE||'本页只读，请先点击编辑接管'); return; }
+    if(!validAckKey(k)) return;
+    setAck(k,!DATA.acks[k]); changed(); paint(); autoPush();
   });
   /* 键盘：已读按钮本身就是 <button>，Enter / 空格由浏览器直接触发，不需要额外接管
      （胶囊不再承担点击已读，所以这里不再处理 .lvtag） */
@@ -321,13 +272,13 @@
   var GH={owner:'nixhuang', repo:'market-monitor', path:'position-costs.json', branch:'data'};
   var GH_API='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/'+GH.path;
   var LS_TOKEN='mm_gh_token_v1';
-  /* 同步状态只看「本机这一轮有没有改过持仓」：
-     没动过 → 已同步（页面显示的就是权威数据，不再拿云端比对结果吓人——云端缺文件、
-     字段顺序不同、另一台设备先改过，都会让比对永远不相等，状态就永远卡在「未同步」）。
-     只有真编辑过（成本价 / 数量 / 现金 / 固定收益 / 已读 / 导入）才标未同步，
-     上传成功后立刻回到已同步；上传失败显示「上传失败」。 */
-  var CLOUD=null, SYNC='synced', SYNC_MSG='';   // synced(已同步) / local(未同步) / loading / error
-  function ghToken(){ try{ return (localStorage.getItem(LS_TOKEN)||'').trim(); }catch(e){ return ''; } }
+  /* 本地 dirty 与 revision 一起原子保存；只有确认对应快照且成功落盘才清除。
+     缓存用于恢复，但未经本轮远端核验不能作为“无需上传”的依据。 */
+  var CLOUD=null, cloudVerified=false, SYNC='synced', SYNC_MSG='';
+  function ghToken(){
+    if(isolated) return '';
+    try{ return (localStorage.getItem(LS_TOKEN)||'').trim(); }catch(e){ return ''; }
+  }
   function ghHead(json){
     var t=ghToken(); if(!t) return null;
     var h={Authorization:'Bearer '+t, Accept:'application/vnd.github+json', 'X-GitHub-Api-Version':'2022-11-28'};
@@ -344,6 +295,33 @@
     for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
     return new TextDecoder().decode(bytes);
   }
+  var REQUEST_DEADLINE=60000, activeRequests=[];
+  function requestJson(url,options){
+    return new Promise(function(resolve,reject){
+      var controller=typeof AbortController==='function'?new AbortController():null;
+      var finished=false, timer;
+      function finish(error,result){
+        if(finished) return;
+        finished=true; clearTimeout(timer);
+        activeRequests=activeRequests.filter(function(x){ return x!==cancel; });
+        if(error){ if(controller) controller.abort(); reject(error); } else resolve(result);
+      }
+      function cancel(){ finish(new Error('页面已退出，请求已取消')); }
+      activeRequests.push(cancel);
+      timer=setTimeout(function(){ finish(new Error('同步请求超时（含响应体读取），请重试核验')); },REQUEST_DEADLINE);
+      var init=Object.assign({},options||{});
+      if(controller) init.signal=controller.signal;
+      Promise.resolve().then(function(){
+        if(finished) return;
+        return fetch(url,init);
+      }).then(function(response){
+        if(finished || !response) return;
+        return response.json().then(function(data){
+          finish(null,{status:response.status,ok:response.ok,data:data});
+        });
+      }).catch(function(error){ finish(error); });
+    });
+  }
   /* 两个候选来源，按顺序试：
      ① 填了 token：GitHub API 直接读 data 分支 —— 没有 CDN 缓存，刚上传完立刻就是新的
         （raw 地址有约 5 分钟 CDN 缓存；本机「干净」时云端会全量覆盖本机，读到旧缓存就会把刚传的数字冲回去）；
@@ -352,229 +330,363 @@
   function cloudSources(){
     var list=[], h=ghHead();
     if(h) list.push(function(){
-      return fetch(GH_API+'?ref='+GH.branch+'&t='+Date.now(),{headers:h,cache:'no-store'})
-        .then(function(r){ return r.ok?r.json():null; })
-        .then(function(m){ return m&&m.content?JSON.parse(unb64(m.content)):null; });
+      return requestJson(GH_API+'?ref='+GH.branch+'&t='+Date.now(),{headers:h,cache:'no-store'})
+        .then(function(r){ var m=r.ok?r.data:null; return m&&m.content?JSON.parse(unb64(m.content)):null; });
     });
     list.push(function(){
-      return fetch('https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/'+GH.branch+'/'+GH.path+'?t='+Date.now(),
-                   {cache:'no-store'}).then(function(r){ return r.ok?r.json():null; });
+      return requestJson('https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/'+GH.branch+'/'+GH.path+'?t='+Date.now(),
+                   {cache:'no-store'}).then(function(r){ return r.ok?r.data:null; });
     });
     return list;
   }
   function pullCloud(cb){
     var us=cloudSources(), i=0;
     (function next(){
+      if(disposed || !writer) return;
       if(i>=us.length){ cb(null); return; }
       us[i++]().then(function(j){ if(j&&j.items) cb(j); else next(); })
         .catch(function(){ next(); });
     })();
   }
-  /* 取云端失败不能只试一次就认命：Pages 发布有延迟（刚上传完可能要等一会儿才 404 变 200）、
-     弱网也会偶发失败 → 最多拉 3 次（立刻 / 5 秒 / 20 秒）。点提示条上的「重试」可重开一轮。 */
+  /* data 分支读取遇到弱网时最多尝试三轮；提示条的“重试”可重开一轮，不补传种子。 */
   var _pullTry=0, _pullTimer=null;
   function startPull(){
+    if(isolated || !writer || disposed) return;
+    var generation=++pullGeneration, rev=revision;
     pullCloud(function(j){
-      var changed=mergeCloud(j);
-      if(CLOUD){ _pullTry=0; SYNC=dirty?'local':'synced'; }
-      else{
-        SYNC=dirty?'local':'nocloud';
-        // 第一次没取到：顺手静默补传一份（云端要是压根没文件，补上以后别人就取得到了）
-        if(_pullTry===0 && DATA.items && Object.keys(DATA.items).length) autoPush(true);
-        if(_pullTry<2){ _pullTry++; _pullTimer=setTimeout(startPull, _pullTry===1?5000:20000); }
+      if(disposed || !writer || generation!==pullGeneration || rev!==revision) return;
+      if(j){
+        try{ mergeCloud(j); _pullTry=0; SYNC=inFlight?'loading':(dirty?'local':'synced'); }
+        catch(e){ SYNC='nocloud'; NOTICE='云端数据校验失败：'+e.message; }
+      }else{
+        SYNC=inFlight?'loading':(dirty?'local':'nocloud');
+        if(_pullTry<2){ _pullTry++; _pullTimer=setTimeout(startPull,_pullTry===1?5000:20000); }
       }
-      /* 打开页面**不再**自动上传：pending 标记只用来「别让云端覆盖本机改动」，
-         上传只在用户真的动了数据时发生（编辑保存 / 点已读 / 导入）。
-         ——10-20 事故：加载即上传 + 状态面板发现新提交就自动刷新页面 = 两边互相触发的提交风暴，
-         每次提交都会顶掉上一轮 Pages 构建，站点就一直发不出去。 */
+      // 拉取失败不上传内置快照；打开页面不是一次用户保存操作。
       paint();
     });
   }
-  function pushCloud(data, cb){
+  function pushCloud(sent, cb){
     var h=ghHead(true);
     if(!h){ cb(false,'未填 token'); return; }
-    var api=GH_API;
-    fetch(api+'?ref='+GH.branch+'&t='+Date.now(),{headers:ghHead(),cache:'no-store'})
-      .then(function(r){ return r.ok?r.json():null; })
-      .then(function(meta){
-        var body={message:'持仓同步 '+new Date().toISOString().slice(0,19).replace('T',' '),
-                  content:b64(JSON.stringify(data,null,1)), branch:GH.branch};
-        if(meta&&meta.sha) body.sha=meta.sha;      // 已存在的文件更新时必须带 sha
-        return fetch(api,{method:'PUT',headers:h,body:JSON.stringify(body)});
-      })
+    requestJson(GH_API+'?ref='+GH.branch+'&t='+Date.now(),{headers:ghHead(),cache:'no-store'})
       .then(function(r){
-        return r.json().then(function(j){
-          var ok=(r.status===200||r.status===201);
-          cb(ok, ok?'已上传':((j&&j.message)||('HTTP '+r.status)));
-        });
-      })
-      .catch(function(){ cb(false,'网络失败'); });
-  }
-  /* 合并云端数据（10-19 晚用户选定「D 简单粗暴」口径）：
-     ① 本机「干净」（没有待上传的改动）→ **云端全量覆盖**：以最后上传的那台设备为准，
-        换设备/刷新就能拿到别处改的数字（含已读）；
-     ② 本机还有没上传的改动（dirty）→ 退回「本机永远优先」，只补本机没有的项，
-        绝不静默冲掉用户刚改还没上传的数字。
-     判据用 dirty 而不是 updated_at：各设备时钟不一定准，updated_at 会被本机每次按键顶新。 */
-  function mergeCloud(j){
-    if(!j||!j.items) return false;
-    CLOUD=j;
-    var changed=false;
-    if(!dirty){
-      var nd={updated_at:j.updated_at||nowStr(), cash:num(j.cash), fixed:num(j.fixed),
-              fixed_cost:num(j.fixed_cost), items:{}, acks:{}, real:true};
-      Object.keys(j.items).forEach(function(k){
-        nd.items[k]={cost:num(j.items[k].cost), qty:num(j.items[k].qty)};
-      });
-      Object.keys(j.acks||{}).forEach(function(k){ nd.acks[k]=j.acks[k]; });
-      changed = JSON.stringify(nd.items)!==JSON.stringify(DATA.items)
-             || num(nd.cash)!==num(DATA.cash) || num(nd.fixed)!==num(DATA.fixed)
-             || num(nd.fixed_cost)!==num(DATA.fixed_cost)
-             || JSON.stringify(nd.acks)!==JSON.stringify(DATA.acks||{});
-      if(changed){ DATA=nd; write(LS_LOCAL,DATA); }
-      return changed;
-    }
-    if(!local&&!DATA.real){
-      DATA={updated_at:j.updated_at||nowStr(), cash:num(j.cash), fixed:num(j.fixed),
-            fixed_cost:num(j.fixed_cost), items:{}, acks:{}, real:true};
-      Object.keys(j.items).forEach(function(k){
-        DATA.items[k]={cost:num(j.items[k].cost), qty:num(j.items[k].qty)};
-      });
-      changed=true;
-    }else{
-      Object.keys(j.items||{}).forEach(function(k){
-        var mine=DATA.items[k], his=j.items[k];
-        if(!mine || (!num(mine.qty)&&num(his.qty)) || (!mine.cost&&num(his.cost))){
-          DATA.items[k]={cost:num((mine&&mine.cost)||his.cost), qty:num((mine&&mine.qty)||his.qty)};
-          changed=true;
+        if(r.status===404) return null;
+        if(!r.ok) throw new Error('读取远端版本失败：HTTP '+r.status);
+        return r.data;
+      }).then(function(meta){
+        if(disposed || !writer) throw new Error('页面已退出，上传已取消');
+        var remote=meta&&meta.content?normalize(JSON.parse(unb64(meta.content))):null;
+        if(sent.recovery){
+          if(meta && (!remote || !meta.sha)) throw new Error('上传结果未知，远端内容及 SHA 未完整核验，暂停重传');
+          if(remote && canonical(remote)===canonical(sent.payload)){
+            cb(true,'已核验上次上传',remote); return null;
+          }
+          if((meta?meta.sha:null)!==sent.baseSha){
+            // 远端已换版本：迟到旧 PUT 的基准 SHA 已失效，才允许释放旧事务、排队新版本。
+            cb(false,'远端已更新，上次上传事务结束',remote,'superseded'); return null;
+          }
+          // SHA 未变时只允许重发同一 payload / 同一 SHA。先完成旧事务，不夹带新编辑。
+        }else if(sent.maintenanceOnly){
+          if(!remote || !meta.sha) throw new Error('ACK 自动维护等待有效远端快照，不上传未核验本地数值');
+          var maintained=clone(remote); reconcileAcks(maintained,sent.payload);
+          if(revision===sent.revision && maintenanceOnly && !editing){
+            DATA=clone(maintained); revision++; sent.revision=revision; persist();
+          }
+          sent.payload=maintained;
         }
-      });
-    }
-    // 现金 / 固定收益：本机没填（0）才用云端的，填过的一律不动
-    if(!num(DATA.cash)&&num(j.cash)){ DATA.cash=num(j.cash); changed=true; }
-    if(!num(DATA.fixed)&&num(j.fixed)){ DATA.fixed=num(j.fixed); DATA.fixed_cost=num(j.fixed_cost); changed=true; }
-    Object.keys(j.acks||{}).forEach(function(k){ if(!DATA.acks[k]){ DATA.acks[k]=j.acks[k]; changed=true; } });
-    if(changed){ write(LS_LOCAL,DATA); }
-    return changed;
+        if(remote && canonical(remote)===canonical(sent.payload)){
+          cb(true,'内容已一致',remote); return null;
+        }
+        if(meta && !meta.sha) throw new Error('缺少远端 SHA，禁止覆盖');
+        // 在网络发送前原子记录未确认事务；超时、退出、刷新后都先核验这一 payload。
+        uncertain={payload:clone(sent.payload),revision:sent.revision,
+          baseSha:sent.recovery?sent.baseSha:(meta?meta.sha:null),maintenanceOnly:!!sent.maintenanceOnly};
+        if(!persist()) throw new Error('上传事务尚未持久化，暂停上传');
+        if(!write(LS_PUSH_AT,Date.now())) throw new Error('上传节流状态未持久化');
+        var body={message:'持仓同步 '+new Date().toISOString().slice(0,19).replace('T',' '),
+          content:b64(JSON.stringify(sent.payload,null,1)),branch:GH.branch};
+        if(uncertain.baseSha) body.sha=uncertain.baseSha;
+        return requestJson(GH_API,{method:'PUT',headers:h,body:JSON.stringify(body)});
+      }).then(function(r){
+        if(!r) return;
+        var ok=r.status===200||r.status===201;
+        cb(ok,ok?'已上传':((r.data&&r.data.message)||('HTTP '+r.status)));
+      }).catch(function(e){ cb(false,e.message||'网络失败'); });
   }
-  /* 静默自动上传：点了「已读」这类小改动也要跨设备生效，不用再手动点保存。
-     有 token 才发；编辑态不发（还在敲数字）；1.2 秒防抖，连续点几下只发一次。
-     silent＝后台补传（用户这轮什么都没改）：失败也不弹「上传失败」，免得每次开页面都报错。 */
-  var _pushTimer=null, _retryN=0, _retryTimer=null;
-  /* 提交节流：每次上传都是一个 GitHub commit，而 commit 会触发 Pages 重新构建
-     —— 几秒一次会把上一轮构建顶掉（实测 pages build 连续 cancelled，站点一直没发布）。
-     所以：① 跟云端内容一样就不传；② 两次上传至少隔 30 秒。 */
-  var _lastPushAt=0;
-  function sameAsCloud(){
-    if(!CLOUD) return false;
-    var a={items:DATA.items,cash:num(DATA.cash),fixed:num(DATA.fixed),
-           fixed_cost:num(DATA.fixed_cost),acks:DATA.acks||{}};
-    var b={items:CLOUD.items,cash:num(CLOUD.cash),fixed:num(CLOUD.fixed),
-           fixed_cost:num(CLOUD.fixed_cost),acks:CLOUD.acks||{}};
-    return JSON.stringify(a)===JSON.stringify(b);
+  /* clean 仍按云端全量替换；dirty 不混入任何远端数字。撤销记录不做并集复活。 */
+  function mergeCloud(j){
+    if(isolated || !j || !writer || disposed) return false;
+    var remote=normalize(j);
+    if(inFlight) return false;
+    CLOUD=remote; cloudVerified=true;
+    var cached=write(LS_CLOUD,remote);
+    if((dirty && !maintenanceOnly) || editing || uncertain) return false;
+    var next=clone(remote); reconcileAcks(next,DATA);
+    var different=canonical(next)!==canonical(DATA);
+    if(different){ DATA=next; revision++; }
+    maintenancePending=canonical(next)!==canonical(remote);
+    maintenanceOnly=maintenancePending;
+    dirty=!cached || maintenancePending;
+    if(!persist()) dirty=true;
+    if(maintenancePending) autoPush();
+    return different;
   }
-  function doPush(silent){
-    // 云端已经是这份内容 → 不用再提交一次（也顺手把「未同步」清掉）
-    if(sameAsCloud()){
-      setPending(false); SYNC='synced'; SYNC_MSG=''; _retryN=0; paint(); return;
-    }
-    var wait=30000-(Date.now()-_lastPushAt);
-    if(wait>0){ _pushTimer=setTimeout(function(){ _pushTimer=null; doPush(silent); }, wait+300); return; }
-    _pushTimer=null;
-    DATA.updated_at=nowStr(); write(LS_LOCAL, DATA);
-    _lastPushAt=Date.now();
-    var wasDirty=dirty;
-    if(!silent||wasDirty){ SYNC='loading'; paint(); }
-    pushCloud(DATA, function(ok,msg){
-        if(ok){ CLOUD=JSON.parse(JSON.stringify(DATA)); write(LS_CLOUD,DATA);
-                SYNC='synced'; SYNC_MSG=''; setPending(false); _retryN=0; }
-        else if(wasDirty||!silent){ SYNC='error'; SYNC_MSG=msg||''; setPending(true);
-                if(wasDirty) scheduleRetry(); }   // 用户改过却没传上去 → 报错并自动重试
-        /* 后台补传失败：本机数据照样完整，不当成错误；
-           但「云端未取到」这个事实不能被它抹掉——同步压根还没建立起来 */
-        else if(SYNC!=='nocloud'){ SYNC='synced'; SYNC_MSG=''; }
-        paint();
-      });
-  }
-  function autoPush(silent){
-    if(!ghToken()||editing) return;
+  /* 自动、手动、重试只进入这一条队列。data 分支不参与 Pages；节流用于减少重复提交。 */
+  var _pushTimer=null, _retryN=0, _retryTimer=null, inFlight=null, queued=false, savePaused=false;
+  function clearSaveTimers(){
     if(_pushTimer) clearTimeout(_pushTimer);
-    _pushTimer=setTimeout(function(){ doPush(silent); },1200);
+    if(_retryTimer) clearTimeout(_retryTimer);
+    _pushTimer=null; _retryTimer=null; queued=false;
   }
-  /* 容错：上传失败后不干等，自动再试 2 次（15 秒 / 60 秒后）。只在「用户真改过」时重试，
-     后台补传失败不重试（免得一台没配好的设备反复打 GitHub API）。 */
+  function sameAsCloud(){ return !uncertain && cloudVerified && !!CLOUD && canonical(DATA)===canonical(CLOUD); }
+  function requestSave(delay,resetRetry){
+    if(!writer || disposed) return;
+    if(isolated){ persist(); SYNC='local'; paint(); return; }
+    if(resetRetry){ _retryN=0; if(_retryTimer) clearTimeout(_retryTimer); _retryTimer=null; }
+    queued=true;
+    if(!ghToken()){ SYNC='local'; SYNC_MSG='未填 GitHub token'; paint(); return; }
+    if(editing || inFlight || savePaused) return;
+    if(_pushTimer) clearTimeout(_pushTimer);
+    _pushTimer=setTimeout(function(){ _pushTimer=null; doPush(); },delay||0);
+  }
+  function doPush(){
+    if(!writer || disposed || editing || savePaused || inFlight || !queued || (!dirty && !uncertain)) return;
+    if(maintenanceOnly && !cloudVerified && !uncertain) return;
+    if(!ghToken()) return;
+    // 先重试本地原子落盘；失败时只允许用户导出，不冒充保存成功。
+    if(!persist()){ paint(); return; }
+    if(sameAsCloud()){
+      if(!write(LS_CLOUD,CLOUD)){ paint(); return; }
+      queued=false; _retryN=0; SYNC=setPending(false)?'synced':'local'; paint(); return;
+    }
+    var last=read(LS_PUSH_AT), wait=typeof last==='number'?30000-(Date.now()-last):0;
+    if(storageErrors[LS_PUSH_AT]){ paint(); return; }
+    if(wait>0){ _pushTimer=setTimeout(function(){ _pushTimer=null; doPush(); },wait); return; }
+    if(!write(LS_PUSH_AT,Date.now())){ paint(); return; }
+    // 在任何 await/GET 之前冻结 payload；之后只确认这一 revision，不读取回调时的 DATA。
+    var sent=uncertain?Object.assign(clone(uncertain),{recovery:true}):
+      {payload:clone(DATA),revision:revision,maintenanceOnly:maintenanceOnly};
+    inFlight=sent; queued=false; pullGeneration++;
+    SYNC='loading'; paint();
+    pushCloud(sent,function(ok,msg,verifiedRemote,outcome){
+      if(inFlight!==sent) return;
+      inFlight=null;
+      if(disposed){
+        if(releaseWriter){ writer=false; releaseWriter(); releaseWriter=null; }
+        return;
+      }
+      if(outcome==='superseded'){
+        uncertain=null; cloudVerified=false; dirty=true; persist();
+        SYNC='local'; SYNC_MSG='';
+        if(maintenanceOnly){ if(verifiedRemote) mergeCloud(verifiedRemote); else startPull(); }
+        requestSave(0,false);
+      }else if(ok){
+        uncertain=null;
+        CLOUD=verifiedRemote||sent.payload; cloudVerified=true;
+        var cached=write(LS_CLOUD,CLOUD);
+        _retryN=0; SYNC_MSG='';
+        if(cached && revision===sent.revision && canonical(DATA)===canonical(sent.payload)){
+          SYNC=setPending(false)?'synced':'local';
+        }else { dirty=true; persist(); SYNC='local'; }
+        if(dirty) requestSave(0,false);
+      }else{
+        if(uncertain) cloudVerified=false;
+        dirty=true; persist(); SYNC='error';
+        SYNC_MSG=(msg||'上传失败')+(uncertain?'；PUT 结果未确认，重试将先核验远端':'');
+        scheduleRetry();
+      }
+      paint();
+    });
+  }
+  function autoPush(){ requestSave(1200,false); }
   function scheduleRetry(){
-    if(_retryN>=2 || !ghToken()) return;
+    if(_retryN>=2 || !ghToken() || disposed) return;
     _retryN++;
     if(_retryTimer) clearTimeout(_retryTimer);
-    _retryTimer=setTimeout(function(){
-      _retryTimer=null;
-      if(dirty && !editing) autoPush();     // dirty 为真 → 这次会显示「上传中…」并按失败处理
-    }, _retryN===1?15000:60000);
+    _retryTimer=setTimeout(function(){ _retryTimer=null; requestSave(0,false); },_retryN===1?15000:60000);
   }
 
-  /* ---------- 2. 数据（本地 / 云端） ---------- */
-  var seedItems={}; ROWS.forEach(function(r){ seedItems[r.sym]=r.seed; });
-  var SEED={updated_at:nowStr(), cash:5914, fixed:0, fixed_cost:0, items:seedItems};
+  /* ---------- 2. 版本化状态：0 是值；仅旧版本确实缺少的字段做一次迁移 ---------- */
+  var SCHEMA_VERSION=2, LS_PENDING='mm_position_pending_v1';
+  var LS_PUSH_AT='mm_position_last_push_v2', LOCK_NAME='mm-position-writer-v2';
+  function object(v){ return v!==null && typeof v==='object' && !Array.isArray(v); }
+  function stamp(v,field){
+    if(typeof v!=='string' || !/^\d{4}-\d\d-\d\d(?:[T ]\d\d:\d\d(?::\d\d(?:\.\d{1,3})?)?(?:Z|[+-]\d\d:\d\d)?)?$/.test(v)
+       || !isFinite(Date.parse(v))
+       || new Date(v.slice(0,10)+'T00:00:00Z').toISOString().slice(0,10)!==v.slice(0,10))
+      throw new Error(field+' 必须是有效日期');
+    return v;
+  }
+  function amount(o,k,fallback){
+    var v=own(o,k)?o[k]:fallback;
+    if(typeof v!=='number' || !isFinite(v) || v<0) throw new Error(k+' 必须是非负有限数值');
+    return v;
+  }
+  function validAckKey(k){ return /^[A-Z0-9.^=_-]{1,32}\|(?:loss10|loss20|(?:add|cut)\|\d+(?:\.\d+)?)$/.test(k); }
+  function normalize(j,seed){
+    if(!object(j)||!object(j.items)) throw new Error('items 必须是对象');
+    var version=own(j,'schema_version')?j.schema_version:1;
+    if(version!==1 && version!==SCHEMA_VERSION) throw new Error('不支持的 schema_version');
+    if(own(j,'real') && typeof j.real!=='boolean') throw new Error('real 必须是布尔值');
+    var base=version===1 && seed?seed:{};
+    var d={schema_version:SCHEMA_VERSION,real:true,
+      updated_at:own(j,'updated_at')?stamp(j.updated_at,'updated_at'):new Date().toISOString(),
+      cash:amount(j,'cash',num(base.cash)),fixed:amount(j,'fixed',num(base.fixed)),
+      fixed_cost:amount(j,'fixed_cost',num(base.fixed_cost)),items:{},acks:{},ack_tombstones:{}};
+    Object.keys(j.items).forEach(function(k){
+      if(!/^[A-Z0-9.^=_-]{1,32}$/.test(k) || !object(j.items[k])) throw new Error('非法标的或持仓对象：'+k);
+      var b=(base.items&&base.items[k])||{};
+      d.items[k]={cost:amount(j.items[k],'cost',num(b.cost)),qty:amount(j.items[k],'qty',num(b.qty))};
+    });
+    ['acks','ack_tombstones'].forEach(function(f){
+      if(own(j,f) && !object(j[f])) throw new Error(f+' 必须是对象');
+      Object.keys(j[f]||{}).forEach(function(k){
+        if(!validAckKey(k)) throw new Error('非法已读规则：'+k);
+        d[f][k]=stamp(j[f][k],f);
+      });
+    });
+    reconcileAcks(d,d);
+    return d;
+  }
+  function reconcileAcks(target,other){
+    Object.keys(other.ack_tombstones||{}).forEach(function(k){
+      var t=other.ack_tombstones[k], old=target.ack_tombstones[k];
+      if(!old || Date.parse(t)>Date.parse(old)) target.ack_tombstones[k]=t;
+    });
+    Object.keys(target.acks).forEach(function(k){
+      var t=target.ack_tombstones[k];
+      if(t && Date.parse(t)>=Date.parse(target.acks[k])) delete target.acks[k];
+    });
+  }
+  function canonical(d){
+    function sorted(v){
+      if(!object(v)) return v;
+      var o={}; Object.keys(v).sort().forEach(function(k){ o[k]=sorted(v[k]); }); return o;
+    }
+    return JSON.stringify(sorted({items:d.items,cash:d.cash,fixed:d.fixed,fixed_cost:d.fixed_cost,
+      acks:d.acks||{},ack_tombstones:d.ack_tombstones||{}}));
+  }
   var local=read(LS_LOCAL), cloud=read(LS_CLOUD);
-  // 这台设备进页面前有没有自己的持仓数据：没有＝新设备（换设备首次打开），
-  // 此时如果再取不到云端，看到的就是默认值而不是你的持仓 → 「云端未取到」要标成黄字提醒
-  var hadOwn=!!(local&&local.items&&Object.keys(local.items).length);
-  // 内置快照的日期（构建时注入）：换设备又取不到云端时，要告诉用户眼前这份数据是哪天的
+  var hadOwn=!!(local&&object(local.items));
   var seedAsOf=(REAL&&REAL.asof)?String(REAL.asof).slice(0,10):'';
-  var DATA;
-  /* 有真实持仓数据时，第一次打开就用它覆盖本机的旧示意值（real 标记只认一次）；
-     之后仍以本机/远端为准，用户在页面里改过的数字不会被冲掉。 */
-  if(REAL && REAL.items && (!local || !local.real)){
-    var ritems={};
-    Object.keys(REAL.items).forEach(function(k){
-      ritems[k]={cost:num(REAL.items[k].cost), qty:num(REAL.items[k].qty)};
-    });
-    DATA={updated_at:nowStr(), cash:num(REAL.cash), fixed:num(REAL.fixed),
-          fixed_cost:num(REAL.fixed_cost), items:ritems, real:true};
-    write(LS_LOCAL, DATA);
-  } else {
-    DATA=local||cloud||JSON.parse(JSON.stringify(SEED));
+  var DATA, revision=0, dirty=false, writer=false, releaseWriter=null, acquiring=false, disposed=false;
+  var ACK_PRUNED=false, pullGeneration=0;
+  var maintenancePending=false, maintenanceOnly=false, uncertain=null;
+  function loadLocal(){
+    var j=read(LS_LOCAL);
+    try{
+      if(j){ DATA=normalize(j,REAL); hadOwn=true; }
+      else DATA=normalize(cloud||REAL||{items:{}});
+      revision=j&&j._local&&Number.isSafeInteger(j._local.revision)?j._local.revision:0;
+      dirty=!!(j&&j._local?j._local.dirty:read(LS_PENDING)===1);
+      maintenancePending=!!(j&&j._local&&j._local.maintenancePending);
+      maintenanceOnly=!!(j&&j._local&&j._local.maintenanceOnly);
+      // 纯 ACK 维护跨刷新后仍须先取远端数值，不把它迁移成用户整份待上传。
+      if(maintenanceOnly) dirty=false;
+      uncertain=null;
+      var u=j&&j._local&&j._local.uncertain;
+      if(u){
+        if(!object(u) || (u.baseSha!==null && (typeof u.baseSha!=='string'||!u.baseSha))
+          || !Number.isSafeInteger(u.revision)) throw new Error('未确认上传事务无效');
+        uncertain={payload:normalize(u.payload),baseSha:u.baseSha,revision:u.revision,maintenanceOnly:!!u.maintenanceOnly};
+        dirty=true;
+      }
+      CLOUD=cloud?normalize(cloud):null; cloudVerified=false;
+      if(storageErrors[LS_LOCAL] || storageErrors[LS_PENDING]){ dirty=true; return false; }
+      return true;
+    }catch(e){
+      storageErrors[LS_LOCAL]='本地数据校验失败：'+e.message+'；原数据未覆盖，请导出或导入有效备份';
+      if(!DATA) DATA=normalize(REAL||{items:{}});
+      dirty=true; return false;
+    }
   }
-  /* 2026-10-19：线上构建环境读不到本机数量文件，早期版本注入的 qty / cash / fixed 全是 0。
-     这里只「补 0」——本机已有数字的项一律不动（本机永远优先），只把缺失的补成种子值。 */
-  if(REAL && REAL.items){
-    var sd_=false;
-    Object.keys(REAL.items).forEach(function(k){
-      var it=DATA.items[k]||(DATA.items[k]={cost:0,qty:0});
-      var rc=num(REAL.items[k].cost), rq=num(REAL.items[k].qty);
-      if(!num(it.cost) && rc>0){ it.cost=rc; sd_=true; }
-      if(!num(it.qty) && rq>0){ it.qty=rq; sd_=true; }
-    });
-    if(!num(DATA.cash) && num(REAL.cash)>0){ DATA.cash=num(REAL.cash); sd_=true; }
-    if(!num(DATA.fixed) && num(REAL.fixed)>0){ DATA.fixed=num(REAL.fixed); sd_=true; }
-    if(!num(DATA.fixed_cost) && num(REAL.fixed_cost)>0){ DATA.fixed_cost=num(REAL.fixed_cost); sd_=true; }
-    DATA.real=true;
-    if(sd_) write(LS_LOCAL, DATA);
+  loadLocal();
+  function persist(){
+    if(!writer) return false;
+    // 数据、revision、dirty 同一原子写入，避免两个 localStorage key 之间刷新产生分裂状态。
+    var saved=clone(DATA); saved._local={revision:revision,dirty:dirty,
+      maintenancePending:maintenancePending,maintenanceOnly:maintenanceOnly,uncertain:uncertain};
+    return write(LS_LOCAL,saved);
   }
-  if(!DATA.items) DATA.items={};
-  if(!DATA.acks) DATA.acks={};   // 「已读」状态：随 DATA 一起保存/导出/上传
-  /* 只为核对页面：?loss=AVGO,UNH（成本 ×1.3，造出 10% 以上浮亏）、?loss=UNH:1.6（×1.6，20% 以上） */
-  var lm=location.search.match(/loss=([^&]+)/);
-  if(lm){
-    var bits=lm[1].split(':'), fac=parseFloat(bits[1]||'1.3')||1.3;
-    bits[0].split(',').forEach(function(s){
-      var k=s.toUpperCase();
-      if(DATA.items[k]) DATA.items[k].cost=num(DATA.items[k].cost)*fac;
-    });
-  }
-  /* dirty＝本机改过但还没上传成功。刷新/重开页面会重置脚本变量，所以另外单独存一个
-     pending 标记：改过没上传就刷新，D 方案也不会拿云端把它冲掉（10-19 晚）。 */
-  var LS_PENDING='mm_position_pending_v1';
   function setPending(v){
     dirty=!!v;
-    try{ if(dirty) localStorage.setItem(LS_PENDING,'1'); else localStorage.removeItem(LS_PENDING); }catch(e){}
+    if(!dirty){ maintenancePending=false; maintenanceOnly=false; }
+    if(!persist()){ dirty=true; return false; }
+    return true;
   }
-  var dirty=false;
-  try{ dirty=(localStorage.getItem(LS_PENDING)==='1'); }catch(e){}
-
-  // 打开页面就拉云端（data 分支的 position-costs.json）：本机有未上传改动时只补缺项，干净时云端全量覆盖
-  try{ startPull(); }catch(e){ SYNC=dirty?'local':'nocloud'; }
+  function changed(){
+    maintenanceOnly=false;
+    revision++; pullGeneration++; DATA.updated_at=new Date().toISOString(); dirty=true;
+    SYNC='local'; SYNC_MSG=''; persist();
+  }
+  function setAck(k,on){
+    var at=Math.max(Date.now(),Date.parse(DATA.acks[k]||'')+1||0,
+      Date.parse(DATA.ack_tombstones[k]||'')+1||0);
+    if(on) DATA.acks[k]=new Date(at).toISOString();
+    else { delete DATA.acks[k]; DATA.ack_tombstones[k]=new Date(at).toISOString(); }
+  }
+  function pruneAck(k){
+    if(writer && DATA.acks[k]){ setAck(k,false); ACK_PRUNED=true; }
+  }
+  function persistMaintenance(){
+    ACK_PRUNED=false; maintenancePending=true;
+    if(!dirty || maintenanceOnly){
+      maintenanceOnly=true;
+      // 尚未核验时只落盘 tombstone，不增加用户 revision，也不使初始 pull 失效。
+      if(cloudVerified){ revision++; dirty=true; }
+      persist();
+    }else changed();
+    if(dirty) autoPush();
+  }
+  function takeOwnership(cb){
+    if(writer){ cb(true); return; }
+    if(acquiring||disposed){ cb(false); return; }
+    if(isolated){
+      writer=true; cloud=null;
+      if(loadLocal()) persist();
+      cb(true); return;
+    }
+    acquiring=true;
+    navigator.locks.request(LOCK_NAME,{mode:'exclusive',ifAvailable:true},function(lock){
+      acquiring=false;
+      if(!lock || disposed){
+        NOTICE='另一标签页正在管理仓位，本页只读；关闭该页后点击编辑接管'; cb(false); return;
+      }
+      writer=true; pullGeneration++;
+      cloud=read(LS_CLOUD); var valid=loadLocal();
+      NOTICE='';
+      return new Promise(function(resolve){
+        releaseWriter=resolve;
+        if(valid) persist();
+        cb(true);
+      });
+    }).catch(function(){
+      acquiring=false; writer=false; releaseWriter=null;
+      NOTICE='无法保持跨标签页写锁，本页只读'; cb(false);
+    });
+  }
+  window.addEventListener('storage',function(e){
+    if(isolated || writer || disposed || (e.key!==LS_LOCAL && e.key!==LS_CLOUD)) return;
+    cloud=read(LS_CLOUD); loadLocal(); pullGeneration++;
+    SYNC=dirty?'local':'synced'; paint();
+  });
+  window.addEventListener('pagehide',function(){
+    disposed=true; pullGeneration++; clearSaveTimers();
+    editing=false; snapshot=null; savePaused=true; editGeneration++;
+    if(_pullTimer) clearTimeout(_pullTimer);
+    if(_paintFrame){ cancelAnimationFrame(_paintFrame); _paintFrame=null; }
+    // PUT 发送前已原子记录 uncertain。退出可立即取消客户端等待并释放锁；
+    // 接管页只会核验/重发同一 SHA 事务，不会把取消误认为服务器没有写入。
+    activeRequests.slice().forEach(function(cancel){ cancel(); });
+    inFlight=null;
+    if(isolated) writer=false;
+    if(releaseWriter){ writer=false; releaseWriter(); releaseWriter=null; }
+  });
+  window.addEventListener('pageshow',function(e){
+    if(!e.persisted) return;
+    disposed=false; syncEditUI(); takeOwnership(function(ok){ if(ok) startPull(); paint(); });
+  });
 
   /* ---------- 3. 「仓位管理」独立面板（统计面板上方；编辑功能内置） ---------- */
   var sc=document.getElementById('signalCounts'); if(!sc) return;
@@ -665,7 +777,9 @@
   });
 
   /* ---------- 4. 编辑态：点「编辑」就地改，点「保存并上传」落盘并同步 ---------- */
-  var editing=false, snapshot=null, prevDirty=false, editOrder={};
+  var editing=false, snapshot=null, prevDirty=false, editOrder={}, editGeneration=0;
+  var prevMaintenanceOnly=false, prevMaintenancePending=false;
+  var _paintFrame=null;
   function syncEditUI(){
     editBtn.textContent=editing?'编辑中':'编辑';
     editBtn.setAttribute('aria-pressed', editing?'true':'false');
@@ -673,45 +787,53 @@
     // 编辑中由下面的「保存并上传／取消」接管，表头这颗收起来，免得出现两个「退出」入口
     editBtn.hidden=editing;
     actsEl.hidden=!editing;
+    panel.querySelector('#costSave').textContent=isolated?'保存到本标签页':'保存并上传';
   }
   function enterEdit(){
-    // 编辑的是真实成本/数量，不能拿演示浮亏反推出来的假成本当输入值 → 进编辑态先切回真实
-    snapshot=JSON.parse(JSON.stringify(DATA)); prevDirty=dirty;
-    // 记下当前行顺序：编辑期间不再重排，否则边打字边跳行
-    editOrder={};
-    Array.prototype.forEach.call(document.querySelectorAll('#'+PID+' li[data-sym]'),
-      function(li,i){ editOrder[li.getAttribute('data-sym')]=i; });
-    editing=true; panel.open=true; syncEditUI(); paint();
-    var first=panel.querySelector('#'+PID+' input'); if(first) first.focus();
+    if(editing || disposed) return;
+    takeOwnership(function(ok){
+      if(!ok){ paint(); return; }
+      clearSaveTimers(); pullGeneration++; editGeneration++;
+      snapshot=clone(DATA); prevDirty=dirty;
+      prevMaintenanceOnly=maintenanceOnly; prevMaintenancePending=maintenancePending;
+      editOrder={};
+      Array.prototype.forEach.call(document.querySelectorAll('#'+PID+' li[data-sym]'),
+        function(li,i){ editOrder[li.getAttribute('data-sym')]=i; });
+      editing=true; panel.open=true; syncEditUI(); paint();
+      var first=panel.querySelector('#'+PID+' input'); if(first) first.focus();
+    });
   }
   function exitEdit(restore){
-    if(restore && snapshot){ DATA=snapshot; write(LS_LOCAL, DATA); setPending(prevDirty); }
-    editing=false; snapshot=null; syncEditUI(); paint();
+    clearSaveTimers(); editGeneration++; pullGeneration++;
+    if(restore && snapshot && canonical(DATA)!==canonical(snapshot)){
+      var draft=DATA; DATA=clone(snapshot);
+      // 取消 ACK 编辑同样是一笔反向操作，不恢复已失效的旧版本戳。
+      reconcileAcks(DATA,draft);
+      Object.keys(Object.assign({},draft.acks,snapshot.acks)).forEach(function(k){
+        if(!!draft.acks[k]!==!!snapshot.acks[k]) setAck(k,!!snapshot.acks[k]);
+      });
+      changed();
+      if(!inFlight && !uncertain){
+        dirty=prevDirty; maintenanceOnly=prevMaintenanceOnly; maintenancePending=prevMaintenancePending; persist();
+      }
+    }
+    editing=false; snapshot=null; savePaused=false; syncEditUI(); paint();
+    if(maintenanceOnly && !cloudVerified) startPull();
+    if(dirty || uncertain) requestSave(0,false);
   }
   editBtn.addEventListener('click', function(e){
     e.preventDefault(); e.stopPropagation();   // 别让点击冒泡上去把整张卡折叠掉
     if(editing) exitEdit(true); else enterEdit();
   });
   panel.querySelector('#costSave').addEventListener('click', function(){
-    DATA.updated_at=nowStr();
-    write(LS_LOCAL, DATA);
-    if(!ghToken()){
-      // 没 token 就上传不了 → 明确告诉用户「未同步 · 未填 token」，点那颗字可以补填
-      SYNC='local'; SYNC_MSG='未填 GitHub token';
-      editing=false; snapshot=null; setPending(true); syncEditUI(); paint(); return;
-    }
-    // 内容跟云端一样就别再提交（省一次 commit，也就少一次 Pages 构建）
-    if(sameAsCloud()){
-      SYNC='synced'; SYNC_MSG=''; setPending(false); _retryN=0;
-      editing=false; snapshot=null; syncEditUI(); paint(); return;
-    }
-    SYNC='loading'; _retryN=0; _lastPushAt=Date.now(); paint();   // 手动保存＝重新给 2 次自动重试机会
-    // 写的是 data 分支：不触发任何 workflow，也不触发 Pages 构建
-    pushCloud(DATA, function(ok,msg){
-      if(ok){ CLOUD=JSON.parse(JSON.stringify(DATA)); write(LS_CLOUD, DATA); SYNC='synced'; SYNC_MSG=''; setPending(false); }
-      else  { SYNC='error'; SYNC_MSG=msg||'上传失败'; setPending(true); scheduleRetry(); }
-      editing=false; snapshot=null; syncEditUI(); paint();
-    });
+    if(!writer || disposed) return;
+    if(panel.querySelector('input:invalid')){ NOTICE='存在无效输入，请修正后保存'; stateEl.textContent=NOTICE; return; }
+    // 保存立即结束本轮编辑；异步回执绝不关闭后来开始的编辑会话。
+    editing=false; snapshot=null; savePaused=false; editGeneration++; pullGeneration++;
+    if(!dirty && !sameAsCloud() && !maintenanceOnly) changed();
+    persist(); syncEditUI();
+    if(maintenanceOnly && !cloudVerified) startPull();
+    requestSave(0,true); paint();
   });
   panel.querySelector('#costCancel').addEventListener('click', function(){ exitEdit(true); });
   // 点标题右侧的「未同步 / 已同步」→ 填 / 改 GitHub token（只存本机 localStorage，每台设备填一次）
@@ -719,11 +841,13 @@
     var st=e.target&&e.target.closest?e.target.closest('#costState'):null;
     if(!st) return;
     e.preventDefault(); e.stopPropagation();     // 别让点击把整张卡折叠掉
-    /* 上传失败时点这颗字＝看失败原因（手机上没有 hover，不能只塞 title） */
+    if(Object.keys(storageErrors).length){
+      window.alert(Object.keys(storageErrors).map(function(k){ return storageErrors[k]; }).join('\n')); return;
+    }
+    if(!writer){ window.alert(NOTICE||'本页只读，请点击编辑接管'); return; }
+    if(isolated){ window.alert(ISOLATED_NOTICE); return; }
     if(SYNC==='error'){
-      window.alert('上传失败：'+(SYNC_MSG||'未知原因')
-        +'\n\n改动已经存在本机，不会丢；会自动再重试 2 次。'
-        +'也可以点「编辑」改一笔再保存，或用「导出 / 导入」把数据搬到另一台设备。');
+      window.alert('上传失败：'+(SYNC_MSG||'未知原因')+'\n可点击提示栏的“重试上传”；本机状态与导出备份仍可使用。');
       return;
     }
     var cur=ghToken();
@@ -735,7 +859,8 @@
     try{
       if(v.trim()) localStorage.setItem(LS_TOKEN, v.trim());
       else localStorage.removeItem(LS_TOKEN);
-    }catch(err){}
+      delete storageErrors[LS_TOKEN];
+    }catch(err){ storageErrors[LS_TOKEN]='token 本地保存失败'; paint(); return; }
     SYNC_MSG='';
     // 换设备刚填完 token：立刻重开一轮云端拉取（原来只补传，取不到就是取不到）
     _pullTry=0; if(_pullTimer){ clearTimeout(_pullTimer); _pullTimer=null; }
@@ -745,52 +870,70 @@
   });
   // 卡片被收起时自动退出编辑态：已敲进去的数字保留（变成「未同步」），不偷偷丢
   panel.addEventListener('toggle', function(){
-    if(!panel.open && editing){ editing=false; snapshot=null; syncEditUI(); paint(); }
+    if(!panel.open && editing){
+      // 折叠保留每次输入已落盘的草稿，但不替用户执行保存上传。
+      clearSaveTimers(); editing=false; snapshot=null; savePaused=true; editGeneration++; pullGeneration++;
+      syncEditUI(); paint();
+    }
   });
-  panel.querySelector('#costExport').addEventListener('click', function(){
+  function exportData(){
     var blob=new Blob([JSON.stringify(DATA,null,1)],{type:'application/json'});
-    var a=document.createElement('a');
-    a.href=URL.createObjectURL(blob); a.download='position-costs.json'; a.click();
-  });
+    var a=document.createElement('a'), url=URL.createObjectURL(blob);
+    a.href=url; a.download='position-costs.json'; a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); },0);
+  }
+  panel.querySelector('#costExport').addEventListener('click',exportData);
   panel.querySelector('#costImport').addEventListener('click', function(){
     panel.querySelector('#costFile').click();
   });
+  function importData(j){
+    var next=normalize(j);
+    if(!writer || disposed) throw new Error('本页只读，请先点击编辑接管');
+    clearSaveTimers(); pullGeneration++; editGeneration++;
+    DATA=next; changed(); hadOwn=true;
+    editing=false; snapshot=null; savePaused=false; syncEditUI();
+    NOTICE=storageErrors[LS_LOCAL]?'导入尚未持久化，请立即导出备份':
+      (isolated?'导入已保存到当前标签页会话；隔离预览不上传云端':
+        (ghToken()?'导入已保存到本机，已加入上传队列':'导入已保存到本机；未填 token，尚未上传'));
+    requestSave(0,true); paint();
+  }
   panel.querySelector('#costFile').addEventListener('change', function(e){
     var file=e.target.files&&e.target.files[0]; if(!file) return;
-    var fr=new FileReader();
+    var input=e.target, fr=new FileReader(), generation=editGeneration, rev=revision;
+    input.value='';
     fr.onload=function(){
-      try{
-        var j=JSON.parse(fr.result);
-        if(j&&j.items){ DATA={updated_at:j.updated_at||nowStr(),cash:num(j.cash),
-          fixed:num(j.fixed),fixed_cost:num(j.fixed_cost),items:j.items};
-          setPending(true); write(LS_LOCAL,DATA); paint(); }
-      }catch(err){}
+      if(disposed || generation!==editGeneration || rev!==revision){
+        NOTICE='读取备份期间数据或编辑会话已变化，请重新选择文件'; paint(); return;
+      }
+      try{ importData(JSON.parse(fr.result)); }
+      catch(err){ NOTICE='导入失败：'+err.message+'；现有数据未修改'; paint(); }
     };
+    fr.onerror=function(){ NOTICE='导入失败：无法读取文件'; paint(); };
     fr.readAsText(file);
   });
 
-  /* 编辑框输入：改完即时重算（整个面板重绘），并把光标原样放回同一个输入框，
-     否则每敲一个键都会因为 innerHTML 重建而丢焦点 */
+  /* 每次有效输入同步落盘，只把重算合并到下一帧；paint 统一保存当前输入值和完整选区。 */
   panel.addEventListener('input', function(e){
     var el=e.target;
-    if(!el || !el.getAttribute) return;
-    var f=el.getAttribute('data-f'); if(!f) return;
-    var sym=el.getAttribute('data-sym');
-    var raw=el.value, caret=(el.selectionStart==null?raw.length:el.selectionStart);
-    if(f==='cash') DATA.cash=num(raw);
-    else if(f==='fixed') DATA.fixed=num(raw);
-    else if(f==='fixed_cost') DATA.fixed_cost=num(raw);
-    else { if(!DATA.items[sym]) DATA.items[sym]={cost:0,qty:0}; DATA.items[sym][f]=num(raw); }
-    DATA.updated_at=nowStr(); setPending(true); write(LS_LOCAL, DATA);
-    paint();
-    var again=panel.querySelector('input[data-sym="'+sym+'"][data-f="'+f+'"]');
-    if(again){
-      again.value=raw; again.focus();
-      try{ again.setSelectionRange(caret,caret); }catch(err){}
+    if(!writer || !editing || disposed || !el || !el.getAttribute) return;
+    var f=el.getAttribute('data-f'), sym=el.getAttribute('data-sym');
+    if(['cash','fixed','fixed_cost','cost','qty'].indexOf(f)<0) return;
+    if((f==='cost'||f==='qty') && !ROWS.some(function(r){ return r.sym===sym && isPosition(r); })) return;
+    var raw=el.value.trim(), value=raw===''?0:Number(raw);
+    if(!/^(?:\d+(?:\.\d{0,4})?|\.\d{1,4})?$/.test(raw) || !isFinite(value) || value<0){
+      el.setCustomValidity('请输入非负数，最多四位小数');
+      NOTICE='输入无效，保留上一次有效数值；请输入非负数，最多四位小数';
+      if(stateEl) stateEl.textContent=NOTICE;
+      return;
     }
+    el.setCustomValidity(''); NOTICE='';
+    if(f==='cash'||f==='fixed'||f==='fixed_cost') DATA[f]=value;
+    else { if(!DATA.items[sym]) DATA.items[sym]={cost:0,qty:0}; DATA.items[sym][f]=value; }
+    changed();
+    if(!_paintFrame) _paintFrame=requestAnimationFrame(function(){ _paintFrame=null; paint(); });
   });
 
-  function vt(v){ var n=num(v); return n>0?trim(n):''; }
+  function vt(v){ return trim(num(v)); }
   function inp(sym, f, val, ph){
     return '<input data-sym="'+esc(sym)+'" data-f="'+f+'" inputmode="decimal" step="0.0001"'
       +' value="'+esc(val)+'" placeholder="'+ph+'" aria-label="'+esc(sym)+' '+ph+'">';
@@ -890,6 +1033,7 @@
     if(!rs || !rs.items) return;
     var v1=0, v0=0, n=0, miss=[];
     ROWS.forEach(function(r){
+      if(!isPosition(r)) return;
       var it=DATA.items[r.sym]; if(!it) return;
       var q=num(it.qty); if(!(q>0) || !(r.price>0)) return;
       var ri=rs.items[r.sym];
@@ -910,8 +1054,24 @@
   }
 
   function paint(){
+    if(!panel || disposed) return;
+    if(_paintFrame){ cancelAnimationFrame(_paintFrame); _paintFrame=null; }
+    var active=document.activeElement, focus=null;
+    if(editing && active && panel.contains(active) && active.getAttribute('data-f')){
+      focus={sym:active.getAttribute('data-sym'),field:active.getAttribute('data-f'),value:active.value,
+        start:active.selectionStart,end:active.selectionEnd,direction:active.selectionDirection,
+        error:active.validationMessage};
+    }
     ACK_PRUNED=false;
-    collectExtra();
+    var positionCount=document.querySelectorAll('#group_positions tr[id^="s-"]').length;
+    var positionName=document.querySelector('#group_positions>summary .grp-name');
+    if(positionName) positionName.textContent='持仓 ('+positionCount+')';
+    // 移组只让持仓亏损条件失效；成本/数量保留，加减仓 ACK 不受组别影响。
+    Object.keys(DATA.acks).forEach(function(k){
+      if(/\|loss(?:10|20)$/.test(k) && !ROWS.some(function(r){
+        return r.sym===k.split('|')[0] && isPosition(r);
+      })) pruneAck(k);
+    });
     var cash=num(DATA.cash);            // 现金总额（券商余额＋货币市场 ETF，一个数字）
     var fixed=num(DATA.fixed);          // 固定收益市值
     var fixedCost=num(DATA.fixed_cost);
@@ -924,14 +1084,18 @@
     ROWS.forEach(function(r){
       var it=DATA.items[r.sym]||{cost:0,qty:0};
       var cost=num(it.cost), qty=num(it.qty);
-      var has=cost>0&&qty>0;
-      r.has=has;
+      r.isLong=!!r.tr.closest('#group_positions_long');
+      var held=isPosition(r), has=held&&cost>0&&qty>0;
+      r.has=has; r.cost=cost; r.qty=qty;
       if(!has){
+        r.lossLv=0; r.lossAcked=false;
+        pruneAck(r.sym+'|loss10'); pruneAck(r.sym+'|loss20');
         r.tick.style.display='none'; r.info.textContent='';
+        if(r.rail) r.rail.setAttribute('aria-label',r.lab0);
         if(r.warn){ r.warn.style.display='none'; r.warn.textContent=''; }
         r.mv=0; r.pnlPct=0; r.pnlAmt=0;
         // 编辑态下没填过的标的也要露出来，否则没法补录
-        if(editing){ (r.isLong?longs:shorts).push(r); }
+        if(editing && held){ (r.isLong?longs:shorts).push(r); }
         return;
       }
       var mv=r.price*qty;
@@ -945,6 +1109,7 @@
 
       /* 成本价在区间外就整条贴到端点并加朝外箭头（区分「成本＝最高/最低价」），
          区间内才按实际位置画 */
+      if(!r.rail || !(r.high>r.low)){ r.tick.style.display='none'; return; }
       var pos=(cost-r.low)/(r.high-r.low)*100;
       var outside=pos<0?'out-lo':(pos>100?'out-hi':'');
       r.tick.style.display='';
@@ -980,9 +1145,8 @@
          浮亏收窄到阈值以内时 key 自动清掉，下次再跌破会重新提醒 */
       var lv=r.pnlPct<=-20?2:(r.pnlPct<=-10?1:0);
       if(!DATA.acks) DATA.acks={};
-      if(lv===0 && (DATA.acks[r.sym+'|loss10']||DATA.acks[r.sym+'|loss20'])){
-        delete DATA.acks[r.sym+'|loss10']; delete DATA.acks[r.sym+'|loss20']; ACK_PRUNED=true;
-      }
+      if(lv===0) pruneAck(r.sym+'|loss10');
+      if(lv<2) pruneAck(r.sym+'|loss20');
       var lk=r.sym+'|loss'+(lv===2?'20':'10');
       // 记到行对象上：灯级合成时要知道「这条规则现在该不该亮红灯」
       r.lossLv=lv; r.lossAcked=!!DATA.acks[lk];
@@ -1053,7 +1217,7 @@
       +'<span class="t-mv">'+(editing?inp('USD','cash',vt(cash),'金额'):plain(cash))+'</span>'
       +'<span class="t-pnl"></span>'
       +wtCell(cash)+'</div>');
-    if(fixed>0){
+    if(fixed>0 || editing){
       /* 固定收益：同样是单排信息。成本是券商给的总成本（没有单价），平时也显示，
          不再只在编辑态露出来；编辑态下成本与市值各自变输入框 */
       html+=miniHtml('blk-bond',
@@ -1134,8 +1298,15 @@
     }
     document.getElementById(PID).innerHTML=html;
     applyLights();
-    // 条件消失自动清掉的「已读」要落盘，否则刷新页面又会亮一次
-    if(ACK_PRUNED){ ACK_PRUNED=false; write(LS_LOCAL, DATA); autoPush(); }
+    // 自动失效只记录维护 tombstone；初次核验前不冒充用户整份编辑，也不失效 pull。
+    if(ACK_PRUNED) persistMaintenance();
+    if(focus && editing){
+      var again=panel.querySelector('input[data-sym="'+focus.sym+'"][data-f="'+focus.field+'"]');
+      if(again){
+        again.value=focus.value; again.setCustomValidity(focus.error||''); again.focus();
+        try{ again.setSelectionRange(focus.start,focus.end,focus.direction); }catch(e){}
+      }
+    }
 
     // 标题行只写「已同步 / 未同步」+ 总资产·盈亏；底部横条下面只留比例图例，不再重复总资产
     // 标题右侧：同步状态。点一下可以填 / 改 GitHub token（只存本机 localStorage）
@@ -1147,9 +1318,14 @@
     var ncTip='没取到云端持仓数据：'+(tk?'点这里更换 GitHub token':'点这里填 GitHub token')
       +'；本机数据不受影响';
     var okTip='已同步'+(CLOUD&&CLOUD.updated_at?('：云端数据 '+esc(String(CLOUD.updated_at).slice(0,16))):'');
-    stateEl.innerHTML = SYNC==='pulling' ? '<span class="warn">拉取中…</span>'
+    stateEl.innerHTML = Object.keys(storageErrors).length ? '<span class="warn">本地未持久化</span>'
+      : isolated ? '<span class="warn">隔离预览 · 不上传</span>'
+      : !writer ? '<span class="warn">只读标签页</span>'
+      : SYNC==='pulling' ? '<span class="warn">拉取中…</span>'
       : SYNC==='loading' ? '<span class="warn">上传中…</span>'
       : SYNC==='error' ? '<span class="warn" aria-label="'+msg+'">上传失败</span>'
+      : uncertain ? '<span class="warn">上传结果待核验</span>'
+      : maintenancePending && !cloudVerified ? '<span class="warn">ACK 维护待云端核验</span>'
       : dirty ? '<span class="warn">未同步'+(tk?'':' · 未填 token')+'</span>'
       : SYNC==='nocloud' ? '<span class="'+ncCls+'" aria-label="'+ncTip+'">云端未取到</span>'
       : '<span class="ok" aria-label="'+okTip+'">已同步</span>';
@@ -1179,11 +1355,26 @@
       +aria.join('，')+'">'+bar+'</div>'
       // 2026-10-19：横条下面不再写「总资产 $xx」——总资产已经在卡片表头（标题行）显示了，
       // 这里重复一份反而抢视线。下面只留「颜色方块 + 比例」。
-      +'<div class="cost-footrow"><div class="cost-legend">'+leg+'</div></div>';
+      +'<div class="cost-footrow"><div class="cost-legend">'+leg+'</div></div>'
+      +'<div class="cost-membership-note">持仓统计仅含持仓分组；移组不自动折算现金、不删除成本和数量。移回后沿用旧值，请复核。</div>'
+      +(isolated?'<div class="cost-notice">'+ISOLATED_NOTICE+' <button type="button" data-cost-export>导出备份</button></div>':'')
+      +((NOTICE||Object.keys(storageErrors).length||SYNC==='error')
+        ? '<div class="cost-notice" role="status">'+esc(Object.keys(storageErrors).map(function(k){
+          return storageErrors[k]; }).join('；')||NOTICE||SYNC_MSG)
+          +' <button type="button" data-cost-export>导出备份</button>'
+          +(writer?'<button type="button" data-cost-retry>'+(isolated?'重试会话保存':'重试保存/上传')+'</button>':'')+'</div>' : '');
   }
 
+  panel.addEventListener('click',function(e){
+    if(e.target.closest('[data-cost-export]')) exportData();
+    if(e.target.closest('[data-cost-retry]')){
+      if(editing){ NOTICE='请先保存或取消当前编辑，再重试上传'; paint(); return; }
+      savePaused=false; requestSave(0,true);
+    }
+  });
   paint();
   syncEditUI();
+  takeOwnership(function(ok){ if(ok) startPull(); paint(); });
 
   /* 默认展开的只有「统计」（monitor.py 生成时就带 open），持仓 / 重点 / 市场风险 / 仓位管理
      全部默认折叠——10-14 定的口径。2026-10-19 修：这段 DEMO 残留会把持仓和仓位管理强行展开，
@@ -1194,14 +1385,6 @@
   //               ?focus=pos 落到持仓，?edit=1 直接进编辑态
   var fq=(location.search.match(/focus=(\w+)/)||[])[1];
   if(/edit=1/.test(location.search)) setTimeout(enterEdit, 400);
-  // 只为核对：?edit=1&save=1 走一遍「进编辑 → 保存并上传」
-  if(/save=1/.test(location.search)){
-    setTimeout(function(){
-      var i=panel.querySelector('input[data-f="qty"]');
-      if(i){ i.value='9'; i.dispatchEvent(new Event('input',{bubbles:true})); }
-      var b=panel.querySelector('#costSave'); if(b) b.click();
-    }, 700);
-  }
   if(fq){
     setTimeout(function(){
       var blocks=panel.querySelectorAll('.signal-member-block');

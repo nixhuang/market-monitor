@@ -1363,8 +1363,7 @@ class TestGroups(unittest.TestCase):
                  'rt': table({'Current Ratio': ('84.25%', '114.00%'), 'After Tax ROE': ('8.8%', '23.6%'),
                               'Operating Margin': ('10.0%', '10.0%'), 'Gross Margin': ('50.0%', '50.0%'),
                               'Profit Margin': ('9.0%', '90.0%')})}
-        with patch.object(monitor, 'nasdaq_financials', return_value=facts):
-            result = monitor.fundamental_check('UBER')
+        result = monitor.fundamental_check('UBER', facts, today='2026-10-10')
         text = ' '.join(result['hits'])
         self.assertIn('流动比率 1.14→0.84倍', text)
         self.assertIn('2025/9→2026/6', text)
@@ -1401,28 +1400,68 @@ class TestGroups(unittest.TestCase):
                  'bs': table({'Total Liabilities': ('$5', '$5'), 'Total Equity': ('$5', '$5')}),
                  'cf': table({'Net Cash Flow-Operating': ('$20', '$20')}),
                  'rt': table({'Operating Margin': ('10%', '10%'), 'Profit Margin': ('9%', '9%')})}
-        self.assertEqual(monitor.fundamental_check('UBER', monitor.compact_financials(facts)),
-                         monitor.fundamental_check('UBER', facts))
-        self.assertIsNone(monitor.fundamental_check('UBER', {}))        # 传空：不联网，直接无结果
+        compact_result = monitor.fundamental_check('UBER', monitor.compact_financials(facts), today=today)
+        self.assertEqual(compact_result, monitor.fundamental_check('UBER', facts, today=today))
+        self.assertEqual(compact_result['level'], 'red')  # 旧缓存仍保留可识别风险，但不能声称完整
+        self.assertFalse(compact_result['quality']['complete'])
+        with patch.object(monitor, 'financials_any_source') as fetch:
+            empty = monitor.fundamental_check('UBER', {}, today=today)
+        fetch.assert_not_called()  # 显式空 facts 只返回灰色质量诊断，绝不取数
+        self.assertEqual(empty['level'], 'gray')
+        self.assertEqual(empty['hits'], [])
+        self.assertEqual(empty['quality']['status'], 'invalid_period')
+        self.assertFalse(empty['quality']['current'])
+        self.assertFalse(empty['quality']['complete'])
+        self.assertTrue(all(c['status'] == 'incomparable' for c in empty['checks'].values()))
 
     def test_update_fundamentals_reuses_cache_and_falls_back(self):
         today = '2026-10-10'
-        fresh = {'period': '6/30/2026', 'base_period': '9/30/2025', 'inc': {}, 'bs': {}, 'cf': {}, 'rt': {}}
+        fresh = {'period': '6/30/2026', 'base_period': '9/30/2025',
+                 'inc': {'Total Revenue': {'value2': '$100', 'value5': '$100'}},
+                 'bs': {}, 'cf': {}, 'rt': {}}
         prev = {'AAPL': {'fetched': '2026-10-01', 'data': fresh},
                 'MSFT': {'fetched': '2026-09-01', 'data': fresh}}
         asked = []
         def fetch(sym):
             asked.append(sym)
-            return None if sym == 'MSFT' else dict(fresh, period='9/30/2026')
+            return None if sym == 'MSFT' else dict(fresh, period='9/30/2026', base_period='12/31/2025')
         # 备用源也要关掉：这个用例断言的是「Nasdaq 取不到就沿用旧值」，不能让它真去联网兜底
         with patch.object(monitor, 'nasdaq_financials', side_effect=fetch), \
                 patch.object(monitor, 'stockanalysis_financials', return_value=None):
             facts, stat = monitor.update_fundamentals(['AAPL', 'MSFT', 'NEW'], prev, today)
         self.assertEqual(sorted(asked), ['MSFT', 'NEW'])                   # AAPL 命中缓存
-        self.assertEqual((stat['fetched'], stat['cached']), (2, 1))
+        self.assertEqual((stat['fetched'], stat['cached'], stat['failed']), (2, 1, 1))
         self.assertEqual(stat['data']['NEW']['fetched'], today)
+        self.assertEqual(facts['NEW']['period'], '9/30/2026')
+        self.assertEqual(facts['NEW']['quality']['status'], 'partial')
+        self.assertNotIn('fetch_error', stat['data']['NEW'])
         self.assertEqual(stat['data']['MSFT']['fetched'], '2026-09-01')    # 没取到：沿用旧数据，不刷新时间
-        self.assertIn('MSFT', facts)
+        self.assertEqual(facts['MSFT'], fresh)
+        self.assertTrue(stat['data']['MSFT']['fetch_error'])
+        self.assertNotIn('attempted', prev['MSFT'])
+        empty = dict(fresh, inc={})
+        with patch.object(monitor, 'nasdaq_financials', return_value=empty), \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
+            kept, failed = monitor.update_fundamentals(['MSFT', 'EMPTY'], prev, today)
+        self.assertEqual(backup.call_count, 2)  # 空表必须尝试备用源，不能视为成功
+        self.assertEqual(failed['failed'], 2)
+        self.assertEqual(failed['data']['MSFT']['fetched'], '2026-09-01')
+        self.assertEqual(kept['MSFT'], fresh)
+        entry = failed['data']['EMPTY']
+        self.assertEqual(entry['data'], kept['EMPTY'])  # 保留失败证据，不冒充成功财报
+        self.assertEqual(kept['EMPTY']['inc'], {})
+        self.assertEqual(kept['EMPTY']['period'], empty['period'])
+        assessment = monitor.fundamental_check('EMPTY', kept['EMPTY'], today=today)
+        self.assertEqual(assessment['level'], 'gray')
+        self.assertEqual(assessment['hits'], [])
+        self.assertFalse(assessment['quality']['complete'])
+        self.assertNotIn('fetched', entry)
+        self.assertEqual(entry['error'], '财报核心单元格为空')
+        self.assertEqual(entry['error_kind'], 'quality_invalid')
+        self.assertTrue(entry['fetch_error'])
+        self.assertEqual(entry['retry_after'], '2026-10-11')
+        self.assertFalse(monitor.fundamentals_refetch_due(entry, today))
+        self.assertTrue(monitor.fundamentals_refetch_due(entry, '2026-10-11'))
         for bad in (None, [], 'x', {'AAPL': 'x'}, {'AAPL': {'data': 1}}):
             with patch.object(monitor, 'nasdaq_financials', return_value=None), \
                     patch.object(monitor, 'stockanalysis_financials', return_value=None):
@@ -1472,21 +1511,50 @@ class TestGroups(unittest.TestCase):
             self.assertEqual(monitor.fetch_history('AAPL')['source'], 'stooq')
 
     def test_realtime_preserves_intraday_high_low_for_bollinger(self):
-        from datetime import datetime, timedelta
-        from zoneinfo import ZoneInfo
-        class TradingClock(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return datetime(2026, 10, 8, 11, 0, tzinfo=ZoneInfo('America/New_York')).astimezone(tz)
-        dates = [(datetime(2026, 10, 8) - timedelta(days=i)).date().isoformat() for i in range(31, -1, -1)]
+        from copy import deepcopy
+        from datetime import datetime
+        import exchange_calendars as xcals
+        when = datetime.fromisoformat('2026-10-08T11:00:00-04:00')
+        dates = [d.date().isoformat() for d in
+                 xcals.get_calendar('XNYS').sessions_in_range('2026-08-01', '2026-10-08')[-32:]]
         data = {'dates': dates, 'closes': [100]*31+[102], 'highs':[100]*31+[110],
                 'lows':[100]*31+[95], 'volumes':[100]*32, 'price':102, 'prev_close':100}
-        with patch.object(monitor, 'datetime', TradingClock), patch.object(monitor, 'CLOSED_ONLY', False), \
-                patch.object(monitor, 'nasdaq_realtime', return_value={'price':101,'ts':'today'}):
-            result = monitor.apply_realtime('AAPL', data)
-        self.assertEqual((result['price'],result['closes'][-1],result['highs'][-1],result['lows'][-1]),
-                         (101,101,110,95))
-        self.assertTrue(result['realtime'])
+        original = deepcopy(data)
+        quote = {'price': 101, 'ts': when.isoformat(), 'volume': 1500}
+        with patch.object(monitor, 'CLOSED_ONLY', False), \
+                patch.object(monitor, 'TARGET_DATE', '2026-10-08'), \
+                patch.dict(monitor.S, {'use_realtime': 1}):
+            with patch.object(monitor, 'nasdaq_realtime', return_value=quote) as realtime:
+                result = monitor.apply_realtime('AAPL', data, asof=when)
+            realtime.assert_called_once_with('AAPL', asof=when)
+            self.assertEqual((result['price'], result['closes'][-1], result['highs'][-1], result['lows'][-1]),
+                             (101, 101, 110, 95))
+            self.assertTrue(result['realtime'])
+            self.assertEqual(result['prev_close'], 100)
+            self.assertEqual((result['rt_ts'], result['rt_volume']), (quote['ts'], 1500))
+            self.assertTrue(monitor.valid_history(result))
+            self.assertIsNot(result, data)
+            for key in ('dates', 'closes', 'highs', 'lows', 'volumes'):
+                self.assertIsNot(result[key], data[key])
+            # 缺失、无时区、昨天、过期和未来成交时间均不得覆盖日线。
+            for stamp in (None, 'today', '2026-10-08', '2026-10-08T11:00:00',
+                          '2026-10-07T11:00:00-04:00', '2026-10-08T10:54:59-04:00',
+                          '2026-10-08T11:00:01-04:00', 'Oct 08, 2026 11:00 AM EST'):
+                with self.subTest(stamp=stamp), \
+                        patch.object(monitor, 'nasdaq_realtime', return_value=dict(quote, ts=stamp)):
+                    self.assertIs(monitor.apply_realtime('AAPL', data, asof=when), data)
+            # 删掉上一交易日，既测替换今日 bar，也测从更早历史追加的拒绝路径。
+            for replace_today in (False, True):
+                broken = {**data, **{k: v[:-2] + (v[-1:] if replace_today else [])
+                                    for k, v in data.items() if isinstance(v, list)}}
+                broken['price'] = broken['closes'][-1]
+                self.assertTrue(monitor.valid_history(broken))
+                before = deepcopy(broken)
+                with patch.object(monitor, 'nasdaq_realtime', return_value=quote) as realtime:
+                    self.assertIs(monitor.apply_realtime('AAPL', broken, asof=when), broken)
+                realtime.assert_not_called()
+                self.assertEqual(broken, before)
+        self.assertEqual(data, original)
 
     def test_settings_reject_bad_values_but_keep_valid_config(self):
         import tempfile
@@ -1546,7 +1614,7 @@ class TestGroups(unittest.TestCase):
                 with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:
                     json.dump(values, f)
                 with patch.object(monitor, 'BASE', directory):
-                    self.assertEqual(monitor.load_settings(), values)
+                    self.assertEqual(monitor.load_settings(), {**values, **monitor.FUND_DEFAULT})
             for key in ('ma_short', 'ma_long'):
                 for bad in (1, -1, 0.5, 50.5, 251, True, None, '', '0', [], {}):
                     values = dict(monitor.DEFAULT_SETTINGS, **{key: bad})
@@ -1554,7 +1622,8 @@ class TestGroups(unittest.TestCase):
                     with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:
                         json.dump(values, f)
                     with patch.object(monitor, 'BASE', directory):
-                        self.assertEqual(monitor.load_settings(), monitor.DEFAULT_SETTINGS)
+                        self.assertEqual(monitor.load_settings(),
+                                         {**monitor.DEFAULT_SETTINGS, **monitor.FUND_DEFAULT})
         self.assertTrue(monitor.valid_settings(dict(monitor.DEFAULT_SETTINGS, ma_short=250, ma_long=50)))
         self.assertTrue(monitor.valid_settings(dict(monitor.DEFAULT_SETTINGS, ma_short=0, ma_long=0, boll_n=0)))
 
@@ -1751,14 +1820,43 @@ class TestGroups(unittest.TestCase):
                          '财报已到期2026-10-01待更新')
         self.assertEqual(note({}), '')
         self.assertEqual(note(None), '')
-        # 一次都没取到过：重试间隔内不再取，过了间隔再确认一次
+        # 只有明确分类为无覆盖、且没有成功缓存，才执行原有七天退避。
         due = monitor.fundamentals_refetch_due
-        empty_err = {'fetch_error': True, 'attempted': '2026-10-10', 'event_date': '2026-10-09'}
-        self.assertFalse(due(empty_err, '2026-10-12'))     # 距上次 2 天 < 7 天
-        self.assertTrue(due(empty_err, '2026-10-20'))      # 10 天后重新确认
-        # 有缓存的失败仍按天重试，不受这条影响
-        self.assertTrue(due({'fetch_error': True, 'fetched': '2026-10-01', 'attempted': '2026-10-10',
-                             'event_date': '2026-10-09'}, '2026-10-12'))
+        empty_err = {'fetch_error': True, 'error_kind': 'no_coverage', 'attempted': '2026-10-10',
+                     'event_date': '2026-10-09', 'retry_after': '2026-10-17'}
+        self.assertEqual(monitor.FUND_NO_DATA_RETRY_DAYS, 7)
+        self.assertFalse(due(empty_err, '2026-10-12'))
+        self.assertFalse(due(empty_err, '2026-10-16'))
+        self.assertTrue(due(empty_err, '2026-10-17'))  # 七天边界当天重新确认
+        self.assertTrue(due(empty_err, '2026-10-20'))
+        self.assertNotIn('沿用缓存', note(empty_err))
+        # 旧无分类记录不能证明无覆盖，旧 retry_after 也不能延迟次日重试。
+        legacy = {k: v for k, v in empty_err.items() if k != 'error_kind'}
+        self.assertFalse(due(legacy, '2026-10-10'))
+        self.assertTrue(due(legacy, '2026-10-11'))
+        for kind in ('timeout', 'http_error', 'transient', 'quality_invalid'):
+            with self.subTest(kind=kind):
+                short_retry = dict(legacy, error_kind=kind)
+                self.assertFalse(due(short_retry, '2026-10-10'))
+                self.assertTrue(due(short_retry, '2026-10-11'))
+                self.assertNotIn('该源暂无财报数据', note(short_retry))
+        # 有成功缓存的失败仍按天重试，即使本轮明确返回无覆盖也不等七天。
+        self.assertTrue(due(dict(empty_err, fetched='2026-10-01'), '2026-10-11'))
+        with patch.object(monitor, 'nasdaq_financials', return_value=None) as primary, \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
+            _, same_day = monitor.update_fundamentals(['LEGACY'], {'LEGACY': legacy}, '2026-10-10')
+            primary.assert_not_called()
+            backup.assert_not_called()
+            _, migrated = monitor.update_fundamentals(['LEGACY'], same_day['data'], '2026-10-11')
+        primary.assert_called_once_with('LEGACY')
+        backup.assert_called_once_with('LEGACY')
+        entry = migrated['data']['LEGACY']
+        self.assertEqual((migrated['fetched'], migrated['failed']), (1, 1))
+        self.assertEqual(entry['error_kind'], 'no_coverage')
+        self.assertEqual(entry['attempted'], '2026-10-11')
+        self.assertEqual(entry['retry_after'], '2026-10-18')
+        self.assertNotIn('fetched', entry)
+        self.assertNotIn('error_kind', legacy)
 
     def test_stockanalysis_fallback_when_nasdaq_returns_nothing(self):
         """Nasdaq 财报接口不覆盖的标的（外国发行人，如 TSM）由 stockanalysis 季度表兜底。
@@ -1804,9 +1902,10 @@ class TestGroups(unittest.TestCase):
             return resp
 
         with patch.object(monitor, '_fund_session') as sess, \
+                patch.object(monitor, '_earn_today', return_value='2026-10-14'), \
                 patch.object(monitor, 'nasdaq_financials', return_value=None):
             sess.return_value.get.side_effect = get
-            f = monitor.financials_any_source('TSM')
+            f = monitor.financials_any_source('TSM', today='2026-10-14')
         self.assertIsNotNone(f, "Nasdaq 没数据时必须走备用源")
         self.assertEqual(f['period'], '6/30/2026')
         self.assertEqual(f['base_period'], '9/30/2025')
@@ -1818,21 +1917,46 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(f['rt']['After Tax ROE']['value2'], '40.45%')            # 6/30 那列，不是首列
         self.assertEqual(f['rt']['Current Ratio']['value2'], '2.46')
         # 备用源的数据能直接喂给判定（生产里就是 update_fundamentals 刷新后这样传）
-        got = monitor.fundamental_check('TSM', monitor.compact_financials(f))
+        got = monitor.fundamental_check('TSM', monitor.compact_financials(f), today='2026-10-14')
         self.assertIsNotNone(got)
         self.assertEqual(got['period'], '6/30/2026')
         self.assertEqual(got['level'], 'green')
+        self.assertTrue(got['quality']['complete'])
+        self.assertEqual(got['source'], 'stockanalysis')
 
     def test_stockanalysis_not_consulted_when_nasdaq_has_data(self):
-        """Nasdaq 取得到就绝不动用备用源，数字口径保持原样。"""
-        from unittest.mock import MagicMock
-        monitor._SA_FUND_CACHE.clear()
-        self.addCleanup(monitor._SA_FUND_CACHE.clear)
-        with patch.object(monitor, 'nasdaq_financials', return_value={'period': '6/27/2026', 'inc': {}}) as nas, \
-                patch.object(monitor, 'stockanalysis_financials') as sa:
-            monitor.financials_any_source('AAPL')
-        nas.assert_called_once()
+        """Nasdaq 有当期可比较数据才不动备用源；缺失、过期或不可比较必须降级。"""
+        from copy import deepcopy
+        primary = {'period': '6/30/2026', 'base_period': '9/30/2025',
+                   'source': 'nasdaq', 'frequency': 'quarterly',
+                   'table_periods': {'inc': {'value2': '6/30/2026', 'value5': '9/30/2025'}},
+                   'inc': {'Total Revenue': {'value2': '$100', 'value5': '$100'}},
+                   'bs': {}, 'cf': {}, 'rt': {}}
+        with patch.object(monitor, 'nasdaq_financials', return_value=primary) as nas, \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as sa:
+            result = monitor.financials_any_source('AAPL', today='2026-10-10')
+        nas.assert_called_once_with('AAPL')
         sa.assert_not_called()
+        self.assertIs(result, primary)  # 缺扩展项不增加请求，也不重写已有数字
+        assessment = monitor.fundamental_check('AAPL', result, today='2026-10-10')
+        self.assertEqual(assessment['checks']['revenue']['status'], 'checked')
+        self.assertEqual(assessment['level'], 'gray')  # 部分可用不等于全表正常
+        self.assertFalse(assessment['quality']['complete'])
+        backup = dict(primary, source='stockanalysis',
+                      inc={'Total Revenue': {'value2': '$200', 'value5': '$200'}})
+        for unusable in ({'period': '6/27/2026', 'inc': {}},
+                         dict(primary, period='6/30/2025'),
+                         dict(primary, base_period='6/30/2026'),
+                         dict(primary, rt={'Current Ratio': {'value2': 2, 'value5': 2}})):
+            with self.subTest(unusable=unusable):
+                original = deepcopy(unusable)
+                with patch.object(monitor, 'nasdaq_financials', return_value=unusable) as nas, \
+                        patch.object(monitor, 'stockanalysis_financials', return_value=backup) as sa:
+                    result = monitor.financials_any_source('AAPL', today='2026-10-10')
+                nas.assert_called_once_with('AAPL')
+                sa.assert_called_once_with('AAPL')
+                self.assertIs(result, backup)  # 整份选择，不把不同来源单元格拼成财报
+                self.assertEqual(unusable, original)
 
     def test_intraday_summary_and_per_stock_fallback_labels(self):
         rows = [dict(symbol=s, note=s, group='position', price=price, chg=0, level=level,
@@ -2965,13 +3089,16 @@ class TestCacheAudit(unittest.TestCase):
 
     @staticmethod
     def _financials(period='6/30/2026'):
-        return {'period': period, 'base_period': '9/30/2025',
+        base = {'3/31/2026': '6/30/2025', '6/30/2026': '9/30/2025', '9/30/2026': '12/31/2025'}[period]
+        return {'period': period, 'base_period': base, 'source': 'nasdaq', 'frequency': 'quarterly',
+                'table_periods': {'inc': {'value2': period, 'value5': base}},
                 'inc': {'Total Revenue': {'value2': '$100', 'value5': '$120'}}, 'bs': {}, 'cf': {}, 'rt': {}}
 
     def test_fundamental_event_overrides_quiet_period_until_period_advances(self):
         prev = {'AAA': {'fetched': '2026-10-01', 'data': self._financials()}}
         events = {'AAA': ['2026-10-09']}
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()) as fetch:
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()) as fetch, \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
             _, st = monitor.update_fundamentals(['AAA'], prev, '2026-10-10', events)
             self.assertEqual(fetch.call_count, 1)
             self.assertEqual(st['data']['AAA']['event_date'], '2026-10-09')
@@ -2979,12 +3106,17 @@ class TestCacheAudit(unittest.TestCase):
             self.assertEqual(same['fetched'], 0)
             _, next_day = monitor.update_fundamentals(['AAA'], st['data'], '2026-10-11', events)
             self.assertEqual(next_day['fetched'], 1)
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('9/30/2026')):
+        backup.assert_not_called()
+        self.assertEqual(next_day['failed'], 0)
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('9/30/2026')), \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
             _, advanced = monitor.update_fundamentals(['AAA'], next_day['data'], '2026-10-12', events)
             self.assertNotIn('event_date', advanced['data']['AAA'])
             self.assertEqual(advanced['data']['AAA']['event_done'], '2026-10-09')
             _, final = monitor.update_fundamentals(['AAA'], advanced['data'], '2026-10-13', events)
             self.assertEqual(final['fetched'], 0)
+        backup.assert_not_called()
+        self.assertEqual(advanced['failed'], 0)
 
     def test_fundamental_failure_keeps_event_and_old_timestamp(self):
         prev = {'AAA': {'fetched': '2026-10-01', 'data': self._financials()}}
@@ -3001,17 +3133,29 @@ class TestCacheAudit(unittest.TestCase):
     def test_fundamental_one_bad_symbol_does_not_drop_other_results(self):
         def fetch(sym):
             return {'inc': 'bad'} if sym == 'BAD' else self._financials()
-        with patch.object(monitor, 'nasdaq_financials', side_effect=fetch), patch.object(monitor, 'log'):
+        with patch.object(monitor, 'nasdaq_financials', side_effect=fetch), \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup, \
+                patch.object(monitor, 'log'):
             facts, st = monitor.update_fundamentals(['BAD', 'GOOD'], today='2026-10-10')
+        backup.assert_called_once_with('BAD')
         self.assertIn('GOOD', facts)
+        self.assertNotIn('BAD', facts)
         self.assertEqual(st['failed'], 1)
+        self.assertEqual(st['data']['GOOD']['fetched'], '2026-10-10')
+        self.assertNotIn('fetched', st['data']['BAD'])
+        self.assertTrue(st['data']['BAD']['fetch_error'])
 
     def test_fundamental_report_regression_keeps_old_data(self):
-        prev = {'AAA': {'fetched': '2026-09-01', 'data': self._financials()}}
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('3/31/2026')):
-            facts, st = monitor.update_fundamentals(['AAA'], prev, '2026-10-10')
+        # 旧候选仍在报告有效期内，单独验证报告期倒退，而不是被陈旧门槛提前拦住。
+        prev = {'AAA': {'fetched': '2026-08-01', 'data': self._financials()}}
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('3/31/2026')), \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
+            facts, st = monitor.update_fundamentals(['AAA'], prev, '2026-09-15')
+        backup.assert_not_called()
         self.assertEqual(facts['AAA']['period'], '6/30/2026')
         self.assertTrue(st['data']['AAA']['fetch_error'])
+        self.assertEqual(st['data']['AAA']['fetched'], '2026-08-01')
+        self.assertEqual(st['data']['AAA']['error'], '报告期倒退，保留原缓存')
 
     def test_fund_cache_warning_visible_even_without_red_yellow(self):
         row = self._row('AAA')
@@ -3025,12 +3169,16 @@ class TestCacheAudit(unittest.TestCase):
 
     def test_first_post_event_fetch_establishes_baseline_not_completion(self):
         events = {'AAA': ['2026-10-09']}
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()):
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()), \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
             _, first = monitor.update_fundamentals(['AAA'], today='2026-10-10', earnings_events=events)
+        backup.assert_not_called()
         self.assertEqual(first['data']['AAA']['event_base'], '2026-06-30')
         self.assertNotIn('event_done', first['data']['AAA'])
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('9/30/2026')) as fetch:
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('9/30/2026')) as fetch, \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
             _, second = monitor.update_fundamentals(['AAA'], first['data'], '2026-10-11', events)
+        backup.assert_not_called()
         self.assertEqual(fetch.call_count, 1)
         self.assertEqual(second['data']['AAA']['event_done'], '2026-10-09')
 
@@ -3038,10 +3186,12 @@ class TestCacheAudit(unittest.TestCase):
         old = {'AAA': {'fetched': '2026-07-02', 'data': self._financials('3/31/2026'),
                        'event_date': '2026-07-01', 'event_base': '2026-03-31', 'event_checked': '2026-07-02'}}
         events = {'AAA': ['2026-07-01', '2026-10-09']}
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()):
+        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()), \
+                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
             _, first = monitor.update_fundamentals(['AAA'], old, '2026-10-10', events)
             self.assertEqual(first['data']['AAA']['event_done'], '2026-07-01')
             _, second = monitor.update_fundamentals(['AAA'], first['data'], '2026-10-11', events)
+        backup.assert_not_called()
         self.assertEqual(second['data']['AAA']['event_date'], '2026-10-09')
         self.assertEqual(second['data']['AAA']['event_base'], '2026-06-30')
         self.assertEqual(second['data']['AAA']['event_done'], '2026-07-01')
@@ -3212,10 +3362,12 @@ class TestIntradayVolumeRatio(unittest.TestCase):
 
     def measure(self, data, time, realtime_volume=None):
         from datetime import datetime
+        data = dict(data)
+        data.setdefault('rt_ts', time)
         if realtime_volume is not None:
             data['rt_volume'] = realtime_volume
-        with patch.object(monitor, 'NOW', datetime.fromisoformat(time)):
-            return monitor.intraday_volume_ratio('AAPL', data)
+        with patch.object(monitor, 'TARGET_DATE', data['dates'][-1]):
+            return monitor.intraday_volume_ratio('AAPL', data, asof=datetime.fromisoformat(time))
 
     def test_midday_uses_elapsed_minutes(self):
         data = self.history('2026-10-13')
@@ -3223,6 +3375,23 @@ class TestIntradayVolumeRatio(unittest.TestCase):
         ratio, moment = self.measure(data, '2026-10-13T12:00:00-04:00', 1500)
         self.assertEqual(moment, '12:00')
         self.assertAlmostEqual(ratio, (1500 / 150) / (1000 / 390), places=4)
+        delayed = dict(data, rt_ts='2026-10-13T11:55:00-04:00')
+        ratio, moment = self.measure(delayed, '2026-10-13T12:00:00-04:00', 1500)
+        self.assertEqual(moment, '11:55')
+        self.assertAlmostEqual(ratio, (1500 / 145) / (1000 / 390), places=4)
+        for stamp in (None, '', '2026-10-13', '2026-10-13T12:00:00',
+                      '2026-10-12T12:00:00-04:00', '2026-10-13T11:54:59-04:00',
+                      '2026-10-13T12:00:01-04:00'):
+            with self.subTest(stamp=stamp):
+                self.assertEqual(self.measure(dict(data, rt_ts=stamp), '2026-10-13T12:00:00-04:00', 1500),
+                                 (None, ''))
+        # 长度和成交量仍然有效，单独验证缺日、重复日、休市日不能凑足20日均量。
+        for day in ('2026-10-09', '2026-10-11', '2026-10-13'):
+            with self.subTest(previous=day):
+                broken = dict(data, dates=data['dates'][:-2] + [day, data['dates'][-1]])
+                self.assertEqual(self.measure(broken, '2026-10-13T12:00:00-04:00', 1500), (None, ''))
+        self.assertNotIn('rt_volume', data)
+        self.assertNotIn('rt_ts', data)
 
     def test_quiet_window_and_closed_hours_report_nothing(self):
         data = self.history('2026-10-13')
@@ -3235,7 +3404,7 @@ class TestIntradayVolumeRatio(unittest.TestCase):
     def test_missing_or_invalid_realtime_volume(self):
         data = self.history('2026-10-13')
         self.assertEqual(self.measure(data, '2026-10-13T12:00:00-04:00'), (None, ''))
-        for bad in (0, -5, None, '3000'):
+        for bad in (0, -5, None, '3000', True, float('nan'), float('inf')):
             with self.subTest(bad=bad):
                 self.assertEqual(self.measure(dict(data), '2026-10-13T12:00:00-04:00', bad), (None, ''))
         # 均量样本里出现 0/None 也不硬算
@@ -3243,27 +3412,43 @@ class TestIntradayVolumeRatio(unittest.TestCase):
         self.assertEqual(self.measure(broken, '2026-10-13T12:00:00-04:00', 1500), (None, ''))
 
     def test_futures_and_index_not_supported(self):
-        data = self.history('2026-10-13')
+        data = dict(self.history('2026-10-13'), rt_volume=1500, rt_ts='2026-10-13T12:00:00-04:00')
         from datetime import datetime
-        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T12:00:00-04:00')):
-            self.assertEqual(monitor.intraday_volume_ratio('ESMAIN', dict(data, rt_volume=1500)), (None, ''))
-            self.assertEqual(monitor.intraday_volume_ratio('^VIX', dict(data, rt_volume=1500)), (None, ''))
+        when = datetime.fromisoformat(data['rt_ts'])
+        with patch.object(monitor, 'TARGET_DATE', '2026-10-13'):
+            self.assertIsNotNone(monitor.intraday_volume_ratio('AAPL', data, asof=when)[0])
+            self.assertEqual(monitor.intraday_volume_ratio('ESMAIN', data, asof=when), (None, ''))
+            self.assertEqual(monitor.intraday_volume_ratio('^VIX', data, asof=when), (None, ''))
 
     def test_half_day_uses_shortened_session(self):
         data = self.history('2026-11-27')     # 感恩节次日 13:00 提前收盘 → 全日 210 分钟
-        ratio, _ = self.measure(data, '2026-11-27T11:00:00-05:00', 900)   # 已开盘 90 分钟
+        self.assertEqual(data['dates'][-2:], ['2026-11-25', '2026-11-27'])
+        self.assertNotIn('2026-11-26', data['dates'])
+        ratio, moment = self.measure(data, '2026-11-27T11:00:00-05:00', 900)   # 已开盘 90 分钟
+        self.assertEqual(moment, '11:00')
         self.assertAlmostEqual(ratio, (900 / 90) / (1000 / 210), places=4)
+        last_quote = dict(data, rt_ts='2026-11-27T12:59:00-05:00')
+        self.assertAlmostEqual(self.measure(last_quote, '2026-11-27T12:59:00-05:00', 900)[0],
+                               (900 / 209) / (1000 / 210), places=4)
+        for time in ('2026-11-27T13:00:00-05:00', '2026-11-27T14:00:00-05:00',
+                     '2026-11-26T11:00:00-05:00'):
+            with self.subTest(time=time):
+                self.assertEqual(self.measure(last_quote, time, 900), (None, ''))
 
     def test_alert_prefers_intraday_over_completed_day(self):
         data = self.history('2026-10-13')
         data['volumes'][-2] = 2600            # 昨日放量 → 20 日均量 1080
-        data['rt_volume'] = 1500              # 盘中折算 3.6×（也应报黄）
+        data['rt_volume'] = 1500              # 盘中折算 3.6×，超过默认红线
+        data['rt_ts'] = '2026-10-13T12:00:00-04:00'
         average = (2600 + 19 * 1000) / 20
         from datetime import datetime
-        # 两段都必须固定 NOW/TARGET_DATE：否则第二次调用会读真实时钟，
-        # 收盘后跑测试时盘中量比根本不触发（2026-10-12 踩过同样的坑）。
-        midday = datetime.fromisoformat('2026-10-13T12:00:00-04:00')
-        with patch.object(monitor, 'NOW', midday), \
+        midday = datetime.fromisoformat(data['rt_ts'])
+        class TradingClock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return midday.astimezone(tz)
+        # 完整日使用任务时钟 NOW；实时量使用当前时钟，两者和目标日都要固定。
+        with patch.object(monitor, 'NOW', midday), patch.object(monitor, 'datetime', TradingClock), \
                 patch.object(monitor, 'TARGET_DATE', data['dates'][-1]):
             _, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
         self.assertTrue(detail['vol_ratio_intraday'])
@@ -3272,7 +3457,7 @@ class TestIntradayVolumeRatio(unittest.TestCase):
         self.assertFalse(any('最近完整日量比' in text for text in signals), signals)
         self.assertIn(('vol_ratio', 'red'), detail['signal_marks'])     # 3.6× ≥ 默认红线 3.0
         self.assertEqual(monitor._member_metric(detail, 'vol_ratio'), '盘中量比 3.6×（截至 12:00 ET）')
-        with patch.object(monitor, 'NOW', midday), \
+        with patch.object(monitor, 'NOW', midday), patch.object(monitor, 'datetime', TradingClock), \
                 patch.object(monitor, 'TARGET_DATE', data['dates'][-1]), \
                 patch.object(monitor, 'S', {**monitor.S, 'vol_ratio_red': 4.0}):
             _, _, y_detail = monitor.analyze_symbol('AAPL', {}, data)
@@ -3283,8 +3468,14 @@ class TestIntradayVolumeRatio(unittest.TestCase):
         data['volumes'][-2] = 2600
         data['volumes'][-1] = 2000            # 今日已收盘，日线给出完整量 → 完整日量比 1.9×
         data['rt_volume'] = 1500              # 已收盘：实时量不该再参与
+        data['rt_ts'] = '2026-10-13T15:59:00-04:00'
         from datetime import datetime
-        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T18:00:00-04:00')), \
+        closed = datetime.fromisoformat('2026-10-13T18:00:00-04:00')
+        class ClosedClock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return closed.astimezone(tz)
+        with patch.object(monitor, 'NOW', closed), patch.object(monitor, 'datetime', ClosedClock), \
                 patch.object(monitor, 'TARGET_DATE', data['dates'][-1]):
             _, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
         self.assertFalse(detail['vol_ratio_intraday'])

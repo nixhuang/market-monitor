@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""默认离线运行九项测试（Python 五项 + Node 四项），任何一项不过就返回非 0。
+"""默认离线运行全部测试（Python 十项 + Node 五项），任何一项不过就返回非 0。
 
 本地：python tests/run_all.py（可用环境变量 NODE 指定 node 可执行文件）
 护栏自测：python tests/run_all.py --self-test-offline（不运行任何业务测试）
@@ -26,8 +26,13 @@ PY = [
     ("mm_test_render", [sys.executable, "tests/mm_test_render.py"]),
     ("mm_test_rsi", [sys.executable, "-m", "unittest", "tests.mm_test_rsi"]),
     ("mm_test_policy_alerts", [sys.executable, "-m", "unittest", "tests.mm_test_policy_alerts"]),
+    ("mm_test_fundamentals", [sys.executable, "tests/mm_test_fundamentals.py"]),
+    ("mm_test_build", [sys.executable, "tests/mm_test_build.py"]),
+    ("mm_test_runtime", [sys.executable, "tests/mm_test_runtime.py"]),
+    ("mm_test_sessions", [sys.executable, "tests/mm_test_sessions.py"]),
+    ("mm_test_rules", [sys.executable, "tests/mm_test_rules.py"]),
 ]
-JS = ["mm_test_ebk", "mm_test_edit", "mm_test_homebtn", "mm_test_rs"]
+JS = ["mm_test_ebk", "mm_test_edit", "mm_test_homebtn", "mm_test_rs", "mm_test_cost"]
 
 
 def _install_python_guard():

@@ -36,6 +36,8 @@ from datetime import datetime, timedelta, timezone
 import requests
 import policy_alerts
 import earnings_sources
+import market_sessions
+from runtime_state import RuntimeState, atomic_write_json, build_identity, write_artifacts
 
 # 北京时间与运行口径
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -162,54 +164,10 @@ FRED_SERIES = {
 # ---------------------------------------------------------------- 可调阈值
 # 这些默认值会被同目录下的 settings.json 覆盖；settings.json 缺失或字段写错就退回默认值。
 # 你可以在 edit.html 里直接改，改完保存会自动重跑，不用碰代码。
-DEFAULT_SETTINGS = {
-    # 布林带
-    "boll_n": 20,           # 均线周期
-    "boll_k": 2.0,          # 标准差倍数
-    "boll_near_pct": 0.5,   # 距上/下轨不足 x% 就算命中（盘中不用等真的穿过去）；仅在算不出个股波动时兜底
-    "boll_near_band_pct": 15.0,  # 自适应：距轨道不足「布林带宽的 x%」就算命中，替代固定百分比
-
-    # 个股
-    "chg_red": 4.0,         # 单日涨跌 >= x% → 红
-    "chg_yellow": 2.0,      # 单日涨跌 >= x% 且 < chg_red → 黄
-    "rsi_high": 70,         # RSI 6/12/24 同侧 >= x：两条黄、三条红
-    "rsi_low": 35,          # RSI 6/12/24 同侧 <= x：进布林区间后两条黄、三条红（超卖侧放宽到 35）
-    "near_52w_low_pct": 1.0,  # 距 52 周低点不足 x% → 红
-    "trigger_gap_pct": 5.0,  # 距加仓价不足 x% → 红（已跌破则无视这条直接红）
-    "reduce_gap_pct": 3.0,   # 持仓的减仓价：现价在减仓价 ±x%（按减仓价算）内 → 红，不分涨跌方向
-    "target_space_pct": 50.0,  # 目标价（共识价 / 手填）高出现价超过 x% → 紫色（竖条 + 实心标签 + 警示栏，不改红黄绿）
-    "target_gap_pct": 3.0,     # 现价在目标价 ±x% 内、或当日跨越目标价 → 紫色
-    "vol_ratio": 1.5,       # 量比 >= x 倍 → 黄（盘后 z 值不可用时的固定兜底）
-    "vol_ratio_red": 3.0,   # 量比 >= x 倍 → 红（所有分组）
-    # 收盘后量比「自身波动」自适应：把最近完整日量比换算成这只股自己 60 日放量分布的 z 值，
-    # z >= vol_ratio_z 黄、>= vol_ratio_red_z 红。两者任一为 0 = 关闭自适应，退回上面两条固定倍数。
-    # 1.8 / 3.6 是按真实日线标定的等效值：黄灯命中率与旧的固定 1.5× 相当（约 8%），
-    # 红灯约 1.6%（旧 3× 只有 0.6%，对高波动股几乎永不触发）。
-    "vol_ratio_z": 1.8,
-    "vol_ratio_red_z": 3.6,
-    "amp_yellow": 5.0,      # 日内振幅（最高-最低）/昨收 >= x% → 黄
-    "amp_red": 8.0,         # 日内振幅 >= x% → 红（上下插针、剧烈震荡）
-    "ma_short": 50,
-    "ma_long": 200,
-
-    # 宏观
-    "hy_green": 350,        # 垃圾债利差 bp：< 350 绿 / 350~400 黄 / >= 400 红
-    "hy_red": 400,
-    "vix_green": 20,        # VIX：< 20 绿 / 20~ 黄 / >= 40 红
-    "vix_yellow": 30,
-    "vix_red": 40,
-
-    # 行情源：1=用 Nasdaq 实时报价覆盖最新价（0 延迟），0=只用日线收盘价
-    "use_realtime": 1,
-
-    # 定投提醒（全局一条）：从 dca_start 那个交易日算起，每 dca_every 个交易日提醒一次
-    # dca_every=0 或 dca_start 为空 = 不提醒
-    "dca_every": 0,
-    "dca_start": "",
-
-    # 统计面板：展开新的灯详情时，是否自动收起已打开的那些（1=只留一个打开，0=可以同时开多个）
-    "signal_single_open": 1,
-}
+from rules_config import (DEFAULT_SETTINGS, SETTING_LIMITS, SETTING_ORDER,
+                          valid_settings, resolve_settings)
+from page_assets import (PAGE_CSS, PAGE_INTERACTION_JS, RULES_SUMMARY,
+                         rules_body, rules_template, script_asset, json_script)
 
 
 from zoneinfo import ZoneInfo
@@ -222,27 +180,23 @@ def log(msg):
 
 def session_date(on_or_before):
     """交易所日历：节假日/周末回退到最近有效交易日，不能只按周一至周五猜。"""
-    import exchange_calendars as xcals
-    cal = xcals.get_calendar("XNYS")
-    return cal.date_to_session(on_or_before.isoformat(), direction="previous").date().isoformat()
+    return market_sessions.session_on_or_before(on_or_before)
 
 
 def plan_run(event, when):
     """schedule锚定最近一次美东20:00（23/5交易休盘窗口20:00-21:00的起点）；手动/保存重跑保留盘中行为。"""
-    ny = when.astimezone(US_TZ)
+    ny = market_sessions.eastern(when)
     day = ny.date()
     if event == "schedule":
         anchor = ny.replace(hour=20, minute=0, second=0, microsecond=0)
         if ny < anchor:
             day -= timedelta(days=1)
         return {"closed_only": True, "target": session_date(day)}
-    # 当前接口口径仍是常规时段日线：09:30–16:00可用实时覆盖。
-    if ny.weekday() < 5 and (ny.hour, ny.minute) >= (9, 30):
-        day_target = session_date(day)
-    else:
-        day_target = session_date(day - timedelta(days=1))
-    in_regular_session = day_target == day.isoformat() and (9, 30) <= (ny.hour, ny.minute) < (16, 0)
-    return {"closed_only": not in_regular_session, "target": day_target}
+    bounds = market_sessions.session_bounds(day)
+    if bounds and ny < bounds[0]:
+        day -= timedelta(days=1)
+    day_target = session_date(day)
+    return {"closed_only": market_sessions.active_session(ny) is None, "target": day_target}
 
 
 def prepare_run():
@@ -289,26 +243,32 @@ def snapshot_freshness(snap, target=None):
     return (prior + missing) / expected <= FRESH_MAX_STALE_RATIO, today, expected
 
 
-def ensure_schedule_run():
+def ensure_schedule_run(runtime=None):
     """保险：GitHub 定时任务可能被延迟或丢弃。若今晚（美东20:00之后）的收盘结果还没生成，
     或生成了但当日日线不齐（源端还没出当日数据），就补派发一次与定时任务等价的运行；
     结果齐全或已有任务在排队/运行则不重复派发。"""
+    runtime = runtime or RuntimeState(BASE, target=TARGET_DATE, event="ensure-schedule")
     now_ny = datetime.now(timezone.utc).astimezone(US_TZ)
     if not 20 * 60 <= now_ny.hour * 60 + now_ny.minute < 21 * 60:
         # 夏冬令时两组时点每天都会触发；不在休盘窗口内（错季节的时点或被严重拖延）就什么都不做，避免抓到新一轮盘中价
         print(f"美东 {now_ny:%H:%M} 不在 20:00-21:00 休盘窗口内，不补跑")
+        runtime.receipt("skipped", "outside_schedule_window")
         return 0
     plan = plan_run("schedule", datetime.now(timezone.utc))
+    runtime.target = plan["target"]
     try:
         with open(os.path.join(BASE, "status.json"), encoding="utf-8") as f:
             snap = json.load(f)
     except Exception:
         snap = {}
+    snap = snap if isinstance(snap, dict) else {}
     if snap.get("target_trade_date") == plan["target"] and snap.get("mode") == "closed" \
             and (snap.get("summary") or {}).get("total"):
         fresh, today, expected = snapshot_freshness(snap, plan["target"])
+        runtime.fresh, runtime.today, runtime.expected = fresh, today, expected
         if fresh:
             print(f"目标交易日 {plan['target']} 的收盘结果已存在且当日数据齐（{today}/{expected}），无需补跑")
+            runtime.receipt("skipped", "target_already_fresh")
             return 0
         print(f"目标交易日 {plan['target']} 的结果已存在但当日日线不齐（当日 {today}/{expected}），补跑")
     repo, token = os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GH_TOKEN", "")
@@ -320,12 +280,16 @@ def ensure_schedule_run():
     for run in r.json().get("workflow_runs", []):
         created = datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
         if run.get("status") in ("queued", "in_progress", "waiting", "pending") and created >= cutoff:
-            print(f"已有运行 {run['id']} 在排队或执行（{run['status']}），不重复派发")
+            print(f"已有候选运行 {run['id']} 在排队或执行（{run['status']}），不重复派发；"
+                  f"未确认其目标交易日为 {plan['target']}，也未确认本轮生成完成")
+            runtime.receipt("skipped", "candidate_run_busy", candidate_run_id=run["id"],
+                            candidate_status=run["status"], candidate_target_verified=False)
             return 0
     d = requests.post(base + "/dispatches", headers=headers, timeout=20,
                       json={"ref": "main", "inputs": {"source": "schedule-fallback"}})
     d.raise_for_status()
     print(f"今晚收盘结果缺失，已补派发运行（目标交易日 {plan['target']}）")
+    runtime.receipt("skipped", "dispatch_requested", dispatched=True)
     return 0
 
 
@@ -356,107 +320,16 @@ def trim_history(data, cutoff):
     return out
 
 
-SETTING_LIMITS = {
-    "boll_n": (2, 250), "boll_k": (0.1, 10), "boll_near_pct": (0, 100),
-    "boll_near_band_pct": (0, 100),
-    "ma_short": (0, 250), "ma_long": (0, 250),  # 0关闭对应警示；1仍不合法
-    "chg_yellow": (0, 100), "chg_red": (0, 100),
-    "rsi_low": (0, 100), "rsi_high": (0, 100),
-    "near_52w_low_pct": (0, 100), "trigger_gap_pct": (0, 100), "reduce_gap_pct": (0, 100),
-    "target_space_pct": (0, 1000), "target_gap_pct": (0, 100),
-    "vol_ratio": (0.1, 100), "vol_ratio_red": (0.1, 100),
-    "vol_ratio_z": (0, 10), "vol_ratio_red_z": (0, 10),  # 0 = 关闭自适应
-    "amp_yellow": (0, 100), "amp_red": (0, 100),
-    "hy_green": (0, 10000), "hy_red": (0, 10000),
-    "vix_green": (0, 200), "vix_yellow": (0, 200), "vix_red": (0, 200),
-    "dca_every": (0, 10000), "use_realtime": (0, 1), "signal_single_open": (0, 1),
-}
-SETTING_ORDER = (("chg_yellow", "chg_red"), ("amp_yellow", "amp_red"), ("vol_ratio", "vol_ratio_red"),
-                 ("vol_ratio_z", "vol_ratio_red_z"),
-                 ("hy_green", "hy_red"),
-                 ("vix_green", "vix_yellow", "vix_red"), ("ma_short", "ma_long"))
-
-
-def valid_settings(s):
-    for k, (lo, hi) in SETTING_LIMITS.items():
-        v = s.get(k)
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not lo <= v <= hi:
-            return k
-        if k in ("ma_short", "ma_long") and v == 1:
-            return k
-    if any(s[k] != int(s[k]) for k in ("boll_n", "ma_short", "ma_long", "dca_every")) or s["use_realtime"] not in (0, 1) or s["signal_single_open"] not in (0, 1):
-        return "整数设置"
-    if not s["rsi_low"] < s["rsi_high"]:
-        return "RSI 上下限"
-    for keys in SETTING_ORDER:
-        if keys == ("ma_short", "ma_long") and 0 in (s["ma_short"], s["ma_long"]):
-            continue  # 只在两条均启用时检查周期顺序
-        if keys == ("vol_ratio_z", "vol_ratio_red_z") and 0 in (s["vol_ratio_z"], s["vol_ratio_red_z"]):
-            continue  # 任一为 0 = 关闭自适应，此时固定倍数生效，不比顺序
-        if any(a > b for a, b in zip((s[k] for k in keys), (s[k] for k in keys[1:]))):
-            return " / ".join(keys)
-    start = s.get("dca_start")
-    if start and (not isinstance(start, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", start)):
-        return "dca_start"
-    if start:
-        try:
-            datetime.strptime(start, "%Y-%m-%d")
-        except ValueError:
-            return "dca_start"
-    return ""
-
-
 def load_settings():
-    """读 settings.json 覆盖默认值。文件不存在 / 写错都安全退回默认值。"""
-    s = dict(DEFAULT_SETTINGS)
+    """按 schema 读取覆盖值；逐项警告与回退，不改写 settings.json。"""
     try:
         with open(os.path.join(BASE, "settings.json"), encoding="utf-8") as f:
-            u = json.load(f)
-        if not isinstance(u, dict):
-            raise ValueError("settings.json 顶层不是对象")
-        for k, v in u.items():
-            if k not in s:
-                continue
-            if k == "dca_start":
-                # 起始日是 YYYY-MM-DD 字符串（或空）；写错就当没设
-                if isinstance(v, str) and (v == "" or re.fullmatch(r"\d{4}-\d{2}-\d{2}", v.strip())):
-                    try:
-                        if v.strip():
-                            datetime.strptime(v.strip(), "%Y-%m-%d")
-                        s[k] = v.strip()
-                    except ValueError:
-                        log("  ! 定投起点日无效，沿用默认值")
-                continue
-            if isinstance(v, bool) or not isinstance(v, (int, float)):
-                continue  # 类型不对就跳过，不让它污染默认值
-            if k in SETTING_LIMITS and (not math.isfinite(v) or not SETTING_LIMITS[k][0] <= v <= SETTING_LIMITS[k][1]):
-                continue
-            if k in ("ma_short", "ma_long") and v == 1:
-                continue
-            if k in ("boll_n", "ma_short", "ma_long", "dca_every", "use_realtime",
-                    "signal_single_open") and v != int(v):
-                continue
-            s[k] = type(DEFAULT_SETTINGS[k])(v)
+            return resolve_settings(json.load(f), log)
     except FileNotFoundError:
-        pass
-    except Exception as e:
-        log(f"  ! settings.json 读取失败，用默认值：{e}")
-    if not s["rsi_low"] < s["rsi_high"]:
-        log("  ! RSI 上下限冲突，仅该组退回默认值")
-        s["rsi_low"], s["rsi_high"] = DEFAULT_SETTINGS["rsi_low"], DEFAULT_SETTINGS["rsi_high"]
-    for keys in SETTING_ORDER:
-        if keys == ("ma_short", "ma_long") and 0 in (s["ma_short"], s["ma_long"]):
-            continue
-        if keys == ("vol_ratio_z", "vol_ratio_red_z") and 0 in (s["vol_ratio_z"], s["vol_ratio_red_z"]):
-            continue  # 0 = 主动关闭自适应，不能当成顺序冲突翻回默认
-        if any(s[a] > s[b] for a, b in zip(keys, keys[1:])):
-            log(f"  ! {'/'.join(keys)} 阈值顺序冲突，仅该组退回默认值")
-            for k in keys:
-                s[k] = DEFAULT_SETTINGS[k]
-    if valid_settings(s):
-        log(f"  ! settings.json 存在无效参数（{valid_settings(s)}），使用安全默认值")
         return dict(DEFAULT_SETTINGS)
-    return s
+    except (OSError, ValueError) as e:
+        log(f"  ! settings.json 读取失败，用默认值：{e}")
+        return dict(DEFAULT_SETTINGS)
 
 
 S = load_settings()
@@ -1250,13 +1123,14 @@ def _nasdaq_date(s):
         return ""
 
 
-def nasdaq_realtime(symbol):
-    """Nasdaq 实时报价：返回 {"price": float, "ts": str}；拿不到返回 None
+def nasdaq_realtime(symbol, asof=None):
+    """返回经常规时段和时间戳校验的 price/ts/volume；无效报价返回 None。
 
-    实测 api.nasdaq.com 的 /info 端点带 isRealTime=true，时间戳跟美东当前时间同步（0 延迟），
-    且中国大陆可直连、免 key。只用它取「最新价」，均线 / 布林 / RSI 仍用历史序列算。
-    注意 BRK-B 在这个源要写成 BRK.B，代码里已做变体尝试。
+    isRealTime 必须为 true，且成交时间属于当前交易日、未超前、延迟不超过五分钟。
+    BRK-B 保留 BRK.B 变体及 stocks/etf 尝试；不推定缺失的成交时间。
     """
+    if market_sessions.active_session(asof or datetime.now(US_TZ)) is None:
+        return None
     syms = [symbol]
     if "-" in symbol:
         syms.append(symbol.replace("-", "."))
@@ -1271,10 +1145,13 @@ def nasdaq_realtime(symbol):
                 if r.status_code != 200:
                     continue
                 p = ((r.json().get("data") or {}).get("primaryData") or {})
-                if not p.get("isRealTime"):
+                if p.get("isRealTime") is not True:
+                    continue
+                if market_sessions.validated_quote_time(
+                        p.get("lastTradeTimestamp"), asof or datetime.now(US_TZ)) is None:
                     continue
                 px = float(str(p.get("lastSalePrice", "")).replace("$", "").replace(",", ""))
-                if px <= 0:
+                if not math.isfinite(px) or px <= 0:
                     continue
                 # 当日累计成交量：实测实时递增（35 秒内 VRT/AAPL/UNH 全部增加），且不含盘前量。
                 # 源给的是带小数的加权值（如 6,549,805.577674），取整后用于盘中量比。
@@ -1289,57 +1166,64 @@ def nasdaq_realtime(symbol):
     return None
 
 
-def apply_realtime(symbol, data):
-    """把实时价并进历史序列。
-
-    历史最后一根就是今天 → 替换它（收盘前它本来就是未定稿的那根）；
-    历史还没更新到今天 → 补一根新的，昨收顺延为 prev_close。
-    这样盘中重跑时 涨跌幅 / RSI / 均线 / 布林 全部按当前价算，而不是昨天的收盘价。
-    """
+def apply_realtime(symbol, data, asof=None):
+    """校验成交时间和昨收连续性后，在副本合并实时价；失败不污染原始历史。"""
     if not data or CLOSED_ONLY or not S.get("use_realtime"):
         return data
-    now_ny = datetime.now(US_TZ)
-    # 常规日线实时层不能把夜盘冒充完整23小时bar。
-    if not ((9, 30) <= (now_ny.hour, now_ny.minute) < (16, 0)):
-        return data
-    rt = nasdaq_realtime(symbol)
-    if not rt:
-        return data
-    px = rt["price"]
-    rt_vol = rt.get("volume") or 0
-    dates = data.get("dates") or []
-    today = now_ny.strftime("%Y-%m-%d")
     try:
-        if dates and dates[-1] == today:
-            data["closes"][-1] = px
-            if data.get("highs"):
-                data["highs"][-1] = max(data["highs"][-1], px)
-            if data.get("lows"):
-                data["lows"][-1] = min(data["lows"][-1], px)
-            if isinstance(data.get("volumes"), list) and data["volumes"]:
-                data["volumes"][-1] = rt_vol   # 换成实时累计量；0 表示源没给，不拿昨量冒充
+        session = market_sessions.active_session(asof or datetime.now(US_TZ))
+        if session is None or (TARGET_DATE and TARGET_DATE != session[0]) or not valid_history(data):
+            return data
+        today = session[0]
+        dates = data["dates"]
+        previous = market_sessions.previous_session(today)
+        replacing = dates[-1] == today
+        if (dates[-2] if replacing else dates[-1]) != previous:
+            return data
+        validity = data.get("ma_range_valid")
+        if validity and (not isinstance(validity, list) or len(validity) != len(dates)):
+            return data
+        rt = nasdaq_realtime(symbol) if asof is None else nasdaq_realtime(symbol, asof=asof)
+        if not rt or market_sessions.validated_quote_time(
+                rt.get("ts"), asof or datetime.now(US_TZ)) is None:
+            return data
+        px = rt.get("price")
+        if isinstance(px, bool) or not isinstance(px, (int, float)) or not math.isfinite(px) or px <= 0:
+            return data
+        rt_vol = rt.get("volume")
+        if (isinstance(rt_vol, bool) or not isinstance(rt_vol, (int, float))
+                or not math.isfinite(rt_vol) or rt_vol <= 0):
+            rt_vol = 0
+        out = dict(data)
+        for key in ("dates", "closes", "highs", "lows", "volumes", "ma_range_valid"):
+            if data.get(key) is not None:
+                out[key] = list(data[key])
+        if replacing:
+            out["closes"][-1] = px
+            if out.get("highs"):
+                out["highs"][-1] = max(out["highs"][-1], px)
+            if out.get("lows"):
+                out["lows"][-1] = min(out["lows"][-1], px)
+            if out.get("volumes"):
+                out["volumes"][-1] = rt_vol
         else:
-            data["prev_close"] = data["price"]
-            data["closes"].append(px)
-            # 报价接口仅有最新价；新补bar没有完整日内范围，不能当作真实高低。
-            data["ma_range_valid"] = list(data.get("ma_range_valid") or [True] * (len(data["closes"]) - 1)) + [False]
-            if data.get("highs"):
-                data["highs"].append(px)
-            if data.get("lows"):
-                data["lows"].append(px)
-            # dates 必须跟着补一天，否则定投的「交易日计数」会少算今天
-            if isinstance(data.get("dates"), list):
-                data["dates"].append(today)
-            if isinstance(data.get("volumes"), list):
-                data["volumes"].append(rt_vol)  # 报价接口没返回当日成交量时是 0，不拿昨量冒充今天。
-        data["price"] = px
-        data["realtime"] = True
-        data["rt_ts"] = rt["ts"]
+            # 仅有成交价，新增 bar 不具备真实日内范围；沿用范围有效位契约。
+            out["ma_range_valid"] = list(validity or [True] * len(dates)) + [False]
+            out["dates"].append(today)
+            out["closes"].append(px)
+            for key in ("highs", "lows"):
+                if out.get(key):
+                    out[key].append(px)
+            if out.get("volumes"):
+                out["volumes"].append(rt_vol)
+        out.update(price=px, prev_close=out["closes"][-2], realtime=True, rt_ts=rt["ts"])
+        out.pop("rt_volume", None)
         if rt_vol > 0:
-            data["rt_volume"] = rt_vol
-    except Exception as e:
+            out["rt_volume"] = rt_vol
+        return out if valid_history(out) else data
+    except (ValueError, TypeError, KeyError, IndexError, OverflowError) as e:
         log(f"  ! {symbol} 实时价合并失败: {e}")
-    return data
+        return data
 
 
 def nasdaq_history(symbol):
@@ -1489,26 +1373,20 @@ def is_etf(symbol):
 # 数据源：Nasdaq 财报（季度，一次给最近 4 期）。value2=最新季，value5=3 个季度前，不是去年同期。
 # 只对「持仓 + 重点关注」查询：这两个组才是真会交易的；其他关注看财报意义不大，
 # 而且每只一个请求，全量查会把运行时间拉长并招来限流。
-# 阈值默认值写在这里；想调就在 settings.json 里加同名键覆盖（改完点保存即生效）。
-FUND_DEFAULT = {
-    "fund_enable":     1,      # 0 = 关闭基本面检查
-    "fund_rev_red":    -20.0,  # 营收同比 ≤ 此值 → 红
-    "fund_rev_yellow": -10.0,  # 营收同比 ≤ 此值 → 黄
-    "fund_om_drop":    3.0,    # 营业利润率同比下滑（百分点）→ 黄
-    "fund_gm_drop":    3.0,    # 毛利率同比下滑（百分点）→ 黄
-    "fund_de_rise":    30.0,   # 负债/权益同比上升 % → 黄
-    "fund_cr_drop":    20.0,   # 流动比率同比下滑 % → 黄
-    "fund_roe_drop":   30.0,   # ROE 同比下滑 % → 黄
-    "fund_pm_abnormal": 60.0,  # |净利率| 超过此值视为一次性损益污染，净利口径不参与判定
-}
+# 默认阈值由纯规则模块统一维护；settings.json 同名键可覆盖。
+from fundamentals import (FUND_DEFAULT, FUND_LIMITS, evaluate as _evaluate_fundamentals,
+                          number as _fund_number, failure_outcome as _fund_failure_outcome,
+                          period_date as _fund_period_date, source_metadata as _fund_source_metadata)
 
 
 def fund_rule(key):
-    v = S.get(key, FUND_DEFAULT.get(key))
-    try:
-        return float(v)
-    except Exception:
-        return float(FUND_DEFAULT[key])
+    v = S.get(key, FUND_DEFAULT[key])
+    lo, hi = FUND_LIMITS[key]
+    if (isinstance(v, bool) or not isinstance(v, (int, float)) or _fund_number(v) is None
+            or not lo <= v <= hi or (key in ("fund_enable", "fund_report_grace_days") and v != int(v))):
+        log(f"  ! 基本面配置 {key} 无效，沿用默认值")
+        v = FUND_DEFAULT[key]
+    return float(v)
 
 
 _FUND_CACHE = {}
@@ -1528,35 +1406,51 @@ def _fund_session():
 
 def _fund_num(v):
     """Nasdaq 财报值形如 '$112,032,000'、'(91,154)'、'12.3%'、'--'，统一转 float。"""
-    if v is None:
-        return None
-    s = str(v).strip().replace("$", "").replace(",", "").replace("%", "")
-    if s in ("", "--", "-", "—"):
-        return None
-    neg = s.startswith("(") or s.startswith("-")
-    s = s.strip("()").lstrip("-")
-    try:
-        n = float(s)
-    except Exception:
-        return None
-    return -n if neg else n
+    return _fund_number(v)
+
+
+def _fund_exception_outcome(exc):
+    """异常按真实类型分类；未知异常不能冒充源不覆盖。"""
+    if isinstance(exc, (requests.exceptions.Timeout, TimeoutError)):
+        kind = "timeout"
+    elif isinstance(exc, requests.exceptions.HTTPError):
+        response = getattr(exc, "response", None)
+        return {"kind": "http_error", "reason": type(exc).__name__,
+                "http_status": getattr(response, "status_code", None)}
+    elif isinstance(exc, (ValueError, TypeError, KeyError, AttributeError)):
+        kind = "quality_invalid"
+    else:
+        kind = "transient"
+    return {"kind": kind, "reason": type(exc).__name__}
 
 
 def nasdaq_financials(sym, timeout=12):
-    """取最近 4 个季度财报。ETF / 无财报 / 请求失败都返回 None，不影响主流程。"""
+    """返回财报或 None；失败原因通过本线程 source_outcomes 传给选择层。"""
     key = normalize_symbol(sym).upper()
-    if key in _FUND_CACHE:
+    _FUND_TLS.source_outcomes = []
+    if isinstance(_FUND_CACHE.get(key), dict):
         return _FUND_CACHE[key]
     res = None
     try:
         # Nasdaq 用 BRK.B 而不是 BRK-B，带横杠的代码拿不到数据
         url = f"https://api.nasdaq.com/api/company/{key.replace('-', '.')}/financials?frequency=2"
         r = _fund_session().get(url, timeout=timeout)
-        if r.status_code == 200:
-            d = (r.json() or {}).get("data") or {}
+        if r.status_code != 200:
+            _FUND_TLS.source_outcomes.append({"kind": "http_error", "http_status": r.status_code,
+                                               "reason": f"HTTP {r.status_code}"})
+        else:
+            body = r.json()
+            if not isinstance(body, dict) or not isinstance(body.get("data"), dict):
+                raise ValueError("财报响应缺少有效 data 对象")
+            status = body.get("status")
+            if status is not None and (not isinstance(status, dict) or str(status.get("rCode")) != "200"
+                                       or status.get("bCodeMessage") or status.get("developerMessage")):
+                raise ValueError("财报业务状态异常")
+            d = body["data"]
 
             def table(name):
-                return {x.get("value1"): x for x in ((d.get(name) or {}).get("rows") or [])}
+                return {x.get("value1"): x for x in ((d.get(name) or {}).get("rows") or [])
+                        if isinstance(x, dict) and x.get("value1")}
 
             inc = table("incomeStatementTable")
             if inc:  # ETF 返回空表
@@ -1568,9 +1462,25 @@ def nasdaq_financials(sym, timeout=12):
                     "inc": inc, "bs": table("balanceSheetTable"),
                     "cf": table("cashFlowTable"), "rt": table("financialRatiosTable"),
                 }
+                periods = {short: {col: ((d.get(name) or {}).get("headers") or {}).get(col)
+                                   for col in ("value2", "value5")}
+                           for short, name in (("inc", "incomeStatementTable"), ("bs", "balanceSheetTable"),
+                                               ("cf", "cashFlowTable"), ("rt", "financialRatiosTable"))}
+                res = _fund_source_metadata(res, "nasdaq", _earn_today(), periods)
+                res["quality"] = _evaluate_fundamentals(res, _earn_today(), fund_rule)["quality"]
+            else:
+                income = d.get("incomeStatementTable")
+                empty = (isinstance(income, dict) and income.get("rows") == [] and all(
+                    name not in d or (isinstance(d[name], dict) and d[name].get("rows") == [])
+                    for name in ("balanceSheetTable", "cashFlowTable", "financialRatiosTable")))
+                _FUND_TLS.source_outcomes.append({"kind": "no_coverage" if empty else "quality_invalid",
+                                                   "reason": "明确空利润表" if empty else "利润表结构无法确认"})
     except Exception as e:
+        _FUND_TLS.source_outcomes.append(_fund_exception_outcome(e))
         log(f"  · {key} 财报读取失败：{e}")
-    _FUND_CACHE[key] = res
+    # 失败不塞入无类型的 None 内存缓存；重试到期或新事件不能被它再次挡住。
+    if res and not _FUND_TLS.source_outcomes:
+        _FUND_CACHE[key] = res
     return res
 
 
@@ -1583,7 +1493,7 @@ FUND_CELLS = {
 }
 FUND_QUIET_DAYS = 105     # 无已知财报事件时的保守缓存窗口，不保证下一份季报尚未发布
 FUND_POLL_DAYS = 3        # 常规新季报轮询间隔；已知财报后先按日检查，报告期推进才结束
-FUND_NO_DATA_RETRY_DAYS = 7  # 源一次都没给过数据（如外国发行人 TSM）时的重试间隔，别天天试
+FUND_NO_DATA_RETRY_DAYS = 7  # 两源明确无覆盖且从未成功时的重试间隔；临时失败不使用
 FUND_MAX_AGE_DAYS = 30    # 无事件时的最大正常复用期；抓取失败的旧值需明确标注
 FUND_EVENT_DAILY_DAYS = 14  # 财后两周每日检查，供应商长期未推进则退回每 3 天，事件不丢失
 
@@ -1642,32 +1552,43 @@ def _sa_parse_table(html, wanted):
 def stockanalysis_financials(sym, timeout=12):
     """备用源取最近 4 个季度财报，结构对齐 nasdaq_financials；取不到返回 None。
 
-    只在 Nasdaq 没有数据时使用（外国发行人 / 该源缺页），不改变 Nasdaq 能取到时的任何数字。
+    Nasdaq 无数据、报告陈旧或不可比较时使用；不混合不同来源的财务单元格。
     """
     key = normalize_symbol(sym).upper()
-    if key in _SA_FUND_CACHE:
+    _FUND_TLS.source_outcomes = []
+    if isinstance(_SA_FUND_CACHE.get(key), dict):
         return _SA_FUND_CACHE[key]
     slug = key.lower().replace(".", "-").replace(" ", "-")
     picked, all_dates = {}, []
-    try:
-        for page, wanted in SA_FIN_ROWS.items():
+    for page, wanted in SA_FIN_ROWS.items():
+        try:
             r = _fund_session().get(SA_FIN_URL.format(slug=slug, page=page), timeout=timeout)
             if r.status_code != 200:
+                _FUND_TLS.source_outcomes.append({"kind": "http_error", "http_status": r.status_code,
+                                                   "page": page, "reason": f"HTTP {r.status_code}"})
                 continue
             rows, dates = _sa_parse_table(r.text, wanted)
-            # 只认第一张表（利润表）的列日期：比率页多一列「当前」快照(如 10/14/2026)，
-            # 拿它当最新季会跟其他三张表对不上。各表都按日期对齐取值，不看列下标。
-            if dates and not all_dates:
+            if not rows:
+                # 只接受明确无数据文案；空 HTML、反爬页、错版表格都不是无覆盖证据。
+                visible_html = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", r.text or "", flags=re.I | re.S)
+                visible = " ".join(re.sub(r"<[^>]+>", " ", visible_html).split())
+                empty = bool(re.search(r"\bNo financial data available\b", visible, re.I))
+                _FUND_TLS.source_outcomes.append({"kind": "no_coverage" if empty else "quality_invalid",
+                                                   "page": page, "reason": "明确无财报数据" if empty else "财报表格无法确认"})
+            # 只认利润表的列日期，比率页的当前快照不能冒充最新季。
+            if page == "income-statement":
                 all_dates = dates
             picked.update(rows)
-    except Exception as e:
-        log(f"  · {key} 备用财报源读取失败：{str(e)[:60]}")
+        except Exception as e:
+            _FUND_TLS.source_outcomes.append({**_fund_exception_outcome(e), "page": page})
+            log(f"  · {key} 备用财报源读取失败：{str(e)[:60]}")
     res = None
     # Nasdaq 只给最近 4 个季度：value2 = 最新季，value5 = 3 个季度前
-    if len(all_dates) >= 4 and picked:
-        now, base = all_dates[0], all_dates[3]
+    if all_dates and picked:
+        now, base = all_dates[0], all_dates[3] if len(all_dates) >= 4 else None
         out = {"period": now, "base_period": base,
                "inc": {}, "bs": {}, "cf": {}, "rt": {}}
+        cell_periods = {table: {} for table in FUND_CELLS}
         def conv(v, scale):
             if v in (None, "", "-", "--"):
                 return None
@@ -1681,26 +1602,76 @@ def stockanalysis_financials(sym, timeout=12):
                 cell = picked.get(label) or {}
                 out[table][target] = {"value2": conv(cell.get(now), scale),
                                       "value5": conv(cell.get(base), scale)}
-        if out["inc"].get("Total Revenue", {}).get("value2"):
-            res = out
-    _SA_FUND_CACHE[key] = res
+                cell_periods[table][target] = {"value2": now if now in cell else None,
+                                               "value5": base if base in cell else None}
+        if out["inc"].get("Total Revenue", {}).get("value2") is not None:
+            periods = {table: {"value2": now, "value5": base} for table in FUND_CELLS}
+            res = _fund_source_metadata(out, "stockanalysis", _earn_today(), periods, cell_periods)
+            res["quality"] = _evaluate_fundamentals(res, _earn_today(), fund_rule)["quality"]
+    if res and not _FUND_TLS.source_outcomes:
+        _SA_FUND_CACHE[key] = res
+    elif res is None and (picked or not _FUND_TLS.source_outcomes):
+        _FUND_TLS.source_outcomes.append({"kind": "quality_invalid", "reason": "缺少可用利润表报告期或营收"})
     return res
 
 
-def financials_any_source(sym, timeout=12):
-    """先 Nasdaq，取不到再上备用源；两处调用（缓存刷新 / 判定）共用，避免口径不一致。"""
-    return nasdaq_financials(sym, timeout) or stockanalysis_financials(sym, timeout)
+def financials_any_source(sym, timeout=12, today=None):
+    """保留 dict/None 接口；每次调用隔离的线程元数据携带两源失败分类。"""
+    _FUND_TLS.fetch_outcome = None
+    if not fund_rule("fund_enable"):
+        return None
+    today = today or _earn_today()
+    candidates, outcomes = [], []
+    for name, source in (("nasdaq", nasdaq_financials), ("stockanalysis", stockanalysis_financials)):
+        _FUND_TLS.source_outcomes = None
+        try:
+            raw = source(sym) if timeout == 12 else source(sym, timeout)
+            reported = _FUND_TLS.source_outcomes
+            if reported:
+                outcomes.extend({**item, "source": name} for item in reported)
+            if not isinstance(raw, dict) or not raw:
+                if not reported:
+                    # 外部旧适配器/mock 的 None 继续表示传统无数据；真实适配器必须给原因。
+                    legacy_empty = raw is None and reported is None
+                    outcomes.append({"source": name, "kind": "no_coverage" if legacy_empty else "quality_invalid",
+                                     "reason": "legacy_return_none" if legacy_empty else "返回结构无效"})
+                continue
+            quality = _evaluate_fundamentals(raw, today, fund_rule)
+            candidates.append((raw, quality))
+            usable = (quality["quality"]["current"] and not quality["quality"]["incomparable"] and any(
+                check["status"] == "checked" for check in quality["checks"].values()))
+            if usable and not reported:
+                return raw
+            if not usable or reported:
+                outcomes.append({"source": name, "kind": "quality_invalid",
+                                 "reason": quality["quality"].get("message") or "财报缺失或不可比较"})
+        except Exception as e:
+            outcomes.append({"source": name, **_fund_exception_outcome(e)})
+            log(f"  · {sym} 财报源读取异常：{str(e)[:60]}")
+    _FUND_TLS.fetch_outcome = _fund_failure_outcome(outcomes)
+    if not candidates:
+        return None
+    # 不合并源；仍保留可验证的部分数据，但失败类型不能因存在历史数据而丢失。
+    return max(candidates, key=lambda item: (
+        item[1]["quality"]["current"],
+        sum(c["status"] == "checked" for c in item[1]["checks"].values()),
+        _fund_period_date(item[0].get("period")) or ""))[0]
 
 
 def compact_financials(f):
     """nasdaq_financials 的结果 → 只含判定所需单元格的精简版（结构不变，fundamental_check 可直接用）。"""
-    if not f:
+    if not isinstance(f, dict) or not f:
         return None
+    from copy import deepcopy
     out = {"period": f.get("period"), "base_period": f.get("base_period")}
+    for key in ("source", "frequency", "fetched_at", "schema_version", "units", "quality",
+                "table_periods", "cell_periods"):
+        if key in f:
+            out[key] = deepcopy(f[key])
     for table, labels in FUND_CELLS.items():
-        src = f.get(table) or {}
-        out[table] = {lb: {c: (src.get(lb) or {}).get(c) for c in ("value2", "value5")}
-                      for lb in labels if lb in src}
+        src = f.get(table) if isinstance(f.get(table), dict) else {}
+        out[table] = {lb: {c: src[lb].get(c) for c in ("value2", "value5")}
+                      for lb in labels if isinstance(src.get(lb), dict)}
     return out
 
 
@@ -1708,11 +1679,14 @@ def _fund_sync_event(entry, events, today):
     out = dict(entry) if isinstance(entry, dict) else {}
     done = _iso_date(out.get("event_done")) or ""
     pending = [d for d in _event_dates(events) if done < d <= today]
+    # 保留最早事件的核销基准，同时记录较新事件以免被旧失败退避屏蔽。
+    if pending:
+        out["event_retry_date"] = max(pending)
     # 按事件顺序核销：后一季不能覆盖尚未完成的前一季并共用旧基准。
     if pending and not out.get("event_date"):
         out["event_date"] = pending[0]
         data = out.get("data") if isinstance(out.get("data"), dict) else {}
-        out["event_base"] = _nasdaq_date(data.get("period")) or ""
+        out["event_base"] = _fund_period_date(data.get("period")) or ""
         out.pop("event_checked", None)
     return out
 
@@ -1720,25 +1694,31 @@ def _fund_sync_event(entry, events, today):
 def fundamentals_refetch_due(entry, today=None):
     """财报事件优先于静默期；未见报告期推进就继续轮询，不用抓取成功时间掩盖旧季报。"""
     today = today or _earn_today()
-    # 源根本不覆盖这只标的（Nasdaq 财报接口没有外国发行人的 20-F 数据，典型是 TSM）：
-    # 一次都没取到过就别天天重取，隔 FUND_NO_DATA_RETRY_DAYS 天再确认一次。
     entry = entry if isinstance(entry, dict) else {}
-    if not isinstance(entry.get("data"), dict) and not entry.get("fetched") and entry.get("fetch_error"):
-        attempted = _iso_date(entry.get("attempted"))
-        if attempted and 0 <= _days_between(today, attempted) < FUND_NO_DATA_RETRY_DAYS:
+    attempted = _iso_date(entry.get("attempted"))
+    event = _iso_date(entry.get("event_date"))
+    # 日期精度下只有严格晚于上次尝试的事件才打破退避；同日不猜测先后、不重复请求。
+    events = (event, _iso_date(entry.get("event_retry_date")))
+    if attempted and any(d and attempted < d <= today for d in events):
+        return True
+    if entry.get("fetch_error"):
+        kind = entry.get("error_kind")
+        interval = FUND_NO_DATA_RETRY_DAYS if kind == "no_coverage" and not entry.get("fetched") else 1
+        if attempted and 0 <= _days_between(today, attempted) < interval:
             return False
+        # 旧缓存无分类不代表确认无覆盖；保留数据但不继续执行无法证明合理的七天等待。
+        # 分类后的短退避到期也不再被旧 retry_after 或事件的三天轮询推迟。
+        return True
     try:
         event = _iso_date(entry.get("event_date"))
         if event and event <= today:
             checked = _iso_date(entry.get("event_checked"))
             interval = 1 if _days_between(today, event) <= FUND_EVENT_DAILY_DAYS else FUND_POLL_DAYS
             return not checked or _days_between(today, checked) < 0 or _days_between(today, checked) >= interval
-        if entry.get("fetch_error"):
-            return entry.get("attempted") != today
         age = _days_between(today, entry["fetched"])
         if age < 0 or age >= FUND_MAX_AGE_DAYS:
             return True
-        period = _nasdaq_date(entry["data"]["period"])
+        period = _fund_period_date(entry["data"]["period"])
         since = _days_between(today, period)
     except (AttributeError, KeyError, ValueError, TypeError):
         return True
@@ -1755,10 +1735,18 @@ def _fund_cache_note(cache):
     """
     if not isinstance(cache, dict):
         return ""
+    if isinstance(cache.get("data"), dict):
+        quality = _evaluate_fundamentals(cache["data"], _earn_today(), fund_rule)["quality"]
+        if not quality["current"]:
+            return quality["message"]
+        if not quality["complete"] and not cache.get("fetch_error") and not cache.get("event_date"):
+            return "基本面数据不完整或口径待核实，未命中不代表正常"
     if not cache.get("fetch_error") and not cache.get("event_date"):
         return ""
     last = cache.get("fetched")
     if cache.get("fetch_error") and not last:
+        if cache.get("error_kind") in ("timeout", "http_error", "transient", "quality_invalid"):
+            return cache.get("error") or "财报读取失败，待重试"
         return "该源暂无财报数据"
     if cache.get("fetch_error"):
         return f"读取失败，沿用缓存（上次成功取数 {last}）"
@@ -1773,45 +1761,69 @@ def update_fundamentals(symbols, prev=None, today=None, earnings_events=None):
     keys = list(dict.fromkeys(normalize_symbol(s).upper() for s in symbols if not is_etf(s)))
     stat = {"fetched": 0, "cached": 0, "failed": 0, "data": {}}
     facts, due, entries = {}, [], {}
+    if not fund_rule("fund_enable"):
+        stat["data"] = {k: prev[k] for k in keys if isinstance(prev.get(k), dict)}
+        return facts, stat
     for k in keys:
         old = _fund_sync_event(prev.get(k), earnings_events.get(k), today)
         entries[k] = old
-        if isinstance(old.get("data"), dict) and not fundamentals_refetch_due(old, today):
-            facts[k] = old["data"]
+        if not fundamentals_refetch_due(old, today):
+            if isinstance(old.get("data"), dict):
+                facts[k] = old["data"]
             stat["data"][k] = old
             stat["cached"] += 1
         else:
             due.append(k)
 
     def fetch(k):
+        _FUND_TLS.fetch_outcome = None
         try:
-            raw = nasdaq_financials(k)
-            if raw is None:
-                raw = stockanalysis_financials(k)
-                if raw:
-                    log(f"  · {k} 用备用财报源（Nasdaq 无数据，多为外国发行人）")
-            return compact_financials(raw)
+            raw = financials_any_source(k, today=today)
+            outcome = _FUND_TLS.fetch_outcome
+            if raw is None and outcome is None:
+                outcome = _fund_failure_outcome([{"kind": "no_coverage", "reason": "legacy_return_none"}])
+            return compact_financials(raw), outcome
         except Exception as e:
             log(f"  ! {k} 基本面读取异常，沿用旧值：{str(e)[:60]}")
-            return None
+            return None, _fund_failure_outcome([_fund_exception_outcome(e)])
 
     if due:
         with ThreadPoolExecutor(max_workers=4) as ex:
             got = list(ex.map(fetch, due))
-        for k, c in zip(due, got):
+        for k, (c, outcome) in zip(due, got):
             stat["fetched"] += 1
             old = entries[k]
             old_data = old.get("data") if isinstance(old.get("data"), dict) else {}
-            old_period, new_period = _nasdaq_date(old_data.get("period")), _nasdaq_date((c or {}).get("period"))
-            if c and (not new_period or new_period > today or (old_period and new_period < old_period)):
-                c = None                       # 供应商返回倒退/异常报告期，不能覆盖有效缓存
+            old_period, new_period = _fund_period_date(old_data.get("period")), _fund_period_date((c or {}).get("period"))
+            candidate = c
+            assessment = _evaluate_fundamentals(c, today, fund_rule) if c else None
+            error = ""
+            if assessment:
+                c["quality"] = assessment["quality"]
+                if not assessment["quality"]["current"]:
+                    error = assessment["quality"]["message"]
+                    c = None
+                elif old_period and old_period <= today and new_period < old_period:
+                    error, c = "报告期倒退，保留原缓存", None
+                elif not any(_fcell((c.get(t) or {}), label) is not None
+                             for t, labels in FUND_CELLS.items() for label in labels):
+                    error, c = "财报核心单元格为空", None
+            if error:
+                outcome = _fund_failure_outcome([*(outcome or {}).get("sources", []),
+                                                {"kind": "quality_invalid", "reason": error}])
+            if outcome:
+                c = None  # 部分数据可供质量判定，但不能掩盖传输错误、刷新成功时间或吞掉短重试。
             entry = {**old, "attempted": today}
             if old.get("event_date"):
                 entry["event_checked"] = today
             if c:
                 entry.update(fetched=today, data=c)
                 entry.pop("fetch_error", None)
-                event, base = old.get("event_date"), old.get("event_base")
+                entry.pop("error", None)
+                entry.pop("error_kind", None)
+                entry.pop("error_sources", None)
+                entry.pop("retry_after", None)
+                event, base = old.get("event_date"), _fund_period_date(old.get("event_base"))
                 if event and base and new_period > base:
                     entry["event_done"] = event
                     for field in ("event_date", "event_base", "event_checked"):
@@ -1823,10 +1835,25 @@ def update_fundamentals(symbols, prev=None, today=None, earnings_events=None):
             else:
                 stat["failed"] += 1
                 entry["fetch_error"] = True
+                outcome = outcome or {"kind": "quality_invalid", "sources": []}
+                kind = outcome["kind"]
+                messages = {"timeout": "财报读取超时，等待短退避重试",
+                            "http_error": "财报源 HTTP 错误，等待短退避重试",
+                            "transient": "财报读取暂时失败，等待短退避重试",
+                            "quality_invalid": "财报质量无效，等待更新",
+                            "no_coverage": "两源确认暂无财报覆盖"}
+                entry["error_kind"] = kind
+                entry["error_sources"] = outcome["sources"]
+                entry["error"] = error if kind == "quality_invalid" and error else messages[kind]
+                # 当前缓存按日期处理：短退避到次日的既有运行，不增加定时任务。
+                interval = FUND_NO_DATA_RETRY_DAYS if kind == "no_coverage" and not old.get("fetched") else 1
+                entry["retry_after"] = (datetime.strptime(today, "%Y-%m-%d") + timedelta(days=interval)).strftime("%Y-%m-%d")
                 if old_data:
-                    facts[k] = old_data          # fetched 保持旧值，页面显式提示缓存回退
-            if old_data or c or entry.get("event_date"):
-                stat["data"][k] = entry
+                    facts[k] = old_data          # fetched 保持旧值，判定层再拦陈旧报告
+                elif candidate and assessment and (assessment["quality"]["current"] or assessment["quality"]["status"] == "stale"):
+                    entry["data"] = candidate   # 保留可信部分/历史证据，不伪装成本轮成功更新
+                    facts[k] = candidate
+            stat["data"][k] = entry              # 无 data / 无事件的失败也必须持久化
     return facts, stat
 
 
@@ -2229,112 +2256,14 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
     return stat
 
 
-def fundamental_check(sym, facts=None):
-    """基本面恶化判定（全套 + 分级）。
-
-    核心三项决定红/黄：营收同比、营业利润率、经营现金流。
-    扩展四项只贡献黄：毛利率、负债/权益、流动比率、ROE。
-    主轴刻意避开净利润——一次性损益（如 NTNX 递延税资产释放、-11.9 亿税项）
-    会把净利抬高到营收之上，用净利判基本面必然误判。
-    """
-    if not fund_rule("fund_enable"):
+def fundamental_check(sym, facts=None, today=None):
+    """质量与风险分开；规则依赖注入，保留 monitor 的取数/config mock 接口。"""
+    if not fund_rule("fund_enable") or is_etf(sym):
         return None
-    # ETF / 基金没有财报，直接跳过，省掉一次必然无结果的请求
-    if is_etf(sym):
-        return None
-    f = nasdaq_financials(sym) if facts is None else facts   # 传入 facts（含 {}）时不再联网；
-    # 备用源只在 update_fundamentals 刷新缓存那条路上用（那里才需要覆盖 Nasdaq 不收录的标的）
-    if not f:
-        return None
-    inc, bs, cf, rt = f["inc"], f["bs"], f["cf"], f["rt"]
-    NOW, YR = "value2", "value5"  # 4 季窗口：value2 最新季、value5 是 3 个季度前（接口取不到去年同期）
-    now_label, base_label = _period_label(f.get("period")), _period_label(f.get("base_period"))
-    span = f"{base_label}→{now_label}" if base_label and now_label else ""
-
-    rev0, rev4 = _fcell(inc, "Total Revenue", NOW), _fcell(inc, "Total Revenue", YR)
-    gm0, gm4 = _fcell(rt, "Gross Margin", NOW), _fcell(rt, "Gross Margin", YR)
-    om0, om4 = _fcell(rt, "Operating Margin", NOW), _fcell(rt, "Operating Margin", YR)
-    roe0, roe4 = _fcell(rt, "After Tax ROE", NOW), _fcell(rt, "After Tax ROE", YR)
-    cr0, cr4 = _fcell(rt, "Current Ratio", NOW), _fcell(rt, "Current Ratio", YR)
-    pm0, tax0 = _fcell(rt, "Profit Margin", NOW), _fcell(inc, "Income Tax", NOW)
-    pm4, tax4 = _fcell(rt, "Profit Margin", YR), _fcell(inc, "Income Tax", YR)
-    cfo0, cfo4 = _fcell(cf, "Net Cash Flow-Operating", NOW), _fcell(cf, "Net Cash Flow-Operating", YR)
-    tl0, te0 = _fcell(bs, "Total Liabilities", NOW), _fcell(bs, "Total Equity", NOW)
-    tl4, te4 = _fcell(bs, "Total Liabilities", YR), _fcell(bs, "Total Equity", YR)
-
-    hits, red = [], False
-
-    def add(t, is_red=False):
-        nonlocal red
-        hits.append(t)
-        if is_red:
-            red = True
-
-    # 一次性损益污染：净利率离谱高、税项为负（税收返还/递延税资产释放），
-    # 或净利率远高于营业利润率（说明净利里有大量非经营收益）。最新季和对比基准季都要查，
-    # 否则基准季被一次性收益抬高，会把正常回落误读成"盈利腰斩"。
-    def distorted(pm, om, tax):
-        return (pm is not None and abs(pm) > fund_rule("fund_pm_abnormal")) or \
-               (tax is not None and tax < 0) or \
-               (pm is not None and om is not None and pm - om > 20)
-
-    oneoff, base_oneoff = distorted(pm0, om0, tax0), distorted(pm4, om4, tax4)
-    tag = f"（{span}）" if span else ""
-
-    # 核心 1 · 营收（对比 3 个季度前；Nasdaq 只提供最近 4 个季度，取不到去年同期）
-    if rev0 is not None and rev4 and rev4 > 0:
-        c = (rev0 / rev4 - 1) * 100
-        if c <= fund_rule("fund_rev_red"):
-            add(f"营收较{base_label or '3季前'} {c:+.0f}%", True)
-        elif c <= fund_rule("fund_rev_yellow"):
-            add(f"营收较{base_label or '3季前'} {c:+.0f}%")
-    # 核心 2 · 营业利润率（不含税项和一次性损益，最干净的盈利口径）
-    if om0 is not None:
-        if om0 < 0:
-            add(f"营业亏损 {om0:.0f}%", True)
-        elif om4 is not None and om0 - om4 <= -fund_rule("fund_om_drop"):
-            add(f"营业利率 {om4:.1f}%→{om0:.1f}%{tag}")
-    # 核心 3 · 经营现金流
-    if cfo0 is not None:
-        if cfo0 < 0 and cfo4 is not None and cfo4 > 0:
-            add("经营现金流转负", True)
-        elif cfo0 < 0:
-            add(f"经营现金流为负 {cfo0 / 1000:.0f}M")
-
-    # 扩展 · 毛利率
-    if gm0 is not None and gm4 is not None and gm0 - gm4 <= -fund_rule("fund_gm_drop"):
-        add(f"毛利率 {gm4:.1f}%→{gm0:.1f}%{tag}")
-    # 扩展 · 负债/权益（要求负债绝对额也上升，否则亏损把权益做小会误报加杠杆）
-    de0 = tl0 / te0 if (tl0 and te0) else None
-    de4 = tl4 / te4 if (tl4 and te4) else None
-    if de0 and de4 and de4 > 0 and de0 / de4 - 1 >= fund_rule("fund_de_rise") / 100.0 \
-            and tl0 is not None and tl4 is not None and tl0 > tl4:
-        add(f"负债/权益 {de4:.2f}→{de0:.2f}倍{tag}")
-    # 扩展 · 短期偿债能力（Nasdaq 以百分比给出：84.25% 即 0.84 倍，页面统一显示成倍数）
-    if cr0 and cr4 and cr4 > 0 and cr0 / cr4 - 1 <= -fund_rule("fund_cr_drop") / 100.0:
-        add(f"流动比率 {cr4 / 100:.2f}→{cr0 / 100:.2f}倍{tag}")
-    # 扩展 · ROE（本季净利含一次性损益时不比较；基准季含一次性收益时照常比较，但在文字里注明仅供参考）
-    if not oneoff and roe0 is not None and roe4 is not None and roe4 > 0 \
-            and roe0 / roe4 - 1 <= -fund_rule("fund_roe_drop") / 100.0:
-        ref = "（基准季含一次性收益，仅供参考）" if base_oneoff else ""
-        add(f"季度ROE {roe4:.1f}%→{roe0:.1f}%{tag}{ref}")
-
-    # 一次性损益只作附加说明，不单独点亮徽章（否则 GOOGL/NTNX 会被无谓判黄）
-    notes = []
-    if hits and oneoff:
-        notes.append("本季净利含一次性损益，ROE未参与判定")
-    hits.extend(notes)
-    # 参考背景：单项恶化要结合经营利润和现金流判断，不能把比率变化直接等同于主营变差
-    context = []
-    if om0 is not None:
-        context.append(f"本季营业利率 {om0:.1f}%")
-    if cfo0 is not None:
-        context.append("本季经营现金流为" + ("正" if cfo0 > 0 else "负"))
-    base = {"period": f["period"], "base_period": f.get("base_period"),
-            "compare": span, "context": context, "oneoff": oneoff}
-    if not hits:
-        return {"level": "green", "hits": [], **base}
-    return {"level": "red" if red else "yellow", "hits": hits, **base}
+    today = today or _earn_today()
+    # 传 facts（包括空字典）绝不联网；未传入时共用质量感知的两源选择。
+    f = financials_any_source(sym, today=today) if facts is None else facts
+    return _evaluate_fundamentals(f, today, fund_rule)
 
 
 def valid_history(data):
@@ -3197,20 +3126,10 @@ def _latest_completed_session_index(dates, asof=None):
     """
     if not isinstance(dates, list) or not dates:
         return None
-    import exchange_calendars as xcals
-    calendar = xcals.get_calendar('XNYS')
-    now = (asof or NOW).astimezone(US_TZ)
     try:
-        latest = calendar.date_to_session(now.date().isoformat(), direction='previous')
-        if (latest.date() == now.date() and
-                now.astimezone(timezone.utc) < calendar.session_close(latest) + timedelta(minutes=15)):
-            latest = calendar.previous_session(latest)
-        expected = latest.date().isoformat()
-        # 目标交易日是历史锚点时，绝不能向后读取未来日线。
-        if TARGET_DATE and expected > TARGET_DATE:
-            expected = TARGET_DATE
-        return dates.index(expected) if expected in dates else None
-    except (ValueError, KeyError, OverflowError):
+        expected = market_sessions.latest_completed_session(asof or NOW, TARGET_DATE)
+        return dates.index(expected) if dates.count(expected) == 1 else None
+    except (ValueError, TypeError, KeyError, OverflowError):
         return None
 
 
@@ -3294,6 +3213,7 @@ def intraday_volume_ratio(sym, data, asof=None):
     用「每分钟成交速度」相比，时间进度天然被约掉，所以盘中不用等到收盘也能算。
     /info 的累计量实测实时递增且不含盘前；均量窗口沿用 completed_day_volume_ratio 的 20 日。
     期货/指数不走同一股票日历口径；静默期内、非交易时段、源没给量或历史不足时一律不报。
+    rt_ts 必须通过时效校验，进度与返回标签均取成交时间；此前20个日期必须连续且完整。
     """
     if instrument_identity(sym).startswith('^') or instrument_identity(sym).endswith('=F'):
         return None, ''
@@ -3301,33 +3221,32 @@ def intraday_volume_ratio(sym, data, asof=None):
     if not isinstance(vol, (int, float)) or isinstance(vol, bool) or not math.isfinite(vol) or vol <= 0:
         return None, ''
     dates, volumes = data.get('dates') or [], data.get('volumes') or []
-    if len(dates) != len(volumes) or len(dates) < 22:
+    if (not isinstance(dates, list) or not isinstance(volumes, list)
+            or len(dates) != len(volumes) or len(dates) < VOL_RATIO_BASE + 1):
         return None, ''
-    import exchange_calendars as xcals
-    calendar = xcals.get_calendar('XNYS')
-    now = (asof or NOW).astimezone(US_TZ)
     try:
-        session = calendar.date_to_session(now.date(), direction='previous')
-        if session.date() != now.date():
+        # 实时量以成交时点计进度；NOW 是任务启动时间，不能拿它误判抓取后的报价为未来。
+        now = asof or datetime.now(US_TZ)
+        session = market_sessions.active_session(now)
+        quoted = market_sessions.validated_quote_time(data.get("rt_ts"), now)
+        if (not session or quoted is None or dates[-1] != session[0]
+                or (TARGET_DATE and TARGET_DATE != session[0])):
             return None, ''
-        open_ts, close_ts = calendar.session_open(session), calendar.session_close(session)
-        now_utc = now.astimezone(timezone.utc)
-        if not (open_ts <= now_utc < close_ts):
+        if dates[-VOL_RATIO_BASE-1:-1] != market_sessions.preceding_sessions(session[0], VOL_RATIO_BASE):
             return None, ''
-        elapsed = (now_utc - open_ts).total_seconds() / 60
-        total = (close_ts - open_ts).total_seconds() / 60
+        elapsed = (quoted - session[1]).total_seconds() / 60
+        total = (session[2] - session[1]).total_seconds() / 60
         if elapsed < INTRADAY_VOL_QUIET_MIN or total <= 0:
             return None, ''
-        # 最后一根是今天（实时或未定稿），不能进均量样本；取它之前的 20 个完整日。
-        sample = volumes[-21:-1]
-        if len(sample) != 20 or any(not isinstance(v, (int, float)) or isinstance(v, bool)
-                                    or not math.isfinite(v) or v <= 0 for v in sample):
+        sample = volumes[-VOL_RATIO_BASE-1:-1]
+        if any(not isinstance(v, (int, float)) or isinstance(v, bool)
+               or not math.isfinite(v) or v <= 0 for v in sample):
             return None, ''
-        average = sum(sample) / 20
+        average = sum(sample) / VOL_RATIO_BASE
         if average <= 0:
             return None, ''
-        return (vol / elapsed) / (average / total), now.strftime("%H:%M")
-    except (ValueError, KeyError, OverflowError):
+        return (vol / elapsed) / (average / total), quoted.strftime("%H:%M")
+    except (ValueError, TypeError, KeyError, OverflowError):
         return None, ''
 
 
@@ -3787,260 +3706,8 @@ def fmt(v, unit="", nd=2):
     return f"{v:,.{nd}f}{unit}"
 
 
-# run-status.js 是独立文件，改完必须 bump 这里的 ?v=，否则浏览器继续吃旧缓存（改完记得同步 tests/mm_test_amp.py 里那条版本号断言）
-RUN_JS = '<script src="./run-status.js?v=20261020"></script>'
-
-# 本页展示交互独立于运行/令牌逻辑；不联网、不写用户配置。
-PAGE_INTERACTION_JS = r"""
-function revealSignalPanel(panel) {
-  // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从清单开头对齐。
-  var pad = 12;
-  var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-  if (!vh) return;
-  var rect = panel.getBoundingClientRect();
-  if (rect.top >= pad && rect.bottom <= vh - pad) return;   // 已经完整可见就不动，避免无谓跳动
-  var y = window.pageYOffset || document.documentElement.scrollTop || 0;
-  var target = (rect.height + pad * 2 <= vh && rect.bottom > vh - pad)
-    ? y + rect.bottom - (vh - pad)                          // 整块往上推
-    : y + rect.top - pad;                                   // 太高，从开头看起
-  window.scrollTo({ top: target < 0 ? 0 : target, behavior: "smooth" });
-}
-function normalizeSignalCard(card) {
-  // 统计面板内部全部回到初始折叠态：明细面板收起、计数按钮回位、一周财报关掉、筛选清空。
-  card.querySelectorAll(".signal-members-panel").forEach(function(panel) {
-    panel.hidden = true;
-  });
-  card.querySelectorAll(".signal-count-toggle").forEach(function(button) {
-    button.setAttribute("aria-expanded", "false");
-  });
-  const earnings = card.querySelector(".earnings-week");
-  if (earnings) {
-    earnings.open = false;
-    // 移动端（iOS Safari / 部分安卓内核）在父面板不可见期间改 open，偶尔不重算子元素
-    // 高度，再展开就会留一块空白。这里显式绕一次 display，逼它按折叠态重排。
-    earnings.style.display = "none";
-    void earnings.offsetHeight;
-    earnings.style.display = "";
-  }
-  card.querySelectorAll(".signal-filter-toggle").forEach(function(button) {
-    button.setAttribute("aria-pressed", "false");
-  });
-  renderSignalFilter();
-  void card.offsetHeight;   // 强制重排，确保恢复出来的高度按折叠态重算
-}
-document.addEventListener("toggle", function(event) {
-  const card = event.target;
-  if (!(card instanceof HTMLDetailsElement) || card.id !== "signalCounts") return;
-  // 展开和收起都归一化一次：只在收起时做的话，内层「未来一周财报」是在面板已经不可见
-  // 的状态下被脚本关掉的，部分移动端浏览器会留下旧高度，再展开就多出一块空白。
-  normalizeSignalCard(card);
-}, true);
-// 兜底一：少数移动内核的 toggle 事件不稳，点标题后用下一帧再归一化一次。
-document.addEventListener("click", function(event) {
-  const target = event.target;
-  if (!target || !target.closest) return;
-  if (!target.closest("#signalCounts > summary")) return;
-  const card = document.getElementById("signalCounts");
-  if (!card) return;
-  requestAnimationFrame(function() { normalizeSignalCard(card); });
-}, true);
-// 兜底二：iOS Safari 往返缓存（bfcache）会原样恢复 details 状态，回到页面时统一复位。
-window.addEventListener("pageshow", function() {
-  const card = document.getElementById("signalCounts");
-  if (card) normalizeSignalCard(card);
-});
-// 卡片收起时，里面的「无异动 N 只」跟着回到默认折叠。否则浏览器会记住 details 的 open 状态，
-// 下次再展开（长/短持仓区尤其明显：关掉区再打开）刚点开的那份清单还是开着的。
-function resetQuietLists(card) {
-  card.querySelectorAll("details.quiet-list[open]").forEach(function(sub) {
-    sub.open = false;
-    // 同统计面板的处理：父容器不可见期间改 open，部分移动端内核不重算高度，会留一块空白
-    sub.style.display = "none";
-    void sub.offsetHeight;
-    sub.style.display = "";
-  });
-  void card.offsetHeight;
-}
-document.addEventListener("toggle", function(event) {
-  const card = event.target;
-  if (!(card instanceof HTMLDetailsElement) || card.open) return;
-  // 只处理装着「无异动」清单的卡片；长/短持仓子区自身不在这里复位（两区默认展开是定好的）
-  if (!card.querySelector("details.quiet-list[open]")) return;
-  resetQuietLists(card);
-}, true);
-function signalFilterData() {
-  const node = document.getElementById("signalFilterResult");
-  if (!node || !node.dataset.filter) return null;
-  try { return JSON.parse(node.dataset.filter); } catch (error) { return null; }
-}
-function intersectSignals(data, kinds) {
-  // 返回 {pending: [信号名...]} 或 {members: [...]}；任一条件名单缺失就不拼残缺结果
-  const pending = kinds.filter(function(kind) { return !data[kind] || !data[kind].ok; })
-    .map(function(kind) { return data[kind] ? data[kind].label : kind; });
-  if (pending.length) return {pending: pending};
-  const maps = kinds.map(function(kind) {
-    const map = new Map();
-    data[kind].members.forEach(function(m) { map.set(m.id, m); });
-    return map;
-  });
-  const members = data[kinds[0]].members.filter(function(m) {
-    return maps.every(function(map) { return map.has(m.id); });
-  }).map(function(m) {
-    return Object.assign({}, m, {details: maps.map(function(map) { return map.get(m.id).d.join(" / "); })});
-  });
-  return {members: members};
-}
-function renderSignalFilter() {
-  const box = document.getElementById("signalFilterResult");
-  if (!box) return;
-  const buttons = Array.from(document.querySelectorAll(".signal-filter-toggle[aria-pressed='true']"));
-  box.textContent = "";
-  if (!buttons.length) { box.hidden = true; return; }
-  const data = signalFilterData() || {};
-  const kinds = buttons.map(function(b) { return b.dataset.kind; });
-  const names = kinds.map(function(kind) { return data[kind] ? data[kind].label : kind; });
-  const head = document.createElement("div");
-  head.className = "signal-filter-head";
-  const title = document.createElement("span");
-  const clear = document.createElement("button");
-  clear.type = "button";
-  clear.className = "signal-filter-clear";
-  clear.textContent = "清除";
-  head.append(title, clear);
-  box.append(head);
-  box.hidden = false;
-  if (kinds.length < 2) {
-    title.textContent = "已选：" + names[0] + " · 再点一项信号，查看同时满足的标的";
-    return;
-  }
-  const result = intersectSignals(data, kinds);
-  if (result.pending) {
-    title.textContent = "同时满足：" + names.join(" + ");
-    const p = document.createElement("p");
-    p.textContent = result.pending.join("、") + " 明细待下次更新，暂不计算";
-    box.append(p);
-    return;
-  }
-  title.textContent = "同时满足：" + names.join(" + ") + " · " + result.members.length + " 只";
-  if (!result.members.length) {
-    const p = document.createElement("p");
-    p.textContent = "无同时满足的标的";
-    box.append(p);
-    return;
-  }
-  const list = document.createElement("ul");
-  result.members.forEach(function(m) {
-    const li = document.createElement("li");
-    const sym = document.createElement("strong");
-    sym.textContent = m.s;
-    li.append(sym);
-    if (m.n) {
-      const note = document.createElement("span");
-      note.className = "note";
-      note.textContent = m.n;
-      li.append(note);
-    }
-    const group = document.createElement("span");
-    group.className = "signal-filter-group";
-    group.textContent = m.g;
-    li.append(" ", group);
-    if (["red", "yellow", "green", "gray"].indexOf(m.l) >= 0) {
-      const dot = document.createElement("i");
-      dot.className = "stat-dot " + m.l;
-      dot.setAttribute("role", "img");
-      dot.setAttribute("aria-label", {red: "红灯", yellow: "黄灯", green: "绿灯", gray: "缺失"}[m.l]);
-      li.append(dot);
-    }
-    const detail = document.createElement("span");
-    detail.className = "signal-filter-detail";
-    detail.textContent = m.details.join(" · ");
-    li.append(detail);
-    list.append(li);
-  });
-  box.append(list);
-}
-document.addEventListener("click", function(event) {
-  if (!(event.target instanceof Element)) return;
-  const closeButton = event.target.closest(".collapse-group");
-  if (closeButton) {
-    const card = closeButton.closest("details");
-    if (!card) return;
-    card.open = false;
-    const heading = card.querySelector(":scope > summary");
-    if (heading) {
-      heading.focus({preventScroll: true});
-      heading.scrollIntoView({block: "start", behavior: "auto"});
-    }
-    return;
-  }
-  const filterButton = event.target.closest(".signal-filter-toggle");
-  if (filterButton) {
-    filterButton.setAttribute("aria-pressed", String(filterButton.getAttribute("aria-pressed") !== "true"));
-    renderSignalFilter();
-    return;
-  }
-  if (event.target.closest(".signal-filter-clear")) {
-    document.querySelectorAll(".signal-filter-toggle").forEach(function(b) { b.setAttribute("aria-pressed", "false"); });
-    renderSignalFilter();
-    return;
-  }
-  const button = event.target.closest(".signal-count-toggle[data-target]");
-  if (!button) return;
-  const panel = document.getElementById(button.dataset.target);
-  if (!panel || !panel.classList.contains("signal-members-panel")) return;
-  const owner = button.closest("tr");
-  const opening = panel.hidden;
-  const buttonTopBefore = button.getBoundingClientRect().top;
-  // 设置里的 signal_single_open=1（默认）时，展开新的灯详情会收起整块统计面板里已打开的那些；
-  // 关掉后只收同一行的，其它行的可以同时开着对比。
-  const singleOpen = !(window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0);
-  const scope = (singleOpen && button.closest("#signalCounts")) || owner;
-  if (scope) {
-    scope.querySelectorAll(".signal-count-toggle[data-target]").forEach(function(other) {
-      const otherPanel = document.getElementById(other.dataset.target);
-      if (otherPanel) otherPanel.hidden = true;
-      other.setAttribute("aria-expanded", "false");
-    });
-  }
-  panel.hidden = !opening;
-  // 胶囊高亮完全靠 CSS 认 aria-expanded，这里不用额外加类
-  button.setAttribute("aria-expanded", String(opening));
-  if (opening) {
-    // 展开的清单往往比一屏长，且「同时只开一个」会先收起上一个、把整页拉上去，
-    // 结果新打开的清单跳到别处。这里两步定位：先把刚点的按钮拉回原来的屏幕位置，
-    // 再把新清单整块带进视口（放不下就从开头对齐）。
-    requestAnimationFrame(function() {
-      const delta = button.getBoundingClientRect().top - buttonTopBefore;
-      if (Math.abs(delta) > 1) window.scrollBy(0, delta);
-      revealSignalPanel(panel);
-    });
-  }
-});
-
-// 统计面板里的标的名字 → 跳到首页该股所在行。
-// 个股可能躺在两层折叠里（分组卡片 + 「无异动 N 只」列表），跳转前必须逐层撑开祖先 details。
-document.addEventListener("click", function(event) {
-  if (!(event.target instanceof Element)) return;
-  const link = event.target.closest("a.signal-member-jump");
-  if (!link) return;
-  const hash = link.getAttribute("href") || "";
-  if (hash.charAt(0) !== "#") return;
-  const target = document.getElementById(hash.slice(1));
-  if (!target) return;                       // 目标不在本页（比如该股这轮没进表），交给浏览器默认行为
-  event.preventDefault();
-  let node = target;
-  while (node && node !== document.body) {   // 从里到外把所有祖先 details 打开
-    if (node.tagName === "DETAILS") node.open = true;
-    node = node.parentElement;
-  }
-  target.classList.remove("stk-flash");
-  void target.offsetWidth;                   // 强制重排，保证连点同一个名字也能再闪一次
-  target.classList.add("stk-flash");
-  target.scrollIntoView({block: "center", behavior: "smooth"});
-  if (history.replaceState) history.replaceState(null, "", hash);
-  window.setTimeout(function() { target.classList.remove("stk-flash"); }, 1800);
-});
-"""
+# 保留公开常量兼容旧调用；render 每次重新读取资源内容计算 hash。
+RUN_JS = script_asset(BASE, "run-status.js")
 
 
 def config_hash(filename):
@@ -4468,7 +4135,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "dca_reminder": dca,
         "run_id": str(os.environ.get("GITHUB_RUN_ID") or "local-" + NOW.strftime("%Y%m%d%H%M%S")),
         "request_id": os.environ.get("MM_REQUEST_ID", ""),
-        "source_sha": os.environ.get("GITHUB_SHA", ""),
+        **build_identity(),
         "started_at": os.environ.get("MM_STARTED_AT", NOW.isoformat()),
         "started_at_bj": beijing_iso(os.environ.get("MM_STARTED_AT", NOW.isoformat())),
         "finished_at": datetime.now(TZ).isoformat(),
@@ -4509,406 +4176,6 @@ def build_snapshot(macro, items, cfg, group_counts=None):
     snapshot["risk_quotes"] = {key: {field: (macro.get(key) or {}).get(field) for field in
                              ('ok', 'value', 'date', 'source', 'drawdown')} for key in ('vix', 'sp500')}
     return snapshot
-
-
-PAGE_CSS = """:root{
-  --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
-  --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
-  --blue:#2f6bd8; --purple:#a371f7;
-}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--text);
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
-  padding:env(safe-area-inset-top) 14px 40px}
-.wrap{max-width:720px;margin:0 auto}
-h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
-.sub{color:var(--dim);font-size:12px;margin-bottom:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:6px 4px;margin-bottom:14px;overflow:hidden}
-h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
-table{width:100%;border-collapse:collapse;font-size:14px}
-td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
-tr:first-child td{border-top:none}
-.num{text-align:right;font-variant-numeric:tabular-nums}
-.dim{color:var(--dim);font-size:13px}
-.sym{font-weight:600}
-.note{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
-.tag{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;
-  font-size:11px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
-  color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}
-.tag.f-red{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}
-.tag.f-yellow{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}
-.tag.quote-note{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}
-.lvs{display:block;margin:4px 0 0;line-height:1.5}
-.lvtag{display:inline-block;margin:0 4px 2px 0;padding:0 7px;border-radius:999px;border:1px solid;
-  background:transparent;font-size:11px;font-weight:400;line-height:17px;white-space:nowrap;font-variant-numeric:tabular-nums}
-.lvtag.add{color:#ffa94d;border-color:rgba(255,169,77,.6)}
-.lvtag.cut{color:#4dd0e1;border-color:rgba(77,208,225,.6)}
-.tgs{display:block;margin:3px 0 0;line-height:1.4;white-space:normal}
-.tgs .lvtag{margin:0;padding:1px 5px;border-radius:4px;line-height:1.35;white-space:normal;text-align:center}
-.tgs .lvtag span{display:inline-block;white-space:nowrap}
-.lvtag.tgt{color:#c4a3ff;border-color:rgba(163,113,247,.65)}
-.lvtag.tgt.hit{color:#fff;background:#8957e5;border-color:#8957e5}
-.lvtag.tgt.bad{color:#ff9b95;border-color:rgba(248,81,73,.7)}
-.tnote,.sig .tp{color:#c4a3ff}
-.fund-detail{margin-top:6px}
-.fund-detail summary{margin-left:0;padding:7px 9px;cursor:pointer;list-style:none;touch-action:manipulation}
-.fund-detail summary::-webkit-details-marker{display:none}
-.fund-detail summary::after{content:"";display:inline-block;margin-left:6px;
-  border:4px solid transparent;border-top-color:currentColor;transform:translateY(2px)}
-.fund-detail[open] summary::after{transform:translateY(-2px) rotate(180deg)}
-.fund-detail summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:3px}
-.fund-body{margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:6px;
-  font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}
-.fund-body ul{margin:4px 0 0;padding-left:16px}
-.sig{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
-.signal-magenta{color:#ef8de4} .signal-red{color:#ff8580} .signal-yellow{color:#f0c674} .signal-cyan{color:#4dd0e1}
-.group-bottom{padding:0;margin:0 -4px -6px;border-top:1px solid var(--line);text-align:center;line-height:0}
-.collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);
-  display:flex;align-items:center;justify-content:center;box-sizing:border-box;
-  background:transparent;border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
-.collapse-group .collapse-icon{font-size:16px;line-height:1}
-.collapse-group:hover{color:var(--text);background:transparent}
-.collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts{border:1px solid #6686c6;box-shadow:inset 3px 0 0 #8fb8f0;background:#182131}
-#signalCounts>summary{color:#bfd5ff}
-#signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
-#signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
-#signalCounts .count-purple{color:var(--purple)} #signalCounts .count-earn{color:var(--text)}
-#signalCounts table{table-layout:fixed}
-#signalCounts td{padding:6.3px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
-#signalCounts td.num{text-align:center}   /* 计数列居中：破折号与展开按钮对齐 */
-#signalCounts td:first-child{width:26%}
-#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;max-width:100%;padding:0 4px;
-  color:#bfd5ff;font:inherit;font-size:14px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
-  display:inline-flex;align-items:center;justify-content:center;gap:3px;touch-action:manipulation}
-#signalCounts .signal-count-toggle::after{content:"▾";font-size:10px}
-#signalCounts .signal-count-toggle[aria-expanded="true"]::after{content:"▴"}
-#signalCounts .signal-members-row>td{padding:0;width:auto;border-top:0}
-#signalCounts .signal-members-panel{padding:10px 12px;background:#121a27;border-top:1px solid #465e87;text-align:left}
-#signalCounts .signal-members-panel[hidden]{display:none}
-#signalCounts .signal-members-panel h4{font-size:13px;margin:12px 0 5px;color:#bfd5ff}
-#signalCounts .signal-members-panel ul{margin:0;padding-left:18px}
-#signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
-/* 名单前面的圆点按这一格的灯色走，不再是默认的白点；灰灯没有灯，用灰点 */
-#signalCounts .signal-members-panel li::marker{color:var(--dim)}
-#signalCounts .signal-members-panel.tone-red li::marker{color:var(--red)}
-#signalCounts .signal-members-panel.tone-yellow li::marker{color:var(--yellow)}
-#signalCounts .signal-members-panel.tone-purple li::marker{color:var(--purple)}
-/* 基本面也用上面那套 marker 圆点，不再单独画一个大的：整张统计表只有一种灯 */
-#signalCounts .text-only .signal-member-list li::marker{color:#9fa3aa}
-#signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
-#signalCounts .signal-member-direction{color:var(--dim);font-size:12px}
-#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}
-#signalCounts .signal-member-split{list-style:none;height:0;margin:9px 0;border-top:1px solid #465e87}
-#signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}
-/* 分框展示：方向写在框标题上（「▲ 上涨」/「▲ 上轨 · RSI 3条过界」），名单里不再逐条画三角 */
-#signalCounts .signal-member-block{margin:0 0 10px}
-#signalCounts .signal-member-block:last-child{margin-bottom:0}
-#signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:#bfd5ff}
-#signalCounts .signal-member-block h5:first-letter{letter-spacing:0}
-#signalCounts .signal-member-block ul{padding-left:18px}
-#signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:14px;font-weight:700;line-height:1;vertical-align:baseline}
-#signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
-#signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
-#signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
-/* 点开的是哪个数字胶囊，就亮哪个胶囊本身（不整行高亮） */
-#signalCounts .signal-count-toggle[aria-expanded="true"]{background:#2f4f86;border-color:#8fb8f0;color:#fff}
-#signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted #465e87}
-#signalCounts .signal-member-jump:hover,.signal-member-jump:focus-visible{color:#bfd5ff;border-bottom-color:#bfd5ff}
-#signalCounts .text-only{margin:8px 0 0;border:1px solid #2b3546;border-radius:8px;background:#12161f;text-align:left}
-#signalCounts .text-only>summary{cursor:pointer;padding:8px 12px;color:var(--text);font-size:13px}
-#signalCounts .text-only[open]>summary{border-bottom:1px solid #2b3546}
-#signalCounts .text-only .text-only-kind{margin:10px 0 4px;padding:0 12px;color:#bfd5ff;font-size:12.5px}
-#signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
-#signalCounts .text-only li{margin:5px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
-tr[id^="s-"]{scroll-margin-top:64px}
-/* 闪烁只改 background-color：带 52 周条的行，灯条是用 background-image 画的，
-   用 background 简写做动画会把灯条一起清掉（看起来就是高亮盖住了灯）。
-   位置条是主行的下一个兄弟行，一起闪才不会断成两截。 */
-tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out 1}
-@keyframes stkflash{0%,55%{background-color:#2b3f63}100%{background-color:transparent}}
-#signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;background:#182130;color:var(--text)}
-/* 折叠态绝对不占高度：个别移动内核在父面板隐藏期间改 open 后不重排，这里用 CSS 兜底 */
-#signalCounts .earnings-week:not([open])>*:not(summary){display:none}
-#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:13.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
-#signalCounts .earnings-week summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts .earnings-week ul{list-style:disc;margin:0;padding:0 0 8.1px 18px}
-#signalCounts .earnings-week li{font-size:13px;padding:3.6px 0;overflow-wrap:anywhere}
-#signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
-/* 财报名单的灯也用行首圆点，和 52周低位/布林+RSI 等栏目同一位置同一大小 */
-#signalCounts .earnings-week li::marker{color:var(--dim)}
-#signalCounts .earnings-week li.lamp-red::marker{color:var(--red)}
-#signalCounts .earnings-week li.lamp-yellow::marker{color:var(--yellow)}
-#signalCounts .earnings-week li.lamp-green::marker{color:var(--green)}
-#signalCounts .earnings-week li.lamp-gray::marker{color:var(--dim)}
-#signalCounts .earnings-week .lamp-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
-  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-#signalCounts .earnings-week-meta{color:var(--text);margin-left:5px}
-#signalCounts .earnings-week-group{color:#8fb8f0}
-#signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;line-height:1;color:var(--text);
-  display:inline-flex;align-items:center;white-space:nowrap;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:left;touch-action:manipulation}
-#signalCounts .signal-filter-toggle[aria-pressed="true"]{background:#2f6bd8;border-color:#2f6bd8;color:#fff}
-#signalCounts .signal-filter-toggle:focus-visible,#signalCounts .signal-filter-clear:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;background:#121a27;font-size:13px}
-#signalCounts .signal-filter[hidden]{display:none}
-#signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:#bfd5ff;font-weight:600}
-#signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:38px;padding:0 10px;font:inherit;font-weight:400;color:var(--text);
-  background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer}
-#signalCounts .signal-filter p{margin:6px 0 0;color:var(--dim)}
-#signalCounts .signal-filter ul{list-style:none;margin:6px 0 0;padding:0}
-#signalCounts .signal-filter li{padding:4.5px 0;overflow-wrap:anywhere}
-#signalCounts .signal-filter li+li{border-top:1px solid var(--line)}
-#signalCounts .signal-filter .note{margin-left:5px}
-#signalCounts .signal-filter-group{color:#8fb8f0}
-#signalCounts .signal-filter .stat-dot{width:9px;height:9px;margin-left:6px;vertical-align:-1px}
-#signalCounts .signal-filter-detail{display:block;margin-top:2px;color:var(--text)}
-.earn{display:block;margin:0;color:#8fb8f0;font-size:12.5px;font-weight:400;line-height:1.5}
-.earn .unit{display:block;color:var(--dim);font-size:12px}
-.earn.soon{color:#f0c674;font-weight:600}
-table.stk{table-layout:fixed}
-.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}  /* 股票行下边距让给位置条，条靠近本股、远离下一只 */
-/* 位置条改成 20px 高（左右要放最低/最高价），底内边距相应从 12px 收到 7px，整行高度不变 */
-.stk tr.range52-row td{padding:0 12px 7px 18px;border-top:0;box-shadow:none}
-/* 个股之间的横线原来是继承全局 td 的 --line(#252a33)，太淡；股票表这里提亮一档（2026-10-20） */
-table.stk tr>td{border-top-color:#39424f}
-/* 位置条：左端写区间最低价、右端写最高价，中间是灰轨；百分比浮在轨道上方跟随紫方块 */
-.range52-rail{position:relative;display:flex;align-items:flex-end;gap:7px;height:20px;
-  font-variant-numeric:tabular-nums}
-.range52-lo,.range52-hi{flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
-.range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
-/* 百分比紧贴倒三角的上边缘，但**不能重叠**：三角高 9px，文字底 = 轨道上沿 + 11px（留 2px） */
-.range52-percent{position:absolute;bottom:calc(100% + 11px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
-/* 现价标记：倒三角，尖角 60°（等边：底 10.4px、高 9px），尖角朝下**顶在灰轨上沿**，
-   不再压在轨道中间（原来是个 8.4px 的紫方块）。外层浅紫描边 + 内层深紫实心 */
-.range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;
-  border-left:5.2px solid transparent;border-right:5.2px solid transparent;
-  border-top:9px solid #efd9ff;transform:translateX(-50%);z-index:1}
-.range52-marker::before{content:"";position:absolute;left:-4.2px;top:-8px;width:0;height:0;
-  border-left:4.2px solid transparent;border-right:4.2px solid transparent;border-top:7px solid #713caf}
-/* 成本价：黄色竖线，横跨灰轨（2026-10-19 改；原来是条下方的白三角）。
-   高度 10.5px 上下各露约 4px；z-index 高于现价标记，成本≈现价时黄压紫，成本价优先可见 */
-.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;background:#f0c674;transform:translate(-50%,-50%);z-index:2}
-/* 成本价落在 52 周区间之外（比低点还低 / 比高点还高）：竖线贴到对应端点并稍淡，
-   端点外侧补一个朝外的小箭头，避免被当成「成本刚好等于最高价／最低价」 */
-.range52-cost.out-lo{left:0;opacity:.85}
-.range52-cost.out-hi{left:100%;opacity:.85}
-.range52-cost.out-lo::after,.range52-cost.out-hi::after{content:"";position:absolute;top:50%;
-  transform:translateY(-50%);border-top:3.2px solid transparent;border-bottom:3.2px solid transparent}
-.range52-cost.out-lo::after{right:calc(100% + 1px);border-right:4px solid #f0c674}
-.range52-cost.out-hi::after{left:calc(100% + 1px);border-left:4px solid #f0c674}
-.range52-missing{display:block;color:var(--dim);font-size:11px;line-height:15px}
-.c-sym{width:18%} .c-earn{width:22%} .c-px{width:13%} .c-sig{width:47%}
-.earn-cell{vertical-align:middle;overflow-wrap:anywhere}
-table.stk tr td:first-child{padding-left:14px}
-.stk td.sym{overflow-wrap:anywhere}
-.stk th{font-size:13px;color:var(--dim);font-weight:600;letter-spacing:.3px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
-.stk th:first-child{padding-left:14px}
-.stk th.h-earn,.earn-cell{text-align:center}
-.px{white-space:nowrap}
-/* 价格列改为居中显示（与共识价胶囊一致），不再靠右 */
-td.px{text-align:center}
-.px-price,.px-chg{display:block}
-.px-chg{font-size:13.5px}
-@media (max-width:600px){
-  /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
-  .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
-  .stk td{padding:8px 5px}
-  .stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}
-  .stk tr.range52-row td{padding:0 8px 6px 12px}
-  table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
-  .stk th{padding:7px 5px;font-size:12px}
-  .stk th.h-earn,.earn-cell{text-align:left}
-  .stk td.sym{font-size:14px}
-  .stk td.sym .note{font-size:11.5px;line-height:1.35}
-  .stk .earn{font-size:11.5px;line-height:1.4}
-  .stk .earn .unit{font-size:11px;line-height:1.35}
-  .stk .px-price{font-size:14px}
-  .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:10.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
-  .stk td.sig{font-size:12.5px;line-height:1.45}
-  .stk .fund-detail summary{padding:6px 7px}
-  .group-card>summary.grp,.macro-card>summary.grp{gap:5px;padding:12px 10px 12px 3px}
-  .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
-  .zone-card{margin:8px 0 10px}
-  .zone-card>summary{padding:8px 8px}
-  .zone-card>summary .zone-name{font-size:14px}
-  .stat-badge{min-width:16px;height:16px;padding:0 2px;font-size:12px}
-}
-.fund-context{margin-top:6px;color:var(--dim)}
-.up{color:var(--up)} .down{color:var(--down)}
-tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
-tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}
-tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}
-tr.gray td{color:var(--dim)}
-.group-card tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
-.group-card tr.pur td.sig{box-shadow:inset -2px 0 0 var(--purple);padding-right:12px}
-/* 有52周条的股票：左侧灯条顶部再减去整只股票高度（主行+位置条）的约15%（85%-6.1px，位置条行约22px），延伸覆盖自己的位置条、在条下方4px处结束，与上下股票留出空隙 */
-.stk tr:has(+tr.range52-row)>td{--lc:transparent;--lw:0px}
-.stk tr.red:has(+tr.range52-row)>td:first-child{--lc:var(--red);--lw:6px}
-.stk tr.yellow:has(+tr.range52-row)>td:first-child{--lc:var(--yellow);--lw:4px}
-.stk tr.green:has(+tr.range52-row)>td:first-child{--lc:var(--green);--lw:2px}
-.stk tr:has(+tr.range52-row)>td:first-child{box-shadow:none;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom;background-repeat:no-repeat}
-.stk tr.pur:has(+tr.range52-row)>td.sig{box-shadow:none;background-image:linear-gradient(var(--purple),var(--purple));background-size:2px calc(85% - 2.1px);background-position:right bottom;background-repeat:no-repeat}
-.stk tr.range52-row>td{--lc:transparent;--lw:0px;--pc:transparent;--pw:0px;background-image:linear-gradient(var(--lc),var(--lc)),linear-gradient(var(--pc),var(--pc));background-size:var(--lw) 18px,var(--pw) 18px;background-position:left top,right top;background-repeat:no-repeat}
-.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px} .stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}
-.stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px} .stk tr.pur+tr.range52-row>td{--pc:var(--purple);--pw:2px}
-#macroCard tr.mh td{padding:5px 10px;font-size:12.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
-.macro-help{margin:8px 12px;color:var(--dim);font-size:13px;line-height:1.7}
-.macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
-.macro-help p{margin:6px 0}
-.macro-help>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
-.page-notes{margin-top:18px}
-.page-notes .macro-help{overflow-wrap:anywhere}
-.page-notes a{color:#8fb8f0}
-.page-notes .macro-help+ .macro-help{border-top:1px solid var(--line);padding-top:4px}
-.unit{display:block;font-size:11px;color:var(--dim);font-weight:400}
-.foot{color:var(--dim);font-size:12.5px;text-align:center;margin-top:22px;line-height:1.7}
-.quiet{color:var(--dim);font-size:13px;padding:8px 12px 12px}
-.warn{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
-  color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:14px}
-.acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
-.acts button{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
-  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
-.acts button:disabled{opacity:.5;cursor:not-allowed}
-#runMsg{font-size:13px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}
-#runMsg.ok{color:var(--green)}
-#runMsg.err{color:var(--red)}
-.runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-.runbar button{padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
-  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
-.runbar button:disabled{opacity:.5;cursor:not-allowed}
-.runbar button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-.runbar a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
-  border:1px solid #333a47;border-radius:8px;text-decoration:none;display:inline-block}
-.statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  margin:-4px 0 14px;font-size:13.5px;line-height:1.5}
-.check-result{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;
-  font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
-.check-result[data-phase="bad"]{border-color:var(--red)}
-.check-result[data-phase="busy"]{border-color:var(--yellow)}
-.check-result[hidden]{display:none}
-.group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:6px;cursor:pointer;
-  /* 2026-10-20：左内边距 12px → 4px —— 展开箭头和分类名整体往左挪，贴着卡片左边缘 */
-  padding:12px 12px 12px 4px;font-size:16px;font-weight:600;list-style:none;touch-action:manipulation}
-.group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{display:none}
-/* 箭头给固定宽度并居中：左内边距收到 4px 后，展开状态旋转 90° 的「›」会贴到卡片边缘被裁掉 */
-.group-card>summary::before,.macro-card>summary::before{content:"›";display:inline-block;width:10px;
-  text-align:center;flex:none;color:var(--dim);font-size:20px;line-height:1}
-.group-card[open]>summary::before,.macro-card[open]>summary::before{transform:rotate(90deg)}
-.group-card[open]>summary,.macro-card[open]>summary{border-bottom:1px solid var(--line)}
-.group-stats{margin-left:auto;color:var(--dim);font-size:14px;font-weight:400}
-.group-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
-.group-card>summary .rs-spy{margin-left:auto}
-.stat-count{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
-/* 持仓里的「长持仓」区：可折叠，默认展开；下方就是短持仓主体，所以底部要留出间距 */
-.zone-card{margin:10px 0 12px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.02)}
-.zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;
-  list-style:none;touch-action:manipulation}
-.zone-card>summary::-webkit-details-marker{display:none}
-.zone-card>summary::before{content:"›";color:var(--dim);font-size:18px;line-height:1}
-.zone-card[open]>summary::before{transform:rotate(90deg)}
-.zone-card[open]>summary{border-bottom:1px solid var(--line)}
-.zone-card>summary .zone-name{color:var(--text);font-size:15px;font-weight:600;white-space:nowrap;flex:none}
-.zone-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;
-  justify-content:flex-start;text-align:left;flex:1 1 auto}
-.zone-card>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
-.zone-card .quiet{font-size:12px;color:var(--dim);padding:8px 10px 0;line-height:1.6}
-/* 展开的那一组整条标题高亮：左边一条蓝＋向左渐隐的底色提亮，
-   一眼就能看出「持仓」和里面的「长持仓」到底有没有打开（两条叠在一起时尤其重要）。
-   统计面板本来就有蓝边框＋左侧蓝条＋#bfd5ff 组名，默认又是展开的，再叠一层高亮是多余的，故排除。 */
-.group-card[open]:not(#signalCounts)>summary,.macro-card[open]>summary,.zone-card[open]>summary{
-  background:linear-gradient(90deg,rgba(143,184,240,.20),rgba(143,184,240,.05) 72%,transparent);
-  box-shadow:inset 3px 0 0 #8fb8f0}
-/* 鼠标／触摸点标题时不要再套一圈蓝描边：那条 2px 线会被误当成高亮，
-   而且点完失焦就消失，看着像「闪一下」。键盘 Tab 过去的 :focus-visible 照旧显示。 */
-.group-card>summary:focus:not(:focus-visible),.macro-card>summary:focus:not(:focus-visible),
-.zone-card>summary:focus:not(:focus-visible){outline:none}
-.group-card[open]:not(#signalCounts)>summary .grp-name,.macro-card[open]>summary .grp-name,
-.zone-card[open]>summary .zone-name{color:#bfd5ff}
-.group-card[open]:not(#signalCounts)>summary::before,.macro-card[open]>summary::before,
-.zone-card[open]>summary::before{color:#8fb8f0}
-/* 子区自己的收起条和外层「持仓」卡底部收起条之间拉开距离，两条 ▲ 挨太近会误点 */
-.zone-card + .group-bottom,.zone-card + .quiet + .group-bottom{margin-top:22px}
-/* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
-.stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
-  box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-radius:999px;
-  border:1.5px solid var(--dim);background:transparent;
-  font-size:12.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;color:#fff;
-  position:relative;top:2px}   /* 与分组名文字底部对齐（圆底原本比文字底高 2px） */
-.stat-badge.red{border-color:var(--red)}
-.stat-badge.yellow{border-color:var(--yellow)}
-.stat-badge.gray{border-color:var(--dim)}
-.stat-badge.purple{border-color:var(--purple)}
-.stat-badge.green{border-color:var(--green)}
-/* 分组标题：名称不参与挤压，避免手机上「IT软硬Ai (27)」被拆成两行 */
-.group-card>summary .grp-name,.macro-card>summary .grp-name{white-space:nowrap;flex:none}
-.rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
-.rs-spy.up{color:var(--up)} .rs-spy.down{color:var(--down)}
-.stat-dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
-.stat-dot.red{background:var(--red)} .stat-dot.yellow{background:var(--yellow)}
-.stat-dot.gray{background:var(--dim)} .stat-dot.green{background:var(--green)} .stat-dot.purple{background:var(--purple)}
-.market-risk-badge{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
-.market-risk-badge[data-level="red"]{color:var(--red)}
-.market-risk-badge[data-level="yellow"]{color:var(--yellow)}
-.market-risk-badge[data-level="green"]{color:var(--green)}
-.macro-card>summary .group-stats{margin-left:0;text-align:left}
-.quiet-list{margin:8px 0}
-.quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:13px;cursor:pointer}
-.sym .note{display:block;margin:3px 0 0;overflow-wrap:anywhere}
-.group-card summary:focus-visible,.macro-card summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
-.runlight{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--dim);line-height:1.4}
-.runlight .dot{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}
-.runlight[data-phase="busy"]{color:var(--yellow)}
-.runlight[data-phase="busy"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
-.runlight[data-phase="partial"]{color:var(--yellow)}
-.runlight[data-phase="partial"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
-.runlight[data-phase="ok"]{color:var(--green)}
-.runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}
-.runlight[data-phase="bad"]{color:var(--red)}
-.runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}
-.dca{background:rgba(139,147,161,.12);border:1px solid var(--line);border-radius:10px;
-  padding:10px 14px;margin-bottom:14px;font-size:14px;color:var(--dim)}
-.dca b{color:var(--text)}
-.dca.on{background:rgba(210,153,34,.14);border-color:rgba(210,153,34,.4);color:var(--yellow)}
-.dca.on b{color:var(--yellow)}
-.dca-badge{margin-left:auto;white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
-.dca-badge.on{color:var(--yellow)}
-/* 定投提醒挂在顶栏最右侧，字号跟顶栏按钮对齐 */
-.runbar .dca-badge{font-size:14px;margin-left:auto}
-.policy-reference{border-top:1px solid var(--line);margin-top:0}
-.policy-reference .reference-alert{padding:7px 12px}
-.policy-reference .reference-top{gap:6px;font-size:12.5px}
-.policy-reference .stat-dot{width:8px;height:8px}
-.policy-reference .reference-status{font-size:11.5px}
-.policy-reference [data-status="pending"] .reference-status,.policy-reference [data-status="unavailable"] .reference-status{color:var(--dim)}
-.policy-reference [data-status="available"] .reference-status{color:var(--text)}
-.policy-reference .reference-conclusion{font-size:13px;line-height:1.55;margin:3px 0 0}
-.oil-reference-row td{font-size:13px;overflow-wrap:anywhere}
-.oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
-.oil-state{font-size:12px;font-weight:600}
-.oil-explanation{margin-top:3px;font-size:12.5px;line-height:1.55}
-.oil-reference-row.red .oil-state{color:var(--red)}
-.oil-reference-row.yellow .oil-state{color:var(--yellow)}
-.oil-reference-row.green .oil-state{color:var(--green)}
-.oil-rise{color:var(--up)} .oil-fall{color:var(--down)}
-#macroCard td:nth-child(3) .unit{white-space:nowrap}
-@media(max-width:600px){.oil-reference-row td{padding:8px 6px}.oil-reference-row .reference-detail{font-size:10.5px}#macroCard td:nth-child(3) .unit{font-size:9px}}
-.reference-alert{padding:13px 14px;border-bottom:1px solid var(--line)}
-.reference-alert:last-of-type{border-bottom:0}
-.reference-top{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
-.reference-top .reference-status{margin-left:auto;color:var(--dim);font-size:12px}
-.reference-alert[data-level="red"] .reference-status{color:var(--red)}
-.reference-alert[data-level="yellow"] .reference-status{color:var(--yellow)}
-.reference-alert[data-level="green"] .reference-status{color:var(--green)}
-.reference-conclusion{font-size:14px;line-height:1.65;margin:7px 0;color:var(--text)}
-.reference-data{font-size:12px;line-height:1.65;color:var(--dim);overflow-wrap:anywhere}
-.reference-detail{margin:8px 0 0;font-size:12px;color:var(--dim);line-height:1.7}
-.reference-detail summary{cursor:pointer;color:#8fb8f0;padding:3px 0}
-.reference-detail a{color:#8fb8f0}
-.reference-detail p{margin:5px 0}
-.reference-alert[data-level="gray"] .reference-conclusion{color:var(--dim)}
-.local-preview-banner{padding:11px 14px;border:1px solid rgba(107,163,240,.35);border-radius:10px;background:rgba(107,163,240,.08);color:#8fb8f0;font-size:13px;margin:14px 0}
-"""
 
 
 def _macro_rows(macro, risk):
@@ -5838,114 +5105,40 @@ def _cost_panel_assets(items=None):
     try:
         import io as _io
         import re as _re
-        css = _io.open(os.path.join(BASE, "cost_panel.css"), encoding="utf-8").read()
+        with _io.open(os.path.join(BASE, "cost_panel.css"), encoding="utf-8") as stream:
+            css = stream.read()
         # 这个文件自带 <style>…</style>，但这里是插进页面已有的 <style> 里，必须剥掉标签，
         # 否则 HTML 里出现嵌套 <style>，浏览器会把后面的 </style> 当正文渲染出来
         css = _re.sub(r"</?style[^>]*>", "", css)
-        js = _io.open(os.path.join(BASE, "cost_panel.js"), encoding="utf-8").read()
+        with _io.open(os.path.join(BASE, "cost_panel.js"), encoding="utf-8") as stream:
+            js = stream.read()
     except Exception as e:
         log(f"  ! 仓位面板资源缺失，跳过：{e}")
         return "", ""
-    return css, js.replace("__MM_REAL__", _cost_seed_json(items))
+    effective = json_script({**DEFAULT_SETTINGS, **S})
+    rules_js = f"<script>window.__MM_RULES__={effective};</script>\n"
+    return css, rules_js + js.replace("__MM_REAL__", _cost_seed_json(items))
 
 
-RULES_SUMMARY = "完整报灯规则 · 全局 + 分组差异"
+def _rule_constants():
+    """规则说明中的固定参数直接引用真实引擎，避免另写一份默认数字。"""
+    return {"rsi_periods": " / ".join(map(str, RSI_PERIODS)),
+            "vol_ratio_base": VOL_RATIO_BASE, "vol_z_window": VOL_Z_WINDOW,
+            "intraday_vol_quiet_min": INTRADAY_VOL_QUIET_MIN,
+            "vol_lookback": VOL_LOOKBACK, "vol_min_returns": VOL_MIN_RETURNS,
+            "vol_low_sigma": VOL_LOW_SIGMA, "vol_high_sigma": VOL_HIGH_SIGMA,
+            "vol_mult": " / ".join(f"×{VOL_MULT[k]:g}" for k in ("low", "mid", "high")),
+            "ma_confirm_lookback": MA_CONFIRM_LOOKBACK,
+            "ma_confirm_min": MA_CONFIRM_MIN, "ma_confirm_max": MA_CONFIRM_MAX,
+            "ma_confirm_default": MA_CONFIRM_DEFAULT, "ma_long_band_pct": MA_LONG_BAND_PCT,
+            "boll_sigma_factor": _BOLL_SIGMA_FACTOR, "target_anomaly_pct": TARGET_ANOMALY_PCT,
+            "earn_soon_days": EARN_SOON_DAYS,
+            "hy_week_yellow": HY_WEEK_YELLOW, "hy_week_red": HY_WEEK_RED}
 
-RULES_BODY = """
-<div class="rules-body">
-  <h4>全局规则（四组一致）</h4>
 
-  <h5>报灯</h5>
-  <ul>
-    <li><b>量比</b> — 收盘后按本股自适应：最近完整日量 ÷ 此前 20 日均量，取对数后放进本股过去 60 日
-        分布算 z（中位数 + 1.4826×MAD）→ z ≥ <b>3.6σ</b> <span class="lamp-red">红</span>、
-        z ≥ <b>1.8σ</b> <span class="lamp-yellow">黄</span>；固定 <b>3×</b>／<b>1.5×</b>
-        只在 z 算不出时兜底（历史不足 80 日、成交量为 0、尺度为 0、指数 ^／期货 =F）。
-        盘中量比无 z 值，一律 1.5×／3×，开盘 15 分钟内不报。缩量不报灯，不分涨跌方向。</li>
-    <li><b>52 周低位</b> — 创新低或刚进入低位区 → <span class="lamp-red">红</span>；
-        仍在低位区（距低点 ≤ 3%）→ <span class="lamp-yellow">黄</span></li>
-    <li><b>长均线 250 日</b> — 日内触及 ±1% 区间、上穿或跌破 → <span class="lamp-yellow">黄</span></li>
-    <li><b>基本面</b> — 核心三项（营收同比、营业利润率、经营现金流）恶化 → <span class="lamp-red">红</span>；
-        扩展四项（毛利率、负债/权益、流动比率、ROE）→ <span class="lamp-yellow">黄</span>；ETF 不判</li>
-    <li><b>加仓价</b> — 已跌破、或距离 ≤ 3% → <span class="lamp-red">红</span></li>
-    <li><b>布林 + RSI</b> — 进布林区间且 RSI 同向 2 条 → <span class="lamp-yellow">黄</span>、
-        3 条 → <span class="lamp-red">红</span>；方向不一致 → <span class="lamp-yellow">黄</span>。
-        <b>上轨部分只对持仓、重点关注生效，见下面分组</b></li>
-  </ul>
-
-  <h5>只出文字，不报灯（灯级不变，不进红黄紫）</h5>
-  <ul>
-    <li><b>RSI</b> 超卖 2 条以上 → <span class="lamp-magenta">品红字</span>；超买不着色</li>
-    <li><b>布林</b> 下轨逼近／触及／跌破 → <span class="lamp-sig-yellow">黄字</span>；上轨 → 普通字</li>
-    <li><b>财报</b> — 只显示日期，不进红黄紫、也不进灰灯区块；统计面板单列「未来一周财报」一栏（默认折叠）
-      <ul class="rules-sub">
-        <li>距今 <b>0~14 天</b>：财报列文字<span class="lamp-sig-yellow">标黄加粗</span>，
-            <b>不改灯级、不进统计</b>（待公布／取数失败／已过期都不算临近）</li>
-        <li>距今 <b>0~7 天</b>：这只股<b>不折叠</b>进「无异动 N 只」，即使是绿灯也留在组内可见表里</li>
-      </ul>
-    </li>
-    <li>字的染色和灯级各管各的：长均线是<span class="lamp-cyan">青字</span>同时报黄灯，
-        组合是<span class="lamp-sig-red">红字</span>／<span class="lamp-sig-yellow">黄字</span>同时报对应灯</li>
-  </ul>
-
-  <h5>只显示（不是信号，统计面板任何区块都不收）</h5>
-  <ul>
-    <li>52 周位置条与成本标记、现价、涨跌幅数值、目标价胶囊与空间、
-        RS 强弱（分组标题的「20 日对 .SPX」）、成本／盈亏／仓位 —— 常驻展示，
-        其中某项达标时<b>另算信号</b>，那是另一回事</li>
-    <li><b>振幅、量比没有常显数值</b>：达到阈值才会作为一条信号文字出现，没到就整条不出现</li>
-  </ul>
-
-  <h5>两个「灰」</h5>
-  <ul>
-    <li><b>灰灯区块</b>（统计面板，默认折叠）— 收<b>最终是绿灯</b>、但页面已经写了 RSI／布林文字的标的：
-        「有动静，规则判它还不够格」。按 RSI／布林／布林+RSI 三类归因，▲▼ 分上下；
-        <b>布林+RSI</b> 那类是够格却被分组规则拦下的（如其他分组的上轨、长持仓的上轨 2 条黄）</li>
-    <li><b>缺失</b> — 行情未取到或 52 周待更新，行标灰，不进红黄紫；和灰灯不是一回事</li>
-  </ul>
-
-  <h4>分组差异（在全局规则上增减）</h4>
-
-  <h5>长持仓 ＝ 全局 ＋ 下列</h5>
-  <ul>
-    <li><b>涨跌幅／振幅</b>：阈值按本股平时波动 <b>×0.6／×1.0／×1.4</b> 缩放 →
-        涨跌幅 ±8% <span class="lamp-red">红</span>、±5% <span class="lamp-yellow">黄</span>；
-        振幅 10% <span class="lamp-red">红</span>、6% <span class="lamp-yellow">黄</span></li>
-    <li><b>布林 + RSI 上轨</b>：只报 RSI 3 条全过界的<span class="lamp-red">红</span>，
-        2 条<span class="lamp-yellow">黄</span>屏蔽；下轨不受影响</li>
-    <li><b>减仓价</b>：已涨到、或距离 ≤ 3% → <span class="lamp-red">红</span></li>
-    <li><b>目标价／共识价</b>：跨越、±3% 内、或空间 &gt; 50% →
-        <span class="lamp-purple">紫</span>（不改红黄绿）；空间 &gt; 100% 疑似异常 → <span class="lamp-red">红</span></li>
-  </ul>
-
-  <h5>短持仓 ＝ 长持仓，唯一区别</h5>
-  <ul>
-    <li><b>布林 + RSI 上轨照常报</b>：2 条<span class="lamp-yellow">黄</span>、3 条<span class="lamp-red">红</span></li>
-  </ul>
-
-  <h5>重点关注 ＝ 全局 ＋ 下列</h5>
-  <ul>
-    <li><b>涨跌幅／振幅</b>：同长持仓</li>
-    <li><b>布林 + RSI 上轨</b>：照报，2 条<span class="lamp-yellow">黄</span>、3 条<span class="lamp-red">红</span></li>
-    <li><b>目标价／共识价</b>：同长持仓出<span class="lamp-purple">紫</span></li>
-    <li><b>不报减仓价</b>（减仓价仅持仓组）</li>
-  </ul>
-
-  <h5>其他分组（科技、指数基等）＝ 全局 − 下列</h5>
-  <ul>
-    <li>不报<b>涨跌幅／振幅</b></li>
-    <li><b>布林 + RSI 上轨</b>不报灯，只显示文字</li>
-    <li><b>目标价／共识价</b>只显示不警示（手填目标价无效）</li>
-    <li>不报<b>减仓价</b></li>
-  </ul>
-</div>
-"""
-
-# 页底「完整报灯规则」模板：cost_panel.js 会拿它替换掉「美联储利率决议」那个折叠块。
-# 2026-10-20：这段以前只存在于 Temp/make_cost_ui_demo.py（DEMO 注入），
-# monitor.py 从不输出 → 线上每轮生成的页面都没有 #rulesTpl → 替换永远不触发。
-RULES_TEMPLATE = ('<template id="rulesTpl"><summary>' + RULES_SUMMARY + '</summary>'
-                  + RULES_BODY + '</template>')
+# 兼容既有导入；页面渲染不使用这份 import 时快照，而按当时 S 重新生成。
+RULES_BODY = rules_body(S, _rule_constants())
+RULES_TEMPLATE = rules_template(S, _rule_constants())
 
 
 def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
@@ -5992,6 +5185,10 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
                         if any((d.get("target") or {}).get("kind") == "consensus" for d in items) else "")
 
     cost_css, cost_js = _cost_panel_assets(items)
+    current_rules = rules_template(S, _rule_constants())
+    # 离线/回放可把 BASE 指向仅含配置的数据目录；静态脚本仍来自实际源码目录。
+    asset_base = BASE if os.path.isfile(os.path.join(BASE, "run-status.js")) else os.path.dirname(__file__)
+    run_js = script_asset(asset_base, "run-status.js")
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -6009,7 +5206,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 {PAGE_CSS}
 {cost_css}</style>
 </head>
-<body>{RULES_TEMPLATE}<div class="wrap">
+<body>{current_rules}<div class="wrap">
 <h1>AI监测</h1>
 <div class="sub">{sub_line}</div>
 
@@ -6050,7 +5247,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <span id="runMsg"></span>
 </div>
 {_page_notes(snapshot)}
-{RUN_JS}
+{run_js}
 <script>window.MM_SETTINGS={{"signal_single_open":{int(S.get("signal_single_open", 1))}}};</script>
 <script>{PAGE_INTERACTION_JS}</script>
 {cost_js}
@@ -6208,14 +5405,27 @@ def dump_http_snapshot(state):
     if not isinstance(state, dict) or state.get("mode") != "dump" or not state.get("path"):
         return
     try:
-        with open(state["path"], "w", encoding="utf-8") as f:
-            json.dump(state["data"], f, ensure_ascii=False)
+        atomic_write_json(state["path"], state["data"])
         log(f"HTTP 快照已写入 {state['path']}（{len(state['data'])} 条请求）")
     except Exception as e:
         log(f"HTTP 快照写入失败：{e}")
 
 
 def main(argv=None):
+    global QUOTE_DEADLINE
+    runtime = RuntimeState(BASE, target=TARGET_DATE, event=EVENT)
+    try:
+        return _main(argv, runtime)
+    except Exception as exc:
+        runtime.receipt("failed", f"{type(exc).__name__}: {str(exc)[:300]}")
+        raise
+    finally:
+        QUOTE_DEADLINE = None
+        YAHOO_GATE.reset(False)
+        STOOQ_GATE.reset(False)
+
+
+def _main(argv, runtime):
     global TARGET_DATE, CLOSED_ONLY, QUOTE_DEADLINE
     parser = argparse.ArgumentParser(description="市场自检生成器")
     parser.add_argument("--prepare-run", action="store_true", help="锁定本次运行目标交易日并输出 GitHub Actions 环境变量")
@@ -6227,7 +5437,7 @@ def main(argv=None):
         prepare_run()
         return 0
     if args.ensure_schedule_run:
-        return ensure_schedule_run()
+        return ensure_schedule_run(runtime)
     if args.dump_http or args.replay_http:
         snap_mode = "dump" if args.dump_http else "replay"
         snap_path = args.dump_http or args.replay_http
@@ -6238,6 +5448,7 @@ def main(argv=None):
     if not TARGET_DATE:
         plan = plan_run(EVENT, datetime.now(timezone.utc))
         TARGET_DATE, CLOSED_ONLY = plan["target"], plan["closed_only"]
+    runtime.target = TARGET_DATE
 
     cfg_path = os.path.join(BASE, "holdings.json")
     try:
@@ -6251,12 +5462,13 @@ def main(argv=None):
     # 一轮只读一个快照；进程内重复调用也必须重新取本轮到期数据。
     _EARN_CACHE.clear()
     _FUND_CACHE.clear()
+    _SA_FUND_CACHE.clear()
     try:
         with open(os.path.join(BASE, "status.json"), encoding="utf-8") as f:
             prev_status = json.load(f)
     except Exception:
         prev_status = {}
-    prev_status = prev_status if isinstance(prev_status, dict) else {}
+    prev_status = runtime.load_previous(prev_status)
     prev_cons = prev_status.get("consensus")
     old_cons = prev_cons.get("data") if isinstance(prev_cons, dict) else None
     old_cons = old_cons if isinstance(old_cons, dict) else {}
@@ -6266,8 +5478,13 @@ def main(argv=None):
         log("holdings.json 里没有自选股，跳过个股部分")
 
     nfci_state = {}
-    macro = build_macro(prev_status, nfci_state)
+    try:
+        macro = build_macro(prev_status, nfci_state)
+    finally:
+        if nfci_state:
+            nfci_state = runtime.checkpoint("nfci_cache", nfci_state)
     reference_alerts = build_reference_alerts(prev_status.get("reference_alerts"))
+    reference_alerts = runtime.checkpoint("reference_alerts", reference_alerts)
     items = []
     if universe:
         log("抓取 " + " + ".join(f"{group_counts[g['key']]} 只{g['label']}" for g in GROUPS
@@ -6348,6 +5565,7 @@ def main(argv=None):
     prev_earn = prev_status.get("earnings")
     prev_earn = prev_earn if isinstance(prev_earn, dict) else {}
     earn_stat = attach_earnings(items, prev_earn.get("data"), event_today, prev_earn.get("events"))
+    earn_stat = runtime.checkpoint("earnings", earn_stat)
     cons_syms = [normalize_symbol(sym) for sym, sc, grp in universe if consensus_wanted(sym, sc, grp)]
     try:
         cons_data, cons_stat = update_consensus(cons_syms, prev_cons, event_today,
@@ -6357,6 +5575,9 @@ def main(argv=None):
         log(f"  ! 共识价更新中断，沿用旧值：{str(e)[:90]}")
         cons_data = {k: v for k, v in old_cons.items() if k in cons_syms and isinstance(v, dict)}
         cons_stat = {"stopped": "error", "quota": _consensus_quota(prev_cons, quota_day)}
+    consensus_state = runtime.checkpoint("consensus", {
+        "source": CONSENSUS_SOURCE, "stat": cons_stat, "data": cons_data,
+        "quota": cons_stat.get("quota", _consensus_quota(prev_cons, quota_day))})
     configs = {sym: (sc, grp) for sym, sc, grp in universe}
     for i, d in enumerate(items):
         sym = d["symbol"]
@@ -6388,7 +5609,7 @@ def main(argv=None):
                                                        event_today, earnings_events=earn_stat.get("events"))
         except Exception as e:
             log(f"  ! 基本面读取中断，跳过：{e}")
-            fund_facts, fund_run = {}, {"fetched": 0, "cached": 0, "data": {}}
+            fund_facts, fund_run = {}, {"fetched": 0, "cached": len(fund_data), "data": fund_data}
         fund_data = fund_run["data"]
         fund_stat.update(fetched=fund_run["fetched"], cached=fund_run["cached"])
         log(f"检查 {len(fund_targets)} 只持仓/重点关注的基本面（缓存 {fund_run['cached']}，本轮请求 {fund_run['fetched']}）…")
@@ -6417,14 +5638,15 @@ def main(argv=None):
         log(f"  基本面：{fund_stat['checked']} 份财报 · "
             f"红 {fund_stat['red']} · 黄 {fund_stat['yellow']}")
 
+    fundamental_state = runtime.checkpoint("fundamental", {**fund_stat, "data": fund_data})
     snapshot = build_snapshot(macro, items, cfg, group_counts=group_counts)
     snapshot["nfci_cache"] = nfci_state
-    snapshot["fundamental"] = {**fund_stat, "data": fund_data}
-    snapshot["consensus"] = {"source": CONSENSUS_SOURCE, "stat": cons_stat, "data": cons_data,
-                             "quota": cons_stat.get("quota", _consensus_quota(prev_cons, quota_day))}
+    snapshot["fundamental"] = fundamental_state
+    snapshot["consensus"] = consensus_state
     snapshot["earnings"] = earn_stat
     snapshot["reference_alerts"] = reference_alerts
     fresh, today_n, expected_n = snapshot_freshness(snapshot, TARGET_DATE)
+    runtime.fresh, runtime.today, runtime.expected = fresh, today_n, expected_n
     snapshot["data_lag"] = {"target": TARGET_DATE, "fresh": fresh, "today": today_n, "expected": expected_n,
                             "by_source": source_day_summary()}
     if universe:
@@ -6440,28 +5662,26 @@ def main(argv=None):
         if gh_out:
             with open(gh_out, "a", encoding="utf-8") as f:
                 f.write("publish=no\n")
+        runtime.receipt("skipped", "freshness_below_threshold", detail=msg)
         return 0
     supported_items = [d for d in items if quote_supported(d["symbol"])]
     html = render(macro, items, len(universe), data_down=bool(supported_items)
                   and all(d["level"] == "gray" for d in supported_items), snapshot=snapshot,
                   dup_hidden=dup_hidden)
     out = os.path.join(BASE, "index.html")
-    with open(out, "w", encoding="utf-8") as f:
-        f.write(html)
     status_path = os.path.join(BASE, "status.json")
-    with open(status_path, "w", encoding="utf-8") as f:
-        json.dump(snapshot, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    log(f"已生成 {out} 与 {status_path}；目标交易日 {TARGET_DATE}，实际行情日期 {snapshot['actual_dates']}")
+    write_artifacts(BASE, html, snapshot,
+                    receipt=runtime.receipt_data("generated", "awaiting_publish"))
+    log(f"已生成 {out} 与 {status_path}，待发布；目标交易日 {TARGET_DATE}，实际行情日期 {snapshot['actual_dates']}")
 
     try:
-        push_serverchan(macro, items)
+        push_serverchan(macro, items, snapshot=snapshot)
     except Exception as e:
         log(f"推送环节异常（忽略）：{str(e)[:90]}")
     return 0
 
 
-def push_serverchan(macro, items):
+def push_serverchan(macro, items, snapshot=None):
     """有红/黄信号时推微信（Server酱 https://sct.ftqq.com）
 
     仓库 Secret 里配 SERVERCHAN_KEY 才生效；没配就静默跳过。
@@ -6479,7 +5699,11 @@ def push_serverchan(macro, items):
         log("今晚无异动，不推送微信")
         return
 
-    lines = []
+    identity = snapshot if isinstance(snapshot, dict) else build_identity()
+    target = identity.get("target_trade_date", TARGET_DATE)
+    build_id = identity.get("build_id", "")
+    lines = ["本轮已生成待发布；尚未确认提交或 Pages 更新，在线页面可能仍为上一版。",
+             f"目标交易日：{target or '未提供'}；build_id：{build_id or '未提供'}", ""]
     for icon, label, group in (("🔴", "需要动手", reds), ("🟡", "留意", yellows)):
         if not group:
             continue
@@ -6507,10 +5731,11 @@ def push_serverchan(macro, items):
         lines.append("> ⚪ %d 只取数失败：%s" % (
             len(grays), "、".join(normalize_symbol(d["symbol"]) for d in grays[:8])))
     lines.append("")
-    lines.append("[打开完整看板](https://nixhuang.github.io/market-monitor/)")
+    lines.append("[打开在线看板（可能仍为上一版）](https://nixhuang.github.io/market-monitor/)")
 
     title = "%s 市场自检 🔴%d 🟡%d" % (
         NOW.strftime("%m-%d"), len(reds), len(yellows))
+    title += " · 已生成待发布"
     try:
         r = requests.post("https://sctapi.ftqq.com/%s.send" % key,
                           data={"title": title, "desp": "\n".join(lines)},

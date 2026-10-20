@@ -52,7 +52,7 @@ const check = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if
 global.window.addEventListener = () => {};
 
 try {
-  eval(code + '\n;globalThis.__T={render,data,pageState,ETF_SET,SET,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError};');
+  eval(code + '\n;globalThis.__T={render,data,pageState,ETF_SET,SET,SET_DEFS,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError,renderRuleText,updateRuleExplanation};');
   globalThis.__T.initGroups(JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8')));
   console.log('PASS 脚本加载无异常');
 } catch (e) {
@@ -61,6 +61,22 @@ try {
 }
 
 const T = globalThis.__T;
+// 独立固定历史默认值，不能用生成器自身的值充当期望值而漏掉默认参数漂移。
+const expectedDefaults = {
+  boll_n:20,boll_k:2,boll_near_pct:0.5,boll_near_band_pct:15,chg_red:4,chg_yellow:2,
+  rsi_high:70,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,
+  target_space_pct:50,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:1.8,vol_ratio_red_z:3.6,
+  amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,hy_green:350,hy_red:400,
+  vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,dca_every:0,dca_start:'',signal_single_open:1,
+  fund_enable:1,fund_rev_red:-20,fund_rev_yellow:-10,fund_om_drop:3,fund_gm_drop:3,fund_de_rise:30,
+  fund_cr_drop:20,fund_roe_drop:30,fund_pm_abnormal:60,fund_report_grace_days:90,
+};
+check(Object.keys(T.SET_DEFS).length===Object.keys(expectedDefaults).length&&
+  Object.entries(expectedDefaults).every(([key,value])=>T.SET_DEFS[key]===value), '共用schema保持全部原默认值');
+T.renderSettings();
+const defaultRules=els.effectiveRuleText.innerHTML;
+check(defaultRules===T.renderRuleText(expectedDefaults)&&defaultRules.includes('振幅（最高−最低）÷昨收 ≥ <b>8%</b>')&&
+  defaultRules.includes('≥ <b>5%</b> <span class="lamp-yellow">黄</span>'), '默认表单实际渲染共用规则及5%／8%振幅阈值');
 store.mm_gh_token_v1='github_pat_test_dispatch';
 check(runOptions.getToken()==='github_pat_test_dispatch', '编辑页仍可核验保存生效所需的授权状态');
 check(!src.includes('id="runCard"')&&!src.includes('id="btnRun"')&&!src.includes('id="btnRuns"')&&
@@ -174,20 +190,42 @@ check(saved.amp_yellow === 3 && saved.amp_red === 9, '振幅阈值正确采集�
 check(saved.custom_rule === 42, '表单外已有设置不会被保存操作删除');
 check(!('hy_yellow' in saved), '保存规则不保留无效的旧黄色信用利差阈值');
 check(src.includes('id="set_amp_yellow"') && src.includes('id="set_amp_red"'), '编辑页确实有两个振幅输入项');
-check(src.includes('RSI 周期固定为 6 / 12 / 24') && src.includes('同侧两条达到或越过阈值为黄，三条为红'), '编辑页说明三线 RSI 分级规则');
-check(!src.includes('RSI ≥ x → 超买红') && !src.includes('RSI ≤ x → 超卖红'), '旧单条 RSI 红灯说明已删除');
-check(src.includes('持仓和重点：布林上、下轨')&&src.includes('其他分组仅下轨报黄，上轨仍显示逼近、触及或盘中突破等具体状态，但单独命中不报黄、不计入布林黄灯')&&
-  src.includes('所有分组的布林＋RSI 双重信号红灯保持原规则'), '设置页说明上轨状态在各组可见，黄灯只在核心两组，下轨与组合红保持');
-check(!src.includes('布林轨道逼近、碰到或穿过都为黄（所有分组都报）'), '移除过时的全分组上轨黄色说明');
+// 动态说明必须执行实际共用代码，不在序列化模板源码里搜旧文案。
+T.updateRuleExplanation();
+const rules=els.effectiveRuleText.innerHTML;
+check(rules===T.renderRuleText(saved)&&!rules.includes('${')&&rules!==defaultRules,
+  '编辑器实际执行共用规则渲染，表单修改后无残留占位符');
+check(rules.includes('振幅（最高−最低）÷昨收 ≥ <b>9%</b>')&&
+  rules.includes('≥ <b>3%</b> <span class="lamp-yellow">黄</span>'), '振幅说明使用当前3%／9%而非硬编码默认值');
+check(rules.includes('RSI 周期 <b>6 / 12 / 24</b>')&&rules.includes('超买 ≥ <b>70</b>，超卖 ≤ <b>35</b>')&&
+  rules.includes('同方向 RSI 2 条 → <span class="lamp-yellow">黄</span>、3 条 → <span class="lamp-red">红</span>')&&
+  rules.includes('仅反向 2 条以上 → <span class="lamp-yellow">黄</span>'), '编辑页实际说明三线RSI与布林组合分级');
+check(!rules.includes('RSI ≥ x → 超买红')&&!rules.includes('RSI ≤ x → 超卖红')&&rules.includes('单独 RSI 不报灯'), '旧单条 RSI 红灯说明已删除');
+check(rules.includes('短持仓和重点关注上轨照常 2 条黄、3 条红')&&
+  rules.includes('长持仓</b>的布林上轨仅同侧 RSI 3 条报红，2 条黄/反向黄屏蔽')&&
+  rules.includes('下轨不受此限制；其他分组上轨仅文字、不报灯'), '设置页说明上轨分组限制，长持仓仅同侧三线红，下轨保持');
+check(!rules.includes('布林轨道逼近、碰到或穿过都为黄（所有分组都报）')&&
+  rules.includes('单独布林不报灯：下轨黄字、上轨普通字'), '移除过时的全分组上轨黄色说明');
 check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x bp 黄')&&src.includes('垃圾债利差 ≥ x bp 红'), '信用利差仅保留有效的黄红两条阈值');
 check(src.includes('一周扩大至少 30 bp 为黄、至少 50 bp 为红')&&src.includes('同类只取最高分')&&src.includes('信用／金融环境按2倍计分')&&src.includes('站上200日均线的股票不足50%为黄')&&src.includes('金融压力NFCI为周度'), '设置页明确说明信用急升和新增市场风险规则');
 check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');
-check(src.includes('距52周低点')&&src.includes('第一条均线确认上穿或跌破')&&src.includes('基本面单独提示'), '设置页覆盖其他固定个股与基本面规则');
-check(src.includes('涨跌幅和振幅只对持仓和重点生效')&&src.includes('×0.6')&&src.includes('×1.4'), '设置页说明涨跌/振幅分档且只对持仓和重点关注生效');
-check(src.includes('均线上下1%区间有重叠')&&src.includes('第一条均线')&&src.includes('确认穿越')&&src.includes('第二条均线')&&src.includes('同时判断日内触及与简单穿越'), '设置页说明第一条确认穿越与第二条贴近加简单穿越');
-check(!src.includes('不再判穿越，只看是否贴近')&&src.includes('昨日收盘低于昨日均线')&&src.includes('即使跳空穿越后远离±1%仍报穿越')&&src.includes('同日日内触及与穿越都满足时显示两条提示'), '长线简单穿越与贴近独立，旧静默说明已移除');
-check(src.includes('仍在52周低位')&&src.includes('降为黄')&&src.includes('基准季含一次性收益，仅供参考'), '设置页说明52周新低降级与ROE基准季备注');
-check(src.includes('id="set_ma_short"')&&src.includes('id="set_ma_long"')&&src.includes('昨日收盘价低于本轮均线')&&src.includes('日线不足对应周期时不计算')&&src.includes('可在上方改为250日'), '均线周期实际可调，规则说明与数据不足处理齐全');
+check(rules.includes('52 周低位')&&rules.includes('距低点 ≤ <b>1%</b>')&&rules.includes('第一条均线 50 日')&&
+  rules.includes('基本面（单独提示，不改股价红黄等级）')&&rules.includes('无风险且全项验证完整才是绿'), '设置页覆盖个股规则及基本面独立质量判断');
+check(rules.includes('持仓 / 重点关注')&&rules.includes('涨跌幅 / 振幅</b>仅这两组报灯')&&
+  rules.includes('×0.6 / ×1 / ×1.4')&&rules.includes('低档 &lt; 1.2%、高档 &gt; 2.5%')&&
+  rules.includes('收益样本不足 40 个按中档'), '设置页说明涨跌/振幅分档且只对持仓和重点关注生效');
+check(rules.includes('第一条均线 50 日')&&rules.includes('确认上穿/跌破')&&rules.includes('今天首次达到同侧确认边界')&&
+  rules.includes('第二条均线 200 日')&&rules.includes('日内高低范围触及本轮 SMA ±<b>1%</b> 区间')&&
+  rules.includes('或昨日收盘/昨日 SMA 与现价/本轮 SMA 发生简单穿越'), '设置页说明第一条确认穿越与第二条贴近加简单穿越');
+check(!rules.includes('不再判穿越，只看是否贴近')&&rules.includes('两条独立判断，同日日内触及与穿越都满足时显示两条提示')&&
+  rules.includes('穿越至少需要“周期+1”根日线计算昨日均线')&&rules.includes('昨日恰等于昨日均线不报新穿越'), '长线简单穿越与贴近独立，旧静默说明已移除');
+check(rules.includes('创新低或刚进入低位区 → <span class="lamp-red">红</span>')&&
+  rules.includes('仍在低位区但未创新低 → <span class="lamp-yellow">黄</span>')&&
+  rules.includes('基准季含一次性收益，仅供参考'), '设置页说明52周新低降级与ROE基准季备注');
+const longerRules=T.renderRuleText({...saved,ma_long:250});
+check(src.includes('id="set_ma_short"')&&src.includes('id="set_ma_long"')&&rules.includes('昨日收盘价低于本轮均线')&&
+  rules.includes('日线不足对应周期时不计算')&&longerRules.includes('第二条均线 250 日')&&
+  !longerRules.includes('第二条均线 200 日'), '均线周期实际可调，共用说明跟随250日且保留数据不足处理');
 check(src.includes('<details class="set" id="ruleDetails">')&&!src.includes('id="ruleDetails" open'), '完整规则默认折叠');
 check(src.includes('五指标综合市场风险')&&src.includes('同类只取最高分')&&src.includes('一级为市场风险和持仓'), '完整说明综合风险及最高优先级去重');
 
@@ -221,6 +259,10 @@ check(src.includes('五指标综合市场风险')&&src.includes('同类只取最
   check(Number(els.set_ma_short.value)===50&&Number(els.set_ma_long.value)===200, '均线默认50／200日');
   els.set_ma_short.value='20';els.set_ma_long.value='250';
   check(T.settingsError()==='', '两条均线可改为20／250');
+  T.updateRuleExplanation();
+  check(els.effectiveRuleText.innerHTML.includes('第一条均线 20 日')&&
+    els.effectiveRuleText.innerHTML.includes('第二条均线 250 日')&&
+    !els.effectiveRuleText.innerHTML.includes('第二条均线 200 日'), '实际表单说明随20／250日输入更新');
   T.collectSettings();
   const periods=JSON.parse(T.setJsonText());
   check(periods.ma_short===20&&periods.ma_long===250, '均线周期真正写入settings JSON');
@@ -237,6 +279,12 @@ check(src.includes('五指标综合市场风险')&&src.includes('同类只取最
     check(Object.keys(unrelatedSettings).filter(k=>!['ma_short','ma_long'].includes(k)).every(k=>JSON.stringify(saved[k])===JSON.stringify(unrelatedSettings[k])), '均线关闭不改其他设置');
     T.renderSettings();
     check(String(els.set_ma_short.value)===String(short)&&String(els.set_ma_long.value)===String(long), '关闭值重新渲染仍为0');
+    const explanation=els.effectiveRuleText.innerHTML;
+    check(explanation===T.renderRuleText(saved)&&
+      explanation.includes('第一条均线已关闭（ma_short=0）')===(short===0)&&
+      explanation.includes('第二条均线已关闭（ma_long=0）')===(long===0)&&
+      explanation.includes('两条均线同为 '+short+' 日')===(short>0&&short===long),
+      '实际共用说明正确切换均线关闭与同周期去重分支 '+short+'／'+long);
   }
   for(const key of ['ma_short','ma_long']){
     for(const bad of ['', ' ', '1', '-1', '0.5', '251', 'abc', 'Infinity']){

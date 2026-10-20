@@ -471,7 +471,7 @@ def _resolve(records, checked, url, malformed=False):
     return _result("ok", checked, source_url, title, day)
 
 
-def _parse_page(text, url, checked, symbol):
+def _parse_page(text, url, checked, symbol, records_out=None):
     try:
         valid_text = isinstance(text, str) and len(text.encode("utf-8")) <= _MAX_BYTES
     except UnicodeError:
@@ -505,6 +505,8 @@ def _parse_page(text, url, checked, symbol):
                 keys.append(record[0])
         if len(keys) > 1:
             return _result("unknown", checked, url, reason="multiple_events_on_detail_page"), parser.root
+    if records_out is not None:
+        records_out.extend(records)
     return _resolve(records, checked, url, malformed), parser.root
 
 
@@ -582,7 +584,7 @@ def _download(session, url, timeout, deadline):
 def fetch_official_earnings(symbol, today, timeout=8):
     """列表一次、至多前三个相关详情；禁跳转/重试/认证，约 20 秒总预算。
 
-    ok 为明确未来财报事件；unknown 为不覆盖/无日期/冲突/结构不明；
+    ok 为已收集候选中最近的当天或未来财报事件；unknown 为不覆盖/无日期/冲突/结构不明；
     error 为 HTTP、网络或限额失败。403/429 当即停止，不换入口绕过限制。
     """
     symbol = str(symbol).upper()
@@ -610,8 +612,9 @@ def fetch_official_earnings(symbol, today, timeout=8):
             text = _download(session, url, timeout, deadline)
         except _FetchError as exc:
             return _result("error", checked, url, reason=exc.reason)
-        result, root = _parse_page(text, url, checked, symbol)
-        if result["status"] == "ok" or result.get("reason") == "conflicting_or_ambiguous_event":
+        records = []
+        result, root = _parse_page(text, url, checked, symbol, records)
+        if result.get("reason") == "conflicting_or_ambiguous_event":
             return result
         last_error = None
         for detail in _detail_links(root, url, symbol):
@@ -624,8 +627,15 @@ def fetch_official_earnings(symbol, today, timeout=8):
                 if exc.status in {403, 429} or exc.reason == "budget_exhausted":
                     return last_error
                 continue
-            candidate, _ = _parse_page(text, detail, checked, symbol)
-            if candidate["status"] == "ok" or candidate.get("reason") == "conflicting_or_ambiguous_event":
+            candidate, _ = _parse_page(text, detail, checked, symbol, records)
+            if candidate.get("reason") == "conflicting_or_ambiguous_event":
                 return candidate
+            # 跨详情页也按同一事件归组：过去/未来冲突不能靠筛掉旧日期掩盖。
+            selected = _resolve(records, checked, url)
+            if selected.get("reason") in {"conflicting_or_ambiguous_event", "too_many_events"}:
+                return selected
             result = candidate
+        selected = _resolve(records, checked, url)
+        if selected["status"] == "ok" or selected.get("reason") in {"conflicting_or_ambiguous_event", "too_many_events"}:
+            return selected
         return last_error or result

@@ -6,5 +6,9 @@ preview-data.json
 最新分组看板.html
 Temp/
 
+# 独立运行缓存与回执：不参与源码提交，由 CI 缓存/运行附件持久化
+.cache/
+run-receipt.json
+
 # 测试临时目录（Windows 下沙箱删不掉会残留）
 tmp*/

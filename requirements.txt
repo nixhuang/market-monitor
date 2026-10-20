@@ -1,0 +1,5 @@
+# 固定直接运行依赖：版本取自现有 .venv 的发行元数据，均支持 Python >=3.10。
+# 不复制整个 3.13 环境：其中 numpy==2.5.3 要求 Python >=3.12，不兼容生产 3.11。
+# 传递依赖由 pip 按目标 Python 的 Requires-Python 解析；本文件不是完整依赖锁。
+requests==2.34.2
+exchange-calendars==4.13.2

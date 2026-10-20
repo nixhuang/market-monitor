@@ -1,21 +1,21 @@
 name: 自动测试
 run-name: "自动测试 · ${{ github.event_name }}"
 
-# 九项离线测试（不联网、不读线上设置）。三种用法：
-#   1. 推送到 main / 提交 PR 时自动跑，红叉就是有问题；
-#   2. daily.yml 里作为「发布前检查」调用——测试不过，就不抓数据、不生成页面、不发布；
-#   3. 也可以手动点 Run workflow。
-# 机器人只提交 index.html / status.json，已排除，不会触发它。
-# position-costs.json 已迁到 data 分支（网页端持仓同步只写 data，不再写 main），这条排除保留作兜底。
-# （以前每次保存都会在 main 上提交、触发 Pages 构建，10-19 曾因此连续顶掉构建。）
+# 生产文件的 main push 由 daily 调用本矩阵，不再重复启动独立测试工作流。
+# tests-only 变更仍自动跑，但不会触发 daily；PR 和手动测试入口保留。
 on:
   push:
     branches: [main]
+    paths:
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+  pull_request:
     paths-ignore:
       - 'index.html'
       - 'status.json'
+      - 'run-receipt.json'
       - 'position-costs.json'
-  pull_request:
+      - 'import-audit.json'
   workflow_call:
   workflow_dispatch:
 
@@ -26,6 +26,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.13']
     steps:
       - name: 拉取仓库
         uses: actions/checkout@v4
@@ -33,7 +37,7 @@ jobs:
       - name: 准备 Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
 
       - name: 准备 Node
         uses: actions/setup-node@v4
@@ -41,7 +45,7 @@ jobs:
           node-version: '22'
 
       - name: 安装依赖
-        run: pip install requests exchange-calendars
+        run: python -m pip install -r requirements.txt
 
-      - name: 跑全部测试
+      - name: 跑全部离线测试
         run: python tests/run_all.py

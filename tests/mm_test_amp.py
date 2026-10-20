@@ -1,11 +1,15 @@
 """日内振幅规则 + 首页布局改版 测试"""
+import hashlib
 import re
 import os
 import sys
+from pathlib import Path
+from unittest.mock import patch
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 sys.path.insert(0, ROOT)
 import monitor  # noqa: E402
+import page_assets  # noqa: E402
 
 # 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
 monitor.S.clear()
@@ -53,9 +57,10 @@ lv4, sig4, _ = monitor.analyze_symbol("AMPCFG", {}, mk(hi=102.5, lo=99.5, last=1
 check(any("振幅 3.0%" in s for s in sig4), f"阈值改成 3% 后生效：{sig4}")
 monitor.S["amp_yellow"] = old
 
-# --- 5. 首页布局：设置按钮在刷新状态右边，灯单独一排 ---
-src = open(os.path.join(ROOT, 'monitor.py'), encoding='utf-8').read()
-m = re.search(r'<div class="runbar">(.*?)</div>\s*<div class="statusrow">(.*?)</div>\s*\n', src, re.S)
+# --- 5. 验证实际渲染：静态资源抽离后，不再通过 monitor 源码猜测页面 ---
+with patch.object(monitor, '_cost_panel_assets', return_value=('', '')):
+    page = monitor.render({}, [], 0)
+m = re.search(r'<div class="runbar">(.*?)</div>\s*<div class="statusrow">(.*?)</div>\s*\n', page, re.S)
 check(bool(m), "runbar 与 statusrow 两排结构存在")
 if m:
     bar, row = m.group(1), m.group(2)
@@ -65,10 +70,27 @@ if m:
     check('>设置</a>' in bar and './edit.html' in bar, "按钮改名「设置」且指向 edit.html")
     check('id="runLight"' in row and 'id="runLightTxt"' in row, "第四排：状态灯 + 文案")
     check('runLight' not in bar, "灯已从第三排移走")
-check('.statusrow{' in src, "statusrow 样式已定义")
-check('改自选清单' not in src, "旧的「改自选清单」已删除")
-# 2026-10-20：运行灯文案改版 → 版本号跟着 bump（改 run-status.js 后必须 bump，否则浏览器还吃旧缓存）
-check('run-status.js?v=20261020' in src, "运行状态脚本版本号已随本次脚本改动更新")
+styles = ''.join(re.findall(r'<style>(.*?)</style>', page, re.S))
+check(monitor.PAGE_CSS == page_assets.PAGE_CSS and '.statusrow{' in page_assets.PAGE_CSS
+      and page_assets.PAGE_CSS in styles, "statusrow 共用样式已实际嵌入页面")
+check('改自选清单' not in page, "旧的「改自选清单」已删除")
+# 脚本内容 hash 代替手工日期版本号；独立计算期望值，避免只验证同一个 helper 自洽。
+content = (Path(ROOT) / 'run-status.js').read_bytes().replace(b'\r\n', b'\n')
+expected_url = './run-status.js?v=' + hashlib.sha256(content).hexdigest()[:16]
+check(page_assets.asset_url(ROOT, 'run-status.js') == expected_url
+      and re.findall(r'<script src="([^"]*run-status\.js[^"]*)"></script>', page) == [expected_url],
+      "运行状态脚本唯一引用携带当前内容 hash")
+check((monitor.DEFAULT_SETTINGS['amp_yellow'], monitor.DEFAULT_SETTINGS['amp_red']) == (5.0, 8.0),
+      "振幅默认阈值仍为5%／8%")
+check(page_assets.rules_template(monitor.S, monitor._rule_constants()) in page,
+      "首页实际使用共用规则模板")
+with patch.dict(monitor.S, {'amp_yellow': 3.0, 'amp_red': 9.0}), \
+        patch.object(monitor, '_cost_panel_assets', return_value=('', '')):
+    changed_page = monitor.render({}, [], 0)
+    changed_rules = page_assets.rules_template(monitor.S, monitor._rule_constants())
+check(changed_rules in changed_page and '振幅（最高−最低）÷昨收 ≥ <b>9%</b>' in changed_rules
+      and '≥ <b>3%</b> <span class="lamp-yellow">黄</span>' in changed_rules,
+      "覆盖振幅阈值后，共用说明和实际首页同步更新")
 
 print()
 if fails:

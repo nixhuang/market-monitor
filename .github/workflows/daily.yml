@@ -2,26 +2,47 @@ name: 每日市场自检
 run-name: "市场自检 · ${{ github.event_name }} · ${{ inputs.request_id || github.sha }}"
 
 on:
-  # 改了清单或脚本就立刻重跑，不用再去点 Run workflow
-  # 只监听这几个文件：workflow 自己提交 index.html 不会触发，避免空转
-  # 只改 tests/ 不会触发本工作流（tests.yml 单独跑）；要发布就动下面任一文件，或在页面点「运行」
+  # 与 build_support.BUILD_INPUT_PATTERNS / EXCLUDED_INPUTS 对齐。
+  # 根目录新增生产模块和资源自动触发；只改 tests/ 不触发发布。
   push:
     branches: [main]
     paths:
-      - 'holdings.json'
-      - 'settings.json'
-      - 'monitor.py'
-      - 'policy_alerts.py'
-      - 'earnings_sources.py'
-      - 'official-earnings.json'
-      - 'groups.json'
-      - 'cost_panel.css'
-      - 'cost_panel.js'
-      - 'position-costs.seed.json'    # 持仓数量/现金/固定收益的种子：改了要重跑才会注入新页面
+      - '*.py'
+      - '*.js'
+      - '*.mjs'
+      - '*.css'
+      - '*.html'
+      - '*.json'
+      - '*.webmanifest'
+      - '*.svg'
+      - '*.png'
+      - '*.ico'
+      - '*.jpg'
+      - '*.jpeg'
+      - '*.webp'
+      - '*.woff'
+      - '*.woff2'
+      - '*.toml'
+      - '*.yaml'
+      - '*.yml'
+      - 'requirements*.txt'
+      - 'requirements*.lock'
+      - 'uv.lock'
+      - 'poetry.lock'
+      - 'assets/**'
+      - 'static/**'
+      - 'templates/**'
+      - 'icons/**'
+      - 'config/**'
       - '.github/workflows/daily.yml'
-  # 不再使用 GitHub 自带的 schedule：实测每次都迟到 4–6 小时，到了也落在美东 20:00–21:00 窗口外被挡掉，白跑。
-  # 定时改由 Cloudflare Worker（cloudflare/market-monitor-trigger.js）在美东 20:15 / 20:45 派发 ensure-morning.yml，
-  # 由它判断要不要派发本工作流（source=schedule-fallback，按定时口径跑）。
+      - '.github/workflows/ensure-morning.yml'
+      - '!index.html'
+      - '!status.json'
+      - '!run-receipt.json'
+      - '!position-costs.json'
+      - '!import-audit.json'
+  # 定时仍仅由 Worker 在美东 20:15 / 20:45 派发 ensure-morning.yml。
+  # 20:00–21:00 窗口仍由原有调度逻辑把关；不增加 GitHub schedule。
   workflow_dispatch:
     inputs:
       request_id:
@@ -33,7 +54,6 @@ on:
         required: false
         type: string
 
-# 同时只允许一个任务在跑，后来的排队，避免互相覆盖
 concurrency:
   group: market-monitor
   cancel-in-progress: false
@@ -43,9 +63,7 @@ permissions:
   contents: write
 
 jobs:
-  # 发布前自检：九项离线测试（tests.yml，不联网、不读线上设置）。
-  # 不通过 → build 不会运行 → 不抓数据、不生成页面、不发布，页面保持上一次的内容，Actions 里这一轮显示红叉。
-  # （原来的 gate 任务只拦 GitHub 原生 schedule，schedule 删掉后一并删除；时间窗口由 ensure_schedule_run 把关。）
+  # 复用离线矩阵；测试不过，不生成或发布。
   test:
     uses: ./.github/workflows/tests.yml
 
@@ -54,9 +72,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      # 自动补跑按 schedule 口径（收盘数据、目标交易日锚定美东20:00），页面显示为"自动"
       MM_EVENT: ${{ inputs.source == 'schedule-fallback' && 'schedule' || github.event_name }}
       MM_REQUEST_ID: ${{ inputs.request_id }}
+      MM_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: 拉取仓库
@@ -67,48 +85,102 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: 冻结构建输入
+        run: |
+          set -euo pipefail
+          python build_support.py snapshot --snapshot "$RUNNER_TEMP/build-inputs.json" >> "$GITHUB_ENV"
+          # 固定校验器副本，重试 reset 后仍使用本轮规则；helper 自身也属于输入。
+          cp build_support.py "$RUNNER_TEMP/build_support.py"
+
       - name: 安装依赖
-        run: pip install requests exchange-calendars
+        run: python -m pip install -r requirements.txt
+
+      - name: 恢复辅助缓存
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/market-monitor.json
+          key: market-monitor-v1-${{ runner.os }}-py311-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            market-monitor-v1-${{ runner.os }}-py311-
 
       - name: 锁定本次目标交易日
-        run: |
-          python monitor.py --prepare-run >> "$GITHUB_ENV"
+        run: python monitor.py --prepare-run >> "$GITHUB_ENV"
 
       - name: 抓数据并生成页面
         id: gen
-        # FRED_API_KEY 是可选 Secret：配置了才能拿到跑路价签和收益率曲线
-        # （Actions 访问 fred.stlouisfed.org 的 CSV 接口会被 CDN 掐断，只有官方 API 域名通）
-        # 定时口径下当日日线不齐时 monitor.py 不写页面并输出 publish=no，下一步整步跳过（绝不能拿旧文件去覆盖 main）。
+        # publish=no 不提交页面，但成功写入的辅助缓存仍保存。
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-          # 微信推送（Server酱）：没配就只生成页面、不推送
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
         run: python monitor.py
 
-      - name: 提交更新
-        if: steps.gen.outputs.publish != 'no'
-        # 抓取要几分钟，期间你保存的清单/设置可能已先推送到 main，直接 git push 会被拒绝，
-        # 白白丢掉整轮结果。这里每次先同步最新 main，再把本轮生成的两个文件放上去重试。
+      - name: 验证本轮辅助缓存凭证
+        id: cache-proof
+        if: ${{ always() && steps.gen.outputs.cache_ready == 'true' }}
+        env:
+          CACHE_CHECKPOINT_ID: ${{ steps.gen.outputs.cache_checkpoint_id }}
         run: |
+          python runtime_state.py verify-cache --checkpoint-id "$CACHE_CHECKPOINT_ID"
+
+      - name: 保存成功辅助缓存
+        if: ${{ always() && steps.cache-proof.outcome == 'success' && hashFiles('.cache/market-monitor.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/market-monitor.json
+          key: market-monitor-v1-${{ runner.os }}-py311-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: 上传运行回执与输入快照
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            run-receipt.json
+            ${{ runner.temp }}/build-inputs.json
+          if-no-files-found: warn
+
+      - name: 封存本轮产物
+        if: ${{ steps.gen.outcome == 'success' && steps.gen.outputs.publish != 'no' }}
+        run: |
+          python "$RUNNER_TEMP/build_support.py" seal \
+            --snapshot "$RUNNER_TEMP/build-inputs.json" --bundle-dir "$RUNNER_TEMP/build-artifacts"
+
+      - name: 校验最新输入并提交更新
+        id: commit
+        if: ${{ steps.gen.outcome == 'success' && steps.gen.outputs.publish != 'no' }}
+        # 仅无关更新允许复用本轮产物。输入改变或校验失败即退出，绝不贴新 SHA。
+        run: |
+          set -euo pipefail
           git config user.name "market-bot"
           git config user.email "bot@users.noreply.github.com"
-          mkdir -p "$RUNNER_TEMP/out"
-          cp index.html status.json "$RUNNER_TEMP/out/"
           for i in 1 2 3 4 5; do
             git fetch origin main
-            git reset --hard origin/main
-            cp "$RUNNER_TEMP/out/index.html" "$RUNNER_TEMP/out/status.json" .
-            git add index.html status.json
-            if git diff --staged --quiet; then
+            target=$(git rev-parse --verify origin/main)
+            python "$RUNNER_TEMP/build_support.py" verify \
+              --snapshot "$RUNNER_TEMP/build-inputs.json" --ref "$target"
+            state=$(python "$RUNNER_TEMP/build_support.py" artifact-state \
+              --snapshot "$RUNNER_TEMP/build-inputs.json" \
+              --bundle-dir "$RUNNER_TEMP/build-artifacts" --ref "$target")
+            if [ "$state" = 'no-change' ]; then
               echo "无变化，跳过提交"
+              echo "result=no-change" >> "$GITHUB_OUTPUT"
               exit 0
             fi
+            if [ "$state" != 'changed' ]; then
+              echo "未知产物状态，拒绝发布"
+              exit 1
+            fi
+            # target 是刚验证的不可变提交；后续 main 再变化时 push 会拒绝并重新校验。
+            git reset --hard "$target"
+            cp "$RUNNER_TEMP/build-artifacts/index.html" "$RUNNER_TEMP/build-artifacts/status.json" .
+            git add -- index.html status.json
             git commit -m "更新 $(date -u '+%Y-%m-%d %H:%M UTC')"
             if git push origin HEAD:main; then
+              echo "result=committed" >> "$GITHUB_OUTPUT"
+              echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "推送被拒绝（运行期间 main 有新提交），第 $i/5 次重新同步后重试"
-            sleep $((i * 3))
+            echo "推送失败，第 $i/5 次；下次重试重新检查最新 main 的完整输入集合"
           done
-          echo "连续5次推送失败，请查看上面的 git 错误信息"
+          echo "连续5次推送失败，未确认提交，请查看 git 错误信息"
           exit 1
