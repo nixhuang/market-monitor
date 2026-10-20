@@ -9,13 +9,13 @@
     "next_in": 18,
     "next_date": "2026-11-12"
   },
-  "run_id": "39340121057",
+  "run_id": "39360994476",
   "request_id": "",
-  "source_sha": "56cc8c6f8cf5607891701ed637efa7f71cf4ce41",
-  "started_at": "2026-10-19T23:12:39+00:00",
-  "started_at_bj": "2026-10-20T07:12:39+08:00",
-  "finished_at": "2026-10-20T07:13:28.961820+08:00",
-  "finished_at_bj": "2026-10-20T07:13:28+08:00",
+  "source_sha": "c163202abbf8395a091749e4d271ec7c29e06160",
+  "started_at": "2026-10-20T02:49:29+00:00",
+  "started_at_bj": "2026-10-20T10:49:29+08:00",
+  "finished_at": "2026-10-20T10:50:14.581406+08:00",
+  "finished_at_bj": "2026-10-20T10:50:14+08:00",
   "event": "push",
   "target_trade_date": "2026-10-19",
   "mode": "closed",
@@ -192,19 +192,21 @@
   },
   "summary": {
     "red": 0,
-    "yellow": 20,
-    "green": 79,
-    "gray": 0,
+    "yellow": 22,
+    "green": 76,
+    "gray": 1,
     "purple": 3,
     "total": 99,
     "macro_ok": 6,
     "stale_symbols": [],
-    "missing_symbols": [],
+    "missing_symbols": [
+      "ESMAIN"
+    ],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 99,
+    "today_prices": 98,
     "prior_prices": 0,
-    "missing_prices": 0
+    "missing_prices": 1
   },
   "signal_counts": {
     "chg": {
@@ -222,7 +224,7 @@
     "vol_ratio": {
       "label": "量比",
       "red": 0,
-      "yellow": 2,
+      "yellow": 3,
       "purple": 0
     },
     "rsi": {
@@ -240,7 +242,7 @@
     "boll_rsi": {
       "label": "布林+RSI",
       "red": 0,
-      "yellow": 13,
+      "yellow": 14,
       "purple": 0
     },
     "ma_cross": {
@@ -314,6 +316,21 @@
             }
           ],
           "metric": "量比 1.7×（2026-10-19完整日）"
+        },
+        {
+          "symbol": "ISRG",
+          "note": "直觉外科",
+          "group": "healthcare",
+          "hold": "short",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-10-19股价上涨1.52%"
+            }
+          ],
+          "metric": "量比 1.3×（2026-10-19完整日）"
         },
         {
           "symbol": "RTX",
@@ -412,6 +429,15 @@
         {
           "symbol": "AMAT",
           "note": "应用材料",
+          "group": "technology",
+          "hold": "short",
+          "level": "yellow",
+          "direction": "下轨（超卖）",
+          "boll_rsi_hits": 2
+        },
+        {
+          "symbol": "ARM",
+          "note": "Arm Holdings-芯片架构",
           "group": "technology",
           "hold": "short",
           "level": "yellow",
@@ -848,7 +874,7 @@
       "symbol": "AAPL",
       "kind": "boll",
       "shape": "▲",
-      "detail": "逼近布林上轨 还差0.04%",
+      "detail": "逼近布林上轨 还差0.03%",
       "group": "focus",
       "hold": "short",
       "note": "苹果"
@@ -920,7 +946,7 @@
       "symbol": "NOW",
       "kind": "boll",
       "shape": "▲",
-      "detail": "逼近布林上轨 还差0.87%",
+      "detail": "逼近布林上轨 还差0.86%",
       "group": "technology",
       "hold": "short",
       "note": "ServiceNow-工作流软件"
@@ -951,15 +977,6 @@
       "group": "technology",
       "hold": "short",
       "note": "英特尔"
-    },
-    {
-      "symbol": "ARM",
-      "kind": "rsi",
-      "shape": "▼",
-      "detail": "RSI 2条超卖",
-      "group": "technology",
-      "hold": "short",
-      "note": "Arm Holdings-芯片架构"
     },
     {
       "symbol": "LITE",
@@ -1032,15 +1049,6 @@
       "group": "healthcare",
       "hold": "short",
       "note": "赛默飞世尔科技"
-    },
-    {
-      "symbol": "ISRG",
-      "kind": "boll",
-      "shape": "▲",
-      "detail": "逼近布林上轨 还差0.22%",
-      "group": "healthcare",
-      "hold": "short",
-      "note": "直觉外科"
     },
     {
       "symbol": "LLY",
@@ -1118,7 +1126,7 @@
       "symbol": "XLE",
       "kind": "boll",
       "shape": "▲",
-      "detail": "逼近布林上轨 还差0.28%",
+      "detail": "逼近布林上轨 还差0.27%",
       "group": "energy",
       "hold": "short",
       "note": "能源精选行业ETF"
@@ -1136,7 +1144,7 @@
       "symbol": "HEI",
       "kind": "boll",
       "shape": "▲",
-      "detail": "逼近布林上轨 还差0.93%",
+      "detail": "逼近布林上轨 还差0.92%",
       "group": "industrials",
       "hold": "short",
       "note": "HEICO-航空零部件"
@@ -1145,7 +1153,7 @@
       "symbol": "DD",
       "kind": "boll",
       "shape": "▼",
-      "detail": "逼近布林下轨 还差0.82%",
+      "detail": "逼近布林下轨 还差0.77%",
       "group": "industrials",
       "hold": "short",
       "note": "杜邦"
@@ -1199,7 +1207,7 @@
       "symbol": "PG",
       "kind": "boll_rsi",
       "shape": "▲",
-      "detail": "逼近布林上轨 还差0.40%",
+      "detail": "逼近布林上轨 还差0.39%",
       "group": "consumer_staples",
       "hold": "short",
       "note": "宝洁"
@@ -1266,7 +1274,7 @@
         "symbol": "ISRG",
         "note": "直觉外科",
         "group": "healthcare",
-        "level": "green",
+        "level": "yellow",
         "date": "2026-10-20",
         "timing": "post",
         "kind": "expected"
@@ -1444,9 +1452,9 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 18.440000534057617,
+      "value": 18.44,
       "date": "2026-10-19",
-      "source": "Yahoo ^VIX",
+      "source": "Cboe VIX 官方日线",
       "drawdown": null
     },
     "sp500": {
@@ -3999,16 +4007,16 @@
       }
     },
     "events": {
-      "UNH": [
+      "GS": [
         "2026-10-13"
       ],
-      "GS": [
+      "JNJ": [
         "2026-10-13"
       ],
       "TSM": [
         "2026-10-15"
       ],
-      "JNJ": [
+      "UNH": [
         "2026-10-13"
       ],
       "JPM": [
@@ -4044,20 +4052,11 @@
       "rules": "美联储仅展示最近已核实的正式利率决议、目标区间、发布日期和官方来源；调整基点仅在声明明确且可核实时显示，不从区间或其他数据猜测。决议信息为neutral中性状态，不作风险灯或买卖解读。成功后持久缓存，日常仅本地比较下次公布时间，到期随下一次监测运行查询新决议，不按24小时重复抓取。失败或待更新后至少1小时重试，到期不绕过错误限速；日程缺失仅补查日历，已核实的同一声明不重复下载。仅按例行日程更新，临时决议可能延迟发现。旧正式决议不按天数或跨年删除，新决议到期或查询失败明确待更新并保留旧日期。原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。原油参考不计入综合灯，不是官方风险线、市场概率或交易指令。"
     },
     "oil": {
-      "level": "green",
-      "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
+      "level": "gray",
+      "text": "原油数据待更新，暂不能判断成本压力。",
       "source": "Yahoo NYMEX WTI期货",
-      "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 98.25,
-      "date": "2026-10-19",
-      "contract": "Crude Oil Dec 26",
-      "day": -0.7776173188956746,
-      "day_from": "2026-10-16",
-      "week": 5.804436091127475,
-      "month": 10.195150251831613,
-      "incomplete": false,
-      "contract_symbol": "CLZ26.NYM"
+      "url": "https://finance.yahoo.com/quote/CL=F/"
     },
-    "assessed_at": "2026-10-20T07:13:22.675388+08:00"
+    "assessed_at": "2026-10-20T10:50:05.256992+08:00"
   }
 }
