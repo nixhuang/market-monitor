@@ -1,5 +1,7 @@
 {
- "updated_at": "2026-10-20 13:19",
+ "schema_version": 2,
+ "real": true,
+ "updated_at": "2026-10-20T16:51:29.690Z",
  "cash": 25030.3,
  "fixed": 16870.35,
  "fixed_cost": 16916.97,
@@ -73,6 +75,8 @@
    "qty": 2
   }
  },
- "real": true,
- "acks": {}
+ "acks": {
+  "HII|fund|20260630": "2026-10-20T16:51:29.690Z"
+ },
+ "ack_tombstones": {}
 }
