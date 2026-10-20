@@ -122,7 +122,7 @@ check('id="checkResult"' in html and html.index('id="checkResult"')<html.index('
 check(html.count('class="card group-card"') == 14, "十四个分类均可折叠")
 check('id="group_positions">' in html and 'id="group_focus">' in html and ' open>' not in html.split('id="macroCard"', 1)[1][:2], "持仓、重点、市场风险默认折叠")
 pos_title = html.split('id="group_positions"', 1)[1].split('</summary>', 1)[0]
-check('class="stat-badge red"' in pos_title and 'class="stat-badge gray"' in pos_title and
+check('class="stat-badge red"' in pos_title and 'class="stat-badge missing"' in pos_title and
       '红1' not in pos_title and '缺失1' not in pos_title,
       "分组警示采用灯色圆里带数字的徽章而非颜色文字（2026-10-15）")
 # 2026-10-15 再调：名称与灯圈之间不再留 6px，靠得更近

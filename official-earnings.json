@@ -13,6 +13,18 @@
       "official_checked": "2026-10-11",
       "evidence": "Q1 2027 Earnings Results | December 10, 2026 01:15 PM PT",
       "verification": "2026-10-11读取官方事件正文核验；此钟点为财报活动时间，不推定为财报文件发布钟点。"
+    },
+    "SPCX": {
+      "status": "ok",
+      "date": "2026-10-20",
+      "kind": "official",
+      "timing": "post",
+      "source": "公司官方投资者关系",
+      "source_url": "https://ir.spacex.com/events/default.aspx",
+      "title": "Q3 2026 Earnings Webcast",
+      "official_checked": "2026-10-20",
+      "evidence": "ir.spacex.com 投资者更新（2026-10-16）：SpaceX will post financial and operational results for the third quarter of 2026 after market close on Tuesday, October 20, 2026；webcast 3:30 p.m. CT / 4:30 p.m. ET；Events 页 Upcoming Events 同为 Q3 2026 Earnings Webcast, October 20, 2026",
+      "verification": "2026-10-20 读取官方投资者关系公告与事件页核验；盘后发布来自公告原文（after market close），不是推算。"
     }
   }
 }

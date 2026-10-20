@@ -41,20 +41,20 @@ RULE_BLOCKS = (
     ("", '<li><b>布林单独命中</b>：下轨 <span class="lamp-yellow">黄字</span>、上轨普通字，<b>不单独报灯</b>；连续贴轨只补天数。组合文字按实际等级显示 <span class="lamp-sig-red">红字</span> / <span class="lamp-sig-yellow">黄字</span>。</li>'),
     ("", '<li><b>均线文字</b>：第二条周期的触及、贴近、穿越为 <span class="lamp-cyan">青字</span>，其他均线为普通字。涨跌幅、振幅、量比的信号文字不随行灯自动染红黄。</li>'),
     ("", '<li><b>目标提示</b>：<span class="lamp-purple">紫字、紫胶囊</span>；命中时实心紫并加行右侧紫条，未命中为空心。取数失败为 <span class="lamp-red">红胶囊</span>，本身不升行灯；仅紫字不代表命中。</li>'),
-    ("", '<li><b>财报日期</b>：未来 <b>${earn_soon_days} 天</b>内 <span class="lamp-yellow">黄字</span>；未来 <b>7 天</b>另列统计。日期不升行灯，待公布、取数失败不当作临近。</li>'),
+    ("", '<li><b>财报日期</b>：未来 <b>${earn_soon_days} 天</b>内 <span class="lamp-yellow">黄字</span>；未来 <b>15 天</b>（美东今天起至第 15 天，含）另列统计名单，可作叠加条件。日期不升行灯，待公布、取数失败不当作临近。</li>'),
     ("", '<li><b>涨跌与盈亏</b>：上涨 / 盈利 <span class="lamp-green">绿字</span>、下跌 / 亏损 <span class="lamp-red">红字</span>。仓位面板红绿仅用于盈亏列，行首圆点表示灯级，不表示盈亏。</li>'),
     ("", '<li><b>定投提醒</b>：顶栏显示还差几个交易日；仅到期当天 <span class="lamp-yellow">黄字</span>，未启用或日期无效不显示，不影响个股灯级。</li>'),
     ("", '<li><b>图形</b>：▲ 上穿 / 上方，▼ 跌破 / 下方，■ 命中区间 / 恰在均线，□ 目标空间提示；量比、布林组合、均线方向写在统计框标题。52 周条的紫三角是现价、<span class="lamp-yellow">黄竖线是成本</span>，两者都不单独报灯。持仓两端价格下的百分比表示<b>从现价跌到低点 / 涨到高点的幅度</b>，不改变灯级。</li></ul>'),
     ("", '<h4>四、展开、折叠与“无异动”</h4><ul>'),
     ("", '<li><b>首次打开</b>：只展开统计；仓位管理、各分组、规则默认收起。持仓展开后，上方为可收起的长持仓，下方直接短持仓表。</li>'),
-    ("", '<li><b>不放进“无异动”</b>：生成页面时，行情红 / 黄 / 灰、基本面红 / 黄、参考行情、目标紫色命中、未来 <b>7 天</b>财报，任一满足即在本组主表显示。<b>不是强制打开整个分组</b>。</li>'),
-    ("", '<li><b>进入“无异动”</b>：行情绿且没有上述条件。单独 RSI、布林文字、未命中紫字、未来 8～14 天财报黄字，不阻止折叠。浏览器补算的浮亏红灯只改变灯色，<b>不自动搬出原折叠表</b>。</li>'),
-    ("", '<li><b>统计灰灯</b>：收纳最终为绿但有 RSI / 布林文字的标的，不等于行情缺失；缺行情、52 周 / 基本面待更新各自标注。信号有计数才显示，点击计数展开名单；默认切换时关闭其他名单，设置允许多开后可跨信号对比，同一行仍互斥。</li>'),
+    ("", '<li><b>显示、不折叠（留在本组主表）</b>：行情红灯 / 黄灯、未读基本面红 / 黄、参考行情、目标价 / 共识价紫色命中（紫字不报灯，但<b>不折叠</b>）、财报在未来 <b>7 天</b>内，任一满足即显示。基本面已读后并入本组“无异动 N 只”折叠表（本组没有就新建一个）；同一标的若另有行情警示、紫灯或财报，仍留在主表。<b>不是强制打开整个分组</b>。</li>'),
+    ("", '<li><b>折叠（进入“无异动”）</b>：行情绿且没有上述条件。<b>不报灯的文字提示一律折叠</b>：单独 RSI、单独布林、布林 + RSI 但被分组或长持仓挡下（统计灰灯名单里的标的）、未命中的紫字、未来 8～14 天财报黄字及 8～15 天的财报名单项（名单里的标的不因此展开）。浏览器补算的浮亏红灯只改变灯色，<b>不自动搬出原折叠表</b>。</li>'),
+    ("", '<li><b>统计灰灯与紫灯</b>：灰灯收纳最终为绿但有 RSI / 布林文字的标的，在表格灰列按 RSI、布林、布林+RSI 分组计数，点击数字展开名单；紫灯名单移到表格下方的折叠区，严格只列目标价 / 共识价紫色命中。灰灯名单不等于行情缺失；缺行情、52 周 / 基本面待更新各自标注。紫灯与未来 15 天财报（美东今天起至第 15 天，含）均可选择，并与其他条件按“同时满足”取交集；默认切换时关闭其他名单，设置允许多开后可跨信号对比，同一行仍互斥。</li>'),
     ("", '<li><b>收起与编辑</b>：收起统计时内部名单复位；收起分组时“无异动”复位，长持仓子区保留状态。当日盈亏贡献默认折叠；收起仓位管理退出编辑，保留已填数字。</li></ul>'),
     ("", '<h4>五、仓位数字与已读提醒</h4><ul>'),
     ("", '<li><b>仓位 &gt; 10%</b>：仅个股仓位数字 <span class="lamp-yellow">黄字</span>，不因此升行灯；现金、固定收益不标黄。名称靠左，数值与输入框居中。</li>'),
     ("", '<li><b>成本价警示：浮亏 ≥ 10%</b>：提醒文字 <span class="lamp-red">红字</span>并附加行级 <span class="lamp-red">红灯</span>；≥ <b>20%</b> 加重提示，仍只显示一条。仅当前持仓且成本、数量均大于零时提醒。</li>'),
-    ("", '<li><b>点击已读</b>：加仓价、减仓价、浮亏提醒保留为 <span class="lamp-none">灰字 + 删除线</span>；再次点击撤销，条件消失自动清除。10% 与 20% 分档，跌至 20% 会重新提醒。<b>只撤页面附加红灯，原行情红灯及其他信号保留</b>。</li>'),
+    ("", '<li><b>点击已读</b>：加仓价、减仓价、成本价及基本面提醒均可撤销。基本面已读项并入本组“无异动”折叠表，并从基本面红 / 黄统计及其名单中排除；报告期变化或风险消失后自动清除，下一份财报重新判定。其他三类仍为灰字 + 删除线，条件消失自动恢复；只撤对应附加红灯，原行情信号保留。</li>'),
     ("", '<li><b>数量与移组</b>：数量为 0 可保存，不计持仓金额、不触发浮亏提醒；移出持仓后不计市值、权重、贡献或亏损，旧成本数量保留，不会自动复活持仓。加减仓、目标及行情规则仍按所在分组判断。</li></ul></div>'),
 )
 
@@ -200,8 +200,15 @@ tr:first-child td{border-top:none}
 .lvtag.tgt.hit{color:#fff;background:#8957e5;border-color:#8957e5}
 .lvtag.tgt.bad{color:#ff9b95;border-color:rgba(248,81,73,.7)}
 .tnote,.sig .tp{color:#c4a3ff}
-.fund-detail{margin-top:6px}
+.fund-alert{margin-top:5px}
+.fund-detail{margin-top:0}
 .fund-detail summary{margin-left:0;padding:7px 9px;cursor:pointer;list-style:none;touch-action:manipulation}
+.fund-ack-line{margin-top:3px}
+.fund-ack-line[data-level="red"]{color:#ff8580}
+.fund-ack-line[data-level="yellow"]{color:#f0c674}
+.fund-ack-line.acked{color:var(--dim)}
+.fund-ack-line.acked .w{text-decoration:line-through;text-decoration-color:#5a6478}
+.fund-alert.acked .fund-detail summary{color:var(--dim);background:rgba(143,152,168,.1);border-color:rgba(143,152,168,.24)}
 .fund-detail summary::-webkit-details-marker{display:none}
 .fund-detail summary::after{content:"";display:inline-block;margin-left:6px;
   border:4px solid transparent;border-top-color:currentColor;transform:translateY(2px)}
@@ -271,6 +278,21 @@ tr:first-child td{border-top:none}
 #signalCounts .text-only .text-only-kind{margin:10px 0 4px;padding:0 12px;color:#bfd5ff;font-size:12.5px}
 #signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
 #signalCounts .text-only li{margin:5px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
+#signalCounts .gray-signal-row td:first-child{color:var(--dim)}
+/* 财报条件 / 紫灯条件：和基本面行一样——胶囊永远钉在第一排左侧不动，
+   标题(summary)始终在胶囊右边同一排，点开后名单只向下展开、占满整行宽度。
+   胶囊绝对定位在行内，summary 用左内边距给它让位，所以名单区域不受胶囊影响。 */
+#signalCounts .signal-extra-row{--chip-w:72px;position:relative;display:block;padding:8px 12px 8px 5px;border-top:1px solid #465e87;background:#182130}
+#signalCounts .signal-extra-row>.signal-filter-toggle{position:absolute;top:8px;left:5px;width:var(--chip-w);padding:0;justify-content:center;text-align:center}
+#signalCounts .signal-extra-row>.text-only,#signalCounts .signal-extra-row>.earnings-week{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
+#signalCounts .signal-extra-row>.text-only>summary,#signalCounts .signal-extra-row>.earnings-week>summary{box-sizing:border-box;min-height:38px;padding:8px 0 8px calc(var(--chip-w) + 12px);line-height:22px;font-size:13.5px;font-weight:600}
+#signalCounts .signal-extra-row>.text-only[open]>summary{border-bottom:0}
+#signalCounts .purple-extra .text-only>summary{color:#c4a3ff}
+#signalCounts .purple-extra .text-only .signal-member-list{margin:0;padding:0 0 8.1px 18px}
+#signalCounts .purple-extra .text-only li{margin:5px 0;list-style:none}
+#signalCounts .purple-extra .text-only .signal-member-list{padding-left:2px}
+#signalCounts .purple-extra .text-only li>.signal-member-icon{margin:0 6px 0 0;color:#c4a3ff;font-size:14px}
+@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:62px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{padding:0;font-size:12px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:12px;line-height:1.1}}
 tr[id^="s-"]{scroll-margin-top:64px}
 /* 闪烁只改 background-color：带 52 周条的行，灯条是用 background-image 画的，
    用 background 简写做动画会把灯条一起清掉（看起来就是高亮盖住了灯）。
@@ -293,10 +315,10 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 #signalCounts .earnings-week li.lamp-gray::marker{color:var(--dim)}
 #signalCounts .earnings-week .lamp-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
   overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-#signalCounts .earnings-week-meta{color:var(--text);margin-left:5px}
-#signalCounts .earnings-week-group{color:#8fb8f0}
+#signalCounts .earnings-week-meta{color:var(--dim);font-size:12px}
+#signalCounts .earnings-week .note{display:inline;margin-left:6px}
 #signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;line-height:1;color:var(--text);
-  display:inline-flex;align-items:center;white-space:nowrap;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:left;touch-action:manipulation}
+  display:inline-flex;align-items:center;justify-content:center;white-space:normal;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:center;line-height:1.15;touch-action:manipulation}
 #signalCounts .signal-filter-toggle[aria-pressed="true"]{background:#2f6bd8;border-color:#2f6bd8;color:#fff}
 #signalCounts .signal-filter-toggle:focus-visible,#signalCounts .signal-filter-clear:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
 #signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;background:#121a27;font-size:13px}
@@ -492,6 +514,7 @@ tr.gray td{color:var(--dim)}
 .stat-badge.red{border-color:var(--red)}
 .stat-badge.yellow{border-color:var(--yellow)}
 .stat-badge.gray{border-color:var(--dim)}
+.stat-badge.missing{border-color:var(--dim);border-style:dashed}
 .stat-badge.purple{border-color:var(--purple)}
 .stat-badge.green{border-color:var(--green)}
 /* 分组标题：名称不参与挤压，避免手机上「IT软硬Ai (27)」被拆成两行 */
@@ -585,6 +608,7 @@ function normalizeSignalCard(card) {
   card.querySelectorAll(".signal-count-toggle").forEach(function(button) {
     button.setAttribute("aria-expanded", "false");
   });
+  card.querySelectorAll(".text-only").forEach(function(panel) { panel.open = false; });
   const earnings = card.querySelector(".earnings-week");
   if (earnings) {
     earnings.open = false;
@@ -600,10 +624,33 @@ function normalizeSignalCard(card) {
   renderSignalFilter();
   void card.offsetHeight;   // 强制重排，确保恢复出来的高度按折叠态重算
 }
+// 财报条件 / 紫灯条件的详情和其他灯的名单同属「同时只开一个」：开一个，收起其余。
+function closeSignalExtras(keep) {
+  document.querySelectorAll("#signalCounts .signal-extra-row > details[open]").forEach(function(d) {
+    if (d !== keep) d.open = false;
+  });
+}
+document.addEventListener("toggle", function(event) {
+  const d = event.target;
+  if (!(d instanceof HTMLDetailsElement) || !d.open || !d.parentElement
+      || !d.parentElement.classList.contains("signal-extra-row")) return;
+  if (window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0) return;
+  const topBefore = d.getBoundingClientRect().top;
+  closeSignalExtras(d);
+  document.querySelectorAll("#signalCounts .signal-count-toggle[aria-expanded='true']").forEach(function(b) {
+    const p = document.getElementById(b.dataset.target);
+    if (p) p.hidden = true;
+    b.setAttribute("aria-expanded", "false");
+  });
+  // 收起上一个会把页面拉上去：先把刚点的这行拉回原来的屏幕位置，再把整块带进视口
+  const delta = d.getBoundingClientRect().top - topBefore;
+  if (Math.abs(delta) > 1) window.scrollBy(0, delta);
+  requestAnimationFrame(function() { revealSignalPanel(d); });
+}, true);
 document.addEventListener("toggle", function(event) {
   const card = event.target;
   if (!(card instanceof HTMLDetailsElement) || card.id !== "signalCounts") return;
-  // 展开和收起都归一化一次：只在收起时做的话，内层「未来一周财报」是在面板已经不可见
+  // 展开和收起都归一化一次：只在收起时做的话，内层「未来15天财报」是在面板已经不可见
   // 的状态下被脚本关掉的，部分移动端浏览器会留下旧高度，再展开就多出一块空白。
   normalizeSignalCard(card);
 }, true);
@@ -731,6 +778,7 @@ function renderSignalFilter() {
   });
   box.append(list);
 }
+window.addEventListener("mm:fund-ack-change", renderSignalFilter);
 document.addEventListener("click", function(event) {
   if (!(event.target instanceof Element)) return;
   const closeButton = event.target.closest(".collapse-group");
@@ -766,6 +814,7 @@ document.addEventListener("click", function(event) {
   // 设置里的 signal_single_open=1（默认）时，展开新的灯详情会收起整块统计面板里已打开的那些；
   // 关掉后只收同一行的，其它行的可以同时开着对比。
   const singleOpen = !(window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0);
+  if (singleOpen && opening) closeSignalExtras(null);   // 财报条件 / 紫灯条件的详情也算同一组，点别的就收起
   const scope = (singleOpen && button.closest("#signalCounts")) || owner;
   if (scope) {
     scope.querySelectorAll(".signal-count-toggle[data-target]").forEach(function(other) {

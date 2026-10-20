@@ -148,7 +148,7 @@ class RulesRegression(unittest.TestCase):
         for explanation in ("数量为 0 可保存", "旧成本数量保留", "都不单独报灯", "&gt; 10%",
                             "浮亏 ≥ 10%", "20%", "不自动搬出原折叠表", "不是强制打开整个分组",
                             "基本面红 / 黄", "未来 8～14 天财报黄字", "灰字 + 删除线",
-                            "只撤页面附加红灯", "粉紫字", "青字"):
+                            "只撤对应附加红灯", "粉紫字", "青字"):
             self.assertIn(explanation, text)
         for removed in ("个股市值＝", "浮动盈亏＝", "总资产＝", "×数量", "ma_short=0", "scope"):
             self.assertNotIn(removed, text)

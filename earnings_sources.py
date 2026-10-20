@@ -43,6 +43,13 @@ SOURCES = {
             "/events-and-presentations/events/event-details/",
         ),
     },
+    "SPCX": {
+        # 页面事件列表由脚本加载，在线解析多半读不到；已核验日期走 official-earnings.json 快照。
+        "host": "ir.spacex.com",
+        "list_url": "https://ir.spacex.com/events/default.aspx",
+        "company": "Space Exploration Technologies Corp.",
+        "event_paths": ("/events/event-details/",),
+    },
     "CRDO": {
         "host": "investors.credosemi.com",
         "list_url": "https://investors.credosemi.com/news-events/events/default.aspx",

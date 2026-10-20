@@ -109,14 +109,15 @@ function makeDocument(opts={}){
   doc.addEventListener=(k,f)=>(doc.events[k]||=[]).push(f);
   doc.fire=(k,e)=>{for(const f of doc.events[k]||[])f({preventDefault(){},stopPropagation(){},...e});};
   doc.body.innerHTML='<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><table></table></details><div id="signalCounts"></div>';
-  const table=doc.querySelector('table');
+  const table=doc.querySelector('table');table.className='stk';
   for(const sym of opts.symbols||['AAA','BBB']){
     const tr=new Element('tr',doc);tr.id='s-'+sym.toLowerCase();tr.className='green';
     tr.innerHTML='<td class="sym">'+sym+'<span class="note">测试名称</span></td><td><span class="px-price">100.00</span><span class="px-chg">+1.00%</span></td><td class="sig"><span class="lvtag add">加 95</span><span class="lvtag cut">减 104</span></td>';
     table.appendChild(tr);
-    const rail=new Element('tr',doc);rail.innerHTML='<td><span class="range52-rail" aria-label="50.00低，本轮价 100.00 位于区间 50%，本轮高 150.00"><span class="range52-track"></span></span></td>';table.appendChild(rail);
+    const rail=new Element('tr',doc);rail.className='range52-row';rail.innerHTML='<td><span class="range52-rail" aria-label="50.00低，本轮价 100.00 位于区间 50%，本轮高 150.00"><span class="range52-track"></span></span></td>';table.appendChild(rail);
   }
   for(const [sym,group] of Object.entries(opts.groups||{}))moveRow(doc,sym,group);
+  if(opts.funds)addFundFixture(doc,opts.funds);
   if(opts.prepareDocument)opts.prepareDocument(doc);
   return doc;
 }
@@ -127,6 +128,39 @@ function moveRow(doc,sym,group){
   let root=doc.getElementById('group_'+group);
   if(!root){root=doc.createElement('details');root.id='group_'+group;root.innerHTML='<summary></summary><table></table>';doc.body.appendChild(root);}
   let table=root.querySelector('table');table.appendChild(tr);if(rail)table.appendChild(rail);
+}
+function addFundFixture(doc, funds){
+  (funds||[]).forEach(f=>{
+    const tr=doc.getElementById('s-'+f.sym.toLowerCase());assert.ok(tr,'基本面 fixture 行必须存在 '+f.sym);
+    if(f.marketLevel)tr.className=f.marketLevel;
+    if(f.foldable)tr.setAttribute('data-fund-foldable','1');
+    const cell=tr.querySelector('td.sig');const box=doc.createElement('div');
+    box.className='fund-alert';box.setAttribute('data-fund-key',f.key||f.sym+'|fund|20260630');
+    box.setAttribute('data-fund-symbol',f.sym);box.setAttribute('data-fund-level',f.level||'red');
+    box.innerHTML='<details class="fund-detail"><summary class="tag f-red">基本面</summary><div class="fund-body">报告期风险详情</div></details>'
+      +'<div class="cost-warn fund-ack-line" data-level="'+(f.level||'red')+'"><span class="w">⚠ 基本面警示</span>'
+      +'<button type="button" class="ack-btn" data-ack="'+(f.key||f.sym+'|fund|20260630')+'">✓</button></div>';
+    cell.appendChild(box);
+  });
+  if(!funds||!funds.length)return;
+  const root=doc.createElement('details');root.id='signalCounts';const stats=doc.createElement('table');
+  const body=doc.createElement('tbody');const row=doc.createElement('tr');
+  row.innerHTML='<td><button type="button" class="signal-filter-toggle" data-kind="fund" aria-pressed="false">基本面</button></td>'
+    +'<td class="num"><button type="button" class="signal-count-toggle" data-target="fundRed" aria-expanded="false">'
+    +funds.filter(f=>(f.level||'red')==='red').length+'</button></td>'
+    +'<td class="num"><button type="button" class="signal-count-toggle" data-target="fundYellow" aria-expanded="false">'
+    +funds.filter(f=>f.level==='yellow').length+'</button></td><td class="num">—</td>';
+  body.appendChild(row);
+  const members=doc.createElement('tr');members.className='signal-members-row';members.innerHTML='<td colspan="4"></td>';
+  for(const level of ['red','yellow']){
+    const panel=doc.createElement('div');panel.className='signal-members-panel';panel.id='fund'+(level==='red'?'Red':'Yellow');
+    const list=funds.filter(f=>(f.level||'red')===level).map(f=>'<li><a class="signal-member-jump" href="#s-'+f.sym.toLowerCase()+'">'+f.sym+'</a></li>').join('');
+    panel.innerHTML='<ul>'+list+'</ul>';panel.hidden=true;members.children[0].appendChild(panel);
+  }
+  body.appendChild(members);stats.appendChild(body);root.appendChild(stats);doc.body.appendChild(root);
+  const filter=doc.createElement('div');filter.id='signalFilterResult';filter.hidden=true;
+  filter.setAttribute('data-filter',JSON.stringify({fund:{label:'基本面',members:funds.map(f=>({id:'s-'+f.sym.toLowerCase(),s:f.sym,n:'',g:'持仓',l:f.level||'red',d:['风险']}))}}));
+  doc.body.appendChild(filter);
 }
 function shared(initial={}){
   const values=new Map(Object.entries(initial).map(([k,v])=>[k,typeof v==='string'?v:JSON.stringify(v)]));
@@ -219,8 +253,8 @@ test('新版缺项不复活种子标的',async()=>{let b=await boot({local:{sche
 test('dirty整份保留，云端不补零或缺项',async()=>{let b=await boot();await b.enter();b.edit('AAA','qty','0');b.edit('USD','cash','0');b.exitEdit(false);b.mergeCloud({...SEED,items:{AAA:{cost:555,qty:9},CCC:{cost:1,qty:1}}});assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.state().DATA.cash,0);assert.equal(b.state().DATA.items.CCC,undefined);});
 test('clean云端仍按整份替换而不是合并持仓',async()=>{let b=await boot();b.mergeCloud({items:{AAA:{cost:1,qty:0}},cash:0});assert.equal(b.state().DATA.items.BBB,undefined);assert.equal(b.state().DATA.cash,0);});
 test('导入ACK、固定收益、零值并刷新等值',async()=>{
-  let b=await boot({token:false});let d={schema_version:2,real:true,updated_at:'2026-10-20T10:00:00Z',items:{AAA:{cost:200,qty:7}},cash:0,fixed:123,fixed_cost:100,acks:{'AAA|loss20':'2026-10-20T09:00:00Z'},ack_tombstones:{'AAA|loss10':'2026-10-20T08:00:00Z'}};
-  b.importData(d);assert.ok(b.state().NOTICE.includes('尚未上传'));let expected=b.canonical(b.state().DATA);await b.dispose();let c=await boot({store:b.store});assert.equal(c.canonical(c.state().DATA),expected);assert.equal(c.state().dirty,true);
+  const funds=[{sym:'AAA',level:'red'}];let b=await boot({token:false,funds});let d={schema_version:2,real:true,updated_at:'2026-10-20T10:00:00Z',items:{AAA:{cost:200,qty:7}},cash:0,fixed:123,fixed_cost:100,acks:{'AAA|loss20':'2026-10-20T09:00:00Z','AAA|fund|20260630':'2026-10-20T09:30:00Z'},ack_tombstones:{'AAA|loss10':'2026-10-20T08:00:00Z'}};
+  b.importData(d);assert.ok(b.state().NOTICE.includes('尚未上传'));let expected=b.canonical(b.state().DATA);await b.dispose();let c=await boot({store:b.store,funds});assert.equal(c.canonical(c.state().DATA),expected);assert.ok(c.state().DATA.acks['AAA|fund|20260630']);assert.equal(c.state().dirty,true);
 });
 const invalids=[
   ['数组items',{items:[]}],['null items',{items:null}],['字符串金额',{items:{},cash:'1'}],['负数量',{items:{AAA:{cost:1,qty:-1}}}],
@@ -249,6 +283,56 @@ test('取消编辑恢复并立即落盘，不上传取消的草稿',async()=>{le
 test('旧上传回执不会污染取消后的状态',async()=>{let b=await boot();await b.enter();b.edit('AAA','qty','1');await b.save();await b.enter();b.edit('AAA','qty','2');b.doc.getElementById('costCancel').click();await finishPush(b);assert.equal(b.state().DATA.items.AAA.qty,1);assert.equal(b.state().CLOUD.items.AAA.qty,1);await b.tick(0);assert.equal(b.state().dirty,false);});
 test('折叠保留草稿并暂停待上传任务',async()=>{let b=await boot();await b.enter();b.edit('AAA','qty','8');let p=b.doc.getElementById('costManage');p.open=false;p.fire('toggle');await b.tick(60000);assert.equal(b.local().items.AAA.qty,8);assert.equal(b.state().dirty,true);assert.equal(b.state().editing,false);assert.equal(b.puts().length,0);});
 test('上传中再次编辑并折叠，旧回执不自动上传草稿',async()=>{let b=await boot();await b.enter();b.edit();await b.save();await b.enter();b.edit('AAA','qty','8');let p=b.doc.getElementById('costManage');p.open=false;p.fire('toggle');await finishPush(b);await b.tick(60000);assert.equal(b.puts().length,1);assert.equal(b.state().dirty,true);});
+test('基本面ACK按报告期键持久化且可撤销',async()=>{let b=await boot({funds:[{sym:'AAA',level:'red'}]});let key='AAA|fund|20260630';b.ack(key);assert.ok(b.state().DATA.acks[key]);b.ack(key);assert.ok(b.local().ack_tombstones[key]);assert.equal(b.state().DATA.acks[key],undefined);});
+test('基本面已读折叠并从红黄统计名单筛选排除，其他行情警示保留',async()=>{
+  const funds=[{sym:'AAA',level:'red',foldable:true},{sym:'BBB',level:'yellow',foldable:false}];
+  let b=await boot({funds});const key='AAA|fund|20260630',redRow=b.doc.querySelector('.signal-filter-toggle[data-kind="fund"]').closest('tr');
+  const aaa=b.doc.getElementById('s-aaa'),bbb=b.doc.getElementById('s-bbb'),table=aaa.closest('table.stk');
+  b.ack(key);
+  assert.equal(aaa.parentNode.tagName,'TBODY');assert.equal(aaa.parentNode.closest('.fund-ack-list').querySelectorAll('tr[id^="s-"]').length,1);
+  assert.equal(b.doc.querySelectorAll('.fund-ack-list').length,1);assert.equal(bbb.parentNode,table);
+  assert.equal(redRow.children[1].textContent,'—');
+  assert.equal(redRow.children[2].querySelector('.signal-count-toggle').textContent,'1');
+  const redPanel=b.doc.getElementById('fundRed');assert.equal(redPanel.hidden,true);
+  assert.deepEqual(JSON.parse(b.doc.getElementById('signalFilterResult').getAttribute('data-filter')).fund.members.map(m=>m.s),['BBB']);
+  b.ack(key);
+  assert.equal(aaa.parentNode,table);assert.equal(b.doc.querySelectorAll('.fund-ack-list').length,0);
+  assert.equal(b.doc.querySelectorAll('#signalCounts .signal-count-toggle')[0].textContent,'1');
+  assert.equal(JSON.parse(b.doc.getElementById('signalFilterResult').getAttribute('data-filter')).fund.members.length,2);
+  assert.ok(b.local().ack_tombstones[key]);assert.equal(aaa.className,'green');assert.equal(bbb.className,'green');
+  assert.ok(redRow);
+});
+test('多个已读基本面共用单个折叠区并保持原序',async()=>{
+  const funds=[{sym:'AAA',level:'red',foldable:true},{sym:'BBB',level:'red',foldable:true}];let b=await boot({funds});
+  b.ack('AAA|fund|20260630');b.ack('BBB|fund|20260630');
+  const buckets=b.doc.querySelectorAll('.fund-ack-list');assert.equal(buckets.length,1);
+  const rows=buckets[0].querySelectorAll('tr[id^="s-"]');assert.deepEqual(rows.map(r=>r.id),['s-aaa','s-bbb']);
+});
+test('已读基本面并入本组已有「无异动」折叠表并更新计数，撤销后复原',async()=>{
+  const funds=[{sym:'AAA',level:'red',foldable:true}];
+  let b=await boot({funds,prepareDocument(doc){
+    const table=doc.getElementById('s-aaa').closest('table.stk');
+    const q=doc.createElement('details');q.className='quiet-list';
+    q.innerHTML='<summary>无异动 3 只 · 点击查看</summary><table class="stk"><tbody></tbody></table>';
+    table.parentNode.insertBefore(q,table.nextElementSibling);
+  }});
+  const key='AAA|fund|20260630',aaa=b.doc.getElementById('s-aaa');
+  b.ack(key);
+  const q=b.doc.querySelectorAll('details.quiet-list');assert.equal(q.length,1);
+  assert.equal(b.doc.querySelectorAll('.fund-ack-list').length,0);
+  assert.equal(q[0].querySelector('summary').textContent,'无异动 4 只 · 点击查看');
+  assert.equal(aaa.closest('details.quiet-list'),q[0]);
+  b.ack(key);
+  assert.equal(q[0].querySelector('summary').textContent,'无异动 3 只 · 点击查看');
+  assert.equal(aaa.closest('details.quiet-list'),null);
+});
+test('报告期变化或基本面风险消失时自动撤销旧ACK',async()=>{
+  const old='AAA|fund|20260630',next='AAA|fund|20260930';
+  let b=await boot({local:{...SEED,acks:{[old]:'2026-10-20T09:00:00Z'}},funds:[{sym:'AAA',key:next,level:'yellow'}]});
+  assert.equal(b.state().DATA.acks[old],undefined);assert.ok(b.local().ack_tombstones[old]);assert.equal(b.state().DATA.acks[next],undefined);
+  let c=await boot({local:{...SEED,acks:{[old]:'2026-10-20T09:00:00Z'}}});
+  assert.equal(c.state().DATA.acks[old],undefined);assert.ok(c.local().ack_tombstones[old]);
+});
 test('ACK撤销写tombstone，旧云端并集不能复活',async()=>{let b=await boot();let key='AAA|add|95';b.ack(key);b.ack(key);assert.ok(b.local().ack_tombstones[key]);assert.equal(b.state().DATA.acks[key],undefined);let old=copy(SEED);old.acks={[key]:'2026-10-19T00:00:00Z'};b.mergeCloud(old);assert.equal(b.state().DATA.acks[key],undefined);});
 test('clean拉取也保留较新的ACK撤销记录',async()=>{let key='AAA|loss10';let d={...SEED,ack_tombstones:{[key]:'2026-10-20T00:00:00Z'}};let b=await boot({local:d});b.mergeCloud({...SEED,acks:{[key]:'2026-10-19T00:00:00Z'}});assert.equal(b.state().DATA.acks[key],undefined);assert.ok(b.state().DATA.ack_tombstones[key]);assert.equal(b.state().dirty,true);});
 test('较新的明确ACK可以再次确认',async()=>{let key='AAA|loss20';let b=await boot({local:{...SEED,ack_tombstones:{[key]:'2026-10-20T00:00:00Z'}}});let d=copy(SEED);d.items.AAA.cost=200;d.acks={[key]:'2026-10-20T01:00:00Z'};b.mergeCloud(d);assert.ok(b.state().DATA.acks[key]);});
@@ -358,7 +442,7 @@ test('移回持仓沿用保留旧值但不自动抹成本或增加现金',async(
   let d=copy(SEED);d.items.AAA={cost:123,qty:7};let b=await boot({local:d,groups:{AAA:'focus'}});b.move('AAA','positions');
   assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$950');assert.equal(b.rows.find(r=>r.sym==='AAA').cost,123);
   assert.equal(b.state().DATA.items.AAA.qty,7);assert.equal(b.state().DATA.cash,30);await b.enter();assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,'123');
-  assert.match(b.doc.getElementById('costFoot').textContent,/移回后沿用旧值，请复核/);
+  assert.doesNotMatch(b.doc.getElementById('costFoot').textContent,/移回后沿用旧值/);
 });
 test('移出再移回后的亏损提醒重新生效且不删除加减仓ACK',async()=>{
   let d=copy(SEED);d.items.AAA.cost=200;d.acks={'AAA|loss20':'2026-10-19T00:00:00Z','AAA|add|95':'2026-10-19T00:00:00Z','AAA|cut|104':'2026-10-19T00:00:00Z'};

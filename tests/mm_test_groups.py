@@ -15,6 +15,7 @@ import monitor
 # 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
 monitor.S.clear()
 monitor.S.update(monitor.DEFAULT_SETTINGS)
+monitor.EARN_CROSS_CHECK = False    # 默认不联网查第二来源；交叉验证专项测试自行打开
 
 
 class TestGroups(unittest.TestCase):
@@ -22,6 +23,7 @@ class TestGroups(unittest.TestCase):
         # 财报测试独立于实际已核验日期文件；默认禁止访问官网，专项测试再注入样本。
         self.addCleanup(patch.stopall)
         patch.object(monitor, 'verified_earnings_events', return_value={}).start()
+        patch.object(monitor, 'yahoo_earnings', return_value={'status': 'error'}).start()   # 默认不联网查第二来源
         self.real_official_fetch = monitor.earnings_sources.fetch_official_earnings
         patch.object(monitor.earnings_sources, 'fetch_official_earnings',
                      return_value={'status': 'unknown', 'reason': 'fixture_empty'}).start()
@@ -949,6 +951,53 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('数据源只给', note)
         self.assertIn('具体时段待定', monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'})[0])
 
+    def test_earnings_cross_check_yahoo(self):
+        from datetime import datetime
+        today = '2026-10-16'
+        ts = lambda d, h=20: int(monitor.US_TZ.localize(datetime.fromisoformat(d + f'T{h:02d}:30:00')).timestamp()) \
+            if hasattr(monitor.US_TZ, 'localize') else int(datetime.fromisoformat(d + f'T{h:02d}:30:00').replace(tzinfo=monitor.US_TZ).timestamp())
+        body = lambda dates, est: {'quoteSummary': {'result': [{'calendarEvents': {'earnings': {
+            'earningsDate': [{'raw': ts(d)} for d in dates], 'isEarningsDateEstimate': est}}}]}}
+        one = monitor.parse_yahoo_earnings(body(['2026-10-20'], False), today)
+        self.assertEqual((one['status'], one['date'], one['kind']), ('ok', '2026-10-20', 'expected'))
+        rng = monitor.parse_yahoo_earnings(body(['2026-10-20', '2026-10-25'], False), today)
+        self.assertEqual((rng['date'], rng['kind']), ('2026-10-20', 'estimated'))
+        self.assertEqual(monitor.parse_yahoo_earnings(body(['2026-10-10'], False), today), {'status': 'unknown'})
+        self.assertEqual(monitor.parse_yahoo_earnings({}, today), {'status': 'unknown'})
+
+        est = {'status': 'ok', 'date': '2026-11-03', 'timing': '', 'kind': 'estimated'}
+        yh = {'status': 'ok', 'date': '2026-10-20', 'timing': '', 'kind': 'expected'}
+        cc = monitor.cross_check_earnings
+        # 确认 vs 估算：取确认，并记下另一来源日期
+        out = cc(est, yh, today)
+        self.assertEqual((out['date'], out['cross'], out['alt_date'], out['source2']), ('2026-10-20', 'conflict', '2026-11-03', 'yahoo'))
+        # 同类不同日：取较早
+        out = cc(dict(est, date='2026-10-30'), dict(yh, kind='estimated', date='2026-10-22'), today)
+        self.assertEqual((out['date'], out['alt_date']), ('2026-10-22', '2026-10-30'))
+        # 一致
+        self.assertEqual(cc(est, dict(yh, date='2026-11-03'), today)['cross'], 'agree')
+        # 主源失败采用第二源；第二源失败原样返回主源
+        self.assertEqual(cc({'status': 'error'}, yh, today)['source2'], 'yahoo')
+        self.assertEqual(cc(est, {'status': 'error'}, today), est)
+        self.assertEqual(cc(est, dict(yh, date='2026-10-01'), today), est)
+        # 冲突在标签里提示待核实
+        text, note = monitor.earnings_label(dict(est, date='2026-10-20', cross='conflict', alt_date='2026-11-03'))
+        self.assertIn('待核实', note)
+        self.assertIn('11/03', note)
+        # 门控：确认日期不再多请求；估算才问第二来源；开关关闭时原样返回
+        with patch.object(monitor, 'EARN_CROSS_CHECK', True), \
+                patch.object(monitor, 'yahoo_earnings', return_value=yh) as y:
+            conf = {'status': 'ok', 'date': '2026-10-30', 'timing': 'post', 'kind': 'expected'}
+            self.assertEqual(monitor._with_cross_check('AAPL', conf, today), conf)
+            self.assertEqual(y.call_count, 0)
+            self.assertEqual(monitor._with_cross_check('SPCX', est, today)['date'], '2026-10-20')
+            self.assertEqual(y.call_count, 1)
+        with patch.object(monitor, 'yahoo_earnings', return_value=yh) as y:
+            self.assertEqual(monitor._with_cross_check('SPCX', est, today), est)
+            self.assertEqual(y.call_count, 0)
+        # 估算日期窗口内每次运行都重查
+        self.assertEqual(monitor.EARN_REFETCH_DAYS['estimated'][-1], (0, 1))
+
     def test_earnings_shown_for_every_fetched_stock_but_not_etf_or_index(self):
         def row(symbol, group, level):
             return {'symbol': symbol, 'group': group, 'level': level, 'price': 10, 'note': ''}
@@ -990,11 +1039,11 @@ class TestGroups(unittest.TestCase):
         self.assertFalse(due(exp('2026-10-10', '2026-10-09'), today))
         self.assertTrue(due(exp('2026-10-13', '2026-10-07'), today))     # 3 天内但缓存已满 3 天：补查一次
         self.assertTrue(due(exp('2026-10-09', '2026-10-09'), today))     # 财报日已过：立即重抓
-        # 算法估算的日期：远 7 天、近 3 天
+        # 算法估算的日期：远 7 天、15 天内每次运行重查
         self.assertFalse(due(est('2026-11-10', '2026-10-04'), today))
         self.assertTrue(due(est('2026-11-10', '2026-10-03'), today))
-        self.assertFalse(due(est('2026-10-20', '2026-10-08'), today))
-        self.assertTrue(due(est('2026-10-20', '2026-10-07'), today))
+        self.assertFalse(due(est('2026-10-20', '2026-10-10'), today))    # 15 天内的估算：当天已抓不重复
+        self.assertTrue(due(est('2026-10-20', '2026-10-09'), today))     # 隔天即重查（估算日期最容易变）
         self.assertTrue(due({'status': 'ok', 'date': '2026-11-10', 'fetched': '2026-10-03'}, today))  # 缺 kind 按估算
         self.assertTrue(due({'status': 'error', 'fetched': today}, today))
         self.assertFalse(due({'status': 'unknown', 'fetched': '2026-10-04'}, today))
@@ -4698,7 +4747,7 @@ class TestSignalCounts(unittest.TestCase):
             output = monitor._signal_counts_card(snap)
         helper.assert_called_once_with('signalCounts', '统计')
         self.assertNotIn('macro-help', output)
-        self.assertIn('</table><div class="signal-filter" id="signalFilterResult" role="status" data-filter="', output)
+        self.assertIn('<div class="signal-filter" id="signalFilterResult" role="status" data-filter="', output)
         self.assertTrue(output.endswith('" hidden></div>' + monitor._collapse_button('signalCounts', '统计')
                                         + '</details>\n'))
         buttons = re.findall(r'<button\b([^>]*\bclass="collapse-group"[^>]*)>(.*?)</button>', output, re.S)
@@ -4716,7 +4765,7 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual([kind for kind, _ in monitor.SIGNAL_KINDS], expected)
         rows = [self.member_row('AAA', 'position', 'red', *((kind, 'red') for kind in expected)),
                 self.member_row('BBB', 'focus', 'yellow', ('earnings', 'yellow'))]
-        # 日期必须落在「美东今天起一周内」才会进「未来一周财报」，写死日期会随当天时间失效
+        # 日期必须落在「美东今天起15天内」才会进「未来15天财报」，写死日期会随当天时间失效
         soon = (monitor.NOW.astimezone(monitor.TZ).date() + timedelta(days=2)).isoformat()
         rows[1].update(earnings={'status': 'ok', 'date': soon}, signals=['财报临近'])
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
@@ -4730,8 +4779,8 @@ class TestSignalCounts(unittest.TestCase):
         output = monitor._signal_counts_card(snap)
         self.assertEqual(output.count('class="signal-members-row"'), len(expected))
         self.assertNotIn('<td>财报</td>', output)  # 不混入红黄紫交易信号
-        self.assertIn('未来一周财报', output)
-        self.assertIn('<strong>BBB</strong>', output)
+        self.assertIn('未来15天财报', output)
+        self.assertIn('<span class="signal-member-symbol">BBB</span>', output.split('earnings-week', 1)[1])
         self.assertNotIn('>BBB</span>', output.split('earnings-week', 1)[0])
 
     def test_next_week_earnings_members_use_us_calendar_day_and_keep_green_visible(self):
@@ -4745,25 +4794,26 @@ class TestSignalCounts(unittest.TestCase):
             rows = [item('AAPL', 'technology', '2026-10-14'),
                     item('BRK.B-US', 'position', '2026-10-21', kind='official'),
                     item('BRK-B', 'technology', '2026-10-21'),  # 持仓优先，不能重复
-                    item('LATE', 'focus', '2026-10-22'),
+                    item('D15', 'focus', '2026-10-29'),   # 第15天（含）进名单
+                    item('LATE', 'focus', '2026-10-30'),  # 第16天不进
                     item('PAST', 'position', '2026-10-13'),
                     item('UNKNOWN', 'technology', '2026-10-15', status='unknown')]
             snap = monitor.build_snapshot({}, rows, {'group_monitoring': {'technology': True}}, group_counts={})
             self.assertEqual(snap['earnings_week']['asof'], '2026-10-14')
-            self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], ['AAPL', 'BRK-B'])
+            self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], ['AAPL', 'BRK-B', 'D15'])
             self.assertEqual(snap['signal_counts']['chg']['red'], 0)
-            self.assertEqual(snap['summary']['green'], 6)  # 财报只提升可见性，绿灯不改黄
+            self.assertEqual(snap['summary']['green'], 7)  # 财报只提升可见性，绿灯不改黄
             panel = monitor._signal_counts_card(snap)
-            self.assertIn('<details class="earnings-week"><summary>未来一周财报 · 2 只</summary>', panel)
+            self.assertIn('<details class="earnings-week"><summary>未来15天财报 · 3 只</summary>', panel)
             self.assertNotIn('<details class="earnings-week" open>', panel)
             self.assertIn('<summary class="grp"><span class="grp-name">统计</span><span class="group-stats">'
                           '<span class="stat-badge red" aria-label="红 0 项">0</span>'
                           '<span class="stat-badge yellow" aria-label="黄 0 项">0</span>', panel)
-            self.assertIn('紫 0', panel)          # 无紫灯总数时按目标价紫色计数补
+            self.assertIn('灰 0', panel)
             self.assertIn('财报 2', panel)
             old = monitor._signal_counts_card({'summary': {'red': 4, 'yellow': 32},
                                                'signal_counts': {'target': {'label': '目标价', 'purple': 3}}})
-            for text in ('红 4', '黄 32', '紫 3', '财报 —'):  # 旧快照无紫总数/财报名单时不冒充0
+            for text in ('红 4', '黄 32', '灰 0', '紫灯 3 只', '财报 —'):
                 self.assertIn(text, old)
             self.assertNotIn('美东 2026-10-14 至 2026-10-21', panel)
             self.assertNotIn('预计或估算日期可能调整', panel)
@@ -4775,19 +4825,24 @@ class TestSignalCounts(unittest.TestCase):
             self.assertIn('.signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;', monitor.PAGE_CSS)  # 数字胶囊扁长方形
             self.assertIn('.signal-filter-toggle{box-sizing:border-box;height:38px;', monitor.PAGE_CSS)  # 与信号名胶囊同高对齐
             # 财报的灯跟统计表其它栏目一致：行首圆点（marker），不再在行尾挂一个 stat-dot
-            self.assertIn('<li class="lamp-green"><strong>AAPL</strong>', panel)
-            self.assertIn('10/14 盘后 · 预计 · <span class="earnings-week-group">IT软硬Ai</span>'
-                          '</span><span class="lamp-text">（绿灯）</span>', panel)
-            self.assertIn('10/21 盘后 · 官方活动日期 · <span class="earnings-week-group">持仓</span>'
-                          '</span><span class="lamp-text">（绿灯）</span>', panel)
+            # 跟其它名单同一套：名字可点跳转 + 分组写在括号里 + 灰色小字说明，不再有加粗蓝色分组
+            self.assertIn('<li class="lamp-green"><a class="signal-member-jump" href="#s-aapl">'
+                          '<span class="signal-member-symbol">AAPL</span></a>'
+                          '<span class="signal-member-belong">（IT软硬Ai）</span> ', panel)
+            self.assertIn('10/14 盘后 · 预计</span><span class="lamp-text">（绿灯）</span>', panel)
+            self.assertIn('<span class="signal-member-belong">（短持仓）</span> '
+                          '<span class="earnings-week-meta">美东 10/21 盘后 · 官方活动日期</span>'
+                          '<span class="lamp-text">（绿灯）</span>', panel)
+            self.assertNotIn('earnings-week-group', panel)
+            self.assertNotIn('<strong>', panel.split('earnings-week', 1)[1])
             self.assertNotIn('stat-dot', panel)
             self.assertNotIn('· 绿灯', panel)
-            self.assertIn('#signalCounts .earnings-week-group{color:#8fb8f0}', monitor.PAGE_CSS)
+            self.assertNotIn('earnings-week-group', monitor.PAGE_CSS)
             red = monitor._earnings_week_panel({'earnings_week': {'asof': '2026-10-14', 'members': [
                 {'symbol': 'NOC', 'group': 'position', 'level': 'red', 'date': '2026-10-20'},
                 {'symbol': 'BAD', 'group': 'position', 'level': '<x>', 'date': '2026-10-20'}]}})
-            self.assertIn('<li class="lamp-red"><strong>NOC</strong>', red)
-            self.assertIn('<li><strong>BAD</strong>', red)          # 未知灯级不画灯、不注入
+            self.assertIn('<li class="lamp-red"><a class="signal-member-jump" href="#s-noc">', red)
+            self.assertIn('<li><a class="signal-member-jump" href="#s-bad">', red)          # 未知灯级不画灯、不注入
             self.assertEqual(red.count('class="lamp-red"'), 1)   # 只有 NOC 有灯
             self.assertNotIn('<strong>LATE</strong>', panel)
             self.assertNotIn('<table>', panel)  # 只有财报名单时不画信号计数表，不伪造信号
@@ -4806,11 +4861,18 @@ class TestSignalCounts(unittest.TestCase):
             for row, e in zip(rows, ({'status': 'unknown', 'date': '2026-10-15'},
                                      {'status': 'ok', 'date': '2026-10-50'},
                                      {'status': 'ok', 'date': '2026-10-13'},
-                                     {'status': 'ok', 'date': '2026-10-22'})):
+                                     {'status': 'ok', 'date': '2026-10-30'})):
                 row.update(price=100.0, chg=0.0, signals=[], earnings=e)
             self.assertEqual(monitor.earnings_week_members(rows, '2026-10-14'), [])
-            self.assertNotIn('未来一周财报', monitor._signal_counts_card(
+            self.assertNotIn('未来15天财报', monitor._signal_counts_card(
                 monitor.build_snapshot({}, rows, {}, group_counts={})))
+
+    def test_text_only_boll_rsi_detail_names_rsi_count(self):
+        row = {'symbol': 'XLP', 'group': 'focus', 'level': 'green', 'note': '',
+               'signals': ['盘中突破布林上轨（盘中触及）', 'RSI 2条超买（RSI6 80）']}
+        member = monitor.text_only_members([row])[0]
+        self.assertEqual(member['kind'], 'boll_rsi')
+        self.assertEqual(member['detail'], '盘中突破布林上轨 · RSI 2条超买')
 
     def test_snapshot_carries_signal_counts(self):
         snap = monitor.build_snapshot({}, [self.row('red', ('chg', 'red'))], {}, group_counts={})
@@ -4857,6 +4919,38 @@ class TestSignalCounts(unittest.TestCase):
             self.assertEqual(out[1][1], '布林+RSI')
             self.assertEqual(out[2], ['布林'])
         self.assertIn('button.setAttribute("aria-pressed", "false");', monitor.PAGE_INTERACTION_JS)  # 收起统计时清空选择
+
+    def test_purple_and_earnings_are_strict_overlay_conditions(self):
+        import html as H
+        with patch.object(monitor, '_earn_today', return_value='2026-10-14'):
+            def item(symbol, group, marks=(), earnings_date=None):
+                row = self.member_row(symbol, group, 'green', *marks)
+                row['earnings'] = ({'status': 'ok', 'date': earnings_date, 'timing': 'post', 'kind': 'expected'}
+                                   if earnings_date else {'status': 'unknown'})
+                return row
+            rows = [item('BOTH', 'position', (('target', 'purple'),), '2026-10-18'),
+                    item('PURPLE', 'focus', (('target', 'purple'),), '2026-11-30'),
+                    item('EARN', 'technology', (), '2026-10-20'),
+                    item('ANOM', 'focus', (('target', 'red'),), '2026-10-19')]
+            snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        output = monitor._signal_counts_card(snap)
+        data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', output).group(1)))
+        ids = lambda kind: [m['s'] for m in data[kind]['members']]
+        self.assertEqual(set(ids('target_purple')), {'BOTH', 'PURPLE'})
+        self.assertEqual(set(ids('earnings_week')), {'BOTH', 'EARN', 'ANOM'})
+        self.assertNotIn('ANOM', ids('target_purple'))  # 目标价异常红不混入紫灯条件
+        self.assertIn('data-kind="target_purple"', output)
+        self.assertIn('data-kind="earnings_week"', output)
+        self.assertLess(output.index('earnings-extra'), output.index('purple-extra'))  # 紫灯占原灰灯位置
+        node = os.environ.get('NODE')
+        if node:
+            import subprocess
+            script = monitor.PAGE_INTERACTION_JS.split('function intersectSignals', 1)[1].split('function renderSignalFilter', 1)[0]
+            code = ('function intersectSignals' + script + ';const d=' + json.dumps(data) + ';'
+                    'process.stdout.write(JSON.stringify(intersectSignals(d,["target_purple","earnings_week"]).members.map(m=>m.s)));')
+            result = json.loads(subprocess.run([node, '-e', code], capture_output=True, text=True,
+                                               encoding='utf-8', check=True).stdout)
+            self.assertEqual(result, ['BOTH'])
 
     def panel(self, output, kind, level):
         import hashlib
@@ -4993,8 +5087,8 @@ class TestSignalCounts(unittest.TestCase):
                       + self.panel_id('chg') + '-red" hidden>', output)
         self.assertIn('<div class="signal-members-panel tone-yellow" id="'
                       + self.panel_id('rsi') + '-yellow" hidden>', output)
-        self.assertIn('<div class="signal-members-panel tone-purple" id="'
-                      + self.panel_id('target') + '-purple" hidden>', output)
+        self.assertIn('class="text-only target-purple"', output)
+        self.assertIn('data-kind="target_purple"', output)
         self.assertIn('#signalCounts .signal-members-panel.tone-red li::marker{color:var(--red)}', monitor.PAGE_CSS)
         self.assertIn('#signalCounts .text-only .signal-member-list li::marker{color:#9fa3aa}', monitor.PAGE_CSS)
 
@@ -5057,13 +5151,14 @@ class TestSignalCounts(unittest.TestCase):
             ('rsi', 'red'): [('RSI3条超卖', 'tone-red', '▼')],
             ('boll', 'yellow'): [('突破上轨', 'tone-yellow', '▲'), ('触及下轨', 'tone-white', '▼')],
             ('target', 'purple'): [('现价在目标价或共识价范围内', 'tone-purple', '■'),
-                                   ('目标价或共识价上涨空间达到提示标准', 'tone-purple', '□'),
+                                   ('目标价或共识价上涨空间达到 55%', 'tone-purple', '□'),
                                    ('当日上穿目标价或共识价', 'tone-purple', '▲'),
                                    ('当日跌破目标价或共识价', 'tone-purple', '▼')],
         }
         output = monitor._signal_counts_card(snap)
         for (kind, level), expected in cases.items():
-            panel = self.panel(output, kind, level)
+            panel = (output.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
+                     if kind == 'target' and level == 'purple' else self.panel(output, kind, level))
             self.assertNotRegex(panel, r'<p><strong>.*?信号.*?</strong></p>')
             for label, tone, shape in expected:
                 with self.subTest(kind=kind, label=label):
@@ -5080,7 +5175,7 @@ class TestSignalCounts(unittest.TestCase):
                     self.assertIn(f'<h5>{title}</h5>', panel)
                 self.assertNotIn('signal-member-icon', panel)
         self.assertEqual(snap['signal_counts']['target']['purple'], 4)
-        target = self.panel(output, 'target', 'purple')
+        target = output.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
         self.assertEqual(target.count('tone-purple'), 4)
         self.assertNotIn('▲ 上穿 · ▼ 跌破 · ■ 附近 · □ 空间达标', target)
         self.assertNotIn('signal-icon-key', output)
@@ -5210,10 +5305,10 @@ class TestSignalCounts(unittest.TestCase):
         members = monitor.signal_count_members([row])
         self.assertEqual(counts['target']['purple'], 1)
         self.assertEqual(len(members['target']['purple']), 1)
-        output = self.panel(monitor._signal_counts_card({'signal_counts': counts,
-                            'signal_members': members}), 'target', 'purple')
+        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
+        output = output.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
         self.assertIn('tone-purple" role="img" aria-label="现价在目标价或共识价范围内">■', output)
-        self.assertIn('tone-purple" role="img" aria-label="目标价或共识价上涨空间达到提示标准">□', output)
+        self.assertIn('tone-purple" role="img" aria-label="目标价或共识价上涨空间达到 58%">□', output)
         self.assertNotIn('title=', output)
         self.assertEqual(output.count('signal-member-icon'), 2)
 
@@ -5377,17 +5472,23 @@ class TestSignalCounts(unittest.TestCase):
         members = monitor.text_only_members(rows)
         self.assertEqual([(m['symbol'], m['kind'], m['shape']) for m in members],
                          [('RSIONLY', 'rsi', '▲'), ('BOLLONLY', 'boll', '▼'), ('BOTH', 'boll_rsi', '▲')])
-        # 灰灯三行不进红黄紫计数；LIT 行是真黄灯，本来就该计进 boll.yellow
+        # 灰灯三行不进红黄计数；LIT 行是真黄灯，本来就该计进 boll.yellow
         counts = monitor.signal_counts(rows)
         self.assertEqual([(k, v['yellow']) for k, v in counts.items() if v['yellow']], [('boll', 1)])
         output = monitor._signal_counts_card({'signal_counts': counts,
                                               'signal_members': monitor.signal_count_members(rows),
                                               'text_only': members})
         self.assertNotIn('仅此一条黄灯', output)
-        self.assertIn('灰灯 3 只', output)
-        # 默认折叠，展开后按归因分类，每组先 ▲ 后 ▼
-        self.assertIn('class="text-only"', output)
-        self.assertLess(output.index('RSI · 1 只'), output.index('布林 · 1 只'))
+        self.assertIn('<span class="stat-badge gray" aria-label="灰 3 项">3</span>', output)
+        # 灰灯现在在统计表按归因分行；每行的灰色计数可展开详细名单
+        self.assertNotIn('<td>灰灯', output)   # 最左列只写 RSI / 布林 / 布林+RSI，不加灰灯前缀
+        self.assertLess(output.index('aria-pressed="false">RSI</button>'), output.index('aria-pressed="false">布林</button>'))
+        self.assertLess(output.index('aria-pressed="false">布林</button>'), output.index('aria-pressed="false">布林+RSI</button>'))
+        self.assertIn('<h5>▲ RSI 2条超买</h5>', output)
+        self.assertIn('<h5>▼ 下轨</h5>', output)
+        self.assertIn('<h5>▲ 上轨 · RSI 2条超买</h5>', output)
+        self.assertNotIn('逼近布林', output.split('signal-members-gray-')[1])
+        self.assertEqual(output.count('class="signal-count-toggle"'), 4)  # 3 条灰灯 + LIT 黄灯
         self.assertIn('signal-member-jump', output)
         self.assertNotIn('(持仓)', output)
         self.assertNotIn('(IT软硬Ai)', output)
@@ -5399,13 +5500,14 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(snap['signal_counts']['target']['purple'], 2)
         self.assertEqual((snap['summary']['green'], snap['summary']['gray'], snap['summary']['yellow']), (1, 1, 0))
         output = monitor._signal_counts_card(snap)
-        panel = self.panel(output, 'target', 'purple')
-        self.assertNotIn('紫色提示 · 2 只', panel)
-        self.assertIn('>GRAY</span>', panel)
-        self.assertIn('>PURPLE</span>', panel)
-        self.assertEqual(output.count('class="signal-count-toggle"'), 1)
-        # 只有目标价行有计数：红、黄两格为空
-        self.assertEqual(output.count('<td class="num">—</td>'), 2)
+        self.assertIn('class="text-only target-purple"', output)
+        self.assertIn('紫灯 2 只 · 目标价 / 共识价', output)
+        self.assertIn('>GRAY</span>', output)
+        self.assertIn('>PURPLE</span>', output)
+        self.assertIn('data-kind="target_purple"', output)
+        self.assertEqual(output.count('class="signal-count-toggle"'), 0)
+        # 紫灯名单已移出红黄灰表，不再占目标价行的计数列
+        self.assertNotIn('>紫</td>', output)  # 紫灯已独立移到表格下方
         self.assertNotIn('不改变综合灯色', output)
 
     def test_groups_use_item_group_order_and_show_group_sizes(self):
@@ -5458,7 +5560,7 @@ class TestSignalCounts(unittest.TestCase):
         buttons = re.findall(r'<button type="button" class="signal-count-toggle" data-target="([^"]+)" '
                              r'aria-controls="([^"]+)" aria-expanded="false" aria-label="([^"]+)">(\d+)</button>', output)
         expected_buttons = sum(bool(v[level]) for v in snap['signal_counts'].values()
-                               for level in ('red', 'yellow', 'purple'))
+                               for level in ('red', 'yellow'))
         self.assertEqual(len(buttons), expected_buttons)
         self.assertEqual(len({b[0] for b in buttons}), expected_buttons)
         panels = re.findall(r'<div class="signal-members-panel tone-\w+" id="([^"]+)" hidden>', output)
@@ -5468,7 +5570,7 @@ class TestSignalCounts(unittest.TestCase):
             self.assertIn(f'{n} 只', label)
         # 只有有计数的行才出现（RSI 行 + 目标价行）
         pairs = re.findall(r'<tr><td>.*?</tr><tr class="signal-members-row"><td colspan="4">.*?</td></tr>', output, re.S)
-        self.assertEqual(len(pairs), 2)
+        self.assertEqual(len(pairs), 1)  # 紫灯移出统计表的计数行，单独折叠展示
         self.assertIn('button.closest("tr")', monitor.PAGE_INTERACTION_JS)
         self.assertIn('scope.querySelectorAll(".signal-count-toggle[data-target]")', monitor.PAGE_INTERACTION_JS)
         # 2026-10-15：展开范围受设置控制——默认关掉整块统计面板里已打开的，关掉开关只收同一行的
@@ -5561,7 +5663,7 @@ class TestSignalCounts(unittest.TestCase):
                 self.assertIn('明细待下次更新', panel)
                 self.assertNotIn('class="signal-member-symbol"', panel)
                 self.assertNotIn('不可信', output)
-                target = self.panel(output, 'target', 'purple')
+                target = output.split('class="text-only target-purple"', 1)[1]
                 self.assertIn('>GOOD</span>', target)
                 self.assertNotIn('明细待下次更新', target)
 

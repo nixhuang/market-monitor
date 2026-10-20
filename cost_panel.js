@@ -187,6 +187,19 @@
                tick:tick,info:info,warnAdd:warnAdd,warnCut:warnCut,warn:warn});
   });
 
+  /* 基本面已读跟随实际财报报告期，不绑定行情行灯；需要时将“仅基本面提示”移入独立折叠区。 */
+  var FUND_ROWS=[], FUND_BUCKETS=[], __fundOrder=0;
+  Array.prototype.forEach.call(document.querySelectorAll('tr[id^="s-"]'),function(tr){ tr.__mmFundOrder=__fundOrder++; });
+  Array.prototype.forEach.call(document.querySelectorAll('.fund-alert[data-fund-key]'),function(box){
+    var tr=box.closest('tr[id^="s-"]');
+    if(!tr) return;
+    var rail=tr.nextElementSibling&&(' '+tr.nextElementSibling.className+' ').indexOf(' range52-row ')>=0?tr.nextElementSibling:null;
+    var table=tr.closest('table.stk');
+    FUND_ROWS.push({box:box,key:box.getAttribute('data-fund-key')||'',symbol:(box.getAttribute('data-fund-symbol')||'').toUpperCase(),
+      level:box.getAttribute('data-fund-level')||'',tr:tr,rail:rail,table:table,source:tr.parentNode,
+      order:Number(tr.__mmFundOrder)||0,bucket:null,bucketBody:null});
+  });
+
   /* ---------- 1.5 「已读」：临时提醒可以手动关 ----------
      规则：点一下＝已知晓，这条规则本轮不再亮红灯；**条件消失后自动失效**
      （价格回到加仓价 3% 之外、或浮亏收窄到 10% 以内），下次再触发会重新亮，
@@ -201,7 +214,7 @@
     el.className='cost-warn lv1'+(acked?' acked':'');
     el.innerHTML='<span class="w">⚠ '+text+'</span>'
       +(acked
-        ? ' 已读<button type="button" class="ack-btn on" data-ack="'+key
+        ? ' <button type="button" class="ack-btn on" data-ack="'+key
           +'" aria-label="撤销已读">✓</button>'
         : '<button type="button" class="ack-btn" data-ack="'+key
           +'" aria-label="标记已读">✓</button>');
@@ -529,7 +542,7 @@
     if(typeof v!=='number' || !isFinite(v) || v<0) throw new Error(k+' 必须是非负有限数值');
     return v;
   }
-  function validAckKey(k){ return /^[A-Z0-9.^=_-]{1,32}\|(?:loss10|loss20|(?:add|cut)\|\d+(?:\.\d+)?)$/.test(k); }
+  function validAckKey(k){ return /^[A-Z0-9.^=_-]{1,32}\|(?:loss10|loss20|(?:add|cut)\|\d+(?:\.\d+)?|fund\|(?:\d{8}|[a-f0-9]{8}))$/.test(k); }
   function normalize(j,seed){
     if(!object(j)||!object(j.items)) throw new Error('items 必须是对象');
     var version=own(j,'schema_version')?j.schema_version:1;
@@ -634,6 +647,156 @@
   }
   function pruneAck(k){
     if(writer && DATA.acks[k]){ setAck(k,false); ACK_PRUNED=true; }
+  }
+  var FUND_STAT_BASE=null;
+  function fundStatBase(){
+    if(FUND_STAT_BASE) return FUND_STAT_BASE;
+    var filter=document.getElementById('signalFilterResult');
+    var toggle=document.querySelector('.signal-filter-toggle[data-kind="fund"]');
+    if(!filter||!toggle) return null;
+    var row=toggle.closest('tr'), base={filter:filter,raw:filter.getAttribute('data-filter')||'',row:row,
+      membersRow:row&&row.nextElementSibling,levels:{}};
+    try{ base.dataOriginal=JSON.parse(base.raw||'{}'); }catch(e){ base.dataOriginal={}; }
+    ['red','yellow'].forEach(function(level,index){
+      var cell=row&&row.children[index+1],button=cell&&cell.querySelector('.signal-count-toggle');
+      var panel=button&&document.getElementById(button.getAttribute('data-target'));
+      base.levels[level]={cell:cell,cellHtml:cell?cell.innerHTML:'—',count:button?num(button.textContent):0,
+        button:button,panel:panel,panelHtml:panel?panel.innerHTML:''};
+    });
+    FUND_STAT_BASE=base; return base;
+  }
+  /* 已读基本面不再单独成区：并进本组已有的「无异动 N 只」折叠表；本组没有该折叠表才新建一个（同样叫「无异动」）。 */
+  function quietText(n){ return '无异动 '+n+' 只 · 点击查看'; }
+  function fundBucket(f){
+    var rec=FUND_BUCKETS.filter(function(item){ return item.table===f.table; })[0];
+    if(rec && rec.box.parentNode){
+      f.bucket=rec.box; f.bucketBody=rec.body; return rec.box;
+    }
+    if(rec) FUND_BUCKETS.splice(FUND_BUCKETS.indexOf(rec),1);
+    if(!f.table || !f.table.parentNode) return null;
+    var next=f.table.nextElementSibling, box=null, body=null, base=0, created=false;
+    if(next && (' '+next.className+' ').indexOf(' quiet-list ')>=0 && (' '+next.className+' ').indexOf(' fund-ack-list ')<0){
+      var qt=next.querySelector('table'), sm=next.querySelector('summary'), mt=sm&&/无异动\s*(\d+)/.exec(sm.textContent||'');
+      if(qt && mt){ box=next; body=qt.querySelector('tbody')||qt; base=Number(mt[1])||0; }
+    }
+    if(!box){
+      created=true;
+      box=document.createElement('details'); box.className='quiet-list fund-ack-list';
+      var summary=document.createElement('summary'); summary.textContent=quietText(0);
+      var table=document.createElement('table'); table.className='stk';
+      var cols=f.table.querySelector('colgroup'); if(cols && cols.cloneNode) table.appendChild(cols.cloneNode(true));
+      body=document.createElement('tbody'); table.appendChild(body); box.appendChild(summary); box.appendChild(table);
+      f.table.parentNode.insertBefore(box,f.table.nextElementSibling);
+    }
+    rec={table:f.table,box:box,body:body,base:base,created:created}; FUND_BUCKETS.push(rec);
+    FUND_ROWS.forEach(function(item){ if(item.table===f.table){ item.bucket=box; item.bucketBody=body; } });
+    return box;
+  }
+  function moveFundRow(f,fold){
+    var bucket=fold?fundBucket(f):f.bucket;
+    if(fold && (!bucket || !f.bucketBody)) return;
+    var target=fold?f.bucketBody:f.source;
+    if(!target || f.tr.parentNode===target) return;
+    var before=null;
+    Array.prototype.some.call(target.children||[],function(node){
+      if(node!==f.tr && node.id && node.id.indexOf('s-')===0 && Number(node.__mmFundOrder)>f.order){ before=node; return true; }
+      return false;
+    });
+    target.insertBefore(f.tr,before);
+    if(f.rail) target.insertBefore(f.rail,f.tr.nextElementSibling);
+  }
+  function renderFundAck(f,acked){
+    f.box.className='fund-alert'+(acked?' acked':'');
+    var line=f.box.querySelector('.fund-ack-line');
+    if(line){
+      line.className='cost-warn fund-ack-line'+(acked?' acked':'');
+      line.innerHTML='<span class="w">'+esc(f.label||'⚠ 基本面警示')+'</span>'
+        +'<button type="button" class="ack-btn'+(acked?' on':'')+'" data-ack="'
+        +esc(f.key)+'" aria-label="'+(acked?'撤销':'标记为')+'基本面已读">✓</button>';
+    }
+    var summary=f.box.querySelector('.fund-detail>summary');
+    if(summary){
+      summary.className='tag '+(f.level==='red'?'f-red':'f-yellow')+(acked?' fund-acked':'');
+      summary.textContent='基本面';
+      summary.setAttribute('aria-label','查看 '+esc(f.symbol)+' 基本面详情'+(acked?'（已读）':''));
+    }
+  }
+  function refreshFundUI(){
+    if(!DATA) return;
+    if(!DATA.acks) DATA.acks={};
+    var active={},ackedSymbols={},ackedRows={},counted={},counts={red:0,yellow:0};
+    FUND_ROWS.forEach(function(f){ active[f.key]=true; });
+    Object.keys(DATA.acks).forEach(function(k){ if(/\|fund\|(?:\d{8}|[a-f0-9]{8})$/.test(k) && !active[k]) pruneAck(k); });
+    FUND_ROWS.forEach(function(f){
+      var acked=!!DATA.acks[f.key];
+      if(!f.label){ var w=f.box.querySelector('.fund-ack-line .w'); f.label=w?(w.textContent||'').trim():'⚠ 基本面警示'; }
+      renderFundAck(f,acked);
+      if(acked){
+        ackedSymbols[f.symbol]=true; ackedRows[f.tr.id]=true;
+        var identity=f.symbol+'|'+f.level;
+        if(counts[f.level]!==undefined && !counted[identity]){ counts[f.level]++; counted[identity]=true; }
+      }
+      var fold=acked && f.tr.getAttribute('data-fund-foldable')==='1';
+      if(fold) moveFundRow(f,true); else if(f.bucketBody && f.tr.parentNode===f.bucketBody) moveFundRow(f,false);
+    });
+    var buckets=[];
+    FUND_ROWS.forEach(function(f){ if(f.bucket && buckets.indexOf(f.bucket)<0) buckets.push(f.bucket); });
+    buckets.forEach(function(box){
+      var rec=FUND_BUCKETS.filter(function(item){ return item.box===box; })[0]||{base:0,created:true};
+      var rows=FUND_ROWS.filter(function(f){ return f.bucket===box && f.tr.parentNode===f.bucketBody; });
+      var summary=box.querySelector('summary');
+      if(summary) summary.textContent=quietText((rec.base||0)+rows.length);
+      if(!rows.length){
+        if(rec.created) box.remove();
+        FUND_BUCKETS=FUND_BUCKETS.filter(function(item){ return item.box!==box; });
+        FUND_ROWS.forEach(function(f){ if(f.bucket===box){ f.bucket=null; f.bucketBody=null; } });
+      }
+    });
+    var base=fundStatBase();
+    if(!base) return;
+    ['red','yellow'].forEach(function(level){
+      var rec=base.levels[level], count=Math.max(0,rec.count-(counts[level]||0));
+      if(!rec.cell) return;
+      var wasExpanded=!!(rec.panel && !rec.panel.hidden && rec.button
+        && rec.button.getAttribute('aria-expanded')==='true');
+      if(count===0){
+        rec.cell.textContent='—';
+        if(rec.panel) rec.panel.hidden=true;
+      }else{
+        var button=rec.button;
+        if(button && button.parentNode!==rec.cell){ rec.cell.textContent=''; rec.cell.appendChild(button); }
+        if(button){
+          button.textContent=String(count);
+          button.setAttribute('aria-label','基本面 · '+(level==='red'?'红色信号':'黄色信号')+' · '+count+' 只，展开或收起标的');
+          button.setAttribute('aria-expanded',String(wasExpanded));
+        }
+        if(rec.panel){
+          Array.prototype.forEach.call(rec.panel.querySelectorAll('a.signal-member-jump'),function(link){
+            var href=link.getAttribute('href')||'', id=href.charAt(0)==='#'?href.slice(1):'';
+            var li=link.closest('li'); if(li) li.style.display=ackedRows[id]?'none':'';
+          });
+          rec.panel.hidden=!wasExpanded;
+        }
+      }
+    });
+    var total=(base.levels.red.count-(counts.red||0))+(base.levels.yellow.count-(counts.yellow||0));
+    var hideFund=total<=0, selectionChanged=false, filterChanged=false;
+    if(base.row) base.row.style.display=hideFund?'none':'';
+    if(base.membersRow) base.membersRow.style.display=hideFund?'none':'';
+    if(base.dataOriginal && base.dataOriginal.fund){
+      var data=clone(base.dataOriginal);
+      data.fund.members=(data.fund.members||[]).filter(function(m){ return !ackedSymbols[String(m.s||'').toUpperCase()]; });
+      var next=JSON.stringify(data), old=base.filter.getAttribute('data-filter')||'';
+      if(next!==old){ base.filter.setAttribute('data-filter',next); filterChanged=true; }
+    }
+    if(hideFund){
+      var filterBtn=base.row&&base.row.querySelector('.signal-filter-toggle');
+      if(filterBtn && filterBtn.getAttribute('aria-pressed')==='true'){
+        filterBtn.setAttribute('aria-pressed','false'); selectionChanged=true;
+      }
+    }
+    if((filterChanged||selectionChanged) && typeof window.dispatchEvent==='function' && typeof window.CustomEvent==='function')
+      window.dispatchEvent(new window.CustomEvent('mm:fund-ack-change'));
   }
   function persistMaintenance(){
     ACK_PRUNED=false; maintenancePending=true;
@@ -1164,7 +1327,7 @@
         r.warn.innerHTML='<span class="w">⚠ 浮亏 '+Math.abs(r.pnlPct).toFixed(1)+'%，已超 '
           +(lv===2?'20':'10')+'%</span>'
           +(lAcked
-            ? ' 已读<button type="button" class="ack-btn on" data-ack="'+lk
+            ? ' <button type="button" class="ack-btn on" data-ack="'+lk
               +'" aria-label="撤销已读">✓</button>'
             : '<button type="button" class="ack-btn" data-ack="'+lk
               +'" aria-label="标记已读">✓</button>');
@@ -1288,8 +1451,7 @@
     }
     var ackN=Object.keys(DATA.acks||{}).length;
     if(ackN){
-      html+='<div class="ack-bar">已读提醒 '+ackN+' 条 · 条件消失后自动恢复'
-        +'<button type="button" data-ack-clear="1" aria-label="把已读全部清掉，重新提醒">恢复全部</button></div>';
+      html+='<div class="ack-bar"><button type="button" data-ack-clear="1" aria-label="把已读全部清掉，重新提醒">恢复全部（'+ackN+'）</button></div>';
     }
     /* 换设备／清了缓存后第一次打开，又没取到云端：眼前这份是构建时注入的内置快照，
        不是你的最新持仓 —— 必须在页面里说清楚，并给「重试」「导入备份」两个出口 */
@@ -1304,6 +1466,7 @@
     }
     document.getElementById(PID).innerHTML=html;
     applyLights();
+    refreshFundUI();
     // 自动失效只记录维护 tombstone；初次核验前不冒充用户整份编辑，也不失效 pull。
     if(ACK_PRUNED) persistMaintenance();
     if(focus && editing){
@@ -1362,7 +1525,6 @@
       // 2026-10-19：横条下面不再写「总资产 $xx」——总资产已经在卡片表头（标题行）显示了，
       // 这里重复一份反而抢视线。下面只留「颜色方块 + 比例」。
       +'<div class="cost-footrow"><div class="cost-legend">'+leg+'</div></div>'
-      +'<div class="cost-membership-note">持仓统计仅含持仓分组；移组不自动折算现金、不删除成本和数量。移回后沿用旧值，请复核。</div>'
       +(isolated?'<div class="cost-notice">'+ISOLATED_NOTICE+' <button type="button" data-cost-export>导出备份</button></div>':'')
       +((NOTICE||Object.keys(storageErrors).length||SYNC==='error')
         ? '<div class="cost-notice" role="status">'+esc(Object.keys(storageErrors).map(function(k){
