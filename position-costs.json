@@ -1,8 +1,8 @@
 {
  "schema_version": 2,
  "real": true,
- "updated_at": "2026-10-20T16:52:54.298Z",
- "cash": 25030.3,
+ "updated_at": "2026-10-20T16:57:15.855Z",
+ "cash": 24937,
  "fixed": 16870.35,
  "fixed_cost": 16916.97,
  "items": {
@@ -23,8 +23,8 @@
    "qty": 4
   },
   "CRSP": {
-   "cost": 46.36,
-   "qty": 10
+   "cost": 46.92,
+   "qty": 12
   },
   "GOOGL": {
    "cost": 338.91,
