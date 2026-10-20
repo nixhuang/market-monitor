@@ -4390,16 +4390,28 @@ def _range52_row(d):
         else:
             cost_html = f'<span class="range52-cost" style="left:{cpos:.1f}%"></span>'
             caption += f'；成本价 {fmt(cost)} 位于区间 {cpos:.1f}%'
-    # 左右两端直接写区间最低价／最高价；百分比浮在倒三角之上跟随现价位置；
-    # 成本价是横跨灰轨的黄色竖线（画在三角之后，成本≈现价时也能看见）
+    # 持仓两端第二行＝从本轮价到低／高点的变化幅度，以本轮价为基数；不是区间位置。
+    # 仅展示，不参与报灯、评分或折叠判定；非持仓保留原单行端点。
+    low_gap_html = high_gap_html = ""
+    rail_class = "range52-rail"
+    if d.get("group") == "position":
+        low_gap = (low / price - 1) * 100
+        high_gap = (high / price - 1) * 100
+        gap_text = lambda n: "0.0%" if abs(n) < 0.05 else f"{n:+.1f}%"
+        low_text, high_text = gap_text(low_gap), gap_text(high_gap)
+        low_gap_html = f'<span class="range52-gap">{low_text}</span>'
+        high_gap_html = f'<span class="range52-gap">{high_text}</span>'
+        rail_class += " has-endpoint-gaps"
+        caption += f'；从本轮价到低点 {low_text}、到高点 {high_text}（均以本轮价为基数）'
+    # 成本价是横跨灰轨的黄色竖线，区间位置百分比仍在现价三角之上。
     return (f'<tr class="range52-row"><td colspan="4">'
-            f'<div class="range52-rail" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
-            f'<span class="range52-lo" aria-hidden="true">{fmt(low)}</span>'
+            f'<div class="{rail_class}" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
+            f'<span class="range52-lo" aria-hidden="true">{fmt(low)}{low_gap_html}</span>'
             f'<div class="range52-track">'
             f'<span class="range52-percent" aria-hidden="true">{pos:.1f}%</span>'
             f'<span class="range52-marker" style="left:{pos:.1f}%"></span>'
             f'{cost_html}</div>'
-            f'<span class="range52-hi" aria-hidden="true">{fmt(high)}</span>'
+            f'<span class="range52-hi" aria-hidden="true">{fmt(high)}{high_gap_html}</span>'
             f'</div></td></tr>')
 
 
@@ -5021,7 +5033,17 @@ def _page_notes(snapshot):
 <div class="grp">规则与数据说明</div>
 <details class="macro-help" id="marketRiskRules"><summary>综合判断规则</summary><p>{html_lib.escape(RISK_RULE_TEXT)}</p>
 {('<p>补充参考：美联储利率决议、WTI原油不计入综合灯；综合灯仍依据原5项指标。</p>' if snapshot.get('reference_alerts') else '')}</details>
-{_reference_card(snapshot, details_only=True)}
+{_reference_card(snapshot, details_only=True) or '<details class="macro-help" id="policyAlertDetails"><summary>完整报灯规则 · 全局 + 分组差异</summary><p>规则说明正在载入…</p></details>'}
+<details class="macro-help" id="dataSourceRules"><summary>宏观细则与数据来源</summary>
+<p>垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到黄线，一周扩大至少 30 bp 为黄、至少 50 bp 为红（水平仍低于黄线时只提示观察是否持续）；达到 500 bp 会标注“信用压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
+<p>VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500距近一段高点回撤不足10%为绿、达到10%或15%为黄、达到20%为红，这些是已发生的跌幅。</p>
+<p>上涨参与度：站上200日均线的股票不足50%为黄；不足30%且近期垃圾债利差或金融压力NFCI也达到警戒时为红；站上50日均线的股票不足30%也为黄。金融压力NFCI为周度：指数达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
+<p>五指标综合市场风险：信用／金融环境包括垃圾债利差、金融压力NFCI；情绪包括VIX；趋势包括标普500回撤、上涨参与度。每项黄记1分、红记2分，同类只取最高分；信用／金融环境按2倍计分，情绪和趋势各按1倍，总分0至8。0至1分为综合绿（轻微提示写在说明里），2至4分为综合黄，5分及以上为综合红。有指标缺失时最低为黄。综合灯不是买卖指令，也不预测涨跌。</p>
+<p>综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力NFCI最多13日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且信用压力最多落后5日或金融压力NFCI最多13日达到警戒。</p>
+<p>财报日期：个股常驻显示下一次财报日期（ETF、指数、期货除外）。日期缓存并按远近复查，财报日过后立即检查下一次；请求失败或超出本轮额度时保留仍有效的旧缓存。未来14天内文字标黄，未来7天在统计面板单列；“算法估算”日期可能调整，尚未公布标“待公布”。数据源仅给美东日期和盘前／盘后／盘中，不含具体钟点。</p>
+<p>标的去重：一级市场风险和持仓、二级重点关注、三级其他分组；相同实质标的只在最高优先级显示和报警，清单记录不删除。VIX及标普指数只在市场风险显示；指数、跟踪ETF和期货不是同一标的。</p>
+<p>数据来源：垃圾债利差使用FRED；VIX、标普指数和10年收益率使用Yahoo；NFCI使用芝加哥联储原始周度数据，过期或不可用时以FRED同一指标同步备用；上涨参与度使用市场宽度源，不能用ETF价格替代。股票日线按既有来源降级，Nasdaq盘中报价只覆盖股票/ETF；来源、实际观测日期与数据失效状态均在页面标明。</p>
+</details>
 </section>'''
 
 
@@ -5251,11 +5273,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <script>window.MM_SETTINGS={{"signal_single_open":{int(S.get("signal_single_open", 1))}}};</script>
 <script>{PAGE_INTERACTION_JS}</script>
 {cost_js}
-<!-- 数据源与「查看完整规则与阈值」整块沉到页面最底部：放在「规则与数据说明」之后 -->
+<!-- 数据源与首页完整规则入口放在「规则与数据说明」之后 -->
 <div class="foot">
 行情：{src_txt} · 垃圾债利差：FRED · 金融压力：NFCI原始周度数据／FRED同步备用<br>
 市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 基本面：Nasdaq<br>
-{consensus_credit}<a href="./edit.html?rules=1" style="color:#6ba3f0;text-decoration:none">查看完整规则与阈值</a>
+{consensus_credit}<a href="#signalRules" style="color:#6ba3f0;text-decoration:none">查看首页完整规则与阈值</a>
 </div>
 </div></body></html>"""
 

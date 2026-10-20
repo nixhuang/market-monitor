@@ -10,29 +10,52 @@ from rules_config import DEFAULT_SETTINGS, browser_schema
 
 
 RULES_SUMMARY = "完整报灯规则 · 全局 + 分组差异"
-# 条件只决定段落是否出现；参数均来自本轮设置和 monitor 的真实规则常量。
+# 规则定义始终保留；条件仅补充当前启用参数，不用关闭状态替代规则。
 RULE_BLOCKS = (
-    ("", '<div class="rules-body"><h4>全局规则（所有分组，差异见下）</h4><h5>报灯</h5><ul>'),
-    ("vol_adaptive", '<li><b>量比自适应已开启</b> — 最近完整日量 ÷ 此前 ${vol_ratio_base} 日均量；最近 ${vol_z_window} 日对数量比分布用中位数 + 1.4826×MAD 算 z，z ≥ <b>${vol_ratio_red_z}σ</b> <span class="lamp-red">红</span>、z ≥ <b>${vol_ratio_z}σ</b> <span class="lamp-yellow">黄</span>。量比至少 1× 且 z 有效时才走自适应，否则按固定倍数。</li>'),
-    ("!vol_adaptive", '<li><b>量比自适应已关闭</b> — z 黄线 ${vol_ratio_z}、红线 ${vol_ratio_red_z}，任一为 0 即关闭；收盘后也只按固定倍数判定，不使用 z 值。</li>'),
-    ("", '<li><b>量比固定阈值</b> — ≥ <b>${vol_ratio_red}×</b> <span class="lamp-red">红</span>，≥ <b>${vol_ratio}×</b> <span class="lamp-yellow">黄</span>。盘中始终使用固定倍数；开盘 ${intraday_vol_quiet_min} 分钟内不报盘中量比，若有最近完整日数据则沿用完整日规则。指数/期货不计算该股票量比；完整日缺失或历史不足不报，不冒充当前量比。固定黄线低于 1× 时缩量也可能命中，按实际设置判定。</li>'),
-    ("", '<li><b>52 周低位</b> — 距低点 ≤ <b>${near_52w_low_pct}%</b>：创新低或刚进入低位区 → <span class="lamp-red">红</span>；仍在低位区但未创新低 → <span class="lamp-yellow">黄</span>；离开后不报。</li>'),
-    ("!ma_short_on", '<li><b>第一条均线已关闭（ma_short=0）</b>，不生成该条均线警示。</li>'),
-    ("!ma_long_on", '<li><b>第二条均线已关闭（ma_long=0）</b>，不生成该条均线警示。</li>'),
-    ("ma_short_distinct", '<li><b>第一条均线 ${ma_short} 日</b> — 确认上穿/跌破 → <span class="lamp-yellow">黄</span>：今天首次达到同侧确认边界、昨天尚未达到，且此前 ${ma_confirm_lookback} 个交易日曾在另一侧。边界随平时波动缩放至 ${ma_confirm_min}%～${ma_confirm_max}%，波动不可用时 ${ma_confirm_default}%；历史不够确认时退回简单穿越（昨日收盘价低于本轮均线、现价达到或高于本轮均线为上穿，反向为跌破）。日线不足对应周期时不计算该周期。仅触及不报。</li>'),
-    ("ma_long_distinct", '<li><b>第二条均线 ${ma_long} 日</b> — 日内高低范围触及本轮 SMA ±<b>${ma_long_band_pct}%</b> 区间，或昨日收盘/昨日 SMA 与现价/本轮 SMA 发生简单穿越 → <span class="lamp-yellow">黄</span>，两条独立判断，同日日内触及与穿越都满足时显示两条提示。穿越至少需要“周期+1”根日线计算昨日均线，昨日恰等于昨日均线不报新穿越；日线不足对应周期时不计算该周期。日内高低缺失时只用现价并注明；本轮目标日未更新则不重报。不是逐笔还原触及时均线，次日重新判定。</li>'),
-    ("ma_equal", '<li><b>两条均线同为 ${ma_short} 日</b> — 去重后只判简单穿越，不额外判第二条触及区间。</li>'),
-    ("", '<li><b>布林 + RSI</b> — 布林周期 <b>${boll_n}</b>、标准差倍数 <b>${boll_k}</b>；RSI 周期 <b>${rsi_periods}</b>，超买 ≥ <b>${rsi_high}</b>，超卖 ≤ <b>${rsi_low}</b>。进布林区间且同方向 RSI 2 条 → <span class="lamp-yellow">黄</span>、3 条 → <span class="lamp-red">红</span>；仅反向 2 条以上 → <span class="lamp-yellow">黄</span>。上轨分组限制见下；同日两侧都命中时展示两侧，组合取最贴近的一侧。</li>'),
-    ("boll_adaptive", '<li><b>布林带宽自适应已开启</b> — 距轨道门槛＝<b>${boll_near_band_pct}%</b> × 归一化带宽；归一化带宽固定按 4 × ${boll_sigma_factor} × 本股平时日波动计算，<b>不是当日实际带宽，也不随 boll_k 改变</b>。波动不可用时回退 <b>${boll_near_pct}%</b>；日内最高/最低触及即计。</li>'),
-    ("!boll_adaptive", '<li><b>布林带宽自适应已关闭（boll_near_band_pct=0）</b> — 只用固定逼近门槛 <b>${boll_near_pct}%</b>，不再按个股波动缩放；日内最高/最低触及即计。</li>'),
-    ("", '<li><b>加仓价</b> — 后端对<b>所有分组</b>生效；有真实加仓价才判断。现价已达到或跌破加仓价，或高出加仓价 ≤ <b>${trigger_gap_pct}%</b> → <span class="lamp-red">红</span>，差距按加仓价计算。</li></ul>'),
-    ("", '<h5>只出文字 / 只展示</h5><ul><li>单独 RSI 不报灯：同侧至少 2 条才显示文字；超卖为品红字、超买普通字。单独布林不报灯：下轨黄字、上轨普通字。连续贴轨仅补天数，不单独升级灯级。</li><li>52 周位置条、成本标记、现价、涨跌幅、目标价空间、RS 强弱、成本/盈亏/仓位常驻；数值本身不是信号。振幅/量比仅达标时显示信号文字。</li><li>财报只显示日期、不改变灯级；未来 ${earn_soon_days} 天内标黄，未来 7 天内不折叠进“无异动”，统计面板单列未来一周财报。待公布/取数失败不冒充临近。</li></ul>'),
-    ("", '<h4>分组差异</h4><h5>持仓 / 重点关注</h5><ul><li><b>涨跌幅 / 振幅</b>仅这两组报灯：中档涨跌幅绝对值 ≥ <b>${chg_red}%</b> <span class="lamp-red">红</span>、≥ <b>${chg_yellow}%</b> <span class="lamp-yellow">黄</span>；振幅（最高−最低）÷昨收 ≥ <b>${amp_red}%</b> <span class="lamp-red">红</span>、≥ <b>${amp_yellow}%</b> <span class="lamp-yellow">黄</span>。按最近 ${vol_lookback} 日平时波动分档乘 <b>${vol_mult}</b>；低档 &lt; ${vol_low_sigma}%、高档 &gt; ${vol_high_sigma}%，收益样本不足 ${vol_min_returns} 个按中档。</li><li><b>长持仓</b>的布林上轨仅同侧 RSI 3 条报红，2 条黄/反向黄屏蔽；短持仓和重点关注上轨照常 2 条黄、3 条红。下轨不受此限制；其他分组上轨仅文字、不报灯。</li><li><b>减仓价</b> — 后端仅 <b>position（持仓）</b>：现价已达到或高于减仓价（不论超出多少），或低于减仓价但还差 ≤ <b>${reduce_gap_pct}%</b> → <span class="lamp-red">红</span>，差距按减仓价计算，<b>不是正负区间</b>。前端保留按已有胶囊补算的原流程，含重点关注；不因此扩大后端减仓 scope，不凭空造价。</li><li><b>目标价 / 共识价</b> — 持仓与重点：当日跨越目标价、落在目标价 ±<b>${target_gap_pct}%</b> 内、或目标价高出现价 &gt; <b>${target_space_pct}%</b> → <span class="lamp-purple">紫</span>，不改红黄绿；空间 &gt; ${target_anomaly_pct}% 为数据异常红。其他分组只展示共识价，手填目标价不参与判定。</li></ul>'),
-    ("", '<h5>基本面（单独提示，不改股价红黄等级）</h5><ul>'),
-    ("fund_on", '<li><b>基本面检查已开启</b>：仅持仓 / 重点关注的非 ETF。最新季与 <b>3 个季度前</b>比较，<b>不是同比</b>；比较日期、频率、分表日期和单位必须可比。</li>'),
-    ("!fund_on", '<li><b>基本面检查已关闭（fund_enable=0）</b>：不发基本面请求；以下为保留参数，不作为开启承诺。</li>'),
-    ("", '<li>营收较基期变化 ≤ <b>${fund_rev_red}%</b>、营业利润率 &lt; 0、经营现金流由正转负 → 基本面红；营收变化 ≤ <b>${fund_rev_yellow}%</b>、营业利润率下降 ≥ <b>${fund_om_drop}</b> 个百分点、毛利率下降 ≥ <b>${fund_gm_drop}</b> 个百分点、经营现金流为负 → 基本面黄（红优先）。</li><li>负债/权益相对上升 ≥ <b>${fund_de_rise}%</b> 且负债额上升、流动比率相对下降 ≥ <b>${fund_cr_drop}%</b>、季度 ROE 相对下降 ≥ <b>${fund_roe_drop}%</b> → 基本面黄。流动比率显示倍数；利润率/ROE 保留百分比，不能混成倍数。</li><li>本季净利率绝对值 &gt; <b>${fund_pm_abnormal}%</b>、税项为负、或净利率比营业利润率高出 20 个百分点，视为一次性损益污染，ROE 排除；仅基准季污染时保留比较并注明“基准季含一次性收益，仅供参考”。行业比率只作核查提示。</li><li><b>灰色待更新</b>：过期、未来报告期、缺数据或日期/单位不可比不当作基本面绿灯。新鲜度窗口为报告周期 + <b>${fund_report_grace_days}</b> 天宽限；部分数据有效且已识别风险时保留红/黄并标注不完整；无风险且全项验证完整才是绿。</li></ul>'),
-    ("", '<h5>灰灯与缺失不是一回事</h5><ul><li>统计面板灰灯收最终为绿但已有 RSI/布林文字的标的，包括被上轨分组规则屏蔽的组合；行情缺失、52 周待更新和基本面待更新各自明确标注，不能当作安全信号。</li></ul><h5>可调宏观阈值</h5><ul><li>垃圾债利差 ≥ <b>${hy_red} bp</b> <span class="lamp-red">红</span>、≥ <b>${hy_green} bp</b> <span class="lamp-yellow">黄</span>；一周扩大 ${hy_week_yellow}/${hy_week_red} bp 另按原规则提示。VIX &lt; <b>${vix_green}</b> 绿，从 ${vix_green} 起黄（紧张）、从 ${vix_yellow} 起黄（恐慌）、≥ <b>${vix_red}</b> <span class="lamp-red">红</span>；固定综合规则见市场风险说明。</li></ul><h5>运行与提醒参数</h5><ul><li>Nasdaq 实时价开关：${use_realtime}（1 为取得有效报价时覆盖日线，0 为关闭）；不改变抓取时段与更新计划。</li><li>定投间隔：${dca_every} 个交易日；起点：${dca_start}。间隔为 0 或起点为空时不提醒，交易日按交易所日历计算。</li><li>灯详情单开开关：${signal_single_open}（1 为展开新的详情时收起其他，0 为允许同时展开）；只影响显示，不改变报灯。</li></ul></div>'),
+    ("", '<div class="rules-body"><h4>一、报灯 · 所有分组</h4><ul>'),
+    ("", '<li><b>行灯取最严重一项</b>：<span class="lamp-red">红</span> 优先于 <span class="lamp-yellow">黄</span>；无报警为 <span class="lamp-green">绿</span>。<span class="lamp-purple">紫色目标提示</span>独立叠加，不替代红黄绿；基本面另挂灯。</li>'),
+    ("", '<li><b>量比</b>：盘中 ≥ <b>${vol_ratio_red}×</b> <span class="lamp-red">红</span>、≥ <b>${vol_ratio}×</b> <span class="lamp-yellow">黄</span>；开盘 ${intraday_vol_quiet_min} 分钟内沿用最近完整日。收盘优先按本股放量异常程度报灯，自适应不可用时退回固定倍数；指数、期货不报股票量比。</li>'),
+    ("vol_adaptive", '<li class="rule-setting">量比自适应阈值：≥ <b>${vol_ratio_red_z}σ</b> <span class="lamp-red">红</span>、≥ <b>${vol_ratio_z}σ</b> <span class="lamp-yellow">黄</span>；量比至少 1× 才使用。</li>'),
+    ("!vol_adaptive", '<li class="rule-setting">当前量比采用固定倍数；重新启用自适应后，按自身异常程度的红、黄阈值判定。</li>'),
+    ("", '<li><b>52 周低位</b>：距低点 ≤ <b>${near_52w_low_pct}%</b>，刚进入或再创新低 → <span class="lamp-red">红</span>；持续低位、未创新低 → <span class="lamp-yellow">黄</span>；离开后不报。</li>'),
+    ("", '<li><b>第一条均线</b>：确认上穿或跌破 → <span class="lamp-yellow">黄</span>；仅触及不报。确认幅度随平时波动调整，历史不足时按简单穿越判断。</li>'),
+    ("", '<li><b>第二条均线</b>：日内触及均线 ±<b>${ma_long_band_pct}%</b>，或上穿、跌破 → <span class="lamp-yellow">黄</span>；触及与穿越可同时提示。缺日内高低时只按现价并注明；旧日线不重报。同周期两条去重后只判简单穿越。</li>'),
+    ("ma_short_on", '<li class="rule-setting">第一条当前周期：<b>${ma_short} 日</b>。</li>'),
+    ("ma_long_on", '<li class="rule-setting">第二条当前周期：<b>${ma_long} 日</b>。</li>'),
+    ("", '<li><b>布林 + RSI</b>：进布林报警区且同方向 RSI <b>2 条</b> → <span class="lamp-yellow">黄</span>、<b>3 条</b> → <span class="lamp-red">红</span>；仅反方向至少 2 条 → <span class="lamp-yellow">黄</span>。同日两轨都命中时文字均显示，组合按最贴近的一轨判断。</li>'),
+    ("", '<li class="rule-setting">布林 <b>${boll_n} 日 / ${boll_k} 倍</b>；RSI <b>${rsi_periods}</b>，超买 ≥ <b>${rsi_high}</b>、超卖 ≤ <b>${rsi_low}</b>。日内触轨也算；逼近门槛随平时波动调整，自适应关闭或不可用时用 <b>${boll_near_pct}%</b>。</li>'),
+    ("boll_adaptive", '<li class="rule-setting">布林自适应门槛：归一化带宽的 <b>${boll_near_band_pct}%</b>，不是当日实际带宽，不随标准差倍数改变。</li>'),
+    ("", '<li><b>加仓价</b>：所有分组，有设置价才判断；已到价或跌破，或现价仅高出 ≤ <b>${trigger_gap_pct}%</b> → <span class="lamp-red">红</span>。</li></ul>'),
+    ("", '<h4>二、报灯 · 分组差异</h4><ul>'),
+    ("", '<li><b>涨跌幅、振幅</b>：仅持仓、重点关注报灯。中档涨跌幅绝对值 ≥ <b>${chg_red}%</b> <span class="lamp-red">红</span>、≥ <b>${chg_yellow}%</b> <span class="lamp-yellow">黄</span>；振幅 ≥ <b>${amp_red}%</b> <span class="lamp-red">红</span>、≥ <b>${amp_yellow}%</b> <span class="lamp-yellow">黄</span>。低、中、高波动档按 <b>${vol_mult}</b> 缩放，历史不足按中档。</li>'),
+    ("", '<li><b>布林上轨</b>：长持仓只有 3 条 RSI 都超买才报红；其他上轨组合不报灯，但保留触轨文字。短持仓、重点关注按通用规则；其他分组上轨只出文字。<b>下轨所有分组照常</b>。</li>'),
+    ("", '<li><b>减仓价</b>：持仓已到价或高于价位，或低于价位但还差 ≤ <b>${reduce_gap_pct}%</b> → <span class="lamp-red">红</span>；高出多少都算，不是正负区间。重点关注若已有减仓胶囊，页面也会补同类红色提醒。</li>'),
+    ("", '<li><b>目标价、共识价</b>：持仓、重点关注当日上穿或跌破、进入 ±<b>${target_gap_pct}%</b> 区间、或上涨空间 &gt; <b>${target_space_pct}%</b> → <span class="lamp-purple">紫</span>；空间 &gt; <b>${target_anomaly_pct}%</b> → 数据异常 <span class="lamp-red">红</span>。其他分组仅展示共识价，不报目标灯。</li>'),
+    ("", '<li><b>基本面</b>：仅持仓、重点关注的非 ETF，单独提示、不改行情行灯；最新季对 <b>3 个季度前</b>。营收变化 ≤ <b>${fund_rev_red}%</b>、营业利润率为负、经营现金流由正转负 → <span class="lamp-red">红</span>。</li>'),
+    ("", '<li><b>基本面黄灯</b>：营收变化 ≤ <b>${fund_rev_yellow}%</b>、营业 / 毛利率下降 ≥ <b>${fund_om_drop}</b> / <b>${fund_gm_drop}</b> 个百分点、经营现金流为负；或负债权益比相对升 ≥ <b>${fund_de_rise}%</b> 且负债额升、流动比率相对降 ≥ <b>${fund_cr_drop}%</b>、季度 ROE 相对降 ≥ <b>${fund_roe_drop}%</b> → <span class="lamp-yellow">黄</span>，红优先。</li>'),
+    ("", '<li><b>基本面待更新</b>：报告过期（报告周期外另给 <b>${fund_report_grace_days}</b> 天宽限）、缺值或不可比 → <span class="lamp-none">灰字</span>，不当作绿。已知风险仍保留红黄；一次性损益污染时不据 ROE 升灯。</li>'),
+    ("!fund_on", '<li class="rule-setting">当前基本面监测未启用；以上规则保留，启用后生效。</li></ul>'),
+    ("fund_on", '</ul>'),
+    ("", '<h4>三、异色文字与图形</h4><ul>'),
+    ("", '<li><b>RSI 单独命中</b>：同侧至少 2 条才出文字；超卖 <span class="lamp-magenta">粉紫字</span>、超买普通字，<b>不单独报灯</b>。</li>'),
+    ("", '<li><b>布林单独命中</b>：下轨 <span class="lamp-yellow">黄字</span>、上轨普通字，<b>不单独报灯</b>；连续贴轨只补天数。组合文字按实际等级显示 <span class="lamp-sig-red">红字</span> / <span class="lamp-sig-yellow">黄字</span>。</li>'),
+    ("", '<li><b>均线文字</b>：第二条周期的触及、贴近、穿越为 <span class="lamp-cyan">青字</span>，其他均线为普通字。涨跌幅、振幅、量比的信号文字不随行灯自动染红黄。</li>'),
+    ("", '<li><b>目标提示</b>：<span class="lamp-purple">紫字、紫胶囊</span>；命中时实心紫并加行右侧紫条，未命中为空心。取数失败为 <span class="lamp-red">红胶囊</span>，本身不升行灯；仅紫字不代表命中。</li>'),
+    ("", '<li><b>财报日期</b>：未来 <b>${earn_soon_days} 天</b>内 <span class="lamp-yellow">黄字</span>；未来 <b>7 天</b>另列统计。日期不升行灯，待公布、取数失败不当作临近。</li>'),
+    ("", '<li><b>涨跌与盈亏</b>：上涨 / 盈利 <span class="lamp-green">绿字</span>、下跌 / 亏损 <span class="lamp-red">红字</span>。仓位面板红绿仅用于盈亏列，行首圆点表示灯级，不表示盈亏。</li>'),
+    ("", '<li><b>定投提醒</b>：顶栏显示还差几个交易日；仅到期当天 <span class="lamp-yellow">黄字</span>，未启用或日期无效不显示，不影响个股灯级。</li>'),
+    ("", '<li><b>图形</b>：▲ 上穿 / 上方，▼ 跌破 / 下方，■ 命中区间 / 恰在均线，□ 目标空间提示；量比、布林组合、均线方向写在统计框标题。52 周条的紫三角是现价、<span class="lamp-yellow">黄竖线是成本</span>，两者都不单独报灯。持仓两端价格下的百分比表示<b>从现价跌到低点 / 涨到高点的幅度</b>，不改变灯级。</li></ul>'),
+    ("", '<h4>四、展开、折叠与“无异动”</h4><ul>'),
+    ("", '<li><b>首次打开</b>：只展开统计；仓位管理、各分组、规则默认收起。持仓展开后，上方为可收起的长持仓，下方直接短持仓表。</li>'),
+    ("", '<li><b>不放进“无异动”</b>：生成页面时，行情红 / 黄 / 灰、基本面红 / 黄、参考行情、目标紫色命中、未来 <b>7 天</b>财报，任一满足即在本组主表显示。<b>不是强制打开整个分组</b>。</li>'),
+    ("", '<li><b>进入“无异动”</b>：行情绿且没有上述条件。单独 RSI、布林文字、未命中紫字、未来 8～14 天财报黄字，不阻止折叠。浏览器补算的浮亏红灯只改变灯色，<b>不自动搬出原折叠表</b>。</li>'),
+    ("", '<li><b>统计灰灯</b>：收纳最终为绿但有 RSI / 布林文字的标的，不等于行情缺失；缺行情、52 周 / 基本面待更新各自标注。信号有计数才显示，点击计数展开名单；默认切换时关闭其他名单，设置允许多开后可跨信号对比，同一行仍互斥。</li>'),
+    ("", '<li><b>收起与编辑</b>：收起统计时内部名单复位；收起分组时“无异动”复位，长持仓子区保留状态。当日盈亏贡献默认折叠；收起仓位管理退出编辑，保留已填数字。</li></ul>'),
+    ("", '<h4>五、仓位数字与已读提醒</h4><ul>'),
+    ("", '<li><b>仓位 &gt; 10%</b>：仅个股仓位数字 <span class="lamp-yellow">黄字</span>，不因此升行灯；现金、固定收益不标黄。名称靠左，数值与输入框居中。</li>'),
+    ("", '<li><b>成本价警示：浮亏 ≥ 10%</b>：提醒文字 <span class="lamp-red">红字</span>并附加行级 <span class="lamp-red">红灯</span>；≥ <b>20%</b> 加重提示，仍只显示一条。仅当前持仓且成本、数量均大于零时提醒。</li>'),
+    ("", '<li><b>点击已读</b>：加仓价、减仓价、浮亏提醒保留为 <span class="lamp-none">灰字 + 删除线</span>；再次点击撤销，条件消失自动清除。10% 与 20% 分档，跌至 20% 会重新提醒。<b>只撤页面附加红灯，原行情红灯及其他信号保留</b>。</li>'),
+    ("", '<li><b>数量与移组</b>：数量为 0 可保存，不计持仓金额、不触发浮亏提醒；移出持仓后不计市值、权重、贡献或亏损，旧成本数量保留，不会自动复活持仓。加减仓、目标及行情规则仍按所在分组判断。</li></ul></div>'),
 )
 
 
@@ -84,38 +107,14 @@ def script_asset(base, filename):
     return '<script src="' + html.escape(asset_url(base, filename), quote=True) + '"></script>'
 
 
-EDIT_RULES_JS = r"""
-function renderRuleText(settings){
-  const s=Object.assign({},SET_DEFS,settings,MM_RULE_CONSTANTS),equal=s.ma_short===s.ma_long;
-  const flags={vol_adaptive:s.vol_ratio_z>0&&s.vol_ratio_red_z>0,
-    boll_adaptive:s.boll_near_band_pct>0,fund_on:s.fund_enable>0,
-    ma_short_on:s.ma_short>0,ma_long_on:s.ma_long>0,
-    ma_short_distinct:s.ma_short>0&&!equal,ma_long_distinct:s.ma_long>0&&!equal,
-    ma_equal:s.ma_short>0&&equal};
-  const escape=value=>String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-  return MM_RULE_BLOCKS.filter(([cond])=>!cond||flags[cond.replace(/^!/, '')]!==cond.startsWith('!'))
-    .map(([,body])=>body.replace(/\$\{(\w+)\}/g,(_,key)=>escape(s[key]))).join('\n');
-}
-function updateRuleExplanation(){
-  const box=$('effectiveRuleText');if(!box)return;
-  const error=settingsError();
-  if(error){box.textContent='当前输入无效：'+error+'；请修正后查看规则。';return;}
-  const values=Object.assign({},SET);
-  SET_KEYS.forEach(key=>{const el=$('set_'+key);if(el)values[key]=key==='dca_start'?String(el.value).trim():Number(el.value);});
-  box.innerHTML=renderRuleText(values);
-}
-"""
-
-
 def editor_generated(constants):
     schema = browser_schema()
     return ("/* MM_SCHEMA_BEGIN：由 page_assets 生成，不手改 */\n"
             + "const SET_SCHEMA=" + json_script(schema) + ";\n"
             + "const SET_DEFS=SET_SCHEMA.defaults;\nconst SET_KEYS=Object.keys(SET_DEFS);\n"
             + "const SET_LIMITS=SET_SCHEMA.limits;\n"
-            + "const MM_RULE_CONSTANTS=" + json_script(constants) + ";\n"
-            + "const MM_RULE_BLOCKS=" + json_script(RULE_BLOCKS) + ";\n"
-            + EDIT_RULES_JS + "\n/* MM_SCHEMA_END */")
+            + "/* 规则说明仅在首页按生效配置生成，设置页只保留可编辑参数。 */\n"
+            + "/* MM_SCHEMA_END */")
 
 
 def sync_edit_html(source, base, constants):
@@ -326,6 +325,11 @@ table.stk tr>td{border-top-color:#39424f}
 .range52-rail{position:relative;display:flex;align-items:flex-end;gap:7px;height:20px;
   font-variant-numeric:tabular-nums}
 .range52-lo,.range52-hi{flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
+/* 持仓端点第二行：相对现价的下跌／上涨空间。轨道仍对齐第一行价格，保留三角上方间距。 */
+.range52-rail.has-endpoint-gaps{height:33px;padding-bottom:13px}
+.has-endpoint-gaps .range52-lo,.has-endpoint-gaps .range52-hi{position:relative}
+.range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;color:var(--dim)}
+.range52-hi .range52-gap{left:auto;right:0}
 .range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
 /* 百分比紧贴倒三角的上边缘，但**不能重叠**：三角高 9px，文字底 = 轨道上沿 + 11px（留 2px） */
 .range52-percent{position:absolute;bottom:calc(100% + 11px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}

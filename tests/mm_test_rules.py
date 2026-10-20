@@ -136,9 +136,32 @@ class RulesRegression(unittest.TestCase):
             self.assertEqual(reduce.level, "red" if group == "position" else "green")
         text = page_assets.rules_body(monitor.S, monitor._rule_constants())
         self.assertIn("所有分组", text)
-        self.assertIn("position（持仓）", text)
-        self.assertIn("含重点关注", text)
+        self.assertIn("持仓已到价或高于价位", text)
+        self.assertIn("重点关注若已有减仓胶囊", text)
         self.assertIn("不是正负区间", text)
+
+    def test_home_rules_explain_cost_membership_and_boll_upper_without_jargon(self):
+        text = page_assets.rules_body(monitor.S, monitor._rule_constants())
+        self.assertIn("只有 3 条 RSI 都超买才报红", text)
+        self.assertIn("其他上轨组合不报灯，但保留触轨文字", text)
+        self.assertNotIn("反向黄屏蔽", text)
+        for explanation in ("数量为 0 可保存", "旧成本数量保留", "都不单独报灯", "&gt; 10%",
+                            "浮亏 ≥ 10%", "20%", "不自动搬出原折叠表", "不是强制打开整个分组",
+                            "基本面红 / 黄", "未来 8～14 天财报黄字", "灰字 + 删除线",
+                            "只撤页面附加红灯", "粉紫字", "青字"):
+            self.assertIn(explanation, text)
+        for removed in ("个股市值＝", "浮动盈亏＝", "总资产＝", "×数量", "ma_short=0", "scope"):
+            self.assertNotIn(removed, text)
+        for color in ("red", "yellow", "purple", "magenta", "cyan", "green"):
+            self.assertIn(f'class="lamp-{color}"', text)
+        self.assertEqual(text.count("<h4>"), 5)
+        page = self.render()
+        self.assertIn("只有 3 条 RSI 都超买才报红", page)
+        self.assertIn('href="#signalRules"', page)
+        self.assertIn('id="dataSourceRules"', page)
+        self.assertIn('id="policyAlertDetails"', page)  # 无美联储数据时也可由前端挂载完整规则
+        self.assertIn('同类只取最高分', page)
+        self.assertNotIn('href="./edit.html?rules=1"', page)
 
     def test_ma_zero_and_equal_period_explanations(self):
         for short, long in ((0, 0), (0, 200), (50, 0), (50, 50)):
@@ -146,9 +169,13 @@ class RulesRegression(unittest.TestCase):
                 monitor.S.update(ma_short=short, ma_long=long)
                 self.assertFalse(monitor.valid_settings(monitor.S))
                 body = page_assets.rules_body(monitor.S, monitor._rule_constants())
-                self.assertEqual("第一条均线已关闭" in body, short == 0)
-                self.assertEqual("第二条均线已关闭" in body, long == 0)
-                self.assertEqual("两条均线同为" in body, short == long and short > 0)
+                self.assertIn("第一条均线</b>：确认上穿或跌破", body)
+                self.assertIn("第二条均线</b>：日内触及均线", body)
+                self.assertIn("同周期两条去重后只判简单穿越", body)
+                self.assertNotIn("均线已关闭", body)
+                self.assertNotIn("<b>0 日</b>", body)
+                self.assertEqual("第一条当前周期" in body, short > 0)
+                self.assertEqual("第二条当前周期" in body, long > 0)
                 x = monitor._analysis_context("OFFLINE", {},
                     {"closes": [100.0] * 60, "price": 100, "prev_close": 100,
                      "highs": [], "lows": [], "dates": []}, "position")
@@ -166,8 +193,9 @@ class RulesRegression(unittest.TestCase):
                     vol_ratio_date="2026-10-01", vol_ratio_intraday=False))
                 self.assertEqual(al.level, "red" if active else "yellow")
                 text = page_assets.rules_body(monitor.S, monitor._rule_constants())
-                self.assertEqual("量比自适应已开启" in text, active)
-                self.assertEqual("量比自适应已关闭" in text, not active)
+                self.assertEqual("量比自适应阈值" in text, active)
+                self.assertEqual("当前量比采用固定倍数" in text, not active)
+                self.assertIn("收盘优先按本股放量异常程度报灯", text)
                 self.assertIn("<b>4×</b>", text)
                 self.assertIn("<b>2×</b>", text)
 
@@ -177,29 +205,33 @@ class RulesRegression(unittest.TestCase):
                                0.25 * 4 * monitor._BOLL_SIGMA_FACTOR * 2)
         self.assertEqual(monitor._boll_near_pct(SimpleNamespace(vol_sigma=None)), 0.75)
         body = page_assets.rules_body(monitor.S, monitor._rule_constants())
-        self.assertIn("布林带宽自适应已开启", body)
-        self.assertIn("不随 boll_k 改变", body)
-        self.assertIn("<b>30</b>", body)
+        self.assertIn("布林自适应门槛", body)
+        self.assertIn("不随标准差倍数改变", body)
+        self.assertIn("<b>30 日 / 3 倍</b>", body)
         self.assertIn("<b>25%</b>", body)
         monitor.S["boll_near_band_pct"] = 0
         self.assertEqual(monitor._boll_near_pct(SimpleNamespace(vol_sigma=2)), 0.75)
         body = page_assets.rules_body(monitor.S, monitor._rule_constants())
-        self.assertIn("布林带宽自适应已关闭", body)
-        self.assertNotIn("布林带宽自适应已开启", body)
+        self.assertIn("自适应关闭或不可用时用 <b>0.75%</b>", body)
+        self.assertIn("进布林报警区且同方向 RSI", body)
+        self.assertNotIn("布林自适应门槛", body)
 
     def test_fund_current_parameters_and_gray_are_not_yoy(self):
         monitor.S.update(fund_rev_red=-35, fund_rev_yellow=-15, fund_om_drop=6,
             fund_gm_drop=7, fund_de_rise=45, fund_cr_drop=25, fund_roe_drop=40, fund_pm_abnormal=65)
         body = page_assets.rules_body(monitor.S, monitor._rule_constants())
-        for value in ("-35%", "-15%", "6", "7", "45%", "25%", "40%", "65%"):
+        for value in ("-35%", "-15%", "6", "7", "45%", "25%", "40%"):
             self.assertIn(f"<b>{value}</b>", body)
         self.assertIn("3 个季度前", body)
-        self.assertIn("不是同比", body)
         self.assertNotIn("营收同比", body)
-        self.assertIn("灰色待更新", body)
+        self.assertIn("基本面待更新", body)
+        self.assertIn("一次性损益污染时不据 ROE 升灯", body)
         self.assertEqual(monitor.fund_rule("fund_om_drop"), 6)
         monitor.S["fund_enable"] = 0
-        self.assertIn("基本面检查已关闭", page_assets.rules_body(monitor.S, monitor._rule_constants()))
+        disabled = page_assets.rules_body(monitor.S, monitor._rule_constants())
+        self.assertIn("当前基本面监测未启用", disabled)
+        self.assertIn("基本面黄灯", disabled)
+        self.assertIn("经营现金流由正转负", disabled)
 
     def test_json_injection_escapes_script_end(self):
         monitor.S["dca_start"] = '</script><script>alert("示例")</script>\u2028'
@@ -298,7 +330,6 @@ const context=vm.createContext({});
 vm.runInContext(generated+'\n'+validate+'\nlet SET={...SET_DEFS};let els={};const $=id=>els[id]||null;\n'+normalize+'\n'+collect,context);
 context.input=input;
 const result=vm.runInContext(`(()=>{
- const bodies=input.settings.map(s=>renderRuleText(s));
  const normalized=input.overrides.map(o=>normalizeSettings(o));
  const errors=input.settings.map(s=>{
    SET={...s};els={};Object.entries(s).forEach(([k,v])=>{if(!k.startsWith('fund_'))els['set_'+k]={value:String(v)};});
@@ -306,7 +337,7 @@ const result=vm.runInContext(`(()=>{
  });
  SET={...SET_DEFS,fund_om_drop:7,fund_report_grace_days:45};els={set_trigger_gap_pct:{value:'8'},set_reduce_gap_pct:{value:'2'}};
  collectSettings();const saved=JSON.parse(setJsonText());
- return {bodies,normalized,errors,saved};
+ return {normalized,errors,saved};
 })()`,context);
 const cost=fs.readFileSync('cost_panel.js','utf8');
 const bindings=cost.slice(cost.indexOf('var RULES=window.__MM_RULES__'),cost.indexOf('// 清仓通过移组完成'));
@@ -318,7 +349,8 @@ process.stdout.write(JSON.stringify(result));
             env=dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8"), timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         got = json.loads(result.stdout)
-        self.assertEqual(got["bodies"], [page_assets.rules_body(s, monitor._rule_constants()) for s in settings])
+        self.assertNotIn('id="effectiveRuleText"', (ROOT / "edit.html").read_text(encoding="utf-8"))
+        self.assertIn('只有 3 条 RSI 都超买才报红', page_assets.rules_body(settings[0], monitor._rule_constants()))
         self.assertEqual(got["errors"], [""] * len(settings))
         self.assertEqual(got["bindings"], [[s["trigger_gap_pct"], s["reduce_gap_pct"]] for s in settings])
         self.assertEqual(got["saved"]["fund_om_drop"], 7)

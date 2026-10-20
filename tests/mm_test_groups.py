@@ -4282,6 +4282,25 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertEqual(monitor._range52_row({'range52': result, 'price': 200.0, 'data_date': result['to']}).count('left:100.0%'), 1)
         self.assertEqual(monitor._range52_row({'reference_only': True, 'range52': result, 'price': 150.0}), '')
 
+    def test_position_endpoint_gaps_use_current_price_and_do_not_change_signals(self):
+        result = monitor._range52_from_history(self.history())
+        base = {'range52': result, 'price': 150.0, 'data_date': result['to'], 'group': 'position'}
+        row = monitor._range52_row(base)
+        self.assertIn('class="range52-rail has-endpoint-gaps"', row)
+        self.assertIn('range52-lo" aria-hidden="true">100.00<span class="range52-gap">-33.3%</span>', row)
+        self.assertIn('range52-hi" aria-hidden="true">200.00<span class="range52-gap">+33.3%</span>', row)
+        self.assertIn('从本轮价到低点 -33.3%、到高点 +33.3%', row)
+        self.assertIn('>50.0%</span>', row)  # 区间位置不改成端点空间
+        for group in ('focus', 'technology', None):
+            self.assertNotIn('range52-gap', monitor._range52_row({**base, 'group': group}))
+        for price in (100.0, 200.0):
+            boundary = monitor._range52_row({**base, 'price': price})
+            self.assertIn('class="range52-gap">0.0%</span>', boundary)
+            self.assertNotIn('-0.0%', boundary)
+        self.assertIn('数据待更新', monitor._range52_row({**base, 'price': 0}))
+        self.assertIn('数据待更新', monitor._range52_row({**base, 'price': float('nan')}))
+        self.assertNotIn('range52-gap', monitor._range52_row({**base, 'reference_only': True}))
+
     def test_cost_price_draws_a_white_triangle_without_touching_the_range_bar(self):
         """成本价只在位置条上多一个白三角：紫方块是本轮价（条上），白三角是成本价（条下）。
         成本价不参与灯级，写错或没写都不能画出来。"""

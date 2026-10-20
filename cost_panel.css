@@ -95,9 +95,11 @@
    编辑态由下面的「保存并上传／取消」接管，这颗收起来（两个退出入口会打架） */
 .cost-manage>summary .cost-edit-btn{margin-left:auto}
 .cost-manage>summary .cost-edit-btn[hidden]{display:none}
-/* 2026-10-19：次级框（长/短持仓、现金、固定收益）左右离外框太远 → 把左右留白从 10px 收到 2px，
-   内框整体变宽 16px。上下不动，卡片本身的 padding 与边框保留，不破坏整页版式 */
-.cost-body{padding:2px 2px 12px}
+/* 展开内框左右贴外框内沿：抵消 card 的 4px 横向 padding；框内文字仍留安全边距。
+   只拓宽仓位管理内容，不移动标题或改其他卡片。 */
+.cost-manage>.cost-body{margin-left:-4px;margin-right:-4px}
+.cost-body{padding:2px 0 12px}
+.cost-body>.cost-acts,.cost-body>.cost-foot{padding-left:8px;padding-right:8px}
 /* 框与框之间留一口气：否则上一个列表的最后一行紧贴下一个框的合计条 */
 .cost-manage .signal-member-block+.signal-member-block{margin-top:9px}
 .cost-manage .signal-members-panel{margin-top:6px}
@@ -337,7 +339,7 @@
 .cost-legend .ln{color:var(--dim);font-size:10.5px}
 .cost-legend b{color:var(--text);font-weight:600}
 @media (max-width:560px){
-  .cost-body{padding:2px 2px 10px}
+  .cost-body{padding:2px 0 10px}
   .cost-manage .signal-member-list{padding-left:12px}
   /* 五列重新分配（2026-10-20）：名称列让出约 20px 给数值列，右侧五列不再挤成一坨；
      名称列留 85px 左右，代码行不换行、中文备注最多两行（超了省略号），避免行高忽高忽低 */
@@ -431,6 +433,8 @@
 .rules-body .lamp-red{color:#ff8580;font-weight:600}
 .rules-body .lamp-yellow{color:#f0c674;font-weight:600}
 .rules-body .lamp-purple{color:#c4a3ff;font-weight:600}
+.rules-body .lamp-green{color:var(--up);font-weight:600}
+.rules-body li.rule-setting{margin-left:6px;border-left:2px solid var(--line);padding-left:8px}
 .rules-body .lamp-magenta{color:#ef8de4;font-weight:600}
 .rules-body .lamp-cyan{color:#4dd0e1;font-weight:600}
 /* 上面是「灯」的颜色；下面是页面上「文字」的颜色，两者同色系但深浅不同，分开写 */

@@ -141,7 +141,7 @@ check("<h2>个股</h2>" not in html and "<h2>ETF 基金</h2>" not in html, "个�
 check('<thead' not in html and '<th>名称</th>' not in html and 'class="h-earn"' not in html,
       "表头「名称｜财报」整行已删除（2026-10-15）")
 check(monitor.STK_HEAD == '', "STK_HEAD 不再输出表头")
-check("财报 美东" not in html and "下一次财报" not in html.split("<style>")[-1].split("</style>")[-1], "每行不再重复写「财报」二字")
+check("财报 美东" not in html and "下一次财报" not in html.split('id="group_positions"')[1].split('<div class="acts">')[0], "每行不再重复写「财报」二字")
 check('无异动 1 只 · 点击查看' in html and 'SPYM' in html, "无异动标的可展开查看")
 pos_card = html.split('id="group_positions"')[1].split('id="group_focus"')[0]
 check('NTNX' in pos_card and 'SPYM' in pos_card, "持仓包含警示及无异动标的")
@@ -223,7 +223,7 @@ check('data-phase="ok"' in html5, "基本面不影响状态灯（仍为绿）")
 check('垃圾债利差' in html5 and '高收益债利差' not in html5 and '跑路价签' not in html5,
       "正式生成首页仅使用垃圾债利差新名称")
 footer = html5.split('<div class="foot">', 1)[1].split('</div>', 1)[0]
-check('./edit.html?rules=1' in footer and '查看完整规则与阈值' in footer, "页脚指向设置页完整规则")
+check('href="#signalRules"' in footer and '查看首页完整规则与阈值' in footer, "页脚指向首页完整规则")
 head5 = html5.split('</head>', 1)[0]
 check('rel="icon"' in head5 and './icons/favicon-32.png' in head5, "页头有网页图标（相对路径）")
 check('rel="apple-touch-icon" href="./icons/apple-touch-icon.png"' in head5, "页头有 apple-touch-icon")

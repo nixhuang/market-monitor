@@ -55,6 +55,12 @@
     box.className='macro-help'; box.id='signalRules';
     box.innerHTML=tpl.innerHTML;
     old.parentNode.replaceChild(box, old);
+    function openRules(){ box.open=true; box.scrollIntoView({block:'start'}); }
+    if(location.hash==='#signalRules') openRules();
+    document.addEventListener('click',function(e){
+      var link=e.target&&e.target.closest&&e.target.closest('a[href="#signalRules"]');
+      if(link) openRules();
+    });
   })();
 
   /* 数据源说明（.foot：行情／垃圾债利差／市场宽度／共识价／查看完整规则与阈值）整块沉到
@@ -206,7 +212,7 @@
     var A=DATA.acks;
     ROWS.forEach(function(r){
       var want=null, sigTxt='';
-      // ① 加仓价：已跌破、或距加仓价不足 3%（跟 monitor.py 判定一致）
+      // ① 加仓价：已跌破、或接近页面注入的加仓门槛（跟 monitor.py 判定一致）
       if(r.trig>0){
         var gap=(r.price/r.trig-1)*100, on=gap<=GAP_TRIGGER;
         var k=r.sym+'|add|'+r.trig;
@@ -227,7 +233,7 @@
           if(!acked) want='red';
         } else hideWarn(r.warnAdd);
       }
-      // ② 减仓价：已涨到它之上（不管高出多少）→ 红；还差不足 3% → 也红（跟 monitor.py 对称）
+      // ② 减仓价：已涨到它之上（不管高出多少）→ 红；不足注入门槛 → 也红
       if(r.cut>0){
         var rgap=(r.price/r.cut-1)*100, onR=(rgap>=0)||(-rgap<=GAP_REDUCE);
         var kc=r.sym+'|cut|'+r.cut;

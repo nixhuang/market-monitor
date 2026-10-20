@@ -88,7 +88,7 @@ with patch.dict(monitor.S, {'amp_yellow': 3.0, 'amp_red': 9.0}), \
         patch.object(monitor, '_cost_panel_assets', return_value=('', '')):
     changed_page = monitor.render({}, [], 0)
     changed_rules = page_assets.rules_template(monitor.S, monitor._rule_constants())
-check(changed_rules in changed_page and '振幅（最高−最低）÷昨收 ≥ <b>9%</b>' in changed_rules
+check(changed_rules in changed_page and '振幅 ≥ <b>9%</b>' in changed_rules
       and '≥ <b>3%</b> <span class="lamp-yellow">黄</span>' in changed_rules,
       "覆盖振幅阈值后，共用说明和实际首页同步更新")
 
