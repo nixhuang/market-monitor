@@ -4705,7 +4705,7 @@ td.px{text-align:center}
   .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:10.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
   .stk td.sig{font-size:12.5px;line-height:1.45}
   .stk .fund-detail summary{padding:6px 7px}
-  .group-card>summary.grp,.macro-card>summary.grp{gap:5px;padding:12px 10px}
+  .group-card>summary.grp,.macro-card>summary.grp{gap:5px;padding:12px 10px 12px 3px}
   .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
   .zone-card{margin:8px 0 10px}
   .zone-card>summary{padding:8px 8px}
@@ -4766,9 +4766,12 @@ tr.gray td{color:var(--dim)}
 .check-result[data-phase="busy"]{border-color:var(--yellow)}
 .check-result[hidden]{display:none}
 .group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:8px;cursor:pointer;
-  padding:12px;font-size:16px;font-weight:600;list-style:none;touch-action:manipulation}
+  /* 2026-10-20：左内边距 12px → 4px —— 展开箭头和分类名整体往左挪，贴着卡片左边缘 */
+  padding:12px 12px 12px 4px;font-size:16px;font-weight:600;list-style:none;touch-action:manipulation}
 .group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{display:none}
-.group-card>summary::before,.macro-card>summary::before{content:"›";color:var(--dim);font-size:20px;line-height:1}
+/* 箭头给固定宽度并居中：左内边距收到 4px 后，展开状态旋转 90° 的「›」会贴到卡片边缘被裁掉 */
+.group-card>summary::before,.macro-card>summary::before{content:"›";display:inline-block;width:14px;
+  text-align:center;flex:none;color:var(--dim);font-size:20px;line-height:1}
 .group-card[open]>summary::before,.macro-card[open]>summary::before{transform:rotate(90deg)}
 .group-card[open]>summary,.macro-card[open]>summary{border-bottom:1px solid var(--line)}
 .group-stats{margin-left:auto;color:var(--dim);font-size:14px;font-weight:400}
