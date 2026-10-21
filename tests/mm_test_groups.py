@@ -1058,6 +1058,11 @@ class TestGroups(unittest.TestCase):
                 out = monitor.resolve_earnings_sources('SPCX', today)
                 self.assertEqual((out['date'], out['kind'], out['cross']), ('2026-10-20', 'expected', 'conflict'))
                 self.assertEqual(out['alt_date'], '2026-11-03')
+            # Nasdaq 的确认日期胜过主源估算时，来源不能误标 Yahoo。
+            with patch.object(monitor, 'stockanalysis_earnings', return_value=dict(sa, kind='estimated')), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value=dict(nd, date='2026-10-19')):
+                out = monitor.resolve_earnings_sources('SPCX', today)
+                self.assertEqual((out['date'], out['source2']), ('2026-10-19', 'nasdaq'))
             # 主源没给：Nasdaq 有就直接用，不额外打第三源
             with patch.object(monitor, 'stockanalysis_earnings', return_value={'status': 'unknown'}):
                 self.assertEqual(monitor.resolve_earnings_sources('SPCX', today)['date'], '2026-10-20')
@@ -3252,6 +3257,32 @@ class TestCacheAudit(unittest.TestCase):
         with patch.object(monitor, 'nasdaq_earnings', return_value=self._earn()) as fetch, patch.object(monitor, 'log'):
             monitor.attach_earnings([self._row(s) for s in old], state['data'], '2026-10-11')
         self.assertEqual([c.args[0] for c in fetch.call_args_list], ['CCC'])
+
+    def test_report_stays_red_until_second_beijing_day_ends(self):
+        # 美东跨到 10/21（北京 10/21 中午）不得提前把 10/20 财报换成下一季或 unknown。
+        for timing in ('pre', 'post'):
+            for future in ({'status': 'unknown'}, self._earn('2027-01-20')):
+                with self.subTest(timing=timing, future=future):
+                    old = {'AAA': dict(self._earn('2026-10-20', '2026-10-19'), timing=timing)}
+                    rows = [self._row('AAA')]
+                    with patch.object(monitor, '_bj_today', return_value='2026-10-21'), \
+                            patch.object(monitor, 'nasdaq_earnings', return_value=future) as fetch, \
+                            patch.object(monitor, 'log'):
+                        st = monitor.attach_earnings(rows, old, '2026-10-21')
+                    fetch.assert_not_called()
+                    self.assertEqual(rows[0]['earnings'], old['AAA'])
+                    self.assertEqual(monitor.earnings_urgency(rows[0]['earnings'], '2026-10-21'), 'red')
+                    self.assertTrue(monitor.earnings_within_list(rows[0]['earnings'], '2026-10-21'))
+                    self.assertTrue(monitor.earnings_within_week(rows[0]['earnings'], '2026-10-21'))
+                    self.assertEqual(st['data']['AAA'], old['AAA'])
+                    self.assertEqual(st['events']['AAA'], ['2026-10-20'])
+                    with patch.object(monitor, '_bj_today', return_value='2026-10-22'), \
+                            patch.object(monitor, 'nasdaq_earnings', return_value=future) as fetch, \
+                            patch.object(monitor, 'log'):
+                        st2 = monitor.attach_earnings(rows, st['data'], '2026-10-21', st['events'])
+                    fetch.assert_called_once()
+                    self.assertNotEqual(rows[0]['earnings'].get('date'), '2026-10-20')
+                    self.assertEqual(st2['events']['AAA'], ['2026-10-20'])
 
     def test_earnings_history_survives_unknown_and_next_quarter(self):
         prev = {'AAA': self._earn('2026-10-08', '2026-10-01')}

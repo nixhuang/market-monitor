@@ -42,7 +42,7 @@ on:
       - '!position-costs.json'
       - '!import-audit.json'
   # 定时仍仅由 Worker 在美东 20:15 / 20:45 派发 ensure-morning.yml。
-  # 20:00–21:00 窗口仍由原有调度逻辑把关；不增加 GitHub schedule。
+  # 首轮由 Worker 派发；缺数后在 20:00–24:00 窗口内延迟重试，不增加 GitHub schedule。
   workflow_dispatch:
     inputs:
       request_id:
@@ -118,7 +118,7 @@ jobs:
         if: ${{ steps.gen.outcome == 'success' && steps.gen.outputs.publish == 'no' && env.MM_EVENT == 'schedule' }}
         run: |
           h=$(TZ=America/New_York date +%-H)
-          if [ "$h" -ge 20 ] && [ "$h" -lt 23 ]; then
+          if [ "$h" -ge 20 ] && [ "$h" -lt 24 ]; then
             gh workflow run ensure-morning.yml --ref main -R "$GITHUB_REPOSITORY" -f delay_minutes=30
             echo "::notice title=已安排重试::美东 ${h} 点数据未齐，约 30 分钟后再检查一次（最晚到美东 24 点）"
           else

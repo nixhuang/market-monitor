@@ -837,9 +837,9 @@
       const gen = step('抓数据并生成页面'), commit = step('校验最新输入并提交更新');
       if (!gen || gen.conclusion !== 'success' || !commit || commit.conclusion !== 'skipped') return null;
       const retry = step('当日日线未就绪：约 30 分钟后自动再试');
-      // 重试步骤只在美东 20–22 点真的派发；之后同名步骤也是成功但不再安排
+      // 重试步骤只在美东 20–23 点派发；到零点由保险任务的窗口检查终止。
       const h = Number(new Date(String(startedAt || '')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', hour12: false}));
-      return {retry: !!(retry && retry.conclusion === 'success' && h >= 20 && h < 23)};
+      return {retry: !!(retry && retry.conclusion === 'success' && h >= 20 && h < 24)};
     } catch (error) { return null; }
   }
   // 「查运行状态」点了要有反馈：否则状态没变化时页面文字不动，看着像按钮坏了。

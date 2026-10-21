@@ -2224,7 +2224,7 @@ def yahoo_earnings(sym, timeout=8):
     return res
 
 
-def cross_check_earnings(primary, secondary, today):
+def cross_check_earnings(primary, secondary, today, secondary_source="yahoo"):
     """两源合并。规则（宁可早提示，不能错过财报）：
     - 日期一致：沿用主源，标 cross=agree。
     - 一个是确认日期、另一个是估算：取确认的；标 cross=conflict，附 alt_date。
@@ -2236,7 +2236,7 @@ def cross_check_earnings(primary, secondary, today):
     if not s_ok or secondary["date"] < today:
         return primary
     if not p_ok:
-        return {**secondary, "source2": "yahoo"}
+        return {**secondary, "source2": secondary_source}
     if primary["date"] == secondary["date"]:
         return {**primary, "cross": "agree"}
     rank = lambda e: 1 if e.get("kind") in ("expected", "official") else 0     # 确认 > 估算
@@ -2248,7 +2248,7 @@ def cross_check_earnings(primary, secondary, today):
         chosen, other = (primary, secondary) if primary["date"] <= secondary["date"] else (secondary, primary)
     out = dict(chosen)
     if chosen is secondary:
-        out["source2"] = "yahoo"
+        out["source2"] = secondary_source
     out.update(cross="conflict", alt_date=other["date"])
     return out
 
@@ -2297,7 +2297,7 @@ def resolve_earnings_sources(sym, today):
             out["timing"] = nd["timing"]
         return out
     if sa.get("status") == "ok":
-        merged = cross_check_earnings(sa, nd, today)
+        merged = cross_check_earnings(sa, nd, today, secondary_source="nasdaq")
         merged = dict(merged) if isinstance(merged, dict) else dict(sa)
         merged.setdefault("source2", "nasdaq")
         # 日期以 stockanalysis 为准；时段仍可从 Nasdaq 借
@@ -2581,6 +2581,11 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
         if _new_official_seed(seed, old, k, today):
             resolved[k] = dict(seed, fetched=today, official_attempted=today,
                                official_seed_sha=_official_seed_hash(seed))
+        elif (isinstance(old, dict) and old.get("status") == "ok"
+              and _iso_date(old.get("date")) and old["date"] < today
+              and earnings_urgency(old) == "red"):
+            # 美东已进次日，但北京仍在财报第二个完整日：暂不换成下一季，红字期结束再抓。
+            resolved[k] = old
         elif isinstance(old, dict) and not needs_official and not earnings_refetch_due(old, today):
             resolved[k] = old
         else:
@@ -2627,8 +2632,9 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
             stat["data"][k] = e
         if e.get("status") == "na":
             continue
-        # 延后项可保留过期缓存供事件回放，但绝不把过去日期显示成“下一次”。
-        shown = {"status": "unknown"} if e.get("status") == "ok" and not _earn_cache_usable(e, today) else e
+        # 刚公布的财报按北京两整日继续展示；红字期后，过期缓存不冒充“下一次”。
+        expired = e.get("status") == "ok" and not _earn_cache_usable(e, today)
+        shown = {"status": "unknown"} if expired and earnings_urgency(e) != "red" else e
         d["earnings"] = shown
         key = {"ok": "dated", "unknown": "pending"}.get(shown.get("status"), "failed")
         stat[key] += 1

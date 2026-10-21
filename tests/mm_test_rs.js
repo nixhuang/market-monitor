@@ -265,6 +265,13 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     await f.els.btnCheckStatus.onclick();
     assert.match(f.els.checkResult.textContent,/最新任务：数据源当日日线未就绪，本轮未发布（页面保留上一版），约 30 分钟后自动再试 · run 2（10\/21 08:46 北京时间）/);
     assert.equal(f.els.checkResult.dataset.phase,'busy');
+    f.data.run.run_started_at='2026-10-21T03:15:21Z'; // 美东23:15仍在重试窗口
+    await f.els.btnCheckStatus.onclick();
+    assert.match(f.els.checkResult.textContent,/约 30 分钟后自动再试/);
+    f.data.run.run_started_at='2026-10-21T04:15:21Z'; // 美东零点后不再承诺重试
+    await f.els.btnCheckStatus.onclick();
+    assert.doesNotMatch(f.els.checkResult.textContent,/约 30 分钟后自动再试/);
+    f.data.run.run_started_at='2026-10-21T00:46:21Z';
     f.data.jobs=[{steps:[{name:'抓数据并生成页面',conclusion:'success'},{name:'校验最新输入并提交更新',conclusion:'success'}]}];
     await f.els.btnCheckStatus.onclick();
     assert.match(f.els.checkResult.textContent,/最新任务：生成成功，等待看板发布 · run 2（10\/21 08:46 北京时间）/);
