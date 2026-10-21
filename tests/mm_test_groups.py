@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
@@ -3006,21 +3007,30 @@ class TestTargets(unittest.TestCase):
                     json.dump(content, f)
             with open(os.path.join(directory, 'status.json'), 'w', encoding='utf-8') as f:
                 json.dump({'consensus': {'data': {'AAPL': cache['AAPL']}}}, f)
-            with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
-                    patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
-                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
-                    patch.object(monitor, 'stockanalysis_earnings', return_value={'status': 'unknown'}), \
-                    patch.object(monitor, 'yahoo_earnings', return_value={'status': 'error'}), \
-                    patch.object(monitor, 'build_reference_alerts', return_value={}), \
-                    patch.object(monitor, 'build_macro', return_value={}), \
-                    patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
-                    patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
-                    patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
-                    patch.object(monitor, 'fundamental_check', return_value=None), \
-                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
-                    patch.object(monitor, 'global_dca', return_value=None), \
-                    patch.object(monitor, 'update_consensus', return_value=({'AAPL': cache['AAPL']}, {'ok': 1})) as upd, \
-                    patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
+            # Python 3.11 将同一 with 的每个上下文分别计入 20 层限制；用 ExitStack 保留隔离而不堆嵌套。
+            with ExitStack() as stack:
+                for mocked in (
+                        patch.object(monitor, 'BASE', directory),
+                        patch.object(monitor, 'TARGET_DATE', '2026-10-07'),
+                        patch.object(monitor, 'QUOTE_WORKERS', 1),
+                        patch.object(monitor, 'QUOTE_RETRY_PASSES', 0),
+                        patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}),
+                        patch.object(monitor, 'stockanalysis_earnings', return_value={'status': 'unknown'}),
+                        patch.object(monitor, 'yahoo_earnings', return_value={'status': 'error'}),
+                        patch.object(monitor, 'build_reference_alerts', return_value={}),
+                        patch.object(monitor, 'build_macro', return_value={}),
+                        patch.object(monitor, 'SP500_RS_ROWS', []),
+                        patch.object(monitor, 'sp500_rows_fallback', return_value=[]),
+                        patch.object(monitor, 'fetch_history', return_value={'price': 100}),
+                        patch.object(monitor, 'analyze_symbol', side_effect=analyzed),
+                        patch.object(monitor, 'fundamental_check', return_value=None),
+                        patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})),
+                        patch.object(monitor, 'global_dca', return_value=None),
+                        patch.object(monitor.time, 'sleep'),
+                        patch.object(monitor, 'push_serverchan')):
+                    stack.enter_context(mocked)
+                upd = stack.enter_context(patch.object(
+                    monitor, 'update_consensus', return_value=({'AAPL': cache['AAPL']}, {'ok': 1})))
                 self.assertEqual(monitor.main([]), 0)
                 # 所有分组里的美股个股都交给抓取；只有持仓/重点关注里手填了目标价的 MSFT 不取
                 self.assertEqual(upd.call_args.args[0], ['AAPL', 'ZS', 'NVDA'])
