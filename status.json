@@ -9,16 +9,16 @@
     "next_in": 17,
     "next_date": "2026-11-12"
   },
-  "run_id": "39536672596",
+  "run_id": "39537716908",
   "request_id": "",
-  "source_sha": "bf012f710d5d9a455184589aceadc57d019e3315",
-  "input_hash": "aacf648b17de85e67129c6a14d2c4639177f373c4d9b8bc4b1b953b583ad45de",
-  "build_id": "39536672596-1",
-  "started_at": "2026-10-21T03:05:50+00:00",
-  "started_at_bj": "2026-10-21T11:05:50+08:00",
-  "finished_at": "2026-10-21T11:06:53.856724+08:00",
-  "finished_at_bj": "2026-10-21T11:06:53+08:00",
-  "event": "schedule",
+  "source_sha": "4320c0c91492c89c23d176e0ff94cee387447d59",
+  "input_hash": "164842b3d42f4713ce758ae005f4229b29005251cba4cb186ef2ff72d735f074",
+  "build_id": "39537716908-1",
+  "started_at": "2026-10-21T03:17:02+00:00",
+  "started_at_bj": "2026-10-21T11:17:02+08:00",
+  "finished_at": "2026-10-21T11:18:07.665979+08:00",
+  "finished_at_bj": "2026-10-21T11:18:07+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-20",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
@@ -2300,7 +2300,7 @@
     "checked_at": "2026-10-15T09:37:08.463966-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-21T03:06:46.921691+00:00"
+    "asof": "2026-10-21T03:18:02.135766+00:00"
   },
   "fundamental": {
     "checked": 21,
@@ -3492,7 +3492,7 @@
       }
     },
     "schema_version": 2,
-    "asof": "2026-10-21T03:06:53.839490+00:00",
+    "asof": "2026-10-21T03:18:07.652445+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -4616,7 +4616,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-21T03:06:53.803857+00:00",
+    "asof": "2026-10-21T03:18:07.562368+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -6610,7 +6610,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-21T03:06:53.773608+00:00",
+    "asof": "2026-10-21T03:18:07.489018+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -8041,9 +8041,9 @@
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/"
     },
-    "assessed_at": "2026-10-21T11:06:45.701548+08:00",
+    "assessed_at": "2026-10-21T11:18:01.112127+08:00",
     "schema_version": 2,
-    "asof": "2026-10-21T03:06:47.022600+00:00"
+    "asof": "2026-10-21T03:18:02.220406+00:00"
   },
   "data_lag": {
     "target": "2026-10-20",
