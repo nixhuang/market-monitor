@@ -821,6 +821,27 @@
     render();
     return tick();
   }
+  function runTime(iso) {
+    const date = new Date(String(iso || ''));
+    if (!iso || !Number.isFinite(date.getTime())) return '';
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', {timeZone: 'Asia/Shanghai', month: '2-digit',
+      day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).formatToParts(date).map(x => [x.type, x.value]));
+    return p.month + '/' + p.day + ' ' + p.hour + ':' + p.minute;
+  }
+  // 成功结束但没发布：生成步骤成功、提交步骤被跳过＝当日日线不齐主动不发布。读不到就当未知，不猜。
+  async function publishSkip(runId, startedAt) {
+    try {
+      const data = await request(bust(apiURL('/actions/runs/' + encodeURIComponent(runId) + '/jobs')), {github: true});
+      const steps = (data && Array.isArray(data.jobs) ? data.jobs : []).flatMap(j => Array.isArray(j.steps) ? j.steps : []);
+      const step = name => steps.find(s => s && s.name === name);
+      const gen = step('抓数据并生成页面'), commit = step('校验最新输入并提交更新');
+      if (!gen || gen.conclusion !== 'success' || !commit || commit.conclusion !== 'skipped') return null;
+      const retry = step('当日日线未就绪：约 30 分钟后自动再试');
+      // 重试步骤只在美东 20–22 点真的派发；之后同名步骤也是成功但不再安排
+      const h = Number(new Date(String(startedAt || '')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', hour12: false}));
+      return {retry: !!(retry && retry.conclusion === 'success' && h >= 20 && h < 23)};
+    } catch (error) { return null; }
+  }
   // 「查运行状态」点了要有反馈：否则状态没变化时页面文字不动，看着像按钮坏了。
   async function manualCheck() {
     const sequence = ++checkRequest;
@@ -857,14 +878,20 @@
         else if (configState.phase !== 'published') checkPhase = 'busy';
       } else if (recentRun) {
         const phase = phaseForRun(recentRun);
+        const samePublished = published && String(recentRun.id) === verifiedSnapshot.run_id;
+        // 运行「成功」不等于发布了：当日日线未就绪时生成步骤会主动不发布，要看提交步骤有没有被跳过
+        const skip = phase.phase === 'generated' && !samePublished ? await publishSkip(recentRun.id, recentRun.run_started_at || recentRun.created_at) : null;
         const label = phase.phase === 'generated'
-          ? (published && String(recentRun.id) === verifiedSnapshot.run_id ? '已完成并发布' : '生成成功，等待看板发布')
+          ? (samePublished ? '已完成并发布'
+            : skip ? '数据源当日日线未就绪，本轮未发布（页面保留上一版）' + (skip.retry ? '，约 30 分钟后自动再试' : '')
+            : '生成成功，等待看板发布')
           : phase.phase === 'running' ? '运行中'
           : phase.phase === 'failed' ? (phase.cancelled ? '已取消（通常被更新的等待任务替换，不是抓取失败）'
             : '失败（' + (recentRun.conclusion || '未知') + '）') : '排队中';
-        lines.push('最新任务：' + label + ' · run ' + recentRun.id);
+        const at = runTime(recentRun.run_started_at || recentRun.created_at);
+        lines.push('最新任务：' + label + ' · run ' + recentRun.id + (at ? '（' + at + ' 北京时间）' : ''));
         if (phase.phase === 'failed') checkPhase = phase.cancelled ? 'busy' : 'bad';
-        else if (!published || String(recentRun.id) !== verifiedSnapshot.run_id) checkPhase = 'busy';
+        else if (!samePublished) checkPhase = 'busy';
       } else lines.push(recentError ? '最新任务状态未能核对：' + recentError : '未找到最新任务记录。');
       if (published) {
         lines.push('已核对线上 run ' + verifiedSnapshot.run_id + '，看板与状态文件一致。');

@@ -59,7 +59,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  actions: read
+  actions: write   # 当日日线未就绪时要派发 ensure-morning.yml 做延迟重试
   contents: write
 
 jobs:
@@ -113,6 +113,17 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
         run: python monitor.py
+
+      - name: 当日日线未就绪：约 30 分钟后自动再试
+        if: ${{ steps.gen.outcome == 'success' && steps.gen.outputs.publish == 'no' && env.MM_EVENT == 'schedule' }}
+        run: |
+          h=$(TZ=America/New_York date +%-H)
+          if [ "$h" -ge 20 ] && [ "$h" -lt 23 ]; then
+            gh workflow run ensure-morning.yml --ref main -R "$GITHUB_REPOSITORY" -f delay_minutes=30
+            echo "::notice title=已安排重试::美东 ${h} 点数据未齐，约 30 分钟后再检查一次（最晚到美东 24 点）"
+          else
+            echo "美东 ${h} 点，已过重试时段，不再安排"
+          fi
 
       - name: 验证本轮辅助缓存凭证
         id: cache-proof

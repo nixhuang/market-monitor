@@ -41,7 +41,7 @@ RULE_BLOCKS = (
     ("", '<li><b>布林单独命中</b>：下轨 <span class="lamp-yellow">黄字</span>、上轨普通字，<b>不单独报灯</b>；连续贴轨只补天数。组合文字按实际等级显示 <span class="lamp-sig-red">红字</span> / <span class="lamp-sig-yellow">黄字</span>。</li>'),
     ("", '<li><b>均线文字</b>：第二条周期的触及、贴近、穿越为 <span class="lamp-cyan">青字</span>，其他均线为普通字。涨跌幅、振幅、量比的信号文字不随行灯自动染红黄。</li>'),
     ("", '<li><b>目标提示</b>：<span class="lamp-purple">紫字、紫胶囊</span>；命中时实心紫并加行右侧紫条，未命中为空心。取数失败为 <span class="lamp-red">红胶囊</span>，本身不升行灯；仅紫字不代表命中。</li>'),
-    ("", '<li><b>财报日期</b>：未来 <b>${earn_soon_days} 天</b>内 <span class="lamp-yellow">黄字</span>；未来 <b>15 天</b>（美东今天起至第 15 天，含）另列统计名单，可作叠加条件。日期不升行灯，待公布、取数失败不当作临近。</li>'),
+    ("", '<li><b>财报日期</b>：按<b>北京时间</b>算。美东财报日当天和次日（盘前盘后都一样，两个完整日）<span class="lamp-red">红字</span>并保留在名单里；发布前 <b>${earn_soon_days} 天</b>内 <span class="lamp-yellow">黄字</span>；未来 <b>15 天</b>另列统计名单，可作叠加条件。日期不升行灯，待公布、取数失败不当作临近。</li>'),
     ("", '<li><b>涨跌与盈亏</b>：上涨 / 盈利 <span class="lamp-green">绿字</span>、下跌 / 亏损 <span class="lamp-red">红字</span>。仓位面板红绿仅用于盈亏列，行首圆点表示灯级，不表示盈亏。</li>'),
     ("", '<li><b>定投提醒</b>：顶栏显示还差几个交易日；仅到期当天 <span class="lamp-yellow">黄字</span>，未启用或日期无效不显示，不影响个股灯级。</li>'),
     ("", '<li><b>图形</b>：▲ 上穿 / 上方，▼ 跌破 / 下方，■ 命中区间 / 恰在均线，□ 目标空间提示；量比、布林组合、均线方向写在统计框标题。52 周条的紫三角是现价、<span class="lamp-yellow">黄竖线是成本</span>，两者都不单独报灯。持仓两端价格下的百分比表示<b>从现价跌到低点 / 涨到高点的幅度</b>，不改变灯级。</li></ul>'),
@@ -316,6 +316,8 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 #signalCounts .earnings-week .lamp-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
   overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 #signalCounts .earnings-week-meta{color:var(--dim);font-size:12px}
+#signalCounts .earnings-week-meta.is-red{color:var(--red);font-weight:600}
+#signalCounts .earnings-week-meta.is-yellow{color:#f0c674;font-weight:600}
 #signalCounts .earnings-week .note{display:inline;margin-left:6px}
 #signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;line-height:1;color:var(--text);
   display:inline-flex;align-items:center;justify-content:center;white-space:normal;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:center;line-height:1.15;touch-action:manipulation}
@@ -337,6 +339,7 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 .earn{display:block;margin:0;color:#8fb8f0;font-size:12.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:12px}
 .earn.soon{color:#f0c674;font-weight:600}
+.earn.urgent{color:var(--red);font-weight:600}
 table.stk{table-layout:fixed}
 .stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}  /* 股票行下边距让给位置条，条靠近本股、远离下一只 */
 /* 位置条改成 20px 高（左右要放最低/最高价），底内边距相应从 12px 收到 7px，整行高度不变 */

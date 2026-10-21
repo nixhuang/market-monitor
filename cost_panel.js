@@ -268,12 +268,6 @@
   }
   document.addEventListener('click', function(e){
     if(!e.target||!e.target.closest) return;
-    var cl=e.target.closest('[data-ack-clear]');
-    if(cl){
-      if(!writer){ window.alert(NOTICE||'本页只读，请先点击编辑接管'); return; }
-      Object.keys(DATA.acks).forEach(function(k){ setAck(k,false); });
-      changed(); paint(); autoPush(); return;
-    }
     var el=e.target.closest('[data-ack]');
     if(!el) return;
     e.preventDefault(); e.stopPropagation();
@@ -648,7 +642,215 @@
   function pruneAck(k){
     if(writer && DATA.acks[k]){ setAck(k,false); ACK_PRUNED=true; }
   }
-  var FUND_STAT_BASE=null;
+  var FUND_STAT_BASE=null, ACK_STAT_BASE={};
+  /* 统计面板里「基本面 / 加仓价 / 减仓价」三行：点了已读的标的不再从计数里凭空消失，
+     而是从红黄扣掉、记进同一行的「灰」列（灰＝已读不再提醒，红黄＝还在提醒的）。
+     面板是构建时生成的，已读存在浏览器里，只能在运行时改；这里先读一次原始计数与成员当基线。 */
+  var ACK_KINDS=(function(){
+    var o={};
+    o.fund={tail:'fund',label:'基本面'};
+    o.add_price={tail:'add',label:'加仓价'};
+    o.reduce_price={tail:'cut',label:'减仓价'};
+    return o;
+  })();
+  function ackStatBase(kind){
+    if(ACK_STAT_BASE[kind]) return ACK_STAT_BASE[kind];
+    var toggle=document.querySelector('#signalCounts .signal-filter-toggle[data-kind="'+kind+'"]');
+    var row=toggle?toggle.closest('tr'):null;
+    if(!row){
+      // 这一行本来没有信号（比如今天没人到加仓价）：有已读时才补一行，否则整行不出现
+      if(!ackStatEntries(kind).length) return null;
+      row=ackStatRow(kind);
+      if(!row) return null;
+    }
+    var base={row:row,membersRow:row.nextElementSibling,levels:{},
+      gray:row.children[3]||null,grayPanel:null,grayBtn:null,grayCount:0,
+      synthetic:!toggle};
+    ['red','yellow'].forEach(function(level,index){
+      var cell=row.children[index+1],button=cell&&cell.querySelector('.signal-count-toggle');
+      var panel=button&&document.getElementById(button.getAttribute('data-target'));
+      var members={};
+      if(panel){
+        Array.prototype.forEach.call(panel.querySelectorAll('a.signal-member-jump'),function(link){
+          var href=link.getAttribute('href')||'', id=href.charAt(0)==='#'?href.slice(1):'';
+          if(id) members[id]=true;
+        });
+      }
+      base.levels[level]={cell:cell,count:button?num(button.textContent):0,button:button,
+        panel:panel,mem:members};
+    });
+    if(base.gray){
+      base.grayBtn=base.gray.querySelector('.signal-count-toggle');
+      base.grayPanel=base.grayBtn?document.getElementById(base.grayBtn.getAttribute('data-target')):null;
+      base.grayCount=base.grayBtn?num(base.grayBtn.textContent):0;
+    }
+    ACK_STAT_BASE[kind]=base; return base;
+  }
+  /* 动态补一行：结构照抄 monitor.py 生成的信号行（胶囊 + 红/黄/灰三格） */
+  function ackStatRow(kind){
+    var card=document.getElementById('signalCounts');
+    var table=card&&card.querySelector('table');
+    if(!table) return null;
+    var label=(ACK_KINDS[kind]||{}).label||kind;
+    var tr=document.createElement('tr');
+    var td=document.createElement('td');
+    var btn=document.createElement('button');
+    btn.type='button'; btn.className='signal-filter-toggle';
+    btn.setAttribute('data-kind', kind);
+    btn.setAttribute('aria-pressed','false');
+    btn.textContent=label;
+    td.appendChild(btn);
+    tr.appendChild(td);
+    ['red','yellow','gray'].forEach(function(){
+      var c=document.createElement('td'); c.className='num'; c.textContent='—'; tr.appendChild(c);
+    });
+    var members=document.createElement('tr');
+    members.className='signal-members-row';
+    members.innerHTML='<td colspan="4"></td>';
+    // 放在基本面行后面（它就是最后一条信号行）；找不到就接在表格末尾
+    var fundBtn=card.querySelector('.signal-filter-toggle[data-kind="fund"]');
+    var fundRow=fundBtn?fundBtn.closest('tr'):null;
+    var membersRow=fundRow?fundRow.nextElementSibling:null;
+    var at=membersRow&&membersRow.parentNode===table?membersRow.nextElementSibling:null;
+    if(at){ table.insertBefore(tr, at); table.insertBefore(members, at); }
+    else { table.appendChild(tr); table.appendChild(members); }
+    return tr;
+  }
+  function rowAnchor(sym){ return 's-'+String(sym||'').toLowerCase().replace(/[^a-z0-9]/g,'-'); }
+  function ackStatEntries(kind){
+    var cfg=ACK_KINDS[kind], out=[], seen={};
+    if(!cfg) return out;
+    Object.keys(DATA.acks||{}).forEach(function(k){
+      var parts=String(k).split('|');
+      if(parts.length<2 || parts[1]!==cfg.tail) return;
+      var sym=parts[0];
+      if(seen[sym]) return;
+      var row=null;
+      ROWS.some(function(r){ if(r.sym===sym && r.tr){ row=r; return true; } return false; });
+      if(!row) return;      // 页面上没有这只票的行（已从分组移除）：不记灰，等 pruneAck 清掉
+      seen[sym]=true;
+      var group='', head=row.tr.closest('details.group-card');
+      if(head && head.id==='group_positions'){
+        var zone=row.tr.closest('details[id^="group_positions_"]');
+        group=zone?(zone.id.indexOf('_long')>0?'长持仓':'短持仓'):'持仓';
+      }else if(head){
+        var nameEl=head.querySelector('.grp-name');
+        group=nameEl?String(nameEl.textContent||'').replace(/\s*\(\d+\)\s*$/,''):'';
+      }
+      var label='', price=parts[2]||'';
+      if(kind==='add_price') label='加 '+(price||trim(row.trig));
+      if(kind==='reduce_price') label='减 '+(price||trim(row.cut));
+      out.push({sym:sym,note:row.note||'',group:group,label:label,anchor:rowAnchor(sym)});
+    });
+    out.sort(function(a,b){ return a.group<b.group?-1:(a.group>b.group?1:(a.sym<b.sym?-1:1)); });
+    return out;
+  }
+  /* 灰列：计数按钮 + 展开名单，写法跟其它灰灯名单一致（名字可跳转、分组在括号里、价位跟在后面） */
+  function ackGrayUnique(entries){
+    var seen={}, n=0;
+    entries.forEach(function(e){ if(!seen[e.anchor]){ seen[e.anchor]=true; n++; } });
+    return n;
+  }
+  function renderAckGray(kind, base, entries, baseGray){
+    if(!base.gray && base.row){
+      base.gray=document.createElement('td'); base.gray.className='num';
+      base.row.appendChild(base.gray);
+    }
+    var cell=base.gray; if(!cell) return;
+    var n=ackGrayUnique(entries)+(baseGray||0);
+    if(!n){
+      if(base.grayBtn) base.grayBtn.parentNode.removeChild(base.grayBtn), base.grayBtn=null;
+      if(base.grayPanel) base.grayPanel.hidden=true;
+      cell.textContent='—';
+      return;
+    }
+    if(!base.grayBtn){
+      var pid='signal-members-acked-'+kind;
+      cell.textContent='';
+      base.grayBtn=document.createElement('button');
+      base.grayBtn.type='button'; base.grayBtn.className='signal-count-toggle';
+      base.grayBtn.setAttribute('data-target',pid);
+      base.grayBtn.setAttribute('aria-controls',pid);
+      base.grayBtn.setAttribute('aria-expanded','false');
+      cell.appendChild(base.grayBtn);
+      base.grayPanel=document.createElement('div');
+      base.grayPanel.className='signal-members-panel tone-gray';
+      base.grayPanel.id=pid; base.grayPanel.hidden=true;
+      var host=base.membersRow;
+      if(!host && base.row){
+        host=document.createElement('tr'); host.className='signal-members-row';
+        host.innerHTML='<td colspan="4"></td>';
+        base.row.parentNode.insertBefore(host, base.row.nextSibling);
+        base.membersRow=host;
+      }
+      if(host) (host.querySelector('td')||host).appendChild(base.grayPanel);
+    }
+    base.grayBtn.textContent=String(n);
+    base.grayBtn.setAttribute('aria-label','灰灯 · 已读 · '+n+' 只，展开或收起标的');
+    if(entries.length){
+      base.grayPanel.innerHTML='<div class="signal-member-groups"><div class="signal-member-block">'
+        +'<h5>已读</h5><ul class="signal-member-list">'
+        +entries.map(function(e){
+          var note=e.note?'<span class="note">'+esc(e.note)+'</span>':'';
+          var metric=e.label?' <span class="signal-member-metric">'+esc(e.label)+'</span>':'';
+          return '<li><a class="signal-member-jump" href="#'+e.anchor+'">'
+            +'<span class="signal-member-symbol">'+esc(e.sym)+'</span></a>'
+            +'<span class="signal-member-belong">（'+esc(e.group||'未分类')+'）</span>'
+            +note+metric+'</li>';
+        }).join('')
+        +'</ul></div></div>';
+    }
+  }
+  /* 已读的标的不再从红黄里「消失」：按身份从原名单里剔掉，计数减掉；红黄都空、灰也没有才隐藏整行 */
+  function refreshAckStats(){
+    if(!DATA) return;
+    Object.keys(ACK_KINDS).forEach(function(kind){
+      var base=ackStatBase(kind); if(!base) return;
+      var entries=ackStatEntries(kind), acked={};
+      entries.forEach(function(e){ acked[e.anchor]=true; });
+      var restRed=0, restYellow=0;
+      ['red','yellow'].forEach(function(level){
+        var rec=base.levels[level]; if(!rec||!rec.cell) return;
+        var left=0;
+        Object.keys(rec.mem).forEach(function(id){ if(!acked[id]) left++; });
+        if(!rec.button) left=0;
+        if(level==='red') restRed=left; else restYellow=left;
+        if(!left){
+          if(rec.button){ rec.cell.textContent='—'; }
+        }else{
+          if(rec.button && rec.button.parentNode!==rec.cell){ rec.cell.textContent=''; rec.cell.appendChild(rec.button); }
+          if(rec.button) rec.button.textContent=String(left);
+        }
+        if(rec.panel){
+          Array.prototype.forEach.call(rec.panel.querySelectorAll('a.signal-member-jump'),function(link){
+            var href=link.getAttribute('href')||'', id=href.charAt(0)==='#'?href.slice(1):'';
+            var li=link.closest('li'); if(li) li.style.display=acked[id]?'none':'';
+          });
+        }
+      });
+      renderAckGray(kind, base, entries, base.grayCount||0);
+      var total=restRed+restYellow+(base.grayCount||0)+ackGrayUnique(entries);
+      if(!total && base.synthetic){
+        // 补出来的行本来不存在、已读也没了：整行收回，别留一个空壳
+        if(base.grayBtn && base.grayBtn.parentNode) base.grayBtn.parentNode.removeChild(base.grayBtn);
+        if(base.grayPanel && base.grayPanel.parentNode) base.grayPanel.parentNode.removeChild(base.grayPanel);
+        if(base.membersRow && base.membersRow.parentNode) base.membersRow.parentNode.removeChild(base.membersRow);
+        if(base.row && base.row.parentNode) base.row.parentNode.removeChild(base.row);
+        delete ACK_STAT_BASE[kind];
+        return;
+      }
+      if(base.row) base.row.style.display=total>0?'':'none';
+      if(base.membersRow) base.membersRow.style.display=total>0?'':'none';
+      if(!total){
+        var filterBtn=base.row&&base.row.querySelector('.signal-filter-toggle');
+        if(filterBtn && filterBtn.getAttribute('aria-pressed')==='true'){
+          filterBtn.setAttribute('aria-pressed','false');
+          if(typeof window.dispatchEvent==='function' && typeof window.CustomEvent==='function')
+            window.dispatchEvent(new window.CustomEvent('mm:fund-ack-change'));
+        }
+      }
+    });
+  }
   function fundStatBase(){
     if(FUND_STAT_BASE) return FUND_STAT_BASE;
     var filter=document.getElementById('signalFilterResult');
@@ -752,51 +954,15 @@
         FUND_ROWS.forEach(function(f){ if(f.bucket===box){ f.bucket=null; f.bucketBody=null; } });
       }
     });
-    var base=fundStatBase();
-    if(!base) return;
-    ['red','yellow'].forEach(function(level){
-      var rec=base.levels[level], count=Math.max(0,rec.count-(counts[level]||0));
-      if(!rec.cell) return;
-      var wasExpanded=!!(rec.panel && !rec.panel.hidden && rec.button
-        && rec.button.getAttribute('aria-expanded')==='true');
-      if(count===0){
-        rec.cell.textContent='—';
-        if(rec.panel) rec.panel.hidden=true;
-      }else{
-        var button=rec.button;
-        if(button && button.parentNode!==rec.cell){ rec.cell.textContent=''; rec.cell.appendChild(button); }
-        if(button){
-          button.textContent=String(count);
-          button.setAttribute('aria-label','基本面 · '+(level==='red'?'红色信号':'黄色信号')+' · '+count+' 只，展开或收起标的');
-          button.setAttribute('aria-expanded',String(wasExpanded));
-        }
-        if(rec.panel){
-          Array.prototype.forEach.call(rec.panel.querySelectorAll('a.signal-member-jump'),function(link){
-            var href=link.getAttribute('href')||'', id=href.charAt(0)==='#'?href.slice(1):'';
-            var li=link.closest('li'); if(li) li.style.display=ackedRows[id]?'none':'';
-          });
-          rec.panel.hidden=!wasExpanded;
-        }
-      }
-    });
-    var total=(base.levels.red.count-(counts.red||0))+(base.levels.yellow.count-(counts.yellow||0));
-    var hideFund=total<=0, selectionChanged=false, filterChanged=false;
-    if(base.row) base.row.style.display=hideFund?'none':'';
-    if(base.membersRow) base.membersRow.style.display=hideFund?'none':'';
-    if(base.dataOriginal && base.dataOriginal.fund){
-      var data=clone(base.dataOriginal);
+    var rec=fundStatBase();
+    if(rec && rec.dataOriginal && rec.dataOriginal.fund){
+      var data=clone(rec.dataOriginal), filterChanged=false;
       data.fund.members=(data.fund.members||[]).filter(function(m){ return !ackedSymbols[String(m.s||'').toUpperCase()]; });
-      var next=JSON.stringify(data), old=base.filter.getAttribute('data-filter')||'';
-      if(next!==old){ base.filter.setAttribute('data-filter',next); filterChanged=true; }
+      var next=JSON.stringify(data), old=rec.filter.getAttribute('data-filter')||'';
+      if(next!==old){ rec.filter.setAttribute('data-filter',next); filterChanged=true; }
+      if(filterChanged && typeof window.dispatchEvent==='function' && typeof window.CustomEvent==='function')
+        window.dispatchEvent(new window.CustomEvent('mm:fund-ack-change'));
     }
-    if(hideFund){
-      var filterBtn=base.row&&base.row.querySelector('.signal-filter-toggle');
-      if(filterBtn && filterBtn.getAttribute('aria-pressed')==='true'){
-        filterBtn.setAttribute('aria-pressed','false'); selectionChanged=true;
-      }
-    }
-    if((filterChanged||selectionChanged) && typeof window.dispatchEvent==='function' && typeof window.CustomEvent==='function')
-      window.dispatchEvent(new window.CustomEvent('mm:fund-ack-change'));
   }
   function persistMaintenance(){
     ACK_PRUNED=false; maintenancePending=true;
@@ -1449,10 +1615,6 @@
         +'<span class="cnt">今日净 <b class="'+dCls+'">'+money(dayNet)+' '+pct(dayPct)+'</b></span></summary>'
         +'<ul class="cost-contrib">'+crows+'</ul></details>';
     }
-    var ackN=Object.keys(DATA.acks||{}).length;
-    if(ackN){
-      html+='<div class="ack-bar"><button type="button" data-ack-clear="1" aria-label="把已读全部清掉，重新提醒">恢复全部（'+ackN+'）</button></div>';
-    }
     /* 换设备／清了缓存后第一次打开，又没取到云端：眼前这份是构建时注入的内置快照，
        不是你的最新持仓 —— 必须在页面里说清楚，并给「重试」「导入备份」两个出口 */
     if(SYNC==='nocloud' && !hadOwn){
@@ -1467,6 +1629,7 @@
     document.getElementById(PID).innerHTML=html;
     applyLights();
     refreshFundUI();
+    refreshAckStats();
     // 自动失效只记录维护 tombstone；初次核验前不冒充用户整份编辑，也不失效 pull。
     if(ACK_PRUNED) persistMaintenance();
     if(focus && editing){

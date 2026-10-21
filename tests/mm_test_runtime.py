@@ -803,7 +803,7 @@ class IdentityAndEnsureTests(TemporaryBase):
                 get.assert_called_once()
 
     def test_outside_window_still_skips_without_network_or_plan(self):
-        plan, get, post = self.ensure_mocks(hour=1, minute=0)
+        plan, get, post = self.ensure_mocks(hour=19, minute=0)   # 美东 15:00，盘中，不在 20:00–24:00 窗口
         self.assertEqual(m.ensure_schedule_run(), 0)
         plan.assert_not_called()
         get.assert_not_called()

@@ -226,7 +226,7 @@ def evaluate(facts, today, rule):
             add(f"营业亏损 {om0:.0f}%", True)
         elif om4 is not None and om0 - om4 <= -rule("fund_om_drop"):
             add(f"营业利率 {om4:.1f}%→{om0:.1f}%{tag}")
-        context.append(f"本季营业利率 {om0:.1f}%")
+        # 2026-10-21 精简：命中项已经写了营业利率变化，明细里不再重复一句「本季营业利率」
     record("operating_cash_flow", cfo)
     if c0 is not None:
         if c0 < 0 and c4 is not None and c4 > 0:
@@ -235,7 +235,7 @@ def evaluate(facts, today, rule):
             # 缺失金额单位时只能报告符号，不能把源未知的数字冒充百万。
             amount = f" {c0 / 1000:.0f}M" if units.get("amount") == "thousands" else ""
             add("经营现金流为负" + amount)
-        context.append("本季经营现金流为" + ("正" if c0 > 0 else "负" if c0 < 0 else "零"))
+        # 同上：经营现金流为负已作为命中项出现，正/零不再单独写
     record("gross_margin", gm)
     if gm0 is not None and gm4 is not None and gm0 - gm4 <= -rule("fund_gm_drop"):
         add(f"毛利率 {gm4:.1f}%→{gm0:.1f}%{tag}")

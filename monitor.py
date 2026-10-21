@@ -172,6 +172,7 @@ from page_assets import (PAGE_CSS, PAGE_INTERACTION_JS, RULES_SUMMARY,
 
 from zoneinfo import ZoneInfo
 US_TZ = ZoneInfo("America/New_York")
+BJ_TZ = ZoneInfo("Asia/Shanghai")
 
 
 def log(msg):
@@ -249,9 +250,10 @@ def ensure_schedule_run(runtime=None):
     结果齐全或已有任务在排队/运行则不重复派发。"""
     runtime = runtime or RuntimeState(BASE, target=TARGET_DATE, event="ensure-schedule")
     now_ny = datetime.now(timezone.utc).astimezone(US_TZ)
-    if not 20 * 60 <= now_ny.hour * 60 + now_ny.minute < 21 * 60:
-        # 夏冬令时两组时点每天都会触发；不在休盘窗口内（错季节的时点或被严重拖延）就什么都不做，避免抓到新一轮盘中价
-        print(f"美东 {now_ny:%H:%M} 不在 20:00-21:00 休盘窗口内，不补跑")
+    if now_ny.hour < 20:
+        # 窗口＝美东 20:00–24:00：20:15/20:45 由 Worker 派发（Worker 自己只放行 20 点）；
+        # 之后的是「当日日线未就绪」时 daily.yml 安排的延迟重试。美东零点后（含次日盘前）一律不做。
+        print(f"美东 {now_ny:%H:%M} 不在 20:00-24:00 收盘补跑窗口内，不补跑")
         runtime.receipt("skipped", "outside_schedule_window")
         return 0
     plan = plan_run("schedule", datetime.now(timezone.utc))
@@ -992,6 +994,108 @@ def market_risk_summary(macro, target_date=None):
 
 # ---------------------------------------------------------------- Yahoo
 
+def _finite_pos(v):
+    return not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(v) and v > 0
+
+
+def _yahoo_meta_close(meta, dates, closes, vols, highs, lows, range_valid):
+    """Yahoo 日线在美东收盘后约 20:00–22:00 会暂时缺最后一根（实测 10-15/16/17/20 都是 98/99 停在前一日），
+    但 meta 里的 regularMarket* 已是当日正式收盘。只在「收盘之后、且日线确实缺这一天」时用它补一根，
+    高低量都齐才算真实日内范围；任何一项缺失或不自洽就原样返回。"""
+    try:
+        price, ts = meta.get("regularMarketPrice"), meta.get("regularMarketTime")
+        if not _finite_pos(price) or isinstance(ts, bool) or not isinstance(ts, (int, float)) or not dates:
+            return dates, closes, vols, highs, lows, range_valid, False
+        quoted = datetime.fromtimestamp(ts, timezone.utc)
+        day = quoted.astimezone(US_TZ).date().isoformat()
+        bounds = market_sessions.session_bounds(day)
+        if not bounds or quoted < bounds[1] or day <= dates[-1] \
+                or market_sessions.previous_session(day) != dates[-1]:
+            return dates, closes, vols, highs, lows, range_valid, False
+        hi, lo, vol = meta.get("regularMarketDayHigh"), meta.get("regularMarketDayLow"), meta.get("regularMarketVolume")
+        real_range = _finite_pos(hi) and _finite_pos(lo) and lo <= price <= hi
+        if abs(price / closes[-1] - 1) > 0.6:
+            return dates, closes, vols, highs, lows, range_valid, False   # 疑似拆股/错代码，交给换源逻辑
+        return (dates + [day], closes + [price], vols + [vol if _finite_pos(vol) else 0],
+                highs + [hi if real_range else price], lows + [lo if real_range else price],
+                range_valid + [bool(real_range)], True)
+    except (ValueError, TypeError, OverflowError, KeyError):
+        return dates, closes, vols, highs, lows, range_valid, False
+
+
+def nasdaq_closing_quote(symbol, day, prev_close):
+    """Nasdaq 报价页的收盘价（日线还没落地时用）：成交日期必须是 day，且「收盘价 − 涨跌额」要接上前一交易日收盘，
+    防止错代码/拆股。只给收盘价与成交量（与历史日线同口径，已核对一致），日内高低不可得。"""
+    syms = [symbol] + ([symbol.replace("-", ".")] if "-" in symbol else [])
+    hdr = dict(UA)
+    hdr.update({"Accept": "application/json", "Referer": "https://www.nasdaq.com/"})
+    want = datetime.strptime(day, "%Y-%m-%d").strftime("%b %d, %Y").replace(" 0", " ")
+    num = lambda v: float(str(v or "").replace("$", "").replace(",", "").replace("+", "").strip())
+    for sym in syms:
+        for ac in ("stocks", "etf"):
+            try:
+                r = requests.get(f"https://api.nasdaq.com/api/quote/{sym}/info?assetclass={ac}",
+                                 headers=hdr, timeout=quote_timeout(10))
+                if r.status_code != 200:
+                    continue
+                data = r.json().get("data") or {}
+                status = str(data.get("marketStatus") or "")
+                cands = [data.get("secondaryData"), data.get("primaryData")] if status != "Closed" \
+                    else [data.get("primaryData")]
+                for c in cands:
+                    if not isinstance(c, dict):
+                        continue
+                    stamp = str(c.get("lastTradeTimestamp") or "")
+                    if want not in stamp.replace(" 0", " ") or (status != "Closed" and "Closed" not in stamp):
+                        continue
+                    px, chg = num(c.get("lastSalePrice")), num(c.get("netChange"))
+                    if not _finite_pos(px) or not math.isfinite(chg):
+                        continue
+                    if not prev_close or abs((px - chg) / prev_close - 1) > 0.005:
+                        continue
+                    try:
+                        vol = num(c.get("volume"))
+                    except ValueError:
+                        vol = 0
+                    return {"price": px, "volume": int(vol) if _finite_pos(vol) else 0}
+            except Exception:
+                continue
+    return None
+
+
+def patch_closing_bar(symbol, data):
+    """收盘口径：最佳日线停在目标日的前一交易日时，用 Nasdaq 收盘报价补目标日一根（高低记为不可用）。"""
+    try:
+        if not (CLOSED_ONLY and TARGET_DATE and valid_history(data)):
+            return data
+        bounds = market_sessions.session_bounds(TARGET_DATE)
+        if not bounds or datetime.now(timezone.utc) < bounds[1] + timedelta(minutes=10):
+            return data
+        if data["dates"][-1] != market_sessions.previous_session(TARGET_DATE):
+            return data
+        q = nasdaq_closing_quote(symbol, TARGET_DATE, data["closes"][-1])
+        if not q:
+            return data
+        out = dict(data)
+        for key in ("dates", "closes", "highs", "lows", "volumes"):
+            if data.get(key) is not None:
+                out[key] = list(data[key])
+        validity = data.get("ma_range_valid")
+        out["ma_range_valid"] = list(validity or [True] * len(data["dates"])) + [False]
+        out["dates"].append(TARGET_DATE)
+        out["closes"].append(q["price"])
+        for key in ("highs", "lows"):
+            if out.get(key) is not None:
+                out[key].append(q["price"])
+        if out.get("volumes") is not None:
+            out["volumes"].append(q["volume"])
+        out.update(price=q["price"], prev_close=out["closes"][-2], realtime=False, rt_ts="",
+                   close_patch="nasdaq-quote")
+        return out if valid_history(out) else data
+    except (ValueError, TypeError, KeyError, IndexError, OverflowError):
+        return data
+
+
 def yahoo_history(symbol):
     """返回 dict: closes(list), volumes(list), highs, lows；失败返回 None
     多端点轮换 + 429 退避重试，尽量扛住限流"""
@@ -1038,6 +1142,8 @@ def yahoo_history(symbol):
                     last_err = "历史数据不足"
                     continue
                 YAHOO_GATE.ok()
+                dates, closes, vols, highs, lows, range_valid, patched = _yahoo_meta_close(
+                    meta, dates, closes, vols, highs, lows, range_valid)
                 # 注意：不要用 meta.chartPreviousClose！
                 # 它返回的是「请求区间起点之前」的那根 K 线收盘价，range=1y 时等于一年前的价格，
                 # 用它算涨跌幅会得到 +40% / +95% 这种荒谬数字。
@@ -1057,6 +1163,7 @@ def yahoo_history(symbol):
                     "quote_type": meta.get("instrumentType", ""),
                     "quote_exchange": meta.get("exchangeName", ""),
                     "quote_timezone": meta.get("exchangeTimezoneName", ""),
+                    **({"close_patch": "yahoo-meta"} if patched else {}),
                 }
             except requests.HTTPError as e:
                 last_err = str(e)[:60]
@@ -1964,7 +2071,85 @@ def _new_official_seed(seed, old, sym, today):
             and old.get("official_seed_sha") != _official_seed_hash(seed))
 
 
-EARN_CROSS_CHECK = True    # 财报日第二来源（Yahoo）交叉验证；失败/限流一律静默退回单源，不影响页面
+EARN_SA_PRIMARY = True      # 财报日主源＝stockanalysis（页面内嵌 earningsDate / earningsDateLabel）
+EARN_CROSS_CHECK = True    # 第三来源（Yahoo）只在前两者都拿不到时兜底；失败/限流一律静默忽略
+# ---- 财报日第二来源：stockanalysis.com 个股页内嵌 earningsDate / earningsDateLabel ----
+# 为什么换成它：Yahoo quoteSummary 要 cookie+crumb，本机与云端 IP 都经常 429；
+# stockanalysis 是服务端渲染的页面（共识价、季度财报都在用），字段就在内嵌对象里：
+#   earningsDate:"Oct 20, 2026", earningsDateLabel:"Est. Earnings"（估算时才有 Est. 前缀）
+# 所以它既给日期，也直接告诉我们「这是估算还是确认」，不需要再猜。
+SA_EARN_URL = "https://stockanalysis.com/stocks/{slug}/"
+SA_EARN_RE = re.compile(r'earningsDate:\s*"([A-Z][a-z]{2} \d{1,2}, \d{4})"')
+SA_EARN_EST_RE = re.compile(r'earningsDateLabel:\s*"([^"]*)"')
+SA_EARN_GATE = SourceGate(threshold=3, cooldown=1800)
+_SA_EARN_CACHE = {}
+_SA_EARN_SESSION = {"sess": None, "t": 0.0}
+_SA_EARN_LOCK = threading.Lock()
+_SA_MONTHS = {m: i for i, m in enumerate(
+    ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), 1)}
+
+
+def _sa_earn_session():
+    """复用一条会话（连接复用，带仓库 UA，跟共识价一致），避免每次重新握手。"""
+    with _SA_EARN_LOCK:
+        now = time.monotonic()
+        if _SA_EARN_SESSION["sess"] and now - _SA_EARN_SESSION["t"] < 1800:
+            return _SA_EARN_SESSION["sess"]
+        sess = requests.Session()
+        sess.headers.update(CONSENSUS_UA)
+        _SA_EARN_SESSION.update(sess=sess, t=now)
+        return sess
+
+
+def parse_stockanalysis_earnings(text, today):
+    """从个股页文本取下一次财报日。返回 {'status','date','timing','kind','label'}。
+    earningsDateLabel 带 "Est." → estimated；否则 expected（供应商确认）。
+    页面没有该字段（部分标的确实没有覆盖）→ unknown，可重试。"""
+    m = SA_EARN_RE.search(text or "")
+    if not m:
+        return {"status": "unknown"}
+    try:
+        month, day, year = m.group(1).replace(",", "").split(" ")
+        date = datetime(int(year), _SA_MONTHS[month], int(day)).date().isoformat()
+    except (ValueError, KeyError):
+        return {"status": "unknown"}
+    if not _iso_date(today) or date < today:
+        return {"status": "unknown"}      # 还停在上一期，不拿过去日期冒充
+    label = SA_EARN_EST_RE.search(text or "")
+    label = label.group(1).strip() if label else ""
+    kind = "estimated" if "est" in label.lower() else "expected"
+    return {"status": "ok", "date": date, "timing": "", "kind": kind, "label": label}
+
+
+def stockanalysis_earnings(sym, timeout=15):
+    """第二来源。任何失败返回 error（调用方静默忽略）；限流走 SA_EARN_GATE 熔断。"""
+    key = normalize_symbol(sym).upper()
+    if is_etf(key):
+        return {"status": "na", "reason": "etf"}
+    if key in _SA_EARN_CACHE:
+        return _SA_EARN_CACHE[key]
+    slug = consensus_slug(key)
+    if not slug:
+        return {"status": "na", "reason": "not_supported"}
+    res = {"status": "error"}
+    try:
+        if not SA_EARN_GATE.allow():
+            return res
+        r = _sa_earn_session().get(SA_EARN_URL.format(slug=slug), timeout=timeout)
+        if r.status_code == 429:
+            SA_EARN_GATE.fail()
+        elif r.status_code == 404:
+            res = {"status": "na", "reason": "http404"}
+        elif r.status_code == 200:
+            SA_EARN_GATE.ok()
+            res = parse_stockanalysis_earnings(r.text, _earn_today())
+    except Exception as e:
+        log(f"  · {key} stockanalysis 财报日期读取失败：{str(e)[:60]}")
+    if res.get("status") != "error":
+        _SA_EARN_CACHE[key] = res
+    return res
+
+
 _YAHOO_CRUMB = {"crumb": None, "session": None, "t": 0.0}
 _YAHOO_CRUMB_LOCK = threading.Lock()
 _YAHOO_EARN_CACHE = {}
@@ -2068,20 +2253,62 @@ def cross_check_earnings(primary, secondary, today):
     return out
 
 
-def _with_cross_check(sym, primary, today):
-    """主源已是供应商确认日期时不再多花一次请求；估算/缺失/读取失败才去问第二来源。"""
+def _with_cross_check(sym, primary, today, force=False):
+    """主源已是供应商确认日期时不再多花一次请求；估算/缺失/读取失败才去问第二来源。
+    force=True 时无条件问一次（前两个来源都没给出日期，兜底用）。"""
     if not EARN_CROSS_CHECK:
         return primary
-    if primary.get("status") == "ok" and primary.get("kind") != "estimated":
-        return primary
-    if primary.get("status") == "na":
-        return primary
+    if not force:
+        if primary.get("status") == "ok" and primary.get("kind") != "estimated":
+            return primary
+        if primary.get("status") == "na":
+            return primary
     try:
         second = yahoo_earnings(sym)
     except Exception:
         return primary
     merged = cross_check_earnings(primary, second, today)
     return merged if isinstance(merged, dict) else primary
+
+
+def resolve_earnings_sources(sym, today):
+    """财报日取数顺序：stockanalysis（主）→ Nasdaq（补时段 / 交叉验证）→ Yahoo（第三，失败静默）。
+
+    为什么主源换成 stockanalysis：Yahoo 需要 cookie+crumb，本机与云端 IP 频繁 429；
+    stockanalysis 页面内嵌 earningsDate + earningsDateLabel，"Est. Earnings" 直接告诉我们是估算。
+    Nasdaq 仍要跑，因为只有它给盘前/盘后（页面写「美东 10/20 盘后」靠这个）。
+    两源日期不一致时沿用交叉核对规则：确认优先，同类取较早，并在 label 里标「待核实」。"""
+    try:
+        sa = stockanalysis_earnings(sym) if EARN_SA_PRIMARY else {"status": "error"}
+    except Exception:
+        sa = {"status": "error"}
+    if not isinstance(sa, dict):
+        sa = {"status": "error"}
+    try:
+        nd = nasdaq_earnings(sym)
+    except Exception:
+        nd = {"status": "error"}
+    if not isinstance(nd, dict):
+        nd = {"status": "error"}
+    if sa.get("status") == "ok" and nd.get("status") == "ok" and sa.get("date") == nd.get("date"):
+        # 同一交易日：用 stockanalysis 的确认/估算性质，补上 Nasdaq 的盘前/盘后
+        out = dict(sa, cross="agree")
+        if nd.get("timing"):
+            out["timing"] = nd["timing"]
+        return out
+    if sa.get("status") == "ok":
+        merged = cross_check_earnings(sa, nd, today)
+        merged = dict(merged) if isinstance(merged, dict) else dict(sa)
+        merged.setdefault("source2", "nasdaq")
+        # 日期以 stockanalysis 为准；时段仍可从 Nasdaq 借
+        if nd.get("status") == "ok" and nd.get("date") == merged.get("date") and nd.get("timing"):
+            merged["timing"] = nd["timing"]
+        return merged
+    # stockanalysis 没给：Nasdaq 有就直接用；Nasdaq 也没有（error/unknown）才去问 Yahoo 兜一层。
+    # Nasdaq 明确 na（ETF／404）说明这一只没有财报日可查，别再打 Yahoo。
+    if nd.get("status") == "ok" or nd.get("status") == "na":
+        return nd
+    return _with_cross_check(sym, nd, today, force=True)
 
 
 def resolve_earnings(sym, today, previous=None, verified=None):
@@ -2095,13 +2322,12 @@ def resolve_earnings(sym, today, previous=None, verified=None):
     if trusted and trusted["official_checked"] == today:
         return dict(trusted, official_attempted=today)
     try:
-        primary = nasdaq_earnings(sym)
+        primary = resolve_earnings_sources(sym, today)
     except Exception:
         primary = {"status": "error"}
     if not isinstance(primary, dict):
         primary = {"status": "error"}
     if not trusted:
-        primary = _with_cross_check(sym, primary, today)
         if primary.get("status") == "ok":
             return primary
     if sym not in earnings_sources.SOURCES:
@@ -2169,48 +2395,63 @@ def earnings_label(e):
     return f"美东 {date_txt} {timing}", note
 
 
-EARN_SOON_DAYS = 14   # 财报日距今 0~14 天（含）时，页面上的财报文字标黄
+EARN_SOON_DAYS = 7    # 北京时间：财报发布前 1~7 天标黄
+EARN_AFTER_DAYS = 1   # 美东财报日当天 + 次日（北京时间两个完整日）标红并保留在名单里
+
+
+def _bj_today():
+    """页面上财报的「今天」按北京时间算（用户在北京看页面，盘前=北京晚间、盘后=北京次日凌晨）。"""
+    return NOW.astimezone(BJ_TZ).date().isoformat()
+
+
+def earnings_urgency(e, today=None):
+    """财报文字颜色：'red'＝美东财报日当天及次日（北京时间两个完整日，盘前盘后都一样）；
+    'yellow'＝尚未到财报日、按北京时间落点距今不超过 EARN_SOON_DAYS 天（盘后落在美东次日＝北京次日凌晨）；
+    其余（待公布、失败、日期异常、已过 2 天）返回空串。"""
+    if not isinstance(e, dict) or e.get("status") != "ok" or not isinstance(e.get("date"), str):
+        return ""
+    try:
+        today = today or _bj_today()
+        base = datetime.strptime(today, "%Y-%m-%d").date()
+        event = datetime.strptime(e["date"], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return ""
+    gap = (event - base).days
+    if -EARN_AFTER_DAYS <= gap <= 0:
+        return "red"
+    if gap > 0:
+        bj_gap = gap + (1 if e.get("timing") == "post" else 0)
+        if bj_gap <= EARN_SOON_DAYS:
+            return "yellow"
+    return ""
 
 
 def earnings_within_week(e, today=None):
-    """美东自然日今天起至第7天（含）；仅已取得有效日期，不把未知或历史日期算作临近财报。"""
-    if not isinstance(e, dict) or e.get("status") != "ok" or not isinstance(e.get("date"), str):
-        return False
-    try:
-        today = today or _earn_today()
-        start = datetime.strptime(today, "%Y-%m-%d").date()
-        event = datetime.strptime(e["date"], "%Y-%m-%d").date()
-        return 0 <= (event - start).days <= 7
-    except (ValueError, TypeError):
-        return False
+    """红字（财报日当天+次日）或黄字（发布前 EARN_SOON_DAYS 天内）期间为 True：
+    个股行不收进「无异动」折叠栏。待公布、失败、日期异常不算。"""
+    return bool(earnings_urgency(e, today))
 
 
-EARN_LIST_DAYS = 15   # 统计面板「财报条件」名单：美东今天起至第 15 天（含）；不影响黄字与「无异动」折叠
+EARN_LIST_DAYS = 15   # 统计面板「财报条件」名单：北京时间今天起至第 15 天（含）；不影响黄字与「无异动」折叠
 
 
 def earnings_within_list(e, today=None):
-    """统计面板财报名单/筛选口径：美东自然日今天起至第 EARN_LIST_DAYS 天（含）。"""
+    """统计面板财报名单/筛选口径：北京时间今天起至第 EARN_LIST_DAYS 天（含），
+    美东财报日当天与次日（北京时间两个完整日）仍保留。"""
     if not isinstance(e, dict) or e.get("status") != "ok" or not isinstance(e.get("date"), str):
         return False
     try:
-        today = today or _earn_today()
+        today = today or _bj_today()
         start = datetime.strptime(today, "%Y-%m-%d").date()
         event = datetime.strptime(e["date"], "%Y-%m-%d").date()
-        return 0 <= (event - start).days <= EARN_LIST_DAYS
+        return -EARN_AFTER_DAYS <= (event - start).days <= EARN_LIST_DAYS
     except (ValueError, TypeError):
         return False
 
 
 def earnings_soon(e, today=None):
-    """财报日期落在今天起 EARN_SOON_DAYS 天内（含当天、含第 14 天）返回 True；待公布、失败、已过期都不算。"""
-    if not e or e.get("status") != "ok" or not e.get("date"):
-        return False
-    try:
-        today = today or TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
-        days = (datetime.strptime(e["date"], "%Y-%m-%d") - datetime.strptime(today, "%Y-%m-%d")).days
-    except (ValueError, TypeError):
-        return False
-    return 0 <= days <= EARN_SOON_DAYS
+    """财报临近（红或黄）；待公布、失败、日期异常都不算。"""
+    return bool(earnings_urgency(e, today))
 
 
 # 重抓间隔表：(财报日距今至少多少天, 缓存多少天内不重抓)，自上而下取第一条命中的。
@@ -2525,6 +2766,12 @@ def fetch_history(symbol):
     if is_future:
         log(f"  ! {symbol} 未取得 {TARGET_DATE} 的有效期货日线，显示无数据")
         return None
+    # 收盘口径且日线源都还停在前一交易日：用收盘报价补当天一根（指数/期货不适用）。
+    if fallback and CLOSED_ONLY and not alias:
+        patched = patch_closing_bar(symbol, fallback)
+        if patched is not fallback:
+            _note_source_day("nasdaq收盘报价补当日", patched)
+            return patched
     # Nasdaq 股票/ETF 实时报价不可套用在指数或期货别名上。
     return apply_realtime(symbol, fallback) if fallback and not CLOSED_ONLY and not alias else fallback
 
@@ -4285,7 +4532,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
     positions = cfg.get("positions", {}) if monitoring["positions"] else {}
     counts = group_counts if group_counts is not None else grouped_universe(cfg)[1]
     dca = global_dca(TARGET_DATE)
-    earnings_asof = _earn_today()
+    earnings_asof = _bj_today()
     snapshot = {
         "dca_reminder": dca,
         "run_id": str(os.environ.get("GITHUB_RUN_ID") or "local-" + NOW.strftime("%Y%m%d%H%M%S")),
@@ -4456,11 +4703,13 @@ def _fund_detail_html(d):
     label = html_lib.escape(f"查看 {symbol} 基本面详情")
     level_label = "红灯" if fund["level"] == "red" else "黄灯"
     compare = html_lib.escape(str(fund.get("compare") or ""))
-    compare_html = (f'<div>对比：{compare}（接口只有最近4个季度，不是去年同期）</div>'
-                    if compare else "")
-    context = "；".join(str(x) for x in fund.get("context") or [])
-    context_html = (f'<div class="fund-context">参考：{html_lib.escape(context)}。'
-                    f'单项比率变化不等于主营恶化，请结合行业和现金流判断</div>' if context else "")
+    compare_html = f'<div class="fund-span">对比 {compare}</div>' if compare else ""
+    # 2026-10-21：详情里只说命中项 + 必要的数据质量提示。
+    # 长句（接口只有最近4个季度/单项比率不等于主营恶化）一律不写；与命中项重复的参考项（如「本季营业利率 27.0%」）也去掉。
+    ctx = [str(x).strip() for x in fund.get("context") or [] if str(x).strip()]
+    ctx = [c for c in ctx if not any(str(x).strip() and str(x).strip() in c for x in fund["hits"])]
+    ctx = [c for c in ctx if "单项比率" not in c]
+    context_html = (f'<div class="fund-context">{html_lib.escape("；".join(ctx))}</div>' if ctx else "")
     return (f'<div class="fund-alert" data-fund-key="{safe_key}" data-fund-symbol="{safe_symbol}" '
             f'data-fund-level="{fund["level"]}">'
             f'<details class="fund-detail"><summary class="{fcls}" aria-label="{label}">'
@@ -4481,7 +4730,8 @@ def _earnings_html(d):
     fund_note = html_lib.escape(str(d.get("fund_cache_note") or "")).strip()
     if not earn and not fund_note:
         return ""
-    soon = " soon" if earnings_soon(d.get("earnings")) else ""
+    urgency = earnings_urgency(d.get("earnings"))
+    soon = {"red": " urgent", "yellow": " soon"}.get(urgency, "")
     main = html_lib.escape(earn[0]) if earn else ""
     sub = f"基本面：{fund_note}" if fund_note else (html_lib.escape(earn[1]) if earn else "")
     unit = f'<span class="unit">{sub}</span>' if sub else ""
@@ -4598,10 +4848,10 @@ def _stock_row(d, snapshot):
     note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
     lv_html = level_note(d.get("trigger"), d.get("reduce"))
     tg_html = target_tag(d.get("target") or {})
-    week_asof = (snapshot.get("earnings_week") or {}).get("asof") or _earn_today()
+    week_asof = (snapshot.get("earnings_week") or {}).get("asof") or _bj_today()
     fund_foldable = (_fund_alert(d) and d["level"] == "green" and not d.get("purple")
                      and not d.get("reference_only")
-                     and not earnings_within_week(d.get("earnings"), week_asof))
+                     and not earnings_soon(d.get("earnings"), week_asof))
     fold_attr = ' data-fund-foldable="1"' if fund_foldable else ""
     # 持仓内部分长短：长持仓屏蔽上轨普通过热，页面上标出来，不然看不出区别
     hold_html = ('<span class="unit" title="长持仓：不看一般过热，RSI 三条全过界才提醒">长</span>'
@@ -4699,9 +4949,9 @@ def _position_zone(d):
 def _group_body(g, group, snapshot, earnings_week, enabled, collapse_id, collapse_label, empty_note=""):
     """分组（或持仓内部某个区）的展开内容：空提示 + 警示表 + 「无异动 N 只」折叠表 + 底部收起条。"""
     shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or _fund_alert(d) or d.get("reference_only")
-             or d.get("purple") or earnings_within_week(d.get("earnings"), earnings_week)]
+             or d.get("purple") or earnings_soon(d.get("earnings"), earnings_week)]
     quiet = [d for d in g if d["level"] == "green" and not _fund_alert(d) and not d.get("reference_only")
-             and not d.get("purple") and not earnings_within_week(d.get("earnings"), earnings_week)]
+             and not d.get("purple") and not earnings_soon(d.get("earnings"), earnings_week)]
     parts = []
     if empty_note:
         parts.append(f'<div class="quiet">{empty_note}</div>')
@@ -4736,7 +4986,7 @@ def _group_card(group, g, items_by_symbol, snapshot):
     monitoring = snapshot.get("group_monitoring", {})
     registered = snapshot.get("registered_counts", {})
     g = _sort_group_items(g, group)
-    earnings_week = (snapshot.get("earnings_week") or {}).get("asof") or _earn_today()
+    earnings_week = (snapshot.get("earnings_week") or {}).get("asof") or _bj_today()
     parts = []
     enabled = monitoring.get(group["key"], True)
     if not enabled:
@@ -4913,10 +5163,12 @@ def _earnings_week_panel(snapshot, count_only=False):
         lamp_text = f'<span class="lamp-text">（{lamp_name}）</span>' if lamp_name else ""
         # 名字（含中文备注）整体可点：跳到首页该股所在行，和其它灯的名单同一套 signal-member-jump
         anchor = _stock_anchor_id(entry["symbol"])
+        urg = earnings_urgency({"status": "ok", "date": date, "timing": entry.get("timing")}, asof)
+        urg_cls = {"red": " is-red", "yellow": " is-yellow"}.get(urg, "")
         lines.append(f'<li{lamp_cls}><a class="signal-member-jump" href="#{anchor}">'
                      f'<span class="signal-member-symbol">{esc(entry["symbol"])}</span>{note}</a>'
                      f'<span class="signal-member-belong">（{esc(belong)}）</span> '
-                     f'<span class="earnings-week-meta">美东 {esc(date[5:].replace("-", "/"))} {timing} · {kind}</span>'
+                     f'<span class="earnings-week-meta{urg_cls}">美东 {esc(date[5:].replace("-", "/"))} {timing} · {kind}</span>'
                      f'{lamp_text}</li>')
     if count_only:
         return len(lines)

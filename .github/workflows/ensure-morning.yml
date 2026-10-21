@@ -2,11 +2,17 @@ name: 早间自动结果保险
 run-name: "自动结果保险 · ${{ github.event_name }}"
 
 # 唯一入口：Cloudflare Worker（cloudflare/market-monitor-trigger.js）在美东 20:15 / 20:45 各派发一次。
-# monitor.py --ensure-schedule-run 判断：不在美东 20:00–21:00 → 不做；当晚结果已存在且当日日线齐 → 不做；
+# 当日日线未就绪时，daily.yml 会再派发本工作流（delay_minutes=30）做延迟重试，最晚到美东 24 点。
+# monitor.py --ensure-schedule-run 判断：不在美东 20:00–24:00 → 不做；当晚结果已存在且当日日线齐 → 不做；
 # 主任务正在排队/运行 → 不做；否则派发 daily.yml（source=schedule-fallback，按定时口径跑）。
 # GitHub 自带 schedule 已删除（实测每次迟到 4–6 小时，全被窗口挡掉）。
 on:
   workflow_dispatch:
+    inputs:
+      delay_minutes:
+        description: '内部使用：先等待 N 分钟再检查（当日日线未就绪时的延迟重试）'
+        required: false
+        type: string
 
 permissions:
   actions: write
@@ -15,10 +21,20 @@ permissions:
 jobs:
   ensure:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 45
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: 延迟重试等待
+        if: ${{ inputs.delay_minutes != '' }}
+        env:
+          DELAY: ${{ inputs.delay_minutes }}
+        run: |
+          case "$DELAY" in *[!0-9]*) echo "delay_minutes 非整数，忽略"; exit 0;; esac
+          if [ "$DELAY" -gt 35 ]; then DELAY=35; fi
+          echo "等待 ${DELAY} 分钟后再检查当日日线"
+          sleep $((DELAY * 60))
+
       - name: 拉取仓库
         uses: actions/checkout@v4
 

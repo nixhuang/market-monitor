@@ -314,10 +314,6 @@
 }
 .cost-warn.acked{color:var(--dim)}
 .cost-warn.acked .w{text-decoration:line-through;text-decoration-color:#5a6478}
-.ack-bar{font-size:11.5px;color:var(--dim);margin:6px 0 0;padding-left:16px}
-.ack-bar button{margin-left:8px;padding:0 6px;height:20px;border:1px solid #2a3242;
-  border-radius:4px;background:#131b28;color:#8b93a1;font-size:11px;cursor:pointer}
-.ack-bar button:hover{color:#dbe8ff;border-color:#46536b}
 /* ===== 底部资产结构：一条横条画占比，下面小文字标金额与比例 ===== */
 .cost-foot{font-size:11.5px;color:var(--dim);margin:8px 0 0;line-height:1.6;
   font-variant-numeric:tabular-nums}

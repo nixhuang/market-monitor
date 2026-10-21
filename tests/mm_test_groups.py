@@ -15,7 +15,10 @@ import monitor
 # 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
 monitor.S.clear()
 monitor.S.update(monitor.DEFAULT_SETTINGS)
-monitor.EARN_CROSS_CHECK = False    # 默认不联网查第二来源；交叉验证专项测试自行打开
+# 财报日的外部来源默认全关，任何用例都不会真的联网；专项测试自己打开并用 mock 注入结果。
+# 用普通属性而不是 patch.start()：TestGroups.setUp 里的 patch.stopall() 会把模块级 patch 一起停掉。
+monitor.EARN_CROSS_CHECK = False    # 第三来源（Yahoo）
+monitor.EARN_SA_PRIMARY = False     # 主源（stockanalysis）
 
 
 class TestGroups(unittest.TestCase):
@@ -23,7 +26,6 @@ class TestGroups(unittest.TestCase):
         # 财报测试独立于实际已核验日期文件；默认禁止访问官网，专项测试再注入样本。
         self.addCleanup(patch.stopall)
         patch.object(monitor, 'verified_earnings_events', return_value={}).start()
-        patch.object(monitor, 'yahoo_earnings', return_value={'status': 'error'}).start()   # 默认不联网查第二来源
         self.real_official_fetch = monitor.earnings_sources.fetch_official_earnings
         patch.object(monitor.earnings_sources, 'fetch_official_earnings',
                      return_value={'status': 'unknown', 'reason': 'fixture_empty'}).start()
@@ -916,17 +918,42 @@ class TestGroups(unittest.TestCase):
         gate.reset(False)
         self.assertTrue(gate.allow())
 
-    def test_earnings_within_two_weeks_is_highlighted(self):
-        soon = lambda d, today='2026-10-09', status='ok': monitor.earnings_soon(
-            {'status': status, 'date': d, 'timing': 'post', 'kind': 'expected'}, today)
-        self.assertTrue(soon('2026-10-09'))      # 当天
-        self.assertTrue(soon('2026-10-23'))      # 第 14 天，含
-        self.assertFalse(soon('2026-10-24'))     # 第 15 天
-        self.assertFalse(soon('2026-10-08'))     # 已过期不算
-        self.assertFalse(soon('2026-10-12', status='unknown'))
-        self.assertFalse(monitor.earnings_soon(None, '2026-10-09'))
-        self.assertFalse(monitor.earnings_soon({'status': 'error'}, '2026-10-09'))
-        self.assertFalse(monitor.earnings_soon({'status': 'ok', 'date': 'bad'}, '2026-10-09'))
+    def test_earnings_urgency_uses_beijing_days(self):
+        """北京时间口径：美东财报日当天+次日两个完整日红字；发布前 7 天内（盘后算次日凌晨）黄字。"""
+        def u(d, today='2026-10-20', timing='post', status='ok'):
+            return monitor.earnings_urgency({'status': status, 'date': d, 'timing': timing, 'kind': 'expected'}, today)
+        # 美东 10/20 盘前盘后：北京 10/20、10/21 整天红，10/22 起消失
+        for timing in ('pre', 'post', 'during', ''):
+            self.assertEqual(u('2026-10-20', '2026-10-20', timing), 'red')
+            self.assertEqual(u('2026-10-20', '2026-10-21', timing), 'red')
+            self.assertEqual(u('2026-10-20', '2026-10-22', timing), '')
+        # 发布前：盘前按美东日、盘后按北京次日凌晨，各自 3 天内黄
+        self.assertEqual(u('2026-10-27', '2026-10-20', 'pre'), 'yellow')    # 差 7 天
+        self.assertEqual(u('2026-10-28', '2026-10-20', 'pre'), '')          # 差 8 天
+        self.assertEqual(u('2026-10-26', '2026-10-20', 'post'), 'yellow')   # 北京 10/27 凌晨，差 7 天
+        self.assertEqual(u('2026-10-27', '2026-10-20', 'post'), '')         # 北京 10/28 凌晨，差 8 天
+        # 待公布 / 失败 / 异常日期不算
+        self.assertEqual(u('2026-10-21', status='unknown'), '')
+        self.assertEqual(monitor.earnings_urgency(None, '2026-10-20'), '')
+        self.assertEqual(monitor.earnings_urgency({'status': 'error'}, '2026-10-20'), '')
+        self.assertEqual(monitor.earnings_urgency({'status': 'ok', 'date': 'bad'}, '2026-10-20'), '')
+        # 名单窗口：红字两天保留，之后消失；上限 15 天
+        win = lambda d, today: monitor.earnings_within_list({'status': 'ok', 'date': d}, today)
+        self.assertTrue(win('2026-10-20', '2026-10-21'))
+        self.assertFalse(win('2026-10-20', '2026-10-22'))
+        self.assertTrue(win('2026-11-05', '2026-10-21'))
+        self.assertFalse(win('2026-11-06', '2026-10-21'))
+        wk = lambda d, today: monitor.earnings_within_week({'status': 'ok', 'date': d}, today)
+        self.assertTrue(wk('2026-10-20', '2026-10-21'))
+        self.assertFalse(wk('2026-10-20', '2026-10-22'))
+        self.assertTrue(wk('2026-10-28', '2026-10-21'))     # 黄字期间不收进「无异动」
+        self.assertFalse(wk('2026-10-29', '2026-10-21'))
+        # 个股行文字：红 urgent / 黄 soon
+        row = lambda d, today: monitor._earnings_html({'earnings': {'status': 'ok', 'date': d, 'timing': 'post', 'kind': 'expected'}})
+        with patch.object(monitor, '_bj_today', return_value='2026-10-21'):
+            self.assertIn('class="earn urgent"', row('2026-10-20', None))
+            self.assertIn('class="earn soon"', row('2026-10-22', None))
+            self.assertIn('class="earn"', row('2026-11-01', None))
 
     def test_earnings_text_never_uses_past_dates_or_invented_times(self):
         parse = monitor.parse_earnings_text
@@ -997,6 +1024,56 @@ class TestGroups(unittest.TestCase):
             self.assertEqual(y.call_count, 0)
         # 估算日期窗口内每次运行都重查
         self.assertEqual(monitor.EARN_REFETCH_DAYS['estimated'][-1], (0, 1))
+
+    def test_earnings_stockanalysis_primary_and_timing_from_nasdaq(self):
+        """stockanalysis 作主源：日期 + 估算/确认由它给，盘前/盘后仍从 Nasdaq 借；
+        两源不一致按「确认优先、同类取较早」合并，并在标签里标待核实。"""
+        today = '2026-10-16'
+        page = ('...,eps:"2.40",epsGrowth:-40.53,peRatio:"159.33",forwardPE:"42.96",'
+                'earningsDate:"Oct 20, 2026",earningsDateLabel:"Earnings Date",description:"x"')
+        got = monitor.parse_stockanalysis_earnings(page, today)
+        self.assertEqual((got['status'], got['date'], got['kind']), ('ok', '2026-10-20', 'expected'))
+        est = monitor.parse_stockanalysis_earnings(
+            'earningsDate:"Nov 3, 2026",earningsDateLabel:"Est. Earnings"', today)
+        self.assertEqual((est['date'], est['kind']), ('2026-11-03', 'estimated'))
+        self.assertEqual(monitor.parse_stockanalysis_earnings('earningsDate:"Oct 1, 2026"', today),
+                         {'status': 'unknown'})      # 停在上一期，不冒充下一次
+        self.assertEqual(monitor.parse_stockanalysis_earnings('', today), {'status': 'unknown'})
+        self.assertEqual(monitor.parse_stockanalysis_earnings('earningsDate:"Foo 3, 2026"', today),
+                         {'status': 'unknown'})
+
+        sa = {'status': 'ok', 'date': '2026-10-20', 'timing': '', 'kind': 'expected'}
+        nd = {'status': 'ok', 'date': '2026-10-20', 'timing': 'post', 'kind': 'expected'}
+        with patch.object(monitor, 'EARN_SA_PRIMARY', True), \
+                patch.object(monitor, 'stockanalysis_earnings', return_value=sa), \
+                patch.object(monitor, 'nasdaq_earnings', return_value=nd), \
+                patch.object(monitor, 'yahoo_earnings', return_value={'status': 'error'}) as y:
+            out = monitor.resolve_earnings_sources('SPCX', today)
+            self.assertEqual((out['date'], out['timing'], out['cross']), ('2026-10-20', 'post', 'agree'))
+            self.assertEqual(y.call_count, 0)      # 日期一致时不再打第三源
+            # 两源日期不同：确认优先
+            nd2 = {'status': 'ok', 'date': '2026-11-03', 'timing': 'post', 'kind': 'estimated'}
+            with patch.object(monitor, 'nasdaq_earnings', return_value=nd2):
+                out = monitor.resolve_earnings_sources('SPCX', today)
+                self.assertEqual((out['date'], out['kind'], out['cross']), ('2026-10-20', 'expected', 'conflict'))
+                self.assertEqual(out['alt_date'], '2026-11-03')
+            # 主源没给：Nasdaq 有就直接用，不额外打第三源
+            with patch.object(monitor, 'stockanalysis_earnings', return_value={'status': 'unknown'}):
+                self.assertEqual(monitor.resolve_earnings_sources('SPCX', today)['date'], '2026-10-20')
+                self.assertEqual(y.call_count, 0)
+            # 主源与 Nasdaq 都没给：EARN_CROSS_CHECK 关闭时不打第三源（默认关闭，避免测试联网）
+            with patch.object(monitor, 'stockanalysis_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'error'}):
+                out = monitor.resolve_earnings_sources('SPCX', today)
+                self.assertEqual(out['status'], 'error')
+                self.assertEqual(y.call_count, 0)
+            # 打开开关后才兜底问第三源；Yahoo 熔断计数在别的用例里可能已满，这里用新门控
+            with patch.object(monitor, 'EARN_CROSS_CHECK', True), \
+                    patch.object(monitor, 'YAHOO_GATE', monitor.SourceGate(threshold=3, cooldown=90)), \
+                    patch.object(monitor, 'stockanalysis_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'error'}):
+                monitor.resolve_earnings_sources('SPCX', today)
+                self.assertEqual(y.call_count, 1)
 
     def test_earnings_shown_for_every_fetched_stock_but_not_etf_or_index(self):
         def row(symbol, group, level):
@@ -1421,7 +1498,8 @@ class TestGroups(unittest.TestCase):
         self.assertIn('基准季含一次性收益，仅供参考', text)
         self.assertNotIn('ROE未比较', text)
         self.assertEqual(result['compare'], '2025/9→2026/6')
-        self.assertTrue(any('营业利率' in c for c in result['context']))
+        # 2026-10-21 精简：命中项已写营业利率变化，context 里不再重复「本季营业利率」
+        self.assertFalse(any('本季营业利率' in c for c in result['context']))
 
     def test_fundamentals_cache_by_quarter(self):
         today = '2026-10-10'
@@ -1714,6 +1792,51 @@ class TestGroups(unittest.TestCase):
         # 冬令时：2026-12-09(周三)美东20:15 = 12-10 01:15 UTC
         self.assertEqual(plan('2026-12-10T01:15:00+00:00')['target'], '2026-12-09')
 
+    def test_closing_bar_patch_when_daily_bars_lag(self):
+        """美东收盘后日线源暂时缺当日一根：Yahoo meta 收盘 / Nasdaq 收盘报价补上；不自洽一律不补。"""
+        from datetime import datetime as _dt, timezone as _tz
+        dates = ['2026-10-16', '2026-10-19']
+        closes, vols, highs, lows, rv = [100.0, 101.0], [10, 11], [102.0, 103.0], [99.0, 100.0], [True, True]
+        ts = int(_dt(2026, 10, 20, 20, 0, 5, tzinfo=_tz.utc).timestamp())    # 美东 16:00:05 收盘
+        meta = {'regularMarketPrice': 102.5, 'regularMarketTime': ts,
+                'regularMarketDayHigh': 104.0, 'regularMarketDayLow': 100.5, 'regularMarketVolume': 12}
+        out = monitor._yahoo_meta_close(meta, dates, closes, vols, highs, lows, rv)
+        self.assertTrue(out[6])
+        self.assertEqual((out[0][-1], out[1][-1], out[2][-1], out[3][-1], out[4][-1], out[5][-1]),
+                         ('2026-10-20', 102.5, 12, 104.0, 100.5, True))
+        # 盘中（收盘前）不补；日线已有当日不补；隔了交易日不补；高低缺失时补但范围记为无效
+        intraday = dict(meta, regularMarketTime=ts - 3600)
+        self.assertFalse(monitor._yahoo_meta_close(intraday, dates, closes, vols, highs, lows, rv)[6])
+        self.assertFalse(monitor._yahoo_meta_close(meta, dates[:1] + ['2026-10-20'], closes, vols, highs, lows, rv)[6])
+        self.assertFalse(monitor._yahoo_meta_close(meta, ['2026-10-15', '2026-10-16'], closes, vols, highs, lows, rv)[6])
+        nohl = monitor._yahoo_meta_close({k: v for k, v in meta.items() if 'Day' not in k}, dates, closes, vols, highs, lows, rv)
+        self.assertTrue(nohl[6]); self.assertEqual((nohl[3][-1], nohl[5][-1]), (102.5, False))
+        self.assertFalse(monitor._yahoo_meta_close(dict(meta, regularMarketPrice=300.0), dates, closes, vols, highs, lows, rv)[6])
+
+        hist = {'dates': ['2026-09-%02d' % d for d in range(1, 31)] + ['2026-10-19'],
+                'closes': [100.0] * 30 + [101.0], 'volumes': [10] * 31, 'highs': [102.0] * 31, 'lows': [99.0] * 31}
+        hist['dates'] = [d for d in hist['dates']]
+        hist.update(price=101.0, prev_close=100.0)
+        after = _dt(2026, 10, 21, 0, 46, tzinfo=_tz.utc)
+        class Now(monitor.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return after
+        with patch.object(monitor, 'CLOSED_ONLY', True), patch.object(monitor, 'TARGET_DATE', '2026-10-20'), \
+                patch.object(monitor, 'datetime', Now), patch.object(monitor, 'valid_history', return_value=True), \
+                patch.object(monitor, 'nasdaq_closing_quote', return_value={'price': 102.0, 'volume': 15}) as q:
+            got = monitor.patch_closing_bar('AAPL', hist)
+            self.assertEqual((got['dates'][-1], got['price'], got['prev_close'], got['volumes'][-1], got['close_patch']),
+                             ('2026-10-20', 102.0, 101.0, 15, 'nasdaq-quote'))
+            self.assertEqual(got['ma_range_valid'][-1], False)
+            self.assertEqual(q.call_args.args, ('AAPL', '2026-10-20', 101.0))
+            self.assertEqual(hist['dates'][-1], '2026-10-19')        # 原数据不被改
+            # 已经是目标日、或报价拿不到：原样返回
+            q.return_value = None
+            self.assertIs(monitor.patch_closing_bar('AAPL', hist), hist)
+        with patch.object(monitor, 'CLOSED_ONLY', False):
+            self.assertIs(monitor.patch_closing_bar('AAPL', hist), hist)
+
     def test_ensure_schedule_run_only_acts_inside_pause_window(self):
         import tempfile
         from unittest.mock import MagicMock
@@ -1740,9 +1863,11 @@ class TestGroups(unittest.TestCase):
         # 对的时点：夏令时 00:45 UTC(美东20:45)、冬令时 01:45 UTC(美东20:45) -> 结果缺失才补派发
         self.assertEqual(run('2026-10-10T00:45:00+00:00'), 1)
         self.assertEqual(run('2026-12-10T01:45:00+00:00'), 1)
-        # 错季节或被拖过21:00的时点：什么都不做
-        self.assertEqual(run('2026-10-10T01:45:00+00:00'), 0)   # 夏令时美东21:45
+        # 20:00 之前、美东零点之后：什么都不做；20:00–24:00 内的延迟重试照常补派发
+        self.assertEqual(run('2026-10-10T01:45:00+00:00'), 1)   # 夏令时美东21:45（延迟重试）
+        self.assertEqual(run('2026-10-10T03:50:00+00:00'), 1)   # 夏令时美东23:50
         self.assertEqual(run('2026-12-10T00:45:00+00:00'), 0)   # 冬令时美东19:45
+        self.assertEqual(run('2026-10-10T04:30:00+00:00'), 0)   # 夏令时美东次日00:30
 
     def test_ensure_schedule_run_redispatches_when_daily_bars_stale(self):
         """结果存在但当日日线不齐（源端换日空档）→ 保险必须补跑；齐了才跳过。"""
@@ -2884,6 +3009,8 @@ class TestTargets(unittest.TestCase):
             with patch.object(monitor, 'BASE', directory), patch.object(monitor, 'TARGET_DATE', '2026-10-07'), \
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'stockanalysis_earnings', return_value={'status': 'unknown'}), \
+                    patch.object(monitor, 'yahoo_earnings', return_value={'status': 'error'}), \
                     patch.object(monitor, 'build_reference_alerts', return_value={}), \
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
@@ -4784,7 +4911,8 @@ class TestSignalCounts(unittest.TestCase):
         self.assertNotIn('>BBB</span>', output.split('earnings-week', 1)[0])
 
     def test_next_week_earnings_members_use_us_calendar_day_and_keep_green_visible(self):
-        with patch.object(monitor, '_earn_today', return_value='2026-10-14'):
+        with patch.object(monitor, '_earn_today', return_value='2026-10-14'), \
+                patch.object(monitor, '_bj_today', return_value='2026-10-14'):
             def item(symbol, group, date, level='green', status='ok', kind='expected'):
                 row = self.member_row(symbol, group, level)
                 row.update(price=100.0, chg=0.0, signals=[], earnings={
@@ -4792,11 +4920,11 @@ class TestSignalCounts(unittest.TestCase):
                     data_date='2026-10-13')
                 return row
             rows = [item('AAPL', 'technology', '2026-10-14'),
-                    item('BRK.B-US', 'position', '2026-10-21', kind='official'),
-                    item('BRK-B', 'technology', '2026-10-21'),  # 持仓优先，不能重复
+                    item('BRK.B-US', 'position', '2026-10-20', kind='official'),   # 盘后：北京 10/21 凌晨，仍在 7 天黄字内
+                    item('BRK-B', 'technology', '2026-10-20'),  # 持仓优先，不能重复
                     item('D15', 'focus', '2026-10-29'),   # 第15天（含）进名单
                     item('LATE', 'focus', '2026-10-30'),  # 第16天不进
-                    item('PAST', 'position', '2026-10-13'),
+                    item('PAST', 'position', '2026-10-12'),   # 北京时间已过两个整天
                     item('UNKNOWN', 'technology', '2026-10-15', status='unknown')]
             snap = monitor.build_snapshot({}, rows, {'group_monitoring': {'technology': True}}, group_counts={})
             self.assertEqual(snap['earnings_week']['asof'], '2026-10-14')
@@ -4831,7 +4959,7 @@ class TestSignalCounts(unittest.TestCase):
                           '<span class="signal-member-belong">（IT软硬Ai）</span> ', panel)
             self.assertIn('10/14 盘后 · 预计</span><span class="lamp-text">（绿灯）</span>', panel)
             self.assertIn('<span class="signal-member-belong">（短持仓）</span> '
-                          '<span class="earnings-week-meta">美东 10/21 盘后 · 官方活动日期</span>'
+                          '<span class="earnings-week-meta is-yellow">美东 10/20 盘后 · 官方活动日期</span>'
                           '<span class="lamp-text">（绿灯）</span>', panel)
             self.assertNotIn('earnings-week-group', panel)
             self.assertNotIn('<strong>', panel.split('earnings-week', 1)[1])
@@ -4856,11 +4984,12 @@ class TestSignalCounts(unittest.TestCase):
             self.assertIn('<td class="sym">BRK-B', position.split('<details class="quiet-list">')[0])
 
     def test_earnings_week_rejects_bad_date_missing_and_expired(self):
-        with patch.object(monitor, '_earn_today', return_value='2026-10-14'):
+        with patch.object(monitor, '_earn_today', return_value='2026-10-14'), \
+                patch.object(monitor, '_bj_today', return_value='2026-10-14'):
             rows = [self.member_row(name, 'position', 'green') for name in ('UNKNOWN', 'BROKEN', 'OLD', 'FUTURE')]
             for row, e in zip(rows, ({'status': 'unknown', 'date': '2026-10-15'},
                                      {'status': 'ok', 'date': '2026-10-50'},
-                                     {'status': 'ok', 'date': '2026-10-13'},
+                                     {'status': 'ok', 'date': '2026-10-12'},
                                      {'status': 'ok', 'date': '2026-10-30'})):
                 row.update(price=100.0, chg=0.0, signals=[], earnings=e)
             self.assertEqual(monitor.earnings_week_members(rows, '2026-10-14'), [])
@@ -4922,7 +5051,8 @@ class TestSignalCounts(unittest.TestCase):
 
     def test_purple_and_earnings_are_strict_overlay_conditions(self):
         import html as H
-        with patch.object(monitor, '_earn_today', return_value='2026-10-14'):
+        with patch.object(monitor, '_earn_today', return_value='2026-10-14'), \
+                patch.object(monitor, '_bj_today', return_value='2026-10-14'):
             def item(symbol, group, marks=(), earnings_date=None):
                 row = self.member_row(symbol, group, 'green', *marks)
                 row['earnings'] = ({'status': 'ok', 'date': earnings_date, 'timing': 'post', 'kind': 'expected'}

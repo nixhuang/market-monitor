@@ -212,7 +212,7 @@ async function boot(opts={}){
     fireWindow:(k,e={})=>{for(const f of events[k]||[])f(e);},
     enter:async()=>{t.enterEdit();await settle();},
     save:async()=>{doc.getElementById('costSave').click();await tick(0);},
-    ack:(key,clear=false)=>{let el=new Element('button',doc);el.setAttribute(clear?'data-ack-clear':'data-ack',key);doc.fire('click',{target:el});},
+    ack:(key)=>{let el=new Element('button',doc);el.setAttribute('data-ack',key);doc.fire('click',{target:el});},
     local:()=>JSON.parse(store.values.get(LOCAL)),
     puts:()=>requests.filter(r=>r.init.method==='PUT'),
     payload:r=>JSON.parse(Buffer.from(JSON.parse(r.init.body).content,'base64').toString()),

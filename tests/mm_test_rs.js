@@ -58,6 +58,7 @@ function fixture(page = snapshot(), onlyRule = false) {
       }
       if (url.includes('/commits?')) return response([{sha: D}]);
       if (url.includes('/actions/workflows/')) return response({workflow_runs: data.run ? [data.run] : []});
+      if (/\/actions\/runs\/\d+\/jobs/.test(url)) return response({jobs: data.jobs || []});
       if (url.includes('/actions/runs/')) return response(data.run);
       if (data.failPublic) throw new TypeError('Failed to fetch');
       if (url.includes('status.json')) return response(data.status);
@@ -255,6 +256,18 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.equal(f.els.checkResult.children.at(-1).textContent,'刷新当前看板');
     f.els.checkResult.children.at(-1).onclick({preventDefault(){}});
     assert.equal(new URL(f.data.reloads.at(-1)).searchParams.get('mm_refreshed_run'),'3');
+  });
+  await check('成功但当日日线未就绪：写明未发布与重试，并带北京时间', async () => {
+    const f=fixture();
+    f.data.run={id:2,status:'completed',conclusion:'success',run_started_at:'2026-10-21T00:46:21Z',created_at:'2026-10-21T00:46:21Z'};
+    f.data.jobs=[{steps:[{name:'抓数据并生成页面',conclusion:'success'},{name:'当日日线未就绪：约 30 分钟后自动再试',conclusion:'success'},
+      {name:'校验最新输入并提交更新',conclusion:'skipped'}]}];
+    await f.els.btnCheckStatus.onclick();
+    assert.match(f.els.checkResult.textContent,/最新任务：数据源当日日线未就绪，本轮未发布（页面保留上一版），约 30 分钟后自动再试 · run 2（10\/21 08:46 北京时间）/);
+    assert.equal(f.els.checkResult.dataset.phase,'busy');
+    f.data.jobs=[{steps:[{name:'抓数据并生成页面',conclusion:'success'},{name:'校验最新输入并提交更新',conclusion:'success'}]}];
+    await f.els.btnCheckStatus.onclick();
+    assert.match(f.els.checkResult.textContent,/最新任务：生成成功，等待看板发布 · run 2（10\/21 08:46 北京时间）/);
   });
   await check('最新任务失败和排队各有清楚结果，不影响已发布数据', async () => {
     for(const [status,conclusion,label] of [['queued',null,'排队中'],['completed','failure','失败']]){
