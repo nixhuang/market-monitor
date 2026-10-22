@@ -32,6 +32,7 @@ import time
 import urllib.robotparser
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import requests
 import policy_alerts
@@ -166,7 +167,7 @@ FRED_SERIES = {
 # 你可以在 edit.html 里直接改，改完保存会自动重跑，不用碰代码。
 from rules_config import (DEFAULT_SETTINGS, SETTING_LIMITS, SETTING_ORDER,
                           valid_settings, resolve_settings)
-from page_assets import (PAGE_CSS, PAGE_INTERACTION_JS, RULES_SUMMARY,
+from page_assets import (PAGE_CSS, PAGE_INTERACTION_JS, RULES_CSS, RULES_SUMMARY,
                          rules_body, rules_template, script_asset, json_script)
 
 
@@ -334,7 +335,10 @@ def load_settings():
         return dict(DEFAULT_SETTINGS)
 
 
-S = load_settings()
+TARGET_SPACE_PCT = 30
+TARGET_HIGH_SPACE_PCT = 70
+S = {**load_settings(), "target_space_pct": TARGET_SPACE_PCT,
+     "target_high_space_pct": TARGET_HIGH_SPACE_PCT}
 
 # 布林带"逼近"阈值（%）：距上轨/下轨不足这个百分比就算命中，不用等真的穿过去
 # 因为盘中价格一直在动，等收盘才确认会错过时机
@@ -1476,512 +1480,24 @@ def is_etf(symbol):
     return normalize_symbol(symbol).upper() in ETF_SYMBOLS
 
 
-# ---------------------------------------------------------------- 基本面恶化
-# 数据源：Nasdaq 财报（季度，一次给最近 4 期）。value2=最新季，value5=3 个季度前，不是去年同期。
-# 只对「持仓 + 重点关注」查询：这两个组才是真会交易的；其他关注看财报意义不大，
-# 而且每只一个请求，全量查会把运行时间拉长并招来限流。
-# 默认阈值由纯规则模块统一维护；settings.json 同名键可覆盖。
-from fundamentals import (FUND_DEFAULT, FUND_LIMITS, evaluate as _evaluate_fundamentals,
-                          number as _fund_number, failure_outcome as _fund_failure_outcome,
-                          period_date as _fund_period_date, source_metadata as _fund_source_metadata)
-
-
-def fund_rule(key):
-    v = S.get(key, FUND_DEFAULT[key])
-    lo, hi = FUND_LIMITS[key]
-    if (isinstance(v, bool) or not isinstance(v, (int, float)) or _fund_number(v) is None
-            or not lo <= v <= hi or (key in ("fund_enable", "fund_report_grace_days") and v != int(v))):
-        log(f"  ! 基本面配置 {key} 无效，沿用默认值")
-        v = FUND_DEFAULT[key]
-    return float(v)
-
-
-_FUND_CACHE = {}
-_SA_FUND_CACHE = {}   # 备用财报源单独缓存：Nasdaq 缓存的 None 不能挡住兜底
-_FUND_TLS = threading.local()
-
-
-def _fund_session():
-    """每线程一个长连接 Session：既复用 TCP 握手，又避免多线程共用一个 Session。"""
-    s = getattr(_FUND_TLS, "s", None)
-    if s is None:
-        s = requests.Session()
-        s.headers.update({**UA, "Accept": "application/json"})
-        _FUND_TLS.s = s
-    return s
-
-
-def _fund_num(v):
-    """Nasdaq 财报值形如 '$112,032,000'、'(91,154)'、'12.3%'、'--'，统一转 float。"""
-    return _fund_number(v)
-
-
-def _fund_exception_outcome(exc):
-    """异常按真实类型分类；未知异常不能冒充源不覆盖。"""
-    if isinstance(exc, (requests.exceptions.Timeout, TimeoutError)):
-        kind = "timeout"
-    elif isinstance(exc, requests.exceptions.HTTPError):
-        response = getattr(exc, "response", None)
-        return {"kind": "http_error", "reason": type(exc).__name__,
-                "http_status": getattr(response, "status_code", None)}
-    elif isinstance(exc, (ValueError, TypeError, KeyError, AttributeError)):
-        kind = "quality_invalid"
-    else:
-        kind = "transient"
-    return {"kind": kind, "reason": type(exc).__name__}
-
-
-def nasdaq_financials(sym, timeout=12):
-    """返回财报或 None；失败原因通过本线程 source_outcomes 传给选择层。"""
-    key = normalize_symbol(sym).upper()
-    _FUND_TLS.source_outcomes = []
-    if isinstance(_FUND_CACHE.get(key), dict):
-        return _FUND_CACHE[key]
-    res = None
-    try:
-        # Nasdaq 用 BRK.B 而不是 BRK-B，带横杠的代码拿不到数据
-        url = f"https://api.nasdaq.com/api/company/{key.replace('-', '.')}/financials?frequency=2"
-        r = _fund_session().get(url, timeout=timeout)
-        if r.status_code != 200:
-            _FUND_TLS.source_outcomes.append({"kind": "http_error", "http_status": r.status_code,
-                                               "reason": f"HTTP {r.status_code}"})
-        else:
-            body = r.json()
-            if not isinstance(body, dict) or not isinstance(body.get("data"), dict):
-                raise ValueError("财报响应缺少有效 data 对象")
-            status = body.get("status")
-            if status is not None and (not isinstance(status, dict) or str(status.get("rCode")) != "200"
-                                       or status.get("bCodeMessage") or status.get("developerMessage")):
-                raise ValueError("财报业务状态异常")
-            d = body["data"]
-
-            def table(name):
-                return {x.get("value1"): x for x in ((d.get(name) or {}).get("rows") or [])
-                        if isinstance(x, dict) and x.get("value1")}
-
-            inc = table("incomeStatementTable")
-            if inc:  # ETF 返回空表
-                headers = (d.get("incomeStatementTable") or {}).get("headers") or {}
-                res = {
-                    "period": headers.get("value2"),
-                    # 接口只给最近4个季度：value2 最新季，value5 是 3 个季度前（不是去年同期）
-                    "base_period": headers.get("value5"),
-                    "inc": inc, "bs": table("balanceSheetTable"),
-                    "cf": table("cashFlowTable"), "rt": table("financialRatiosTable"),
-                }
-                periods = {short: {col: ((d.get(name) or {}).get("headers") or {}).get(col)
-                                   for col in ("value2", "value5")}
-                           for short, name in (("inc", "incomeStatementTable"), ("bs", "balanceSheetTable"),
-                                               ("cf", "cashFlowTable"), ("rt", "financialRatiosTable"))}
-                res = _fund_source_metadata(res, "nasdaq", _earn_today(), periods)
-                res["quality"] = _evaluate_fundamentals(res, _earn_today(), fund_rule)["quality"]
-            else:
-                income = d.get("incomeStatementTable")
-                empty = (isinstance(income, dict) and income.get("rows") == [] and all(
-                    name not in d or (isinstance(d[name], dict) and d[name].get("rows") == [])
-                    for name in ("balanceSheetTable", "cashFlowTable", "financialRatiosTable")))
-                _FUND_TLS.source_outcomes.append({"kind": "no_coverage" if empty else "quality_invalid",
-                                                   "reason": "明确空利润表" if empty else "利润表结构无法确认"})
-    except Exception as e:
-        _FUND_TLS.source_outcomes.append(_fund_exception_outcome(e))
-        log(f"  · {key} 财报读取失败：{e}")
-    # 失败不塞入无类型的 None 内存缓存；重试到期或新事件不能被它再次挡住。
-    if res and not _FUND_TLS.source_outcomes:
-        _FUND_CACHE[key] = res
-    return res
-
-
-# 基本面判定只读这些行的最新季(value2)与 3 个季度前(value5)；缓存只存它们，status.json 才不会膨胀
-FUND_CELLS = {
-    "inc": ("Total Revenue", "Income Tax"),
-    "rt": ("Gross Margin", "Operating Margin", "After Tax ROE", "Current Ratio", "Profit Margin"),
-    "cf": ("Net Cash Flow-Operating",),
-    "bs": ("Total Liabilities", "Total Equity"),
-}
-FUND_QUIET_DAYS = 105     # 无已知财报事件时的保守缓存窗口，不保证下一份季报尚未发布
-FUND_POLL_DAYS = 3        # 常规新季报轮询间隔；已知财报后先按日检查，报告期推进才结束
-FUND_NO_DATA_RETRY_DAYS = 7  # 两源明确无覆盖且从未成功时的重试间隔；临时失败不使用
-FUND_MAX_AGE_DAYS = 30    # 无事件时的最大正常复用期；抓取失败的旧值需明确标注
-FUND_EVENT_DAILY_DAYS = 14  # 财后两周每日检查，供应商长期未推进则退回每 3 天，事件不丢失
-
-
-# 备用财报源：stockanalysis.com 的季度报表页（服务端渲染的 HTML 表格）。
-# Nasdaq 的财报接口不覆盖外国发行人（TSM 交 20-F 不是 10-Q），实测返回空，用它兜底。
-# 单位：stockanalysis 给「百万」，Nasdaq 给「千」，所以金额一律 ×1000 对齐；
-# 百分比（毛利率/营业利润率/净利率/ROE）和倍数（流动比率）原样带过去。
-SA_FIN_URL = "https://stockanalysis.com/stocks/{slug}/financials/{page}/?p=quarterly"
-SA_FIN_ROWS = {
-    "income-statement": {"Revenue": ("inc", "Total Revenue", 1000.0),
-                         "Income Tax Expense": ("inc", "Income Tax", 1000.0),
-                         "Gross Margin": ("rt", "Gross Margin", None),
-                         "Operating Margin": ("rt", "Operating Margin", None),
-                         "Profit Margin": ("rt", "Profit Margin", None)},
-    "balance-sheet": {"Total Liabilities": ("bs", "Total Liabilities", 1000.0),
-                      "Shareholders' Equity": ("bs", "Total Equity", 1000.0)},
-    "cash-flow-statement": {"Operating Cash Flow": ("cf", "Net Cash Flow-Operating", 1000.0)},
-    "ratios": {"Current Ratio": ("rt", "Current Ratio", None),
-               "Return on Equity (ROE)": ("rt", "After Tax ROE", None)},
-}
-_SA_MONTH = {m: i for i, m in enumerate(
-    "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(), 1)}
-
-
-def _sa_period_end(text):
-    """stockanalysis 的列头 "Jun '26 Jun 30, 2026" → "6/30/2026"（与 Nasdaq 同格式）。"""
-    m = re.search(r"([A-Za-z]{3})\s+(\d{1,2}),\s*(\d{4})", str(text))
-    if not m:
-        return ""
-    month = _SA_MONTH.get(m.group(1).title())
-    return f"{month}/{int(m.group(2))}/{m.group(3)}" if month else ""
-
-
-def _sa_parse_table(html, wanted):
-    """季度报表页 → ({标签: {期间结束日: 原始值}}, [期间结束日...])。
-
-    一页里有多张表，每张开头都有一行 Period Ending 给出各列对应的日期，
-    所以按文档顺序跟踪「当前列 → 日期」，避免直接按下标取值错列。
-    """
-    rows, dates = {}, []
-    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", html or "", re.S):
-        cells = [re.sub(r"<[^>]+>", "", c).strip()
-                 for c in re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", tr, re.S)]
-        if len(cells) < 2:
-            continue
-        label = cells[0]
-        if label == "Period Ending":
-            dates = [_sa_period_end(c) for c in cells[1:]]
-            continue
-        if label in wanted and dates:
-            rows.setdefault(label, {}).update({d: v for d, v in zip(dates, cells[1:]) if d})
-    return rows, [d for d in dates if d]
-
-
-def stockanalysis_financials(sym, timeout=12):
-    """备用源取最近 4 个季度财报，结构对齐 nasdaq_financials；取不到返回 None。
-
-    Nasdaq 无数据、报告陈旧或不可比较时使用；不混合不同来源的财务单元格。
-    """
-    key = normalize_symbol(sym).upper()
-    _FUND_TLS.source_outcomes = []
-    if isinstance(_SA_FUND_CACHE.get(key), dict):
-        return _SA_FUND_CACHE[key]
-    slug = key.lower().replace(".", "-").replace(" ", "-")
-    picked, all_dates = {}, []
-    for page, wanted in SA_FIN_ROWS.items():
-        try:
-            r = _fund_session().get(SA_FIN_URL.format(slug=slug, page=page), timeout=timeout)
-            if r.status_code != 200:
-                _FUND_TLS.source_outcomes.append({"kind": "http_error", "http_status": r.status_code,
-                                                   "page": page, "reason": f"HTTP {r.status_code}"})
-                continue
-            rows, dates = _sa_parse_table(r.text, wanted)
-            if not rows:
-                # 只接受明确无数据文案；空 HTML、反爬页、错版表格都不是无覆盖证据。
-                visible_html = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", r.text or "", flags=re.I | re.S)
-                visible = " ".join(re.sub(r"<[^>]+>", " ", visible_html).split())
-                empty = bool(re.search(r"\bNo financial data available\b", visible, re.I))
-                _FUND_TLS.source_outcomes.append({"kind": "no_coverage" if empty else "quality_invalid",
-                                                   "page": page, "reason": "明确无财报数据" if empty else "财报表格无法确认"})
-            # 只认利润表的列日期，比率页的当前快照不能冒充最新季。
-            if page == "income-statement":
-                all_dates = dates
-            picked.update(rows)
-        except Exception as e:
-            _FUND_TLS.source_outcomes.append({**_fund_exception_outcome(e), "page": page})
-            log(f"  · {key} 备用财报源读取失败：{str(e)[:60]}")
-    res = None
-    # Nasdaq 只给最近 4 个季度：value2 = 最新季，value5 = 3 个季度前
-    if all_dates and picked:
-        now, base = all_dates[0], all_dates[3] if len(all_dates) >= 4 else None
-        out = {"period": now, "base_period": base,
-               "inc": {}, "bs": {}, "cf": {}, "rt": {}}
-        cell_periods = {table: {} for table in FUND_CELLS}
-        def conv(v, scale):
-            if v in (None, "", "-", "--"):
-                return None
-            n = _fund_num(v)
-            if n is None:
-                return str(v)
-            return f"{n * scale:,.0f}" if scale else str(v)
-
-        for page_map in SA_FIN_ROWS.values():
-            for label, (table, target, scale) in page_map.items():
-                cell = picked.get(label) or {}
-                out[table][target] = {"value2": conv(cell.get(now), scale),
-                                      "value5": conv(cell.get(base), scale)}
-                cell_periods[table][target] = {"value2": now if now in cell else None,
-                                               "value5": base if base in cell else None}
-        if out["inc"].get("Total Revenue", {}).get("value2") is not None:
-            periods = {table: {"value2": now, "value5": base} for table in FUND_CELLS}
-            res = _fund_source_metadata(out, "stockanalysis", _earn_today(), periods, cell_periods)
-            res["quality"] = _evaluate_fundamentals(res, _earn_today(), fund_rule)["quality"]
-    if res and not _FUND_TLS.source_outcomes:
-        _SA_FUND_CACHE[key] = res
-    elif res is None and (picked or not _FUND_TLS.source_outcomes):
-        _FUND_TLS.source_outcomes.append({"kind": "quality_invalid", "reason": "缺少可用利润表报告期或营收"})
-    return res
-
-
-def financials_any_source(sym, timeout=12, today=None):
-    """保留 dict/None 接口；每次调用隔离的线程元数据携带两源失败分类。"""
-    _FUND_TLS.fetch_outcome = None
-    if not fund_rule("fund_enable"):
-        return None
-    today = today or _earn_today()
-    candidates, outcomes = [], []
-    for name, source in (("nasdaq", nasdaq_financials), ("stockanalysis", stockanalysis_financials)):
-        _FUND_TLS.source_outcomes = None
-        try:
-            raw = source(sym) if timeout == 12 else source(sym, timeout)
-            reported = _FUND_TLS.source_outcomes
-            if reported:
-                outcomes.extend({**item, "source": name} for item in reported)
-            if not isinstance(raw, dict) or not raw:
-                if not reported:
-                    # 外部旧适配器/mock 的 None 继续表示传统无数据；真实适配器必须给原因。
-                    legacy_empty = raw is None and reported is None
-                    outcomes.append({"source": name, "kind": "no_coverage" if legacy_empty else "quality_invalid",
-                                     "reason": "legacy_return_none" if legacy_empty else "返回结构无效"})
-                continue
-            quality = _evaluate_fundamentals(raw, today, fund_rule)
-            candidates.append((raw, quality))
-            usable = (quality["quality"]["current"] and not quality["quality"]["incomparable"] and any(
-                check["status"] == "checked" for check in quality["checks"].values()))
-            if usable and not reported:
-                return raw
-            if not usable or reported:
-                outcomes.append({"source": name, "kind": "quality_invalid",
-                                 "reason": quality["quality"].get("message") or "财报缺失或不可比较"})
-        except Exception as e:
-            outcomes.append({"source": name, **_fund_exception_outcome(e)})
-            log(f"  · {sym} 财报源读取异常：{str(e)[:60]}")
-    _FUND_TLS.fetch_outcome = _fund_failure_outcome(outcomes)
-    if not candidates:
-        return None
-    # 不合并源；仍保留可验证的部分数据，但失败类型不能因存在历史数据而丢失。
-    return max(candidates, key=lambda item: (
-        item[1]["quality"]["current"],
-        sum(c["status"] == "checked" for c in item[1]["checks"].values()),
-        _fund_period_date(item[0].get("period")) or ""))[0]
-
-
-def compact_financials(f):
-    """nasdaq_financials 的结果 → 只含判定所需单元格的精简版（结构不变，fundamental_check 可直接用）。"""
-    if not isinstance(f, dict) or not f:
-        return None
-    from copy import deepcopy
-    out = {"period": f.get("period"), "base_period": f.get("base_period")}
-    for key in ("source", "frequency", "fetched_at", "schema_version", "units", "quality",
-                "table_periods", "cell_periods"):
-        if key in f:
-            out[key] = deepcopy(f[key])
-    for table, labels in FUND_CELLS.items():
-        src = f.get(table) if isinstance(f.get(table), dict) else {}
-        out[table] = {lb: {c: src[lb].get(c) for c in ("value2", "value5")}
-                      for lb in labels if isinstance(src.get(lb), dict)}
-    return out
-
-
-def _fund_sync_event(entry, events, today):
-    out = dict(entry) if isinstance(entry, dict) else {}
-    done = _iso_date(out.get("event_done")) or ""
-    pending = [d for d in _event_dates(events) if done < d <= today]
-    # 保留最早事件的核销基准，同时记录较新事件以免被旧失败退避屏蔽。
-    if pending:
-        out["event_retry_date"] = max(pending)
-    # 按事件顺序核销：后一季不能覆盖尚未完成的前一季并共用旧基准。
-    if pending and not out.get("event_date"):
-        out["event_date"] = pending[0]
-        data = out.get("data") if isinstance(out.get("data"), dict) else {}
-        out["event_base"] = _fund_period_date(data.get("period")) or ""
-        out.pop("event_checked", None)
-    return out
-
-
-def fundamentals_refetch_due(entry, today=None):
-    """财报事件优先于静默期；未见报告期推进就继续轮询，不用抓取成功时间掩盖旧季报。"""
-    today = today or _earn_today()
-    entry = entry if isinstance(entry, dict) else {}
-    attempted = _iso_date(entry.get("attempted"))
-    event = _iso_date(entry.get("event_date"))
-    # 日期精度下只有严格晚于上次尝试的事件才打破退避；同日不猜测先后、不重复请求。
-    events = (event, _iso_date(entry.get("event_retry_date")))
-    if attempted and any(d and attempted < d <= today for d in events):
-        return True
-    if entry.get("fetch_error"):
-        kind = entry.get("error_kind")
-        interval = FUND_NO_DATA_RETRY_DAYS if kind == "no_coverage" and not entry.get("fetched") else 1
-        if attempted and 0 <= _days_between(today, attempted) < interval:
-            return False
-        # 旧缓存无分类不代表确认无覆盖；保留数据但不继续执行无法证明合理的七天等待。
-        # 分类后的短退避到期也不再被旧 retry_after 或事件的三天轮询推迟。
-        return True
-    try:
-        event = _iso_date(entry.get("event_date"))
-        if event and event <= today:
-            checked = _iso_date(entry.get("event_checked"))
-            interval = 1 if _days_between(today, event) <= FUND_EVENT_DAILY_DAYS else FUND_POLL_DAYS
-            return not checked or _days_between(today, checked) < 0 or _days_between(today, checked) >= interval
-        age = _days_between(today, entry["fetched"])
-        if age < 0 or age >= FUND_MAX_AGE_DAYS:
-            return True
-        period = _fund_period_date(entry["data"]["period"])
-        since = _days_between(today, period)
-    except (AttributeError, KeyError, ValueError, TypeError):
-        return True
-    if since < 0:
-        return True
-    return False if since < FUND_QUIET_DAYS else age >= FUND_POLL_DAYS
-
-
-def _fund_cache_note(cache):
-    """基本面缓存状态 → 名称旁那句说明；没什么可说的返回空串。
-
-    一次都没取到过（源不覆盖这只标的，如外国发行人 TSM 不在 Nasdaq 财报接口里）时
-    绝不能写「沿用缓存」——压根没有缓存可沿用。
-    """
-    if not isinstance(cache, dict):
-        return ""
-    if isinstance(cache.get("data"), dict):
-        quality = _evaluate_fundamentals(cache["data"], _earn_today(), fund_rule)["quality"]
-        if not quality["current"]:
-            return quality["message"]
-        if not quality["complete"] and not cache.get("fetch_error") and not cache.get("event_date"):
-            return "基本面数据不完整或口径待核实，未命中不代表正常"
-    if not cache.get("fetch_error") and not cache.get("event_date"):
-        return ""
-    last = cache.get("fetched")
-    if cache.get("fetch_error") and not last:
-        if cache.get("error_kind") in ("timeout", "http_error", "transient", "quality_invalid"):
-            return cache.get("error") or "财报读取失败，待重试"
-        return "该源暂无财报数据"
-    if cache.get("fetch_error"):
-        return f"读取失败，沿用缓存（上次成功取数 {last}）"
-    return f"财报已到期{last or '未知'}待更新"
-
-
-def update_fundamentals(symbols, prev=None, today=None, earnings_events=None):
-    """精简财报跨次缓存；事件后轮询到报告期推进，错误保留旧值和事件，单只异常不拖垮整批。"""
-    today = today or _earn_today()
-    prev = prev if isinstance(prev, dict) else {}
-    earnings_events = earnings_events if isinstance(earnings_events, dict) else {}
-    keys = list(dict.fromkeys(normalize_symbol(s).upper() for s in symbols if not is_etf(s)))
-    stat = {"fetched": 0, "cached": 0, "failed": 0, "data": {}}
-    facts, due, entries = {}, [], {}
-    if not fund_rule("fund_enable"):
-        stat["data"] = {k: prev[k] for k in keys if isinstance(prev.get(k), dict)}
-        return facts, stat
-    for k in keys:
-        old = _fund_sync_event(prev.get(k), earnings_events.get(k), today)
-        entries[k] = old
-        if not fundamentals_refetch_due(old, today):
-            if isinstance(old.get("data"), dict):
-                facts[k] = old["data"]
-            stat["data"][k] = old
-            stat["cached"] += 1
-        else:
-            due.append(k)
-
-    def fetch(k):
-        _FUND_TLS.fetch_outcome = None
-        try:
-            raw = financials_any_source(k, today=today)
-            outcome = _FUND_TLS.fetch_outcome
-            if raw is None and outcome is None:
-                outcome = _fund_failure_outcome([{"kind": "no_coverage", "reason": "legacy_return_none"}])
-            return compact_financials(raw), outcome
-        except Exception as e:
-            log(f"  ! {k} 基本面读取异常，沿用旧值：{str(e)[:60]}")
-            return None, _fund_failure_outcome([_fund_exception_outcome(e)])
-
-    if due:
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            got = list(ex.map(fetch, due))
-        for k, (c, outcome) in zip(due, got):
-            stat["fetched"] += 1
-            old = entries[k]
-            old_data = old.get("data") if isinstance(old.get("data"), dict) else {}
-            old_period, new_period = _fund_period_date(old_data.get("period")), _fund_period_date((c or {}).get("period"))
-            candidate = c
-            assessment = _evaluate_fundamentals(c, today, fund_rule) if c else None
-            error = ""
-            if assessment:
-                c["quality"] = assessment["quality"]
-                if not assessment["quality"]["current"]:
-                    error = assessment["quality"]["message"]
-                    c = None
-                elif old_period and old_period <= today and new_period < old_period:
-                    error, c = "报告期倒退，保留原缓存", None
-                elif not any(_fcell((c.get(t) or {}), label) is not None
-                             for t, labels in FUND_CELLS.items() for label in labels):
-                    error, c = "财报核心单元格为空", None
-            if error:
-                outcome = _fund_failure_outcome([*(outcome or {}).get("sources", []),
-                                                {"kind": "quality_invalid", "reason": error}])
-            if outcome:
-                c = None  # 部分数据可供质量判定，但不能掩盖传输错误、刷新成功时间或吞掉短重试。
-            entry = {**old, "attempted": today}
-            if old.get("event_date"):
-                entry["event_checked"] = today
-            if c:
-                entry.update(fetched=today, data=c)
-                entry.pop("fetch_error", None)
-                entry.pop("error", None)
-                entry.pop("error_kind", None)
-                entry.pop("error_sources", None)
-                entry.pop("retry_after", None)
-                event, base = old.get("event_date"), _fund_period_date(old.get("event_base"))
-                if event and base and new_period > base:
-                    entry["event_done"] = event
-                    for field in ("event_date", "event_base", "event_checked"):
-                        entry.pop(field, None)
-                elif event and not base:
-                    # 首次财后抓取没有对照，不能宣称“新季报已更新”；先建基准继续检查。
-                    entry["event_base"] = new_period
-                facts[k] = c
-            else:
-                stat["failed"] += 1
-                entry["fetch_error"] = True
-                outcome = outcome or {"kind": "quality_invalid", "sources": []}
-                kind = outcome["kind"]
-                messages = {"timeout": "财报读取超时，等待短退避重试",
-                            "http_error": "财报源 HTTP 错误，等待短退避重试",
-                            "transient": "财报读取暂时失败，等待短退避重试",
-                            "quality_invalid": "财报质量无效，等待更新",
-                            "no_coverage": "两源确认暂无财报覆盖"}
-                entry["error_kind"] = kind
-                entry["error_sources"] = outcome["sources"]
-                entry["error"] = error if kind == "quality_invalid" and error else messages[kind]
-                # 当前缓存按日期处理：短退避到次日的既有运行，不增加定时任务。
-                interval = FUND_NO_DATA_RETRY_DAYS if kind == "no_coverage" and not old.get("fetched") else 1
-                entry["retry_after"] = (datetime.strptime(today, "%Y-%m-%d") + timedelta(days=interval)).strftime("%Y-%m-%d")
-                if old_data:
-                    facts[k] = old_data          # fetched 保持旧值，判定层再拦陈旧报告
-                elif candidate and assessment and (assessment["quality"]["current"] or assessment["quality"]["status"] == "stale"):
-                    entry["data"] = candidate   # 保留可信部分/历史证据，不伪装成本轮成功更新
-                    facts[k] = candidate
-            stat["data"][k] = entry              # 无 data / 无事件的失败也必须持久化
-    return facts, stat
-
-
-def _fcell(tbl, label, col="value2"):
-    return _fund_num((tbl or {}).get(label, {}).get(col)) if tbl else None
-
-
-def _period_label(period):
-    """Nasdaq 报告期 '6/30/2026' → '2026/6'；认不出来返回空串。"""
-    date = _nasdaq_date(period)
-    if not date:
-        return ""
-    year, month, _ = date.split("-")
-    return f"{year}/{int(month)}"
-
-
 # ---------------------------------------------------------------- 下一次财报日期
 # 主源 Nasdaq（Zacks）；缺失时按 earnings_sources 的官方白名单补查。
 # official-earnings.json 仅存已核验来源快照；活动钟点不当作文件发布钟点。
 # 全部非 ETF 个股都查，结果跨次缓存到 status.json（离财报越近刷新越勤）。ETF、指数、期货不适用。
 _EARN_CACHE = {}
+_EARN_TLS = threading.local()
+
+
+def _earn_session():
+    """财报日期请求每线程复用一个 Session，不与行情线程共享连接。"""
+    s = getattr(_EARN_TLS, "s", None)
+    if s is None:
+        s = requests.Session()
+        s.headers.update({**UA, "Accept": "application/json"})
+        _EARN_TLS.s = s
+    return s
+
+
 _EARN_RE = re.compile(
     r"(expected\*?|estimated)\s+to\s+report\s+earnings\s+on\s+(\d{1,2})/(\d{1,2})/(\d{4})"
     r"(?:\s+(before market open|after market close|during market hours))?", re.I)
@@ -2016,7 +1532,7 @@ def nasdaq_earnings(sym, timeout=12):
     res = {"status": "error"}
     try:
         url = f"https://api.nasdaq.com/api/analyst/{key.replace('-', '.')}/earnings-date"
-        r = _fund_session().get(url, timeout=timeout)
+        r = _earn_session().get(url, timeout=timeout)
         if r.status_code == 404:
             res = {"status": "na", "reason": "http404"}
         elif r.status_code == 200:
@@ -2380,23 +1896,20 @@ def earnings_label(e):
     date_txt = f"{month}/{day}" if int(year) == this_year else f"{year}/{month}/{day}"
     timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(e.get("timing"), "具体时段待定")
     nxt = (datetime(int(year), int(month), int(day)) + timedelta(days=1)).strftime("%m/%d")
-    # 说明文字按 2026-10-15 要求精简：只留来源性质 + 北京时间的落点，不写核实日期、钟点状态
-    bj = {"pre": f"北京 {month}/{day} 晚间", "post": f"北京 {nxt} 凌晨",
-          "during": f"北京 {month}/{day} 夜–{nxt} 凌晨"}.get(e.get("timing"), "北京 待定")
-    kind = {"expected": "预计", "official": "官方"}.get(e.get("kind"), "估算")
-    if e.get("kind") == "official":
-        # 官方活动日期：不给钟点，也不再挂来源链接；复查没拿到新确认时多标一个「待复核」
-        note = "官方 · 待复核" if e.get("official_error") else "官方"
-        return f"美东 {date_txt}", note
-    note = f"{kind} · {bj}"
-    if e.get("cross") == "conflict" and _iso_date(e.get("alt_date")):
+    # 财报列只写时间，不展示来源性质；真实时段缺失时不从会议钟点推断。
+    note = {"pre": f"北京 {month}/{day} 晚间", "post": f"北京 {nxt} 凌晨",
+            "during": f"北京 {month}/{day} 夜–{nxt} 凌晨"}.get(e.get("timing"), "北京 待定")
+    if e.get("kind") == "official" and e.get("official_error"):
+        note += " · 待复核"
+    if e.get("kind") != "official" and e.get("cross") == "conflict" and _iso_date(e.get("alt_date")):
         alt = e["alt_date"][5:].replace("-", "/")
-        note += f" · 待核实（另一来源 {alt}）"
+        note += f" · 日期待核实（{alt}）"
     return f"美东 {date_txt} {timing}", note
 
 
-EARN_SOON_DAYS = 7    # 北京时间：财报发布前 1~7 天标黄
-EARN_AFTER_DAYS = 1   # 美东财报日当天 + 次日（北京时间两个完整日）标红并保留在名单里
+EARN_SOON_DAYS = 7    # 美东财报日期 D 的前 7 天；以北京日历比较，红字优先于黄字
+EARN_BEFORE_DAYS = 1  # 北京日期 D-1、D、D+1 三个完整日统一标红，不因盘前/盘后平移
+EARN_AFTER_DAYS = 1   # D+1 仍保留财报名单及主表，D+2 起退出本次事件提醒
 
 
 def _bj_today():
@@ -2405,9 +1918,9 @@ def _bj_today():
 
 
 def earnings_urgency(e, today=None):
-    """财报文字颜色：'red'＝美东财报日当天及次日（北京时间两个完整日，盘前盘后都一样）；
-    'yellow'＝尚未到财报日、按北京时间落点距今不超过 EARN_SOON_DAYS 天（盘后落在美东次日＝北京次日凌晨）；
-    其余（待公布、失败、日期异常、已过 2 天）返回空串。"""
+    """以北京今天对比美东日期 D：D-1/D/D+1 三个整日红字；
+    D 前 7 天内其余日期黄字，盘前/盘后/盘中/未知时段同一窗口。
+    这只是文字及展示条件，不参与报灯；待公布、失败、异常日期均不命中。"""
     if not isinstance(e, dict) or e.get("status") != "ok" or not isinstance(e.get("date"), str):
         return ""
     try:
@@ -2417,17 +1930,15 @@ def earnings_urgency(e, today=None):
     except (ValueError, TypeError):
         return ""
     gap = (event - base).days
-    if -EARN_AFTER_DAYS <= gap <= 0:
+    if -EARN_AFTER_DAYS <= gap <= EARN_BEFORE_DAYS:
         return "red"
-    if gap > 0:
-        bj_gap = gap + (1 if e.get("timing") == "post" else 0)
-        if bj_gap <= EARN_SOON_DAYS:
-            return "yellow"
+    if EARN_BEFORE_DAYS < gap <= EARN_SOON_DAYS:
+        return "yellow"
     return ""
 
 
 def earnings_within_week(e, today=None):
-    """红字（财报日当天+次日）或黄字（发布前 EARN_SOON_DAYS 天内）期间为 True：
+    """红字（D-1/D/D+1）或黄字（D 前 EARN_SOON_DAYS 天内、红字优先）期间为 True：
     个股行不收进「无异动」折叠栏。待公布、失败、日期异常不算。"""
     return bool(earnings_urgency(e, today))
 
@@ -2437,7 +1948,7 @@ EARN_LIST_DAYS = 15   # 统计面板「财报条件」名单：北京时间今�
 
 def earnings_within_list(e, today=None):
     """统计面板财报名单/筛选口径：北京时间今天起至第 EARN_LIST_DAYS 天（含），
-    美东财报日当天与次日（北京时间两个完整日）仍保留。"""
+    D-1/D/D+1 红字期均保留；D+1 对应的昨天事件额外留在名单中。"""
     if not isinstance(e, dict) or e.get("status") != "ok" or not isinstance(e.get("date"), str):
         return False
     try:
@@ -2578,13 +2089,19 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
                           and old.get("status") in ("unknown", "na")
                           and not _iso_date(old.get("official_attempted")))
         seed = verified.get(k)
-        if _new_official_seed(seed, old, k, today):
+        old_is_red = (isinstance(old, dict) and old.get("status") == "ok"
+                      and _iso_date(old.get("date")) and earnings_urgency(old) == "red")
+        keep_recent = old_is_red and old["date"] < today
+        seed_is_next_cycle = (isinstance(seed, dict) and _iso_date(seed.get("date"))
+                              and old_is_red and _days_between(seed["date"], old["date"]) > EARN_LIST_DAYS)
+        if seed_is_next_cycle or (keep_recent and not _new_official_seed(seed, old, k, today)):
+            # 财报虽已过美东日期，仍保留北京 D+1；下一季种子不得提前吞掉这次红字。
+            resolved[k] = old
+        elif _new_official_seed(seed, old, k, today):
+            # 同一次事件的官方近日期修订照常接入，不用红字保留拦住真实改期。
             resolved[k] = dict(seed, fetched=today, official_attempted=today,
                                official_seed_sha=_official_seed_hash(seed))
-        elif (isinstance(old, dict) and old.get("status") == "ok"
-              and _iso_date(old.get("date")) and old["date"] < today
-              and earnings_urgency(old) == "red"):
-            # 美东已进次日，但北京仍在财报第二个完整日：暂不换成下一季，红字期结束再抓。
+        elif keep_recent:
             resolved[k] = old
         elif isinstance(old, dict) and not needs_official and not earnings_refetch_due(old, today):
             resolved[k] = old
@@ -2608,7 +2125,15 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
                 got = list(ex.map(lambda k: resolve_earnings(k, today, prev.get(k), verified.get(k)), queue))
             for k, e in zip(queue, got):
                 stat["fetched"] += 1
-                if e.get("status") == "error":
+                old = prev.get(k)
+                old_is_red = (isinstance(old, dict) and _iso_date(old.get("date"))
+                              and earnings_urgency(old) == "red")
+                next_cycle = (_iso_date(e.get("date")) and old_is_red
+                              and _days_between(e["date"], old["date"]) > EARN_LIST_DAYS)
+                if old_is_red and (e.get("status") in ("unknown", "na", "error") or next_cycle):
+                    # D-1 仍可核查真实近日期改期，但取数空值/下一季不能抹掉当前红字事件。
+                    resolved[k] = old
+                elif e.get("status") == "error":
                     old = prev.get(k)
                     if _earn_cache_usable(old, today):
                         resolved[k] = old                   # 日期还有效，继续用旧的，下一轮再试
@@ -2632,7 +2157,7 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
             stat["data"][k] = e
         if e.get("status") == "na":
             continue
-        # 刚公布的财报按北京两整日继续展示；红字期后，过期缓存不冒充“下一次”。
+        # 财报按北京 D-1/D/D+1 三整日展示；红字期后，过期缓存不冒充“下一次”。
         expired = e.get("status") == "ok" and not _earn_cache_usable(e, today)
         shown = {"status": "unknown"} if expired and earnings_urgency(e) != "red" else e
         d["earnings"] = shown
@@ -2643,16 +2168,6 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
     log(f"  财报日期：已取得 {stat['dated']} · 待确认 {stat['pending']} · 失败 {stat['failed']}"
         f" · 本轮请求 {stat['fetched']}")
     return stat
-
-
-def fundamental_check(sym, facts=None, today=None):
-    """质量与风险分开；规则依赖注入，保留 monitor 的取数/config mock 接口。"""
-    if not fund_rule("fund_enable") or is_etf(sym):
-        return None
-    today = today or _earn_today()
-    # 传 facts（包括空字典）绝不联网；未传入时共用质量感知的两源选择。
-    f = financials_any_source(sym, today=today) if facts is None else facts
-    return _evaluate_fundamentals(f, today, fund_rule)
 
 
 def valid_history(data):
@@ -2709,15 +2224,13 @@ def source_day_summary():
         return {name: dict(sorted(days.items(), reverse=True)) for name, days in _SRC_DAYS.items()}
 
 
+QUOTE_CLOSED_SOURCES = ("nasdaq", "yahoo", "stooq")
+QUOTE_INTRADAY_SOURCES = ("yahoo", "stooq", "nasdaq")
+
+
 def fetch_history(symbol):
-    """普通标的 Yahoo → stooq → Nasdaq；指数／期货只取经映射的 Yahoo 日线。
-
-    GitHub Actions（美国 IP）走 Yahoo 正常；中国大陆本地跑 Yahoo 会被整段封禁
-    （返回 403 且提示 mainland China 不可访问），stooq 也上了 JS 人机验证，
-    所以补第三级 Nasdaq，保证本地也能跑出真实数据验证筛选逻辑。
-
-    代码先过一遍 normalize_symbol：富途导出的 UNH-US 这类后缀行情源不认，
-    剥掉后缀才抓得到（否则整只标的变灰）。
+    """普通标的收盘 Nasdaq → Yahoo → stooq，盘中 Yahoo → stooq → Nasdaq。
+    指数／期货只取经映射的 Yahoo 日线；先规范化代码，再校验日线与来源身份。
     """
     symbol = normalize_symbol(symbol)
     identity = instrument_identity(symbol)
@@ -2725,8 +2238,9 @@ def fetch_history(symbol):
     alias = INDEX_YAHOO_ALIAS.get(symbol) or (identity if identity.startswith('^') or is_future else None)
     if identity == '^TNX':
         return None  # 国债收益率不使用报价指数替代百分比口径。
-    loaders = (("yahoo", yahoo_history),) if alias else (
-        ("yahoo", yahoo_history), ("stooq", stooq_history), ("nasdaq", nasdaq_history))
+    sources = QUOTE_CLOSED_SOURCES if CLOSED_ONLY else QUOTE_INTRADAY_SOURCES
+    history_loaders = {"nasdaq": nasdaq_history, "yahoo": yahoo_history, "stooq": stooq_history}
+    loaders = (("yahoo", yahoo_history),) if alias else tuple((name, history_loaders[name]) for name in sources)
     fallback = None
     suspicious = None
     for name, loader in loaders:
@@ -3038,18 +2552,11 @@ def level_note(trigger, reduce):
 
 
 # ---------------------------------------------------------------- 目标价（手填 / S&P Global 共识价）
-# 全部分组的个股可显示共识价，仅「持仓」「重点关注」触发警示；每只最多一个标签。
-#   手填：设置页填的 target，仅持仓/重点关注有效，优先于共识价。
-#   共识价：S&P Global，取自 stockanalysis.com 个股预测页里内嵌的数据块；
-#           每只满 14 天到期，财报后至少 2 个美东自然日提前刷新；每天北京时间最多 12 只；
-#           月份取页面「分析师最近更新日」；失败保留旧值并标红标签，不参与价格警示。
-#           持仓/重点关注手填目标价的不取；ETF、指数、期货、伯克希尔不取。
-# 两者共用同一套警示（目标价 T，现价 P），命中只出紫色（紫色竖条 + 实心紫标签 + 警示栏文字），不改红黄绿：
-#   ① 当日跨越：昨收和现价分别在 T 的两侧（含刚好到达）；
-#   ② 在 T 的 ±target_gap_pct% 内（按 P/T−1 算）；
-#   ③ 空间 T/P−1 超过 target_space_pct%；
-#   空间超过 TARGET_ANOMALY_PCT（100%）→ 疑似数据异常（如拆股后共识价没同步），改成红色警示、不出紫色；
-#   其余（已远超目标价、离得很远、共识价获取失败）→ 不警示。
+# 全部分组个股使用手填优先的目标价；ETF、指数、期货不参与目标状态。
+# 共识价每只满 14 天到期，财报后至少 2 个美东自然日提前刷新；北京时间每天最多 12 只。
+# 获取失败仅灰色虚线展示旧价，不参与空间或达到；有效手填值不受共识失败影响。
+# 空间 = (目标价 / 现价 − 1) × 100：低 <30%，中 [30%,70%)，高 ≥70%，不改变红黄绿。
+# 达到仅限持仓/重点关注：当日上穿、跌破或处于目标价 ±target_gap_pct% 内；优先于高空间。
 CONSENSUS_URL = "https://stockanalysis.com/stocks/{slug}/forecast/"
 CONSENSUS_ROBOTS = "https://stockanalysis.com/robots.txt"
 CONSENSUS_UA = {"User-Agent": "market-monitor/1.0 (personal dashboard; +https://github.com/nixhuang/market-monitor)"}
@@ -3058,22 +2565,17 @@ CONSENSUS_SKIP = {"BRK-B", "BRK-A"}   # 伯克希尔：分析师太少，不抓
 CONSENSUS_GAP = 2.0                   # 两次请求的间隔（秒）
 CONSENSUS_BUDGET = 7 * 60             # 单次运行最多花这么久；没取完的下次运行接着取
 CONSENSUS_BREAK = 3                   # 连续失败这么多次就停手，不再继续敲对方网站
-CONSENSUS_GROUPS = ("position", "focus")   # 只有这两组的共识价/目标价会触发警示；其他分组只显示
+CONSENSUS_GROUPS = ("position", "focus")   # 仅达到规则限这两组；空间规则覆盖全部个股
 CONSENSUS_REFETCH_DAYS = 14           # 每只各自满这么多天重取（不再用统一的 1、15 号节拍）
 CONSENSUS_NONE_RECHECK_DAYS = 30      # 页面上没有共识价（无覆盖）的，隔这么久再看一次
 CONSENSUS_POST_EARN_LAG_DAYS = 2      # 财报后至少等 2 个美东自然日；不保证所有分析师已更新
 CONSENSUS_MAX_PER_DAY = 12           # 北京自然日的独立台账，删除/关闭分组不返还额度
 CONSENSUS_RETRY_PER_DAY = 3          # 失败重试最多占用 3 个名额，避免挤掉正常到期项
 CONSENSUS_RETRY_BACKOFF = (1, 2, 4, 7)  # 连续失败：首次次日重试，此后逐步退避
-CHG_AMP_GROUPS = ("position", "focus")   # 涨跌幅、振幅警示只对这两组生效
-BOLL_UP_SIGNAL_GROUPS = ("position", "focus")  # 上轨方向的组合黄/红只对持仓和重点关注生效；
-# 其他分组的上轨只展示状态文字。持仓内部再按 hold=long/short 区分（见 _is_long_position）。
+AMP_GROUPS = ("position", "focus")   # 振幅仅持仓/重点；涨跌幅对所有分组生效
+BOLL_UP_SIGNAL_GROUPS = ("position", "focus")  # 上轨普通过热仅持仓/重点；三超卖红覆盖全组，持仓不分长短。
+# 单独上轨（RSI 零条）仅持仓提醒；有 RSI 的上轨组合仍按各分组规则处理。
 
-
-def _is_long_position(x):
-    """长持仓：持仓组里显式标了 hold=long 的。缺省按短持仓处理，规则不缩水。"""
-    return x.group == "position" and str((x.cfg or {}).get("hold") or "short").lower() == "long"
-TARGET_ANOMALY_PCT = 100.0
 _CONS_SPG = re.compile(r'Targets:\{source:"spg",currency:"([A-Z]+)",avg:([0-9.]+)')
 _CONS_UPD = re.compile(r'targets:\{low:[0-9.]+,high:[0-9.]+,count:\d+,median:[0-9.]+,average:[0-9.]+,updated:"(\d{4}-\d{2}-\d{2})"')
 
@@ -3098,10 +2600,10 @@ def consensus_slug(sym):
 
 def consensus_wanted(sym, cfg, group):
     """该不该自动取共识价：任何分组里的美股个股都取；ETF、指数、期货、伯克希尔不取。
-    持仓/重点关注手填了目标价就不取（手填优先）；其他分组只显示共识价，手填值对它们无效。"""
+    任何个股手填有效目标价就不取（手填优先）。"""
     if not sym or not quote_supported(sym) or is_etf(sym):
         return False
-    if group in CONSENSUS_GROUPS and manual_target(cfg, quiet=True):
+    if manual_target(cfg, quiet=True):
         return False
     ident = instrument_identity(sym)
     return (not ident.startswith("^") and not ident.endswith("=F")
@@ -3372,43 +2874,181 @@ def target_label(t):
     return "目标价" if t.get("kind") == "manual" else "共识价"
 
 
-def target_alerts(price, prev, target, label, space_pct, gap_pct):
-    """目标价警示 → (紫色文字列表, 红色文字列表, 空间%)。空间 = 目标价 / 现价 − 1。"""
-    space = (target / price - 1) * 100
+def target_alerts(price, prev, target, label, gap_pct):
+    """仅计算达到，返回具体上穿/跌破/区间文字；空间不参与达到条件。"""
+    if _pos_num(price) is None or _pos_num(target) is None:
+        return []
     tstr = _price_text(target)
-    if space > TARGET_ANOMALY_PCT:
-        return [], [f"{label} {tstr} 疑似数据异常（高出现价 {space:.0f}%）"], space
-    purple = []
-    dev = (price / target - 1) * 100
-    if prev and prev < target <= price:
-        purple.append(f"今日上穿{label} {tstr}")
-    elif prev and prev > target >= price:
-        purple.append(f"今日跌破{label} {tstr}")
-    elif abs(dev) <= gap_pct:
-        purple.append(f"在{label} {tstr} ±{gap_pct:g}% 内（偏离 {dev:+.1f}%）")
-    if space > space_pct:
-        purple.append(f"{label} {tstr}，空间 +{space:.0f}%")
-    return purple, [], space
+    if _pos_num(prev) is not None and prev < target <= price:
+        return [f"今日上穿{label} {tstr}"]
+    if _pos_num(prev) is not None and prev > target >= price:
+        return [f"今日跌破{label} {tstr}"]
+    p, t = Decimal(str(price)), Decimal(str(target))
+    dev = (p / t - 1) * 100
+    if abs(p - t) * 100 <= Decimal(str(gap_pct)) * t:
+        return [f"在{label} {tstr} ±{gap_pct:g}% 内（偏离 {dev:+.1f}%）"]
+    return []
+
+
+def evaluate_target(price, prev, target, group, gap_pct):
+    """返回新目标字典（或 None）；调用方先确认个股身份，不修改输入。"""
+    if not target:
+        return None
+    t = {key: value for key, value in target.items() if key != "anomaly"}
+    t.update(space=None, hit=False, space_hit=False, band=None,
+             space_detail="", reached_detail="")
+    if t.get("failed") or _pos_num(t.get("price")) is None or _pos_num(price) is None:
+        t["failed"] = True
+        return t
+    p, tp = Decimal(str(price)), Decimal(str(t["price"]))
+    space = float((tp / p - 1) * 100)
+    # 十进制交叉相乘判边界，避免 1.3/1.7 的二进制浮点误差。
+    band = ("high" if tp * 100 >= p * (100 + TARGET_HIGH_SPACE_PCT)
+            else "medium" if tp * 100 >= p * (100 + TARGET_SPACE_PCT) else "low")
+    for boundary in (TARGET_SPACE_PCT, TARGET_HIGH_SPACE_PCT):
+        if tp * 100 == p * (100 + boundary):
+            space = float(boundary)
+    reached = (target_alerts(price, prev, t["price"], target_label(t), gap_pct)
+               if group in CONSENSUS_GROUPS else [])
+    space_hit = band in ("medium", "high")
+    detail = (f"{target_label(t)} {_price_text(t['price'])}，"
+              f"空间 {space:+.1f}%") if space_hit else ""
+    t.update(failed=False, space=space, hit=bool(reached), space_hit=space_hit, band=band,
+             space_detail=detail, reached_detail=" / ".join(reached))
+    return t
+
+
+def target_display_state(t):
+    """纯函数：failed/reached/high/space/low；达到优先，缺行情不推断状态。"""
+    if not isinstance(t, dict) or t.get("failed") or _pos_num(t.get("price")) is None:
+        return "failed"
+    space = t.get("space")
+    if isinstance(space, bool) or not isinstance(space, (int, float)) or not math.isfinite(space):
+        return "failed"
+    if t.get("hit"):
+        return "reached"
+    if t.get("band") == "high" and t.get("space_hit"):
+        return "high"
+    if t.get("band") == "medium" and t.get("space_hit"):
+        return "space"
+    return "low"
+
+
+def _target_stock(d):
+    symbol = d.get("symbol")
+    identity = instrument_identity(symbol)
+    asset = str(d.get("asset") or "").lower()
+    return bool(symbol and quote_supported(symbol) and not d.get("reference_only")
+                and not d.get("etf") and not is_etf(symbol)
+                and asset not in ("etf", "index", "future", "futures")
+                and not identity.startswith("^") and not identity.endswith("=F"))
+
+
+def _target_active(d):
+    return _target_stock(d) and target_display_state(d.get("target")) in ("reached", "high", "space")
+
+
+def _apply_target(d):
+    """在副本中迁移旧条目；只用真实目标与行情重算，不相信旧紫计数或异常灯。"""
+    out = dict(d)
+    marks = list(d.get("signal_marks") or [])
+    target = d.get("target")
+    if isinstance(target, dict) and _target_stock(d):
+        if not all(key in target for key in ("band", "space_hit", "space_detail", "reached_detail")):
+            prev = _pos_num(d.get("prev_close")) or _pos_num(d.get("prev"))
+            chg = d.get("chg")
+            if (prev is None and _pos_num(d.get("price")) is not None
+                    and type(chg) in (int, float) and math.isfinite(chg) and chg > -100):
+                prev = d["price"] / (1 + chg / 100)
+            target = evaluate_target(d.get("price"), prev, target, d.get("group"), S["target_gap_pct"])
+        else:
+            target = {key: value for key, value in target.items() if key != "anomaly"}
+            if target.get("failed") or _pos_num(d.get("price")) is None:
+                target = evaluate_target(d.get("price"), None, target, d.get("group"), S["target_gap_pct"])
+            elif d.get("group") not in CONSENSUS_GROUPS:
+                target.update(hit=False, reached_detail="")
+    else:
+        target = None
+    out["target"] = target
+    out["purple"] = _target_stock(out) and target_display_state(target) in ("reached", "high", "space")
+    out["signal_marks"] = [mark for mark in marks if mark[0] != "target"]
+    if (any(kind == "target" and level in ("red", "yellow") for kind, level in marks)
+            or isinstance(d.get("target"), dict) and d["target"].get("anomaly")):
+        remaining = {level for _, level in out["signal_marks"]}
+        out["level"] = ("red" if "red" in remaining else "yellow" if "yellow" in remaining
+                        else "green" if _pos_num(d.get("price")) is not None else "gray")
+    out["signals"] = [text for text in d.get("signals") or []
+                      if not isinstance(text, str) or ("目标价" not in text and "共识价" not in text)]
+    if out["purple"]:
+        for field in ("reached_detail", "space_detail"):
+            if target.get(field):
+                out["signals"].append(target[field])
+        out["signal_marks"].append(("target", "purple"))
+    return out
+
+
+def target_overlay_members(items):
+    """空间与达到分别去重，沿用首页身份优先级；两段允许同一身份重叠。"""
+    priority = {g["item_group"]: i for i, g in enumerate(GROUPS)}
+    seen = set(RISK_IDENTITIES)
+    out = {"space": [], "reached": []}
+    for item in sorted(items, key=lambda d: priority.get(d.get("group"), len(GROUPS))):
+        symbol = normalize_symbol(item.get("symbol"))
+        identity = instrument_identity(symbol)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        d = _apply_target(item)
+        if not _target_active(d):
+            continue
+        target = d["target"]
+        record = {"symbol": symbol, "note": d.get("note") or "", "group": d.get("group") or "",
+                  "hold": str(d.get("hold") or ""), "level": d.get("level") or "",
+                  "space": target["space"], "band": target["band"], "price": target["price"],
+                  "kind": target.get("kind") or ""}
+        if target.get("space_hit"):
+            out["space"].append({**record, "detail": target["space_detail"]})
+        if target.get("hit") and d.get("group") in CONSENSUS_GROUPS:
+            out["reached"].append({**record, "detail": target["reached_detail"]})
+    return out
+
+
+def _target_overlay_union(overlays):
+    """旧紫成员接口使用两段的身份并集，并保留重叠标的的两条具体说明。"""
+    members = {}
+    for section in ("space", "reached"):
+        for record in overlays.get(section) or []:
+            identity = instrument_identity(record["symbol"])
+            if identity not in members:
+                members[identity] = dict(record)
+            elif record.get("detail"):
+                members[identity]["detail"] += " / " + record["detail"]
+    return list(members.values())
+
+
+def purple_counts(items):
+    return len(_target_overlay_union(target_overlay_members(items)))
 
 
 def target_tag(t):
-    """价格涨跌幅下面的标签：正常 = 空心紫色胶囊；命中紫色警示 = 实心紫色；共识价取数失败 = 红色。
-    手填目标价和共识价一视同仁：都不写「目标」「共识」，开头统一是距现价的空间百分比，
-    如「+75% 429.47 · 10月」；没有空间数据时只显示价格（和月份）。没有目标价返回空串。"""
+    """目标标签：低/中/高空心，达到实心，失败灰虚线且不显示旧空间。"""
     if not t:
         return ""
-    if t.get("price") is None:
-        body, cls = '<span>获取失败</span>', "tgt bad"
-    else:
-        parts = []
-        space = t.get("space")
-        if isinstance(space, (int, float)) and not isinstance(space, bool) and math.isfinite(space):
-            parts.append(f'<span>{space:+.0f}%</span>')
+    state = target_display_state(t)
+    cls = "tgt " + {"failed": "bad", "reached": "hit", "high": "high",
+                    "space": "space", "low": "low"}[state]
+    parts = []
+    if state != "failed":
+        # 30/70边界附近保留小数，避免69.9%被四舍五入显示为高档70%。
+        space_text = f'{t["space"]:+.1f}'.rstrip('0').rstrip('.')
+        parts.append(f'<span>{space_text}%</span>')
+    if _pos_num(t.get("price")) is not None:
         parts.append(f'<span>{_price_text(t["price"])}</span>')
-        if t.get("month"):
-            parts.append(f'<span>· {t["month"]}月</span>')
-        body = " ".join(parts)
-        cls = "tgt bad" if t.get("failed") else ("tgt hit" if t.get("hit") else "tgt")
+    if state != "failed" and t.get("month"):
+        parts.append(f'<span>· {html_lib.escape(str(t["month"]))}月</span>')
+    if state == "failed":
+        parts.append('<span>获取失败</span>')
+    body = " ".join(parts)
     return f'<span class="tgs"><span class="lvtag {cls}">{body}</span></span>'
 
 
@@ -3504,8 +3144,6 @@ SIGNAL_KINDS = (
     ("rsi", "RSI"), ("boll", "布林"), ("boll_rsi", "布林+RSI"),
     ("ma_cross", "均线穿越"), ("ma_band", "长均线触及"), ("low52", "52周低位"),
     ("add_price", "加仓价"), ("reduce_price", "减仓价"), ("target", "共识价"),
-    # 基本面是独立判定：不改股价灯级，红黄照常报，所以单独作为一行统计
-    ("fund", "基本面"),
 )
 
 
@@ -3712,36 +3350,87 @@ def _analysis_context(sym, cfg, data, group):
 
 def _apply_vol_tier(x):
     """涨跌 / 振幅阈值：设置页的值是中档，按这只股自己的平时波动缩放；
-    涨跌幅 / 振幅警示只对「持仓」和「重点关注」生效，其他分组不报这两类。"""
+    涨跌幅对所有分组生效；振幅仅「持仓」和「重点关注」报灯。"""
     x.vol_tier, x.vol_sigma = vol_profile(x.closes)
     mult = VOL_MULT[x.vol_tier]
     x.chg_red, x.chg_yellow = S["chg_red"] * mult, S["chg_yellow"] * mult
     x.amp_red, x.amp_yellow = S["amp_red"] * mult, S["amp_yellow"] * mult
     x.usual = f"（平时约 ±{x.vol_sigma:.1f}%）" if x.vol_sigma is not None else ""
-    x.chg_amp_on = x.group in CHG_AMP_GROUPS
+    x.amp_on = x.group in AMP_GROUPS
 
 
 def _rule_chg_red(al, x):
-    if x.chg_amp_on and x.chg is not None and abs(x.chg) >= x.chg_red:
+    if x.chg is not None and abs(x.chg) >= x.chg_red:
         al.add("chg", f"异动 {x.chg:+.1f}%{x.usual}", "red")
 
 
 def _rule_chg_yellow(al, x):
-    if x.chg_amp_on and x.chg is not None and x.chg_yellow <= abs(x.chg) < x.chg_red:
+    if x.chg is not None and x.chg_yellow <= abs(x.chg) < x.chg_red:
         al.add("chg", f"波动 {x.chg:+.1f}%{x.usual}", "yellow")
 
 
+def classify_technical_facts(group, high_hits, low_hits, selected_side):
+    """纯事实分类，不计算 RSI 或轨距，也不推断选中轨。
+
+    selected_side 必须明确传 None / 上轨 / 下轨。命中条数为 0..3 整数且和不超过 3。
+    返回 kind、level、foldable：kind=None / level=green 表示无提醒；gray 表示技术文字，
+    不改变主表整体绿灯；foldable 是独立于红黄灯的折叠资格。
+    """
+    if not isinstance(group, str) or not group:
+        raise ValueError("group 必须是非空分组名称")
+    if (type(high_hits) is not int or type(low_hits) is not int
+            or not 0 <= high_hits <= 3 or not 0 <= low_hits <= 3
+            or high_hits + low_hits > 3):
+        raise ValueError("RSI 命中条数必须为 0..3 整数，且超买与超卖条数之和不超过 3")
+    if selected_side not in (None, "上轨", "下轨"):
+        raise ValueError("selected_side 必须明确为 None、上轨或下轨")
+    active_up = group in BOLL_UP_SIGNAL_GROUPS
+    count = max(high_hits, low_hits)
+    if selected_side is None:
+        if count < 2:
+            return {"kind": None, "level": "green", "foldable": True}
+        level = "red" if low_hits == 3 else "yellow" if high_hits == 3 and active_up else "gray"
+        return {"kind": "rsi", "level": level, "foldable": True}
+    up = selected_side == "上轨"
+    if count == 0:
+        if up and group != "position":
+            return {"kind": None, "level": "green", "foldable": True}
+        return {"kind": "boll", "level": "gray", "foldable": True}
+    foldable = not (not up and count == 1 or up and not active_up and low_hits == 2)
+    # 三超卖全覆盖优先于上轨分组豁免；有轨时只归组合。
+    if low_hits == 3:
+        level = "red"
+    elif up and active_up and (high_hits >= 2 or low_hits == 2):
+        level = "red" if high_hits == 3 else "yellow"
+    elif not up and count >= 2:
+        level = "yellow"
+    else:
+        level = "gray"
+    return {"kind": "boll_rsi", "level": level, "foldable": foldable}
+
+
 def _rule_rsi(al, x):
-    """RSI 不再单独报灯：条数照样算、状态照样展示，但只是文字，不进灯级也不进统计。
-    灯级全部由 _rule_boll 的组合规则判定——RSI 是布林的「强度放大器」，
-    只有同时进了布林报警区间才谈得上黄或红。"""
+    """无轨用纯事实 API 判灯；有轨只保留 RSI 事实，由布林选轨后统一归组合。"""
     x.high_hits = sum(v is not None and math.isfinite(v) and v >= S["rsi_high"] for v in x.rsi.values())
     x.low_hits = sum(v is not None and math.isfinite(v) and v <= S["rsi_low"] for v in x.rsi.values())
+    facts = (classify_technical_facts(x.group, x.high_hits, x.low_hits, None)
+             if not getattr(x, "boll_hits", []) else None)
+    if facts:
+        x.foldable = facts["foldable"]
     for count, tag, boundary in ((x.high_hits, "超买", f"≥{S['rsi_high']:g}"),
                                  (x.low_hits, "超卖", f"≤{S['rsi_low']:g}")):
         if count >= 2:
-            # 只报条数和阈值，不再列出 RSI6=xx.x 这类逐周期数值（具体数值在设置页的规则说明里看口径）
-            al.signals.append(f"RSI {count}条{tag}（{boundary}）")
+            text = f"RSI {count}条{tag}（{boundary}）"
+            if facts and facts["level"] in ("red", "yellow"):
+                al.add(facts["kind"], text, facts["level"])
+            else:
+                al.signals.append(text)
+    # 已有两条同侧提醒时，补齐反向单条事实；单独一条仍然无提醒。
+    if max(x.high_hits, x.low_hits) >= 2:
+        for count, tag, boundary in ((x.high_hits, "超买", f"≥{S['rsi_high']:g}"),
+                                     (x.low_hits, "超卖", f"≤{S['rsi_low']:g}")):
+            if count == 1:
+                al.signals.append(f"RSI 1条{tag}（{boundary}）")
 
 
 def _fresh_52w_low(x):
@@ -3777,11 +3466,13 @@ def _rule_add_price(al, x):
     x.trig = trig
     if not trig:
         return
-    gap = (x.price / trig - 1) * 100
+    price, target = Decimal(str(x.price)), Decimal(str(trig))
+    distance = price - target
     tstr = f"{trig:,.2f}"
-    if gap <= 0:
+    if distance <= 0:
         al.add("add_price", f"已跌破加仓价 {tstr}", "red")
-    elif gap <= S["trigger_gap_pct"]:
+    elif distance * 100 <= Decimal(str(S["trigger_gap_pct"])) * target:
+        gap = distance * 100 / target
         al.add("add_price", f"距加仓价 {tstr} 还差 {gap:.1f}%", "red")
 
 
@@ -3791,35 +3482,28 @@ def _rule_reduce_price(al, x):
     x.reduce = reduce_rule(x.cfg) if x.group == "position" else None
     if not x.reduce:
         return
-    rgap = (x.price / x.reduce - 1) * 100
+    price, target = Decimal(str(x.price)), Decimal(str(x.reduce))
+    distance = target - price
     rstr = f"{x.reduce:,.2f}"
-    if rgap >= 0:
+    if distance <= 0:
+        rgap = -distance * 100 / target
         al.add("reduce_price", f"已涨到减仓价 {rstr}（高出 {rgap:.1f}%）", "red")
-    elif -rgap <= S["reduce_gap_pct"]:
-        al.add("reduce_price", f"距减仓价 {rstr} 还差 {-rgap:.1f}%", "red")
+    elif distance * 100 <= Decimal(str(S["reduce_gap_pct"])) * target:
+        gap = distance * 100 / target
+        al.add("reduce_price", f"距减仓价 {rstr} 还差 {gap:.1f}%", "red")
 
 
 def _rule_target(al, x):
-    """目标价（手填优先于 S&P Global 共识价）：持仓 / 重点关注才警示，命中只出紫色，不改红黄绿；
-    疑似数据异常（空间 > 100%）才升成红色警示；共识价取数失败只标红标签，不参与警示。
-    其他分组的个股只显示共识价和空间，不警示，手填的目标价对它们无效。"""
-    alert = x.group in CONSENSUS_GROUPS
-    x.tgt = resolve_target(x.cfg if alert else {}, x.cfg.get("_consensus"))
-    tgt = x.tgt
-    if not tgt:
+    """所有分组个股计算空间；达到仅持仓/重点，二者只叠加紫色，不改原灯级。"""
+    stock = {"symbol": x.sym, "asset": x.data.get("asset") or x.cfg.get("asset"),
+             "etf": x.cfg.get("etf"), "reference_only": x.data.get("reference_only")}
+    x.tgt = (evaluate_target(x.price, x.prev, resolve_target(x.cfg, x.cfg.get("_consensus")),
+                             x.group, S["target_gap_pct"]) if _target_stock(stock) else None)
+    if not x.tgt or x.tgt.get("failed"):
         return
-    tgt["hit"] = False
-    if tgt["price"] and not tgt["failed"]:
-        if not alert:
-            tgt.update(space=(tgt["price"] / x.price - 1) * 100, anomaly=False)
-            return
-        purple, reds, space = target_alerts(x.price, x.prev, tgt["price"], target_label(tgt),
-                                            S["target_space_pct"], S["target_gap_pct"])
-        for text in reds:
-            al.add("target", text, "red")
-        for text in purple:
-            al.add("target", text, "purple")
-        tgt.update(hit=bool(purple), space=space, anomaly=bool(reds))
+    for field in ("reached_detail", "space_detail"):
+        if x.tgt.get(field):
+            al.add("target", x.tgt[field], "purple")
 
 
 def _intraday_extremes(x):
@@ -3885,36 +3569,38 @@ def _boll_hits(x):
 
 
 def _rule_boll(al, x):
-    """布林不再单独报灯：任何分组的逼近 / 触及 / 穿破都只作为文字展示，不进灯级也不进统计。
-    灯级一律由「进了布林报警区间 + RSI 同侧条数」决定：2 条黄、3 条红；方向不一致（比如
-    跌破下轨却配 RSI 超买）只给黄。方向沿用最贴近的那条轨道；极窄带同时命中两侧时两条都展示。"""
-    hits = _boll_hits(x)
+    """先按带符号距离选轨（相等上轨），再按分组限制；双轨保留双方事实，不换边。"""
+    hits = x.boll_hits if hasattr(x, "boll_hits") else _boll_hits(x)
     if not hits:
         return
     best = min(hits, key=lambda h: h[0])
-    x.boll_alert_text = best[1]
-    al.signals.extend(hit[1] for hit in hits)
-    if max(x.high_hits, x.low_hits) < 2:
-        return
     up = "布林上轨" in best[1]
     side = "上轨" if up else "下轨"
+    facts = classify_technical_facts(x.group, x.high_hits, x.low_hits, side)
+    x.foldable = facts["foldable"]
+    if len(hits) == 1 and facts["kind"] is None:
+        return
+    x.boll_alert_text = best[1]
+    al.signals.extend(hit[1] for hit in hits)
     same_hits = x.high_hits if up else x.low_hits
     oppo_hits = x.low_hits if up else x.high_hits
-    if up and x.group not in BOLL_UP_SIGNAL_GROUPS:
-        return          # 其他分组的上轨只展示，不参与灯级
-    if up and _is_long_position(x) and same_hits < 3:
-        return          # 长持仓不看一般过热，但 RSI 三条全过界仍要提醒
+    # 单条 RSI 仅在触轨时补文字；不把单独 RSI 1 条变成提醒。
+    for count, tag, boundary in ((x.high_hits, "超买", f"≥{S['rsi_high']:g}"),
+                                 (x.low_hits, "超卖", f"≤{S['rsi_low']:g}")):
+        if count == 1:
+            text = f"RSI 1条{tag}（{boundary}）"
+            if text not in al.signals:
+                al.signals.append(text)
+    level = facts["level"]
+    if level not in ("red", "yellow"):
+        return
     if same_hits >= 2:
-        level = "red" if same_hits >= 3 else "yellow"
         x.boll_rsi_direction = f"{side}（{'超买' if up else '超卖'}）"
         x.boll_rsi_hits = same_hits
-    elif oppo_hits >= 2:
-        level = "yellow"    # 方向不一致：看得见就行，不算危险
+    else:
         x.boll_rsi_direction = f"{side}（RSI{'超卖' if up else '超买'}，方向不一致）"
         x.boll_rsi_hits = oppo_hits
-    else:
-        return
-    al.add("boll_rsi", f"布林 + RSI → {'红' if level == 'red' else '黄'}", level)
+    al.add(facts["kind"], f"布林 + RSI → {'红' if level == 'red' else '黄'}", level)
 
 
 def _vol_ratio_z_enabled():
@@ -3956,7 +3642,7 @@ def _rule_amplitude(al, x):
     if x.touch_up is None or x.touch_dn is None or not x.prev:
         return
     x.amp = (x.touch_up - x.touch_dn) / x.prev * 100
-    if not x.chg_amp_on:
+    if not x.amp_on:
         return
     text = f"振幅 {x.amp:.1f}%（{x.touch_dn:,.2f}~{x.touch_up:,.2f}）"
     if x.amp >= x.amp_red:
@@ -4051,7 +3737,9 @@ def _analysis_detail(x, al):
         "reduce": x.reduce,
         "cost": getattr(x, "cost", None),
         "target": x.tgt,
-        "purple": bool(x.tgt and x.tgt.get("hit")),
+        "purple": bool(x.tgt and (x.tgt.get("hit") or x.tgt.get("space_hit"))),
+        "prev_close": x.prev,
+        "asset": x.data.get("asset") or x.cfg.get("asset"),
         "source": x.data.get("source", ""),
         "data_date": (x.data.get("dates") or [""])[-1],
         "realtime": bool(x.data.get("realtime")),
@@ -4069,6 +3757,7 @@ def _analysis_detail(x, al):
         "signals": al.signals,
         "signal_marks": al.marks,
         "level": al.level,
+        "foldable": getattr(x, "foldable", True),
     }
 
 
@@ -4079,6 +3768,7 @@ def analyze_symbol(sym, cfg, data, group="technology"):
     al = _Alerts()
     _apply_vol_tier(x)
     _intraday_extremes(x)
+    x.boll_hits = _boll_hits(x)
     _rule_chg_red(al, x)
     _rule_rsi(al, x)
     _rule_52w_low(al, x)
@@ -4161,41 +3851,26 @@ def market_data_time(snapshot):
 def signal_counts(items):
     """各类信号的触发数量，写进 status.json，方便看「黄灯到底是被哪条规则点亮的」。
     red / yellow：这一类信号以红 / 黄级别触发的标的数；purple：目标价提示数。
-    只出文字不报灯的标的（灰灯）不在这里统计，单独走 text_only_members()。
-    基本面（fund）不进 signal_marks——它不改变股价灯级，这里单独按标的身份去重统计，
-    保证计数和 signal_count_members 的名单条数一致。"""
-    out = {kind: {"label": label, "red": 0, "yellow": 0, "purple": 0}
-           for kind, label in SIGNAL_KINDS}
-    fund_ids = set()
-    for d in items:
-        marks = d.get("signal_marks") or []
-        for kind in {k for k, _ in marks}:
-            if kind not in out:
-                continue
-            for lv in ("red", "yellow", "purple"):
-                if any(k == kind and m == lv for k, m in marks):
-                    out[kind][lv] += 1
-        level = (d.get("fund") or {}).get("level")
-        if level in ("red", "yellow"):
-            fund_ids.add((instrument_identity(normalize_symbol(d.get("symbol"))), level))
-    for _, level in fund_ids:
-        out["fund"][level] += 1
-    return out
+    只出文字不报灯的标的（灰灯）不在这里统计，单独走 text_only_members()。"""
+    members = signal_count_members(items)
+    return {kind: {"label": label, **{level: len(members[kind][level])
+                                    for level in ("red", "yellow", "purple")}}
+            for kind, label in SIGNAL_KINDS}
 
 
-_TEXT_RSI_RE = re.compile(r"^RSI [23]条(超买|超卖)")
+_TEXT_RSI_RE = re.compile(r"^RSI [123]条(超买|超卖)")
 _TEXT_BOLL_PREFIX = ("逼近布林", "触及布林", "跌破布林", "突破布林", "盘中突破布林")
 
 
 def _text_only_kind(signals):
-    """按页面文字反推「只出文字不报灯」的归因：只有 RSI 文字 → rsi；只有布林文字 → boll；
-    两者都有 → 进了布林区间且 RSI 也够，但被分组或长持仓挡下，归 boll_rsi。"""
+    """技术灰归因：单独 RSI 至少两条才归 rsi；只有布林文字归 boll；
+    两者都有归 boll_rsi（含单条 RSI），不重复归入单独指标。"""
     texts = [str(s) for s in (signals or []) if isinstance(s, str)]
     has_rsi = any(_TEXT_RSI_RE.match(t) for t in texts)
     has_boll = any(t.startswith(_TEXT_BOLL_PREFIX) for t in texts)
     if has_rsi and has_boll:
         return "boll_rsi"
-    if has_rsi:
+    if has_rsi and any(re.match(r"^RSI [23]条(超买|超卖)", t) for t in texts):
         return "rsi"
     if has_boll:
         return "boll"
@@ -4224,12 +3899,17 @@ def text_only_members(items):
         if identity in seen:
             continue
         seen.add(identity)
-        if d.get("level") != "green" or d.get("reference_only"):
+        if (d.get("level") != "green" or d.get("reference_only")
+                or "price" in d and d["price"] is None
+                or any(level in ("red", "yellow") for _, level in d.get("signal_marks") or [])):
             continue
         kind = _text_only_kind(d.get("signals"))
         if not kind:
             continue
         texts = [str(s) for s in (d.get("signals") or []) if isinstance(s, str)]
+        selected = d.get("boll_alert_text")
+        if isinstance(selected, str) and selected in texts and selected.startswith(_TEXT_BOLL_PREFIX):
+            texts = [selected] + [text for text in texts if text != selected]
         # 只留主句：括号里的「盘中触及 / 连续第几日贴近」太长，占满一行反而不好看。
         # 组合被挡下的（boll_rsi）优先说轨道，因为那才是被规则拦下的原因。
         pool = [t for t in texts if t.startswith(_TEXT_BOLL_PREFIX)]
@@ -4237,14 +3917,18 @@ def text_only_members(items):
             pool = [t for t in texts
                     if _TEXT_RSI_RE.match(t) or t.startswith(_TEXT_BOLL_PREFIX)]
         detail = re.split(r"（", pool[0])[0].strip() if pool else ""
-        if kind == "boll_rsi":
-            # 组合名单必须写清 RSI 几条（2 条或 3 条）和超买/超卖，不能只剩轨道文字
-            rsi_text = next((t for t in texts if _TEXT_RSI_RE.match(t)), "")
-            rsi_main = re.split(r"（", rsi_text)[0].strip() if rsi_text else ""
-            if rsi_main:
-                detail = f"{detail} · {rsi_main}" if detail else rsi_main
+        rsi_texts = [t for t in texts if _TEXT_RSI_RE.match(t)]
+        rsi_main = " / ".join(dict.fromkeys(re.split(r"（", t)[0].strip() for t in rsi_texts))
+        if kind == "boll_rsi" and rsi_main:
+            detail = f"{detail} · {rsi_main}" if detail else rsi_main
+        elif kind == "rsi":
+            detail = rsi_main
         boll_text = next((t for t in texts if t.startswith(_TEXT_BOLL_PREFIX)), "")
-        rsi_match = next((_TEXT_RSI_RE.match(t) for t in texts if _TEXT_RSI_RE.match(t)), None)
+        # 非持仓零条上轨被限制后，不能借保留的另一轨事实改归下轨灰灯。
+        if kind == "boll" and "上轨" in boll_text and d.get("group") != "position":
+            continue
+        rsi_match = max((_TEXT_RSI_RE.match(t) for t in rsi_texts),
+                        key=lambda match: int(match.group(0)[4]), default=None)
         out.append({"symbol": symbol, "kind": kind, "shape": _text_only_shape(texts),
                     "side": ("上轨" if "上轨" in boll_text else "下轨") if boll_text else "",
                     "rsi_n": int(rsi_match.group(0)[4]) if rsi_match else 0,
@@ -4265,10 +3949,11 @@ def _member_direction_markers(d, kind):
             markers.append(marker)
     if kind == "rsi":
         for s in signals:
-            match = re.match(r"^RSI ([23])条(超买|超卖)（", s)
-            if match:
+            if not s.startswith("RSI "):
+                continue
+            for match in re.finditer(r"([123])条(超买|超卖)", s):
                 count, side = int(match[1]), match[2]
-                add("▲" if side == "超买" else "▼", "red" if count == 3 else "yellow",
+                add("▲" if side == "超买" else "▼", "red" if count == 3 and side == "超卖" else "yellow",
                     f"RSI{count}条{side}")
     elif kind in ("chg", "amp", "vol_ratio"):
         chg = d.get("chg")
@@ -4427,7 +4112,7 @@ def _member_metric_text(d, kind):
         return f"52周低 {price}" if price else ""
     if kind in ("add_price", "reduce_price"):
         return d.get("level_price") or ""
-    return ""   # 基本面：命中项不复述，个股行自己有点开的详情
+    return ""
 
 
 def _member_signal_details(d, kind, member, level):
@@ -4466,13 +4151,18 @@ def signal_count_members(items):
         if identity in seen:
             continue
         seen.add(identity)
+        if (d.get("reference_only") or d.get("level") == "gray"
+                or "price" in d and d["price"] is None):
+            continue
         member = {"symbol": symbol, "note": d.get("note") or "", "group": d.get("group") or "",
                   # hold 只给持仓组用：统计面板要在名单里标「长持仓 / 短持仓」
                   "hold": str(d.get("hold") or ""),
                   "level": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else ""}
         marks = d.get("signal_marks") or []
+        if any(kind == "boll_rsi" for kind, _ in marks) or _text_only_kind(d.get("signals")) == "boll_rsi":
+            marks = [(kind, level) for kind, level in marks if kind not in ("boll", "rsi")]
         for kind in {k for k, _ in marks}:
-            if kind not in out:
+            if kind not in out or kind == "target":
                 continue
             for level in levels:
                 if any(k == kind and m == level for k, m in marks):
@@ -4491,16 +4181,7 @@ def signal_count_members(items):
                     if kind != "target" or level == "purple":
                         _member_signal_details(d, kind, entry, level)
                     out[kind][level].append(entry)
-        # 基本面是独立判定，不走 signal_marks：红黄各归各档，成员带上命中项
-        fund = d.get("fund") or {}
-        if fund.get("level") in levels:
-            entry = dict(member)
-            hits = [str(h) for h in (fund.get("hits") or []) if str(h).strip()]
-            if hits:
-                entry["fund_hits"] = hits
-            if fund.get("period"):
-                entry["fund_period"] = str(fund["period"])
-            out["fund"][fund["level"]].append(entry)
+    out["target"]["purple"] = _target_overlay_union(target_overlay_members(items))
     return out
 
 
@@ -4525,7 +4206,83 @@ def earnings_week_members(items, today):
     return sorted(members, key=lambda m: (m["date"], priority.get(m["group"], len(GROUPS)), m["symbol"]))
 
 
+_RETIRED_SNAPSHOT_KEYS = frozenset({
+    "fund", "fundamental", "fund_cache_note", "fund_hits", "fund_period",
+    "fund_enable", "fund_rev_red", "fund_rev_yellow", "fund_om_drop", "fund_gm_drop",
+    "fund_de_rise", "fund_cr_drop", "fund_roe_drop", "fund_pm_abnormal", "fund_report_grace_days",
+    "target_anomaly_pct",
+})
+
+
+def _sanitize_snapshot_fields(value):
+    """浅复制并过滤已知退役键；其它字段保持原值。"""
+    out = {key: item for key, item in value.items() if key not in _RETIRED_SNAPSHOT_KEYS}
+    if "signal_marks" in out:
+        out["signal_marks"] = [mark for mark in out["signal_marks"] or [] if mark[0] != "fund"]
+    if "symbol" in out and any(key in out for key in ("target", "purple", "signal_marks", "signals")):
+        out = _apply_target(out)
+    return out
+
+
+def _sanitize_snapshot(snapshot):
+    """旧快照只在渲染副本中清理，原对象与磁盘保存快照不变。"""
+    out = _sanitize_snapshot_fields(snapshot)
+    old_target_counts = (snapshot.get("signal_counts") or {}).get("target") or {}
+    old_target_light = bool(old_target_counts.get("red") or old_target_counts.get("yellow"))
+    for field in ("summary", "list_counts", "signal_counts", "effective_settings"):
+        if isinstance(out.get(field), dict):
+            out[field] = _sanitize_snapshot_fields(out[field])
+    if isinstance(out.get("signal_members"), dict):
+        out["signal_members"] = {
+            kind: {level: [_sanitize_snapshot_fields(entry) if isinstance(entry, dict) else entry
+                           for entry in entries] if isinstance(entries, list) else entries
+                   for level, entries in members.items()} if isinstance(members, dict) else members
+            for kind, members in out["signal_members"].items() if kind != "fund"
+        }
+    for field in ("items", "stocks", "text_only"):
+        if isinstance(out.get(field), list):
+            out[field] = [_sanitize_snapshot_fields(item) if isinstance(item, dict) else item
+                          for item in out[field]]
+    rows = out.get("items") if isinstance(out.get("items"), list) else out.get("stocks")
+    if isinstance(rows, list):
+        out["target_overlays"] = target_overlay_members(rows)
+        if isinstance(out.get("summary"), dict):
+            out["summary"].update({level: sum(d.get("level") == level for d in rows)
+                                   for level in ("red", "yellow", "green", "gray")})
+    overlays = out.get("target_overlays")
+    union = _target_overlay_union(overlays) if isinstance(overlays, dict) else []
+    if isinstance(out.get("signal_counts"), dict):
+        out["signal_counts"]["target"] = {"label": dict(SIGNAL_KINDS)["target"],
+                                            "red": 0, "yellow": 0, "purple": len(union)}
+    if isinstance(out.get("signal_members"), dict):
+        out["signal_members"]["target"] = {"red": [], "yellow": [], "purple": union}
+    if isinstance(out.get("summary"), dict):
+        out["summary"]["purple"] = len(union)
+        if old_target_light and not isinstance(rows, list):
+            for level in ("red", "yellow"):
+                entries = out.get("signal_members") or {}
+                counts = out.get("signal_counts") or {}
+                if isinstance(entries, dict) and counts and all(
+                        not value.get(level) or isinstance(entries.get(kind), dict)
+                        and isinstance(entries[kind].get(level), list)
+                        and len(entries[kind][level]) == value[level]
+                        for kind, value in counts.items() if kind != "target"):
+                    out["summary"][level] = len({instrument_identity(d["symbol"])
+                        for kind, levels in entries.items() if kind != "target" and isinstance(levels, dict)
+                        for d in levels.get(level) or [] if isinstance(d, dict) and d.get("symbol")})
+                else:
+                    out["summary"][level] = None
+    return out
+
+
 def build_snapshot(macro, items, cfg, group_counts=None):
+    priority = {g["item_group"]: i for i, g in enumerate(GROUPS)}
+    unique = {}
+    for item in sorted(items, key=lambda d: priority.get(d.get("group"), len(GROUPS))):
+        identity = instrument_identity(item["symbol"])
+        if identity not in RISK_IDENTITIES:
+            unique.setdefault(identity, item)
+    items = [_sanitize_snapshot_fields(item) for item in unique.values()]
     dates = sorted({d.get("data_date") for d in items if d.get("data_date") and not d.get("reference_only")})
     references = {normalize_symbol(d["symbol"]): d["data_date"] for d in items
                   if d.get("reference_only") and d.get("data_date")}
@@ -4553,7 +4310,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
         "mode": "closed" if CLOSED_ONLY else "manual_or_config",
         "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
         "config_files": {f: config_hash(f) for f in ("holdings.json", "settings.json")},
-        "effective_settings": dict(S),
+        "effective_settings": _sanitize_snapshot_fields(S),
         "groups": GROUPS,
         "group_monitoring": monitoring,
         "registered_counts": {g["key"]: len(cfg.get(g["key"]) or {}) for g in GROUPS},
@@ -4561,8 +4318,10 @@ def build_snapshot(macro, items, cfg, group_counts=None):
                         "triggers": sum(bool(c.get("trigger")) for c in positions.values()),
                         "reduces": sum(bool(reduce_rule(c)) for c in positions.values()),
                         "dca": 1 if dca else 0},
-        "summary": {**{lv: sum(d["level"] == lv for d in items) for lv in ("red", "yellow", "green", "gray")},
-                    "purple": sum(bool(d.get("purple")) for d in items),
+        "summary": {**{lv: sum(d["level"] == lv and (lv not in ("red", "yellow")
+                              or not d.get("reference_only") and ("price" not in d or d["price"] is not None))
+                              for d in items) for lv in ("red", "yellow", "green", "gray")},
+                    "purple": purple_counts(items),
                     "total": len(items), "macro_ok": sum(bool(m.get("ok")) for m in macro.values()),
                     "stale_symbols": stale, "missing_symbols": missing,
                     "unsupported_symbols": unsupported, "reference_dates": references,
@@ -4571,6 +4330,7 @@ def build_snapshot(macro, items, cfg, group_counts=None):
                     "missing_prices": sum(d.get("price") is None for d in items)},
         "signal_counts": signal_counts(items),
         "signal_members": signal_count_members(items),
+        "target_overlays": target_overlay_members(items),
         "text_only": text_only_members(items),
         "earnings_week": {"asof": earnings_asof, "members": earnings_week_members(items, earnings_asof)},
         "actual_dates": {"min": dates[0] if dates else "", "max": dates[-1] if dates else ""},
@@ -4645,16 +4405,8 @@ def _macro_rows(macro, risk):
 _LEVEL_ORDER = {"red": 0, "yellow": 1, "green": 2, "gray": 3}
 
 
-def _fund_alert(d):
-    """行情没异动但基本面亮了警示的，要上表并往前排，否则徽章永远藏在「无异动 N 只」里看不见。"""
-    return (d.get("fund") or {}).get("level") in ("red", "yellow")
-
-
 def _sort_key(d):
-    base = _LEVEL_ORDER[d["level"]]
-    if _fund_alert(d) and base > 1:
-        base = 1.5  # 夹在黄和绿之间
-    return (base, -(abs(d["chg"]) if d["chg"] else 0))
+    return (_LEVEL_ORDER[d["level"]], -(abs(d["chg"]) if d["chg"] else 0))
 
 
 def _dedupe_items(items):
@@ -4671,9 +4423,7 @@ def _dedupe_items(items):
 
 
 def _row_tags(d, snapshot):
-    """名称旁的小标签：ETF、无数据、参考值、日线日期。
-
-    2026-10-15：财报类状态说明（基本面取数状态）不再放这里，统一挪到「财报」列。"""
+    """名称旁的小标签：ETF、无数据、参考值、日线日期。"""
     # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
     tag = '<span class="tag">ETF</span>' if (d.get("etf") or is_etf(d["symbol"])) else ""
     if d.get("price") is None:
@@ -4691,55 +4441,15 @@ def _row_tags(d, snapshot):
     return tag
 
 
-def _fund_detail_html(d):
-    """基本面红黄警示详情与按报告期失效的已读提醒。"""
-    fund = d.get("fund") or {}
-    if fund.get("level") not in ("red", "yellow") or not fund.get("hits"):
-        return ""
-    raw_period = str(fund.get("period") or "")
-    period_date = _fund_period_date(raw_period)
-    period_token = period_date.replace("-", "") if period_date else hashlib.sha256(raw_period.encode("utf-8")).hexdigest()[:8]
-    symbol = normalize_symbol(d["symbol"])
-    ack_key = f"{symbol}|fund|{period_token}"
-    safe_key = html_lib.escape(ack_key, quote=True)
-    safe_symbol = html_lib.escape(symbol, quote=True)
-    period = html_lib.escape(raw_period or "未提供")
-    hits = "".join(f'<li>{html_lib.escape(str(hit))}</li>' for hit in fund["hits"])
-    fcls = "tag f-red" if fund["level"] == "red" else "tag f-yellow"
-    label = html_lib.escape(f"查看 {symbol} 基本面详情")
-    level_label = "红灯" if fund["level"] == "red" else "黄灯"
-    compare = html_lib.escape(str(fund.get("compare") or ""))
-    compare_html = f'<div class="fund-span">对比 {compare}</div>' if compare else ""
-    # 2026-10-21：详情里只说命中项 + 必要的数据质量提示。
-    # 长句（接口只有最近4个季度/单项比率不等于主营恶化）一律不写；与命中项重复的参考项（如「本季营业利率 27.0%」）也去掉。
-    ctx = [str(x).strip() for x in fund.get("context") or [] if str(x).strip()]
-    ctx = [c for c in ctx if not any(str(x).strip() and str(x).strip() in c for x in fund["hits"])]
-    ctx = [c for c in ctx if "单项比率" not in c]
-    context_html = (f'<div class="fund-context">{html_lib.escape("；".join(ctx))}</div>' if ctx else "")
-    return (f'<div class="fund-alert" data-fund-key="{safe_key}" data-fund-symbol="{safe_symbol}" '
-            f'data-fund-level="{fund["level"]}">'
-            f'<details class="fund-detail"><summary class="{fcls}" aria-label="{label}">'
-            f'基本面</summary><div class="fund-body"><div>{period} 报告期</div>{compare_html}'
-            f'<ul>{hits}</ul>{context_html}</div></details>'
-            f'<div class="cost-warn fund-ack-line" data-level="{fund["level"]}">'
-            f'<span class="w">⚠ 基本面{level_label} · {period} 报告期</span>'
-            f'<button type="button" class="ack-btn" data-ack="{safe_key}" '
-            f'aria-label="标记 {symbol} {period or "当前报告期"} 基本面为已读">✓</button></div></div>')
-
-
 def _earnings_html(d):
-    """财报列：主行是财报日期/时段，副行优先放基本面取数状态（2026-10-15 从名称列挪过来）。
-
-    有基本面状态时副行就写它，否则仍是财报本身的那句说明（预计/估算/未取得…）。
-    """
+    """财报列只写美东日期/时段与北京时间，不混入来源说明。"""
     earn = earnings_label(d.get("earnings"))
-    fund_note = html_lib.escape(str(d.get("fund_cache_note") or "")).strip()
-    if not earn and not fund_note:
+    if not earn:
         return ""
     urgency = earnings_urgency(d.get("earnings"))
     soon = {"red": " urgent", "yellow": " soon"}.get(urgency, "")
-    main = html_lib.escape(earn[0]) if earn else ""
-    sub = f"基本面：{fund_note}" if fund_note else (html_lib.escape(earn[1]) if earn else "")
+    main = html_lib.escape(earn[0])
+    sub = html_lib.escape(earn[1])
     unit = f'<span class="unit">{sub}</span>' if sub else ""
     return f'<span class="earn{soon}">{main}{unit}</span>'
 
@@ -4772,7 +4482,7 @@ def _signals_html(d):
     parts = [_signal_text_html(x) for x in signals if not is_tp(x)] + [_signal_text_html(x) for x in signals if is_tp(x)]
     sig = " · ".join(parts) if parts else "—"
     tg = d.get("target") or {}
-    if tg.get("kind") == "manual" and tg.get("space") is not None and not tg.get("hit") and not tg.get("anomaly"):
+    if tg.get("kind") == "manual" and target_display_state(tg) == "low":
         sig = ("" if sig == "—" else sig + " · ") + f'<span class="tnote">目标价 {_price_text(tg["price"])}，空间 {tg["space"]:+.0f}%</span>'
     return sig
 
@@ -4846,36 +4556,45 @@ def _stock_anchor_id(symbol):
     return "s-" + re.sub(r"[^0-9A-Za-z]+", "-", str(ident)).strip("-").lower()
 
 
-def _stock_row(d, snapshot):
-    cls = d["level"] + (" pur" if d.get("purple") else "")
+def _quiet_keep(d, earnings_week):
+    """独立于红黄灯的主表保留原因；已读降绿后仍适用。"""
+    return bool(d.get("reference_only") or not d.get("foldable", True)
+                or _target_active(d) or earnings_soon(d.get("earnings"), earnings_week))
+
+
+def _stock_row(d, snapshot, earnings_week=None):
+    if d.get("target") or d.get("purple") or any(kind == "target" for kind, _ in d.get("signal_marks") or []):
+        d = _apply_target(d)
+    earnings_week = earnings_week or (snapshot.get("earnings_week") or {}).get("asof") or _bj_today()
+    quiet_keep = "true" if _quiet_keep(d, earnings_week) else "false"
+    state = target_display_state(d.get("target"))
+    stripe = {"reached": "pur-hit", "space": "pur-space", "high": "pur-high"}.get(state)
+    cls = d["level"] + (" pur " + stripe if _target_active(d) and stripe else "")
     chg_cls = "up" if (d["chg"] or 0) > 0 else (
         "down" if (d["chg"] or 0) < 0 else "")
     chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
     note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
     lv_html = level_note(d.get("trigger"), d.get("reduce"))
     tg_html = target_tag(d.get("target") or {})
-    week_asof = (snapshot.get("earnings_week") or {}).get("asof") or _bj_today()
-    fund_foldable = (_fund_alert(d) and d["level"] == "green" and not d.get("purple")
-                     and not d.get("reference_only")
-                     and not earnings_soon(d.get("earnings"), week_asof))
-    fold_attr = ' data-fund-foldable="1"' if fund_foldable else ""
     # 持仓内部分长短：长持仓屏蔽上轨普通过热，页面上标出来，不然看不出区别
     hold_html = ('<span class="unit" title="长持仓：不看一般过热，RSI 三条全过界才提醒">长</span>'
                  if d.get("group") == "position" and str(d.get("hold") or "") == "long" else "")
     return (
-        f'<tr class="{cls}" id="{_stock_anchor_id(d["symbol"])}"{fold_attr}><td class="sym">'
+        f'<tr class="{cls}" id="{_stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
+        f'data-price="{html_lib.escape(str(d.get("price") or ""), quote=True)}" '
+        f'data-prev-close="{html_lib.escape(str(d.get("prev_close") or ""), quote=True)}"><td class="sym">'
         f'{normalize_symbol(d["symbol"])}{note}{hold_html}'
         f'{lv_html}{_row_tags(d, snapshot)}</td>'
         f'<td class="earn-cell">{_earnings_html(d)}</td>'
         f'<td class="num px"><span class="px-price">{fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
         f'<span class="px-chg {chg_cls}">{chg_txt}</span>{tg_html}</td>'
-        f'<td class="sig">{_signals_html(d)}{_fund_detail_html(d)}</td></tr>'
+        f'<td class="sig">{_signals_html(d)}</td></tr>'
         + _range52_row(d)
     )
 
 
-def _stock_rows(lst, snapshot):
-    out = "".join(_stock_row(d, snapshot) for d in lst)
+def _stock_rows(lst, snapshot, earnings_week=None):
+    out = "".join(_stock_row(d, snapshot, earnings_week) for d in lst)
     return out or '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
 
 
@@ -4891,14 +4610,13 @@ def _group_stats_html(g, group, items_by_symbol, enabled):
                     for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"))
                     if (count := sum(d["level"] == lv for d in g)))
     # 灰灯（只出 RSI / 布林文字、不报灯）：口径与顶部「统计」一致，分组标题也能看到
-    if (n_gray := sum(d.get("level") == "green" and not d.get("reference_only")
-                      and bool(_text_only_kind(d.get("signals"))) for d in g)):
+    if (n_gray := len(text_only_members(g))):
         stats += _count_badge("gray", n_gray, "灰灯")
     # 无数据（缺失）单独用虚线圈，避免和灰灯撞名
     if (n_miss := sum(d["level"] == "gray" for d in g)):
         stats += _count_badge("missing", n_miss, "缺失")
     # 紫色（目标价 / 共识价警示）：条数跟在红黄灯后面；一条都没有就不显示
-    if (n_pur := sum(bool(d.get("purple")) for d in g)):
+    if (n_pur := purple_counts(g)):
         stats += _count_badge("purple", n_pur, "紫色警示")
     # 板块组：红黄灯后面跟「板块 ETF 近 20 日相对标普500的强弱」，折叠时也能看到
     rs = (items_by_symbol.get(group["sector_etf"]) or {}).get("rs_spy") if group.get("sector_etf") else None
@@ -4954,18 +4672,20 @@ def _position_zone(d):
 
 def _group_body(g, group, snapshot, earnings_week, enabled, collapse_id, collapse_label, empty_note=""):
     """分组（或持仓内部某个区）的展开内容：空提示 + 警示表 + 「无异动 N 只」折叠表 + 底部收起条。"""
-    shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or _fund_alert(d) or d.get("reference_only")
-             or d.get("purple") or earnings_soon(d.get("earnings"), earnings_week)]
-    quiet = [d for d in g if d["level"] == "green" and not _fund_alert(d) and not d.get("reference_only")
-             and not d.get("purple") and not earnings_soon(d.get("earnings"), earnings_week)]
+    earnings_week = earnings_week or (snapshot.get("earnings_week") or {}).get("asof") or _bj_today()
+    g = [dict(d, group=group["item_group"]) if d.get("group") != group["item_group"] else d for d in g]
+    g = [_apply_target(d) if d.get("target") or d.get("purple")
+         or any(kind == "target" for kind, _ in d.get("signal_marks") or []) else d for d in g]
+    shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or _quiet_keep(d, earnings_week)]
+    quiet = [d for d in g if d["level"] == "green" and not _quiet_keep(d, earnings_week)]
     parts = []
     if empty_note:
         parts.append(f'<div class="quiet">{empty_note}</div>')
     if shown:
-        parts.append(f'<table class="stk">{STK_COLS}{STK_HEAD}{_stock_rows(shown, snapshot)}</table>')
+        parts.append(f'<table class="stk">{STK_COLS}{STK_HEAD}{_stock_rows(shown, snapshot, earnings_week)}</table>')
     if quiet:
         parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只 · 点击查看</summary>'
-                     f'<table class="stk">{STK_COLS}{STK_HEAD}{_stock_rows(quiet, snapshot)}</table></details>')
+                     f'<table class="stk">{STK_COLS}{STK_HEAD}{_stock_rows(quiet, snapshot, earnings_week)}</table></details>')
     parts.append(_collapse_button(collapse_id, collapse_label))
     return "\n".join(parts)
 
@@ -5039,22 +4759,22 @@ def _run_light(snapshot, finished_txt):
         return "idle", f"清单中 {unsupported_count} 个特殊代码暂不支持报价，未抓取报价"
     risk = snapshot.get("market_risk") or {}
     missing_risk = risk.get("missing") or []
+    kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
+    # 仅列出缺失或不支持的项目，不重复显示完整数据的已更新计数。
+    deficits = []
+    if summary.get("gray"):
+        deficits.append(f"缺失 {summary.get('gray')}")
+    if unsupported_count:
+        deficits.append(f"{unsupported_count} 个特殊代码暂不支持报价")
     if isinstance(missing_risk, list) and missing_risk:
         names = "、".join(html_lib.escape(str(name)) for name in missing_risk)
         valid = risk.get("valid_count", 5 - len(missing_risk))
-        kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
-        return "partial", (f"{kind}运行已完成 · 市场风险数据缺失或过期：{names}（有效指标 {valid}/5） · "
-                           f"个股行情 {total - unsupported_count}/{total} 已更新 · "
-                           f"完成于 {finished_txt}（北京时间）")
-    kind = {"schedule": "自动", "workflow_dispatch": "手动", "push": "保存后"}.get(snapshot.get("event"), "")
-    # 一切正常时只报完成时间就行了：「N 项数据已更新」「红N 黄N 绿N」都是废话。
-    # 只有真的有缺失（缺失 N）或不支持报价的特殊代码时才补一句。
-    parts = [f"完成于 {finished_txt}（北京时间）"]
-    if summary.get("gray"):
-        parts.append(f"缺失 {summary.get('gray')}")
-    if unsupported_count:
-        parts.append(f"{total - unsupported_count} 项数据已更新 · "
-                     f"{unsupported_count} 个特殊代码暂不支持报价")
+        parts = [f"{kind}运行已完成",
+                 f"市场风险数据缺失：{names}（有效指标 {valid}/5）"]
+        parts.extend(deficits)
+        parts.append(f"完成于 {finished_txt}（北京时间）")
+        return "partial", " · ".join(parts)
+    parts = [f"完成于 {finished_txt}（北京时间）"] + deficits
     return "ok", f"{kind}抓取成功 · " + " · ".join(parts)
 
 
@@ -5127,9 +4847,6 @@ def _filter_detail(d, kind, label):
         hits = d.get("boll_rsi_hits")
         extra = f" RSI{hits}条" if type(hits) is int and hits in (2, 3) else ""
         return f"布林+RSI {d['direction']}{extra}"
-    if kind == "fund":
-        hits = [str(h) for h in (d.get("fund_hits") or []) if str(h).strip()]
-        return f"基本面 {'；'.join(hits)}" if hits else label
     marks = [m.get("label") for m in d.get("indicators") or []
              if isinstance(m, dict) and isinstance(m.get("label"), str) and m.get("label")]
     return f"{label} {' / '.join(marks)}" if marks else label
@@ -5199,7 +4916,7 @@ def _signal_counts_card(snapshot):
     rows = ""
     filters = {}  # 同时满足筛选：每类信号的已核验成员（红/黄/紫合并）
     gray_by_kind = _gray_by_kind(snapshot)
-    kinds_iter = list(counts.items())
+    kinds_iter = [(kind, value) for kind, value in counts.items() if kind not in ("fund", "target")]
     for gkind in ("rsi", "boll", "boll_rsi"):
         if gray_by_kind.get(gkind) and gkind not in counts:
             kinds_iter.append((gkind, {"label": dict(SIGNAL_KINDS)[gkind]}))
@@ -5258,7 +4975,7 @@ def _signal_counts_card(snapshot):
                             if isinstance(d.get("note"), str) and d["note"].strip() else "")
                     # 分组写在代码后面的括号里：持仓内部标长/短，跟首页分区对得上
                     belong = f'<span class="signal-member-belong">（{esc(_member_belong(d))}）</span>'
-                    # 灯统一用列表圆点（marker）画在最前面，基本面不再另起一套：
+                    # 灯统一用列表圆点（marker）画在最前面：
                     # 52周低位、布林+RSI 等栏目都是这个位置、这个大小、按这一格灯色着色。
                     return (f'<li>'
                             f'<a class="signal-member-jump" href="#{_stock_anchor_id(d["symbol"])}">'
@@ -5307,7 +5024,10 @@ def _signal_counts_card(snapshot):
                  f'<tr class="signal-members-row"><td colspan="4">{"".join(panels)}</td></tr>')
     earnings_panel = _earnings_week_panel(snapshot)
     purple_panel = _target_purple_panel(snapshot)
-    if not rows and not earnings_panel and not purple_panel:
+    if not rows and not earnings_panel and not purple_panel and (
+            "target_overlays" in snapshot or not any(
+                type((snapshot.get("summary") or {}).get(level)) is int
+                and snapshot["summary"][level] > 0 for level in ("red", "yellow"))):
         return ""
     if "boll" in filters and "boll_rsi" in filters:  # 点「布林」时也算上布林+RSI组合里的标的
         merged = {key: {**rec, "d": list(rec["d"])} for key, rec in filters["boll"]["members"].items()}
@@ -5342,15 +5062,12 @@ def _signal_counts_card(snapshot):
                 }
         filters[kind] = rec
 
-    target_counts = counts.get("target") if isinstance(counts, dict) else {}
-    target_counts = target_counts if isinstance(target_counts, dict) else {}
-    target_purple = target_counts.get("purple")
-    summary = snapshot.get("summary") or {}
-    if type(target_purple) is int and target_purple > 0:
-        purple_entries = ((members.get("target") or {}).get("purple")
-                          if isinstance(members, dict) and isinstance(members.get("target"), dict) else None)
-        add_overlay_filter("target_purple", "紫灯", purple_entries, target_purple,
-                           lambda d: _filter_detail(d, "target", "紫灯"))
+    overlays = snapshot.get("target_overlays")
+    if isinstance(overlays, dict):
+        purple_entries = _target_overlay_union(overlays)
+        if purple_entries:
+            add_overlay_filter("target_purple", "空间 / 达到", purple_entries, len(purple_entries),
+                               lambda d: str(d.get("detail") or "空间 / 达到"))
 
     earnings = snapshot.get("earnings_week")
     if isinstance(earnings, dict):
@@ -5401,7 +5118,7 @@ def _signal_counts_card(snapshot):
             f'{_collapse_button("signalCounts", "统计")}</details>\n')
 
 
-_GRAY_RSI_RE = re.compile(r"RSI ([23])条(超买|超卖)")
+_GRAY_RSI_RE = re.compile(r"RSI ([123])条(超买|超卖)")
 
 
 def _gray_by_kind(snapshot):
@@ -5477,53 +5194,45 @@ def _gray_cell(kind, picked, label, filter_members, group_labels, group_order):
 
 
 def _target_purple_panel(snapshot):
-    """紫灯移到原灰灯折叠区位置；仅列真正紫灯目标提示，并可作为叠加筛选条件。"""
-    counts = snapshot.get("signal_counts") or {}
-    target_counts = counts.get("target") if isinstance(counts, dict) else {}
-    target_counts = target_counts if isinstance(target_counts, dict) else {}
-    summary = snapshot.get("summary") or {}
-    summary_count = summary.get("purple")
-    target_count = target_counts.get("purple")
-    valid_counts = [n for n in (summary_count, target_count) if type(n) is int and n >= 0]
-    count = max(valid_counts) if valid_counts else None
-    if type(count) is not int or count <= 0:
+    """展开空间/达到两段；高空间紫红空心优先，达到一律紫色实心并写具体事件。"""
+    overlays = snapshot.get("target_overlays")
+    if not isinstance(overlays, dict):
         return ""
-    members = snapshot.get("signal_members") or {}
-    target_members = members.get("target") if isinstance(members, dict) else {}
-    entries = target_members.get("purple") if isinstance(target_members, dict) else None
-    valid = (isinstance(entries, list) and len(entries) == count
-             and all(isinstance(d, dict) and isinstance(d.get("symbol"), str) and d["symbol"].strip()
-                     for d in entries))
-    if valid:
-        valid = len({instrument_identity(d["symbol"]) for d in entries}) == count
+    space, reached = overlays.get("space"), overlays.get("reached")
+    if not isinstance(space, list) or not isinstance(reached, list) or not (space or reached):
+        return ""
+    valid = all(isinstance(d, dict) and isinstance(d.get("symbol"), str) and d["symbol"].strip()
+                and isinstance(d.get("detail"), str) and d["detail"]
+                for entries in (space, reached) for d in entries)
+    valid = valid and all(len({instrument_identity(d["symbol"]) for d in entries}) == len(entries)
+                          for entries in (space, reached))
     esc = lambda v: html_lib.escape(str(v), quote=True)
+    order = {g["item_group"]: i for i, g in enumerate(_display_groups())}
+    parts = []
     if valid:
-        order = {g["item_group"]: i for i, g in enumerate(_display_groups())}
-        group_order = {g["item_group"]: i for i, g in enumerate(GROUPS)}
-        group_label = {g["item_group"]: g["label"] for g in GROUPS}
-        lines = []
-        for d in sorted(entries, key=lambda item: order.get(str(item.get("group") or ""), len(order))):
-            symbol = normalize_symbol(d["symbol"])
-            note = f'<span class="note">{esc(d.get("note"))}</span>' if str(d.get("note") or "").strip() else ""
-            group = str(d.get("group") or "")
-            belong = "长持仓" if group == "position" and str(d.get("hold") or "short").lower() == "long" else (
-                "短持仓" if group == "position" else group_label.get(group, group or "未分类"))
-            indicators = [m.get("label") for m in d.get("indicators") or []
-                          if isinstance(m, dict) and isinstance(m.get("label"), str) and m["label"]]
-            details = " / ".join(indicators) or "目标价提示"
-            # 名单行首用紫色方块代替灰色圆点：□＝上涨空间达标；■＝现价已在目标价/共识价范围内（▲▼＝当日上穿/跌破）
-            lead = _member_icons(d, "target", "purple").strip()
-            lines.append(f'<li>{lead}<a class="signal-member-jump" href="#{_stock_anchor_id(symbol)}">'
-                         f'<span class="signal-member-symbol">{esc(symbol)}</span>{note}</a>'
-                         f'<span class="signal-member-belong">（{esc(belong)}）</span>'
-                         f' <span class="signal-member-direction">{esc(details)}</span></li>')
-        content = '<ul class="signal-member-list">' + "".join(lines) + '</ul>'
+        for section, entries, label in (("space", space, "空间"), ("reached", reached, "达到")):
+            lines = []
+            ordered = sorted(entries, key=lambda d: (0 if section == "space" and d.get("band") == "high" else 1,
+                             order.get(d.get("group"), len(order)), d["symbol"]))
+            for d in ordered:
+                symbol = normalize_symbol(d["symbol"])
+                note = f'<span class="note">{esc(d.get("note"))}</span>' if str(d.get("note") or "").strip() else ""
+                tone = "tone-target-high" if section == "space" and d.get("band") == "high" else "tone-purple"
+                shape = "□" if section == "space" else "■"
+                lead = f'<span class="signal-member-icon {tone}" aria-hidden="true">{shape}</span>'
+                high_class = ' class="target-space-high"' if tone == "tone-target-high" else ""
+                lines.append(f'<li{high_class}>{lead}<a class="signal-member-jump" href="#{_stock_anchor_id(symbol)}">'
+                             f'<span class="signal-member-symbol">{esc(symbol)}</span>{note}</a>'
+                             f'<span class="signal-member-belong">（{esc(_member_belong(d))}）</span>'
+                             f' <span class="signal-member-direction">{esc(d["detail"])}</span></li>')
+            parts.append(f'<h5>{label}</h5><ul class="signal-member-list">{"".join(lines)}</ul>')
+        content = "".join(parts)
     else:
-        content = '<p>明细待下次更新：当前快照缺少紫灯名单或人数不一致，暂不展示。</p>'
+        content = '<p>明细待下次更新：当前快照名单无效或有重复标的，暂不展示。</p>'
     return (f'<div class="signal-extra-row purple-extra">'
             f'<button type="button" class="signal-filter-toggle" data-kind="target_purple" '
-            f'aria-pressed="false" aria-label="选择紫灯叠加条件">紫灯条件</button>'
-            f'<details class="text-only target-purple"><summary>紫灯 {count} 只 · 目标价 / 共识价</summary>'
+            f'aria-pressed="false" aria-label="选择空间或达到叠加条件">紫灯条件</button>'
+            f'<details class="text-only target-purple"><summary>空间{len(space)}只　达到{len(reached)}只</summary>'
             f'{content}</details></div>')
 
 
@@ -5574,13 +5283,8 @@ def _reference_card(snapshot, *, details_only=False):
     checked = policy_alerts.moment(fed.get("checked_at"))
     if checked:
         details += f'<p>最近查询：{checked.astimezone(TZ).strftime("%Y-%m-%d %H:%M")}（北京时间）。</p>'
-    details += ('<p>成功后持久缓存；日常只在本地比较下次公布时间，不按24小时重复抓取。'
-                '到计划决议公布时间，随下一次监测运行查询新消息；未取得新消息标记待更新，保留旧决议。'
-                '失败或待更新后至少间隔1小时再试；日程缺失只补查日历，已核实的同一声明不重复下载。'
-                '检查随现有监测任务运行，不额外启动定时任务；不是每小时自动抓取。</p>'
-                '<p>仅按例行会议日程更新，临时决议可能延迟发现；未额外增加每日公告检查。</p>'
-                '<p>仅展示已公布的加息／降息／维持不变，不展示预测，不解读市场安全与危险，不计入综合评分或个股信号。'
-                '最近正式消息保留至新消息核实；新决议应公布但未取得时标记待更新。</p>')
+    details += ('<p>抓取来源与缓存间隔见<a class="rule-jump" href="#fetch-reference">名词解释和抓取</a>。'
+                '仅按例行会议日程更新，临时决议可能延迟发现。</p>')
     if details_only:
         return ('<details class="macro-help" id="policyAlertDetails">'
                 '<summary>美联储利率决议 · 查看数据与来源</summary>' + details + '</details>')
@@ -5640,18 +5344,19 @@ def _page_notes(snapshot):
     """页底集中收纳说明；不改变任何指标阈值和判断规则。"""
     return f'''<section class="card page-notes" id="pageNotes" aria-label="规则与数据说明">
 <div class="grp">规则与数据说明</div>
-<details class="macro-help" id="marketRiskRules"><summary>综合判断规则</summary><p>{html_lib.escape(RISK_RULE_TEXT)}</p>
-{('<p>补充参考：美联储利率决议、WTI原油不计入综合灯；综合灯仍依据原5项指标。</p>' if snapshot.get('reference_alerts') else '')}</details>
-{_reference_card(snapshot, details_only=True) or '<details class="macro-help" id="policyAlertDetails"><summary>完整报灯规则 · 全局 + 分组差异</summary><p>规则说明正在载入…</p></details>'}
-<details class="macro-help" id="dataSourceRules"><summary>宏观细则与数据来源</summary>
-<p>垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到黄线，一周扩大至少 30 bp 为黄、至少 50 bp 为红（水平仍低于黄线时只提示观察是否持续）；达到 500 bp 会标注“信用压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
+<details class="macro-help" id="marketRiskRules"><summary>综合判断与宏观细则</summary>
+<h5>综合评分</h5>
+<p>{html_lib.escape(RISK_RULE_TEXT)}</p>
+<h5>宏观指标细则</h5>
+<p>垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到黄线，一周扩大至少 {HY_WEEK_YELLOW} bp 为黄、至少 {HY_WEEK_RED} bp 为红（水平仍低于黄线也照常报灯，说明另提醒观察是否持续）；达到 500 bp 会标注“信用压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
 <p>VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500距近一段高点回撤不足10%为绿、达到10%或15%为黄、达到20%为红，这些是已发生的跌幅。</p>
-<p>上涨参与度：站上200日均线的股票不足50%为黄；不足30%且近期垃圾债利差或金融压力NFCI也达到警戒时为红；站上50日均线的股票不足30%也为黄。金融压力NFCI为周度：指数达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
-<p>五指标综合市场风险：信用／金融环境包括垃圾债利差、金融压力NFCI；情绪包括VIX；趋势包括标普500回撤、上涨参与度。每项黄记1分、红记2分，同类只取最高分；信用／金融环境按2倍计分，情绪和趋势各按1倍，总分0至8。0至1分为综合绿（轻微提示写在说明里），2至4分为综合黄，5分及以上为综合红。有指标缺失时最低为黄。综合灯不是买卖指令，也不预测涨跌。</p>
-<p>综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力NFCI最多13日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且信用压力最多落后5日或金融压力NFCI最多13日达到警戒。</p>
-<p>财报日期：个股常驻显示下一次财报日期（ETF、指数、期货除外）。日期缓存并按远近复查，财报日过后立即检查下一次；请求失败或超出本轮额度时保留仍有效的旧缓存。未来14天内文字标黄，未来15天在统计面板单列名单；“算法估算”日期可能调整，尚未公布标“待公布”。数据源仅给美东日期和盘前／盘后／盘中，不含具体钟点。</p>
-<p>标的去重：一级市场风险和持仓、二级重点关注、三级其他分组；相同实质标的只在最高优先级显示和报警，清单记录不删除。VIX及标普指数只在市场风险显示；指数、跟踪ETF和期货不是同一标的。</p>
-<p>数据来源：垃圾债利差使用FRED；VIX、标普指数和10年收益率使用Yahoo；NFCI使用芝加哥联储原始周度数据，过期或不可用时以FRED同一指标同步备用；上涨参与度使用市场宽度源，不能用ETF价格替代。股票日线按既有来源降级，Nasdaq盘中报价只覆盖股票/ETF；来源、实际观测日期与数据失效状态均在页面标明。</p>
+<p>上涨参与度：站上200日均线的股票不足50%为黄；不足30%时，还需近期垃圾债利差已为红，或金融压力NFCI达到或高于0，才升级红；站上50日均线的股票不足30%也为黄。NFCI为周度：达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
+<h5>数据有效性</h5>
+<p>综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力NFCI最多13日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且垃圾债利差最多落后5日并已为红，或NFCI最多落后13日且达到或高于0；垃圾债利差仅为黄不足以确认。</p>
+<h5>补充参考</h5>
+<p>美联储利率决议、WTI原油、10年美债收益率仅作参考，不计入五指标综合分或有效指标数。</p>
+<p>10年美债收益率：相对约30个自然日前可用观测，上行至少{UST_MONTH_YELLOW} bp为参考黄，至少{UST_MONTH_WATCH}但不足{UST_MONTH_YELLOW} bp只提示、仍绿；缺历史则不判断。</p>
+{_reference_card(snapshot, details_only=True)}
 </details>
 </section>'''
 
@@ -5661,7 +5366,8 @@ def _position_symbols():
     try:
         import io as _io
         import json as _json
-        h = _json.load(_io.open(os.path.join(BASE, "holdings.json"), encoding="utf-8"))
+        with _io.open(os.path.join(BASE, "holdings.json"), encoding="utf-8") as stream:
+            h = _json.load(stream)
         return [str(s) for s in (h.get("positions") or {}).keys()]
     except Exception:
         return []
@@ -5673,10 +5379,11 @@ def _cost_seed_json(fetched=None):
     旧名 position-costs.local.json 仍兼容）。只是「第一次打开时的兜底值」——
     本机 localStorage 和云端 position-costs.json 都优先于它。"""
     import json as _json
-    items, cash, fixed, fixed_cost = {}, 0, 0, 0
+    items, cash, cash_extra, fixed, fixed_cost = {}, 0, 0, 0, 0
     try:
         import io as _io
-        h = _json.load(_io.open(os.path.join(BASE, "holdings.json"), encoding="utf-8"))
+        with _io.open(os.path.join(BASE, "holdings.json"), encoding="utf-8") as stream:
+            h = _json.load(stream)
         for sym, c in (h.get("positions") or {}).items():
             cost = (c or {}).get("cost")
             if isinstance(cost, (int, float)) and cost > 0:
@@ -5690,13 +5397,18 @@ def _cost_seed_json(fetched=None):
     if os.path.exists(p):
         try:
             import io as _io
-            loc = _json.load(_io.open(p, encoding="utf-8"))
+            with _io.open(p, encoding="utf-8") as stream:
+                loc = _json.load(stream)
             asof = str(loc.get("asof") or "")[:10]
             for sym, q in (loc.get("positions") or {}).items():
                 if sym in items and isinstance(q, (int, float)) and q > 0:
                     items[sym]["qty"] = q
             c = loc.get("cash")
             cash = c if isinstance(c, (int, float)) else ((c or {}).get("cash") or 0)
+            extra = loc.get("cash_extra", 0)
+            if (isinstance(extra, (int, float)) and not isinstance(extra, bool)
+                    and math.isfinite(extra) and 0 <= extra <= cash):
+                cash_extra = extra
             fi = loc.get("fixed_income") or {}
             fixed, fixed_cost = fi.get("market") or 0, fi.get("cost") or 0
         except Exception as e:
@@ -5725,7 +5437,7 @@ def _cost_seed_json(fetched=None):
     except Exception:
         rs20 = None
     # asof＝内置快照的日期（种子文件里的券商截图日期）：换设备取不到云端时页面要拿它说明数据来源
-    return _json.dumps({"asof": asof, "cash": cash, "fixed": fixed,
+    return _json.dumps({"asof": asof, "cash": cash, "cash_extra": cash_extra, "fixed": fixed,
                         "fixed_cost": fixed_cost, "items": items, "rs20": rs20}, ensure_ascii=False)
 
 
@@ -5753,7 +5465,10 @@ def _cost_panel_assets(items=None):
 
 def _rule_constants():
     """规则说明中的固定参数直接引用真实引擎，避免另写一份默认数字。"""
-    return {"rsi_periods": " / ".join(map(str, RSI_PERIODS)),
+    source_labels = {"nasdaq": "Nasdaq", "yahoo": "Yahoo", "stooq": "stooq"}
+    return {"quote_closed_sources": " → ".join(source_labels[name] for name in QUOTE_CLOSED_SOURCES),
+            "quote_intraday_sources": " → ".join(source_labels[name] for name in QUOTE_INTRADAY_SOURCES),
+            "rsi_periods": " / ".join(map(str, RSI_PERIODS)),
             "vol_ratio_base": VOL_RATIO_BASE, "vol_z_window": VOL_Z_WINDOW,
             "intraday_vol_quiet_min": INTRADAY_VOL_QUIET_MIN,
             "vol_lookback": VOL_LOOKBACK, "vol_min_returns": VOL_MIN_RETURNS,
@@ -5762,7 +5477,8 @@ def _rule_constants():
             "ma_confirm_lookback": MA_CONFIRM_LOOKBACK,
             "ma_confirm_min": MA_CONFIRM_MIN, "ma_confirm_max": MA_CONFIRM_MAX,
             "ma_confirm_default": MA_CONFIRM_DEFAULT, "ma_long_band_pct": MA_LONG_BAND_PCT,
-            "boll_sigma_factor": _BOLL_SIGMA_FACTOR, "target_anomaly_pct": TARGET_ANOMALY_PCT,
+            "boll_sigma_factor": _BOLL_SIGMA_FACTOR, "target_space_pct": TARGET_SPACE_PCT,
+            "target_high_space_pct": TARGET_HIGH_SPACE_PCT,
             "earn_soon_days": EARN_SOON_DAYS,
             "hy_week_yellow": HY_WEEK_YELLOW, "hy_week_red": HY_WEEK_RED}
 
@@ -5773,7 +5489,23 @@ RULES_TEMPLATE = rules_template(S, _rule_constants())
 
 
 def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
-    snapshot = snapshot or {}
+    legacy_target_light = (any(kind == "target" and level in ("red", "yellow")
+                               for d in items for kind, level in d.get("signal_marks") or [])
+                           or any(isinstance(d.get("target"), dict) and d["target"].get("anomaly")
+                                  for d in items))
+    snapshot = _sanitize_snapshot(snapshot or {})
+    items = [_sanitize_snapshot_fields(item) for item in items]
+    overlays = target_overlay_members(items)
+    union = _target_overlay_union(overlays)
+    snapshot["target_overlays"] = overlays
+    snapshot["signal_counts"] = {**(snapshot.get("signal_counts") or {}),
+        "target": {"label": dict(SIGNAL_KINDS)["target"], "red": 0, "yellow": 0, "purple": len(union)}}
+    snapshot["signal_members"] = {**(snapshot.get("signal_members") or {}),
+        "target": {"red": [], "yellow": [], "purple": union}}
+    snapshot["summary"] = {**(snapshot.get("summary") or {}), "purple": len(union)}
+    if legacy_target_light:
+        snapshot["summary"].update({level: sum(d.get("level") == level for d in items)
+                                    for level in ("red", "yellow", "green", "gray")})
     risk = market_risk_summary(macro, snapshot.get("target_trade_date"))
     rows_macro = _macro_rows(macro, risk)
 
@@ -5788,12 +5520,7 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     group_cards = "".join(_group_card(group, items_by_group[group["item_group"]], items_by_symbol, snapshot)
                           for group in _display_groups())
 
-    src_name = {"yahoo": "Yahoo Finance", "stooq": "Stooq", "nasdaq": "Nasdaq"}
-    srcs = sorted({d.get("source") for d in items if d.get("source")})
-    src_txt = " · ".join(src_name.get(x, x) for x in srcs) if srcs else "本轮不可用"
-    n_rt = len([d for d in items if d.get("realtime")])
-    if n_rt:
-        src_txt += f" · {n_rt} 只用了实时价（Nasdaq，0 延迟）"
+    # 来源与抓取间隔集中到独立名词／抓取区块；页脚只保留导航入口。
     risk_title = html_lib.escape(f"综合判断：{risk['label']} · 有效指标 {risk['valid_count']}/5")
     macro_stats = (f'<span class="market-risk-badge" id="marketRiskLight" data-level="{risk["level"]}" '
                    f'role="status" aria-label="{risk_title}">'
@@ -5812,8 +5539,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
     sub_line = (f"数据时间 {market_data_time(snapshot)} · "
                 f"自动计划：美东周一至五 20:15（北京 {bj_auto}）")
     # 「在册：…」一整行按 2026-10-15 要求删除，不再在首页展示分组在册数与去重说明。
-    consensus_credit = (f'共识价来源：{CONSENSUS_SOURCE}，每只约 {CONSENSUS_REFETCH_DAYS} 天更新一次，财报后提前更新<br>\n'
-                        if any((d.get("target") or {}).get("kind") == "consensus" for d in items) else "")
 
     cost_css, cost_js = _cost_panel_assets(items)
     current_rules = rules_template(S, _rule_constants())
@@ -5834,8 +5559,9 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <link rel="manifest" href="./manifest.webmanifest">
 <title>AI监测</title>
 <style>
-{PAGE_CSS}
-{cost_css}</style>
+{PAGE_CSS.removesuffix(RULES_CSS)}
+{cost_css}
+{RULES_CSS}</style>
 </head>
 <body>{current_rules}<div class="wrap">
 <h1>AI监测</h1>
@@ -5882,11 +5608,11 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <script>window.MM_SETTINGS={{"signal_single_open":{int(S.get("signal_single_open", 1))}}};</script>
 <script>{PAGE_INTERACTION_JS}</script>
 {cost_js}
-<!-- 数据源与首页完整规则入口放在「规则与数据说明」之后 -->
+<!-- 来源正文仅在「名词解释和抓取」维护，页脚只提供入口。 -->
 <div class="foot">
-行情：{src_txt} · 垃圾债利差：FRED · 金融压力：NFCI原始周度数据／FRED同步备用<br>
-市场宽度：<a href="{BREADTH_CREDIT}" rel="noopener noreferrer" target="_blank">History of Market (historyofmarket.com)</a> · 基本面：Nasdaq<br>
-{consensus_credit}<a href="#signalRules" style="color:#6ba3f0;text-decoration:none">查看首页完整规则与阈值</a>
+<a class="rule-jump" href="#marketRiskRules">综合判断与宏观细则</a> ·
+<a class="rule-jump" href="#signalRules">查看完整规则与阈值</a> ·
+<a class="rule-jump" href="#glossary-fetch">名词解释和抓取 · 数据来源</a>
 </div>
 </div></body></html>"""
 
@@ -6092,8 +5818,6 @@ def _main(argv, runtime):
     universe, group_counts, dup_hidden = grouped_universe(cfg)
     # 一轮只读一个快照；进程内重复调用也必须重新取本轮到期数据。
     _EARN_CACHE.clear()
-    _FUND_CACHE.clear()
-    _SA_FUND_CACHE.clear()
     try:
         with open(os.path.join(BASE, "status.json"), encoding="utf-8") as f:
             prev_status = json.load(f)
@@ -6222,57 +5946,8 @@ def _main(argv, runtime):
             if field in d:
                 detail[field] = d[field]
         items[i] = detail
-    # 基本面只查持仓/重点关注；财报事件优先触发，供应商未推进报告期时继续轮询。
-    fund_stat = {"checked": 0, "red": 0, "yellow": 0}
-    previous_fund = prev_status.get("fundamental")
-    previous_fund = previous_fund.get("data") if isinstance(previous_fund, dict) else {}
-    previous_fund = previous_fund if isinstance(previous_fund, dict) else {}
-    fund_targets = [d for d in items
-                    if d.get("group") in ("position", "focus") and d.get("symbol")
-                    and quote_supported(d["symbol"]) and not is_etf(d["symbol"])]
-    fund_keys = {normalize_symbol(d["symbol"]).upper() for d in fund_targets}
-    fund_data = {k: v for k, v in previous_fund.items() if k in fund_keys and isinstance(v, dict)}
-    if fund_targets and fund_rule("fund_enable"):
-        prev_fund = prev_status.get("fundamental")
-        prev_fund = prev_fund.get("data") if isinstance(prev_fund, dict) else None
-        try:
-            fund_facts, fund_run = update_fundamentals([d["symbol"] for d in fund_targets], prev_fund,
-                                                       event_today, earnings_events=earn_stat.get("events"))
-        except Exception as e:
-            log(f"  ! 基本面读取中断，跳过：{e}")
-            fund_facts, fund_run = {}, {"fetched": 0, "cached": len(fund_data), "data": fund_data}
-        fund_data = fund_run["data"]
-        fund_stat.update(fetched=fund_run["fetched"], cached=fund_run["cached"])
-        log(f"检查 {len(fund_targets)} 只持仓/重点关注的基本面（缓存 {fund_run['cached']}，本轮请求 {fund_run['fetched']}）…")
-        try:
-            for d in fund_targets:
-                cache = fund_data.get(normalize_symbol(d["symbol"]).upper(), {})
-                note = _fund_cache_note(cache)
-                if note:
-                    d["fund_cache_note"] = note
-                fd = fundamental_check(d["symbol"], fund_facts.get(normalize_symbol(d["symbol"]).upper(), {}))
-                if not fd:
-                    continue
-                if d.get("fund_cache_note"):
-                    fd.setdefault("context", []).append(d["fund_cache_note"])
-                d["fund"] = fd
-                fund_stat["checked"] += 1
-                if fd["level"] == "red":
-                    fund_stat["red"] += 1
-                    log(f"  {d['symbol']} 基本面红：{'；'.join(fd['hits'])}")
-                elif fd["level"] == "yellow":
-                    fund_stat["yellow"] += 1
-                    log(f"  {d['symbol']} 基本面黄：{'；'.join(fd['hits'])}")
-        except Exception as e:
-            # 财报是加分项，任何异常都不能拖垮行情抓取和页面生成
-            log(f"  ! 基本面检查中断，跳过：{e}")
-        log(f"  基本面：{fund_stat['checked']} 份财报 · "
-            f"红 {fund_stat['red']} · 黄 {fund_stat['yellow']}")
-
-    fundamental_state = runtime.checkpoint("fundamental", {**fund_stat, "data": fund_data})
     snapshot = build_snapshot(macro, items, cfg, group_counts=group_counts)
     snapshot["nfci_cache"] = nfci_state
-    snapshot["fundamental"] = fundamental_state
     snapshot["consensus"] = consensus_state
     snapshot["earnings"] = earn_stat
     snapshot["reference_alerts"] = reference_alerts

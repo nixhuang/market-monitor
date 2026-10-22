@@ -5,6 +5,7 @@ import itertools
 import os
 import sys
 import unittest
+from contextlib import ExitStack
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -129,6 +130,158 @@ class QuoteTimeTests(unittest.TestCase):
         for raw in ("2026-11-27T13:00:00-05:00", "2026-11-26T11:00:00-05:00",
                     "2026-10-18T11:00:00-04:00"):
             self.assertIsNone(ms.validated_quote_time(raw, at(raw)))
+
+
+class HistorySourceTests(unittest.TestCase):
+    def fetch(self, providers, closed=True, day='2026-10-20', symbol='AAPL', when=None):
+        calls = []
+        moment = when or at(day + 'T20:15:00-04:00')
+
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return moment.astimezone(tz)
+
+        def load(name, requested):
+            calls.append((name, requested))
+            return copy.deepcopy(providers.get(name))
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(monitor, 'CLOSED_ONLY', closed))
+            stack.enter_context(patch.object(monitor, 'TARGET_DATE', day))
+            stack.enter_context(patch.object(monitor, 'datetime', Clock))
+            stack.enter_context(patch.object(monitor, 'log'))
+            stack.enter_context(patch.object(monitor, 'S', dict(monitor.DEFAULT_SETTINGS, use_realtime=1)))
+            for name in ('nasdaq', 'yahoo', 'stooq'):
+                stack.enter_context(patch.object(monitor, name + '_history',
+                                                 side_effect=lambda requested, name=name: load(name, requested)))
+            result = monitor.fetch_history(symbol)
+        return result, calls
+
+    def test_closed_same_day_prefers_nasdaq_and_preserves_source_identity(self):
+        providers = {name: history('2026-10-20') for name in ('nasdaq', 'yahoo', 'stooq')}
+        with patch.object(monitor, 'nasdaq_realtime') as live, \
+                patch.object(monitor, 'nasdaq_closing_quote') as closing:
+            result, calls = self.fetch(providers, symbol='AAPL-US')
+        self.assertEqual(calls, [('nasdaq', 'AAPL')])
+        self.assertEqual((result['source'], result['dates'][-1]), ('nasdaq', '2026-10-20'))
+        live.assert_not_called()
+        closing.assert_not_called()
+        self.assertEqual(providers['nasdaq']['source'], 'offline_fixture')
+
+    def test_closed_failure_order_is_nasdaq_yahoo_stooq(self):
+        for providers, expected, sources in (
+            ({'yahoo': history('2026-10-20')}, 'yahoo', ['nasdaq', 'yahoo']),
+            ({'stooq': history('2026-10-20')}, 'stooq', ['nasdaq', 'yahoo', 'stooq']),
+            ({'nasdaq': dict(history('2026-10-20'), highs=[1] * 35),
+              'yahoo': history('2026-10-20')}, 'yahoo', ['nasdaq', 'yahoo']),
+            ({}, None, ['nasdaq', 'yahoo', 'stooq']),
+        ):
+            with self.subTest(expected=expected):
+                result, calls = self.fetch(providers)
+                self.assertEqual([name for name, _ in calls], sources)
+                self.assertEqual(result['source'] if result else None, expected)
+
+    def test_previous_day_nasdaq_does_not_mask_current_yahoo(self):
+        with patch.object(monitor, 'nasdaq_closing_quote') as closing:
+            result, calls = self.fetch({'nasdaq': history('2026-10-19'), 'yahoo': history('2026-10-20')})
+        self.assertEqual(calls, [('nasdaq', 'AAPL'), ('yahoo', 'AAPL')])
+        self.assertEqual((result['source'], result['dates'][-1]), ('yahoo', '2026-10-20'))
+        closing.assert_not_called()
+
+    def test_previous_day_fallback_patches_today_with_verified_closing_quote(self):
+        for preferred in ('nasdaq', 'yahoo', 'stooq'):
+            providers = {name: history('2026-10-19') for name in ('nasdaq', 'yahoo', 'stooq')
+                         if name == preferred or preferred == 'nasdaq'}
+            before = copy.deepcopy(providers)
+            with self.subTest(preferred=preferred), \
+                    patch.object(monitor, 'nasdaq_closing_quote', return_value={'price': 103.0, 'volume': 1600}) as closing, \
+                    patch.object(monitor, 'nasdaq_realtime') as live:
+                result, calls = self.fetch(providers)
+            self.assertEqual([name for name, _ in calls], ['nasdaq', 'yahoo', 'stooq'])
+            closing.assert_called_once_with('AAPL', '2026-10-20', 100.0)
+            live.assert_not_called()
+            self.assertEqual((result['source'], result['close_patch']), (preferred, 'nasdaq-quote'))
+            self.assertEqual(result['dates'][-2:], ['2026-10-19', '2026-10-20'])
+            self.assertEqual((result['price'], result['prev_close'], result['volumes'][-1]), (103, 100, 1600))
+            self.assertFalse(result['ma_range_valid'][-1])
+            self.assertFalse(result['realtime'])
+            self.assertTrue(monitor.valid_history(result))
+            self.assertEqual(providers, before)
+
+    def test_missing_closing_quote_keeps_previous_day_and_source(self):
+        with patch.object(monitor, 'nasdaq_closing_quote', return_value=None) as closing:
+            result, _ = self.fetch({'nasdaq': history('2026-10-19'), 'yahoo': history('2026-10-19')})
+        closing.assert_called_once_with('AAPL', '2026-10-20', 100.0)
+        self.assertEqual((result['source'], result['dates'][-1]), ('nasdaq', '2026-10-19'))
+        self.assertNotIn('close_patch', result)
+
+    def test_same_day_jump_corroboration_keeps_first_valid_source(self):
+        providers = {}
+        for name, price in (('nasdaq', 190.0), ('yahoo', 191.0), ('stooq', 192.0)):
+            data = history('2026-10-20')
+            data['price'] = data['closes'][-1] = data['highs'][-1] = price
+            providers[name] = data
+        for closed, expected in ((True, 'nasdaq'), (False, 'yahoo')):
+            with self.subTest(closed=closed), patch.object(monitor, 'nasdaq_realtime', return_value=None):
+                result, calls = self.fetch(providers, closed=closed)
+            self.assertEqual(result['source'], expected)
+            self.assertEqual(result['price'], 190 if closed else 191)
+            self.assertEqual([name for name, _ in calls], ['nasdaq', 'yahoo'] if closed else ['yahoo', 'stooq'])
+
+    def test_intraday_yahoo_first_and_realtime_merge_in_summer_and_winter(self):
+        for moment, previous in (('2026-10-20T11:00:00-04:00', '2026-10-19'),
+                                 ('2026-12-09T11:00:00-05:00', '2026-12-08')):
+            for end in (previous, moment[:10]):
+                providers = {name: history(end) for name in ('nasdaq', 'yahoo', 'stooq')}
+                quote = {'price': 102.0, 'ts': moment, 'volume': 1200}
+                with self.subTest(moment=moment, end=end), \
+                        patch.object(monitor, 'nasdaq_realtime', return_value=quote) as live, \
+                        patch.object(monitor, 'nasdaq_closing_quote') as closing:
+                    result, calls = self.fetch(providers, closed=False, day=moment[:10], when=at(moment))
+                self.assertEqual([name for name, _ in calls], ['yahoo'] if end == moment[:10] else ['yahoo', 'stooq', 'nasdaq'])
+                self.assertEqual((result['source'], result['dates'][-1]), ('yahoo', moment[:10]))
+                self.assertEqual((result['price'], result['prev_close']), (102, 100))
+                self.assertTrue(result['realtime'])
+                self.assertTrue(monitor.valid_history(result))
+                live.assert_called_once_with('AAPL')
+                closing.assert_not_called()
+
+    def test_intraday_fallback_source_order_remains_yahoo_stooq_nasdaq(self):
+        for providers, expected, order in (
+            ({'stooq': history('2026-10-20')}, 'stooq', ['yahoo', 'stooq']),
+            ({'nasdaq': history('2026-10-20')}, 'nasdaq', ['yahoo', 'stooq', 'nasdaq']),
+        ):
+            with patch.object(monitor, 'nasdaq_realtime', return_value=None):
+                result, calls = self.fetch(providers, closed=False)
+            self.assertEqual([name for name, _ in calls], order)
+            self.assertEqual(result['source'], expected)
+
+    def test_index_and_future_still_use_only_yahoo_in_both_modes(self):
+        for symbol, requested in (('.SPX', '^GSPC'), ('^VIX', '^VIX'), ('ESMAIN', 'ES=F'), ('ES=F', 'ES=F')):
+            data = history('2026-10-20')
+            if requested == 'ES=F':
+                data.update(quote_symbol='ES=F', quote_type='FUTURE', currency='USD',
+                            quote_timezone='America/New_York', quote_name='E-Mini S&P 500 Dec 26')
+            for closed in (True, False):
+                with self.subTest(symbol=symbol, closed=closed), \
+                        patch.object(monitor, 'nasdaq_realtime') as live, \
+                        patch.object(monitor, 'nasdaq_closing_quote') as closing:
+                    result, calls = self.fetch({'yahoo': data}, symbol=symbol, closed=closed)
+                self.assertEqual(calls, [('yahoo', requested)])
+                self.assertEqual(result['source'], 'yahoo')
+                live.assert_not_called()
+                closing.assert_not_called()
+
+    def test_rule_constants_report_the_actual_engine_orders(self):
+        constants = monitor._rule_constants()
+        self.assertEqual(constants['quote_closed_sources'], 'Nasdaq → Yahoo → stooq')
+        self.assertEqual(constants['quote_intraday_sources'], 'Yahoo → stooq → Nasdaq')
+        for closed in (True, False):
+            _, calls = self.fetch({}, closed=closed)
+            labels = {'nasdaq': 'Nasdaq', 'yahoo': 'Yahoo', 'stooq': 'stooq'}
+            key = 'quote_closed_sources' if closed else 'quote_intraday_sources'
+            self.assertEqual(constants[key], ' → '.join(labels[name] for name, _ in calls))
 
 
 class RealtimeTests(unittest.TestCase):

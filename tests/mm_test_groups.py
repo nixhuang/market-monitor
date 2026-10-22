@@ -22,6 +22,74 @@ monitor.EARN_CROSS_CHECK = False    # 第三来源（Yahoo）
 monitor.EARN_SA_PRIMARY = False     # 主源（stockanalysis）
 
 
+class TestPriceDecimalBoundaries(unittest.TestCase):
+    def check_price(self, kind, target, price, threshold, expected):
+        from types import SimpleNamespace
+        field = 'trigger' if kind == 'add_price' else 'reduce'
+        setting = 'trigger_gap_pct' if kind == 'add_price' else 'reduce_gap_pct'
+        rule = monitor._rule_add_price if kind == 'add_price' else monitor._rule_reduce_price
+        alerts = monitor._Alerts()
+        context = SimpleNamespace(cfg={field: target}, price=price, group='position')
+        with patch.dict(monitor.S, {setting: threshold}):
+            rule(alerts, context)
+        self.assertEqual(alerts.marks, [(kind, 'red')] if expected else [])
+        self.assertEqual(alerts.level, 'red' if expected else 'green')
+
+    def test_three_percent_exact_boundary_and_adjacent_values(self):
+        for kind, cases in (
+            ('add_price', ((102.999999999999, True), (103, True), (103.000000000001, False))),
+            ('reduce_price', ((97.000000000001, True), (97, True), (96.999999999999, False))),
+        ):
+            for price, expected in cases:
+                with self.subTest(kind=kind, price=price):
+                    self.check_price(kind, 100, price, 3, expected)
+
+    def test_noninteger_price_target_and_threshold_boundaries(self):
+        for kind, cases in (
+            ('add_price', ((12.658749999999, True), (12.65875, True), (12.658750000001, False))),
+            ('reduce_price', ((12.041250000001, True), (12.04125, True), (12.041249999999, False))),
+        ):
+            for price, expected in cases:
+                with self.subTest(kind=kind, price=price):
+                    self.check_price(kind, 12.35, price, 2.5, expected)
+
+    def test_zero_threshold_only_accepts_equal_or_crossed_prices(self):
+        for target, below, above in ((100, 99.999999999999, 100.000000000001),
+                                     (12.35, 12.349999999999, 12.350000000001),
+                                     (1e-7, 0.999999999999e-7, 1.000000000001e-7)):
+            for kind in ('add_price', 'reduce_price'):
+                for price in (below, target, above):
+                    with self.subTest(kind=kind, target=target, price=price):
+                        self.check_price(kind, target, price, 0,
+                                         price <= target if kind == 'add_price' else price >= target)
+
+    def test_small_decimal_threshold_and_scientific_notation_do_not_expand(self):
+        for kind, cases in (
+            ('add_price', ((1.000099999999e-7, True), (1.0001e-7, True), (1.000100000001e-7, False))),
+            ('reduce_price', ((0.999900000001e-7, True), (0.9999e-7, True), (0.999899999999e-7, False))),
+        ):
+            for price, expected in cases:
+                with self.subTest(kind=kind, price=price):
+                    self.check_price(kind, 1e-7, price, 0.01, expected)
+
+    def test_analysis_includes_only_the_expected_price_mark_at_boundary(self):
+        for field, price in (('trigger', 103), ('reduce', 97)):
+            for hold in ('short', 'long'):
+                closes = [100.0] * 59 + [price]
+                data = dict(closes=closes, highs=closes[:], lows=closes[:], volumes=[1000] * 60,
+                            price=price, prev_close=100, dates=['2026-10-08'] * 60)
+                with self.subTest(field=field, hold=hold), \
+                        patch.object(monitor, 'S', dict(monitor.DEFAULT_SETTINGS, trigger_gap_pct=3,
+                            reduce_gap_pct=3, near_52w_low_pct=0, ma_short=0, ma_long=0)), \
+                        patch.object(monitor, 'calc_rsi', return_value=50), \
+                        patch.object(monitor, 'boll', return_value=(None, None, None)):
+                    row = monitor.analyze_symbol('TEST', {field: 100, 'hold': hold}, data, 'position')[2]
+                kind = 'add_price' if field == 'trigger' else 'reduce_price'
+                self.assertIn((kind, 'red'), row['signal_marks'])
+                self.assertTrue(row['foldable'])
+                self.assertIn('data-quiet-keep="false"', monitor._stock_row(row, {}))
+
+
 class TestGroups(unittest.TestCase):
     def setUp(self):
         # 财报测试独立于实际已核验日期文件；默认禁止访问官网，专项测试再注入样本。
@@ -50,6 +118,8 @@ class TestGroups(unittest.TestCase):
             with self.subTest(text=text):
                 e = es.parse_official_event(text, url, '2030-10-11', 'COST')
                 self.assertEqual((e['status'], e['date'], e['kind'], e['timing']), ('ok', date, 'official', ''))
+                self.assertIn('具体时段待定', monitor.earnings_label(e)[0])
+                self.assertNotRegex(monitor._earnings_html({'earnings': e}), r'盘前|盘后|盘中|\d{1,2}:\d{2}')
         for text in ('<h1>Annual Shareholders Meeting</h1><time>December 10, 2030</time>',
                      '<h1>Monthly Sales Results</h1><time>December 10, 2030</time>',
                      title + '<time>December 10, 2029</time>', title,
@@ -86,10 +156,11 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(kept['official_error'], 'http_429')
         self.assertEqual(kept['official_attempted'], '2030-10-20')
         html = monitor._earnings_html({'symbol': 'COST', 'earnings': kept})
-        # 2026-10-15 精简：不再挂「官方来源」链接，说明只写「官方 · 待复核」
+        # 财报列不写来源，未知时段与复查状态仍如实保留。
         self.assertNotIn('官方来源', html)
         self.assertNotIn('<a ', html)
-        self.assertIn('官方 · 待复核', html)
+        self.assertIn('北京 待定 · 待复核', html)
+        self.assertNotIn('官方', html)
         self.assertNotIn('核实于', html)
         self.assertNotIn('发布钟点', html)
         self.assertNotIn('算法估算', html)
@@ -558,9 +629,11 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(snap['data_time_text'], '2026-10-07 收盘（美东交易日）')
         with patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):
             page = monitor.render({}, [reference, daily], 2, snapshot=snap)
-        self.assertIn('个股行情 2/2 已更新', page)
-        self.assertIn('市场风险数据缺失或过期', page)
-        self.assertNotIn('抓取成功', page)
+        self.assertNotIn('个股行情 2/2 已更新', page)
+        run_text = re.search(r'<span id="runLightTxt">(.*?)</span>', page, re.S)[1]
+        self.assertIn('市场风险数据缺失', run_text)
+        self.assertNotIn('抓取成功', run_text)
+        self.assertIn('id="runLight" data-phase="partial"', page)
         self.assertNotIn('项参考值（截至', page)
         self.assertNotIn('当日行情未取得', page)
         self.assertIn('参考值 · 截至 2026-10-06', page)
@@ -670,8 +743,6 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}) as fetch, \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
-                    patch.object(monitor, 'fundamental_check', return_value=None), \
-                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
@@ -708,8 +779,6 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'sp500_rows_fallback', return_value=list(fallback_rows or [])) as fallback, \
                     patch.object(monitor, 'fetch_history', side_effect=hist), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
-                    patch.object(monitor, 'fundamental_check', return_value=None), \
-                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan') as notify:
@@ -826,8 +895,6 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'fetch_history', side_effect=fetch), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
-                    patch.object(monitor, 'fundamental_check', return_value=None), \
-                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
@@ -859,8 +926,6 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'build_macro', return_value={}), \
                     patch.object(monitor, 'fetch_history', side_effect=slow_fail), \
                     patch.object(monitor, 'global_dca', return_value=None), \
-                    patch.object(monitor, 'fundamental_check', return_value=None), \
-                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'update_consensus', return_value=({}, {})), \
                     patch.object(monitor, 'push_serverchan'), \
                     patch.object(monitor.time, 'monotonic', side_effect=lambda: clock['t']):
@@ -920,41 +985,77 @@ class TestGroups(unittest.TestCase):
         self.assertTrue(gate.allow())
 
     def test_earnings_urgency_uses_beijing_days(self):
-        """北京时间口径：美东财报日当天+次日两个完整日红字；发布前 7 天内（盘后算次日凌晨）黄字。"""
-        def u(d, today='2026-10-20', timing='post', status='ok'):
-            return monitor.earnings_urgency({'status': status, 'date': d, 'timing': timing, 'kind': 'expected'}, today)
-        # 美东 10/20 盘前盘后：北京 10/20、10/21 整天红，10/22 起消失
-        for timing in ('pre', 'post', 'during', ''):
-            self.assertEqual(u('2026-10-20', '2026-10-20', timing), 'red')
-            self.assertEqual(u('2026-10-20', '2026-10-21', timing), 'red')
-            self.assertEqual(u('2026-10-20', '2026-10-22', timing), '')
-        # 发布前：盘前按美东日、盘后按北京次日凌晨，各自 3 天内黄
-        self.assertEqual(u('2026-10-27', '2026-10-20', 'pre'), 'yellow')    # 差 7 天
-        self.assertEqual(u('2026-10-28', '2026-10-20', 'pre'), '')          # 差 8 天
-        self.assertEqual(u('2026-10-26', '2026-10-20', 'post'), 'yellow')   # 北京 10/27 凌晨，差 7 天
-        self.assertEqual(u('2026-10-27', '2026-10-20', 'post'), '')         # 北京 10/28 凌晨，差 8 天
-        # 待公布 / 失败 / 异常日期不算
-        self.assertEqual(u('2026-10-21', status='unknown'), '')
-        self.assertEqual(monitor.earnings_urgency(None, '2026-10-20'), '')
-        self.assertEqual(monitor.earnings_urgency({'status': 'error'}, '2026-10-20'), '')
-        self.assertEqual(monitor.earnings_urgency({'status': 'ok', 'date': 'bad'}, '2026-10-20'), '')
-        # 名单窗口：红字两天保留，之后消失；上限 15 天
-        win = lambda d, today: monitor.earnings_within_list({'status': 'ok', 'date': d}, today)
-        self.assertTrue(win('2026-10-20', '2026-10-21'))
-        self.assertFalse(win('2026-10-20', '2026-10-22'))
-        self.assertTrue(win('2026-11-05', '2026-10-21'))
-        self.assertFalse(win('2026-11-06', '2026-10-21'))
-        wk = lambda d, today: monitor.earnings_within_week({'status': 'ok', 'date': d}, today)
-        self.assertTrue(wk('2026-10-20', '2026-10-21'))
-        self.assertFalse(wk('2026-10-20', '2026-10-22'))
-        self.assertTrue(wk('2026-10-28', '2026-10-21'))     # 黄字期间不收进「无异动」
-        self.assertFalse(wk('2026-10-29', '2026-10-21'))
-        # 个股行文字：红 urgent / 黄 soon
-        row = lambda d, today: monitor._earnings_html({'earnings': {'status': 'ok', 'date': d, 'timing': 'post', 'kind': 'expected'}})
-        with patch.object(monitor, '_bj_today', return_value='2026-10-21'):
-            self.assertIn('class="earn urgent"', row('2026-10-20', None))
-            self.assertIn('class="earn soon"', row('2026-10-22', None))
-            self.assertIn('class="earn"', row('2026-11-01', None))
+        """直接用美东日期 D 与北京今天比较：D-1/D/D+1 红，D-7..D-2 黄。"""
+        from datetime import date
+        today = '2026-10-20'
+        for timing in ('pre', 'post', 'during', '', 'unknown'):
+            for gap, urgency in ((-2, ''), (-1, 'red'), (0, 'red'), (1, 'red'),
+                                 (2, 'yellow'), (6, 'yellow'), (7, 'yellow'),
+                                 (8, ''), (14, ''), (15, ''), (16, '')):
+                with self.subTest(timing=timing, gap=gap):
+                    d = (date.fromisoformat(today) + timedelta(days=gap)).isoformat()
+                    e = {'status': 'ok', 'date': d, 'timing': timing, 'kind': 'expected'}
+                    self.assertEqual(monitor.earnings_urgency(e, today), urgency)
+                    self.assertEqual(monitor.earnings_within_week(e, today), bool(urgency))
+                    self.assertEqual(monitor.earnings_soon(e, today), bool(urgency))
+                    self.assertEqual(monitor.earnings_within_list(e, today), -1 <= gap <= 15)
+                    with patch.object(monitor, '_bj_today', return_value=today):
+                        css = {'red': ' urgent', 'yellow': ' soon', '': ''}[urgency]
+                        self.assertIn(f'class="earn{css}"', monitor._earnings_html({'earnings': e}))
+        for e in (None, {}, [], '损坏', {'status': 'unknown', 'date': today},
+                  {'status': 'error', 'date': today}, {'status': 'na', 'date': today},
+                  {'status': 'ok'}, {'status': 'ok', 'date': 'bad'},
+                  {'status': 'ok', 'date': '2026-02-30'}, {'status': 'ok', 'date': None}):
+            with self.subTest(invalid=e):
+                self.assertEqual(monitor.earnings_urgency(e, today), '')
+                self.assertFalse(monitor.earnings_within_week(e, today))
+                self.assertFalse(monitor.earnings_soon(e, today))
+                self.assertFalse(monitor.earnings_within_list(e, today))
+
+    def test_earnings_beijing_midnight_summer_winter_weekend_and_year_boundary(self):
+        from datetime import date, datetime
+        # 包含冬夏令时及切换日、周末和跨年；行情交易日不得让财报自然日回退。
+        for d in ('2026-01-15', '2026-07-15', '2026-03-08', '2026-11-01',
+                  '2026-10-11', '2027-01-01'):
+            event_day = date.fromisoformat(d)
+            for offset, urgency in ((-8, ''), (-7, 'yellow'), (-2, 'yellow'),
+                                    (-1, 'red'), (0, 'red'), (1, 'red'), (2, '')):
+                bj_day = event_day + timedelta(days=offset)
+                for time in ('00:00:00', '23:59:59'):
+                    moment = datetime.fromisoformat(f'{bj_day}T{time}+08:00')
+                    with self.subTest(date=d, offset=offset, time=time), \
+                            patch.object(monitor, 'NOW', moment), \
+                            patch.object(monitor, 'TARGET_DATE', '2026-01-02'):
+                        self.assertEqual(monitor._bj_today(), bj_day.isoformat())
+                        self.assertEqual(monitor._earn_today(), moment.astimezone(monitor.US_TZ).date().isoformat())
+                        for timing in ('pre', 'post', 'during', '', 'unknown'):
+                            e = {'status': 'ok', 'date': d, 'timing': timing}
+                            self.assertEqual(monitor.earnings_urgency(e), urgency)
+                            self.assertEqual(monitor.earnings_within_week(e), bool(urgency))
+                            self.assertEqual(monitor.earnings_within_list(e), -15 <= offset <= 1)
+
+    def test_official_reschedule_in_red_window_replaces_date_without_stale_event(self):
+        old = dict(self.official_fixture(), fetched='2030-12-06', official_checked='2030-12-06')
+        revised = dict(old, date='2030-12-17', official_checked='2030-12-09')
+        for seeded, day, urgency in ((False, '2030-12-09', ''), (False, '2030-12-10', 'yellow'),
+                                     (True, '2030-12-09', ''), (True, '2030-12-10', 'yellow'),
+                                     (True, '2030-12-11', 'yellow')):
+            latest = dict(revised, official_checked=day)
+            with self.subTest(seeded=seeded, day=day), ExitStack() as stack:
+                for p in (patch.object(monitor, '_bj_today', return_value=day),
+                          patch.object(monitor, 'verified_earnings_events', return_value={'COST': latest} if seeded else {}),
+                          patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}),
+                          patch.object(monitor.earnings_sources, 'fetch_official_earnings', return_value=latest),
+                          patch.object(monitor, 'log')):
+                    stack.enter_context(p)
+                rows = [{'symbol': 'COST', 'group': 'focus', 'level': 'green'}]
+                stat = monitor.attach_earnings(rows, {'COST': old}, day)
+                self.assertEqual(rows[0]['earnings']['date'], '2030-12-17')
+                self.assertEqual(stat['data']['COST']['date'], '2030-12-17')
+                self.assertEqual(monitor.earnings_urgency(rows[0]['earnings']), urgency)
+                if day < '2030-12-10':
+                    self.assertNotIn('2030-12-10', stat['events'].get('COST', []))
+                self.assertEqual(old['date'], '2030-12-10')
 
     def test_earnings_text_never_uses_past_dates_or_invented_times(self):
         parse = monitor.parse_earnings_text
@@ -978,6 +1079,56 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('不含具体钟点', note)
         self.assertNotIn('数据源只给', note)
         self.assertIn('具体时段待定', monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'})[0])
+
+    def test_earnings_labels_preserve_known_timing_without_source_notes(self):
+        date = '2026-10-30'
+        year = monitor.datetime.now(monitor.US_TZ).year
+        date_txt = '10/30' if year == 2026 else '2026/10/30'
+        for kind in ('official', 'expected', 'estimated'):
+            for timing, label, bj in (
+                    ('pre', '盘前', '北京 10/30 晚间'),
+                    ('post', '盘后', '北京 10/31 凌晨'),
+                    ('during', '盘中', '北京 10/30 夜–10/31 凌晨'),
+                    ('', '具体时段待定', '北京 待定'),
+                    (None, '具体时段待定', '北京 待定'),
+                    ('unknown', '具体时段待定', '北京 待定')):
+                for error in ('', 'http_429'):
+                    with self.subTest(kind=kind, timing=timing, error=error):
+                        e = dict(self.official_fixture(), date=date, kind=kind,
+                                 timing=timing, official_error=error)
+                        before = dict(e)
+                        note = bj
+                        if kind == 'official' and error:
+                            note += ' · 待复核'
+                        main = f'美东 {date_txt} {label}'
+                        self.assertEqual(monitor.earnings_label(e), (main, note))
+                        with patch.object(monitor, '_bj_today', return_value='2026-10-20'):
+                            self.assertEqual(monitor._earnings_html({'earnings': e}),
+                                             f'<span class="earn">{main}<span class="unit">{note}</span></span>')
+                        self.assertEqual(e, before)
+
+    def test_earnings_beijing_note_is_separate_from_fund_cache_warning(self):
+        for kind in ('official', 'expected', 'estimated'):
+            with self.subTest(kind=kind):
+                e = {'status': 'ok', 'date': '2026-12-31', 'kind': kind, 'timing': 'post'}
+                main, note = monitor.earnings_label(e)
+                self.assertIn('北京 01/01 凌晨', note)
+                markup = monitor._earnings_html({
+                    'earnings': e, 'fund_cache_note': '读取失败 <旧>'})
+                self.assertIn(main, markup)
+                self.assertIn(note, markup)
+                for text in ('基本面', '读取失败', '官方', '预计', '估算'):
+                    self.assertNotIn(text, markup)
+        self.assertEqual(monitor._earnings_html({'fund_cache_note': '读取失败 <旧>'}), '')
+
+    def test_earnings_date_conflict_remains_visible_without_source(self):
+        e = {'status': 'ok', 'date': '2026-10-30', 'kind': 'estimated', 'timing': 'post',
+             'cross': 'conflict', 'alt_date': '2026-10-31'}
+        main, note = monitor.earnings_label(e)
+        self.assertIn('盘后', main)
+        self.assertIn('日期待核实（10/31）', note)
+        self.assertNotIn('来源', note)
+        self.assertNotIn('估算', note)
 
     def test_earnings_cross_check_yahoo(self):
         from datetime import datetime
@@ -1451,11 +1602,16 @@ class TestGroups(unittest.TestCase):
         m = re.search(r'<details class="macro-help" id="marketRiskRules">(.*?)</details>', page, re.S)
         self.assertIsNotNone(m)
         self.assertNotIn(' open', page[m.start():m.start() + 60])
-        self.assertIn('综合判断规则', m.group(1))
+        self.assertIn('综合判断与宏观细则', m.group(1))
+        self.assertEqual(m.group(1).count('同类只取最高分'), 1)
+        self.assertIn('宏观指标细则', m.group(1))
+        self.assertNotIn('财报日期：', m.group(1))
+        self.assertNotIn('数据来源：', m.group(1))
         self.assertIn(monitor.BREADTH_CREDIT, page)
         self.assertIn('查看完整规则与阈值', page)
         notes = monitor._page_notes({'reference_alerts': {}})
         self.assertIn('id="policyAlertDetails"', notes)
+        self.assertNotIn('id="dataSourceRules"', notes)
         self.assertNotIn('marketRiskNotes', notes)
         self.assertNotIn(' open', notes)
 
@@ -1481,124 +1637,6 @@ class TestGroups(unittest.TestCase):
             page = monitor.render({}, [], 0, snapshot=monitor.build_snapshot({}, [], {}))
         self.assertIn('--up:#3fb950; --down:#f85149;', page)
         self.assertIn('--green:#3fb950; --yellow:#d29922; --red:#f85149;', page)
-
-    def test_fundamental_units_periods_and_oneoff_base(self):
-        def table(rows):
-            return {k: dict(zip(('value2', 'value5'), v)) for k, v in rows.items()}
-        facts = {'period': '6/30/2026', 'base_period': '9/30/2025',
-                 'inc': table({'Total Revenue': ('$1,000', '$1,000'), 'Operating Income': ('$100', '$100'),
-                               'Gross Profit': ('$500', '$500'), 'Net Income': ('$90', '$900'),
-                               'Income Tax': ('$10', '-$4,000')}),
-                 'bs': table({'Total Assets': ('$10,000', '$10,000'), 'Total Liabilities': ('$5,000', '$5,000'),
-                              'Total Equity': ('$5,000', '$5,000')}),
-                 'cf': table({'Net Cash Flow-Operating': ('$200', '$200')}),
-                 'rt': table({'Current Ratio': ('84.25%', '114.00%'), 'After Tax ROE': ('8.8%', '23.6%'),
-                              'Operating Margin': ('10.0%', '10.0%'), 'Gross Margin': ('50.0%', '50.0%'),
-                              'Profit Margin': ('9.0%', '90.0%')})}
-        result = monitor.fundamental_check('UBER', facts, today='2026-10-10')
-        text = ' '.join(result['hits'])
-        self.assertIn('流动比率 1.14→0.84倍', text)
-        self.assertIn('2025/9→2026/6', text)
-        self.assertNotIn('114→84', text)
-        self.assertIn('季度ROE 23.6%→8.8%', text)           # 基准季含一次性收益：照常比较
-        self.assertIn('基准季含一次性收益，仅供参考', text)
-        self.assertNotIn('ROE未比较', text)
-        self.assertEqual(result['compare'], '2025/9→2026/6')
-        # 2026-10-21 精简：命中项已写营业利率变化，context 里不再重复「本季营业利率」
-        self.assertFalse(any('本季营业利率' in c for c in result['context']))
-
-    def test_fundamentals_cache_by_quarter(self):
-        today = '2026-10-10'
-        entry = lambda period, fetched: {'fetched': fetched, 'data': {'period': period, 'base_period': '9/30/2025'}}
-        due = monitor.fundamentals_refetch_due
-        self.assertFalse(due(entry('6/30/2026', '2026-10-01'), today))    # 静默期内沿用
-        self.assertTrue(due(entry('6/30/2026', '2026-09-09'), today))     # 放满 30 天：重抓
-        self.assertFalse(due(entry('3/31/2026', '2026-10-08'), today))    # 过了静默期：3 天内不问
-        self.assertTrue(due(entry('3/31/2026', '2026-10-07'), today))     # 过了静默期：满 3 天问一次
-        self.assertTrue(due(None, today))
-        self.assertTrue(due({'fetched': today}, today))
-        self.assertTrue(due(entry('bad', today), today))
-        self.assertTrue(due(entry('6/30/2026', '2026-10-20'), today))     # 时间在未来
-        full = {'period': '6/30/2026', 'base_period': '9/30/2025',
-                'inc': {'Total Revenue': {'value2': '$1', 'value5': '$2', 'value3': 'x'}, 'Junk': {'value2': '1'}},
-                'bs': {}, 'cf': {}, 'rt': {'Gross Margin': {'value2': '50%', 'value5': '55%'}}}
-        c = monitor.compact_financials(full)
-        self.assertEqual(c['inc'], {'Total Revenue': {'value2': '$1', 'value5': '$2'}})
-        self.assertEqual(c['rt']['Gross Margin']['value5'], '55%')
-        self.assertIsNone(monitor.compact_financials(None))
-        # 精简版结果与完整版一致
-        table = lambda rows: {k: dict(zip(('value2', 'value5'), v)) for k, v in rows.items()}
-        facts = {'period': '6/30/2026', 'base_period': '9/30/2025',
-                 'inc': table({'Total Revenue': ('$700', '$1,000'), 'Income Tax': ('$1', '$1')}),
-                 'bs': table({'Total Liabilities': ('$5', '$5'), 'Total Equity': ('$5', '$5')}),
-                 'cf': table({'Net Cash Flow-Operating': ('$20', '$20')}),
-                 'rt': table({'Operating Margin': ('10%', '10%'), 'Profit Margin': ('9%', '9%')})}
-        compact_result = monitor.fundamental_check('UBER', monitor.compact_financials(facts), today=today)
-        self.assertEqual(compact_result, monitor.fundamental_check('UBER', facts, today=today))
-        self.assertEqual(compact_result['level'], 'red')  # 旧缓存仍保留可识别风险，但不能声称完整
-        self.assertFalse(compact_result['quality']['complete'])
-        with patch.object(monitor, 'financials_any_source') as fetch:
-            empty = monitor.fundamental_check('UBER', {}, today=today)
-        fetch.assert_not_called()  # 显式空 facts 只返回灰色质量诊断，绝不取数
-        self.assertEqual(empty['level'], 'gray')
-        self.assertEqual(empty['hits'], [])
-        self.assertEqual(empty['quality']['status'], 'invalid_period')
-        self.assertFalse(empty['quality']['current'])
-        self.assertFalse(empty['quality']['complete'])
-        self.assertTrue(all(c['status'] == 'incomparable' for c in empty['checks'].values()))
-
-    def test_update_fundamentals_reuses_cache_and_falls_back(self):
-        today = '2026-10-10'
-        fresh = {'period': '6/30/2026', 'base_period': '9/30/2025',
-                 'inc': {'Total Revenue': {'value2': '$100', 'value5': '$100'}},
-                 'bs': {}, 'cf': {}, 'rt': {}}
-        prev = {'AAPL': {'fetched': '2026-10-01', 'data': fresh},
-                'MSFT': {'fetched': '2026-09-01', 'data': fresh}}
-        asked = []
-        def fetch(sym):
-            asked.append(sym)
-            return None if sym == 'MSFT' else dict(fresh, period='9/30/2026', base_period='12/31/2025')
-        # 备用源也要关掉：这个用例断言的是「Nasdaq 取不到就沿用旧值」，不能让它真去联网兜底
-        with patch.object(monitor, 'nasdaq_financials', side_effect=fetch), \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None):
-            facts, stat = monitor.update_fundamentals(['AAPL', 'MSFT', 'NEW'], prev, today)
-        self.assertEqual(sorted(asked), ['MSFT', 'NEW'])                   # AAPL 命中缓存
-        self.assertEqual((stat['fetched'], stat['cached'], stat['failed']), (2, 1, 1))
-        self.assertEqual(stat['data']['NEW']['fetched'], today)
-        self.assertEqual(facts['NEW']['period'], '9/30/2026')
-        self.assertEqual(facts['NEW']['quality']['status'], 'partial')
-        self.assertNotIn('fetch_error', stat['data']['NEW'])
-        self.assertEqual(stat['data']['MSFT']['fetched'], '2026-09-01')    # 没取到：沿用旧数据，不刷新时间
-        self.assertEqual(facts['MSFT'], fresh)
-        self.assertTrue(stat['data']['MSFT']['fetch_error'])
-        self.assertNotIn('attempted', prev['MSFT'])
-        empty = dict(fresh, inc={})
-        with patch.object(monitor, 'nasdaq_financials', return_value=empty), \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
-            kept, failed = monitor.update_fundamentals(['MSFT', 'EMPTY'], prev, today)
-        self.assertEqual(backup.call_count, 2)  # 空表必须尝试备用源，不能视为成功
-        self.assertEqual(failed['failed'], 2)
-        self.assertEqual(failed['data']['MSFT']['fetched'], '2026-09-01')
-        self.assertEqual(kept['MSFT'], fresh)
-        entry = failed['data']['EMPTY']
-        self.assertEqual(entry['data'], kept['EMPTY'])  # 保留失败证据，不冒充成功财报
-        self.assertEqual(kept['EMPTY']['inc'], {})
-        self.assertEqual(kept['EMPTY']['period'], empty['period'])
-        assessment = monitor.fundamental_check('EMPTY', kept['EMPTY'], today=today)
-        self.assertEqual(assessment['level'], 'gray')
-        self.assertEqual(assessment['hits'], [])
-        self.assertFalse(assessment['quality']['complete'])
-        self.assertNotIn('fetched', entry)
-        self.assertEqual(entry['error'], '财报核心单元格为空')
-        self.assertEqual(entry['error_kind'], 'quality_invalid')
-        self.assertTrue(entry['fetch_error'])
-        self.assertEqual(entry['retry_after'], '2026-10-11')
-        self.assertFalse(monitor.fundamentals_refetch_due(entry, today))
-        self.assertTrue(monitor.fundamentals_refetch_due(entry, '2026-10-11'))
-        for bad in (None, [], 'x', {'AAPL': 'x'}, {'AAPL': {'data': 1}}):
-            with patch.object(monitor, 'nasdaq_financials', return_value=None), \
-                    patch.object(monitor, 'stockanalysis_financials', return_value=None):
-                monitor.update_fundamentals(['AAPL'], bad, today)
 
     def test_daily_source_validation_and_intraday_fallback(self):
         from datetime import datetime, timedelta
@@ -1747,7 +1785,7 @@ class TestGroups(unittest.TestCase):
                 with open(os.path.join(directory, 'settings.json'), 'w', encoding='utf-8') as f:
                     json.dump(values, f)
                 with patch.object(monitor, 'BASE', directory):
-                    self.assertEqual(monitor.load_settings(), {**values, **monitor.FUND_DEFAULT})
+                    self.assertEqual(monitor.load_settings(), values)
             for key in ('ma_short', 'ma_long'):
                 for bad in (1, -1, 0.5, 50.5, 251, True, None, '', '0', [], {}):
                     values = dict(monitor.DEFAULT_SETTINGS, **{key: bad})
@@ -1756,7 +1794,7 @@ class TestGroups(unittest.TestCase):
                         json.dump(values, f)
                     with patch.object(monitor, 'BASE', directory):
                         self.assertEqual(monitor.load_settings(),
-                                         {**monitor.DEFAULT_SETTINGS, **monitor.FUND_DEFAULT})
+                                         monitor.DEFAULT_SETTINGS)
         self.assertTrue(monitor.valid_settings(dict(monitor.DEFAULT_SETTINGS, ma_short=250, ma_long=50)))
         self.assertTrue(monitor.valid_settings(dict(monitor.DEFAULT_SETTINGS, ma_short=0, ma_long=0, boll_n=0)))
 
@@ -1941,8 +1979,6 @@ class TestGroups(unittest.TestCase):
                               patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]),
                               patch.object(monitor, 'fetch_history', return_value={'price': 100}),
                               patch.object(monitor, 'analyze_symbol', side_effect=analyzed),
-                              patch.object(monitor, 'fundamental_check', return_value=None),
-                              patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})),
                               patch.object(monitor, 'update_consensus', return_value=({}, {})),
                               patch.object(monitor, 'global_dca', return_value=None),
                               patch.object(monitor.time, 'sleep')):
@@ -1987,156 +2023,6 @@ class TestGroups(unittest.TestCase):
         self.assertIsNotNone(monitor._range52_from_history(empty))
         self.assertEqual(monitor._ma_day_range(monitor._analysis_context('T', {}, empty, 'technology')),
                          (99.0, 101.0, True))
-
-    def test_fund_cache_note_and_no_data_backoff(self):
-        """源不覆盖这只标的（TSM 那种外国发行人）时：文案不能再写「沿用缓存」，且别天天重取。"""
-        note = monitor._fund_cache_note
-        self.assertEqual(note({'fetch_error': True, 'fetched': None, 'event_date': '2026-10-15'}),
-                         '该源暂无财报数据')
-        self.assertNotIn('沿用缓存', note({'fetch_error': True, 'fetched': None}))
-        self.assertIn('读取失败，沿用缓存（上次成功取数 2026-10-01）',
-                      note({'fetch_error': True, 'fetched': '2026-10-01'}))
-        self.assertEqual(note({'event_date': '2026-10-15', 'fetched': '2026-10-01'}),
-                         '财报已到期2026-10-01待更新')
-        self.assertEqual(note({}), '')
-        self.assertEqual(note(None), '')
-        # 只有明确分类为无覆盖、且没有成功缓存，才执行原有七天退避。
-        due = monitor.fundamentals_refetch_due
-        empty_err = {'fetch_error': True, 'error_kind': 'no_coverage', 'attempted': '2026-10-10',
-                     'event_date': '2026-10-09', 'retry_after': '2026-10-17'}
-        self.assertEqual(monitor.FUND_NO_DATA_RETRY_DAYS, 7)
-        self.assertFalse(due(empty_err, '2026-10-12'))
-        self.assertFalse(due(empty_err, '2026-10-16'))
-        self.assertTrue(due(empty_err, '2026-10-17'))  # 七天边界当天重新确认
-        self.assertTrue(due(empty_err, '2026-10-20'))
-        self.assertNotIn('沿用缓存', note(empty_err))
-        # 旧无分类记录不能证明无覆盖，旧 retry_after 也不能延迟次日重试。
-        legacy = {k: v for k, v in empty_err.items() if k != 'error_kind'}
-        self.assertFalse(due(legacy, '2026-10-10'))
-        self.assertTrue(due(legacy, '2026-10-11'))
-        for kind in ('timeout', 'http_error', 'transient', 'quality_invalid'):
-            with self.subTest(kind=kind):
-                short_retry = dict(legacy, error_kind=kind)
-                self.assertFalse(due(short_retry, '2026-10-10'))
-                self.assertTrue(due(short_retry, '2026-10-11'))
-                self.assertNotIn('该源暂无财报数据', note(short_retry))
-        # 有成功缓存的失败仍按天重试，即使本轮明确返回无覆盖也不等七天。
-        self.assertTrue(due(dict(empty_err, fetched='2026-10-01'), '2026-10-11'))
-        with patch.object(monitor, 'nasdaq_financials', return_value=None) as primary, \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
-            _, same_day = monitor.update_fundamentals(['LEGACY'], {'LEGACY': legacy}, '2026-10-10')
-            primary.assert_not_called()
-            backup.assert_not_called()
-            _, migrated = monitor.update_fundamentals(['LEGACY'], same_day['data'], '2026-10-11')
-        primary.assert_called_once_with('LEGACY')
-        backup.assert_called_once_with('LEGACY')
-        entry = migrated['data']['LEGACY']
-        self.assertEqual((migrated['fetched'], migrated['failed']), (1, 1))
-        self.assertEqual(entry['error_kind'], 'no_coverage')
-        self.assertEqual(entry['attempted'], '2026-10-11')
-        self.assertEqual(entry['retry_after'], '2026-10-18')
-        self.assertNotIn('fetched', entry)
-        self.assertNotIn('error_kind', legacy)
-
-    def test_stockanalysis_fallback_when_nasdaq_returns_nothing(self):
-        """Nasdaq 财报接口不覆盖的标的（外国发行人，如 TSM）由 stockanalysis 季度表兜底。
-
-        单位：stockanalysis 是「百万」，Nasdaq 是「千」（AAPL 实测 109,417 vs $109,417,000），
-        所以金额 ×1000；百分比和倍数原样带过去。各表按「期间结束日」对齐，不按列下标。
-        """
-        from unittest.mock import MagicMock
-
-        dates = ["Jun '26 Jun 30, 2026", "Mar '26 Mar 31, 2026",
-                 "Dec '25 Dec 31, 2025", "Sep '25 Sep 30, 2025"]
-
-        def page(rows, extra=None):
-            cols = ([extra] + dates) if extra else dates
-            out = ['<table>', '<tr><th>Fiscal Quarter</th>' + ''.join(f'<th>{c}</th>' for c in cols) + '</tr>',
-                   '<tr><td>Period Ending</td>' + ''.join(f'<td>{c}</td>' for c in cols) + '</tr>']
-            for label, vals in rows:
-                out.append(f'<tr><td>{label}</td>' + ''.join(f'<td>{v}</td>' for v in vals) + '</tr>')
-            return "".join(out) + '</table>'
-
-        pages = {
-            'income-statement': page([('Revenue', ['1,270,380', '1,134,103', '1,046,090', '989,918']),
-                                      ('Income Tax Expense', ['155,649', '114,998', '107,212', '73,614']),
-                                      ('Gross Margin', ['67.72%', '66.25%', '62.33%', '59.45%']),
-                                      ('Operating Margin', ['60.34%', '58.10%', '53.92%', '50.58%']),
-                                      ('Profit Margin', ['55.62%', '50.48%', '46.41%', '45.69%'])]),
-            'balance-sheet': page([('Total Liabilities', ['2,901,184', '2,728,561', '2,536,623', '2,318,529']),
-                                   ("Shareholders' Equity", ['6,474,471', '5,932,389', '5,396,219', '5,035,578'])]),
-            'cash-flow-statement': page([('Operating Cash Flow', ['783,365', '698,976', '725,509', '426,829'])]),
-            # 比率页多一列「当前」快照(10/14)，必须按日期取值而不是按列下标
-            'ratios': page([('Current Ratio', ['2.46', '2.46', '2.49', '2.51', '2.69']),
-                            ('Return on Equity (ROE)', ['45.57%', '40.45%', '37.20%', '37.44%', '34.50%'])],
-                           extra="Oct '26 Oct 14, 2026"),
-        }
-        monitor._SA_FUND_CACHE.clear()
-        self.addCleanup(monitor._SA_FUND_CACHE.clear)
-
-        def get(url, timeout=None):
-            resp = MagicMock()
-            hit = next((v for k, v in pages.items() if '/' + k + '/' in url), None)
-            resp.status_code = 200 if hit else 404
-            resp.text = hit or ''
-            return resp
-
-        with patch.object(monitor, '_fund_session') as sess, \
-                patch.object(monitor, '_earn_today', return_value='2026-10-14'), \
-                patch.object(monitor, 'nasdaq_financials', return_value=None):
-            sess.return_value.get.side_effect = get
-            f = monitor.financials_any_source('TSM', today='2026-10-14')
-        self.assertIsNotNone(f, "Nasdaq 没数据时必须走备用源")
-        self.assertEqual(f['period'], '6/30/2026')
-        self.assertEqual(f['base_period'], '9/30/2025')
-        self.assertEqual(f['inc']['Total Revenue']['value2'], '1,270,380,000')   # 百万 → 千
-        self.assertEqual(f['inc']['Total Revenue']['value5'], '989,918,000')
-        self.assertEqual(f['cf']['Net Cash Flow-Operating']['value2'], '783,365,000')
-        self.assertEqual(f['bs']['Total Equity']['value2'], '6,474,471,000')
-        self.assertEqual(f['rt']['Operating Margin']['value2'], '60.34%')         # 百分比原样
-        self.assertEqual(f['rt']['After Tax ROE']['value2'], '40.45%')            # 6/30 那列，不是首列
-        self.assertEqual(f['rt']['Current Ratio']['value2'], '2.46')
-        # 备用源的数据能直接喂给判定（生产里就是 update_fundamentals 刷新后这样传）
-        got = monitor.fundamental_check('TSM', monitor.compact_financials(f), today='2026-10-14')
-        self.assertIsNotNone(got)
-        self.assertEqual(got['period'], '6/30/2026')
-        self.assertEqual(got['level'], 'green')
-        self.assertTrue(got['quality']['complete'])
-        self.assertEqual(got['source'], 'stockanalysis')
-
-    def test_stockanalysis_not_consulted_when_nasdaq_has_data(self):
-        """Nasdaq 有当期可比较数据才不动备用源；缺失、过期或不可比较必须降级。"""
-        from copy import deepcopy
-        primary = {'period': '6/30/2026', 'base_period': '9/30/2025',
-                   'source': 'nasdaq', 'frequency': 'quarterly',
-                   'table_periods': {'inc': {'value2': '6/30/2026', 'value5': '9/30/2025'}},
-                   'inc': {'Total Revenue': {'value2': '$100', 'value5': '$100'}},
-                   'bs': {}, 'cf': {}, 'rt': {}}
-        with patch.object(monitor, 'nasdaq_financials', return_value=primary) as nas, \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as sa:
-            result = monitor.financials_any_source('AAPL', today='2026-10-10')
-        nas.assert_called_once_with('AAPL')
-        sa.assert_not_called()
-        self.assertIs(result, primary)  # 缺扩展项不增加请求，也不重写已有数字
-        assessment = monitor.fundamental_check('AAPL', result, today='2026-10-10')
-        self.assertEqual(assessment['checks']['revenue']['status'], 'checked')
-        self.assertEqual(assessment['level'], 'gray')  # 部分可用不等于全表正常
-        self.assertFalse(assessment['quality']['complete'])
-        backup = dict(primary, source='stockanalysis',
-                      inc={'Total Revenue': {'value2': '$200', 'value5': '$200'}})
-        for unusable in ({'period': '6/27/2026', 'inc': {}},
-                         dict(primary, period='6/30/2025'),
-                         dict(primary, base_period='6/30/2026'),
-                         dict(primary, rt={'Current Ratio': {'value2': 2, 'value5': 2}})):
-            with self.subTest(unusable=unusable):
-                original = deepcopy(unusable)
-                with patch.object(monitor, 'nasdaq_financials', return_value=unusable) as nas, \
-                        patch.object(monitor, 'stockanalysis_financials', return_value=backup) as sa:
-                    result = monitor.financials_any_source('AAPL', today='2026-10-10')
-                nas.assert_called_once_with('AAPL')
-                sa.assert_called_once_with('AAPL')
-                self.assertIs(result, backup)  # 整份选择，不把不同来源单元格拼成财报
-                self.assertEqual(unusable, original)
 
     def test_intraday_summary_and_per_stock_fallback_labels(self):
         rows = [dict(symbol=s, note=s, group='position', price=price, chg=0, level=level,
@@ -2527,8 +2413,10 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('红1 · 黄1', summary)
         self.assertIn('多数股票走弱，且信用或金融压力也在升高', page)
         self.assertIn('截至 2026-10-02', page)
-        self.assertIn('History of Market (historyofmarket.com)', page)
-        self.assertIn(monitor.BREADTH_CREDIT, page)
+        glossary = re.search(r'<template id="glossaryTpl">(.*?)</template>', page, re.S)[1]
+        self.assertRegex(glossary, '<a href="' + re.escape(monitor.BREADTH_CREDIT)
+                         + '"[^>]*>History of Market</a>')
+        self.assertIn('使用成分股均线参与度，不用ETF价格替代', glossary)
 
     def test_run_light_empty_and_unsupported(self):
         empty = monitor.render({}, [], 0, snapshot={'summary': {'total': 0}})
@@ -2536,7 +2424,10 @@ class TestGroups(unittest.TestCase):
         self.assertIn('id="runLight" data-phase="idle"', empty)
         unsupported = monitor.render({}, [], 0, snapshot={'summary': {'total': 1, 'unsupported_symbols': ['.SPX']}})
         self.assertIn('1 个特殊代码暂不支持报价，未抓取报价', unsupported)
-        self.assertNotIn('抓取成功', unsupported)
+        run_text = re.search(r'<span id="runLightTxt">(.*?)</span>', unsupported, re.S)[1]
+        self.assertNotIn('抓取成功', run_text)
+        self.assertIn('1 个特殊代码暂不支持报价，未抓取报价', run_text)
+        self.assertIn('id="runLight" data-phase="idle"', unsupported)
         duplicate_failure = monitor.render({}, [], 0, snapshot={'summary': {
             'total': 1, 'missing_symbols': ['AAPL'], 'stale_symbols': ['AAPL']}})
         self.assertIn('当日行情未取得 1 只：AAPL', duplicate_failure)
@@ -2548,16 +2439,27 @@ class TestGroups(unittest.TestCase):
                 'market_risk': {'missing': ['VIX'], 'valid_count': 4}}
         phase, text = monitor._run_light(snap, '2026-10-13 12:34:28')
         self.assertEqual(phase, 'partial')
-        self.assertIn('市场风险数据缺失或过期：VIX（有效指标 4/5）', text)
-        self.assertIn('个股行情 99/99 已更新', text)
+        self.assertIn('市场风险数据缺失：VIX（有效指标 4/5）', text)
+        self.assertNotIn('已更新', text)
+        self.assertNotIn('或过期', text)
         self.assertNotIn('抓取成功', text)
         page = monitor.render({}, [], 0, snapshot=snap)
         self.assertIn('id="runLight" data-phase="partial"', page)
-        self.assertIn('市场风险数据缺失或过期：VIX', page)
+        self.assertIn('市场风险数据缺失：VIX', page)
         complete = dict(snap, market_risk={'missing': [], 'valid_count': 5})
         self.assertEqual(monitor._run_light(complete, '2026-10-13 12:34:28')[0], 'ok')
         bad_quote = dict(snap, summary=dict(snap['summary'], missing_symbols=['NTNX']))
         self.assertEqual(monitor._run_light(bad_quote, '2026-10-13 12:34:28')[0], 'bad')
+        example = dict(snap, event='schedule', market_risk={'missing': ['垃圾债利差'], 'valid_count': 4})
+        self.assertEqual(monitor._run_light(example, '2026-10-22 08:18:36'),
+                         ('partial', '自动运行已完成 · 市场风险数据缺失：垃圾债利差（有效指标 4/5） · '
+                          '完成于 2026-10-22 08:18:36（北京时间）'))
+        for risk in (example['market_risk'], {'missing': [], 'valid_count': 5}):
+            unsupported = dict(example, market_risk=risk,
+                               summary=dict(snap['summary'], unsupported_symbols=['SPECIAL']))
+            _, unsupported_text = monitor._run_light(unsupported, '2026-10-22 08:18:36')
+            self.assertIn('1 个特殊代码暂不支持报价', unsupported_text)
+            self.assertNotIn('已更新', unsupported_text)
 
     def test_empty_render_and_safe_names(self):
         row = dict(symbol='MSFT', note='<公司 & 名称>', price=100, chg=0,
@@ -2600,14 +2502,14 @@ def spg_page(avg, upd='2026-10-07', cur='USD'):
 
 
 class TestTargets(unittest.TestCase):
-    def _run(self, cfg, price=100, prev=100, group='position', cons=None):
+    def _run(self, cfg, price=100, prev=100, group='position', cons=None, symbol='TEST'):
         closes = [100 + (0.5 if i % 2 else -0.5) for i in range(60)]
         closes[-2:] = [prev, price]
         data = dict(closes=closes, highs=[101] * 60, lows=[99] * 60, volumes=[1000] * 60,
                     price=price, prev_close=prev, dates=['2026-10-08'] * 60, source='test')
         cfg = {**cfg, '_consensus': cons} if cons else cfg
         with patch.object(monitor, 'log'):
-            return monitor.analyze_symbol('TEST', cfg, data, group=group)
+            return monitor.analyze_symbol(symbol, cfg, data, group=group)
 
     def _tg(self, cfg, **kw):
         level, signals, detail = self._run(cfg, **kw)
@@ -2627,7 +2529,7 @@ class TestTargets(unittest.TestCase):
                 self.assertTrue(detail['target']['hit'])
 
     def test_far_from_target_or_far_beyond_is_silent(self):
-        for target in (104, 120, 140, 96, 90, 60):           # 远离 / 已远超：都不报
+        for target in (104, 120, 129.999, 96, 90, 60):      # 低空间且未达到：都不报
             with self.subTest(target=target):
                 level, base, hit, detail = self._tg({'target': target})
                 self.assertEqual(hit, [])
@@ -2646,52 +2548,63 @@ class TestTargets(unittest.TestCase):
         self.assertEqual(len(self._tg({'target': 100}, price=102, prev=101)[2]), 1)
         self.assertEqual(self._tg({'target': 100}, price=110, prev=108)[2], [])
 
-    def test_space_over_threshold_is_purple_with_percent_text(self):
-        level, base, hit, detail = self._tg({'target': 160})        # 160/100-1 = +60%
-        self.assertEqual(hit, ['目标价 160，空间 +60%'])
+    def test_space_at_30_is_purple_but_not_reached(self):
+        for price in (130, 150, 160, 170, 250):
+            with self.subTest(price=price):
+                level, base, texts, detail = self._tg({'target': price})
+                self.assertEqual(level, base)
+                self.assertTrue(detail['purple'])
+                self.assertTrue(detail['target']['space_hit'])
+                self.assertFalse(detail['target']['hit'])
+                self.assertTrue(any('空间' in text for text in texts))
+        with patch.dict(monitor.S, {'target_gap_pct': 5.0}):
+            self.assertTrue(self._tg({'target': 104})[3]['target']['hit'])
+        self.assertEqual(monitor.DEFAULT_SETTINGS['target_gap_pct'], 3.0)
+        self.assertEqual(monitor.TARGET_SPACE_PCT, 30)
+        self.assertEqual(monitor.TARGET_HIGH_SPACE_PCT, 70)
+
+    def test_over_100_percent_is_high_space_without_anomaly_red(self):
+        level, base, texts, detail = self._tg({'target': 250})
         self.assertEqual(level, base)
         self.assertTrue(detail['purple'])
-        self.assertEqual(self._tg({'target': 150})[2], [])                  # 刚好 50% 不算「超过」
-        with patch.dict(monitor.S, {'target_space_pct': 30.0}):
-            self.assertEqual(self._tg({'target': 140})[2], ['目标价 140，空间 +40%'])
-        with patch.dict(monitor.S, {'target_gap_pct': 5.0}):
-            self.assertEqual(len(self._tg({'target': 104})[2]), 1)
-        self.assertEqual(monitor.DEFAULT_SETTINGS['target_gap_pct'], 3.0)
-        self.assertEqual(monitor.DEFAULT_SETTINGS['target_space_pct'], 50.0)
+        self.assertEqual(detail['target']['band'], 'high')
+        self.assertFalse(detail['target']['hit'])
+        self.assertFalse(detail['target'].get('anomaly', False))
+        self.assertNotIn(('target', 'red'), detail['signal_marks'])
+        self.assertNotIn(('target', 'yellow'), detail['signal_marks'])
+        self.assertTrue(any('空间' in text for text in texts))
+        self.assertFalse(any('异常' in text for text in texts))
 
-    def test_over_100_percent_is_anomaly_red_not_purple(self):
-        level, base, hit, detail = self._tg({'target': 250})        # +150%
-        self.assertEqual(hit, ['目标价 250 疑似数据异常（高出现价 150%）'])
-        self.assertEqual(level, 'red')
-        self.assertFalse(detail['purple'])
-        self.assertTrue(detail['target']['anomaly'])
+    def test_manual_targets_all_stocks_but_reached_only_positions_and_focus(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            with self.subTest(group=group):
+                near = self._tg({'target': 101}, group=group)[3]
+                self.assertEqual(near['target']['kind'], 'manual')
+                self.assertEqual(near['purple'], group in ('position', 'focus'))
+                self.assertEqual(near['target']['hit'], group in ('position', 'focus'))
+                space = self._tg({'target': 170}, group=group)[3]
+                self.assertEqual(space['target']['kind'], 'manual')
+                self.assertTrue(space['purple'])
+                self.assertFalse(space['target']['hit'])
 
-    def test_only_positions_and_focus_use_targets(self):
-        for group in ('position', 'focus'):
-            self.assertTrue(self._tg({'target': 101}, group=group)[3]['purple'])
-        for group in ('technology', 'materials', 'index_funds'):
-            d = self._tg({'target': 101}, group=group)[3]
-            self.assertFalse(d['purple'])
-            self.assertIsNone(d['target'])
-
-    def test_other_groups_show_consensus_but_never_alert(self):
+    def test_other_groups_use_space_but_do_not_use_reached(self):
         cons = {'s': 'ok', 'avg': 160.0, 'upd': '2026-10-07', 'r': '2026-10-07'}
-        for avg in (160.0, 101.0, 500.0):          # 空间大、贴着现价、高得离谱：其他分组都不警示
-            with self.subTest(avg=avg):
-                level, base, hit, detail = self._tg({'target': 100}, group='technology', cons=dict(cons, avg=avg))
-                self.assertEqual((level, hit), (base, []))
-                self.assertEqual(detail['target']['kind'], 'consensus')      # 手填值对其他分组无效
-                self.assertEqual(detail['target']['price'], avg)
-                self.assertAlmostEqual(detail['target']['space'], (avg / 100 - 1) * 100)
-                self.assertFalse(detail['target']['hit'])
-                self.assertFalse(detail['target']['anomaly'])
-                self.assertFalse(detail['purple'])
-        level, base, hit, detail = self._tg({}, group='position', cons=cons)
-        self.assertEqual(hit, ['共识价 160，空间 +60%'])                    # 持仓里同样的值照常警示
-        level, base, hit, detail = self._tg({}, group='technology', cons={'s': 'fail', 'avg': 160.0, 'r': '2026-09-15'})
-        self.assertEqual((level, hit), (base, []))
-        self.assertTrue(detail['target']['failed'])                          # 取数失败照样标出来
-        self.assertIsNone(self._tg({}, group='technology')[3]['target'])     # 没共识价：什么都不显示
+        for group in (g['item_group'] for g in monitor.GROUPS if g['item_group'] not in ('position', 'focus')):
+            for avg in (129.999, 130.0, 160.0, 170.0, 101.0, 500.0):
+                with self.subTest(group=group, avg=avg):
+                    level, base, texts, detail = self._tg({}, group=group, cons=dict(cons, avg=avg))
+                    self.assertEqual(level, base)
+                    self.assertEqual(detail['target']['kind'], 'consensus')
+                    self.assertEqual(detail['target']['price'], avg)
+                    self.assertAlmostEqual(detail['target']['space'], avg - 100)
+                    self.assertFalse(detail['target']['hit'])
+                    self.assertFalse(detail['target'].get('anomaly', False))
+                    self.assertEqual(detail['purple'], avg >= 130)
+                    self.assertEqual(bool(texts), avg >= 130)
+        level, base, texts, detail = self._tg({}, group='technology', cons={'s': 'fail', 'avg': 160.0, 'r': '2026-09-15'})
+        self.assertEqual((level, texts), (base, []))
+        self.assertTrue(detail['target']['failed'])
+        self.assertIsNone(self._tg({}, group='technology')[3]['target'])
 
     def test_manual_target_beats_consensus_and_bad_values_ignored(self):
         cons = {'s': 'ok', 'avg': 160.0, 'upd': '2026-10-07', 'r': '2026-10-01'}
@@ -2701,7 +2614,7 @@ class TestTargets(unittest.TestCase):
         self.assertEqual(hit, ['在目标价 101 ±3% 内（偏离 -1.0%）'])          # 用手填的 101，不是共识的 160
         _, _, hit, d = self._tg({}, cons=cons)
         self.assertEqual(d['target']['kind'], 'consensus')
-        self.assertEqual(hit, ['共识价 160，空间 +60%'])
+        self.assertTrue(any('共识价 160' in text and '空间' in text for text in hit))
         for bad in (0, -5, 'abc', True, float('nan'), float('inf'), ''):
             with self.subTest(bad=bad):
                 d = self._tg({'target': bad})[3]
@@ -2726,27 +2639,156 @@ class TestTargets(unittest.TestCase):
     def test_tag_html_variants(self):
         tag = monitor.target_tag
         self.assertEqual(tag(None), '')
-        # 共识价胶囊不再写「共识」，开头是距现价的百分比
-        self.assertEqual(tag({'kind': 'consensus', 'price': 429.47, 'month': 10, 'space': 60.0}),
-                         '<span class="tgs"><span class="lvtag tgt"><span>+60%</span> <span>429.47</span> <span>· 10月</span></span></span>')
-        self.assertNotIn('共识', tag({'kind': 'consensus', 'price': 429.47, 'month': 10, 'space': 60.0}))
-        self.assertIn('lvtag tgt hit', tag({'kind': 'consensus', 'price': 87.56, 'month': 10, 'hit': True}))
-        # 手填目标价同样不写「目标」，开头也是距现价的空间百分比（2026-10-15 改）
-        self.assertEqual(tag({'kind': 'manual', 'price': 108.0, 'month': 10, 'space': 12.0}),
-                         '<span class="tgs"><span class="lvtag tgt"><span>+12%</span> <span>108</span> <span>· 10月</span></span></span>')
-        self.assertNotIn('目标', tag({'kind': 'manual', 'price': 108.0, 'month': 10, 'space': 12.0}))
-        self.assertEqual(tag({'kind': 'manual', 'price': 500.0, 'month': 12, 'space': 8.0}),
-                         '<span class="tgs"><span class="lvtag tgt"><span>+8%</span> <span>500</span> <span>· 12月</span></span></span>')
-        self.assertNotIn('月', tag({'kind': 'manual', 'price': 108.0, 'month': None}))
-        failed = tag({'kind': 'consensus', 'price': 429.0, 'month': 8, 'failed': True})
+        for kind in ('manual', 'consensus'):
+            for space, band, hit, css in ((12, 'low', False, 'low'), (60, 'medium', False, 'space'),
+                                          (150, 'high', False, 'high'), (150, 'high', True, 'hit')):
+                with self.subTest(kind=kind, css=css):
+                    target = {'kind': kind, 'price': 429.47, 'month': 10, 'failed': False,
+                              'space': space, 'band': band, 'space_hit': space >= 30, 'hit': hit}
+                    self.assertEqual(tag(target), '<span class="tgs"><span class="lvtag tgt ' + css
+                                     + '"><span>+' + str(space) + '%</span> <span>429.47</span> '
+                                     + '<span>· 10月</span></span></span>')
+                    self.assertNotIn('共识', tag(target))
+                    self.assertNotIn('目标', tag(target))
+        failed = tag({'kind': 'consensus', 'price': 429.0, 'month': 8, 'failed': True,
+                      'space': 150, 'band': 'high', 'hit': True, 'space_hit': True})
         self.assertIn('lvtag tgt bad', failed)
         self.assertIn('<span>429</span>', failed)
-        self.assertNotIn('共识', failed)                     # 失败时也不写「共识」
-        self.assertIn('<span>获取失败</span>', tag({'kind': 'consensus', 'price': None, 'month': None, 'failed': True}))
-        self.assertEqual(tag({'kind': 'consensus', 'price': 87.56, 'month': None}),
-                         '<span class="tgs"><span class="lvtag tgt"><span>87.56</span></span></span>')  # 无空间数据只显示价格
-        # 数据异常：标签不变红
-        self.assertNotIn('bad', tag({'kind': 'consensus', 'price': 250.0, 'month': 10, 'anomaly': True}))
+        self.assertIn('<span>获取失败</span>', failed)
+        self.assertNotIn('月', failed)
+        self.assertNotIn('月', tag({'kind': 'consensus', 'price': None, 'month': 10, 'failed': True}))
+        self.assertNotIn('+150%', failed)
+        self.assertIn('<span>获取失败</span>', tag({'kind': 'consensus', 'price': None, 'failed': True}))
+        missing = tag({'kind': 'consensus', 'price': 87.56, 'month': None, 'hit': True})
+        self.assertIn('lvtag tgt bad', missing)
+        self.assertNotIn('月', missing)
+        self.assertIn('获取失败', missing)
+
+    def test_exact_space_boundaries_manual_and_consensus(self):
+        for kind in ('manual', 'consensus'):
+            for price, band, active, state in ((129.999, 'low', False, 'low'),
+                                               (130, 'medium', True, 'space'),
+                                               (169.999, 'medium', True, 'space'),
+                                               (170, 'high', True, 'high')):
+                with self.subTest(kind=kind, price=price):
+                    cfg = {'target': price} if kind == 'manual' else {}
+                    cons = {'s': 'ok', 'avg': price} if kind == 'consensus' else None
+                    level, base, _, detail = self._tg(cfg, cons=cons)
+                    target = detail['target']
+                    self.assertEqual((target['band'], target['space_hit'], target['hit']), (band, active, False))
+                    self.assertAlmostEqual(target['space'], price - 100, places=10)
+                    self.assertEqual(monitor.target_display_state(target), state)
+                    self.assertEqual(detail['purple'], active)
+                    self.assertEqual(level, base)
+
+    def test_reached_gap_has_exact_inclusive_boundaries_and_uses_settings(self):
+        for price, reached in ((96.999, False), (97, True), (103, True), (103.001, False)):
+            with self.subTest(price=price):
+                # 无昨收：只验证带内，不能伪造今日跨越。
+                target = monitor.evaluate_target(price, None,
+                    {'kind': 'manual', 'price': 100}, 'position', 3)
+                self.assertEqual(target['hit'], reached)
+                self.assertFalse(target['space_hit'])
+        with patch.dict(monitor.S, {'target_gap_pct': 5}):
+            self.assertTrue(self._tg({'target': 104})[3]['target']['hit'])
+        with patch.dict(monitor.S, {'target_gap_pct': 0}):
+            self.assertFalse(self._tg({'target': 101})[3]['target']['hit'])
+            self.assertTrue(self._tg({'target': 100})[3]['target']['hit'])
+
+    def test_decimal_price_boundaries_do_not_round_into_wrong_band(self):
+        for price, target, band in ((0.1, 0.13, 'medium'), (0.1, 0.17, 'high'),
+                                     (10, 12.9999, 'low'), (10, 16.9999, 'medium')):
+            with self.subTest(price=price, target=target):
+                got = monitor.evaluate_target(price, price, {'kind': 'manual', 'price': target}, 'position', 3)
+                self.assertEqual(got['band'], band)
+        self.assertEqual(monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 130}, 'position', 3)['space'], 30)
+        self.assertEqual(monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 170}, 'position', 3)['space'], 70)
+
+    def test_reached_overrides_high_space_and_can_overlap_on_down_cross(self):
+        level, base, texts, detail = self._tg({'target': 170}, price=100, prev=180)
+        target = detail['target']
+        self.assertEqual((target['hit'], target['space_hit'], target['band']), (True, True, 'high'))
+        self.assertEqual(monitor.target_display_state(target), 'reached')
+        self.assertIn('今日跌破目标价 170', texts)
+        self.assertIn('lvtag tgt hit', monitor.target_tag(target))
+        self.assertEqual(level, base)
+        self.assertTrue(detail['purple'])
+
+    def test_space_keeps_strong_non_target_signals(self):
+        level, signals, detail = self._run({'target': 250, 'trigger': 120}, price=100, prev=120)
+        base, base_signals, base_detail = self._run({'trigger': 120}, price=100, prev=120)
+        self.assertEqual(level, base)
+        self.assertEqual([m for m in detail['signal_marks'] if m[0] != 'target'], base_detail['signal_marks'])
+        self.assertTrue(set(base_signals).issubset(signals))
+        self.assertTrue(any(lv == 'red' for _, lv in base_detail['signal_marks']))
+        self.assertTrue(detail['purple'])
+
+    def test_cross_group_etf_index_futures_never_get_target_overlay(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for symbol, cfg in (('XLK', {}), ('ETFTEST', {'asset': 'etf'}),
+                                 ('INDEXTEST', {'asset': 'index'}), ('^GSPC', {}),
+                                 ('.VIX', {}), ('CL=F', {}), ('FUTTEST', {'asset': 'futures'})):
+                with self.subTest(group=group, symbol=symbol):
+                    _, _, detail = self._run(dict(cfg, target=250), group=group, symbol=symbol,
+                                             cons={'s': 'ok', 'avg': 250})
+                    self.assertFalse(detail['purple'])
+                    self.assertFalse(any(k == 'target' for k, _ in detail['signal_marks']))
+                    self.assertFalse(monitor._target_stock(dict(detail, **cfg)))
+
+    def test_missing_quote_never_infers_reached_or_space(self):
+        for price in (None, 0, True, float('nan'), float('inf')):
+            with self.subTest(price=price):
+                target = monitor.evaluate_target(price, 180, {'kind': 'manual', 'price': 170,
+                    'hit': True, 'space_hit': True, 'space': 70, 'band': 'high'}, 'position', 3)
+                self.assertEqual(monitor.target_display_state(target), 'failed')
+                self.assertFalse(target['hit'])
+                self.assertFalse(target['space_hit'])
+                self.assertIsNone(target['space'])
+                self.assertNotIn('+70%', monitor.target_tag(target))
+        self.assertEqual(monitor.target_alerts(100, None, 170, '目标价', 3), [])
+
+    def test_failure_with_or_without_old_price_never_enters_overlay(self):
+        for avg in (None, 101, 170, 250):
+            with self.subTest(avg=avg):
+                _, _, texts, detail = self._tg({}, cons={'s': 'fail', 'avg': avg})
+                target = detail['target']
+                self.assertEqual(texts, [])
+                self.assertEqual(monitor.target_display_state(target), 'failed')
+                self.assertFalse(target['hit'])
+                self.assertFalse(target['space_hit'])
+                self.assertFalse(detail['purple'])
+                self.assertIsNone(target['space'])
+
+    def test_manual_override_still_valid_when_consensus_failed(self):
+        for group in ('position', 'focus', 'technology', 'index_funds'):
+            for manual, state in ((101, 'reached'), (130, 'space'), (170, 'high')):
+                with self.subTest(group=group, manual=manual):
+                    _, _, _, detail = self._tg({'target': manual}, group=group, cons={'s': 'fail', 'avg': 500})
+                    expected = 'low' if state == 'reached' and group not in ('position', 'focus') else state
+                    self.assertEqual(detail['target']['kind'], 'manual')
+                    self.assertFalse(detail['target']['failed'])
+                    self.assertEqual(monitor.target_display_state(detail['target']), expected)
+                    self.assertEqual(detail['purple'], expected != 'low')
+
+    def test_display_helper_is_pure_and_failure_has_first_priority(self):
+        import copy
+        for target, state in ((None, 'failed'), ({}, 'failed'),
+            ({'price': 170, 'space': 70, 'band': 'high', 'space_hit': True, 'hit': True}, 'reached'),
+            ({'price': 170, 'space': 70, 'band': 'high', 'space_hit': True, 'failed': True, 'hit': True}, 'failed'),
+            ({'price': 170, 'space': None, 'band': 'high', 'space_hit': True, 'hit': True}, 'failed')):
+            with self.subTest(state=state):
+                before = copy.deepcopy(target)
+                self.assertEqual(monitor.target_display_state(target), state)
+                self.assertEqual(target, before)
+
+    def test_evaluate_target_drops_legacy_anomaly_without_mutating_input(self):
+        import copy
+        target = {'kind': 'consensus', 'price': 250, 'anomaly': True, 'failed': False}
+        before = copy.deepcopy(target)
+        evaluated = monitor.evaluate_target(100, 100, target, 'technology', 3)
+        self.assertEqual(target, before)
+        self.assertFalse(evaluated.get('anomaly', False))
+        self.assertEqual(monitor.target_display_state(evaluated), 'high')
 
     # ---- 抓取
     def test_parse_consensus(self):
@@ -2791,7 +2833,7 @@ class TestTargets(unittest.TestCase):
         self.assertFalse(w('XLK', {}, 'position'))             # ETF 不取
         self.assertFalse(w('XLK', {}, 'technology'))
         self.assertFalse(w('AAPL', {'target': 300}, 'position'))   # 持仓手填了就不取共识
-        self.assertTrue(w('NVDA', {'target': 300}, 'technology'))  # 手填对其它分组无效，照取
+        self.assertFalse(w('NVDA', {'target': 300}, 'technology'))  # 全组个股手填优先，不取共识
         self.assertTrue(w('AAPL', {'target': 0}, 'position'))      # 手填无效当没填
         self.assertFalse(w('.VIX', {}, 'position'))
         self.assertFalse(w('00700.HK', {}, 'position'))
@@ -2929,35 +2971,53 @@ class TestTargets(unittest.TestCase):
             return monitor.render({}, rows, len(rows), snapshot=snap)
 
     def _row(self, sym, level='green', purple=False, target=None, signals=None, group='position', note=''):
+        evaluated = monitor.evaluate_target(100, 100, target, group, monitor.S['target_gap_pct']) if target else None
         return dict(symbol=sym, note=note, price=100.0, chg=0.0, level=level, signals=signals or [],
-                    group=group, data_date='2026-10-08', purple=purple, target=target)
+                    group=group, data_date='2026-10-08', purple=purple, target=evaluated)
 
     def test_page_purple_rows_are_unfolded_and_stripe_class_stacks(self):
-        t_hit = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True, 'space': 60.0}
-        t_ok = {'kind': 'consensus', 'price': 429.47, 'month': 10, 'failed': False, 'hit': False, 'space': 10.0}
+        t_hit = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': False,
+                 'space': 60.0, 'space_hit': True, 'band': 'medium'}
+        t_ok = {'kind': 'consensus', 'price': 110.0, 'month': 10, 'failed': False, 'hit': False, 'space': 10.0}
         rows = [self._row('AAA', 'green', True, t_hit, ['共识价 160，空间 +60%']),
                 self._row('BBB', 'red', True, t_hit, ['异动 +5.0%', '共识价 160，空间 +60%']),
                 self._row('CCC', 'yellow', True, t_hit, ['x']),
                 self._row('DDD', 'green', False, t_ok)]
+        for row in rows:
+            row['prev_close'] = 99.0
         page = self._page(rows)
-        self.assertIn('<tr class="green pur" id="s-aaa"><td class="sym">AAA', page)
-        self.assertIn('<tr class="red pur" id="s-bbb"><td class="sym">BBB', page)
-        self.assertIn('<tr class="yellow pur" id="s-ccc"><td class="sym">CCC', page)
+        for symbol, level in (('AAA', 'green'), ('BBB', 'red'), ('CCC', 'yellow')):
+            with self.subTest(symbol=symbol):
+                matches = re.findall(r'<tr\b([^>]*\bid="s-' + symbol.lower()
+                                     + r'"[^>]*)>(.*?)</tr>', page, re.S)
+                self.assertEqual(len(matches), 1)
+                attrs, body = matches[0]
+                self.assertEqual(re.findall(r'\bclass="([^"]*)"', attrs), [level + ' pur pur-space'])
+                for name, value in (('data-quiet-keep', 'true'), ('data-price', '100.0'),
+                                    ('data-prev-close', '99.0')):
+                    self.assertEqual(re.findall(r'\b' + name + r'="([^"]*)"', attrs), [value])
+                self.assertTrue(body.startswith('<td class="sym">' + symbol))
         self.assertIn('<td class="sym">DDD', page)
         shown, folded = page.split('无异动 1 只', 1)
         self.assertIn('>AAA', shown)                      # 紫色的绿灯行不折叠
         self.assertNotIn('>DDD', shown)                   # 普通绿灯行仍然折叠
         self.assertIn('>DDD', folded)
-        self.assertIn('lvtag tgt hit', page)
+        self.assertIn('lvtag tgt space', page)
         self.assertIn('tr.pur td.sig', page)
         self.assertIn('--purple:', page)
-        self.assertIn('共识价来源：stockanalysis.com（S&P Global），每只约 14 天更新一次，财报后提前更新', page)
+        glossary = re.search(r'<template id="glossaryTpl">(.*?)</template>', page, re.S)[1]
+        self.assertIn('StockAnalysis · S&amp;P Global美元平均目标价；不抓晨星', glossary)
+        self.assertIn('14个美东自然日；财后刷新可提前', glossary)
+        self.assertIn('href="#glossary-fetch"', page)
+        self.assertNotIn('共识价来源：stockanalysis.com（S&P Global），每只约', page)
 
     def test_page_sort_order_not_changed_by_purple(self):
-        t_hit = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True}
+        t_hit = {'kind': 'consensus', 'price': 101.0, 'month': 10, 'failed': False, 'hit': True,
+                 'space': 1.0, 'space_hit': False, 'band': 'low'}
         rows = [self._row('GRN', 'green', True, t_hit), self._row('RED', 'red'), self._row('YEL', 'yellow')]
         page = self._page(rows)
-        pos = [page.index(f'>{s}<') if f'>{s}<' in page else page.index(f'>{s}') for s in ('RED', 'YEL', 'GRN')]
+        # 统计名单也含代码；仅核对个股主表顺序，不拿统计中首次出现的位置代替。
+        pos = [page.index(f'id="s-{s.lower()}"') for s in ('RED', 'YEL', 'GRN')]
         self.assertEqual(pos, sorted(pos))
 
     def test_page_manual_target_always_shows_space_in_alert_column(self):
@@ -2970,21 +3030,25 @@ class TestTargets(unittest.TestCase):
         self.assertNotIn('共识价来源', page)               # 只有手填：不显示共识来源
 
     def test_page_target_alert_text_is_purple_last_and_purple_bar_on_right(self):
-        t = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True}
-        page = self._page([self._row('PUR', 'green', True, t, ['在共识价 160 ±3% 内（偏离 +0.0%）', '异动 +2.1%', 'RSI 超买'])])
+        t = {'kind': 'consensus', 'price': 101.0, 'month': 10, 'failed': False, 'hit': True,
+             'space': 1.0, 'space_hit': False, 'band': 'low'}
+        page = self._page([self._row('PUR', 'green', True, t, ['在共识价 101 ±3% 内（偏离 -1.0%）', '异动 +2.1%', 'RSI 超买'])])
         # 共识价 / 目标价的警示统一排在最后，并用紫色文字
-        self.assertIn('异动 +2.1% · RSI 超买 · <span class="tp">在共识价 160 ±3% 内（偏离 +0.0%）</span>', page)
+        self.assertIn('异动 +2.1% · RSI 超买 · <span class="tp">在共识价 101 ±3% 内（偏离 -1.0%）</span>', page)
         css = page.split('<style>')[1]
         # 红黄绿竖条在左、宽度不变（6/4/2px）；紫条改画在整行右侧（警示栏右缘），宽 2px
         self.assertIn('tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red)', css)
         self.assertIn('tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow)', css)
         self.assertIn('tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}', css)
-        self.assertIn('.group-card tr.pur td.sig{box-shadow:inset -2px 0 0 var(--purple)', css)
+        self.assertIn('.group-card tr.pur td.sig{', css)
+        self.assertIn('.group-card tr.pur-hit td.sig{', css)
+        self.assertIn('background-position:right bottom', css)
         self.assertNotIn('tr.pur td:first-child', css)
 
     def test_group_header_shows_purple_count_only_when_there_is_one(self):
-        t = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': True}
-        with_pur = self._page([self._row('PUR', 'green', True, t, ['在共识价 160 ±3% 内（偏离 +0.0%）'])])
+        t = {'kind': 'consensus', 'price': 101.0, 'month': 10, 'failed': False, 'hit': True,
+             'space': 1.0, 'space_hit': False, 'band': 'low'}
+        with_pur = self._page([self._row('PUR', 'green', True, t, ['在共识价 101 ±3% 内（偏离 -1.0%）'])])
         self.assertIn('aria-label="紫色警示 1 项"', with_pur)
         self.assertIn('stat-badge purple', with_pur.split('</style>')[1])
         without = self._page([self._row('AAPL', 'red', signals=['异动 +5.0%'])])
@@ -3028,8 +3092,6 @@ class TestTargets(unittest.TestCase):
                         patch.object(monitor, 'sp500_rows_fallback', return_value=[]),
                         patch.object(monitor, 'fetch_history', return_value={'price': 100}),
                         patch.object(monitor, 'analyze_symbol', side_effect=analyzed),
-                        patch.object(monitor, 'fundamental_check', return_value=None),
-                        patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})),
                         patch.object(monitor, 'global_dca', return_value=None),
                         patch.object(monitor.time, 'sleep'),
                         patch.object(monitor, 'push_serverchan')):
@@ -3066,8 +3128,6 @@ class TestTargets(unittest.TestCase):
                     patch.object(monitor, 'SP500_RS_ROWS', []), patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
                     patch.object(monitor, 'fetch_history', return_value={'price': 100}), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
-                    patch.object(monitor, 'fundamental_check', return_value=None), \
-                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})), \
                     patch.object(monitor, 'global_dca', return_value=None), \
                     patch.object(monitor, 'update_consensus', side_effect=RuntimeError('boom')), \
                     patch.object(monitor.time, 'sleep'), patch.object(monitor, 'push_serverchan'):
@@ -3216,7 +3276,7 @@ class TestCacheAudit(unittest.TestCase):
         response.json.return_value = body
         session = MagicMock()
         session.get.return_value = response
-        with patch.object(monitor, '_EARN_CACHE', {}), patch.object(monitor, '_fund_session', return_value=session), \
+        with patch.object(monitor, '_EARN_CACHE', {}), patch.object(monitor, '_earn_session', return_value=session), \
                 patch.object(monitor, '_earn_today', return_value='2026-10-10'):
             return monitor.nasdaq_earnings('AAA')
 
@@ -3258,10 +3318,10 @@ class TestCacheAudit(unittest.TestCase):
             monitor.attach_earnings([self._row(s) for s in old], state['data'], '2026-10-11')
         self.assertEqual([c.args[0] for c in fetch.call_args_list], ['CCC'])
 
-    def test_report_stays_red_until_second_beijing_day_ends(self):
+    def test_report_stays_red_through_d_plus_one_and_clears_on_d_plus_two(self):
         # 美东跨到 10/21（北京 10/21 中午）不得提前把 10/20 财报换成下一季或 unknown。
-        for timing in ('pre', 'post'):
-            for future in ({'status': 'unknown'}, self._earn('2027-01-20')):
+        for timing in ('pre', 'post', 'during', '', 'unknown'):
+            for future in ({'status': 'unknown'}, {'status': 'error'}, self._earn('2027-01-20')):
                 with self.subTest(timing=timing, future=future):
                     old = {'AAA': dict(self._earn('2026-10-20', '2026-10-19'), timing=timing)}
                     rows = [self._row('AAA')]
@@ -3284,6 +3344,65 @@ class TestCacheAudit(unittest.TestCase):
                     self.assertNotEqual(rows[0]['earnings'].get('date'), '2026-10-20')
                     self.assertEqual(st2['events']['AAA'], ['2026-10-20'])
 
+    def test_red_cache_survives_primary_next_quarter_unknown_and_failure(self):
+        import copy
+        from datetime import datetime
+        for timing in ('pre', 'post', 'during', '', 'unknown'):
+            for primary in ({'status': 'unknown'}, {'status': 'error'}, self._earn('2027-01-20')):
+                with self.subTest(timing=timing, primary=primary), ExitStack() as stack:
+                    for p in (patch.object(monitor, 'EARN_SA_PRIMARY', True),
+                              patch.object(monitor, 'EARN_CROSS_CHECK', False),
+                              patch.object(monitor, 'verified_earnings_events', return_value={}),
+                              patch.object(monitor, 'stockanalysis_earnings', return_value=primary),
+                              patch.object(monitor, 'nasdaq_earnings', return_value=primary),
+                              patch.object(monitor.earnings_sources, 'fetch_official_earnings', return_value={'status': 'unknown'}),
+                              patch.object(monitor, 'log')):
+                        stack.enter_context(p)
+                    cache = {'AAA': dict(self._earn('2026-10-20', '2026-10-10'),
+                                         timing=timing, kind='estimated')}
+                    events = {}
+                    for bj_day in ('2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22'):
+                        for time in ('00:00:00', '23:59:59'):
+                            now = datetime.fromisoformat(f'{bj_day}T{time}+08:00')
+                            rows = [dict(self._row('AAA'), chg=0, signals=[], note='')]
+                            before = copy.deepcopy((cache, events))
+                            with patch.object(monitor, 'NOW', now):
+                                state = monitor.attach_earnings(rows, cache, prev_events=events)
+                                shown = rows[0]['earnings']
+                                self.assertEqual((cache, events), before)
+                                if bj_day < '2026-10-22':
+                                    self.assertEqual(shown.get('date'), '2026-10-20', bj_day + ' ' + time)
+                                    self.assertEqual(monitor.earnings_urgency(shown), 'red')
+                                    self.assertTrue(monitor.earnings_within_list(shown))
+                                    self.assertTrue(monitor.earnings_within_week(shown))
+                                    self.assertIn('class="earn urgent"', monitor._earnings_html(rows[0]))
+                                    body = monitor._group_body(rows, {'item_group': 'technology'}, {}, bj_day, True, 'group_technology', '科技')
+                                    self.assertNotIn('无异动 1 只', body)
+                                else:
+                                    self.assertNotEqual(shown.get('date'), '2026-10-20')
+                                    self.assertEqual(monitor.earnings_urgency(shown), '')
+                                    self.assertFalse(monitor.earnings_within_list(shown))
+                                    self.assertFalse(monitor.earnings_within_week(shown))
+                                    self.assertEqual(state['events']['AAA'], ['2026-10-20'])
+                            cache, events = state['data'], state['events']
+
+    def test_deferred_red_cache_keeps_date_and_fetch_timestamp(self):
+        for day in ('2026-10-19', '2026-10-20', '2026-10-21'):
+            with self.subTest(day=day), ExitStack() as stack:
+                api = stack.enter_context(patch.object(monitor, 'nasdaq_earnings'))
+                for p in (patch.object(monitor, '_bj_today', return_value=day),
+                          patch.object(monitor, 'verified_earnings_events', return_value={}),
+                          patch.object(monitor, 'EARN_MAX_FETCH_PER_RUN', 0),
+                          patch.object(monitor, 'log')):
+                    stack.enter_context(p)
+                old = {'AAA': dict(self._earn('2026-10-20', '2026-10-10'), kind='estimated')}
+                rows = [self._row('AAA')]
+                stat = monitor.attach_earnings(rows, old, day)
+                api.assert_not_called()
+                self.assertEqual(rows[0]['earnings'], old['AAA'])
+                self.assertEqual(stat['data']['AAA'], old['AAA'])
+                self.assertEqual(monitor.earnings_urgency(rows[0]['earnings']), 'red')
+
     def test_earnings_history_survives_unknown_and_next_quarter(self):
         prev = {'AAA': self._earn('2026-10-08', '2026-10-01')}
         with patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), patch.object(monitor, 'log'):
@@ -3304,114 +3423,38 @@ class TestCacheAudit(unittest.TestCase):
         self.assertEqual(st['events']['AAA'], ['2026-10-08'])
         self.assertIn('AAA', st['data'])
 
-    @staticmethod
-    def _financials(period='6/30/2026'):
-        base = {'3/31/2026': '6/30/2025', '6/30/2026': '9/30/2025', '9/30/2026': '12/31/2025'}[period]
-        return {'period': period, 'base_period': base, 'source': 'nasdaq', 'frequency': 'quarterly',
-                'table_periods': {'inc': {'value2': period, 'value5': base}},
-                'inc': {'Total Revenue': {'value2': '$100', 'value5': '$120'}}, 'bs': {}, 'cf': {}, 'rt': {}}
 
-    def test_fundamental_event_overrides_quiet_period_until_period_advances(self):
-        prev = {'AAA': {'fetched': '2026-10-01', 'data': self._financials()}}
-        events = {'AAA': ['2026-10-09']}
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()) as fetch, \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
-            _, st = monitor.update_fundamentals(['AAA'], prev, '2026-10-10', events)
-            self.assertEqual(fetch.call_count, 1)
-            self.assertEqual(st['data']['AAA']['event_date'], '2026-10-09')
-            _, same = monitor.update_fundamentals(['AAA'], st['data'], '2026-10-10', events)
-            self.assertEqual(same['fetched'], 0)
-            _, next_day = monitor.update_fundamentals(['AAA'], st['data'], '2026-10-11', events)
-            self.assertEqual(next_day['fetched'], 1)
-        backup.assert_not_called()
-        self.assertEqual(next_day['failed'], 0)
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('9/30/2026')), \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
-            _, advanced = monitor.update_fundamentals(['AAA'], next_day['data'], '2026-10-12', events)
-            self.assertNotIn('event_date', advanced['data']['AAA'])
-            self.assertEqual(advanced['data']['AAA']['event_done'], '2026-10-09')
-            _, final = monitor.update_fundamentals(['AAA'], advanced['data'], '2026-10-13', events)
-            self.assertEqual(final['fetched'], 0)
-        backup.assert_not_called()
-        self.assertEqual(advanced['failed'], 0)
 
-    def test_fundamental_failure_keeps_event_and_old_timestamp(self):
-        prev = {'AAA': {'fetched': '2026-10-01', 'data': self._financials()}}
-        # 备用源也关掉：这个用例要的是「Nasdaq 取不到 → 保留旧值和事件」
-        with patch.object(monitor, 'nasdaq_financials', return_value=None), \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None):
-            facts, st = monitor.update_fundamentals(['AAA'], prev, '2026-10-10', {'AAA': ['2026-10-09']})
-        self.assertEqual(facts['AAA']['period'], '6/30/2026')
-        entry = st['data']['AAA']
-        self.assertTrue(entry['fetch_error'])
-        self.assertEqual(entry['fetched'], '2026-10-01')
-        self.assertTrue(monitor.fundamentals_refetch_due(entry, '2026-10-11'))
+    def test_legacy_fund_does_not_prevent_quiet_folding_or_hide_real_alerts(self):
+        base = dict(symbol='AAA', group='technology', level='green', price=100, chg=0,
+                    note='', signals=[])
+        def body(row):
+            return monitor._group_body([row], {'item_group': 'technology'}, {}, '2026-10-21', True, 'group_technology', '科技')
+        for level in (None, 'green', 'gray', 'yellow', 'red'):
+            with self.subTest(legacy_level=level):
+                legacy = dict(base, fund={'level': level, 'hits': ['旧基本面风险']},
+                              fund_cache_note='旧基本面数据不全')
+                markup = body(legacy)
+                self.assertEqual(markup, body(base))
+                self.assertIn('<details class="quiet-list"><summary>无异动 1 只', markup)
+                self.assertNotIn('<details class="quiet-list" open>', markup)
+                self.assertNotIn('基本面', markup)
+                self.assertNotIn('data-fund-', markup)
+        exceptions = [
+            {'level': 'red'}, {'level': 'yellow'},
+            {'purple': True, 'target': monitor.evaluate_target(
+                100, 100, {'kind': 'consensus', 'price': 130, 'failed': False}, 'technology', 3)},
+            {'earnings': {'status': 'ok', 'date': '2026-10-20', 'timing': 'post'}},
+            {'earnings': {'status': 'ok', 'date': '2026-10-26', 'timing': 'pre'}}]
+        for change in exceptions:
+            with self.subTest(active_alert=change):
+                row = {**base, **change}
+                markup = body(dict(row, fund={'level': 'red', 'hits': ['旧基本面风险']},
+                                   fund_cache_note='旧基本面待更新'))
+                self.assertEqual(markup, body(row))
+                self.assertNotIn('class="quiet-list"', markup)
+                self.assertNotIn('基本面', markup)
 
-    def test_fundamental_one_bad_symbol_does_not_drop_other_results(self):
-        def fetch(sym):
-            return {'inc': 'bad'} if sym == 'BAD' else self._financials()
-        with patch.object(monitor, 'nasdaq_financials', side_effect=fetch), \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup, \
-                patch.object(monitor, 'log'):
-            facts, st = monitor.update_fundamentals(['BAD', 'GOOD'], today='2026-10-10')
-        backup.assert_called_once_with('BAD')
-        self.assertIn('GOOD', facts)
-        self.assertNotIn('BAD', facts)
-        self.assertEqual(st['failed'], 1)
-        self.assertEqual(st['data']['GOOD']['fetched'], '2026-10-10')
-        self.assertNotIn('fetched', st['data']['BAD'])
-        self.assertTrue(st['data']['BAD']['fetch_error'])
-
-    def test_fundamental_report_regression_keeps_old_data(self):
-        # 旧候选仍在报告有效期内，单独验证报告期倒退，而不是被陈旧门槛提前拦住。
-        prev = {'AAA': {'fetched': '2026-08-01', 'data': self._financials()}}
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('3/31/2026')), \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
-            facts, st = monitor.update_fundamentals(['AAA'], prev, '2026-09-15')
-        backup.assert_not_called()
-        self.assertEqual(facts['AAA']['period'], '6/30/2026')
-        self.assertTrue(st['data']['AAA']['fetch_error'])
-        self.assertEqual(st['data']['AAA']['fetched'], '2026-08-01')
-        self.assertEqual(st['data']['AAA']['error'], '报告期倒退，保留原缓存')
-
-    def test_fund_cache_warning_visible_even_without_red_yellow(self):
-        row = self._row('AAA')
-        row['fund_cache_note'] = '读取失败，沿用缓存 <旧>'
-        # 2026-10-15：基本面状态挪到财报列显示，名称列只留名称/备注/加减仓标签
-        markup = monitor._earnings_html(row)
-        self.assertIn('读取失败，沿用缓存', markup)
-        self.assertIn('&lt;旧&gt;', markup)
-        self.assertIn('基本面：', markup)
-        self.assertNotIn('基本面', monitor._row_tags(row, {}))
-
-    def test_first_post_event_fetch_establishes_baseline_not_completion(self):
-        events = {'AAA': ['2026-10-09']}
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()), \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
-            _, first = monitor.update_fundamentals(['AAA'], today='2026-10-10', earnings_events=events)
-        backup.assert_not_called()
-        self.assertEqual(first['data']['AAA']['event_base'], '2026-06-30')
-        self.assertNotIn('event_done', first['data']['AAA'])
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials('9/30/2026')) as fetch, \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
-            _, second = monitor.update_fundamentals(['AAA'], first['data'], '2026-10-11', events)
-        backup.assert_not_called()
-        self.assertEqual(fetch.call_count, 1)
-        self.assertEqual(second['data']['AAA']['event_done'], '2026-10-09')
-
-    def test_two_unfinished_quarter_events_are_completed_in_order(self):
-        old = {'AAA': {'fetched': '2026-07-02', 'data': self._financials('3/31/2026'),
-                       'event_date': '2026-07-01', 'event_base': '2026-03-31', 'event_checked': '2026-07-02'}}
-        events = {'AAA': ['2026-07-01', '2026-10-09']}
-        with patch.object(monitor, 'nasdaq_financials', return_value=self._financials()), \
-                patch.object(monitor, 'stockanalysis_financials', return_value=None) as backup:
-            _, first = monitor.update_fundamentals(['AAA'], old, '2026-10-10', events)
-            self.assertEqual(first['data']['AAA']['event_done'], '2026-07-01')
-            _, second = monitor.update_fundamentals(['AAA'], first['data'], '2026-10-11', events)
-        backup.assert_not_called()
-        self.assertEqual(second['data']['AAA']['event_date'], '2026-10-09')
-        self.assertEqual(second['data']['AAA']['event_base'], '2026-06-30')
-        self.assertEqual(second['data']['AAA']['event_done'], '2026-07-01')
 
     def test_legacy_untrusted_negative_caches_get_one_time_recheck(self):
         self.assertTrue(monitor.earnings_refetch_due({'status': 'na', 'fetched': '2026-10-09'}, '2026-10-10'))
@@ -3448,8 +3491,10 @@ class TestCacheAudit(unittest.TestCase):
                     patch.object(monitor, 'collect_quotes', return_value={'AAA': {'price': 100}}), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
                     patch.object(monitor, 'global_dca', return_value=None), \
-                    patch.object(monitor, 'update_fundamentals', return_value=({}, {'fetched': 0, 'cached': 0, 'data': {}})) as fund, \
-                    patch.object(monitor, 'fundamental_check', return_value=None), \
+                    patch.object(monitor, 'SP500_RS_ROWS', []), \
+                    patch.object(monitor, 'sp500_rows_fallback', return_value=[]), \
+                    patch.object(monitor, 'fetch_history', return_value=None), \
+                    patch.object(monitor.time, 'sleep'), \
                     patch.object(monitor, 'consensus_robots_ok', return_value=True), \
                     patch.object(monitor, 'fetch_consensus_one', return_value={'s': 'ok', 'avg': 110, 'upd': '2026-10-05'}) as cons, \
                     patch.object(monitor, 'push_serverchan'), patch.object(monitor, 'log'):
@@ -3468,17 +3513,26 @@ class TestCacheAudit(unittest.TestCase):
                 third = run('2026-10-10T20:15:00-04:00', {'status': 'unknown'})
                 self.assertEqual(cons.call_count, 2)
                 self.assertEqual(third['consensus']['data']['AAA']['r'], '2026-10-10')
-                self.assertEqual(fund.call_args.kwargs['earnings_events']['AAA'], ['2026-10-08'])
-                # 关闭检查不许再触及批量抓取入口，已有缓存必须保留。
-                third['fundamental']['data'] = {'AAA': {'fetched': '2026-10-01', 'data': self._financials()}}
-                with open(os.path.join(directory, 'status.json'), 'w', encoding='utf-8') as f:
-                    json.dump(third, f)
-                count = fund.call_count
-                with patch.dict(monitor.S, {'fund_enable': 0}):
-                    disabled = run('2026-10-11T20:15:00-04:00', {'status': 'unknown'})
-                self.assertEqual(fund.call_count, count)
-                self.assertEqual(disabled['fundamental']['data'], third['fundamental']['data'])
-
+                self.assertEqual(third['consensus']['quota'],
+                                 {'date': '2026-10-11', 'symbols': ['AAA'], 'retry_symbols': []})
+                fourth = run('2026-10-10T21:15:00-04:00', {'status': 'unknown'})
+                self.assertEqual(cons.call_count, 2)  # 同一北京配额日不重复抓取
+                self.assertEqual(fourth['consensus']['quota'], third['consensus']['quota'])
+                fifth = run('2026-10-11T20:15:00-04:00', {'status': 'unknown'})
+                self.assertEqual(cons.call_count, 2)  # 财后刷新完成，次日仍复用有效缓存
+                self.assertEqual(fifth['earnings']['events']['AAA'], ['2026-10-08'])
+                for state in (first, second, third, fourth, fifth):
+                    self.assertNotIn('fundamental', state)
+                    self.assertNotIn('fund', state['signal_counts'])
+                    self.assertNotIn('fund', state['signal_members'])
+                    self.assertFalse(any(key.startswith('fund_') for key in state['effective_settings']))
+                with open(os.path.join(directory, 'index.html'), encoding='utf-8') as f:
+                    page = f.read()
+                # 新抓取稿仅有这一句明确声明不抓基本面，不能据此误判功能残留。
+                retired_note = '只抓日期／时段，不抓财报内容或基本面。'
+                self.assertEqual(page.count(retired_note), 1)
+                self.assertNotIn('基本面', page.replace(retired_note, ''))
+                self.assertNotRegex(page, r'data-fund-|fund[_-]|FUND_|id="fund')
 
 class TestCompletedDayVolume(unittest.TestCase):
     """量比只比较同源的已完整日线，不把盘中/补报价的零成交量冒充完整日。"""
@@ -4035,6 +4089,575 @@ class TestFuturesIdentity(unittest.TestCase):
         self.assertEqual(got['dates'], base['dates'])
 
 
+class TestBollRsiRules(unittest.TestCase):
+    """新版布林/RSI 报灯、文字折叠、灰名单与 signed gap 选轨的纯离线回归。"""
+
+    def setUp(self):
+        settings = patch.object(monitor, 'S', dict(monitor.DEFAULT_SETTINGS,
+            near_52w_low_pct=0, ma_short=0, ma_long=0, boll_near_band_pct=0))
+        settings.start()
+        self.addCleanup(settings.stop)
+
+    def analyze(self, values, group='position', hold='short', bands=(100, 110, 90),
+                high=101, low=99, symbol='TEST', cfg=None):
+        closes = [100 + (.5 if i % 2 else -.5) for i in range(60)]
+        closes[-2:] = [100, 100]
+        data = dict(closes=closes, highs=[101] * 59 + [high], lows=[99] * 59 + [low],
+                    volumes=[1000] * 60, price=100, prev_close=100,
+                    dates=['2026-10-08'] * 60, source='test')
+        with patch.object(monitor, 'calc_rsi', side_effect=values), \
+                patch.object(monitor, 'vol_profile', return_value=('mid', None)), \
+                patch.object(monitor, 'boll', return_value=bands), \
+                patch.object(monitor, 'boll_streak', return_value={'up': 0, 'dn': 0}):
+            return monitor.analyze_symbol(symbol, {'hold': hold, **(cfg or {})}, data, group)[2]
+
+    def test_three_oversold_standalone_and_combinations_are_exclusive_in_every_group(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for hold in ('short', 'long', 'LONG'):
+                for bands in ((100, 110, 90), (100, 101, 90), (100, 110, 99),
+                              (None, None, None)):
+                    with self.subTest(group=group, hold=hold, bands=bands):
+                        row = self.analyze([35, 30, 20], group, hold, bands)
+                        upper, lower = bands[1] == 101, bands[2] == 99
+                        expected = 'red'
+                        kind = 'boll_rsi' if upper or lower else 'rsi'
+                        self.assertEqual(row['level'], expected)
+                        self.assertEqual(row['signal_marks'], [(kind, expected)])
+                        self.assertEqual(row['signals'].count('RSI 3条超卖（≤35）'), 1)
+                        counts = monitor.signal_counts([row])
+                        members = monitor.signal_count_members([row])
+                        for indicator in ('rsi', 'boll', 'boll_rsi'):
+                            for level in ('red', 'yellow'):
+                                n = int(indicator == kind and expected == level)
+                                self.assertEqual(counts[indicator][level], n)
+                                self.assertEqual(len(members[indicator][level]), n)
+                        self.assertEqual(bool(monitor.text_only_members([row])), expected == 'green')
+                        if kind == 'rsi':
+                            member = members['rsi']['red'][0]
+                            self.assertEqual(member['rsi_hits'], '3条超卖')
+                            self.assertEqual(member['indicators'], [
+                                {'shape': '▼', 'tone': 'red', 'label': 'RSI3条超卖'}])
+
+    def test_single_rsi_counts_respect_current_threshold_and_invalid_periods(self):
+        monitor.S['rsi_low'] = 28
+        for values, red in (([28, 28, 28], True), ([28.001, 28, 28], False),
+                            ([None, 28, 28], False), ([float('nan'), 28, 28], False),
+                            ([float('inf'), 28, 28], False)):
+            with self.subTest(values=values):
+                row = self.analyze(values)
+                self.assertEqual(row['level'], 'red' if red else 'green')
+                self.assertEqual(('rsi', 'red') in row['signal_marks'], red)
+
+    def test_boll_matrix_and_only_designated_text_combinations_stay_visible(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for hold in ('short', 'long'):
+                active_up = group in ('position', 'focus')
+                for side, bands in (('上轨', (100, 101, 90)), ('下轨', (100, 110, 99))):
+                    for high_n in range(4):
+                        for low_n in range(4 - high_n):
+                            values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                            marks, kept = [], False
+                            if side == '下轨':
+                                if low_n >= 2:
+                                    marks.append(('boll_rsi', 'red' if low_n == 3 else 'yellow'))
+                                elif high_n >= 2:
+                                    marks.append(('boll_rsi', 'yellow'))
+                                kept = max(high_n, low_n) == 1
+                            else:
+                                if low_n == 3:
+                                    marks.append(('boll_rsi', 'red'))
+                                elif active_up and (high_n >= 2 or low_n == 2):
+                                    marks.append(('boll_rsi', 'red' if high_n == 3 else 'yellow'))
+                                kept = not active_up and low_n == 2
+                            level = ('red' if any(lv == 'red' for _, lv in marks)
+                                     else 'yellow' if marks else 'green')
+                            with self.subTest(group=group, hold=hold, side=side,
+                                              high_n=high_n, low_n=low_n):
+                                row = self.analyze(values, group, hold, bands)
+                                self.assertEqual(row['signal_marks'], marks)
+                                self.assertEqual(row['level'], level)
+                                counts = monitor.signal_counts([row])
+                                members = monitor.signal_count_members([row])
+                                for indicator in ('rsi', 'boll', 'boll_rsi'):
+                                    for color in ('red', 'yellow'):
+                                        n = int((indicator, color) in marks)
+                                        self.assertEqual(counts[indicator][color], n)
+                                        self.assertEqual(len(members[indicator][color]), n)
+                                self.assertEqual(row['foldable'], not kept)
+                                silent = side == '上轨' and group != 'position' and high_n == low_n == 0
+                                self.assertEqual(any('布林' + side in text for text in row['signals']), not silent)
+                                gray = monitor.text_only_members([row])
+                                if level == 'green' and not silent:
+                                    self.assertEqual(gray[0]['kind'], 'boll_rsi' if high_n or low_n else 'boll')
+                                    self.assertEqual(gray[0]['side'], side)
+                                    self.assertEqual(gray[0]['rsi_n'], max(high_n, low_n))
+                                else:
+                                    self.assertEqual(gray, [])
+
+    def test_long_short_positions_have_identical_technical_rules(self):
+        for bands in ((100, 110, 90), (100, 101, 90), (100, 110, 99), (None, None, None)):
+            for high_n in range(4):
+                for low_n in range(4 - high_n):
+                    values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                    short = self.analyze(values, hold='short', bands=bands)
+                    for hold in ('long', 'LONG'):
+                        with self.subTest(bands=bands, values=values, hold=hold):
+                            row = self.analyze(values, hold=hold, bands=bands)
+                            self.assertEqual(row['hold'], hold.lower())
+                            for key in ('level', 'signals', 'signal_marks', 'foldable', 'boll_alert_text',
+                                        'boll_rsi_direction', 'boll_rsi_hits'):
+                                self.assertEqual(row.get(key), short.get(key), key)
+                            self.assertEqual(monitor.signal_counts([row]), monitor.signal_counts([short]))
+                            # 归属名称仍保留长短，只比较提醒与统计分类，不要求展示元数据相同。
+                            gray = [{k: v for k, v in m.items() if k != 'hold'}
+                                    for m in monitor.text_only_members([row])]
+                            short_gray = [{k: v for k, v in m.items() if k != 'hold'}
+                                          for m in monitor.text_only_members([short])]
+                            self.assertEqual(gray, short_gray)
+
+    def test_plain_upper_only_alerts_positions_and_plain_lower_stays_all_groups(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for hold in ('short', 'long'):
+                with self.subTest(group=group, hold=hold):
+                    row = self.analyze([50, 50, 50], group, hold, bands=(100, 101, 90))
+                    members = monitor.text_only_members([row])
+                    self.assertEqual(row['level'], 'green')
+                    self.assertTrue(row['foldable'])
+                    self.assertEqual(row['signal_marks'], [])
+                    if group == 'position':
+                        self.assertTrue(any('布林上轨' in text for text in row['signals']))
+                        self.assertEqual((members[0]['kind'], members[0]['side']), ('boll', '上轨'))
+                    else:
+                        self.assertEqual(row['signals'], [])
+                        self.assertEqual(row['boll_alert_text'], '')
+                        self.assertEqual(members, [])
+                    lower = self.analyze([50, 50, 50], group, hold, bands=(100, 110, 99))
+                    lower_member = monitor.text_only_members([lower])[0]
+                    self.assertEqual((lower_member['kind'], lower_member['side']), ('boll', '下轨'))
+
+    def test_plain_dual_tracks_keep_facts_but_do_not_switch_after_upper_restriction(self):
+        for group in ('focus', 'technology'):
+            # 只隔离振幅灯，不改变选轨距离与分组限制。
+            for high, low, side in ((120, 90, '上轨'), (110, 80, '下轨'), (110, 90, '上轨')):
+                with self.subTest(group=group, high=high, low=low), \
+                        patch.dict(monitor.S, {'amp_yellow': 1000, 'amp_red': 2000}):
+                    row = self.analyze([50, 50, 50], group, high=high, low=low)
+                self.assertTrue(any('布林上轨' in text for text in row['signals']))
+                self.assertTrue(any('布林下轨' in text for text in row['signals']))
+                self.assertIn('布林' + side, row['boll_alert_text'])
+                gray = monitor.text_only_members([row])
+                self.assertEqual([m['side'] for m in gray], ['下轨'] if side == '下轨' else [])
+        # 有单条 RSI 的上轨仍是组合文字，不被“单独上轨零条”规则误删。
+        for values in ([70, 50, 50], [35, 50, 50]):
+            for group in ('focus', 'technology'):
+                row = self.analyze(values, group, bands=(100, 101, 90))
+                self.assertTrue(any('布林上轨' in text for text in row['signals']))
+                self.assertEqual(monitor.text_only_members([row])[0]['kind'], 'boll_rsi')
+
+    def test_rule_template_groups_positions_without_changing_position_layout(self):
+        from page_assets import RULE_BLOCKS
+        body = ''.join(part for _, part in RULE_BLOCKS)
+        self.assertNotIn('长持仓', body)
+        self.assertNotIn('短持仓', body)
+        self.assertIn('布林上轨 + RSI 2条向上超买 → <span class="lamp-yellow">黄灯</span>', body)
+        self.assertIn('布林上轨 + RSI 2条向下超卖 → <span class="lamp-yellow">黄灯</span>', body)
+        self.assertIn('单独布林上轨「RSI 0 条」→ 文字 → 灰灯', body)
+        self.assertIn('单独布林上轨「RSI 0 条」→ 无提醒', body)
+
+    def test_rsi_alone_and_plain_boll_remain_foldable(self):
+        for values in ([50, 50, 50], [70, 50, 50], [35, 50, 50], [70, 35, 50],
+                       [70, 70, 50], [35, 35, 50]):
+            with self.subTest(values=values):
+                row = self.analyze(values)
+                self.assertEqual(row['level'], 'green')
+                self.assertTrue(row['foldable'])
+                self.assertEqual(row['signal_marks'], [])
+                if max(values.count(70), values.count(35)) < 2:
+                    self.assertEqual(row['signals'], [])
+        for bands in ((100, 101, 90), (100, 110, 99)):
+            row = self.analyze([50, 50, 50], bands=bands)
+            self.assertTrue(row['foldable'])
+            self.assertEqual(monitor.text_only_members([row])[0]['kind'], 'boll')
+
+    def test_dual_tracks_keep_both_texts_and_use_signed_not_absolute_gap(self):
+        cases = ((120, 89, '上轨', 'green', False),
+                 (111, 80, '下轨', 'yellow', True),
+                 (120, 80, '下轨', 'yellow', True),
+                 (110, 90, '上轨', 'green', False))
+        for high, low, selected, level, foldable in cases:
+            with self.subTest(high=high, low=low):
+                row = self.analyze([35, 35, 50], 'technology', high=high, low=low)
+                self.assertTrue(any('布林上轨' in text for text in row['signals']))
+                self.assertTrue(any('布林下轨' in text for text in row['signals']))
+                self.assertIn('布林' + selected, row['boll_alert_text'])
+                self.assertEqual((row['level'], row['foldable']), (level, foldable))
+                self.assertEqual(('boll_rsi', 'yellow') in row['signal_marks'], selected == '下轨')
+        # 被选上轨屏蔽的三超买组合，不用另一条下轨补黄；单条也不借下轨取消折叠。
+        for values in ([70, 70, 70], [70, 50, 50]):
+            row = self.analyze(values, 'technology', high=110, low=90)
+            self.assertEqual(row['level'], 'green')
+            self.assertTrue(row['foldable'])
+            self.assertEqual(row['signal_marks'], [])
+
+    def test_gray_combination_uses_selected_lower_track_and_single_rsi_title(self):
+        row = self.analyze([70, 50, 50], 'technology', high=111, low=80)
+        self.assertTrue('布林上轨' in row['signals'][0])
+        member = monitor.text_only_members([row])[0]
+        self.assertEqual((member['kind'], member['shape'], member['side'], member['rsi_n'], member['rsi_side']),
+                         ('boll_rsi', '▼', '下轨', 1, '超买'))
+        self.assertIn('跌破布林下轨 · RSI 1条超买', member['detail'])
+        self.assertEqual(monitor._gray_title('boll_rsi', member), ('▼', '下轨 · RSI 1条超买', 1))
+        self.assertEqual(monitor._gray_title('boll_rsi', {'detail': member['detail']}),
+                         ('▼', '下轨 · RSI 1条超买', 1))
+
+    def test_technical_keep_is_independent_of_other_red_price_signal(self):
+        for values, bands, keep in (([70, 50, 50], (100, 110, 99), True),
+                                    ([35, 35, 50], (100, 101, 90), True),
+                                    ([35, 35, 50], (100, 110, 99), False),
+                                    ([50, 50, 50], (100, 110, 90), False)):
+            with self.subTest(values=values, bands=bands):
+                row = self.analyze(values, 'technology', bands=bands, cfg={'trigger': 100})
+                self.assertEqual(row['level'], 'red')
+                self.assertIn(('add_price', 'red'), row['signal_marks'])
+                self.assertEqual(row['foldable'], not keep)
+                self.assertIn(f'data-quiet-keep="{str(keep).lower()}"', monitor._stock_row(row, {}))
+
+    def test_group_body_keeps_designated_gray_rows_but_folds_other_text(self):
+        group = next(g for g in monitor.GROUPS if g['item_group'] == 'technology')
+        rows = [self.analyze([35, 35, 50], 'technology', bands=(100, 101, 90), symbol='UPLOW'),
+                self.analyze([70, 50, 50], 'technology', bands=(100, 110, 99), symbol='DOWNONE'),
+                self.analyze([70, 70, 50], 'technology', bands=(100, 101, 90), symbol='UPHIGH'),
+                self.analyze([50, 50, 50], 'technology', bands=(100, 110, 99), symbol='PLAIN'),
+                self.analyze([35, 35, 50], 'technology', symbol='RSIONLY')]
+        body = monitor._group_body(rows, group, {}, {}, True, 'group_technology', group['label'])
+        shown, quiet = body.split('<details class="quiet-list">', 1)
+        for symbol in ('UPLOW', 'DOWNONE'):
+            self.assertIn(f'id="s-{symbol.lower()}"', shown)
+            self.assertNotIn(f'id="s-{symbol.lower()}"', quiet)
+        self.assertIn('无异动 3 只', quiet)
+        for symbol in ('UPHIGH', 'PLAIN', 'RSIONLY'):
+            self.assertNotIn(f'id="s-{symbol.lower()}"', shown)
+            self.assertIn(f'id="s-{symbol.lower()}"', quiet)
+        counts = monitor.signal_counts(rows)
+        self.assertTrue(all(v['red'] == v['yellow'] == v['purple'] == 0 for v in counts.values()))
+        self.assertEqual(len(monitor.text_only_members(rows)), 5)
+        stats = monitor._group_stats_html(rows, group, {}, True)
+        self.assertIn('aria-label="灰灯 5 项"', stats)
+        card = monitor._signal_counts_card({'signal_counts': counts,
+            'signal_members': monitor.signal_count_members(rows), 'text_only': monitor.text_only_members(rows)})
+        self.assertIn('<h5>▼ 下轨 · RSI 1条超买</h5>', card)
+        self.assertIn('<h5>▲ 上轨 · RSI 2条超卖</h5>', card)
+
+    def test_standalone_rsi_complete_group_matrix_includes_mixed_and_single_silence(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for hold in ('short', 'long'):
+                for high_n in range(4):
+                    for low_n in range(4 - high_n):
+                        values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                        expected = ('red' if low_n == 3 else 'yellow'
+                                    if high_n == 3 and group in ('position', 'focus') else 'green')
+                        with self.subTest(group=group, hold=hold, high_n=high_n, low_n=low_n):
+                            row = self.analyze(values, group, hold)
+                            self.assertEqual(row['level'], expected)
+                            self.assertEqual(row['signal_marks'], [] if expected == 'green' else [('rsi', expected)])
+                            self.assertTrue(row['foldable'])
+                            counts, members = monitor.signal_counts([row]), monitor.signal_count_members([row])
+                            for kind in ('rsi', 'boll', 'boll_rsi'):
+                                for color in ('red', 'yellow'):
+                                    n = int(kind == 'rsi' and color == expected)
+                                    self.assertEqual(counts[kind][color], n)
+                                    self.assertEqual(len(members[kind][color]), n)
+                            gray = monitor.text_only_members([row])
+                            self.assertEqual(bool(gray), expected == 'green' and max(high_n, low_n) >= 2)
+                            if max(high_n, low_n) < 2:
+                                self.assertEqual(row['signals'], [])
+                            if high_n and low_n and max(high_n, low_n) == 2:
+                                directions = monitor._member_direction_markers(row, 'rsi')
+                                self.assertEqual({m['shape'] for m in directions}, {'▲', '▼'})
+                                self.assertEqual(len(directions), 2)
+                                self.assertIn('超买', gray[0]['detail'])
+                                self.assertIn('超卖', gray[0]['detail'])
+
+    def test_dual_rail_full_group_matrix_keeps_facts_and_never_reselects(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for hold in ('short', 'long'):
+                for high, low, side in ((120, 90, '上轨'), (110, 80, '下轨'), (110, 90, '上轨')):
+                    for high_n in range(4):
+                        for low_n in range(4 - high_n):
+                            values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                            expected = 'green'
+                            if low_n == 3:
+                                expected = 'red'
+                            elif side == '下轨':
+                                expected = 'yellow' if max(high_n, low_n) >= 2 else 'green'
+                            elif group in ('position', 'focus'):
+                                expected = 'red' if high_n == 3 else 'yellow' if high_n == 2 or low_n == 2 else 'green'
+                            with self.subTest(group=group, hold=hold, side=side,
+                                              high_n=high_n, low_n=low_n, high=high, low=low), \
+                                    patch.dict(monitor.S, {'amp_yellow': 1000, 'amp_red': 2000}):
+                                row = self.analyze(values, group, hold, high=high, low=low)
+                            self.assertEqual(row['level'], expected)
+                            self.assertEqual(row['signal_marks'], [] if expected == 'green' else [('boll_rsi', expected)])
+                            self.assertIn('布林' + side, row['boll_alert_text'])
+                            self.assertTrue(any('布林上轨' in s for s in row['signals']))
+                            self.assertTrue(any('布林下轨' in s for s in row['signals']))
+                            gray = monitor.text_only_members([row])
+                            gray_expected = (expected == 'green' and not
+                                             (side == '上轨' and group != 'position' and high_n == low_n == 0))
+                            self.assertEqual(bool(gray), gray_expected)
+                            if gray_expected:
+                                self.assertEqual(gray[0]['side'], side)
+                            counts = monitor.signal_counts([row])
+                            self.assertTrue(all(not counts[k][c] for k in ('rsi', 'boll') for c in ('red', 'yellow')))
+                            self.assertEqual(counts['boll_rsi']['red'], int(expected == 'red'))
+                            self.assertEqual(counts['boll_rsi']['yellow'], int(expected == 'yellow'))
+
+    def test_direction_markers_keep_mixed_rsi_in_separate_or_shared_text(self):
+        for signals in (['RSI 2条超买（≥70）', 'RSI 1条超卖（≤35）'],
+                        ['RSI 2条超买 / 1条超卖'],
+                        ['RSI 1条超买（≥70）', 'RSI 2条超卖（≤35）']):
+            with self.subTest(signals=signals):
+                markers = monitor._member_direction_markers({'signals': signals}, 'rsi')
+                self.assertEqual({m['shape'] for m in markers}, {'▲', '▼'})
+                self.assertEqual({m['tone'] for m in markers}, {'yellow'})
+        for side, color, shape in (('超买', 'yellow', '▲'), ('超卖', 'red', '▼')):
+            row = {'signals': [f'RSI 3条{side}', f'RSI 3条{side}'], 'level': 'red'}
+            self.assertEqual(monitor._member_direction_markers(row, 'rsi'),
+                             [{'shape': shape, 'tone': color, 'label': f'RSI3条{side}'}])
+
+    def test_cross_group_combinations_never_duplicate_boll_or_rsi_counts(self):
+        groups = [g['item_group'] for g in monitor.GROUPS]
+        for high_n, low_n in ((3, 0), (0, 3), (2, 1), (1, 2), (1, 1)):
+            for bands in ((100, 101, 90), (100, 110, 99)):
+                values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                for index, primary in enumerate(groups):
+                    with self.subTest(values=values, bands=bands, primary=primary):
+                        first = self.analyze(values, primary, 'long', bands, symbol='BRK.B-US')
+                        first['note'] = '优先归属'
+                        later = self.analyze(values, primary, 'short', bands, symbol='BRK-B')
+                        later['note'] = '同组后记录'
+                        rows = [self.analyze(values, group, bands=bands, symbol='BRK.B')
+                                for group in groups[index + 1:]]
+                        rows += [first, later]
+                        counts, members = monitor.signal_counts(rows), monitor.signal_count_members(rows)
+                        self.assertEqual(counts, monitor.signal_counts([first]))
+                        self.assertEqual(members, monitor.signal_count_members([first]))
+                        self.assertTrue(all(counts[kind][color] == 0 for kind in ('rsi', 'boll')
+                                            for color in ('red', 'yellow')))
+                        self.assertEqual(monitor.text_only_members(rows), monitor.text_only_members([first]))
+                        with patch.object(monitor, 'global_dca', return_value=None):
+                            snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+                        self.assertEqual(snap['summary']['total'], 1)
+                        self.assertEqual(snap['summary']['red'], int(first['level'] == 'red'))
+                        self.assertEqual(snap['summary']['yellow'], int(first['level'] == 'yellow'))
+
+    def test_combination_normalization_and_other_indicators_remain_independent(self):
+        import copy
+        row = self.analyze([35, 35, 35], 'position', bands=(100, 110, 99), symbol='STACK')
+        row.update(price=100, prev_close=180, target=monitor.evaluate_target(
+            100, 180, {'kind': 'manual', 'price': 170}, 'position', 3))
+        row['signal_marks'] += [('rsi', 'red'), ('boll', 'yellow'), ('chg', 'red'),
+                               ('amp', 'yellow'), ('vol_ratio', 'red'), ('ma_cross', 'yellow'),
+                               ('ma_band', 'yellow'), ('ma_cross', 'yellow')]
+        row['signals'] += ['上穿250日均线', '日内触及250日均线 ±1%区间']
+        row['ma_band_direction'] = 'up'
+        before = copy.deepcopy(row)
+        with patch.object(monitor, 'global_dca', return_value=None):
+            snap = monitor.build_snapshot({}, [row, dict(row, group='technology')], {}, group_counts={})
+        self.assertEqual((snap['summary']['red'], snap['summary']['yellow'], snap['summary']['purple']), (1, 0, 1))
+        for kind, color in (('boll_rsi', 'red'), ('chg', 'red'), ('amp', 'yellow'),
+                            ('vol_ratio', 'red'), ('ma_cross', 'yellow'), ('ma_band', 'yellow'), ('target', 'purple')):
+            self.assertEqual(snap['signal_counts'][kind][color], 1)
+            self.assertEqual(len(snap['signal_members'][kind][color]), 1)
+        self.assertEqual(snap['signal_counts']['rsi']['red'], 0)
+        self.assertEqual(snap['signal_counts']['boll']['yellow'], 0)
+        self.assertEqual(len(snap['target_overlays']['space']), 1)
+        self.assertEqual(len(snap['target_overlays']['reached']), 1)
+        self.assertEqual(snap['text_only'], [])
+        self.assertEqual(row, before)
+
+    def test_gray_only_when_final_no_red_yellow_and_missing_reference_never_count(self):
+        row = self.analyze([70, 70, 50], 'technology', symbol='TEXT')
+        self.assertEqual(monitor.text_only_members([row])[0]['kind'], 'rsi')
+        # 紫可与技术灰重叠；红黄抑制技术灰，主表灯仍由最终业务结果决定。
+        purple = dict(row, signal_marks=[('target', 'purple')])
+        self.assertEqual(monitor.text_only_members([purple])[0]['kind'], 'rsi')
+        for changes in ({'level': 'red', 'signal_marks': [('chg', 'red')]},
+                        {'level': 'yellow', 'signal_marks': [('ma_band', 'yellow')]},
+                        {'signal_marks': [('vol_ratio', 'yellow')]},
+                        {'price': None}, {'level': 'gray'}, {'reference_only': True}):
+            with self.subTest(changes=changes):
+                self.assertEqual(monitor.text_only_members([dict(row, **changes)]), [])
+        single = dict(row, signals=['RSI 1条超买（≥70）'])
+        self.assertEqual(monitor.text_only_members([single]), [])
+        for changes in ({'price': None}, {'level': 'gray'}, {'reference_only': True}):
+            with self.subTest(changes=changes):
+                excluded = dict(row, signal_marks=[('chg', 'red'), ('rsi', 'yellow')], **changes)
+                self.assertTrue(all(not v[color] for v in monitor.signal_counts([excluded]).values()
+                                    for color in ('red', 'yellow', 'purple')))
+                self.assertTrue(all(not v[color] for v in monitor.signal_count_members([excluded]).values()
+                                    for color in ('red', 'yellow', 'purple')))
+
+    def test_legacy_row_without_foldable_keeps_existing_folding(self):
+        group = next(g for g in monitor.GROUPS if g['item_group'] == 'technology')
+        row = self.analyze([35, 35, 50], 'technology', bands=(100, 101, 90))
+        row.pop('foldable')
+        body = monitor._group_body([row], group, {}, {}, True, 'group_technology', group['label'])
+        self.assertIn('无异动 1 只', body)
+
+
+class TestTechnicalFacts(unittest.TestCase):
+    """纯事实契约、独立规则矩阵，以及生产 analyze_symbol 的真实分派/选轨。"""
+
+    def setUp(self):
+        self.analyzer = TestBollRsiRules()
+        self.analyzer.setUp()
+        self.addCleanup(self.analyzer.doCleanups)
+
+    @staticmethod
+    def expected(group, high, low, side):
+        active = group in ('position', 'focus')
+        none = (None, 'green', True)
+        rsi_gray = ('rsi', 'gray', True)
+        combo_gray = ('boll_rsi', 'gray', True)
+        combo_keep = ('boll_rsi', 'gray', False)
+        combo_yellow = ('boll_rsi', 'yellow', True)
+        combo_red = ('boll_rsi', 'red', True)
+        if side is None:
+            table = {(0, 0): none, (1, 0): none, (0, 1): none, (1, 1): none,
+                     (2, 0): rsi_gray, (2, 1): rsi_gray, (0, 2): rsi_gray, (1, 2): rsi_gray,
+                     (3, 0): ('rsi', 'yellow' if active else 'gray', True), (0, 3): ('rsi', 'red', True)}
+        elif side == '上轨':
+            table = {(0, 0): ('boll', 'gray', True) if group == 'position' else none,
+                     (1, 0): combo_gray, (0, 1): combo_gray, (1, 1): combo_gray,
+                     (2, 0): combo_yellow if active else combo_gray,
+                     (2, 1): combo_yellow if active else combo_gray,
+                     (0, 2): combo_yellow if active else combo_keep,
+                     (1, 2): combo_yellow if active else combo_keep,
+                     (3, 0): combo_red if active else combo_gray, (0, 3): combo_red}
+        else:
+            table = {(0, 0): ('boll', 'gray', True),
+                     (1, 0): combo_keep, (0, 1): combo_keep, (1, 1): combo_keep,
+                     (2, 0): combo_yellow, (2, 1): combo_yellow, (0, 2): combo_yellow,
+                     (1, 2): combo_yellow, (3, 0): combo_yellow, (0, 3): combo_red}
+        kind, level, foldable = table[(high, low)]
+        return dict(kind=kind, level=level, foldable=foldable)
+
+    def test_pure_api_complete_group_count_and_selected_side_matrix(self):
+        with patch.object(monitor, 'calc_rsi', side_effect=AssertionError('纯API不得计算RSI')), \
+                patch.object(monitor, 'boll', side_effect=AssertionError('纯API不得计算布林')), \
+                patch.object(monitor, '_boll_hits', side_effect=AssertionError('纯API不得猜测轨距')), \
+                patch.object(monitor, 'analyze_symbol', side_effect=AssertionError('纯API不得伪造行情')):
+            for group in (g['item_group'] for g in monitor.GROUPS):
+                for high in range(4):
+                    for low in range(4 - high):
+                        for side in (None, '上轨', '下轨'):
+                            with self.subTest(group=group, high=high, low=low, side=side):
+                                self.assertEqual(monitor.classify_technical_facts(group, high, low, side),
+                                                 self.expected(group, high, low, side))
+
+    def test_invalid_count_types_ranges_sums_and_ambiguous_side_are_rejected(self):
+        bad_counts = ((True, 0), (0, False), (1.0, 0), (0, 2.0), ('1', 0), (0, None),
+                      (float('nan'), 0), ([], 0), (0, {}), (-1, 0), (0, -1),
+                      (4, 0), (0, 4), (2, 2), (3, 1), (1, 3), (3, 3))
+        for high, low in bad_counts:
+            with self.subTest(high=high, low=low), self.assertRaises(ValueError):
+                monitor.classify_technical_facts('position', high, low, None)
+        for side in ('', '上下轨', 'both', 'up', 'down', [], {}, True, 0):
+            with self.subTest(side=side), self.assertRaises(ValueError):
+                monitor.classify_technical_facts('position', 0, 3, side)
+        for group in (None, '', {}, True):
+            with self.subTest(group=group), self.assertRaises(ValueError):
+                monitor.classify_technical_facts(group, 0, 3, None)
+        with self.assertRaises(TypeError):
+            monitor.classify_technical_facts('position', 0, 3)
+
+    def test_none_means_no_selected_rail_and_results_are_fresh(self):
+        expected = dict(kind='rsi', level='red', foldable=True)
+        result = monitor.classify_technical_facts('technology', 0, 3, None)
+        self.assertEqual(result, expected)
+        result['kind'] = 'boll_rsi'
+        result['level'] = 'gray'
+        with patch.object(monitor, 'S', dict(rsi_high=90, rsi_low=10, boll_near_pct=100)):
+            self.assertEqual(monitor.classify_technical_facts('technology', 0, 3, None), expected)
+
+    def test_production_single_rail_and_no_rail_dispatch_match_pure_api(self):
+        bands = {None: (100, 110, 90), '上轨': (100, 101, 90), '下轨': (100, 110, 99)}
+        classify = monitor.classify_technical_facts
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for hold in ('short', 'long'):
+                for high in range(4):
+                    for low in range(4 - high):
+                        values = [70] * high + [35] * low + [50] * (3 - high - low)
+                        for side in (None, '上轨', '下轨'):
+                            with self.subTest(group=group, hold=hold, high=high, low=low, side=side), \
+                                    patch.object(monitor, 'classify_technical_facts', wraps=classify) as dispatch:
+                                row = self.analyzer.analyze(values, group, hold, bands=bands[side])
+                            dispatch.assert_called_once_with(group, high, low, side)
+                            facts = classify(group, high, low, side)
+                            gray = monitor.text_only_members([row])
+                            kind = row['signal_marks'][0][0] if row['signal_marks'] else gray[0]['kind'] if gray else None
+                            level = row['level'] if row['signal_marks'] else 'gray' if gray else 'green'
+                            self.assertEqual(dict(kind=kind, level=level, foldable=row['foldable']), facts)
+                            self.assertEqual(facts, self.expected(group, high, low, side))
+                            expected_marks = [(facts['kind'], facts['level'])] if facts['level'] in ('red', 'yellow') else []
+                            self.assertEqual(row['signal_marks'], expected_marks)
+                            counts = monitor.signal_counts([row])
+                            for indicator in ('rsi', 'boll', 'boll_rsi'):
+                                for color in ('red', 'yellow'):
+                                    self.assertEqual(counts[indicator][color], int((indicator, color) in expected_marks))
+                            self.assertIn(f'data-quiet-keep="{str(not facts["foldable"]).lower()}"',
+                                          monitor._stock_row(row, {}))
+
+    def test_real_dual_rail_selection_is_passed_to_api_without_switching(self):
+        classify = monitor.classify_technical_facts
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for high, low in ((0, 0), (0, 3), (3, 0), (1, 2), (2, 1)):
+                values = [70] * high + [35] * low + [50] * (3 - high - low)
+                for day_high, day_low, side in ((120, 90, '上轨'), (110, 80, '下轨'), (110, 90, '上轨')):
+                    with self.subTest(group=group, high=high, low=low, side=side), \
+                            patch.dict(monitor.S, amp_yellow=1000, amp_red=2000), \
+                            patch.object(monitor, 'classify_technical_facts', wraps=classify) as dispatch:
+                        row = self.analyzer.analyze(values, group, high=day_high, low=day_low)
+                    dispatch.assert_called_once_with(group, high, low, side)
+                    facts = classify(group, high, low, side)
+                    self.assertIn('布林' + side, row['boll_alert_text'])
+                    self.assertTrue(any('布林上轨' in text for text in row['signals']))
+                    self.assertTrue(any('布林下轨' in text for text in row['signals']))
+                    self.assertEqual(row['level'], facts['level'] if facts['level'] in ('red', 'yellow') else 'green')
+                    self.assertEqual(row['foldable'], facts['foldable'])
+                    self.assertTrue(all(mark[0] == 'boll_rsi' for mark in row['signal_marks']))
+
+    def test_real_rsi_boll_and_history_use_api_for_all_three_oversold_paths(self):
+        import copy
+        closes = [100.0 - i * 0.1 for i in range(80)]
+        dates = monitor.market_sessions.preceding_sessions('2026-10-20', 79) + ['2026-10-20']
+        base = dict(dates=dates, closes=closes, highs=[p + 0.05 for p in closes],
+                    lows=[p - 0.05 for p in closes], volumes=[1000] * 80,
+                    price=closes[-1], prev_close=closes[-2], source='offline_fixture')
+        classify = monitor.classify_technical_facts
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for hold in ('short', 'long'):
+                for side in (None, '上轨', '下轨'):
+                    data = copy.deepcopy(base)
+                    if side == '上轨':
+                        data['highs'][-1] = 200.0
+                    elif side == '下轨':
+                        data['lows'][-1] = 20.0
+                    before = copy.deepcopy(data)
+                    with self.subTest(group=group, hold=hold, side=side), \
+                            patch.dict(monitor.S, boll_near_pct=0, chg_yellow=1000, chg_red=2000,
+                                       amp_yellow=1000, amp_red=2000), \
+                            patch.object(monitor, 'classify_technical_facts', wraps=classify) as dispatch:
+                        row = monitor.analyze_symbol('TEST', {'hold': hold}, data, group)[2]
+                    dispatch.assert_called_once_with(group, 0, 3, side)
+                    self.assertTrue(all(value <= monitor.S['rsi_low'] for value in row['rsi'].values()))
+                    self.assertEqual(row['signal_marks'], [('rsi' if side is None else 'boll_rsi', 'red')])
+                    self.assertEqual(row['level'], 'red')
+                    self.assertEqual(monitor.text_only_members([row]), [])
+                    self.assertEqual(data, before)
+
+
 class TestVolTier(unittest.TestCase):
     def setUp(self):
         # 固定中档阈值，不依赖线上 settings.json
@@ -4110,16 +4733,34 @@ class TestVolTier(unittest.TestCase):
         _, sig, _ = monitor.analyze_symbol('A', {}, self.data(self.series(4.0), 0.0, hi_pct=2.5, lo_pct=2.5), group='position')
         self.assertFalse(any('振幅' in x for x in sig), sig)
 
-    def test_change_and_amplitude_only_apply_to_position_and_focus(self):
-        big = self.data(self.series(1.8), 9.0, hi_pct=6.0, lo_pct=6.0)   # 涨 9%、振幅很大
-        for grp in ('position', 'focus'):
-            lv, sig, _ = monitor.analyze_symbol('X', {}, big, group=grp)
+    def test_change_applies_to_all_groups_but_amplitude_stays_position_and_focus(self):
+        big = self.data(self.series(1.8), 9.0, hi_pct=6.0, lo_pct=6.0)
+        for grp in ('position', 'focus', 'technology', 'index_funds', 'healthcare'):
+            lv, sig, details = monitor.analyze_symbol('X', {}, big, group=grp)
             self.assertEqual(lv, 'red', (grp, sig))
-            self.assertTrue(any('异动' in x for x in sig), sig)
-            self.assertTrue(any('振幅' in x for x in sig), sig)
-        for grp in ('technology', 'index_funds', 'healthcare'):
-            lv, sig, _ = monitor.analyze_symbol('X', {}, big, group=grp)
-            self.assertFalse(any(('异动' in x or '波动' in x or '振幅' in x) for x in sig), (grp, sig))
+            self.assertTrue(any('异动' in text for text in sig), (grp, sig))
+            self.assertEqual(any('振幅' in text for text in sig), grp in ('position', 'focus'))
+            self.assertIn(('chg', 'red'), [tuple(mark) for mark in details['signal_marks']])
+
+    def test_change_threshold_boundaries_and_both_directions_in_all_groups(self):
+        for grp in ('position', 'focus', 'technology', 'index_funds', 'healthcare'):
+            for tier, sigma, mult in (('low', 1.0, .6), ('mid', 2.0, 1), ('high', 3.0, 1.4)):
+                for sign in (-1, 1):
+                    for move, expected in ((2 * mult - .001, None), (2 * mult, 'yellow'), (4 * mult, 'red')):
+                        with self.subTest(group=grp, tier=tier, sign=sign, move=move):
+                            x = monitor.SimpleNamespace(group=grp, closes=[], chg=sign * move)
+                            with patch.object(monitor, 'vol_profile', return_value=(tier, sigma)):
+                                monitor._apply_vol_tier(x)
+                            alerts = monitor._Alerts()
+                            monitor._rule_chg_red(alerts, x)
+                            monitor._rule_chg_yellow(alerts, x)
+                            self.assertEqual(alerts.marks, [('chg', expected)] if expected else [])
+
+    def test_other_group_change_is_in_snapshot_counts_and_members(self):
+        _, _, details = monitor.analyze_symbol('OTHER', {}, self.data(self.series(1.8), 9.0), group='technology')
+        snap = monitor.build_snapshot({}, [details], {}, group_counts={})
+        self.assertEqual(snap['signal_counts']['chg']['red'], 1)
+        self.assertEqual(snap['signal_members']['chg']['red'][0]['symbol'], 'OTHER')
 
 
 class TestMaConfirm(unittest.TestCase):
@@ -4327,7 +4968,7 @@ class TestMaConfirm(unittest.TestCase):
         data = {'closes': closes, 'highs': closes[:], 'lows': closes[:],
                 'volumes': [1000] * len(closes), 'price': 105, 'prev_close': 99}
         data['lows'][-1] = 100
-        with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 250}), \
+        with patch.dict(monitor.S, {'ma_short': 0, 'ma_long': 250, 'chg_yellow': 20, 'chg_red': 30}), \
                 patch.object(monitor, 'boll', return_value=(None, None, None)), \
                 patch.object(monitor, 'calc_rsi', return_value=50):
             level, signals, detail = monitor.analyze_symbol('T', {}, data, group='technology')
@@ -4704,10 +5345,10 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('if (opening) {\n    //', js)
         self.assertIn('function revealSignalPanel(panel) {', js)
 
-    def test_collapse_button_css_has_full_width_short_transparent_strip(self):
+    def test_collapse_button_css_has_full_width_short_tinted_strip(self):
         button_rule = re.search(r'\.collapse-group\{([^}]+)\}', monitor.PAGE_CSS)
         self.assertIsNotNone(button_rule)
-        for declaration in ('width:100%', 'height:26px', 'padding:0', 'background:transparent', 'border:0',
+        for declaration in ('width:100%', 'height:26px', 'padding:0', 'background:var(--collapse-bg)', 'border:0',
                             'display:flex', 'align-items:center', 'justify-content:center', 'box-sizing:border-box'):
             self.assertIn(declaration, button_rule.group(1))
         self.assertNotIn('width:44px', button_rule.group(1))
@@ -4716,7 +5357,7 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertRegex(strip_rule.group(1), r'(?:^|;)padding:0(?:;|$)')
         self.assertIn('margin:0 -4px -6px', strip_rule.group(1))
         self.assertIn('line-height:0', strip_rule.group(1))
-        self.assertIn('.collapse-group:hover{color:var(--text);background:transparent}', monitor.PAGE_CSS)
+        self.assertIn('.collapse-group:hover{color:var(--text);background:var(--collapse-bg)}', monitor.PAGE_CSS)
 
     def test_jump_flash_never_overwrites_the_lamp_bar(self):
         """闪烁只能用 background-color：带 52 周条的行灯条是 background-image 画的，
@@ -4756,6 +5397,96 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertGreater(macro.index(button), macro.index('</table>'))
         self.assertIn('aria-label="收起市场风险"', button)
         self.assertNotIn('title=', button)
+
+
+class TestQuietKeep(unittest.TestCase):
+    @staticmethod
+    def item(symbol='TEST', **changes):
+        row = dict(symbol=symbol, note='', level='green', group='position', chg=0.0,
+                   price=100.0, prev_close=100.0, signals=[], signal_marks=[], foldable=True)
+        row.update(changes)
+        return row
+
+    def body(self, rows, group='position', asof='2030-10-20', snapshot=None):
+        config = next(g for g in monitor.GROUPS if g['item_group'] == group)
+        return monitor._group_body(rows, config, snapshot or {}, asof, True,
+                                   'group_' + config['key'], config['label'])
+
+    def test_keep_flags_and_actual_group_placement_share_all_four_reasons(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for level in ('green', 'red', 'yellow', 'gray'):
+                rows = [self.item('NORMAL', group=group, level=level),
+                        self.item('REFERENCE', group=group, level=level, reference_only=True),
+                        self.item('TECHKEEP', group=group, level=level, foldable=False),
+                        self.item('TARGETKEEP', group=group, level=level,
+                                  target=monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 150}, group, 3)),
+                        self.item('EARNKEEP', group=group, level=level,
+                                  earnings={'status': 'ok', 'kind': 'official', 'date': '2030-10-21'})]
+                with self.subTest(group=group, level=level):
+                    output = self.body(rows, group)
+                    shown, _, quiet = output.partition('<details class="quiet-list">')
+                    for row in rows:
+                        keep = row['symbol'] != 'NORMAL'
+                        marker = f'id="{monitor._stock_anchor_id(row["symbol"])}" data-quiet-keep="{str(keep).lower()}"'
+                        self.assertIn(marker, output)
+                        self.assertEqual(marker in shown, keep or level != 'green')
+                        self.assertEqual(marker in quiet, not keep and level == 'green')
+
+    def test_target_reached_uses_container_group_not_stale_row_group(self):
+        for container, stale, keep in (('position', 'technology', True),
+                                        ('focus', 'technology', True),
+                                        ('technology', 'position', False)):
+            row = self.item(group=stale, target={'kind': 'manual', 'price': 99})
+            before = json.dumps(row, sort_keys=True)
+            with self.subTest(container=container, stale=stale):
+                output = self.body([row], container)
+                marker = f'id="s-test" data-quiet-keep="{str(keep).lower()}"'
+                self.assertIn(marker, output)
+                self.assertEqual('<details class="quiet-list">' in output, not keep)
+                self.assertEqual(json.dumps(row, sort_keys=True), before)
+
+    def test_explicit_earnings_window_is_used_in_both_classification_and_row(self):
+        row = self.item(earnings={'status': 'ok', 'kind': 'official', 'date': '2030-10-21'})
+        snapshot = {'earnings_week': {'asof': '2030-12-01'}}
+        with patch.object(monitor, '_bj_today', return_value='2031-01-01'):
+            output = self.body([row], asof='2030-10-20', snapshot=snapshot)
+            self.assertIn('data-quiet-keep="true"', output)
+            self.assertNotIn('<details class="quiet-list">', output)
+            output = self.body([row], asof='2030-12-01', snapshot=snapshot)
+            self.assertIn('data-quiet-keep="false"', output)
+            self.assertIn('<details class="quiet-list">', output)
+            direct = monitor._stock_row(row, {'earnings_week': {'asof': '2030-10-20'}})
+            self.assertIn('data-quiet-keep="true"', direct)
+
+    def test_missing_foldable_and_original_red_yellow_do_not_imply_keep(self):
+        for level in ('green', 'red', 'yellow'):
+            row = self.item(level=level)
+            row.pop('foldable')
+            with self.subTest(level=level):
+                self.assertIn('data-quiet-keep="false"', monitor._stock_row(row, {}))
+                output = self.body([row])
+                self.assertEqual('<details class="quiet-list">' in output, level == 'green')
+
+    def test_target_below_medium_and_etf_target_do_not_force_keep(self):
+        for row in (self.item(target=monitor.evaluate_target(100, 100,
+                             {'kind': 'manual', 'price': 110}, 'position', 3)),
+                    self.item(etf=True, target=monitor.evaluate_target(100, 100,
+                             {'kind': 'manual', 'price': 150}, 'position', 3))):
+            output = self.body([row])
+            self.assertIn('data-quiet-keep="false"', output)
+            self.assertIn('<details class="quiet-list">', output)
+
+    def test_long_and_short_zones_share_the_same_keep_and_earnings_window(self):
+        rows = [self.item('LONGRED', level='red', hold='long'),
+                self.item('SHORTRED', level='red', hold='short'),
+                self.item('LONGEARN', hold='long', earnings={'status': 'ok', 'date': '2030-10-21'}),
+                self.item('SHORTEARN', hold='short', earnings={'status': 'ok', 'date': '2030-10-21'})]
+        group = next(g for g in monitor.GROUPS if g['item_group'] == 'position')
+        output = monitor._group_card(group, rows, {}, {'earnings_week': {'asof': '2030-10-20'}})
+        for symbol in ('longred', 'shortred'):
+            self.assertIn(f'id="s-{symbol}" data-quiet-keep="false"', output)
+        for symbol in ('longearn', 'shortearn'):
+            self.assertIn(f'id="s-{symbol}" data-quiet-keep="true"', output)
 
 
 class TestPositionZones(unittest.TestCase):
@@ -4854,10 +5585,10 @@ class TestSignalCounts(unittest.TestCase):
         return {'symbol': 'T', 'level': level, 'signal_marks': list(marks)}
 
     def test_counts_by_kind_and_level(self):
-        rows = [self.row('red', ('chg', 'red'), ('rsi', 'yellow')),
-                self.row('yellow', ('boll', 'yellow')),
-                self.row('yellow', ('boll', 'yellow'), ('vol_ratio', 'yellow')),
-                self.row('green', ('target', 'purple'))]
+        rows = [self.member_row('CHANGE', 'position', 'red', ('chg', 'red'), ('rsi', 'yellow')),
+                self.member_row('BOLL1', 'focus', 'yellow', ('boll', 'yellow')),
+                self.member_row('BOLL2', 'technology', 'yellow', ('boll', 'yellow'), ('vol_ratio', 'yellow')),
+                self.member_row('TARGET', 'focus', 'green', ('target', 'purple'))]
         out = monitor.signal_counts(rows)
         self.assertEqual((out['chg']['red'], out['chg']['yellow']), (1, 0))
         self.assertEqual(out['rsi']['yellow'], 1)
@@ -4875,6 +5606,58 @@ class TestSignalCounts(unittest.TestCase):
         out = monitor.signal_counts([])
         self.assertEqual(list(out), [k for k, _ in monitor.SIGNAL_KINDS])
         self.assertTrue(all(v['red'] == v['yellow'] == v['purple'] == 0 for v in out.values()))
+
+    def test_legacy_fund_fields_marks_and_duplicates_are_ignored(self):
+        import copy
+        rows = [self.member_row('AAA', 'position', 'red', ('chg', 'red')),
+                self.member_row('BBB', 'focus', 'green', ('target', 'purple')),
+                self.member_row('CCC', 'technology', 'green')]
+        for row, chg in zip(rows, (-3, 2, 1)):
+            row.update(price=100, chg=chg, signals=[])
+        legacy = copy.deepcopy(rows)
+        for row in legacy:
+            row['fund'] = {'level': 'red', 'hits': ['旧基本面风险'], 'period': '2026-06-30'}
+            row['fund_cache_note'] = '旧基本面待更新'
+            row['signal_marks'].append(('fund', 'red'))
+        before = copy.deepcopy(legacy)
+        self.assertNotIn('fund', dict(monitor.SIGNAL_KINDS))
+        self.assertEqual(monitor.signal_counts(legacy), monitor.signal_counts(rows))
+        self.assertEqual(monitor.signal_count_members(legacy), monitor.signal_count_members(rows))
+        self.assertEqual([monitor._sort_key(row) for row in legacy],
+                         [monitor._sort_key(row) for row in rows])
+        duplicated = legacy + [dict(legacy[0], group='technology')]
+        baseline_duplicates = rows + [dict(rows[0], group='technology')]
+        self.assertEqual(monitor.signal_counts(duplicated), monitor.signal_counts(baseline_duplicates))
+        self.assertEqual(monitor.signal_count_members(duplicated), monitor.signal_count_members(rows))
+        self.assertEqual(legacy, before)
+
+    def test_legacy_fund_snapshot_is_sanitized_without_changing_other_signals(self):
+        import copy
+        rows = [self.member_row('AAA', 'position', 'red', ('chg', 'red')),
+                self.member_row('CCC', 'technology', 'green')]
+        for row in rows:
+            row.update(price=100, chg=0, signals=[])
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        legacy = copy.deepcopy(snap)
+        legacy['fundamental'] = {'data': {'AAA': {'data': {'period': '2026-06-30', 'marker': '旧基本面秘密'}}}}
+        legacy['effective_settings'].update(fund_enable=1, fund_report_grace_days=90)
+        legacy['signal_counts']['fund'] = {'label': '基本面', 'red': 1, 'yellow': 0, 'purple': 0}
+        legacy['signal_members']['fund'] = {'red': [{'symbol': 'AAA', 'group': 'position',
+                                                   'note': '旧基本面秘密', 'fund_hits': ['旧风险']}],
+                                         'yellow': [], 'purple': []}
+        before = copy.deepcopy(legacy)
+        baseline = monitor.render({}, rows, 2, snapshot=snap)
+        page = monitor.render({}, rows, 2, snapshot=legacy)
+        self.assertEqual(page, baseline)
+        self.assertEqual(monitor._signal_counts_card(legacy), monitor._signal_counts_card(snap))
+        self.assertNotIn('基本面', re.sub(r'<template\b[^>]*>.*?</template>', '', page, flags=re.S))
+        self.assertNotIn('旧基本面秘密', page)
+        self.assertNotIn('fund_enable', page)
+        self.assertNotIn('fund_report_grace_days', page)
+        self.assertEqual(legacy, before)
+        only_fund = {'signal_counts': {'fund': legacy['signal_counts']['fund']},
+                     'signal_members': {'fund': legacy['signal_members']['fund']}}
+        self.assertEqual(monitor._signal_counts_card(only_fund), '')
 
     def test_unknown_kind_is_ignored(self):
         out = monitor.signal_counts([self.row('yellow', ('mystery', 'yellow'))])
@@ -4928,31 +5711,32 @@ class TestSignalCounts(unittest.TestCase):
 
     def test_earnings_is_not_added_to_signal_kinds_counts_or_members(self):
         expected = ['chg', 'amp', 'vol_ratio', 'rsi', 'boll', 'boll_rsi',
-                    'ma_cross', 'ma_band', 'low52', 'add_price', 'reduce_price', 'target',
-                    'fund']
+                    'ma_cross', 'ma_band', 'low52', 'add_price', 'reduce_price', 'target']
         self.assertEqual([kind for kind, _ in monitor.SIGNAL_KINDS], expected)
         rows = [self.member_row('AAA', 'position', 'red', *((kind, 'red') for kind in expected)),
                 self.member_row('BBB', 'focus', 'yellow', ('earnings', 'yellow'))]
-        # 日期必须落在「美东今天起15天内」才会进「未来15天财报」，写死日期会随当天时间失效
-        soon = (monitor.NOW.astimezone(monitor.TZ).date() + timedelta(days=2)).isoformat()
+        # 名单使用北京今天起至 +15（含），不随美东交易日回退。
+        soon = (monitor.NOW.astimezone(monitor.BJ_TZ).date() + timedelta(days=2)).isoformat()
         rows[1].update(earnings={'status': 'ok', 'date': soon}, signals=['财报临近'])
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         self.assertEqual(list(snap['signal_counts']), expected)
         self.assertEqual(list(snap['signal_members']), expected)
         for kind in expected:
             with self.subTest(kind=kind):
-                self.assertEqual(snap['signal_counts'][kind]['red'], 1)
+                excluded = kind in ('target', 'rsi', 'boll')  # 组合互斥，紫不列红黄。
+                self.assertEqual(snap['signal_counts'][kind]['red'], 0 if excluded else 1)
                 self.assertEqual(snap['signal_counts'][kind]['yellow'], 0)
-                self.assertEqual([d['symbol'] for d in snap['signal_members'][kind]['red']], ['AAA'])
+                self.assertEqual([d['symbol'] for d in snap['signal_members'][kind]['red']],
+                                 [] if excluded else ['AAA'])
         output = monitor._signal_counts_card(snap)
-        self.assertEqual(output.count('class="signal-members-row"'), len(expected))
+        self.assertEqual(output.count('class="signal-members-row"'), len(expected) - 3)
         self.assertNotIn('<td>财报</td>', output)  # 不混入红黄紫交易信号
         self.assertIn('未来15天财报', output)
         self.assertIn('<span class="signal-member-symbol">BBB</span>', output.split('earnings-week', 1)[1])
         self.assertNotIn('>BBB</span>', output.split('earnings-week', 1)[0])
 
-    def test_next_week_earnings_members_use_us_calendar_day_and_keep_green_visible(self):
-        with patch.object(monitor, '_earn_today', return_value='2026-10-14'), \
+    def test_earnings_members_use_beijing_calendar_day_and_keep_green_visible(self):
+        with patch.object(monitor, '_earn_today', return_value='2026-10-13'), \
                 patch.object(monitor, '_bj_today', return_value='2026-10-14'):
             def item(symbol, group, date, level='green', status='ok', kind='expected'):
                 row = self.member_row(symbol, group, level)
@@ -4961,17 +5745,17 @@ class TestSignalCounts(unittest.TestCase):
                     data_date='2026-10-13')
                 return row
             rows = [item('AAPL', 'technology', '2026-10-14'),
-                    item('BRK.B-US', 'position', '2026-10-20', kind='official'),   # 盘后：北京 10/21 凌晨，仍在 7 天黄字内
+                    item('BRK.B-US', 'position', '2026-10-20', kind='official'),   # D 距北京今天 6 天，盘后不加一天
                     item('BRK-B', 'technology', '2026-10-20'),  # 持仓优先，不能重复
                     item('D15', 'focus', '2026-10-29'),   # 第15天（含）进名单
                     item('LATE', 'focus', '2026-10-30'),  # 第16天不进
-                    item('PAST', 'position', '2026-10-12'),   # 北京时间已过两个整天
+                    item('PAST', 'position', '2026-10-12'),   # 已是 D+2，退出红窗及名单
                     item('UNKNOWN', 'technology', '2026-10-15', status='unknown')]
             snap = monitor.build_snapshot({}, rows, {'group_monitoring': {'technology': True}}, group_counts={})
             self.assertEqual(snap['earnings_week']['asof'], '2026-10-14')
             self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], ['AAPL', 'BRK-B', 'D15'])
             self.assertEqual(snap['signal_counts']['chg']['red'], 0)
-            self.assertEqual(snap['summary']['green'], 7)  # 财报只提升可见性，绿灯不改黄
+            self.assertEqual(snap['summary']['green'], 6)  # 同身份按优先分组去重，财报仍不改绿灯
             panel = monitor._signal_counts_card(snap)
             self.assertIn('<details class="earnings-week"><summary>未来15天财报 · 3 只</summary>', panel)
             self.assertNotIn('<details class="earnings-week" open>', panel)
@@ -4982,8 +5766,10 @@ class TestSignalCounts(unittest.TestCase):
             self.assertIn('财报 2', panel)
             old = monitor._signal_counts_card({'summary': {'red': 4, 'yellow': 32},
                                                'signal_counts': {'target': {'label': '目标价', 'purple': 3}}})
-            for text in ('红 4', '黄 32', '灰 0', '紫灯 3 只', '财报 —'):
+            for text in ('红 4', '黄 32', '灰 0', '财报 —'):
                 self.assertIn(text, old)
+            self.assertNotIn('紫灯 3 只', old)
+            self.assertNotIn('class="signal-member-symbol"', old)
             self.assertNotIn('美东 2026-10-14 至 2026-10-21', panel)
             self.assertNotIn('预计或估算日期可能调整', panel)
             self.assertIn('earnings.open = false;', monitor.PAGE_INTERACTION_JS)
@@ -5024,6 +5810,101 @@ class TestSignalCounts(unittest.TestCase):
             position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
             self.assertIn('<td class="sym">BRK-B', position.split('<details class="quiet-list">')[0])
 
+    def test_earnings_row_and_statistics_use_the_same_source_timing(self):
+        import html as H
+        date = '2026-10-30'
+        for kind in ('official', 'expected', 'estimated'):
+            for timing, label in (('pre', '盘前'), ('post', '盘后'),
+                                  ('during', '盘中'), ('', '时段待定')):
+                with self.subTest(kind=kind, timing=timing):
+                    e = {'status': 'ok', 'date': date, 'timing': timing, 'kind': kind}
+                    if kind == 'official':
+                        e['official_error'] = 'http_429'
+                    row = self.member_row('AAPL', 'position', 'green')
+                    row.update(price=100.0, chg=0.0, signals=[], rsi={}, dist_high=None,
+                               dist_low=None, vol_ratio=None, trigger=None, boll_up=None,
+                               boll_dn=None, earnings=e, data_date='2026-10-20')
+                    with patch.object(monitor, '_bj_today', return_value='2026-10-20'), \
+                            patch.object(monitor, 'TARGET_DATE', '2026-10-20'), \
+                            patch.object(monitor, 'global_dca', return_value=None):
+                        snap = monitor.build_snapshot({}, [row], {'positions': {'AAPL': {}}})
+                        page = monitor.render({}, [row], 1, snapshot=snap)
+                    member, = snap['earnings_week']['members']
+                    self.assertEqual((member['date'], member['timing'], member['kind']),
+                                     (date, timing, kind))
+                    duplicate = dict(row, group='technology', earnings=dict(
+                        e, timing='pre' if timing == 'post' else 'post', kind='expected'))
+                    self.assertEqual(monitor.earnings_week_members([duplicate, row], '2026-10-20'),
+                                     [member])
+                    panel = monitor._signal_counts_card(snap)
+                    self.assertIn(f'美东 10/30 {label} · ', panel)
+                    self.assertEqual(monitor._earnings_week_panel(snap, count_only=True), 1)
+                    data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', panel).group(1)))
+                    self.assertTrue(data['earnings_week']['ok'])
+                    filtered, = data['earnings_week']['members']
+                    self.assertIn(f'财报 {date} {label} · ', filtered['d'][0])
+                    position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
+                    self.assertIn('无异动 1 只', position)
+                    folded = position.split('<details class="quiet-list">', 1)[1]
+                    main, note = monitor.earnings_label(e)
+                    self.assertIn(label, main)
+                    self.assertIn(f'{main}<span class="unit">{note}</span>', folded)
+                    self.assertEqual(snap['summary']['green'], 1)
+                    self.assertTrue(all(c['red'] == c['yellow'] == 0 for c in snap['signal_counts'].values()))
+                    for today, urgency in (('2026-10-28', 'yellow'), ('2026-10-29', 'red'), ('2026-10-30', 'red'),
+                                           ('2026-10-31', 'red'), ('2026-11-01', '')):
+                        self.assertEqual(monitor.earnings_urgency(e, today), urgency)
+                        self.assertEqual(monitor.earnings_within_week(e, today), bool(urgency))
+
+    def test_earnings_list_15_days_and_folding_share_beijing_boundaries(self):
+        import copy
+        import html as H
+        from datetime import date, datetime
+        for bj_day in ('2026-01-15', '2026-07-15', '2026-10-11', '2026-12-31'):
+            for timing in ('pre', 'post', 'during', '', 'unknown'):
+                with self.subTest(bj_day=bj_day, timing=timing), ExitStack() as stack:
+                    stack.enter_context(patch.object(monitor, 'NOW', datetime.fromisoformat(bj_day + 'T00:00:00+08:00')))
+                    stack.enter_context(patch.object(monitor, 'TARGET_DATE', '2026-01-02'))
+                    stack.enter_context(patch.object(monitor, 'global_dca', return_value=None))
+                    rows = []
+                    for symbol, gap in (('OLD', -2), ('YESTERDAY', -1), ('TODAY', 0),
+                                        ('TOMORROW', 1), ('D2', 2), ('D7', 7), ('D8', 8),
+                                        ('D15', 15), ('D16', 16)):
+                        e = {'status': 'ok', 'date': (date.fromisoformat(bj_day) + timedelta(days=gap)).isoformat(),
+                             'timing': timing, 'kind': 'expected'}
+                        row = self.member_row(symbol, 'technology', 'green')
+                        row.update(price=100, chg=0, signals=[], earnings=e, data_date='2026-01-02')
+                        rows.append(row)
+                    for symbol, status in (('PENDING', 'unknown'), ('ERROR', 'error')):
+                        row = self.member_row(symbol, 'technology', 'green')
+                        row.update(price=100, chg=0, signals=[], earnings={'status': status, 'date': bj_day})
+                        rows.append(row)
+                    before = copy.deepcopy(rows)
+                    snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+                    expected = ['YESTERDAY', 'TODAY', 'TOMORROW', 'D2', 'D7', 'D8', 'D15']
+                    self.assertEqual(snap['earnings_week']['asof'], bj_day)
+                    self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], expected)
+                    self.assertEqual(snap['summary']['green'], len(rows))
+                    self.assertTrue(all(c['red'] == c['yellow'] == 0 for c in snap['signal_counts'].values()))
+                    panel = monitor._signal_counts_card(snap)
+                    self.assertIn('未来15天财报 · 7 只', panel)
+                    self.assertEqual(panel.count('earnings-week-meta is-red'), 3)
+                    self.assertEqual(panel.count('earnings-week-meta is-yellow'), 2)
+                    self.assertEqual(monitor._earnings_week_panel(snap, count_only=True), 7)
+                    filtered = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', panel).group(1)))
+                    self.assertTrue(filtered['earnings_week']['ok'])
+                    self.assertEqual([m['id'] for m in filtered['earnings_week']['members']], sorted(expected))
+                    body = monitor._group_body(rows, {'item_group': 'technology'}, snap, bj_day, True, 'group_technology', '科技')
+                    main, folded = body.split('<details class="quiet-list">', 1)
+                    self.assertIn('无异动 6 只', folded)
+                    for symbol in expected[:5]:
+                        self.assertIn(f'id="s-{symbol.lower()}"', main)
+                        self.assertNotIn(f'id="s-{symbol.lower()}"', folded)
+                    for symbol in ('OLD', 'D8', 'D15', 'D16', 'PENDING', 'ERROR'):
+                        self.assertIn(f'id="s-{symbol.lower()}"', folded)
+                        self.assertNotIn(f'id="s-{symbol.lower()}"', main)
+                    self.assertEqual(rows, before)
+
     def test_earnings_week_rejects_bad_date_missing_and_expired(self):
         with patch.object(monitor, '_earn_today', return_value='2026-10-14'), \
                 patch.object(monitor, '_bj_today', return_value='2026-10-14'):
@@ -5052,8 +5933,12 @@ class TestSignalCounts(unittest.TestCase):
 
     @staticmethod
     def member_row(symbol, group, level, *marks, note=''):
-        return {'symbol': symbol, 'group': group, 'note': note,
-                'level': level, 'signal_marks': list(marks)}
+        row = {'symbol': symbol, 'group': group, 'note': note,
+               'level': level, 'signal_marks': list(marks)}
+        if ('target', 'purple') in marks:
+            row.update(price=100, purple=True, target=monitor.evaluate_target(
+                100, 100, {'kind': 'consensus', 'price': 101, 'failed': False}, group, 3))
+        return row
 
     def test_filter_buttons_and_intersection_data_without_changing_counts(self):
         import html as H
@@ -5132,51 +6017,7 @@ class TestSignalCounts(unittest.TestCase):
         self.assertIsNotNone(match, output)
         return match.group(1)
 
-    def test_fund_is_counted_from_fund_field_and_deduped(self):
-        """基本面不改变股价灯级，所以走 d['fund'] 单独统计；重复分组只算一只。"""
-        rows = [self.member_row('AAA', 'position', 'green', ('target', 'purple')),
-                self.member_row('BBB', 'focus', 'green'),
-                self.member_row('CCC', 'technology', 'green')]
-        rows[0]['fund'] = {'level': 'red', 'hits': ['营收较基准下降 24%'], 'period': '2026/6'}
-        rows[1]['fund'] = {'level': 'yellow',
-                           'hits': ['毛利率下滑 3.4 个百分点', '经营现金流为负']}
-        rows[2]['fund'] = {'level': 'green', 'hits': []}
-        counts = monitor.signal_counts(rows)
-        members = monitor.signal_count_members(rows)
-        self.assertEqual((counts['fund']['red'], counts['fund']['yellow']), (1, 1))
-        self.assertEqual([d['symbol'] for d in members['fund']['red']], ['AAA'])
-        self.assertEqual([d['symbol'] for d in members['fund']['yellow']], ['BBB'])
-        # 同一只票同时出现在持仓和其他分类时，统计和名单都只算一次
-        duplicated = [dict(rows[0]), dict(rows[0], group='technology')]
-        self.assertEqual(monitor.signal_counts(duplicated)['fund']['red'], 1)
-        self.assertEqual(len(monitor.signal_count_members(duplicated)['fund']['red']), 1)
-        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
-        self.assertIn('>基本面</button>', output)
-        red_panel = self.panel(output, 'fund', 'red')
-        self.assertIn('>AAA</span>', red_panel)
-        # 命中项不在统计名单里复述（个股行自己有点开的折叠详情），只在行首挂灯色圆点
-        self.assertNotIn('营收较基准下降 24%', red_panel)
-        self.assertNotIn('毛利率下滑 3.4 个百分点', self.panel(output, 'fund', 'yellow'))
-        # 灯就是其它栏目那个行首圆点，基本面不再自己画一个大的
-        self.assertNotIn('signal-member-dot', output)
-        self.assertIn('<div class="signal-members-panel tone-red"', output)
-        self.assertIn('<div class="signal-members-panel tone-yellow"', output)
-        self.assertNotIn('CCC', output)  # 基本面绿灯不进统计
-        # 这一轮没有基本面警示：整块统计也不该出现
-        quiet = [self.member_row('ZZZ', 'position', 'green')]
-        self.assertEqual(monitor._signal_counts_card(
-            {'signal_counts': monitor.signal_counts(quiet),
-             'signal_members': monitor.signal_count_members(quiet)}), '')
 
-    def test_fund_detail_lists_hits_without_any_lights(self):
-        """个股行折叠里的基本面详情就是一份清单：不挂红/黄圆点，也不猜每条命中的等级。"""
-        fund = {'level': 'red', 'period': '2026/6',
-                'hits': ['营收较2025/9 -24%', '毛利率 50.0%→46.1%', '本季净利含一次性损益，ROE未参与判定']}
-        html = monitor._fund_detail_html({'symbol': 'AAA', 'fund': fund})
-        self.assertIn('<li>营收较2025/9 -24%</li>', html)
-        self.assertIn('<li>毛利率 50.0%→46.1%</li>', html)
-        self.assertNotIn('signal-member-dot', html)   # 详情里没有灯
-        self.assertNotIn('hit_levels', html)
 
     def test_add_and_reduce_price_members_print_the_price(self):
         """统计面板的加仓价/减仓价名单里补上价位，写法跟个股行胶囊一致（加 325 / 减 400）。"""
@@ -5229,25 +6070,6 @@ class TestSignalCounts(unittest.TestCase):
         self.assertIn('>减 400.5</span>', self.panel(output, 'reduce_price', 'red'))
         self.assertEqual(output.count('class="signal-member-block"'), 0)   # 这两栏不分框
 
-    def test_fund_members_show_a_light_dot_at_the_front_instead_of_the_hits(self):
-        """基本面那一栏：行首挂灯色圆点（与其它栏目的方向图标位置一致），
-        不再把命中项复述在代码后面。"""
-        # 基本面只走 d['fund']，不进 signal_marks（进了会被算两遍，名单与计数对不上）
-        rows = [self.member_row('AAA', 'position', 'red', note='甲'),
-                self.member_row('BBB', 'position', 'yellow')]
-        rows[0]['fund'] = {'level': 'red', 'hits': ['营收较基准下降 24%'], 'period': '2026/6'}
-        rows[1]['fund'] = {'level': 'yellow', 'hits': ['毛利率下滑 3.4 个百分点'], 'period': '2026/6'}
-        output = monitor._signal_counts_card({'signal_counts': monitor.signal_counts(rows),
-                                              'signal_members': monitor.signal_count_members(rows)})
-        red_panel = self.panel(output, 'fund', 'red')
-        # 行首圆点就是灯，和 52周低位 / 布林+RSI 那几栏同一个位置同一个大小，不再单画
-        self.assertIn('<li><a class="signal-member-jump" href="#s-aaa">', red_panel)
-        self.assertNotIn('signal-member-dot', red_panel)
-        self.assertNotIn('signal-member-fund', red_panel)
-        self.assertNotIn('营收较基准下降 24%', red_panel)   # 命中项不在统计名单里复述
-        self.assertNotIn('毛利率下滑 3.4 个百分点', self.panel(output, 'fund', 'yellow'))
-        self.assertIn('#signalCounts .signal-members-panel.tone-red li::marker{color:var(--red)}', monitor.PAGE_CSS)
-        self.assertIn('#signalCounts .earnings-week li.lamp-red::marker{color:var(--red)}', monitor.PAGE_CSS)
 
     def test_member_panels_are_toned_so_bullets_follow_the_light(self):
         """名单前的圆点靠面板上的 tone-* 上色：这一格红档，圆点就是红的。"""
@@ -5298,33 +6120,38 @@ class TestSignalCounts(unittest.TestCase):
 
     def test_member_icons_cover_single_indicators_cross_touch_and_target(self):
         rows = [
-            self.member_row('UP', 'position', 'yellow', ('rsi', 'yellow'), ('boll', 'yellow'),
+            self.member_row('UP', 'position', 'yellow', ('rsi', 'yellow'),
                             ('ma_cross', 'yellow'), ('ma_band', 'yellow'), ('target', 'purple')),
-            self.member_row('DOWN', 'focus', 'red', ('rsi', 'red'), ('boll', 'yellow'),
+            self.member_row('DOWN', 'focus', 'red', ('rsi', 'red'),
                             ('ma_cross', 'yellow'), ('ma_band', 'yellow'), ('target', 'purple')),
             self.member_row('LEVEL', 'technology', 'yellow', ('ma_band', 'yellow')),
             self.member_row('SPACE', 'focus', 'green', ('target', 'purple')),
             self.member_row('CROSS', 'focus', 'green', ('target', 'purple')),
         ]
-        rows[0].update(signals=['RSI 2条超买（≥70）：RSI6=80', '突破布林上轨 100',
+        rows[0].update(signals=['RSI 2条超买（≥70）：RSI6=80',
                                 '上穿60日均线', '日内触及120日均线 ±1%区间',
                                 '在共识价 200 ±3% 内（偏离 +1%）'],
                        ma_band_direction='up')
-        rows[1].update(signals=['RSI 3条超卖（≤30）：RSI6=20', '触及布林下轨 90',
+        rows[1].update(signals=['RSI 3条超卖（≤30）：RSI6=20',
                                 '跌破120日均线', '现价贴近120日均线 -0.1%（仅按现价）',
                                 '今日跌破目标价 90'], ma_band_direction='down')
         rows[2].update(signals=['日内触及120日均线 ±1%区间'], ma_band_direction='level')
-        rows[3].update(signals=['共识价 200，空间 +55%'])
-        rows[4].update(signals=['今日上穿共识价 200'])
+        rows[0]['target'] = monitor.evaluate_target(202, 202, {'kind': 'consensus', 'price': 200}, 'position', 3)
+        rows[1]['target'] = monitor.evaluate_target(89, 91, {'kind': 'manual', 'price': 90}, 'focus', 3)
+        rows[3].update(signals=['共识价 155，空间 +55%'], price=100,
+                       target=monitor.evaluate_target(100, 100, {'kind': 'consensus', 'price': 155}, 'focus', 3))
+        rows[4].update(signals=['今日上穿共识价 200'], price=202,
+                       target=monitor.evaluate_target(202, 198, {'kind': 'consensus', 'price': 200}, 'focus', 3))
+        # 单独布林与RSI使用不同标的，避免把旧组合fixture误当成两个独立栏目。
+        for symbol, text in (('BOLLUP', '突破布林上轨 100'), ('BOLLDOWN', '触及布林下轨 90')):
+            row = self.member_row(symbol, 'position', 'yellow', ('boll', 'yellow'))
+            row['signals'] = [text]
+            rows.append(row)
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         cases = {
             ('rsi', 'yellow'): [('RSI2条超买', 'tone-yellow', '▲')],
             ('rsi', 'red'): [('RSI3条超卖', 'tone-red', '▼')],
             ('boll', 'yellow'): [('突破上轨', 'tone-yellow', '▲'), ('触及下轨', 'tone-white', '▼')],
-            ('target', 'purple'): [('现价在目标价或共识价范围内', 'tone-purple', '■'),
-                                   ('目标价或共识价上涨空间达到 55%', 'tone-purple', '□'),
-                                   ('当日上穿目标价或共识价', 'tone-purple', '▲'),
-                                   ('当日跌破目标价或共识价', 'tone-purple', '▼')],
         }
         output = monitor._signal_counts_card(snap)
         for (kind, level), expected in cases.items():
@@ -5347,7 +6174,12 @@ class TestSignalCounts(unittest.TestCase):
                 self.assertNotIn('signal-member-icon', panel)
         self.assertEqual(snap['signal_counts']['target']['purple'], 4)
         target = output.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
-        self.assertEqual(target.count('tone-purple'), 4)
+        self.assertIn('□', target)
+        self.assertGreaterEqual(target.count('■'), 3)
+        self.assertIn('今日上穿共识价 200', target)
+        self.assertIn('今日跌破目标价 90', target)
+        self.assertNotIn('>▲</span>', target)
+        self.assertNotIn('>▼</span>', target)
         self.assertNotIn('▲ 上穿 · ▼ 跌破 · ■ 附近 · □ 空间达标', target)
         self.assertNotIn('signal-icon-key', output)
         self.assertNotIn('signal-member-help', output)
@@ -5425,17 +6257,17 @@ class TestSignalCounts(unittest.TestCase):
         member = monitor.signal_count_members([row])['boll']['yellow'][0]
         self.assertNotIn('indicators', member)  # 其他组只有上轨说明，不能伪造黄灯图标
 
-    def test_rsi_icon_tone_depends_on_hit_count_not_side_or_overall_lamp(self):
+    def test_rsi_three_overbought_is_yellow_and_oversold_is_red_regardless_of_overall_lamp(self):
         rows = [self.member_row('BX', 'position', 'red', ('rsi', 'yellow'), ('chg', 'red')),
                 self.member_row('TWO_HIGH', 'focus', 'yellow', ('rsi', 'yellow')),
                 self.member_row('THREE_LOW', 'focus', 'red', ('rsi', 'red')),
-                self.member_row('THREE_HIGH', 'technology', 'red', ('rsi', 'red'))]
+                self.member_row('THREE_HIGH', 'position', 'red', ('rsi', 'yellow'), ('chg', 'red'))]
         rows[0]['signals'] = ['RSI 2条超卖（≤30）：RSI6=22 / RSI12=27 / RSI24=33']
         rows[1]['signals'] = ['RSI 2条超买（≥70）：RSI6=81 / RSI12=72 / RSI24=67']
         rows[2]['signals'] = ['RSI 3条超卖（≤30）：RSI6=19 / RSI12=24 / RSI24=29']
         rows[3]['signals'] = ['RSI 3条超买（≥70）：RSI6=85 / RSI12=79 / RSI24=71']
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
-        self.assertEqual((snap['signal_counts']['rsi']['yellow'], snap['signal_counts']['rsi']['red']), (2, 2))
+        self.assertEqual((snap['signal_counts']['rsi']['yellow'], snap['signal_counts']['rsi']['red']), (3, 1))
         self.assertEqual(snap['signal_members']['rsi']['yellow'][0]['rsi_hits'], '2条超卖')
         output = monitor._signal_counts_card(snap)
         yellow = self.panel(output, 'rsi', 'yellow')
@@ -5447,10 +6279,11 @@ class TestSignalCounts(unittest.TestCase):
                       '<span class="signal-member-icon tone-yellow" role="img" aria-label="RSI2条超买">▲', yellow)
         self.assertIn('>THREE_LOW</span></a><span class="signal-member-belong">（重点）</span>'
                       '<span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超卖">▼', red)
-        self.assertIn('>THREE_HIGH</span></a><span class="signal-member-belong">（IT软硬Ai）</span>'
-                      '<span class="signal-member-icon tone-red" role="img" aria-label="RSI3条超买">▲', red)
+        self.assertIn('>THREE_HIGH</span></a><span class="signal-member-belong">（短持仓）</span>'
+                      '<span class="signal-member-icon tone-yellow" role="img" aria-label="RSI3条超买">▲', yellow)
         self.assertIn('2条超卖', yellow)
-        self.assertIn('3条超买', red)
+        self.assertIn('3条超买', yellow)
+        self.assertNotIn('RSI3条超买', red)
         self.assertNotIn('2条过界为黄，3条过界为红', yellow)
         self.assertNotIn('tone-red" role="img" aria-label="RSI2条超卖"', yellow)
 
@@ -5471,17 +6304,21 @@ class TestSignalCounts(unittest.TestCase):
 
     def test_target_same_symbol_can_show_solid_and_hollow_squares_without_double_count(self):
         row = self.member_row('BOTH', 'focus', 'green', ('target', 'purple'), ('target', 'purple'))
-        row['signals'] = ['在目标价 120 ±55% 内（偏离 -36.7%）', '目标价 120，空间 +58%']
-        counts = monitor.signal_counts([row])
-        members = monitor.signal_count_members([row])
-        self.assertEqual(counts['target']['purple'], 1)
-        self.assertEqual(len(members['target']['purple']), 1)
-        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
+        row.update(price=100, target=monitor.evaluate_target(
+            100, 180, {'kind': 'manual', 'price': 170}, 'focus', 3),
+            signals=['今日跌破目标价 170', '目标价 170，高空间 +70%'])
+        snap = monitor.build_snapshot({}, [row], {}, group_counts={})
+        self.assertEqual(snap['signal_counts']['target']['purple'], 1)
+        self.assertEqual(len(snap['signal_members']['target']['purple']), 1)
+        self.assertEqual(len(snap['target_overlays']['space']), 1)
+        self.assertEqual(len(snap['target_overlays']['reached']), 1)
+        output = monitor._signal_counts_card(snap)
         output = output.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
-        self.assertIn('tone-purple" role="img" aria-label="现价在目标价或共识价范围内">■', output)
-        self.assertIn('tone-purple" role="img" aria-label="目标价或共识价上涨空间达到 58%">□', output)
+        self.assertIn('■', output)
+        self.assertIn('□', output)
+        self.assertIn('今日跌破目标价 170', output)
         self.assertNotIn('title=', output)
-        self.assertEqual(output.count('signal-member-icon'), 2)
+        self.assertEqual(output.count('href="#s-both"'), 2)
 
     def test_old_snapshot_missing_icons_does_not_infer_direction(self):
         row = self.member_row('OLDER', 'position', 'yellow', ('rsi', 'yellow'), ('boll', 'yellow'))
@@ -5664,21 +6501,23 @@ class TestSignalCounts(unittest.TestCase):
         self.assertNotIn('(持仓)', output)
         self.assertNotIn('(IT软硬Ai)', output)
 
-    def test_purple_only_and_gray_members_keep_original_levels(self):
+    def test_purple_only_and_missing_quote_keep_original_levels(self):
         rows = [self.member_row('PURPLE', 'focus', 'green', ('target', 'purple'), ('target', 'purple')),
                 self.member_row('GRAY', 'position', 'gray', ('target', 'purple'))]
+        rows[1].update(price=None, purple=False, target=monitor.evaluate_target(
+            None, 100, {'kind': 'consensus', 'price': 101}, 'position', 3))
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
-        self.assertEqual(snap['signal_counts']['target']['purple'], 2)
+        self.assertEqual(snap['signal_counts']['target']['purple'], 1)
         self.assertEqual((snap['summary']['green'], snap['summary']['gray'], snap['summary']['yellow']), (1, 1, 0))
         output = monitor._signal_counts_card(snap)
         self.assertIn('class="text-only target-purple"', output)
-        self.assertIn('紫灯 2 只 · 目标价 / 共识价', output)
-        self.assertIn('>GRAY</span>', output)
+        self.assertRegex(output, r'空间\s*0\s*只[\s　]*达到\s*1\s*只')
+        self.assertNotIn('>GRAY</span>', output)
         self.assertIn('>PURPLE</span>', output)
         self.assertIn('data-kind="target_purple"', output)
         self.assertEqual(output.count('class="signal-count-toggle"'), 0)
-        # 紫灯名单已移出红黄灰表，不再占目标价行的计数列
-        self.assertNotIn('>紫</td>', output)  # 紫灯已独立移到表格下方
+        self.assertNotIn('>紫</td>', output)
+        self.assertNotIn('紫灯 2 只', output)
         self.assertNotIn('不改变综合灯色', output)
 
     def test_groups_use_item_group_order_and_show_group_sizes(self):
@@ -5715,13 +6554,13 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(members['ma_cross']['yellow'], expected)
         for kind in ('boll', 'rsi', 'chg'):
             self.assertEqual(members[kind]['yellow'], [])
-        # 旧统计逐行计算，不为了成员身份去重而改变统计口径。
+        # 统计与成员使用同一优先归属；不把同标的在低优先分组里的指标再计一次。
         counts = monitor.signal_counts(rows)
-        self.assertEqual([counts[k]['yellow'] for k in ('boll', 'rsi', 'ma_cross', 'chg')], [1, 1, 1, 1])
+        self.assertEqual([counts[k]['yellow'] for k in ('boll', 'rsi', 'ma_cross', 'chg')], [0, 0, 1, 0])
         output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
         self.assertIn('class="signal-member-jump"', self.panel(output, 'ma_cross', 'yellow'))
         self.assertNotIn('行业备注', output)
-        self.assertIn('明细待下次更新', self.panel(output, 'boll', 'yellow'))
+        self.assertNotIn('data-kind="boll"', output)
 
     def test_every_nonzero_cell_has_accessible_hidden_adjacent_panel(self):
         rows = [self.member_row('AAA', 'position', 'red', ('rsi', 'red'), ('rsi', 'yellow'), ('target', 'purple')),
@@ -5820,7 +6659,9 @@ class TestSignalCounts(unittest.TestCase):
 
     def test_member_count_mismatch_and_duplicate_identity_degrade_locally(self):
         counts = {'chg': {'label': '涨跌幅', 'red': 2}, 'target': {'label': '目标价', 'purple': 1}}
-        good = {'symbol': 'GOOD', 'note': '有效备注', 'group': 'focus'}
+        good_row = self.member_row('GOOD', 'focus', 'green', ('target', 'purple'), note='有效备注')
+        good_snap = monitor.build_snapshot({}, [good_row], {}, group_counts={})
+        good = good_snap['signal_members']['target']['purple'][0]
         invalid_lists = (None, [], [{'symbol': 'ONE', 'note': '不可信', 'group': 'position'}],
                          [{'symbol': 'A'}, {'symbol': 'B'}, {'symbol': 'C'}],
                          [{'symbol': 'BRK.B'}, {'symbol': 'BRK-B'}],
@@ -5828,7 +6669,8 @@ class TestSignalCounts(unittest.TestCase):
         for entries in invalid_lists:
             with self.subTest(entries=entries):
                 output = monitor._signal_counts_card({'signal_counts': counts,
-                           'signal_members': {'chg': {'red': entries}, 'target': {'purple': [good]}}})
+                           'signal_members': {'chg': {'red': entries}, 'target': {'purple': [good]}},
+                           'target_overlays': good_snap['target_overlays']})
                 panel = self.panel(output, 'chg', 'red')
                 self.assertNotIn('红色信号 · 2 只', panel)
                 self.assertIn('明细待下次更新', panel)
@@ -5846,6 +6688,172 @@ class TestSignalCounts(unittest.TestCase):
         self.assertEqual(output.count('class="signal-count-toggle"'), 1)
         self.assertEqual(output.count('<td class="num">—</td>'), 2)
         self.assertIn('明细待下次更新', self.panel(output, 'boll', 'yellow'))
+
+
+class TestTargetOverlays(unittest.TestCase):
+    """30/70 两名单契约；所有行情和共识价均为离线合成样本。"""
+
+    @staticmethod
+    def row(symbol, group='technology', target_price=170, price=100, prev=100, **extra):
+        target = monitor.evaluate_target(price, prev,
+            {'kind': 'consensus', 'price': target_price, 'failed': False}, group, 3)
+        return dict(symbol=symbol, group=group, note='测试备注', hold='', price=price,
+                    chg=0, level='green', data_date='2026-10-20', target=target,
+                    purple=bool(target['hit'] or target['space_hit']), signal_marks=[], signals=[], **extra)
+
+    @staticmethod
+    def snapshot(rows):
+        with patch.object(monitor, 'global_dca', return_value=None):
+            return monitor.build_snapshot({}, rows, {}, group_counts={})
+
+    def test_snapshot_lists_records_and_union_counts(self):
+        rows = [self.row('SPACE', target_price=130), self.row('HIGH'),
+                self.row('HIT', 'position', 101), self.row('BOTH', 'focus', 170, prev=180),
+                self.row('LOW', target_price=129.999)]
+        snap = self.snapshot(rows)
+        overlays = snap['target_overlays']
+        self.assertEqual(set(overlays), {'space', 'reached'})
+        self.assertEqual({m['symbol'] for m in overlays['space']}, {'SPACE', 'HIGH', 'BOTH'})
+        self.assertEqual({m['symbol'] for m in overlays['reached']}, {'HIT', 'BOTH'})
+        fields = {'symbol', 'note', 'group', 'hold', 'level', 'space', 'band', 'price', 'kind', 'detail'}
+        for entries in overlays.values():
+            for member in entries:
+                self.assertTrue(fields.issubset(member))
+                row = next(r for r in rows if r['symbol'] == member['symbol'])
+                self.assertEqual(member['price'], row['target']['price'])
+                self.assertEqual(member['space'], row['target']['space'])
+                self.assertEqual(member['band'], row['target']['band'])
+                self.assertEqual(member['kind'], 'consensus')
+                self.assertTrue(member['detail'])
+        self.assertEqual(snap['summary']['purple'], 4)
+        self.assertEqual(snap['signal_counts']['target']['purple'], 4)
+        self.assertEqual({m['symbol'] for m in snap['signal_members']['target']['purple']}, {'SPACE', 'HIGH', 'HIT', 'BOTH'})
+        self.assertEqual(snap['signal_counts']['target']['red'], 0)
+        self.assertEqual(snap['signal_counts']['target']['yellow'], 0)
+
+    def test_identity_dedup_uses_groups_priority_and_first_note(self):
+        industry = self.row('BRK-B', 'technology', 250)
+        position = self.row('BRK.B-US', 'position', 101)
+        position.update(note='优先备注', hold='long')
+        later = self.row('BRK.B', 'position', 250)
+        later['note'] = '后来备注'
+        snap = self.snapshot([industry, position, later])
+        self.assertEqual(snap['target_overlays']['space'], [])
+        member, = snap['target_overlays']['reached']
+        self.assertEqual((member['symbol'], member['group'], member['hold'], member['note']),
+                         ('BRK-B', 'position', 'long', '优先备注'))
+        self.assertEqual(snap['summary']['purple'], 1)
+        self.assertEqual(snap['signal_counts']['target']['purple'], 1)
+        self.assertEqual(len(snap['signal_members']['target']['purple']), 1)
+
+    def test_priority_low_or_failed_row_does_not_revive_lower_group_space(self):
+        for target in ({'kind': 'consensus', 'price': 250, 'failed': True},
+                       {'kind': 'consensus', 'price': 120, 'failed': False}):
+            with self.subTest(target=target):
+                first = self.row('AAA', 'position', 120)
+                first['target'] = monitor.evaluate_target(100, 100, target, 'position', 3)
+                first['purple'] = False
+                snap = self.snapshot([self.row('AAA', 'technology', 250), first])
+                self.assertEqual(snap['target_overlays'], {'space': [], 'reached': []})
+                self.assertEqual(snap['signal_counts']['target']['purple'], 0)
+
+    def test_all_group_stock_space_but_reached_only_position_focus(self):
+        rows = []
+        expected = set()
+        for index, group in enumerate(monitor.GROUPS):
+            name = 'STOCK' + str(index)
+            rows.append(self.row(name, group['item_group'], 170, prev=180))
+            expected.add(name)
+        snap = self.snapshot(rows)
+        self.assertEqual({m['symbol'] for m in snap['target_overlays']['space']}, expected)
+        self.assertEqual({m['group'] for m in snap['target_overlays']['reached']}, {'position', 'focus'})
+        self.assertEqual(snap['signal_counts']['target']['purple'], len(expected))
+
+    def test_etf_index_futures_and_failed_missing_quotes_excluded(self):
+        rows = []
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for symbol, extra in (('XLK', {}), ('^GSPC', {}), ('CL=F', {}),
+                                   ('ETFTEST', {'etf': True}), ('INDEXTEST', {'asset': 'index'}),
+                                   ('FUTTEST', {'asset': 'futures'})):
+                rows.append(self.row(symbol, group, **extra))
+        bad = self.row('FAIL', 'focus', 250)
+        bad['target'] = monitor.evaluate_target(100, 100, {'kind': 'consensus', 'price': 250, 'failed': True}, 'focus', 3)
+        missing = self.row('MISS', 'position', 170, price=None)
+        snap = self.snapshot(rows + [bad, missing])
+        self.assertEqual(snap['target_overlays'], {'space': [], 'reached': []})
+        self.assertEqual(snap['summary']['purple'], 0)
+        self.assertEqual(snap['signal_counts']['target']['purple'], 0)
+        self.assertEqual(snap['signal_members']['target']['purple'], [])
+
+    def test_legacy_target_marks_never_resurrect_anomaly_or_purple(self):
+        rows = [dict(symbol='OLD', group='focus', note='', price=100, chg=0, level='green',
+                     purple=True, signal_marks=[('target', 'red'), ('target', 'yellow'), ('target', 'purple')],
+                     signals=['目标价疑似数据异常'])]
+        snap = self.snapshot(rows)
+        self.assertEqual(snap['target_overlays'], {'space': [], 'reached': []})
+        self.assertEqual([snap['signal_counts']['target'][lv] for lv in ('red', 'yellow', 'purple')], [0, 0, 0])
+        self.assertEqual(snap['summary']['purple'], 0)
+
+    def test_two_sections_high_first_squares_direction_and_union_filter(self):
+        import html as H
+        rows = [self.row('MED', 'position', 130), self.row('HIGH', 'technology', 250),
+                self.row('BOTH', 'focus', 170, prev=180), self.row('UP', 'position', 100, prev=99)]
+        rows[2]['signal_marks'] = [('chg', 'red')]
+        rows[2]['level'] = 'red'
+        rows[2]['chg'] = -20
+        snap = self.snapshot(rows)
+        output = monitor._signal_counts_card(snap)
+        target = output.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
+        self.assertRegex(target, r'空间\s*3\s*只[\s　]*达到\s*2\s*只')
+        self.assertNotRegex(target, r'紫灯\s*\d+\s*只')
+        self.assertEqual(target.count('<ul'), 2)
+        self.assertLess(target.index('>HIGH</span>'), target.index('>MED</span>'))
+        self.assertIn('□', target)
+        self.assertIn('■', target)
+        self.assertRegex(target, r'(?:tone-target-high|target-space-high)')
+        self.assertIn('今日跌破共识价 170', target)
+        self.assertIn('今日上穿共识价 100', target)
+        self.assertIn('共识价 250，空间 +150.0%', target)
+        self.assertNotRegex(target, r'高空间|中空间|普通空间|模拟')
+        self.assertNotIn('>▲</span>', target)
+        self.assertNotIn('>▼</span>', target)
+        self.assertEqual(target.count('href="#s-both"'), 2)
+        self.assertIn('href="#s-high"', target)
+        self.assertIn('（IT软硬Ai）', target)
+        self.assertIn('测试备注', target)
+        data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', output)[1]))
+        union = data['target_purple']
+        self.assertTrue(union['ok'])
+        self.assertEqual({m['id'] for m in union['members']}, {'MED', 'HIGH', 'BOTH', 'UP'})
+        self.assertEqual(len(union['members']), 4)
+        self.assertEqual({m['id'] for m in union['members']} & {m['id'] for m in data['chg']['members']}, {'BOTH'})
+        self.assertNotIn('>目标价</button>', output)
+        self.assertNotIn('>共识价</button>', output)
+
+    def test_old_snapshot_target_red_yellow_tables_are_not_rendered(self):
+        old = {'summary': {'red': 1, 'yellow': 1, 'purple': 0},
+               'signal_counts': {'chg': {'label': '涨跌幅', 'red': 1},
+                                 'target': {'label': '目标价', 'red': 9, 'yellow': 8, 'purple': 0}},
+               'signal_members': {'chg': {'red': [{'symbol': 'LIVE', 'group': 'focus'}]},
+                                  'target': {'red': [{'symbol': 'ANOM', 'detail': '疑似数据异常'}],
+                                             'yellow': [{'symbol': 'OLDTARGET'}]}}}
+        output = monitor._signal_counts_card(old)
+        self.assertIn('>LIVE</span>', output)
+        self.assertNotIn('ANOM', output)
+        self.assertNotIn('OLDTARGET', output)
+        self.assertNotIn('疑似数据异常', output)
+        self.assertNotIn('>目标价</button>', output)
+        self.assertNotIn('data-kind="target"', output)
+
+    def test_snapshot_and_overlay_render_do_not_mutate_inputs(self):
+        import copy
+        rows = [self.row('BOTH', 'focus', prev=180)]
+        before = copy.deepcopy(rows)
+        snap = self.snapshot(rows)
+        self.assertEqual(rows, before)
+        saved = copy.deepcopy(snap)
+        monitor._signal_counts_card(snap)
+        self.assertEqual(snap, saved)
 
 
 if __name__ == '__main__':

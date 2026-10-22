@@ -9,60 +9,225 @@ import re
 from rules_config import DEFAULT_SETTINGS, browser_schema
 
 
-RULES_SUMMARY = "完整报灯规则 · 全局 + 分组差异"
-# 规则定义始终保留；条件仅补充当前启用参数，不用关闭状态替代规则。
-RULE_BLOCKS = (
-    ("", '<div class="rules-body"><h4>一、报灯 · 所有分组</h4><ul>'),
-    ("", '<li><b>行灯取最严重一项</b>：<span class="lamp-red">红</span> 优先于 <span class="lamp-yellow">黄</span>；无报警为 <span class="lamp-green">绿</span>。<span class="lamp-purple">紫色目标提示</span>独立叠加，不替代红黄绿；基本面另挂灯。</li>'),
-    ("", '<li><b>量比</b>：盘中 ≥ <b>${vol_ratio_red}×</b> <span class="lamp-red">红</span>、≥ <b>${vol_ratio}×</b> <span class="lamp-yellow">黄</span>；开盘 ${intraday_vol_quiet_min} 分钟内沿用最近完整日。收盘优先按本股放量异常程度报灯，自适应不可用时退回固定倍数；指数、期货不报股票量比。</li>'),
-    ("vol_adaptive", '<li class="rule-setting">量比自适应阈值：≥ <b>${vol_ratio_red_z}σ</b> <span class="lamp-red">红</span>、≥ <b>${vol_ratio_z}σ</b> <span class="lamp-yellow">黄</span>；量比至少 1× 才使用。</li>'),
-    ("!vol_adaptive", '<li class="rule-setting">当前量比采用固定倍数；重新启用自适应后，按自身异常程度的红、黄阈值判定。</li>'),
-    ("", '<li><b>52 周低位</b>：距低点 ≤ <b>${near_52w_low_pct}%</b>，刚进入或再创新低 → <span class="lamp-red">红</span>；持续低位、未创新低 → <span class="lamp-yellow">黄</span>；离开后不报。</li>'),
-    ("", '<li><b>第一条均线</b>：确认上穿或跌破 → <span class="lamp-yellow">黄</span>；仅触及不报。确认幅度随平时波动调整，历史不足时按简单穿越判断。</li>'),
-    ("", '<li><b>第二条均线</b>：日内触及均线 ±<b>${ma_long_band_pct}%</b>，或上穿、跌破 → <span class="lamp-yellow">黄</span>；触及与穿越可同时提示。缺日内高低时只按现价并注明；旧日线不重报。同周期两条去重后只判简单穿越。</li>'),
-    ("ma_short_on", '<li class="rule-setting">第一条当前周期：<b>${ma_short} 日</b>。</li>'),
-    ("ma_long_on", '<li class="rule-setting">第二条当前周期：<b>${ma_long} 日</b>。</li>'),
-    ("", '<li><b>布林 + RSI</b>：进布林报警区且同方向 RSI <b>2 条</b> → <span class="lamp-yellow">黄</span>、<b>3 条</b> → <span class="lamp-red">红</span>；仅反方向至少 2 条 → <span class="lamp-yellow">黄</span>。同日两轨都命中时文字均显示，组合按最贴近的一轨判断。</li>'),
-    ("", '<li class="rule-setting">布林 <b>${boll_n} 日 / ${boll_k} 倍</b>；RSI <b>${rsi_periods}</b>，超买 ≥ <b>${rsi_high}</b>、超卖 ≤ <b>${rsi_low}</b>。日内触轨也算；逼近门槛随平时波动调整，自适应关闭或不可用时用 <b>${boll_near_pct}%</b>。</li>'),
-    ("boll_adaptive", '<li class="rule-setting">布林自适应门槛：归一化带宽的 <b>${boll_near_band_pct}%</b>，不是当日实际带宽，不随标准差倍数改变。</li>'),
-    ("", '<li><b>加仓价</b>：所有分组，有设置价才判断；已到价或跌破，或现价仅高出 ≤ <b>${trigger_gap_pct}%</b> → <span class="lamp-red">红</span>。</li></ul>'),
-    ("", '<h4>二、报灯 · 分组差异</h4><ul>'),
-    ("", '<li><b>涨跌幅、振幅</b>：仅持仓、重点关注报灯。中档涨跌幅绝对值 ≥ <b>${chg_red}%</b> <span class="lamp-red">红</span>、≥ <b>${chg_yellow}%</b> <span class="lamp-yellow">黄</span>；振幅 ≥ <b>${amp_red}%</b> <span class="lamp-red">红</span>、≥ <b>${amp_yellow}%</b> <span class="lamp-yellow">黄</span>。低、中、高波动档按 <b>${vol_mult}</b> 缩放，历史不足按中档。</li>'),
-    ("", '<li><b>布林上轨</b>：长持仓只有 3 条 RSI 都超买才报红；其他上轨组合不报灯，但保留触轨文字。短持仓、重点关注按通用规则；其他分组上轨只出文字。<b>下轨所有分组照常</b>。</li>'),
-    ("", '<li><b>减仓价</b>：持仓已到价或高于价位，或低于价位但还差 ≤ <b>${reduce_gap_pct}%</b> → <span class="lamp-red">红</span>；高出多少都算，不是正负区间。重点关注若已有减仓胶囊，页面也会补同类红色提醒。</li>'),
-    ("", '<li><b>目标价、共识价</b>：持仓、重点关注当日上穿或跌破、进入 ±<b>${target_gap_pct}%</b> 区间、或上涨空间 &gt; <b>${target_space_pct}%</b> → <span class="lamp-purple">紫</span>；空间 &gt; <b>${target_anomaly_pct}%</b> → 数据异常 <span class="lamp-red">红</span>。其他分组仅展示共识价，不报目标灯。</li>'),
-    ("", '<li><b>基本面</b>：仅持仓、重点关注的非 ETF，单独提示、不改行情行灯；最新季对 <b>3 个季度前</b>。营收变化 ≤ <b>${fund_rev_red}%</b>、营业利润率为负、经营现金流由正转负 → <span class="lamp-red">红</span>。</li>'),
-    ("", '<li><b>基本面黄灯</b>：营收变化 ≤ <b>${fund_rev_yellow}%</b>、营业 / 毛利率下降 ≥ <b>${fund_om_drop}</b> / <b>${fund_gm_drop}</b> 个百分点、经营现金流为负；或负债权益比相对升 ≥ <b>${fund_de_rise}%</b> 且负债额升、流动比率相对降 ≥ <b>${fund_cr_drop}%</b>、季度 ROE 相对降 ≥ <b>${fund_roe_drop}%</b> → <span class="lamp-yellow">黄</span>，红优先。</li>'),
-    ("", '<li><b>基本面待更新</b>：报告过期（报告周期外另给 <b>${fund_report_grace_days}</b> 天宽限）、缺值或不可比 → <span class="lamp-none">灰字</span>，不当作绿。已知风险仍保留红黄；一次性损益污染时不据 ROE 升灯。</li>'),
-    ("!fund_on", '<li class="rule-setting">当前基本面监测未启用；以上规则保留，启用后生效。</li></ul>'),
-    ("fund_on", '</ul>'),
-    ("", '<h4>三、异色文字与图形</h4><ul>'),
-    ("", '<li><b>RSI 单独命中</b>：同侧至少 2 条才出文字；超卖 <span class="lamp-magenta">粉紫字</span>、超买普通字，<b>不单独报灯</b>。</li>'),
-    ("", '<li><b>布林单独命中</b>：下轨 <span class="lamp-yellow">黄字</span>、上轨普通字，<b>不单独报灯</b>；连续贴轨只补天数。组合文字按实际等级显示 <span class="lamp-sig-red">红字</span> / <span class="lamp-sig-yellow">黄字</span>。</li>'),
-    ("", '<li><b>均线文字</b>：第二条周期的触及、贴近、穿越为 <span class="lamp-cyan">青字</span>，其他均线为普通字。涨跌幅、振幅、量比的信号文字不随行灯自动染红黄。</li>'),
-    ("", '<li><b>目标提示</b>：<span class="lamp-purple">紫字、紫胶囊</span>；命中时实心紫并加行右侧紫条，未命中为空心。取数失败为 <span class="lamp-red">红胶囊</span>，本身不升行灯；仅紫字不代表命中。</li>'),
-    ("", '<li><b>财报日期</b>：按<b>北京时间</b>算。美东财报日当天和次日（盘前盘后都一样，两个完整日）<span class="lamp-red">红字</span>并保留在名单里；发布前 <b>${earn_soon_days} 天</b>内 <span class="lamp-yellow">黄字</span>；未来 <b>15 天</b>另列统计名单，可作叠加条件。日期不升行灯，待公布、取数失败不当作临近。</li>'),
-    ("", '<li><b>涨跌与盈亏</b>：上涨 / 盈利 <span class="lamp-green">绿字</span>、下跌 / 亏损 <span class="lamp-red">红字</span>。仓位面板红绿仅用于盈亏列，行首圆点表示灯级，不表示盈亏。</li>'),
-    ("", '<li><b>定投提醒</b>：顶栏显示还差几个交易日；仅到期当天 <span class="lamp-yellow">黄字</span>，未启用或日期无效不显示，不影响个股灯级。</li>'),
-    ("", '<li><b>图形</b>：▲ 上穿 / 上方，▼ 跌破 / 下方，■ 命中区间 / 恰在均线，□ 目标空间提示；量比、布林组合、均线方向写在统计框标题。52 周条的紫三角是现价、<span class="lamp-yellow">黄竖线是成本</span>，两者都不单独报灯。持仓两端价格下的百分比表示<b>从现价跌到低点 / 涨到高点的幅度</b>，不改变灯级。</li></ul>'),
-    ("", '<h4>四、展开、折叠与“无异动”</h4><ul>'),
-    ("", '<li><b>首次打开</b>：只展开统计；仓位管理、各分组、规则默认收起。持仓展开后，上方为可收起的长持仓，下方直接短持仓表。</li>'),
-    ("", '<li><b>显示、不折叠（留在本组主表）</b>：行情红灯 / 黄灯、未读基本面红 / 黄、参考行情、目标价 / 共识价紫色命中（紫字不报灯，但<b>不折叠</b>）、财报在未来 <b>7 天</b>内，任一满足即显示。基本面已读后并入本组“无异动 N 只”折叠表（本组没有就新建一个）；同一标的若另有行情警示、紫灯或财报，仍留在主表。<b>不是强制打开整个分组</b>。</li>'),
-    ("", '<li><b>折叠（进入“无异动”）</b>：行情绿且没有上述条件。<b>不报灯的文字提示一律折叠</b>：单独 RSI、单独布林、布林 + RSI 但被分组或长持仓挡下（统计灰灯名单里的标的）、未命中的紫字、未来 8～14 天财报黄字及 8～15 天的财报名单项（名单里的标的不因此展开）。浏览器补算的浮亏红灯只改变灯色，<b>不自动搬出原折叠表</b>。</li>'),
-    ("", '<li><b>统计灰灯与紫灯</b>：灰灯收纳最终为绿但有 RSI / 布林文字的标的，在表格灰列按 RSI、布林、布林+RSI 分组计数，点击数字展开名单；紫灯名单移到表格下方的折叠区，严格只列目标价 / 共识价紫色命中。灰灯名单不等于行情缺失；缺行情、52 周 / 基本面待更新各自标注。紫灯与未来 15 天财报（美东今天起至第 15 天，含）均可选择，并与其他条件按“同时满足”取交集；默认切换时关闭其他名单，设置允许多开后可跨信号对比，同一行仍互斥。</li>'),
-    ("", '<li><b>收起与编辑</b>：收起统计时内部名单复位；收起分组时“无异动”复位，长持仓子区保留状态。当日盈亏贡献默认折叠；收起仓位管理退出编辑，保留已填数字。</li></ul>'),
-    ("", '<h4>五、仓位数字与已读提醒</h4><ul>'),
-    ("", '<li><b>仓位 &gt; 10%</b>：仅个股仓位数字 <span class="lamp-yellow">黄字</span>，不因此升行灯；现金、固定收益不标黄。名称靠左，数值与输入框居中。</li>'),
-    ("", '<li><b>成本价警示：浮亏 ≥ 10%</b>：提醒文字 <span class="lamp-red">红字</span>并附加行级 <span class="lamp-red">红灯</span>；≥ <b>20%</b> 加重提示，仍只显示一条。仅当前持仓且成本、数量均大于零时提醒。</li>'),
-    ("", '<li><b>点击已读</b>：加仓价、减仓价、成本价及基本面提醒均可撤销。基本面已读项并入本组“无异动”折叠表，并从基本面红 / 黄统计及其名单中排除；报告期变化或风险消失后自动清除，下一份财报重新判定。其他三类仍为灰字 + 删除线，条件消失自动恢复；只撤对应附加红灯，原行情信号保留。</li>'),
-    ("", '<li><b>数量与移组</b>：数量为 0 可保存，不计持仓金额、不触发浮亏提醒；移出持仓后不计市值、权重、贡献或亏损，旧成本数量保留，不会自动复活持仓。加减仓、目标及行情规则仍按所在分组判断。</li></ul></div>'),
+RULES_SUMMARY = "预警规则"
+GLOSSARY_SUMMARY = "名词解释和抓取"
+# 定位 ID 沿用确认后的展示稿；门槛只在渲染时从生效配置替换。
+RULE_SECTIONS = (
+    ("rule-lamps", r"""line-0||h4|一、报灯规则（不折叠，计入统计面板）
+line-1|rule-boll-upper|h5|布林上轨 + RSI 持仓分组、重点
+up-buy-two||p|布林上轨 + RSI 2条向上超买 → 黄灯。
+up-buy-three||p|布林上轨 + RSI 3条向上超买 → 红灯。
+up-sell-two||p|布林上轨 + RSI 2条向下超卖 → 黄灯。
+line-5|rule-boll-lower|h5|布林下轨 + RSI 所有分组
+line-6||p|布林下轨 + RSI 2条向下 → 黄灯。
+line-7||p|布林下轨 + RSI 3条向下超卖 → 红灯。
+line-8||p|布林下轨 + RSI ≥2条向上超买 → 黄灯。
+line-9|rule-rsi|h5|单独RSI三条超卖
+line-10||p|所有分组 → 红灯。
+line-11|rule-rsi-overbought|h5|单独RSI三条超买
+rsi-buy-three||p|持仓分组、重点 → 黄灯。
+line-13|rule-vol|h5|量比 所有分组
+line-14||p|自适应：≥${vol_ratio_red_z}σ → 红灯，≥${vol_ratio_z}σ → 黄灯；固定：≥${vol_ratio_red}× → 红灯，≥${vol_ratio}× → 黄灯。切换条件见量比解释。
+line-15|rule-chg|h5|涨跌幅 · 自适应 所有分组
+line-16||p|取涨跌幅绝对值，按波动档报红／黄灯。
+line-21|rule-amp|h5|振幅 · 自适应 持仓分组、重点
+line-22||p|按波动档报红／黄灯；其他分组只显示数值。
+line-27|rule-low52|h5|52周低位 所有分组
+line-28||p|距低点≤${near_52w_low_pct}%：新进入、触及／跌破此前低点或昨日状态未知 → 红灯；
+line-29||p|其余持续低位 → 黄灯。
+line-30|rule-ma|h5|均线 所有分组
+line-31||p|第一条（短期）：自适应确认穿越 → 黄灯（${ma_short_status}）。
+line-32||p|第二条（长期）：日内触及±${ma_long_band_pct}%或穿越 → 黄灯（${ma_long_status}）。
+line-33||p|第二条（长期）：本轮日线日期与目标交易日不符 → 不报触及／穿越灯；日内高低缺失或无效 → 只按现价判断贴近，不冒充日内触及。
+line-34|rule-clickable|h5|可点红灯 可点✓ 标记已读
+line-35|rule-prices|h5|加仓价／减仓价 须设置有效价位
+line-36||p|加仓价 · 所有分组：现价≤设置价×${add_factor} → 可点红灯。
+line-37||p|加仓价提醒标记已读 → 灰灯。
+line-38||p|减仓价 · 持仓分组：现价≥设置价×${reduce_factor} → 可点红灯。
+line-39||p|减仓价提醒标记已读 → 灰灯。
+line-40||p|减仓价：重点、其他分组不适用。
+line-41|rule-cost-loss|h5|成本浮亏 持仓分组
+line-42||p|浮亏≥10% → 可点红灯；
+line-43||p|浮亏≥20%加重文字 → 可点红灯。
+line-44||p|浮亏提醒标记已读 → 灰灯。
+line-45||p|浮亏10%／20%每只标的只计一次。
+line-46||p|重点、其他分组不适用。
+line-47|rule-target-space|h5|目标空间 所有分组
+line-48||p|有效空间≥${target_space_pct}% → 紫虚线空心灯；
+target-space-positive||p|≥${target_high_space_pct}% → 紫红虚线空心灯。
+line-50|rule-target-reached|h5|达到目标／共识价 持仓分组、重点
+target-reached-positive||p|当日上穿／跌破或现价在目标±${target_gap_pct}% → 实心紫灯。"""),
+    ("rule-text", r"""line-52||h4|二、不升红黄灯且不折叠
+||h5|布林＋RSI
+line-59||p|其他分组：
+up-sell-other||p|布林上轨 + RSI 2条向下超卖 → 文字 → 灰灯。
+line-61||p|所有分组：
+low-one-sell||p|布林下轨 + RSI 1条向下超卖 → 文字 → 灰灯。
+low-one-buy||p|布林下轨 + RSI 1条向上超买 → 文字 → 灰灯。
+line-53|rule-earnings|h5|财报临近 所有分组
+line-54||p|美东财报日期按北京时间：前一日／当日／后一日 → 红字；
+earnings-near||p|财报前2～${earn_soon_days}天 → 黄字。
+line-56|rule-quotes|h5|缺行情／参考行情 数据缺失 所有分组
+line-57||p|缺行情 → 灰灯；参考行情显示参考状态。
+line-58||p|两者只保留在主表，不进入“无异动”，不计入统计面板，不因此制造红灯／黄灯警示。"""),
+    ("rule-folded", r"""line-64||h4|三、不升红黄灯且折叠
+||h5|单独布林
+line-65||p|所有分组：
+plain-low||p|单独布林下轨「RSI 0 条」→ 文字 → 灰灯。
+line-73||p|持仓分组：
+plain-up-position||p|单独布林上轨「RSI 0 条」→ 文字 → 灰灯。
+line-75||p|重点、其他分组：
+plain-up-other||p|单独布林上轨「RSI 0 条」→ 无提醒。
+||h5|单独RSI
+||p|所有分组：
+line-67||p|单独RSI 1条超买／超卖 → 无提醒。
+line-68||p|单独RSI 2条向上超买／向下超卖 → 文字 → 灰灯。
+line-77||p|其他分组：
+rsi-buy-other||p|单独RSI三条超买 → 文字 → 灰灯。
+||h5|布林＋RSI
+||p|所有分组：
+up-one-sell||p|布林上轨 + RSI 1条向下超卖 → 文字 → 灰灯。
+up-one-buy||p|布林上轨 + RSI 1条向上超买 → 文字 → 灰灯。
+||p|其他分组：
+up-buy-other||p|布林上轨 + RSI 2条／3条向上超买 → 文字 → 灰灯。
+||h5|目标／共识价
+||p|所有分组：
+target-inactive||p|目标空间<${target_space_pct}%、未达到目标／共识价、共识获取失败及失败旧价。
+||h5|财报
+||p|所有分组：
+earnings-far||p|仅有未来${earn_far_start}～${earn_list_days}天财报名单。"""),
 )
+
+# 相邻同块不互跳；保留跨块／跨节的 18 条有向链接。
+RULE_CROSS_LINKS = {
+    "up-buy-two": ("up-buy-other",), "up-buy-three": ("up-buy-other",),
+    "up-buy-other": ("up-buy-two", "up-buy-three"),
+    "up-sell-two": ("up-sell-other",), "up-sell-other": ("up-sell-two",),
+    "rsi-buy-three": ("rsi-buy-other",), "rsi-buy-other": ("rsi-buy-three",),
+    "low-one-sell": ("up-one-sell",), "up-one-sell": ("low-one-sell",),
+    "low-one-buy": ("up-one-buy",), "up-one-buy": ("low-one-buy",),
+    "target-space-positive": ("target-inactive",),
+    "target-reached-positive": ("target-inactive",),
+    "target-inactive": ("target-space-positive", "target-reached-positive"),
+    "earnings-near": ("earnings-far",), "earnings-far": ("earnings-near",),
+}
+RULE_LINK_LABELS = {
+    "up-buy-two": "持仓分组、重点：两条超买", "up-buy-three": "持仓分组、重点：三条超买",
+    "up-buy-other": "其他分组", "up-sell-two": "持仓分组、重点", "up-sell-other": "其他分组",
+    "rsi-buy-three": "持仓分组、重点", "rsi-buy-other": "其他分组",
+    "low-one-sell": "下轨：所有分组", "up-one-sell": "上轨：所有分组",
+    "low-one-buy": "下轨：所有分组", "up-one-buy": "上轨：所有分组",
+    "target-space-positive": "目标空间≥${target_space_pct}%",
+    "target-reached-positive": "达到目标／共识价",
+    "target-inactive": "空间不足／未达到／获取失败",
+    "earnings-near": "财报前一日／当日／后一日及前2～${earn_soon_days}天",
+    "earnings-far": "未来${earn_far_start}～${earn_list_days}天名单",
+}
+
+
+GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
+<section id="glossary-calculation">
+<h4>名词解释与计算</h4>
+<h5 id="glossary-ack">可点红灯与已读</h5>
+<p>加仓价、减仓价、成本浮亏：点✓已读，再点撤销。已读显示灰字删除线，统计由对应红列转灰列。</p>
+<p>已读只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯。是否进入“无异动”，按剩余报灯与保留条件判断。</p>
+<p>条件消失即清除已读，再次触发重新提醒。浮亏10%／20%分档记录、每只只计一次；升降档切换提醒，低于10%清除浮亏已读。</p>
+<h5 id="glossary-chg">涨跌幅 · 计算与阈值</h5>
+<p>涨跌幅＝（现价÷昨收−1）×100%；报灯取绝对值。</p>
+<p>两项共用历史日波动档：&lt;${vol_low_sigma}%低档，&gt;${vol_high_sigma}%高档，其余中档；不足${vol_min_returns}个有效日收益取中档。不是按今天的涨跌选档。</p>
+<p>所有分组适用；达到红门槛报红，否则达到黄门槛报黄。</p>
+${chg_threshold_table}
+<p><a class="rule-jump" href="#rule-chg">返回涨跌幅规则</a>。</p>
+<h5 id="glossary-amp">振幅 · 计算与阈值</h5>
+<p>振幅＝（日高−日低）÷昨收×100%，表示日内摆动宽度。涨跌幅接近0，振幅仍可能很大。</p>
+<p>沿用上节波动档；持仓分组、重点报灯，其他分组只显示数值。红门槛优先。</p>
+${amp_threshold_table}
+<p><a class="rule-jump" href="#rule-amp">返回振幅规则</a>。</p>
+<h5 id="glossary-boll">布林逼近 · 自适应</h5>
+<p>布林为${boll_n}日、±${boll_k}倍标准差。逼近范围＝历史日波动×${boll_near_factor}（当前${boll_near_band_pct}%设置）；波动越大，范围越宽。关闭自适应或波动无效时固定${boll_near_pct}%。</p>
+<p>连续自适应示例，不是固定三档：</p>
+<table class="rule-table"><thead><tr><th scope="col">假设平时日波动</th><th scope="col">距上轨／下轨多近算逼近</th></tr></thead>
+<tbody><tr><th scope="row">1%</th><td>≤约${boll_example_1}%</td></tr><tr><th scope="row">2%</th><td>≤约${boll_example_2}%</td></tr><tr><th scope="row">3%</th><td>≤约${boll_example_3}%</td></tr></tbody></table>
+<p>碰轨为触及，穿轨为越轨。日波动来自历史，不是今天涨跌幅，也不是当天带宽的${boll_near_band_pct}%。</p>
+<p id="glossary-boll-dual">双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。布林与RSI的组合、分组限制及文字／报灯条件统一见<a class="rule-jump" href="#rule-boll-upper">《预警规则》</a>。</p>
+<h5 id="glossary-rsi">RSI周期与条数</h5>
+<p>周期${rsi_periods}日；≥${rsi_high}超买，≤${rsi_low}超卖。</p>
+<p>“1／2／3条”是同方向达标的周期数，不是连续天数；向上／向下指超买／超卖，不等于今日涨跌。<a class="rule-jump" href="#rule-rsi">单独RSI规则</a> · <a class="rule-jump" href="#rule-boll-upper">布林＋RSI规则</a>。</p>
+<h5 id="glossary-vol">量比 · 自适应／固定切换</h5>
+<p>完整日量比＝成交量÷此前${vol_ratio_base}日均量。异常值有效、两条σ阈值启用且量比≥1×，用自适应；否则用固定倍数。</p>
+<p>σ表示放量异常程度，不是均量倍数，也不套股价波动档。自适应未命中，不再用固定倍数补灯。</p>
+<p>盘中按已开盘时间折算成交速度，只用固定倍数；不足${intraday_vol_quiet_min}分钟或盘中值无效，退回最近完整日。完整日量比缺失则不判。<a class="rule-jump" href="#rule-vol">报灯条件</a>。</p>
+<h5 id="glossary-ma">均线确认 · 第一条（短期）／第二条（长期）</h5>
+<p>第一条（短期，${ma_short_status}）：确认幅度＝历史日波动×0.5，限${ma_confirm_min}%～${ma_confirm_max}%；波动无效取${ma_confirm_default}%。检查近${ma_confirm_lookback}日另一侧记录，历史不足只判简单穿越。</p>
+<p>启用后的连续自适应示例：</p>
+<table class="rule-table"><thead><tr><th scope="col">假设平时日波动</th><th scope="col">穿越确认幅度</th></tr></thead>
+<tbody><tr><th scope="row">1%</th><td>${ma_example_1}%</td></tr><tr><th scope="row">2%</th><td>${ma_example_2}%</td></tr><tr><th scope="row">3%</th><td>${ma_example_3}%</td></tr></tbody></table>
+<p>第二条（长期，${ma_long_status}）：触及范围固定±${ma_long_band_pct}%；简单穿越不需额外确认幅度。<a class="rule-jump" href="#rule-ma">均线规则</a>。</p>
+<p>0关闭，2～250整数启用；两条同周期只计一次，按简单穿越判断。</p>
+<h5 id="glossary-target">目标／共识价</h5>
+<p>有效手填目标价优先；未手填才用自动平均共识价。空间＝（目标／共识价÷现价−1）×100%。</p>
+<p>达到按昨收与现价判断，不用日内高低曾触及代替。失败旧共识不参与，有效手填价不受影响。</p>
+<p>空间／达到各自去重、允许重叠；总数取并集，不直接相加。<a class="rule-jump" href="#rule-target-space">空间规则</a> · <a class="rule-jump" href="#rule-target-reached">达到规则</a>。</p>
+<h5 id="glossary-earnings">财报与显示</h5>
+<p>用美东财报日期对比北京今天，盘前／盘后不平移。名单含今天至+${earn_list_days}天，另留昨天红字；红字保留期结束后才检查下一次。<a class="rule-jump" href="#rule-earnings">颜色与保留规则</a>。</p>
+<p>只显示个股财报，ETF／指数／期货除外。失败时沿用有效旧日期；“待公布”仅表示本站未取得日期。</p>
+<p>已知时段显示盘前／盘后／盘中及北京落点，未知不猜钟点。</p>
+<h5 id="glossary-dedup">标的去重与显示优先级</h5>
+<p>显示与报警优先级：市场风险／持仓 → 重点 → 其他。同一实质标的只显示最高级，清单记录不删。</p>
+<p>VIX与标普指数仅在市场风险显示；指数、跟踪ETF、期货不是同一标的。</p>
+<p>文字颜色不等于交易灯。首次只展开统计，不等于标的进入“无异动”的判定。</p>
+</section>
+<section id="glossary-fetch">
+<h4>抓取规则</h4>
+<h5 id="fetch-quotes">行情与技术指标：来源</h5>
+<p>普通标的收盘日线：${quote_closed_sources}；盘中日线：${quote_intraday_sources}。${quote_closing_patch}指数／期货：Yahoo。布林、RSI、均线由行情计算。</p>
+<h5 id="fetch-target">目标／共识价：来源与缓存间隔</h5>
+<p>StockAnalysis · S&amp;P Global美元平均目标价；不抓晨星。有效手填价优先，并停止自动抓共识。</p>
+<p>所有分组符合条件的美股个股适用；排除ETF名单、指数、期货与伯克希尔。</p>
+<table class="rule-table"><thead><tr><th scope="col">缓存状态</th><th scope="col">重查间隔</th></tr></thead>
+<tbody><tr><th scope="row">没有缓存</th><td>加入抓取队列</td></tr>
+<tr><th scope="row">成功取得共识价</th><td>14个美东自然日；财后刷新可提前</td></tr>
+<tr><th scope="row">明确404／零覆盖</th><td>30个美东自然日；财报不提前解除</td></tr>
+<tr><th scope="row">连续失败</th><td>依次等1／2／4／7个北京自然日，之后每次7天</td></tr></tbody></table>
+<p>北京每天最多12只，失败重试最多3只；每股每天最多1次，请求间隔2秒。</p>
+<h5 id="fetch-target-after-earnings">财报后：共识价提前刷新</h5>
+<table class="rule-table"><thead><tr><th scope="col">条件／结果</th><th scope="col">处理</th></tr></thead>
+<tbody><tr><th scope="row">正常缓存＋已记录财报事件</th><td>财报后2个美东自然日起，尚未完成对应刷新则加入队列；盘前／盘后不平移</td></tr>
+<tr><th scope="row">抓取成功</th><td>即使价格没变、来源日期仍早于财报，也算完成，通常再等14天</td></tr>
+<tr><th scope="row">抓取失败</th><td>按失败退避与日额度重试；未完成事件继续保留</td></tr></tbody></table>
+<p>例：已记录美东20日财报，正常缓存未到期，22日起可提前刷新。</p>
+<h5 id="fetch-earnings">财报日期：来源与缓存间隔</h5>
+<p>StockAnalysis主源 → Nasdaq补时段、交叉核对 → 均无日期才用Yahoo。已核验官方事件优先，支持官网适配的个股可补查官网。</p>
+<p>只抓日期／时段，不抓财报内容或基本面。重查间隔按美东自然日、当前距财报天数选列：</p>
+<table class="rule-table"><thead><tr><th scope="col">日期性质</th><th scope="col">距财报≥15天</th><th scope="col">距财报4～14天</th><th scope="col">距财报0～3天</th></tr></thead>
+<tbody><tr><th scope="row">供应商确认</th><td>14天</td><td>7天</td><td>3天</td></tr>
+<tr><th scope="row">官方核验</th><td>7天</td><td>3天</td><td>3天</td></tr>
+<tr><th scope="row">估算日期</th><td>7天</td><td>1天</td><td>1天</td></tr></tbody></table>
+<p>未知7天复查，不适用／404为30天。无缓存、日期已过或失败，下次再查；失败保留有效旧日期。</p>
+<h5 id="fetch-macro"><span id="dataSourceRules" class="rule-anchor"></span>宏观与补充参考：来源</h5>
+<table class="rule-table"><thead><tr><th scope="col">数据</th><th scope="col">来源</th></tr></thead>
+<tbody><tr><th scope="row">垃圾债利差</th><td>FRED · BAMLH0A0HYM2</td></tr>
+<tr><th scope="row">VIX</th><td>Cboe官方VIX日线优先；官方未更新时，以日期更新的Yahoo ^VIX兜底</td></tr>
+<tr><th scope="row">标普500</th><td>Yahoo ^GSPC</td></tr>
+<tr><th scope="row">上涨参与度</th><td><a href="https://historyofmarket.com/zh-cn/sp500/sp500-breadth/" rel="noopener noreferrer" target="_blank">History of Market</a>；使用成分股均线参与度，不用ETF价格替代</td></tr>
+<tr><th scope="row">金融压力NFCI</th><td>芝加哥联储原始周度数据；过期或不可用时以FRED同一指标同步备用</td></tr>
+<tr><th scope="row">10年美债收益率</th><td>Yahoo ^TNX百分比日线；校验标的与收益率序列，不混用债券价格</td></tr>
+<tr><th scope="row">美联储决议</th><td>美联储官网声明及发布日程</td></tr>
+<tr><th scope="row">WTI原油</th><td>Yahoo NYMEX WTI期货日线；不是实时夜盘报价</td></tr></tbody></table>
+<p>来源、观测日期与失效状态看对应数据项；有效期与判定见<a class="rule-jump" href="#marketRiskRules">综合判断与宏观细则</a>。</p>
+<h5 id="fetch-reference">补充参考：缓存间隔</h5>
+<table class="rule-table"><thead><tr><th scope="col">数据</th><th scope="col">缓存／重试</th></tr></thead>
+<tbody><tr><th scope="row">美联储决议</th><td>到下次官方公布时点前复用；错误／待更新至少隔1小时重试</td></tr>
+<tr><th scope="row">NFCI</th><td>按周度公布时点到期；有旧缓存时，未发布／失败至少隔1小时重试，无有效缓存则下一轮再查</td></tr>
+<tr><th scope="row">其他行情型参考</th><td>随行情更新，不用共识价14天缓存</td></tr></tbody></table>
+</section>
+</div>"""
 
 
 def rule_flags(s):
     equal = s["ma_short"] == s["ma_long"]
     return {"vol_adaptive": s["vol_ratio_z"] > 0 and s["vol_ratio_red_z"] > 0,
-            "boll_adaptive": s["boll_near_band_pct"] > 0, "fund_on": s["fund_enable"] > 0,
+            "boll_adaptive": s["boll_near_band_pct"] > 0,
             "ma_short_on": s["ma_short"] > 0, "ma_long_on": s["ma_long"] > 0,
             "ma_short_distinct": s["ma_short"] > 0 and not equal,
             "ma_long_distinct": s["ma_long"] > 0 and not equal,
@@ -75,20 +240,158 @@ def _text(value):
     return html.escape(str(value), quote=True).replace("&#x27;", "&#39;")
 
 
+def _rules_markup(body):
+    arrows = {
+        "上轨": (18, "M3 3H15 M9 15V3 M5 7L9 3L13 7"),
+        "下轨": (18, "M3 15H15 M9 3V15 M5 11L9 15L13 11"),
+        "超买": (14, "M7 15V3 M3 7L7 3L11 7"),
+        "超卖": (14, "M7 3V15 M3 11L7 15L11 11"),
+    }
+    aliases = {
+        "rule-lamps": "alerts", "rule-text": "display", "rule-folded": "quiet",
+        "rule-boll-upper": "upper", "rule-boll-lower": "lower", "rule-vol": "volume",
+        "rule-chg": "change", "rule-amp": "amplitude", "rule-low52": "low",
+        "rule-ma": "ma", "rule-prices": "prices", "rule-cost-loss": "loss",
+        "rule-target-space": "space", "rule-target-reached": "reached",
+        "rule-earnings": "earnings", "rule-quotes": "missing", "rule-rsi": "single",
+        "glossary-calculation": "terms", "glossary-fetch": "fetch",
+        "glossary-ack": "read-terms", "glossary-chg": "change-terms",
+        "glossary-amp": "amplitude-terms", "glossary-boll": "boll-terms",
+        "glossary-rsi": "rsi-terms", "glossary-vol": "volume-terms",
+        "glossary-ma": "ma-terms", "glossary-target": "target-terms",
+        "glossary-earnings": "earnings-terms", "fetch-target": "fetch-consensus",
+        "fetch-target-after-earnings": "fetch-after-earnings", "fetch-earnings": "fetch-earnings-cache",
+    }
+    def arrow(match):
+        name = match[0]
+        width, path = arrows[name]
+        return (f'<span class="signal-term" data-rule-term="{name}">{name}<svg class="dir-arrow" '
+                f'viewBox="0 0 {width} 18" width="{width}" height="18" fill="none" '
+                'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+                f'stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="{path}"/></svg></span>')
+
+    # 属性和弱链接标签不插入 SVG，data-original 保持纯文本。
+    body = re.sub(r'<a\b[^>]*>.*?</a>|<[^>]+>|([^<]+)',
+                  lambda m: re.sub("上轨|下轨|超买|超卖", arrow, m[1]) if m[1] else m[0],
+                  body, flags=re.S)
+    return re.sub(r'(<(?:h5|section) id="([^"]+)"[^>]*>)',
+                  lambda m: m[1] + (f'<span id="{aliases[m[2]]}" class="rule-anchor"></span>'
+                                    if m[2] in aliases else ""), body)
+
+
+def _rule_values(settings, constants):
+    values = {**DEFAULT_SETTINGS, "rsi_periods": "6／12／24", "vol_ratio_base": 20,
+              "intraday_vol_quiet_min": 15, "vol_low_sigma": 1.2, "vol_high_sigma": 2.5,
+              "vol_min_returns": 40, "ma_confirm_lookback": 10, "ma_confirm_min": 0.5,
+              "ma_confirm_max": 3, "ma_confirm_default": 1, "ma_long_band_pct": 1,
+              "boll_sigma_factor": 1.29, "earn_soon_days": 7, "earn_list_days": 15,
+              "quote_closed_sources": "Yahoo → stooq → Nasdaq",
+              "quote_intraday_sources": "Yahoo → stooq → Nasdaq",
+              "quote_closing_patch": "收盘日线缺目标日时，Nasdaq收盘报价可补当日一根，不冒充有效日内高低。",
+              **settings, **constants}
+    # 兼容 monitor 现有的 ×低 / ×中 / ×高 字符串；新增显式参数优先。
+    multipliers = values.get("vol_mult", "×0.6 / ×1 / ×1.4")
+    if isinstance(multipliers, str):
+        multipliers = dict(zip(("low", "mid", "high"),
+                              (float(n) for n in re.findall(r"×\s*([\d.]+)", multipliers))))
+    for tier in ("low", "mid", "high"):
+        mult = values.get("vol_mult_" + tier, multipliers[tier])
+        values["vol_mult_" + tier] = mult
+        for kind in ("chg", "amp"):
+            for level in ("red", "yellow"):
+                values[f"{kind}_{tier}_{level}"] = round(values[f"{kind}_{level}"] * mult, 6)
+    for period in ("short", "long"):
+        n = values["ma_" + period]
+        values[f"ma_{period}_status"] = f"当前{n:g}日" if n else "当前关闭"
+    values["add_factor"] = round(1 + values["trigger_gap_pct"] / 100, 6)
+    values["reduce_factor"] = round(1 - values["reduce_gap_pct"] / 100, 6)
+    values["earn_far_start"] = values["earn_soon_days"] + 1
+    factor = values["boll_near_band_pct"] / 100 * 4 * values["boll_sigma_factor"]
+    values["boll_near_factor"] = round(factor, 6)
+    for sigma in (1, 2, 3):
+        values[f"boll_example_{sigma}"] = round(factor * sigma, 2)
+        values[f"ma_example_{sigma}"] = min(values["ma_confirm_max"],
+            max(values["ma_confirm_min"], 0.5 * sigma))
+    return values
+
+
+def _threshold_table(kind, values):
+    rows = []
+    for tier, label in (("low", "低"), ("mid", "中"), ("high", "高")):
+        rows.append('<tr><th scope="row">' + label + ' ×' + _text(values["vol_mult_" + tier])
+                    + '</th><td>≥' + _text(values[f"{kind}_{tier}_yellow"])
+                    + '%</td><td>≥' + _text(values[f"{kind}_{tier}_red"]) + '%</td></tr>')
+    return (f'<table class="rule-table" id="glossary-{kind}-table"><thead><tr>'
+            '<th scope="col">波动档位</th><th scope="col">黄灯</th><th scope="col">红灯</th>'
+            '</tr></thead><tbody>' + ''.join(rows) + '</tbody></table>')
+
+
+def _rules_source():
+    parts = ['<div class="rules-body" id="signalRulesBody">']
+    for section, lines in RULE_SECTIONS:
+        parts.append(f'<section id="{section}">')
+        for line in lines.splitlines():
+            ident, heading, tag, text = line.split("|", 3)
+            if not ident:
+                cls = "heading" if tag == "h5" else "scope"
+                parts.append(f'<{tag} class="rule-layout-{cls}">' + _text(text) + f'</{tag}>')
+                continue
+            parts.append(f'<div class="rule-entry" id="nav-{ident}" data-original="{_text(text)}">')
+            anchor = f' id="{heading}"' if heading else ""
+            body = _text(text)
+            parts.append(f'<{tag}{anchor} class="rule-original">' + body + f'</{tag}>')
+            if ident in ("line-16", "line-22"):
+                metric = "chg" if ident == "line-16" else "amp"
+                parts.append('<nav class="rule-cross-nav" aria-label="计算与阈值">'
+                             f'<a class="rule-jump rule-cross-link rule-metric-link" href="#glossary-{metric}-table">计算与阈值表</a></nav>')
+            if ident in RULE_CROSS_LINKS:
+                parts.append('<nav class="rule-cross-nav" aria-label="同一指标的其他条件">')
+                for peer in RULE_CROSS_LINKS[ident]:
+                    label = _text(RULE_LINK_LABELS[peer])
+                    parts.append(f'<a class="rule-jump rule-cross-link" href="#nav-{peer}" '
+                                 f'aria-label="跳转到{label}对应规则">{label}</a>')
+                parts.append('</nav>')
+            parts.append('</div>')
+        parts.append('</section>')
+    parts.append('</div>')
+    body = "\n".join(parts)
+    colors = {"紫红虚线空心灯": "tone-target-high", "紫虚线空心灯": "lamp-purple",
+              "实心紫灯": "lamp-purple", "红灯": "lamp-red", "黄灯": "lamp-yellow",
+              "灰灯": "nav-gray", "红字": "lamp-red", "黄字": "lamp-yellow",
+              "持仓分组": "rule-group", "所有分组": "rule-group",
+              "其他分组": "rule-group", "重点": "rule-group"}
+    body = re.sub(r'<a\b[^>]*>.*?</a>|<[^>]+>|([^<]+)',
+                  lambda m: re.sub('|'.join(colors),
+                      lambda word: f'<span class="{colors[word[0]]}">{word[0]}</span>', m[1])
+                  if m[1] else m[0], body, flags=re.S)
+    return body
+
+
+RULE_BLOCKS = (("", _rules_source()),)
+
+
 def rules_body(settings, constants):
-    values = {**DEFAULT_SETTINGS, **settings, **constants}
-    flags = rule_flags(values)
-    parts = []
-    for condition, body in RULE_BLOCKS:
-        if condition and (flags[condition.lstrip("!")] == condition.startswith("!")):
-            continue
-        parts.append(re.sub(r"\$\{(\w+)\}", lambda m: _text(values[m[1]]), body))
-    return "\n".join(parts)
+    values = _rule_values(settings, constants)
+    body = re.sub(r"\$\{(\w+)\}", lambda m: _text(values[m[1]]), RULE_BLOCKS[0][1])
+    return _rules_markup(body)
+
+
+def glossary_body(settings, constants):
+    values = _rule_values(settings, constants)
+    tables = {kind + "_threshold_table": _threshold_table(kind, values) for kind in ("chg", "amp")}
+    body = re.sub(r"\$\{(\w+)\}", lambda m: tables[m[1]] if m[1] in tables else _text(values[m[1]]),
+                  GLOSSARY_BODY)
+    body = re.sub(r'<h5 id="([^"]+)"[^>]*>.*?(?=<h5\b|</section>)',
+                  lambda m: f'<div class="glossary-entry" id="glossary-block-{m[1]}">{m[0]}</div>\n',
+                  body, flags=re.S)
+    return _rules_markup(body)
 
 
 def rules_template(settings, constants):
     return ('<template id="rulesTpl"><summary>' + RULES_SUMMARY + '</summary>'
-            + rules_body(settings, constants) + '</template>')
+            + rules_body(settings, constants) + '</template>'
+            + '<template id="glossaryTpl"><summary>' + GLOSSARY_SUMMARY + '</summary>'
+            + glossary_body(settings, constants) + '</template>')
 
 
 def json_script(value):
@@ -140,11 +443,11 @@ def main():
     args = parser.parse_args()
     if args.check == args.sync_edit:
         parser.error("请选择 --check 或 --sync-edit")
-    import monitor
-    path = Path(monitor.BASE) / "edit.html"
+    base = Path(__file__).resolve().parent
+    path = base / "edit.html"
     with path.open(encoding="utf-8", newline="") as stream:
         original = stream.read()
-    expected = sync_edit_html(original, monitor.BASE, monitor._rule_constants())
+    expected = sync_edit_html(original, base, {})
     if args.check:
         if original != expected:
             raise SystemExit("edit.html 生成片段已过期，请运行 page_assets.py --sync-edit 并提交对应改动")
@@ -163,7 +466,8 @@ def main():
 PAGE_CSS = """:root{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
   --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
-  --blue:#2f6bd8; --purple:#a371f7;
+  --blue:#2f6bd8; --purple:#a371f7; --target-high:#dc62b8;
+  --signal-bg:#182131; --collapse-bg:var(--signal-bg);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--text);
@@ -174,6 +478,9 @@ h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 .sub{color:var(--dim);font-size:12px;margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:6px 4px;margin-bottom:14px;overflow:hidden}
+/* 持仓卡：2%绿叠层；长持仓再叠2%（合成约4%），不影响文字和灯级。 */
+#group_positions{background:linear-gradient(rgba(46,160,67,.02),rgba(46,160,67,.02)),var(--card);--collapse-bg:rgba(46,160,67,.15)}
+#group_positions_long.zone-card{background:rgba(46,160,67,.02)}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
@@ -185,8 +492,6 @@ tr:first-child td{border-top:none}
 .tag{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;
   font-size:11px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
   color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}
-.tag.f-red{color:#ff9b95;background:rgba(248,81,73,.16);border-color:rgba(248,81,73,.42)}
-.tag.f-yellow{color:#f0c674;background:rgba(210,153,34,.16);border-color:rgba(210,153,34,.42)}
 .tag.quote-note{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}
 .lvs{display:block;margin:4px 0 0;line-height:1.5}
 .lvtag{display:inline-block;margin:0 4px 2px 0;padding:0 7px;border-radius:999px;border:1px solid;
@@ -196,37 +501,28 @@ tr:first-child td{border-top:none}
 .tgs{display:block;margin:3px 0 0;line-height:1.4;white-space:normal}
 .tgs .lvtag{margin:0;padding:1px 5px;border-radius:4px;line-height:1.35;white-space:normal;text-align:center}
 .tgs .lvtag span{display:inline-block;white-space:nowrap}
-.lvtag.tgt{color:#c4a3ff;border-color:rgba(163,113,247,.65)}
-.lvtag.tgt.hit{color:#fff;background:#8957e5;border-color:#8957e5}
-.lvtag.tgt.bad{color:#ff9b95;border-color:rgba(248,81,73,.7)}
+.lvtag.tgt{position:relative;color:#c4a3ff;border-color:var(--dim)}
+.lvtag.tgt.low{border:1px solid var(--dim);background:transparent}
+/* 描边绘在原1px边框内部，文字等宽视觉加粗：分档不增加尺寸、不移动文字。 */
+.lvtag.tgt.space,.lvtag.tgt.high{border-color:transparent;background:transparent}
+.lvtag.tgt.space::after,.lvtag.tgt.high::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none}
+.lvtag.tgt.space::after{border:1.5px solid var(--purple)}
+.lvtag.tgt.high{text-shadow:.2px 0 currentColor,-.2px 0 currentColor}
+.lvtag.tgt.high::after{border:1.5px solid var(--target-high)}
+.lvtag.tgt.bad{color:var(--dim);background:transparent;border:1px dashed var(--dim);text-shadow:none}
+.lvtag.tgt.bad::after,.lvtag.tgt.hit::after{content:none}
+.lvtag.tgt.hit{color:#fff;background:#8957e5;border:1px solid #8957e5;text-shadow:none}
 .tnote,.sig .tp{color:#c4a3ff}
-.fund-alert{margin-top:5px}
-.fund-detail{margin-top:0}
-.fund-detail summary{margin-left:0;padding:7px 9px;cursor:pointer;list-style:none;touch-action:manipulation}
-.fund-ack-line{margin-top:3px}
-.fund-ack-line[data-level="red"]{color:#ff8580}
-.fund-ack-line[data-level="yellow"]{color:#f0c674}
-.fund-ack-line.acked{color:var(--dim)}
-.fund-ack-line.acked .w{text-decoration:line-through;text-decoration-color:#5a6478}
-.fund-alert.acked .fund-detail summary{color:var(--dim);background:rgba(143,152,168,.1);border-color:rgba(143,152,168,.24)}
-.fund-detail summary::-webkit-details-marker{display:none}
-.fund-detail summary::after{content:"";display:inline-block;margin-left:6px;
-  border:4px solid transparent;border-top-color:currentColor;transform:translateY(2px)}
-.fund-detail[open] summary::after{transform:translateY(-2px) rotate(180deg)}
-.fund-detail summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:3px}
-.fund-body{margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:6px;
-  font-size:12px;font-weight:400;line-height:1.6;overflow-wrap:anywhere}
-.fund-body ul{margin:4px 0 0;padding-left:16px}
 .sig{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
 .signal-magenta{color:#ef8de4} .signal-red{color:#ff8580} .signal-yellow{color:#f0c674} .signal-cyan{color:#4dd0e1}
 .group-bottom{padding:0;margin:0 -4px -6px;border-top:1px solid var(--line);text-align:center;line-height:0}
 .collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);
   display:flex;align-items:center;justify-content:center;box-sizing:border-box;
-  background:transparent;border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
+  background:var(--collapse-bg);border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
 .collapse-group .collapse-icon{font-size:16px;line-height:1}
-.collapse-group:hover{color:var(--text);background:transparent}
+.collapse-group:hover{color:var(--text);background:var(--collapse-bg)}
 .collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts{border:1px solid #6686c6;box-shadow:inset 3px 0 0 #8fb8f0;background:#182131}
+#signalCounts{border:1px solid #6686c6;box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}
 #signalCounts>summary{color:#bfd5ff}
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 #signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
@@ -251,7 +547,6 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel.tone-red li::marker{color:var(--red)}
 #signalCounts .signal-members-panel.tone-yellow li::marker{color:var(--yellow)}
 #signalCounts .signal-members-panel.tone-purple li::marker{color:var(--purple)}
-/* 基本面也用上面那套 marker 圆点，不再单独画一个大的：整张统计表只有一种灯 */
 #signalCounts .text-only .signal-member-list li::marker{color:#9fa3aa}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
 #signalCounts .signal-member-direction{color:var(--dim);font-size:12px}
@@ -279,7 +574,7 @@ tr:first-child td{border-top:none}
 #signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
 #signalCounts .text-only li{margin:5px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
 #signalCounts .gray-signal-row td:first-child{color:var(--dim)}
-/* 财报条件 / 紫灯条件：和基本面行一样——胶囊永远钉在第一排左侧不动，
+/* 财报条件 / 紫灯条件：胶囊永远钉在第一排左侧不动，
    标题(summary)始终在胶囊右边同一排，点开后名单只向下展开、占满整行宽度。
    胶囊绝对定位在行内，summary 用左内边距给它让位，所以名单区域不受胶囊影响。 */
 #signalCounts .signal-extra-row{--chip-w:72px;position:relative;display:block;padding:8px 12px 8px 5px;border-top:1px solid #465e87;background:#182130}
@@ -291,7 +586,29 @@ tr:first-child td{border-top:none}
 #signalCounts .purple-extra .text-only .signal-member-list{margin:0;padding:0 0 8.1px 18px}
 #signalCounts .purple-extra .text-only li{margin:5px 0;list-style:none}
 #signalCounts .purple-extra .text-only .signal-member-list{padding-left:2px}
+/* 空间/达到只用紧凑段落间距，覆盖浏览器 h5 的默认大外边距。 */
+#signalCounts .purple-extra .target-purple>h5{margin:6px 0 3px;font-size:13px;line-height:1.5}
+#signalCounts .purple-extra .target-purple .signal-member-list{padding-bottom:0}
+#signalCounts .purple-extra .target-purple li{margin:2px 0}
+#signalCounts .target-purple .note{display:inline;margin-left:6px}
+#signalCounts .target-purple .signal-member-direction{color:#c4a3ff}
+#signalCounts .target-purple .target-space-high .signal-member-direction,
+.group-card tr.pur-high .sig .tp{color:var(--target-high)}
 #signalCounts .purple-extra .text-only li>.signal-member-icon{margin:0 6px 0 0;color:#c4a3ff;font-size:14px}
+.tone-target-high{color:var(--target-high)}
+#signalCounts .tone-target-high,
+#signalCounts .purple-extra .text-only li>.signal-member-icon.tone-target-high,
+#signalCounts .purple-extra .text-only li>.signal-member-icon.target-space-high,
+#signalCounts .purple-extra .text-only .target-space-high>.signal-member-icon,
+#signalCounts .purple-extra .text-only .tone-target-high>.signal-member-icon,
+#signalCounts .purple-extra .text-only .text-only-kind.tone-target-high,
+#signalCounts .purple-extra .text-only .text-only-kind.target-space-high,
+#signalCounts .purple-extra .text-only>summary.tone-target-high,
+#signalCounts .purple-extra .text-only>summary.target-space-high,
+#signalCounts .signal-member-block h5.tone-target-high,
+#signalCounts .signal-member-block h5.target-space-high,
+#signalCounts .signal-member-block.tone-target-high h5,
+#signalCounts .signal-member-block.target-space-high h5{color:var(--target-high)}
 @media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:62px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{padding:0;font-size:12px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:12px;line-height:1.1}}
 tr[id^="s-"]{scroll-margin-top:64px}
 /* 闪烁只改 background-color：带 52 周条的行，灯条是用 background-image 画的，
@@ -405,7 +722,6 @@ td.px{text-align:center}
   .stk .px-price{font-size:14px}
   .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:10.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
   .stk td.sig{font-size:12.5px;line-height:1.45}
-  .stk .fund-detail summary{padding:6px 7px}
   .group-card>summary.grp,.macro-card>summary.grp{gap:5px;padding:12px 10px 12px 3px}
   .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
   .zone-card{margin:8px 0 10px}
@@ -413,24 +729,30 @@ td.px{text-align:center}
   .zone-card>summary .zone-name{font-size:14px}
   .stat-badge{min-width:16px;height:16px;padding:0 2px;font-size:12px}
 }
-.fund-context{margin-top:6px;color:var(--dim)}
 .up{color:var(--up)} .down{color:var(--down)}
 tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
 tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}
 tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}
 tr.gray td{color:var(--dim)}
 .group-card tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
-.group-card tr.pur td.sig{box-shadow:inset -2px 0 0 var(--purple);padding-right:12px}
+.group-card tr.pur td.sig{--pc:var(--purple);--pw:2px;--pstripe:linear-gradient(var(--pc),var(--pc));box-shadow:none;padding-right:12px;background-image:var(--pstripe);background-size:var(--pw) 100%;background-position:right bottom;background-repeat:no-repeat}
+.group-card tr.pur-space td.sig{--pc:var(--purple);--pw:2px;--pstripe:repeating-linear-gradient(to top,var(--pc) 0 10px,transparent 10px 18px)}
+.group-card tr.pur-high td.sig{--pc:var(--target-high);--pw:3px;--pstripe:repeating-linear-gradient(to top,var(--pc) 0 10px,transparent 10px 18px)}
+.group-card tr.pur-hit td.sig{--pc:var(--purple);--pw:2px;--pstripe:linear-gradient(var(--pc),var(--pc))}
 /* 有52周条的股票：左侧灯条顶部再减去整只股票高度（主行+位置条）的约15%（85%-6.1px，位置条行约22px），延伸覆盖自己的位置条、在条下方4px处结束，与上下股票留出空隙 */
 .stk tr:has(+tr.range52-row)>td{--lc:transparent;--lw:0px}
 .stk tr.red:has(+tr.range52-row)>td:first-child{--lc:var(--red);--lw:6px}
 .stk tr.yellow:has(+tr.range52-row)>td:first-child{--lc:var(--yellow);--lw:4px}
 .stk tr.green:has(+tr.range52-row)>td:first-child{--lc:var(--green);--lw:2px}
 .stk tr:has(+tr.range52-row)>td:first-child{box-shadow:none;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom;background-repeat:no-repeat}
-.stk tr.pur:has(+tr.range52-row)>td.sig{box-shadow:none;background-image:linear-gradient(var(--purple),var(--purple));background-size:2px calc(85% - 2.1px);background-position:right bottom;background-repeat:no-repeat}
-.stk tr.range52-row>td{--lc:transparent;--lw:0px;--pc:transparent;--pw:0px;background-image:linear-gradient(var(--lc),var(--lc)),linear-gradient(var(--pc),var(--pc));background-size:var(--lw) 18px,var(--pw) 18px;background-position:left top,right top;background-repeat:no-repeat}
+.stk tr.pur:has(+tr.range52-row)>td.sig{background-image:var(--pstripe);background-size:var(--pw) calc(85% - 2.1px);background-position:right bottom;background-repeat:no-repeat}
+/* 长划线10px、间隔8px，参考图的长段节奏；下段18px正好一个周期，与上段同向且锚定底部，跨行接缝不断拍。 */
+.stk tr.range52-row>td{--lc:transparent;--lw:0px;--pc:transparent;--pw:0px;--pstripe:linear-gradient(var(--pc),var(--pc));background-image:linear-gradient(var(--lc),var(--lc)),var(--pstripe);background-size:var(--lw) 18px,var(--pw) 18px;background-position:left top,right top;background-repeat:no-repeat}
 .stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px} .stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}
 .stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px} .stk tr.pur+tr.range52-row>td{--pc:var(--purple);--pw:2px}
+.stk tr.pur-space+tr.range52-row>td{--pc:var(--purple);--pw:2px;--pstripe:repeating-linear-gradient(to top,var(--pc) 0 10px,transparent 10px 18px)}
+.stk tr.pur-high+tr.range52-row>td{--pc:var(--target-high);--pw:3px;--pstripe:repeating-linear-gradient(to top,var(--pc) 0 10px,transparent 10px 18px)}
+.stk tr.pur-hit+tr.range52-row>td{--pc:var(--purple);--pw:2px;--pstripe:linear-gradient(var(--pc),var(--pc))}
 #macroCard tr.mh td{padding:5px 10px;font-size:12.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
 .macro-help{margin:8px 12px;color:var(--dim);font-size:13px;line-height:1.7}
 .macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
@@ -442,6 +764,8 @@ tr.gray td{color:var(--dim)}
 .page-notes .macro-help+ .macro-help{border-top:1px solid var(--line);padding-top:4px}
 .unit{display:block;font-size:11px;color:var(--dim);font-weight:400}
 .foot{color:var(--dim);font-size:12.5px;text-align:center;margin-top:22px;line-height:1.7}
+.foot a{color:#8ab4f8;text-decoration:none}
+.foot a:hover,.foot a:focus-visible{text-decoration:underline}
 .quiet{color:var(--dim);font-size:13px;padding:8px 12px 12px}
 .warn{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
   color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:14px}
@@ -480,7 +804,7 @@ tr.gray td{color:var(--dim)}
 .group-card>summary .rs-spy{margin-left:auto}
 .stat-count{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
 /* 持仓里的「长持仓」区：可折叠，默认展开；下方就是短持仓主体，所以底部要留出间距 */
-.zone-card{margin:10px 0 12px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.02)}
+.zone-card{margin:10px 0 12px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}
 .zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;
   list-style:none;touch-action:manipulation}
 .zone-card>summary::-webkit-details-marker{display:none}
@@ -589,7 +913,130 @@ tr.gray td{color:var(--dim)}
 .reference-alert[data-level="gray"] .reference-conclusion{color:var(--dim)}
 .local-preview-banner{padding:11px 14px;border:1px solid rgba(107,163,240,.35);border-radius:10px;background:rgba(107,163,240,.08);color:#8fb8f0;font-size:13px;margin:14px 0}
 """
-PAGE_INTERACTION_JS = r"""
+
+# 主页面将此块放在现有 rules/cost CSS 之后，避免旧规则样式覆盖紧凑版。
+RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:#bfd5ff;font-size:13px;font-weight:600;touch-action:manipulation}
+#fedRules[open]>summary,#fedGlossary[open]>summary,details.card[open]:has(>.rules-body)>summary{border-bottom:1px solid var(--line)}
+#fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:-2px}
+.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body section+section{margin-top:16px;padding-top:4px;border-top:1px solid var(--line)}
+.card .rules-body h4{margin:6px 0 8px;color:#bfd5ff;font-size:12.5px;font-weight:600}
+.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}
+.card .rules-body p{margin:4px 0;color:var(--dim);font-size:12px;line-height:1.65}
+.card .rules-body ul{margin:4px 0 8px;padding-left:18px}
+.card .rules-body li{margin:3px 0;color:var(--dim);font-size:12px;line-height:1.65}
+.card .rules-body .rule-group{color:#8fb8f0}
+.card .rules-body a{color:#8fb8f0;text-underline-offset:3px}
+.card .rules-body a:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
+.card .rules-body .lamp-red,.card .rules-body .lamp-sig-red{color:#ff8580;font-weight:600}
+.card .rules-body .lamp-yellow,.card .rules-body .lamp-sig-yellow{color:#f0c674;font-weight:600}
+.card .rules-body .lamp-purple{color:#c4a3ff;font-weight:600}
+.card .rules-body .tone-target-high{color:var(--target-high);font-weight:600}
+.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid var(--line);font-size:12px}
+.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--line);text-align:left;vertical-align:top;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body .rule-table th{color:var(--text);font-weight:600;background:rgba(143,184,240,.04)}
+.card .rules-body .rule-table th.lamp-red{color:#ff8580}
+.card .rules-body .rule-table th.lamp-yellow{color:#f0c674}
+.card .rules-body .signal-term{display:inline-block;white-space:nowrap;overflow-wrap:normal}
+.card .rules-body .dir-arrow{display:inline-block;vertical-align:-4px;margin-left:2px;overflow:visible}
+.card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
+.card .rules-body .rule-anchor{display:block;height:0}
+@media(max-width:520px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}}
+#signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
+#signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
+#signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:#dce1e9}
+#signalRulesBody h5.rule-original,#signalRulesBody .rule-layout-heading,#glossaryRulesBody h5{margin:14px 0 4px}
+#signalRulesBody .rule-layout-scope{margin:1px 0;line-height:1.5;color:#dce1e9}
+#signalRulesBody h4.rule-original{margin:18px 0 7px}
+.card .rules-body .signal-term{display:inline-flex;align-items:center;vertical-align:baseline;white-space:nowrap;gap:1px}
+.card .rules-body .dir-arrow{display:inline-block;flex:none;width:auto;height:18px;vertical-align:middle}
+#signalRulesBody .nav-gray{color:#adb5c2}
+#signalRulesBody .rule-cross-nav{display:flex;gap:3px 14px;flex-wrap:wrap;margin:0 0 3px;line-height:1.5}
+#signalRulesBody a.rule-jump,#glossaryRulesBody a.rule-jump{color:#8795a7;font-size:11.5px;font-weight:400;text-decoration:underline dotted;text-underline-offset:3px}
+#signalRulesBody .rule-cross-link{display:inline-block;padding:1px 0;min-height:22px;box-sizing:border-box}
+#signalRulesBody a.rule-jump:hover,#glossaryRulesBody a.rule-jump:hover{color:#b2becf}
+#signalRulesBody a.rule-jump:focus-visible,#glossaryRulesBody a.rule-jump:focus-visible{outline:2px solid #bfd5ff;outline-offset:3px;border-radius:3px}
+#signalRulesBody .rule-entry.nav-hit,#glossaryRulesBody .glossary-entry.nav-hit{background:#213048;box-shadow:inset 3px 0 #bfd5ff,0 0 0 1px #49648a}
+#signalRulesBody .rule-entry:focus{outline:1px solid #49648a}
+#glossaryRulesBody p{margin:2px 0;line-height:1.5;color:#dce1e9}
+#glossaryRulesBody .rule-table{margin:6px 0 8px}
+#glossaryRulesBody .rule-table th,#glossaryRulesBody .rule-table td{line-height:1.5}
+#glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:#f0c674}
+#glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:#ff8580}
+#glossary-chg-table td,#glossary-amp-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
+@media(max-width:600px){#signalRulesBody .rule-cross-link{min-height:30px;padding:4px 0}#signalRulesBody .rule-cross-nav{gap:3px 12px}}
+@media(prefers-reduced-motion:reduce){#signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{transition:none}}
+"""
+PAGE_CSS += RULES_CSS
+
+# 单独导出供 monitor 替换旧锚点处理器；PAGE_INTERACTION_JS 已含此块，勿重复追加。
+RULES_INTERACTION_JS = r"""
+let activeRuleEntry = null;
+let ruleHighlightTimer = null;
+function revealRuleAnchor(hash) {
+  if (!hash || hash.charAt(0) !== "#") return false;
+  let id;
+  try { id = decodeURIComponent(hash.slice(1)); } catch (error) { return false; }
+  if (id === "complete-rules") id = "signalRules";
+  const target = document.getElementById(id);
+  if (!target || (!target.closest(".rules-body") &&
+      !target.querySelector(":scope > .rules-body") && target.id !== "marketRiskRules")) return false;
+  for (let node = target; node; node = node.parentElement) {
+    if (node.tagName === "DETAILS") node.open = true;
+  }
+  const entry = target.closest("#signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry");
+  if (entry) {
+    if (activeRuleEntry) activeRuleEntry.classList.remove("nav-hit");
+    window.clearTimeout(ruleHighlightTimer);
+    activeRuleEntry = entry;
+    entry.classList.add("nav-hit");
+    ruleHighlightTimer = window.setTimeout(function() {
+      entry.classList.remove("nav-hit");
+      if (activeRuleEntry === entry) activeRuleEntry = null;
+    }, 2600);
+  }
+  requestAnimationFrame(function() {
+    const destination = entry || target;
+    destination.scrollIntoView({block: "start", behavior: "auto"});
+    destination.setAttribute("tabindex", "-1");
+    destination.focus({preventScroll: true});
+  });
+  return true;
+}
+let ruleAnchorsInitialized = false;
+function initRuleAnchors() {
+  const bar = document.querySelector(".runbar");
+  if (bar && !bar.querySelector('a[href="#signalRules"]')) {
+    const shortcut = document.createElement("a");
+    shortcut.className = "btnlink rule-jump";
+    shortcut.href = "#signalRules";
+    shortcut.textContent = "预警规则";
+    bar.appendChild(shortcut);
+  }
+  if (!ruleAnchorsInitialized) {
+    document.addEventListener("click", function(event) {
+      if (!(event.target instanceof Element) || event.defaultPrevented ||
+          event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      const link = event.target.closest('a[href^="#"]');
+      if (!link) return;
+      const hash = link.getAttribute("href");
+      if (!revealRuleAnchor(hash)) return;
+      event.preventDefault();
+      if (window.location.hash !== hash) history.pushState(null, "", hash);
+    });
+    window.addEventListener("hashchange", function() { revealRuleAnchor(window.location.hash); });
+    window.addEventListener("pageshow", function() { revealRuleAnchor(window.location.hash); });
+    ruleAnchorsInitialized = true;
+  }
+  revealRuleAnchor(window.location.hash);
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initRuleAnchors, {once: true});
+} else {
+  initRuleAnchors();
+}
+"""
+PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
 function revealSignalPanel(panel) {
   // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从清单开头对齐。
   var pad = 12;
@@ -781,7 +1228,7 @@ function renderSignalFilter() {
   });
   box.append(list);
 }
-window.addEventListener("mm:fund-ack-change", renderSignalFilter);
+window.addEventListener("mm:ack-change", renderSignalFilter);
 document.addEventListener("click", function(event) {
   if (!(event.target instanceof Element)) return;
   const closeButton = event.target.closest(".collapse-group");

@@ -11,23 +11,19 @@ import uuid
 
 
 SCHEMA_VERSION = 2
-ENTRY_SECTIONS = frozenset(("fundamental", "earnings", "consensus"))
+ENTRY_SECTIONS = frozenset(("earnings", "consensus"))
 EPOCH = "1970-01-01T00:00:00+00:00"
 ATTEMPT_FIELDS = {
-    "fundamental": {"attempted", "fetch_error", "error", "error_kind", "error_sources",
-                    "retry_after", "next_retry", "failures"},
     "earnings": {"status", "attempted", "official_attempted", "official_error", "error", "next_retry", "retry"},
     "consensus": {"s", "try", "why", "failures", "next_retry", "kind", "retryable_block"},
 }
 EVENT_FIELDS = {
-    "fundamental": {"event_date", "event_done", "event_base", "event_checked"},
     "earnings": set(),
     "consensus": {"ne", "earn_pending"},
 }
 AUX_FIELDS = {
     "nfci_cache": ("rows", "source", "checked_at", "result"),
     "earnings": ("data", "events"),
-    "fundamental": ("data",),
     "consensus": ("source", "data", "quota"),
     # oil 含当轮行情，不能随辅助缓存回灌。
     "reference_alerts": ("policy",),
@@ -152,18 +148,17 @@ def _parts(name, entry):
 
 def _own_stamp(name, aspect, entry):
     if aspect == "events":
-        keys = ("event_checked",) if name == "fundamental" else ()
+        keys = ()
     elif aspect == "facts":
         keys = ("r",) if name == "consensus" else ("fetched", "official_checked")
     else:
-        keys = {"fundamental": ("attempted",),
-                "earnings": ("attempted", "official_attempted"),
+        keys = {"earnings": ("attempted", "official_attempted"),
                 "consensus": ("try",)}[name]
         explicit = [_entry_stamp(entry.get(k)) for k in keys]
         if any(s is not None for s in explicit):
             return max(s for s in explicit if s is not None)
-        failed = (entry.get("fetch_error") or entry.get("official_error")
-                  or entry.get("s") == "fail" or entry.get("status") == "error")
+        failed = (entry.get("official_error") or entry.get("s") == "fail"
+                  or entry.get("status") == "error")
         # 失败记录的 fetched/r 是上次成功时间，不能拿来压低本轮失败版本。
         # 有新元数据时用本轮观测；旧缓存缺尝试时间时不凭 section 时间猜测。
         keys = () if failed else (("r",) if name == "consensus" else ("fetched",))
@@ -205,20 +200,6 @@ def _merge_events(name, left, right, preferred):
         pending = _dates(left.get("earn_pending")) | _dates(right.get("earn_pending"))
         if pending:
             out["earn_pending"] = sorted(pending)
-    elif name == "fundamental":
-        done = max(_dates([left.get("event_done"), right.get("event_done")]), default="")
-        if done:
-            out["event_done"] = done
-        candidates = [e for e in (left, right) if _date(e.get("event_date"))
-                      and _date(e["event_date"]).isoformat() > done]
-        for key in ("event_date", "event_base", "event_checked"):
-            out.pop(key, None)
-        if candidates:
-            event = min(e["event_date"] for e in candidates)
-            matches = [e for e in candidates if e["event_date"] == event]
-            selected = max(matches, key=lambda e: (
-                _entry_stamp(e.get("event_checked")) or _stamp(EPOCH), e == preferred))
-            out.update({k: selected[k] for k in ("event_date", "event_base", "event_checked") if k in selected})
     return out
 
 
@@ -229,20 +210,11 @@ def _merge_entry(name, left, right, left_meta=None, right_meta=None):
     for aspect in ("facts", "attempt", "events"):
         use_right = _rank(aspect, rm) >= _rank(aspect, lm)
         if aspect == "facts":
-            # 缺少成功内容的失败记录不能删除旧事实；有效报告期永不倒退。
+            # 缺少成功内容的失败记录不能删除旧事实。
             if not rp[aspect] and lp[aspect]:
                 use_right = False
             elif not lp[aspect] and rp[aspect]:
                 use_right = True
-            if name == "fundamental":
-                periods = []
-                for entry in (left, right):
-                    data = entry.get("data")
-                    period = _date(data.get("period")) if isinstance(data, dict) else None
-                    fetched = _entry_stamp(entry.get("fetched"))
-                    periods.append(period if period and (not fetched or period <= fetched.date()) else None)
-                if periods[0] != periods[1]:
-                    use_right = periods[1] is not None and (periods[0] is None or periods[1] > periods[0])
         part = copy.deepcopy(rp[aspect] if use_right else lp[aspect])
         meta = copy.deepcopy(rm[aspect] if use_right else lm[aspect])
         if aspect == "events":
@@ -342,6 +314,7 @@ class RuntimeState:
     def load_previous(self, status):
         status = status if isinstance(status, dict) else {}
         previous = copy.deepcopy(status)
+        previous.pop("fundamental", None)
         cache = _read_object(self.cache_path)
         compatible_cache = _version(cache.get("schema_version")) and _stamp(cache.get("asof"))
         cached = cache.get("sections") if compatible_cache else None

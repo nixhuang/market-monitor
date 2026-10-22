@@ -37,7 +37,7 @@
     "APH": {
       "note": "安费诺",
       "hold": "long",
-      "cost": 79.2
+      "cost": 78.94
     },
     "AVGO": {
       "note": "博通",
@@ -47,12 +47,12 @@
     "CRSP": {
       "note": "CRISPR-基因编辑",
       "hold": "short",
-      "cost": 46.36
+      "cost": 46.92
     },
     "GOOGL": {
       "note": "谷歌（Alphabet）",
       "hold": "long",
-      "cost": 338.91
+      "cost": 337.54
     },
     "LMT": {
       "note": "洛克希德马丁",
@@ -108,6 +108,11 @@
       "note": "恩智浦半导体",
       "hold": "short",
       "cost": 220.0
+    },
+    "PDD": {
+      "note": "拼多多",
+      "hold": "short",
+      "cost": 79
     }
   },
   "focus": {
@@ -122,9 +127,6 @@
     },
     "MA": {
       "note": "万事达"
-    },
-    "PDD": {
-      "note": "拼多多"
     },
     "V": {
       "note": "Visa-支付"

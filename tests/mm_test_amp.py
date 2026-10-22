@@ -1,5 +1,6 @@
 """日内振幅规则 + 首页布局改版 测试"""
 import hashlib
+import html
 import re
 import os
 import sys
@@ -72,7 +73,8 @@ if m:
     check('runLight' not in bar, "灯已从第三排移走")
 styles = ''.join(re.findall(r'<style>(.*?)</style>', page, re.S))
 check(monitor.PAGE_CSS == page_assets.PAGE_CSS and '.statusrow{' in page_assets.PAGE_CSS
-      and page_assets.PAGE_CSS in styles, "statusrow 共用样式已实际嵌入页面")
+      and page_assets.PAGE_CSS.removesuffix(page_assets.RULES_CSS) in styles
+      and styles.count(page_assets.RULES_CSS) == 1, "statusrow 共用样式完整嵌入且规则样式只一份")
 check('改自选清单' not in page, "旧的「改自选清单」已删除")
 # 脚本内容 hash 代替手工日期版本号；独立计算期望值，避免只验证同一个 helper 自洽。
 content = (Path(ROOT) / 'run-status.js').read_bytes().replace(b'\r\n', b'\n')
@@ -88,9 +90,40 @@ with patch.dict(monitor.S, {'amp_yellow': 3.0, 'amp_red': 9.0}), \
         patch.object(monitor, '_cost_panel_assets', return_value=('', '')):
     changed_page = monitor.render({}, [], 0)
     changed_rules = page_assets.rules_template(monitor.S, monitor._rule_constants())
-check(changed_rules in changed_page and '振幅 ≥ <b>9%</b>' in changed_rules
-      and '≥ <b>3%</b> <span class="lamp-yellow">黄</span>' in changed_rules,
-      "覆盖振幅阈值后，共用说明和实际首页同步更新")
+check(changed_rules in changed_page,
+      "覆盖振幅阈值后，实际首页仍完整嵌入最新双模板")
+# 独立固定三档数值，精确检查两表的标题、列序与全部行，避免生成器自证。
+for label, rendered, expected_amp in (
+        ('默认', page, [['低 ×0.6', '≥3%', '≥4.8%'],
+                        ['中 ×1', '≥5%', '≥8%'], ['高 ×1.4', '≥7%', '≥11.2%']]),
+        ('覆盖3%／9%', changed_page, [['低 ×0.6', '≥1.8%', '≥5.4%'],
+                                    ['中 ×1', '≥3%', '≥9%'], ['高 ×1.4', '≥4.2%', '≥12.6%']])):
+    rules_matches = re.findall(r'<template id="rulesTpl">(.*?)</template>', rendered, re.S)
+    glossary_matches = re.findall(r'<template id="glossaryTpl">(.*?)</template>', rendered, re.S)
+    check(len(rules_matches) == len(glossary_matches) == 1, label + '：两模板各出现一次')
+    rules = rules_matches[0] if len(rules_matches) == 1 else ''
+    glossary = glossary_matches[0] if len(glossary_matches) == 1 else ''
+    sections = re.findall(r'<section id="glossary-calculation">(.*?)</section>', glossary, re.S)
+    check(len(sections) == 1, label + '：阈值表位于唯一名词计算区')
+    calculation = sections[0] if len(sections) == 1 else ''
+    for kind, expected_rows in (
+            ('chg', [['低 ×0.6', '≥1.2%', '≥2.4%'],
+                     ['中 ×1', '≥2%', '≥4%'], ['高 ×1.4', '≥2.8%', '≥5.6%']]),
+            ('amp', expected_amp)):
+        ident = 'glossary-' + kind + '-table'
+        pattern = r'<table\b[^>]*\bid="' + ident + r'"[^>]*>(.*?)</table>'
+        tables = re.findall(pattern, calculation, re.S)
+        check(len(tables) == 1 and rendered.count('id="' + ident + '"') == 1,
+              label + '：' + ident + ' 仅在名词区出现一次')
+        table = tables[0] if len(tables) == 1 else ''
+        cells = [[html.unescape(re.sub(r'<[^>]+>', '', cell)).strip()
+                  for cell in re.findall(r'<t[hd]\b[^>]*>(.*?)</t[hd]>', row, re.S)]
+                 for row in re.findall(r'<tr\b[^>]*>(.*?)</tr>', table, re.S)]
+        check(cells == [['波动档位', '黄灯', '红灯'], *expected_rows],
+              label + '：' + ident + ' 列序及三档全部阈值精确匹配')
+        check('id="' + ident + '"' not in rules and
+              rules.count('href="#' + ident + '"') == 1,
+              label + '：预警区不重复阈值表且唯一跳转到' + ident)
 
 print()
 if fails:

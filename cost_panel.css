@@ -233,6 +233,19 @@
 .cost-mini input{width:100%;min-width:0;background:#0d121b;border:1px solid #2a3342;color:var(--text);
   border-radius:6px;padding:2px 5px;font-size:12px;text-align:center;font-variant-numeric:tabular-nums}
 .cost-mini input:focus{outline:none;border-color:#8fb8f0}
+/* 双现金仅改变编辑态；空框按0，平时保持一笔现金总额。 */
+.cost-mini.cash-edit{grid-template-columns:minmax(48px,1fr) minmax(0,3fr) 52px;gap:0 10px}
+.cost-mini.cash-edit>.c-cost,.cost-mini.cash-edit>.t-pnl{display:none}
+.cost-mini.cash-edit>.t-mv{grid-column:2}
+.cost-mini.cash-edit>.t-wt{grid-column:3}
+.cash-inputs{display:flex;align-items:flex-end;gap:6px}
+.cash-inputs label{display:block;flex:1;min-width:0}
+.cash-inputs label>span{display:block;font-size:10.5px;color:var(--dim);margin-bottom:3px}
+.cash-inputs input{box-sizing:border-box}
+.cash-plus{color:var(--dim);padding-bottom:4px}
+.cash-total{display:block;font-size:11px;color:var(--dim);margin-top:3px}
+@media(max-width:560px){.cost-mini.cash-edit{grid-template-columns:38px minmax(0,1fr) 32px;gap:0 6px}}
+
 
 /* ===== 当日盈亏贡献：只看今天谁在赚、谁在亏（总盈亏券商里能看到，这里不重复） ===== */
 .blk-pnl{border-color:rgba(143,184,240,.24)}
@@ -412,6 +425,7 @@
 .cost-colhead .sortable .arw{font-size:9px;margin-left:2px;opacity:.9}
 
 /* ===== 4. 「无异动」展开时同样高亮 ===== */
+.quiet-list[hidden]{display:none}
 .quiet-list[open]>summary{
   background:linear-gradient(90deg,rgba(143,184,240,.18),rgba(143,184,240,.04) 72%,transparent);
   box-shadow:inset 3px 0 0 #8fb8f0;color:#bfd5ff}

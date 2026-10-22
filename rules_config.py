@@ -1,9 +1,7 @@
-"""设置的单一 schema；基本面定义沿用 fundamentals，不读写用户配置。"""
+"""设置的单一 schema，不读写用户配置。"""
 import math
 import re
 from datetime import date
-
-from fundamentals import FUND_DEFAULT, FUND_LIMITS, settings_overrides
 
 
 def _number(default, lo, hi, *, integer=False, exclude=(), order=None):
@@ -22,7 +20,8 @@ SETTING_SCHEMA = {
     "near_52w_low_pct": _number(1.0, 0, 100),
     "trigger_gap_pct": _number(5.0, 0, 100),
     "reduce_gap_pct": _number(3.0, 0, 100),
-    "target_space_pct": _number(50.0, 0, 1000),
+    "target_space_pct": _number(30.0, 30, 30),
+    "target_high_space_pct": _number(70.0, 70, 70),
     "target_gap_pct": _number(3.0, 0, 100),
     "vol_ratio": _number(1.5, 0.1, 100, order=("volume", 0)),
     "vol_ratio_red": _number(3.0, 0.1, 100, order=("volume", 1)),
@@ -42,12 +41,6 @@ SETTING_SCHEMA = {
     "dca_start": {"default": "", "type": "date"},
     "signal_single_open": _number(1, 0, 1, integer=True),
 }
-# 不复制基本面默认/边界，避免覆盖另一个模块已经完成的配置接入。
-SETTING_SCHEMA.update({key: _number(value, *FUND_LIMITS[key],
-    integer=key in ("fund_enable", "fund_report_grace_days"),
-    order=("fund_revenue", ("fund_rev_red", "fund_rev_yellow").index(key))
-    if key in ("fund_rev_red", "fund_rev_yellow") else None)
-    for key, value in FUND_DEFAULT.items()})
 
 DEFAULT_SETTINGS = {key: spec["default"] for key, spec in SETTING_SCHEMA.items()}
 SETTING_LIMITS = {key: spec["limits"] for key, spec in SETTING_SCHEMA.items() if "limits" in spec}
@@ -117,10 +110,11 @@ def resolve_settings(overrides, warn):
     if not isinstance(overrides, dict):
         raise ValueError("settings.json 顶层不是对象")
     values = dict(DEFAULT_SETTINGS)
-    values.update(settings_overrides(overrides, warn))
     for key, value in overrides.items():
         if str(key).startswith("fund_"):
-            continue  # 保留基本面模块的字段校验、顺序修复与明确警告。
+            continue  # 退役配置只忽略，不恢复默认项或触发配置写入。
+        if key == "target_space_pct" and not isinstance(value, bool) and value == 50:
+            continue  # 旧空间门槛静默忽略；固定30，不触发维护或配置写入。
         if key == "dca_start" and isinstance(value, str):
             value = value.strip()
         reason = setting_error(key, value)

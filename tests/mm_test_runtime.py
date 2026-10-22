@@ -46,13 +46,13 @@ class TemporaryBase(unittest.TestCase):
 
 class CacheTests(TemporaryBase):
     def test_newer_status_wins_and_missing_symbols_survive(self):
-        self.save_cache(self.cache("fundamental", {"data": {"AAA": {"fetched": "old"}, "BBB": {"next_retry": "later"}}}))
-        status = {"finished_at": NEW, "fundamental": {"data": {"AAA": {"fetched": "new"}}},
+        self.save_cache(self.cache("earnings", {"data": {"AAA": {"fetched": "old"}, "BBB": {"next_retry": "later"}}}))
+        status = {"finished_at": NEW, "earnings": {"data": {"AAA": {"fetched": "new"}}},
                   "risk_quotes": {"value": 7}, "summary": {"total": 5}}
         original = copy.deepcopy(status)
         previous = rt.RuntimeState(self.base).load_previous(status)
-        self.assertEqual(previous["fundamental"]["data"]["AAA"], {"fetched": "new"})
-        self.assertEqual(previous["fundamental"]["data"]["BBB"], {"next_retry": "later"})
+        self.assertEqual(previous["earnings"]["data"]["AAA"], {"fetched": "new"})
+        self.assertEqual(previous["earnings"]["data"]["BBB"], {"next_retry": "later"})
         self.assertEqual(previous["risk_quotes"], status["risk_quotes"])
         self.assertEqual(previous["summary"], status["summary"])
         self.assertEqual(status, original)
@@ -65,10 +65,10 @@ class CacheTests(TemporaryBase):
         self.assertEqual(previous["earnings"]["data"]["AAA"]["status"], "error")
 
     def test_section_asof_takes_precedence_over_status_finished_at(self):
-        self.save_cache(self.cache("fundamental", {"data": {"AAA": {"source": "cache"}}}, OLD))
+        self.save_cache(self.cache("earnings", {"data": {"AAA": {"source": "cache"}}}, OLD))
         previous = rt.RuntimeState(self.base).load_previous({"finished_at": "2026-10-17T00:00:00Z",
-            "fundamental": {"schema_version": 1, "asof": NEW, "data": {"AAA": {"source": "status"}}}})
-        self.assertEqual(previous["fundamental"]["data"]["AAA"]["source"], "status")
+            "earnings": {"schema_version": 1, "asof": NEW, "data": {"AAA": {"source": "status"}}}})
+        self.assertEqual(previous["earnings"]["data"]["AAA"]["source"], "status")
 
     def test_equal_asof_prefers_status(self):
         self.save_cache(self.cache("earnings", {"data": {"AAA": {"status": "error"}}}, NEW))
@@ -121,13 +121,69 @@ class CacheTests(TemporaryBase):
 
     def test_checkpoints_preserve_inactive_symbols_and_failures(self):
         runtime = rt.RuntimeState(self.base)
-        runtime.load_previous({"finished_at": OLD, "fundamental": {
-            "data": {"AAA": {"fetched": OLD}, "BBB": {"next_retry": NEW, "fetch_error": True}}}})
-        runtime.checkpoint("fundamental", {"data": {"AAA": {"fetched": NEW}}})
-        runtime.checkpoint("fundamental", {"data": {}})
+        runtime.load_previous({"finished_at": OLD, "earnings": {
+            "data": {"AAA": {"fetched": OLD}, "BBB": {"next_retry": NEW, "status": "error"}}}})
+        runtime.checkpoint("earnings", {"data": {"AAA": {"fetched": NEW}}})
+        runtime.checkpoint("earnings", {"data": {}})
         restarted = rt.RuntimeState(self.base).load_previous({})
-        self.assertEqual(restarted["fundamental"]["data"]["AAA"], {"fetched": NEW})
-        self.assertEqual(restarted["fundamental"]["data"]["BBB"]["next_retry"], NEW)
+        self.assertEqual(restarted["earnings"]["data"]["AAA"], {"fetched": NEW})
+        self.assertEqual(restarted["earnings"]["data"]["BBB"], {"next_retry": NEW, "status": "error"})
+
+    def test_legacy_status_fundamental_is_dropped_without_mutating_input(self):
+        earnings = {"data": {"AAA": {"status": "ok", "fetched": OLD, "date": "2026-10-23",
+                                      "official_attempted": TARGET, "official_error": "读取失败"}},
+                    "events": {"AAA": [TARGET]}}
+        consensus = {"data": {"AAA": {"s": "fail", "r": OLD, "avg": 20, "try": TARGET,
+                                       "next_retry": "2026-10-22", "ne": "2026-10-23", "earn_pending": [TARGET]}},
+                     "quota": {"date": TARGET, "symbols": ["AAA"], "retry_symbols": ["AAA"]}}
+        for fundamental in ({"data": {"LEGACY": {"fetched": NEW}}}, None, ["legacy"]):
+            with self.subTest(fundamental=fundamental):
+                status = {"finished_at": NEW, "fundamental": fundamental,
+                          "earnings": earnings, "consensus": consensus, "summary": {"total": 5}}
+                original = copy.deepcopy(status)
+                runtime = rt.RuntimeState(self.base)
+                previous = runtime.load_previous(status)
+                self.assertEqual(previous, {key: value for key, value in status.items() if key != "fundamental"})
+                self.assertEqual(status, original)
+                self.assertEqual(set(runtime.sections), {"earnings", "consensus"})
+
+    def test_legacy_cache_fundamental_is_not_migrated_or_written_back(self):
+        earnings = {"data": {"AAA": {"status": "ok", "fetched": OLD, "date": "2026-10-23",
+                                      "official_attempted": TARGET, "official_error": "读取失败"}},
+                    "events": {"AAA": [TARGET]}}
+        consensus = {"data": {"AAA": {"s": "fail", "r": OLD, "avg": 20, "try": TARGET,
+                                       "next_retry": "2026-10-22", "ne": "2026-10-23", "earn_pending": [TARGET]}},
+                     "quota": {"date": TARGET, "symbols": ["AAA"], "retry_symbols": ["AAA"]}}
+        for version in (1, rt.SCHEMA_VERSION):
+            with self.subTest(version=version):
+                cache = self.cache("fundamental", {"data": {"LEGACY": {"fetched": NEW}}}, NEW, version)
+                cache["schema_version"] = version
+                for name, value in (("earnings", earnings), ("consensus", consensus)):
+                    cache["sections"][name] = {"schema_version": version, "asof": OLD, "data": value}
+                self.save_cache(cache)
+                original = (self.base / ".cache/market-monitor.json").read_bytes()
+                runtime = rt.RuntimeState(self.base)
+                self.assertEqual(runtime.load_previous({}), {"earnings": earnings, "consensus": consensus})
+                self.assertEqual((self.base / ".cache/market-monitor.json").read_bytes(), original)
+                self.assertEqual(set(runtime.sections), {"earnings", "consensus"})
+                runtime.checkpoint("earnings", earnings)
+                rewritten = self.read(".cache/market-monitor.json")
+                self.assertEqual(set(rewritten["sections"]), {"earnings", "consensus"})
+                self.assertNotIn("fundamental", rewritten)
+                self.assertEqual(rt.RuntimeState(self.base).load_previous({}), {"earnings": earnings, "consensus": consensus})
+                self.assertTrue(rt.verify_checkpoint(self.base, rewritten["checkpoint"]["id"]))
+
+    def test_fundamental_is_not_an_allowed_checkpoint_section(self):
+        runtime = rt.RuntimeState(self.base)
+        runtime.checkpoint("earnings", {"events": {"AAA": [TARGET]}})
+        original = (self.base / ".cache/market-monitor.json").read_bytes()
+        sections = copy.deepcopy(runtime.sections)
+        for whitelist in (rt.ENTRY_SECTIONS, rt.ATTEMPT_FIELDS, rt.EVENT_FIELDS, rt.AUX_FIELDS):
+            self.assertNotIn("fundamental", whitelist)
+        with self.assertRaises(KeyError):
+            runtime.checkpoint("fundamental", {"data": {"LEGACY": {"fetched": NEW}}})
+        self.assertEqual(runtime.sections, sections)
+        self.assertEqual((self.base / ".cache/market-monitor.json").read_bytes(), original)
 
     def test_malformed_quota_lists_do_not_break_cache_recovery(self):
         self.save_cache(self.cache("consensus", {"quota": {"date": TARGET,
@@ -159,8 +215,8 @@ class EntryVersionTests(TemporaryBase):
                 return test.instant.astimezone(tz) if tz else test.instant.replace(tzinfo=None)
         self.stack.enter_context(patch.object(rt, "datetime", Clock))
 
-    def fund(self, fetched="2026-10-18", period="2026-06-30", **fields):
-        return {"fetched": fetched, "data": {"period": period, "revenue": 12}, **fields}
+    def earn(self, fetched="2026-10-18", date="2026-10-23", **fields):
+        return {"status": "ok", "fetched": fetched, "date": date, **fields}
 
     def restored(self, name, cached, saved, *, asof="2026-10-20T10:00:00Z"):
         self.save_cache(self.cache(name, {"data": {"AAA": cached}}, asof))
@@ -168,37 +224,37 @@ class EntryVersionTests(TemporaryBase):
             name: {"data": {"AAA": saved}}})[name]["data"]["AAA"]
 
     def test_checkpoint_other_symbol_never_promotes_old_facts(self):
-        self.save_cache(self.cache("fundamental", {"data": {"AAA": self.fund()}}))
+        self.save_cache(self.cache("earnings", {"data": {"AAA": self.earn()}}))
         runtime = rt.RuntimeState(self.base)
         runtime.load_previous({})
-        original_meta = copy.deepcopy(runtime.sections["fundamental"]["entry_meta"]["AAA"])
-        runtime.checkpoint("fundamental", {"data": {"BBB": self.fund("2026-10-20", "2026-09-30")}})
+        original_meta = copy.deepcopy(runtime.sections["earnings"]["entry_meta"]["AAA"])
+        runtime.checkpoint("earnings", {"data": {"BBB": self.earn("2026-10-20", "2026-10-25")}})
         cache = self.read(".cache/market-monitor.json")
-        self.assertEqual(cache["sections"]["fundamental"]["entry_meta"]["AAA"], original_meta)
-        status = {"finished_at": NEW, "fundamental": {"data": {"AAA": self.fund("2026-10-19", "2026-09-30")}}}
+        self.assertEqual(cache["sections"]["earnings"]["entry_meta"]["AAA"], original_meta)
+        status = {"finished_at": NEW, "earnings": {"data": {"AAA": self.earn("2026-10-19", "2026-10-24")}}}
         restarted = rt.RuntimeState(self.base)
         previous = restarted.load_previous(status)
-        self.assertEqual(previous["fundamental"]["data"]["AAA"], status["fundamental"]["data"]["AAA"])
-        self.assertIn("BBB", previous["fundamental"]["data"])
-        restarted.checkpoint("earnings", {"data": {}})
-        self.assertEqual(rt.RuntimeState(self.base).load_previous(status)["fundamental"]["data"]["AAA"]["data"]["period"], "2026-09-30")
+        self.assertEqual(previous["earnings"]["data"]["AAA"], status["earnings"]["data"]["AAA"])
+        self.assertIn("BBB", previous["earnings"]["data"])
+        restarted.checkpoint("consensus", {"data": {}})
+        self.assertEqual(rt.RuntimeState(self.base).load_previous(status)["earnings"]["data"]["AAA"]["date"], "2026-10-24")
 
     def test_unchanged_included_entry_does_not_advance_any_component(self):
         runtime = rt.RuntimeState(self.base)
-        first = runtime.checkpoint("fundamental", {"data": {"AAA": self.fund()}})
+        first = runtime.checkpoint("earnings", {"data": {"AAA": self.earn()}})
         metadata = copy.deepcopy(first["entry_meta"]["AAA"])
         self.instant = self.instant.replace(hour=13)
-        second = runtime.checkpoint("fundamental", {"data": {"AAA": self.fund(), "BBB": self.fund()}})
+        second = runtime.checkpoint("earnings", {"data": {"AAA": self.earn(), "BBB": self.earn()}})
         self.assertEqual(second["entry_meta"]["AAA"], metadata)
         self.assertNotEqual(first["asof"], second["asof"])
 
     def test_failed_refresh_updates_only_attempt_version(self):
         runtime = rt.RuntimeState(self.base)
-        first = runtime.checkpoint("fundamental", {"data": {"AAA": self.fund(attempted="2026-10-18")}})
+        first = runtime.checkpoint("earnings", {"data": {"AAA": self.earn(attempted="2026-10-18")}})
         self.instant = self.instant.replace(hour=13)
-        failure = self.fund(attempted="2026-10-20", fetch_error=True, error="离线失败", retry_after="2026-10-21",
-                            error_kind="timeout", error_sources=[{"source": "nasdaq", "kind": "timeout"}])
-        second = runtime.checkpoint("fundamental", {"data": {"AAA": failure}})
+        failure = self.earn(attempted="2026-10-20", status="error", error="离线失败", next_retry="2026-10-21",
+                            official_attempted="2026-10-20", official_error="读取失败", retry=2)
+        second = runtime.checkpoint("earnings", {"data": {"AAA": failure}})
         a, b = first["entry_meta"]["AAA"], second["entry_meta"]["AAA"]
         self.assertEqual(a["facts"], b["facts"])
         self.assertNotEqual(a["attempt"], b["attempt"])
@@ -206,126 +262,114 @@ class EntryVersionTests(TemporaryBase):
 
     def test_new_failure_without_attempt_date_uses_its_own_observation(self):
         runtime = rt.RuntimeState(self.base)
-        first = runtime.checkpoint("fundamental", {"data": {"AAA": self.fund()}})
+        first = runtime.checkpoint("earnings", {"data": {"AAA": self.earn()}})
         self.instant = self.instant.replace(hour=13)
-        runtime.checkpoint("fundamental", {"data": {"AAA": self.fund(fetch_error=True, retry_after="2026-10-22")}})
-        status = {"fundamental": {"data": {"AAA": self.fund("2026-10-19", "2026-09-30")}}}
-        actual = rt.RuntimeState(self.base).load_previous(status)["fundamental"]["data"]["AAA"]
+        runtime.checkpoint("earnings", {"data": {"AAA": self.earn(status="error", next_retry="2026-10-22")}})
+        status = {"earnings": {"data": {"AAA": self.earn("2026-10-19", "2026-10-24")}}}
+        actual = rt.RuntimeState(self.base).load_previous(status)["earnings"]["data"]["AAA"]
         self.assertEqual(actual["fetched"], "2026-10-19")
-        self.assertEqual(actual["data"]["period"], "2026-09-30")
-        self.assertTrue(actual["fetch_error"])
-        self.assertEqual(actual["retry_after"], "2026-10-22")
-        self.assertNotIn("fetch_error", first["data"]["AAA"])
+        self.assertEqual(actual["date"], "2026-10-24")
+        self.assertEqual(actual["status"], "error")
+        self.assertEqual(actual["next_retry"], "2026-10-22")
+        self.assertEqual(first["data"]["AAA"]["status"], "ok")
 
     def test_legacy_cache_ignores_section_time_and_prefers_entry_time(self):
-        older = self.fund("2026-10-18", "2026-09-30")
-        newer = self.fund("2026-10-19", "2026-09-30")
-        self.assertEqual(self.restored("fundamental", older, newer), newer)
-
-    def test_legacy_missing_metadata_valid_report_never_regresses(self):
-        for period in ("2026-06-30", "bad", "2026-12-31", "2026-02-30"):
-            with self.subTest(period=period):
-                cached = self.fund("2026-10-20", period)
-                status = self.fund("2026-10-19", "09/30/2026")
-                actual = self.restored("fundamental", cached, status)
-                self.assertEqual(actual["data"], status["data"])
-                self.assertEqual(actual["fetched"], status["fetched"])
-
-    def test_report_period_after_fetch_date_is_not_valid_evidence(self):
-        cached = self.fund("2026-06-01", "2026-09-30")
-        status = self.fund("2026-10-19", "2026-06-30")
-        self.assertEqual(self.restored("fundamental", cached, status)["data"], status["data"])
+        older = self.earn("2026-10-18", "2026-10-24")
+        newer = self.earn("2026-10-19", "2026-10-24")
+        self.assertEqual(self.restored("earnings", older, newer), newer)
 
     def test_new_status_facts_and_new_cache_attempt_are_merged_independently(self):
-        cached = self.fund(attempted="2026-10-20", fetch_error=True, error="限流", retry_after="2026-10-23",
-                           error_kind="http_error", error_sources=[{"status_code": 429}])
-        status = self.fund("2026-10-19", "2026-09-30", attempted="2026-10-19")
-        actual = self.restored("fundamental", cached, status)
-        self.assertEqual(actual["data"], status["data"])
+        cached = self.earn(attempted="2026-10-20", status="error", error="限流", next_retry="2026-10-23",
+                           official_attempted="2026-10-20", official_error="HTTP 429", retry=3)
+        status = self.earn("2026-10-19", "2026-10-24", attempted="2026-10-19")
+        actual = self.restored("earnings", cached, status)
+        self.assertEqual(actual["date"], status["date"])
         self.assertEqual(actual["fetched"], "2026-10-19")
         self.assertEqual(actual["attempted"], "2026-10-20")
-        self.assertEqual(actual["retry_after"], "2026-10-23")
-        self.assertEqual(actual["error_kind"], "http_error")
-        self.assertEqual(actual["error_sources"], [{"status_code": 429}])
-        self.assertTrue(actual["fetch_error"])
+        self.assertEqual(actual["next_retry"], "2026-10-23")
+        self.assertEqual(actual["official_attempted"], "2026-10-20")
+        self.assertEqual(actual["official_error"], "HTTP 429")
+        self.assertEqual(actual["retry"], 3)
+        self.assertEqual(actual["status"], "error")
 
     def test_new_cache_facts_keep_newer_status_failure(self):
-        cached = self.fund("2026-10-19", "2026-09-30", attempted="2026-10-19")
-        status = self.fund(attempted="2026-10-20", fetch_error=True, error="失败", retry_after="2026-10-21")
-        actual = self.restored("fundamental", cached, status)
-        self.assertEqual(actual["data"], cached["data"])
+        cached = self.earn("2026-10-19", "2026-10-24", attempted="2026-10-19")
+        status = self.earn(attempted="2026-10-20", status="error", error="失败", next_retry="2026-10-21")
+        actual = self.restored("earnings", cached, status)
+        self.assertEqual(actual["date"], cached["date"])
         self.assertEqual(actual["fetched"], cached["fetched"])
         self.assertEqual(actual["attempted"], status["attempted"])
-        self.assertTrue(actual["fetch_error"])
+        self.assertEqual(actual["status"], "error")
 
     def test_success_newer_than_failure_clears_error_and_retry(self):
-        cached = self.fund(attempted="2026-10-19", fetch_error=True, error="失败", retry_after="2026-10-29",
-                           error_kind="no_coverage", error_sources=[{"source": "nasdaq"}])
-        status = self.fund("2026-10-20", "2026-09-30", attempted="2026-10-20")
-        actual = self.restored("fundamental", cached, status)
+        cached = self.earn(attempted="2026-10-19", status="error", error="失败", next_retry="2026-10-29",
+                           official_attempted="2026-10-19", official_error="读取失败", retry=3)
+        status = self.earn("2026-10-20", "2026-10-24", attempted="2026-10-20")
+        actual = self.restored("earnings", cached, status)
         self.assertEqual(actual, status)
-        self.assertNotIn("retry_after", actual)
+        self.assertNotIn("next_retry", actual)
+        self.assertNotIn("official_error", actual)
 
     def test_no_success_failure_is_kept_with_existing_facts(self):
-        failure = {"attempted": "2026-10-20", "fetch_error": True, "retry_after": "2026-10-27"}
-        status = self.fund("2026-10-19", "2026-09-30")
-        actual = self.restored("fundamental", failure, status)
-        self.assertEqual(actual["data"], status["data"])
+        failure = {"attempted": "2026-10-20", "status": "error", "next_retry": "2026-10-27"}
+        status = self.earn("2026-10-19", "2026-10-24")
+        actual = self.restored("earnings", failure, status)
+        self.assertEqual(actual["date"], status["date"])
         self.assertEqual(actual["fetched"], status["fetched"])
-        self.assertEqual(actual["retry_after"], failure["retry_after"])
+        self.assertEqual(actual["next_retry"], failure["next_retry"])
 
     def test_merged_attempt_clock_does_not_change_with_chosen_facts(self):
-        self.save_cache(self.cache("fundamental", {"data": {"AAA": self.fund("2026-10-18", "2026-09-30")}}))
+        cached = self.earn("2026-10-18", "2026-10-24", official_checked="2026-10-20")
+        self.save_cache(self.cache("earnings", {"data": {"AAA": cached}}))
         runtime = rt.RuntimeState(self.base)
-        runtime.load_previous({"fundamental": {"data": {"AAA": self.fund("2026-10-19", "2026-06-30")}}})
-        metadata = runtime.sections["fundamental"]["entry_meta"]["AAA"]
-        self.assertEqual(metadata["facts"]["at"], "2026-10-18T00:00:00+00:00")
+        runtime.load_previous({"earnings": {"data": {"AAA": self.earn("2026-10-19")}}})
+        metadata = runtime.sections["earnings"]["entry_meta"]["AAA"]
+        self.assertEqual(metadata["facts"]["at"], "2026-10-20T00:00:00+00:00")
         self.assertEqual(metadata["attempt"]["at"], "2026-10-19T00:00:00+00:00")
-        runtime.checkpoint("fundamental", {"data": {"BBB": self.fund()}})
-        old_failure = self.fund(attempted="2026-10-18T12:00:00+00:00", fetch_error=True, retry_after="2026-10-28")
-        actual = rt.RuntimeState(self.base).load_previous({"fundamental": {"data": {"AAA": old_failure}}})["fundamental"]["data"]["AAA"]
-        self.assertEqual(actual["fetched"], "2026-10-18")
-        self.assertEqual(actual["data"]["period"], "2026-09-30")
-        self.assertNotIn("fetch_error", actual)
-        self.assertNotIn("retry_after", actual)
+        runtime.checkpoint("earnings", {"data": {"BBB": self.earn()}})
+        old_failure = self.earn(attempted="2026-10-18T12:00:00+00:00", status="error", next_retry="2026-10-28")
+        actual = rt.RuntimeState(self.base).load_previous({"earnings": {"data": {"AAA": old_failure}}})["earnings"]["data"]["AAA"]
+        self.assertEqual(actual, cached)
+        self.assertEqual(actual["status"], "ok")
+        self.assertNotIn("next_retry", actual)
 
     def test_retry_deadline_is_not_an_attempt_timestamp(self):
-        cached = self.fund(attempted="2026-10-18", fetch_error=True, retry_after="2026-11-30")
-        status = self.fund(attempted="2026-10-19", fetch_error=True, retry_after="2026-10-21")
-        self.assertEqual(self.restored("fundamental", cached, status)["retry_after"], "2026-10-21")
+        cached = self.earn(attempted="2026-10-18", status="error", next_retry="2026-11-30")
+        status = self.earn(attempted="2026-10-19", status="error", next_retry="2026-10-21")
+        self.assertEqual(self.restored("earnings", cached, status)["next_retry"], "2026-10-21")
 
     def test_same_day_fail_then_success_uses_component_metadata(self):
         runtime = rt.RuntimeState(self.base)
-        failure = self.fund("2026-10-20", "2026-09-30", attempted="2026-10-20", fetch_error=True, retry_after="2026-10-21")
-        first = runtime.checkpoint("fundamental", {"data": {"AAA": failure}})
+        failure = self.earn("2026-10-20", "2026-10-24", attempted="2026-10-20", status="error", next_retry="2026-10-21")
+        first = runtime.checkpoint("earnings", {"data": {"AAA": failure}})
         old_cache = copy.deepcopy(self.read(".cache/market-monitor.json"))
         self.instant = self.instant.replace(hour=13)
-        success = self.fund("2026-10-20", "2026-09-30", attempted="2026-10-20")
-        second = runtime.checkpoint("fundamental", {"data": {"AAA": success}})
+        success = self.earn("2026-10-20", "2026-10-24", attempted="2026-10-20")
+        second = runtime.checkpoint("earnings", {"data": {"AAA": success}})
         self.save_cache(old_cache)
-        actual = rt.RuntimeState(self.base).load_previous({"fundamental": second})["fundamental"]["data"]["AAA"]
+        actual = rt.RuntimeState(self.base).load_previous({"earnings": second})["earnings"]["data"]["AAA"]
         self.assertEqual(actual, success)
         self.assertNotEqual(first["entry_meta"]["AAA"]["attempt"], second["entry_meta"]["AAA"]["attempt"])
 
     def test_same_day_success_then_failure_preserves_facts_and_backoff(self):
         runtime = rt.RuntimeState(self.base)
-        success = self.fund("2026-10-20", "2026-09-30", attempted="2026-10-20")
-        first = runtime.checkpoint("fundamental", {"data": {"AAA": success}})
+        success = self.earn("2026-10-20", "2026-10-24", attempted="2026-10-20")
+        first = runtime.checkpoint("earnings", {"data": {"AAA": success}})
         self.instant = self.instant.replace(hour=13)
-        failure = {**success, "fetch_error": True, "retry_after": "2026-10-21"}
-        runtime.checkpoint("fundamental", {"data": {"AAA": failure}})
-        actual = rt.RuntimeState(self.base).load_previous({"fundamental": first})["fundamental"]["data"]["AAA"]
+        failure = {**success, "status": "error", "next_retry": "2026-10-21"}
+        runtime.checkpoint("earnings", {"data": {"AAA": failure}})
+        actual = rt.RuntimeState(self.base).load_previous({"earnings": first})["earnings"]["data"]["AAA"]
         self.assertEqual(actual, failure)
 
     def test_invalid_copied_metadata_does_not_override_entry_evidence(self):
         runtime = rt.RuntimeState(self.base)
-        fresh = runtime.checkpoint("fundamental", {"data": {"AAA": self.fund("2026-10-19", "2026-09-30")}})
+        fresh = runtime.checkpoint("earnings", {"data": {"AAA": self.earn("2026-10-19", "2026-10-24")}})
         cache = self.read(".cache/market-monitor.json")
-        cache["sections"]["fundamental"]["data"]["data"]["AAA"] = self.fund()
+        cache["sections"]["earnings"]["data"]["data"]["AAA"] = self.earn()
         self.save_cache(cache)
-        actual = rt.RuntimeState(self.base).load_previous({"fundamental": fresh})["fundamental"]["data"]["AAA"]
+        actual = rt.RuntimeState(self.base).load_previous({"earnings": fresh})["earnings"]["data"]["AAA"]
         self.assertEqual(actual["fetched"], "2026-10-19")
-        self.assertEqual(actual["data"]["period"], "2026-09-30")
+        self.assertEqual(actual["date"], "2026-10-24")
 
     def test_consensus_facts_and_failure_attempt_have_separate_versions(self):
         failure = {"s": "fail", "r": "2026-10-18", "avg": 10, "try": "2026-10-20",
@@ -355,7 +399,7 @@ class EntryVersionTests(TemporaryBase):
         self.assertEqual(actual["official_error"], "读取失败")
 
     def test_legacy_unknown_entry_time_does_not_borrow_section_time(self):
-        self.assertEqual(self.restored("fundamental", {"source": "old"}, {"source": "status"}), {"source": "status"})
+        self.assertEqual(self.restored("earnings", {"source": "old"}, {"source": "status"}), {"source": "status"})
 
     def test_earnings_events_union_across_load_checkpoint_and_restart(self):
         self.save_cache(self.cache("earnings", {"events": {"AAA": ["2026-10-16"], "BBB": ["2026-10-17"]}}))
@@ -377,23 +421,15 @@ class EntryVersionTests(TemporaryBase):
         self.assertEqual(actual["ne"], "2026-10-30")
         self.assertEqual(actual["earn_pending"], ["2026-10-17", "2026-10-19"])
 
-    def test_same_day_event_baseline_uses_its_component_version(self):
+    def test_same_day_consensus_event_uses_its_component_version(self):
         runtime = rt.RuntimeState(self.base)
-        old = self.fund(event_date="2026-10-17", event_base="", event_checked="2026-10-20")
-        first = runtime.checkpoint("fundamental", {"data": {"AAA": old}})
+        old = {"r": "2026-10-20", "s": "ok", "ne": "2026-10-23"}
+        first = runtime.checkpoint("consensus", {"data": {"AAA": old}})
         self.instant = self.instant.replace(hour=13)
-        runtime.checkpoint("fundamental", {"data": {"AAA": {**old, "event_base": "2026-06-30"}}})
-        actual = rt.RuntimeState(self.base).load_previous({"fundamental": first})["fundamental"]["data"]["AAA"]
-        self.assertEqual(actual["event_base"], "2026-06-30")
-        self.assertEqual(actual["event_checked"], "2026-10-20")
-
-    def test_fundamental_completed_event_cannot_be_resurrected(self):
-        pending = self.fund(event_date="2026-10-16", event_base="2026-06-30", event_checked="2026-10-18")
-        done = self.fund("2026-10-19", "2026-09-30", event_done="2026-10-16")
-        actual = self.restored("fundamental", pending, done)
-        self.assertEqual(actual["event_done"], "2026-10-16")
-        self.assertNotIn("event_date", actual)
-        self.assertNotIn("event_base", actual)
+        runtime.checkpoint("consensus", {"data": {"AAA": {**old, "ne": "2026-10-24"}}})
+        actual = rt.RuntimeState(self.base).load_previous({"consensus": first})["consensus"]["data"]["AAA"]
+        self.assertEqual(actual["ne"], "2026-10-24")
+        self.assertEqual(actual["r"], "2026-10-20")
 
     def test_quota_union_and_newest_ledger_day_win_over_section_time(self):
         runtime = rt.RuntimeState(self.base)
@@ -457,7 +493,7 @@ class CheckpointProofTests(TemporaryBase):
         old = (self.base / ".cache/market-monitor.json").read_bytes()
         with patch.object(rt.os, "replace", side_effect=OSError("模拟第二次写入失败")):
             with self.assertRaises(OSError):
-                runtime.checkpoint("fundamental", {"data": {"BBB": {"attempted": TARGET, "fetch_error": True}}})
+                runtime.checkpoint("consensus", {"data": {"BBB": {"try": TARGET, "s": "fail"}}})
         self.assertEqual((self.base / ".cache/market-monitor.json").read_bytes(), old)
         self.assertEqual(self.outputs(), output)
         self.assertTrue(rt.verify_checkpoint(self.base, output["cache_checkpoint_id"]))
@@ -496,7 +532,7 @@ class CheckpointProofTests(TemporaryBase):
         runtime.checkpoint("earnings", {"data": {"AAA": {"status": "ok", "fetched": TARGET}}})
         original = self.read(".cache/market-monitor.json")
         nonce = self.outputs()["cache_checkpoint_id"]
-        for mutation in ("schema", "metadata", "whitelist", "entries"):
+        for mutation in ("schema", "metadata", "whitelist", "entries", "fundamental"):
             with self.subTest(mutation=mutation):
                 cache = copy.deepcopy(original)
                 section = cache["sections"]["earnings"]
@@ -506,6 +542,8 @@ class CheckpointProofTests(TemporaryBase):
                     section["entry_meta"]["AAA"]["facts"]["digest"] = "wrong"
                 elif mutation == "whitelist":
                     section["data"]["risk_quotes"] = {"price": 123}
+                elif mutation == "fundamental":
+                    cache["sections"]["fundamental"] = copy.deepcopy(section)
                 else:
                     section["data"]["data"] = []
                 cache["checkpoint"]["sections_sha256"] = rt._digest(cache["sections"])
@@ -595,11 +633,9 @@ class MainTests(TemporaryBase):
         self.stack.enter_context(patch.object(m, "_position_symbols", return_value=[]))
         self.stack.enter_context(patch.object(m, "quote_supported", return_value=True))
         self.stack.enter_context(patch.object(m, "is_etf", return_value=False))
-        self.stack.enter_context(patch.object(m, "fund_rule", return_value=1))
-        self.stack.enter_context(patch.object(m, "fundamental_check", return_value=None))
         rt.atomic_write_json(self.base / "holdings.json", {"positions": {"AAA": {}}})
         self.old_status = {"finished_at": OLD, "target_trade_date": "2026-10-16", "risk_quotes": {"value": 5},
-            "fundamental": {"data": {"BBB": {"next_retry": NEW, "fetch_error": True}}}}
+            "earnings": {"data": {"BBB": {"next_retry": NEW, "status": "error"}}}}
         rt.atomic_write_json(self.base / "status.json", self.old_status)
         rt.atomic_write_bytes(self.base / "index.html", b"old page")
         self.output = self.base / "github-output"
@@ -616,7 +652,6 @@ class MainTests(TemporaryBase):
             "source_day_summary": {"return_value": {}},
             "attach_earnings": {"return_value": {"data": {"AAA": {"status": "error", "fetched": TARGET}}, "events": {"AAA": [TARGET]}}},
             "update_consensus": {"return_value": ({"AAA": {"s": "fail", "next_retry": "2026-10-22", "failures": 2}}, {"quota": {"date": TARGET, "symbols": ["AAA"], "retry_symbols": []}})},
-            "update_fundamentals": {"return_value": ({}, {"fetched": 1, "cached": 0, "data": {"AAA": {"fetch_error": True, "next_retry": "2026-10-22"}}})},
             "build_snapshot": {"return_value": {**IDENTITY, "target_trade_date": TARGET, "actual_dates": {"max": TARGET},
                 "summary": {"today_prices": 79, "prior_prices": 21, "missing_prices": 0}}},
             "render": {"return_value": "new page"},
@@ -642,7 +677,7 @@ class MainTests(TemporaryBase):
         self.assertEqual({k: receipt[k] for k in IDENTITY}, IDENTITY)
         sections = self.read(".cache/market-monitor.json")["sections"]
         self.assertEqual(set(sections), set(rt.AUX_FIELDS))
-        self.assertEqual(sections["fundamental"]["data"]["data"]["BBB"]["next_retry"], NEW)
+        self.assertEqual(sections["earnings"]["data"]["data"]["BBB"]["next_retry"], NEW)
         self.assertEqual(sections["consensus"]["data"]["data"]["AAA"]["failures"], 2)
         self.assertNotIn("oil", sections["reference_alerts"]["data"])
         self.assertEqual(sections["nfci_cache"]["data"]["result"], "pending")
@@ -716,7 +751,7 @@ class MainTests(TemporaryBase):
         self.assertEqual(receipt["target_trade_date"], TARGET)
         sections = self.read(".cache/market-monitor.json")["sections"]
         self.assertEqual(sections["nfci_cache"]["data"]["result"], "ok")
-        self.assertIn("BBB", sections["fundamental"]["data"]["data"])
+        self.assertIn("BBB", sections["earnings"]["data"]["data"])
         self.assertIsNone(m.QUOTE_DEADLINE)
         self.assertFalse(m.YAHOO_GATE.enabled)
 
@@ -736,16 +771,29 @@ class MainTests(TemporaryBase):
         restored = self.mocks["build_macro"].call_args.args[0]
         self.assertEqual(restored["risk_quotes"], self.old_status["risk_quotes"])
         self.assertEqual(restored["consensus"]["data"]["AAA"]["next_retry"], "2026-10-22")
-        self.assertEqual(restored["fundamental"]["data"]["AAA"]["next_retry"], "2026-10-22")
+        self.assertEqual(restored["earnings"]["data"]["BBB"]["next_retry"], NEW)
+        self.assertNotIn("fundamental", restored)
         self.assert_old_artifacts()
 
-    def test_fundamental_exception_preserves_existing_snapshot_cache(self):
-        self.old_status["fundamental"]["data"]["AAA"] = {"fetched": OLD, "next_retry": NEW}
+    def test_generated_output_never_restores_legacy_fundamental(self):
+        self.old_status["fundamental"] = {"data": {"AAA": {"fetched": OLD, "next_retry": NEW}}}
         rt.atomic_write_json(self.base / "status.json", self.old_status)
-        self.mocks["update_fundamentals"].side_effect = RuntimeError("模拟读取错误")
+        self.save_cache(self.cache("fundamental", {"data": {"LEGACY": {"fetched": NEW}}}, NEW))
         self.mocks["build_snapshot"].return_value["summary"].update(today_prices=80, prior_prices=20)
-        m.main([])
-        self.assertEqual(self.read("status.json")["fundamental"]["data"]["AAA"], self.old_status["fundamental"]["data"]["AAA"])
+        self.assertEqual(m.main([]), 0)
+        previous = self.mocks["build_macro"].call_args.args[0]
+        self.assertNotIn("fundamental", previous)
+        snapshot = self.read("status.json")
+        self.assertNotIn("fundamental", snapshot)
+        self.assertTrue({"earnings", "consensus"} <= snapshot.keys())
+        self.assertEqual(snapshot["earnings"]["data"]["AAA"]["status"], "error")
+        self.assertEqual(snapshot["consensus"]["data"]["AAA"]["failures"], 2)
+        sections = self.read(".cache/market-monitor.json")["sections"]
+        self.assertNotIn("fundamental", sections)
+        self.assertEqual(set(sections), set(rt.AUX_FIELDS))
+        rendered = self.mocks["render"].call_args.kwargs["snapshot"]
+        self.assertNotIn("fundamental", rendered)
+        self.assertEqual(self.read("run-receipt.json")["result"], "generated")
 
 
 class IdentityAndEnsureTests(TemporaryBase):

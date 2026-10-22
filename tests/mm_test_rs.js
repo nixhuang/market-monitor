@@ -110,16 +110,31 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.match(f.els.runLightTxt.textContent, /取数失败 2 只/);
     assert.equal(f.els.ruleLight.dataset.phase, 'ok');
   });
-  await check('市场风险缺项时运行灯为部分数据待补，个股行情单独准确显示', async () => {
+  await check('市场风险缺项保留提示，完整行情不再显示更新计数', async () => {
     const page = snapshot(); page.event = 'push'; page.market_risk = {missing: ['VIX'], valid_count: 4};
     const f = fixture(page); await f.win.MMRunStatus.refresh();
     assert.equal(f.els.runLight.dataset.phase, 'partial');
-    assert.match(f.els.runLightTxt.textContent, /市场风险数据缺失或过期：VIX（有效指标 4\/5）/);
-    assert.match(f.els.runLightTxt.textContent, /个股行情 129\/129 已更新/);
-    assert.doesNotMatch(f.els.runLightTxt.textContent, /抓取成功/);
+    assert.match(f.els.runLightTxt.textContent, /市场风险数据缺失：VIX（有效指标 4\/5）/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent, /已更新|或过期|抓取成功/);
     page.market_risk = {missing: [], valid_count: 5};
     const ok = fixture(page); await ok.win.MMRunStatus.refresh();
     assert.equal(ok.els.runLight.dataset.phase, 'ok');
+  });
+  await check('今日提示按指定文案显示；不支持报价项仍显示且不重复完整计数', async () => {
+    const page = snapshot(); page.event = 'schedule';
+    page.finished_at_bj = '2026-10-22T08:18:36+08:00';
+    page.summary.total = 99;
+    page.market_risk = {missing: ['垃圾债利差'], valid_count: 4};
+    const f = fixture(page); await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.runLightTxt.textContent,
+      '自动运行已完成 · 市场风险数据缺失：垃圾债利差（有效指标 4/5） · 完成于 2026-10-22 08:18:36（北京时间）');
+    page.summary.unsupported_symbols = ['SPECIAL'];
+    for (const risk of [page.market_risk, {missing: [], valid_count: 5}]) {
+      page.market_risk = risk;
+      const partial = fixture(page); await partial.win.MMRunStatus.refresh();
+      assert.match(partial.els.runLightTxt.textContent, /1 个特殊代码暂不支持报价/);
+      assert.doesNotMatch(partial.els.runLightTxt.textContent, /已更新/);
+    }
   });
   await check('对应规则运行失败红灯，别误用行情绿灯', async () => {
     const f = fixture(); f.data.sha = C; f.data.run.status = 'completed'; f.data.run.conclusion = 'failure';

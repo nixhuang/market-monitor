@@ -1,11 +1,15 @@
 """M7 离线回归：仅用独立临时 Git 仓库，不 fetch/reset/commit/push 真实仓库。"""
+import ast
 import contextlib
+import html
 import copy
 import io
 import json
 import os
 from pathlib import Path
 import re
+import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -14,6 +18,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_support as b
+import page_assets as assets
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -96,7 +101,7 @@ class BuildTests(unittest.TestCase):
                     b.verify_inputs(self.root, self.frozen, sha)
 
     def test_new_modules_and_resources_are_discovered(self):
-        for name in ("fundamentals.py", "rules_config.py", "page_assets.py", "future.js", "future.css",
+        for name in ("quote_adapter.py", "rules_config.py", "page_assets.py", "future.js", "future.css",
                      "new-config.json", "new-editor.html", "templates/cards/item.html",
                      "assets/cards/theme.css", "static/tools.js", "icons/new.png", "config/new.json"):
             with self.subTest(path=name):
@@ -257,7 +262,7 @@ class BuildTests(unittest.TestCase):
 
 class WorkflowContractTests(unittest.TestCase):
     def test_path_policy_covers_production_but_not_tests_or_outputs(self):
-        for path in b.REQUIRED_INPUTS | {"fundamentals.py", "page_assets.py", "rules_config.py",
+        for path in b.REQUIRED_INPUTS | {"quote_adapter.py", "page_assets.py", "rules_config.py",
                                        "assets/deep/card.css", "manifest.webmanifest"}:
             with self.subTest(path=path):
                 self.assertTrue(b.is_build_input(path))
@@ -298,6 +303,412 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertLess(loop.index("no-change"), loop.index("git commit"))
         self.assertIn("git push origin HEAD:main", loop)
         self.assertNotIn("--force", loop)
+
+
+class RulesTemplateTests(unittest.TestCase):
+    """独立纯内存模板专项，不导入 monitor、不生成正式产物。"""
+
+    @staticmethod
+    def plain(markup):
+        return html.unescape(re.sub(r'<[^>]+>', '', markup))
+
+    def test_templates_render_without_files_network_or_monitor(self):
+        with patch.object(Path, 'read_text', side_effect=AssertionError('禁止读临时素材')), \
+                patch.object(Path, 'read_bytes', side_effect=AssertionError('禁止读文件')), \
+                patch.object(socket, 'socket', side_effect=AssertionError('禁止联网')):
+            markup = assets.rules_template({}, {})
+        self.assertEqual(markup.count('<template id="rulesTpl">'), 1)
+        self.assertEqual(markup.count('<template id="glossaryTpl">'), 1)
+        self.assertNotIn('${', markup)
+        self.assertNotIn('<details', markup)
+        self.assertNotIn('<script', markup)
+        for summary in ('预警规则', '名词解释和抓取'):
+            self.assertIn('<summary>' + summary + '</summary>', markup)
+
+    def test_all_links_are_unique_targets_and_eighteen_cross_links_are_reciprocal(self):
+        rules = assets.rules_body({}, {})
+        glossary = assets.glossary_body({}, {})
+        ids = re.findall(r'\bid="([^"]+)"', rules + glossary)
+        self.assertEqual(len(ids), len(set(ids)))
+        links = re.findall(r'href="#([^"]+)"', rules + glossary)
+        self.assertEqual(len(links), 31)
+        self.assertEqual(set(links) - set(ids), {'marketRiskRules'})
+        pairs = [(key, peer) for key, peers in assets.RULE_CROSS_LINKS.items() for peer in peers]
+        self.assertEqual(len(pairs), 18)
+        for key, peer in pairs:
+            self.assertIn((peer, key), pairs)
+            self.assertIn('id="nav-' + key + '"', rules)
+            self.assertIn('href="#nav-' + peer + '"', rules)
+        for alias in ('alerts', 'display', 'quiet', 'upper', 'lower', 'volume', 'change',
+                      'amplitude', 'low', 'ma', 'prices', 'loss', 'space', 'reached',
+                      'earnings', 'missing', 'single', 'terms', 'fetch', 'read-terms',
+                      'change-terms', 'amplitude-terms', 'boll-terms', 'rsi-terms',
+                      'volume-terms', 'ma-terms', 'target-terms', 'earnings-terms',
+                      'fetch-consensus', 'fetch-after-earnings', 'fetch-earnings-cache',
+                      'dataSourceRules'):
+            self.assertIn(alias, ids)
+
+    def test_latest_rules_and_sorting_keep_gray_and_group_conditions(self):
+        rules = assets.rules_body({}, {})
+        text = self.plain(rules)
+        for term in ('单独RSI三条超卖', '所有分组 → 红灯。', '单独RSI三条超买',
+                     '持仓分组、重点 → 黄灯。', '加仓价提醒标记已读 → 灰灯。',
+                     '减仓价提醒标记已读 → 灰灯。', '浮亏提醒标记已读 → 灰灯。',
+                     '浮亏10%／20%每只标的只计一次。',
+                     '两者只保留在主表，不进入“无异动”，不计入统计面板',
+                     '单独布林下轨「RSI 0 条」→ 文字 → 灰灯。',
+                     '单独RSI 2条向上超买／向下超卖 → 文字 → 灰灯。',
+                     '布林上轨 + RSI 2条／3条向上超买 → 文字 → 灰灯。',
+                     '单独RSI三条超买 → 文字 → 灰灯。', '第一条（短期）', '第二条（长期）'):
+            self.assertIn(term, text)
+        for deleted in ('进入下轨报警区（逼近自适应）', '排除指数、期货', '行灯取最严重',
+                        '单独RSI 3条向上超买 → 文字。', '基本面黄灯'):
+            self.assertNotIn(deleted, text)
+        second = rules.split('<section id="rule-text">')[1].split('</section>')[0]
+        self.assertLess(second.index('id="nav-up-sell-other"'), second.index('id="rule-earnings"'))
+        self.assertLess(second.index('id="rule-earnings"'), second.index('id="rule-quotes"'))
+        third = rules.split('<section id="rule-folded">')[1]
+        headings = re.findall(r'<h5 class="rule-layout-heading">(.*?)</h5>', third)
+        self.assertEqual(headings, ['单独布林', '单独RSI', '布林＋RSI', '目标／共识价', '财报'])
+        self.assertEqual(rules.count('class="nav-gray"'), 14)
+
+    def test_threshold_tables_are_only_in_glossary_and_follow_settings_and_constants(self):
+        settings = {'chg_yellow': 7, 'chg_red': 11, 'amp_yellow': 13, 'amp_red': 17,
+                    'ma_short': 25, 'ma_long': 180, 'boll_n': 30, 'boll_k': 2.7,
+                    'boll_near_band_pct': 10, 'boll_near_pct': 0.9,
+                    'rsi_high': 82, 'rsi_low': 24, 'near_52w_low_pct': 2.2,
+                    'trigger_gap_pct': 7, 'reduce_gap_pct': 9,
+                    'vol_ratio': 2.2, 'vol_ratio_red': 4.4, 'vol_ratio_z': 2.1, 'vol_ratio_red_z': 4.2}
+        constants = {'vol_mult': '×0.5 / ×1.1 / ×1.8', 'rsi_periods': '5／10／21',
+                     'vol_low_sigma': 0.8, 'vol_high_sigma': 3.1, 'vol_min_returns': 33,
+                     'ma_long_band_pct': 1.7, 'ma_confirm_lookback': 8,
+                     'ma_confirm_min': 0.75, 'ma_confirm_max': 1.25, 'ma_confirm_default': 0.8,
+                     'vol_ratio_base': 22, 'intraday_vol_quiet_min': 19,
+                     'boll_sigma_factor': 1.5, 'target_space_pct': 40,
+                     'target_high_space_pct': 80, 'earn_soon_days': 5, 'earn_list_days': 12}
+        before = copy.deepcopy((settings, constants))
+        rules = assets.rules_body(settings, constants)
+        glossary = assets.glossary_body(settings, constants)
+        self.assertNotIn('<table', rules)
+        self.assertEqual(glossary.count('<table'), 9)
+        for kind, expected in (('chg', ['≥3.5%', '≥5.5%', '≥7.7%', '≥12.1%', '≥12.6%', '≥19.8%']),
+                               ('amp', ['≥6.5%', '≥8.5%', '≥14.3%', '≥18.7%', '≥23.4%', '≥30.6%'])):
+            table = re.search(r'<table[^>]+id="glossary-' + kind + r'-table">.*?</table>', glossary, re.S)[0]
+            for threshold in expected:
+                self.assertIn(threshold, table)
+            self.assertIn('中 ×1.1', table)
+        combined = self.plain(rules + glossary)
+        for dynamic in ('当前25日', '当前180日', '布林为30日、±2.7倍', '×0.6（当前10%设置）',
+                        '≤约0.6%', '≤约1.2%', '≤约1.8%', '固定0.9%', '周期5／10／21日',
+                        '≥82超买', '≤24超卖', '距低点≤2.2%', '设置价×1.07', '设置价×0.91',
+                        '≥4.2σ', '≥2.1σ', '≥4.4×', '≥2.2×', '固定±1.7%',
+                        '限0.75%～1.25%', '检查近8日', '此前22日', '不足19分钟',
+                        '有效空间≥40%', '≥80%', '未来6～12天', '&lt;0.8%'):
+            self.assertIn(html.unescape(dynamic), combined)
+        self.assertIn('目标空间≥40%', rules)
+        self.assertEqual((settings, constants), before)
+
+    def test_disabled_and_equal_moving_averages_and_adaptive_settings_keep_rules(self):
+        for short, long in ((0, 0), (0, 250), (50, 50), (25, 180)):
+            with self.subTest(short=short, long=long):
+                markup = assets.rules_template({'ma_short': short, 'ma_long': long,
+                    'boll_near_band_pct': 0, 'vol_ratio_z': 0, 'vol_ratio_red_z': 0}, {})
+                text = self.plain(markup)
+                for n in (short, long):
+                    self.assertIn('当前' + (str(n) + '日' if n else '关闭'), text)
+                self.assertIn('两条同周期只计一次，按简单穿越判断', text)
+                self.assertIn('关闭自适应或波动无效时固定0.5%', text)
+                self.assertIn('两条σ阈值启用', text)
+                self.assertIn('第一条（短期）：自适应确认穿越', text)
+                self.assertNotIn('${', markup)
+
+    def test_unique_tables_and_dual_track_sentence_remain(self):
+        glossary = assets.glossary_body({}, {})
+        self.assertEqual(glossary.count('class="glossary-entry"'), 16)
+        for unique in ('穿越确认幅度', '连续失败', '正常缓存＋已记录财报事件',
+                       '来源日期仍早于财报', '供应商确认', '官方核验', '估算日期',
+                       'BAMLH0A0HYM2', 'Cboe官方VIX日线优先', 'History of Market',
+                       '金融压力NFCI', '至少隔1小时重试', '不是实时夜盘报价'):
+            self.assertIn(unique, glossary)
+        self.assertIn('双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。',
+                      self.plain(glossary))
+
+    def test_fetch_quote_wording_uses_actual_loader_order_and_explicit_override(self):
+        import monitor
+
+        day = '2026-10-20'
+        dates = monitor.market_sessions.preceding_sessions(day, 34) + [day]
+        fixture = {'dates': dates, 'closes': [100.0] * 35, 'highs': [105.0] * 35,
+                   'lows': [95.0] * 35, 'volumes': [1000.0] * 35,
+                   'price': 100.0, 'prev_close': 100.0, 'source': 'offline_fixture'}
+        labels = {'nasdaq': 'Nasdaq', 'yahoo': 'Yahoo', 'stooq': 'stooq'}
+        constants = monitor._rule_constants()
+
+        def fetch(providers, closed, symbol='AAPL-US'):
+            calls = []
+
+            def load(name, requested):
+                calls.append((name, requested))
+                return copy.deepcopy(providers.get(name))
+
+            # 只替换外部行情接口，真实执行规范化、分源循环和日线校验。
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(patch.object(socket, 'socket', side_effect=AssertionError('禁止联网')))
+                stack.enter_context(patch.object(monitor.requests.sessions.Session, 'request',
+                                                 side_effect=AssertionError('禁止 HTTP 请求')))
+                stack.enter_context(patch.object(monitor, 'CLOSED_ONLY', closed))
+                stack.enter_context(patch.object(monitor, 'TARGET_DATE', day))
+                stack.enter_context(patch.object(monitor, 'S', dict(monitor.DEFAULT_SETTINGS, use_realtime=1)))
+                stack.enter_context(patch.object(monitor, 'log'))
+                stack.enter_context(patch.object(monitor, '_note_source_day'))
+                live = stack.enter_context(patch.object(monitor, 'nasdaq_realtime', return_value=None))
+                closing = stack.enter_context(patch.object(monitor, 'nasdaq_closing_quote', return_value=None))
+                for name in labels:
+                    stack.enter_context(patch.object(monitor, name + '_history',
+                        side_effect=lambda requested, name=name: load(name, requested)))
+                result = monitor.fetch_history(symbol)
+                closing.assert_not_called()
+                if closed or symbol != 'AAPL-US':
+                    live.assert_not_called()
+            return result, calls
+
+        for closed, order in ((True, ('nasdaq', 'yahoo', 'stooq')),
+                              (False, ('yahoo', 'stooq', 'nasdaq'))):
+            key = 'quote_closed_sources' if closed else 'quote_intraday_sources'
+            result, calls = fetch({}, closed)
+            self.assertIsNone(result)
+            self.assertEqual(calls, [(name, 'AAPL') for name in order])
+            self.assertEqual(constants[key], ' → '.join(labels[name] for name, _ in calls))
+            self.assertEqual(assets._rule_values({}, constants)[key], constants[key])
+            for index, source in enumerate(order):
+                with self.subTest(closed=closed, source=source):
+                    providers = {name: fixture for name in order[index:]}
+                    result, calls = fetch(providers, closed)
+                    self.assertEqual(calls, [(name, 'AAPL') for name in order[:index + 1]])
+                    self.assertEqual((result['source'], result['dates'][-1]), (source, day))
+                    self.assertEqual(fixture['source'], 'offline_fixture')
+            for symbol, requested in (('.SPX', '^GSPC'), ('^VIX', '^VIX'),
+                                      ('ESMAIN', 'ES=F'), ('ES=F', 'ES=F')):
+                with self.subTest(closed=closed, symbol=symbol):
+                    data = copy.deepcopy(fixture)
+                    if requested == 'ES=F':
+                        data.update(quote_symbol='ES=F', quote_type='FUTURE', currency='USD',
+                                    quote_timezone='America/New_York', quote_name='E-Mini S&P 500 Dec 26')
+                    result, calls = fetch({'yahoo': data}, closed, symbol)
+                    self.assertEqual(calls, [('yahoo', requested)])
+                    self.assertEqual(result['source'], 'yahoo')
+                    result, calls = fetch({}, closed, symbol)
+                    self.assertIsNone(result)
+                    self.assertEqual(calls, [('yahoo', requested)])
+
+        text = self.plain(assets.glossary_body({}, constants))
+        self.assertIn('收盘日线：Nasdaq → Yahoo → stooq；盘中日线：Yahoo → stooq → Nasdaq', text)
+        self.assertIn('Nasdaq收盘报价可补当日一根，不冒充有效日内高低', text)
+        override = dict(constants, quote_closed_sources='stooq → Yahoo → Nasdaq')
+        self.assertIn('收盘日线：stooq → Yahoo → Nasdaq', self.plain(assets.glossary_body({}, override)))
+
+    def test_svg_never_changes_attributes_or_weak_link_labels_and_escapes_values(self):
+        markup = assets.rules_template({}, {'rsi_periods': '<script>超买</script>\"&'})
+        self.assertNotIn('<script>', markup)
+        self.assertIn('&lt;script&gt;', markup)
+        self.assertIn('aria-hidden="true" focusable="false"', markup)
+        for attribute in re.findall(r'(?:data-original|aria-label)="([^"]*)"', markup):
+            self.assertNotIn('<', attribute)
+        for link in re.findall(r'<a\b[^>]*>.*?</a>', markup, re.S):
+            self.assertNotIn('<svg', link)
+            self.assertNotIn('<span', link)
+        for path in ('M3 3H15 M9 15V3 M5 7L9 3L13 7', 'M3 15H15 M9 3V15 M5 11L9 15L13 11',
+                     'M7 15V3 M3 7L7 3L11 7', 'M7 3V15 M3 11L7 15L11 11'):
+            self.assertIn('d="' + path + '"', markup)
+
+    def test_export_contract_and_python311_syntax(self):
+        self.assertTrue(assets.PAGE_CSS.endswith(assets.RULES_CSS))
+        self.assertTrue(assets.PAGE_INTERACTION_JS.startswith(assets.RULES_INTERACTION_JS))
+        self.assertEqual(assets.PAGE_INTERACTION_JS.count('function revealRuleAnchor('), 1)
+        self.assertIn('}, 2600)', assets.RULES_INTERACTION_JS)
+        self.assertIn('window.clearTimeout(ruleHighlightTimer)', assets.RULES_INTERACTION_JS)
+        for source in ('page_assets.py', 'tests/mm_test_build.py'):
+            ast.parse((ROOT / source).read_text(encoding='utf-8'), feature_version=(3, 11))
+        if not shutil.which('node'):
+            self.skipTest('Node 未安装，跳过 JS 语法检查')
+        code = 'const vm=require("vm"),fs=require("fs");new vm.Script(fs.readFileSync(0,"utf8"));'
+        for script in (assets.RULES_INTERACTION_JS, assets.PAGE_INTERACTION_JS):
+            result = subprocess.run(['node', '-e', code], input=script, text=True,
+                                    encoding='utf-8', capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(os.environ.get('MM_RULES_BROWSER_TEST') == '1',
+                         '设置 MM_RULES_BROWSER_TEST=1 可运行本机已有 Playwright/Chrome 离线验收')
+    def test_browser_rules_navigation_and_compact_styles_without_network(self):
+        code = r'''
+const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),{chromium}=require('playwright');
+(async()=>{
+  const input=JSON.parse(fs.readFileSync(0,'utf8'));
+  new vm.Script(input.js);
+  const browser=await chromium.launch({channel:'chrome',headless:true});
+  try{
+    for(const width of [1280,390]){
+      const context=await browser.newContext({viewport:{width,height:900},serviceWorkers:'block'});
+      let requests=0;await context.route('**/*',route=>{requests++;return route.abort();});
+      const page=await context.newPage();
+      await page.setContent('<style>'+input.css+'</style>'+input.html,{waitUntil:'domcontentloaded'});
+      await page.evaluate(()=>{
+        for(const [id,target] of [['rulesTpl','signalRules'],['glossaryTpl','glossaryRules']]){
+          const box=document.createElement('details');box.className='card rule-card';box.id=target;
+          box.innerHTML=document.getElementById(id).innerHTML;document.body.appendChild(box);
+        }
+        window.__timers=new Map();let seq=0;
+        window.setTimeout=(fn,ms)=>{window.__timers.set(++seq,{fn,ms});return seq;};
+        window.clearTimeout=id=>window.__timers.delete(id);
+      });
+      await page.addScriptTag({content:input.js});
+      assert.deepEqual(await page.locator('details[open]').evaluateAll(ds=>ds.map(d=>d.id)),['signalCounts']);
+      assert.equal(await page.locator('.runbar a[href="#signalRules"]').count(),1);
+      const links=await page.locator('#signalRules a[href^="#"],#glossaryRules a[href^="#"]').evaluateAll(ns=>ns.map(n=>({hash:n.hash,source:n.closest('details').id})));
+      assert.equal(links.length,31);
+      for(const link of links){
+        await page.evaluate(source=>{
+          document.querySelectorAll('details:not(#signalCounts)').forEach(d=>d.open=false);
+          document.getElementById(source).open=true;
+        },link.source);
+        await page.locator('#'+link.source+' a[href="'+link.hash+'"]').first().click();
+        await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+        const result=await page.evaluate(hash=>{
+          const target=document.querySelector(hash),entry=target.closest('.rule-entry,.glossary-entry');
+          return {open:target.closest('details').open,hash:location.hash,
+            highlight:entry?entry.classList.contains('nav-hit'):true,
+            focus:document.activeElement===(entry||target),timers:[...window.__timers.values()].map(t=>t.ms)};
+        },link.hash);
+        assert(result.open,link.hash);assert.equal(result.hash,link.hash);assert(result.highlight,link.hash);
+        assert(result.focus,link.hash);assert(result.timers.every(ms=>ms===2600));
+      }
+      await page.evaluate(()=>{
+        revealRuleAnchor('#nav-up-buy-two');revealRuleAnchor('#nav-up-buy-two');
+      });
+      assert.equal(await page.locator('.nav-hit').count(),1);
+      await page.evaluate(()=>{[...window.__timers.values()].forEach(t=>t.fn());});
+      assert.equal(await page.locator('.nav-hit').count(),0);
+      const appearance=await page.evaluate(()=>{
+        document.getElementById('glossaryRules').open=true;
+        const p=document.querySelector('#signalRulesBody p.rule-original');
+        const link=document.querySelector('#signalRulesBody .rule-cross-link');
+        const g=document.querySelector('#glossaryRulesBody p');
+        const arrow=document.querySelector('#signalRulesBody svg');
+        const table=document.getElementById('glossary-chg-table');
+        return {pMargin:getComputedStyle(p).marginTop,linkColor:getComputedStyle(link).color,
+          linkSize:getComputedStyle(link).fontSize,gMargin:getComputedStyle(g).marginTop,
+          arrowHeight:arrow.getBoundingClientRect().height,
+          yellow:getComputedStyle(table.rows[0].cells[1]).color,
+          red:getComputedStyle(table.rows[0].cells[2]).color,
+          horizontal:document.documentElement.scrollWidth>window.innerWidth};
+      });
+      assert.equal(appearance.pMargin,'1px');assert.equal(appearance.gMargin,'2px');
+      assert.equal(appearance.linkColor,'rgb(135, 149, 167)');assert.equal(appearance.linkSize,'11.5px');
+      assert.equal(appearance.arrowHeight,18);assert.equal(appearance.yellow,'rgb(240, 198, 116)');
+      assert.equal(appearance.red,'rgb(255, 133, 128)');assert(!appearance.horizontal);
+      await page.evaluate(()=>revealRuleAnchor('#dataSourceRules'));
+      assert(await page.locator('#glossaryRules').evaluate(d=>d.open));
+      await page.evaluate(()=>revealRuleAnchor('#complete-rules'));
+      assert(await page.locator('#signalRules').evaluate(d=>d.open));
+      await page.evaluate(()=>{
+        document.querySelectorAll('details:not(#signalCounts)').forEach(d=>d.open=false);
+        history.replaceState(null,'',location.href.split('#')[0]);initRuleAnchors();
+      });
+      assert.deepEqual(await page.locator('details[open]').evaluateAll(ds=>ds.map(d=>d.id)),['signalCounts']);
+      assert.equal(requests,0);await context.close();
+    }
+  }finally{await browser.close();}
+  console.log('桌面与手机 31 链接离线浏览器验收通过');
+})().catch(e=>{console.error(e);process.exit(1);});
+'''
+        markup = (assets.rules_template({}, {}) + '<div class="runbar"></div>'
+                  '<details id="signalCounts" open><summary>统计</summary></details>'
+                  '<details class="card" id="marketRiskRules"><summary>宏观细则</summary></details>')
+        payload = {'html': markup, 'css': assets.PAGE_CSS + assets.RULES_CSS,
+                   'js': assets.RULES_INTERACTION_JS}
+        result = subprocess.run(['node', '-e', code], input=json.dumps(payload), text=True,
+                                encoding='utf-8', capture_output=True, check=False, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_navigation_click_hash_history_highlight_and_default_collapsed_offline(self):
+        if not shutil.which('node'):
+            self.skipTest('Node 未安装，跳过离线导航执行')
+        code = r'''
+const assert=require('assert/strict'),vm=require('vm'),fs=require('fs');
+const input=JSON.parse(fs.readFileSync(0,'utf8'));
+const events={},timers=new Map();let seq=0,focus=null,scroll=null;
+class Element {
+  constructor(id,parent=null,kind='DIV',entry=false){
+    this.id=id;this.parentElement=parent;this.tagName=kind;this.entry=entry;this.open=false;
+    this.classes=new Set();this.classList={add:c=>this.classes.add(c),remove:c=>this.classes.delete(c)};
+  }
+  closest(selector){
+    if(selector==='a[href^="#"]')return this.href?this:null;
+    if(selector==='.rules-body')return this.owner||null;
+    if(selector.includes('.rule-entry'))return this.entry?this:this.parentElement&&this.parentElement.closest(selector);
+    return null;
+  }
+  querySelector(){return this.body||null;}
+  setAttribute(k,v){this[k]=v;}
+  getAttribute(k){return this[k];}
+  scrollIntoView(){scroll=this.id;}
+  focus(){focus=this.id;}
+}
+const stats=new Element('signalCounts',null,'DETAILS');stats.open=true;
+const rules=new Element('signalRules',null,'DETAILS'),glossary=new Element('glossaryRules',null,'DETAILS');
+const macro=new Element('marketRiskRules',null,'DETAILS');
+const nodes={signalRules:rules,glossaryRules:glossary,marketRiskRules:macro};
+for(const [bodyId,owner] of [['signalRulesBody',rules],['glossaryRulesBody',glossary]]){
+  owner.body=new Element(bodyId,owner);owner.body.owner=owner.body;nodes[bodyId]=owner.body;
+}
+for(const id of input.ids){
+  if(nodes[id])continue;
+  const body=id.startsWith('glossary')||id.startsWith('fetch')||id.endsWith('terms')?
+    glossary.body:rules.body;
+  const entry=new Element('entry-'+id,body,'DIV',true);entry.owner=body;
+  nodes[id]=new Element(id,entry);nodes[id].owner=body;
+}
+let barLinks=[];
+const bar={querySelector:()=>barLinks[0]||null,appendChild:n=>barLinks.push(n)};
+const context={Element,document:{readyState:'complete',getElementById:id=>nodes[id]||null,
+  querySelector:s=>s==='.runbar'?bar:null,createElement:()=>new Element('shortcut'),
+  addEventListener:(name,fn)=>{(events[name]??=[]).push(fn);}},
+  requestAnimationFrame:fn=>fn(),window:{location:{hash:''},
+    addEventListener:(name,fn)=>{(events[name]??=[]).push(fn);},
+    clearTimeout:id=>timers.delete(id),setTimeout:(fn,ms)=>{assert.equal(ms,2600);timers.set(++seq,fn);return seq;}},
+  history:{pushState:(_a,_b,hash)=>{context.window.location.hash=hash;}}};
+vm.createContext(context);vm.runInContext(input.js,context);
+const reveal=hash=>context.revealRuleAnchor(hash);
+assert.equal(rules.open,false);assert.equal(glossary.open,false);assert.equal(macro.open,false);assert(stats.open);
+context.initRuleAnchors();assert.equal(barLinks.length,1);assert.equal(events.click.length,1);
+for(const id of input.ids){
+  rules.open=glossary.open=macro.open=false;
+  assert(reveal('#'+id),id);assert.equal(focus,scroll);
+  assert(rules.open||glossary.open||macro.open,id);assert(stats.open);
+}
+assert(reveal('#complete-rules'));assert.equal(scroll,'signalRules');
+assert(!reveal('#bad%'));assert(!reveal('#missing-anchor'));assert(!reveal('not-a-hash'));
+reveal('#nav-up-buy-two');const first=nodes['nav-up-buy-two'].parentElement;
+assert(first.classes.has('nav-hit'));
+reveal('#glossary-chg-table');const second=nodes['glossary-chg-table'].parentElement;
+assert(!first.classes.has('nav-hit'));assert(second.classes.has('nav-hit'));assert.equal(timers.size,1);
+reveal('#glossary-chg-table');assert.equal(timers.size,1);
+[...timers.values()][0]();assert(!second.classes.has('nav-hit'));
+const link=new Element('link');link.href='#nav-up-buy-two';
+function click(extra={}){let prevented=false;events.click[0]({target:link,button:0,
+  defaultPrevented:false,preventDefault:()=>{prevented=true;},...extra});return prevented;}
+assert(click());assert.equal(context.window.location.hash,link.href);
+for(const key of ['ctrlKey','metaKey','shiftKey','altKey'])assert(!click({[key]:true}));
+assert(!click({button:1}));assert(!click({defaultPrevented:true}));
+rules.open=false;context.window.location.hash='#nav-up-buy-three';events.hashchange[0]();assert(rules.open);
+glossary.open=false;context.window.location.hash='#glossary-amp-table';events.pageshow[0]();assert(glossary.open);
+console.log('离线导航执行通过');
+'''
+        ids = re.findall(r'\bid="([^"]+)"', assets.rules_template({}, {}))
+        payload = {'js': assets.RULES_INTERACTION_JS, 'ids': ids + ['marketRiskRules']}
+        result = subprocess.run(['node', '-e', code], input=json.dumps(payload),
+                                text=True, encoding='utf-8', capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

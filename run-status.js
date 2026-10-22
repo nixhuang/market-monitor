@@ -428,20 +428,18 @@
       if (unsupported >= total) return {phase: 'idle', text: '清单中 ' + unsupported + ' 个特殊代码暂不支持报价，未抓取报价'};
       const risk = snap.market_risk || {};
       const missingRisk = Array.isArray(risk.missing) ? risk.missing : [];
+      const deficits = [];
+      if (info.gray) deficits.push('缺失 ' + info.gray);
+      if (unsupported) deficits.push(unsupported + ' 个特殊代码暂不支持报价');
       if (missingRisk.length) {
         const valid = risk.valid_count ?? (5 - missingRisk.length);
-        return {phase: 'partial', text: kind + '运行已完成 · 市场风险数据缺失或过期：' +
-          missingRisk.join('、') + '（有效指标 ' + valid + '/5） · 个股行情 ' +
-          (total - unsupported) + '/' + total + ' 已更新 · 完成于 ' +
-          (finished || '未记录') + '（北京时间）' + suffix, reload: !!oldPage};
+        const parts = [kind + '运行已完成',
+          '市场风险数据缺失：' + missingRisk.join('、') + '（有效指标 ' + valid + '/5）',
+          ...deficits, '完成于 ' + (finished || '未记录') + '（北京时间）'];
+        return {phase: 'partial', text: parts.join(' · ') + suffix, reload: !!oldPage};
       }
-      if (unsupported) {
-        const extra = (info.gray ? '缺失 ' + info.gray + ' · ' : '') +
-          (total - unsupported) + ' 项数据已更新 · ' + unsupported + ' 个特殊代码暂不支持报价';
-        return {phase: 'ok', text: success + ' · ' + extra + suffix, reload: !!oldPage};
-      }
-      if (info.gray) return {phase: 'ok', text: success + ' · 缺失 ' + info.gray + suffix, reload: !!oldPage};
-      return {phase: 'ok', text: success + suffix, reload: !!oldPage};
+      const extra = deficits.length ? ' · ' + deficits.join(' · ') : '';
+      return {phase: 'ok', text: success + extra + suffix, reload: !!oldPage};
     }
     if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
     return {phase: 'idle', text: '点「立即运行」抓最新行情'};

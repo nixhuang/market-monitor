@@ -58,10 +58,18 @@ items = [
 html = monitor.render(macro, items, 10, snapshot=snapshot, dup_hidden=2)
 
 fail = []
+checks_total = 0
 def check(cond, msg):
+    global checks_total
+    checks_total += 1
     print(("PASS " if cond else "FAIL ") + msg)
     if not cond:
         fail.append(msg)
+
+# 规则样式只输出一次，且仍在仓位CSS后保持最终覆盖优先级。
+check(html.count(monitor.RULES_CSS) == 1, "规则CSS整块只输出一份")
+_cost_css, _cost_js = monitor._cost_panel_assets(items)
+check(html.index(_cost_css) < html.index(monitor.RULES_CSS), "规则CSS仍在仓位CSS之后覆盖")
 
 # 标题与排
 check("<title>AI监测</title>" in html and "<h1>AI监测</h1>" in html, "标题 = AI监测")
@@ -80,10 +88,56 @@ from unittest.mock import patch as _patch
 with _patch.object(monitor, "_bj_today", return_value="2026-10-07"):   # 财报颜色按北京时间日算，固定「今天」
     _html_e = monitor.render(macro, [_near, _far] + [d for d in items if d["symbol"] not in ("NTNX", "TEM")], 10, snapshot=snapshot, dup_hidden=2)
 check('<span class="earn soon"' in _html_e and _html_e.count('<span class="earn soon"') == 1
-      and '<span class="earn">' in _html_e, "北京时间 7 天内的财报标黄（earn soon），更远的保持蓝色")
+      and '<span class="earn">' in _html_e, "D 距北京今天 2 天的财报标黄（earn soon），更远的保持蓝色")
 check(' title="' not in _html_e and " title='" not in _html_e, "首页不含任何 title 悬停提示（手机/iPad 无法悬停）")
 check(".earn.soon{color:#f0c674" in _html_e, "财报标黄样式存在")
-_mob_css = _html_e.split('@media (max-width:600px){', 1)[1].split('.fund-context{', 1)[0]
+# 整页验证冬夏令时北京午夜：同一 D 的时段文字仍不同，但红黄窗口必须完全一致。
+from datetime import date as _date, datetime as _datetime, timedelta as _timedelta
+for _d in ('2026-01-15', '2026-07-15', '2026-10-11', '2027-01-01'):
+    for _offset, _urgency in ((-8, ''), (-7, 'yellow'), (-2, 'yellow'), (-1, 'red'),
+                             (0, 'red'), (1, 'red'), (2, '')):
+        _day = _date.fromisoformat(_d) + _timedelta(days=_offset)
+        for _time in ('00:00:00', '23:59:59'):
+            _rows = []
+            for _index, _timing in enumerate(('pre', 'post', 'during', '', 'unknown')):
+                _row = item('EARN' + str(_index), 'technology', 'green', chg=0)
+                _row.update(signals=[], earnings={'status': 'ok', 'date': _d, 'timing': _timing, 'kind': 'expected'})
+                _rows.append(_row)
+            with _patch.object(monitor, 'NOW', _datetime.fromisoformat(f'{_day}T{_time}+08:00')):
+                _page = monitor.render({}, _rows, len(_rows), snapshot={})
+            _card = _page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
+            _css = {'red': ' urgent', 'yellow': ' soon', '': ''}[_urgency]
+            check(_card.count(f'<span class="earn{_css}">') == 5
+                  and ('无异动 5 只' not in _card if _urgency else '无异动 5 只' in _card)
+                  and _card.count('<tr class="green"') == 5
+                  and all(_row['level'] == 'green' for _row in _rows),
+                  f'北京 {_day} {_time} / D={_d}：五种时段同窗 {_urgency or "普通"}，不改行情绿灯及正确折叠')
+
+# rulesTpl 与页底宏观说明都不能残留旧日期口径或“行灯”。
+from html import unescape as _unescape
+for _label, _fragment in (
+        ('静态 rulesTpl', re.search(r'<template id="rulesTpl">(.*?)</template>', _html_e, re.S)[1]),
+        ('名词解释模板', re.search(r'<template id="glossaryTpl">(.*?)</template>', _html_e, re.S)[1])):
+    _plain = _unescape(re.sub(r'<[^>]+>', '', _fragment))
+    check(not re.search(r'行灯|两个完整日|两整日|美东今天|14\s*天[^。；\n]*黄|黄[^。；\n]*14\s*天', _plain),
+          _label + ' 不含行灯、两日、美东今天或14天黄旧口径')
+    _window_in_rules = all(term in _plain for term in ('前一日', '当日', '后一日', '北京'))
+    _window_by_link = (_label == '名词解释模板' and '北京今天' in _plain
+                       and 'href="#rule-earnings"' in _fragment)
+    check(_window_in_rules or _window_by_link,
+          _label + ' 保留北京日历红窗正文或指向规则正文的有效链接')
+
+_visible_html = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', '', _html_e, flags=re.S | re.I)
+check('行灯' not in _unescape(re.sub(r'<[^>]+>', '', _visible_html)), '全部用户可见说明统一使用报灯，不残留行灯')
+
+_mobile_start = _html_e.index('@media (max-width:600px){') + len('@media (max-width:600px){')
+_mobile_depth = 1
+_mobile_end = _mobile_start
+while _mobile_depth:
+    _char = _html_e[_mobile_end]
+    _mobile_depth += (_char == '{') - (_char == '}')
+    _mobile_end += 1
+_mob_css = _html_e[_mobile_start:_mobile_end - 1]
 check('display:grid' not in _mob_css and 'grid-column' not in _mob_css and 'tr:not(:has' not in _mob_css,
       "手机端不再把个股行拆成上下三层 grid，保持四栏各自换行")
 check('.stk thead{display:none}' not in _mob_css and '.stk colgroup' not in _mob_css and 'table-layout:auto' not in _mob_css,
@@ -140,7 +194,8 @@ check('box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-rad
 check('id="group_technology"' in html and 'IT软硬Ai (5)' in html, "IT 分类展示计数")
 check('其他关注' not in html, "旧其他关注分类已移除")
 check("<h2>个股</h2>" not in html and "<h2>ETF 基金</h2>" not in html, "个股与 ETF 不再分区")
-check('<thead' not in html and '<th>名称</th>' not in html and 'class="h-earn"' not in html,
+check(all('<thead' not in table and '<th>名称</th>' not in table and 'class="h-earn"' not in table
+          for table in re.findall(r'<table class="stk">.*?</table>', html, re.S)),
       "表头「名称｜财报」整行已删除（2026-10-15）")
 check(monitor.STK_HEAD == '', "STK_HEAD 不再输出表头")
 check("财报 美东" not in html and "下一次财报" not in html.split('id="group_positions"')[1].split('<div class="acts">')[0], "每行不再重复写「财报」二字")
@@ -187,45 +242,30 @@ check("当日行情未取得 2 只：NTNX、MCD" in html4 and "规则未完全�
 check('id="runLight" data-phase="bad"' in html4, "运行灯初始为红")
 check('id="ruleLight" data-phase="idle"' in html4, "行情失败时规则灯仍独立待核验")
 
-# ---- 基本面徽章 ----
-# render() 会就地 sort items，前面几次 render 已经打乱顺序，必须按代码定位，不能用索引
-def by_sym(lst, s):
-    return next(d for d in lst if d["symbol"] == s)
-
-
-for d in items:
-    d.pop("fund", None)
-by_sym(items, "NTNX")["fund"] = {"level": "red", "hits": ["营收同比 -22%"],
-                                 "period": "6/30/2026", "oneoff": False}
-by_sym(items, "TEM")["fund"] = {"level": "yellow", "hits": ["营业利率 12.3→8.1%", "流动比率 115→84"],
-                                "period": "6/30/2026", "oneoff": False}
-by_sym(items, "MCD")["fund"] = {"level": "green", "hits": [], "period": "6/30/2026", "oneoff": True}
-# 行情绿灯但基本面亮红的行也必须上表，否则警示永远藏在「无异动 N 只」里
-by_sym(items, "JNJ")["fund"] = {"level": "red", "hits": ["经营现金流转负"],
-                                "period": "6/30/2026", "oneoff": False}
-html5 = monitor.render(macro, items, 10, snapshot=snapshot, dup_hidden=0)
-check('<td class="sym">JNJ' in html5, "基本面红的绿灯行也会上表（不再藏在无异动里）")
-check("经营现金流转负" in html5, "该行徽章 title 正确")
-quiet_nums = re.findall(r"无异动 (\d+) 只", html5)
-check("1" in quiet_nums and "2" not in quiet_nums,
-      f"无异动计数已扣掉基本面警示的那只：{quiet_nums}")
-check(html5.count('summary class="tag f-red"') == 2, "红色基本面可点击标签 2 个")
-check(html5.count('summary class="tag f-yellow"') == 1, "黄色基本面可点击标签 1 个")
-check('<li>营收同比 -22%</li>' in html5, "红标签展开内容带命中原因")
-check('<li>流动比率 115→84</li>' in html5, "黄标签展开内容带命中原因")
-check("6/30/2026 报告期" in html5, "展开内容带报告期")
-check(html5.count('class="fund-detail"') == 3, "绿色不亮徽章，共 3 个折叠详情")
-check('aria-label="查看 JNJ 基本面详情"' in html5, "标签有可访问名称")
-check('border-top-color:currentColor' in html5 and 'content:" · 展开"' not in html5,
-      "基本面收起时显示向下三角，展开时箭头翻转且不再显示展开文字")
-check('鼠标悬停徽章' not in html5, "页脚更新为点击查看说明")
-# 基本面不改变原有红黄绿灯：NTNX 本来就是 red，加 fund 不改变行数与灯色
-check(html5.count('<tr class="red"') == html.count('<tr class="red"'), "基本面不影响红行数量")
-check('data-phase="ok"' in html5, "基本面不影响状态灯（仍为绿）")
+# 旧基本面输入必须完全忽略，不改变行情灯、排序或无异动折叠。
+import copy as _copy
+_clean_items = _copy.deepcopy(items)
+_legacy_items = _copy.deepcopy(items)
+for _row in _legacy_items:
+    _row['fund'] = {'level': 'red', 'hits': ['旧风险 <script>alert(1)</script>'], 'period': '6/30/2026'}
+    _row['fund_cache_note'] = '旧缓存基本面待更新'
+_legacy_before = _copy.deepcopy(_legacy_items)
+_baseline = monitor.render(macro, _clean_items, 10, snapshot=snapshot, dup_hidden=0)
+html5 = monitor.render(macro, _legacy_items, 10, snapshot=snapshot, dup_hidden=0)
+check(html5 == _baseline, "旧基本面红灯及缓存说明不改变全页输出与排序")
+check(_legacy_items == _legacy_before, "渲染旧基本面输入不突变原数据")
+check(re.findall(r"无异动 (\d+) 只", html5) == re.findall(r"无异动 (\d+) 只", _baseline),
+      "旧基本面红灯不改变无异动折叠计数")
+_legacy_visible = re.sub(r'<template\b[^>]*>.*?</template>', '', html5, flags=re.S)
+check(not any(_text in _legacy_visible for _text in ('基本面', 'fund-detail', 'fund-data-note', 'data-fund-', '旧风险', 'alert(1)')),
+      "旧基本面内容、徽章、已读属性及脚本均不回显")
+check('鼠标悬停徽章' not in html5, "页脚不使用悬停说明")
+check(html5.count('<tr class="red"') == html.count('<tr class="red"'), "旧基本面红灯不影响行情红行数量")
+check('id="runLight" data-phase="ok"' in html5, "旧基本面红灯不影响运行状态灯")
 check('垃圾债利差' in html5 and '高收益债利差' not in html5 and '跑路价签' not in html5,
       "正式生成首页仅使用垃圾债利差新名称")
 footer = html5.split('<div class="foot">', 1)[1].split('</div>', 1)[0]
-check('href="#signalRules"' in footer and '查看首页完整规则与阈值' in footer, "页脚指向首页完整规则")
+check('href="#signalRules"' in footer and '查看完整规则与阈值' in footer, "页脚指向独立预警规则")
 head5 = html5.split('</head>', 1)[0]
 check('rel="icon"' in head5 and './icons/favicon-32.png' in head5, "页头有网页图标（相对路径）")
 check('rel="apple-touch-icon" href="./icons/apple-touch-icon.png"' in head5, "页头有 apple-touch-icon")
@@ -236,13 +276,14 @@ _mf = _json.load(open(_os.path.join(_root, 'manifest.webmanifest'), encoding='ut
 check(all(_os.path.exists(_os.path.join(_root, i['src'])) for i in _mf['icons']), "manifest 里的图标文件都存在")
 check(all(_os.path.exists(_os.path.join(_root, 'icons', n)) for n in ('favicon-32.png', 'apple-touch-icon.png')), "页头引用的图标文件存在")
 check(sum(_os.path.getsize(_os.path.join(_root, 'icons', n)) for n in _os.listdir(_os.path.join(_root, 'icons'))) < 400 * 1024, "图标总体积小于 400KB")
-check('RSI 6 / 12 / 24' not in footer and '布林信号 + RSI' not in footer and 'Nasdaq' in footer,
-      "页脚仅保留数据来源，不再重复长篇规则")
-by_sym(items, "NTNX")["fund"]["hits"] = ['利润 < 0 & "下降" <script>alert(1)</script>']
-html6 = monitor.render(macro, items, 10, snapshot=snapshot)
-check('&lt;script&gt;alert(1)&lt;/script&gt;' in html6 and '<script>alert(1)</script>' not in html6,
-      "基本面展开内容保留 HTML 转义")
-
+check('RSI 6 / 12 / 24' not in footer and '布林信号 + RSI' not in footer
+      and '行情：' not in footer and '垃圾债利差：' not in footer
+      and 'href="#marketRiskRules"' in footer and 'href="#glossary-fetch"' in footer,
+      "页脚仅保留三类入口，来源统一收进名词解释和抓取")
+_glossary5 = re.search(r'<template id="glossaryTpl">(.*?)</template>', html5, re.S)[1]
+check(all(term in _glossary5 for term in ('Yahoo → stooq → Nasdaq', 'BAMLH0A0HYM2',
+      'Cboe官方VIX日线优先', '芝加哥联储原始周度数据', 'History of Market')),
+      "旧来源迁入新稿且VIX来源与当前实现一致")
 # 正式利率决议仅为中性消息，不影响风险灯、个股信号或原油行。
 import copy as _copy
 from unittest.mock import patch as _patch
@@ -264,9 +305,9 @@ check(not any(term in _refhtml for term in ("核心CPI", "SEP", "季度预测", 
 check('id="policyAlertDetails"><summary>美联储利率决议' in _refhtml
       and '<details class="macro-help" id="policyAlertDetails" open' not in _refhtml, "决议来源位于页底并默认折叠")
 check("3.50%–3.75%" in _refhtml and "2026-09-17 02:00" in _refhtml
-      and "成功后持久缓存" in _refhtml and "不按24小时重复抓取" in _refhtml
+      and "到下次官方公布时点前复用" in _refhtml and 'href="#fetch-reference"' in _refhtml
       and "正常缓存24小时" not in _refhtml and "临时决议可能延迟发现" in _refhtml,
-      "详情包含目标区间、双时区与按公布时间更新说明")
+      "详情保留区间与双时区，缓存说明集中到新抓取区块")
 check(_refsnap["summary"] == snapshot["summary"] and 'id="oilAlert"' in _refhtml, "原计数不变，WTI保留")
 _pending = _copy.deepcopy(_refsnap)
 _pending["reference_alerts"]["policy"]["fed"]["fetch_error"] = "模拟解析错误 <script>bad()</script>"
@@ -413,7 +454,176 @@ with _patch.object(monitor, "NOW", _ref_now), \
             check("维持不变" in _page and "3.50%–3.75%" in _page and "2026-09-16" in _page,
                   "入口异常 " + _label + "：保留有效旧消息和来源日期")
 
+# 完整捕获主行属性，允许新增属性；保留原因及报价必须各出现一次且值精确一致。
+def rendered_stock_row(page, row, keep):
+    matches = re.findall(r'<tr\b([^>]*\bid="' + re.escape(monitor._stock_anchor_id(row['symbol']))
+                         + r'"[^>]*)>(.*?)</tr>', page, re.S)
+    check(len(matches) == 1, row['symbol'] + '主表行唯一且完整捕获')
+    attrs, body = matches[0] if len(matches) == 1 else ('', '')
+    for name, value in (('data-quiet-keep', str(keep).lower()),
+                        ('data-price', '' if row.get('price') is None else str(row['price'])),
+                        ('data-prev-close', '' if row.get('prev_close') is None else str(row['prev_close']))):
+        check(re.findall(r'\b' + name + r'="([^"]*)"', attrs) == [value],
+              row['symbol'] + '主行' + name + '精确匹配' + repr(value))
+    classes = re.findall(r'\bclass="([^"]*)"', attrs)
+    check(len(classes) == 1, row['symbol'] + '主行class属性唯一')
+    return classes[0].split() if len(classes) == 1 else [], body
+
+
+# 目标/共识30/70：状态与主表折叠分别验证，旧基本面及财报三日回归保持不动。
+_target_cases = []
+for _symbol, _group, _price, _prev, _state in (
+        ('TLOW', 'technology', 129.999, 100, 'low'),
+        ('TSPACE', 'technology', 130, 100, 'space'),
+        ('TMID', 'materials', 169.999, 100, 'space'),
+        ('THIGH', 'healthcare', 170, 100, 'high'),
+        ('TOVER', 'energy', 250, 100, 'high'),
+        ('THIT', 'position', 101, 100, 'hit'),
+        ('TBOTH', 'focus', 170, 180, 'hit')):
+    _row = item(_symbol, _group, 'green', chg=0)
+    _row.update(data_date='2026-10-20', prev_close=_prev, signals=[], signal_marks=[], range52={'low': 50, 'high': 150, 'position': 50, 'scope': '52周',
+                'from': '2025-10-20', 'to': '2026-10-20'},
+                target=monitor.evaluate_target(100, _prev,
+                    {'kind': 'consensus', 'price': _price, 'failed': False}, _group, 3))
+    _row['purple'] = bool(_row['target']['hit'] or _row['target']['space_hit'])
+    _target_cases.append((_row, _state))
+_target_rows = [row for row, _ in _target_cases]
+for _symbol, _target, _price, _level in (
+        ('TFAILOLD', {'kind': 'consensus', 'price': 250, 'failed': True}, 100, 'green'),
+        ('TFAILNEW', {'kind': 'consensus', 'price': None, 'failed': True}, 100, 'green'),
+        ('TNOQUOTE', {'kind': 'consensus', 'price': 250, 'failed': False}, None, 'gray')):
+    _row = item(_symbol, 'technology', _level, chg=0)
+    _row.update(price=_price, prev_close=100, signals=[], signal_marks=[], purple=False,
+                target=monitor.evaluate_target(_price, 100, _target, 'technology', 3))
+    _target_rows.append(_row)
+_target_before = _copy.deepcopy(_target_rows)
+with _patch.object(monitor, 'global_dca', return_value=None):
+    _target_snapshot = monitor.build_snapshot({}, _target_rows, {}, group_counts={})
+    _target_page = monitor.render({}, _target_rows, len(_target_rows), snapshot=_target_snapshot)
+
+for _row, _state in _target_cases:
+    _classes, _fragment = rendered_stock_row(_target_page, _row, _state != 'low')
+    check('lvtag tgt ' + _state in _fragment,
+          '30/70胶囊状态 ' + _row['symbol'] + '=' + _state)
+    _stripe = {'space': 'pur-space', 'high': 'pur-high', 'hit': 'pur-hit'}.get(_state)
+    check('green' in _classes and (_stripe in _classes if _stripe else 'pur' not in _classes),
+          '目标行独立条纹 ' + _row['symbol'] + '=' + (_stripe or '无'))
+
+for _row in _target_rows[-3:]:
+    _classes, _fragment = rendered_stock_row(_target_page, _row, False)
+    check(_row['level'] in _classes and 'pur' not in _classes,
+          _row['symbol'] + '失败不新增紫色条纹或改变灯级')
+    check('lvtag tgt bad' in _fragment and '获取失败' in _fragment and '+150%' not in _fragment,
+          _row['symbol'] + '失败灰胶囊不展示旧空间')
+_tech = _target_page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
+_tech_main, _tech_quiet = _tech.split('<details class="quiet-list">', 1)
+check('id="s-tspace"' in _tech_main and 'id="s-tlow"' in _tech_quiet
+      and 'id="s-tfailold"' in _tech_quiet and 'id="s-tfailnew"' in _tech_quiet,
+      '跨组空间>=30留主表，低空间及失败不提升可见性')
+check(_target_rows == _target_before, '目标全页渲染不突变输入')
+check(_target_snapshot['summary']['purple'] == 6
+      and _target_snapshot['signal_counts']['target']['purple'] == 6,
+      '空间5达到2的union紫计数是6而非7')
+check({r['symbol'] for r in _target_snapshot['target_overlays']['space']}
+      == {'TSPACE', 'TMID', 'THIGH', 'TOVER', 'TBOTH'}
+      and {r['symbol'] for r in _target_snapshot['target_overlays']['reached']} == {'THIT', 'TBOTH'},
+      '全页快照空间和达到名单成员正确且允许重叠')
+_target_panel = _target_page.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
+check(bool(re.search(r'空间\s*5\s*只[\s　]*达到\s*2\s*只', _target_panel))
+      and not re.search(r'紫灯\s*\d+\s*只', _target_panel), '空间/达到双计数标题替代旧紫灯标题')
+check(_target_panel.count('<ul') == 2 and '□' in _target_panel and '■' in _target_panel
+      and '今日跌破共识价 170' in _target_panel and _target_panel.count('href="#s-tboth"') == 2,
+      '展开两段方块名单保留具体达到方向及重叠跳转')
+check('data-kind="target_purple"' in _target_page and '>目标价</button>' not in _target_page
+      and '>共识价</button>' not in _target_page, '底部union按钮保留而目标红黄表行移除')
+check('疑似数据异常' not in _target_panel and 'lvtag tgt high' in _target_page,
+      '>100只作高空间不复活异常红')
+for _state in ('space', 'high', 'hit'):
+    check('tr.pur-' + _state + ' td.sig{' in _target_page
+          and 'tr.pur-' + _state + '+tr.range52-row>td{' in _target_page,
+          _state + '右侧条纹贯通52周行的CSS存在')
+check(bool(re.search(r'\.lvtag\.tgt\.bad\{[^}]*color:var\(--dim\)[^}]*border:1px dashed', _target_page))
+      and '.lvtag.tgt.low{' in _target_page and '.lvtag.tgt.hit{' in _target_page,
+      '失败灰虚线及低空间/达到胶囊CSS存在')
+
+# 最新判灯：技术灰仍保留主表绿灯；组合不重复RSI/布林，缺/参考不进统计。
+from tests.mm_test_groups import TestBollRsiRules as _BollRules
+_business = _BollRules()
+_business.setUp()
+try:
+    _business_rows = [
+        _business.analyze([35, 35, 35], 'technology', bands=(100, 110, 99), symbol='COMBORED'),
+        _business.analyze([70, 70, 70], 'position', symbol='RSIYELLOW'),
+        _business.analyze([70, 70, 70], 'technology', symbol='RSIGRAY'),
+        _business.analyze([70, 50, 50], 'technology', bands=(100, 110, 99), symbol='COMBOGRAY'),
+        _business.analyze([70, 50, 50], 'technology', symbol='RSISILENT'),
+        _business.analyze([50, 50, 50], 'focus', bands=(100, 101, 90), symbol='UPSILENT'),
+        _business.analyze([50, 50, 50], 'technology', high=120, low=90, symbol='DUALSILENT')]
+    _oversold_rows = []
+    for _index, _group in enumerate(g['item_group'] for g in monitor.GROUPS):
+        for _side, _bands, _prefix in ((None, (100, 110, 90), 'OSNONE'),
+                                       ('上轨', (100, 101, 90), 'OSUP'),
+                                       ('下轨', (100, 110, 99), 'OSDOWN')):
+            _row = _business.analyze([35, 30, 20], _group, bands=_bands, symbol=_prefix + str(_index))
+            _oversold_rows.append((_row, _side))
+finally:
+    _business.doCleanups()
+_excluded = item('QUOTEMISSING', 'technology', 'gray', chg=0)
+_excluded.update(price=None, signals=['缺行情'], signal_marks=[])
+_reference = item('QUOTE_REFERENCE', 'technology', 'green', chg=0)
+_reference.update(reference_only=True, signals=[], signal_marks=[])
+_business_rows += [_excluded, _reference]
+with _patch.object(monitor, 'global_dca', return_value=None):
+    _business_snap = monitor.build_snapshot({}, _business_rows, {}, group_counts={})
+    _business_page = monitor.render({}, _business_rows, len(_business_rows), snapshot=_business_snap)
+check(_business_snap['signal_counts']['boll_rsi']['red'] == 1
+      and _business_snap['signal_counts']['rsi']['red'] == 0
+      and _business_snap['signal_counts']['boll']['red'] == 0,
+      '下轨三超卖只归布林+RSI红，不重复单独RSI或布林')
+check(_business_snap['signal_counts']['rsi']['yellow'] == 1
+      and _business_snap['summary']['red'] == 1 and _business_snap['summary']['yellow'] == 1,
+      '单独三超买持仓黄，其他组文字灰，顶部按最终灯去重')
+check({r['symbol'] for r in _business_snap['text_only']} == {'RSIGRAY', 'COMBOGRAY'},
+      '单条RSI、重点零条上轨、受限制双轨、缺/参考均不制造技术灰')
+for _sym in ('RSIGRAY', 'COMBOGRAY', 'RSISILENT', 'UPSILENT', 'DUALSILENT'):
+    _row = next(row for row in _business_rows if row['symbol'] == _sym)
+    _classes, _fragment = rendered_stock_row(_business_page, _row, _sym == 'COMBOGRAY')
+    check(_classes == ['green'], _sym + '技术文字或无提醒均不把主表绿灯改灰')
+check('aria-label="RSI3条超买">▲' in _business_page
+      and 'tone-yellow" role="img" aria-label="RSI3条超买"' in _business_page,
+      '单独三超买统计方向三角标黄，不跟其他红灯染红')
+check('盘中突破布林上轨' in _business_page and '触及布林下轨' in _business_page,
+      '双轨保留双方事实但限制后不换边统计')
+check('id="' + monitor._stock_anchor_id('QUOTEMISSING') + '"' in _business_page
+      and 'id="' + monitor._stock_anchor_id('QUOTE_REFERENCE') + '"' in _business_page
+      and all(r['symbol'] not in ('QUOTEMISSING', 'QUOTE_REFERENCE')
+              for levels in _business_snap['signal_members'].values() for members in levels.values() for r in members),
+      '缺/参考仍在主表，所有指标统计成员均排除')
+
+# 三超卖全覆盖：实际分析→快照→整页，所有分组上/下轨组合红、无轨RSI红。
+with _patch.object(monitor, 'global_dca', return_value=None):
+    _oversold_items = [row for row, _ in _oversold_rows]
+    _oversold_snap = monitor.build_snapshot({}, _oversold_items, {}, group_counts={})
+    _oversold_page = monitor.render({}, _oversold_items, len(_oversold_items), snapshot=_oversold_snap)
+for _row, _side in _oversold_rows:
+    _kind = 'rsi' if _side is None else 'boll_rsi'
+    _facts = monitor.classify_technical_facts(_row['group'], 0, 3, _side)
+    check(_facts == {'kind': _kind, 'level': 'red', 'foldable': True}
+          and _row['signal_marks'] == [(_kind, 'red')],
+          _row['symbol'] + '纯事实与生产分析同为独占红灯')
+    _classes, _fragment = rendered_stock_row(_oversold_page, _row, False)
+    check(_classes == ['red'], _row['symbol'] + '红灯主表可见但不因原红永久保留')
+    check(_row['symbol'] in {m['symbol'] for m in _oversold_snap['signal_members'][_kind]['red']},
+          _row['symbol'] + '快照统计成员归属正确')
+check(_oversold_snap['summary']['red'] == len(_oversold_items)
+      and _oversold_snap['summary']['yellow'] == 0 and not _oversold_snap['text_only'],
+      '三超卖全组全路径最终红，不进入技术灰名单')
+check(_oversold_snap['signal_counts']['boll_rsi']['red'] == 2 * len(monitor.GROUPS)
+      and _oversold_snap['signal_counts']['rsi']['red'] == len(monitor.GROUPS)
+      and _oversold_snap['signal_counts']['boll']['red'] == 0,
+      '有轨三超卖仅组合红，无轨仅RSI红，不重复计布林')
+
 print()
 if fail:
-    print(f"{len(fail)} 项失败"); sys.exit(1)
-print("全部通过")
+    print(f"{checks_total} 项检查中 {len(fail)} 项失败"); sys.exit(1)
+print(f"全部通过（{checks_total} 项检查）")

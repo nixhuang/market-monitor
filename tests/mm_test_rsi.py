@@ -1,7 +1,6 @@
-"""离线回归：RSI 不再单独报灯，灯级只由「进布林报警区间 + RSI 同侧条数」产生。
+"""离线回归：布林+RSI与单独RSI互斥；单独三超卖全组红、三超买持仓/重点黄。
 
-   进区间且 2 条同侧 → 黄；3 条同侧 → 红；方向不一致（下轨配超买 / 上轨配超卖）→ 黄。
-   不进区间时 RSI 几条过界都只是文字，不亮灯也不进统计。
+组合按选中轨道及分组判灯；单条单独RSI无提醒，技术文字仅在最终绿灯时计灰。
 """
 import os
 import sys
@@ -39,10 +38,10 @@ class TestRSI(unittest.TestCase):
             self.assertEqual([call.args[1] for call in rsi.call_args_list], [6, 12, 24])
         return result
 
-    # ---------------------------------------------------------------- 单独 RSI 不报灯
+    # ---------------------------------------------------------------- 单独 RSI 分组判灯
 
-    def test_rsi_alone_never_lights(self):
-        """没进布林区间时，RSI 几条同侧过界都只留文字，不亮灯、不进计数。"""
+    def test_standalone_rsi_boundaries_and_lights(self):
+        """单条无提醒、两条文字灰、三超卖红、三超买持仓黄，含无效周期边界。"""
         cases = [([50, 50, 50], 0), ([70, 69.999, 50], 0), ([36, 36.001, 50], 0),
                  ([70, 70, 50], 1), ([80, 70, 50], 1), ([35, 35, 50], 1),
                  ([70, 70, 70], 1), ([35, 35, 35], 1), ([80, 20, 50], 0),
@@ -51,8 +50,9 @@ class TestRSI(unittest.TestCase):
         for values, expected_texts in cases:
             with self.subTest(values=values):
                 level, signals, detail = self.analyze(values)   # 默认 bands 不触轨
-                self.assertEqual(level, 'green')
-                self.assertFalse(detail['signal_marks'])
+                expected = 'red' if values == [35, 35, 35] else 'yellow' if values == [70, 70, 70] else 'green'
+                self.assertEqual(level, expected)
+                self.assertEqual(detail['signal_marks'], [('rsi', expected)] if expected != 'green' else [])
                 texts = [s for s in signals if s.startswith('RSI')]
                 self.assertEqual(len(texts), expected_texts, signals)
                 for text in texts:
@@ -105,11 +105,16 @@ class TestRSI(unittest.TestCase):
         self.assertEqual(two['boll_rsi_hits'], 2)
         self.assertEqual(three['boll_rsi_hits'], 3)
 
-    def test_direction_mismatch_never_red(self):
-        """方向不一致降为黄：3 条 RSI 与轨道反向也不升级成红。"""
-        level, signals, detail = self.analyze([20, 25, 30], bands=(100, 101, 90))
-        self.assertEqual(level, 'yellow')
-        self.assertEqual(detail['boll_rsi_direction'], '上轨（RSI超卖，方向不一致）')
+    def test_direction_mismatch_respects_explicit_upper_and_lower_rules(self):
+        """上轨三超卖全组组合红；下轨三超买仍反向组合黄，不重复单独RSI。"""
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            with self.subTest(group=group):
+                level, signals, detail = self.analyze([20, 25, 30], bands=(100, 101, 90), group=group)
+                self.assertEqual(level, 'red')
+                self.assertEqual(detail['signal_marks'], [('boll_rsi', 'red')])
+                self.assertEqual(detail['boll_rsi_direction'], '上轨（RSI超卖，方向不一致）')
+                self.assertEqual(detail['boll_rsi_hits'], 3)
+                self.assertEqual(monitor.text_only_members([detail]), [])
         level, signals, detail = self.analyze([80, 85, 90], bands=(100, 110, 99))
         self.assertEqual(level, 'yellow')
         self.assertEqual(detail['boll_rsi_direction'], '下轨（RSI超买，方向不一致）')
@@ -147,24 +152,23 @@ class TestRSI(unittest.TestCase):
                 self.assertEqual(counts['rsi']['yellow'], 0)
                 self.assertEqual(counts['boll_rsi']['red'], 0)
 
-    # ---------------------------------------------------------------- 长持仓
+    # ---------------------------------------------------------------- 持仓规则不分长短
 
-    def test_long_position_shields_upper_but_keeps_three(self):
-        """长持仓屏蔽上轨的普通过热，RSI 三条全过界仍报红；下轨不受影响。"""
-        long_cfg, short_cfg = {'hold': 'long'}, {'hold': 'short'}
-        # 上轨 + 2 条 → 长持仓不报，短持仓报黄
-        self.assertEqual(self.analyze([80, 80, 50], cfg=long_cfg, bands=(100, 101, 90))[0], 'green')
-        self.assertEqual(self.analyze([80, 80, 50], cfg=short_cfg, bands=(100, 101, 90))[0], 'yellow')
-        # 上轨 + 3 条 → 两边都报红
-        level, _, detail = self.analyze([80, 80, 75], cfg=long_cfg, bands=(100, 101, 90))
-        self.assertEqual(level, 'red')
-        self.assertEqual(detail['boll_rsi_direction'], '上轨（超买）')
-        # 下轨 2 条 / 3 条 → 长持仓照常
-        self.assertEqual(self.analyze([20, 30, 50], cfg=long_cfg, bands=(100, 110, 99))[0], 'yellow')
-        self.assertEqual(self.analyze([10, 20, 34], cfg=long_cfg, bands=(100, 110, 99))[0], 'red')
-        # 没写 hold 字段按短持仓处理，规则不缩水
-        self.assertEqual(self.analyze([80, 80, 50], cfg={}, bands=(100, 101, 90))[0], 'yellow')
-        self.assertEqual(self.analyze([80, 80, 50], cfg={'hold': 'LONG'}, bands=(100, 101, 90))[0], 'green')
+    def test_position_rules_ignore_long_short_for_alerts(self):
+        """长短持仓统一为原短持仓规则，hold 字段只保留展示归属。"""
+        cases = (([80, 80, 50], (100, 101, 90), 'yellow'),
+                 ([20, 30, 50], (100, 101, 90), 'yellow'),
+                 ([80, 80, 75], (100, 101, 90), 'red'),
+                 ([20, 30, 50], (100, 110, 99), 'yellow'),
+                 ([10, 20, 34], (100, 110, 99), 'red'))
+        for values, bands, expected in cases:
+            for cfg in ({'hold': 'long'}, {'hold': 'short'}, {'hold': 'LONG'}, {}):
+                with self.subTest(values=values, bands=bands, cfg=cfg):
+                    level, _, detail = self.analyze(values, cfg=cfg, bands=bands)
+                    self.assertEqual(level, expected)
+                    self.assertIn(('boll_rsi', expected), detail['signal_marks'])
+                    self.assertTrue(detail['foldable'])
+                    self.assertIn('data-quiet-keep="false"', monitor._stock_row(detail, {}))
 
     def test_long_position_only_applies_to_positions(self):
         """同标的长持仓标记只在持仓组生效；重点组不看 hold。"""

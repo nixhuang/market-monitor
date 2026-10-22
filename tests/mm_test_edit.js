@@ -25,7 +25,10 @@ function makeEl(id) {
 }
 const els = {};
 const doc = {
-  getElementById(id) { return els[id] || (els[id] = makeEl(id)); },
+  getElementById(id) {
+    if(id==='set_target_space_pct'||id==='set_target_high_space_pct')return null;
+    return els[id] || (els[id] = makeEl(id));
+  },
   addEventListener() {}, createElement() { return makeEl('tmp'); },
   readyState: 'complete',
 };
@@ -52,7 +55,7 @@ const check = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if
 global.window.addEventListener = () => {};
 
 try {
-  eval(code + '\n;globalThis.__T={render,data,pageState,ETF_SET,SET,SET_DEFS,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError};');
+  eval(code + '\n;globalThis.__T={render,data,pageState,ETF_SET,get SET(){return SET;},SET_DEFS,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError,normalizeSettings};');
   globalThis.__T.initGroups(JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8')));
   console.log('PASS 脚本加载无异常');
 } catch (e) {
@@ -65,15 +68,27 @@ const T = globalThis.__T;
 const expectedDefaults = {
   boll_n:20,boll_k:2,boll_near_pct:0.5,boll_near_band_pct:15,chg_red:4,chg_yellow:2,
   rsi_high:70,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,
-  target_space_pct:50,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:1.8,vol_ratio_red_z:3.6,
+  target_space_pct:30,target_high_space_pct:70,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:1.8,vol_ratio_red_z:3.6,
   amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,hy_green:350,hy_red:400,
   vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,dca_every:0,dca_start:'',signal_single_open:1,
-  fund_enable:1,fund_rev_red:-20,fund_rev_yellow:-10,fund_om_drop:3,fund_gm_drop:3,fund_de_rise:30,
-  fund_cr_drop:20,fund_roe_drop:30,fund_pm_abnormal:60,fund_report_grace_days:90,
 };
 check(Object.keys(T.SET_DEFS).length===Object.keys(expectedDefaults).length&&
-  Object.entries(expectedDefaults).every(([key,value])=>T.SET_DEFS[key]===value), '共用schema保持全部原默认值');
+  Object.entries(expectedDefaults).every(([key,value])=>T.SET_DEFS[key]===value), '共用schema仅更新目标空间30／70，保留全部非相关默认值');
 T.renderSettings();
+const targetMigrated=T.normalizeSettings({target_space_pct:50,trigger_gap_pct:8});
+check(targetMigrated.values.target_space_pct===30&&targetMigrated.values.target_high_space_pct===70&&
+  targetMigrated.values.trigger_gap_pct===8&&targetMigrated.warnings.length===0,
+  '旧空间50静默退役为30／70，不产生维护警告且保留其它阈值');
+check(T.normalizeSettings({target_space_pct:50.0,target_high_space_pct:70}).warnings.length===0,
+  '旧50与已固定70配置兼容归一化');
+for(const [key,value] of [['target_space_pct',29],['target_space_pct',70],['target_high_space_pct',100]]){
+  const result=T.normalizeSettings({[key]:value});
+  check(result.values[key]===T.SET_DEFS[key]&&result.warnings.length===1, key+' 拒绝非固定值 '+value);
+}
+const migrated=T.normalizeSettings({fund_enable:1,fund_om_drop:7,fund_unknown:true,trigger_gap_pct:8,reduce_gap_pct:2,signal_single_open:0});
+check(!Object.keys(migrated.values).some(k=>k.startsWith('fund_'))&&migrated.warnings.length===0&&
+  migrated.values.trigger_gap_pct===8&&migrated.values.reduce_gap_pct===2&&migrated.values.signal_single_open===0,
+  '读取旧fund设置静默剔除、不产生维护警告且保留技术与交互设置');
 check(!src.includes('id="effectiveRuleText"')&&!src.includes('id="ruleDetails"')&&
   !src.includes('id="sourceDetails"')&&src.includes('href="./#signalRules"'),
   '设置页移除重复的完整规则和宏观细则，仅指向首页');
@@ -188,6 +203,13 @@ T.collectSettings();
 const saved = JSON.parse(T.setJsonText());
 check(saved.amp_yellow === 3 && saved.amp_red === 9, '振幅阈值正确采集并保留到保存 JSON');
 check(saved.custom_rule === 42, '表单外已有设置不会被保存操作删除');
+T.SET.fund_enable=1;T.SET.fund_om_drop=7;T.SET.fund_future_rule=99;
+const retiredSaved=JSON.parse(T.setJsonText());
+check(!Object.keys(retiredSaved).some(k=>k.startsWith('fund_'))&&retiredSaved.custom_rule===42&&
+  retiredSaved.amp_yellow===3&&retiredSaved.amp_red===9, '保存剔除全部旧fund设置但保留其他设置');
+check(!src.includes('基本面')&&!src.includes('set_fund_')&&!Object.keys(T.SET_DEFS).some(k=>k.startsWith('fund_')),
+  '设置页无基本面UI或schema参数');
+delete T.SET.fund_enable;delete T.SET.fund_om_drop;delete T.SET.fund_future_rule;
 check(!('hy_yellow' in saved), '保存规则不保留无效的旧黄色信用利差阈值');
 check(src.includes('id="set_amp_yellow"') && src.includes('id="set_amp_red"'), '编辑页确实有两个振幅输入项');
 check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x bp 黄')&&src.includes('垃圾债利差 ≥ x bp 红'), '信用利差仅保留有效的黄红两条阈值');
@@ -201,6 +223,18 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
   '完整规则迁至首页，设置页保留参数入口');
 
 (async () => {
+  // 等初始化的模拟读取结束，避免其错误文案与本次迁移断言竞争。
+  await new Promise(resolve=>setImmediate(resolve));
+  const migrationRequests=[];
+  const beforeMigrationStore=JSON.stringify(store);
+  els.msg.textContent='迁移前';
+  global.fetch=async(url,options)=>{migrationRequests.push(options.method);return {ok:true,status:200,
+    json:async()=>({content:Buffer.from('{"target_space_pct":50,"amp_yellow":3,"amp_red":9}').toString('base64'),sha:'a'.repeat(40)})};};
+  await T.loadSettings();
+  check(migrationRequests.join(',')==='GET'&&JSON.stringify(store)===beforeMigrationStore&&els.msg.textContent==='迁移前',
+    '读取旧50仅GET，无维护上传、无本地写入、无参数警告');
+  check(T.normalizeSettings({target_space_pct:50}).values.target_high_space_pct===70,
+    '缺高空间配置时浏览器自动使用固定70');
   let resolve;
   global.fetch = () => new Promise(r => { resolve = r; });
   const loading = T.loadSettings();
@@ -334,12 +368,24 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
   T.moveSymbol('positions','technology','NVDA');
   cfg2=JSON.parse(T.configText());
   check(cfg2.technology.NVDA&&!('target' in cfg2.technology.NVDA)&&!('target_at' in cfg2.technology.NVDA), '移到其他分组时清掉目标价和月份');
-  check(src.includes('id="set_target_gap_pct"')&&src.includes('id="set_target_space_pct"'), '规则区有目标价 ±x% 和空间 x% 两项设置');
-  T.SET.target_gap_pct=3;T.SET.target_space_pct=50;T.renderSettings();
-  check(Number(els.set_target_gap_pct.value)===3&&Number(els.set_target_space_pct.value)===50&&T.settingsError()==='', '目标价设置默认 3% / 50% 且通过校验');
+  check(src.includes('id="set_target_gap_pct"')&&!src.includes('id="set_target_space_pct"')&&
+    !src.includes('id="set_target_high_space_pct"'), '仅目标价 ±x% 可编辑，固定30／70不造输入框');
+  T.SET.target_gap_pct=3;T.SET.target_space_pct=30;T.SET.target_high_space_pct=70;T.renderSettings();
+  check(Number(els.set_target_gap_pct.value)===3&&T.SET.target_space_pct===30&&
+    T.SET.target_high_space_pct===70&&T.settingsError()==='', '目标价默认±3%，无空间输入框也能校验固定30／70');
+  check(src.includes('30%≤空间&lt;70%')&&src.includes('高空间 ≥70%（含边界）')&&
+    src.includes('目标价 / 现价 − 1')&&src.includes('所有分组个股空间 ≥30%')&&
+    src.includes('不含 ETF、指数、期货')&&src.includes('有效手填目标价覆盖共识取数失败')&&
+    src.includes('旧价仅展示不计数')&&src.includes('无数据不显示胶囊'), '静态说明明确边界、公式、范围和失败口径');
   els.set_target_gap_pct.value='101';check(T.settingsError().includes('target_gap_pct'), '目标价 ±x% 超过 100% 被拒绝');
-  els.set_target_gap_pct.value='3';els.set_target_space_pct.value='-1';check(T.settingsError().includes('target_space_pct'), '空间阈值为负被拒绝');
-  els.set_target_space_pct.value='50';T.renderSettings();
+  els.set_target_gap_pct.value='3';T.SET.target_space_pct=50;
+  check(T.settingsError().includes('target_space_pct'), '未归一化旧50值不能通过固定30校验');
+  T.SET.target_space_pct=30;T.SET.target_high_space_pct=69;
+  check(T.settingsError().includes('target_high_space_pct'), '高空间非70不能通过固定70校验');
+  T.SET.target_high_space_pct=70;T.renderSettings();
+  const fixedSaved=JSON.parse(T.setJsonText());
+  check(fixedSaved.target_space_pct===30&&fixedSaved.target_high_space_pct===70&&T.settingsError()==='',
+    '无空间输入框时采集保存仍保留固定30／70');
 
   // 手动新增只要求有效代码；名称备注不在静态表中时也可留空。
   check(els.groupEditor.innerHTML.includes('placeholder="名称备注（选填）"'), '新增栏明确标注名称备注选填');
