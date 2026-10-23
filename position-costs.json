@@ -1,10 +1,10 @@
 {
  "schema_version": 2,
  "real": true,
- "updated_at": "2026-10-21T03:23:44.654Z",
- "cash": 24937,
- "cash_extra": 0,
- "fixed": 16870.35,
+ "updated_at": "2026-10-23T06:41:17+00:00",
+ "cash": 23674.25,
+ "cash_extra": 23626,
+ "fixed": 16916.34,
  "fixed_cost": 16916.97,
  "items": {
   "BRK-B": {
@@ -16,8 +16,8 @@
    "qty": 2
   },
   "APH": {
-   "cost": 79.2,
-   "qty": 28
+   "cost": 78.94,
+   "qty": 30
   },
   "AVGO": {
    "cost": 364.92,
@@ -28,8 +28,8 @@
    "qty": 12
   },
   "GOOGL": {
-   "cost": 338.91,
-   "qty": 7
+   "cost": 337.54,
+   "qty": 8
   },
   "LMT": {
    "cost": 513,
@@ -74,6 +74,10 @@
   "NXPI": {
    "cost": 220,
    "qty": 2
+  },
+  "PDD": {
+   "cost": 79,
+   "qty": 10
   }
  },
  "acks": {},
