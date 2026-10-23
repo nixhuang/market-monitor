@@ -9,15 +9,15 @@
     "next_in": 15,
     "next_date": "2026-11-12"
   },
-  "run_id": "39909689445",
+  "run_id": "39918189355",
   "request_id": "",
-  "source_sha": "608313878be84c98fd28bcb1b4a4ec7701c87e8a",
-  "input_hash": "f6695b6892ca1c413aa7bff2d0738a95726c05981ff5aa3e40e7dacf3d2c6321",
-  "build_id": "39909689445-1",
-  "started_at": "2026-10-23T06:08:12+00:00",
-  "started_at_bj": "2026-10-23T14:08:12+08:00",
-  "finished_at": "2026-10-23T14:10:40.208308+08:00",
-  "finished_at_bj": "2026-10-23T14:10:40+08:00",
+  "source_sha": "b843ea1ba52ac5f68ad6e4963ab677ec0a3c3cfd",
+  "input_hash": "1f16df2fd3a51e4aaf8e81cb6a728069f598bb841370bace9c09f67fc737a174",
+  "build_id": "39918189355-1",
+  "started_at": "2026-10-23T07:30:17+00:00",
+  "started_at_bj": "2026-10-23T15:30:17+08:00",
+  "finished_at": "2026-10-23T15:32:14.652906+08:00",
+  "finished_at_bj": "2026-10-23T15:32:14+08:00",
   "event": "push",
   "target_trade_date": "2026-10-22",
   "mode": "closed",
@@ -3696,15 +3696,15 @@
     "checked_at": "2026-10-22T11:56:54.517842-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-23T06:09:36.451435+00:00"
+    "asof": "2026-10-23T07:31:29.267605+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 5,
+      "due": 0,
       "deferred": 0,
-      "tried": 5,
-      "ok": 5,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -4495,7 +4495,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-23T06:10:40.157573+00:00",
+    "asof": "2026-10-23T07:32:14.613227+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -5223,7 +5223,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5291,7 +5291,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5308,7 +5308,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -5359,7 +5359,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5580,7 +5580,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5614,7 +5614,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5631,7 +5631,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5699,7 +5699,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5784,7 +5784,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5801,7 +5801,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -5869,7 +5869,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-23T07:32:14.613227+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5881,8 +5881,8 @@
     "dated": 65,
     "pending": 17,
     "failed": 0,
-    "fetched": 10,
-    "cached": 72,
+    "fetched": 0,
+    "cached": 82,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -6527,7 +6527,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-23T06:10:31.383060+00:00",
+    "asof": "2026-10-23T07:32:14.589520+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -7967,9 +7967,9 @@
       "incomplete": false,
       "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-10-23T14:09:34.645704+08:00",
+    "assessed_at": "2026-10-23T15:31:28.182215+08:00",
     "schema_version": 2,
-    "asof": "2026-10-23T06:09:36.824081+00:00"
+    "asof": "2026-10-23T07:31:29.538526+00:00"
   },
   "data_lag": {
     "target": "2026-10-22",
