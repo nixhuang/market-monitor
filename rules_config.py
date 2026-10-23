@@ -25,7 +25,7 @@ SETTING_SCHEMA = {
     "target_gap_pct": _number(3.0, 0, 100),
     "vol_ratio": _number(1.5, 0.1, 100, order=("volume", 0)),
     "vol_ratio_red": _number(3.0, 0.1, 100, order=("volume", 1)),
-    "vol_ratio_z": _number(1.8, 0, 10, order=("volume_z", 0)),
+    "vol_ratio_z": _number(2.0, 0, 10, order=("volume_z", 0)),
     "vol_ratio_red_z": _number(3.6, 0, 10, order=("volume_z", 1)),
     "amp_yellow": _number(5.0, 0, 100, order=("amp", 0)),
     "amp_red": _number(8.0, 0, 100, order=("amp", 1)),

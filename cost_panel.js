@@ -200,6 +200,15 @@
     td.insertBefore(warnAdd, info.nextSibling);
     td.insertBefore(warnCut, warnAdd.nextSibling);
     td.insertBefore(warn, warnCut.nextSibling);
+    var description=tr.querySelector('td.sig');
+    if(description){
+      [warnAdd,warnCut,warn].forEach(function(el){
+        el.style.margin='0'; description.appendChild(el);
+      });
+    }
+    warnAdd.setAttribute('data-signal-kind','add_price');
+    warnCut.setAttribute('data-signal-kind','reduce_price');
+    warn.setAttribute('data-signal-kind','cost_loss');
     var quietBox=tr.closest('details.quiet-list');
     ROWS.push({sym:sym,note:note,isLong:isLong,isEtf:isEtf,lv:lv,price:price,prevClose:prevClose,chg:chg,low:low,high:high,
                rail:rail,lab0:lab,lowTxt:m?m[1]:'',highTxt:m?m[4]:'',tr:tr,origCls:tr.className||'',
@@ -219,16 +228,49 @@
      跟浮亏 −10% 完全同一套；胶囊只负责显示价位，不再承担「已读」点击 */
   function renderWarn(el, text, key, acked){
     if(!el) return;
-    el.style.display='';
-    el.className='cost-warn lv1'+(acked?' acked':'');
-    el.innerHTML='<span class="w">⚠ '+text+'</span>'
-      +(acked
-        ? ' <button type="button" class="ack-btn on" data-ack="'+key
-          +'" aria-label="撤销已读">✓</button>'
-        : '<button type="button" class="ack-btn" data-ack="'+key
-          +'" aria-label="标记已读">✓</button>');
+    el.className='cost-warn signal-item lv1'+(acked?' acked':'');
+    el.setAttribute('data-signal-level',acked?'gray':'red');
+    el.style.display='inline';
+    if(!el.querySelector('.ack-btn')) el.innerHTML='<span class="w"><span class="signal-dot" role="img"></span>'
+      +'<span class="cost-warn-text"></span></span> <button type="button" class="ack-btn">✓</button>';
+    var dot=el.querySelector('.signal-dot'), label=el.querySelector('.cost-warn-text'), button=el.querySelector('.ack-btn');
+    dot.className='signal-dot '+(acked?'gray':'red'); dot.setAttribute('aria-label',acked?'已读':'红灯');
+    if(label.textContent!==text) label.textContent=text;
+    button.className='ack-btn'+(acked?' on':''); button.setAttribute('data-ack',key);
+    button.setAttribute('aria-label',acked?'撤销已读':'标记已读');
   }
-  function hideWarn(el){ if(el){ el.style.display='none'; el.textContent=''; } }
+  function hideWarn(el){ if(el){ el.style.display='none'; el.removeAttribute('data-signal-level'); el.textContent=''; } }
+  // 只移动描述节点；不重建主表、事件按钮或行对象，紫灯及目标备注固定在末尾。
+  function sortDescriptions(){
+    var rank={red:0,yellow:1,gray:2};
+    ROWS.forEach(function(r){
+      if(!document.documentElement.contains(r.tr)) return;
+      var box=r.tr.querySelector('td.sig'); if(!box) return;
+      Array.prototype.forEach.call(box.children,function(el){
+        var kind=el.getAttribute('data-signal-kind');
+        if(el.matches('.signal-item') && el!==r.warnAdd && el!==r.warnCut &&
+          (kind==='add_price' || kind==='reduce_price')) el.style.display='none';
+      });
+      var items=Array.prototype.filter.call(box.children,function(el){
+        return el.matches('.signal-item,.tnote') && el.style.display!=='none';
+      });
+      Array.prototype.slice.call(box.childNodes).forEach(function(el){
+        if(el.nodeType===3 && (/^[\s/]*$/.test(el.textContent) || items.length && /^\s*—\s*$/.test(el.textContent)) ||
+          el.nodeType===1 && el.matches('.signal-separator')) box.removeChild(el);
+      });
+      items.map(function(el,index){
+        var level=el.getAttribute('data-signal-level');
+        return {el:el,index:index,rank:el.matches('.tnote') ||
+          el.getAttribute('data-signal-kind')==='target' || level==='purple'?4:own(rank,level)?rank[level]:3};
+      }).sort(function(a,b){ return a.rank-b.rank || a.index-b.index; }).forEach(function(item,index){
+        if(index){
+          var separator=document.createElement('span'); separator.className='signal-separator';
+          separator.textContent=' / '; box.appendChild(separator);
+        }
+        box.appendChild(item.el);
+      });
+    });
+  }
   function applyLights(){
     if(!DATA.acks) DATA.acks={};
     var A=DATA.acks;
@@ -264,7 +306,7 @@
           renderWarn(r.warnAdd, (gap<=0?'已跌破加仓价 '+r.trig
             :'距加仓价 '+r.trig+' 还差 '+gap.toFixed(1)+'%'), k, acked);
           if(!acked) sigTxt+=(gap<=0?'已跌破加仓价 ':'距加仓价 ')+r.trig
-            +(gap<=0?'':' 还差 '+gap.toFixed(1)+'%')+' · ';
+            +(gap<=0?'':' 还差 '+gap.toFixed(1)+'%')+' / ';
           if(!acked) want='red';
         } else hideWarn(r.warnAdd);
       } else hideWarn(r.warnAdd);
@@ -279,7 +321,7 @@
           renderWarn(r.warnCut, (rgap>=0?'已涨到减仓价 '+r.cut+'（高出 '+rgap.toFixed(1)+'%）'
             :'距减仓价 '+r.cut+' 还差 '+(-rgap).toFixed(1)+'%'), kc, aR);
           if(!aR) sigTxt+=(rgap>=0?'已涨到减仓价 '+r.cut+'（高出 '+rgap.toFixed(1)+'%）'
-            :'距减仓价 '+r.cut+' 还差 '+(-rgap).toFixed(1)+'%')+' · ';
+            :'距减仓价 '+r.cut+' 还差 '+(-rgap).toFixed(1)+'%')+' / ';
           if(!aR) want='red';
         } else hideWarn(r.warnCut);
       } else {
@@ -728,6 +770,59 @@
   function pruneAck(k){
     if(writer && DATA.acks[k]){ setAck(k,false); ACK_PRUNED=true; }
   }
+  // 统计层兼容旧均线键；事实明细合并，交集只认真实身份，不触碰判灯规则。
+  function signalIdentity(symbol){
+    var s=String(symbol||'').trim().toUpperCase().replace(/^31#/,'');
+    if(s==='BRK.B') s='BRK-B';
+    var markets={US:null,HK:'.HK',SH:'.SS',SS:'.SS',SZ:'.SZ'};
+    ['-','.'].some(function(sep){
+      var at=s.lastIndexOf(sep), code=s.slice(0,at), market=s.slice(at+1);
+      if(at<=0 || !own(markets,market)) return false;
+      s=market==='US'?code.replace(/\./g,'-'):market==='HK'?
+        (code.replace(/^0+/,'')||'0').padStart(4,'0')+'.HK':code+markets[market];
+      return true;
+    });
+    var aliases={'.SPX':'^GSPC','^SPX':'^GSPC','.VIX':'^VIX','.NDX':'^NDX',
+      '.VXN':'^VXN','.SOX':'^SOX','BD#US10Y':'^TNX','.TNX':'^TNX','ESMAIN':'ES=F','CLMAIN':'CL=F'};
+    return (aliases[s]||s).replace(/\//g,'-');
+  }
+  function signalRowAnchor(symbol){
+    return 's-'+signalIdentity(symbol).replace(/[^0-9A-Za-z]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase();
+  }
+  function mergeMaFilters(data){
+    var out=Object.assign({},data), keys=['ma','ma_cross','ma_band'].filter(function(k){ return own(out,k); });
+    if(!keys.length) return out;
+    var members=new Map(), ok=true;
+    keys.forEach(function(k){
+      var source=out[k];
+      if(!source || !source.ok || !Array.isArray(source.members)){ ok=false; return; }
+      source.members.forEach(function(m){
+        var id=signalIdentity(m.s||m.id), previous=members.get(id);
+        var details=(Array.isArray(m.d)?m.d:[]).slice();
+        if(previous){
+          details=previous.d.concat(details.filter(function(t){ return previous.d.indexOf(t)<0; }));
+          if(LV_ORDER.indexOf(m.l)<0 || LV_ORDER.indexOf(previous.l)>=0 &&
+            LV_ORDER.indexOf(previous.l)<=LV_ORDER.indexOf(m.l)) m=previous;
+        }
+        members.set(id,Object.assign({},m,{id:id,d:details}));
+      });
+    });
+    keys.forEach(function(k){ delete out[k]; });
+    out.ma={label:'均线',ok:ok,members:ok?Array.from(members.values()):[]};
+    return out;
+  }
+  var originalIntersect=window.intersectSignals;
+  if(typeof originalIntersect==='function') window.intersectSignals=function(data,kinds){
+    var normalized=mergeMaFilters(data), selected=[];
+    kinds.forEach(function(k){ k=k==='ma_cross'||k==='ma_band'?'ma':k;
+      if(selected.indexOf(k)<0) selected.push(k); });
+    return originalIntersect(normalized,selected);
+  };
+  var maFilterBox=document.getElementById('signalFilterResult');
+  if(maFilterBox){
+    try{ maFilterBox.setAttribute('data-filter',JSON.stringify(mergeMaFilters(
+      JSON.parse(maFilterBox.getAttribute('data-filter')||'{}')))); }catch(e){}
+  }
   var ACK_STAT_BASE={}, ACK_STATS_CHANGED=false, ACK_STATUS_JSON='';
   /* 统计面板里「加仓价 / 减仓价」两行：点了已读的标的不再从计数里凭空消失，
      而是从红黄扣掉、记进同一行的「灰」列（灰＝已读不再提醒，红黄＝还在提醒的）。
@@ -1037,18 +1132,34 @@
     if(LOSS_GRAY_BASE===null){
       var snap=document.getElementById('snapshotData'), saved=null;
       try{ saved=snap?JSON.parse(snap.textContent):null; }catch(e){}
-      LOSS_GRAY_BASE={members:saved&&Array.isArray(saved.text_only)?saved.text_only:null,
+      var excluded={}, excludedAnchors={};
+      (saved&&Array.isArray(saved.items)?saved.items:[]).forEach(function(m){
+        if(m.reference_only || own(m,'price') && !(m.price>0)){
+          excluded[signalIdentity(m.symbol)]=true;
+          excludedAnchors[signalRowAnchor(m.symbol)]=true;
+        }
+      });
+      LOSS_GRAY_BASE={members:saved&&Array.isArray(saved.text_only)?saved.text_only:null,excluded:excluded,excludedAnchors:excludedAnchors,
         count:grayBadge?num(grayBadge.textContent):0};
     }
-    var grayIds={}, grayFallback=LOSS_GRAY_BASE.members?0:LOSS_GRAY_BASE.count;
-    (LOSS_GRAY_BASE.members||[]).forEach(function(m){
-      var id=String(m.symbol||'').toUpperCase().replace(/\//g,'-');
-      if(finalLevels[id]==='green') grayIds[id]=true;
+    var grayIds={}, available={}, availableAnchors={}, grayFallback=LOSS_GRAY_BASE.members?0:LOSS_GRAY_BASE.count;
+    ROWS.forEach(function(r){
+      var id=signalIdentity(r.sym);
+      if(document.documentElement.contains(r.tr) && r.price>0 && !LOSS_GRAY_BASE.excluded[id] && !LOSS_GRAY_BASE.excludedAnchors[r.tr.id]){
+        available[id]=true;
+        availableAnchors[r.tr.id]=true;
+      }
     });
-    entries.forEach(function(e){ if(e.acked) grayIds[e.id]=true; });
+    // DOM锚点是有损编码（ES=F→es-f）；按保存身份生成同一锚点，不反推标的代码。
+    // 技术灰只认所属指标，不受同股其它红黄灯或动态成本灯影响。
+    (LOSS_GRAY_BASE.members||[]).forEach(function(m){
+      var id=signalIdentity(m.symbol);
+      if(availableAnchors[signalRowAnchor(m.symbol)] && !m.reference_only && (!own(m,'price') || m.price>0)) grayIds[signalRowAnchor(m.symbol)]=true;
+    });
+    entries.forEach(function(e){ var id=signalIdentity(e.sym); if(e.acked && available[id]) grayIds[signalRowAnchor(e.sym)]=true; });
     Object.keys(ACK_KINDS).forEach(function(kind){
       ackStatEntries(kind).forEach(function(e){
-        grayIds[e.sym.toUpperCase().replace(/\//g,'-')]=true;
+        var id=signalIdentity(e.sym); if(available[id]) grayIds[signalRowAnchor(e.sym)]=true;
       });
     });
     var grayTotal=grayFallback+Object.keys(grayIds).length;
@@ -1603,19 +1714,13 @@
       if(!r.warn) return;
       if(lv){
         var lAcked=!!DATA.acks[lk];
-        r.warn.style.display='';
-        r.warn.className='cost-warn lv'+lv+(lAcked?' acked':'');
-        r.warn.innerHTML='<span class="w">⚠ 浮亏 '+Math.abs(r.pnlPct).toFixed(1)+'%，已达 '
-          +(lv===2?'20':'10')+'%</span>'
-          +(lAcked
-            ? ' <button type="button" class="ack-btn on" data-ack="'+lk
-              +'" aria-label="撤销已读">✓</button>'
-            : '<button type="button" class="ack-btn" data-ack="'+lk
-              +'" aria-label="标记已读">✓</button>');
-      } else { r.warn.style.display='none'; r.warn.textContent=''; }
+        renderWarn(r.warn,'浮亏 '+Math.abs(r.pnlPct).toFixed(1)+'%，已达 '+(lv===2?'20':'10')+'%',lk,lAcked);
+        r.warn.className='cost-warn signal-item lv'+lv+(lAcked?' acked':'');
+      } else hideWarn(r.warn);
     });
 
     applyLights();
+    sortDescriptions();
     syncQuietRows();
     var tcls=totalPnl>=0?'up':'down';
     var tPct=totalCost>0?totalPnl/totalCost*100:0;
@@ -1831,7 +1936,7 @@
      还定时重试 5 次，用户手动收起后又被弹开。*/
 
   // 只为截图核对：?focus=panel 落到「仓位管理」卡片，?focus=shorts 落到短持仓框，
-  //               ?focus=editor 落到编辑后的按钮区，?focus=rules 落到页底报灯规则，
+  //               ?focus=editor 落到编辑后的按钮区，
   //               ?focus=pos 落到持仓，?edit=1 直接进编辑态
   var fq=(location.search.match(/focus=(\w+)/)||[])[1];
   if(/edit=1/.test(location.search)) setTimeout(enterEdit, 400);
@@ -1841,7 +1946,6 @@
       var t;
       if(fq==='editor'){ if(actsEl.hidden) enterEdit(); t=actsEl; }
       else if(fq==='pos') t=document.getElementById('group_positions');
-      else if(fq==='rules') t=document.getElementById('signalRules');
       else if(fq==='shorts') t=blocks[1]||panel;
       else t=panel;
       if(t && t.scrollIntoView) t.scrollIntoView({block:'start'});

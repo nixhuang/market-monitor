@@ -122,10 +122,10 @@ for _label, _fragment in (
     check(not re.search(r'行灯|两个完整日|两整日|美东今天|14\s*天[^。；\n]*黄|黄[^。；\n]*14\s*天', _plain),
           _label + ' 不含行灯、两日、美东今天或14天黄旧口径')
     _window_in_rules = all(term in _plain for term in ('前一日', '当日', '后一日', '北京'))
-    _window_by_link = (_label == '名词解释模板' and '北京今天' in _plain
-                       and 'href="#rule-earnings"' in _fragment)
-    check(_window_in_rules or _window_by_link,
-          _label + ' 保留北京日历红窗正文或指向规则正文的有效链接')
+    _window_in_glossary = (_label == '名词解释模板' and all(term in _plain
+                           for term in ('北京今天', '盘前／盘后不平移', '另留昨天红字')))
+    check(_window_in_rules or _window_in_glossary,
+          _label + ' 保留北京日历窗口正文且不依赖已删除跳转')
 
 _visible_html = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', '', _html_e, flags=re.S | re.I)
 check('行灯' not in _unescape(re.sub(r'<[^>]+>', '', _visible_html)), '全部用户可见说明统一使用报灯，不残留行灯')
@@ -158,8 +158,11 @@ check('id="ust10Ref"' in html and "无数据或已过期" in html.split('id="ust
 _macro_b = dict(macro, breadth={"ok": True, "name": "上涨参与度", "date": "2026-10-06", "value": 47.0,
                                "pct50": 29.3, "unit": "%", "source": "History of Market"})
 _html_b = monitor.render(_macro_b, items, 10, snapshot=snapshot, dup_hidden=2)
-check("47.0%<span class=\"unit\">的成分股站上200日线（长期趋势）</span>" in _html_b
-      and "站上50日线（短期）：29.3%" in _html_b and "站上200日均线 · 50日" not in _html_b, "上涨参与度文案已改写")
+check("47.0%<span class=\"unit\">的成分股站上宏观长均线（长期趋势）</span>" in _html_b
+      and "站上宏观短均线（短期）：29.3%" in _html_b
+      and "宏观均线沿用数据源固定口径，不随个股均线设置变化" in _html_b
+      and not re.search(r'\d+日(?:均线|线)', _html_b.split('id="macroCard"', 1)[1].split('</table>', 1)[0]),
+      "上涨参与度短长命名，沿用固定宏观口径及原数据值")
 # 2026-10-19：顶栏不再重复念灯级计数（统计卡里已有一份），只保留时间＋数据量；「缺失 N」是告警要留
 # 2026-10-19：一切正常时只报完成时间；「N 项数据已更新」只在有缺失/不支持代码时才写
 check("红2 黄2 绿4" not in html and "10 项数据已更新" not in html
@@ -264,8 +267,8 @@ check(html5.count('<tr class="red"') == html.count('<tr class="red"'), "旧基�
 check('id="runLight" data-phase="ok"' in html5, "旧基本面红灯不影响运行状态灯")
 check('垃圾债利差' in html5 and '高收益债利差' not in html5 and '跑路价签' not in html5,
       "正式生成首页仅使用垃圾债利差新名称")
-footer = html5.split('<div class="foot">', 1)[1].split('</div>', 1)[0]
-check('href="#signalRules"' in footer and '查看完整规则与阈值' in footer, "页脚指向独立预警规则")
+check('<div class="foot">' not in html5 and 'href="#signalRules"' not in html5,
+      '页底重复规则入口已删除，完整规则模板仍保留')
 head5 = html5.split('</head>', 1)[0]
 check('rel="icon"' in head5 and './icons/favicon-32.png' in head5, "页头有网页图标（相对路径）")
 check('rel="apple-touch-icon" href="./icons/apple-touch-icon.png"' in head5, "页头有 apple-touch-icon")
@@ -276,15 +279,14 @@ _mf = _json.load(open(_os.path.join(_root, 'manifest.webmanifest'), encoding='ut
 check(all(_os.path.exists(_os.path.join(_root, i['src'])) for i in _mf['icons']), "manifest 里的图标文件都存在")
 check(all(_os.path.exists(_os.path.join(_root, 'icons', n)) for n in ('favicon-32.png', 'apple-touch-icon.png')), "页头引用的图标文件存在")
 check(sum(_os.path.getsize(_os.path.join(_root, 'icons', n)) for n in _os.listdir(_os.path.join(_root, 'icons'))) < 400 * 1024, "图标总体积小于 400KB")
-check('RSI 6 / 12 / 24' not in footer and '布林信号 + RSI' not in footer
-      and '行情：' not in footer and '垃圾债利差：' not in footer
-      and 'href="#marketRiskRules"' in footer and 'href="#glossary-fetch"' in footer,
-      "页脚仅保留三类入口，来源统一收进名词解释和抓取")
+check('<div class="foot">' not in html5 and 'href="#marketRiskRules"' not in html5
+      and 'href="#glossary-fetch"' not in html5,
+      '页底三个重复入口已删，规则与来源仍在折叠正文')
 _glossary5 = re.search(r'<template id="glossaryTpl">(.*?)</template>', html5, re.S)[1]
 check(all(term in _glossary5 for term in ('Yahoo → stooq → Nasdaq', 'BAMLH0A0HYM2',
       'Cboe官方VIX日线优先', '芝加哥联储原始周度数据', 'History of Market')),
       "旧来源迁入新稿且VIX来源与当前实现一致")
-# 正式利率决议仅为中性消息，不影响风险灯、个股信号或原油行。
+# 正式利率决议仅保留页底默认折叠详情，不生成常驻消息或影响风险灯。
 import copy as _copy
 from unittest.mock import patch as _patch
 import policy_alerts as _policy
@@ -298,24 +300,29 @@ _refsnap = _copy.deepcopy(snapshot)
 _refsnap["reference_alerts"] = {"policy": {"fed": _fed}, "assessed_at": _ref_now.isoformat(),
                                "oil": {"level": "gray", "text": "原油数据待更新"}}
 _refhtml = monitor.render(macro, _copy.deepcopy(items), 10, snapshot=_refsnap)
-_refcard = monitor._reference_card(_refsnap)
-check('data-level="neutral" data-status="available"' in _refcard and "维持不变" in _refcard
-      and "2026-09-16" in _refcard and "stat-dot" not in _refcard, "决议中性展示动作和日期，不显示风险灯")
+_refcard = monitor._policy_details(_refsnap)
+check('data-status="available"' in _refcard and "维持不变" in _refcard
+      and "2026-09-16" in _refcard and "stat-dot" not in _refcard, "折叠详情保留决议动作和日期，不显示风险灯")
+check(all(term not in _refhtml for term in ('id="policyAlert"', 'id="referenceAlerts"',
+      '美联储最近利率决议', '正式消息', '.policy-reference')),
+      "真实全页移除常驻决议卡片、正式消息标签及专属样式")
+check(not re.search(r'<details[^>]*id="policyAlertDetails"[^>]*\bopen\b', _refhtml),
+      "决议详情无open属性，不常驻展示正文")
 check(not any(term in _refhtml for term in ("核心CPI", "SEP", "季度预测", "点阵图", "通胀／利率")), "页面移除CPI与预测依赖及旧标签")
 check('id="policyAlertDetails"><summary>美联储利率决议' in _refhtml
       and '<details class="macro-help" id="policyAlertDetails" open' not in _refhtml, "决议来源位于页底并默认折叠")
 check("3.50%–3.75%" in _refhtml and "2026-09-17 02:00" in _refhtml
-      and "到下次官方公布时点前复用" in _refhtml and 'href="#fetch-reference"' in _refhtml
+      and "到下次官方公布时点前复用" in _refhtml and 'href="#fetch-reference"' not in _refhtml
       and "正常缓存24小时" not in _refhtml and "临时决议可能延迟发现" in _refhtml,
       "详情保留区间与双时区，缓存说明集中到新抓取区块")
 check(_refsnap["summary"] == snapshot["summary"] and 'id="oilAlert"' in _refhtml, "原计数不变，WTI保留")
 _pending = _copy.deepcopy(_refsnap)
 _pending["reference_alerts"]["policy"]["fed"]["fetch_error"] = "模拟解析错误 <script>bad()</script>"
-check('data-status="pending"' in monitor._reference_card(_pending) and "2026-09-16" in monitor._reference_card(_pending),
+check('data-status="pending"' in monitor._policy_details(_pending) and "2026-09-16" in monitor._policy_details(_pending),
       "失败仍保留旧决议日期并显示待更新")
-check("&lt;script&gt;bad()&lt;/script&gt;" in monitor._reference_card(_pending, details_only=True), "错误详情安全转义")
+check("&lt;script&gt;bad()&lt;/script&gt;" in monitor._policy_details(_pending), "错误详情安全转义")
 _empty = {"reference_alerts": {"policy": {"fed": {}}}}
-check('data-status="unavailable"' in monitor._reference_card(_empty), "首次无数据不伪造消息")
+check('data-status="unavailable"' in monitor._policy_details(_empty), "首次无数据不伪造消息")
 with _patch.object(monitor.policy_alerts, "update_policy", return_value={"fed": _fed}) as _load, \
      _patch.object(monitor, "fetch_history", return_value=None), \
      _patch.object(monitor, "fred_series", side_effect=AssertionError("决议不能依赖FRED")):
@@ -335,11 +342,13 @@ def check_reference_render(refs, label, status="unavailable", oil_level="gray"):
     render_macro, render_items = _copy.deepcopy(macro), _copy.deepcopy(items)
     before = _copy.deepcopy((snap, render_macro, render_items))
     page = monitor.render(render_macro, render_items, 10, snapshot=snap)
-    card = page.split('id="policyAlert"', 1)[1].split('</div></div>', 1)[0]
+    details = re.search(r'<details\b[^>]*id="policyAlertDetails"[^>]*>.*?</details>', page, re.S)[0]
     oil_row = page.split('id="oilAlert"', 1)[1].split('</tr>', 1)[0]
-    check(f'data-status="{status}"' in card and 'data-level="neutral"' in card
+    check(f'data-status="{status}"' in details
+          and 'id="policyAlert"' not in page and 'id="referenceAlerts"' not in page
+          and not re.search(r'<details[^>]*\bopen\b', details)
           and f'data-level="{oil_level}"' in oil_row
-          and (status == "available" or "待更新" in card)
+          and (status == "available" or "待更新" in details or "尚未取得" in details)
           and (oil_level != "gray" or "待更新" in oil_row)
           and 'id="policyAlertDetails"' in page and 'id="group_positions"' in page
           and page.endswith('</body></html>')
@@ -546,6 +555,123 @@ check(bool(re.search(r'\.lvtag\.tgt\.bad\{[^}]*color:var\(--dim\)[^}]*border:1px
       and '.lvtag.tgt.low{' in _target_page and '.lvtag.tgt.hit{' in _target_page,
       '失败灰虚线及低空间/达到胶囊CSS存在')
 
+# 共识只在描述列隐藏；完整信号、空间/达到统计与原胶囊仍保留。
+for _row in _target_rows:
+    _body = re.search(r'<tr\b[^>]*\bid="' + re.escape(monitor._stock_anchor_id(_row['symbol']))
+                      + r'"[^>]*>(.*?)</tr>', _target_page, re.S)[1]
+    check('<td class="sig">—</td>' in _body,
+          _row['symbol'] + '仅自动共识时描述列保留破折号占位')
+_description_rows = _copy.deepcopy(_target_rows)
+_technical_texts = ['触及布林下轨 → 黄', 'RSI 三条超卖', '贴近200日均线']
+for _row in _description_rows:
+    _target = _row['target']
+    _row['signals'] = _technical_texts + [
+        text for text in (_target.get('reached_detail'), _target.get('space_detail')) if text]
+    if _target['failed']:
+        _row['signals'] += ['共识价 250，空间 +150%', '今日上穿共识价 250',
+                            '旧共识价 250，获取失败', '共识获取失败']
+    _row['signal_marks'] = [('boll', 'yellow'), ('rsi', 'red'), ('ma', 'yellow')]
+    if _row['purple']:
+        _row['signal_marks'].append(('target', 'purple'))
+    _row['level'] = 'red'
+    _direct_before = _copy.deepcopy(_row)
+    _sig = monitor._signals_html(_row)
+    _expected_sig = monitor._signals_html({**_row, 'signals': _technical_texts, 'target': {}})
+    check(_sig == _expected_sig and _row == _direct_before,
+          _row['symbol'] + '成功/失败共识仅从描述过滤，原技术文字及输入不变')
+    if _row['purple']:
+        _applied = monitor._apply_target(_row)
+        check(_applied['signals'] == _row['signals']
+              and _applied['signal_marks'] == _row['signal_marks'],
+              _row['symbol'] + '有效共识内部signals/marks完整保留')
+
+_legacy_consensus = _copy.deepcopy(_description_rows[-3])
+_legacy_consensus.update(target={'kind': 'consensus', 'price': 250, 'failed': True,
+                                  'space': 150, 'hit': True, 'month': 10}, purple=True)
+_legacy_before = _copy.deepcopy(_legacy_consensus)
+_legacy_html = monitor._stock_row(_legacy_consensus, {})
+check(re.search(r'<td class="sig">(.*?)</td>', _legacy_html, re.S)[1] == _expected_sig
+      and 'lvtag tgt bad' in _legacy_html and 'pur-high' not in _legacy_html
+      and 'pur-hit' not in _legacy_html,
+      '失效旧共识经过stock_row迁移后仅保留原技术描述与失败灰胶囊')
+check(_legacy_consensus == _legacy_before, '失效旧共识渲染不突变原signals/marks或旧目标')
+
+_manual_rows = []
+for _symbol, _group, _target_price in (('MANHIGH', 'technology', 250),
+                                       ('MANLOW', 'technology', 120),
+                                       ('MANHIT', 'position', 101)):
+    _row = item(_symbol, _group, 'green', chg=0)
+    _row.update(prev_close=100, signal_marks=[],
+                target=monitor.evaluate_target(100, 100,
+                    {'kind': 'manual', 'price': _target_price, 'month': 10, 'failed': False}, _group, 3))
+    _row['purple'] = bool(_row['target']['hit'] or _row['target']['space_hit'])
+    _manual_note = '手填目标价说明，与共识价交叉核对 <b>保留</b>'
+    _row['signals'] = [_technical_texts[0], _manual_note] + [
+        text for text in (_row['target']['reached_detail'], _row['target']['space_detail']) if text]
+    _manual_rows.append(_row)
+_description_rows += _manual_rows
+_description_before = _copy.deepcopy(_description_rows)
+with _patch.object(monitor, 'global_dca', return_value=None):
+    _description_snapshot = monitor.build_snapshot({}, _description_rows, {}, group_counts={})
+    _description_snapshot_before = _copy.deepcopy(_description_snapshot)
+    _description_page = monitor.render({}, _description_rows, len(_description_rows), snapshot=_description_snapshot)
+
+for _row in _description_rows:
+    _body = re.search(r'<tr\b[^>]*\bid="' + re.escape(monitor._stock_anchor_id(_row['symbol']))
+                      + r'"[^>]*>(.*?)</tr>', _description_page, re.S)[1]
+    _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
+    if _row['target']['kind'] == 'consensus':
+        check(_sig == _expected_sig, _row['symbol'] + '全页td.sig无自动共识且原技术描述完全一致')
+    else:
+        check(all(monitor.html_lib.escape(monitor._ma_display_text(text, _row.get('ma_settings'))) in _sig
+                  for text in _row['signals'])
+              and '&lt;b&gt;保留&lt;/b&gt;' in _sig,
+              _row['symbol'] + '手填目标描述不误删并保持安全转义')
+        if monitor.target_display_state(_row['target']) == 'low':
+            check('<span class="tnote">目标价 120，空间 +20%</span>' in _sig,
+                  '手填低空间说明继续显示')
+    check(monitor.target_tag(_row['target']) in _body,
+          _row['symbol'] + '原胶囊内容与属性原样保留')
+
+check(_description_rows == _description_before
+      and _description_snapshot == _description_snapshot_before,
+      '描述过滤不突变内部输入或快照')
+check(_description_snapshot['summary']['purple'] == 8
+      and _description_snapshot['signal_counts']['target']['purple'] == 8
+      and len(_description_snapshot['signal_members']['target']['purple']) == 8,
+      '共识6加手填2的union统计及成员不丢失')
+check({r['symbol'] for r in _description_snapshot['target_overlays']['space']}
+      == {'TSPACE', 'TMID', 'THIGH', 'TOVER', 'TBOTH', 'MANHIGH'}
+      and {r['symbol'] for r in _description_snapshot['target_overlays']['reached']}
+      == {'THIT', 'TBOTH', 'MANHIT'},
+      '隐藏描述后空间6、达到3名单与重叠精确保持')
+_description_panel = _description_page.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
+check(bool(re.search(r'空间\s*6\s*只[\s　]*达到\s*3\s*只', _description_panel))
+      and '共识价 250，空间 +150.0%' in _description_panel
+      and '今日跌破共识价 170' in _description_panel
+      and _description_panel.count('href="#s-tboth"') == 2,
+      '统计区共识详情与两段重叠跳转不丢失')
+_both = next(row for row in _description_rows if row['symbol'] == 'TBOTH')
+_both_html = monitor._stock_row(_both, {})
+check(_both['target']['band'] == 'high' and _both['target']['hit']
+      and 'lvtag tgt hit' in _both_html and 'pur-hit' in _both_html
+      and 'tgt high' not in _both_html and 'pur-high' not in _both_html,
+      '达到优先于高空间：实心紫胶囊和达到条纹不被紫红覆盖')
+for _kind in ('manual', None):
+    _row = item('KINDKEEP', 'technology', 'green')
+    _row.update(signals=['今日上穿共识价 250'], target={'kind': _kind})
+    check('今日上穿共识价 250' in monitor._signals_html(_row),
+          'kind=' + repr(_kind) + '不靠文字误判为自动共识')
+_technical_mention = item('TECHKEEP', 'technology', 'green')
+_technical_mention.update(target={'kind': 'consensus'}, signals=['RSI 原技术描述，与共识价交叉核对'])
+check(_technical_mention['signals'][0] in monitor._signals_html(_technical_mention),
+      '自动共识kind也不误删包含关键字的原技术描述')
+_runbar = re.search(r'<div class="runbar">(.*?)</div>', _description_page, re.S)[1]
+check('href="#signalRules"' not in _runbar and 'shortcut.textContent = "预警规则"' not in monitor.PAGE_INTERACTION_JS,
+      '静态及动态顶部均不恢复已删除的预警规则快捷按钮')
+check(bool(re.search(r'\.lvtag\.tgt\.high\{[^}]*color:var\(--target-high\)', _description_page)),
+      '高空间数字显式跟随紫红外框#dc62b8')
+
 # 最新判灯：技术灰仍保留主表绿灯；组合不重复RSI/布林，缺/参考不进统计。
 from tests.mm_test_groups import TestBollRsiRules as _BollRules
 _business = _BollRules()
@@ -622,6 +748,279 @@ check(_oversold_snap['signal_counts']['boll_rsi']['red'] == 2 * len(monitor.GROU
       and _oversold_snap['signal_counts']['rsi']['red'] == len(monitor.GROUPS)
       and _oversold_snap['signal_counts']['boll']['red'] == 0,
       '有轨三超卖仅组合红，无轨仅RSI红，不重复计布林')
+
+# STX/NEE 型：技术灰与涨跌红黄全页共存，交集保留最终行灯而非伪装成绿色。
+_business.setUp()
+try:
+    with _patch.dict(monitor.S, {'chg_yellow': 2, 'chg_red': 4}):
+        _coexist_rows = [
+            _business.analyze([70, 70, 50], 'technology', symbol='STXY', chg=3),
+            _business.analyze([35, 35, 50], 'technology', symbol='STXR', chg=-5),
+            _business.analyze([70, 50, 50], 'technology', bands=(100, 101, 90), symbol='NEEY', chg=3)]
+finally:
+    _business.doCleanups()
+_coexist_before = _copy.deepcopy(_coexist_rows)
+with _patch.object(monitor, 'global_dca', return_value=None):
+    _coexist_snap = monitor.build_snapshot({}, _coexist_rows, {}, group_counts={})
+    _coexist_snap_before = _copy.deepcopy(_coexist_snap)
+    _coexist_page = monitor.render({}, _coexist_rows, len(_coexist_rows), snapshot=_coexist_snap)
+_coexist_data = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _coexist_page)[1]))
+_group_headers = re.findall(r'<details\b[^>]*\bid="group_[^"]*"[^>]*>\s*<summary\b[^>]*>(.*?)</summary>', _coexist_page, re.S)
+check(_group_headers and all('stat-badge gray' not in header for header in _group_headers)
+      and 'stat-badge gray' in _coexist_page,
+      '技术灰数字只在统计面板，不出现在个股和长持仓表头')
+check('.signal-dot::marker{content:normal}' in monitor.PAGE_CSS
+      and '.signal-dot{display:inline list-item;list-style:disc inside;font-size:13px;font-weight:400;' in monitor.PAGE_CSS
+      and 'font-weight:400;margin:0 -5px 0 0;padding:0;vertical-align:baseline;color:var(--dim)}' in monitor.PAGE_CSS
+      and '.signal-dot::before' not in monitor.PAGE_CSS
+      and '.signal-dot{display:inline-block;width:7px' not in monitor.PAGE_CSS,
+      '描述复用原生disc、灯文字间距再缩小2px，不用字体圆点冒充')
+check((_coexist_snap['summary']['red'], _coexist_snap['summary']['yellow']) == (1, 2)
+      and {m['symbol']: m['level'] for m in _coexist_snap['text_only']}
+      == {'STXY': 'yellow', 'STXR': 'red', 'NEEY': 'yellow'},
+      '技术灰三个成员携带最终红黄行灯，红黄汇总不变')
+for _row, _color, _kind in zip(_coexist_rows, ('yellow', 'red', 'yellow'), ('rsi', 'rsi', 'boll_rsi')):
+    _classes, _body = rendered_stock_row(_coexist_page, _row, not _row.get('foldable', True))
+    _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
+    check(_classes == [_color] and _sig.count('signal-dot ' + _color) == 1
+          and _sig.count('signal-dot gray') == 1
+          and _sig.index('signal-dot ' + _color) < _sig.index('signal-dot gray'),
+          _row['symbol'] + '主表保留红黄且描述先红黄后指标灰，不重复灯点')
+    check(next(m['l'] for m in _coexist_data[_kind]['members'] if m['s'] == _row['symbol']) == _color
+          and all(_coexist_snap['signal_counts'][kind][level] == 0
+                  for kind in ('rsi', 'boll', 'boll_rsi') for level in ('red', 'yellow')),
+          _row['symbol'] + '指标灰筛选l不降成green，单独和组合技术统计不重复')
+check(_coexist_rows == _coexist_before and _coexist_snap == _coexist_snap_before,
+      '技术灰共存全页渲染不突变输入与快照')
+
+# 旧中点解析只恢复已知的同轨布林连续天数尾句；绝不追加独立布林灯。
+_tail = '连续第2日贴近下轨'
+_plain = '逼近布林下轨 还差0.15%（盘中触及 293.63）'
+for _level, _rsi in ((None, None), ('yellow', 'RSI 2条超卖（≤35）'),
+                     ('red', 'RSI 3条超卖（≤35）')):
+    _tail_row = item('TAIL', 'technology', _level or 'green')
+    _tail_row.update(signals=([_rsi] if _rsi else []) + [_plain, _tail, '量比 1.2x'],
+                     signal_marks=[('boll_rsi', _level)] if _level else [])
+    _before_tail = _copy.deepcopy(_tail_row)
+    _html_tail = monitor._signals_html(_tail_row)
+    _groups_tail = monitor._signal_description_groups(_tail_row)
+    _technical = next(g for g in _groups_tail if g['kind'] in ('boll', 'boll_rsi'))
+    check(_technical['kind'] == ('boll_rsi' if _rsi else 'boll')
+          and _technical['level'] == (_level or 'gray')
+          and _plain + '，' + _tail in _technical['texts']
+          and _html_tail.count('signal-dot') == 1 and _html_tail.count('signal-separator') == 1
+          and _groups_tail[-1]['kind'] == 'vol_ratio' and _groups_tail[-1]['level'] is None,
+          str(_level) + '连续天数留同一技术指标，一点一次计数，斜线后独立量比无灯')
+    check(_tail_row == _before_tail, '尾句恢复不改原始signals/marks')
+check(monitor._description_signals([_tail]) == [_tail]
+      and monitor._description_signals(['突破布林上轨', _tail]) == ['突破布林上轨', _tail]
+      and monitor._description_signals([_plain, '量比 1.2x', _tail]) == [_plain, '量比 1.2x', _tail],
+      '缺前句、不同轨、已切指标时不凭连续天数猜归属或新增布林灯')
+check(monitor._description_signals(['跌破布林下轨', '连续第≥120日贴近下轨（其中3日穿越）'])
+      == ['跌破布林下轨，连续第≥120日贴近下轨（其中3日穿越）'], '连续天数含上限/穿越尾句安全恢复')
+_ma_inline = item('MATEXT', 'technology', 'yellow')
+_ma_inline.update(signals=['上穿50日均线 / 日内触及200日均线，现价在均线下方'],
+                  signal_marks=[('ma', 'yellow')], ma_settings={'ma_short': 50, 'ma_long': 200})
+check('signal-separator' not in monitor._signals_html(_ma_inline)
+      and ' / ' not in monitor._signals_html(_ma_inline), '同一均线指标内部合并事实用逗号不冒充切指标')
+
+# 描述红黄灰无紫稳定排序并安全转义，均线只投影展示，原数字事实与marks保留。
+_order_row = item('ORDERESCAPE', 'technology', 'red')
+_order_row.update(signals=['手填目标价说明 <b>尾部</b>', '无灯说明 <img onerror=x>',
+    'RSI 2条超买（≥70）', '日内触及120日均线 ±1%区间', '上穿60日弱均线',
+    '振幅 6%', '量比 2.8x', '异动 -12.1%', '距加仓价 90 还差 1%', '另条说明 & 保留'],
+    signal_marks=[('target', 'purple'), ('ma_band', 'yellow'), ('ma_cross', 'yellow'),
+                  ('amp', 'yellow'), ('vol_ratio', 'yellow'), ('chg', 'red'), ('add_price', 'red')],
+    ma_band_direction='up', ma_settings={'ma_short': 60, 'ma_long': 120}, trigger=90,
+    target=monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 150}, 'technology', 3))
+_order_before = _copy.deepcopy(_order_row)
+with _patch.dict(monitor.S, {'ma_short': 120, 'ma_long': 60}), \
+        _patch.object(monitor, 'global_dca', return_value=None):
+    _order_snap = monitor.build_snapshot({}, [_order_row], {}, group_counts={})
+    _order_snap_before = _copy.deepcopy(_order_snap)
+    _order_page = monitor.render({}, [_order_row], 1, snapshot=_order_snap)
+_order_body = re.search(r'<tr\b[^>]*\bid="s-orderescape"[^>]*>(.*?)</tr>', _order_page, re.S)[1]
+_order_sig = re.search(r'<td class="sig">(.*?)</td>', _order_body, re.S)[1]
+check(re.findall(r'data-signal-kind="([^"]*)"', _order_sig)
+      == ['chg', 'add_price', 'ma', 'amp', 'vol_ratio', 'rsi', '', '', 'target']
+      and [ _order_sig.count('signal-dot ' + color) for color in ('red', 'yellow', 'gray', 'purple')]
+      == [2, 3, 1, 1], '全页描述稳定按红黄灰无紫排序，同色依首次出现且均线事实合并一点')
+check(all(text in _order_sig for text in ('&lt;b&gt;尾部&lt;/b&gt;', '&lt;img onerror=x&gt;', '&amp; 保留'))
+      and '<img' not in _order_sig and '<b>' not in _order_sig,
+      '排序聚合后描述仍安全HTML转义')
+_order_member = _order_snap['signal_members']['ma']['yellow'][0]
+_order_stats = _order_page.split('id="signalCounts"', 1)[1].split('id="macroCard"', 1)[0]
+_order_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _order_page)[1]))['ma']['members'][0]['d'][0]
+for _label, _output in (('主表描述', _order_sig), ('统计区', _order_stats),
+                       ('交集详情', _order_filter), ('均线图标', monitor._member_icons(_order_member, 'ma', 'yellow'))):
+    check('短均线' in _output and '长均线' in _output
+          and not re.search(r'\d+日(?:弱)?均线', _output), _label + '采用事实配置短长名称而非当前反置配置或数字')
+check('现价在长均线上方' in _order_stats and '现价在长均线上方' in _order_filter,
+      '均线触及与穿越共存时保留同事实长线现价侧文字')
+check(_order_row == _order_before and _order_snap == _order_snap_before
+      and _order_member['ma_settings'] == {'ma_short': 60, 'ma_long': 120}
+      and any(f['text'] == '上穿60日弱均线' for f in _order_member['ma_facts'])
+      and _order_member['indicators'] == monitor._member_direction_markers(_order_row, 'ma'),
+      '展示投影不改内部数字signals、marks、方向markers及快照')
+
+# 显式 --chrome 才启动全新隔离实例；HTML 经 CDP 放入 about:blank 内存页。
+if '--chrome' in sys.argv:
+    import subprocess as _subprocess
+    import tempfile as _tempfile
+    _chrome = os.environ.get('MM_TEST_CHROME', 'C:/Program Files/Google/Chrome/Application/chrome.exe')
+    _browser_script = r'''
+const fs = require('node:fs');
+const {spawn} = require('node:child_process');
+const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+const assertions = [];
+const failedRequests = [];
+const chrome = spawn(input.chrome, [
+  '--headless=new', '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
+  '--user-data-dir=' + input.profile, '--no-first-run', '--no-default-browser-check',
+  '--disable-background-networking', '--disable-component-update', '--disable-sync',
+  '--disable-extensions', '--disable-domain-reliability', '--no-proxy-server',
+  '--host-resolver-rules=MAP * ~NOTFOUND',
+  '--disable-features=MediaRouter,OptimizationHints,AutofillServerCommunication', 'about:blank'
+], {stdio: ['ignore', 'ignore', 'pipe']});
+let ws, call, session, diagnostic = '';
+const deadline = setTimeout(() => { chrome.kill(); process.exit(2); }, 60000);
+(async () => {
+  try {
+    const endpoint = await new Promise((resolve, reject) => {
+      chrome.once('error', reject);
+      chrome.once('exit', code => reject(new Error('Chrome提前退出：' + code + diagnostic)));
+      chrome.stderr.on('data', chunk => {
+        diagnostic += chunk.toString();
+        const match = diagnostic.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:[^\s]+)/);
+        if (match) resolve(match[1]);
+      });
+    });
+    ws = new WebSocket(endpoint);
+    await new Promise((resolve, reject) => {
+      ws.addEventListener('open', resolve, {once: true});
+      ws.addEventListener('error', reject, {once: true});
+    });
+    let seq = 0;
+    const pending = new Map();
+    call = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
+      const id = ++seq;
+      pending.set(id, {resolve, reject});
+      ws.send(JSON.stringify({id, method, params, ...(sessionId ? {sessionId} : {})}));
+    });
+    ws.addEventListener('message', event => {
+      const msg = JSON.parse(event.data);
+      if (pending.has(msg.id)) {
+        const job = pending.get(msg.id);
+        pending.delete(msg.id);
+        if (msg.error) job.reject(new Error(JSON.stringify(msg.error)));
+        else job.resolve(msg.result);
+      } else if (msg.method === 'Fetch.requestPaused') {
+        call('Fetch.failRequest', {requestId: msg.params.requestId, errorReason: 'InternetDisconnected'}, msg.sessionId)
+          .catch(() => {});
+      } else if (msg.method === 'Network.loadingFailed') {
+        failedRequests.push(msg.params.errorText);
+      }
+    });
+    const target = await call('Target.createTarget', {url: 'about:blank'});
+    session = (await call('Target.attachToTarget', {targetId: target.targetId, flatten: true})).sessionId;
+    const cdp = (method, params) => call(method, params, session);
+    await cdp('Page.enable');
+    await cdp('Runtime.enable');
+    await cdp('Network.enable');
+    await cdp('Network.setBypassServiceWorker', {bypass: true});
+    await cdp('Network.emulateNetworkConditions', {offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0});
+    await cdp('Fetch.enable', {patterns: [{urlPattern: '*'}]});
+    const tree = await cdp('Page.getFrameTree');
+    await cdp('Page.setDocumentContent', {frameId: tree.frameTree.frame.id, html: input.html});
+    const evaluate = async expression => {
+      const result = await cdp('Runtime.evaluate', {expression, returnByValue: true, awaitPromise: true});
+      if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+      return result.result.value;
+    };
+    const isolation = await evaluate(`(async () => {
+      let blocked = false;
+      try { await fetch('http://127.0.0.1:65530/offline-probe'); } catch (_) { blocked = true; }
+      return {href: location.href, origin: location.origin, blocked};
+    })()`);
+    isolation.requestFailures = failedRequests;
+    assertions.push({ok: isolation.href === 'about:blank' && isolation.origin === 'null' && isolation.blocked
+      && failedRequests.includes('net::ERR_INTERNET_DISCONNECTED'),
+      name: '独立Chrome内存页与请求阻断', actual: isolation});
+    for (const [width, height] of [[1440, 1000], [820, 1180], [390, 844]]) {
+      await cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
+      const actual = await evaluate(`(() => {
+        document.querySelectorAll('details.group-card,details.quiet-list').forEach(el => el.open = true);
+        const high = document.querySelector('#s-thigh .lvtag.tgt.high');
+        const space = document.querySelector('#s-tspace .lvtag.tgt.space');
+        const hit = document.querySelector('#s-tboth .lvtag.tgt.hit');
+        const bad = document.querySelector('#s-tfailold .lvtag.tgt.bad');
+        const low = document.querySelector('#s-tlow .lvtag.tgt.low');
+        const style = el => getComputedStyle(el);
+        const rect = el => { const r = el.getBoundingClientRect(); return [r.width, r.height]; };
+        const originalSize = rect(high);
+        high.style.color = '#c4a3ff';
+        const priorSize = rect(high);
+        high.style.removeProperty('color');
+        return {
+          highColor: style(high).color,
+          highNumbers: [...high.querySelectorAll('span')].map(el => style(el).color),
+          highBorder: getComputedStyle(high, '::after').borderTopColor,
+          highBorderWidth: getComputedStyle(high, '::after').borderTopWidth,
+          highShadow: style(high).textShadow,
+          originalSize, priorSize,
+          spaceColor: style(space).color, spaceBorder: getComputedStyle(space, '::after').borderTopColor,
+          hitColor: style(hit).color, hitBackground: style(hit).backgroundColor,
+          hitAfter: getComputedStyle(hit, '::after').content,
+          hitClass: hit.closest('tr').className,
+          badColor: style(bad).color, badBorderStyle: style(bad).borderTopStyle,
+          lowBorder: style(low).borderTopColor,
+          sig: document.querySelector('#s-thigh td.sig').textContent,
+          manual: document.querySelector('#s-manhigh td.sig').textContent,
+          runbarRuleLinks: document.querySelectorAll('.runbar a[href="#signalRules"]').length
+        };
+      })()`);
+      const pink = 'rgb(220, 98, 184)';
+      assertions.push({ok: actual.highColor === pink && actual.highBorder === pink
+        && actual.highNumbers.length >= 2 && actual.highNumbers.every(color => color === pink)
+        && actual.highShadow.includes(pink) && parseFloat(actual.highBorderWidth) > 0,
+        name: width + 'px真实CSS高空间外框、数字及等宽加重同色#dc62b8', actual});
+      assertions.push({ok: actual.originalSize[0] > 0 && actual.originalSize[1] > 0
+        && JSON.stringify(actual.originalSize) === JSON.stringify(actual.priorSize)
+        && actual.spaceColor === 'rgb(196, 163, 255)' && actual.spaceBorder === 'rgb(163, 113, 247)'
+        && actual.hitColor === 'rgb(255, 255, 255)' && actual.hitBackground === 'rgb(137, 87, 229)'
+        && actual.hitAfter === 'none' && actual.hitClass.includes('pur-hit') && !actual.hitClass.includes('pur-high')
+        && actual.badColor === 'rgb(139, 147, 161)' && actual.badBorderStyle === 'dashed'
+        && actual.lowBorder === 'rgb(139, 147, 161)'
+        && !actual.sig.includes('共识') && actual.manual.includes('手填目标价说明，与共识价交叉核对 <b>保留</b>')
+        && actual.runbarRuleLinks === 0,
+        name: width + 'px尺寸不变、达到优先、失败灰虚线及描述过滤', actual: {
+          size: actual.originalSize, priorSize: actual.priorSize,
+          hitColor: actual.hitColor, hitBackground: actual.hitBackground, badColor: actual.badColor,
+          sig: actual.sig, manual: actual.manual, runbarRuleLinks: actual.runbarRuleLinks}});
+    }
+    process.stdout.write(JSON.stringify(assertions));
+  } catch (error) {
+    process.stderr.write(String(error.stack || error));
+    process.exitCode = 1;
+  } finally {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      await call('Browser.close').catch(() => {});
+      ws.close();
+    } else { chrome.kill(); }
+    clearTimeout(deadline);
+  }
+})();
+'''
+    with _tempfile.TemporaryDirectory(prefix='mm-target-chrome-') as _profile:
+        _browser_result = _subprocess.run(['node', '-e', _browser_script],
+            input=_json.dumps({'chrome': _chrome, 'profile': _profile, 'html': _description_page}),
+            capture_output=True, text=True, encoding='utf-8', timeout=90)
+    check(_browser_result.returncode == 0,
+          '独立Chrome样式验证执行成功' + (('：' + _browser_result.stderr) if _browser_result.returncode else ''))
+    if _browser_result.returncode == 0:
+        for _assertion in _json.loads(_browser_result.stdout):
+            check(_assertion['ok'], _assertion['name'] + '：'
+                  + _json.dumps(_assertion['actual'], ensure_ascii=False, separators=(',', ':')))
 
 print()
 if fail:

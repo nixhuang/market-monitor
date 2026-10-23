@@ -36,9 +36,9 @@ line-27|rule-low52|h5|52周低位 所有分组
 line-28||p|距低点≤${near_52w_low_pct}%：新进入、触及／跌破此前低点或昨日状态未知 → 红灯；
 line-29||p|其余持续低位 → 黄灯。
 line-30|rule-ma|h5|均线 所有分组
-line-31||p|第一条（短期）：自适应确认穿越 → 黄灯（${ma_short_status}）。
-line-32||p|第二条（长期）：日内触及±${ma_long_band_pct}%或穿越 → 黄灯（${ma_long_status}）。
-line-33||p|第二条（长期）：本轮日线日期与目标交易日不符 → 不报触及／穿越灯；日内高低缺失或无效 → 只按现价判断贴近，不冒充日内触及。
+line-31||p|短均线：自适应确认穿越 → 黄灯（${ma_short_status}）。
+line-32||p|长均线：日内触及±${ma_long_band_pct}%或穿越 → 黄灯（${ma_long_status}）。
+line-33||p|长均线：本轮日线日期与目标交易日不符 → 不报触及／穿越灯；日内高低缺失或无效 → 只按现价判断贴近，不冒充日内触及。
 line-34|rule-clickable|h5|可点红灯 可点✓ 标记已读
 line-35|rule-prices|h5|加仓价／减仓价 须设置有效价位
 line-36||p|加仓价 · 所有分组：现价≤设置价×${add_factor} → 可点红灯。
@@ -98,31 +98,7 @@ target-inactive||p|目标空间<${target_space_pct}%、未达到目标／共识�
 earnings-far||p|仅有未来${earn_far_start}～${earn_list_days}天财报名单。"""),
 )
 
-# 相邻同块不互跳；保留跨块／跨节的 18 条有向链接。
-RULE_CROSS_LINKS = {
-    "up-buy-two": ("up-buy-other",), "up-buy-three": ("up-buy-other",),
-    "up-buy-other": ("up-buy-two", "up-buy-three"),
-    "up-sell-two": ("up-sell-other",), "up-sell-other": ("up-sell-two",),
-    "rsi-buy-three": ("rsi-buy-other",), "rsi-buy-other": ("rsi-buy-three",),
-    "low-one-sell": ("up-one-sell",), "up-one-sell": ("low-one-sell",),
-    "low-one-buy": ("up-one-buy",), "up-one-buy": ("low-one-buy",),
-    "target-space-positive": ("target-inactive",),
-    "target-reached-positive": ("target-inactive",),
-    "target-inactive": ("target-space-positive", "target-reached-positive"),
-    "earnings-near": ("earnings-far",), "earnings-far": ("earnings-near",),
-}
-RULE_LINK_LABELS = {
-    "up-buy-two": "持仓分组、重点：两条超买", "up-buy-three": "持仓分组、重点：三条超买",
-    "up-buy-other": "其他分组", "up-sell-two": "持仓分组、重点", "up-sell-other": "其他分组",
-    "rsi-buy-three": "持仓分组、重点", "rsi-buy-other": "其他分组",
-    "low-one-sell": "下轨：所有分组", "up-one-sell": "上轨：所有分组",
-    "low-one-buy": "下轨：所有分组", "up-one-buy": "上轨：所有分组",
-    "target-space-positive": "目标空间≥${target_space_pct}%",
-    "target-reached-positive": "达到目标／共识价",
-    "target-inactive": "空间不足／未达到／获取失败",
-    "earnings-near": "财报前一日／当日／后一日及前2～${earn_soon_days}天",
-    "earnings-far": "未来${earn_far_start}～${earn_list_days}天名单",
-}
+# 规则正文不再提供内部跳转；方向图标和阈值仍保留。
 
 
 GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
@@ -137,39 +113,37 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 <p>两项共用历史日波动档：&lt;${vol_low_sigma}%低档，&gt;${vol_high_sigma}%高档，其余中档；不足${vol_min_returns}个有效日收益取中档。不是按今天的涨跌选档。</p>
 <p>所有分组适用；达到红门槛报红，否则达到黄门槛报黄。</p>
 ${chg_threshold_table}
-<p><a class="rule-jump" href="#rule-chg">返回涨跌幅规则</a>。</p>
 <h5 id="glossary-amp">振幅 · 计算与阈值</h5>
 <p>振幅＝（日高−日低）÷昨收×100%，表示日内摆动宽度。涨跌幅接近0，振幅仍可能很大。</p>
 <p>沿用上节波动档；持仓分组、重点报灯，其他分组只显示数值。红门槛优先。</p>
 ${amp_threshold_table}
-<p><a class="rule-jump" href="#rule-amp">返回振幅规则</a>。</p>
 <h5 id="glossary-boll">布林逼近 · 自适应</h5>
 <p>布林为${boll_n}日、±${boll_k}倍标准差。逼近范围＝历史日波动×${boll_near_factor}（当前${boll_near_band_pct}%设置）；波动越大，范围越宽。关闭自适应或波动无效时固定${boll_near_pct}%。</p>
 <p>连续自适应示例，不是固定三档：</p>
 <table class="rule-table"><thead><tr><th scope="col">假设平时日波动</th><th scope="col">距上轨／下轨多近算逼近</th></tr></thead>
 <tbody><tr><th scope="row">1%</th><td>≤约${boll_example_1}%</td></tr><tr><th scope="row">2%</th><td>≤约${boll_example_2}%</td></tr><tr><th scope="row">3%</th><td>≤约${boll_example_3}%</td></tr></tbody></table>
 <p>碰轨为触及，穿轨为越轨。日波动来自历史，不是今天涨跌幅，也不是当天带宽的${boll_near_band_pct}%。</p>
-<p id="glossary-boll-dual">双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。布林与RSI的组合、分组限制及文字／报灯条件统一见<a class="rule-jump" href="#rule-boll-upper">《预警规则》</a>。</p>
+<p id="glossary-boll-dual">双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。布林与RSI的组合、分组限制及文字／报灯条件统一见《预警规则》。</p>
 <h5 id="glossary-rsi">RSI周期与条数</h5>
 <p>周期${rsi_periods}日；≥${rsi_high}超买，≤${rsi_low}超卖。</p>
-<p>“1／2／3条”是同方向达标的周期数，不是连续天数；向上／向下指超买／超卖，不等于今日涨跌。<a class="rule-jump" href="#rule-rsi">单独RSI规则</a> · <a class="rule-jump" href="#rule-boll-upper">布林＋RSI规则</a>。</p>
+<p>“1／2／3条”是同方向达标的周期数，不是连续天数；向上／向下指超买／超卖，不等于今日涨跌。</p>
 <h5 id="glossary-vol">量比 · 自适应／固定切换</h5>
 <p>完整日量比＝成交量÷此前${vol_ratio_base}日均量。异常值有效、两条σ阈值启用且量比≥1×，用自适应；否则用固定倍数。</p>
 <p>σ表示放量异常程度，不是均量倍数，也不套股价波动档。自适应未命中，不再用固定倍数补灯。</p>
-<p>盘中按已开盘时间折算成交速度，只用固定倍数；不足${intraday_vol_quiet_min}分钟或盘中值无效，退回最近完整日。完整日量比缺失则不判。<a class="rule-jump" href="#rule-vol">报灯条件</a>。</p>
-<h5 id="glossary-ma">均线确认 · 第一条（短期）／第二条（长期）</h5>
-<p>第一条（短期，${ma_short_status}）：确认幅度＝历史日波动×0.5，限${ma_confirm_min}%～${ma_confirm_max}%；波动无效取${ma_confirm_default}%。检查近${ma_confirm_lookback}日另一侧记录，历史不足只判简单穿越。</p>
+<p>盘中按已开盘时间折算成交速度，只用固定倍数；不足${intraday_vol_quiet_min}分钟或盘中值无效，退回最近完整日。完整日量比缺失则不判。</p>
+<h5 id="glossary-ma">均线确认 · 短均线／长均线</h5>
+<p>短均线（${ma_short_status}）：确认幅度＝历史日波动×0.5，限${ma_confirm_min}%～${ma_confirm_max}%；波动无效取${ma_confirm_default}%。检查近${ma_confirm_lookback}日另一侧记录，历史不足只判简单穿越。</p>
 <p>启用后的连续自适应示例：</p>
 <table class="rule-table"><thead><tr><th scope="col">假设平时日波动</th><th scope="col">穿越确认幅度</th></tr></thead>
 <tbody><tr><th scope="row">1%</th><td>${ma_example_1}%</td></tr><tr><th scope="row">2%</th><td>${ma_example_2}%</td></tr><tr><th scope="row">3%</th><td>${ma_example_3}%</td></tr></tbody></table>
-<p>第二条（长期，${ma_long_status}）：触及范围固定±${ma_long_band_pct}%；简单穿越不需额外确认幅度。<a class="rule-jump" href="#rule-ma">均线规则</a>。</p>
-<p>0关闭，2～250整数启用；两条同周期只计一次，按简单穿越判断。</p>
+<p>长均线（${ma_long_status}）：触及范围固定±${ma_long_band_pct}%；简单穿越不需额外确认幅度。</p>
+<p>周期可在设置页编辑，填0关闭对应均线；两条同周期只计一次，按简单穿越判断。</p>
 <h5 id="glossary-target">目标／共识价</h5>
 <p>有效手填目标价优先；未手填才用自动平均共识价。空间＝（目标／共识价÷现价−1）×100%。</p>
 <p>达到按昨收与现价判断，不用日内高低曾触及代替。失败旧共识不参与，有效手填价不受影响。</p>
-<p>空间／达到各自去重、允许重叠；总数取并集，不直接相加。<a class="rule-jump" href="#rule-target-space">空间规则</a> · <a class="rule-jump" href="#rule-target-reached">达到规则</a>。</p>
+<p>空间／达到各自去重、允许重叠；总数取并集，不直接相加。</p>
 <h5 id="glossary-earnings">财报与显示</h5>
-<p>用美东财报日期对比北京今天，盘前／盘后不平移。名单含今天至+${earn_list_days}天，另留昨天红字；红字保留期结束后才检查下一次。<a class="rule-jump" href="#rule-earnings">颜色与保留规则</a>。</p>
+<p>用美东财报日期对比北京今天，盘前／盘后不平移。名单含今天至+${earn_list_days}天，另留昨天红字；红字保留期结束后才检查下一次。</p>
 <p>只显示个股财报，ETF／指数／期货除外。失败时沿用有效旧日期；“待公布”仅表示本站未取得日期。</p>
 <p>已知时段显示盘前／盘后／盘中及北京落点，未知不猜钟点。</p>
 <h5 id="glossary-dedup">标的去重与显示优先级</h5>
@@ -214,7 +188,7 @@ ${amp_threshold_table}
 <tr><th scope="row">10年美债收益率</th><td>Yahoo ^TNX百分比日线；校验标的与收益率序列，不混用债券价格</td></tr>
 <tr><th scope="row">美联储决议</th><td>美联储官网声明及发布日程</td></tr>
 <tr><th scope="row">WTI原油</th><td>Yahoo NYMEX WTI期货日线；不是实时夜盘报价</td></tr></tbody></table>
-<p>来源、观测日期与失效状态看对应数据项；有效期与判定见<a class="rule-jump" href="#marketRiskRules">综合判断与宏观细则</a>。</p>
+<p>来源、观测日期与失效状态看对应数据项；有效期与判定见综合判断与宏观细则。</p>
 <h5 id="fetch-reference">补充参考：缓存间隔</h5>
 <table class="rule-table"><thead><tr><th scope="col">数据</th><th scope="col">缓存／重试</th></tr></thead>
 <tbody><tr><th scope="row">美联储决议</th><td>到下次官方公布时点前复用；错误／待更新至少隔1小时重试</td></tr>
@@ -302,7 +276,7 @@ def _rule_values(settings, constants):
                 values[f"{kind}_{tier}_{level}"] = round(values[f"{kind}_{level}"] * mult, 6)
     for period in ("short", "long"):
         n = values["ma_" + period]
-        values[f"ma_{period}_status"] = f"当前{n:g}日" if n else "当前关闭"
+        values[f"ma_{period}_status"] = "启用" if n else "关闭"
     values["add_factor"] = round(1 + values["trigger_gap_pct"] / 100, 6)
     values["reduce_factor"] = round(1 - values["reduce_gap_pct"] / 100, 6)
     values["earn_far_start"] = values["earn_soon_days"] + 1
@@ -340,17 +314,6 @@ def _rules_source():
             anchor = f' id="{heading}"' if heading else ""
             body = _text(text)
             parts.append(f'<{tag}{anchor} class="rule-original">' + body + f'</{tag}>')
-            if ident in ("line-16", "line-22"):
-                metric = "chg" if ident == "line-16" else "amp"
-                parts.append('<nav class="rule-cross-nav" aria-label="计算与阈值">'
-                             f'<a class="rule-jump rule-cross-link rule-metric-link" href="#glossary-{metric}-table">计算与阈值表</a></nav>')
-            if ident in RULE_CROSS_LINKS:
-                parts.append('<nav class="rule-cross-nav" aria-label="同一指标的其他条件">')
-                for peer in RULE_CROSS_LINKS[ident]:
-                    label = _text(RULE_LINK_LABELS[peer])
-                    parts.append(f'<a class="rule-jump rule-cross-link" href="#nav-{peer}" '
-                                 f'aria-label="跳转到{label}对应规则">{label}</a>')
-                parts.append('</nav>')
             parts.append('</div>')
         parts.append('</section>')
     parts.append('</div>')
@@ -507,7 +470,7 @@ tr:first-child td{border-top:none}
 .lvtag.tgt.space,.lvtag.tgt.high{border-color:transparent;background:transparent}
 .lvtag.tgt.space::after,.lvtag.tgt.high::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none}
 .lvtag.tgt.space::after{border:1.5px solid var(--purple)}
-.lvtag.tgt.high{text-shadow:.2px 0 currentColor,-.2px 0 currentColor}
+.lvtag.tgt.high{color:var(--target-high);text-shadow:.2px 0 currentColor,-.2px 0 currentColor}
 .lvtag.tgt.high::after{border:1.5px solid var(--target-high)}
 .lvtag.tgt.bad{color:var(--dim);background:transparent;border:1px dashed var(--dim);text-shadow:none}
 .lvtag.tgt.bad::after,.lvtag.tgt.hit::after{content:none}
@@ -515,6 +478,15 @@ tr:first-child td{border-top:none}
 .tnote,.sig .tp{color:#c4a3ff}
 .sig{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
 .signal-magenta{color:#ef8de4} .signal-red{color:#ff8580} .signal-yellow{color:#f0c674} .signal-cyan{color:#4dd0e1}
+/* 原生disc尺寸不变；抵消inside尾空白后，描述灯到文字再缩小2px，统计名单不变。 */
+.signal-dot{display:inline list-item;list-style:disc inside;font-size:13px;font-weight:400;margin:0 -5px 0 0;padding:0;vertical-align:baseline;color:var(--dim)}
+.signal-dot::marker{content:normal}
+.signal-dot.red{color:var(--red)} .signal-dot.yellow{color:var(--yellow)}
+.signal-dot.purple{color:var(--purple)} .signal-dot.gray{color:#9fa3aa}
+.signal-item[data-signal-level="red"]{color:#ff8580}
+.signal-item[data-signal-level="yellow"]{color:#f0c674}
+.signal-item[data-signal-level="purple"]{color:var(--purple)}
+.signal-separator{color:var(--dim);margin:0 2px}
 .group-bottom{padding:0;margin:0 -4px -6px;border-top:1px solid var(--line);text-align:center;line-height:0}
 .collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);
   display:flex;align-items:center;justify-content:center;box-sizing:border-box;
@@ -522,7 +494,8 @@ tr:first-child td{border-top:none}
 .collapse-group .collapse-icon{font-size:16px;line-height:1}
 .collapse-group:hover{color:var(--text);background:var(--collapse-bg)}
 .collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts{border:1px solid #6686c6;box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}
+#signalCounts{--signal-border:#6686c6;--collapse-bg:var(--signal-border);border:1px solid var(--signal-border);box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}
+#signalCounts .collapse-group{color:#fff}
 #signalCounts>summary{color:#bfd5ff}
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 #signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
@@ -879,14 +852,6 @@ tr.gray td{color:var(--dim)}
 .dca-badge.on{color:var(--yellow)}
 /* 定投提醒挂在顶栏最右侧，字号跟顶栏按钮对齐 */
 .runbar .dca-badge{font-size:14px;margin-left:auto}
-.policy-reference{border-top:1px solid var(--line);margin-top:0}
-.policy-reference .reference-alert{padding:7px 12px}
-.policy-reference .reference-top{gap:6px;font-size:12.5px}
-.policy-reference .stat-dot{width:8px;height:8px}
-.policy-reference .reference-status{font-size:11.5px}
-.policy-reference [data-status="pending"] .reference-status,.policy-reference [data-status="unavailable"] .reference-status{color:var(--dim)}
-.policy-reference [data-status="available"] .reference-status{color:var(--text)}
-.policy-reference .reference-conclusion{font-size:13px;line-height:1.55;margin:3px 0 0}
 .oil-reference-row td{font-size:13px;overflow-wrap:anywhere}
 .oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
 .oil-state{font-size:12px;font-weight:600}
@@ -951,91 +916,17 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 .card .rules-body .signal-term{display:inline-flex;align-items:center;vertical-align:baseline;white-space:nowrap;gap:1px}
 .card .rules-body .dir-arrow{display:inline-block;flex:none;width:auto;height:18px;vertical-align:middle}
 #signalRulesBody .nav-gray{color:#adb5c2}
-#signalRulesBody .rule-cross-nav{display:flex;gap:3px 14px;flex-wrap:wrap;margin:0 0 3px;line-height:1.5}
-#signalRulesBody a.rule-jump,#glossaryRulesBody a.rule-jump{color:#8795a7;font-size:11.5px;font-weight:400;text-decoration:underline dotted;text-underline-offset:3px}
-#signalRulesBody .rule-cross-link{display:inline-block;padding:1px 0;min-height:22px;box-sizing:border-box}
-#signalRulesBody a.rule-jump:hover,#glossaryRulesBody a.rule-jump:hover{color:#b2becf}
-#signalRulesBody a.rule-jump:focus-visible,#glossaryRulesBody a.rule-jump:focus-visible{outline:2px solid #bfd5ff;outline-offset:3px;border-radius:3px}
-#signalRulesBody .rule-entry.nav-hit,#glossaryRulesBody .glossary-entry.nav-hit{background:#213048;box-shadow:inset 3px 0 #bfd5ff,0 0 0 1px #49648a}
-#signalRulesBody .rule-entry:focus{outline:1px solid #49648a}
 #glossaryRulesBody p{margin:2px 0;line-height:1.5;color:#dce1e9}
 #glossaryRulesBody .rule-table{margin:6px 0 8px}
 #glossaryRulesBody .rule-table th,#glossaryRulesBody .rule-table td{line-height:1.5}
 #glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:#f0c674}
 #glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:#ff8580}
 #glossary-chg-table td,#glossary-amp-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
-@media(max-width:600px){#signalRulesBody .rule-cross-link{min-height:30px;padding:4px 0}#signalRulesBody .rule-cross-nav{gap:3px 12px}}
-@media(prefers-reduced-motion:reduce){#signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{transition:none}}
 """
 PAGE_CSS += RULES_CSS
 
 # 单独导出供 monitor 替换旧锚点处理器；PAGE_INTERACTION_JS 已含此块，勿重复追加。
-RULES_INTERACTION_JS = r"""
-let activeRuleEntry = null;
-let ruleHighlightTimer = null;
-function revealRuleAnchor(hash) {
-  if (!hash || hash.charAt(0) !== "#") return false;
-  let id;
-  try { id = decodeURIComponent(hash.slice(1)); } catch (error) { return false; }
-  if (id === "complete-rules") id = "signalRules";
-  const target = document.getElementById(id);
-  if (!target || (!target.closest(".rules-body") &&
-      !target.querySelector(":scope > .rules-body") && target.id !== "marketRiskRules")) return false;
-  for (let node = target; node; node = node.parentElement) {
-    if (node.tagName === "DETAILS") node.open = true;
-  }
-  const entry = target.closest("#signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry");
-  if (entry) {
-    if (activeRuleEntry) activeRuleEntry.classList.remove("nav-hit");
-    window.clearTimeout(ruleHighlightTimer);
-    activeRuleEntry = entry;
-    entry.classList.add("nav-hit");
-    ruleHighlightTimer = window.setTimeout(function() {
-      entry.classList.remove("nav-hit");
-      if (activeRuleEntry === entry) activeRuleEntry = null;
-    }, 2600);
-  }
-  requestAnimationFrame(function() {
-    const destination = entry || target;
-    destination.scrollIntoView({block: "start", behavior: "auto"});
-    destination.setAttribute("tabindex", "-1");
-    destination.focus({preventScroll: true});
-  });
-  return true;
-}
-let ruleAnchorsInitialized = false;
-function initRuleAnchors() {
-  const bar = document.querySelector(".runbar");
-  if (bar && !bar.querySelector('a[href="#signalRules"]')) {
-    const shortcut = document.createElement("a");
-    shortcut.className = "btnlink rule-jump";
-    shortcut.href = "#signalRules";
-    shortcut.textContent = "预警规则";
-    bar.appendChild(shortcut);
-  }
-  if (!ruleAnchorsInitialized) {
-    document.addEventListener("click", function(event) {
-      if (!(event.target instanceof Element) || event.defaultPrevented ||
-          event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-      const link = event.target.closest('a[href^="#"]');
-      if (!link) return;
-      const hash = link.getAttribute("href");
-      if (!revealRuleAnchor(hash)) return;
-      event.preventDefault();
-      if (window.location.hash !== hash) history.pushState(null, "", hash);
-    });
-    window.addEventListener("hashchange", function() { revealRuleAnchor(window.location.hash); });
-    window.addEventListener("pageshow", function() { revealRuleAnchor(window.location.hash); });
-    ruleAnchorsInitialized = true;
-  }
-  revealRuleAnchor(window.location.hash);
-}
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initRuleAnchors, {once: true});
-} else {
-  initRuleAnchors();
-}
-"""
+RULES_INTERACTION_JS = ""  # 保留导出兼容；规则跳转、hash监听和高亮计时器已删除。
 PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
 function revealSignalPanel(panel) {
   // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从清单开头对齐。

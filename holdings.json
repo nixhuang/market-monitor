@@ -143,9 +143,6 @@
     }
   },
   "index_funds": {
-    "ESMAIN": {
-      "note": "标普500期货主连·日线"
-    },
     "IBIT": {
       "note": "iShares比特币ETF"
     }

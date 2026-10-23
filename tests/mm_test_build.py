@@ -325,20 +325,21 @@ class RulesTemplateTests(unittest.TestCase):
         for summary in ('预警规则', '名词解释和抓取'):
             self.assertIn('<summary>' + summary + '</summary>', markup)
 
-    def test_all_links_are_unique_targets_and_eighteen_cross_links_are_reciprocal(self):
+    def test_rule_ids_remain_unique_without_internal_links_or_navigation(self):
         rules = assets.rules_body({}, {})
         glossary = assets.glossary_body({}, {})
         ids = re.findall(r'\bid="([^"]+)"', rules + glossary)
         self.assertEqual(len(ids), len(set(ids)))
-        links = re.findall(r'href="#([^"]+)"', rules + glossary)
-        self.assertEqual(len(links), 31)
-        self.assertEqual(set(links) - set(ids), {'marketRiskRules'})
-        pairs = [(key, peer) for key, peers in assets.RULE_CROSS_LINKS.items() for peer in peers]
-        self.assertEqual(len(pairs), 18)
-        for key, peer in pairs:
-            self.assertIn((peer, key), pairs)
-            self.assertIn('id="nav-' + key + '"', rules)
-            self.assertIn('href="#nav-' + peer + '"', rules)
+        self.assertFalse(hasattr(assets, 'RULE_CROSS_LINKS'))
+        self.assertFalse(hasattr(assets, 'RULE_LINK_LABELS'))
+        for markup in (rules, glossary, assets.rules_template({}, {})):
+            self.assertNotRegex(markup, r'href\s*=\s*[\"\']\s*#')
+            self.assertNotRegex(markup, r'<nav\b|rule-jump|rule-cross-link|rule-cross-nav')
+            self.assertNotRegex(markup, r'\bon\w+\s*=|\btabindex\s*=')
+        source_links = re.findall(r'<a\b[^>]+href="([^"]+)"[^>]*>.*?</a>', glossary, re.S)
+        self.assertTrue(source_links, '保留外部来源链接，不能将所有链接一起删除')
+        self.assertTrue(all(link.startswith('https://') for link in source_links))
+        self.assertIn('History of Market', self.plain(glossary))
         for alias in ('alerts', 'display', 'quiet', 'upper', 'lower', 'volume', 'change',
                       'amplitude', 'low', 'ma', 'prices', 'loss', 'space', 'reached',
                       'earnings', 'missing', 'single', 'terms', 'fetch', 'read-terms',
@@ -359,7 +360,7 @@ class RulesTemplateTests(unittest.TestCase):
                      '单独布林下轨「RSI 0 条」→ 文字 → 灰灯。',
                      '单独RSI 2条向上超买／向下超卖 → 文字 → 灰灯。',
                      '布林上轨 + RSI 2条／3条向上超买 → 文字 → 灰灯。',
-                     '单独RSI三条超买 → 文字 → 灰灯。', '第一条（短期）', '第二条（长期）'):
+                     '单独RSI三条超买 → 文字 → 灰灯。', '短均线', '长均线'):
             self.assertIn(term, text)
         for deleted in ('进入下轨报警区（逼近自适应）', '排除指数、期货', '行灯取最严重',
                         '单独RSI 3条向上超买 → 文字。', '基本面黄灯'):
@@ -398,14 +399,14 @@ class RulesTemplateTests(unittest.TestCase):
                 self.assertIn(threshold, table)
             self.assertIn('中 ×1.1', table)
         combined = self.plain(rules + glossary)
-        for dynamic in ('当前25日', '当前180日', '布林为30日、±2.7倍', '×0.6（当前10%设置）',
+        for dynamic in ('短均线（启用）', '长均线（启用）', '布林为30日、±2.7倍', '×0.6（当前10%设置）',
                         '≤约0.6%', '≤约1.2%', '≤约1.8%', '固定0.9%', '周期5／10／21日',
                         '≥82超买', '≤24超卖', '距低点≤2.2%', '设置价×1.07', '设置价×0.91',
                         '≥4.2σ', '≥2.1σ', '≥4.4×', '≥2.2×', '固定±1.7%',
                         '限0.75%～1.25%', '检查近8日', '此前22日', '不足19分钟',
                         '有效空间≥40%', '≥80%', '未来6～12天', '&lt;0.8%'):
             self.assertIn(html.unescape(dynamic), combined)
-        self.assertIn('目标空间≥40%', rules)
+        self.assertIn('有效空间≥40%', self.plain(rules))
         self.assertEqual((settings, constants), before)
 
     def test_disabled_and_equal_moving_averages_and_adaptive_settings_keep_rules(self):
@@ -414,12 +415,13 @@ class RulesTemplateTests(unittest.TestCase):
                 markup = assets.rules_template({'ma_short': short, 'ma_long': long,
                     'boll_near_band_pct': 0, 'vol_ratio_z': 0, 'vol_ratio_red_z': 0}, {})
                 text = self.plain(markup)
-                for n in (short, long):
-                    self.assertIn('当前' + (str(n) + '日' if n else '关闭'), text)
+                for name, n in (('短均线', short), ('长均线', long)):
+                    self.assertIn(name + '（' + ('启用' if n else '关闭') + '）', text)
+                self.assertNotRegex(text, r'当前\d+日|\d+日均线|第一条|第二条|2～250')
                 self.assertIn('两条同周期只计一次，按简单穿越判断', text)
                 self.assertIn('关闭自适应或波动无效时固定0.5%', text)
                 self.assertIn('两条σ阈值启用', text)
-                self.assertIn('第一条（短期）：自适应确认穿越', text)
+                self.assertIn('短均线：自适应确认穿越', text)
                 self.assertNotIn('${', markup)
 
     def test_unique_tables_and_dual_track_sentence_remain(self):
@@ -524,9 +526,10 @@ class RulesTemplateTests(unittest.TestCase):
     def test_export_contract_and_python311_syntax(self):
         self.assertTrue(assets.PAGE_CSS.endswith(assets.RULES_CSS))
         self.assertTrue(assets.PAGE_INTERACTION_JS.startswith(assets.RULES_INTERACTION_JS))
-        self.assertEqual(assets.PAGE_INTERACTION_JS.count('function revealRuleAnchor('), 1)
-        self.assertIn('}, 2600)', assets.RULES_INTERACTION_JS)
-        self.assertIn('window.clearTimeout(ruleHighlightTimer)', assets.RULES_INTERACTION_JS)
+        self.assertEqual(assets.RULES_INTERACTION_JS, '')
+        for removed in ('revealRuleAnchor', 'initRuleAnchors', 'ruleHighlightTimer', 'nav-hit'):
+            self.assertNotIn(removed, assets.PAGE_INTERACTION_JS)
+        self.assertIn('function revealSignalPanel(', assets.PAGE_INTERACTION_JS)
         for source in ('page_assets.py', 'tests/mm_test_build.py'):
             ast.parse((ROOT / source).read_text(encoding='utf-8'), feature_version=(3, 11))
         if not shutil.which('node'):
@@ -561,64 +564,39 @@ const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),{chromiu
         window.setTimeout=(fn,ms)=>{window.__timers.set(++seq,{fn,ms});return seq;};
         window.clearTimeout=id=>window.__timers.delete(id);
       });
-      await page.addScriptTag({content:input.js});
+      if(input.js)await page.addScriptTag({content:input.js});
       assert.deepEqual(await page.locator('details[open]').evaluateAll(ds=>ds.map(d=>d.id)),['signalCounts']);
-      assert.equal(await page.locator('.runbar a[href="#signalRules"]').count(),1);
-      const links=await page.locator('#signalRules a[href^="#"],#glossaryRules a[href^="#"]').evaluateAll(ns=>ns.map(n=>({hash:n.hash,source:n.closest('details').id})));
-      assert.equal(links.length,31);
-      for(const link of links){
-        await page.evaluate(source=>{
-          document.querySelectorAll('details:not(#signalCounts)').forEach(d=>d.open=false);
-          document.getElementById(source).open=true;
-        },link.source);
-        await page.locator('#'+link.source+' a[href="'+link.hash+'"]').first().click();
-        await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
-        const result=await page.evaluate(hash=>{
-          const target=document.querySelector(hash),entry=target.closest('.rule-entry,.glossary-entry');
-          return {open:target.closest('details').open,hash:location.hash,
-            highlight:entry?entry.classList.contains('nav-hit'):true,
-            focus:document.activeElement===(entry||target),timers:[...window.__timers.values()].map(t=>t.ms)};
-        },link.hash);
-        assert(result.open,link.hash);assert.equal(result.hash,link.hash);assert(result.highlight,link.hash);
-        assert(result.focus,link.hash);assert(result.timers.every(ms=>ms===2600));
-      }
-      await page.evaluate(()=>{
-        revealRuleAnchor('#nav-up-buy-two');revealRuleAnchor('#nav-up-buy-two');
-      });
-      assert.equal(await page.locator('.nav-hit').count(),1);
-      await page.evaluate(()=>{[...window.__timers.values()].forEach(t=>t.fn());});
-      assert.equal(await page.locator('.nav-hit').count(),0);
+      assert.equal(await page.locator('.runbar a[href="#signalRules"]').count(),0);
+      assert.equal(await page.locator('#signalRules a[href^="#"],#glossaryRules a[href^="#"],.rule-cross-nav').count(),0);
+      assert.equal(await page.evaluate(()=>window.__timers.size),0);
+      assert.equal(await page.evaluate(()=>typeof window.revealRuleAnchor),'undefined');
+      // 原生折叠仍有效，移除跳转不能影响查看完整正文。
+      await page.locator('#signalRules > summary').click();
+      await page.locator('#glossaryRules > summary').click();
+      assert(await page.locator('#signalRules').evaluate(d=>d.open));
+      assert.equal(await page.locator('#signalRulesBody svg').count(),35);
       const appearance=await page.evaluate(()=>{
         document.getElementById('glossaryRules').open=true;
         const p=document.querySelector('#signalRulesBody p.rule-original');
-        const link=document.querySelector('#signalRulesBody .rule-cross-link');
         const g=document.querySelector('#glossaryRulesBody p');
         const arrow=document.querySelector('#signalRulesBody svg');
         const table=document.getElementById('glossary-chg-table');
-        return {pMargin:getComputedStyle(p).marginTop,linkColor:getComputedStyle(link).color,
-          linkSize:getComputedStyle(link).fontSize,gMargin:getComputedStyle(g).marginTop,
+        return {pMargin:getComputedStyle(p).marginTop,gMargin:getComputedStyle(g).marginTop,
           arrowHeight:arrow.getBoundingClientRect().height,
           yellow:getComputedStyle(table.rows[0].cells[1]).color,
           red:getComputedStyle(table.rows[0].cells[2]).color,
           horizontal:document.documentElement.scrollWidth>window.innerWidth};
       });
       assert.equal(appearance.pMargin,'1px');assert.equal(appearance.gMargin,'2px');
-      assert.equal(appearance.linkColor,'rgb(135, 149, 167)');assert.equal(appearance.linkSize,'11.5px');
       assert.equal(appearance.arrowHeight,18);assert.equal(appearance.yellow,'rgb(240, 198, 116)');
       assert.equal(appearance.red,'rgb(255, 133, 128)');assert(!appearance.horizontal);
-      await page.evaluate(()=>revealRuleAnchor('#dataSourceRules'));
-      assert(await page.locator('#glossaryRules').evaluate(d=>d.open));
-      await page.evaluate(()=>revealRuleAnchor('#complete-rules'));
-      assert(await page.locator('#signalRules').evaluate(d=>d.open));
-      await page.evaluate(()=>{
-        document.querySelectorAll('details:not(#signalCounts)').forEach(d=>d.open=false);
-        history.replaceState(null,'',location.href.split('#')[0]);initRuleAnchors();
-      });
+      await page.locator('#signalRules > summary').click();
+      await page.locator('#glossaryRules > summary').click();
       assert.deepEqual(await page.locator('details[open]').evaluateAll(ds=>ds.map(d=>d.id)),['signalCounts']);
       assert.equal(requests,0);await context.close();
     }
   }finally{await browser.close();}
-  console.log('桌面与手机 31 链接离线浏览器验收通过');
+  console.log('桌面与手机无规则跳转、原生折叠及正文样式验收通过');
 })().catch(e=>{console.error(e);process.exit(1);});
 '''
         markup = (assets.rules_template({}, {}) + '<div class="runbar"></div>'
@@ -630,83 +608,25 @@ const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),{chromiu
                                 encoding='utf-8', capture_output=True, check=False, timeout=120)
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_navigation_click_hash_history_highlight_and_default_collapsed_offline(self):
+    def test_removed_navigation_registers_no_listeners_timers_or_dom_changes(self):
         if not shutil.which('node'):
-            self.skipTest('Node 未安装，跳过离线导航执行')
+            self.skipTest('Node 未安装，跳过离线执行')
         code = r'''
 const assert=require('assert/strict'),vm=require('vm'),fs=require('fs');
 const input=JSON.parse(fs.readFileSync(0,'utf8'));
-const events={},timers=new Map();let seq=0,focus=null,scroll=null;
-class Element {
-  constructor(id,parent=null,kind='DIV',entry=false){
-    this.id=id;this.parentElement=parent;this.tagName=kind;this.entry=entry;this.open=false;
-    this.classes=new Set();this.classList={add:c=>this.classes.add(c),remove:c=>this.classes.delete(c)};
-  }
-  closest(selector){
-    if(selector==='a[href^="#"]')return this.href?this:null;
-    if(selector==='.rules-body')return this.owner||null;
-    if(selector.includes('.rule-entry'))return this.entry?this:this.parentElement&&this.parentElement.closest(selector);
-    return null;
-  }
-  querySelector(){return this.body||null;}
-  setAttribute(k,v){this[k]=v;}
-  getAttribute(k){return this[k];}
-  scrollIntoView(){scroll=this.id;}
-  focus(){focus=this.id;}
+for(const hash of ['', '#nav-up-buy-three', '#glossary-amp-table']){
+  let calls=0;
+  const forbidden=()=>{calls++;throw Error('删除后的规则脚本不应操作DOM、注册监听或计时器');};
+  const context={document:new Proxy({},{get:()=>forbidden}),
+    window:{location:{hash},addEventListener:forbidden,setTimeout:forbidden},
+    requestAnimationFrame:forbidden};
+  vm.createContext(context);vm.runInContext(input.js,context);
+  assert.equal(calls,0);assert.equal(typeof context.revealRuleAnchor,'undefined');
+  assert.equal(typeof context.initRuleAnchors,'undefined');
 }
-const stats=new Element('signalCounts',null,'DETAILS');stats.open=true;
-const rules=new Element('signalRules',null,'DETAILS'),glossary=new Element('glossaryRules',null,'DETAILS');
-const macro=new Element('marketRiskRules',null,'DETAILS');
-const nodes={signalRules:rules,glossaryRules:glossary,marketRiskRules:macro};
-for(const [bodyId,owner] of [['signalRulesBody',rules],['glossaryRulesBody',glossary]]){
-  owner.body=new Element(bodyId,owner);owner.body.owner=owner.body;nodes[bodyId]=owner.body;
-}
-for(const id of input.ids){
-  if(nodes[id])continue;
-  const body=id.startsWith('glossary')||id.startsWith('fetch')||id.endsWith('terms')?
-    glossary.body:rules.body;
-  const entry=new Element('entry-'+id,body,'DIV',true);entry.owner=body;
-  nodes[id]=new Element(id,entry);nodes[id].owner=body;
-}
-let barLinks=[];
-const bar={querySelector:()=>barLinks[0]||null,appendChild:n=>barLinks.push(n)};
-const context={Element,document:{readyState:'complete',getElementById:id=>nodes[id]||null,
-  querySelector:s=>s==='.runbar'?bar:null,createElement:()=>new Element('shortcut'),
-  addEventListener:(name,fn)=>{(events[name]??=[]).push(fn);}},
-  requestAnimationFrame:fn=>fn(),window:{location:{hash:''},
-    addEventListener:(name,fn)=>{(events[name]??=[]).push(fn);},
-    clearTimeout:id=>timers.delete(id),setTimeout:(fn,ms)=>{assert.equal(ms,2600);timers.set(++seq,fn);return seq;}},
-  history:{pushState:(_a,_b,hash)=>{context.window.location.hash=hash;}}};
-vm.createContext(context);vm.runInContext(input.js,context);
-const reveal=hash=>context.revealRuleAnchor(hash);
-assert.equal(rules.open,false);assert.equal(glossary.open,false);assert.equal(macro.open,false);assert(stats.open);
-context.initRuleAnchors();assert.equal(barLinks.length,1);assert.equal(events.click.length,1);
-for(const id of input.ids){
-  rules.open=glossary.open=macro.open=false;
-  assert(reveal('#'+id),id);assert.equal(focus,scroll);
-  assert(rules.open||glossary.open||macro.open,id);assert(stats.open);
-}
-assert(reveal('#complete-rules'));assert.equal(scroll,'signalRules');
-assert(!reveal('#bad%'));assert(!reveal('#missing-anchor'));assert(!reveal('not-a-hash'));
-reveal('#nav-up-buy-two');const first=nodes['nav-up-buy-two'].parentElement;
-assert(first.classes.has('nav-hit'));
-reveal('#glossary-chg-table');const second=nodes['glossary-chg-table'].parentElement;
-assert(!first.classes.has('nav-hit'));assert(second.classes.has('nav-hit'));assert.equal(timers.size,1);
-reveal('#glossary-chg-table');assert.equal(timers.size,1);
-[...timers.values()][0]();assert(!second.classes.has('nav-hit'));
-const link=new Element('link');link.href='#nav-up-buy-two';
-function click(extra={}){let prevented=false;events.click[0]({target:link,button:0,
-  defaultPrevented:false,preventDefault:()=>{prevented=true;},...extra});return prevented;}
-assert(click());assert.equal(context.window.location.hash,link.href);
-for(const key of ['ctrlKey','metaKey','shiftKey','altKey'])assert(!click({[key]:true}));
-assert(!click({button:1}));assert(!click({defaultPrevented:true}));
-rules.open=false;context.window.location.hash='#nav-up-buy-three';events.hashchange[0]();assert(rules.open);
-glossary.open=false;context.window.location.hash='#glossary-amp-table';events.pageshow[0]();assert(glossary.open);
-console.log('离线导航执行通过');
+console.log('无规则跳转处理器、监听或高亮计时器');
 '''
-        ids = re.findall(r'\bid="([^"]+)"', assets.rules_template({}, {}))
-        payload = {'js': assets.RULES_INTERACTION_JS, 'ids': ids + ['marketRiskRules']}
-        result = subprocess.run(['node', '-e', code], input=json.dumps(payload),
+        result = subprocess.run(['node', '-e', code], input=json.dumps({'js': assets.RULES_INTERACTION_JS}),
                                 text=True, encoding='utf-8', capture_output=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
 

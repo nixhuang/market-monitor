@@ -122,8 +122,8 @@ for label, rendered, expected_amp in (
         check(cells == [['波动档位', '黄灯', '红灯'], *expected_rows],
               label + '：' + ident + ' 列序及三档全部阈值精确匹配')
         check('id="' + ident + '"' not in rules and
-              rules.count('href="#' + ident + '"') == 1,
-              label + '：预警区不重复阈值表且唯一跳转到' + ident)
+              rules.count('href="#' + ident + '"') == 0,
+              label + '：预警区不重复阈值表且不再跳转到' + ident)
 
 print()
 if fails:

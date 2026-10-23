@@ -13,6 +13,8 @@
   "target_space_pct": 50,
   "vol_ratio": 1.5,
   "vol_ratio_red": 3,
+  "vol_ratio_z": 2,
+  "vol_ratio_red_z": 3.6,
   "amp_yellow": 6,
   "amp_red": 10,
   "ma_short": 0,

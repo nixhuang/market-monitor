@@ -1,6 +1,7 @@
-// edit.html 内联脚本的 DOM 桩测试：验证三分组渲染、ETF 分区、排序、分页。
+// edit.html 离线 DOM 桩测试：验证折叠、实际控件、保存及清单渲染。
 const fs = require('fs');
 const path = require('path');
+const vm = require('node:vm');
 const ROOT = path.resolve(__dirname, '..');
 const src = fs.readFileSync(path.join(ROOT, 'edit.html'), 'utf8');
 const m = src.match(/<script>\r?\n([\s\S]*?)<\/script>\s*<\/body>/);
@@ -9,11 +10,20 @@ const code = m[1];
 
 function makeEl(id) {
   return {
-    id, textContent: '', value: '', _html: '', className: '',
+    id, tagName: '', textContent: '', value: '', _html: '', className: '', open: false,
     dataset: {}, files: [], hidden: false, disabled: false,
     classList: { add() {}, remove() {}, contains() { return false; } },
     style: {},
-    set innerHTML(v) { this._html = v; },
+    set innerHTML(v) {
+      this._html = v;
+      for (const match of v.matchAll(/<([a-z][\w-]*)\b([^>]*)>/gi)) {
+        const id = match[2].match(/\bid="([^"]+)"/);
+        if (!id) continue;
+        const child = els[id[1]] = makeEl(id[1]);
+        child.tagName = match[1].toUpperCase();
+        if (child.tagName === 'DETAILS') child.open = /(?:^|\s)open(?:\s|=|$)/.test(match[2]);
+      }
+    },
     get innerHTML() { return this._html; },
     addEventListener() {}, attachEvent() {}, setAttribute(k,v) { this[k]=v; },
     querySelector() { return null; },
@@ -24,11 +34,15 @@ function makeEl(id) {
   };
 }
 const els = {};
+for (const match of src.slice(0, src.indexOf('<script')).matchAll(/<([a-z][\w-]*)\b([^>]*)>/gi)) {
+  const id = match[2].match(/\bid="([^"]+)"/);
+  if (!id) continue;
+  const el = els[id[1]] = makeEl(id[1]);
+  el.tagName = match[1].toUpperCase();
+  if (el.tagName === 'DETAILS') el.open = /(?:^|\s)open(?:\s|=|$)/.test(match[2]);
+}
 const doc = {
-  getElementById(id) {
-    if(id==='set_target_space_pct'||id==='set_target_high_space_pct')return null;
-    return els[id] || (els[id] = makeEl(id));
-  },
+  getElementById(id) { return els[id] || null; },
   addEventListener() {}, createElement() { return makeEl('tmp'); },
   readyState: 'complete',
 };
@@ -55,7 +69,7 @@ const check = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if
 global.window.addEventListener = () => {};
 
 try {
-  eval(code + '\n;globalThis.__T={render,data,pageState,ETF_SET,get SET(){return SET;},SET_DEFS,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError,normalizeSettings};');
+  eval(code + '\n;globalThis.__T={render,data,pageState,ETF_SET,get SET(){return SET;},SET_DEFS,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError,normalizeSettings,trackReceipt,saveRules,loadRun,bootstrap,setToken:t=>{TOKEN=t;}};');
   globalThis.__T.initGroups(JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8')));
   console.log('PASS 脚本加载无异常');
 } catch (e) {
@@ -68,7 +82,7 @@ const T = globalThis.__T;
 const expectedDefaults = {
   boll_n:20,boll_k:2,boll_near_pct:0.5,boll_near_band_pct:15,chg_red:4,chg_yellow:2,
   rsi_high:70,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,
-  target_space_pct:30,target_high_space_pct:70,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:1.8,vol_ratio_red_z:3.6,
+  target_space_pct:30,target_high_space_pct:70,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:2,vol_ratio_red_z:3.6,
   amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,hy_green:350,hy_red:400,
   vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,dca_every:0,dca_start:'',signal_single_open:1,
 };
@@ -89,15 +103,36 @@ const migrated=T.normalizeSettings({fund_enable:1,fund_om_drop:7,fund_unknown:tr
 check(!Object.keys(migrated.values).some(k=>k.startsWith('fund_'))&&migrated.warnings.length===0&&
   migrated.values.trigger_gap_pct===8&&migrated.values.reduce_gap_pct===2&&migrated.values.signal_single_open===0,
   '读取旧fund设置静默剔除、不产生维护警告且保留技术与交互设置');
-check(!src.includes('id="effectiveRuleText"')&&!src.includes('id="ruleDetails"')&&
-  !src.includes('id="sourceDetails"')&&src.includes('href="./#signalRules"'),
-  '设置页移除重复的完整规则和宏观细则，仅指向首页');
+const removedIds=['effectiveRuleText','ruleDetails','sourceDetails','targetSpaceNote',
+  'appliedCard','appliedBrief','appliedState','dataTime','detailCard','runSummary'];
+check(removedIds.every(id=>doc.getElementById(id)===null&&!src.includes(id)),
+  '规则说明与底部生效／运行详情节点及内联引用真实删除');
+check(!/布林判定说明|RSI判定说明|量比判定说明|monitorNote_|单独布林|RSI 三条全过界/.test(src),
+  '参数区和清单组无残留金融规则说明及动态更新引用');
+check(!/signalRules|[?&]rules=|#rule[-\w]*|location\.(?:replace|assign)\s*\(/i.test(src),
+  '设置页无规则链接、规则锚点或旧书签自动跳转');
+check(src.includes('href="./index.html"')&&src.includes('id="authCard"')&&src.includes('id="manualCard"'),
+  '删除规则跳转不删除普通返回看板链接和授权／手动操作入口');
 store.mm_gh_token_v1='github_pat_test_dispatch';
 check(runOptions.getToken()==='github_pat_test_dispatch', '编辑页仍可核验保存生效所需的授权状态');
 check(!src.includes('id="runCard"')&&!src.includes('id="btnRun"')&&!src.includes('id="btnRuns"')&&
   !src.includes('id="btnCheckStatus"')&&!src.includes('id="runList"'), '编辑页不再重复首页运行控件与20条运行记录');
-check(src.includes('id="appliedCard"')&&src.includes('id="appliedState"')&&src.includes('id="detailCard"'),
-  '编辑页仍保留保存生效核对与折叠运行详情');
+check(['btnSave','btnSaveRules','btnResetRules','btnSaveDca','btnClearDca','btnReload'].every(id=>
+  doc.getElementById(id)&&typeof els[id].onclick==='function'), '清单／规则／定投保存及恢复默认、重读按钮仍绑定真实功能');
+const groupKeys=JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8')).map(g=>g.key);
+const foldIds=['setToggle','displayCard','importCard','dcaCard',...groupKeys.map(k=>'fold_'+k)];
+check(foldIds.every(id=>els[id]&&els[id].tagName==='DETAILS'&&els[id].open===false),
+  '所有设置、导入、定投和清单分组初始关闭（含持仓）');
+check(!/<details\b[^>]*\sopen(?:\s|=|>)/.test(src), '静态折叠项不含默认open属性');
+els.setToggle.open=true;els.displayCard.open=true;els.fold_focus.open=true;
+T.render();T.renderSettings();
+check(els.setToggle.open&&els.displayCard.open&&els.fold_focus.open&&!els.fold_positions.open,
+  '普通清单和参数重渲染保留手动展开／关闭状态');
+els.btnExpandGroups.onclick();
+check(groupKeys.every(k=>els['fold_'+k].open), '全部展开按钮仍有效');
+els.btnCollapseGroups.onclick();T.render();
+check(groupKeys.every(k=>els['fold_'+k].open===false), '全部收起后重渲染不会自动打开持仓或其它组');
+check(runOptions.canReload()===false, '后台状态刷新不重载设置页以免重置手动折叠状态');
 delete store.mm_gh_token_v1;
 T.data.positions = { 'BRK-B': {}, SPYM: {}, NTNX: {} };
 T.data.focus = { SOXL: { note: '半导体3倍' }, TEM: {} };
@@ -136,6 +171,7 @@ T.moveSymbol('positions', 'positions:short', 'BRK-B');
 check(T.data.positions['BRK-B'].hold === 'short', '下拉改选「短持仓」后写回 hold=short');
 T.moveSymbol('positions', 'focus', 'BRK-B');
 check(!('hold' in (T.data.focus['BRK-B'] || {})), '移出持仓时清掉 hold');
+check(els.fold_focus.open===false&&els.fold_positions.open===false, '移动标的不会强制展开源组或目标组');
 T.moveSymbol('focus', 'positions:long', 'BRK-B');
 check(T.data.positions['BRK-B'].hold === 'long', '从其它分组也能直接挪进长持仓区');
 check(els.list_technology._html.includes('>长持仓<'), '其它分组的行同样提供长/短持仓两个区可选');
@@ -169,6 +205,7 @@ T.previewCsv('symbol,name\nXLV,医疗\nABC,Example Company\n','healthcare');
 check(!Object.keys(T.data.healthcare).length, 'CSV 预览前不修改目标组');
 els.btnApply.onclick();
 check(T.data.healthcare.XLV.note==='医疗'&&T.data.healthcare.ABC.note==='Example Company', '确认导入只写入目标分类与名称');
+check(els.fold_healthcare.open===false, '确认导入不强制打开原本关闭的目标清单组');
 check(!('watch' in JSON.parse(T.configText())), '保存不包含旧其他关注');
 T.previewCsv('symbol,name\nBRK.B-US,Berkshire\n','positions');
 T.data.positions.EXTRA={note:'新添加公司'};
@@ -212,15 +249,17 @@ check(!src.includes('基本面')&&!src.includes('set_fund_')&&!Object.keys(T.SET
 delete T.SET.fund_enable;delete T.SET.fund_om_drop;delete T.SET.fund_future_rule;
 check(!('hy_yellow' in saved), '保存规则不保留无效的旧黄色信用利差阈值');
 check(src.includes('id="set_amp_yellow"') && src.includes('id="set_amp_red"'), '编辑页确实有两个振幅输入项');
-check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差 ≥ x bp 黄')&&src.includes('垃圾债利差 ≥ x bp 红'), '信用利差仅保留有效的黄红两条阈值');
+check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差黄线（bp）')&&src.includes('垃圾债利差红线（bp）')&&
+  src.includes('id="set_hy_green"')&&src.includes('id="set_hy_red"'), '信用利差仅保留有效黄红阈值控件和简短标签');
 check(!src.includes('同类只取最高分')&&!src.includes('站上200日均线的股票不足50%为黄'),
   '设置页不再保留宏观完整说明');
 check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');
 check(src.includes('id="set_ma_short"')&&src.includes('id="set_ma_long"')&&
   src.includes('id="set_amp_yellow"')&&src.includes('id="set_amp_red"'), '设置页保留可编辑阈值输入框');
 check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场风险')&&
-  !src.includes('id="effectiveRuleText"')&&src.includes('生效规则详见<a href="./#signalRules"'),
-  '完整规则迁至首页，设置页保留参数入口');
+  !src.includes('id="effectiveRuleText"')&&Object.keys(expectedDefaults).filter(k=>
+    !['target_space_pct','target_high_space_pct'].includes(k)).every(k=>doc.getElementById('set_'+k)),
+  '完整规则不重复展示，全部真实可编辑参数控件保留');
 
 (async () => {
   // 等初始化的模拟读取结束，避免其错误文案与本次迁移断言竞争。
@@ -247,15 +286,20 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
   cfg.group_monitoring={positions:false,focus:true,materials:false,future_group:true};
   let persisted=cfg;
   global.fetch=async()=>({ok:true,status:200,json:async()=>({content:Buffer.from(JSON.stringify(persisted)).toString('base64'),sha:'a'.repeat(40)})});
+  els.fold_focus.open=true;els.fold_materials.open=false;
   await T.load();
+  check(els.fold_focus.open&&!els.fold_materials.open&&els.setToggle.open&&els.displayCard.open,
+    '重新读取清单及异步参数读取保留用户的手动折叠状态');
   check(T.monitorEnabled('positions')&&T.monitorEnabled('focus')&&!T.monitorEnabled('materials'), '旧配置关闭值不影响持仓重点关注始终监测');
   const normalized=JSON.parse(T.configText());
   check(normalized.group_monitoring.positions===true&&normalized.group_monitoring.focus===true, '保存内容将核心两组固定开启');
   check(!els.groupEditor.innerHTML.includes('id="monitor_positions"')&&!els.groupEditor.innerHTML.includes('id="monitor_focus"'), '两组不再生成监测开关');
-  check(els.monitorNote_materials.textContent.includes('XLB')&&els.monitorNote_materials.textContent.includes('仍正常抓取和报警'), '关闭化材组说明XLB例外');
+  check(!/monitorNote_/.test(els.groupEditor.innerHTML)&&els.monitor_materials['aria-checked']==='false'&&
+    normalized.materials.XLB.note==='板块'&&normalized.materials.DD.note==='化工', '删除组规则说明，关闭状态及XLB和普通成员数据仍保留');
   els.monitor_materials.onclick({preventDefault(){},stopPropagation(){}});
   const after=JSON.parse(T.configText());
   check(after.group_monitoring.materials&&after.group_monitoring.future_group, '点击开关序列化并保留未知开关键');
+  check(!els.fold_materials.open&&els.fold_focus.open, '监测开关重渲染保留各组打开与关闭状态');
   check(JSON.stringify(after.materials)===JSON.stringify(cfg.materials)&&after.positions.AAPL.trigger===80&&after.custom_field==='preserved', '开关不改成员备注加仓价及未知字段');
   persisted=after;await T.load();
   check(T.monitorEnabled('materials')&&els.monitor_materials['aria-checked']==='true', '保存内容重载后监测状态一致');
@@ -288,7 +332,8 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
       check(T.settingsError().includes(key), key+' 拒绝非法值 '+JSON.stringify(bad));
     }
   }
-  check(src.includes('填0关闭对应均线警示')&&src.includes('min="0" max="250"'), '输入框及说明支持零值独立关闭');
+  check(src.includes('短均线（交易日，0关闭）')&&src.includes('长均线（交易日，0关闭）')&&
+    src.includes('min="0" max="250"')&&!src.includes('填0关闭对应均线警示'), '均线用简短关闭标签与输入约束替代规则说明');
   T.SET.ma_short=50;T.SET.ma_long=200;T.renderSettings();
   els.set_boll_n.value='0';
   check(T.settingsError().includes('boll_n'), '布林周期零被阻止');
@@ -373,10 +418,8 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
   T.SET.target_gap_pct=3;T.SET.target_space_pct=30;T.SET.target_high_space_pct=70;T.renderSettings();
   check(Number(els.set_target_gap_pct.value)===3&&T.SET.target_space_pct===30&&
     T.SET.target_high_space_pct===70&&T.settingsError()==='', '目标价默认±3%，无空间输入框也能校验固定30／70');
-  check(src.includes('30%≤空间&lt;70%')&&src.includes('高空间 ≥70%（含边界）')&&
-    src.includes('目标价 / 现价 − 1')&&src.includes('所有分组个股空间 ≥30%')&&
-    src.includes('不含 ETF、指数、期货')&&src.includes('有效手填目标价覆盖共识取数失败')&&
-    src.includes('旧价仅展示不计数')&&src.includes('无数据不显示胶囊'), '静态说明明确边界、公式、范围和失败口径');
+  check(!src.includes('目标空间固定分档')&&!src.includes('目标价 / 现价 − 1')&&
+    !src.includes('旧价仅展示不计数')&&src.includes('目标价距离（±%）'), '删除目标空间金融说明，仅保留必要目标价标签');
   els.set_target_gap_pct.value='101';check(T.settingsError().includes('target_gap_pct'), '目标价 ±x% 超过 100% 被拒绝');
   els.set_target_gap_pct.value='3';T.SET.target_space_pct=50;
   check(T.settingsError().includes('target_space_pct'), '未归一化旧50值不能通过固定30校验');
@@ -397,6 +440,106 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
   check(els.newSym_energy.value===''&&els.msg.textContent.includes('已添加 ZZZX'), '添加成功后清空代码并反馈');
   els.newSym_energy.value='';els.newNote_energy.value='  ';T.addSymbol('energy');
   check(Object.keys(JSON.parse(T.configText()).energy).length===Object.keys(cfg2.energy).length, '空代码仍不能添加');
+  // 真实按钮保存：只用内存令牌与模拟PUT，覆盖回执缺失、提交校验和恢复默认。
+  T.renderSettings();
+  const writes=[];
+  global.fetch=async(url,options)=>{
+    writes.push({url,options});
+    return {ok:true,status:200,json:async()=>({content:{sha:'b'.repeat(40)},commit:{sha:'c'.repeat(40)}})};
+  };
+  T.setToken('github_pat_memory_only');
+  await els.btnSave.onclick({target:els.btnSave});
+  check(writes.length===1&&writes[0].options.method==='PUT'&&writes[0].url.includes('/contents/holdings.json')&&
+    !els.btnSave.disabled, '底部详情删除后保存清单按钮仍提交并恢复可用');
+  const beforeInvalid=writes.length;
+  els.set_ma_short.value='1';await T.saveRules(els.btnSaveRules);
+  check(writes.length===beforeInvalid&&els.msg.textContent.includes('ma_short'), '保存规则仍阻止非法参数写入');
+  T.renderSettings();await els.btnSaveRules.onclick({target:els.btnSaveRules});
+  const submitted=JSON.parse(Buffer.from(JSON.parse(writes.at(-1).options.body).content,'base64').toString('utf8'));
+  check(writes.at(-1).options.method==='PUT'&&writes.at(-1).url.includes('/contents/settings.json')&&
+    submitted.vol_ratio_z===2&&submitted.vol_ratio_red_z===3.6&&
+    submitted.vix_green===20&&submitted.vix_yellow===30&&submitted.vix_red===40&&!els.btnSaveRules.disabled,
+    '保存规则真实序列化并保留黄2／红3.6σ与VIX20／30／40');
+  check(T.trackReceipt('settings.json',{content:{sha:'bad'}})===false&&els.msg.className==='err',
+    '移除生效UI不移除有效blob／commit回执校验');
+  T.SET.dca_start='2026-10-01';T.SET.dca_every=5;T.SET.vol_ratio_z=1;
+  els.dcaCard.open=true;els.btnResetRules.onclick();
+  check(T.SET.vol_ratio_z===2&&T.SET.vol_ratio_red_z===3.6&&T.SET.dca_every===5&&T.SET.dca_start==='2026-10-01'&&
+    els.dcaCard.open&&els.setToggle.open, '恢复默认保留定投和手动折叠状态，并恢复黄2／红3.6σ');
+  T.setToken('');
+
+  // 运行共享状态脚本而非桩：所有已删除节点查询必须返回null。
+  const requests=[],reloads=[];
+  let snapshot={run_id:'offline-run',source_sha:'c'.repeat(40),started_at:new Date().toISOString(),
+    config_files:{'holdings.json':'a'.repeat(40),'settings.json':'b'.repeat(40)},summary:{total:1},actual_dates:{max:'2026-10-22'}};
+  let configConclusion='success';
+  const runtime={document:doc,location:{origin:location.origin,href:location.origin+location.pathname,replace:u=>reloads.push(u)},
+    localStorage:{getItem:()=>null,setItem(){},removeItem(){}},
+    setTimeout:()=>1,clearTimeout(){},AbortController,URL,TextEncoder,
+    crypto:{randomUUID:()=> 'offline-request'},
+    DOMParser:class {parseFromString(){return {querySelector:()=>({textContent:JSON.stringify(snapshot)})};}},
+    fetch:async(url,options)=>{
+      requests.push({url,method:options.method});
+      let response;
+      if(url.includes('dispatches')){snapshot={...snapshot,request_id:'offline-request'};return {ok:true,status:204};}
+      if(url.includes('/contents/settings.json'))response={sha:'b'.repeat(40)};
+      else if(url.includes('/actions/'))response={workflow_runs:[
+        {id:'offline-run',event:'push',head_sha:'c'.repeat(40),status:'completed',conclusion:configConclusion},
+        {id:'offline-run',event:'workflow_dispatch',display_title:'offline-request',status:'completed',conclusion:'success'}]};
+      else if(url.includes('status.json'))response=snapshot;
+      else if(url.includes('index.html'))return {ok:true,status:200,text:async()=>'<mock-snapshot>'};
+      else if(url.includes('/commits'))response=[];
+      else throw new Error('未mock的请求 '+url);
+      return {ok:true,status:200,json:async()=>response};
+    }};
+  runtime.window=runtime;
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT,'run-status.js'),'utf8'),runtime);
+  runtime.MMRunStatus.init({...runOptions,getToken:()=> 'github_pat_memory_only'});
+  const beforeRefresh=Object.fromEntries(foldIds.map(id=>[id,els[id].open]));
+  const published=await runtime.MMRunStatus.refresh();
+  check(published.verified&&published.publication.phase==='published'&&removedIds.every(id=>doc.getElementById(id)===null),
+    '真实运行脚本在生效与运行详情DOM缺失时仍完成刷新和发布校验');
+  check(foldIds.every(id=>els[id].open===beforeRefresh[id])&&reloads.length===0,
+    '真实状态刷新不新增节点、不展开或重载手动折叠项');
+  const receipt=await runtime.MMRunStatus.watchConfig({file:'settings.json',blobSHA:'b'.repeat(40),commitSHA:'c'.repeat(40)});
+  check(receipt.config.phase==='published'&&receipt.pending['settings.json'].blobSHA==='b'.repeat(40),
+    '无生效卡片时真实提交跟踪仍双验证配置与看板快照');
+  snapshot={...snapshot,source_sha:'d'.repeat(40),started_at:'2026-01-01T00:00:00Z',
+    config_files:{...snapshot.config_files,'settings.json':'d'.repeat(40)}};
+  configConclusion='failure';
+  const failed=await runtime.MMRunStatus.watchConfig({file:'settings.json',blobSHA:'b'.repeat(40),commitSHA:'c'.repeat(40)});
+  check(failed.config.phase==='failed', '无详情DOM时运行失败状态仍正常处理、不误报生效');
+  const manual=await runtime.MMRunStatus.startManual();
+  check(requests.filter(r=>r.method==='POST').length===1&&manual.manual.phase==='published',
+    '共享实际运行功能仍按request_id派发和校验（请求全部模拟）');
+  // 旧规则书签应正常初始化设置页，不跳到首页，也不写入真实存储。
+  const bootstrapRequests=[],redirects=[];
+  const beforeBootstrapStore=JSON.stringify(store);
+  const savedLocation={search:location.search,hash:location.hash,replace:location.replace};
+  const previousFetch=global.fetch;
+  global.location.search='?rules=1';global.location.hash='#signalRules';
+  global.location.replace=url=>redirects.push(url);
+  global.fetch=async(url,options)=>{
+    bootstrapRequests.push({url,method:options?.method||'GET'});
+    if(url==='./groups.json')return {ok:true,json:async()=>JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8'))};
+    if(url==='./symbol-names.json')return {ok:true,json:async()=>({})};
+    const payload=url.includes('/contents/holdings.json')?{positions:{AAPL:{note:'苹果'}},focus:{}}:
+      url.includes('/contents/settings.json')?expectedDefaults:null;
+    if(!payload)throw new Error('初始化未mock的请求 '+url);
+    return {ok:true,status:200,json:async()=>({content:Buffer.from(JSON.stringify(payload)).toString('base64'),sha:'a'.repeat(40)})};
+  };
+  T.setToken('github_pat_bootstrap_memory_only');
+  await T.bootstrap();await new Promise(resolve=>setImmediate(resolve));
+  check(redirects.length===0&&bootstrapRequests.some(r=>r.url==='./groups.json')&&
+    bootstrapRequests.some(r=>r.url.includes('/contents/holdings.json'))&&
+    bootstrapRequests.some(r=>r.url.includes('/contents/settings.json')),
+    '携带?rules=1和规则锚点仍正常加载设置页，不执行旧规则跳转');
+  check(groupKeys.every(k=>els['fold_'+k].open===false)&&els.setToggle.open&&els.displayCard.open,
+    '完整初始化后清单默认关闭，参数普通刷新仍保留手动展开状态');
+  check(bootstrapRequests.every(r=>r.method==='GET')&&JSON.stringify(store)===beforeBootstrapStore&&
+    removedIds.every(id=>doc.getElementById(id)===null), '旧书签初始化只模拟GET、不写存储、不重建已删除说明和详情DOM');
+  T.setToken('');global.fetch=previousFetch;
+  Object.assign(global.location,savedLocation);
   console.log();
   if (fails) { console.error(fails + ' 项失败'); process.exitCode = 1; }
   else console.log('全部通过');

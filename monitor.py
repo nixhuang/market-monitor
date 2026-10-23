@@ -2934,6 +2934,13 @@ def target_display_state(t):
     return "low"
 
 
+def _consensus_description(text, target):
+    """只识别自动共识描述；手填目标及原技术文字不按关键字误删。"""
+    return (isinstance(target, dict) and target.get("kind") == "consensus" and isinstance(text, str)
+            and text.startswith(("共识价", "旧共识价", "共识获取失败",
+                                 "今日上穿共识价", "今日跌破共识价", "在共识价")))
+
+
 def _target_stock(d):
     symbol = d.get("symbol")
     identity = instrument_identity(symbol)
@@ -2978,10 +2985,12 @@ def _apply_target(d):
         out["level"] = ("red" if "red" in remaining else "yellow" if "yellow" in remaining
                         else "green" if _pos_num(d.get("price")) is not None else "gray")
     out["signals"] = [text for text in d.get("signals") or []
-                      if not isinstance(text, str) or ("目标价" not in text and "共识价" not in text)]
+                      if not _consensus_description(text, d.get("target") or {})
+                      and not (not d.get("target") and any(kind == "target" for kind, _ in marks)
+                               and text == "目标价疑似数据异常")]
     if out["purple"]:
         for field in ("reached_detail", "space_detail"):
-            if target.get(field):
+            if target.get(field) and target[field] not in out["signals"]:
                 out["signals"].append(target[field])
         out["signal_marks"].append(("target", "purple"))
     return out
@@ -3142,7 +3151,7 @@ class _Alerts:
 SIGNAL_KINDS = (
     ("chg", "涨跌幅"), ("amp", "振幅"), ("vol_ratio", "量比"),
     ("rsi", "RSI"), ("boll", "布林"), ("boll_rsi", "布林+RSI"),
-    ("ma_cross", "均线穿越"), ("ma_band", "长均线触及"), ("low52", "52周低位"),
+    ("ma", "均线"), ("low52", "52周低位"),
     ("add_price", "加仓价"), ("reduce_price", "减仓价"), ("target", "共识价"),
 )
 
@@ -3752,6 +3761,7 @@ def _analysis_detail(x, al):
         "boll_rsi_hits": getattr(x, "boll_rsi_hits", None),
         "boll_alert_text": getattr(x, "boll_alert_text", ""),
         "ma_band_direction": getattr(x, "ma_band_direction", ""),
+        "ma_settings": {key: S.get(key) for key in ("ma_short", "ma_long")},
         # ETF 标签：静态表命中，或行情源明确给出 assetclass=etf
         "etf": is_etf(x.sym) or x.data.get("asset") == "etf",
         "signals": al.signals,
@@ -3888,8 +3898,8 @@ def _text_only_shape(signals):
 
 
 def text_only_members(items):
-    """灰灯名单：最终是绿灯、但页面上有 RSI / 布林文字的标的（只写文字、不报灯、不进统计）。
-    重复身份沿用首页分类优先级，只保留第一条。"""
+    """技术灰按所属指标独立计，与同股其它指标红黄并存；组合与单独指标互斥。
+    主表最高灯级不变；重复身份沿用首页分类优先级，只保留第一条。"""
     priority = {g["item_group"]: i for i, g in enumerate(GROUPS)}
     seen = set(RISK_IDENTITIES)
     out = []
@@ -3899,12 +3909,15 @@ def text_only_members(items):
         if identity in seen:
             continue
         seen.add(identity)
-        if (d.get("level") != "green" or d.get("reference_only")
-                or "price" in d and d["price"] is None
-                or any(level in ("red", "yellow") for _, level in d.get("signal_marks") or [])):
+        if (d.get("level") == "gray" or d.get("reference_only")
+                or "price" in d and (not isinstance(d["price"], (int, float))
+                    or isinstance(d["price"], bool) or not math.isfinite(d["price"]) or d["price"] <= 0)):
             continue
         kind = _text_only_kind(d.get("signals"))
-        if not kind:
+        technical_marks = {k for k, level in d.get("signal_marks") or []
+                           if k in ("boll", "rsi", "boll_rsi") and level in ("red", "yellow")}
+        # 同一组技术事实已有红黄就不能再计灰；涨跌幅/均线等不影响技术灰资格。
+        if not kind or technical_marks:
             continue
         texts = [str(s) for s in (d.get("signals") or []) if isinstance(s, str)]
         selected = d.get("boll_alert_text")
@@ -3934,9 +3947,28 @@ def text_only_members(items):
                     "rsi_n": int(rsi_match.group(0)[4]) if rsi_match else 0,
                     "rsi_side": rsi_match.group(1) if rsi_match else "",
                     "detail": detail, "group": d.get("group") or "",
+                    "level": d.get("level") if d.get("level") in ("red", "yellow", "green") else "green",
                     "hold": str(d.get("hold") or ""),
                     "note": str(d.get("note") or "")})
     return out
+
+
+def _ma_display_text(text, settings=None):
+    """均线展示投影：使用该事实的配置归属，不改变内部周期、原始信号或计算。
+    历史周期不匹配时明确待确认；同周期共用短/长身份，绝不拆成两条计数。"""
+    config = settings if isinstance(settings, dict) else S
+    if " / " in str(text):
+        return " / ".join(_ma_display_text(part, config) for part in str(text).split(" / "))
+    def name(match):
+        period = int(match[1])
+        short, long = period == config.get("ma_short"), period == config.get("ma_long")
+        return "短均线/长均线" if short and long else "短均线" if short else "长均线" if long else "均线（归属待确认）"
+    output = re.sub(r"(\d+)日(?:弱)?均线", name, str(text))
+    named = set(re.findall(r"(?:短|长)均线", output))
+    if len(named) == 1:
+        label = next(iter(named))
+        output = output.replace("现价在均线", "现价在" + label).replace("现价与均线", "现价与" + label)
+    return output
 
 
 def _member_direction_markers(d, kind):
@@ -3978,6 +4010,18 @@ def _member_direction_markers(d, kind):
                 if s.startswith(prefix):
                     add(shape, tone, label)
                     break
+    elif kind == "ma":
+        marks = {k for k, _ in d.get("signal_marks") or []}
+        if marks & {"ma", "ma_cross"}:
+            markers.extend(_member_direction_markers(d, "ma_cross"))
+        if marks & {"ma", "ma_band"}:
+            side = d.get("ma_band_direction")
+            for s in signals:
+                match = re.match(r"^(日内触及|现价贴近)(\d+)日(?:弱)?均线", s)
+                if match and side in ("up", "down", "level"):
+                    label = f"{match[1]}{match[2]}日均线，" + {
+                        "up": "现价在均线上方", "down": "现价在均线下方", "level": "现价与均线相等"}[side]
+                    add({"up": "▲", "down": "▼", "level": "■"}[side], "cyan", label)
     elif kind == "ma_cross":
         for s in signals:
             match = re.match(r"^(上穿|跌破)(\d+)日(?:弱)?均线", s)
@@ -3986,12 +4030,14 @@ def _member_direction_markers(d, kind):
                     f"{match[1]}{match[2]}日均线")
     elif kind == "ma_band":
         side = d.get("ma_band_direction")
-        if side in ("up", "down", "level") and any(
-                s.startswith(("日内触及", "现价贴近")) and "均线" in s for s in signals):
+        if side in ("up", "down", "level"):
             shape = {"up": "▲", "down": "▼", "level": "■"}[side]
-            label = {"up": "现价在均线上方，日内触及", "down": "现价在均线下方，日内触及",
-                     "level": "现价与均线相等，日内触及"}[side]
-            add(shape, "cyan", label)
+            for text in signals:
+                match = re.match(r"^(日内触及|现价贴近)(\d+)日(?:弱)?均线", text)
+                if match:
+                    position = {"up": "现价在均线上方", "down": "现价在均线下方",
+                                "level": "现价与均线相等"}[side]
+                    add(shape, "cyan", f"{match[1]}{match[2]}日均线，{position}")
     elif kind == "target":
         for s in signals:
             if s.startswith(("今日上穿目标价", "今日上穿共识价")):
@@ -4037,7 +4083,7 @@ def _member_metric(d, kind):
 # 方向提到「框标题」上的栏目：名单里不再逐条画三角，▲/▼ 只出现在每个框的标题里。
 # 量比按涨跌、布林+RSI 按上下轨、均线穿越按上穿/跌破、长均线触及按现价在均线哪一侧。
 # 只改这几栏——涨跌幅、振幅等栏目行内三角照旧，别把没要求的栏目一起改了。
-_BLOCK_PANEL_KINDS = ("vol_ratio", "boll_rsi", "ma_cross", "ma_band")
+_BLOCK_PANEL_KINDS = ("vol_ratio", "boll_rsi", "ma")
 
 # 框标题已经写明方向的栏目，行尾不再重复同一句话（布林+RSI 曾经标题行尾都写
 # 「上轨 · RSI 2条过界」）。量比那种带数值的照旧保留。
@@ -4065,8 +4111,25 @@ def _member_block(d, kind):
             title = f"{side} · RSI {hits}条过界" + (f" · {tail}" if tail else "")
             return ("▲" if side == "上轨" else "▼", title)
         return ("", "方向待下次更新")
+    if kind == "ma":
+        markers = [m for m in d.get("indicators") or [] if isinstance(m, dict)
+                   and m.get("shape") in ("▲", "▼", "■") and m.get("label")]
+        if not markers:
+            facts = [f.get("text") for f in d.get("ma_facts") or []
+                     if isinstance(f, dict) and isinstance(f.get("text"), str)]
+            return ("", _ma_display_text(" / ".join(facts), d.get("ma_settings")) or "方向待下次更新")
+        shapes = {m["shape"] for m in markers}
+        labels = []
+        for m in markers:
+            label = str(m["label"])
+            match = re.match(r"^(上穿|跌破)(\d+)日均线$", label)
+            if match:
+                label = f"{match[2]}日均线{match[1]}"
+            label = _ma_display_text(label, d.get("ma_settings"))
+            labels.append((f'{m["shape"]} ' if len(shapes) > 1 else "") + label)
+        return (markers[0]["shape"] if len(shapes) == 1 else "", " / ".join(dict.fromkeys(labels)))
     if kind in ("ma_cross", "ma_band"):
-        # 均线两栏照量比那套：周期和方向写在框标题上，行内不再逐个重复。
+        # 旧成员仍可读取；对外统计统一使用 ma。
         for marker in d.get("indicators") or []:
             if not (isinstance(marker, dict) and marker.get("shape") in ("▲", "▼", "■")):
                 continue
@@ -4075,7 +4138,7 @@ def _member_block(d, kind):
             if match:
                 # 标题说「250日均线上穿」，跟用户口头说法一致
                 label = f"{match.group(2)}日均线{match.group(1)}"
-            return (marker["shape"], label or ("均线穿越" if kind == "ma_cross" else "日内触及长均线"))
+            return (marker["shape"], _ma_display_text(label, d.get("ma_settings")) or ("均线穿越" if kind == "ma_cross" else "日内触及长均线"))
         return ("", "方向待下次更新")
     return None
 
@@ -4122,6 +4185,22 @@ def _member_signal_details(d, kind, member, level):
         indicators = [marker for marker in indicators if marker["tone"] == level]
     if indicators:
         member["indicators"] = indicators
+    if kind == "ma":
+        settings = d.get("ma_settings") if isinstance(d.get("ma_settings"), dict) else S
+        member["ma_settings"] = {key: settings.get(key) for key in ("ma_short", "ma_long")}
+        marks = {k for k, _ in d.get("signal_marks") or []}
+        facts = []
+        for text in d.get("signals") or []:
+            if not isinstance(text, str):
+                continue
+            fact_kind = ("ma_cross" if re.match(r"^(上穿|跌破)\d+日(?:弱)?均线", text)
+                         else "ma_band" if re.match(r"^(日内触及|现价贴近)\d+日(?:弱)?均线", text) else "")
+            if fact_kind and (fact_kind in marks or "ma" in marks):
+                fact = {"kind": fact_kind, "text": text}
+                if fact not in facts:
+                    facts.append(fact)
+        if facts:
+            member["ma_facts"] = facts
     metric = _member_metric(d, kind)
     if metric:
         member["metric"] = metric
@@ -4139,12 +4218,53 @@ def _member_signal_details(d, kind, member, level):
         member["flat"] = True
 
 
+def _merge_ma_members(candidates):
+    """均线按真实身份取最高信号等级，所有已触发事实保留在同一成员中。"""
+    levels = ("red", "yellow", "purple")
+    priority = {g["item_group"]: i for i, g in enumerate(GROUPS)}
+    unique = {}
+    for level, source in sorted(candidates, key=lambda pair: priority.get(pair[1].get("group"), len(GROUPS))):
+        identity = instrument_identity(source["symbol"])
+        if identity in RISK_IDENTITIES:
+            continue
+        entry = {**source, "symbol": normalize_symbol(source["symbol"])}
+        previous = unique.get(identity)
+        if previous:
+            old_level, old = previous
+            chosen_level = min((old_level, level), key=levels.index)
+            entry = dict(old if chosen_level == old_level else entry)
+            for field in ("indicators", "ma_facts"):
+                values = list(old.get(field) or [])
+                values += [value for value in source.get(field) or [] if value not in values]
+                if values:
+                    entry[field] = values
+            unique[identity] = (chosen_level, entry)
+        else:
+            unique[identity] = (level, entry)
+    return {level: [entry for chosen, entry in unique.values() if chosen == level] for level in levels}
+
+
 def signal_count_members(items):
-    """按原信号口径收集标的；重复身份沿用首页分类优先级，只保留第一条。"""
+    """原规则口径不变；均线合并后按真实身份最高等级统计，事实不互相覆盖。"""
     levels = ("red", "yellow", "purple")
     out = {kind: {level: [] for level in levels} for kind, _ in SIGNAL_KINDS}
     priority = {g["item_group"]: i for i, g in enumerate(GROUPS)}
     seen = set(RISK_IDENTITIES)
+    ma_candidates = []
+    for d in sorted(items, key=lambda item: priority.get(item.get("group"), len(GROUPS))):
+        if (d.get("reference_only") or d.get("level") == "gray"
+                or "price" in d and d["price"] is None):
+            continue
+        ma_levels = {level for kind, level in d.get("signal_marks") or []
+                     if kind in ("ma", "ma_cross", "ma_band") and level in levels}
+        if ma_levels:
+            level = min(ma_levels, key=levels.index)
+            entry = {"symbol": normalize_symbol(d.get("symbol")), "note": d.get("note") or "",
+                     "group": d.get("group") or "", "hold": str(d.get("hold") or ""),
+                     "level": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else ""}
+            _member_signal_details(d, "ma", entry, level)
+            ma_candidates.append((level, entry))
+    out["ma"] = _merge_ma_members(ma_candidates)
     for d in sorted(items, key=lambda item: priority.get(item.get("group"), len(GROUPS))):
         symbol = normalize_symbol(d.get("symbol"))
         identity = instrument_identity(symbol)
@@ -4162,7 +4282,7 @@ def signal_count_members(items):
         if any(kind == "boll_rsi" for kind, _ in marks) or _text_only_kind(d.get("signals")) == "boll_rsi":
             marks = [(kind, level) for kind, level in marks if kind not in ("boll", "rsi")]
         for kind in {k for k, _ in marks}:
-            if kind not in out or kind == "target":
+            if kind not in out or kind in ("ma", "target"):
                 continue
             for level in levels:
                 if any(k == kind and m == level for k, m in marks):
@@ -4224,6 +4344,70 @@ def _sanitize_snapshot_fields(value):
     return out
 
 
+def _merge_ma_snapshot(snapshot):
+    """兼容旧双均线快照；名单可核验才计算并集，缺名单时不猜重叠数。"""
+    counts = snapshot.get("signal_counts") or {}
+    members = snapshot.get("signal_members") or {}
+    keys = [kind for kind in ("ma", "ma_cross", "ma_band") if kind in counts or kind in members]
+    if not keys or keys == ["ma"] and "ma" not in members:
+        return snapshot
+    candidates, valid = [], True
+    for kind in keys:
+        source_counts = counts.get(kind) or {}
+        source_members = members.get(kind) or {}
+        if not isinstance(source_counts, dict) or not isinstance(source_members, dict):
+            valid = False
+            continue
+        for level in ("red", "yellow", "purple"):
+            expected = source_counts.get(level, 0)
+            entries = source_members.get(level, [])
+            if (not isinstance(entries, list) or type(expected) is not int or expected < 0
+                    or kind in counts and len(entries) != expected
+                    or any(not isinstance(d, dict) or not isinstance(d.get("symbol"), str)
+                           or not d["symbol"].strip() for d in entries)):
+                valid = False
+                continue
+            candidates.extend((level, _snapshot_ma_member(d, kind, snapshot.get("effective_settings") or {})) for d in entries)
+    merged = _merge_ma_members(candidates) if valid else {level: [] for level in ("red", "yellow", "purple")}
+    ma_counts = {"label": "均线", **{level: len(merged[level]) if valid else None for level in merged}}
+    if not valid:
+        ma_counts["pending"] = True
+    out = dict(snapshot)
+    out["signal_members"] = {kind: value for kind, value in members.items() if kind not in keys}
+    # 放回原均线的位置，不改变其它信号的展示顺序。
+    out["signal_counts"] = {kind: (ma_counts if kind == "ma" else counts[kind])
+                            for kind in dict.fromkeys("ma" if kind in keys else kind for kind in counts)}
+    out["signal_counts"].setdefault("ma", ma_counts)
+    out["signal_members"]["ma"] = merged
+    return out
+
+
+def _snapshot_ma_member(entry, kind, settings):
+    """旧均线成员补展示归属；数字原事实保留，不用当前设置解释历史周期。"""
+    if not isinstance(entry, dict):
+        return entry
+    out = _sanitize_snapshot_fields(entry)
+    if kind not in ("ma", "ma_cross", "ma_band"):
+        return out
+    config = out.get("ma_settings") if isinstance(out.get("ma_settings"), dict) else settings
+    out["ma_settings"] = {key: config.get(key) for key in ("ma_short", "ma_long")}
+    if kind == "ma_band":
+        markers = []
+        for marker in out.get("indicators") or []:
+            if not isinstance(marker, dict):
+                markers.append(marker)
+                continue
+            label = str(marker.get("label") or "")
+            if label.startswith(("现价在均线", "现价与均线")) and "日内触及" in label:
+                period = config.get("ma_long")
+                name = f"{period}日均线" if type(period) is int and period > 0 else "均线（归属待确认）"
+                label = f"日内触及{name}，" + label.replace("，日内触及", "")
+            markers.append({**marker, "label": label})
+        if markers:
+            out["indicators"] = markers
+    return out
+
+
 def _sanitize_snapshot(snapshot):
     """旧快照只在渲染副本中清理，原对象与磁盘保存快照不变。"""
     out = _sanitize_snapshot_fields(snapshot)
@@ -4234,7 +4418,7 @@ def _sanitize_snapshot(snapshot):
             out[field] = _sanitize_snapshot_fields(out[field])
     if isinstance(out.get("signal_members"), dict):
         out["signal_members"] = {
-            kind: {level: [_sanitize_snapshot_fields(entry) if isinstance(entry, dict) else entry
+            kind: {level: [_snapshot_ma_member(entry, kind, out.get("effective_settings") or {})
                            for entry in entries] if isinstance(entries, list) else entries
                    for level, entries in members.items()} if isinstance(members, dict) else members
             for kind, members in out["signal_members"].items() if kind != "fund"
@@ -4243,8 +4427,14 @@ def _sanitize_snapshot(snapshot):
         if isinstance(out.get(field), list):
             out[field] = [_sanitize_snapshot_fields(item) if isinstance(item, dict) else item
                           for item in out[field]]
+            if field in ("items", "stocks"):
+                out[field] = [{**item, "ma_settings": item.get("ma_settings")
+                               if isinstance(item.get("ma_settings"), dict) else
+                               {key: (out.get("effective_settings") or {}).get(key) for key in ("ma_short", "ma_long")}}
+                              if isinstance(item, dict) else item for item in out[field]]
     rows = out.get("items") if isinstance(out.get("items"), list) else out.get("stocks")
     if isinstance(rows, list):
+        out["text_only"] = text_only_members(rows)
         out["target_overlays"] = target_overlay_members(rows)
         if isinstance(out.get("summary"), dict):
             out["summary"].update({level: sum(d.get("level") == level for d in rows)
@@ -4272,10 +4462,19 @@ def _sanitize_snapshot(snapshot):
                         for d in levels.get(level) or [] if isinstance(d, dict) and d.get("symbol")})
                 else:
                     out["summary"][level] = None
-    return out
+    if isinstance(rows, list) and isinstance(out.get("signal_counts"), dict):
+        ma_members = signal_count_members(rows)["ma"]
+        out["signal_counts"] = {kind: value for kind, value in out["signal_counts"].items()
+                                if kind not in ("ma_cross", "ma_band")}
+        out["signal_counts"]["ma"] = {"label": "均线", **{level: len(entries) for level, entries in ma_members.items()}}
+        out["signal_members"] = {**(out.get("signal_members") or {}), "ma": ma_members}
+        for kind in ("ma_cross", "ma_band"):
+            out["signal_members"].pop(kind, None)
+    return _merge_ma_snapshot(out)
 
 
 def build_snapshot(macro, items, cfg, group_counts=None):
+    ma_members = signal_count_members(items)["ma"]
     priority = {g["item_group"]: i for i, g in enumerate(GROUPS)}
     unique = {}
     for item in sorted(items, key=lambda d: priority.get(d.get("group"), len(GROUPS))):
@@ -4339,6 +4538,8 @@ def build_snapshot(macro, items, cfg, group_counts=None):
                                ("ok", "value", "date", "source", "unit", "lagging", "reason", "quote_name", "observed_date", "observed_value", "delta_month")},
         "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
     }
+    snapshot["signal_members"]["ma"] = ma_members
+    snapshot["signal_counts"]["ma"] = {"label": "均线", **{level: len(entries) for level, entries in ma_members.items()}}
     snapshot["data_time_text"] = market_data_time(snapshot)
     snapshot["market_risk"] = market_risk_summary(macro)
     snapshot["risk_quotes"] = {key: {field: (macro.get(key) or {}).get(field) for field in
@@ -4367,8 +4568,8 @@ def _macro_rows(macro, risk):
         elif key == "curve":
             val = f'{it["value"]:.2f}<span class="unit">个百分点</span>'
         elif key == "breadth":
-            val = (f'{it["value"]:.1f}%<span class="unit">的成分股站上200日线（长期趋势）</span>'
-                   f'<span class="unit">站上50日线（短期）：{it["pct50"]:.1f}%</span>')
+            val = (f'{it["value"]:.1f}%<span class="unit">的成分股站上宏观长均线（长期趋势）</span>'
+                   f'<span class="unit">站上宏观短均线（短期）：{it["pct50"]:.1f}%</span>')
         elif key == "nfci":
             val = f'{it["value"]:+.2f}'
         else:
@@ -4475,16 +4676,91 @@ def _signal_text_html(text):
     return f'<span class="{cls}">{escaped}</span>' if cls else escaped
 
 
+# 描述分类只用于排版，灯色只认对应指标 marks，不从整行灯色或文案猜灯。
+_SIGNAL_DESCRIPTION_RULES = (
+    ("rsi", re.compile(r"^RSI\b")),
+    ("boll", re.compile(r"^(?:盘中突破|突破|跌破|触及|逼近)布林[上下]轨")),
+    ("boll_rsi", re.compile(r"^布林\s*\+\s*RSI")),
+    ("chg", re.compile(r"^(?:异动|波动)\s*[+-]?\d")),
+    ("amp", re.compile(r"^(?:日内)?振幅")),
+    ("vol_ratio", re.compile(r"^(?:盘中|最近完整日)?量比")),
+    ("ma", re.compile(r"^(?:日内触及|现价贴近|贴近|触及|上穿|跌破)\d+日(?:弱)?均线")),
+    ("low52", re.compile(r"^(?:触及52周新低|仍在52周低位|距52周低点)")),
+    ("add_price", re.compile(r"^(?:已跌破|距)加仓价")),
+    ("reduce_price", re.compile(r"^(?:已涨到|距)减仓价")),
+    ("target", re.compile(r"^(?:距目标价|目标价|手填目标价|今日上穿目标价|今日跌破目标价|在目标价)")),
+)
+_SIGNAL_DESCRIPTION_LABELS = dict(SIGNAL_KINDS, target="目标价")
+
+
+def _description_signals(signals):
+    """仅恢复旧描述中被中点拆开的布林尾句；不新增信号、判灯或突变输入。"""
+    result = []
+    for value in signals or []:
+        text = str(value)
+        tail = re.fullmatch(r"连续第≥?\d+日贴近([上下]轨)(?:（其中\d+日穿越）)?", text)
+        if (tail and result and result[-1].startswith(_TEXT_BOLL_PREFIX)
+                and "布林" + tail[1] in result[-1]):
+            result[-1] += "，" + text
+        else:
+            result.append(text)
+    return result
+
+
+def _signal_description_groups(d):
+    """聚合同一指标的事实，布林+RSI互斥显示，绝不修改原 signals/marks。"""
+    tg = d.get("target") or {}
+    signals = [x for x in _description_signals(d.get("signals")) if not _consensus_description(x, tg)]
+    levels = {}
+    rank = {"gray": 0, "purple": 1, "yellow": 2, "red": 3}
+    for kind, level in d.get("signal_marks") or []:
+        kind = "ma" if kind in ("ma_cross", "ma_band") else kind
+        if level in rank and rank[level] > rank.get(levels.get(kind), -1):
+            levels[kind] = level
+    gray_kind = next((m["kind"] for m in text_only_members([d])), "")
+    combo = "boll_rsi" in levels or _text_only_kind(signals) == "boll_rsi"
+    if gray_kind:
+        levels.setdefault(gray_kind, "gray")
+    groups = {}
+    for index, text in enumerate(signals):
+        kind = next((kind for kind, pattern in _SIGNAL_DESCRIPTION_RULES if pattern.match(text)), "")
+        if combo and kind in ("rsi", "boll"):
+            kind = "boll_rsi"
+        if kind == "boll_rsi" and re.fullmatch(r"布林\s*\+\s*RSI\s*→\s*[红黄]", text):
+            # 原总结只重复 marks；前置名称和灯点替代它，事实不删除。
+            continue
+        text = re.sub(r"\s*·\s*", "，", text)
+        if kind == "ma":
+            text = (_ma_display_text(text, d.get("ma_settings"))
+                    .replace(" / ", "，").replace("短均线/长均线", "短均线与长均线"))
+        key = kind or f"context-{index}"
+        entry = groups.setdefault(key, {"kind": kind, "level": levels.get(kind), "texts": []})
+        if text not in entry["texts"]:
+            entry["texts"].append(text)
+    order = {"red": 0, "yellow": 1, "gray": 2}
+    return sorted(groups.values(), key=lambda g: 4 if g["kind"] == "target" or g["level"] == "purple"
+                  else order.get(g["level"], 3))
+
+
 def _signals_html(d):
-    """目标价 / 共识价仍用紫色并排最后，其他警示按类型独立着色。"""
-    is_tp = lambda x: "共识价" in x or "目标价" in x
-    signals = d["signals"]
-    parts = [_signal_text_html(x) for x in signals if not is_tp(x)] + [_signal_text_html(x) for x in signals if is_tp(x)]
-    sig = " · ".join(parts) if parts else "—"
+    """每项真实触发独立灯色；不同指标用 /，组合事实用逗号；共识仍仅隐藏描述。"""
+    parts = []
+    for group in _signal_description_groups(d):
+        kind, level, texts = group["kind"], group["level"], group["texts"]
+        label = _SIGNAL_DESCRIPTION_LABELS.get(kind, "")
+        # RSI/量比等名称已在原事实开头，不重复添加；组合名称始终前置。
+        prefix = label + " " if label and not texts[0].startswith(label) and kind not in ("vol_ratio", "amp", "low52", "add_price", "reduce_price", "target") else ""
+        body = html_lib.escape(prefix + "，".join(texts))
+        if level:
+            label_text = {"red": "红灯", "yellow": "黄灯", "purple": "紫灯", "gray": "灰色文字提示"}[level]
+            body = (f'<span class="signal-dot {level}" role="img" '
+                    f'aria-label="{label_text}：{html_lib.escape(label)}"></span>' + body)
+        parts.append(f'<span class="signal-item" data-signal-kind="{kind}"'
+                     + (f' data-signal-level="{level}"' if level else "") + f'>{body}</span>')
     tg = d.get("target") or {}
     if tg.get("kind") == "manual" and target_display_state(tg) == "low":
-        sig = ("" if sig == "—" else sig + " · ") + f'<span class="tnote">目标价 {_price_text(tg["price"])}，空间 {tg["space"]:+.0f}%</span>'
-    return sig
+        parts.append(f'<span class="tnote">目标价 {_price_text(tg["price"])}，空间 {tg["space"]:+.0f}%</span>')
+    return ' <span class="signal-separator">/</span> '.join(parts) if parts else "—"
 
 
 def _range52_row(d):
@@ -4605,13 +4881,11 @@ def _count_badge(level, count, label):
 
 
 def _group_stats_html(g, group, items_by_symbol, enabled):
-    """分组标题右侧的小圆点计数：红、黄、灰、紫，板块组再跟「相对标普500的强弱」。"""
+    """分组标题仅计红、黄、缺失、紫；技术灰只在统计面板计数。"""
     stats = ''.join(_count_badge(lv, count, label)
                     for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"))
                     if (count := sum(d["level"] == lv for d in g)))
-    # 灰灯（只出 RSI / 布林文字、不报灯）：口径与顶部「统计」一致，分组标题也能看到
-    if (n_gray := len(text_only_members(g))):
-        stats += _count_badge("gray", n_gray, "灰灯")
+    # 技术灰仍进入统计面板及描述，不在个股/持仓分组标题另加数字。
     # 无数据（缺失）单独用虚线圈，避免和灰灯撞名
     if (n_miss := sum(d["level"] == "gray" for d in g)):
         stats += _count_badge("missing", n_miss, "缺失")
@@ -4795,17 +5069,17 @@ def _member_icons(d, kind, level):
                      "下轨（RSI超买/超卖均命中）")
             value = direction if direction in known else "方向待下次更新"
             return f' <span class="signal-member-direction">{esc(value)}</span>'
-    elif kind in ("rsi", "boll", "ma_cross", "ma_band", "chg", "amp", "vol_ratio") or (kind == "target" and level == "purple"):
+    elif kind in ("rsi", "boll", "ma", "ma_cross", "ma_band", "chg", "amp", "vol_ratio") or (kind == "target" and level == "purple"):
         markers = d.get("indicators")
         if kind in ("chg", "amp", "vol_ratio") and d.get("flat") is True:
             return ' <span class="signal-member-direction">平盘</span>'
         if not isinstance(markers, list) or not markers:
             return ' <span class="signal-member-direction">方向待下次更新</span>'
-        if kind == "ma_cross" and {"▲", "▼"} <= {m.get("shape") for m in markers
+        if kind in ("ma", "ma_cross") and {"▲", "▼"} <= {m.get("shape") for m in markers
                                                  if isinstance(m, dict)}:
             # 不同周期均线方向相反（如站上短均线却跌破长均线）：同格上下箭头会互相打架，
             # 跟布林+RSI 方向不一致时一样改成文字，不画三角。
-            labels = [m.get("label") for m in markers
+            labels = [_ma_display_text(m["label"], d.get("ma_settings")) for m in markers
                       if isinstance(m, dict) and isinstance(m.get("label"), str) and m["label"]]
             return (f' <span class="signal-member-direction">'
                     f'{esc(" / ".join(labels) or "多周期均线方向不一致")}</span>')
@@ -4820,16 +5094,18 @@ def _member_icons(d, kind, level):
             continue
         allowed = {"chg": ("white",), "amp": ("white",), "vol_ratio": ("white",),
                    "rsi": ("yellow", "red"), "boll": ("white", "yellow"),
-                   "boll_rsi": ("yellow", "red"), "ma_cross": ("cyan",),
+                   "boll_rsi": ("yellow", "red"), "ma": ("cyan",), "ma_cross": ("cyan",),
                    "ma_band": ("cyan",), "target": ("purple",)}
         if tone not in allowed.get(kind, ()):
             continue
-        if shape not in ("▲", "▼") and kind not in ("target", "ma_band"):
+        if shape not in ("▲", "▼") and kind not in ("target", "ma", "ma_band"):
             continue
         if shape == "□" and (kind != "target" or level != "purple" or tone != "purple"):
             continue
         if not isinstance(label, str) or not label or len(label) > 100:
             continue
+        if kind in ("ma", "ma_cross", "ma_band"):
+            label = _ma_display_text(label, d.get("ma_settings"))
         icons.append(f'<span class="signal-member-icon tone-{tone}" role="img" '
                      f'aria-label="{esc(label)}">{shape}</span>')
     return "".join(icons) or ' <span class="signal-member-direction">方向待下次更新</span>'
@@ -4849,7 +5125,8 @@ def _filter_detail(d, kind, label):
         return f"布林+RSI {d['direction']}{extra}"
     marks = [m.get("label") for m in d.get("indicators") or []
              if isinstance(m, dict) and isinstance(m.get("label"), str) and m.get("label")]
-    return f"{label} {' / '.join(marks)}" if marks else label
+    detail = f"{label} {' / '.join(marks)}" if marks else label
+    return _ma_display_text(detail, d.get("ma_settings")) if kind in ("ma", "ma_cross", "ma_band") else detail
 
 
 def _earnings_week_panel(snapshot, count_only=False):
@@ -4907,6 +5184,7 @@ def _earnings_week_panel(snapshot, count_only=False):
 
 def _signal_counts_card(snapshot):
     """各信号计数及分组明细；空计数不显示，缺失或不一致的成员等待下次更新。"""
+    snapshot = _merge_ma_snapshot(snapshot)
     counts = snapshot.get("signal_counts") or {}
     members = snapshot.get("signal_members") or {}
     levels = (("red", "红色信号"), ("yellow", "黄色信号"))
@@ -4924,6 +5202,11 @@ def _signal_counts_card(snapshot):
         # 只显示这一轮真的有计数的信号：全 0 的行不占位。
         # 布林和 RSI 现在都不再单独报灯，计数恒为 0，这两行会自然消失——
         # 不需要在这里写死排除，免得以后规则再变时要改两处。
+        if v.get("pending") and kind == "ma":
+            filters[kind] = {"label": "均线", "ok": False, "members": {}}
+            rows += ('<tr><td><button type="button" class="signal-filter-toggle" data-kind="ma" '
+                     'aria-pressed="false">均线</button></td><td colspan="3">明细待下次更新</td></tr>')
+            continue
         if not any(v.get(level) for level, _ in levels) and not gray_by_kind.get(kind):
             continue
         raw_label = str(v.get("label", ""))
@@ -5104,7 +5387,8 @@ def _signal_counts_card(snapshot):
             f'<td class="num" {dim}>灰</td></tr>')
     summary = snapshot.get("summary") or {}
     whole = lambda n: n if type(n) is int and n >= 0 else None
-    gray_count = len(snapshot.get("text_only") or []) if isinstance(snapshot.get("text_only"), list) else 0
+    gray_count = len({instrument_identity(m["symbol"]) for m in snapshot.get("text_only") or []
+                      if isinstance(m, dict) and m.get("symbol")}) if isinstance(snapshot.get("text_only"), list) else 0
     totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
               ("gray", "灰", gray_count), ("earn", "财报", _earnings_week_panel(snapshot, count_only=True)))
     stats = "".join(
@@ -5175,7 +5459,8 @@ def _gray_cell(kind, picked, label, filter_members, group_labels, group_order):
             rec = filter_members.setdefault(instrument_identity(r["symbol"]), {
                 "s": r["symbol"], "n": r.get("note") if isinstance(r.get("note"), str) else "",
                 "g": group_labels.get(str(r.get("group") or ""), str(r.get("group") or "") or "未分类"),
-                "o": group_order.get(str(r.get("group") or ""), len(GROUPS)), "l": "green", "d": []})
+                "o": group_order.get(str(r.get("group") or ""), len(GROUPS)),
+                "l": r.get("level") if r.get("level") in ("red", "yellow", "green") else "green", "d": []})
             text = f"灰灯 · {label} · {title}"
             if text not in rec["d"]:
                 rec["d"].append(text)
@@ -5236,8 +5521,8 @@ def _target_purple_panel(snapshot):
             f'{content}</details></div>')
 
 
-def _reference_card(snapshot, *, details_only=False):
-    """仅展示正式利率决议信息，数据来源折叠放页底，不接入任何风险评分。"""
+def _policy_details(snapshot):
+    """决议信息仅保留在页底折叠详情中，不生成常驻卡片或接入风险评分。"""
     if "reference_alerts" not in snapshot:
         return ""
     refs = snapshot.get("reference_alerts")
@@ -5250,7 +5535,6 @@ def _reference_card(snapshot, *, details_only=False):
     decision = policy_alerts.fed_decision(fed, assessment_time)
     esc = lambda value: html_lib.escape(str(value))
     status = decision["status"]
-    status_name = {"available": "正式消息", "pending": "待更新", "unavailable": "待更新"}[status]
     published = policy_alerts.moment(fed.get("date"))
     valid = status != "unavailable"
     action = fed.get("action")
@@ -5283,15 +5567,10 @@ def _reference_card(snapshot, *, details_only=False):
     checked = policy_alerts.moment(fed.get("checked_at"))
     if checked:
         details += f'<p>最近查询：{checked.astimezone(TZ).strftime("%Y-%m-%d %H:%M")}（北京时间）。</p>'
-    details += ('<p>抓取来源与缓存间隔见<a class="rule-jump" href="#fetch-reference">名词解释和抓取</a>。'
+    details += ('<p>抓取来源与缓存间隔见名词解释和抓取。'
                 '仅按例行会议日程更新，临时决议可能延迟发现。</p>')
-    if details_only:
-        return ('<details class="macro-help" id="policyAlertDetails">'
-                '<summary>美联储利率决议 · 查看数据与来源</summary>' + details + '</details>')
-    return (f'<div id="referenceAlerts" class="policy-reference">'
-            f'<div class="reference-alert" id="policyAlert" data-level="neutral" data-status="{status}">'
-            f'<div class="reference-top">美联储最近利率决议<span class="reference-status">{status_name}</span></div>'
-            f'<p class="reference-conclusion">{esc(message)}</p></div></div>')
+    return (f'<details class="macro-help" data-status="{status}" id="policyAlertDetails">'
+            '<summary>美联储利率决议 · 查看数据与来源</summary>' + details + '</details>')
 
 
 def _oil_reference_row(snapshot):
@@ -5350,13 +5629,13 @@ def _page_notes(snapshot):
 <h5>宏观指标细则</h5>
 <p>垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到黄线，一周扩大至少 {HY_WEEK_YELLOW} bp 为黄、至少 {HY_WEEK_RED} bp 为红（水平仍低于黄线也照常报灯，说明另提醒观察是否持续）；达到 500 bp 会标注“信用压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
 <p>VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500距近一段高点回撤不足10%为绿、达到10%或15%为黄、达到20%为红，这些是已发生的跌幅。</p>
-<p>上涨参与度：站上200日均线的股票不足50%为黄；不足30%时，还需近期垃圾债利差已为红，或金融压力NFCI达到或高于0，才升级红；站上50日均线的股票不足30%也为黄。NFCI为周度：达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
+<p>上涨参与度：站上宏观长均线的股票不足50%为黄；不足30%时，还需近期垃圾债利差已为红，或金融压力NFCI达到或高于0，才升级红；站上宏观短均线的股票不足30%也为黄。宏观均线沿用数据源固定口径，不随个股均线设置变化。NFCI为周度：达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
 <h5>数据有效性</h5>
 <p>综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力NFCI最多13日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且垃圾债利差最多落后5日并已为红，或NFCI最多落后13日且达到或高于0；垃圾债利差仅为黄不足以确认。</p>
 <h5>补充参考</h5>
 <p>美联储利率决议、WTI原油、10年美债收益率仅作参考，不计入五指标综合分或有效指标数。</p>
 <p>10年美债收益率：相对约30个自然日前可用观测，上行至少{UST_MONTH_YELLOW} bp为参考黄，至少{UST_MONTH_WATCH}但不足{UST_MONTH_YELLOW} bp只提示、仍绿；缺历史则不判断。</p>
-{_reference_card(snapshot, details_only=True)}
+{_policy_details(snapshot)}
 </details>
 </section>'''
 
@@ -5594,7 +5873,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 {rows_macro}
 {_oil_reference_row(snapshot)}
 </table>
-{_reference_card(snapshot)}
 {_collapse_button("macroCard", "市场风险")}
 </details>
 
@@ -5608,12 +5886,6 @@ def render(macro, items, watch_count, data_down=False, snapshot=None, dup_hidden
 <script>window.MM_SETTINGS={{"signal_single_open":{int(S.get("signal_single_open", 1))}}};</script>
 <script>{PAGE_INTERACTION_JS}</script>
 {cost_js}
-<!-- 来源正文仅在「名词解释和抓取」维护，页脚只提供入口。 -->
-<div class="foot">
-<a class="rule-jump" href="#marketRiskRules">综合判断与宏观细则</a> ·
-<a class="rule-jump" href="#signalRules">查看完整规则与阈值</a> ·
-<a class="rule-jump" href="#glossary-fetch">名词解释和抓取 · 数据来源</a>
-</div>
 </div></body></html>"""
 
 

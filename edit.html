@@ -108,16 +108,12 @@ details.fold[open]>summary{padding-bottom:6px;border-bottom:1px solid var(--line
 details.fold>summary span{color:#5f6672;font-weight:400}
 .card>details.fold{background:none;border:none;border-radius:0;padding:0;margin-bottom:0}
 details.fold .pane{padding-bottom:8px}
-details.fold .pane #appliedState{color:var(--text);font-size:13px;
-  white-space:pre-wrap;line-height:1.7}
 .pager{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
   font-size:12px;color:var(--dim);padding:8px 0 4px}
 .pager button{padding:5px 11px;font-size:12px}
 .pager .pg{font-variant-numeric:tabular-nums}
 .subsec{font-size:11px;color:#5f6672;margin:12px 0 4px;letter-spacing:.4px;
   border-top:1px dashed var(--line);padding-top:10px}
-.rs{padding:8px 0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;
-  color:var(--dim);line-height:1.65}
 </style>
 </head>
 <body>
@@ -164,68 +160,59 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
 <div id="main" class="hide">
 
   <div class="card">
-    <h2>规则阈值 <span>（红黄绿的判定线，改完单独保存）</span></h2>
+    <h2>规则参数</h2>
     <details class="set" id="setToggle">
-      <summary>展开调整（布林 / 均线 / 涨跌幅 / RSI / 量比 / 宏观）</summary>
+      <summary>布林 / 均线 / 涨跌幅 / RSI / 量比 / 宏观</summary>
       <div class="setsec">布林带</div>
       <div class="setgrid">
         <div class="setrow"><label>均线周期（天）</label><input id="set_boll_n" inputmode="numeric"></div>
         <div class="setrow"><label>标准差倍数</label><input id="set_boll_k" inputmode="decimal"></div>
-        <div class="setrow"><label>距上下轨不足 x% 就算命中（只在算不出个股波动时兜底）</label><input id="set_boll_near_pct" inputmode="decimal"></div>
-        <div class="setrow"><label>自适应：距轨道不足「布林带宽的 x%」就算命中（按每只票平时波动自动缩放，0 = 关闭自适应）</label><input id="set_boll_near_band_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>贴轨距离（%，固定兜底）</label><input id="set_boll_near_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>自适应贴轨比例（%，0关闭）</label><input id="set_boll_near_band_pct" inputmode="decimal"></div>
       </div>
-      <details class="set"><summary>布林判定说明</summary>
-      <p class="note">单独布林只显示文字，不报灯。进入布林区间并有 RSI 同侧两条才报黄、三条报红；上轨另按分组与长短持仓限制。生效规则详见<a href="./#signalRules">首页页底的完整报灯规则</a>。</p>
-      </details>
       <div class="setsec">趋势均线穿越</div>
       <div class="setgrid">
-        <div class="setrow"><label for="set_ma_short">第一条均线周期（交易日）</label><input id="set_ma_short" type="number" min="0" max="250" step="1" inputmode="numeric"></div>
-        <div class="setrow"><label for="set_ma_long">第二条均线周期（交易日）</label><input id="set_ma_long" type="number" min="0" max="250" step="1" inputmode="numeric"></div>
+        <div class="setrow"><label for="set_ma_short">短均线（交易日，0关闭）</label><input id="set_ma_short" type="number" min="0" max="250" step="1" inputmode="numeric"></div>
+        <div class="setrow"><label for="set_ma_long">长均线（交易日，0关闭）</label><input id="set_ma_long" type="number" min="0" max="250" step="1" inputmode="numeric"></div>
       </div>
-      <p class="note">填0关闭对应均线警示，填2～250的整数启用；不可留空或填1。两条都启用时第一条不大于第二条；调整后点「保存规则」生效。与布林周期独立。</p>
       <div class="setsec">个股</div>
       <div class="setgrid">
-        <div class="setrow"><label>单日涨跌 ≥ x% → 红</label><input id="set_chg_red" inputmode="decimal"></div>
-        <div class="setrow"><label>单日涨跌 ≥ x% → 黄</label><input id="set_chg_yellow" inputmode="decimal"></div>
+        <div class="setrow"><label>涨跌幅红线（%）</label><input id="set_chg_red" inputmode="decimal"></div>
+        <div class="setrow"><label>涨跌幅黄线（%）</label><input id="set_chg_yellow" inputmode="decimal"></div>
         <div class="setrow"><label>RSI 超买线</label><input id="set_rsi_high" inputmode="numeric"></div>
         <div class="setrow"><label>RSI 超卖线</label><input id="set_rsi_low" inputmode="numeric"></div>
-        <details class="set"><summary>RSI判定说明</summary><p class="note">单独 RSI 仅显示文字，不改变灯级；布林 + RSI 组合才按同侧两条黄、三条红判断，完整口径和当前值见下方规则。</p></details>
-        <div class="setrow"><label>距 52 周低点 ≤ x%（新进入/创新低红，持续低位黄）</label><input id="set_near_52w_low_pct" inputmode="decimal"></div>
-        <div class="setrow"><label>高出加仓价 ≤ x% 或已跌破 → 红（所有分组）</label><input id="set_trigger_gap_pct" inputmode="decimal"></div>
-        <div class="setrow"><label>低于减仓价还差 ≤ x% 或已涨到 → 红（后端仅持仓；前端保留重点原流程）</label><input id="set_reduce_gap_pct" inputmode="decimal"></div>
-        <div class="setrow"><label>现价在目标价 ±x% 内，或当日跨越目标价 → 紫（仅持仓和重点）</label><input id="set_target_gap_pct" inputmode="decimal"></div>
-        <p class="note" id="targetSpaceNote">目标空间固定分档：低 &lt;30%，普通空间 30%≤空间&lt;70%，高空间 ≥70%（含边界），不可修改；百分比＝（目标价 / 现价 − 1）×100%。所有分组个股空间 ≥30% 留主表并计入空间统计，不含 ETF、指数、期货；空间无上限，高空间不自动报红黄。达到仅持仓和重点沿用上穿、跌破或目标价 ±x% 规则，并优先显示实心紫胶囊。有效手填目标价覆盖共识取数失败；失败为灰色虚线、旧价仅展示不计数，无数据不显示胶囊。普通空间与高空间均用空心提示，完整规则见首页。</p>
-        <div class="setrow"><label>最近完整交易日量比 ≥ x 倍 → 黄</label><input id="set_vol_ratio" inputmode="decimal"></div>
-        <div class="setrow"><label>最近完整交易日量比 ≥ x 倍 → 红（所有分组）</label><input id="set_vol_ratio_red" inputmode="decimal"></div>
-        <div class="setrow"><label>收盘后量比「自身波动」≥ x σ → 黄（0 = 关闭自适应，退回上面的固定倍数）</label><input id="set_vol_ratio_z" inputmode="decimal"></div>
-        <div class="setrow"><label>收盘后量比「自身波动」≥ x σ → 红（0 = 关闭自适应）</label><input id="set_vol_ratio_red_z" inputmode="decimal"></div>
-        <details class="set"><summary>量比判定说明</summary><p class="note">收盘后仅在两条 z 阈值都大于 0 时启用自身波动自适应；任一为 0 则退回固定倍数。盘中始终按固定倍数判断。生效分支、门槛与数据不足时的处理见<a href="./#signalRules">首页页底的完整报灯规则</a>。</p></details>
-        <div class="setrow"><label>日内振幅 ≥ x% → 黄</label><input id="set_amp_yellow" inputmode="decimal"></div>
-        <div class="setrow"><label>日内振幅 ≥ x% → 红</label><input id="set_amp_red" inputmode="decimal"></div>
+        <div class="setrow"><label>52周低点距离（%）</label><input id="set_near_52w_low_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>加仓价距离（%）</label><input id="set_trigger_gap_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>减仓价距离（%）</label><input id="set_reduce_gap_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>目标价距离（±%）</label><input id="set_target_gap_pct" inputmode="decimal"></div>
+        <div class="setrow"><label>量比黄线（倍）</label><input id="set_vol_ratio" inputmode="decimal"></div>
+        <div class="setrow"><label>量比红线（倍）</label><input id="set_vol_ratio_red" inputmode="decimal"></div>
+        <div class="setrow"><label>自适应量比黄线（σ，0关闭）</label><input id="set_vol_ratio_z" inputmode="decimal"></div>
+        <div class="setrow"><label>自适应量比红线（σ，0关闭）</label><input id="set_vol_ratio_red_z" inputmode="decimal"></div>
+        <div class="setrow"><label>振幅黄线（%）</label><input id="set_amp_yellow" inputmode="decimal"></div>
+        <div class="setrow"><label>振幅红线（%）</label><input id="set_amp_red" inputmode="decimal"></div>
       </div>
       <div class="setsec">宏观</div>
       <div class="setgrid">
-        <div class="setrow"><label>垃圾债利差 ≥ x bp 黄（低于此值为绿）</label><input id="set_hy_green" inputmode="numeric"></div>
-        <div class="setrow"><label>垃圾债利差 ≥ x bp 红</label><input id="set_hy_red" inputmode="numeric"></div>
-        <div class="setrow"><label>VIX &lt; x 绿</label><input id="set_vix_green" inputmode="numeric"></div>
-        <div class="setrow"><label>VIX ≥ x 黄</label><input id="set_vix_yellow" inputmode="numeric"></div>
-        <div class="setrow"><label>VIX ≥ x 红</label><input id="set_vix_red" inputmode="numeric"></div>
+        <div class="setrow"><label>垃圾债利差黄线（bp）</label><input id="set_hy_green" inputmode="numeric"></div>
+        <div class="setrow"><label>垃圾债利差红线（bp）</label><input id="set_hy_red" inputmode="numeric"></div>
+        <div class="setrow"><label>VIX 绿线</label><input id="set_vix_green" inputmode="numeric"></div>
+        <div class="setrow"><label>VIX 黄线</label><input id="set_vix_yellow" inputmode="numeric"></div>
+        <div class="setrow"><label>VIX 红线</label><input id="set_vix_red" inputmode="numeric"></div>
       </div>
-      <p class="note">完整报灯规则、宏观细则和数据来源统一在<a href="./#signalRules">首页页底</a>查看；这里仅编辑参数，保存并重新发布后才会生效。</p>
       <div class="setsec">行情源开关</div>
       <div class="setgrid">
-        <div class="setrow"><label>用 Nasdaq 盘中价（取得时覆盖日线最新价）</label>
+        <div class="setrow"><label>Nasdaq 盘中价</label>
           <select id="set_use_realtime"><option value="1">开</option><option value="0">关</option></select></div>
       </div>
     </details>
-    <details class="card fold" id="displayCard" open>
-      <summary>显示与交互 <span>（统计面板 / 灯圈计数）</span></summary>
+    <details class="card fold" id="displayCard">
+      <summary>显示与交互</summary>
       <div class="pane">
         <div class="setgrid">
-          <div class="setrow"><label>统计面板：灯详情只留一个打开（展开新的自动收起已打开的）</label>
+          <div class="setrow"><label>统计明细单组展开</label>
             <select id="set_signal_single_open"><option value="1">开</option><option value="0">关</option></select></div>
         </div>
-        <p class="note">统计面板里点开某个信号的标的明细时，是否自动收起其它已经展开的明细。关掉后可以同时展开多个做对比；不影响信号判定和计数。</p>
       </div>
     </details>
 
@@ -234,9 +221,7 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
       <button id="btnResetRules">恢复默认</button>
     </div>
     <p class="note">
-      改完点<b>保存规则</b>只提交 <kbd>settings.json</kbd>，清单另点分类清单下方「保存清单与分组」，定投另点「保存定投提醒」。<br>
-      保存后需等待 Actions 重跑和看板发布，通常约 5–9 分钟；首页独立规则灯变绿才表示本页已用最新规则。<br>
-      改坏也不怕：值类型不对会被忽略、自动退回默认，填错顶多是信号变多变少，不会白屏。
+      保存规则只提交 <kbd>settings.json</kbd>；清单另行保存。
       <textarea id="rulesOut" spellcheck="false" class="hide"
         style="width:100%;height:160px;margin-top:10px;padding:10px;font-size:12px;
         font-family:ui-monospace,Menlo,monospace;background:#0e1014;color:#9fd3ff;
@@ -244,8 +229,9 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     </p>
   </div>
 
-  <div class="card group-intro">
-    <h2>CSV / EBK 导入 <span>（先选分组，再上传文件）</span></h2>
+  <details class="card fold group-intro" id="importCard">
+    <summary>CSV / EBK 导入</summary>
+    <div class="pane">
     <div class="row">
       <label for="csvKind" class="note">导入到</label>
       <select id="csvKind" aria-label="CSV 目标分组"></select>
@@ -256,12 +242,12 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     <div class="note" id="importAudit"></div>
     <div class="csvinfo" id="csvInfo" aria-live="polite"></div>
     <button class="primary hide" id="btnApply">确认导入</button>
-  </div>
+    </div>
+  </details>
   <div class="row group-tools">
     <h2>分类清单</h2><span id="groupTotal"></span>
     <button id="btnExpandGroups">全部展开</button><button id="btnCollapseGroups">全部收起</button>
   </div>
-  <p class="note" style="margin-bottom:12px">持仓和重点始终监测，无需开关。其他分组的监测开关改完点分类下方「保存清单与分组」才生效；关闭后清单仍保留，不抓取该组普通标的。行业组已有的 XL 板块 ETF 继续监测和报警，不自动添加基金。</p>
   <fieldset id="groupEditor" disabled style="border:0;padding:0;margin:0;min-width:0"></fieldset>
   <div class="savebar">
     <span class="sp" id="dirty"></span>
@@ -270,21 +256,19 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
   </div>
   <p class="note">保存股票清单、备注、加仓价、减仓价、目标价和监测开关，不影响规则与定投设置。重新读取会先询问是否丢弃未保存的清单改动。</p>
 
-  <div class="card">
-    <h2>定投提醒 <span>（全局一条，按美股交易日计数）</span></h2>
-    <div class="setrow"><label>起点日（YYYY-MM-DD，当天算第 1 个交易日）</label>
+  <details class="card fold" id="dcaCard">
+    <summary>定投提醒</summary>
+    <div class="pane">
+    <div class="setrow"><label>起点日（YYYY-MM-DD）</label>
       <input id="set_dca_start" placeholder="2026-10-01" style="width:130px"></div>
-    <div class="setrow" style="margin-top:7px"><label>间隔（每 N 个交易日提醒一次，0 或留空 = 关闭）</label>
+    <div class="setrow" style="margin-top:7px"><label>间隔（交易日，0或留空关闭）</label>
       <input id="set_dca_every" inputmode="numeric" placeholder="5"></div>
     <div class="row" style="margin-top:10px">
       <button class="primary" id="btnSaveDca">保存定投提醒</button>
       <button id="btnClearDca">关闭定投提醒</button>
     </div>
-    <p class="note">
-      例：起点 <kbd>2026-10-01</kbd>、间隔 <kbd>5</kbd> → 10/01 是第 1 次，之后每过 5 个交易日（周末和美股休市日不算）提醒一次。
-      看板首页会显示「今天是定投日」或「距下次还有几个交易日（日期）」。只改这一块，不影响下面的规则阈值；点保存后通常约 5–9 分钟生效，以首页规则灯为准。
-    </p>
-  </div>
+    </div>
+  </details>
 
   <p class="note" style="margin-top:18px">
     手机上也要改？点下面生成一条<b>带令牌的链接</b>，发到微信里用手机打开就行，
@@ -296,23 +280,6 @@ details.fold .pane #appliedState{color:var(--text);font-size:13px;
     <button id="btnWipe" class="danger" style="padding:5px 10px;font-size:12px">清除本机令牌</button>
   </p>
 
-  <details class="card fold" id="appliedCard">
-    <summary>保存是否生效 · <span id="appliedBrief">还没在这台设备保存过修改</span></summary>
-    <div class="pane">
-      <div id="appliedState" aria-live="polite">还没在这台设备保存过修改</div>
-      <div id="dataTime" aria-live="polite">数据时间 读取中…</div>
-      <p class="note">这里只回答一句话：<b>刚才保存的清单/规则，有没有真的跑到看板上</b>。<br>
-        <b>查运行状态</b> = 去问一次最新情况，只改这几行字，不会动你正在编辑的内容。<br>
-        <b>规则确认发布后</b> = 自动刷新当前页，不再打开新标签。若还有未保存的编辑，会先保留并等待保存完成，避免丢失改动。</p>
-    </div>
-  </details>
-
-  <details class="card fold" id="detailCard">
-    <summary>运行详情 <span>（本次生成的技术细节，从首页挪到这里，给核对用）</span></summary>
-    <div class="pane">
-      <div id="runSummary" class="rs" aria-live="polite">还没读到本次运行的详情</div>
-    </div>
-  </details>
 </div>
 </div>
 
@@ -338,11 +305,8 @@ let GROUPS=[], KINDS=[], KIND_LABEL={}, NAMES={};
 const pageState={};
 let monitoring={};
 function hasReduce(key){return key==='positions';}
-/* 成本价：只对「持仓」开放。只用于在首页 52 周位置条上画白三角，不参与任何灯级判定。 */
 function hasCost(key){return key==='positions';}
 function hasTarget(key){return key==='positions'||key==='focus';}
-/* 持仓内部分「长持仓」「短持仓」两区：长持仓只屏蔽上轨方向的普通过热（上轨 + RSI 两条），
-   RSI 三条全过界仍报红；下轨和减仓价照常。设置页每行只留一个下拉：两区和其它分组都在里面选。 */
 const POS_ZONES=[{v:'long',label:'长持仓'},{v:'short',label:'短持仓'}];
 const ZONE_LABEL={long:'长持仓',short:'短持仓'};
 const isLongHeld=c=>String((c&&c.hold)||'').toLowerCase()==='long';
@@ -426,15 +390,12 @@ function trackReceipt(file,response){
     return false;
   }
   void window.MMRunStatus.watchConfig({file,blobSHA,commitSHA});
-  setMsg(file+' 已提交：'+commitSHA+'；尚未确认发布生效，请看生效卡片','ok');
+  setMsg(file+' 已提交，等待看板更新','ok');
   return true;
 }
 window.MMRunStatus.init({owner:OWNER,repo:REPO,branch:BRANCH,getToken:()=>{
   try{return TOKEN||localStorage.getItem(TKEY)||'';}catch(e){return TOKEN;}
-},canReload:()=>{
-  try{return !changed&&settingsBaseline!==null&&settingsInputs()===settingsBaseline&&
-    !['btnSave','btnSaveRules','btnSaveDca','btnClearDca'].some(id=>$(id).disabled);}catch(e){return false;}
-}});
+},canReload:()=>false});
 function whyFail(status,dflt){
   if(status===0)return dflt||'网络请求未确认；请检查仓库最新版本后再操作，不要盲目重复写入';
   if(status===401)return '令牌无效或已过期（401）';
@@ -546,11 +507,11 @@ function initGroups(groups){
   KIND_LABEL=Object.fromEntries(groups.map(g=>[g.key,g.label]));
   KINDS=groups.map(g=>({k:g.key,list:'list_'+g.key,pager:'pager_'+g.key,cnt:'cnt_'+g.key,sort:g.key!=='positions'}));
   $('csvKind').innerHTML=groups.map(g=>'<option value="'+g.key+'">'+esc(g.label)+'</option>').join('');
-  $('groupEditor').innerHTML=groups.map(g=>'<details class="fold edit-group" id="fold_'+g.key+'"'+(g.key==='positions'?' open':'')+'>'
+  $('groupEditor').innerHTML=groups.map(g=>'<details class="fold edit-group" id="fold_'+g.key+'">'
     +'<summary>'+esc(g.label)+' <span id="cnt_'+g.key+'">(0)</span>'
     +(alwaysMonitored(g.key)?'<span class="monitor-note" style="margin:0 0 0 auto">始终监测</span>'
       :'<button type="button" class="monitor-toggle" id="monitor_'+g.key+'" role="switch" aria-checked="false" aria-label="'+esc(g.label)+'分组监测">监测关闭</button>')+'</summary>'
-    +'<div class="pane"><div class="monitor-note" id="monitorNote_'+g.key+'"></div>'
+    +'<div class="pane">'
     +'<div id="list_'+g.key+'"></div><div class="pager" id="pager_'+g.key+'"></div>'
     +'<div class="add row"><input class="s" id="newSym_'+g.key+'" placeholder="股票代码" aria-label="'+esc(g.label)+'股票代码">'
     +'<input class="n" id="newNote_'+g.key+'" placeholder="名称备注（选填）" aria-label="'+esc(g.label)+'名称备注（选填）">'
@@ -615,7 +576,7 @@ function moveSymbol(from,to,symbol){
   if(!hasTarget(t.group)){delete data[t.group][symbol].target;delete data[t.group][symbol].target_at;}
   if(t.group==='positions')data[t.group][symbol].hold=t.hold||'short';
   else delete data[t.group][symbol].hold;   // 长/短只对持仓有意义
-  $('fold_'+t.group).open=true;render();touch();
+  render();touch();
 }
 $('btnExpandGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=true);
 $('btnCollapseGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=false);
@@ -623,15 +584,9 @@ $('btnCollapseGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=false
 function render(){
   KINDS.forEach(K=>{
     $(K.cnt).textContent='('+Object.keys(data[K.k]||{}).length+')';
-    const enabled=monitorEnabled(K.k),group=GROUPS.find(g=>g.key===K.k);
-    const sectorPresent=group.sector_etf&&Object.keys(data[K.k]||{}).some(s=>normTicker(s)===group.sector_etf);
+    const enabled=monitorEnabled(K.k);
     const toggle=alwaysMonitored(K.k)?null:$('monitor_'+K.k);
     if(toggle){toggle.textContent=enabled?'监测开启':'监测关闭';toggle.setAttribute('aria-checked',String(enabled));}
-    let note=alwaysMonitored(K.k)?'本组始终开启监测，无需开关；跨组重复只抓取一次。':enabled?'监测本组全部标的，跨组重复只抓取一次。':sectorPresent
-      ?'分组监测已关闭；本组已有的 '+group.sector_etf+' 仍正常抓取和报警。普通标的保留但暂停监测。'
-      :'分组监测已关闭；清单仍保留，本组独有标的不抓取、不报警。';
-    if(K.k==='positions')note+=' 内部分「长持仓」「短持仓」两区：长持仓不看一般过热（布林上轨 + RSI 两条不报灯），RSI 三条全过界仍报红；下轨、加仓价、减仓价都不受影响。每行右侧的下拉可以把标的挪到任意区或分组。';
-    $('monitorNote_'+K.k).textContent=note;
     const box=$(K.list),pager=$(K.pager);
     let keys=Object.keys(data[K.k]||{});
     if(K.sort)keys=keys.slice().sort(bySym);
@@ -775,7 +730,7 @@ $('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定
 
 /* ---------- 规则阈值（settings.json） ---------- */
 /* MM_SCHEMA_BEGIN：由 page_assets 生成，不手改 */
-const SET_SCHEMA={"defaults":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"boll_near_band_pct":15.0,"chg_red":4.0,"chg_yellow":2.0,"rsi_high":70,"rsi_low":35,"near_52w_low_pct":1.0,"trigger_gap_pct":5.0,"reduce_gap_pct":3.0,"target_space_pct":30.0,"target_high_space_pct":70.0,"target_gap_pct":3.0,"vol_ratio":1.5,"vol_ratio_red":3.0,"vol_ratio_z":1.8,"vol_ratio_red_z":3.6,"amp_yellow":5.0,"amp_red":8.0,"ma_short":50,"ma_long":200,"hy_green":350,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":0,"dca_start":"","signal_single_open":1},"limits":{"boll_n":[2,250],"boll_k":[0.1,10],"boll_near_pct":[0,100],"boll_near_band_pct":[0,100],"chg_red":[0,100],"chg_yellow":[0,100],"rsi_high":[0,100],"rsi_low":[0,100],"near_52w_low_pct":[0,100],"trigger_gap_pct":[0,100],"reduce_gap_pct":[0,100],"target_space_pct":[30,30],"target_high_space_pct":[70,70],"target_gap_pct":[0,100],"vol_ratio":[0.1,100],"vol_ratio_red":[0.1,100],"vol_ratio_z":[0,10],"vol_ratio_red_z":[0,10],"amp_yellow":[0,100],"amp_red":[0,100],"ma_short":[0,250],"ma_long":[0,250],"hy_green":[0,10000],"hy_red":[0,10000],"vix_green":[0,200],"vix_yellow":[0,200],"vix_red":[0,200],"use_realtime":[0,1],"dca_every":[0,10000],"signal_single_open":[0,1]},"integers":["boll_n","ma_short","ma_long","use_realtime","dca_every","signal_single_open"],"excluded":{"ma_short":[1],"ma_long":[1]},"relations":[{"keys":["chg_yellow","chg_red"],"strict":false,"skip_zero":false},{"keys":["rsi_low","rsi_high"],"strict":true,"skip_zero":false},{"keys":["vol_ratio","vol_ratio_red"],"strict":false,"skip_zero":false},{"keys":["vol_ratio_z","vol_ratio_red_z"],"strict":false,"skip_zero":true},{"keys":["amp_yellow","amp_red"],"strict":false,"skip_zero":false},{"keys":["ma_short","ma_long"],"strict":false,"skip_zero":true},{"keys":["hy_green","hy_red"],"strict":false,"skip_zero":false},{"keys":["vix_green","vix_yellow","vix_red"],"strict":false,"skip_zero":false}]};
+const SET_SCHEMA={"defaults":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"boll_near_band_pct":15.0,"chg_red":4.0,"chg_yellow":2.0,"rsi_high":70,"rsi_low":35,"near_52w_low_pct":1.0,"trigger_gap_pct":5.0,"reduce_gap_pct":3.0,"target_space_pct":30.0,"target_high_space_pct":70.0,"target_gap_pct":3.0,"vol_ratio":1.5,"vol_ratio_red":3.0,"vol_ratio_z":2.0,"vol_ratio_red_z":3.6,"amp_yellow":5.0,"amp_red":8.0,"ma_short":50,"ma_long":200,"hy_green":350,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":0,"dca_start":"","signal_single_open":1},"limits":{"boll_n":[2,250],"boll_k":[0.1,10],"boll_near_pct":[0,100],"boll_near_band_pct":[0,100],"chg_red":[0,100],"chg_yellow":[0,100],"rsi_high":[0,100],"rsi_low":[0,100],"near_52w_low_pct":[0,100],"trigger_gap_pct":[0,100],"reduce_gap_pct":[0,100],"target_space_pct":[30,30],"target_high_space_pct":[70,70],"target_gap_pct":[0,100],"vol_ratio":[0.1,100],"vol_ratio_red":[0.1,100],"vol_ratio_z":[0,10],"vol_ratio_red_z":[0,10],"amp_yellow":[0,100],"amp_red":[0,100],"ma_short":[0,250],"ma_long":[0,250],"hy_green":[0,10000],"hy_red":[0,10000],"vix_green":[0,200],"vix_yellow":[0,200],"vix_red":[0,200],"use_realtime":[0,1],"dca_every":[0,10000],"signal_single_open":[0,1]},"integers":["boll_n","ma_short","ma_long","use_realtime","dca_every","signal_single_open"],"excluded":{"ma_short":[1],"ma_long":[1]},"relations":[{"keys":["chg_yellow","chg_red"],"strict":false,"skip_zero":false},{"keys":["rsi_low","rsi_high"],"strict":true,"skip_zero":false},{"keys":["vol_ratio","vol_ratio_red"],"strict":false,"skip_zero":false},{"keys":["vol_ratio_z","vol_ratio_red_z"],"strict":false,"skip_zero":true},{"keys":["amp_yellow","amp_red"],"strict":false,"skip_zero":false},{"keys":["ma_short","ma_long"],"strict":false,"skip_zero":true},{"keys":["hy_green","hy_red"],"strict":false,"skip_zero":false},{"keys":["vix_green","vix_yellow","vix_red"],"strict":false,"skip_zero":false}]};
 const SET_DEFS=SET_SCHEMA.defaults;
 const SET_KEYS=Object.keys(SET_DEFS);
 const SET_LIMITS=SET_SCHEMA.limits;
@@ -805,7 +760,7 @@ function settingsError(){
     new Date(start+'T00:00:00Z').toISOString().slice(0,10)!==start))return '定投起点日不是有效日期';
   return '';
 }
-let SET=Object.assign({},SET_DEFS), SET_SHA='', settingsRevision=0, settingsBaseline=null;
+let SET=Object.assign({},SET_DEFS), SET_SHA='', settingsRevision=0;
 function settingsInputs(){
   return JSON.stringify(SET_KEYS.map(k=>{const el=$('set_'+k);return el?el.value:null;}));
 }
@@ -885,7 +840,7 @@ async function loadSettings(){
   }
   try{
     const normalized=normalizeSettings(JSON.parse(b64dec(r.data.content)));
-    SET=normalized.values;SET_SHA=r.data.sha||'';renderSettings();settingsBaseline=settingsInputs();
+    SET=normalized.values;SET_SHA=r.data.sha||'';renderSettings();
     if(normalized.warnings.length)setMsg('规则参数警告：'+normalized.warnings.join('；'),'err');
   }catch(e){setMsg('settings.json 不是合法 JSON；保留当前编辑内容','err');}
 }
@@ -894,7 +849,7 @@ async function saveRules(btn){
   if(error){setMsg('规则未保存：'+error,'err');return;}
   settingsRevision++;
   collectSettings();
-  const text=setJsonText(), submittedInputs=settingsInputs();
+  const text=setJsonText();
   if(LOCAL_PREVIEW){setMsg('本地预览：规则仅用于查看，未写入 GitHub','ok');return;}
   if(!TOKEN){
     $('rulesOut').value=text;$('rulesOut').classList.remove('hide');
@@ -909,7 +864,6 @@ async function saveRules(btn){
   const r=await gh('PUT','/contents/settings.json',body);
   if(r.ok){
     SET_SHA=(r.data.content&&r.data.content.sha)||SET_SHA;
-    settingsBaseline=submittedInputs;
     trackReceipt('settings.json',r.data);
   }else{
     setMsg('保存失败：'+whyFail(r.status,r.data.message),'err');
@@ -996,7 +950,7 @@ $('btnApply').onclick=()=>{
     if(!next[key].note)next[key].note=names[s]||NAMES[s]||'';
   });
   data[kind]=next;pending=null;$('btnApply').classList.add('hide');
-  $('fold_'+kind).open=true;render();touch();
+  render();touch();
   setMsg('已导入到「'+KIND_LABEL[kind]+'」，共 '+symbols.length+' 只；尚未保存','ok');
 };
 
@@ -1068,10 +1022,6 @@ window.addEventListener('unhandledrejection',e=>setMsg('请求出错：'+(e.reas
 })();
 
 async function bootstrap(){
-  // 兼容旧版页脚书签：完整规则现只保留在首页。
-  if(new URLSearchParams(location.search).get('rules')==='1'){
-    location.replace('./#signalRules');return;
-  }
   loadingControls(true);
   try{
     const [groups,names]=await Promise.all(['groups.json','symbol-names.json'].map(async file=>{

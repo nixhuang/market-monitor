@@ -2,6 +2,7 @@
 import ast
 import hashlib
 import html
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
@@ -188,7 +189,7 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('--signal-bg:#182131; --collapse-bg:var(--signal-bg)', css)
         self.assertIn('#group_positions{background:linear-gradient(rgba(46,160,67,.02),rgba(46,160,67,.02)),var(--card);--collapse-bg:rgba(46,160,67,.15)}', css)
         self.assertIn('#group_positions_long.zone-card{background:rgba(46,160,67,.02)}', css)
-        self.assertIn('#signalCounts{border:1px solid #6686c6;box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}', css)
+        self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:var(--signal-border);border:1px solid var(--signal-border);box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}', css)
         button = re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1]
         self.assertIn('background:var(--collapse-bg)', button)
         self.assertIn('.collapse-group:hover{color:var(--text);background:var(--collapse-bg)}', css)
@@ -395,9 +396,10 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('id="dataSourceRules"', glossary)  # 旧来源链接锚点迁入新稿。
         self.assertIn('Cboe官方VIX日线优先', glossary)
         self.assertIn(monitor.BREADTH_CREDIT, glossary)
-        self.assertIn('href="#marketRiskRules"', page)
-        self.assertIn('href="#signalRules"', page)
-        self.assertIn('href="#glossary-fetch"', page)
+        self.assertNotIn('href="#marketRiskRules"', page)
+        self.assertNotIn('href="#signalRules"', page)
+        self.assertNotIn('href="#glossary-fetch"', page)
+        self.assertNotIn('<div class="foot">', page)
         self.assertNotIn('href="./edit.html?rules=1"', page)
 
     def test_static_rules_template_and_macro_footer_explain_new_earnings_window(self):
@@ -425,7 +427,8 @@ class RulesRegression(unittest.TestCase):
         for term in ('用美东财报日期对比北京今天', '红字保留期结束后才检查下一次',
                      '失败时沿用有效旧日期', '名单含今天至+15天', '待公布', '未知不猜钟点'):
             self.assertIn(term, plain_glossary)
-        self.assertIn('href="#rule-earnings">颜色与保留规则</a>', glossary[1])
+        self.assertNotIn('href="#rule-earnings"', glossary[1])
+        self.assertIn('用美东财报日期对比北京今天', plain_glossary)
         self.assertIn('财报前2～7天', H.unescape(re.sub(r'<[^>]+>', '', body)))
         self.assertNotIn('财报日期：', monitor._page_notes({}))
         visible = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', '', page, flags=re.S | re.I)
@@ -444,19 +447,62 @@ class RulesRegression(unittest.TestCase):
                 body = page_assets.rules_body(monitor.S, monitor._rule_constants())
                 rules_text = plain_text(body)
                 glossary = plain_text(page_assets.glossary_body(monitor.S, monitor._rule_constants()))
-                self.assertIn("第一条（短期）：自适应确认穿越 → 黄灯", rules_text)
-                self.assertIn("第二条（长期）：日内触及±1%或穿越 → 黄灯", rules_text)
+                self.assertIn("短均线：自适应确认穿越 → 黄灯", rules_text)
+                self.assertIn("长均线：日内触及±1%或穿越 → 黄灯", rules_text)
                 self.assertIn("两条同周期只计一次，按简单穿越判断", glossary)
                 self.assertNotIn("均线已关闭", rules_text)
                 self.assertNotIn("当前0日", rules_text)
-                for name, period in (("第一条（短期）", short), ("第二条（长期）", long)):
-                    status = f"当前{period}日" if period else "当前关闭"
+                for name, period in (("短均线", short), ("长均线", long)):
+                    status = "启用" if period else "关闭"
                     self.assertRegex(rules_text, re.escape(name) + r'[^\n]*（' + status + r'）')
-                    self.assertIn(name[:-1] + "，" + status + "）", glossary)
+                    self.assertIn(name + "（" + status + "）", glossary)
+                self.assertNotRegex(rules_text + glossary, r'当前\d+日|\d+日均线|第一条|第二条|2～250')
                 x = monitor._analysis_context("OFFLINE", {},
                     {"closes": [100.0] * 60, "price": 100, "prev_close": 100,
                      "highs": [], "lows": [], "dates": []}, "position")
                 self.assertEqual([p for p, _ in x.moving_averages], list(dict.fromkeys(p for p in (short, long) if p)))
+
+    def test_volume_slight_tightening_boundaries_and_fixed_rules_unchanged(self):
+        current = dict(monitor.DEFAULT_SETTINGS)
+        previous = dict(current, vol_ratio_z=1.8, vol_ratio_red_z=3.6)
+        self.assertEqual((current['vol_ratio_z'], current['vol_ratio_red_z']), (2, 3.6))
+        self.assertEqual((current['vol_ratio'], current['vol_ratio_red']), (1.5, 3))
+        with patch.object(monitor, 'BASE', str(ROOT)):
+            loaded = monitor.load_settings()
+        self.assertEqual((loaded['vol_ratio_z'], loaded['vol_ratio_red_z']), (2, 3.6))
+        def level(settings, z, ratio=2, intraday=False):
+            x = SimpleNamespace(vol_ratio=ratio, vol_ratio_z=z, vol_ratio_date='2026-10-22',
+                                vol_ratio_intraday=intraday, rt_vol_ratio=ratio, rt_vol_time='12:00')
+            alerts = monitor._Alerts()
+            with patch.object(monitor, 'S', settings):
+                monitor._rule_vol_ratio(alerts, x)
+            return alerts.level
+        for z, expected in ((1.8, 'green'), (1.999999, 'green'), (2, 'yellow'),
+                            (3.599999, 'yellow'), (3.6, 'red'), (3.999999, 'red'), (4, 'red')):
+            self.assertEqual(level(current, z), expected)
+        severity = {'green': 0, 'yellow': 1, 'red': 2}
+        for i in range(-20, 101):
+            z = i / 10
+            self.assertLessEqual(severity[level(current, z)], severity[level(previous, z)])
+            self.assertEqual(level(current, z) == 'red', level(previous, z) == 'red')
+        # 黄灯旧边界收紧；原红灯边界及其上下邻值完全不变。
+        self.assertEqual((level(previous, 1.8), level(current, 1.8)), ('yellow', 'green'))
+        for z in (3.599999, 3.6, 3.600001, 4, 10):
+            self.assertEqual(level(current, z), level(previous, z))
+        for intraday in (False, True):
+            for ratio, expected in ((1.499999, 'green'), (1.5, 'yellow'),
+                                    (2.999999, 'yellow'), (3, 'red')):
+                self.assertEqual(level(current, None, ratio, intraday), expected)
+                self.assertEqual(level(current, None, ratio, intraday), level(previous, None, ratio, intraday))
+        text = plain_text(page_assets.rules_body(current, monitor._rule_constants()))
+        self.assertIn('自适应：≥3.6σ → 红灯，≥2σ → 黄灯', text)
+        self.assertIn('固定：≥3× → 红灯，≥1.5× → 黄灯', text)
+
+    def test_statistics_collapse_bar_shares_border_color_only_in_statistics(self):
+        self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:var(--signal-border);border:1px solid var(--signal-border)', page_assets.PAGE_CSS)
+        self.assertIn('#signalCounts .collapse-group{color:#fff}', page_assets.PAGE_CSS)
+        self.assertIn('--collapse-bg:rgba(46,160,67,.15)', page_assets.PAGE_CSS)
+        self.assertNotIn('bar.appendChild(shortcut)', page_assets.RULES_INTERACTION_JS)
 
     def test_volume_adaptive_off_on_and_fixed_fallback(self):
         for yellow, red in ((0, 3.6), (1.8, 0), (0, 0), (1.8, 3.6)):
@@ -557,6 +603,72 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
             "--offline-node", "-e", script], cwd=ROOT, input=page_assets.PAGE_INTERACTION_JS,
             capture_output=True, text=True, encoding="utf-8", timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_editor_has_only_closed_settings_and_no_duplicate_rule_or_status_ui(self):
+        source = (ROOT / "edit.html").read_text(encoding="utf-8")
+        markup, script = source.split('<script src=', 1)
+        class Elements(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.tags = []
+            def handle_starttag(self, tag, attrs):
+                self.tags.append((tag, dict(attrs)))
+        elements = Elements()
+        elements.feed(markup)
+        by_id = {attrs['id']: (tag, attrs) for tag, attrs in elements.tags if 'id' in attrs}
+        for ident in ('setToggle', 'displayCard', 'importCard', 'dcaCard'):
+            with self.subTest(ident=ident):
+                tag, attrs = by_id[ident]
+                self.assertEqual(tag, 'details')
+                self.assertNotIn('open', attrs)
+        for tag, attrs in elements.tags:
+            if tag == 'details':
+                self.assertNotIn('open', attrs)
+        for ident in ('effectiveRuleText', 'ruleDetails', 'sourceDetails', 'targetSpaceNote',
+                      'appliedCard', 'appliedBrief', 'appliedState', 'dataTime', 'detailCard', 'runSummary'):
+            self.assertNotIn(ident, by_id)
+            self.assertNotIn(ident, script)
+        for phrase in ('布林判定说明', 'RSI判定说明', '量比判定说明', '目标空间固定分档',
+                       '单独布林只显示文字', '保存是否生效', '运行详情', 'monitorNote_'):
+            self.assertNotIn(phrase, source)
+        labels = re.findall(r'<label(?:\s[^>]*)?>(.*?)</label>', markup, re.S)
+        parameter_labels = [plain_text(label) for label in labels if '令牌' not in label]
+        self.assertTrue(parameter_labels)
+        self.assertTrue(all(len(label) <= 30 for label in parameter_labels), parameter_labels)
+        expected = set(rules_config.DEFAULT_SETTINGS) - {'target_space_pct', 'target_high_space_pct'}
+        actual = {ident.removeprefix('set_') for ident in by_id if ident.startswith('set_')}
+        self.assertEqual(actual, expected)
+        for ident in ('btnSave', 'btnSaveRules', 'btnResetRules', 'btnSaveDca', 'btnClearDca', 'btnReload'):
+            self.assertEqual(by_id[ident][0], 'button')
+            self.assertNotIn('hide', by_id[ident][1].get('class', '').split())
+        for ident in ('btnRun', 'btnRunNow', 'btnRuns', 'btnCheckStatus', 'runCard', 'runList'):
+            self.assertNotIn(ident, by_id)  # 不为删除的区域增加替代入口。
+        self.assertIn('id="authCard"', markup)
+        self.assertIn('id="manualCard"', markup)
+        self.assertIn('Contents: Read and write', markup)
+        self.assertIn('href="./index.html"', markup)
+        for tag, attrs in elements.tags:
+            if tag == 'a':
+                self.assertNotRegex(attrs.get('href', ''), r'(?i)(?:[?&]rules=|#(?:signalRules|rule[-\w]*))')
+        self.assertNotIn('signalRules', source)
+        self.assertNotRegex(script, r"\.get\(['\"]rules['\"]\)")
+        self.assertNotRegex(script, r'location\.(?:replace|assign)\s*\(')
+        schema = json.loads(re.search(r'const SET_SCHEMA=(.*?);\n', script)[1])
+        self.assertEqual([schema['defaults'][k] for k in ('vol_ratio_z', 'vol_ratio_red_z')], [2, 3.6])
+        self.assertEqual([schema['defaults'][k] for k in ('vix_green', 'vix_yellow', 'vix_red')], [20, 30, 40])
+
+    def test_editor_ui_removal_survives_generator_without_regeneration_or_writes(self):
+        source = (ROOT / "edit.html").read_text(encoding="utf-8")
+        generated = page_assets.sync_edit_html(source, ROOT, monitor._rule_constants())
+        self.assertEqual(source, generated)
+        self.assertEqual(generated, page_assets.sync_edit_html(generated, ROOT, monitor._rule_constants()))
+        for phrase in ('targetSpaceNote', 'appliedState', 'runSummary', 'monitorNote_', '判定说明', 'signalRules'):
+            self.assertNotIn(phrase, generated)
+        self.assertNotRegex(generated, r'(?i)(?:[?&]rules=|#rule[-\w]*)')
+        self.assertNotRegex(generated, r'<details\b[^>]*\sopen(?:\s|=|>)')
+        # 生成器与保存前校验仍保留全部参数，不因删除展示说明缩减规则。
+        self.assertEqual(json.loads(re.search(r'const SET_SCHEMA=(.*?);\n', generated)[1]),
+                         json.loads(json.dumps(rules_config.browser_schema())))
 
     def test_sync_check_does_not_import_monitor(self):
         with patch.object(sys, "argv", ["page_assets.py", "--check"]), \
