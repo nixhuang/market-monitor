@@ -392,7 +392,10 @@
     var k=el.getAttribute('data-ack');
     if(!writer){ window.alert(NOTICE||'本页只读，请先点击编辑接管'); return; }
     if(!validAckKey(k)) return;
-    setAck(k,!DATA.acks[k]); changed(); paint(); autoPush();
+    setAck(k,!DATA.acks[k]);
+    revision++; DATA.updated_at=new Date().toISOString(); dirty=true;
+    maintenancePending=true; maintenanceOnly=!positionsAuthorized; SYNC='local'; persist();
+    paint(); autoPush();
   });
   /* 键盘：已读按钮本身就是 <button>，Enter / 空格由浏览器直接触发，不需要额外接管
      （胶囊不再承担点击已读，所以这里不再处理 .lvtag） */
@@ -404,8 +407,18 @@
   var GH_API='https://api.github.com/repos/'+GH.owner+'/'+GH.repo+'/contents/'+GH.path;
   var LS_TOKEN='mm_gh_token_v1';
   /* 本地 dirty 与 revision 一起原子保存；只有确认对应快照且成功落盘才清除。
-     缓存用于恢复，但未经本轮远端核验不能作为“无需上传”的依据。 */
-  var CLOUD=null, cloudVerified=false, SYNC='synced', SYNC_MSG='';
+     新页缓存仅暂显，远端成功读取后覆盖；本页保存事务才允许核验/重试。 */
+  var CLOUD=null, cloudVerified=false, SYNC='pulling', SYNC_MSG='';
+  // 新页旧 dirty/事务没有仓位上传权限；只有本页明确保存或导入才授予。
+  var cloudFirstPending=true, positionsAuthorized=false, draftPending=false, ackChanges={};
+  var positionSave=null, positionGeneration=0, ackRevision=0;
+  function authorizePositions(){
+    positionSave={generation:++positionGeneration,payload:clone(DATA)};
+    positionsAuthorized=true;
+  }
+  function consumePositions(generation){
+    if(positionSave && positionSave.generation===generation){ positionSave=null; positionsAuthorized=false; }
+  }
   function ghToken(){
     if(isolated) return '';
     try{ return (localStorage.getItem(LS_TOKEN)||'').trim(); }catch(e){ return ''; }
@@ -483,14 +496,15 @@
   var _pullTry=0, _pullTimer=null;
   function startPull(){
     if(isolated || !writer || disposed) return;
-    var generation=++pullGeneration, rev=revision;
+    var generation=++pullGeneration;
+    SYNC='pulling';
     pullCloud(function(j){
-      if(disposed || !writer || generation!==pullGeneration || rev!==revision) return;
+      if(disposed || !writer || generation!==pullGeneration) return;
       if(j){
-        try{ mergeCloud(j); _pullTry=0; SYNC=inFlight?'loading':(dirty?'local':'synced'); }
+        try{ mergeCloud(j,cloudFirstPending); _pullTry=0; SYNC=inFlight?'loading':(!dirty && sameAsCloud()?'synced':'local'); }
         catch(e){ SYNC='nocloud'; NOTICE='云端数据校验失败：'+e.message; }
       }else{
-        SYNC=inFlight?'loading':(dirty?'local':'nocloud');
+        SYNC=inFlight?'loading':'nocloud';
         if(_pullTry<2){ _pullTry++; _pullTimer=setTimeout(startPull,_pullTry===1?5000:20000); }
       }
       // 拉取失败不上传内置快照；打开页面不是一次用户保存操作。
@@ -521,8 +535,10 @@
         }else if(sent.maintenanceOnly){
           if(!remote || !meta.sha) throw new Error('ACK 自动维护等待有效远端快照，不上传未核验本地数值');
           var maintained=clone(remote); reconcileAcks(maintained,sent.payload);
-          if(revision===sent.revision && maintenanceOnly && !editing){
-            DATA=clone(maintained); revision++; sent.revision=revision; persist();
+          mergeAckChanges(maintained,sent.payload,sent.ackChanges||{});
+          if(!positionsAuthorized && !editing && !draftPending){
+            var next=clone(maintained); reconcileAcks(next,DATA); mergeAckChanges(next,DATA,ackChanges);
+            DATA=next; revision++; sent.revision=revision; persist();
           }
           sent.payload=maintained;
         }
@@ -530,9 +546,10 @@
           cb(true,'内容已一致',remote); return null;
         }
         if(meta && !meta.sha) throw new Error('缺少远端 SHA，禁止覆盖');
-        // 在网络发送前原子记录未确认事务；超时、退出、刷新后都先核验这一 payload。
+        // 发送前原子记录未确认事务；同页超时先核验此 payload，新页不恢复该事务。
         uncertain={payload:clone(sent.payload),revision:sent.revision,
-          baseSha:sent.recovery?sent.baseSha:(meta?meta.sha:null),maintenanceOnly:!!sent.maintenanceOnly};
+          baseSha:sent.recovery?sent.baseSha:(meta?meta.sha:null),maintenanceOnly:!!sent.maintenanceOnly,
+          positionGeneration:sent.positionGeneration,ackRevision:sent.ackRevision,ackChanges:sent.ackChanges};
         if(!persist()) throw new Error('上传事务尚未持久化，暂停上传');
         if(!write(LS_PUSH_AT,Date.now())) throw new Error('上传节流状态未持久化');
         var body={message:'持仓同步 '+new Date().toISOString().slice(0,19).replace('T',' '),
@@ -545,17 +562,29 @@
         cb(ok,ok?'已上传':((r.data&&r.data.message)||('HTTP '+r.status)));
       }).catch(function(e){ cb(false,e.message||'网络失败'); });
   }
-  /* clean 仍按云端全量替换；dirty 不混入任何远端数字。撤销记录不做并集复活。 */
-  function mergeCloud(j){
+  /* 新页读取完整覆盖仓位；本页新草稿/保存仍受保护。ACK 撤销独立合并。 */
+  function mergeCloud(j,cloudWins){
     if(isolated || !j || !writer || disposed) return false;
     var remote=normalize(j);
     if(inFlight) return false;
     CLOUD=remote; cloudVerified=true;
     var cached=write(LS_CLOUD,remote);
-    if((dirty && !maintenanceOnly) || editing || uncertain) return false;
-    var next=clone(remote); reconcileAcks(next,DATA);
+    if(editing || draftPending){
+      // 远端核验可供纯 ACK 使用，但不授予替换当前草稿的权限。
+      if(maintenancePending) autoPush();
+      return false;
+    }
+    if(cloudWins){
+      if(positionsAuthorized) return false;
+      clearSaveTimers(); _retryN=0; uncertain=null;
+      dirty=false; maintenancePending=false; maintenanceOnly=false;
+      if(!write(LS_PENDING,0)) cached=false;
+    }else if((dirty && !maintenanceOnly) || uncertain) return false;
+    cloudFirstPending=false;
+    var next=clone(remote); reconcileAcks(next,DATA); mergeAckChanges(next,DATA,ackChanges);
     var different=canonical(next)!==canonical(DATA);
-    if(different){ DATA=next; revision++; }
+    DATA=next;
+    if(different) revision++;
     maintenancePending=canonical(next)!==canonical(remote);
     maintenanceOnly=maintenancePending;
     dirty=!cached || maintenancePending;
@@ -578,18 +607,23 @@
     queued=true;
     if(!ghToken()){ SYNC='local'; SYNC_MSG='未填 GitHub token'; paint(); return; }
     if(editing || inFlight || savePaused) return;
+    if(cloudFirstPending && !positionsAuthorized && !(cloudVerified && maintenancePending)) return;
+    if(!positionsAuthorized && !maintenancePending && !uncertain) return;
     if(_pushTimer) clearTimeout(_pushTimer);
     _pushTimer=setTimeout(function(){ _pushTimer=null; doPush(); },delay||0);
   }
   function doPush(){
     if(!writer || disposed || editing || savePaused || inFlight || !queued || (!dirty && !uncertain)) return;
-    if(maintenanceOnly && !cloudVerified && !uncertain) return;
+    if(cloudFirstPending && !positionsAuthorized && !(cloudVerified && maintenancePending)) return;
+    if(!positionsAuthorized && !maintenancePending && !uncertain) return;
+    if(!positionsAuthorized && !cloudVerified && !uncertain) return;
     if(!ghToken()) return;
     // 先重试本地原子落盘；失败时只允许用户导出，不冒充保存成功。
     if(!persist()){ paint(); return; }
-    if(sameAsCloud()){
+    if(!draftPending && sameAsCloud() && (!positionSave || canonical(positionSave.payload)===canonical(DATA))){
       if(!write(LS_CLOUD,CLOUD)){ paint(); return; }
-      queued=false; _retryN=0; SYNC=setPending(false)?'synced':'local'; paint(); return;
+      if(positionSave) consumePositions(positionSave.generation);
+      ackChanges={}; queued=false; _retryN=0; SYNC=setPending(false)?'synced':'local'; paint(); return;
     }
     var last=read(LS_PUSH_AT), wait=typeof last==='number'?30000-(Date.now()-last):0;
     if(storageErrors[LS_PUSH_AT]){ paint(); return; }
@@ -597,7 +631,12 @@
     if(!write(LS_PUSH_AT,Date.now())){ paint(); return; }
     // 在任何 await/GET 之前冻结 payload；之后只确认这一 revision，不读取回调时的 DATA。
     var sent=uncertain?Object.assign(clone(uncertain),{recovery:true}):
-      {payload:clone(DATA),revision:revision,maintenanceOnly:maintenanceOnly};
+      {payload:clone(positionSave?positionSave.payload:DATA),revision:revision,maintenanceOnly:!positionsAuthorized,
+        positionGeneration:positionSave?positionSave.generation:null,ackRevision:ackRevision,ackChanges:clone(ackChanges)};
+    if(!uncertain && positionSave){
+      // 仓位数字只来自明确保存时冻结的快照；ACK 不另授整仓上传权。
+      sent.payload.acks=clone(DATA.acks); sent.payload.ack_tombstones=clone(DATA.ack_tombstones);
+    }
     inFlight=sent; queued=false; pullGeneration++;
     SYNC='loading'; paint();
     pushCloud(sent,function(ok,msg,verifiedRemote,outcome){
@@ -610,14 +649,23 @@
       if(outcome==='superseded'){
         uncertain=null; cloudVerified=false; dirty=true; persist();
         SYNC='local'; SYNC_MSG='';
+        maintenanceOnly=!positionsAuthorized;
         if(maintenanceOnly){ if(verifiedRemote) mergeCloud(verifiedRemote); else startPull(); }
         requestSave(0,false);
       }else if(ok){
-        uncertain=null;
+        uncertain=null; consumePositions(sent.positionGeneration);
         CLOUD=verifiedRemote||sent.payload; cloudVerified=true;
         var cached=write(LS_CLOUD,CLOUD);
         _retryN=0; SYNC_MSG='';
-        if(cached && revision===sent.revision && canonical(DATA)===canonical(sent.payload)){
+        // 仓位授权按事务代次消费，ACK 按自己的版本确认；取消/重绘的 revision 不会复活授权。
+        maintenancePending=ackRevision!==sent.ackRevision;
+        maintenanceOnly=!positionsAuthorized && maintenancePending;
+        if(!maintenancePending) ackChanges={};
+        if(!positionsAuthorized && !draftPending && !editing){
+          var next=clone(CLOUD); reconcileAcks(next,DATA); mergeAckChanges(next,DATA,ackChanges);
+          DATA=next;
+        }
+        if(cached && !positionsAuthorized && !draftPending && canonical(DATA)===canonical(CLOUD)){
           SYNC=setPending(false)?'synced':'local';
         }else { dirty=true; persist(); SYNC='local'; }
         if(dirty) requestSave(0,false);
@@ -695,6 +743,13 @@
       if(t && Date.parse(t)>=Date.parse(target.acks[k])) delete target.acks[k];
     });
   }
+  function mergeAckChanges(target,source,keys){
+    Object.keys(keys).forEach(function(k){
+      var at=source.acks[k], old=target.acks[k];
+      if(at && (!old || Date.parse(at)>Date.parse(old))) target.acks[k]=at;
+    });
+    reconcileAcks(target,target);
+  }
   function canonical(d){
     function sorted(v){
       if(!object(v)) return v;
@@ -710,6 +765,10 @@
   var ACK_PRUNED=false, pullGeneration=0;
   var maintenancePending=false, maintenanceOnly=false, uncertain=null;
   function loadLocal(){
+    // 新生命周期先撤销旧运行时授权，即使缓存损坏，也不能复活 bfCache 里的待传仓位。
+    uncertain=null; cloudFirstPending=true; positionSave=null; positionsAuthorized=false;
+    draftPending=false; ackChanges={}; ackRevision=0; CLOUD=null; cloudVerified=false;
+    clearSaveTimers(); _retryN=0;
     var j=read(LS_LOCAL);
     try{
       if(j){ DATA=normalize(j,REAL); hadOwn=true; }
@@ -724,15 +783,8 @@
         // 旧维护若仅含退役撤销键，规范化后已无操作可提交。
         if(!Object.keys(DATA.ack_tombstones).length) maintenancePending=maintenanceOnly=false;
       }
-      uncertain=null;
-      var u=j&&j._local&&j._local.uncertain;
-      if(u){
-        if(!object(u) || (u.baseSha!==null && (typeof u.baseSha!=='string'||!u.baseSha))
-          || !Number.isSafeInteger(u.revision)) throw new Error('未确认上传事务无效');
-        uncertain={payload:normalize(u.payload),baseSha:u.baseSha,revision:u.revision,maintenanceOnly:!!u.maintenanceOnly};
-        dirty=true;
-      }
-      CLOUD=cloud?normalize(cloud):null; cloudVerified=false;
+      // 跨刷新未知事务不恢复、不重传；本页发起的事务仍按 SHA 核验。
+      CLOUD=cloud?normalize(cloud):null;
       if(storageErrors[LS_LOCAL] || storageErrors[LS_PENDING]){ dirty=true; return false; }
       return true;
     }catch(e){
@@ -766,9 +818,15 @@
       Date.parse(DATA.ack_tombstones[k]||'')+1||0);
     if(on) DATA.acks[k]=new Date(at).toISOString();
     else { delete DATA.acks[k]; DATA.ack_tombstones[k]=new Date(at).toISOString(); }
+    ackChanges[k]=true; ackRevision++;
   }
   function pruneAck(k){
-    if(writer && DATA.acks[k]){ setAck(k,false); ACK_PRUNED=true; }
+    if(!writer || !DATA.acks[k]) return;
+    if(!isolated && cloudFirstPending && !positionsAuthorized){
+      // 初始本地缓存只供暂显；不能用其旧成本/数量判断远端 ACK 已过期。
+      maintenancePending=true; maintenanceOnly=true; ACK_PRUNED=true; return;
+    }
+    setAck(k,false); ACK_PRUNED=true;
   }
   // 统计层兼容旧均线键；事实明细合并，交集只认真实身份，不触碰判灯规则。
   function signalIdentity(symbol){
@@ -1173,9 +1231,12 @@
   }
   function persistMaintenance(){
     ACK_PRUNED=false; maintenancePending=true;
-    if(!dirty || maintenanceOnly){
+    if(cloudFirstPending && !positionsAuthorized){
+      // 旧 dirty/uncertain 不能把启动 paint 的维护升格为仓位保存或使初始 GET 失效。
+      maintenanceOnly=true; persist(); return;
+    }
+    if(!positionsAuthorized || !dirty || maintenanceOnly){
       maintenanceOnly=true;
-      // 尚未核验时只落盘 tombstone，不增加用户 revision，也不使初始 pull 失效。
       if(cloudVerified){ revision++; dirty=true; }
       persist();
     }else changed();
@@ -1185,7 +1246,7 @@
     if(writer){ cb(true); return; }
     if(acquiring||disposed){ cb(false); return; }
     if(isolated){
-      writer=true; cloud=null;
+      writer=true; cloud=null; savePaused=false;
       if(loadLocal()) persist();
       cb(true); return;
     }
@@ -1195,13 +1256,16 @@
       if(!lock || disposed){
         NOTICE='另一标签页正在管理仓位，本页只读；关闭该页后点击编辑接管'; cb(false); return;
       }
-      writer=true; pullGeneration++;
+      writer=true; pullGeneration++; savePaused=false;
       cloud=read(LS_CLOUD); var valid=loadLocal();
-      NOTICE='';
+      NOTICE=''; SYNC='pulling'; _pullTry=0;
+      if(_pullTimer){ clearTimeout(_pullTimer); _pullTimer=null; }
       return new Promise(function(resolve){
         releaseWriter=resolve;
         if(valid) persist();
         cb(true);
+        // 接管入口（含点击编辑）统一启动新读取；在编辑回调之后捕获新 generation。
+        startPull(); paint();
       });
     }).catch(function(){
       acquiring=false; writer=false; releaseWriter=null;
@@ -1211,15 +1275,15 @@
   window.addEventListener('storage',function(e){
     if(isolated || writer || disposed || (e.key!==LS_LOCAL && e.key!==LS_CLOUD)) return;
     cloud=read(LS_CLOUD); loadLocal(); pullGeneration++;
-    SYNC=dirty?'local':'synced'; paint();
+    SYNC='pulling'; paint();
   });
   window.addEventListener('pagehide',function(){
     disposed=true; pullGeneration++; clearSaveTimers();
     editing=false; snapshot=null; savePaused=true; editGeneration++;
     if(_pullTimer) clearTimeout(_pullTimer);
     if(_paintFrame){ cancelAnimationFrame(_paintFrame); _paintFrame=null; }
-    // PUT 发送前已原子记录 uncertain。退出可立即取消客户端等待并释放锁；
-    // 接管页只会核验/重发同一 SHA 事务，不会把取消误认为服务器没有写入。
+    // 退出取消客户端等待并释放锁；新页只读远端，不恢复旧事务或重传旧仓位。
+    // 已发送的 PUT 仍可能在服务器完成，读取失败时不能据此声称同步成功。
     activeRequests.slice().forEach(function(cancel){ cancel(); });
     inFlight=null;
     if(isolated) writer=false;
@@ -1227,7 +1291,7 @@
   });
   window.addEventListener('pageshow',function(e){
     if(!e.persisted) return;
-    disposed=false; syncEditUI(); takeOwnership(function(ok){ if(ok) startPull(); paint(); });
+    disposed=false; syncEditUI(); takeOwnership(function(){ paint(); });
   });
 
   /* ---------- 3. 「仓位管理」独立面板（统计面板上方；编辑功能内置） ---------- */
@@ -1330,7 +1394,7 @@
 
   /* ---------- 4. 编辑态：点「编辑」就地改，点「保存并上传」落盘并同步 ---------- */
   var editing=false, snapshot=null, prevDirty=false, editOrder={}, editGeneration=0;
-  var prevMaintenanceOnly=false, prevMaintenancePending=false;
+  var prevMaintenanceOnly=false, prevMaintenancePending=false, prevDraftPending=false;
   var _paintFrame=null;
   function syncEditUI(){
     editBtn.textContent=editing?'编辑中':'编辑';
@@ -1348,6 +1412,7 @@
       clearSaveTimers(); pullGeneration++; editGeneration++;
       snapshot=clone(DATA); prevDirty=dirty;
       prevMaintenanceOnly=maintenanceOnly; prevMaintenancePending=maintenancePending;
+      prevDraftPending=draftPending;
       editOrder={};
       Array.prototype.forEach.call(document.querySelectorAll('#'+PID+' li[data-sym]'),
         function(li,i){ editOrder[li.getAttribute('data-sym')]=i; });
@@ -1369,8 +1434,11 @@
         dirty=prevDirty; maintenanceOnly=prevMaintenanceOnly; maintenancePending=prevMaintenancePending; persist();
       }
     }
+    if(restore) draftPending=prevDraftPending;
+    if(!positionsAuthorized && maintenancePending) maintenanceOnly=true;
+    if(restore && !positionsAuthorized && !draftPending && !inFlight && sameAsCloud()) setPending(false);
     editing=false; snapshot=null; savePaused=false; syncEditUI(); paint();
-    if(maintenanceOnly && !cloudVerified) startPull();
+    if(cloudFirstPending && !draftPending && !positionsAuthorized || maintenanceOnly && !cloudVerified) startPull();
     if(dirty || uncertain) requestSave(0,false);
   }
   editBtn.addEventListener('click', function(e){
@@ -1382,7 +1450,11 @@
     if(panel.querySelector('input:invalid')){ NOTICE='存在无效输入，请修正后保存'; stateEl.textContent=NOTICE; return; }
     // 保存立即结束本轮编辑；异步回执绝不关闭后来开始的编辑会话。
     editing=false; snapshot=null; savePaused=false; editGeneration++; pullGeneration++;
-    if(!dirty && !sameAsCloud() && !maintenanceOnly) changed();
+    if(draftPending || !maintenanceOnly){
+      draftPending=false; cloudFirstPending=false; maintenanceOnly=false;
+      if(!dirty && !sameAsCloud()) changed();
+      authorizePositions();
+    }
     persist(); syncEditUI();
     if(maintenanceOnly && !cloudVerified) startPull();
     requestSave(0,true); paint();
@@ -1417,7 +1489,8 @@
     // 换设备刚填完 token：立刻重开一轮云端拉取（原来只补传，取不到就是取不到）
     _pullTry=0; if(_pullTimer){ clearTimeout(_pullTimer); _pullTimer=null; }
     SYNC='pulling'; startPull();
-    if(dirty){ SYNC='local'; autoPush(); }   // 还有没传上去的改动，顺手补传
+    // token 只恢复本页已授权的保存/ACK队列，不补传刷新前的仓位或未保存草稿。
+    if(dirty && (positionsAuthorized || maintenanceOnly && cloudVerified)) autoPush();
     paint();
   });
   // 卡片被收起时自动退出编辑态：已敲进去的数字保留（变成「未同步」），不偷偷丢
@@ -1442,7 +1515,7 @@
     var next=normalize(j);
     if(!writer || disposed) throw new Error('本页只读，请先点击编辑接管');
     clearSaveTimers(); pullGeneration++; editGeneration++;
-    DATA=next; changed(); hadOwn=true;
+    DATA=next; draftPending=false; cloudFirstPending=false; changed(); authorizePositions(); hadOwn=true;
     editing=false; snapshot=null; savePaused=false; syncEditUI();
     NOTICE=storageErrors[LS_LOCAL]?'导入尚未持久化，请立即导出备份':
       (isolated?'导入已保存到当前标签页会话；隔离预览不上传云端':
@@ -1490,7 +1563,7 @@
       DATA.cash=total; DATA.cash_extra=second;
     }else if(f==='fixed'||f==='fixed_cost') DATA[f]=value;
     else { if(!DATA.items[sym]) DATA.items[sym]={cost:0,qty:0}; DATA.items[sym][f]=value; }
-    changed();
+    draftPending=true; changed();
     if(!_paintFrame) _paintFrame=requestAnimationFrame(function(){ _paintFrame=null; paint(); });
   });
 
@@ -1880,10 +1953,10 @@
       : SYNC==='pulling' ? '<span class="warn">拉取中…</span>'
       : SYNC==='loading' ? '<span class="warn">上传中…</span>'
       : SYNC==='error' ? '<span class="warn" aria-label="'+msg+'">上传失败</span>'
+      : SYNC==='nocloud' ? '<span class="'+ncCls+'" aria-label="'+ncTip+'">云端未取到</span>'
       : uncertain ? '<span class="warn">上传结果待核验</span>'
       : maintenancePending && !cloudVerified ? '<span class="warn">ACK 维护待云端核验</span>'
-      : dirty ? '<span class="warn">未同步'+(tk?'':' · 未填 token')+'</span>'
-      : SYNC==='nocloud' ? '<span class="'+ncCls+'" aria-label="'+ncTip+'">云端未取到</span>'
+      : dirty || !sameAsCloud() ? '<span class="warn">未同步'+(tk?'':' · 未填 token')+'</span>'
       : '<span class="ok" aria-label="'+okTip+'">已同步</span>';
     /* 底部：一条横条画资产结构占比（长持仓深绿 / 短持仓浅绿 / 现金青 / 固定收益橙），
        下面只留「颜色图标 + 比例」，不再写名称和金额——横条本身已经用颜色分段，
@@ -1929,7 +2002,7 @@
   });
   paint();
   syncEditUI();
-  takeOwnership(function(ok){ if(ok) startPull(); paint(); });
+  takeOwnership(function(){ paint(); });
 
   /* 默认展开的只有「统计」（monitor.py 生成时就带 open），持仓 / 重点 / 市场风险 / 仓位管理
      全部默认折叠——10-14 定的口径。2026-10-19 修：这段 DEMO 残留会把持仓和仓位管理强行展开，

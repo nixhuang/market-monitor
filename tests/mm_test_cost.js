@@ -185,7 +185,7 @@ async function boot(opts={}){
     __MM_RULES__:opts.rules};
   ctx.window=ctx;
   const hooks=`globalThis.__costTest={normalize,canonical,mergeCloud,requestSave,autoPush,doPush,startPull,enterEdit,exitEdit,importData,exportData,cashFirst,nearPrice,ackStatEntries,paint,setAck,pruneAck,
-    state:()=>({DATA:clone(DATA),CLOUD:CLOUD&&clone(CLOUD),revision,dirty,maintenanceOnly,maintenancePending,cloudVerified,uncertain:uncertain&&clone(uncertain),deadline:REQUEST_DEADLINE,activeRequests:activeRequests.length,editing,inFlight:inFlight&&clone(inFlight),queued,writer,SYNC,NOTICE,savePaused,storageErrors:clone(storageErrors)}),
+    state:()=>({DATA:clone(DATA),CLOUD:CLOUD&&clone(CLOUD),revision,dirty,maintenanceOnly,maintenancePending,cloudVerified,cloudFirstPending,positionsAuthorized,positionSave:positionSave&&clone(positionSave),positionGeneration,ackRevision,draftPending,uncertain:uncertain&&clone(uncertain),deadline:REQUEST_DEADLINE,activeRequests:activeRequests.length,editing,inFlight:inFlight&&clone(inFlight),queued,writer,SYNC,NOTICE,savePaused,storageErrors:clone(storageErrors)}),
     rows:ROWS};`;
   const code=SOURCE.replace(/^<script>\s*/,'').replace(/\s*<\/script>\s*$/,'').replace('__MM_REAL__',JSON.stringify(opts.seed||SEED))
     .replace(/\}\)\(\);\s*$/,hooks+'})();');
@@ -241,11 +241,318 @@ for(const f of ['cash','fixed','fixed_cost'])test(f+'零值刷新不回填',asyn
 test('旧备份没有real不被种子覆盖',async()=>{let d=copy(SEED);d.items.AAA.qty=7;let b=await boot({local:d});assert.equal(b.state().DATA.items.AAA.qty,7);assert.equal(b.local().real,true);});
 test('旧版本只补缺字段并记录版本',async()=>{let d=copy(SEED);delete d.items.AAA.qty;delete d.cash;let b=await boot({local:d});assert.equal(b.local().items.AAA.qty,5);assert.equal(b.local().cash,30);assert.equal(b.local().schema_version,2);});
 test('新版缺项不复活种子标的',async()=>{let b=await boot({local:{schema_version:2,items:{AAA:{cost:0,qty:0}},cash:0,fixed:0,fixed_cost:0}});assert.equal(b.state().DATA.items.BBB,undefined);});
-test('dirty整份保留，云端不补零或缺项',async()=>{let b=await boot();await b.enter();b.edit('AAA','qty','0');b.edit('USD','cash','0');b.exitEdit(false);b.mergeCloud({...SEED,items:{AAA:{cost:555,qty:9},CCC:{cost:1,qty:1}}});assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.state().DATA.cash,0);assert.equal(b.state().DATA.items.CCC,undefined);});
+test('同页未保存dirty草稿整份保留，云端不补零或缺项',async()=>{let b=await boot();await b.enter();b.edit('AAA','qty','0');b.edit('USD','cash','0');b.exitEdit(false);b.mergeCloud({...SEED,items:{AAA:{cost:555,qty:9},CCC:{cost:1,qty:1}}});assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.state().DATA.cash,0);assert.equal(b.state().DATA.items.CCC,undefined);});
 test('clean云端仍按整份替换而不是合并持仓',async()=>{let b=await boot();b.mergeCloud({items:{AAA:{cost:1,qty:0}},cash:0});assert.equal(b.state().DATA.items.BBB,undefined);assert.equal(b.state().DATA.cash,0);});
 test('导入ACK、固定收益、零值并刷新等值',async()=>{
   let b=await boot({token:false});let d={schema_version:2,real:true,updated_at:'2026-10-20T10:00:00Z',items:{AAA:{cost:200,qty:7}},cash:0,fixed:123,fixed_cost:100,acks:{'AAA|loss20':'2026-10-20T09:00:00Z','AAA|fund|20260630':'2026-10-20T09:30:00Z'},ack_tombstones:{'AAA|loss10':'2026-10-20T08:00:00Z'}};
   b.importData(d);assert.ok(b.state().NOTICE.includes('尚未上传'));let expected=b.canonical(b.state().DATA);await b.dispose();let c=await boot({store:b.store});assert.equal(c.canonical(c.state().DATA),expected);assert.equal(c.state().DATA.acks['AAA|fund|20260630'],undefined);assert.ok(c.state().DATA.acks['AAA|loss20']);assert.equal(c.state().dirty,true);
+});
+// 刷新云端优先：以下请求与存储均来自 boot 的真实脚本 mock，不访问真实数据。
+const cloudNumbers = d => copy({items:d.items,cash:d.cash,cash_extra:d.cash_extra,fixed:d.fixed,fixed_cost:d.fixed_cost});
+for(const residue of ['dirty','uncertain','legacy','clean-pending'])for(const shape of ['双现金删除零值','全零空仓'])test('刷新'+residue+'云端全量覆盖'+shape+'且不补传',async()=>{
+  const local={...copy(SEED),cash:300,cash_extra:100,_local:{revision:41,dirty:residue!=='clean-pending'}};
+  if(residue==='uncertain')local._local.uncertain={payload:{...copy(SEED),cash:777},revision:40,baseSha:'old-sha'};
+  if(residue==='legacy')delete local._local;
+  const store=shared({[LOCAL]:local,[CLOUD]:SEED,[PENDING]:1,[TOKEN]:'test-token',[PUSH_AT]:NOW-1000});
+  const b=await boot({store}),remote={schema_version:2,items:shape==='全零空仓'?{}:{AAA:{cost:0,qty:0},NEW:{cost:12,qty:3}},
+    cash:shape==='全零空仓'?0:70,cash_extra:shape==='全零空仓'?0:20,fixed:0,fixed_cost:0};
+  assert.equal(b.state().SYNC,'pulling');assert.equal(b.state().positionsAuthorized,false);
+  assert.match(b.requests[0].url,/ref=data/);b.respond(b.requests[0],meta(remote,'fresh-sha'));await settle();
+  assert.deepEqual(cloudNumbers(b.state().DATA),cloudNumbers(b.normalize(remote)));
+  assert.deepEqual(cloudNumbers(b.local()),cloudNumbers(b.normalize(remote)));
+  assert.equal(b.local().items.BBB,undefined);assert.equal(b.state().dirty,false);assert.equal(b.state().uncertain,null);
+  assert.equal(b.local()._local.uncertain,null);assert.equal(b.local()._local.maintenancePending,false);
+  assert.equal(store.values.get(PENDING),'0');assert.equal(store.values.get(PUSH_AT),String(NOW-1000));
+  assert.equal(b.state().queued,false);assert.equal(b.state().SYNC,'synced');await b.tick(180000);
+  assert.equal(b.requests.length,1);assert.equal(b.puts().length,0);
+});
+test('刷新无token仅GET读取data分支并替换双现金',async()=>{
+  const b=await boot({token:false,local:{...copy(SEED),_local:{dirty:true,revision:3}}});
+  assert.equal(b.requests[0].init.headers,undefined);assert.match(b.requests[0].url,/\/data\/position-costs\.json\?t=/);
+  const remote={...copy(SEED),cash:10,cash_extra:10};b.respond(b.requests[0],remote);await settle();await b.tick(180000);
+  assert.equal(b.state().DATA.cash,10);assert.equal(b.cashFirst(b.state().DATA),0);assert.equal(b.state().DATA.cash_extra,10);
+  assert.equal(b.state().dirty,false);assert.equal(b.state().SYNC,'synced');assert.equal(b.requests.length,1);assert.equal(b.puts().length,0);
+});
+test('刷新已一致的dirty和旧事务仍清理所有残留标记',async()=>{
+  const local={...copy(SEED),_local:{dirty:true,revision:7,uncertain:{payload:copy(SEED),revision:7,baseSha:'old'}}};
+  const store=shared({[LOCAL]:local,[TOKEN]:'test-token',[PENDING]:1}),b=await boot({store});
+  b.respond(b.requests[0],meta(SEED));await settle();await b.tick(180000);
+  assert.equal(b.local()._local.dirty,false);assert.equal(b.local()._local.uncertain,null);
+  assert.equal(b.local()._local.maintenanceOnly,false);assert.equal(store.values.get(PENDING),'0');
+  assert.equal(b.state().SYNC,'synced');assert.equal(b.puts().length,0);assert.equal(b.requests.length,1);
+});
+for(const token of [true,false])test('刷新读取失败旧dirty未知事务不PUT且标题优先云端未取到 token='+token,async()=>{
+  const local={...copy(SEED),_local:{dirty:true,revision:5,uncertain:{payload:copy(SEED),revision:5,baseSha:'old'}}};
+  const b=await boot({local,token});
+  b.respond(b.requests[0],{},500);await settle();if(token){b.respond(b.requests.at(-1),{},404);await settle();}
+  assert.equal(b.state().SYNC,'nocloud');assert.match(b.doc.getElementById('costState').textContent,/云端未取到/);
+  assert.doesNotMatch(b.doc.getElementById('costState').textContent,/已同步/);
+  await b.tick(600000);assert.equal(b.puts().length,0);assert.equal(b.state().inFlight,null);
+  assert.equal(b.state().cloudVerified,false);assert.equal(b.state().SYNC,'nocloud');assert.equal(b.local().cash,30);
+});
+test('API读取失败后raw成功仍按云端全量覆盖旧dirty',async()=>{
+  const b=await boot({local:{...copy(SEED),_local:{dirty:true,revision:9}}});b.respond(b.requests[0],{},403);await settle();
+  b.respond(b.requests.at(-1),{items:{},cash:0});await settle();await b.tick(90000);
+  assert.deepEqual(copy(b.local().items),{});assert.equal(b.state().dirty,false);assert.equal(b.state().SYNC,'synced');
+  assert.equal(b.requests.length,2);assert.equal(b.puts().length,0);
+});
+test('刷新前未保存草稿保留本机，重启读取后被云端覆盖且绝不自动上传',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
+  b.edit('AAA','qty','99');b.edit('USD','cash_extra','40');const panel=b.doc.getElementById('costManage');
+  panel.open=false;panel.fire('toggle');assert.equal(b.local().items.AAA.qty,99);assert.equal(b.local().cash_extra,40);
+  await b.dispose();const c=await boot({store:b.store});c.respond(c.requests[0],meta(SEED));await settle();await c.tick(180000);
+  assert.equal(c.local().items.AAA.qty,5);assert.equal(c.local().cash_extra,0);assert.equal(c.local().cash,30);
+  assert.equal(c.state().SYNC,'synced');assert.equal(c.puts().length,0);assert.equal(c.requests.length,1);
+});
+test('明确保存上传成功后重启读取远端即同步，不额外提交',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','11');await b.save();
+  const put=await finishPush(b),remote=b.payload(put);assert.equal(b.state().dirty,false);await b.dispose();
+  const c=await boot({store:b.store,now:NOW+1000});c.respond(c.requests[0],meta(remote,'saved'));await settle();await c.tick(180000);
+  assert.equal(c.local().items.AAA.qty,11);assert.equal(c.state().SYNC,'synced');assert.equal(c.puts().length,0);assert.equal(c.requests.length,1);
+});
+for(const residue of ['dirty','uncertain'])test('刷新'+residue+'伴过期ACK只基于新远端数字维护且初始GET有效',async()=>{
+  const local=staleAck();local._local={dirty:true,revision:19};
+  if(residue==='uncertain')local._local.uncertain={payload:copy(local),revision:18,baseSha:'old-sha'};
+  const b=await boot({local}),remote={...freshRemote(),cash:700,cash_extra:250,fixed:0,fixed_cost:0,items:{AAA:{cost:100,qty:0}}};
+  assert.equal(b.state().revision,19);assert.equal(b.state().SYNC,'pulling');assert.equal(b.local().ack_tombstones['AAA|loss10'],undefined);
+  await b.tick(5000);assert.equal(b.requests.length,1);assert.equal(b.puts().length,0);
+  b.respond(b.requests[0],meta(remote));await settle();assert.deepEqual(cloudNumbers(b.state().DATA),cloudNumbers(b.normalize(remote)));
+  assert.ok(b.local().ack_tombstones['AAA|loss10']);assert.equal(b.state().maintenanceOnly,true);
+  await b.tick(1200);const newer={...remote,cash:800,cash_extra:300};b.respond(b.requests.at(-1),meta(newer,'new-sha'));await settle();
+  const put=b.puts()[0];assert.ok(put);assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(newer)));
+  assert.equal(JSON.parse(put.init.body).sha,'new-sha');b.respond(put,{});await settle();await b.tick(180000);
+  assert.equal(b.puts().length,1);assert.equal(b.state().dirty,false);assert.equal(b.state().SYNC,'synced');
+});
+test('旧本地看似过期的ACK在新远端成本仍有效时保留且不维护上传',async()=>{
+  const local=staleAck();local._local={dirty:true,revision:6};const remote=staleAck();remote.items.AAA.cost=120;
+  const b=await boot({local});assert.equal(b.local().ack_tombstones['AAA|loss10'],undefined);
+  b.respond(b.requests[0],meta(remote));await settle();await b.tick(180000);
+  assert.ok(b.state().DATA.acks['AAA|loss10']);assert.equal(b.state().DATA.ack_tombstones['AAA|loss10'],undefined);
+  assert.equal(b.state().DATA.items.AAA.cost,120);assert.equal(b.state().dirty,false);assert.equal(b.puts().length,0);
+});
+test('新页填token只重开读取，不补传旧dirty或未知事务',async()=>{
+  const b=await boot({token:false,local:{...copy(SEED),_local:{dirty:true,revision:7}}}),old=b.requests[0];
+  b.ctx.prompt=()=> 'mock-token';b.doc.getElementById('costManage').fire('click',{target:b.doc.getElementById('costState')});await settle();
+  const get=b.requests.at(-1);assert.notEqual(get,old);b.respond(get,meta({...SEED,cash:900}));await settle();
+  b.respond(old,SEED);await settle();await b.tick(180000);assert.equal(b.state().DATA.cash,900);
+  assert.equal(b.puts().length,0);assert.equal(b.requests.length,2);assert.equal(b.state().dirty,false);
+});
+test('同页未保存草稿不因填token和迟到初始GET上传或回退',async()=>{
+  const b=await boot({token:false});await b.enter();b.edit('AAA','qty','88');
+  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');
+  b.ctx.prompt=()=> 'mock-token';panel.fire('click',{target:b.doc.getElementById('costState')});await settle();
+  b.respond(b.requests.at(-1),meta({...SEED,cash:999}));await settle();b.respond(b.requests[0],SEED);await settle();await b.tick(180000);
+  assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.local().items.AAA.qty,88);assert.equal(b.puts().length,0);
+  assert.equal(b.state().dirty,true);assert.equal(b.state().positionsAuthorized,false);
+});
+test('未保存同页草稿的明确ACK仅上传远端仓位，不被旧回执清dirty或循环上传',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();
+  await b.enter();b.edit('AAA','qty','88');b.exitEdit(false);b.ack('AAA|add|95');await b.tick(1200);
+  const remote={...copy(SEED),cash:1234,cash_extra:34};b.respond(b.requests.at(-1),meta(remote));await settle();
+  const put=b.puts()[0];assert.ok(put);assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));
+  assert.ok(b.payload(put).acks['AAA|add|95']);b.respond(put,{});await settle();await b.tick(180000);
+  assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.state().dirty,true);assert.equal(b.state().positionsAuthorized,false);
+  assert.equal(b.puts().length,1);assert.equal(b.requests.length,3);
+});
+test('初始GET迟到不得覆盖只进入编辑未输入的新会话',async()=>{
+  const b=await boot();await b.enter();b.respond(b.requests[0],meta({...SEED,cash:999}));await settle();
+  assert.equal(b.state().editing,true);assert.equal(b.state().DATA.cash,30);assert.equal(b.doc.querySelector('input[data-f="cash"]').value,'30');
+});
+test('同页明确保存两次以最后成功保存为准，旧ACK和GET不得带出后来未保存草稿',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}}),initial=b.requests[0];await b.enter();b.edit('AAA','qty','7');await b.save();
+  const first=await finishPush(b);await b.enter();b.edit('AAA','qty','9');await b.save();await b.tick(30000);
+  b.respond(b.requests.at(-1),meta(b.payload(first),'first'));await settle();const second=b.puts()[1];
+  assert.equal(b.payload(second).items.AAA.qty,9);await b.enter();b.edit('AAA','qty','88');b.ack('AAA|add|95');
+  b.respond(second,{});await settle();b.respond(initial,meta(SEED));await settle();await b.tick(90000);
+  assert.equal(b.state().CLOUD.items.AAA.qty,9);assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.state().editing,true);
+  assert.equal(b.state().dirty,true);assert.equal(b.puts().length,2);
+});
+test('已同步仓位后的明确ACK只维护更晚远端，不重写此前保存的仓位',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();
+  await b.enter();b.edit('AAA','qty','7');await b.save();await finishPush(b);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);
+  b.ack('AAA|add|95');await b.tick(30000);const remote={...copy(SEED),cash:999,cash_extra:99,items:{AAA:{cost:123,qty:20}}};
+  b.respond(b.requests.at(-1),meta(remote,'external'));await settle();const put=b.puts()[1];assert.ok(put);
+  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));assert.ok(b.payload(put).acks['AAA|add|95']);
+  b.respond(put,{});await settle();assert.equal(b.state().DATA.items.AAA.qty,20);assert.equal(b.state().dirty,false);
+});
+test('初始GET期间明确ACK不使读取失效，合并ACK但仓位仍云端完整覆盖',async()=>{
+  const b=await boot({local:{...copy(SEED),_local:{dirty:true,revision:12}},rules:{trigger_gap_pct:6}}),initial=b.requests[0];
+  b.ack('AAA|add|95');await b.tick(5000);assert.equal(b.puts().length,0);assert.equal(b.requests.length,1);
+  const remote={...copy(SEED),cash:450,cash_extra:50,items:{AAA:{cost:0,qty:0}}};b.respond(initial,meta(remote));await settle();
+  assert.deepEqual(cloudNumbers(b.local()),cloudNumbers(b.normalize(remote)));assert.ok(b.state().DATA.acks['AAA|add|95']);
+  await b.tick(1200);b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
+  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));b.respond(put,{});await settle();
+  assert.equal(b.state().dirty,false);assert.equal(b.state().SYNC,'synced');
+});
+test('云端校验失败不覆盖本地、不PUT也不假同步',async()=>{
+  const b=await boot({local:{...copy(SEED),_local:{dirty:true,revision:12}}});
+  b.respond(b.requests[0],meta({items:{AAA:{cost:1,qty:-1}},cash:999}));await settle();await b.tick(180000);
+  assert.equal(b.state().DATA.cash,30);assert.equal(b.local().items.AAA.qty,5);assert.equal(b.state().SYNC,'nocloud');
+  assert.match(b.doc.getElementById('costState').textContent,/云端未取到/);assert.equal(b.puts().length,0);
+});
+for(const key of [LOCAL,CLOUD,PENDING])test('云端覆盖时'+key+'落盘失败不假同步也不自动PUT',async()=>{
+  const b=await boot({local:{...copy(SEED),_local:{dirty:true,revision:3}}});b.store.failSet.add(key);
+  b.respond(b.requests[0],meta({...SEED,cash:555}));await settle();await b.tick(180000);
+  assert.equal(b.state().DATA.cash,555);assert.equal(b.state().dirty,true);assert.notEqual(b.state().SYNC,'synced');
+  assert.match(b.doc.getElementById('costState').textContent,/未持久化/);assert.equal(b.puts().length,0);
+});
+test('旧dirty读取失败后自动重试成功只采用新云端，不补传本地',async()=>{
+  const b=await boot({token:false,local:{...copy(SEED),_local:{dirty:true,revision:3}}});
+  b.respond(b.requests[0],{},500);await settle();assert.equal(b.state().SYNC,'nocloud');await b.tick(5000);
+  b.respond(b.requests[1],{items:{},cash:0});await settle();await b.tick(180000);
+  assert.equal(b.state().dirty,false);assert.equal(b.state().SYNC,'synced');assert.deepEqual(copy(b.local().items),{});
+  assert.equal(b.requests.length,2);assert.equal(b.puts().length,0);
+});
+test('本页上传失败重启后读取较新云端覆盖失败快照，无自动重试旧PUT',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','9');await b.save();
+  await finishPush(b,500);assert.equal(b.state().SYNC,'error');assert.ok(b.local()._local.uncertain);await b.dispose();
+  const c=await boot({store:b.store}),remote={...copy(SEED),cash:300,items:{AAA:{cost:100,qty:12}}};
+  assert.equal(c.state().SYNC,'pulling');c.respond(c.requests[0],meta(remote));await settle();await c.tick(180000);
+  assert.equal(c.state().DATA.items.AAA.qty,12);assert.equal(c.state().SYNC,'synced');assert.equal(c.state().uncertain,null);
+  assert.equal(c.requests.length,1);assert.equal(c.puts().length,0);
+});
+test('事务生命周期 ACK维护GET期间编辑取消不会复活已成功仓位授权',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();
+  await b.enter();b.edit('AAA','qty','7');await b.save();await finishPush(b);
+  b.ack('AAA|add|95');await b.tick(30000);const maintenanceGet=b.requests.at(-1);
+  assert.equal(b.state().inFlight.maintenanceOnly,true);await b.enter();b.edit('AAA','qty','88');b.doc.getElementById('costCancel').click();
+  const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};b.respond(maintenanceGet,meta(remote,'external'));await settle();
+  const maintenancePut=b.puts()[1];assert.ok(maintenancePut);assert.deepEqual(cloudNumbers(b.payload(maintenancePut)),cloudNumbers(b.normalize(remote)));
+  const count=b.requests.length;b.respond(maintenancePut,{});await settle();await b.tick(30000);
+  if(b.requests.length>count){b.respond(b.requests.at(-1),meta(b.payload(maintenancePut),'ack-done'));await settle();}
+  assert.equal(b.puts().length,2,'ACK回执不得再上传qty7/cash30旧仓位');assert.equal(b.requests.length,count);
+});
+test('事务生命周期 保存PUT期间新增ACK，仓位成功后只走最新远端ACK维护',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();
+  await b.enter();b.edit('AAA','qty','7');await b.save();b.respond(b.requests.at(-1),meta(SEED));await settle();const first=b.puts()[0];
+  b.ack('AAA|add|95');b.respond(first,{});await settle();await b.tick(30000);
+  const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};b.respond(b.requests.at(-1),meta(remote,'external'));await settle();
+  const ackPut=b.puts()[1];assert.ok(ackPut);assert.deepEqual(cloudNumbers(b.payload(ackPut)),cloudNumbers(b.normalize(remote)));
+  assert.ok(b.payload(ackPut).acks['AAA|add|95']);b.respond(ackPut,{});await settle();assert.equal(b.state().dirty,false);
+});
+test('事务生命周期 初始草稿收起重入取消后核验远端可上传ACK但不能替换草稿',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}}),initial=b.requests[0];await b.enter();b.edit('AAA','qty','88');
+  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');await b.enter();b.doc.getElementById('costCancel').click();
+  assert.equal(b.state().draftPending,true);assert.equal(b.state().savePaused,false);b.ack('AAA|add|95');
+  b.ctx.prompt=()=> 'mock-token';panel.fire('click',{target:b.doc.getElementById('costState')});await settle();
+  const pull=b.requests.at(-1),remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};b.respond(pull,meta(remote));await settle();
+  assert.equal(b.state().cloudVerified,true);assert.equal(b.state().DATA.items.AAA.qty,88);await b.tick(1200);
+  const get=b.requests.at(-1);assert.notEqual(get,pull,'核验成功后待维护ACK不能永久被cloudFirstPending阻塞');
+  b.respond(get,meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
+  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));assert.ok(b.payload(put).acks['AAA|add|95']);
+  b.respond(put,{});await settle();b.respond(initial,meta(SEED));await settle();await b.tick(180000);
+  assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.local().items.AAA.qty,88);assert.equal(b.puts().length,1);
+});
+test('事务生命周期 bfCache恢复新生命周期解除旧pause后ACK可正常维护',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.dispose();
+  b.fireWindow('pageshow',{persisted:true});await settle();const pull=b.requests.at(-1);b.respond(pull,meta(SEED));await settle();
+  b.ack('AAA|add|95');await b.tick(1200);const get=b.requests.at(-1);assert.notEqual(get,pull,'bfCache旧pause不得阻挡ACK');
+  assert.equal(b.state().savePaused,false);b.respond(get,meta(SEED));await settle();const put=b.puts()[0];assert.ok(put);
+  b.respond(put,{});await settle();assert.equal(b.state().dirty,false);
+});
+test('事务生命周期 只读storage后点击编辑接管必须新GET并保护新草稿',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();const c=await boot({store:b.store});
+  c.fireWindow('storage',{key:LOCAL});assert.equal(c.state().writer,false);assert.equal(c.requests.length,0);await b.dispose();await c.enter();
+  assert.equal(c.state().writer,true);assert.equal(c.requests.length,1,'接管点击编辑后必须开始新的云端GET');
+  assert.equal(c.state().SYNC,'pulling');assert.doesNotMatch(c.doc.getElementById('costState').textContent,/已同步/);
+  c.edit('AAA','qty','88');const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};c.respond(c.requests[0],meta(remote));await settle();
+  assert.equal(c.state().DATA.items.AAA.qty,88);assert.equal(c.state().editing,true);assert.equal(c.puts().length,0);
+});
+test('事务生命周期 ACK维护PUT期间编辑取消后只确认维护事务不整仓重传',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();await finishPush(b);
+  b.ack('AAA|add|95');await b.tick(30000);const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};
+  b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[1],count=b.requests.length;
+  await b.enter();b.edit('AAA','qty','88');b.doc.getElementById('costCancel').click();b.respond(put,{});await settle();await b.tick(180000);
+  assert.equal(b.puts().length,2);assert.equal(b.requests.length,count);assert.equal(b.state().positionSave,null);
+  assert.equal(b.local().items.AAA.qty,20);assert.equal(b.local().cash,999);assert.equal(b.state().dirty,false);
+});
+test('事务生命周期 保存成功发生在新编辑期间，取消不能复活消费的仓位代次',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
+  b.respond(b.requests.at(-1),meta(SEED));await settle();const put=b.puts()[0];await b.enter();b.edit('AAA','qty','88');
+  b.respond(put,{});await settle();assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().editing,true);
+  b.doc.getElementById('costCancel').click();assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);
+  assert.equal(b.local().items.AAA.qty,7);assert.equal(b.state().dirty,false);
+  b.ack('AAA|add|95');await b.tick(30000);const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};
+  assert.equal(b.state().inFlight.maintenanceOnly,true);b.respond(b.requests.at(-1),meta(remote));await settle();
+  assert.deepEqual(cloudNumbers(b.payload(b.puts()[1])),cloudNumbers(b.normalize(remote)));b.respond(b.puts()[1],{});await settle();
+});
+for(const action of ['保存','导入'])test('事务生命周期 旧仓位回执不能消费后来的新'+action+'代次',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
+  b.respond(b.requests.at(-1),meta(SEED));await settle();const first=b.puts()[0],oldGeneration=b.state().positionSave.generation;
+  if(action==='保存'){await b.enter();b.edit('AAA','qty','9');await b.save();}else b.importData({...copy(SEED),cash:456,items:{AAA:{cost:100,qty:9}}});
+  const newGeneration=b.state().positionSave.generation;assert.ok(newGeneration>oldGeneration);b.respond(first,{});await settle();
+  assert.equal(b.state().positionsAuthorized,true);assert.equal(b.state().positionSave.generation,newGeneration);await b.tick(30000);
+  b.respond(b.requests.at(-1),meta(b.payload(first),'first-done'));await settle();const second=b.puts()[1];assert.ok(second);
+  assert.equal(b.payload(second).items.AAA.qty,9);if(action==='导入')assert.equal(b.payload(second).cash,456);
+  b.respond(second,{});await settle();assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);assert.equal(b.state().dirty,false);
+});
+test('事务生命周期 ACK维护旧回执不消费维护期间的新明确保存',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();b.ack('AAA|add|95');await b.tick(1200);
+  b.respond(b.requests.at(-1),meta(SEED));await settle();const ackPut=b.puts()[0];await b.enter();b.edit('AAA','qty','9');await b.save();
+  const generation=b.state().positionSave.generation;b.respond(ackPut,{});await settle();assert.equal(b.state().positionSave.generation,generation);
+  await b.tick(30000);b.respond(b.requests.at(-1),meta(b.payload(ackPut),'ack-done'));await settle();const saved=b.puts()[1];
+  assert.ok(saved);assert.equal(b.payload(saved).items.AAA.qty,9);b.respond(saved,{});await settle();assert.equal(b.state().positionSave,null);
+});
+test('事务生命周期 内容已一致的明确保存也消费授权，后续ACK只用远端新数字',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','5');await b.save();
+  assert.equal(b.puts().length,0);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);
+  b.ack('AAA|add|95');await b.tick(1200);const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};
+  b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
+  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));b.respond(put,{});await settle();
+});
+test('事务生命周期 未成功仓位事务保留代次用于同页重试但不带新草稿',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
+  const generation=b.state().positionSave.generation;await finishPush(b,500);assert.equal(b.state().positionSave.generation,generation);
+  await b.enter();b.edit('AAA','qty','88');b.doc.getElementById('costCancel').click();await b.tick(30000);
+  b.respond(b.requests.at(-1),meta(SEED,'fixture-sha'));await settle();const retry=b.puts()[1];assert.ok(retry);assert.equal(b.payload(retry).items.AAA.qty,7);
+  b.respond(retry,{});await settle();assert.equal(b.state().positionSave,null);assert.equal(b.local().items.AAA.qty,7);assert.equal(b.state().dirty,false);
+});
+for(const token of [false,true])test('事务生命周期 初始草稿远端核验与ACK基底分离 token='+token,async()=>{
+  const b=await boot({token,rules:{trigger_gap_pct:6}});await b.enter();b.edit('AAA','qty','88');
+  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');await b.enter();b.doc.getElementById('costCancel').click();
+  b.ack('AAA|add|95');b.ctx.prompt=()=> 'new-token';panel.fire('click',{target:b.doc.getElementById('costState')});await settle();
+  const pull=b.requests.at(-1),remote={...copy(SEED),cash:999,cash_extra:99,items:{AAA:{cost:100,qty:20}}};b.respond(pull,meta(remote));await settle();
+  assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.state().cloudVerified,true);assert.equal(b.state().cloudFirstPending,true);
+  await b.tick(1200);assert.notEqual(b.requests.at(-1),pull);b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
+  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));b.respond(put,{});await settle();await b.tick(180000);
+  assert.equal(b.puts().length,1);assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.state().dirty,true);assert.equal(b.state().positionsAuthorized,false);
+});
+test('事务生命周期 同页主动折叠暂停不会因新GET或ACK被接管复位',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','88');
+  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');b.ack('AAA|add|95');b.startPull();await settle();
+  b.respond(b.requests.at(-1),meta({...SEED,cash:999}));await settle();await b.tick(180000);
+  assert.equal(b.state().savePaused,true);assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.puts().length,0);
+  await b.dispose();b.fireWindow('pageshow',{persisted:true});await settle();assert.equal(b.state().savePaused,false);
+  b.respond(b.requests.at(-1),meta(SEED));await settle();assert.equal(b.state().DATA.items.AAA.qty,5);assert.equal(b.puts().length,0);
+});
+test('事务生命周期 只读缓存没有核验资格，接管失败读取不得默认已同步',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();const c=await boot({store:b.store});c.fireWindow('storage',{key:CLOUD});
+  assert.equal(c.state().cloudVerified,false);assert.notEqual(c.state().SYNC,'synced');await b.dispose();await c.enter();
+  const initial=c.requests[0];c.doc.getElementById('costCancel').click();await settle();const retry=c.requests.at(-1);assert.notEqual(retry,initial);
+  c.respond(initial,meta({...SEED,cash:111}));await settle();assert.equal(c.state().cloudVerified,false);
+  c.respond(retry,{},500);await settle();c.respond(c.requests.at(-1),{},404);await settle();
+  assert.equal(c.state().SYNC,'nocloud');assert.doesNotMatch(c.doc.getElementById('costState').textContent,/已同步/);assert.equal(c.puts().length,0);
+});
+test('事务生命周期 接管编辑未输入时只有真实GET且内容一致才显示已同步',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();const c=await boot({store:b.store});c.fireWindow('storage',{key:LOCAL});
+  await b.dispose();await c.enter();assert.equal(c.state().cloudVerified,false);assert.doesNotMatch(c.doc.getElementById('costState').textContent,/已同步/);
+  c.respond(c.requests[0],meta(SEED));await settle();assert.equal(c.state().cloudVerified,true);assert.equal(c.state().SYNC,'synced');
+  assert.match(c.doc.getElementById('costState').textContent,/已同步/);assert.equal(c.state().editing,true);assert.equal(c.puts().length,0);
+});
+test('事务生命周期 bfCache缓存损坏也先撤销旧仓位授权，读取成功仍云端覆盖',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
+  assert.ok(b.state().positionSave);await b.dispose();b.store.values.set(LOCAL,'{invalid');b.fireWindow('pageshow',{persisted:true});await settle();
+  assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);assert.equal(b.state().cloudFirstPending,true);
+  const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};b.respond(b.requests.at(-1),meta(remote));await settle();await b.tick(180000);
+  assert.equal(b.local().items.AAA.qty,20);assert.equal(b.local().cash,999);assert.equal(b.puts().length,0);assert.equal(b.state().dirty,false);
+});
+test('事务生命周期 成功PUT即消费仓位授权，缓存落盘失败不因ACK重传旧仓位',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
+  b.store.failSet.add(CLOUD);await finishPush(b);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);
+  assert.equal(b.state().dirty,true);assert.notEqual(b.state().SYNC,'synced');b.store.failSet.delete(CLOUD);
+  b.ack('AAA|add|95');await b.tick(30000);const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};
+  b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[1];assert.ok(put);
+  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));b.respond(put,{});await settle();assert.equal(b.state().dirty,false);
 });
 const invalids=[
   ['数组items',{items:[]}],['null items',{items:null}],['字符串金额',{items:{},cash:'1'}],['负数量',{items:{AAA:{cost:1,qty:-1}}}],
@@ -354,11 +661,12 @@ test('导入与新版本正常保存不再带出退役fund键',async()=>{
 test('ACK撤销写tombstone，旧云端并集不能复活',async()=>{let b=await boot();let key='AAA|add|95';b.ack(key);b.ack(key);assert.ok(b.local().ack_tombstones[key]);assert.equal(b.state().DATA.acks[key],undefined);let old=copy(SEED);old.acks={[key]:'2026-10-19T00:00:00Z'};b.mergeCloud(old);assert.equal(b.state().DATA.acks[key],undefined);});
 test('clean拉取也保留较新的ACK撤销记录',async()=>{let key='AAA|loss10';let d={...SEED,ack_tombstones:{[key]:'2026-10-20T00:00:00Z'}};let b=await boot({local:d});b.mergeCloud({...SEED,acks:{[key]:'2026-10-19T00:00:00Z'}});assert.equal(b.state().DATA.acks[key],undefined);assert.ok(b.state().DATA.ack_tombstones[key]);assert.equal(b.state().dirty,true);});
 test('较新的明确ACK可以再次确认',async()=>{let key='AAA|loss20';let b=await boot({local:{...SEED,ack_tombstones:{[key]:'2026-10-20T00:00:00Z'}}});let d=copy(SEED);d.items.AAA.cost=200;d.acks={[key]:'2026-10-20T01:00:00Z'};b.mergeCloud(d);assert.ok(b.state().DATA.acks[key]);});
-test('自动清理已读持久化待维护操作而非未核验整份dirty',async()=>{
+test('初始ACK过期候选仅等待云端，不按旧本地数字构造撤销',async()=>{
   let b=await boot({local:{...SEED,acks:{'AAA|loss10':'2026-10-19T00:00:00Z'}},token:false});
-  assert.ok(b.local().ack_tombstones['AAA|loss10']);assert.equal(b.state().dirty,false);
-  assert.equal(b.local()._local.maintenancePending,true);assert.equal(b.local()._local.maintenanceOnly,true);
-  assert.equal(b.state().revision,0);assert.match(b.doc.getElementById('costState').textContent,/待云端核验/);
+  assert.ok(b.local().acks['AAA|loss10']);assert.equal(b.local().ack_tombstones['AAA|loss10'],undefined);
+  assert.equal(b.state().dirty,false);assert.equal(b.local()._local.maintenancePending,true);
+  assert.equal(b.local()._local.maintenanceOnly,true);assert.equal(b.state().revision,0);
+  assert.equal(b.state().SYNC,'pulling');assert.match(b.doc.getElementById('costState').textContent,/拉取中/);
 });
 test('清仓后重绘成本数量和loss状态不会残留',async()=>{let d=copy(SEED);d.items.AAA.cost=200;let b=await boot({local:d});await b.enter();b.edit('AAA','qty','0');await b.tick(16);assert.equal(b.rows[0].qty,0);assert.equal(b.rows[0].lossLv,0);assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'0');});
 test('零固定收益也能在编辑态输入',async()=>{let b=await boot({local:{...SEED,fixed:0,fixed_cost:0}});await b.enter();b.edit('BOND','fixed','12.3456');assert.equal(b.local().fixed,12.3456);});
@@ -380,7 +688,12 @@ test('不支持Web Locks安全降级为隔离会话编辑',async()=>{
   assert.equal(b.sessionLocal().items.AAA.qty,9);assert.equal(b.store.values.get(LOCAL),original);assert.equal(b.requests.length,0);
   assert.match(b.doc.getElementById('costState').textContent,/隔离预览/);assert.match(b.doc.getElementById('costFoot').textContent,/关闭标签页前请导出/);
 });
-test('跨tab取得写权后依旧遵守持久化节流',async()=>{let b=await boot();await b.enter();b.edit();await b.save();await finishPush(b);let c=await boot({store:b.store,now:NOW+1000});await b.dispose();await c.enter();c.edit('AAA','qty','7');await c.save();assert.equal(c.requests.length,0);await c.tick(29000);assert.equal(c.requests.length,1);});
+test('跨tab接管先GET且仓位保存依旧遵守持久化节流',async()=>{
+  let b=await boot();await b.enter();b.edit();await b.save();await finishPush(b);let c=await boot({store:b.store,now:NOW+1000});
+  await b.dispose();await c.enter();assert.equal(c.requests.length,1);assert.equal(c.state().SYNC,'pulling');
+  c.edit('AAA','qty','7');await c.save();assert.equal(c.requests.length,1);await c.tick(29000);assert.equal(c.requests.length,2);
+  assert.equal(c.puts().length,0);
+});
 test('输入每次立即落盘但同帧只重绘一次并保留选区',async()=>{
   let b=await boot();await b.enter();let before=b.doc.renders,writes=b.store.writes.filter(x=>x.k===LOCAL).length;
   let start=performance.now();for(let i=1;i<=20;i++)b.edit('AAA','qty',String(i));let inputMs=performance.now()-start;
@@ -399,15 +712,20 @@ test('慢GET后两次实际PUT也必须间隔30秒',async()=>{
 });
 test('旧cloud缓存未核验时不能直接清dirty',async()=>{
   let s=shared({[LOCAL]:{...SEED,_local:{dirty:true,revision:3}},[CLOUD]:SEED,[TOKEN]:'test-token'});
-  let b=await boot({store:s});b.requestSave(0,true);await b.tick(0);assert.equal(b.state().dirty,true);assert.ok(b.state().inFlight);
-  let remote={...SEED,cash:123};b.respond(b.requests.at(-1),{sha:'s',content:Buffer.from(JSON.stringify(remote)).toString('base64')});await settle();assert.equal(b.puts().length,1);
+  let b=await boot({store:s});b.requestSave(0,true);await b.tick(0);
+  assert.equal(b.state().dirty,true);assert.equal(b.state().inFlight,null);assert.equal(b.requests.length,1);
+  let remote={...SEED,cash:123};b.respond(b.requests[0],meta(remote));await settle();
+  assert.equal(b.state().DATA.cash,123);assert.equal(b.state().dirty,false);assert.equal(b.puts().length,0);
 });
 test('GET核验canonical相同则不产生重复PUT',async()=>{
   let b=await boot();await b.enter();b.edit('AAA','qty','7');await b.save();let d=b.state().DATA;d.items={BBB:{qty:2,cost:90},AAA:{qty:7,cost:100}};
   b.respond(b.requests.at(-1),{sha:'s',content:Buffer.from(JSON.stringify(d)).toString('base64')});await settle();assert.equal(b.puts().length,0);assert.equal(b.state().dirty,false);
 });
-test('损坏本地存储在云端返回后也不自动被覆盖',async()=>{
-  let s=shared({[LOCAL]:'{invalid',[TOKEN]:'test-token'});let b=await boot({store:s});b.respond(b.requests[0],{content:Buffer.from(JSON.stringify(SEED)).toString('base64')});await settle();assert.equal(s.values.get(LOCAL),'{invalid');assert.equal(b.state().dirty,true);
+test('有效云端读取可替换损坏的旧本地缓存但不触发上传',async()=>{
+  let s=shared({[LOCAL]:'{invalid',[TOKEN]:'test-token'});let b=await boot({store:s});
+  assert.equal(s.values.get(LOCAL),'{invalid');b.respond(b.requests[0],meta(SEED));await settle();
+  assert.equal(b.canonical(b.local()),b.canonical(b.normalize(SEED)));assert.equal(b.state().dirty,false);
+  assert.equal(b.puts().length,0);assert.equal(b.state().SYNC,'synced');
 });
 test('bfcache恢复不会用旧取消快照覆盖接管后的数据',async()=>{
   let b=await boot();await b.enter();b.edit('AAA','qty','7');await b.dispose();let c=await boot({store:b.store});await c.enter();c.edit('AAA','qty','9');await c.dispose();
@@ -420,7 +738,7 @@ test('404仅表示不存在并允许创建data文件',async()=>{
   let b=await boot();await b.enter();b.edit();await b.save();b.respond(b.requests.at(-1),{},404);await settle();assert.equal(b.puts().length,1);assert.equal(JSON.parse(b.puts()[0].init.body).sha,undefined);
 });
 test('自动ACK上传中撤销不会让旧回执清除dirty',async()=>{
-  let b=await boot({rules:{trigger_gap_pct:6,reduce_gap_pct:3}});let key='AAA|add|95';b.ack(key);await b.tick(1200);b.ack(key);let p=await finishPush(b);assert.ok(b.payload(p).acks[key]);assert.equal(b.state().DATA.acks[key],undefined);assert.equal(b.state().dirty,true);await b.tick(30000);let q=await finishPush(b);assert.ok(b.payload(q).ack_tombstones[key]);assert.equal(b.state().dirty,false);
+  let b=await boot({rules:{trigger_gap_pct:6,reduce_gap_pct:3}});b.respond(b.requests[0],meta(SEED));await settle();let key='AAA|add|95';b.ack(key);await b.tick(1200);b.ack(key);let p=await finishPush(b);assert.ok(b.payload(p).acks[key]);assert.equal(b.state().DATA.acks[key],undefined);assert.equal(b.state().dirty,true);await b.tick(30000);let q=await finishPush(b);assert.ok(b.payload(q).ack_tombstones[key]);assert.equal(b.state().dirty,false);
 });
 test('无效输入经过重绘仍阻止保存',async()=>{
   let b=await boot();await b.enter();b.edit('AAA','qty','-1');b.paint();await b.save();assert.equal(b.state().editing,true);assert.equal(b.puts().length,0);assert.equal(b.local().items.AAA.qty,5);
@@ -464,14 +782,16 @@ test('移回持仓沿用保留旧值但不自动抹成本或增加现金',async(
 });
 test('移出再移回后的亏损及减仓重新生效，仅保留仍有效的加仓ACK',async()=>{
   let d=copy(SEED);d.items.AAA.cost=200;d.acks={'AAA|loss20':'2026-10-19T00:00:00Z','AAA|add|95':'2026-10-19T00:00:00Z','AAA|cut|104':'2026-10-19T00:00:00Z'};
-  let b=await boot({local:d,rules:{trigger_gap_pct:6,reduce_gap_pct:4},token:false});b.move('AAA','focus');
+  let b=await boot({local:d,rules:{trigger_gap_pct:6,reduce_gap_pct:4},token:false});
+  b.respond(b.requests[0],d);await settle();b.move('AAA','focus');
   assert.equal(b.state().DATA.acks['AAA|loss20'],undefined);assert.ok(b.state().DATA.ack_tombstones['AAA|loss20']);
   assert.ok(b.state().DATA.acks['AAA|add|95']);assert.equal(b.state().DATA.acks['AAA|cut|104'],undefined);
   assert.ok(b.state().DATA.ack_tombstones['AAA|cut|104']);b.move('AAA','positions');
   assert.equal(b.rows[0].lossLv,2);assert.equal(b.rows[0].lossAcked,false);assert.equal(b.rows[0].tr.className,'red');
 });
 test('非持仓重点组只保留加仓提醒，残留减仓胶囊隐藏且不计灰',async()=>{
-  let b=await boot({groups:{AAA:'focus'},rules:{trigger_gap_pct:6,reduce_gap_pct:4}});let r=b.rows.find(r=>r.sym==='AAA');
+  let b=await boot({groups:{AAA:'focus'},rules:{trigger_gap_pct:6,reduce_gap_pct:4}});
+  b.respond(b.requests[0],meta(SEED));await settle();let r=b.rows.find(r=>r.sym==='AAA');
   assert.equal(r.warnAdd.style.display,'inline');assert.equal(r.warnCut.style.display,'none');assert.equal(r.warn.style.display,'none');
   assert.equal(r.cutCap.style.display,'none');b.ack('AAA|add|95');assert.equal(r.tr.className,'green');
   b.ack('AAA|cut|104');assert.equal(r.tr.className,'green');assert.equal(b.state().DATA.acks['AAA|cut|104'],undefined);
@@ -651,17 +971,21 @@ test('未知PUT远端SHA已变化先结束旧事务再上传新revision',async()
   await b.tick(30000);b.respond(b.requests.at(-1),meta({...SEED,cash:100},'external-sha'));await settle();assert.equal(b.payload(b.puts()[1]).items.AAA.qty,3);
   b.respond(b.puts()[1],{});await settle();b.respond(old,{});await settle();assert.equal(b.state().CLOUD.items.AAA.qty,3);assert.equal(b.state().dirty,false);
 });
-test('PUT未确认事务跨刷新保存且新页先核验不盲目重传',async()=>{
-  let b=await boot();b.respond(b.requests[0],meta(SEED));await settle();let put=await beginPut(b);await b.dispose();assert.equal(put.init.signal.aborted,true);
-  let c=await boot({store:b.store,now:NOW+61000});assert.ok(c.state().uncertain);c.respond(c.requests[0],meta(b.payload(put),'done-sha'));await settle();
-  assert.equal(c.state().dirty,true);c.requestSave(0,true);await c.tick(0);c.respond(c.requests.at(-1),meta(b.payload(put),'done-sha'));await settle();
-  assert.equal(c.puts().length,0);assert.equal(c.state().dirty,false);assert.equal(c.state().uncertain,null);
+test('PUT未确认事务跨刷新不恢复，首次读取确认远端后直接同步',async()=>{
+  let b=await boot();b.respond(b.requests[0],meta(SEED));await settle();let put=await beginPut(b);
+  assert.ok(b.local()._local.uncertain);await b.dispose();assert.equal(put.init.signal.aborted,true);
+  let c=await boot({store:b.store,now:NOW+61000});assert.equal(c.state().uncertain,null);
+  c.respond(c.requests[0],meta(b.payload(put),'done-sha'));await settle();await c.tick(90000);
+  assert.equal(c.puts().length,0);assert.equal(c.requests.length,1);assert.equal(c.state().dirty,false);
+  assert.equal(c.local()._local.uncertain,null);assert.equal(c.state().SYNC,'synced');
 });
-test('PUT在途pagehide取消等待释放锁而接管页仍执行SHA核验',async()=>{
+test('PUT在途pagehide释放锁，新页接管后先读取而不恢复旧事务',async()=>{
   let b=await boot();b.respond(b.requests[0],meta(SEED));await settle();let put=await beginPut(b),c=await boot({store:b.store,now:NOW+61000});
-  await b.dispose();assert.equal(b.state().activeRequests,0);assert.equal(b.state().inFlight,null);await c.enter();assert.equal(c.state().writer,true);assert.ok(c.state().uncertain);
-  await c.save();let get=c.requests.at(-1);assert.notEqual(get.init.method,'PUT');c.respond(get,meta(b.payload(put),'finished-sha'));await settle();
-  assert.equal(c.puts().length,0);assert.equal(c.state().dirty,false);
+  await b.dispose();assert.equal(b.state().activeRequests,0);assert.equal(b.state().inFlight,null);
+  c.fireWindow('pageshow',{persisted:true});await settle();assert.equal(c.state().writer,true);
+  assert.equal(c.state().uncertain,null);c.respond(c.requests[0],meta({...SEED,cash:555},'external-sha'));await settle();
+  b.respond(put,{});await settle();await c.tick(90000);
+  assert.equal(c.puts().length,0);assert.equal(c.state().DATA.cash,555);assert.equal(c.state().dirty,false);
 });
 test('未知PUT恢复GET再次超时仍保留事务且不再阻塞inFlight',async()=>{
   let b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await beginPut(b);await b.tick(b.state().deadline);
@@ -1660,4 +1984,5 @@ for(const original of ['red','green'])test('ACKCASE原'+original+'三条ACK只�
   b.ack('AAA|loss10');assert.equal(r.tr.className,'red');assertRowPair(b,'AAA',false);
 });
 
-(async()=>{let passed=0;for(const t of tests){try{await t.fn();passed++;console.log('PASS '+t.name);}catch(e){console.error('FAIL '+t.name+'\n'+e.stack);process.exitCode=1;}}console.log('\n仓位面板离线测试：'+passed+'/'+tests.length+' 通过');})();
+const selectedTests=process.env.MM_COST_TEST_FILTER?tests.filter(t=>t.name.includes(process.env.MM_COST_TEST_FILTER)):tests;
+(async()=>{let passed=0;assert.ok(selectedTests.length,'定向测试必须匹配真实用例');for(const t of selectedTests){try{await t.fn();passed++;console.log('PASS '+t.name);}catch(e){console.error('FAIL '+t.name+'\n'+e.stack);process.exitCode=1;}}console.log('\n仓位面板离线测试：'+passed+'/'+selectedTests.length+' 通过');})();
