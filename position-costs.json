@@ -80,6 +80,8 @@
    "qty": 10
   }
  },
- "acks": {},
+ "acks": {
+  "AVGO|loss10": "2026-10-23T12:47:46.026Z"
+ },
  "ack_tombstones": {}
 }
