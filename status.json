@@ -9,16 +9,16 @@
     "next_in": 14,
     "next_date": "2026-11-12"
   },
-  "run_id": "40044139930",
+  "run_id": "40101315167",
   "request_id": "",
-  "source_sha": "810090a72dbaa4032dd89f536cabb57788bc57c2",
-  "input_hash": "1f16df2fd3a51e4aaf8e81cb6a728069f598bb841370bace9c09f67fc737a174",
-  "build_id": "40044139930-1",
-  "started_at": "2026-10-24T00:16:19+00:00",
-  "started_at_bj": "2026-10-24T08:16:19+08:00",
-  "finished_at": "2026-10-24T08:18:22.141037+08:00",
-  "finished_at_bj": "2026-10-24T08:18:22+08:00",
-  "event": "schedule",
+  "source_sha": "a312ecc6b7c1c2714ae28b5e1baf4a755107dd94",
+  "input_hash": "03ab0eef0c23817d90bf8ae0a2e30e53a21a602d774e813efc6a196928fe9142",
+  "build_id": "40101315167-1",
+  "started_at": "2026-10-24T14:10:26+00:00",
+  "started_at_bj": "2026-10-24T22:10:26+08:00",
+  "finished_at": "2026-10-24T22:12:56.346080+08:00",
+  "finished_at_bj": "2026-10-24T22:12:56+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-23",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
@@ -38,8 +38,8 @@
     "near_52w_low_pct": 3,
     "trigger_gap_pct": 3,
     "reduce_gap_pct": 3,
-    "target_space_pct": 30,
-    "target_high_space_pct": 70,
+    "target_space_pct": 40,
+    "target_high_space_pct": 90,
     "target_gap_pct": 3,
     "vol_ratio": 1.5,
     "vol_ratio_red": 3,
@@ -198,7 +198,7 @@
     "yellow": 28,
     "green": 64,
     "gray": 0,
-    "purple": 39,
+    "purple": 26,
     "total": 98,
     "macro_ok": 6,
     "stale_symbols": [],
@@ -274,7 +274,7 @@
       "label": "共识价",
       "red": 0,
       "yellow": 0,
-      "purple": 39
+      "purple": 26
     }
   },
   "signal_members": {
@@ -395,12 +395,12 @@
           "level": "red",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "↓",
               "tone": "red",
-              "label": "RSI3条超卖"
+              "label": "RSI 3条 ↓超卖"
             }
           ],
-          "rsi_hits": "3条超卖"
+          "rsi_hits": "RSI 3条 ↓超卖"
         }
       ],
       "yellow": [],
@@ -608,7 +608,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 71.50~74.68，现价偏离 +0.3%）"
+              "text": "日内触及250日均线 ±1%区间（日内 71.44~74.68，现价偏离 +0.3%）"
             },
             {
               "kind": "ma_cross",
@@ -846,7 +846,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 133.19~136.82，现价偏离 +1.7%）"
+              "text": "日内触及250日均线 ±1%区间（日内 133.19~136.85，现价偏离 +1.7%）"
             }
           ]
         },
@@ -894,7 +894,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 42.35~43.20，现价偏离 -0.5%）"
+              "text": "日内触及250日均线 ±1%区间（日内 42.35~43.21，现价偏离 -0.5%）"
             }
           ]
         }
@@ -947,30 +947,6 @@
       "yellow": [],
       "purple": [
         {
-          "symbol": "HII",
-          "note": "亨廷顿英格尔斯工业",
-          "group": "position",
-          "hold": "short",
-          "level": "green",
-          "space": 30.042323409223584,
-          "band": "medium",
-          "price": 356.42,
-          "kind": "consensus",
-          "detail": "共识价 356.42，空间 +30.0%"
-        },
-        {
-          "symbol": "APH",
-          "note": "安费诺",
-          "group": "position",
-          "hold": "long",
-          "level": "yellow",
-          "space": 38.979619381832904,
-          "band": "medium",
-          "price": 102.97,
-          "kind": "consensus",
-          "detail": "共识价 102.97，空间 +39.0%"
-        },
-        {
           "symbol": "AVGO",
           "note": "博通",
           "group": "position",
@@ -989,22 +965,10 @@
           "hold": "short",
           "level": "green",
           "space": 73.3751771613687,
-          "band": "high",
+          "band": "medium",
           "price": 85.63,
           "kind": "consensus",
           "detail": "共识价 85.63，空间 +73.4%"
-        },
-        {
-          "symbol": "GOOGL",
-          "note": "谷歌（Alphabet）",
-          "group": "position",
-          "hold": "long",
-          "level": "yellow",
-          "space": 34.44614471752912,
-          "band": "medium",
-          "price": 430.51,
-          "kind": "consensus",
-          "detail": "共识价 430.51，空间 +34.4%"
         },
         {
           "symbol": "UBER",
@@ -1025,22 +989,10 @@
           "hold": "short",
           "level": "red",
           "space": 72.46809386578839,
-          "band": "high",
+          "band": "medium",
           "price": 335.14,
           "kind": "consensus",
           "detail": "共识价 335.14，空间 +72.5%"
-        },
-        {
-          "symbol": "NXPI",
-          "note": "恩智浦半导体",
-          "group": "position",
-          "hold": "short",
-          "level": "yellow",
-          "space": 30.563596117827345,
-          "band": "medium",
-          "price": 306.72,
-          "kind": "consensus",
-          "detail": "共识价 306.72，空间 +30.6%"
         },
         {
           "symbol": "PDD",
@@ -1055,37 +1007,13 @@
           "detail": "共识价 114.82，空间 +45.3%"
         },
         {
-          "symbol": "TSM",
-          "note": "台积电",
-          "group": "focus",
-          "hold": "short",
-          "level": "green",
-          "space": 39.635850995197245,
-          "band": "medium",
-          "price": 584.39,
-          "kind": "consensus",
-          "detail": "共识价 584.39，空间 +39.6%"
-        },
-        {
-          "symbol": "SNOW",
-          "note": "Snowflake-数据云",
-          "group": "technology",
-          "hold": "short",
-          "level": "green",
-          "space": 30.639461635374737,
-          "band": "medium",
-          "price": 425.14,
-          "kind": "consensus",
-          "detail": "共识价 425.14，空间 +30.6%"
-        },
-        {
           "symbol": "SKHY",
           "note": "SK海力士ADR",
           "group": "technology",
           "hold": "short",
           "level": "green",
           "space": 84.06801926726025,
-          "band": "high",
+          "band": "medium",
           "price": 252.21,
           "kind": "consensus",
           "detail": "共识价 252.21，空间 +84.1%"
@@ -1097,7 +1025,7 @@
           "hold": "short",
           "level": "green",
           "space": 77.21269443336563,
-          "band": "high",
+          "band": "medium",
           "price": 1555.13,
           "kind": "consensus",
           "detail": "共识价 1555.13，空间 +77.2%"
@@ -1109,7 +1037,7 @@
           "hold": "short",
           "level": "green",
           "space": 75.52078705685646,
-          "band": "high",
+          "band": "medium",
           "price": 2173.0,
           "kind": "consensus",
           "detail": "共识价 2173，空间 +75.5%"
@@ -1121,7 +1049,7 @@
           "hold": "short",
           "level": "green",
           "space": 81.5016891623975,
-          "band": "high",
+          "band": "medium",
           "price": 1144.35,
           "kind": "consensus",
           "detail": "共识价 1144.35，空间 +81.5%"
@@ -1132,11 +1060,11 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 41.37610953182108,
+          "space": 42.21732320009282,
           "band": "medium",
-          "price": 243.69,
+          "price": 245.14,
           "kind": "consensus",
-          "detail": "共识价 243.69，空间 +41.4%"
+          "detail": "共识价 245.14，空间 +42.2%"
         },
         {
           "symbol": "COHR",
@@ -1151,40 +1079,16 @@
           "detail": "共识价 412.52，空间 +97.1%"
         },
         {
-          "symbol": "INTC",
-          "note": "英特尔",
-          "group": "technology",
-          "hold": "short",
-          "level": "green",
-          "space": 35.752069917203315,
-          "band": "medium",
-          "price": 118.05,
-          "kind": "consensus",
-          "detail": "共识价 118.05，空间 +35.8%"
-        },
-        {
           "symbol": "AMAT",
           "note": "应用材料",
           "group": "technology",
           "hold": "short",
           "level": "red",
-          "space": 69.3722828968296,
+          "space": 66.42720814335702,
           "band": "medium",
-          "price": 638.94,
+          "price": 627.83,
           "kind": "consensus",
-          "detail": "共识价 638.94，空间 +69.4%"
-        },
-        {
-          "symbol": "ARM",
-          "note": "Arm Holdings-芯片架构",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "space": 38.216136547330386,
-          "band": "medium",
-          "price": 290.71,
-          "kind": "consensus",
-          "detail": "共识价 290.71，空间 +38.2%"
+          "detail": "共识价 627.83，空间 +66.4%"
         },
         {
           "symbol": "CIEN",
@@ -1229,7 +1133,7 @@
           "hold": "short",
           "level": "yellow",
           "space": 89.48333220177881,
-          "band": "high",
+          "band": "medium",
           "price": 279.09,
           "kind": "consensus",
           "detail": "共识价 279.09，空间 +89.5%"
@@ -1300,23 +1204,11 @@
           "group": "industrials",
           "hold": "short",
           "level": "green",
-          "space": 67.49768061469658,
+          "space": 64.30287603777624,
           "band": "medium",
-          "price": 704.11,
+          "price": 690.68,
           "kind": "consensus",
-          "detail": "共识价 704.11，空间 +67.5%"
-        },
-        {
-          "symbol": "HEI",
-          "note": "HEICO-航空零部件",
-          "group": "industrials",
-          "hold": "short",
-          "level": "green",
-          "space": 31.725854183481303,
-          "band": "medium",
-          "price": 391.7,
-          "kind": "consensus",
-          "detail": "共识价 391.7，空间 +31.7%"
+          "detail": "共识价 690.68，空间 +64.3%"
         },
         {
           "symbol": "SPCX",
@@ -1343,18 +1235,6 @@
           "detail": "共识价 970.8，空间 +41.3%"
         },
         {
-          "symbol": "CEG",
-          "note": "Constellation-核电",
-          "group": "utilities",
-          "hold": "short",
-          "level": "green",
-          "space": 34.75241665022687,
-          "band": "medium",
-          "price": 341.53,
-          "kind": "consensus",
-          "detail": "共识价 341.53，空间 +34.8%"
-        },
-        {
           "symbol": "TTWO",
           "note": "Take-Two-游戏",
           "group": "communications",
@@ -1367,82 +1247,22 @@
           "detail": "共识价 286.44，空间 +40.6%"
         },
         {
-          "symbol": "NFLX",
-          "note": "奈飞",
-          "group": "communications",
-          "hold": "short",
-          "level": "red",
-          "space": 38.78511769172361,
-          "band": "medium",
-          "price": 91.39,
-          "kind": "consensus",
-          "detail": "共识价 91.39，空间 +38.8%"
-        },
-        {
           "symbol": "BKNG",
           "note": "Booking-在线旅游",
           "group": "consumer_discretionary",
           "hold": "short",
           "level": "green",
-          "space": 50.972213309375604,
+          "space": 50.0545466213181,
           "band": "medium",
-          "price": 235.26,
+          "price": 233.83,
           "kind": "consensus",
-          "detail": "共识价 235.26，空间 +51.0%"
-        },
-        {
-          "symbol": "AMZN",
-          "note": "亚马逊",
-          "group": "consumer_discretionary",
-          "hold": "short",
-          "level": "green",
-          "space": 33.681451612903224,
-          "band": "medium",
-          "price": 331.53,
-          "kind": "consensus",
-          "detail": "共识价 331.53，空间 +33.7%"
-        },
-        {
-          "symbol": "LMT",
-          "note": "洛克希德马丁",
-          "group": "position",
-          "hold": "long",
-          "level": "yellow",
-          "space": 2.42973948161144,
-          "band": "low",
-          "price": 618.86,
-          "kind": "consensus",
-          "detail": "在共识价 618.86 ±3% 内（偏离 -2.4%）"
+          "detail": "共识价 233.83，空间 +50.1%"
         }
       ]
     }
   },
   "target_overlays": {
     "space": [
-      {
-        "symbol": "HII",
-        "note": "亨廷顿英格尔斯工业",
-        "group": "position",
-        "hold": "short",
-        "level": "green",
-        "space": 30.042323409223584,
-        "band": "medium",
-        "price": 356.42,
-        "kind": "consensus",
-        "detail": "共识价 356.42，空间 +30.0%"
-      },
-      {
-        "symbol": "APH",
-        "note": "安费诺",
-        "group": "position",
-        "hold": "long",
-        "level": "yellow",
-        "space": 38.979619381832904,
-        "band": "medium",
-        "price": 102.97,
-        "kind": "consensus",
-        "detail": "共识价 102.97，空间 +39.0%"
-      },
       {
         "symbol": "AVGO",
         "note": "博通",
@@ -1462,22 +1282,10 @@
         "hold": "short",
         "level": "green",
         "space": 73.3751771613687,
-        "band": "high",
+        "band": "medium",
         "price": 85.63,
         "kind": "consensus",
         "detail": "共识价 85.63，空间 +73.4%"
-      },
-      {
-        "symbol": "GOOGL",
-        "note": "谷歌（Alphabet）",
-        "group": "position",
-        "hold": "long",
-        "level": "yellow",
-        "space": 34.44614471752912,
-        "band": "medium",
-        "price": 430.51,
-        "kind": "consensus",
-        "detail": "共识价 430.51，空间 +34.4%"
       },
       {
         "symbol": "UBER",
@@ -1498,22 +1306,10 @@
         "hold": "short",
         "level": "red",
         "space": 72.46809386578839,
-        "band": "high",
+        "band": "medium",
         "price": 335.14,
         "kind": "consensus",
         "detail": "共识价 335.14，空间 +72.5%"
-      },
-      {
-        "symbol": "NXPI",
-        "note": "恩智浦半导体",
-        "group": "position",
-        "hold": "short",
-        "level": "yellow",
-        "space": 30.563596117827345,
-        "band": "medium",
-        "price": 306.72,
-        "kind": "consensus",
-        "detail": "共识价 306.72，空间 +30.6%"
       },
       {
         "symbol": "PDD",
@@ -1528,37 +1324,13 @@
         "detail": "共识价 114.82，空间 +45.3%"
       },
       {
-        "symbol": "TSM",
-        "note": "台积电",
-        "group": "focus",
-        "hold": "short",
-        "level": "green",
-        "space": 39.635850995197245,
-        "band": "medium",
-        "price": 584.39,
-        "kind": "consensus",
-        "detail": "共识价 584.39，空间 +39.6%"
-      },
-      {
-        "symbol": "SNOW",
-        "note": "Snowflake-数据云",
-        "group": "technology",
-        "hold": "short",
-        "level": "green",
-        "space": 30.639461635374737,
-        "band": "medium",
-        "price": 425.14,
-        "kind": "consensus",
-        "detail": "共识价 425.14，空间 +30.6%"
-      },
-      {
         "symbol": "SKHY",
         "note": "SK海力士ADR",
         "group": "technology",
         "hold": "short",
         "level": "green",
         "space": 84.06801926726025,
-        "band": "high",
+        "band": "medium",
         "price": 252.21,
         "kind": "consensus",
         "detail": "共识价 252.21，空间 +84.1%"
@@ -1570,7 +1342,7 @@
         "hold": "short",
         "level": "green",
         "space": 77.21269443336563,
-        "band": "high",
+        "band": "medium",
         "price": 1555.13,
         "kind": "consensus",
         "detail": "共识价 1555.13，空间 +77.2%"
@@ -1582,7 +1354,7 @@
         "hold": "short",
         "level": "green",
         "space": 75.52078705685646,
-        "band": "high",
+        "band": "medium",
         "price": 2173.0,
         "kind": "consensus",
         "detail": "共识价 2173，空间 +75.5%"
@@ -1594,7 +1366,7 @@
         "hold": "short",
         "level": "green",
         "space": 81.5016891623975,
-        "band": "high",
+        "band": "medium",
         "price": 1144.35,
         "kind": "consensus",
         "detail": "共识价 1144.35，空间 +81.5%"
@@ -1605,11 +1377,11 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 41.37610953182108,
+        "space": 42.21732320009282,
         "band": "medium",
-        "price": 243.69,
+        "price": 245.14,
         "kind": "consensus",
-        "detail": "共识价 243.69，空间 +41.4%"
+        "detail": "共识价 245.14，空间 +42.2%"
       },
       {
         "symbol": "COHR",
@@ -1624,40 +1396,16 @@
         "detail": "共识价 412.52，空间 +97.1%"
       },
       {
-        "symbol": "INTC",
-        "note": "英特尔",
-        "group": "technology",
-        "hold": "short",
-        "level": "green",
-        "space": 35.752069917203315,
-        "band": "medium",
-        "price": 118.05,
-        "kind": "consensus",
-        "detail": "共识价 118.05，空间 +35.8%"
-      },
-      {
         "symbol": "AMAT",
         "note": "应用材料",
         "group": "technology",
         "hold": "short",
         "level": "red",
-        "space": 69.3722828968296,
+        "space": 66.42720814335702,
         "band": "medium",
-        "price": 638.94,
+        "price": 627.83,
         "kind": "consensus",
-        "detail": "共识价 638.94，空间 +69.4%"
-      },
-      {
-        "symbol": "ARM",
-        "note": "Arm Holdings-芯片架构",
-        "group": "technology",
-        "hold": "short",
-        "level": "yellow",
-        "space": 38.216136547330386,
-        "band": "medium",
-        "price": 290.71,
-        "kind": "consensus",
-        "detail": "共识价 290.71，空间 +38.2%"
+        "detail": "共识价 627.83，空间 +66.4%"
       },
       {
         "symbol": "CIEN",
@@ -1702,7 +1450,7 @@
         "hold": "short",
         "level": "yellow",
         "space": 89.48333220177881,
-        "band": "high",
+        "band": "medium",
         "price": 279.09,
         "kind": "consensus",
         "detail": "共识价 279.09，空间 +89.5%"
@@ -1773,23 +1521,11 @@
         "group": "industrials",
         "hold": "short",
         "level": "green",
-        "space": 67.49768061469658,
+        "space": 64.30287603777624,
         "band": "medium",
-        "price": 704.11,
+        "price": 690.68,
         "kind": "consensus",
-        "detail": "共识价 704.11，空间 +67.5%"
-      },
-      {
-        "symbol": "HEI",
-        "note": "HEICO-航空零部件",
-        "group": "industrials",
-        "hold": "short",
-        "level": "green",
-        "space": 31.725854183481303,
-        "band": "medium",
-        "price": 391.7,
-        "kind": "consensus",
-        "detail": "共识价 391.7，空间 +31.7%"
+        "detail": "共识价 690.68，空间 +64.3%"
       },
       {
         "symbol": "SPCX",
@@ -1816,18 +1552,6 @@
         "detail": "共识价 970.8，空间 +41.3%"
       },
       {
-        "symbol": "CEG",
-        "note": "Constellation-核电",
-        "group": "utilities",
-        "hold": "short",
-        "level": "green",
-        "space": 34.75241665022687,
-        "band": "medium",
-        "price": 341.53,
-        "kind": "consensus",
-        "detail": "共识价 341.53，空间 +34.8%"
-      },
-      {
         "symbol": "TTWO",
         "note": "Take-Two-游戏",
         "group": "communications",
@@ -1840,56 +1564,19 @@
         "detail": "共识价 286.44，空间 +40.6%"
       },
       {
-        "symbol": "NFLX",
-        "note": "奈飞",
-        "group": "communications",
-        "hold": "short",
-        "level": "red",
-        "space": 38.78511769172361,
-        "band": "medium",
-        "price": 91.39,
-        "kind": "consensus",
-        "detail": "共识价 91.39，空间 +38.8%"
-      },
-      {
         "symbol": "BKNG",
         "note": "Booking-在线旅游",
         "group": "consumer_discretionary",
         "hold": "short",
         "level": "green",
-        "space": 50.972213309375604,
+        "space": 50.0545466213181,
         "band": "medium",
-        "price": 235.26,
+        "price": 233.83,
         "kind": "consensus",
-        "detail": "共识价 235.26，空间 +51.0%"
-      },
-      {
-        "symbol": "AMZN",
-        "note": "亚马逊",
-        "group": "consumer_discretionary",
-        "hold": "short",
-        "level": "green",
-        "space": 33.681451612903224,
-        "band": "medium",
-        "price": 331.53,
-        "kind": "consensus",
-        "detail": "共识价 331.53，空间 +33.7%"
+        "detail": "共识价 233.83，空间 +50.1%"
       }
     ],
-    "reached": [
-      {
-        "symbol": "LMT",
-        "note": "洛克希德马丁",
-        "group": "position",
-        "hold": "long",
-        "level": "yellow",
-        "space": 2.42973948161144,
-        "band": "low",
-        "price": 618.86,
-        "kind": "consensus",
-        "detail": "在共识价 618.86 ±3% 内（偏离 -2.4%）"
-      }
-    ]
+    "reached": []
   },
   "text_only": [
     {
@@ -1899,7 +1586,7 @@
       "side": "上轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林上轨 还差0.53%",
+      "detail": "逼近布林上轨▲ 还差0.53%",
       "group": "position",
       "level": "green",
       "hold": "short",
@@ -1912,7 +1599,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨 还差1.55%",
+      "detail": "逼近布林下轨▼ 还差1.55%",
       "group": "position",
       "level": "green",
       "hold": "short",
@@ -1925,7 +1612,7 @@
       "side": "上轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林上轨 还差0.59%",
+      "detail": "逼近布林上轨▲ 还差0.59%",
       "group": "position",
       "level": "green",
       "hold": "long",
@@ -1938,7 +1625,7 @@
       "side": "下轨",
       "rsi_n": 1,
       "rsi_side": "超卖",
-      "detail": "跌破布林下轨 · RSI 1条超卖",
+      "detail": "跌破布林下轨▼ · RSI 1条 ↓超卖",
       "group": "position",
       "level": "red",
       "hold": "short",
@@ -1951,7 +1638,7 @@
       "side": "",
       "rsi_n": 2,
       "rsi_side": "超卖",
-      "detail": "RSI 2条超卖",
+      "detail": "RSI 2条 ↓超卖",
       "group": "position",
       "level": "green",
       "hold": "short",
@@ -1964,7 +1651,7 @@
       "side": "下轨",
       "rsi_n": 1,
       "rsi_side": "超卖",
-      "detail": "逼近布林下轨 还差0.08% · RSI 1条超卖",
+      "detail": "逼近布林下轨▼ 还差0.08% · RSI 1条 ↓超卖",
       "group": "position",
       "level": "green",
       "hold": "long",
@@ -1977,7 +1664,7 @@
       "side": "上轨",
       "rsi_n": 1,
       "rsi_side": "超买",
-      "detail": "逼近布林上轨 还差0.30% · RSI 1条超买",
+      "detail": "逼近布林上轨▲ 还差0.30% · RSI 1条 ↑超买",
       "group": "focus",
       "level": "green",
       "hold": "short",
@@ -1990,7 +1677,7 @@
       "side": "上轨",
       "rsi_n": 1,
       "rsi_side": "超买",
-      "detail": "盘中突破布林上轨 · RSI 1条超买",
+      "detail": "盘中突破布林上轨▲ · RSI 1条 ↑超买",
       "group": "focus",
       "level": "green",
       "hold": "short",
@@ -2003,7 +1690,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨 还差0.74%",
+      "detail": "逼近布林下轨▼ 还差0.74%",
       "group": "index_funds",
       "level": "green",
       "hold": "short",
@@ -2016,7 +1703,7 @@
       "side": "下轨",
       "rsi_n": 1,
       "rsi_side": "超卖",
-      "detail": "逼近布林下轨 还差0.63% · RSI 1条超卖",
+      "detail": "逼近布林下轨▼ 还差0.63% · RSI 1条 ↓超卖",
       "group": "technology",
       "level": "green",
       "hold": "short",
@@ -2029,7 +1716,7 @@
       "side": "",
       "rsi_n": 2,
       "rsi_side": "超卖",
-      "detail": "RSI 2条超卖",
+      "detail": "RSI 2条 ↓超卖",
       "group": "technology",
       "level": "green",
       "hold": "short",
@@ -2042,7 +1729,7 @@
       "side": "",
       "rsi_n": 2,
       "rsi_side": "超卖",
-      "detail": "RSI 2条超卖",
+      "detail": "RSI 2条 ↓超卖",
       "group": "technology",
       "level": "green",
       "hold": "short",
@@ -2055,7 +1742,7 @@
       "side": "",
       "rsi_n": 2,
       "rsi_side": "超卖",
-      "detail": "RSI 2条超卖",
+      "detail": "RSI 2条 ↓超卖",
       "group": "technology",
       "level": "green",
       "hold": "short",
@@ -2068,7 +1755,7 @@
       "side": "上轨",
       "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "突破布林上轨 · RSI 2条超买",
+      "detail": "突破布林上轨▲ · RSI 2条 ↑超买",
       "group": "technology",
       "level": "green",
       "hold": "short",
@@ -2081,7 +1768,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨 还差1.26%",
+      "detail": "逼近布林下轨▼ 还差1.26%",
       "group": "technology",
       "level": "yellow",
       "hold": "short",
@@ -2094,7 +1781,7 @@
       "side": "",
       "rsi_n": 2,
       "rsi_side": "超卖",
-      "detail": "RSI 2条超卖",
+      "detail": "RSI 2条 ↓超卖",
       "group": "technology",
       "level": "green",
       "hold": "short",
@@ -2107,7 +1794,7 @@
       "side": "",
       "rsi_n": 2,
       "rsi_side": "超卖",
-      "detail": "RSI 2条超卖",
+      "detail": "RSI 2条 ↓超卖",
       "group": "technology",
       "level": "green",
       "hold": "short",
@@ -2120,7 +1807,7 @@
       "side": "",
       "rsi_n": 2,
       "rsi_side": "超卖",
-      "detail": "RSI 2条超卖",
+      "detail": "RSI 2条 ↓超卖",
       "group": "technology",
       "level": "yellow",
       "hold": "short",
@@ -2133,7 +1820,7 @@
       "side": "下轨",
       "rsi_n": 1,
       "rsi_side": "超卖",
-      "detail": "逼近布林下轨 还差1.16% · RSI 1条超卖",
+      "detail": "逼近布林下轨▼ 还差1.16% · RSI 1条 ↓超卖",
       "group": "technology",
       "level": "green",
       "hold": "short",
@@ -2146,7 +1833,7 @@
       "side": "",
       "rsi_n": 2,
       "rsi_side": "超卖",
-      "detail": "RSI 2条超卖",
+      "detail": "RSI 2条 ↓超卖",
       "group": "technology",
       "level": "yellow",
       "hold": "short",
@@ -2159,7 +1846,7 @@
       "side": "下轨",
       "rsi_n": 1,
       "rsi_side": "超卖",
-      "detail": "逼近布林下轨 还差0.80% · RSI 1条超卖",
+      "detail": "逼近布林下轨▼ 还差0.80% · RSI 1条 ↓超卖",
       "group": "technology",
       "level": "green",
       "hold": "short",
@@ -2172,7 +1859,7 @@
       "side": "上轨",
       "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "突破布林上轨 · RSI 2条超买",
+      "detail": "突破布林上轨▲ · RSI 2条 ↑超买",
       "group": "healthcare",
       "level": "yellow",
       "hold": "short",
@@ -2185,7 +1872,7 @@
       "side": "上轨",
       "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "逼近布林上轨 还差0.16% · RSI 2条超买",
+      "detail": "逼近布林上轨▲ 还差0.16% · RSI 2条 ↑超买",
       "group": "financials",
       "level": "green",
       "hold": "short",
@@ -2198,7 +1885,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨 还差0.09%",
+      "detail": "逼近布林下轨▼ 还差0.07%",
       "group": "financials",
       "level": "green",
       "hold": "short",
@@ -2211,7 +1898,7 @@
       "side": "下轨",
       "rsi_n": 1,
       "rsi_side": "超卖",
-      "detail": "跌破布林下轨 · RSI 1条超卖",
+      "detail": "跌破布林下轨▼ · RSI 1条 ↓超卖",
       "group": "financials",
       "level": "green",
       "hold": "short",
@@ -2224,7 +1911,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨 还差0.46%",
+      "detail": "逼近布林下轨▼ 还差0.46%",
       "group": "financials",
       "level": "green",
       "hold": "short",
@@ -2237,7 +1924,7 @@
       "side": "上轨",
       "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "逼近布林上轨 还差0.94% · RSI 2条超买",
+      "detail": "逼近布林上轨▲ 还差0.94% · RSI 2条 ↑超买",
       "group": "energy",
       "level": "green",
       "hold": "short",
@@ -2250,7 +1937,7 @@
       "side": "上轨",
       "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "逼近布林上轨 还差0.51% · RSI 2条超买",
+      "detail": "逼近布林上轨▲ 还差0.51% · RSI 2条 ↑超买",
       "group": "energy",
       "level": "green",
       "hold": "short",
@@ -2263,7 +1950,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "跌破布林下轨",
+      "detail": "跌破布林下轨▼",
       "group": "industrials",
       "level": "green",
       "hold": "short",
@@ -2276,7 +1963,7 @@
       "side": "上轨",
       "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "突破布林上轨 · RSI 2条超买",
+      "detail": "突破布林上轨▲ · RSI 2条 ↑超买",
       "group": "industrials",
       "level": "green",
       "hold": "short",
@@ -2289,7 +1976,7 @@
       "side": "上轨",
       "rsi_n": 1,
       "rsi_side": "超买",
-      "detail": "突破布林上轨 · RSI 1条超买",
+      "detail": "突破布林上轨▲ · RSI 1条 ↑超买",
       "group": "industrials",
       "level": "yellow",
       "hold": "short",
@@ -2302,7 +1989,7 @@
       "side": "上轨",
       "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "逼近布林上轨 还差0.07% · RSI 2条超买",
+      "detail": "逼近布林上轨▲ 还差0.07% · RSI 2条 ↑超买",
       "group": "materials",
       "level": "green",
       "hold": "short",
@@ -2315,7 +2002,7 @@
       "side": "上轨",
       "rsi_n": 1,
       "rsi_side": "超买",
-      "detail": "突破布林上轨 · RSI 1条超买",
+      "detail": "突破布林上轨▲ · RSI 1条 ↑超买",
       "group": "utilities",
       "level": "green",
       "hold": "short",
@@ -2328,7 +2015,7 @@
       "side": "",
       "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "RSI 2条超买",
+      "detail": "RSI 2条 ↑超买",
       "group": "consumer_staples",
       "level": "green",
       "hold": "short",
@@ -2341,7 +2028,7 @@
       "side": "下轨",
       "rsi_n": 1,
       "rsi_side": "超卖",
-      "detail": "逼近布林下轨 还差0.59% · RSI 1条超卖",
+      "detail": "逼近布林下轨▼ 还差0.59% · RSI 1条 ↓超卖",
       "group": "communications",
       "level": "red",
       "hold": "short",
@@ -2354,7 +2041,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨 还差0.42%",
+      "detail": "逼近布林下轨▼ 还差0.42%",
       "group": "consumer_discretionary",
       "level": "green",
       "hold": "short",
@@ -2367,7 +2054,7 @@
       "side": "下轨",
       "rsi_n": 1,
       "rsi_side": "超卖",
-      "detail": "逼近布林下轨 还差1.32% · RSI 1条超卖",
+      "detail": "逼近布林下轨▼ 还差1.32% · RSI 1条 ↓超卖",
       "group": "consumer_discretionary",
       "level": "green",
       "hold": "short",
@@ -2789,7 +2476,7 @@
     "sp500": "2026-10-23",
     "ust10": "2026-10-23",
     "nfci": "2026-10-16",
-    "breadth": "2026-10-22"
+    "breadth": "2026-10-23"
   },
   "treasury_reference": {
     "ok": true,
@@ -2824,9 +2511,9 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 19.450000762939453,
+      "value": 19.45,
       "date": "2026-10-23",
-      "source": "Yahoo ^VIX",
+      "source": "Cboe VIX 官方日线",
       "drawdown": null
     },
     "sp500": {
@@ -2876,21 +2563,34 @@
     "checked_at": "2026-10-22T11:56:54.517842-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-24T00:17:26.779419+00:00"
+    "asof": "2026-10-24T14:11:38.225397+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 0,
-      "deferred": 0,
-      "tried": 0,
-      "ok": 0,
+      "due": 22,
+      "deferred": 10,
+      "tried": 12,
+      "ok": 12,
       "none": 0,
       "fail": 0,
       "stopped": "",
       "quota": {
         "date": "2026-10-24",
-        "symbols": [],
+        "symbols": [
+          "ABBV",
+          "AMAT",
+          "AMZN",
+          "ANET",
+          "ARM",
+          "AXON",
+          "AXP",
+          "BKNG",
+          "BX",
+          "LMT",
+          "PG",
+          "WDC"
+        ],
         "retry_symbols": []
       }
     },
@@ -2941,13 +2641,12 @@
         "ne": "2026-10-28"
       },
       "LMT": {
-        "avg": 618.86,
-        "upd": "2026-10-14",
-        "r": "2026-10-15",
+        "avg": 633.62,
+        "upd": "2026-10-23",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-16",
-        "ne": "2026-10-22",
+        "try": "2026-10-24",
         "earn_pending": [
           "2026-10-22"
         ]
@@ -3166,12 +2865,12 @@
         "ne": "2026-11-04"
       },
       "ANET": {
-        "avg": 243.69,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
+        "avg": 245.14,
+        "upd": "2026-10-23",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
+        "try": "2026-10-24",
         "ne": "2026-11-03"
       },
       "COHR": {
@@ -3193,21 +2892,21 @@
         "ne": "2026-10-29"
       },
       "AMAT": {
-        "avg": 638.94,
-        "upd": "2026-09-28",
-        "r": "2026-10-10",
+        "avg": 627.83,
+        "upd": "2026-10-16",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
+        "try": "2026-10-24",
         "ne": "2026-11-12"
       },
       "ARM": {
         "avg": 290.71,
-        "upd": "2026-09-18",
-        "r": "2026-10-10",
+        "upd": "2026-10-21",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
+        "try": "2026-10-24",
         "ne": "2026-11-04"
       },
       "CIEN": {
@@ -3295,23 +2994,22 @@
       },
       "WDC": {
         "avg": 668.5,
-        "upd": "2026-10-12",
-        "r": "2026-10-14",
+        "upd": "2026-10-23",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-15",
-        "ne": "2026-10-22",
+        "try": "2026-10-24",
         "earn_pending": [
           "2026-10-22"
         ]
       },
       "ABBV": {
         "avg": 282.61,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
+        "upd": "2026-10-23",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
+        "try": "2026-10-24",
         "ne": "2026-10-30"
       },
       "TMO": {
@@ -3366,25 +3064,24 @@
         ]
       },
       "AXP": {
-        "avg": 371.12,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
+        "avg": 368.72,
+        "upd": "2026-10-16",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
+        "try": "2026-10-24",
         "ne": "2026-10-23",
         "earn_pending": [
           "2026-10-23"
         ]
       },
       "BX": {
-        "avg": 141.64,
-        "upd": "2026-10-08",
-        "r": "2026-10-10",
+        "avg": 139.91,
+        "upd": "2026-10-23",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
-        "ne": "2026-10-22",
+        "try": "2026-10-24",
         "earn_pending": [
           "2026-10-22"
         ]
@@ -3460,12 +3157,12 @@
         "ne": "2026-10-30"
       },
       "AXON": {
-        "avg": 704.11,
-        "upd": "2026-09-29",
-        "r": "2026-10-10",
+        "avg": 690.68,
+        "upd": "2026-10-20",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
+        "try": "2026-10-24",
         "ne": "2026-11-05"
       },
       "HEI": {
@@ -3566,12 +3263,12 @@
         "ne": "2026-11-19"
       },
       "PG": {
-        "avg": 161.22,
-        "upd": "2026-10-09",
-        "r": "2026-10-13",
+        "avg": 161.65,
+        "upd": "2026-10-23",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-14",
+        "try": "2026-10-24",
         "ne": "2027-01-21",
         "earn_pending": [
           "2026-10-22"
@@ -3619,21 +3316,21 @@
         ]
       },
       "BKNG": {
-        "avg": 235.26,
-        "upd": "2026-10-07",
-        "r": "2026-10-10",
+        "avg": 233.83,
+        "upd": "2026-10-20",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
+        "try": "2026-10-24",
         "ne": "2026-11-03"
       },
       "AMZN": {
-        "avg": 331.53,
-        "upd": "2026-10-07",
-        "r": "2026-10-10",
+        "avg": 331.72,
+        "upd": "2026-10-21",
+        "r": "2026-10-24",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
+        "try": "2026-10-24",
         "ne": "2026-10-29"
       },
       "MCD": {
@@ -3659,11 +3356,24 @@
     },
     "quota": {
       "date": "2026-10-24",
-      "symbols": [],
+      "symbols": [
+        "ABBV",
+        "AMAT",
+        "AMZN",
+        "ANET",
+        "ARM",
+        "AXON",
+        "AXP",
+        "BKNG",
+        "BX",
+        "LMT",
+        "PG",
+        "WDC"
+      ],
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-24T00:18:22.094764+00:00",
+    "asof": "2026-10-24T14:12:56.285740+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -3752,19 +3462,19 @@
       },
       "LMT": {
         "facts": {
-          "asof": "2026-10-15T00:00:00+00:00",
-          "at": "2026-10-15T00:00:00+00:00",
-          "digest": "5f5fcb4cb1054d5fa513706cfd8b824d13667b147f225d025009b9b20f0adee2"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "0fc2354467d22a2199d71ad3a1d6d44bf3bd832d7f503393f7046914da689770"
         },
         "attempt": {
-          "asof": "2026-10-16T00:00:00+00:00",
-          "at": "2026-10-16T00:00:00+00:00",
-          "digest": "92245a6d0cd9e639357cc8244880887ea919bd19bea83f0b90ee4fabc9d8a3ed"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-22T15:58:02.360316+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
-          "digest": "2fbcd763918589418d14c94adb35f3d5292f57b6f6f8ae60f1f7ce9bf10a2eb5"
+          "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
       },
       "NTNX": {
@@ -4177,14 +3887,14 @@
       },
       "ANET": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "8ec8aa8ae50632667ce2c6693c5ce140773be3228879483e34061764407909b6"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "26bd7ed68a6b942ccf1e89be4ccf3f14d975fd9d2c710d5f7cc2cdcebf9e73c9"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4228,14 +3938,14 @@
       },
       "AMAT": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "002cf3556f50ce217ee492cac7f5a5900c49312f021d025c1f40dd2eccc94f49"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "4e1273a07b503183b10bde4bd2a7bf5b4031afd79447b5dbc6995bc8e006a0ba"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4245,14 +3955,14 @@
       },
       "ARM": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "877ac5f66842a379ebe5ab22e75aa31a1280f4eb41c30943963b2555e1dd18a9"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "4b06d0f4167f70b3790cb2b3387654007afd37d9dab97b36a8af55ce993e4557"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4391,7 +4101,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4415,31 +4125,31 @@
       },
       "WDC": {
         "facts": {
-          "asof": "2026-10-14T00:00:00+00:00",
-          "at": "2026-10-14T00:00:00+00:00",
-          "digest": "071b3b380f934961648a9c4863442b7b8aed0badbbc75419bbe5de5a04516ec0"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "f86e92be3590b0ca70ad9248e1c275d5c274fe13b722bf7035c549d5af52ec2a"
         },
         "attempt": {
-          "asof": "2026-10-15T00:00:00+00:00",
-          "at": "2026-10-15T00:00:00+00:00",
-          "digest": "e4f3129c043105fc890005d09fc658bf2942eb1b36551873568b717ebceb2f13"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-22T15:58:02.360316+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
-          "digest": "2fbcd763918589418d14c94adb35f3d5292f57b6f6f8ae60f1f7ce9bf10a2eb5"
+          "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
       },
       "ABBV": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "5e052d316147354d9f227067e2a8378cbb8f2c0fa624dc6a31a110d3d5c91ea7"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "6182a918a81e437c47c93765ee8fe66d58cd6a4c1543448d670848eded43f0ee"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4459,7 +4169,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4476,7 +4186,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -4527,21 +4237,21 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
       },
       "AXP": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "187bc66fe8079afb0c768563ffeafe379a30bd66665fefb2cc559310d3ddce6e"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "1e3718e995515cf3b9a016a0099cf7ab93d81545fc0f3763eb6a367640793da6"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
           "asof": "2026-10-23T06:10:40.157573+00:00",
@@ -4551,19 +4261,19 @@
       },
       "BX": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "c1021ce4f8fbac2b012b5eb8e23dcb8531cea419879024afa5af9e3518517f18"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "cb4a0336f436dc3f5688990f77a681f8143b5e91b867dd5de4da4fcc5629f354"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-22T15:58:02.360316+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
-          "digest": "2fbcd763918589418d14c94adb35f3d5292f57b6f6f8ae60f1f7ce9bf10a2eb5"
+          "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
       },
       "SPGI": {
@@ -4704,14 +4414,14 @@
       },
       "AXON": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "7d423d317cead9f4c96564d44ecd19889ffd1cf777b4aa4e232d6fb2b72af3a8"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "00b1e2476bb595fe2a3982c530c4adfb1c041b11a8f614171a65f1973085e9db"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
           "asof": "2026-10-23T06:10:40.157573+00:00",
@@ -4748,7 +4458,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4782,7 +4492,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4799,7 +4509,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4867,7 +4577,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4891,17 +4601,17 @@
       },
       "PG": {
         "facts": {
-          "asof": "2026-10-13T00:00:00+00:00",
-          "at": "2026-10-13T00:00:00+00:00",
-          "digest": "3bc0e7d0315e75ec237fd9c643fe6c9e4d3367b5c9c848b2486c6198895348b3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "b772aca2c347d3035d8e547ae9a9d7e023910576174f83c8be6c45628e48e57f"
         },
         "attempt": {
-          "asof": "2026-10-14T00:00:00+00:00",
-          "at": "2026-10-14T00:00:00+00:00",
-          "digest": "d9d27b16cd1d47453f2466dd14b812cf6b79580716c349c1b9859080b322986c"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -4952,7 +4662,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4969,21 +4679,21 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
       },
       "BKNG": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "d329670e0c3cc0184f41850ca413d2a934e2b9de20242cedf799d42c57de4b8b"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "d08a1d36bf0a10442c386687148542859a0c24270003331fe0a89b508ba719eb"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4993,14 +4703,14 @@
       },
       "AMZN": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "ca4bce6f9ac8b70650d70ff209db5371444bd1d441c0b06ce86975bb5838873c"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "aaedb41b6b451e5061147608ff0f16ab8c305d3ee9a98733b57d004aad0f78ad"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -5037,7 +4747,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T00:18:22.094764+00:00",
+          "asof": "2026-10-24T14:12:56.285740+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5049,8 +4759,8 @@
     "dated": 62,
     "pending": 20,
     "failed": 0,
-    "fetched": 4,
-    "cached": 78,
+    "fetched": 7,
+    "cached": 75,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -5127,7 +4837,9 @@
         "date": "2026-10-27",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-24",
         "status": "ok"
       },
       "PDD": {
@@ -5181,7 +4893,9 @@
         "date": "2026-10-27",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-20",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-24",
         "status": "ok"
       },
       "AAPL": {
@@ -5300,7 +5014,9 @@
         "date": "2026-11-12",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-10",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-24",
         "status": "ok"
       },
       "ARM": {
@@ -5431,7 +5147,9 @@
         "date": "2026-10-27",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-24",
         "status": "ok"
       },
       "GS": {
@@ -5465,7 +5183,9 @@
         "date": "2026-10-27",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-24",
         "status": "ok"
       },
       "JPM": {
@@ -5548,7 +5268,9 @@
         "date": "2026-11-19",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-10",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-24",
         "status": "ok"
       },
       "PG": {
@@ -5563,7 +5285,9 @@
         "date": "2026-10-27",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-24",
         "status": "ok"
       },
       "TTWO": {
@@ -5679,7 +5403,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-24T00:18:22.064090+00:00",
+    "asof": "2026-10-24T14:12:32.068013+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -5870,13 +5594,13 @@
       },
       "NXPI": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "45b3f081104a89ead50a0dbd54b4b1e95a0a1763135a6366cd9946f90e5ce645"
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "a7567f67e6ee768c4a0b74e05242862ddb17ccb724090c280ef2e73aedc2f48f"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5972,13 +5696,13 @@
       },
       "V": {
         "facts": {
-          "asof": "2026-10-20T00:00:00+00:00",
-          "at": "2026-10-20T00:00:00+00:00",
-          "digest": "aea06faa14d988c96ac847b7bb0bf676fccc9c01c31466d869b5450c8310b031"
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "a7567f67e6ee768c4a0b74e05242862ddb17ccb724090c280ef2e73aedc2f48f"
         },
         "attempt": {
-          "asof": "2026-10-20T00:00:00+00:00",
-          "at": "2026-10-20T00:00:00+00:00",
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6261,13 +5985,13 @@
       },
       "AMAT": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "0c456ee6fcf9f5f986c95b3db81b0867af5f9a031ab5e42d4d793c39cd154066"
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "7aa179b859e459fa4545fd3fcffca4703e382abf5f5c81fb04f370e848bb4867"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6601,13 +6325,13 @@
       },
       "SPGI": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "ad4ae48b626dcdaeaf7570c72e3b1211ea3d4316bbae5bd3a8e30e10bd2e242f"
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "a7ba40645bfce7e527157c57b9791c127a73ac5fe35ba8f8dd68c51f5c07508d"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6686,13 +6410,13 @@
       },
       "HOOD": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "45b3f081104a89ead50a0dbd54b4b1e95a0a1763135a6366cd9946f90e5ce645"
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "a7567f67e6ee768c4a0b74e05242862ddb17ccb724090c280ef2e73aedc2f48f"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6907,13 +6631,13 @@
       },
       "WMT": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "5ca06816dda91c72e1f8b382afc437b1f971bed11fe6811ff2125cb07f0329fa"
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "4ebb8f37fea92c7cb03eba2144f54dd2461506c9093b1f6c0842a78e5c9cc4a7"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6941,13 +6665,13 @@
       },
       "KO": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "ad4ae48b626dcdaeaf7570c72e3b1211ea3d4316bbae5bd3a8e30e10bd2e242f"
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
+          "digest": "a7ba40645bfce7e527157c57b9791c127a73ac5fe35ba8f8dd68c51f5c07508d"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-24T14:12:32.068013+00:00",
+          "at": "2026-10-24T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -7109,19 +6833,19 @@
       "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 103.44000244140625,
+      "price": 103.2699966430664,
       "date": "2026-10-23",
       "contract": "Crude Oil Dec 26",
-      "day": 3.991154289718493,
+      "day": 3.8202426618371956,
       "day_from": "2026-10-22",
-      "week": 4.463750705094927,
-      "month": 16.60467084765403,
+      "week": 4.292062355162273,
+      "month": 16.413028642610197,
       "incomplete": false,
       "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-10-24T08:17:25.770334+08:00",
+    "assessed_at": "2026-10-24T22:11:37.320445+08:00",
     "schema_version": 2,
-    "asof": "2026-10-24T00:17:26.963199+00:00"
+    "asof": "2026-10-24T14:11:38.521554+00:00"
   },
   "data_lag": {
     "target": "2026-10-23",
@@ -7130,9 +6854,6 @@
     "expected": 98,
     "by_source": {
       "nasdaq": {
-        "2026-10-22": 98
-      },
-      "yahoo": {
         "2026-10-23": 98
       }
     }
