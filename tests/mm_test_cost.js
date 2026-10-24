@@ -1212,6 +1212,9 @@ function assertLossStats(b,red,gray,ids,{filter=LOSS_FILTER_BASE,cardFilter=JSON
   }
   const data=lossFilter(b);assert.equal(data.cost_loss.ok,true);assert.equal(data.cost_loss.label,'成本浮亏');
   assert.deepEqual(data.cost_loss.members.map(m=>m.id),ids);
+  for(const member of data.cost_loss.members){
+    assert.equal(member.a,b.doc.getElementById('s-'+member.s.toLowerCase()).id,'浮亏筛选沿用主表真实锚点');
+  }
   assert.equal(new Set(ids).size,ids.length,'筛选成员按身份去重');
   for(const kind of Object.keys(filter))assert.deepEqual(data[kind],filter[kind],'保持其它筛选数据 '+kind);
   assert.equal(b.doc.getElementById('signalCounts').getAttribute('data-filter'),cardFilter);
@@ -1360,7 +1363,7 @@ test('成本浮亏mm:ack-change同步回调已看到红黄灰标题、统计行�
   const expected=(red,yellow,gray,members,counts,display='')=>({type:'mm:ack-change',badges:{
     red:{text:String(red),label:'红 '+red+' 项'},yellow:{text:String(yellow),label:'黄 '+yellow+' 项'},gray:{text:String(gray),label:'灰 '+gray+' 项'}},
     data:{...copy(LOSS_FILTER_BASE),cost_loss:{label:'成本浮亏',ok:true,members}},counts,display});
-  const member={id:'AAA',s:'AAA',n:'测试名称',g:'短持仓',l:'gray',d:['浮亏 10.0%（已达 10%） · 已读']};
+  const member={id:'AAA',s:'AAA',n:'测试名称',g:'短持仓',a:'s-aaa',l:'gray',d:['浮亏 10.0%（已达 10%） · 已读']};
   assertLossBadges(b,1,0);assertLossGrayBadge(b,1);
   ackCurrentLoss(b);assert.deepEqual(seen,[expected(0,1,2,[member],['—','1'])],'事件不能先于红黄灰标题刷新');
   b.paint();assert.equal(seen.length,1,'无变化不重复派发');

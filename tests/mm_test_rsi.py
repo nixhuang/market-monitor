@@ -62,10 +62,10 @@ class TestRSI(unittest.TestCase):
     def test_rsi_text_shows_boundary_and_count_only(self):
         level, signals, _ = self.analyze([80, 75, 50])
         text = next(s for s in signals if s.startswith('RSI'))
-        self.assertEqual(text, 'RSI 2条超买（≥70）')
+        self.assertEqual(text, 'RSI 2条 ↑超买（≥70）')
         level, signals, _ = self.analyze([20, 30, 34])
         text = next(s for s in signals if s.startswith('RSI'))
-        self.assertEqual(text, 'RSI 3条超卖（≤35）')
+        self.assertEqual(text, 'RSI 3条 ↓超卖（≤35）')
 
     # ---------------------------------------------------------------- 组合灯级
 
@@ -193,7 +193,7 @@ class TestRSI(unittest.TestCase):
     def test_lower_band_exact_touch_is_not_labeled_as_breakthrough(self):
         level, signals, detail = self.analyze([50, 50, 50], bands=(100, 110, 99))
         self.assertEqual(level, 'green')
-        self.assertTrue(any(s.startswith('触及布林下轨') for s in signals), signals)
+        self.assertTrue(any(s.startswith('触及布林下轨▼') for s in signals), signals)
         self.assertIn('signal-yellow', monitor._signal_text_html(next(s for s in signals if '布林' in s)))
 
     def test_consecutive_bollinger_hits_do_not_turn_red(self):

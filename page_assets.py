@@ -13,32 +13,8 @@ RULES_SUMMARY = "预警规则"
 GLOSSARY_SUMMARY = "名词解释和抓取"
 # 定位 ID 沿用确认后的展示稿；门槛只在渲染时从生效配置替换。
 RULE_SECTIONS = (
-    ("rule-lamps", r"""line-0||h4|一、报灯规则（不折叠，计入统计面板）
-line-1|rule-boll-upper|h5|布林上轨 + RSI 持仓分组、重点
-up-buy-two||p|布林上轨 + RSI 2条向上超买 → 黄灯。
-up-buy-three||p|布林上轨 + RSI 3条向上超买 → 红灯。
-up-sell-two||p|布林上轨 + RSI 2条向下超卖 → 黄灯。
-line-5|rule-boll-lower|h5|布林下轨 + RSI 所有分组
-line-6||p|布林下轨 + RSI 2条向下 → 黄灯。
-line-7||p|布林下轨 + RSI 3条向下超卖 → 红灯。
-line-8||p|布林下轨 + RSI ≥2条向上超买 → 黄灯。
-line-9|rule-rsi|h5|单独RSI三条超卖
-line-10||p|所有分组 → 红灯。
-line-11|rule-rsi-overbought|h5|单独RSI三条超买
-rsi-buy-three||p|持仓分组、重点 → 黄灯。
-line-13|rule-vol|h5|量比 所有分组
-line-14||p|自适应：≥${vol_ratio_red_z}σ → 红灯，≥${vol_ratio_z}σ → 黄灯；固定：≥${vol_ratio_red}× → 红灯，≥${vol_ratio}× → 黄灯。切换条件见量比解释。
-line-15|rule-chg|h5|涨跌幅 · 自适应 所有分组
-line-16||p|取涨跌幅绝对值，按波动档报红／黄灯。
-line-21|rule-amp|h5|振幅 · 自适应 持仓分组、重点
-line-22||p|按波动档报红／黄灯；其他分组只显示数值。
-line-27|rule-low52|h5|52周低位 所有分组
-line-28||p|距低点≤${near_52w_low_pct}%：新进入、触及／跌破此前低点或昨日状态未知 → 红灯；
-line-29||p|其余持续低位 → 黄灯。
-line-30|rule-ma|h5|均线 所有分组
-line-31||p|短均线：自适应确认穿越 → 黄灯（${ma_short_status}）。
-line-32||p|长均线：日内触及±${ma_long_band_pct}%或穿越 → 黄灯（${ma_long_status}）。
-line-33||p|长均线：本轮日线日期与目标交易日不符 → 不报触及／穿越灯；日内高低缺失或无效 → 只按现价判断贴近，不冒充日内触及。
+    ("rule-lamps", r"""line-0||h4|一、报灯规则
+lamp-table||table|${lamp_table}
 line-34|rule-clickable|h5|可点红灯 可点✓ 标记已读
 line-35|rule-prices|h5|加仓价／减仓价 须设置有效价位
 line-36||p|加仓价 · 所有分组：现价≤设置价×${add_factor} → 可点红灯。
@@ -57,39 +33,14 @@ line-48||p|有效空间≥${target_space_pct}% → 紫虚线空心灯；
 target-space-positive||p|≥${target_high_space_pct}% → 紫红虚线空心灯。
 line-50|rule-target-reached|h5|达到目标／共识价 持仓分组、重点
 target-reached-positive||p|当日上穿／跌破或现价在目标±${target_gap_pct}% → 实心紫灯。"""),
-    ("rule-text", r"""line-52||h4|二、不升红黄灯且不折叠
-||h5|布林＋RSI
-line-59||p|其他分组：
-up-sell-other||p|布林上轨 + RSI 2条向下超卖 → 文字 → 灰灯。
-line-61||p|所有分组：
-low-one-sell||p|布林下轨 + RSI 1条向下超卖 → 文字 → 灰灯。
-low-one-buy||p|布林下轨 + RSI 1条向上超买 → 文字 → 灰灯。
+    ("rule-text", r"""line-52||h4|二、不报灯且不折叠
 line-53|rule-earnings|h5|财报临近 所有分组
 line-54||p|美东财报日期按北京时间：前一日／当日／后一日 → 红字；
 earnings-near||p|财报前2～${earn_soon_days}天 → 黄字。
 line-56|rule-quotes|h5|缺行情／参考行情 数据缺失 所有分组
 line-57||p|缺行情 → 灰灯；参考行情显示参考状态。
 line-58||p|两者只保留在主表，不进入“无异动”，不计入统计面板，不因此制造红灯／黄灯警示。"""),
-    ("rule-folded", r"""line-64||h4|三、不升红黄灯且折叠
-||h5|单独布林
-line-65||p|所有分组：
-plain-low||p|单独布林下轨「RSI 0 条」→ 文字 → 灰灯。
-line-73||p|持仓分组：
-plain-up-position||p|单独布林上轨「RSI 0 条」→ 文字 → 灰灯。
-line-75||p|重点、其他分组：
-plain-up-other||p|单独布林上轨「RSI 0 条」→ 无提醒。
-||h5|单独RSI
-||p|所有分组：
-line-67||p|单独RSI 1条超买／超卖 → 无提醒。
-line-68||p|单独RSI 2条向上超买／向下超卖 → 文字 → 灰灯。
-line-77||p|其他分组：
-rsi-buy-other||p|单独RSI三条超买 → 文字 → 灰灯。
-||h5|布林＋RSI
-||p|所有分组：
-up-one-sell||p|布林上轨 + RSI 1条向下超卖 → 文字 → 灰灯。
-up-one-buy||p|布林上轨 + RSI 1条向上超买 → 文字 → 灰灯。
-||p|其他分组：
-up-buy-other||p|布林上轨 + RSI 2条／3条向上超买 → 文字 → 灰灯。
+    ("rule-folded", r"""line-64||h4|三、折叠
 ||h5|目标／共识价
 ||p|所有分组：
 target-inactive||p|目标空间<${target_space_pct}%、未达到目标／共识价、共识获取失败及失败旧价。
@@ -97,6 +48,73 @@ target-inactive||p|目标空间<${target_space_pct}%、未达到目标／共识�
 ||p|所有分组：
 earnings-far||p|仅有未来${earn_far_start}～${earn_list_days}天财报名单。"""),
 )
+
+# 报灯总表：分组 × 灯级，替代原来按指标逐条罗列的正文。
+# 灯级口径：红灯／黄灯／灰灯＝有文字、不折叠；灰灯（折）＝有文字、折叠；仅文字＝折叠且不计灰；
+# 无提示＝规则判定后不出声；无效＝该分组下规则不生效。
+LAMP_RULE_TABLE = (
+    '<table class="rule-table" id="rules-lamp-table">'
+    '<colgroup><col class="cat-col"><col class="col-cond"><col span="3"></colgroup>'
+    '<thead><tr>'
+    '<th scope="col" class="cat-col">分类</th><th scope="col" class="col-cond">条件</th>'
+    '<th scope="col">持仓分组</th><th scope="col">重点</th><th scope="col">其他分组</th>'
+    '</tr></thead><tbody>'
+    '<tr><th scope="row" class="cat-col" rowspan="12">布林+RSI</th>'
+    '<td>布林上轨▲ + RSI 3条 ↑超买</td>'
+    '<td class="cell-red">红灯</td><td class="cell-red">红灯</td>'
+    '<td class="cell-gray">灰灯</td></tr>'
+    '<tr class="rule-group-end"><td>布林上轨▲ + RSI 3条 ↓超卖（反）</td>'
+    '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
+    '<tr><td>布林下轨▼ + RSI 3条 ↓超卖</td>'
+    '<td class="cell-red" colspan="3">红灯</td></tr>'
+    '<tr class="rule-group-end"><td>布林下轨▼ + RSI 3条 ↑超买（反）</td>'
+    '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
+    '<tr><td>布林上轨▲ + RSI 2条 ↑超买</td>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td><td>仅文字</td></tr>'
+    '<tr class="rule-group-end"><td>布林上轨▲ + RSI 2条 ↓超卖（反）</td>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td>'
+    '<td class="cell-gray">灰灯</td></tr>'
+    '<tr><td>布林下轨▼ + RSI 2条 ↓超卖</td>'
+    '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
+    '<tr class="rule-group-end"><td>布林下轨▼ + RSI 2条 ↑超买（反）</td>'
+    '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
+    '<tr><td>布林上轨▲ + RSI 1条 ↑超买</td>'
+    '<td class="cell-gray">灰灯</td><td class="cell-gray">灰灯</td><td>无提示</td></tr>'
+    '<tr class="rule-group-end"><td>布林上轨▲ + RSI 1条 ↓超卖（反）</td>'
+    '<td class="cell-gray-fold">灰灯（折）</td><td class="cell-gray-fold">灰灯（折）</td><td>无提示</td></tr>'
+    '<tr><td>布林下轨▼ + RSI 1条 ↓超卖</td>'
+    '<td class="cell-gray" colspan="3">灰灯</td></tr>'
+    '<tr class="rule-group-end"><td>布林下轨▼ + RSI 1条 ↑超买（反）</td>'
+    '<td class="cell-gray" colspan="3">灰灯</td></tr>'
+    '<tr><th scope="row" class="cat-col" rowspan="6">单独RSI</th>'
+    '<td>RSI 3条 ↑超买</td>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td>'
+    '<td class="cell-gray-fold">灰灯（折）</td></tr>'
+    '<tr class="rule-group-end"><td>RSI 3条 ↓超卖</td>'
+    '<td class="cell-red" colspan="3">红灯</td></tr>'
+    '<tr><td>RSI 2条 ↑超买</td>'
+    '<td class="cell-gray">灰灯</td><td class="cell-gray">灰灯</td><td>无提示</td></tr>'
+    '<tr class="rule-group-end"><td>RSI 2条 ↓超卖</td>'
+    '<td class="cell-gray" colspan="3">灰灯</td></tr>'
+    '<tr><td>RSI 1条 ↑超买</td><td colspan="3">无提示</td></tr>'
+    '<tr class="rule-group-end"><td>RSI 1条 ↓超卖</td><td colspan="3">无提示</td></tr>'
+    '<tr><th scope="row" class="cat-col" rowspan="2">单独布林</th>'
+    '<td>布林上轨▲ + RSI 0条</td><td class="cell-gray">灰灯</td>'
+    '<td>无提示</td><td>无提示</td></tr>'
+    '<tr class="rule-group-end"><td>布林下轨▼ + RSI 0条</td>'
+    '<td class="cell-gray-fold" colspan="3">灰灯（折）</td></tr>'
+    '<tr><th scope="row" class="cat-col" rowspan="5">价格与量能</th>'
+    '<td>涨跌幅 · 自适应</td>'
+    '<td>红灯／黄灯</td><td>红灯／黄灯</td><td class="cell-gray">灰灯</td></tr>'
+    '<tr><td>振幅 · 自适应</td><td>红灯／黄灯</td><td>红灯／黄灯</td><td>无效</td></tr>'
+    '<tr><td>52周低位（距低点≤${near_52w_low_pct}%）</td>'
+    '<td colspan="3">红灯（新进入／跌破／昨日未知）；黄灯（其余持续低位）</td></tr>'
+    '<tr><td>均线（短均线穿越；长均线触及±${ma_long_band_pct}%或穿越）</td>'
+    '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
+    '<tr><td>量比（收盘自适应／盘中固定）</td>'
+    '<td colspan="3">红灯（≥${vol_ratio_red_z}σ 或 ≥${vol_ratio_red}×）；'
+    '黄灯（≥${vol_ratio_z}σ 或 ≥${vol_ratio}×）</td></tr>'
+    '</tbody></table>')
 
 # 规则正文不再提供内部跳转；方向图标和阈值仍保留。
 
@@ -214,6 +232,31 @@ def _text(value):
     return html.escape(str(value), quote=True).replace("&#x27;", "&#39;")
 
 
+COLORS = {"紫红虚线空心灯": "tone-target-high", "紫虚线空心灯": "lamp-purple",
+          "实心紫灯": "lamp-purple", "红灯": "lamp-red", "黄灯": "lamp-yellow",
+          "灰灯": "nav-gray", "红字": "lamp-red", "黄字": "lamp-yellow",
+          "持仓分组": "rule-group", "所有分组": "rule-group",
+          "其他分组": "rule-group", "重点": "rule-group"}
+
+
+# 报灯总表自带的字符箭头：布林轨 ▲／▼ 与 RSI ↑／↓ 各用一种颜色，便于区分"轨"与"动能"。
+ARROW_COLORS = {"▲": "ar-band-up", "▼": "ar-band-down",
+                "↑": "ar-rsi-up", "↓": "ar-rsi-down"}
+
+
+def _colorize(body):
+    """只给纯文本里的灯级／分组词与方向箭头上色，标签与属性原样保留。"""
+
+    def paint(text):
+        text = re.sub('|'.join(COLORS),
+                      lambda word: f'<span class="{COLORS[word[0]]}">{word[0]}</span>', text)
+        return re.sub('|'.join(ARROW_COLORS),
+                      lambda word: f'<span class="{ARROW_COLORS[word[0]]}">{word[0]}</span>', text)
+
+    return re.sub(r'<a\b[^>]*>.*?</a>|<[^>]+>|([^<]+)',
+                  lambda m: paint(m[1]) if m[1] else m[0], body, flags=re.S)
+
+
 def _rules_markup(body):
     arrows = {
         "上轨": (18, "M3 3H15 M9 15V3 M5 7L9 3L13 7"),
@@ -244,10 +287,19 @@ def _rules_markup(body):
                 'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
                 f'stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="{path}"/></svg></span>')
 
+    # 报灯总表自带 ▲▼／↑↓ 字符箭头，不再重复插入方向 SVG。
+    blocks = []
+
+    def stash(match):
+        blocks.append(match[0])
+        return f"\x00{len(blocks) - 1}\x00"
+
+    body = re.sub(r'<table\b[^>]*id="rules-lamp-table"[^>]*>.*?</table>', stash, body, flags=re.S)
     # 属性和弱链接标签不插入 SVG，data-original 保持纯文本。
     body = re.sub(r'<a\b[^>]*>.*?</a>|<[^>]+>|([^<]+)',
                   lambda m: re.sub("上轨|下轨|超买|超卖", arrow, m[1]) if m[1] else m[0],
                   body, flags=re.S)
+    body = re.sub(r"\x00(\d+)\x00", lambda m: blocks[int(m[1])], body)
     return re.sub(r'(<(?:h5|section) id="([^"]+)"[^>]*>)',
                   lambda m: m[1] + (f'<span id="{aliases[m[2]]}" class="rule-anchor"></span>'
                                     if m[2] in aliases else ""), body)
@@ -306,6 +358,9 @@ def _rules_source():
         parts.append(f'<section id="{section}">')
         for line in lines.splitlines():
             ident, heading, tag, text = line.split("|", 3)
+            if tag == "table":
+                parts.append(f'<div class="rule-table-block" id="nav-{ident}">' + text + '</div>')
+                continue
             if not ident:
                 cls = "heading" if tag == "h5" else "scope"
                 parts.append(f'<{tag} class="rule-layout-{cls}">' + _text(text) + f'</{tag}>')
@@ -317,17 +372,7 @@ def _rules_source():
             parts.append('</div>')
         parts.append('</section>')
     parts.append('</div>')
-    body = "\n".join(parts)
-    colors = {"紫红虚线空心灯": "tone-target-high", "紫虚线空心灯": "lamp-purple",
-              "实心紫灯": "lamp-purple", "红灯": "lamp-red", "黄灯": "lamp-yellow",
-              "灰灯": "nav-gray", "红字": "lamp-red", "黄字": "lamp-yellow",
-              "持仓分组": "rule-group", "所有分组": "rule-group",
-              "其他分组": "rule-group", "重点": "rule-group"}
-    body = re.sub(r'<a\b[^>]*>.*?</a>|<[^>]+>|([^<]+)',
-                  lambda m: re.sub('|'.join(colors),
-                      lambda word: f'<span class="{colors[word[0]]}">{word[0]}</span>', m[1])
-                  if m[1] else m[0], body, flags=re.S)
-    return body
+    return _colorize("\n".join(parts))
 
 
 RULE_BLOCKS = (("", _rules_source()),)
@@ -335,7 +380,11 @@ RULE_BLOCKS = (("", _rules_source()),)
 
 def rules_body(settings, constants):
     values = _rule_values(settings, constants)
-    body = re.sub(r"\$\{(\w+)\}", lambda m: _text(values[m[1]]), RULE_BLOCKS[0][1])
+    filled = re.sub(r"\$\{(\w+)\}", lambda m: _text(values[m[1]]), LAMP_RULE_TABLE)
+    tables = {"lamp_table": _colorize(filled)}
+    body = re.sub(r"\$\{(\w+)\}",
+                  lambda m: tables[m[1]] if m[1] in tables else _text(values[m[1]]),
+                  RULE_BLOCKS[0][1])
     return _rules_markup(body)
 
 
@@ -431,6 +480,8 @@ PAGE_CSS = """:root{
   --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
   --blue:#2f6bd8; --purple:#a371f7; --target-high:#dc62b8;
   --signal-bg:#182131; --collapse-bg:var(--signal-bg);
+  /* 灯（圆点）统一尺寸：首页描述灯、统计名单行首圆点、名单三角同一套大小 */
+  --lamp-size:14px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--text);
@@ -478,9 +529,12 @@ tr:first-child td{border-top:none}
 .tnote,.sig .tp{color:#c4a3ff}
 .sig{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
 .signal-magenta{color:#ef8de4} .signal-red{color:#ff8580} .signal-yellow{color:#f0c674} .signal-cyan{color:#4dd0e1}
-/* 原生disc尺寸不变；抵消inside尾空白后，描述灯到文字再缩小2px，统计名单不变。 */
-.signal-dot{display:inline list-item;list-style:disc inside;font-size:13px;font-weight:400;margin:0 -5px 0 0;padding:0;vertical-align:baseline;color:var(--dim)}
-.signal-dot::marker{content:normal}
+/* 灯统一画在标的名称前面：直径 .34em（14px 字号下 4.76px，与原生 disc 的 4.75px 一致）、
+   右边距 .875em（12.25px），与统计名单 li::marker 的间距一致。三处灯只在这一处定尺寸和间距。
+   vertical-align:.25em 是实测校准值：与统计名单原生 li::marker 的圆点垂直中心相差 0.00px。
+   不能用 display 的双关键字写法（inline 后接 list-item，靠原生 disc 画圆点）：Safari 与
+   iOS WebView（含微信内置浏览器）不支持，整条声明被丢弃后灯会整个消失。这里画实心圆点。 */
+.signal-dot{display:inline-block;width:.34em;height:.34em;border-radius:50%;background:currentColor;font-size:var(--lamp-size);font-weight:400;margin:0 .875em 0 0;padding:0;vertical-align:.25em;color:var(--dim)}
 .signal-dot.red{color:var(--red)} .signal-dot.yellow{color:var(--yellow)}
 .signal-dot.purple{color:var(--purple)} .signal-dot.gray{color:#9fa3aa}
 .signal-item[data-signal-level="red"]{color:#ff8580}
@@ -499,7 +553,7 @@ tr:first-child td{border-top:none}
 #signalCounts>summary{color:#bfd5ff}
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 #signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
-#signalCounts .count-purple{color:var(--purple)} #signalCounts .count-earn{color:var(--text)}
+#signalCounts .count-earn{color:var(--text)}
 #signalCounts table{table-layout:fixed}
 #signalCounts td{padding:6.3px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
 #signalCounts td.num{text-align:center}   /* 计数列居中：破折号与展开按钮对齐 */
@@ -512,27 +566,24 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-row>td{padding:0;width:auto;border-top:0}
 #signalCounts .signal-members-panel{padding:10px 12px;background:#121a27;border-top:1px solid #465e87;text-align:left}
 #signalCounts .signal-members-panel[hidden]{display:none}
-#signalCounts .signal-members-panel h4{font-size:13px;margin:12px 0 5px;color:#bfd5ff}
 #signalCounts .signal-members-panel ul{margin:0;padding-left:18px}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
 /* 名单前面的圆点按这一格的灯色走，不再是默认的白点；灰灯没有灯，用灰点 */
-#signalCounts .signal-members-panel li::marker{color:var(--dim)}
+#signalCounts .signal-members-panel li::marker{color:var(--dim);font-size:var(--lamp-size)}
 #signalCounts .signal-members-panel.tone-red li::marker{color:var(--red)}
 #signalCounts .signal-members-panel.tone-yellow li::marker{color:var(--yellow)}
-#signalCounts .signal-members-panel.tone-purple li::marker{color:var(--purple)}
 #signalCounts .text-only .signal-member-list li::marker{color:#9fa3aa}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
-#signalCounts .signal-member-direction{color:var(--dim);font-size:12px}
-#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}
+#signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}
 #signalCounts .signal-member-split{list-style:none;height:0;margin:9px 0;border-top:1px solid #465e87}
 #signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}
-/* 分框展示：方向写在框标题上（「▲ 上涨」/「▲ 上轨 · RSI 3条过界」），名单里不再逐条画三角 */
+/* 分框展示：方向写在框标题上（「▲ 上涨」/「上轨▲ · RSI 3条 ↑超买」），名单里不再逐条画三角 */
 #signalCounts .signal-member-block{margin:0 0 10px}
 #signalCounts .signal-member-block:last-child{margin-bottom:0}
 #signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:#bfd5ff}
 #signalCounts .signal-member-block h5:first-letter{letter-spacing:0}
 #signalCounts .signal-member-block ul{padding-left:18px}
-#signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:14px;font-weight:700;line-height:1;vertical-align:baseline}
+#signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:var(--lamp-size);font-weight:700;line-height:1;vertical-align:baseline}
 #signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
 #signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
@@ -543,10 +594,8 @@ tr:first-child td{border-top:none}
 #signalCounts .text-only{margin:8px 0 0;border:1px solid #2b3546;border-radius:8px;background:#12161f;text-align:left}
 #signalCounts .text-only>summary{cursor:pointer;padding:8px 12px;color:var(--text);font-size:13px}
 #signalCounts .text-only[open]>summary{border-bottom:1px solid #2b3546}
-#signalCounts .text-only .text-only-kind{margin:10px 0 4px;padding:0 12px;color:#bfd5ff;font-size:12.5px}
 #signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
 #signalCounts .text-only li{margin:5px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
-#signalCounts .gray-signal-row td:first-child{color:var(--dim)}
 /* 财报条件 / 紫灯条件：胶囊永远钉在第一排左侧不动，
    标题(summary)始终在胶囊右边同一排，点开后名单只向下展开、占满整行宽度。
    胶囊绝对定位在行内，summary 用左内边距给它让位，所以名单区域不受胶囊影响。 */
@@ -582,7 +631,7 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-member-block h5.target-space-high,
 #signalCounts .signal-member-block.tone-target-high h5,
 #signalCounts .signal-member-block.target-space-high h5{color:var(--target-high)}
-@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:62px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{padding:0;font-size:12px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:12px;line-height:1.1}}
+@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:62px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:12px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:12px;line-height:1.1}}
 tr[id^="s-"]{scroll-margin-top:64px}
 /* 闪烁只改 background-color：带 52 周条的行，灯条是用 background-image 画的，
    用 background 简写做动画会把灯条一起清掉（看起来就是高亮盖住了灯）。
@@ -623,8 +672,8 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 #signalCounts .signal-filter li{padding:4.5px 0;overflow-wrap:anywhere}
 #signalCounts .signal-filter li+li{border-top:1px solid var(--line)}
 #signalCounts .signal-filter .note{margin-left:5px}
-#signalCounts .signal-filter-group{color:#8fb8f0}
-#signalCounts .signal-filter .stat-dot{width:9px;height:9px;margin-left:6px;vertical-align:-1px}
+/* 多选清单与主表共用 .signal-dot 的尺寸和间距；统计名单保留原生 marker。
+   三处灯均在名称前，尺寸由 --lamp-size 控制。 */
 #signalCounts .signal-filter-detail{display:block;margin-top:2px;color:var(--text)}
 .earn{display:block;margin:0;color:#8fb8f0;font-size:12.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:12px}
@@ -683,7 +732,6 @@ td.px{text-align:center}
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
   .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
   .stk td{padding:8px 5px}
-  .stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}
   .stk tr.range52-row td{padding:0 8px 6px 12px}
   table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
   .stk th{padding:7px 5px;font-size:12px}
@@ -695,12 +743,7 @@ td.px{text-align:center}
   .stk .px-price{font-size:14px}
   .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:10.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
   .stk td.sig{font-size:12.5px;line-height:1.45}
-  .group-card>summary.grp,.macro-card>summary.grp{gap:5px;padding:12px 10px 12px 3px}
   .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
-  .zone-card{margin:8px 0 10px}
-  .zone-card>summary{padding:8px 8px}
-  .zone-card>summary .zone-name{font-size:14px}
-  .stat-badge{min-width:16px;height:16px;padding:0 2px;font-size:12px}
 }
 .up{color:var(--up)} .down{color:var(--down)}
 tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
@@ -743,9 +786,6 @@ tr.gray td{color:var(--dim)}
 .warn{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
   color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:14px}
 .acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
-.acts button{padding:8px 14px;font-size:13px;color:var(--text);background:#232833;
-  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
-.acts button:disabled{opacity:.5;cursor:not-allowed}
 #runMsg{font-size:13px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}
 #runMsg.ok{color:var(--green)}
 #runMsg.err{color:var(--red)}
@@ -775,7 +815,6 @@ tr.gray td{color:var(--dim)}
 .group-stats{margin-left:auto;color:var(--dim);font-size:14px;font-weight:400}
 .group-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
 .group-card>summary .rs-spy{margin-left:auto}
-.stat-count{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
 /* 持仓里的「长持仓」区：可折叠，默认展开；下方就是短持仓主体，所以底部要留出间距 */
 .zone-card{margin:10px 0 12px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}
 .zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;
@@ -835,19 +874,12 @@ tr.gray td{color:var(--dim)}
 .group-card summary:focus-visible,.macro-card summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
 .runlight{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--dim);line-height:1.4}
 .runlight .dot{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}
-.runlight[data-phase="busy"]{color:var(--yellow)}
-.runlight[data-phase="busy"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
-.runlight[data-phase="partial"]{color:var(--yellow)}
-.runlight[data-phase="partial"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
+.runlight[data-phase="busy"],.runlight[data-phase="partial"]{color:var(--yellow)}
+.runlight[data-phase="busy"] .dot,.runlight[data-phase="partial"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
 .runlight[data-phase="ok"]{color:var(--green)}
 .runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}
 .runlight[data-phase="bad"]{color:var(--red)}
 .runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}
-.dca{background:rgba(139,147,161,.12);border:1px solid var(--line);border-radius:10px;
-  padding:10px 14px;margin-bottom:14px;font-size:14px;color:var(--dim)}
-.dca b{color:var(--text)}
-.dca.on{background:rgba(210,153,34,.14);border-color:rgba(210,153,34,.4);color:var(--yellow)}
-.dca.on b{color:var(--yellow)}
 .dca-badge{margin-left:auto;white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
 .dca-badge.on{color:var(--yellow)}
 /* 定投提醒挂在顶栏最右侧，字号跟顶栏按钮对齐 */
@@ -862,21 +894,10 @@ tr.gray td{color:var(--dim)}
 .oil-rise{color:var(--up)} .oil-fall{color:var(--down)}
 #macroCard td:nth-child(3) .unit{white-space:nowrap}
 @media(max-width:600px){.oil-reference-row td{padding:8px 6px}.oil-reference-row .reference-detail{font-size:10.5px}#macroCard td:nth-child(3) .unit{font-size:9px}}
-.reference-alert{padding:13px 14px;border-bottom:1px solid var(--line)}
-.reference-alert:last-of-type{border-bottom:0}
-.reference-top{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
-.reference-top .reference-status{margin-left:auto;color:var(--dim);font-size:12px}
-.reference-alert[data-level="red"] .reference-status{color:var(--red)}
-.reference-alert[data-level="yellow"] .reference-status{color:var(--yellow)}
-.reference-alert[data-level="green"] .reference-status{color:var(--green)}
-.reference-conclusion{font-size:14px;line-height:1.65;margin:7px 0;color:var(--text)}
-.reference-data{font-size:12px;line-height:1.65;color:var(--dim);overflow-wrap:anywhere}
 .reference-detail{margin:8px 0 0;font-size:12px;color:var(--dim);line-height:1.7}
 .reference-detail summary{cursor:pointer;color:#8fb8f0;padding:3px 0}
 .reference-detail a{color:#8fb8f0}
 .reference-detail p{margin:5px 0}
-.reference-alert[data-level="gray"] .reference-conclusion{color:var(--dim)}
-.local-preview-banner{padding:11px 14px;border:1px solid rgba(107,163,240,.35);border-radius:10px;background:rgba(107,163,240,.08);color:#8fb8f0;font-size:13px;margin:14px 0}
 """
 
 # 主页面将此块放在现有 rules/cost CSS 之后，避免旧规则样式覆盖紧凑版。
@@ -888,25 +909,48 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 .card .rules-body h4{margin:6px 0 8px;color:#bfd5ff;font-size:12.5px;font-weight:600}
 .card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}
 .card .rules-body p{margin:4px 0;color:var(--dim);font-size:12px;line-height:1.65}
-.card .rules-body ul{margin:4px 0 8px;padding-left:18px}
-.card .rules-body li{margin:3px 0;color:var(--dim);font-size:12px;line-height:1.65}
 .card .rules-body .rule-group{color:#8fb8f0}
 .card .rules-body a{color:#8fb8f0;text-underline-offset:3px}
 .card .rules-body a:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-.card .rules-body .lamp-red,.card .rules-body .lamp-sig-red{color:#ff8580;font-weight:600}
-.card .rules-body .lamp-yellow,.card .rules-body .lamp-sig-yellow{color:#f0c674;font-weight:600}
+.card .rules-body .lamp-red{color:#ff8580;font-weight:600}
+.card .rules-body .lamp-yellow{color:#f0c674;font-weight:600}
 .card .rules-body .lamp-purple{color:#c4a3ff;font-weight:600}
 .card .rules-body .tone-target-high{color:var(--target-high);font-weight:600}
-.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid var(--line);font-size:12px}
-.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--line);text-align:left;vertical-align:top;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
-.card .rules-body .rule-table th{color:var(--text);font-weight:600;background:rgba(143,184,240,.04)}
-.card .rules-body .rule-table th.lamp-red{color:#ff8580}
-.card .rules-body .rule-table th.lamp-yellow{color:#f0c674}
+.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid #6b7689;font-size:12px;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid #5a6478;text-align:left;vertical-align:top;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:rgba(143,184,240,.07);border-bottom:1px solid #6b7689}
+/* 报灯总表左右撑满卡片：抵消 .card(4px) 与 .rules-body(12px) 的内边距。 */
+#rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border-left:0;border-right:0}
+/* 最左分类列：竖排、固定 18px 单字宽（不用 em，避免手机端字号缩放把列撑宽）。
+   overflow:hidden 兜底：万一竖排不生效，横排文字被裁掉也不会把列顶宽。 */
+.card .rules-body .rule-table col.cat-col{width:18px}
+.card .rules-body .rule-table col.col-cond{width:40%}
+.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:1.1;font-size:12px;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:rgba(143,184,240,.04);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
+.card .rules-body .ar-band-up{color:#3fb950}
+.card .rules-body .ar-band-down{color:#f85149}
+.card .rules-body .ar-rsi-up{color:#3ec9d6}
+.card .rules-body .ar-rsi-down{color:#e061c9}
+/* RSI 的 ↑↓ 继承文字颜色，仅放大字号；布林 ▲▼ 直接使用正文文字。 */
+.arrow-rsi-up,.arrow-rsi-down{color:inherit;font-size:1.15em;line-height:1}
+/* 分组位置的上下三角：统一分组蓝，跟框标题同色系，不再绿红黄白各一个样。 */
+.grp-arrow{color:#bfd5ff;font-weight:700}
+.card .rules-body .rule-table .ar-band-up,.card .rules-body .rule-table .ar-band-down,
+.card .rules-body .rule-table .ar-rsi-up,.card .rules-body .rule-table .ar-rsi-down{font-weight:700}
+/* 同向／反向两行为一组，组间用更亮的横线分开。 */
+.card .rules-body .rule-table tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid #6f7b91}
+/* 同一灯级覆盖多个分组：居中并带灯色底色；混合灯与非灯级不加底色。灰灯（折）比灰灯更淡。 */
+.card .rules-body .rule-table td.cell-red{background:rgba(248,81,73,.16);text-align:center}
+.card .rules-body .rule-table td.cell-yellow{background:rgba(210,153,34,.16);text-align:center}
+.card .rules-body .rule-table td.cell-gray{background:rgba(173,181,194,.24);text-align:center}
+.card .rules-body .rule-table td.cell-gray-fold{background:rgba(173,181,194,.09);text-align:center}
+/* 条件列：表头与条件文字用白字，便于与右侧灯级列区分。 */
+.card .rules-body #rules-lamp-table thead th.col-cond{color:#fff}
+.card .rules-body #rules-lamp-table tbody td:first-of-type{color:#e6edf3}
 .card .rules-body .signal-term{display:inline-block;white-space:nowrap;overflow-wrap:normal}
 .card .rules-body .dir-arrow{display:inline-block;vertical-align:-4px;margin-left:2px;overflow:visible}
 .card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
 .card .rules-body .rule-anchor{display:block;height:0}
-@media(max-width:520px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}}
+@media(max-width:520px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{font-size:11px}}
 #signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
 #signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
 #signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:#dce1e9}
@@ -1050,6 +1094,27 @@ function intersectSignals(data, kinds) {
   });
   return {members: members};
 }
+// 多选清单里的 ↑↓ 必须和主表描述、统计名单用同一套配色/字号（.arrow-rsi-up / .arrow-rsi-down）。
+// 以前这里整段用 textContent 写纯文本，箭头既不上色也不放大，所以跟另外两处对不上。
+// 逐字符拆成文本节点 + span，不拼 innerHTML，避免把数据当 HTML 解析。
+function appendRsiArrows(parent, text) {
+  const UP = "↑", DOWN = "↓";
+  let buf = "";
+  const flush = function() {
+    if (buf) { parent.appendChild(document.createTextNode(buf)); buf = ""; }
+  };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === UP || ch === DOWN) {
+      flush();
+      const span = document.createElement("span");
+      span.className = ch === UP ? "arrow-rsi-up" : "arrow-rsi-down";
+      span.textContent = ch;
+      parent.appendChild(span);
+    } else { buf += ch; }
+  }
+  flush();
+}
 function renderSignalFilter() {
   const box = document.getElementById("signalFilterResult");
   if (!box) return;
@@ -1091,29 +1156,36 @@ function renderSignalFilter() {
   const list = document.createElement("ul");
   result.members.forEach(function(m) {
     const li = document.createElement("li");
+    // 灯统一画在标的名称前面：与主表、统计名单同一元素、同一位置、同一尺寸（--lamp-size）。
+    // 旧版这里用 9px 的 <i class="stat-dot"> 排在分组后面，跟另外两处既不同位也不同大。
+    if (["red", "yellow", "green", "gray", "purple"].indexOf(m.l) >= 0) {
+      const dot = document.createElement("span");
+      dot.className = "signal-dot " + m.l;
+      dot.setAttribute("role", "img");
+      dot.setAttribute("aria-label",
+        {red: "红灯", yellow: "黄灯", green: "绿灯", gray: "缺失", purple: "紫灯"}[m.l]);
+      li.append(dot);
+    }
+    const link = document.createElement("a");
+    link.className = "signal-member-jump";
+    link.setAttribute("href", "#" + m.a);
     const sym = document.createElement("strong");
+    sym.className = "signal-member-symbol";
     sym.textContent = m.s;
-    li.append(sym);
+    link.append(sym);
     if (m.n) {
       const note = document.createElement("span");
       note.className = "note";
       note.textContent = m.n;
-      li.append(note);
+      link.append(note);
     }
     const group = document.createElement("span");
-    group.className = "signal-filter-group";
-    group.textContent = m.g;
-    li.append(" ", group);
-    if (["red", "yellow", "green", "gray"].indexOf(m.l) >= 0) {
-      const dot = document.createElement("i");
-      dot.className = "stat-dot " + m.l;
-      dot.setAttribute("role", "img");
-      dot.setAttribute("aria-label", {red: "红灯", yellow: "黄灯", green: "绿灯", gray: "缺失"}[m.l]);
-      li.append(dot);
-    }
+    group.className = "signal-member-belong";
+    group.textContent = "（" + m.g + "）";
+    li.append(link, group);
     const detail = document.createElement("span");
     detail.className = "signal-filter-detail";
-    detail.textContent = m.details.join(" · ");
+    appendRsiArrows(detail, m.details.join(" / "));
     li.append(detail);
     list.append(li);
   });
@@ -1136,7 +1208,16 @@ document.addEventListener("click", function(event) {
   }
   const filterButton = event.target.closest(".signal-filter-toggle");
   if (filterButton) {
-    filterButton.setAttribute("aria-pressed", String(filterButton.getAttribute("aria-pressed") !== "true"));
+    const selecting = filterButton.getAttribute("aria-pressed") !== "true";
+    const technicalKinds = ["rsi", "boll", "boll_rsi"];
+    if (selecting && technicalKinds.includes(filterButton.dataset.kind)) {
+      document.querySelectorAll(".signal-filter-toggle").forEach(function(button) {
+        if (button !== filterButton && technicalKinds.includes(button.dataset.kind)) {
+          button.setAttribute("aria-pressed", "false");
+        }
+      });
+    }
+    filterButton.setAttribute("aria-pressed", String(selecting));
     renderSignalFilter();
     return;
   }

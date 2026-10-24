@@ -44,10 +44,10 @@ class RulesRegression(unittest.TestCase):
         self.assertEqual(monitor.valid_settings(monitor.DEFAULT_SETTINGS), "")
         self.assertEqual(monitor.DEFAULT_SETTINGS["trigger_gap_pct"], 5)
         self.assertEqual(monitor.DEFAULT_SETTINGS["reduce_gap_pct"], 3)
-        self.assertEqual(monitor.DEFAULT_SETTINGS["target_space_pct"], 30)
-        self.assertEqual(monitor.DEFAULT_SETTINGS["target_high_space_pct"], 70)
-        self.assertEqual(monitor.SETTING_LIMITS["target_space_pct"], (30, 30))
-        self.assertEqual(monitor.SETTING_LIMITS["target_high_space_pct"], (70, 70))
+        self.assertEqual(monitor.DEFAULT_SETTINGS["target_space_pct"], 40)
+        self.assertEqual(monitor.DEFAULT_SETTINGS["target_high_space_pct"], 90)
+        self.assertEqual(monitor.SETTING_LIMITS["target_space_pct"], (40, 40))
+        self.assertEqual(monitor.SETTING_LIMITS["target_high_space_pct"], (90, 90))
         self.assertEqual(monitor.DEFAULT_SETTINGS["rsi_low"], 35)
         self.assertEqual(monitor.DEFAULT_SETTINGS["ma_long"], 200)
         self.assertFalse(any(key.startswith("fund_") for key in monitor.DEFAULT_SETTINGS))
@@ -59,16 +59,16 @@ class RulesRegression(unittest.TestCase):
         for old in (50, 50.0):
             warnings = []
             got = rules_config.resolve_settings({"target_space_pct": old, "trigger_gap_pct": 7}, warnings.append)
-            self.assertEqual((got["target_space_pct"], got["target_high_space_pct"]), (30, 70))
+            self.assertEqual((got["target_space_pct"], got["target_high_space_pct"]), (40, 90))
             self.assertEqual(got["trigger_gap_pct"], 7)
             self.assertEqual(warnings, [])
             with patch("builtins.open", mock_open(read_data=json.dumps({"target_space_pct": old}))) as opened, \
                     patch.object(monitor, "log") as warn:
                 loaded = monitor.load_settings()
-            self.assertEqual((loaded["target_space_pct"], loaded["target_high_space_pct"]), (30, 70))
+            self.assertEqual((loaded["target_space_pct"], loaded["target_high_space_pct"]), (40, 90))
             opened().write.assert_not_called()
             warn.assert_not_called()
-        for key, valid in (("target_space_pct", 30), ("target_high_space_pct", 70)):
+        for key, valid in (("target_space_pct", 40), ("target_high_space_pct", 90)):
             self.assertEqual(rules_config.setting_error(key, valid), "")
             for bad in (valid - 1, valid + 1, True, str(valid), float("nan"), float("inf")):
                 with self.subTest(key=key, bad=bad):
@@ -78,10 +78,10 @@ class RulesRegression(unittest.TestCase):
                     self.assertEqual(got[key], valid)
                     self.assertEqual(len(warnings), 1)
 
-    def test_target_rules_explain_30_70_boundaries_scope_priority_and_union(self):
+    def test_target_rules_explain_40_90_boundaries_scope_priority_and_union(self):
         constants = monitor._rule_constants()
-        self.assertEqual(constants["target_space_pct"], 30)
-        self.assertEqual(constants["target_high_space_pct"], 70)
+        self.assertEqual(constants["target_space_pct"], 40)
+        self.assertEqual(constants["target_high_space_pct"], 90)
         dynamic = page_assets.rules_template(monitor.S, constants)
         for label, markup in (("动态规则", dynamic), ("静态模板", monitor.RULES_TEMPLATE),
                               ("渲染页", self.render())):
@@ -89,10 +89,10 @@ class RulesRegression(unittest.TestCase):
                 rules = re.search(r'<template id="rulesTpl">(.*?)</template>', markup, re.S)[1]
                 glossary = re.search(r'<template id="glossaryTpl">(.*?)</template>', markup, re.S)[1]
                 text = plain_text(rules)
-                for term in ("目标空间 所有分组", "有效空间≥30% → 紫虚线空心灯",
-                             "≥70% → 紫红虚线空心灯", "达到目标／共识价 持仓分组、重点",
+                for term in ("目标空间 所有分组", "有效空间≥40% → 紫虚线空心灯",
+                             "≥90% → 紫红虚线空心灯", "达到目标／共识价 持仓分组、重点",
                              "当日上穿／跌破或现价在目标±3% → 实心紫灯",
-                             "目标空间<30%、未达到目标／共识价、共识获取失败及失败旧价"):
+                             "目标空间<40%、未达到目标／共识价、共识获取失败及失败旧价"):
                     self.assertIn(term, text)
                 explanation = plain_text(glossary)
                 for term in ("有效手填目标价优先", "空间＝（目标／共识价÷现价−1）×100%",
@@ -308,11 +308,11 @@ class RulesRegression(unittest.TestCase):
                 members = monitor.signal_count_members([row])
                 self.assertEqual(list(counts), [kind for kind, _ in monitor.SIGNAL_KINDS])
                 self.assertEqual(counts['rsi'], {'label': 'RSI', 'red': 1, 'yellow': 0, 'purple': 0})
-                self.assertEqual(members['rsi']['red'][0]['rsi_hits'], '3条超卖')
+                self.assertEqual(members['rsi']['red'][0]['rsi_hits'], 'RSI 3条 ↓超卖')
                 self.assertEqual(monitor.text_only_members([row]), [])
                 card = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
                 self.assertIn('data-kind="rsi"', card)
-                self.assertIn('aria-label="RSI3条超卖"', card)
+                self.assertIn('<h5>RSI 3条 <span class="arrow-rsi-down">↓</span>超卖</h5>', card)
                 self.assertNotIn('data-kind="rsi_low"', card)
 
     def test_standalone_three_overbought_uses_yellow_rsi_kind_only_in_active_groups(self):
@@ -330,7 +330,7 @@ class RulesRegression(unittest.TestCase):
                 self.assertEqual(monitor.signal_counts([row])['rsi']['yellow'], int(level == 'yellow'))
                 if level == 'yellow':
                     self.assertEqual(members['rsi']['yellow'][0]['indicators'],
-                                     [{'shape': '▲', 'tone': 'yellow', 'label': 'RSI3条超买'}])
+                                     [{'shape': '↑', 'tone': 'yellow', 'label': 'RSI 3条 ↑超买'}])
                 else:
                     self.assertEqual(monitor.text_only_members([row])[0]['kind'], 'rsi')
 
@@ -373,8 +373,8 @@ class RulesRegression(unittest.TestCase):
         text = page_assets.rules_body(monitor.S, monitor._rule_constants())
         glossary = page_assets.glossary_body(monitor.S, monitor._rule_constants())
         rules_text, glossary_text = plain_text(text), plain_text(glossary)
-        self.assertIn('单独RSI三条超卖', rules_text)
-        self.assertRegex(rules_text, r'单独RSI三条超卖\s+所有分组 → 红灯')
+        self.assertIn('单独RSI', rules_text)
+        self.assertRegex(rules_text, r'RSI 3条 ↓超卖\s*红灯')
         self.assertIn('重点、其他分组不适用', rules_text)
         for explanation in ('只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯',
                             '统计由对应红列转灰列', '灰字删除线',
@@ -447,14 +447,13 @@ class RulesRegression(unittest.TestCase):
                 body = page_assets.rules_body(monitor.S, monitor._rule_constants())
                 rules_text = plain_text(body)
                 glossary = plain_text(page_assets.glossary_body(monitor.S, monitor._rule_constants()))
-                self.assertIn("短均线：自适应确认穿越 → 黄灯", rules_text)
-                self.assertIn("长均线：日内触及±1%或穿越 → 黄灯", rules_text)
+                self.assertIn("均线（短均线穿越；长均线触及±1%或穿越）", rules_text)
+                self.assertRegex(rules_text, r"长均线触及±1%或穿越）\s*黄灯")
                 self.assertIn("两条同周期只计一次，按简单穿越判断", glossary)
                 self.assertNotIn("均线已关闭", rules_text)
                 self.assertNotIn("当前0日", rules_text)
                 for name, period in (("短均线", short), ("长均线", long)):
                     status = "启用" if period else "关闭"
-                    self.assertRegex(rules_text, re.escape(name) + r'[^\n]*（' + status + r'）')
                     self.assertIn(name + "（" + status + "）", glossary)
                 self.assertNotRegex(rules_text + glossary, r'当前\d+日|\d+日均线|第一条|第二条|2～250')
                 x = monitor._analysis_context("OFFLINE", {},
@@ -495,8 +494,7 @@ class RulesRegression(unittest.TestCase):
                 self.assertEqual(level(current, None, ratio, intraday), expected)
                 self.assertEqual(level(current, None, ratio, intraday), level(previous, None, ratio, intraday))
         text = plain_text(page_assets.rules_body(current, monitor._rule_constants()))
-        self.assertIn('自适应：≥3.6σ → 红灯，≥2σ → 黄灯', text)
-        self.assertIn('固定：≥3× → 红灯，≥1.5× → 黄灯', text)
+        self.assertIn('红灯（≥3.6σ 或 ≥3×）；黄灯（≥2σ 或 ≥1.5×）', text)
 
     def test_statistics_collapse_bar_shares_border_color_only_in_statistics(self):
         self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:var(--signal-border);border:1px solid var(--signal-border)', page_assets.PAGE_CSS)
@@ -517,8 +515,7 @@ class RulesRegression(unittest.TestCase):
                 self.assertEqual(al.level, "red" if active else "yellow")
                 text = page_assets.rules_body(monitor.S, monitor._rule_constants())
                 self.assertEqual(page_assets.rule_flags(monitor.S)["vol_adaptive"], active)
-                self.assertIn(f"自适应：≥{red:g}σ → 红灯，≥{yellow:g}σ → 黄灯", plain_text(text))
-                self.assertIn("固定：≥4× → 红灯，≥2× → 黄灯", plain_text(text))
+                self.assertIn(f"红灯（≥{red:g}σ 或 ≥4×）；黄灯（≥{yellow:g}σ 或 ≥2×）", plain_text(text))
                 glossary = plain_text(page_assets.glossary_body(monitor.S, monitor._rule_constants()))
                 self.assertIn("异常值有效、两条σ阈值启用且量比≥1×，用自适应；否则用固定倍数", glossary)
                 self.assertIn("自适应未命中，不再用固定倍数补灯", glossary)
@@ -545,8 +542,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn("关闭自适应或波动无效时固定0.75%", plain_text(body))
         self.assertIn("历史日波动×0（当前0%设置）", plain_text(body))
         rules = plain_text(page_assets.rules_body(monitor.S, monitor._rule_constants()))
-        self.assertIn("布林上轨 + RSI 2条向上超买 → 黄灯", rules)
-        self.assertIn("布林下轨 + RSI 3条向下超卖 → 红灯", rules)
+        self.assertIn("布林上轨▲ + RSI 2条 ↑超买黄灯黄灯仅文字", rules)
+        self.assertIn("布林下轨▼ + RSI 3条 ↓超卖红灯", rules)
 
     def test_retired_fund_settings_and_frontend_are_absent(self):
         warnings = []
@@ -697,6 +694,21 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
         self.assertLess(page.index(cost_css), page.index(page_assets.RULES_CSS))
         self.assertIn(page_assets.PAGE_INTERACTION_JS, page)
 
+    def test_css_cleanup_keeps_active_features_and_drops_retired_selectors(self):
+        css = page_assets.PAGE_CSS
+        for retired in ('.reference-alert', '.reference-top', '.reference-conclusion',
+                        '.reference-data', '.local-preview-banner', '.dca{', '.dca.on{',
+                        '.acts button', '.stat-count{', '.gray-signal-row',
+                        '.arrow-band-up{', '.arrow-band-down{', '.lamp-sig-red', '.lamp-sig-yellow'):
+            self.assertNotIn(retired, css)
+        for active in ('.reference-detail{', '.oil-reference-row', '.dca-badge',
+                       '.runbar button', '.signal-dot{', 'li::marker', '.grp-arrow',
+                       '.arrow-rsi-up,.arrow-rsi-down', '.rule-table th.cat-col'):
+            self.assertIn(active, css)
+        self.assertEqual(css.count('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}'), 1)
+        for phase in ('busy', 'partial', 'ok', 'bad'):
+            self.assertIn(f'.runlight[data-phase="{phase}"]', css)
+
     def test_content_hash_changes_even_with_same_size_and_mtime(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "run-status.js"
@@ -763,8 +775,8 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
                       "rsi_low": 80, "rsi_high": 70, "fund_rev_red": -1, "fund_rev_yellow": -10},
                      {"trigger_gap_pct": "8", "reduce_gap_pct": None, "signal_single_open": 0.5},
                      {"target_space_pct": 50, "trigger_gap_pct": 7},
-                     {"target_space_pct": 30, "target_high_space_pct": 70},
-                     {"target_space_pct": 29, "target_high_space_pct": 69}]
+                     {"target_space_pct": 40, "target_high_space_pct": 90},
+                     {"target_space_pct": 39, "target_high_space_pct": 89}]
         payload = {"settings": settings, "overrides": overrides}
         # 真实生成块与真实编辑页函数均在 VM 中执行；Node 本身也经同一个离线入口。
         script = r'''
@@ -798,7 +810,7 @@ process.stdout.write(JSON.stringify(result));
         self.assertEqual(result.returncode, 0, result.stderr)
         got = json.loads(result.stdout)
         self.assertNotIn('id="effectiveRuleText"', (ROOT / "edit.html").read_text(encoding="utf-8"))
-        self.assertIn('布林上轨 + RSI 3条向上超买 → 红灯',
+        self.assertIn('布林上轨▲ + RSI 3条 ↑超买红灯红灯灰灯',
                       plain_text(page_assets.rules_body(settings[0], monitor._rule_constants())))
         self.assertEqual(got["errors"], [""] * len(settings))
         self.assertEqual(got["bindings"], [[s["trigger_gap_pct"], s["reduce_gap_pct"]] for s in settings])
@@ -810,9 +822,89 @@ process.stdout.write(JSON.stringify(result));
             self.assertEqual(bool(actual["warnings"]), bool(warnings))
 
     def test_changed_modules_parse_as_python_311(self):
-        for name in ("monitor.py", "rules_config.py", "page_assets.py", "tests/mm_test_rules.py",
+        for name in ("monitor.py", "monitor_indicators.py", "monitor_rules.py",
+                     "monitor_snapshot.py", "monitor_render.py", "rules_config.py",
+                     "page_assets.py", "tests/mm_test_rules.py",
                      "tests/mm_test_groups.py", "tests/mm_test_render.py"):
             ast.parse((ROOT / name).read_text(encoding="utf-8"), filename=name, feature_version=(3, 11))
+
+
+class ModuleBoundaryRegression(unittest.TestCase):
+    def test_modules_import_without_runtime_and_join_build_inputs(self):
+        import importlib
+        import build_support
+        modules = (("monitor_indicators", "IndicatorCalculator"),
+                   ("monitor_rules", "RuleEngine"),
+                   ("monitor_snapshot", "SnapshotBuilder"),
+                   ("monitor_render", "PageRenderer"))
+        for name, class_name in modules:
+            with self.subTest(module=name):
+                module = importlib.import_module(name)
+                context = SimpleNamespace()
+                service = getattr(module, class_name)(context)
+                self.assertIs(service._context, context)
+                self.assertEqual(set(vars(service)), {"_context"})
+                self.assertTrue(build_support.is_build_input(name + ".py"))
+                tree = ast.parse((ROOT / (name + ".py")).read_text(encoding="utf-8"))
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.Import):
+                        self.assertNotIn("monitor", [a.name for a in node.names])
+                    elif isinstance(node, ast.ImportFrom):
+                        self.assertNotEqual(node.module, "monitor")
+
+    def test_existing_bound_interfaces_read_later_callable_patches(self):
+        resolve = monitor.resolve_target
+        evaluate = monitor.evaluate_target
+        with patch.object(monitor, "manual_target", return_value=(99, None)) as manual:
+            self.assertEqual(resolve({}, None),
+                             {"kind": "manual", "price": 99, "month": None, "failed": False})
+            manual.assert_called_once_with({})
+        target = {"kind": "manual", "price": 100, "month": None, "failed": False}
+        with patch.object(monitor, "target_alerts", return_value=["patched"]) as alerts:
+            self.assertEqual(evaluate(100, 99, target, "position", 3)["reached_detail"], "patched")
+            alerts.assert_called_once()
+        self.assertIsNone(resolve({}, None))
+
+    def test_indicator_internal_lookup_keeps_old_patch_surface(self):
+        ratio = monitor.completed_day_volume_ratio
+        data = {"dates": [str(i) for i in range(21)], "volumes": [100] * 21}
+        with patch.object(monitor, "_latest_completed_session_index", return_value=20) as index:
+            self.assertEqual(ratio("AAPL", data), (1.0, "20"))
+            index.assert_called_once_with(data["dates"], None)
+
+    def test_statistics_internal_lookup_keeps_old_patch_surface(self):
+        members = {kind: {level: [] for level in ("red", "yellow", "purple")}
+                   for kind, _ in monitor.SIGNAL_KINDS}
+        members["chg"]["red"] = [{"symbol": "AAPL"}]
+        count = monitor.signal_counts
+        with patch.object(monitor, "signal_count_members", return_value=members) as collect:
+            self.assertEqual(count([])["chg"]["red"], 1)
+            collect.assert_called_once_with([])
+
+    def test_rule_and_projection_read_same_rebound_constants(self):
+        evaluate = monitor.evaluate_target
+        project = monitor._apply_target
+        target = {"kind": "manual", "price": 100, "month": None, "failed": False}
+        with patch.object(monitor, "CONSENSUS_GROUPS", ()):
+            resolved = evaluate(100, 99, target, "position", 3)
+            self.assertFalse(resolved["hit"])
+            projected = project({"symbol": "AAPL", "group": "position", "price": 100,
+                                 "prev_close": 99, "target": resolved, "level": "green",
+                                 "signal_marks": [], "signals": []})
+            self.assertFalse(projected["target"]["hit"])
+            self.assertFalse(projected["purple"])
+        with patch.object(monitor, "TARGET_SPACE_PCT", 50), \
+                patch.object(monitor, "TARGET_HIGH_SPACE_PCT", 100):
+            self.assertEqual(evaluate(100, 99, dict(target, price=145), "technology", 3)["band"], "low")
+
+    def test_services_read_rebound_settings_and_restore(self):
+        near = monitor._boll_near_pct
+        with patch.object(monitor, "S", dict(monitor.DEFAULT_SETTINGS,
+                                            boll_near_band_pct=0, boll_near_pct=0.75)):
+            self.assertEqual(near(SimpleNamespace(vol_sigma=2)), 0.75)
+            with patch.dict(monitor.S, {"boll_near_pct": 1.25}):
+                self.assertEqual(near(SimpleNamespace(vol_sigma=2)), 1.25)
+            self.assertEqual(near(SimpleNamespace(vol_sigma=2)), 0.75)
 
 
 class CostSeedRegression(unittest.TestCase):

@@ -1163,7 +1163,7 @@
     ACK_STATS_CHANGED=false; ACK_STATUS_JSON=ackStatus;
     var filter={label:'成本浮亏',ok:true,members:entries.map(function(e){
       // 筛选看条件是否命中，包含已读，与加减仓筛选一致；灰仅表示这条提醒已读。
-      return {id:e.id,s:e.sym,n:e.note,g:e.group,l:e.acked?'gray':'red',d:[e.label+(e.acked?' · 已读':'')]};
+      return {id:e.id,s:e.sym,n:e.note,g:e.group,a:e.anchor,l:e.acked?'gray':'red',d:[e.label+(e.acked?' · 已读':'')]};
     })}, next=JSON.stringify(filter);
     if(box && next!==LOSS_FILTER_JSON){
       var data;

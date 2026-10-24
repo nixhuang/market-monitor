@@ -340,9 +340,8 @@ class RulesTemplateTests(unittest.TestCase):
         self.assertTrue(source_links, '保留外部来源链接，不能将所有链接一起删除')
         self.assertTrue(all(link.startswith('https://') for link in source_links))
         self.assertIn('History of Market', self.plain(glossary))
-        for alias in ('alerts', 'display', 'quiet', 'upper', 'lower', 'volume', 'change',
-                      'amplitude', 'low', 'ma', 'prices', 'loss', 'space', 'reached',
-                      'earnings', 'missing', 'single', 'terms', 'fetch', 'read-terms',
+        for alias in ('alerts', 'display', 'quiet', 'prices', 'loss', 'space', 'reached',
+                      'earnings', 'missing', 'terms', 'fetch', 'read-terms',
                       'change-terms', 'amplitude-terms', 'boll-terms', 'rsi-terms',
                       'volume-terms', 'ma-terms', 'target-terms', 'earnings-terms',
                       'fetch-consensus', 'fetch-after-earnings', 'fetch-earnings-cache',
@@ -352,26 +351,25 @@ class RulesTemplateTests(unittest.TestCase):
     def test_latest_rules_and_sorting_keep_gray_and_group_conditions(self):
         rules = assets.rules_body({}, {})
         text = self.plain(rules)
-        for term in ('单独RSI三条超卖', '所有分组 → 红灯。', '单独RSI三条超买',
-                     '持仓分组、重点 → 黄灯。', '加仓价提醒标记已读 → 灰灯。',
+        for term in ('RSI 3条 ↓超卖红灯', 'RSI 3条 ↑超买黄灯黄灯灰灯（折）',
+                     '加仓价提醒标记已读 → 灰灯。',
                      '减仓价提醒标记已读 → 灰灯。', '浮亏提醒标记已读 → 灰灯。',
                      '浮亏10%／20%每只标的只计一次。',
                      '两者只保留在主表，不进入“无异动”，不计入统计面板',
-                     '单独布林下轨「RSI 0 条」→ 文字 → 灰灯。',
-                     '单独RSI 2条向上超买／向下超卖 → 文字 → 灰灯。',
-                     '布林上轨 + RSI 2条／3条向上超买 → 文字 → 灰灯。',
-                     '单独RSI三条超买 → 文字 → 灰灯。', '短均线', '长均线'):
+                     '布林下轨▼ + RSI 0条灰灯（折）',
+                     'RSI 2条 ↓超卖灰灯',
+                     '布林上轨▲ + RSI 1条 ↑超买灰灯灰灯无提示', '短均线', '长均线'):
             self.assertIn(term, text)
         for deleted in ('进入下轨报警区（逼近自适应）', '排除指数、期货', '行灯取最严重',
                         '单独RSI 3条向上超买 → 文字。', '基本面黄灯'):
             self.assertNotIn(deleted, text)
         second = rules.split('<section id="rule-text">')[1].split('</section>')[0]
-        self.assertLess(second.index('id="nav-up-sell-other"'), second.index('id="rule-earnings"'))
+        self.assertNotIn('id="nav-up-sell-other"', second)
         self.assertLess(second.index('id="rule-earnings"'), second.index('id="rule-quotes"'))
         third = rules.split('<section id="rule-folded">')[1]
         headings = re.findall(r'<h5 class="rule-layout-heading">(.*?)</h5>', third)
-        self.assertEqual(headings, ['单独布林', '单独RSI', '布林＋RSI', '目标／共识价', '财报'])
-        self.assertEqual(rules.count('class="nav-gray"'), 14)
+        self.assertEqual(headings, ['目标／共识价', '财报'])
+        self.assertEqual(rules.count('class="nav-gray"'), 19)
 
     def test_threshold_tables_are_only_in_glossary_and_follow_settings_and_constants(self):
         settings = {'chg_yellow': 7, 'chg_red': 11, 'amp_yellow': 13, 'amp_red': 17,
@@ -386,11 +384,13 @@ class RulesTemplateTests(unittest.TestCase):
                      'ma_confirm_min': 0.75, 'ma_confirm_max': 1.25, 'ma_confirm_default': 0.8,
                      'vol_ratio_base': 22, 'intraday_vol_quiet_min': 19,
                      'boll_sigma_factor': 1.5, 'target_space_pct': 40,
-                     'target_high_space_pct': 80, 'earn_soon_days': 5, 'earn_list_days': 12}
+                     'target_high_space_pct': 90, 'earn_soon_days': 5, 'earn_list_days': 12}
         before = copy.deepcopy((settings, constants))
         rules = assets.rules_body(settings, constants)
         glossary = assets.glossary_body(settings, constants)
-        self.assertNotIn('<table', rules)
+        self.assertEqual(re.findall(r'<table[^>]*id="([^"]+)"', rules), ['rules-lamp-table'])
+        self.assertNotIn('glossary-chg-table', rules)
+        self.assertNotIn('glossary-amp-table', rules)
         self.assertEqual(glossary.count('<table'), 9)
         for kind, expected in (('chg', ['≥3.5%', '≥5.5%', '≥7.7%', '≥12.1%', '≥12.6%', '≥19.8%']),
                                ('amp', ['≥6.5%', '≥8.5%', '≥14.3%', '≥18.7%', '≥23.4%', '≥30.6%'])):
@@ -404,7 +404,7 @@ class RulesTemplateTests(unittest.TestCase):
                         '≥82超买', '≤24超卖', '距低点≤2.2%', '设置价×1.07', '设置价×0.91',
                         '≥4.2σ', '≥2.1σ', '≥4.4×', '≥2.2×', '固定±1.7%',
                         '限0.75%～1.25%', '检查近8日', '此前22日', '不足19分钟',
-                        '有效空间≥40%', '≥80%', '未来6～12天', '&lt;0.8%'):
+                        '有效空间≥40%', '≥90%', '未来6～12天', '&lt;0.8%'):
             self.assertIn(html.unescape(dynamic), combined)
         self.assertIn('有效空间≥40%', self.plain(rules))
         self.assertEqual((settings, constants), before)
@@ -421,7 +421,7 @@ class RulesTemplateTests(unittest.TestCase):
                 self.assertIn('两条同周期只计一次，按简单穿越判断', text)
                 self.assertIn('关闭自适应或波动无效时固定0.5%', text)
                 self.assertIn('两条σ阈值启用', text)
-                self.assertIn('短均线：自适应确认穿越', text)
+                self.assertIn('均线（短均线穿越；长均线触及±1%或穿越）', text)
                 self.assertNotIn('${', markup)
 
     def test_unique_tables_and_dual_track_sentence_remain(self):
@@ -574,12 +574,14 @@ const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),{chromiu
       await page.locator('#signalRules > summary').click();
       await page.locator('#glossaryRules > summary').click();
       assert(await page.locator('#signalRules').evaluate(d=>d.open));
-      assert.equal(await page.locator('#signalRulesBody svg').count(),35);
+      assert.equal(await page.locator('#signalRulesBody svg').count(),input.ruleSvgCount);
+      assert.equal(await page.locator('#glossaryRulesBody svg').count(),input.glossarySvgCount);
+      assert(input.glossarySvgCount>0);
       const appearance=await page.evaluate(()=>{
         document.getElementById('glossaryRules').open=true;
         const p=document.querySelector('#signalRulesBody p.rule-original');
         const g=document.querySelector('#glossaryRulesBody p');
-        const arrow=document.querySelector('#signalRulesBody svg');
+        const arrow=document.querySelector('#glossaryRulesBody svg');
         const table=document.getElementById('glossary-chg-table');
         return {pMargin:getComputedStyle(p).marginTop,gMargin:getComputedStyle(g).marginTop,
           arrowHeight:arrow.getBoundingClientRect().height,
@@ -602,8 +604,14 @@ const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),{chromiu
         markup = (assets.rules_template({}, {}) + '<div class="runbar"></div>'
                   '<details id="signalCounts" open><summary>统计</summary></details>'
                   '<details class="card" id="marketRiskRules"><summary>宏观细则</summary></details>')
-        payload = {'html': markup, 'css': assets.PAGE_CSS + assets.RULES_CSS,
-                   'js': assets.RULES_INTERACTION_JS}
+        rule_body = re.search(r'<div[^>]*id="signalRulesBody"[^>]*>(.*?)</template>', markup, re.S)
+        self.assertIsNotNone(rule_body, '规则模板须包含完整正文')
+        glossary_body = re.search(r'<div[^>]*id="glossaryRulesBody"[^>]*>(.*?)</template>', markup, re.S)
+        self.assertIsNotNone(glossary_body, '名词模板须包含完整正文')
+        payload = {'html': markup, 'css': assets.PAGE_CSS,
+                   'js': assets.RULES_INTERACTION_JS,
+                   'ruleSvgCount': rule_body.group(1).count('<svg'),
+                   'glossarySvgCount': glossary_body.group(1).count('<svg')}
         result = subprocess.run(['node', '-e', code], input=json.dumps(payload), text=True,
                                 encoding='utf-8', capture_output=True, check=False, timeout=120)
         self.assertEqual(result.returncode, 0, result.stderr)

@@ -8,6 +8,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import monitor  # noqa: E402
 
+
+def _row_signals(row):
+    """首页一行：灯统一画在标的名称前面（_signal_lamps），描述文字在后（_signals_html）。"""
+    return monitor._signal_lamps(row) + monitor._signals_html(row)
+
 # 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
 monitor.S.clear()
 monitor.S.update(monitor.DEFAULT_SETTINGS)
@@ -479,16 +484,16 @@ def rendered_stock_row(page, row, keep):
     return classes[0].split() if len(classes) == 1 else [], body
 
 
-# 目标/共识30/70：状态与主表折叠分别验证，旧基本面及财报三日回归保持不动。
+# 目标/共识40/90：状态与主表折叠分别验证，旧基本面及财报三日回归保持不动。
 _target_cases = []
 for _symbol, _group, _price, _prev, _state in (
-        ('TLOW', 'technology', 129.999, 100, 'low'),
-        ('TSPACE', 'technology', 130, 100, 'space'),
-        ('TMID', 'materials', 169.999, 100, 'space'),
-        ('THIGH', 'healthcare', 170, 100, 'high'),
+        ('TLOW', 'technology', 139.999, 100, 'low'),
+        ('TSPACE', 'technology', 140, 100, 'space'),
+        ('TMID', 'materials', 189.999, 100, 'space'),
+        ('THIGH', 'healthcare', 190, 100, 'high'),
         ('TOVER', 'energy', 250, 100, 'high'),
         ('THIT', 'position', 101, 100, 'hit'),
-        ('TBOTH', 'focus', 170, 180, 'hit')):
+        ('TBOTH', 'focus', 190, 200, 'hit')):
     _row = item(_symbol, _group, 'green', chg=0)
     _row.update(data_date='2026-10-20', prev_close=_prev, signals=[], signal_marks=[], range52={'low': 50, 'high': 150, 'position': 50, 'scope': '52周',
                 'from': '2025-10-20', 'to': '2026-10-20'},
@@ -513,7 +518,7 @@ with _patch.object(monitor, 'global_dca', return_value=None):
 for _row, _state in _target_cases:
     _classes, _fragment = rendered_stock_row(_target_page, _row, _state != 'low')
     check('lvtag tgt ' + _state in _fragment,
-          '30/70胶囊状态 ' + _row['symbol'] + '=' + _state)
+          '40/90胶囊状态 ' + _row['symbol'] + '=' + _state)
     _stripe = {'space': 'pur-space', 'high': 'pur-high', 'hit': 'pur-hit'}.get(_state)
     check('green' in _classes and (_stripe in _classes if _stripe else 'pur' not in _classes),
           '目标行独立条纹 ' + _row['symbol'] + '=' + (_stripe or '无'))
@@ -528,7 +533,7 @@ _tech = _target_page.split('id="group_technology"', 1)[1].split('id="group_energ
 _tech_main, _tech_quiet = _tech.split('<details class="quiet-list">', 1)
 check('id="s-tspace"' in _tech_main and 'id="s-tlow"' in _tech_quiet
       and 'id="s-tfailold"' in _tech_quiet and 'id="s-tfailnew"' in _tech_quiet,
-      '跨组空间>=30留主表，低空间及失败不提升可见性')
+      '跨组空间>=40留主表，低空间及失败不提升可见性')
 check(_target_rows == _target_before, '目标全页渲染不突变输入')
 check(_target_snapshot['summary']['purple'] == 6
       and _target_snapshot['signal_counts']['target']['purple'] == 6,
@@ -541,7 +546,7 @@ _target_panel = _target_page.split('class="text-only target-purple"', 1)[1].spli
 check(bool(re.search(r'空间\s*5\s*只[\s　]*达到\s*2\s*只', _target_panel))
       and not re.search(r'紫灯\s*\d+\s*只', _target_panel), '空间/达到双计数标题替代旧紫灯标题')
 check(_target_panel.count('<ul') == 2 and '□' in _target_panel and '■' in _target_panel
-      and '今日跌破共识价 170' in _target_panel and _target_panel.count('href="#s-tboth"') == 2,
+      and '今日跌破共识价 190' in _target_panel and _target_panel.count('href="#s-tboth"') == 2,
       '展开两段方块名单保留具体达到方向及重叠跳转')
 check('data-kind="target_purple"' in _target_page and '>目标价</button>' not in _target_page
       and '>共识价</button>' not in _target_page, '底部union按钮保留而目标红黄表行移除')
@@ -562,7 +567,7 @@ for _row in _target_rows:
     check('<td class="sig">—</td>' in _body,
           _row['symbol'] + '仅自动共识时描述列保留破折号占位')
 _description_rows = _copy.deepcopy(_target_rows)
-_technical_texts = ['触及布林下轨 → 黄', 'RSI 三条超卖', '贴近200日均线']
+_technical_texts = ['触及布林下轨▼ → 黄', 'RSI 三条超卖', '贴近200日均线']
 for _row in _description_rows:
     _target = _row['target']
     _row['signals'] = _technical_texts + [
@@ -591,6 +596,8 @@ _legacy_consensus.update(target={'kind': 'consensus', 'price': 250, 'failed': Tr
 _legacy_before = _copy.deepcopy(_legacy_consensus)
 _legacy_html = monitor._stock_row(_legacy_consensus, {})
 check(re.search(r'<td class="sig">(.*?)</td>', _legacy_html, re.S)[1] == _expected_sig
+      and re.search(r'<td class="sym">(.*?)</td>', _legacy_html, re.S)[1].startswith(
+          monitor._signal_lamps(_legacy_consensus))   # 灯统一画在标的名称前面
       and 'lvtag tgt bad' in _legacy_html and 'pur-high' not in _legacy_html
       and 'pur-hit' not in _legacy_html,
       '失效旧共识经过stock_row迁移后仅保留原技术描述与失败灰胶囊')
@@ -623,7 +630,8 @@ for _row in _description_rows:
     if _row['target']['kind'] == 'consensus':
         check(_sig == _expected_sig, _row['symbol'] + '全页td.sig无自动共识且原技术描述完全一致')
     else:
-        check(all(monitor.html_lib.escape(monitor._ma_display_text(text, _row.get('ma_settings'))) in _sig
+        _sig_plain = re.sub(r'<[^>]+>', '', _sig)   # 方向符号的配色 span 不影响文字比对
+        check(all(monitor.html_lib.escape(monitor._ma_display_text(text, _row.get('ma_settings'))) in _sig_plain
                   for text in _row['signals'])
               and '&lt;b&gt;保留&lt;/b&gt;' in _sig,
               _row['symbol'] + '手填目标描述不误删并保持安全转义')
@@ -648,7 +656,7 @@ check({r['symbol'] for r in _description_snapshot['target_overlays']['space']}
 _description_panel = _description_page.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
 check(bool(re.search(r'空间\s*6\s*只[\s　]*达到\s*3\s*只', _description_panel))
       and '共识价 250，空间 +150.0%' in _description_panel
-      and '今日跌破共识价 170' in _description_panel
+      and '今日跌破共识价 190' in _description_panel
       and _description_panel.count('href="#s-tboth"') == 2,
       '统计区共识详情与两段重叠跳转不丢失')
 _both = next(row for row in _description_rows if row['symbol'] == 'TBOTH')
@@ -660,11 +668,11 @@ check(_both['target']['band'] == 'high' and _both['target']['hit']
 for _kind in ('manual', None):
     _row = item('KINDKEEP', 'technology', 'green')
     _row.update(signals=['今日上穿共识价 250'], target={'kind': _kind})
-    check('今日上穿共识价 250' in monitor._signals_html(_row),
+    check('今日上穿共识价 250' in _row_signals(_row),
           'kind=' + repr(_kind) + '不靠文字误判为自动共识')
 _technical_mention = item('TECHKEEP', 'technology', 'green')
 _technical_mention.update(target={'kind': 'consensus'}, signals=['RSI 原技术描述，与共识价交叉核对'])
-check(_technical_mention['signals'][0] in monitor._signals_html(_technical_mention),
+check(_technical_mention['signals'][0] in _row_signals(_technical_mention),
       '自动共识kind也不误删包含关键字的原技术描述')
 _runbar = re.search(r'<div class="runbar">(.*?)</div>', _description_page, re.S)[1]
 check('href="#signalRules"' not in _runbar and 'shortcut.textContent = "预警规则"' not in monitor.PAGE_INTERACTION_JS,
@@ -715,10 +723,10 @@ for _sym in ('RSIGRAY', 'COMBOGRAY', 'RSISILENT', 'UPSILENT', 'DUALSILENT'):
     _row = next(row for row in _business_rows if row['symbol'] == _sym)
     _classes, _fragment = rendered_stock_row(_business_page, _row, _sym == 'COMBOGRAY')
     check(_classes == ['green'], _sym + '技术文字或无提醒均不把主表绿灯改灰')
-check('aria-label="RSI3条超买">▲' in _business_page
-      and 'tone-yellow" role="img" aria-label="RSI3条超买"' in _business_page,
-      '单独三超买统计方向三角标黄，不跟其他红灯染红')
-check('盘中突破布林上轨' in _business_page and '触及布林下轨' in _business_page,
+check('<h5>RSI 3条 <span class="arrow-rsi-up">↑</span>超买</h5>' in _business_page,
+      '单独三超买：统计框标题写「RSI 3条 ↑超买」，不跟其他红灯染红')
+_business_plain = re.sub(r'<[^>]+>', '', _business_page)
+check('盘中突破布林上轨▲' in _business_plain and '触及布林下轨▼' in _business_plain,
       '双轨保留双方事实但限制后不换边统计')
 check('id="' + monitor._stock_anchor_id('QUOTEMISSING') + '"' in _business_page
       and 'id="' + monitor._stock_anchor_id('QUOTE_REFERENCE') + '"' in _business_page
@@ -769,12 +777,14 @@ _group_headers = re.findall(r'<details\b[^>]*\bid="group_[^"]*"[^>]*>\s*<summary
 check(_group_headers and all('stat-badge gray' not in header for header in _group_headers)
       and 'stat-badge gray' in _coexist_page,
       '技术灰数字只在统计面板，不出现在个股和长持仓表头')
-check('.signal-dot::marker{content:normal}' in monitor.PAGE_CSS
-      and '.signal-dot{display:inline list-item;list-style:disc inside;font-size:13px;font-weight:400;' in monitor.PAGE_CSS
-      and 'font-weight:400;margin:0 -5px 0 0;padding:0;vertical-align:baseline;color:var(--dim)}' in monitor.PAGE_CSS
-      and '.signal-dot::before' not in monitor.PAGE_CSS
-      and '.signal-dot{display:inline-block;width:7px' not in monitor.PAGE_CSS,
-      '描述复用原生disc、灯文字间距再缩小2px，不用字体圆点冒充')
+check('.signal-dot{display:inline-block;width:.34em;height:.34em;border-radius:50%;background:currentColor;'
+      'font-size:var(--lamp-size);font-weight:400;margin:0 .875em 0 0;padding:0;vertical-align:.25em;'
+      'color:var(--dim)}' in monitor.PAGE_CSS
+      and '--lamp-size:14px' in monitor.PAGE_CSS
+      and 'display:inline list-item' not in monitor.PAGE_CSS
+      and '.signal-dot::marker' not in monitor.PAGE_CSS
+      and '.signal-dot::before' not in monitor.PAGE_CSS,
+      '灯画成实心圆点、统一 --lamp-size，不用 inline list-item（Safari/微信不支持会整条丢声明）')
 check((_coexist_snap['summary']['red'], _coexist_snap['summary']['yellow']) == (1, 2)
       and {m['symbol']: m['level'] for m in _coexist_snap['text_only']}
       == {'STXY': 'yellow', 'STXR': 'red', 'NEEY': 'yellow'},
@@ -782,10 +792,14 @@ check((_coexist_snap['summary']['red'], _coexist_snap['summary']['yellow']) == (
 for _row, _color, _kind in zip(_coexist_rows, ('yellow', 'red', 'yellow'), ('rsi', 'rsi', 'boll_rsi')):
     _classes, _body = rendered_stock_row(_coexist_page, _row, not _row.get('foldable', True))
     _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
-    check(_classes == [_color] and _sig.count('signal-dot ' + _color) == 1
-          and _sig.count('signal-dot gray') == 1
-          and _sig.index('signal-dot ' + _color) < _sig.index('signal-dot gray'),
-          _row['symbol'] + '主表保留红黄且描述先红黄后指标灰，不重复灯点')
+    _sym = re.search(r'<td class="sym">(.*?)</td>', _body, re.S)[1]
+    # 灯统一画在标的名称前面（td.sym 开头），描述文字留在 td.sig
+    check(_classes == [_color] and _body.count('signal-dot ' + _color) == 1
+          and _body.count('signal-dot gray') == 1
+          and _body.index('signal-dot ' + _color) < _body.index('signal-dot gray')
+          and _sym.startswith('<span class="signal-dot ' + _color)
+          and 'signal-dot' not in _sig,
+          _row['symbol'] + '主表保留红黄且灯在名称前、描述先红黄后指标灰，不重复灯点')
     check(next(m['l'] for m in _coexist_data[_kind]['members'] if m['s'] == _row['symbol']) == _color
           and all(_coexist_snap['signal_counts'][kind][level] == 0
                   for kind in ('rsi', 'boll', 'boll_rsi') for level in ('red', 'yellow')),
@@ -795,14 +809,14 @@ check(_coexist_rows == _coexist_before and _coexist_snap == _coexist_snap_before
 
 # 旧中点解析只恢复已知的同轨布林连续天数尾句；绝不追加独立布林灯。
 _tail = '连续第2日贴近下轨'
-_plain = '逼近布林下轨 还差0.15%（盘中触及 293.63）'
-for _level, _rsi in ((None, None), ('yellow', 'RSI 2条超卖（≤35）'),
-                     ('red', 'RSI 3条超卖（≤35）')):
+_plain = '逼近布林下轨▼ 还差0.15%（盘中触及 293.63）'
+for _level, _rsi in ((None, None), ('yellow', 'RSI 2条 ↓超卖（≤35）'),
+                     ('red', 'RSI 3条 ↓超卖（≤35）')):
     _tail_row = item('TAIL', 'technology', _level or 'green')
     _tail_row.update(signals=([_rsi] if _rsi else []) + [_plain, _tail, '量比 1.2x'],
                      signal_marks=[('boll_rsi', _level)] if _level else [])
     _before_tail = _copy.deepcopy(_tail_row)
-    _html_tail = monitor._signals_html(_tail_row)
+    _html_tail = _row_signals(_tail_row)
     _groups_tail = monitor._signal_description_groups(_tail_row)
     _technical = next(g for g in _groups_tail if g['kind'] in ('boll', 'boll_rsi'))
     check(_technical['kind'] == ('boll_rsi' if _rsi else 'boll')
@@ -813,21 +827,21 @@ for _level, _rsi in ((None, None), ('yellow', 'RSI 2条超卖（≤35）'),
           str(_level) + '连续天数留同一技术指标，一点一次计数，斜线后独立量比无灯')
     check(_tail_row == _before_tail, '尾句恢复不改原始signals/marks')
 check(monitor._description_signals([_tail]) == [_tail]
-      and monitor._description_signals(['突破布林上轨', _tail]) == ['突破布林上轨', _tail]
+      and monitor._description_signals(['突破布林上轨▲', _tail]) == ['突破布林上轨▲', _tail]
       and monitor._description_signals([_plain, '量比 1.2x', _tail]) == [_plain, '量比 1.2x', _tail],
       '缺前句、不同轨、已切指标时不凭连续天数猜归属或新增布林灯')
-check(monitor._description_signals(['跌破布林下轨', '连续第≥120日贴近下轨（其中3日穿越）'])
-      == ['跌破布林下轨，连续第≥120日贴近下轨（其中3日穿越）'], '连续天数含上限/穿越尾句安全恢复')
+check(monitor._description_signals(['跌破布林下轨▼', '连续第≥120日贴近下轨（其中3日穿越）'])
+      == ['跌破布林下轨▼，连续第≥120日贴近下轨（其中3日穿越）'], '连续天数含上限/穿越尾句安全恢复')
 _ma_inline = item('MATEXT', 'technology', 'yellow')
 _ma_inline.update(signals=['上穿50日均线 / 日内触及200日均线，现价在均线下方'],
                   signal_marks=[('ma', 'yellow')], ma_settings={'ma_short': 50, 'ma_long': 200})
-check('signal-separator' not in monitor._signals_html(_ma_inline)
-      and ' / ' not in monitor._signals_html(_ma_inline), '同一均线指标内部合并事实用逗号不冒充切指标')
+check('signal-separator' not in _row_signals(_ma_inline)
+      and ' / ' not in _row_signals(_ma_inline), '同一均线指标内部合并事实用逗号不冒充切指标')
 
 # 描述红黄灰无紫稳定排序并安全转义，均线只投影展示，原数字事实与marks保留。
 _order_row = item('ORDERESCAPE', 'technology', 'red')
 _order_row.update(signals=['手填目标价说明 <b>尾部</b>', '无灯说明 <img onerror=x>',
-    'RSI 2条超买（≥70）', '日内触及120日均线 ±1%区间', '上穿60日弱均线',
+    'RSI 2条 ↑超买（≥70）', '日内触及120日均线 ±1%区间', '上穿60日弱均线',
     '振幅 6%', '量比 2.8x', '异动 -12.1%', '距加仓价 90 还差 1%', '另条说明 & 保留'],
     signal_marks=[('target', 'purple'), ('ma_band', 'yellow'), ('ma_cross', 'yellow'),
                   ('amp', 'yellow'), ('vol_ratio', 'yellow'), ('chg', 'red'), ('add_price', 'red')],
@@ -843,7 +857,7 @@ _order_body = re.search(r'<tr\b[^>]*\bid="s-orderescape"[^>]*>(.*?)</tr>', _orde
 _order_sig = re.search(r'<td class="sig">(.*?)</td>', _order_body, re.S)[1]
 check(re.findall(r'data-signal-kind="([^"]*)"', _order_sig)
       == ['chg', 'add_price', 'ma', 'amp', 'vol_ratio', 'rsi', '', '', 'target']
-      and [ _order_sig.count('signal-dot ' + color) for color in ('red', 'yellow', 'gray', 'purple')]
+      and [ _order_body.count('signal-dot ' + color) for color in ('red', 'yellow', 'gray', 'purple')]
       == [2, 3, 1, 1], '全页描述稳定按红黄灰无紫排序，同色依首次出现且均线事实合并一点')
 check(all(text in _order_sig for text in ('&lt;b&gt;尾部&lt;/b&gt;', '&lt;img onerror=x&gt;', '&amp; 保留'))
       and '<img' not in _order_sig and '<b>' not in _order_sig,

@@ -82,19 +82,19 @@ const T = globalThis.__T;
 const expectedDefaults = {
   boll_n:20,boll_k:2,boll_near_pct:0.5,boll_near_band_pct:15,chg_red:4,chg_yellow:2,
   rsi_high:70,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,
-  target_space_pct:30,target_high_space_pct:70,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:2,vol_ratio_red_z:3.6,
+  target_space_pct:40,target_high_space_pct:90,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:2,vol_ratio_red_z:3.6,
   amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,hy_green:350,hy_red:400,
   vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,dca_every:0,dca_start:'',signal_single_open:1,
 };
 check(Object.keys(T.SET_DEFS).length===Object.keys(expectedDefaults).length&&
-  Object.entries(expectedDefaults).every(([key,value])=>T.SET_DEFS[key]===value), '共用schema仅更新目标空间30／70，保留全部非相关默认值');
+  Object.entries(expectedDefaults).every(([key,value])=>T.SET_DEFS[key]===value), '共用schema仅更新目标空间40／90，保留全部非相关默认值');
 T.renderSettings();
 const targetMigrated=T.normalizeSettings({target_space_pct:50,trigger_gap_pct:8});
-check(targetMigrated.values.target_space_pct===30&&targetMigrated.values.target_high_space_pct===70&&
+check(targetMigrated.values.target_space_pct===40&&targetMigrated.values.target_high_space_pct===90&&
   targetMigrated.values.trigger_gap_pct===8&&targetMigrated.warnings.length===0,
-  '旧空间50静默退役为30／70，不产生维护警告且保留其它阈值');
-check(T.normalizeSettings({target_space_pct:50.0,target_high_space_pct:70}).warnings.length===0,
-  '旧50与已固定70配置兼容归一化');
+  '旧空间50静默退役为40／90，不产生维护警告且保留其它阈值');
+check(T.normalizeSettings({target_space_pct:50.0,target_high_space_pct:90}).warnings.length===0,
+  '旧50与已固定90配置兼容归一化');
 for(const [key,value] of [['target_space_pct',29],['target_space_pct',70],['target_high_space_pct',100]]){
   const result=T.normalizeSettings({[key]:value});
   check(result.values[key]===T.SET_DEFS[key]&&result.warnings.length===1, key+' 拒绝非固定值 '+value);
@@ -272,8 +272,8 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
   await T.loadSettings();
   check(migrationRequests.join(',')==='GET'&&JSON.stringify(store)===beforeMigrationStore&&els.msg.textContent==='迁移前',
     '读取旧50仅GET，无维护上传、无本地写入、无参数警告');
-  check(T.normalizeSettings({target_space_pct:50}).values.target_high_space_pct===70,
-    '缺高空间配置时浏览器自动使用固定70');
+  check(T.normalizeSettings({target_space_pct:50}).values.target_high_space_pct===90,
+    '缺高空间配置时浏览器自动使用固定90');
   let resolve;
   global.fetch = () => new Promise(r => { resolve = r; });
   const loading = T.loadSettings();
@@ -414,21 +414,21 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
   cfg2=JSON.parse(T.configText());
   check(cfg2.technology.NVDA&&!('target' in cfg2.technology.NVDA)&&!('target_at' in cfg2.technology.NVDA), '移到其他分组时清掉目标价和月份');
   check(src.includes('id="set_target_gap_pct"')&&!src.includes('id="set_target_space_pct"')&&
-    !src.includes('id="set_target_high_space_pct"'), '仅目标价 ±x% 可编辑，固定30／70不造输入框');
-  T.SET.target_gap_pct=3;T.SET.target_space_pct=30;T.SET.target_high_space_pct=70;T.renderSettings();
-  check(Number(els.set_target_gap_pct.value)===3&&T.SET.target_space_pct===30&&
-    T.SET.target_high_space_pct===70&&T.settingsError()==='', '目标价默认±3%，无空间输入框也能校验固定30／70');
+    !src.includes('id="set_target_high_space_pct"'), '仅目标价 ±x% 可编辑，固定40／90不造输入框');
+  T.SET.target_gap_pct=3;T.SET.target_space_pct=40;T.SET.target_high_space_pct=90;T.renderSettings();
+  check(Number(els.set_target_gap_pct.value)===3&&T.SET.target_space_pct===40&&
+    T.SET.target_high_space_pct===90&&T.settingsError()==='', '目标价默认±3%，无空间输入框也能校验固定40／90');
   check(!src.includes('目标空间固定分档')&&!src.includes('目标价 / 现价 − 1')&&
     !src.includes('旧价仅展示不计数')&&src.includes('目标价距离（±%）'), '删除目标空间金融说明，仅保留必要目标价标签');
   els.set_target_gap_pct.value='101';check(T.settingsError().includes('target_gap_pct'), '目标价 ±x% 超过 100% 被拒绝');
   els.set_target_gap_pct.value='3';T.SET.target_space_pct=50;
-  check(T.settingsError().includes('target_space_pct'), '未归一化旧50值不能通过固定30校验');
-  T.SET.target_space_pct=30;T.SET.target_high_space_pct=69;
-  check(T.settingsError().includes('target_high_space_pct'), '高空间非70不能通过固定70校验');
-  T.SET.target_high_space_pct=70;T.renderSettings();
+  check(T.settingsError().includes('target_space_pct'), '未归一化旧50值不能通过固定40校验');
+  T.SET.target_space_pct=40;T.SET.target_high_space_pct=89;
+  check(T.settingsError().includes('target_high_space_pct'), '高空间非90不能通过固定90校验');
+  T.SET.target_high_space_pct=90;T.renderSettings();
   const fixedSaved=JSON.parse(T.setJsonText());
-  check(fixedSaved.target_space_pct===30&&fixedSaved.target_high_space_pct===70&&T.settingsError()==='',
-    '无空间输入框时采集保存仍保留固定30／70');
+  check(fixedSaved.target_space_pct===40&&fixedSaved.target_high_space_pct===90&&T.settingsError()==='',
+    '无空间输入框时采集保存仍保留固定40／90');
 
   // 手动新增只要求有效代码；名称备注不在静态表中时也可留空。
   check(els.groupEditor.innerHTML.includes('placeholder="名称备注（选填）"'), '新增栏明确标注名称备注选填');
