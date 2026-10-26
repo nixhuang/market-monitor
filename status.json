@@ -9,15 +9,15 @@
     "next_in": 14,
     "next_date": "2026-11-12"
   },
-  "run_id": "40101315167",
+  "run_id": "40293120657",
   "request_id": "",
-  "source_sha": "a312ecc6b7c1c2714ae28b5e1baf4a755107dd94",
-  "input_hash": "03ab0eef0c23817d90bf8ae0a2e30e53a21a602d774e813efc6a196928fe9142",
-  "build_id": "40101315167-1",
-  "started_at": "2026-10-24T14:10:26+00:00",
-  "started_at_bj": "2026-10-24T22:10:26+08:00",
-  "finished_at": "2026-10-24T22:12:56.346080+08:00",
-  "finished_at_bj": "2026-10-24T22:12:56+08:00",
+  "source_sha": "ae05376a4feeff554acaa58f70c96be831ef712a",
+  "input_hash": "6aa9c53d5ced6c5d0333cb114b500c74dc457fff823fa1ac80541e2d0c2cfd17",
+  "build_id": "40293120657-1",
+  "started_at": "2026-10-26T08:33:48+00:00",
+  "started_at_bj": "2026-10-26T16:33:48+08:00",
+  "finished_at": "2026-10-26T16:36:52.264553+08:00",
+  "finished_at_bj": "2026-10-26T16:36:52+08:00",
   "event": "push",
   "target_trade_date": "2026-10-23",
   "mode": "closed",
@@ -198,7 +198,7 @@
     "yellow": 28,
     "green": 64,
     "gray": 0,
-    "purple": 26,
+    "purple": 25,
     "total": 98,
     "macro_ok": 6,
     "stale_symbols": [],
@@ -243,7 +243,7 @@
     "boll_rsi": {
       "label": "布林+RSI",
       "red": 3,
-      "yellow": 15,
+      "yellow": 14,
       "purple": 0
     },
     "ma": {
@@ -274,7 +274,7 @@
       "label": "共识价",
       "red": 0,
       "yellow": 0,
-      "purple": 26
+      "purple": 25
     }
   },
   "signal_members": {
@@ -512,15 +512,6 @@
           "hold": "long",
           "level": "yellow",
           "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "ZS",
-          "note": "Zscaler-云安全",
-          "group": "focus",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "上轨（超买）",
           "boll_rsi_hits": 2
         },
         {
@@ -1072,11 +1063,11 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 97.10449615366238,
-          "band": "high",
-          "price": 412.52,
+          "space": 88.63299727650629,
+          "band": "medium",
+          "price": 394.79,
           "kind": "consensus",
-          "detail": "共识价 412.52，空间 +97.1%"
+          "detail": "共识价 394.79，空间 +88.6%"
         },
         {
           "symbol": "AMAT",
@@ -1132,11 +1123,11 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 89.48333220177881,
-          "band": "medium",
-          "price": 279.09,
+          "space": 92.85083848190644,
+          "band": "high",
+          "price": 284.05,
           "kind": "consensus",
-          "detail": "共识价 279.09，空间 +89.5%"
+          "detail": "共识价 284.05，空间 +92.9%"
         },
         {
           "symbol": "TER",
@@ -1221,18 +1212,6 @@
           "price": 222.71,
           "kind": "consensus",
           "detail": "共识价 222.71，空间 +51.0%"
-        },
-        {
-          "symbol": "CAT",
-          "note": "卡特彼勒",
-          "group": "industrials",
-          "hold": "short",
-          "level": "red",
-          "space": 41.31004366812227,
-          "band": "medium",
-          "price": 970.8,
-          "kind": "consensus",
-          "detail": "共识价 970.8，空间 +41.3%"
         },
         {
           "symbol": "TTWO",
@@ -1389,11 +1368,11 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 97.10449615366238,
-        "band": "high",
-        "price": 412.52,
+        "space": 88.63299727650629,
+        "band": "medium",
+        "price": 394.79,
         "kind": "consensus",
-        "detail": "共识价 412.52，空间 +97.1%"
+        "detail": "共识价 394.79，空间 +88.6%"
       },
       {
         "symbol": "AMAT",
@@ -1449,11 +1428,11 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 89.48333220177881,
-        "band": "medium",
-        "price": 279.09,
+        "space": 92.85083848190644,
+        "band": "high",
+        "price": 284.05,
         "kind": "consensus",
-        "detail": "共识价 279.09，空间 +89.5%"
+        "detail": "共识价 284.05，空间 +92.9%"
       },
       {
         "symbol": "TER",
@@ -1538,18 +1517,6 @@
         "price": 222.71,
         "kind": "consensus",
         "detail": "共识价 222.71，空间 +51.0%"
-      },
-      {
-        "symbol": "CAT",
-        "note": "卡特彼勒",
-        "group": "industrials",
-        "hold": "short",
-        "level": "red",
-        "space": 41.31004366812227,
-        "band": "medium",
-        "price": 970.8,
-        "kind": "consensus",
-        "detail": "共识价 970.8，空间 +41.3%"
       },
       {
         "symbol": "TTWO",
@@ -1658,30 +1625,34 @@
       "note": "SPDR标普500指数ETF"
     },
     {
-      "symbol": "COST",
+      "symbol": "ZS",
       "kind": "boll_rsi",
       "shape": "▲",
       "side": "上轨",
-      "rsi_n": 1,
+      "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "逼近布林上轨▲ 还差0.30% · RSI 1条 ↑超买",
+      "detail": "突破布林上轨▲ · RSI 2条 ↑超买",
       "group": "focus",
-      "level": "green",
+      "level": "yellow",
       "hold": "short",
-      "note": "好市多"
+      "note": "Zscaler-云安全"
     },
     {
-      "symbol": "SYK",
-      "kind": "boll_rsi",
-      "shape": "▲",
-      "side": "上轨",
-      "rsi_n": 1,
-      "rsi_side": "超买",
-      "detail": "盘中突破布林上轨▲ · RSI 1条 ↑超买",
-      "group": "focus",
+      "symbol": "IBIT",
+      "kind": "amp",
+      "group": "index_funds",
       "level": "green",
       "hold": "short",
-      "note": "医疗机器人"
+      "note": "iShares比特币ETF",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.22%"
+        }
+      ],
+      "metric": "振幅 1.3%",
+      "detail": "振幅 1.3%"
     },
     {
       "symbol": "IBIT",
@@ -1698,6 +1669,23 @@
     },
     {
       "symbol": "XLK",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "科技精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.49%"
+        }
+      ],
+      "metric": "振幅 1.6%",
+      "detail": "振幅 1.6%"
+    },
+    {
+      "symbol": "XLK",
       "kind": "boll_rsi",
       "shape": "▼",
       "side": "下轨",
@@ -1708,6 +1696,57 @@
       "level": "green",
       "hold": "short",
       "note": "科技精选行业ETF"
+    },
+    {
+      "symbol": "U",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "Unity-游戏引擎",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨1.29%"
+        }
+      ],
+      "metric": "振幅 4.2%",
+      "detail": "振幅 4.2%"
+    },
+    {
+      "symbol": "SNOW",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "Snowflake-数据云",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨3.65%"
+        }
+      ],
+      "metric": "振幅 4.9%",
+      "detail": "振幅 4.9%"
+    },
+    {
+      "symbol": "SKHY",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "SK海力士ADR",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨4.05%"
+        }
+      ],
+      "metric": "振幅 2.5%",
+      "detail": "振幅 2.5%"
     },
     {
       "symbol": "SKHY",
@@ -1721,6 +1760,40 @@
       "level": "green",
       "hold": "short",
       "note": "SK海力士ADR"
+    },
+    {
+      "symbol": "MU",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "美光科技",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨2.46%"
+        }
+      ],
+      "metric": "振幅 3.9%",
+      "detail": "振幅 3.9%"
+    },
+    {
+      "symbol": "SNDK",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "闪迪",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.82%"
+        }
+      ],
+      "metric": "振幅 5.6%",
+      "detail": "振幅 5.6%"
     },
     {
       "symbol": "SNDK",
@@ -1737,6 +1810,23 @@
     },
     {
       "symbol": "STX",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "希捷科技",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.81%"
+        }
+      ],
+      "metric": "振幅 5.4%",
+      "detail": "振幅 5.4%"
+    },
+    {
+      "symbol": "STX",
       "kind": "rsi",
       "shape": "▼",
       "side": "",
@@ -1747,6 +1837,23 @@
       "level": "green",
       "hold": "short",
       "note": "希捷科技"
+    },
+    {
+      "symbol": "NOW",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "ServiceNow-工作流软件",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨1.25%"
+        }
+      ],
+      "metric": "振幅 3.7%",
+      "detail": "振幅 3.7%"
     },
     {
       "symbol": "NOW",
@@ -1762,6 +1869,57 @@
       "note": "ServiceNow-工作流软件"
     },
     {
+      "symbol": "CRWD",
+      "kind": "amp",
+      "group": "technology",
+      "level": "yellow",
+      "hold": "short",
+      "note": "CrowdStrike-终端安全",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨8.25%"
+        }
+      ],
+      "metric": "振幅 9.7%",
+      "detail": "振幅 9.7%"
+    },
+    {
+      "symbol": "FTNT",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "Fortinet-防火墙",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨4.05%"
+        }
+      ],
+      "metric": "振幅 5.2%",
+      "detail": "振幅 5.2%"
+    },
+    {
+      "symbol": "QCOM",
+      "kind": "amp",
+      "group": "technology",
+      "level": "yellow",
+      "hold": "short",
+      "note": "高通",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨1.78%"
+        }
+      ],
+      "metric": "振幅 3.2%",
+      "detail": "振幅 3.2%"
+    },
+    {
       "symbol": "QCOM",
       "kind": "boll",
       "shape": "▼",
@@ -1773,6 +1931,40 @@
       "level": "yellow",
       "hold": "short",
       "note": "高通"
+    },
+    {
+      "symbol": "ANET",
+      "kind": "amp",
+      "group": "technology",
+      "level": "yellow",
+      "hold": "short",
+      "note": "Arista-数据中心网络",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.76%"
+        }
+      ],
+      "metric": "振幅 4.5%",
+      "detail": "振幅 4.5%"
+    },
+    {
+      "symbol": "COHR",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "Coherent-光器件",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.71%"
+        }
+      ],
+      "metric": "振幅 5.7%",
+      "detail": "振幅 5.7%"
     },
     {
       "symbol": "COHR",
@@ -1789,6 +1981,23 @@
     },
     {
       "symbol": "INTC",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "英特尔",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨1.72%"
+        }
+      ],
+      "metric": "振幅 3.7%",
+      "detail": "振幅 3.7%"
+    },
+    {
+      "symbol": "INTC",
       "kind": "rsi",
       "shape": "▼",
       "side": "",
@@ -1799,6 +2008,40 @@
       "level": "green",
       "hold": "short",
       "note": "英特尔"
+    },
+    {
+      "symbol": "AMAT",
+      "kind": "amp",
+      "group": "technology",
+      "level": "red",
+      "hold": "short",
+      "note": "应用材料",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.44%"
+        }
+      ],
+      "metric": "振幅 3.1%",
+      "detail": "振幅 3.1%"
+    },
+    {
+      "symbol": "ARM",
+      "kind": "amp",
+      "group": "technology",
+      "level": "yellow",
+      "hold": "short",
+      "note": "Arm Holdings-芯片架构",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.11%"
+        }
+      ],
+      "metric": "振幅 3.1%",
+      "detail": "振幅 3.1%"
     },
     {
       "symbol": "ARM",
@@ -1814,6 +2057,57 @@
       "note": "Arm Holdings-芯片架构"
     },
     {
+      "symbol": "CIEN",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "Ciena-光网络",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.74%"
+        }
+      ],
+      "metric": "振幅 4.3%",
+      "detail": "振幅 4.3%"
+    },
+    {
+      "symbol": "LITE",
+      "kind": "amp",
+      "group": "technology",
+      "level": "yellow",
+      "hold": "short",
+      "note": "Lumentum-光模块",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.48%"
+        }
+      ],
+      "metric": "振幅 7.0%",
+      "detail": "振幅 7.0%"
+    },
+    {
+      "symbol": "MRVL",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "迈威尔科技",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨2.26%"
+        }
+      ],
+      "metric": "振幅 4.6%",
+      "detail": "振幅 4.6%"
+    },
+    {
       "symbol": "MRVL",
       "kind": "boll_rsi",
       "shape": "▼",
@@ -1825,6 +2119,57 @@
       "level": "green",
       "hold": "short",
       "note": "迈威尔科技"
+    },
+    {
+      "symbol": "CRDO",
+      "kind": "amp",
+      "group": "technology",
+      "level": "yellow",
+      "hold": "short",
+      "note": "Credo-高速互连",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌9.51%"
+        }
+      ],
+      "metric": "振幅 7.9%",
+      "detail": "振幅 7.9%"
+    },
+    {
+      "symbol": "PANW",
+      "kind": "amp",
+      "group": "technology",
+      "level": "yellow",
+      "hold": "short",
+      "note": "Palo Alto-网络安全",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨7.22%"
+        }
+      ],
+      "metric": "振幅 8.5%",
+      "detail": "振幅 8.5%"
+    },
+    {
+      "symbol": "TER",
+      "kind": "amp",
+      "group": "technology",
+      "level": "yellow",
+      "hold": "short",
+      "note": "泰瑞达",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.03%"
+        }
+      ],
+      "metric": "振幅 4.4%",
+      "detail": "振幅 4.4%"
     },
     {
       "symbol": "TER",
@@ -1840,6 +2185,57 @@
       "note": "泰瑞达"
     },
     {
+      "symbol": "PLTR",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "Palantir-AI数据分析",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.29%"
+        }
+      ],
+      "metric": "振幅 3.5%",
+      "detail": "振幅 3.5%"
+    },
+    {
+      "symbol": "LRCX",
+      "kind": "amp",
+      "group": "technology",
+      "level": "red",
+      "hold": "short",
+      "note": "拉姆研究",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.02%"
+        }
+      ],
+      "metric": "振幅 3.9%",
+      "detail": "振幅 3.9%"
+    },
+    {
+      "symbol": "NVDA",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "英伟达",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.59%"
+        }
+      ],
+      "metric": "振幅 1.7%",
+      "detail": "振幅 1.7%"
+    },
+    {
       "symbol": "NVDA",
       "kind": "boll_rsi",
       "shape": "▼",
@@ -1853,6 +2249,91 @@
       "note": "英伟达"
     },
     {
+      "symbol": "WDC",
+      "kind": "amp",
+      "group": "technology",
+      "level": "green",
+      "hold": "short",
+      "note": "西部数据",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌2.97%"
+        }
+      ],
+      "metric": "振幅 6.0%",
+      "detail": "振幅 6.0%"
+    },
+    {
+      "symbol": "XLV",
+      "kind": "amp",
+      "group": "healthcare",
+      "level": "green",
+      "hold": "short",
+      "note": "医疗保健精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.11%"
+        }
+      ],
+      "metric": "振幅 1.1%",
+      "detail": "振幅 1.1%"
+    },
+    {
+      "symbol": "ABBV",
+      "kind": "amp",
+      "group": "healthcare",
+      "level": "green",
+      "hold": "short",
+      "note": "艾伯维",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.16%"
+        }
+      ],
+      "metric": "振幅 1.6%",
+      "detail": "振幅 1.6%"
+    },
+    {
+      "symbol": "TMO",
+      "kind": "amp",
+      "group": "healthcare",
+      "level": "green",
+      "hold": "short",
+      "note": "赛默飞世尔科技",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.40%"
+        }
+      ],
+      "metric": "振幅 2.2%",
+      "detail": "振幅 2.2%"
+    },
+    {
+      "symbol": "ISRG",
+      "kind": "amp",
+      "group": "healthcare",
+      "level": "yellow",
+      "hold": "short",
+      "note": "直觉外科",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨1.90%"
+        }
+      ],
+      "metric": "振幅 3.6%",
+      "detail": "振幅 3.6%"
+    },
+    {
       "symbol": "ISRG",
       "kind": "boll_rsi",
       "shape": "▲",
@@ -1864,6 +2345,125 @@
       "level": "yellow",
       "hold": "short",
       "note": "直觉外科"
+    },
+    {
+      "symbol": "LLY",
+      "kind": "amp",
+      "group": "healthcare",
+      "level": "green",
+      "hold": "short",
+      "note": "礼来",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌2.54%"
+        }
+      ],
+      "metric": "振幅 3.8%",
+      "detail": "振幅 3.8%"
+    },
+    {
+      "symbol": "JNJ",
+      "kind": "amp",
+      "group": "healthcare",
+      "level": "green",
+      "hold": "short",
+      "note": "强生",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.42%"
+        }
+      ],
+      "metric": "振幅 1.4%",
+      "detail": "振幅 1.4%"
+    },
+    {
+      "symbol": "XLF",
+      "kind": "amp",
+      "group": "financials",
+      "level": "green",
+      "hold": "short",
+      "note": "金融精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.32%"
+        }
+      ],
+      "metric": "振幅 1.0%",
+      "detail": "振幅 1.0%"
+    },
+    {
+      "symbol": "CB",
+      "kind": "amp",
+      "group": "financials",
+      "level": "green",
+      "hold": "short",
+      "note": "安达保险",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌2.43%"
+        }
+      ],
+      "metric": "振幅 2.6%",
+      "detail": "振幅 2.6%"
+    },
+    {
+      "symbol": "AXP",
+      "kind": "amp",
+      "group": "financials",
+      "level": "yellow",
+      "hold": "short",
+      "note": "美国运通",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌3.68%"
+        }
+      ],
+      "metric": "振幅 3.0%",
+      "detail": "振幅 3.0%"
+    },
+    {
+      "symbol": "BX",
+      "kind": "amp",
+      "group": "financials",
+      "level": "green",
+      "hold": "short",
+      "note": "黑石",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.66%"
+        }
+      ],
+      "metric": "振幅 1.8%",
+      "detail": "振幅 1.8%"
+    },
+    {
+      "symbol": "SPGI",
+      "kind": "amp",
+      "group": "financials",
+      "level": "green",
+      "hold": "short",
+      "note": "标普全球",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.62%"
+        }
+      ],
+      "metric": "振幅 1.6%",
+      "detail": "振幅 1.6%"
     },
     {
       "symbol": "SPGI",
@@ -1880,6 +2480,23 @@
     },
     {
       "symbol": "GS",
+      "kind": "amp",
+      "group": "financials",
+      "level": "green",
+      "hold": "short",
+      "note": "高盛",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.75%"
+        }
+      ],
+      "metric": "振幅 1.8%",
+      "detail": "振幅 1.8%"
+    },
+    {
+      "symbol": "GS",
       "kind": "boll",
       "shape": "▼",
       "side": "下轨",
@@ -1890,6 +2507,57 @@
       "level": "green",
       "hold": "short",
       "note": "高盛"
+    },
+    {
+      "symbol": "NU",
+      "kind": "amp",
+      "group": "financials",
+      "level": "yellow",
+      "hold": "short",
+      "note": "Nu Holdings-数字银行",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨2.92%"
+        }
+      ],
+      "metric": "振幅 4.6%",
+      "detail": "振幅 4.6%"
+    },
+    {
+      "symbol": "CRCL",
+      "kind": "amp",
+      "group": "financials",
+      "level": "yellow",
+      "hold": "short",
+      "note": "Circle-稳定币",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.82%"
+        }
+      ],
+      "metric": "振幅 3.8%",
+      "detail": "振幅 3.8%"
+    },
+    {
+      "symbol": "COIN",
+      "kind": "amp",
+      "group": "financials",
+      "level": "green",
+      "hold": "short",
+      "note": "Coinbase-加密交易所",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌2.74%"
+        }
+      ],
+      "metric": "振幅 3.9%",
+      "detail": "振幅 3.9%"
     },
     {
       "symbol": "COIN",
@@ -1903,6 +2571,40 @@
       "level": "green",
       "hold": "short",
       "note": "Coinbase-加密交易所"
+    },
+    {
+      "symbol": "HOOD",
+      "kind": "amp",
+      "group": "financials",
+      "level": "yellow",
+      "hold": "short",
+      "note": "Robinhood-零售券商",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.56%"
+        }
+      ],
+      "metric": "振幅 3.1%",
+      "detail": "振幅 3.1%"
+    },
+    {
+      "symbol": "JPM",
+      "kind": "amp",
+      "group": "financials",
+      "level": "green",
+      "hold": "short",
+      "note": "摩根大通",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.47%"
+        }
+      ],
+      "metric": "振幅 1.4%",
+      "detail": "振幅 1.4%"
     },
     {
       "symbol": "JPM",
@@ -1919,6 +2621,23 @@
     },
     {
       "symbol": "XLE",
+      "kind": "amp",
+      "group": "energy",
+      "level": "green",
+      "hold": "short",
+      "note": "能源精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨2.60%"
+        }
+      ],
+      "metric": "振幅 2.9%",
+      "detail": "振幅 2.9%"
+    },
+    {
+      "symbol": "XLE",
       "kind": "boll_rsi",
       "shape": "▲",
       "side": "上轨",
@@ -1929,6 +2648,23 @@
       "level": "green",
       "hold": "short",
       "note": "能源精选行业ETF"
+    },
+    {
+      "symbol": "XOM",
+      "kind": "amp",
+      "group": "energy",
+      "level": "green",
+      "hold": "short",
+      "note": "埃克森美孚",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨2.79%"
+        }
+      ],
+      "metric": "振幅 2.7%",
+      "detail": "振幅 2.7%"
     },
     {
       "symbol": "XOM",
@@ -1944,6 +2680,40 @@
       "note": "埃克森美孚"
     },
     {
+      "symbol": "AXON",
+      "kind": "amp",
+      "group": "industrials",
+      "level": "green",
+      "hold": "short",
+      "note": "Axon-执法科技",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨1.39%"
+        }
+      ],
+      "metric": "振幅 4.0%",
+      "detail": "振幅 4.0%"
+    },
+    {
+      "symbol": "HEI",
+      "kind": "amp",
+      "group": "industrials",
+      "level": "green",
+      "hold": "short",
+      "note": "HEICO-航空零部件",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.89%"
+        }
+      ],
+      "metric": "振幅 4.8%",
+      "detail": "振幅 4.8%"
+    },
+    {
       "symbol": "HEI",
       "kind": "boll",
       "shape": "▼",
@@ -1955,6 +2725,57 @@
       "level": "green",
       "hold": "short",
       "note": "HEICO-航空零部件"
+    },
+    {
+      "symbol": "SPCX",
+      "kind": "amp",
+      "group": "industrials",
+      "level": "green",
+      "hold": "short",
+      "note": "SpaceX-商业航天",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨1.89%"
+        }
+      ],
+      "metric": "振幅 3.9%",
+      "detail": "振幅 3.9%"
+    },
+    {
+      "symbol": "CAT",
+      "kind": "amp",
+      "group": "industrials",
+      "level": "red",
+      "hold": "short",
+      "note": "卡特彼勒",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌2.42%"
+        }
+      ],
+      "metric": "振幅 2.1%",
+      "detail": "振幅 2.1%"
+    },
+    {
+      "symbol": "NOC",
+      "kind": "amp",
+      "group": "industrials",
+      "level": "green",
+      "hold": "short",
+      "note": "诺斯罗普格鲁曼",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.16%"
+        }
+      ],
+      "metric": "振幅 2.2%",
+      "detail": "振幅 2.2%"
     },
     {
       "symbol": "NOC",
@@ -1970,6 +2791,40 @@
       "note": "诺斯罗普格鲁曼"
     },
     {
+      "symbol": "RTX",
+      "kind": "amp",
+      "group": "industrials",
+      "level": "yellow",
+      "hold": "short",
+      "note": "RTX-航空防务",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.90%"
+        }
+      ],
+      "metric": "振幅 2.3%",
+      "detail": "振幅 2.3%"
+    },
+    {
+      "symbol": "DD",
+      "kind": "amp",
+      "group": "industrials",
+      "level": "yellow",
+      "hold": "short",
+      "note": "杜邦",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨1.07%"
+        }
+      ],
+      "metric": "振幅 2.7%",
+      "detail": "振幅 2.7%"
+    },
+    {
       "symbol": "DD",
       "kind": "boll_rsi",
       "shape": "▲",
@@ -1981,6 +2836,40 @@
       "level": "yellow",
       "hold": "short",
       "note": "杜邦"
+    },
+    {
+      "symbol": "XLB",
+      "kind": "amp",
+      "group": "materials",
+      "level": "green",
+      "hold": "short",
+      "note": "原材料精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.74%"
+        }
+      ],
+      "metric": "振幅 1.6%",
+      "detail": "振幅 1.6%"
+    },
+    {
+      "symbol": "LIN",
+      "kind": "amp",
+      "group": "materials",
+      "level": "green",
+      "hold": "short",
+      "note": "林德-工业气体",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.30%"
+        }
+      ],
+      "metric": "振幅 1.4%",
+      "detail": "振幅 1.4%"
     },
     {
       "symbol": "LIN",
@@ -1996,6 +2885,57 @@
       "note": "林德-工业气体"
     },
     {
+      "symbol": "XLU",
+      "kind": "amp",
+      "group": "utilities",
+      "level": "green",
+      "hold": "short",
+      "note": "公用事业精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.72%"
+        }
+      ],
+      "metric": "振幅 1.0%",
+      "detail": "振幅 1.0%"
+    },
+    {
+      "symbol": "CEG",
+      "kind": "amp",
+      "group": "utilities",
+      "level": "green",
+      "hold": "short",
+      "note": "Constellation-核电",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.69%"
+        }
+      ],
+      "metric": "振幅 3.8%",
+      "detail": "振幅 3.8%"
+    },
+    {
+      "symbol": "NEE",
+      "kind": "amp",
+      "group": "utilities",
+      "level": "green",
+      "hold": "short",
+      "note": "新纪元能源",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.24%"
+        }
+      ],
+      "metric": "振幅 1.4%",
+      "detail": "振幅 1.4%"
+    },
+    {
       "symbol": "NEE",
       "kind": "boll_rsi",
       "shape": "▲",
@@ -2007,6 +2947,40 @@
       "level": "green",
       "hold": "short",
       "note": "新纪元能源"
+    },
+    {
+      "symbol": "XLP",
+      "kind": "amp",
+      "group": "consumer_staples",
+      "level": "green",
+      "hold": "short",
+      "note": "必需消费精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.92%"
+        }
+      ],
+      "metric": "振幅 2.1%",
+      "detail": "振幅 2.1%"
+    },
+    {
+      "symbol": "WMT",
+      "kind": "amp",
+      "group": "consumer_staples",
+      "level": "green",
+      "hold": "short",
+      "note": "沃尔玛",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.02%"
+        }
+      ],
+      "metric": "振幅 2.7%",
+      "detail": "振幅 2.7%"
     },
     {
       "symbol": "WMT",
@@ -2022,6 +2996,108 @@
       "note": "沃尔玛"
     },
     {
+      "symbol": "PG",
+      "kind": "amp",
+      "group": "consumer_staples",
+      "level": "green",
+      "hold": "short",
+      "note": "宝洁",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌2.76%"
+        }
+      ],
+      "metric": "振幅 2.3%",
+      "detail": "振幅 2.3%"
+    },
+    {
+      "symbol": "KO",
+      "kind": "amp",
+      "group": "consumer_staples",
+      "level": "green",
+      "hold": "short",
+      "note": "可口可乐",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌2.76%"
+        }
+      ],
+      "metric": "振幅 2.5%",
+      "detail": "振幅 2.5%"
+    },
+    {
+      "symbol": "XLC",
+      "kind": "amp",
+      "group": "communications",
+      "level": "yellow",
+      "hold": "short",
+      "note": "通信服务精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.78%"
+        }
+      ],
+      "metric": "振幅 1.2%",
+      "detail": "振幅 1.2%"
+    },
+    {
+      "symbol": "TTWO",
+      "kind": "amp",
+      "group": "communications",
+      "level": "green",
+      "hold": "short",
+      "note": "Take-Two-游戏",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.98%"
+        }
+      ],
+      "metric": "振幅 2.3%",
+      "detail": "振幅 2.3%"
+    },
+    {
+      "symbol": "META",
+      "kind": "amp",
+      "group": "communications",
+      "level": "yellow",
+      "hold": "short",
+      "note": "Meta-社交广告",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.96%"
+        }
+      ],
+      "metric": "振幅 2.3%",
+      "detail": "振幅 2.3%"
+    },
+    {
+      "symbol": "NFLX",
+      "kind": "amp",
+      "group": "communications",
+      "level": "red",
+      "hold": "short",
+      "note": "奈飞",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.79%"
+        }
+      ],
+      "metric": "振幅 3.0%",
+      "detail": "振幅 3.0%"
+    },
+    {
       "symbol": "NFLX",
       "kind": "boll_rsi",
       "shape": "▼",
@@ -2033,6 +3109,40 @@
       "level": "red",
       "hold": "short",
       "note": "奈飞"
+    },
+    {
+      "symbol": "XLY",
+      "kind": "amp",
+      "group": "consumer_discretionary",
+      "level": "green",
+      "hold": "short",
+      "note": "非必需消费精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.66%"
+        }
+      ],
+      "metric": "振幅 1.1%",
+      "detail": "振幅 1.1%"
+    },
+    {
+      "symbol": "BKNG",
+      "kind": "amp",
+      "group": "consumer_discretionary",
+      "level": "green",
+      "hold": "short",
+      "note": "Booking-在线旅游",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌3.27%"
+        }
+      ],
+      "metric": "振幅 2.6%",
+      "detail": "振幅 2.6%"
     },
     {
       "symbol": "BKNG",
@@ -2049,6 +3159,23 @@
     },
     {
       "symbol": "AMZN",
+      "kind": "amp",
+      "group": "consumer_discretionary",
+      "level": "green",
+      "hold": "short",
+      "note": "亚马逊",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.95%"
+        }
+      ],
+      "metric": "振幅 1.4%",
+      "detail": "振幅 1.4%"
+    },
+    {
+      "symbol": "AMZN",
       "kind": "boll_rsi",
       "shape": "▼",
       "side": "下轨",
@@ -2059,21 +3186,62 @@
       "level": "green",
       "hold": "short",
       "note": "亚马逊"
+    },
+    {
+      "symbol": "MCD",
+      "kind": "amp",
+      "group": "consumer_discretionary",
+      "level": "green",
+      "hold": "short",
+      "note": "麦当劳",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌1.65%"
+        }
+      ],
+      "metric": "振幅 2.0%",
+      "detail": "振幅 2.0%"
+    },
+    {
+      "symbol": "TSLA",
+      "kind": "amp",
+      "group": "consumer_discretionary",
+      "level": "green",
+      "hold": "short",
+      "note": "特斯拉",
+      "indicators": [
+        {
+          "shape": "▼",
+          "tone": "white",
+          "label": "2026-10-23股价下跌0.63%"
+        }
+      ],
+      "metric": "振幅 3.2%",
+      "detail": "振幅 3.2%"
+    },
+    {
+      "symbol": "XLRE",
+      "kind": "amp",
+      "group": "real_estate",
+      "level": "yellow",
+      "hold": "short",
+      "note": "房地产精选行业ETF",
+      "indicators": [
+        {
+          "shape": "▲",
+          "tone": "white",
+          "label": "2026-10-23股价上涨0.12%"
+        }
+      ],
+      "metric": "振幅 2.0%",
+      "detail": "振幅 2.0%"
     }
   ],
   "earnings_week": {
-    "asof": "2026-10-24",
+    "asof": "2026-10-26",
     "members": [
-      {
-        "symbol": "AXP",
-        "note": "美国运通",
-        "group": "financials",
-        "level": "yellow",
-        "hold": "short",
-        "date": "2026-10-23",
-        "timing": "pre",
-        "kind": "expected"
-      },
       {
         "symbol": "NXPI",
         "note": "恩智浦半导体",
@@ -2202,6 +3370,16 @@
         "hold": "short",
         "date": "2026-10-28",
         "timing": "post",
+        "kind": "expected"
+      },
+      {
+        "symbol": "SKHY",
+        "note": "SK海力士ADR",
+        "group": "technology",
+        "level": "green",
+        "hold": "short",
+        "date": "2026-10-28",
+        "timing": "",
         "kind": "expected"
       },
       {
@@ -2463,6 +3641,46 @@
         "date": "2026-11-05",
         "timing": "",
         "kind": "expected"
+      },
+      {
+        "symbol": "BRK-B",
+        "note": "伯克希尔哈撒韦",
+        "group": "position",
+        "level": "yellow",
+        "hold": "long",
+        "date": "2026-11-06",
+        "timing": "",
+        "kind": "estimated"
+      },
+      {
+        "symbol": "CRSP",
+        "note": "CRISPR-基因编辑",
+        "group": "position",
+        "level": "green",
+        "hold": "short",
+        "date": "2026-11-09",
+        "timing": "",
+        "kind": "estimated"
+      },
+      {
+        "symbol": "CEG",
+        "note": "Constellation-核电",
+        "group": "utilities",
+        "level": "green",
+        "hold": "short",
+        "date": "2026-11-09",
+        "timing": "",
+        "kind": "expected"
+      },
+      {
+        "symbol": "TTWO",
+        "note": "Take-Two-游戏",
+        "group": "communications",
+        "level": "green",
+        "hold": "short",
+        "date": "2026-11-09",
+        "timing": "post",
+        "kind": "expected"
       }
     ]
   },
@@ -2563,33 +3781,33 @@
     "checked_at": "2026-10-22T11:56:54.517842-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-24T14:11:38.225397+00:00"
+    "asof": "2026-10-26T08:35:15.632628+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 22,
-      "deferred": 10,
+      "due": 26,
+      "deferred": 14,
       "tried": 12,
       "ok": 12,
       "none": 0,
       "fail": 0,
       "stopped": "",
       "quota": {
-        "date": "2026-10-24",
+        "date": "2026-10-26",
         "symbols": [
-          "ABBV",
-          "AMAT",
-          "AMZN",
-          "ANET",
-          "ARM",
-          "AXON",
           "AXP",
-          "BKNG",
-          "BX",
-          "LMT",
-          "PG",
-          "WDC"
+          "CAT",
+          "CEG",
+          "CIEN",
+          "COHR",
+          "COIN",
+          "CRCL",
+          "CRDO",
+          "CRWD",
+          "DD",
+          "FTNT",
+          "HEI"
         ],
         "retry_symbols": []
       }
@@ -2800,7 +4018,8 @@
         "r": "2026-10-13",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-14"
+        "try": "2026-10-14",
+        "ne": "2026-10-28"
       },
       "MU": {
         "avg": 1555.13,
@@ -2808,7 +4027,8 @@
         "r": "2026-10-12",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-13"
+        "try": "2026-10-13",
+        "ne": "2026-12-16"
       },
       "SNDK": {
         "avg": 2173.0,
@@ -2838,21 +4058,21 @@
         "ne": "2026-10-28"
       },
       "CRWD": {
-        "avg": 240.17,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
+        "avg": 247.25,
+        "upd": "2026-10-22",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-11",
+        "try": "2026-10-26",
         "ne": "2026-12-01"
       },
       "FTNT": {
-        "avg": 164.32,
-        "upd": "2026-10-07",
-        "r": "2026-10-10",
+        "avg": 169.45,
+        "upd": "2026-10-23",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-11",
+        "try": "2026-10-26",
         "ne": "2026-10-28"
       },
       "QCOM": {
@@ -2874,12 +4094,12 @@
         "ne": "2026-11-03"
       },
       "COHR": {
-        "avg": 412.52,
-        "upd": "2026-10-07",
-        "r": "2026-10-10",
+        "avg": 394.79,
+        "upd": "2026-10-21",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-11",
+        "try": "2026-10-26",
         "ne": "2026-11-04"
       },
       "INTC": {
@@ -2911,11 +4131,11 @@
       },
       "CIEN": {
         "avg": 512.99,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
+        "upd": "2026-10-14",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-11",
+        "try": "2026-10-26",
         "ne": "2026-12-10"
       },
       "LITE": {
@@ -2937,13 +4157,13 @@
         "ne": "2026-12-01"
       },
       "CRDO": {
-        "avg": 279.09,
+        "avg": 284.05,
         "upd": "2026-10-05",
-        "r": "2026-10-10",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-11",
-        "ne": "2026-12-07"
+        "try": "2026-10-26",
+        "ne": "2026-11-30"
       },
       "PANW": {
         "avg": 396.92,
@@ -3064,13 +4284,12 @@
         ]
       },
       "AXP": {
-        "avg": 368.72,
-        "upd": "2026-10-16",
-        "r": "2026-10-24",
+        "avg": 368.92,
+        "upd": "2026-10-23",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-24",
-        "ne": "2026-10-23",
+        "try": "2026-10-26",
         "earn_pending": [
           "2026-10-23"
         ]
@@ -3113,21 +4332,21 @@
         "ne": "2026-11-12"
       },
       "CRCL": {
-        "avg": 105.56,
-        "upd": "2026-09-28",
-        "r": "2026-10-10",
+        "avg": 107.35,
+        "upd": "2026-10-19",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-11",
+        "try": "2026-10-26",
         "ne": "2026-11-04"
       },
       "COIN": {
-        "avg": 211.31,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
+        "avg": 213.55,
+        "upd": "2026-10-21",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-11",
+        "try": "2026-10-26",
         "ne": "2026-10-29"
       },
       "HOOD": {
@@ -3166,12 +4385,13 @@
         "ne": "2026-11-05"
       },
       "HEI": {
-        "avg": 391.7,
-        "upd": "2026-10-09",
-        "r": "2026-10-12",
+        "avg": 390.7,
+        "upd": "2026-10-19",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-12"
+        "try": "2026-10-26",
+        "ne": "2026-12-17"
       },
       "SPCX": {
         "avg": 222.71,
@@ -3185,12 +4405,12 @@
         ]
       },
       "CAT": {
-        "avg": 970.8,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
+        "avg": 933.64,
+        "upd": "2026-10-19",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-10",
+        "try": "2026-10-26",
         "ne": "2026-10-29"
       },
       "NOC": {
@@ -3216,12 +4436,12 @@
         ]
       },
       "DD": {
-        "avg": 167.06,
-        "upd": "2026-10-09",
-        "r": "2026-10-10",
+        "avg": 165.47,
+        "upd": "2026-10-19",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-11",
+        "try": "2026-10-26",
         "ne": "2026-11-03"
       },
       "LIN": {
@@ -3234,12 +4454,12 @@
         "ne": "2026-10-29"
       },
       "CEG": {
-        "avg": 341.53,
-        "upd": "2026-10-07",
-        "r": "2026-10-10",
+        "avg": 338.07,
+        "upd": "2026-10-22",
+        "r": "2026-10-26",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-10-11",
+        "try": "2026-10-26",
         "ne": "2026-11-09"
       },
       "NEE": {
@@ -3355,25 +4575,25 @@
       }
     },
     "quota": {
-      "date": "2026-10-24",
+      "date": "2026-10-26",
       "symbols": [
-        "ABBV",
-        "AMAT",
-        "AMZN",
-        "ANET",
-        "ARM",
-        "AXON",
         "AXP",
-        "BKNG",
-        "BX",
-        "LMT",
-        "PG",
-        "WDC"
+        "CAT",
+        "CEG",
+        "CIEN",
+        "COHR",
+        "COIN",
+        "CRCL",
+        "CRDO",
+        "CRWD",
+        "DD",
+        "FTNT",
+        "HEI"
       ],
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-24T14:12:56.285740+00:00",
+    "asof": "2026-10-26T08:36:52.184714+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -3472,7 +4692,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -3761,9 +4981,9 @@
           "digest": "d9d27b16cd1d47453f2466dd14b812cf6b79580716c349c1b9859080b322986c"
         },
         "events": {
-          "asof": "1970-01-01T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
-          "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          "digest": "6f1776fb4a092f6ff35134edaf39e31dbf057342b1889e259cdf2f03ad90ad5f"
         }
       },
       "MU": {
@@ -3778,9 +4998,9 @@
           "digest": "8ae08044934f85559e254a02b8de3d00f63993b709a30ce565256f5beca1c29e"
         },
         "events": {
-          "asof": "1970-01-01T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
-          "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          "digest": "76e9e4d6f9c18a8ae75537d01d404ec8a554a3383b6174365126545604101a90"
         }
       },
       "SNDK": {
@@ -3836,14 +5056,14 @@
       },
       "CRWD": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "d93f2fe07fb1bd938f87f3eff7150bfd7f505a86ba232d14487a9e3cbe72dd12"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "0c4259cd7e371180c11c28c88af967a403aae07a4ce3875dff74d73d0e91a65a"
         },
         "attempt": {
-          "asof": "2026-10-11T00:00:00+00:00",
-          "at": "2026-10-11T00:00:00+00:00",
-          "digest": "e95f7eef046a513f7dd0741722208785767ad818b3161b5f6d089efbfa061aa0"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -3853,14 +5073,14 @@
       },
       "FTNT": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "a6783e44f1174190d7ca208bd0ee3b5615e498dc72a459ef1057ef079e284a5a"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "f40d5da0dec4d9ca5ee69851dddbf548b1b4f72a67e442df59e4b9043a5bcd98"
         },
         "attempt": {
-          "asof": "2026-10-11T00:00:00+00:00",
-          "at": "2026-10-11T00:00:00+00:00",
-          "digest": "e95f7eef046a513f7dd0741722208785767ad818b3161b5f6d089efbfa061aa0"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -3904,14 +5124,14 @@
       },
       "COHR": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "22313a04d52a341385203cf966ea8a7e21426091889f0e4f9abca45a425fbde7"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "9893bb87a15f31a8e9671e4266b88cabaa3ab66c2c2dbb10b2416f7a123792d7"
         },
         "attempt": {
-          "asof": "2026-10-11T00:00:00+00:00",
-          "at": "2026-10-11T00:00:00+00:00",
-          "digest": "e95f7eef046a513f7dd0741722208785767ad818b3161b5f6d089efbfa061aa0"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -3972,14 +5192,14 @@
       },
       "CIEN": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "4b5f1eb1ce384adf9c2704f6e31efe55c2c569e7730320e6f7125d62167d6d57"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "142bbb9e67f4b8f75c651f72b2f46d5c7cfa177ab757adcd44448332d3e04dd8"
         },
         "attempt": {
-          "asof": "2026-10-11T00:00:00+00:00",
-          "at": "2026-10-11T00:00:00+00:00",
-          "digest": "e95f7eef046a513f7dd0741722208785767ad818b3161b5f6d089efbfa061aa0"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4023,19 +5243,19 @@
       },
       "CRDO": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "6ebf2ffe3f67f45271433cd63a692650ccf1ad3de61c1ad6b87c8a76630f0b22"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "0410546fbfc0403d8ac662812fc98c8adffda41e69df2b39bd509bd8903c69b3"
         },
         "attempt": {
-          "asof": "2026-10-11T00:00:00+00:00",
-          "at": "2026-10-11T00:00:00+00:00",
-          "digest": "e95f7eef046a513f7dd0741722208785767ad818b3161b5f6d089efbfa061aa0"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
-          "asof": "1970-01-01T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
-          "digest": "5f96aef2b7e868f41ccdde9623b3c60fd6329c9f1f42929b1e73839c953ff70a"
+          "digest": "ef8c0dea6c7c8f588517d3c55e7de79a59284013d470fd576f3e47f2e08ae27b"
         }
       },
       "PANW": {
@@ -4101,7 +5321,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4135,7 +5355,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -4169,7 +5389,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4186,7 +5406,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -4237,26 +5457,26 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
       },
       "AXP": {
         "facts": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
-          "at": "2026-10-24T00:00:00+00:00",
-          "digest": "1e3718e995515cf3b9a016a0099cf7ab93d81545fc0f3763eb6a367640793da6"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "d46f020a8f7bb790763478be619a160724356f2634c400c23e9b98b896f0e609"
         },
         "attempt": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
-          "at": "2026-10-24T00:00:00+00:00",
-          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
-          "asof": "2026-10-23T06:10:40.157573+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
-          "digest": "8f8d8defcd7668c2c21d1de8ad83f407a2ab38449bfad1d11c32b9db2fd2252d"
+          "digest": "b97f36fd59ba73086b38a650d9ce1d58aa3255ca676925c8a1348c837f5dbe76"
         }
       },
       "BX": {
@@ -4271,7 +5491,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -4329,14 +5549,14 @@
       },
       "CRCL": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "3d987654b02bfccceb02322f563c86455930c64fcd17aa3b58a3cfed26ccc8d4"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "37425d31719a91a579067da97476f26b9ca5c9c3b50a195ebd0d6b0d16a53db1"
         },
         "attempt": {
-          "asof": "2026-10-11T00:00:00+00:00",
-          "at": "2026-10-11T00:00:00+00:00",
-          "digest": "e95f7eef046a513f7dd0741722208785767ad818b3161b5f6d089efbfa061aa0"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4346,14 +5566,14 @@
       },
       "COIN": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "8a27d0cc145281dd4411d85af105e4bda32181287d9744ecd66fcc6014367b25"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "cb2c7ac29e3c78c12e45cfbea65759c6be9d380db64275ebb7f32a97317314c9"
         },
         "attempt": {
-          "asof": "2026-10-11T00:00:00+00:00",
-          "at": "2026-10-11T00:00:00+00:00",
-          "digest": "e95f7eef046a513f7dd0741722208785767ad818b3161b5f6d089efbfa061aa0"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4431,19 +5651,19 @@
       },
       "HEI": {
         "facts": {
-          "asof": "2026-10-12T00:00:00+00:00",
-          "at": "2026-10-12T00:00:00+00:00",
-          "digest": "380d28f0c5417a5e3061ef6fd73668e844c394e75f9ecc254dca0df1cc7a4cb4"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "916f03319727988a84b27814f6201eb42b52b308f760dd99bf6258f60b527432"
         },
         "attempt": {
-          "asof": "2026-10-12T00:00:00+00:00",
-          "at": "2026-10-12T00:00:00+00:00",
-          "digest": "bf3a5914ae62c23023146b6e46c8a59ee534b274b1e6970219a0b34ed4249595"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
-          "asof": "1970-01-01T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
-          "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+          "digest": "1eb38ef547c17d1712ce3298fb60f5e22fcead51b356fb7dffed1f957ddfe7bf"
         }
       },
       "SPCX": {
@@ -4458,21 +5678,21 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
       },
       "CAT": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "bfb4f2486b82e08d8d0f01b0a530a0bf69417bce9bab8fd311102f6c6344e3f7"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "47e72b3d11bac3eb9477518dbb52ac41b10491d395e915b6e249d7bd59e75f3b"
         },
         "attempt": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "037e71d3c7f256605c86068f791b04181b33f1bc5dc48a42da946a6c923e63e3"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4492,7 +5712,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4509,21 +5729,21 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
       },
       "DD": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "69fed6ea54e326f14823d0f9e4df4e6b49d4bdd947783e0a366810fe1a63e2ab"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "755821f1c573d9637365f366bd39285c1703502e872652e95d9a24a6ef81eb8d"
         },
         "attempt": {
-          "asof": "2026-10-11T00:00:00+00:00",
-          "at": "2026-10-11T00:00:00+00:00",
-          "digest": "e95f7eef046a513f7dd0741722208785767ad818b3161b5f6d089efbfa061aa0"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -4550,14 +5770,14 @@
       },
       "CEG": {
         "facts": {
-          "asof": "2026-10-10T00:00:00+00:00",
-          "at": "2026-10-10T00:00:00+00:00",
-          "digest": "406f961aec61ac45b2f55eed686a78a332539de33516cea36f69cf651581f0cc"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9adeb3822ebfbb36d7590a8936ab0c9d1702d3643090142b8a1f4614a35965f"
         },
         "attempt": {
-          "asof": "2026-10-11T00:00:00+00:00",
-          "at": "2026-10-11T00:00:00+00:00",
-          "digest": "e95f7eef046a513f7dd0741722208785767ad818b3161b5f6d089efbfa061aa0"
+          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
           "asof": "2026-10-23T06:10:40.157573+00:00",
@@ -4577,7 +5797,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4611,7 +5831,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -4662,7 +5882,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4679,7 +5899,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -4747,7 +5967,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
+          "asof": "2026-10-26T08:36:52.184714+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4756,50 +5976,65 @@
   },
   "earnings": {
     "targets": 82,
-    "dated": 62,
-    "pending": 20,
+    "dated": 65,
+    "pending": 17,
     "failed": 0,
-    "fetched": 7,
-    "cached": 75,
+    "fetched": 44,
+    "cached": 38,
     "deferred": 0,
     "data": {
       "BRK-B": {
-        "fetched": "2026-10-19",
-        "status": "unknown"
+        "date": "2026-11-06",
+        "timing": "",
+        "kind": "estimated",
+        "label": "Est. Earnings",
+        "source2": "nasdaq",
+        "fetched": "2026-10-26",
+        "status": "ok"
       },
       "HII": {
         "date": "2026-10-29",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "APH": {
         "date": "2026-10-28",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "AVGO": {
         "date": "2026-12-10",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "CRSP": {
         "date": "2026-11-09",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "GOOGL": {
         "date": "2026-10-28",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "LMT": {
@@ -4810,7 +6045,9 @@
         "date": "2026-11-24",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "UNH": {
@@ -4830,7 +6067,9 @@
         "date": "2026-10-28",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "NXPI": {
@@ -4846,14 +6085,18 @@
         "date": "2026-11-17",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "ZS": {
         "date": "2026-11-24",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "COST": {
@@ -4866,10 +6109,10 @@
         "official_checked": "2026-10-11",
         "evidence": "Q1 2027 Earnings Results | December 10, 2026 01:15 PM PT",
         "verification": "2026-10-11读取官方事件正文核验；此钟点为财报活动时间，不推定为财报文件发布钟点。",
-        "fetched": "2026-10-19",
+        "fetched": "2026-10-26",
         "official_seed_sha": "29362937a358db1cde711a79113c5e389dd96aae9be2360fff5d7ff2e9e41bac",
         "status": "ok",
-        "official_attempted": "2026-10-19",
+        "official_attempted": "2026-10-26",
         "official_error": "no_clear_earnings_event"
       },
       "TSM": {
@@ -4886,7 +6129,7 @@
         "kind": "expected",
         "label": "Earnings Date",
         "cross": "agree",
-        "fetched": "2026-10-22",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "V": {
@@ -4902,52 +6145,72 @@
         "date": "2026-11-02",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "MSFT": {
         "date": "2026-10-28",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "SYK": {
         "date": "2026-10-29",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-20",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "U": {
         "date": "2026-11-05",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "SNOW": {
         "date": "2026-12-02",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "SKHY": {
-        "fetched": "2026-10-19",
-        "status": "unknown"
+        "date": "2026-10-28",
+        "timing": "",
+        "kind": "expected",
+        "label": "Earnings Date",
+        "source2": "nasdaq",
+        "fetched": "2026-10-26",
+        "status": "ok"
       },
       "MU": {
-        "fetched": "2026-10-19",
-        "status": "unknown",
-        "official_attempted": "2026-10-19",
-        "official_error": "no_clear_earnings_event"
+        "date": "2026-12-16",
+        "timing": "",
+        "kind": "estimated",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
+        "status": "ok"
       },
       "SNDK": {
         "date": "2026-10-29",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "STX": {
@@ -4956,28 +6219,34 @@
         "kind": "expected",
         "label": "Earnings Date",
         "cross": "agree",
-        "fetched": "2026-10-23",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "NOW": {
         "date": "2026-10-28",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "CRWD": {
         "date": "2026-12-01",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "FTNT": {
         "date": "2026-10-28",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "QCOM": {
@@ -5000,14 +6269,18 @@
         "date": "2026-11-04",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "INTC": {
         "date": "2026-10-29",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "AMAT": {
@@ -5032,7 +6305,9 @@
         "date": "2026-12-10",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "LITE": {
@@ -5048,21 +6323,29 @@
         "date": "2026-12-01",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "CRDO": {
-        "date": "2026-12-07",
+        "date": "2026-11-30",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "conflict",
+        "alt_date": "2026-12-07",
+        "source2": "nasdaq",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "PANW": {
         "date": "2026-11-18",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "TER": {
@@ -5071,14 +6354,16 @@
         "kind": "expected",
         "label": "Earnings Date",
         "cross": "agree",
-        "fetched": "2026-10-23",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "PLTR": {
         "date": "2026-11-02",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "LRCX": {
@@ -5089,7 +6374,9 @@
         "date": "2026-11-18",
         "timing": "",
         "kind": "estimated",
-        "fetched": "2026-10-19",
+        "label": "Est. Earnings",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "WDC": {
@@ -5100,7 +6387,9 @@
         "date": "2026-10-30",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "TMO": {
@@ -5119,7 +6408,9 @@
         "date": "2026-10-29",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "JNJ": {
@@ -5131,13 +6422,8 @@
         "status": "unknown"
       },
       "AXP": {
-        "date": "2026-10-23",
-        "timing": "pre",
-        "kind": "expected",
-        "label": "Earnings Date",
-        "cross": "agree",
-        "fetched": "2026-10-22",
-        "status": "ok"
+        "fetched": "2026-10-26",
+        "status": "unknown"
       },
       "BX": {
         "fetched": "2026-10-23",
@@ -5159,8 +6445,10 @@
       "NU": {
         "date": "2026-11-12",
         "timing": "",
-        "kind": "estimated",
-        "fetched": "2026-10-19",
+        "kind": "expected",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "CRCL": {
@@ -5176,7 +6464,9 @@
         "date": "2026-10-29",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "HOOD": {
@@ -5196,7 +6486,9 @@
         "date": "2026-10-30",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "AXON": {
@@ -5211,8 +6503,11 @@
         "status": "ok"
       },
       "HEI": {
-        "fetched": "2026-10-19",
-        "status": "unknown"
+        "date": "2026-12-17",
+        "timing": "",
+        "kind": "estimated",
+        "fetched": "2026-10-26",
+        "status": "ok"
       },
       "SPCX": {
         "fetched": "2026-10-21",
@@ -5224,7 +6519,9 @@
         "date": "2026-10-29",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "NOC": {
@@ -5246,7 +6543,9 @@
         "date": "2026-10-29",
         "timing": "pre",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "CEG": {
@@ -5294,7 +6593,9 @@
         "date": "2026-11-09",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "META": {
@@ -5320,7 +6621,9 @@
         "date": "2026-10-29",
         "timing": "post",
         "kind": "expected",
-        "fetched": "2026-10-19",
+        "label": "Earnings Date",
+        "cross": "agree",
+        "fetched": "2026-10-26",
         "status": "ok"
       },
       "MCD": {
@@ -5403,18 +6706,18 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-24T14:12:32.068013+00:00",
+    "asof": "2026-10-26T08:36:27.806312+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "dd937bde3fd563a8d77ba54d7638d9edc8c87e2869886585f135c3472b17e94d"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "cdb444f6c59e316d4d9e45af428fc8f19bbe7e914a853f588b42ed5bbfdf970c"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -5424,13 +6727,13 @@
       },
       "HII": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "88da8e9db21f4ffaf696be7ce131793a6ab27460c9a003b4bd19b8989f30d8f1"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "1486f7b02c6bf880ba2aa2a2c401a5bac7e88076bbfbbda85b56e8b64a0a4d68"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5441,13 +6744,13 @@
       },
       "APH": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "0223c6156e50375f82f809cb38ce5e166980bbdc3b674f63c87867dc89e4ea0f"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "2c7682da90e283fb0b0aceaba6bd101989da958116d8b3ba987aeabe2724ca72"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5458,13 +6761,13 @@
       },
       "AVGO": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "e2712d0799ead8742eb340fd2bcab81c242ec945ecb56165407f3a4639efc27c"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "60ce8d6f2c11100bef328f8f7d862527f422fa8afb25da9a828c05993a3b1261"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5475,13 +6778,13 @@
       },
       "CRSP": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "c1ea700f6630ac366446f9a55cc150e83dda2839dff1e872b1ba37e06e05ca88"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "33cec2a58be519722cd86a1685471b8005371be67981182ae040a239404cecd5"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5492,13 +6795,13 @@
       },
       "GOOGL": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "b5e904c1fe423b132adc8158395b3c1f09281f4d29828952cbdd6341891fc770"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "aa968906a282985d7462650d00cd798d31f4b0b1f34f85e1df257f63e0c3f2b1"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5526,13 +6829,13 @@
       },
       "NTNX": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "0b0842e0b3a2541e51d12fa34c6fe3c49b175acd0e387b2f72daa6c67163ba2b"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "514e8dc1e607c585ac76ba049952290928f4c48cab0c32543f894924afc911da"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5577,13 +6880,13 @@
       },
       "VRT": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "0223c6156e50375f82f809cb38ce5e166980bbdc3b674f63c87867dc89e4ea0f"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "2c7682da90e283fb0b0aceaba6bd101989da958116d8b3ba987aeabe2724ca72"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5611,13 +6914,13 @@
       },
       "PDD": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "ad2c0c60040b7459c0f93effba4502f5a2c7e7111d0b3a51535ea4f758c33750"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "f2fa1ec069f360b876421d7b01e5bbb2ada1ccd78a62cb685c8b82cb58b03f9c"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5628,13 +6931,13 @@
       },
       "ZS": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "0b0842e0b3a2541e51d12fa34c6fe3c49b175acd0e387b2f72daa6c67163ba2b"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "514e8dc1e607c585ac76ba049952290928f4c48cab0c32543f894924afc911da"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5645,14 +6948,14 @@
       },
       "COST": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "3e8b36822bc4df3dc4e9c254644fca9446ceca13bbb2542bfa321a6e635f7ab9"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "0b7c76b720bebc920d3b494bb5cb0953c163aabdc7363193ba16fd31175d6bfd"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "d0eef0b8794d5c9f608574c83cf1c6196cbbb88a635fd30f5f0e740d3b430b84"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "42d715a49d824af34ecbbf0ed2dcf29f2592027849534fa6298ef456beb3086b"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -5679,13 +6982,13 @@
       },
       "MA": {
         "facts": {
-          "asof": "2026-10-22T15:57:51.167541+00:00",
-          "at": "2026-10-22T00:00:00+00:00",
-          "digest": "0feb46897e0cc13b46c9f429344dd51798cfc010275f37b0da188c7a17104f93"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "1486f7b02c6bf880ba2aa2a2c401a5bac7e88076bbfbbda85b56e8b64a0a4d68"
         },
         "attempt": {
-          "asof": "2026-10-22T15:57:51.167541+00:00",
-          "at": "2026-10-22T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5713,13 +7016,13 @@
       },
       "AAPL": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "c1bbcc9bc303404cae425eb56585823891a89ab60ba7114a2404702059236a1b"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "57cda0b4828467362be60c5ab51144b01eed0e2f2000b55f3eb081fcde9668e1"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5730,13 +7033,13 @@
       },
       "MSFT": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "b5e904c1fe423b132adc8158395b3c1f09281f4d29828952cbdd6341891fc770"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "aa968906a282985d7462650d00cd798d31f4b0b1f34f85e1df257f63e0c3f2b1"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5747,13 +7050,13 @@
       },
       "SYK": {
         "facts": {
-          "asof": "2026-10-20T00:00:00+00:00",
-          "at": "2026-10-20T00:00:00+00:00",
-          "digest": "3772c6a68666c8d78c4dd914e1930d5c8b984a757682a47aff68d4dba088666a"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "af7a6cd9d128cdef0b0fb8e4a5f5acb36e886b58b1bfad6804fcd7aab0098ed4"
         },
         "attempt": {
-          "asof": "2026-10-20T00:00:00+00:00",
-          "at": "2026-10-20T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5764,13 +7067,13 @@
       },
       "U": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "f7cb3ecdbd5f00389bd4ad6b419131b6e98714183d7edc4d21f47dbacc23e568"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "0219dc627436fd1a379b798de77820975c772fe79454331270c2520ad749cce6"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5781,13 +7084,13 @@
       },
       "SNOW": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "d515d183f0cf6726820bddda927608bc8b7c6badf8bfe764d0e44b53bb3f8a07"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "bc0f0cbf4897a17ba0ceaa08264b82fdf967e98825d6195d07fca510b5d51094"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5798,14 +7101,14 @@
       },
       "SKHY": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "dd937bde3fd563a8d77ba54d7638d9edc8c87e2869886585f135c3472b17e94d"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "f858e3cb09a1e3ce8c4328597cb1d1abcc6f522dcdb874eff5d8148ac0b28576"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -5815,14 +7118,14 @@
       },
       "MU": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "dd937bde3fd563a8d77ba54d7638d9edc8c87e2869886585f135c3472b17e94d"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "396f21327871bf062a75886e417d45ce8e87703453216fa5645d545e83c66696"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "f3ce52429c3741981bade52623c9c49b6c770853eefaa8f1fccec3c2168c2629"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -5832,13 +7135,13 @@
       },
       "SNDK": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "26a1e06e7e5e00a32371208e9e2e0ea36fe2d141114a1f112178715180688afe"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "af7a6cd9d128cdef0b0fb8e4a5f5acb36e886b58b1bfad6804fcd7aab0098ed4"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5849,13 +7152,13 @@
       },
       "STX": {
         "facts": {
-          "asof": "2026-10-23T06:10:31.383060+00:00",
-          "at": "2026-10-23T00:00:00+00:00",
-          "digest": "6374db60cf8cbac6d8c1f0dcd520fc25e353b39e3a05edb4f5386951dcb696b2"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c003c0eac470d5a10cf1ffd65384e3306764e163ab64ca59be08b77747b472da"
         },
         "attempt": {
-          "asof": "2026-10-23T06:10:31.383060+00:00",
-          "at": "2026-10-23T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5866,13 +7169,13 @@
       },
       "NOW": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "b5e904c1fe423b132adc8158395b3c1f09281f4d29828952cbdd6341891fc770"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "aa968906a282985d7462650d00cd798d31f4b0b1f34f85e1df257f63e0c3f2b1"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5883,13 +7186,13 @@
       },
       "CRWD": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "7eeada4153532dd212b8ce65ab3fb1eeb75da53f37b24704745470a801684254"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "853038e1e57d8aa77de3c3a3fcb796abba49ba9632408c779c61b66d930a2798"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5900,13 +7203,13 @@
       },
       "FTNT": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "b5e904c1fe423b132adc8158395b3c1f09281f4d29828952cbdd6341891fc770"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "aa968906a282985d7462650d00cd798d31f4b0b1f34f85e1df257f63e0c3f2b1"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5951,13 +7254,13 @@
       },
       "COHR": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "9423ce07c3ee641cce108afbaba8923e1b4f084d0b07d0302d0617151c5f7dcc"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "5af953cf3f9269aaf35c0ca2b3d15bc37cc905a765134204933e7cd4f186ead4"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5968,13 +7271,13 @@
       },
       "INTC": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "26a1e06e7e5e00a32371208e9e2e0ea36fe2d141114a1f112178715180688afe"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "af7a6cd9d128cdef0b0fb8e4a5f5acb36e886b58b1bfad6804fcd7aab0098ed4"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6019,13 +7322,13 @@
       },
       "CIEN": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "e2712d0799ead8742eb340fd2bcab81c242ec945ecb56165407f3a4639efc27c"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "60ce8d6f2c11100bef328f8f7d862527f422fa8afb25da9a828c05993a3b1261"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6053,13 +7356,13 @@
       },
       "MRVL": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "7eeada4153532dd212b8ce65ab3fb1eeb75da53f37b24704745470a801684254"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "853038e1e57d8aa77de3c3a3fcb796abba49ba9632408c779c61b66d930a2798"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6070,13 +7373,13 @@
       },
       "CRDO": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "42306703094749bb8b03411324cd70db2d047ff65ba64cf26004857d7744215d"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "e726c9171e132ad75f968b50ddc370bab65eb0b5eaba9c30da21b641fd456a9e"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6087,13 +7390,13 @@
       },
       "PANW": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "a2f02dce93501203dd01fbb8d48ef497b624db955b9f5509747aee05d25f85c4"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "104125e6b3a8d5f61b56885d63caf923dccde69a625aaf799a06a453aa1bacf8"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6104,13 +7407,13 @@
       },
       "TER": {
         "facts": {
-          "asof": "2026-10-23T06:10:31.383060+00:00",
-          "at": "2026-10-23T00:00:00+00:00",
-          "digest": "6374db60cf8cbac6d8c1f0dcd520fc25e353b39e3a05edb4f5386951dcb696b2"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "c003c0eac470d5a10cf1ffd65384e3306764e163ab64ca59be08b77747b472da"
         },
         "attempt": {
-          "asof": "2026-10-23T06:10:31.383060+00:00",
-          "at": "2026-10-23T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6121,13 +7424,13 @@
       },
       "PLTR": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "c1bbcc9bc303404cae425eb56585823891a89ab60ba7114a2404702059236a1b"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "57cda0b4828467362be60c5ab51144b01eed0e2f2000b55f3eb081fcde9668e1"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6155,13 +7458,13 @@
       },
       "NVDA": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "a2f02dce93501203dd01fbb8d48ef497b624db955b9f5509747aee05d25f85c4"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "104125e6b3a8d5f61b56885d63caf923dccde69a625aaf799a06a453aa1bacf8"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6189,13 +7492,13 @@
       },
       "ABBV": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "962bb128860fb973b922cdcedeecd6d22334d8e253d74eee019a56a23f4bd9aa"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "3ca4fef21508fda464ee78a8e005179485b7c7fc44053d59c0fc98d0c39169e0"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6240,13 +7543,13 @@
       },
       "LLY": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "88da8e9db21f4ffaf696be7ce131793a6ab27460c9a003b4bd19b8989f30d8f1"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "1486f7b02c6bf880ba2aa2a2c401a5bac7e88076bbfbbda85b56e8b64a0a4d68"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6291,14 +7594,14 @@
       },
       "AXP": {
         "facts": {
-          "asof": "2026-10-22T15:57:51.167541+00:00",
-          "at": "2026-10-22T00:00:00+00:00",
-          "digest": "f5a405c6b357bd8f594edcdc94024dc76d45f9956519acaa441748333034ffde"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "b511204b6719e0da003377285d20cabdf340c7693f6aa00c5ab4aac76b5d4617"
         },
         "attempt": {
-          "asof": "2026-10-22T15:57:51.167541+00:00",
-          "at": "2026-10-22T00:00:00+00:00",
-          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6359,13 +7662,13 @@
       },
       "NU": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "01ca0fd32244ab324b1afa73d560d8be8904e07bb3dbee507d97f5bd60ea8fb1"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "31bb2cafd380cdfdbc20683379848de43a4903dff88fbe3ce5ccbfad36a8bb20"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6393,13 +7696,13 @@
       },
       "COIN": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "26a1e06e7e5e00a32371208e9e2e0ea36fe2d141114a1f112178715180688afe"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "af7a6cd9d128cdef0b0fb8e4a5f5acb36e886b58b1bfad6804fcd7aab0098ed4"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6444,13 +7747,13 @@
       },
       "XOM": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "962bb128860fb973b922cdcedeecd6d22334d8e253d74eee019a56a23f4bd9aa"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "3ca4fef21508fda464ee78a8e005179485b7c7fc44053d59c0fc98d0c39169e0"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6478,14 +7781,14 @@
       },
       "HEI": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "dd937bde3fd563a8d77ba54d7638d9edc8c87e2869886585f135c3472b17e94d"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "acccec042f7be22ca33d878dc35c96a910286182414cf547f89369ba91a316ba"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6512,13 +7815,13 @@
       },
       "CAT": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "88da8e9db21f4ffaf696be7ce131793a6ab27460c9a003b4bd19b8989f30d8f1"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "1486f7b02c6bf880ba2aa2a2c401a5bac7e88076bbfbbda85b56e8b64a0a4d68"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6580,13 +7883,13 @@
       },
       "LIN": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "88da8e9db21f4ffaf696be7ce131793a6ab27460c9a003b4bd19b8989f30d8f1"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "1486f7b02c6bf880ba2aa2a2c401a5bac7e88076bbfbbda85b56e8b64a0a4d68"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6682,13 +7985,13 @@
       },
       "TTWO": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "2d0ab2c3e4ce01b4af1b04902d62f25da96937e929c294fde4cf9df83d9863b6"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "17f15d19ec475c15bfeb29d40145e9a43026640b53a7eb33de9328821f726529"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6750,13 +8053,13 @@
       },
       "AMZN": {
         "facts": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
-          "digest": "26a1e06e7e5e00a32371208e9e2e0ea36fe2d141114a1f112178715180688afe"
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
+          "digest": "af7a6cd9d128cdef0b0fb8e4a5f5acb36e886b58b1bfad6804fcd7aab0098ed4"
         },
         "attempt": {
-          "asof": "2026-10-19T00:00:00+00:00",
-          "at": "2026-10-19T00:00:00+00:00",
+          "asof": "2026-10-26T08:36:27.806312+00:00",
+          "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6843,9 +8146,9 @@
       "incomplete": false,
       "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-10-24T22:11:37.320445+08:00",
+    "assessed_at": "2026-10-26T16:35:14.030867+08:00",
     "schema_version": 2,
-    "asof": "2026-10-24T14:11:38.521554+00:00"
+    "asof": "2026-10-26T08:35:16.081291+00:00"
   },
   "data_lag": {
     "target": "2026-10-23",
