@@ -9,15 +9,15 @@
     "next_in": 14,
     "next_date": "2026-11-12"
   },
-  "run_id": "40293120657",
+  "run_id": "40317714360",
   "request_id": "",
-  "source_sha": "ae05376a4feeff554acaa58f70c96be831ef712a",
-  "input_hash": "6aa9c53d5ced6c5d0333cb114b500c74dc457fff823fa1ac80541e2d0c2cfd17",
-  "build_id": "40293120657-1",
-  "started_at": "2026-10-26T08:33:48+00:00",
-  "started_at_bj": "2026-10-26T16:33:48+08:00",
-  "finished_at": "2026-10-26T16:36:52.264553+08:00",
-  "finished_at_bj": "2026-10-26T16:36:52+08:00",
+  "source_sha": "0d3e7240fd03d17fdfa5399a8f75a55475739b16",
+  "input_hash": "29bdfd0ace5dfd152650095d3380c108428d1e1868353db72f3090271e5a69fd",
+  "build_id": "40317714360-1",
+  "started_at": "2026-10-26T11:47:44+00:00",
+  "started_at_bj": "2026-10-26T19:47:44+08:00",
+  "finished_at": "2026-10-26T19:50:00.400686+08:00",
+  "finished_at_bj": "2026-10-26T19:50:00+08:00",
   "event": "push",
   "target_trade_date": "2026-10-23",
   "mode": "closed",
@@ -219,7 +219,7 @@
     "amp": {
       "label": "振幅",
       "red": 0,
-      "yellow": 1,
+      "yellow": 3,
       "purple": 0
     },
     "vol_ratio": {
@@ -376,6 +376,36 @@
             }
           ],
           "metric": "振幅 9.0%"
+        },
+        {
+          "symbol": "CRWD",
+          "note": "CrowdStrike-终端安全",
+          "group": "technology",
+          "hold": "short",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-10-23股价上涨8.25%"
+            }
+          ],
+          "metric": "振幅 9.7%"
+        },
+        {
+          "symbol": "PANW",
+          "note": "Palo Alto-网络安全",
+          "group": "technology",
+          "hold": "short",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-10-23股价上涨7.22%"
+            }
+          ],
+          "metric": "振幅 8.5%"
         }
       ],
       "purple": []
@@ -1639,23 +1669,6 @@
     },
     {
       "symbol": "IBIT",
-      "kind": "amp",
-      "group": "index_funds",
-      "level": "green",
-      "hold": "short",
-      "note": "iShares比特币ETF",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.22%"
-        }
-      ],
-      "metric": "振幅 1.3%",
-      "detail": "振幅 1.3%"
-    },
-    {
-      "symbol": "IBIT",
       "kind": "boll",
       "shape": "▼",
       "side": "下轨",
@@ -1666,23 +1679,6 @@
       "level": "green",
       "hold": "short",
       "note": "iShares比特币ETF"
-    },
-    {
-      "symbol": "XLK",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "科技精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.49%"
-        }
-      ],
-      "metric": "振幅 1.6%",
-      "detail": "振幅 1.6%"
     },
     {
       "symbol": "XLK",
@@ -1698,57 +1694,6 @@
       "note": "科技精选行业ETF"
     },
     {
-      "symbol": "U",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "Unity-游戏引擎",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨1.29%"
-        }
-      ],
-      "metric": "振幅 4.2%",
-      "detail": "振幅 4.2%"
-    },
-    {
-      "symbol": "SNOW",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "Snowflake-数据云",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨3.65%"
-        }
-      ],
-      "metric": "振幅 4.9%",
-      "detail": "振幅 4.9%"
-    },
-    {
-      "symbol": "SKHY",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "SK海力士ADR",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨4.05%"
-        }
-      ],
-      "metric": "振幅 2.5%",
-      "detail": "振幅 2.5%"
-    },
-    {
       "symbol": "SKHY",
       "kind": "rsi",
       "shape": "▼",
@@ -1760,40 +1705,6 @@
       "level": "green",
       "hold": "short",
       "note": "SK海力士ADR"
-    },
-    {
-      "symbol": "MU",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "美光科技",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨2.46%"
-        }
-      ],
-      "metric": "振幅 3.9%",
-      "detail": "振幅 3.9%"
-    },
-    {
-      "symbol": "SNDK",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "闪迪",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.82%"
-        }
-      ],
-      "metric": "振幅 5.6%",
-      "detail": "振幅 5.6%"
     },
     {
       "symbol": "SNDK",
@@ -1810,23 +1721,6 @@
     },
     {
       "symbol": "STX",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "希捷科技",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.81%"
-        }
-      ],
-      "metric": "振幅 5.4%",
-      "detail": "振幅 5.4%"
-    },
-    {
-      "symbol": "STX",
       "kind": "rsi",
       "shape": "▼",
       "side": "",
@@ -1837,23 +1731,6 @@
       "level": "green",
       "hold": "short",
       "note": "希捷科技"
-    },
-    {
-      "symbol": "NOW",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "ServiceNow-工作流软件",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨1.25%"
-        }
-      ],
-      "metric": "振幅 3.7%",
-      "detail": "振幅 3.7%"
     },
     {
       "symbol": "NOW",
@@ -1869,57 +1746,6 @@
       "note": "ServiceNow-工作流软件"
     },
     {
-      "symbol": "CRWD",
-      "kind": "amp",
-      "group": "technology",
-      "level": "yellow",
-      "hold": "short",
-      "note": "CrowdStrike-终端安全",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨8.25%"
-        }
-      ],
-      "metric": "振幅 9.7%",
-      "detail": "振幅 9.7%"
-    },
-    {
-      "symbol": "FTNT",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "Fortinet-防火墙",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨4.05%"
-        }
-      ],
-      "metric": "振幅 5.2%",
-      "detail": "振幅 5.2%"
-    },
-    {
-      "symbol": "QCOM",
-      "kind": "amp",
-      "group": "technology",
-      "level": "yellow",
-      "hold": "short",
-      "note": "高通",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨1.78%"
-        }
-      ],
-      "metric": "振幅 3.2%",
-      "detail": "振幅 3.2%"
-    },
-    {
       "symbol": "QCOM",
       "kind": "boll",
       "shape": "▼",
@@ -1931,40 +1757,6 @@
       "level": "yellow",
       "hold": "short",
       "note": "高通"
-    },
-    {
-      "symbol": "ANET",
-      "kind": "amp",
-      "group": "technology",
-      "level": "yellow",
-      "hold": "short",
-      "note": "Arista-数据中心网络",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.76%"
-        }
-      ],
-      "metric": "振幅 4.5%",
-      "detail": "振幅 4.5%"
-    },
-    {
-      "symbol": "COHR",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "Coherent-光器件",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.71%"
-        }
-      ],
-      "metric": "振幅 5.7%",
-      "detail": "振幅 5.7%"
     },
     {
       "symbol": "COHR",
@@ -1981,23 +1773,6 @@
     },
     {
       "symbol": "INTC",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "英特尔",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨1.72%"
-        }
-      ],
-      "metric": "振幅 3.7%",
-      "detail": "振幅 3.7%"
-    },
-    {
-      "symbol": "INTC",
       "kind": "rsi",
       "shape": "▼",
       "side": "",
@@ -2008,40 +1783,6 @@
       "level": "green",
       "hold": "short",
       "note": "英特尔"
-    },
-    {
-      "symbol": "AMAT",
-      "kind": "amp",
-      "group": "technology",
-      "level": "red",
-      "hold": "short",
-      "note": "应用材料",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.44%"
-        }
-      ],
-      "metric": "振幅 3.1%",
-      "detail": "振幅 3.1%"
-    },
-    {
-      "symbol": "ARM",
-      "kind": "amp",
-      "group": "technology",
-      "level": "yellow",
-      "hold": "short",
-      "note": "Arm Holdings-芯片架构",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.11%"
-        }
-      ],
-      "metric": "振幅 3.1%",
-      "detail": "振幅 3.1%"
     },
     {
       "symbol": "ARM",
@@ -2057,57 +1798,6 @@
       "note": "Arm Holdings-芯片架构"
     },
     {
-      "symbol": "CIEN",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "Ciena-光网络",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.74%"
-        }
-      ],
-      "metric": "振幅 4.3%",
-      "detail": "振幅 4.3%"
-    },
-    {
-      "symbol": "LITE",
-      "kind": "amp",
-      "group": "technology",
-      "level": "yellow",
-      "hold": "short",
-      "note": "Lumentum-光模块",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.48%"
-        }
-      ],
-      "metric": "振幅 7.0%",
-      "detail": "振幅 7.0%"
-    },
-    {
-      "symbol": "MRVL",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "迈威尔科技",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨2.26%"
-        }
-      ],
-      "metric": "振幅 4.6%",
-      "detail": "振幅 4.6%"
-    },
-    {
       "symbol": "MRVL",
       "kind": "boll_rsi",
       "shape": "▼",
@@ -2119,57 +1809,6 @@
       "level": "green",
       "hold": "short",
       "note": "迈威尔科技"
-    },
-    {
-      "symbol": "CRDO",
-      "kind": "amp",
-      "group": "technology",
-      "level": "yellow",
-      "hold": "short",
-      "note": "Credo-高速互连",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌9.51%"
-        }
-      ],
-      "metric": "振幅 7.9%",
-      "detail": "振幅 7.9%"
-    },
-    {
-      "symbol": "PANW",
-      "kind": "amp",
-      "group": "technology",
-      "level": "yellow",
-      "hold": "short",
-      "note": "Palo Alto-网络安全",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨7.22%"
-        }
-      ],
-      "metric": "振幅 8.5%",
-      "detail": "振幅 8.5%"
-    },
-    {
-      "symbol": "TER",
-      "kind": "amp",
-      "group": "technology",
-      "level": "yellow",
-      "hold": "short",
-      "note": "泰瑞达",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.03%"
-        }
-      ],
-      "metric": "振幅 4.4%",
-      "detail": "振幅 4.4%"
     },
     {
       "symbol": "TER",
@@ -2185,57 +1824,6 @@
       "note": "泰瑞达"
     },
     {
-      "symbol": "PLTR",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "Palantir-AI数据分析",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.29%"
-        }
-      ],
-      "metric": "振幅 3.5%",
-      "detail": "振幅 3.5%"
-    },
-    {
-      "symbol": "LRCX",
-      "kind": "amp",
-      "group": "technology",
-      "level": "red",
-      "hold": "short",
-      "note": "拉姆研究",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.02%"
-        }
-      ],
-      "metric": "振幅 3.9%",
-      "detail": "振幅 3.9%"
-    },
-    {
-      "symbol": "NVDA",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "英伟达",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.59%"
-        }
-      ],
-      "metric": "振幅 1.7%",
-      "detail": "振幅 1.7%"
-    },
-    {
       "symbol": "NVDA",
       "kind": "boll_rsi",
       "shape": "▼",
@@ -2249,91 +1837,6 @@
       "note": "英伟达"
     },
     {
-      "symbol": "WDC",
-      "kind": "amp",
-      "group": "technology",
-      "level": "green",
-      "hold": "short",
-      "note": "西部数据",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌2.97%"
-        }
-      ],
-      "metric": "振幅 6.0%",
-      "detail": "振幅 6.0%"
-    },
-    {
-      "symbol": "XLV",
-      "kind": "amp",
-      "group": "healthcare",
-      "level": "green",
-      "hold": "short",
-      "note": "医疗保健精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.11%"
-        }
-      ],
-      "metric": "振幅 1.1%",
-      "detail": "振幅 1.1%"
-    },
-    {
-      "symbol": "ABBV",
-      "kind": "amp",
-      "group": "healthcare",
-      "level": "green",
-      "hold": "short",
-      "note": "艾伯维",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.16%"
-        }
-      ],
-      "metric": "振幅 1.6%",
-      "detail": "振幅 1.6%"
-    },
-    {
-      "symbol": "TMO",
-      "kind": "amp",
-      "group": "healthcare",
-      "level": "green",
-      "hold": "short",
-      "note": "赛默飞世尔科技",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.40%"
-        }
-      ],
-      "metric": "振幅 2.2%",
-      "detail": "振幅 2.2%"
-    },
-    {
-      "symbol": "ISRG",
-      "kind": "amp",
-      "group": "healthcare",
-      "level": "yellow",
-      "hold": "short",
-      "note": "直觉外科",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨1.90%"
-        }
-      ],
-      "metric": "振幅 3.6%",
-      "detail": "振幅 3.6%"
-    },
-    {
       "symbol": "ISRG",
       "kind": "boll_rsi",
       "shape": "▲",
@@ -2345,125 +1848,6 @@
       "level": "yellow",
       "hold": "short",
       "note": "直觉外科"
-    },
-    {
-      "symbol": "LLY",
-      "kind": "amp",
-      "group": "healthcare",
-      "level": "green",
-      "hold": "short",
-      "note": "礼来",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌2.54%"
-        }
-      ],
-      "metric": "振幅 3.8%",
-      "detail": "振幅 3.8%"
-    },
-    {
-      "symbol": "JNJ",
-      "kind": "amp",
-      "group": "healthcare",
-      "level": "green",
-      "hold": "short",
-      "note": "强生",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.42%"
-        }
-      ],
-      "metric": "振幅 1.4%",
-      "detail": "振幅 1.4%"
-    },
-    {
-      "symbol": "XLF",
-      "kind": "amp",
-      "group": "financials",
-      "level": "green",
-      "hold": "short",
-      "note": "金融精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.32%"
-        }
-      ],
-      "metric": "振幅 1.0%",
-      "detail": "振幅 1.0%"
-    },
-    {
-      "symbol": "CB",
-      "kind": "amp",
-      "group": "financials",
-      "level": "green",
-      "hold": "short",
-      "note": "安达保险",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌2.43%"
-        }
-      ],
-      "metric": "振幅 2.6%",
-      "detail": "振幅 2.6%"
-    },
-    {
-      "symbol": "AXP",
-      "kind": "amp",
-      "group": "financials",
-      "level": "yellow",
-      "hold": "short",
-      "note": "美国运通",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌3.68%"
-        }
-      ],
-      "metric": "振幅 3.0%",
-      "detail": "振幅 3.0%"
-    },
-    {
-      "symbol": "BX",
-      "kind": "amp",
-      "group": "financials",
-      "level": "green",
-      "hold": "short",
-      "note": "黑石",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.66%"
-        }
-      ],
-      "metric": "振幅 1.8%",
-      "detail": "振幅 1.8%"
-    },
-    {
-      "symbol": "SPGI",
-      "kind": "amp",
-      "group": "financials",
-      "level": "green",
-      "hold": "short",
-      "note": "标普全球",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.62%"
-        }
-      ],
-      "metric": "振幅 1.6%",
-      "detail": "振幅 1.6%"
     },
     {
       "symbol": "SPGI",
@@ -2480,23 +1864,6 @@
     },
     {
       "symbol": "GS",
-      "kind": "amp",
-      "group": "financials",
-      "level": "green",
-      "hold": "short",
-      "note": "高盛",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.75%"
-        }
-      ],
-      "metric": "振幅 1.8%",
-      "detail": "振幅 1.8%"
-    },
-    {
-      "symbol": "GS",
       "kind": "boll",
       "shape": "▼",
       "side": "下轨",
@@ -2507,57 +1874,6 @@
       "level": "green",
       "hold": "short",
       "note": "高盛"
-    },
-    {
-      "symbol": "NU",
-      "kind": "amp",
-      "group": "financials",
-      "level": "yellow",
-      "hold": "short",
-      "note": "Nu Holdings-数字银行",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨2.92%"
-        }
-      ],
-      "metric": "振幅 4.6%",
-      "detail": "振幅 4.6%"
-    },
-    {
-      "symbol": "CRCL",
-      "kind": "amp",
-      "group": "financials",
-      "level": "yellow",
-      "hold": "short",
-      "note": "Circle-稳定币",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.82%"
-        }
-      ],
-      "metric": "振幅 3.8%",
-      "detail": "振幅 3.8%"
-    },
-    {
-      "symbol": "COIN",
-      "kind": "amp",
-      "group": "financials",
-      "level": "green",
-      "hold": "short",
-      "note": "Coinbase-加密交易所",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌2.74%"
-        }
-      ],
-      "metric": "振幅 3.9%",
-      "detail": "振幅 3.9%"
     },
     {
       "symbol": "COIN",
@@ -2571,40 +1887,6 @@
       "level": "green",
       "hold": "short",
       "note": "Coinbase-加密交易所"
-    },
-    {
-      "symbol": "HOOD",
-      "kind": "amp",
-      "group": "financials",
-      "level": "yellow",
-      "hold": "short",
-      "note": "Robinhood-零售券商",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.56%"
-        }
-      ],
-      "metric": "振幅 3.1%",
-      "detail": "振幅 3.1%"
-    },
-    {
-      "symbol": "JPM",
-      "kind": "amp",
-      "group": "financials",
-      "level": "green",
-      "hold": "short",
-      "note": "摩根大通",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.47%"
-        }
-      ],
-      "metric": "振幅 1.4%",
-      "detail": "振幅 1.4%"
     },
     {
       "symbol": "JPM",
@@ -2621,23 +1903,6 @@
     },
     {
       "symbol": "XLE",
-      "kind": "amp",
-      "group": "energy",
-      "level": "green",
-      "hold": "short",
-      "note": "能源精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨2.60%"
-        }
-      ],
-      "metric": "振幅 2.9%",
-      "detail": "振幅 2.9%"
-    },
-    {
-      "symbol": "XLE",
       "kind": "boll_rsi",
       "shape": "▲",
       "side": "上轨",
@@ -2648,23 +1913,6 @@
       "level": "green",
       "hold": "short",
       "note": "能源精选行业ETF"
-    },
-    {
-      "symbol": "XOM",
-      "kind": "amp",
-      "group": "energy",
-      "level": "green",
-      "hold": "short",
-      "note": "埃克森美孚",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨2.79%"
-        }
-      ],
-      "metric": "振幅 2.7%",
-      "detail": "振幅 2.7%"
     },
     {
       "symbol": "XOM",
@@ -2680,40 +1928,6 @@
       "note": "埃克森美孚"
     },
     {
-      "symbol": "AXON",
-      "kind": "amp",
-      "group": "industrials",
-      "level": "green",
-      "hold": "short",
-      "note": "Axon-执法科技",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨1.39%"
-        }
-      ],
-      "metric": "振幅 4.0%",
-      "detail": "振幅 4.0%"
-    },
-    {
-      "symbol": "HEI",
-      "kind": "amp",
-      "group": "industrials",
-      "level": "green",
-      "hold": "short",
-      "note": "HEICO-航空零部件",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.89%"
-        }
-      ],
-      "metric": "振幅 4.8%",
-      "detail": "振幅 4.8%"
-    },
-    {
       "symbol": "HEI",
       "kind": "boll",
       "shape": "▼",
@@ -2725,57 +1939,6 @@
       "level": "green",
       "hold": "short",
       "note": "HEICO-航空零部件"
-    },
-    {
-      "symbol": "SPCX",
-      "kind": "amp",
-      "group": "industrials",
-      "level": "green",
-      "hold": "short",
-      "note": "SpaceX-商业航天",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨1.89%"
-        }
-      ],
-      "metric": "振幅 3.9%",
-      "detail": "振幅 3.9%"
-    },
-    {
-      "symbol": "CAT",
-      "kind": "amp",
-      "group": "industrials",
-      "level": "red",
-      "hold": "short",
-      "note": "卡特彼勒",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌2.42%"
-        }
-      ],
-      "metric": "振幅 2.1%",
-      "detail": "振幅 2.1%"
-    },
-    {
-      "symbol": "NOC",
-      "kind": "amp",
-      "group": "industrials",
-      "level": "green",
-      "hold": "short",
-      "note": "诺斯罗普格鲁曼",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.16%"
-        }
-      ],
-      "metric": "振幅 2.2%",
-      "detail": "振幅 2.2%"
     },
     {
       "symbol": "NOC",
@@ -2791,40 +1954,6 @@
       "note": "诺斯罗普格鲁曼"
     },
     {
-      "symbol": "RTX",
-      "kind": "amp",
-      "group": "industrials",
-      "level": "yellow",
-      "hold": "short",
-      "note": "RTX-航空防务",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.90%"
-        }
-      ],
-      "metric": "振幅 2.3%",
-      "detail": "振幅 2.3%"
-    },
-    {
-      "symbol": "DD",
-      "kind": "amp",
-      "group": "industrials",
-      "level": "yellow",
-      "hold": "short",
-      "note": "杜邦",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨1.07%"
-        }
-      ],
-      "metric": "振幅 2.7%",
-      "detail": "振幅 2.7%"
-    },
-    {
       "symbol": "DD",
       "kind": "boll_rsi",
       "shape": "▲",
@@ -2836,40 +1965,6 @@
       "level": "yellow",
       "hold": "short",
       "note": "杜邦"
-    },
-    {
-      "symbol": "XLB",
-      "kind": "amp",
-      "group": "materials",
-      "level": "green",
-      "hold": "short",
-      "note": "原材料精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.74%"
-        }
-      ],
-      "metric": "振幅 1.6%",
-      "detail": "振幅 1.6%"
-    },
-    {
-      "symbol": "LIN",
-      "kind": "amp",
-      "group": "materials",
-      "level": "green",
-      "hold": "short",
-      "note": "林德-工业气体",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.30%"
-        }
-      ],
-      "metric": "振幅 1.4%",
-      "detail": "振幅 1.4%"
     },
     {
       "symbol": "LIN",
@@ -2885,57 +1980,6 @@
       "note": "林德-工业气体"
     },
     {
-      "symbol": "XLU",
-      "kind": "amp",
-      "group": "utilities",
-      "level": "green",
-      "hold": "short",
-      "note": "公用事业精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.72%"
-        }
-      ],
-      "metric": "振幅 1.0%",
-      "detail": "振幅 1.0%"
-    },
-    {
-      "symbol": "CEG",
-      "kind": "amp",
-      "group": "utilities",
-      "level": "green",
-      "hold": "short",
-      "note": "Constellation-核电",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.69%"
-        }
-      ],
-      "metric": "振幅 3.8%",
-      "detail": "振幅 3.8%"
-    },
-    {
-      "symbol": "NEE",
-      "kind": "amp",
-      "group": "utilities",
-      "level": "green",
-      "hold": "short",
-      "note": "新纪元能源",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.24%"
-        }
-      ],
-      "metric": "振幅 1.4%",
-      "detail": "振幅 1.4%"
-    },
-    {
       "symbol": "NEE",
       "kind": "boll_rsi",
       "shape": "▲",
@@ -2947,40 +1991,6 @@
       "level": "green",
       "hold": "short",
       "note": "新纪元能源"
-    },
-    {
-      "symbol": "XLP",
-      "kind": "amp",
-      "group": "consumer_staples",
-      "level": "green",
-      "hold": "short",
-      "note": "必需消费精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.92%"
-        }
-      ],
-      "metric": "振幅 2.1%",
-      "detail": "振幅 2.1%"
-    },
-    {
-      "symbol": "WMT",
-      "kind": "amp",
-      "group": "consumer_staples",
-      "level": "green",
-      "hold": "short",
-      "note": "沃尔玛",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.02%"
-        }
-      ],
-      "metric": "振幅 2.7%",
-      "detail": "振幅 2.7%"
     },
     {
       "symbol": "WMT",
@@ -2996,108 +2006,6 @@
       "note": "沃尔玛"
     },
     {
-      "symbol": "PG",
-      "kind": "amp",
-      "group": "consumer_staples",
-      "level": "green",
-      "hold": "short",
-      "note": "宝洁",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌2.76%"
-        }
-      ],
-      "metric": "振幅 2.3%",
-      "detail": "振幅 2.3%"
-    },
-    {
-      "symbol": "KO",
-      "kind": "amp",
-      "group": "consumer_staples",
-      "level": "green",
-      "hold": "short",
-      "note": "可口可乐",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌2.76%"
-        }
-      ],
-      "metric": "振幅 2.5%",
-      "detail": "振幅 2.5%"
-    },
-    {
-      "symbol": "XLC",
-      "kind": "amp",
-      "group": "communications",
-      "level": "yellow",
-      "hold": "short",
-      "note": "通信服务精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.78%"
-        }
-      ],
-      "metric": "振幅 1.2%",
-      "detail": "振幅 1.2%"
-    },
-    {
-      "symbol": "TTWO",
-      "kind": "amp",
-      "group": "communications",
-      "level": "green",
-      "hold": "short",
-      "note": "Take-Two-游戏",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.98%"
-        }
-      ],
-      "metric": "振幅 2.3%",
-      "detail": "振幅 2.3%"
-    },
-    {
-      "symbol": "META",
-      "kind": "amp",
-      "group": "communications",
-      "level": "yellow",
-      "hold": "short",
-      "note": "Meta-社交广告",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.96%"
-        }
-      ],
-      "metric": "振幅 2.3%",
-      "detail": "振幅 2.3%"
-    },
-    {
-      "symbol": "NFLX",
-      "kind": "amp",
-      "group": "communications",
-      "level": "red",
-      "hold": "short",
-      "note": "奈飞",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.79%"
-        }
-      ],
-      "metric": "振幅 3.0%",
-      "detail": "振幅 3.0%"
-    },
-    {
       "symbol": "NFLX",
       "kind": "boll_rsi",
       "shape": "▼",
@@ -3109,40 +2017,6 @@
       "level": "red",
       "hold": "short",
       "note": "奈飞"
-    },
-    {
-      "symbol": "XLY",
-      "kind": "amp",
-      "group": "consumer_discretionary",
-      "level": "green",
-      "hold": "short",
-      "note": "非必需消费精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.66%"
-        }
-      ],
-      "metric": "振幅 1.1%",
-      "detail": "振幅 1.1%"
-    },
-    {
-      "symbol": "BKNG",
-      "kind": "amp",
-      "group": "consumer_discretionary",
-      "level": "green",
-      "hold": "short",
-      "note": "Booking-在线旅游",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌3.27%"
-        }
-      ],
-      "metric": "振幅 2.6%",
-      "detail": "振幅 2.6%"
     },
     {
       "symbol": "BKNG",
@@ -3159,23 +2033,6 @@
     },
     {
       "symbol": "AMZN",
-      "kind": "amp",
-      "group": "consumer_discretionary",
-      "level": "green",
-      "hold": "short",
-      "note": "亚马逊",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.95%"
-        }
-      ],
-      "metric": "振幅 1.4%",
-      "detail": "振幅 1.4%"
-    },
-    {
-      "symbol": "AMZN",
       "kind": "boll_rsi",
       "shape": "▼",
       "side": "下轨",
@@ -3186,57 +2043,6 @@
       "level": "green",
       "hold": "short",
       "note": "亚马逊"
-    },
-    {
-      "symbol": "MCD",
-      "kind": "amp",
-      "group": "consumer_discretionary",
-      "level": "green",
-      "hold": "short",
-      "note": "麦当劳",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌1.65%"
-        }
-      ],
-      "metric": "振幅 2.0%",
-      "detail": "振幅 2.0%"
-    },
-    {
-      "symbol": "TSLA",
-      "kind": "amp",
-      "group": "consumer_discretionary",
-      "level": "green",
-      "hold": "short",
-      "note": "特斯拉",
-      "indicators": [
-        {
-          "shape": "▼",
-          "tone": "white",
-          "label": "2026-10-23股价下跌0.63%"
-        }
-      ],
-      "metric": "振幅 3.2%",
-      "detail": "振幅 3.2%"
-    },
-    {
-      "symbol": "XLRE",
-      "kind": "amp",
-      "group": "real_estate",
-      "level": "yellow",
-      "hold": "short",
-      "note": "房地产精选行业ETF",
-      "indicators": [
-        {
-          "shape": "▲",
-          "tone": "white",
-          "label": "2026-10-23股价上涨0.12%"
-        }
-      ],
-      "metric": "振幅 2.0%",
-      "detail": "振幅 2.0%"
     }
   ],
   "earnings_week": {
@@ -3781,15 +2587,15 @@
     "checked_at": "2026-10-22T11:56:54.517842-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-26T08:35:15.632628+00:00"
+    "asof": "2026-10-26T11:49:13.977976+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 26,
+      "due": 14,
       "deferred": 14,
-      "tried": 12,
-      "ok": 12,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -4593,7 +3399,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-26T08:36:52.184714+00:00",
+    "asof": "2026-10-26T11:50:00.347254+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -4692,7 +3498,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -5321,7 +4127,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5355,7 +4161,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -5389,7 +4195,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5406,7 +4212,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -5457,7 +4263,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5474,7 +4280,7 @@
           "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "b97f36fd59ba73086b38a650d9ce1d58aa3255ca676925c8a1348c837f5dbe76"
         }
@@ -5491,7 +4297,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -5678,7 +4484,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5712,7 +4518,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5729,7 +4535,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5797,7 +4603,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5831,7 +4637,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -5882,7 +4688,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5899,7 +4705,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -5967,7 +4773,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-26T08:36:52.184714+00:00",
+          "asof": "2026-10-26T11:50:00.347254+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5979,8 +4785,8 @@
     "dated": 65,
     "pending": 17,
     "failed": 0,
-    "fetched": 44,
-    "cached": 38,
+    "fetched": 0,
+    "cached": 82,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -6706,7 +5512,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-26T08:36:27.806312+00:00",
+    "asof": "2026-10-26T11:50:00.318852+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -8146,9 +6952,9 @@
       "incomplete": false,
       "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-10-26T16:35:14.030867+08:00",
+    "assessed_at": "2026-10-26T19:49:12.567263+08:00",
     "schema_version": 2,
-    "asof": "2026-10-26T08:35:16.081291+00:00"
+    "asof": "2026-10-26T11:49:14.256906+00:00"
   },
   "data_lag": {
     "target": "2026-10-23",
