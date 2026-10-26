@@ -606,6 +606,11 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
 /* 点开的是哪个数字胶囊，就亮哪个胶囊本身（不整行高亮） */
 #signalCounts .signal-count-toggle[aria-expanded="true"]{background:#2f4f86;border-color:#8fb8f0;color:#fff}
+#signalCounts .signal-count-toggle[data-target$="-red"]{border-color:rgba(255,133,128,.45)}
+#signalCounts .signal-count-toggle[data-target$="-yellow"]{border-color:rgba(240,198,116,.45)}
+#signalCounts .signal-count-toggle[data-target$="-red"][aria-expanded="true"]{background:rgba(255,133,128,.16)}
+#signalCounts .signal-count-toggle[data-target$="-yellow"][aria-expanded="true"]{background:rgba(240,198,116,.16)}
+#signalCounts .signal-count-toggle[data-target^="signal-members-gray-"][aria-expanded="true"]{background:rgba(201,209,217,.14);border-color:rgba(201,209,217,.45)}
 #signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted #465e87}
 #signalCounts .signal-member-jump:hover,.signal-member-jump:focus-visible{color:#bfd5ff;border-bottom-color:#bfd5ff}
 #signalCounts .text-only{margin:8px 0 0;border:1px solid #2b3546;border-radius:8px;background:#12161f;text-align:left}
