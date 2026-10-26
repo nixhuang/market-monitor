@@ -15,7 +15,7 @@ TARGET_HIGH_SPACE_PCT = 90
 CONSENSUS_GROUPS = ("position", "focus")   # 仅达到规则限这两组；空间规则覆盖全部个股
 
 
-AMP_GROUPS = ("position", "focus")   # 振幅红黄仅持仓/重点，其他有效振幅计灰；涨跌幅对所有分组生效
+AMP_GROUPS = ("position", "focus")   # 保留旧导出值供兼容；振幅覆盖全部分组，不再用它门控。
 
 
 BOLL_UP_SIGNAL_GROUPS = ("position", "focus")  # 上轨普通过热仅持仓/重点；三超卖红覆盖全组，持仓不分长短。
@@ -126,22 +126,18 @@ def _rule_amplitude(al, x):
     """日内振幅：涨跌幅只看「收盘 vs 昨收」，盘中冲高又回落、最后收平的票不会响，这条专门抓它。
     用当日最高/最低（盘中重跑时再和当前价取极值）除以昨收。"""
     x.amp = None
-    # 其他组的灰灯必须来自真实有效日内范围；布林现价回退不能冒充0%振幅。
-    # 复用已对齐收盘序列/有效位的范围校验，不改变持仓/重点原红黄口径。
-    if not x.amp_on and hasattr(x, "data") and not _ma_day_range(x)[2]:
+    # 全组必须有对齐且有效的日内范围；布林现价回退不能冒充0%振幅。
+    if hasattr(x, "data") and not _ma_day_range(x)[2]:
         return
     if (not all(isinstance(v, (int, float)) and not isinstance(v, bool)
                 and math.isfinite(v) and v > 0 for v in (x.touch_up, x.touch_dn, x.prev))
             or x.touch_dn > x.touch_up):
         return
-    x.amp = (x.touch_up - x.touch_dn) / x.prev * 100
-    if not math.isfinite(x.amp) or x.amp < 0:
+    amp = (x.touch_up - x.touch_dn) / x.prev * 100
+    if not math.isfinite(amp) or amp < 0:
         return
+    x.amp = amp
     text = f"振幅 {x.amp:.1f}%（{x.touch_dn:,.2f}~{x.touch_up:,.2f}）"
-    if not x.amp_on:
-        al.add("amp", text, "gray")
-        x.foldable = False
-        return
     if x.amp >= x.amp_red:
         al.add("amp", text, "red")
     elif x.amp >= x.amp_yellow:
@@ -384,13 +380,12 @@ class RuleEngine:
 
     def _apply_vol_tier(self, x):
         """涨跌 / 振幅阈值：设置页的值是中档，按这只股自己的平时波动缩放；
-    涨跌幅对所有分组生效；振幅仅「持仓」和「重点关注」报红黄，其他有效振幅无阈值计灰。"""
+    涨跌幅与有效振幅对所有分组生效；达到红线优先报红，否则达到黄线报黄。"""
         x.vol_tier, x.vol_sigma = self._context.vol_profile(x.closes)
         mult = self._context.VOL_MULT[x.vol_tier]
         x.chg_red, x.chg_yellow = self._context.S["chg_red"] * mult, self._context.S["chg_yellow"] * mult
         x.amp_red, x.amp_yellow = self._context.S["amp_red"] * mult, self._context.S["amp_yellow"] * mult
         x.usual = f"（平时约 ±{x.vol_sigma:.1f}%）" if x.vol_sigma is not None else ""
-        x.amp_on = x.group in self._context.AMP_GROUPS
 
 
     def classify_technical_facts(self, group, high_hits, low_hits, selected_side):

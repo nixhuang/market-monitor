@@ -296,7 +296,7 @@ _glossary5 = re.search(r'<template id="glossaryTpl">(.*?)</template>', html5, re
 check(all(term in _glossary5 for term in ('Yahoo → stooq → Nasdaq', 'BAMLH0A0HYM2',
       'Cboe官方VIX日线优先', '芝加哥联储原始周度数据', 'History of Market')),
       "旧来源迁入新稿且VIX来源与当前实现一致")
-# 正式利率决议仅保留页底默认折叠详情，不生成常驻消息或影响风险灯。
+# 页面不再展示利率决议；旧helper及后台缓存接口保留兼容，不影响风险灯。
 import copy as _copy
 from unittest.mock import patch as _patch
 import policy_alerts as _policy
@@ -319,12 +319,11 @@ check(all(term not in _refhtml for term in ('id="policyAlert"', 'id="referenceAl
 check(not re.search(r'<details[^>]*id="policyAlertDetails"[^>]*\bopen\b', _refhtml),
       "决议详情无open属性，不常驻展示正文")
 check(not any(term in _refhtml for term in ("核心CPI", "SEP", "季度预测", "点阵图", "通胀／利率")), "页面移除CPI与预测依赖及旧标签")
-check('id="policyAlertDetails"><summary>美联储利率决议' in _refhtml
-      and '<details class="macro-help" id="policyAlertDetails" open' not in _refhtml, "决议来源位于页底并默认折叠")
-check("3.50%–3.75%" in _refhtml and "2026-09-17 02:00" in _refhtml
-      and "到下次官方公布时点前复用" in _refhtml and 'href="#fetch-reference"' not in _refhtml
-      and "正常缓存24小时" not in _refhtml and "临时决议可能延迟发现" in _refhtml,
-      "详情保留区间与双时区，缓存说明集中到新抓取区块")
+check('id="policyAlertDetails"' not in _refhtml, "页面规则不再插入美联储决议详情，旧helper保留兼容")
+check("3.50%–3.75%" in _refcard and "2026-09-17 02:00" in _refcard
+      and "到下次官方公布时点前复用" not in _refhtml and 'href="#fetch-reference"' not in _refhtml
+      and "正常缓存24小时" not in _refhtml and "临时决议可能延迟发现" not in _refhtml,
+      "旧helper数据不变，规则正文已移除决议来源缓存与日程说明")
 check(_refsnap["summary"] == snapshot["summary"] and 'id="oilAlert"' in _refhtml, "原计数不变，WTI保留")
 _pending = _copy.deepcopy(_refsnap)
 _pending["reference_alerts"]["policy"]["fed"]["fetch_error"] = "模拟解析错误 <script>bad()</script>"
@@ -352,7 +351,7 @@ def check_reference_render(refs, label, status="unavailable", oil_level="gray"):
     render_macro, render_items = _copy.deepcopy(macro), _copy.deepcopy(items)
     before = _copy.deepcopy((snap, render_macro, render_items))
     page = monitor.render(render_macro, render_items, 10, snapshot=snap)
-    details = re.search(r'<details\b[^>]*id="policyAlertDetails"[^>]*>.*?</details>', page, re.S)[0]
+    details = monitor._policy_details(snap)
     oil_row = page.split('id="oilAlert"', 1)[1].split('</tr>', 1)[0]
     check(f'data-status="{status}"' in details
           and 'id="policyAlert"' not in page and 'id="referenceAlerts"' not in page
@@ -360,7 +359,8 @@ def check_reference_render(refs, label, status="unavailable", oil_level="gray"):
           and f'data-level="{oil_level}"' in oil_row
           and (status == "available" or "待更新" in details or "尚未取得" in details)
           and (oil_level != "gray" or "待更新" in oil_row)
-          and 'id="policyAlertDetails"' in page and 'id="group_positions"' in page
+          and 'id="policyAlertDetails"' not in page and '美联储' not in monitor._page_notes(snap)
+          and 'id="group_positions"' in page
           and page.endswith('</body></html>')
           and (snap, render_macro, render_items) == before,
           label + "：全页完成、状态保守且输入不突变")
@@ -452,8 +452,9 @@ with _patch.object(monitor, "NOW", _ref_now), \
     _before = _copy.deepcopy(_old)
     _built = monitor.build_reference_alerts(_old)
     _page = check_reference_render(_built, "build→render 到期抓取失败", "pending")
-    check(_fetch_text.call_count == 1 and _old == _before and "维持不变" in _page
-          and "3.50%–3.75%" in _page and "2026-09-16" in _page,
+    _retained = monitor._policy_details({'reference_alerts': _built})
+    check(_fetch_text.call_count == 1 and _old == _before and "维持不变" in _retained
+          and "3.50%–3.75%" in _retained and "2026-09-16" in _retained,
           "到期失败保留有效旧消息、日期和区间，不突变原缓存")
     _before = _copy.deepcopy(_built)
     _retry = monitor.build_reference_alerts(_built)
@@ -470,7 +471,8 @@ with _patch.object(monitor, "NOW", _ref_now), \
         check(_refs == _before, "入口异常 " + _label + "：原缓存不突变")
         _page = check_reference_render(_built, "入口异常→render " + _label, _expected)
         if _status == "available":
-            check("维持不变" in _page and "3.50%–3.75%" in _page and "2026-09-16" in _page,
+            _retained = monitor._policy_details({'reference_alerts': _built})
+            check("维持不变" in _retained and "3.50%–3.75%" in _retained and "2026-09-16" in _retained,
                   "入口异常 " + _label + "：保留有效旧消息和来源日期")
 
 # 完整捕获主行属性，允许新增属性；保留原因及报价必须各出现一次且值精确一致。
@@ -1107,17 +1109,17 @@ for _condition, _expected in (
           re.findall(r'<td\b[^>]*>(.*?)</td>', _rule_rows[0] if _rule_rows else '', re.S)] == [_condition] + _expected,
           _condition + '全页规则与实际分类一致，持仓重点上轨三反向超卖均黄')
 
-# 振幅专项不复用已隔离振幅的技术fixture：真实分析→快照→灰列/白字/独立灯。
+# 振幅专项真实分析→快照→红黄/静默；技术灰、条件颜色、折叠资格互不覆盖。
 from tests.mm_test_groups import TestAmplitudeChain as _AmplitudeChain
 _amp_engine = _AmplitudeChain()
 _amp_engine.setUp()
 try:
-    _amp_rows = [_amp_engine.analyze(symbol='AMPUP', prev=99, high=102, low=99),
-                 _amp_engine.analyze(symbol='AMPDOWN', group='healthcare', prev=101, high=101, low=98),
+    _amp_rows = [_amp_engine.analyze(symbol='AMPUP', prev=99, high=104, low=98),
+                 _amp_engine.analyze(symbol='AMPDOWN', group='healthcare', prev=101, high=103, low=96),
                  _amp_engine.analyze(symbol='AMPZERO', group='index_funds', high=100, low=100),
-                 _amp_engine.analyze(symbol='AMPDUAL', values=(70, 70, 50)),
+                 _amp_engine.analyze(symbol='AMPDUAL', high=106, low=94, values=(70, 70, 50)),
                  _amp_engine.analyze(symbol='AMPCOMBO', values=(35, 35, 35), bands=(100, 110, 99)),
-                 _amp_engine.analyze(symbol='AMPSTACK', prev=100 / 1.06, values=(70, 50, 50),
+                 _amp_engine.analyze(symbol='AMPSTACK', high=106, low=94, prev=100 / 1.06, values=(70, 50, 50),
                                      bands=(100, 110, 99), cfg={'trigger': 100, 'target': 190}, ratio=3)]
     _amp_input_before = _copy.deepcopy(_amp_rows)
     _amp_snap = monitor.build_snapshot({}, _amp_rows, {}, group_counts={})
@@ -1126,52 +1128,65 @@ try:
 finally:
     _amp_engine.doCleanups()
 _amp_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _amp_page)[1]))
-_amp_gray_members = [m for m in _amp_snap['text_only'] if m['kind'] == 'amp']
-check(len(_amp_gray_members) == 6 and len(_amp_snap['text_only']) == 8
-      and set(m['symbol'] for m in _amp_gray_members) == {r['symbol'] for r in _amp_rows},
-      '真实振幅全链：6只振幅灰加2项技术灰，不按kind重复计总数')
+check([m['kind'] for m in _amp_snap['text_only']] == ['rsi', 'boll_rsi'],
+      '真实振幅全链：只保留2项技术灰，振幅不再计灰')
 _amp_stats = _amp_page.split('id="signalCounts"', 1)[1].split('id="group_positions"', 1)[0]
-check('aria-label="灰 6 项"' in _amp_stats and 'aria-label="红 2 项"' in _amp_stats,
-      '总灰按身份并集计6，独立组合红和复合红仍各计一次')
+check('aria-label="灰 2 项"' in _amp_stats and 'aria-label="红 3 项"' in _amp_stats,
+      '总灰仅技术身份并集2，振幅红与其他红按最终行去重计3')
 _amp_stat_row = re.search(r'<tr><td><button[^>]*data-kind="amp".*?</tr>', _amp_stats, re.S)[0]
 check([_unescape(re.sub(r'<[^>]+>', '', cell)) for cell in
-       re.findall(r'<td\b[^>]*>(.*?)</td>', _amp_stat_row, re.S)] == ['振幅', '—', '—', '6'],
-      '振幅真实统计表精确列序：红黄空、灰6')
-_amp_panel_id = 'signal-members-gray-' + __import__('hashlib').sha256(b'amp').hexdigest()
-_amp_panel = re.search(r'<div class="signal-members-panel tone-gray" id="' + _amp_panel_id
-                       + r'" hidden>(.*?)</div>(?=</td>|<div class="signal-members-panel)', _amp_stats, re.S)[1]
-check(all(title in _amp_panel for title in ('<h5><span class="grp-arrow">▲</span> 上涨</h5>',
-                                          '<h5><span class="grp-arrow">▼</span> 下跌</h5>', '<h5>平盘</h5>'))
-      and _amp_panel.index('上涨</h5>') < _amp_panel.index('下跌</h5>') < _amp_panel.index('平盘</h5>'),
-      '振幅灰名单复用涨/跌/平分框，次序与红黄名单一致')
-check(_amp_panel.count('<li>') == 6 and '振幅 0.0%' in _amp_panel
-      and all(m['metric'] in _unescape(re.sub(r'<[^>]+>', '', _amp_panel)) for m in _amp_gray_members)
-      and not re.search(r'tone-red|tone-yellow|signal-dot', _amp_panel),
-      '灰名单保留所有数值含0，灯灰且不继承同股其它红黄')
-for _row in _amp_rows:
-    _classes, _body = rendered_stock_row(_amp_page, _row, True)
+       re.findall(r'<td\b[^>]*>(.*?)</td>', _amp_stat_row, re.S)] == ['振幅', '2', '2', '—'],
+      '振幅统计表精确列序：红2、黄2、灰空')
+_amp_panels = {}
+for _level in ('red', 'yellow'):
+    _panel_id = 'signal-members-' + __import__('hashlib').sha256(b'amp').hexdigest() + '-' + _level
+    _amp_panels[_level] = re.search(r'<div class="signal-members-panel tone-' + _level + '" id="' + _panel_id
+        + r'" hidden>(.*?)</div>(?=</td>|<div class="signal-members-panel)', _amp_stats, re.S)[1]
+check(all(title in _amp_panels['yellow'] for title in ('<h5><span class="grp-arrow">▲</span> 上涨</h5>',
+                                                     '<h5><span class="grp-arrow">▼</span> 下跌</h5>'))
+      and _amp_panels['yellow'].index('上涨</h5>') < _amp_panels['yellow'].index('下跌</h5>')
+      and '<h5>平盘</h5>' in _amp_panels['red'],
+      '振幅红黄名单仍按涨/跌/平分框，方向结构不变')
+check(all(panel.count('<li>') == 2 for panel in _amp_panels.values())
+      and '振幅 0.0%' not in ''.join(_amp_panels.values())
+      and 'aria-label="灰灯 · 振幅' not in _amp_stats,
+      '振幅仅已触发红黄进入名单，合法0静默，无旧振幅灰面板')
+for _row, _amp_level in zip(_amp_rows, ('yellow', 'yellow', None, 'red', None, 'red')):
+    _classes, _body = rendered_stock_row(_amp_page, _row, not _row['foldable'])
     _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
     _kinds_levels = re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', _sig)
     _expected_classes = [_row['level']] + (['pur', 'pur-high'] if _row['purple'] else [])
-    check(_row['foldable'] is False and _classes == _expected_classes
-          and _kinds_levels.count(('amp', 'gray')) == 1 and 'signal-dot' not in _sig,
-          _row['symbol'] + '振幅灰描述白字、不折叠，整体灯由独立指标决定')
-    _record = next(m for m in _amp_filter['amp']['members'] if m['s'] == _row['symbol'])
-    _metric = next(m['metric'] for m in _amp_gray_members if m['symbol'] == _row['symbol'])
-    check(_record['l'] == _row['level'] and _record['d'] == [{'l': 'gray', 't': _metric}],
-          _row['symbol'] + '振幅灰筛选保留最终行灯但事实自身始终灰，不重复指标标签')
+    check(_classes == _expected_classes and ('amp', 'gray') not in _kinds_levels
+          and _kinds_levels.count(('amp', _amp_level)) == int(_amp_level is not None)
+          and ('data-signal-kind="amp"' in _sig) == (_amp_level is not None) and 'signal-dot' not in _sig,
+          _row['symbol'] + '振幅只呈现自身红黄颜色，低于黄线无条件文字，主行灯独立')
+    _record = next((m for m in _amp_filter['amp']['members'] if m['s'] == _row['symbol']), None)
+    if _amp_level:
+        _metric = next(m['metric'] for m in _amp_snap['signal_members']['amp'][_amp_level]
+                       if m['symbol'] == _row['symbol'])
+        check(_record['l'] == _row['level'] and _record['d'] == [{'l': _amp_level, 't': _metric}],
+              _row['symbol'] + '振幅筛选保留最终行灯和逐条件红黄事实')
+    else:
+        check(_record is None, _row['symbol'] + '未达黄线不进入振幅筛选')
+check(_amp_rows[2]['amp'] == 0 and _amp_rows[2]['foldable'] and _amp_rows[2]['signals'] == []
+      and monitor._stock_anchor_id('AMPZERO') in ''.join(re.findall(
+          r'<details class="quiet-list">.*?<table class="stk">(.*?)</table>', _amp_page, re.S)),
+      '合法0保存数值，静默且可进入无异动，不强制不折叠')
+check('data-signal-kind="rsi" data-signal-level="gray"' in monitor._signals_html(_amp_rows[3])
+      and 'data-signal-kind="amp" data-signal-level="red"' in monitor._signals_html(_amp_rows[3]),
+      '同股技术灰+振幅红分别白字/红字，不继承整行灯色')
 check('data-signal-kind="boll_rsi" data-signal-level="red"' in monitor._signals_html(_amp_rows[4])
-      and [m['kind'] for m in monitor.text_only_members([_amp_rows[4]])] == ['amp']
+      and monitor.text_only_members([_amp_rows[4]]) == []
       and _amp_snap['signal_counts']['boll_rsi']['red'] == 1
       and all(_amp_snap['signal_counts'][k][c] == 0 for k in ('boll', 'rsi') for c in ('red', 'yellow')),
-      'amp与真实组合红并存：只禁技术灰、不禁振幅灰，也不重复单独布林RSI')
-check(all((kind, 'red') in _amp_rows[-1]['signal_marks'] for kind in ('chg', 'add_price', 'vol_ratio'))
-      and _amp_rows[-1]['purple']
-      and [m['kind'] for m in monitor.text_only_members([_amp_rows[-1]])] == ['amp', 'boll_rsi'],
-      '振幅灰+技术灰+涨跌/加仓/量比红+目标紫各自独立')
+      '组合红时低振幅静默，不重复单独布林RSI或技术灰')
+check(all((kind, 'red') in _amp_rows[-1]['signal_marks'] for kind in ('chg', 'add_price', 'vol_ratio', 'amp'))
+      and _amp_rows[-1]['purple'] and not _amp_rows[-1]['foldable']
+      and [m['kind'] for m in monitor.text_only_members([_amp_rows[-1]])] == ['boll_rsi'],
+      '振幅红+技术灰+涨跌/加仓/量比红+目标紫独立，技术不折叠资格不变')
 check('.signal-item[data-signal-level="gray"]{color:var(--text)}' in monitor.PAGE_CSS
       and _amp_rows == _amp_input_before and _amp_snap == _amp_snap_before,
-      '生产灰描述使用白字且完整渲染不突变分析或快照')
+      '生产技术灰仍白字且完整渲染不突变分析或快照')
 
 # 显式 --chrome 才启动全新隔离实例；HTML 经 CDP 放入 about:blank 内存页。
 if '--chrome' in sys.argv:

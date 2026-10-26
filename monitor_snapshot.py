@@ -178,7 +178,7 @@ class SnapshotBuilder:
 
 
     def text_only_members(self, items):
-        """显式振幅灰与技术灰独立计，与同股其它指标红黄并存；技术组合与单独指标互斥。
+        """技术灰与同股其它指标红黄并存；技术组合与单独指标互斥。
     主表最高灯级不变；重复身份沿用首页分类优先级，只处理优先条目。"""
         priority = {g["item_group"]: i for i, g in enumerate(self._context.GROUPS)}
         seen = set(self._context.RISK_IDENTITIES)
@@ -193,17 +193,6 @@ class SnapshotBuilder:
                     or "price" in d and (not isinstance(d["price"], (int, float))
                         or isinstance(d["price"], bool) or not math.isfinite(d["price"]) or d["price"] <= 0)):
                 continue
-            amp = d.get("amp")
-            if (d.get("group") not in self._context.AMP_GROUPS
-                    and isinstance(amp, (int, float)) and not isinstance(amp, bool)
-                    and math.isfinite(amp) and amp >= 0
-                    and any(k == "amp" and level == "gray" for k, level in d.get("signal_marks") or [])):
-                member = {"symbol": symbol, "kind": "amp", "group": d.get("group") or "",
-                          "level": d.get("level") if d.get("level") in ("red", "yellow", "green") else "green",
-                          "hold": str(d.get("hold") or ""), "note": str(d.get("note") or "")}
-                self._context._member_signal_details(d, "amp", member, "gray")
-                member["detail"] = member.get("metric", "")
-                out.append(member)
             kind = self._context._text_only_kind(d.get("signals"))
             technical_marks = {k for k, level in d.get("signal_marks") or []
                                if k in ("boll", "rsi", "boll_rsi") and level in ("red", "yellow")}
@@ -267,6 +256,7 @@ class SnapshotBuilder:
             short, long = period == config.get("ma_short"), period == config.get("ma_long")
             return "短均线/长均线" if short and long else "短均线" if short else "长均线" if long else "均线（归属待确认）"
         output = re.sub(r"(\d+)日(?:弱)?均线", name, str(text))
+        output = output.replace("日内触及长均线", "触及长均线")
         named = set(re.findall(r"(?:短|长)均线", output))
         if len(named) == 1:
             label = next(iter(named))
@@ -511,6 +501,29 @@ class SnapshotBuilder:
         out = {key: item for key, item in value.items() if key not in self._context._RETIRED_SNAPSHOT_KEYS}
         if "signal_marks" in out:
             out["signal_marks"] = [mark for mark in out["signal_marks"] or [] if mark[0] != "fund"]
+            retired_amp = any(kind == "amp" and level == "gray" for kind, level in out["signal_marks"])
+            if retired_amp:
+                out["signal_marks"] = [mark for mark in out["signal_marks"] if mark != ("amp", "gray") and mark != ["amp", "gray"]]
+                if not any(kind == "amp" and level in ("red", "yellow") for kind, level in out["signal_marks"]):
+                    out["signals"] = [text for text in out.get("signals") or []
+                                      if not isinstance(text, str) or not text.startswith("振幅 ")]
+                # 旧振幅灰曾强制不折叠；仅按已保存技术事实恢复资格，不回查行情或重判振幅。
+                texts = [text for text in out.get("signals") or [] if isinstance(text, str)]
+                selected = out.get("boll_alert_text") or next(
+                    (text for text in texts if text.startswith(self._context._TEXT_BOLL_PREFIX)), "")
+                side = ("上轨" if "上轨" in selected else "下轨" if "下轨" in selected else None) if isinstance(selected, str) else None
+                hits = {"超买": 0, "超卖": 0}
+                for text in texts:
+                    match = re.match(r"^RSI ([123])条\s*[↑↓]?(超买|超卖)", text)
+                    if match:
+                        hits[match[2]] = max(hits[match[2]], int(match[1]))
+                facts = self._context.classify_technical_facts(out.get("group"), hits["超买"], hits["超卖"], side)
+                technical_marks = {kind for kind, _ in out["signal_marks"] if kind in ("rsi", "boll", "boll_rsi")}
+                known = isinstance(selected, str) and (not selected or side is not None) and all(
+                    not text.startswith("RSI") or re.match(r"^RSI ([123])条\s*[↑↓]?(超买|超卖)", text)
+                    for text in texts)
+                if facts and known and (not technical_marks or technical_marks == {facts["kind"]}):
+                    out["foldable"] = facts["foldable"]
         if "symbol" in out and any(key in out for key in ("target", "purple", "signal_marks", "signals")):
             out = self._context._apply_target(out)
         return out
@@ -598,7 +611,8 @@ class SnapshotBuilder:
         for field in ("items", "stocks", "text_only"):
             if isinstance(out.get(field), list):
                 out[field] = [self._context._sanitize_snapshot_fields(item) if isinstance(item, dict) else item
-                              for item in out[field]]
+                              for item in out[field]
+                              if not (field == "text_only" and isinstance(item, dict) and item.get("kind") == "amp")]
                 if field in ("items", "stocks"):
                     out[field] = [{**item, "ma_settings": item.get("ma_settings")
                                    if isinstance(item.get("ma_settings"), dict) else

@@ -2395,7 +2395,7 @@ CONSENSUS_RETRY_PER_DAY = 3          # 失败重试最多占用 3 个名额，�
 CONSENSUS_RETRY_BACKOFF = (1, 2, 4, 7)  # 连续失败：首次次日重试，此后逐步退避
 
 
-AMP_GROUPS = monitor_rules.AMP_GROUPS
+AMP_GROUPS = monitor_rules.AMP_GROUPS  # 兼容旧导出，不参与振幅规则门控。
 
 
 BOLL_UP_SIGNAL_GROUPS = monitor_rules.BOLL_UP_SIGNAL_GROUPS

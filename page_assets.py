@@ -38,6 +38,7 @@ target-reached-positive||p|当日上穿／跌破或现价在目标±${target_gap
 line-53|rule-earnings|h5|财报临近 所有分组
 line-54||p|美东财报日期按北京时间：前一日／当日／后一日 → 红字；
 earnings-near||p|财报前2～${earn_soon_days}天 → 黄字。
+earnings-list-note||p|还有 ${earn_far_start}～${earn_list_days}天 → 仅文字，进入统计财报，可折叠。
 line-56|rule-quotes|h5|缺行情／参考行情 数据缺失 所有分组
 line-57||p|缺行情 → 灰灯；参考行情显示参考状态。
 line-58||p|两者只保留在主表，不进入“无异动”，不计入统计面板，不因此制造红灯／黄灯警示。"""),
@@ -107,8 +108,8 @@ LAMP_RULE_TABLE = (
     '<td class="cell-gray">灰灯</td><td class="cell-gray-fold" colspan="2">灰灯（折）</td></tr>'
     '<tr><th scope="row" class="cat-col" rowspan="5">价格与量能</th>'
     '<td>涨跌幅 · 自适应</td>'
-    '<td>红灯／黄灯</td><td>红灯／黄灯</td><td class="cell-gray">灰灯</td></tr>'
-    '<tr><td>振幅 · 自适应</td><td>红灯／黄灯</td><td>红灯／黄灯</td><td class="cell-gray">灰灯</td></tr>'
+    '<td colspan="3">红灯／黄灯</td></tr>'
+    '<tr><td>振幅 · 自适应</td><td colspan="3">红灯／黄灯</td></tr>'
     '<tr><td>52周低位（距低点≤${near_52w_low_pct}%）</td>'
     '<td colspan="3">红灯（新进入／跌破／昨日未知）；黄灯（其余持续低位）</td></tr>'
     '<tr><td>均线（短均线穿越；长均线触及±${ma_long_band_pct}%或穿越）</td>'
@@ -126,7 +127,6 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 <h4>名词解释与计算</h4>
 <h5 id="glossary-ack">可点红灯与已读</h5>
 <p>加仓价、减仓价、成本浮亏：点✓已读，再点撤销。已读显示白字删除线，统计由对应红列转灰列。</p>
-<p>已读只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯。是否进入“无异动”，按剩余报灯与保留条件判断。</p>
 <p>条件消失即清除已读，再次触发重新提醒。浮亏10%／20%分档记录、每只只计一次；升降档切换提醒，低于10%清除浮亏已读。</p>
 <h5 id="glossary-chg">涨跌幅 · 计算与阈值</h5>
 <p>涨跌幅＝（现价÷昨收−1）×100%；报灯取绝对值。</p>
@@ -135,7 +135,7 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 ${chg_threshold_table}
 <h5 id="glossary-amp">振幅 · 计算与阈值</h5>
 <p>振幅＝（日高−日低）÷昨收×100%，表示日内摆动宽度。涨跌幅接近0，振幅仍可能很大。</p>
-<p>持仓分组、重点沿用上节波动档，达到红门槛优先报红，否则达到黄门槛报黄。其他分组只要振幅有效（含0%）就报灰灯：白字、计灰且不折叠，不设门槛、不升红黄。</p>
+<p>所有分组沿用上节波动档，达到红门槛优先报红，否则达到黄门槛报黄。有效0%保留数值；低于黄门槛不提示、不计灰，也不因振幅强制不折叠。日内高低缺失、错位、无效或仅由现价填补时，不计算振幅。</p>
 ${amp_threshold_table}
 <h5 id="glossary-boll">布林逼近 · 自适应</h5>
 <p>布林为${boll_n}日、±${boll_k}倍标准差。逼近范围＝历史日波动×${boll_near_factor}（当前${boll_near_band_pct}%设置）；波动越大，范围越宽。关闭自适应或波动无效时固定${boll_near_pct}%。</p>
@@ -167,12 +167,12 @@ ${vol_example_table}
 <p>空间／达到各自去重、允许重叠；总数取并集，不直接相加。</p>
 <h5 id="glossary-earnings">财报与显示</h5>
 <p>用美东财报日期对比北京今天，盘前／盘后不平移。名单含今天至+${earn_list_days}天，另留昨天红字；红字保留期结束后才检查下一次。</p>
-<p>只显示个股财报，ETF／指数／期货除外。失败时沿用有效旧日期；“待公布”仅表示本站未取得日期。</p>
+<p>失败时沿用有效旧日期；“待公布”仅表示本站未取得日期。</p>
 <p>已知时段显示盘前／盘后／盘中及北京落点，未知不猜钟点。</p>
 <h5 id="glossary-dedup">标的去重与显示优先级</h5>
 <p>显示与报警优先级：市场风险／持仓 → 重点 → 其他。同一实质标的只显示最高级，清单记录不删。</p>
-<p>VIX与标普指数仅在市场风险显示；指数、跟踪ETF、期货不是同一标的。</p>
-<p>主表描述按指标级别着色：红字为红灯内容、黄字为黄灯内容、白字为灰灯内容；仅文字且不计灰灯的内容用灰字。财报日期颜色不计交易灯，竖条灯保留。首次只展开统计，不等于标的进入“无异动”的判定。</p>
+<p>VIX与标普指数仅在市场风险显示。</p>
+<p>主表描述按指标级别着色：红字为红灯内容、黄字为黄灯内容、白字为灰灯内容；仅文字且不计灰灯的内容用灰字。</p>
 </section>
 <section id="glossary-fetch">
 <h4>抓取规则</h4>
@@ -209,13 +209,11 @@ ${vol_example_table}
 <tr><th scope="row">上涨参与度</th><td><a href="https://historyofmarket.com/zh-cn/sp500/sp500-breadth/" rel="noopener noreferrer" target="_blank">History of Market</a>；使用成分股均线参与度，不用ETF价格替代</td></tr>
 <tr><th scope="row">金融压力NFCI</th><td>芝加哥联储原始周度数据；过期或不可用时以FRED同一指标同步备用</td></tr>
 <tr><th scope="row">10年美债收益率</th><td>Yahoo ^TNX百分比日线；校验标的与收益率序列，不混用债券价格</td></tr>
-<tr><th scope="row">美联储决议</th><td>美联储官网声明及发布日程</td></tr>
 <tr><th scope="row">WTI原油</th><td>Yahoo NYMEX WTI期货日线；不是实时夜盘报价</td></tr></tbody></table>
 <p>来源、观测日期与失效状态看对应数据项；有效期与判定见综合判断与宏观细则。</p>
 <h5 id="fetch-reference">补充参考：缓存间隔</h5>
 <table class="rule-table"><thead><tr><th scope="col">数据</th><th scope="col">缓存／重试</th></tr></thead>
-<tbody><tr><th scope="row">美联储决议</th><td>到下次官方公布时点前复用；错误／待更新至少隔1小时重试</td></tr>
-<tr><th scope="row">NFCI</th><td>按周度公布时点到期；有旧缓存时，未发布／失败至少隔1小时重试，无有效缓存则下一轮再查</td></tr>
+<tbody><tr><th scope="row">NFCI</th><td>按周度公布时点到期；有旧缓存时，未发布／失败至少隔1小时重试，无有效缓存则下一轮再查</td></tr>
 <tr><th scope="row">其他行情型参考</th><td>随行情更新，不用共识价14天缓存</td></tr></tbody></table>
 </section>
 </div>"""
@@ -940,6 +938,8 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 #rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border-left:0;border-right:0}
 .card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center}
 .card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}
+/* 分类列四块之间的三条边界加粗；条件、灯级列与组内分隔线不变。 */
+#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid #6f7b91}
 /* 最左分类列：竖排、固定 18px 单字宽（不用 em，避免手机端字号缩放把列撑宽）。
    overflow:hidden 兜底：万一竖排不生效，横排文字被裁掉也不会把列顶宽。 */
 .card .rules-body .rule-table col.cat-col{width:18px}
@@ -949,6 +949,11 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 .card .rules-body .ar-band-down{color:#f85149}
 .card .rules-body .ar-rsi-up{color:#3ec9d6}
 .card .rules-body .ar-rsi-down{color:#e061c9}
+/* 仅报灯总表条件列的四种方向符号统一白色；其它区块配色与反向灰字不变。 */
+#rules-lamp-table tbody td:first-of-type .ar-band-up,
+#rules-lamp-table tbody td:first-of-type .ar-band-down,
+#rules-lamp-table tbody td:first-of-type .ar-rsi-up,
+#rules-lamp-table tbody td:first-of-type .ar-rsi-down{color:#fff}
 /* RSI 的 ↑↓ 继承文字颜色，仅放大字号；布林 ▲▼ 直接使用正文文字。 */
 .arrow-rsi-up,.arrow-rsi-down{color:inherit;font-size:1.15em;line-height:1}
 /* 分组位置的上下三角：统一分组蓝，跟框标题同色系，不再绿红黄白各一个样。 */

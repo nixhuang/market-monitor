@@ -624,7 +624,7 @@
       if(positionSave) consumePositions(positionSave.generation);
       ackChanges={}; queued=false; _retryN=0; SYNC=setPending(false)?'synced':'local'; paint(); return;
     }
-    var last=read(LS_PUSH_AT), wait=typeof last==='number'?30000-(Date.now()-last):0;
+    var last=read(LS_PUSH_AT), wait=typeof last==='number'?15000-(Date.now()-last):0;
     if(storageErrors[LS_PUSH_AT]){ paint(); return; }
     if(wait>0){ _pushTimer=setTimeout(function(){ _pushTimer=null; doPush(); },wait); return; }
     if(!write(LS_PUSH_AT,Date.now())){ paint(); return; }
@@ -1967,12 +1967,11 @@
       bar+='<span class="seg '+p.c+'" style="width:'+pc.toFixed(3)+'%"></span>';
       leg+='<span><i class="'+p.c+'"></i><b>'+pc.toFixed(1)+'%</b></span>';
       aria.push(p.n+' '+pc.toFixed(1)+'%');
-      /* 「所有持仓」＝长持仓＋短持仓：跟在浅绿方块后面再加一个深绿／浅绿拼接的方块，
-         只出现在图例里（横条上长＋短本来就是前后两段，再画一遍会重复） */
+      /* 长＋短合计仅在图例显示两个完整深浅绿块及合计比例，不重复横条分段。 */
       if(p.c==='s-short' && (longMv+shortMv)>0){
         var hp=totalAsset>0?(longMv+shortMv)/totalAsset*100:0;
-        leg+='<span><i class="seg-all"></i><span class="ln">所有持仓</span>'
-          +'<b>'+hp.toFixed(1)+'%</b></span>';
+        leg+='<span aria-label="所有持仓 '+hp.toFixed(1)+'%"><span class="seg-all" aria-hidden="true">'
+          +'<i class="s-long"></i><i class="s-short"></i></span><b>'+hp.toFixed(1)+'%</b></span>';
       }
     });
     footEl.innerHTML='<div class="cost-bar" role="img" aria-label="资产结构：'

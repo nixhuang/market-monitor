@@ -371,7 +371,7 @@ class RulesTemplateTests(unittest.TestCase):
         third = rules.split('<section id="rule-folded">')[1]
         headings = re.findall(r'<h5 class="rule-layout-heading">(.*?)</h5>', third)
         self.assertEqual(headings, ['目标／共识价', '财报'])
-        self.assertEqual(rules.count('class="nav-gray"'), 21)  # 重点上轨两条两方向新增技术灰灯。
+        self.assertEqual(rules.count('class="nav-gray"'), 19)  # 涨跌幅、振幅全组红黄后移除两处旧灰说明。
 
     def test_threshold_tables_are_only_in_glossary_and_follow_settings_and_constants(self):
         settings = {'chg_yellow': 7, 'chg_red': 11, 'amp_yellow': 13, 'amp_red': 17,
@@ -451,7 +451,7 @@ class RulesTemplateTests(unittest.TestCase):
                              re.findall(r'<td\b([^>]*)>(.*?)</td>', rows[0], re.S)]
                     self.assertEqual(cells, [('', condition)] + expected)
 
-    def test_reverse_condition_text_and_amplitude_gray_description_are_scoped(self):
+    def test_reverse_condition_text_and_all_group_price_rules_are_scoped(self):
         rules = assets.rules_body({}, {})
         reverse = re.findall(r'<span class="rule-reverse">(.*?)</span></td>', rules, re.S)
         self.assertEqual(len(reverse), 6)
@@ -460,13 +460,63 @@ class RulesTemplateTests(unittest.TestCase):
             self.assertEqual(len(re.findall(r'<span class="ar-(?:band|rsi)-(?:up|down)">', text)), 2)
         self.assertIn('.card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}', assets.RULES_CSS)
         self.assertNotIn('rule-reverse', assets.glossary_body({}, {}))
-        row = next(row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', rules, re.S)
-                   if '振幅 · 自适应' in self.plain(row))
-        cells = re.findall(r'<td\b([^>]*)>(.*?)</td>', row, re.S)
-        self.assertEqual([self.plain(text) for _, text in cells], ['振幅 · 自适应', '红灯／黄灯', '红灯／黄灯', '灰灯'])
-        self.assertIn('class="cell-gray"', cells[-1][0])
-        self.assertIn('振幅有效（含0%）就报灰灯', self.plain(assets.glossary_body({}, {})))
-        self.assertIn('不设门槛、不升红黄', self.plain(assets.glossary_body({}, {})))
+        for condition in ('涨跌幅 · 自适应', '振幅 · 自适应'):
+            row = next(row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', rules, re.S)
+                       if condition in self.plain(row))
+            cells = re.findall(r'<td\b([^>]*)>(.*?)</td>', row, re.S)
+            self.assertEqual([(attrs, self.plain(text)) for attrs, text in cells],
+                             [('', condition), (' colspan="3"', '红灯／黄灯')])
+            self.assertEqual(self.plain(row).count('红灯／黄灯'), 1)
+            self.assertNotIn('cell-gray', row)
+        glossary = self.plain(assets.glossary_body({}, {}))
+        self.assertIn('所有分组沿用上节波动档', glossary)
+        self.assertIn('有效0%保留数值', glossary)
+        self.assertIn('低于黄门槛不提示、不计灰，也不因振幅强制不折叠', glossary)
+        self.assertNotIn('不设门槛、不升红黄', glossary)
+
+    def test_condition_arrows_white_only_in_lamp_table_and_earnings_list_note(self):
+        css = re.sub(r'/\*.*?\*/', '', assets.RULES_CSS, flags=re.S)
+        expected = {f'#rules-lamp-table tbody td:first-of-type .{name}'
+                    for name in assets.ARROW_COLORS.values()}
+        scoped = []
+        for selectors, declarations in re.findall(r'([^{}]+)\{([^{}]*)\}', css):
+            names = {selector.strip() for selector in selectors.split(',')}
+            if names & expected:
+                self.assertEqual(names, expected)
+                self.assertEqual(declarations, 'color:#fff')
+                scoped.append(names)
+        self.assertEqual(len(scoped), 1)
+        for name, color in (('ar-band-up', '#3fb950'), ('ar-band-down', '#f85149'),
+                            ('ar-rsi-up', '#3ec9d6'), ('ar-rsi-down', '#e061c9')):
+            self.assertIn(f'.card .rules-body .{name}{{color:{color}}}', css)
+        rules = assets.rules_body({}, {})
+        note = re.search(r'<div\b[^>]*id="nav-earnings-list-note"[^>]*>\s*<p\b[^>]*>(.*?)</p>', rules, re.S)
+        self.assertIsNotNone(note)
+        self.assertEqual(self.plain(note[1]), '还有 8～15天 → 仅文字，进入统计财报，可折叠。')
+        self.assertLess(rules.index('id="nav-earnings-near"'), note.start())
+        self.assertLess(note.end(), rules.index('id="rule-quotes"'))
+
+    def test_requested_glossary_sentences_and_fed_rules_removed(self):
+        glossary = self.plain(assets.glossary_body({}, {}))
+        for removed in ('已读只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯。',
+                        '是否进入“无异动”，按剩余报灯与保留条件判断。',
+                        '只显示个股财报，ETF／指数／期货除外。',
+                        '指数、跟踪ETF、期货不是同一标的。',
+                        '财报日期颜色不计交易灯，竖条灯保留。',
+                        '首次只展开统计，不等于标的进入“无异动”的判定。', '美联储决议'):
+            self.assertNotIn(removed, glossary)
+        for retained in ('失败时沿用有效旧日期', 'VIX与标普指数仅在市场风险显示。',
+                         '主表描述按指标级别着色', '金融压力NFCI', 'WTI原油'):
+            self.assertIn(retained, glossary)
+
+    def test_category_column_section_borders_only(self):
+        self.assertIn('#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid #6f7b91}', assets.RULES_CSS)
+        rows = re.findall(r'<tr\b[^>]*>.*?</tr>', assets.LAMP_RULE_TABLE, re.S)
+        sections = [row for row in rows if 'class="cat-col" rowspan=' in row]
+        self.assertEqual(len(sections), 4)
+        self.assertEqual([self.plain(re.search(r'<th\b[^>]*>(.*?)</th>', row)[1]) for row in sections],
+                         ['布林+RSI', '单独RSI', '单独布林', '价格与量能'])
+        self.assertIn('tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid #6f7b91}', assets.RULES_CSS)
 
     def test_lamp_table_horizontal_center_is_scoped_and_keeps_other_layout(self):
         css = assets.RULES_CSS

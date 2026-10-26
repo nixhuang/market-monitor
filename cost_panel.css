@@ -349,9 +349,10 @@
   font-variant-numeric:tabular-nums}
 .cost-legend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .cost-legend i{width:9px;height:9px;border-radius:2px;flex:none}
-/* 「所有持仓」＝长持仓＋短持仓：一个深绿、浅绿各占一半的拼接方块 */
-.cost-legend i.seg-all{background:linear-gradient(90deg,#2ea043 0 50%,#7ee787 50% 100%)}
-.cost-legend .ln{color:var(--dim);font-size:10.5px}
+/* 长＋短合计图例：两个完整9px色块无缝相邻，仅外侧保留圆角。 */
+.cost-legend .seg-all{display:inline-flex;gap:0;flex:none}
+.cost-legend .seg-all i:first-child{border-radius:2px 0 0 2px}
+.cost-legend .seg-all i:last-child{border-radius:0 2px 2px 0}
 .cost-legend b{color:var(--text);font-weight:600}
 @media (max-width:560px){
   .cost-body{padding:2px 0 10px}
@@ -401,7 +402,6 @@
   .cost-mini .t-pnl .pct,.cost-mini .t-pnl .amt{display:block}
   .cost-mini .c-cost,.cost-mini .t-mv,.cost-mini .t-pnl,.cost-mini .t-wt{font-size:10.5px}
   .cost-legend{font-size:10.5px;gap:3px 10px}
-  .cost-legend .ln{font-size:10px}
   .cost-subhead{font-size:11.5px;padding-left:12px}
   .cost-subhead .cnt{font-size:10.5px}
   .cost-contrib{padding-left:12px}

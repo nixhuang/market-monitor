@@ -58,61 +58,71 @@ lv4, sig4, _ = monitor.analyze_symbol("AMPCFG", {}, mk(hi=102.5, lo=99.5, last=1
 check(any("振幅 3.0%" in s for s in sig4), f"阈值改成 3% 后生效：{sig4}")
 monitor.S["amp_yellow"] = old
 
-# --- 5. 其他所有分组的有效振幅（含0）真实分析计灰，不借持仓阈值过滤 ---
-for group in (g['item_group'] for g in monitor.GROUPS if g['item_group'] not in monitor.AMP_GROUPS):
-    for amplitude in (0, .01, 2, 12):
-        with patch.dict(monitor.S, {'amp_yellow': 1000, 'amp_red': 2000,
+# --- 5. 全部现有分组及自定义分组：同一自适应红黄规则，0与低振幅静默 ---
+groups = [g['item_group'] for g in monitor.GROUPS] + ['custom_group']
+for group in groups:
+    for amplitude, expected in ((0, 'green'), (.01, 'green'), (2, 'green'),
+                                (5.999, 'green'), (6, 'yellow'), (9.999, 'yellow'), (10, 'red'), (12, 'red')):
+        with patch.dict(monitor.S, {'amp_yellow': 6, 'amp_red': 10,
                                    'near_52w_low_pct': 0, 'ma_short': 0, 'ma_long': 0}), \
+                patch.object(monitor, 'vol_profile', return_value=('mid', None)), \
+                patch.object(monitor, 'AMP_GROUPS', ()), \
                 patch.object(monitor, 'calc_rsi', return_value=50), \
                 patch.object(monitor, 'boll', return_value=(None, None, None)):
-            level, signals, detail = monitor.analyze_symbol('AMPGRAY', {},
+            level, signals, detail = monitor.analyze_symbol('AMPALL', {},
                 mk(hi=100 + amplitude / 2, lo=100 - amplitude / 2), group=group)
-        check((level, detail['foldable'], detail['signal_marks']) == ('green', False, [('amp', 'gray')]),
-              f'{group} 振幅{amplitude:g}%：灰marks、不折叠，主表仍绿')
-        check(len(signals) == 1 and signals[0].startswith(f'振幅 {amplitude:.1f}%'),
-              f'{group} 振幅{amplitude:g}%：有效振幅无阈值且只有真实振幅描述')
-        gray = monitor.text_only_members([detail])
-        check(len(gray) == 1 and gray[0]['kind'] == 'amp' and gray[0]['metric'] == f'振幅 {amplitude:.1f}%'
-              and monitor.signal_counts([detail])['amp'] == {'label': '振幅', 'red': 0, 'yellow': 0, 'purple': 0},
-              f'{group} 振幅{amplitude:g}%：计振幅灰而非红黄')
+        marks = [] if expected == 'green' else [('amp', expected)]
+        check((level, detail['foldable'], detail['signal_marks']) == (expected, True, marks),
+              f'{group} 振幅{amplitude:g}%：统一红黄或静默，不强制不折叠')
+        check(abs(detail['amp'] - amplitude) < 1e-10 and
+              (signals == [] if expected == 'green' else len(signals) == 1 and signals[0].startswith(f'振幅 {amplitude:.1f}%')),
+              f'{group} 振幅{amplitude:g}%：保留真实数值，未达黄线无描述')
+        check(monitor.text_only_members([detail]) == [] and
+              monitor.signal_counts([detail])['amp'] == {'label': '振幅', 'red': int(expected == 'red'),
+                                                        'yellow': int(expected == 'yellow'), 'purple': 0},
+              f'{group} 振幅{amplitude:g}%：只计真实红黄，不计振幅灰')
 
-# 缺失/合成/错位的日内范围不能以现价回退制造0%或低估振幅的灰灯。
-for group in (g['item_group'] for g in monitor.GROUPS if g['item_group'] not in monitor.AMP_GROUPS):
-    for case in ('missing', 'empty', 'high_none', 'low_none', 'mismatched', 'synthetic', 'bad_validity'):
+# 缺失/合成/错位的日内范围不能以现价回退制造0%或低估振幅。
+from types import SimpleNamespace
+for group in groups:
+    cases = ('missing', 'empty', 'high_none', 'low_none', 'mismatched', 'synthetic', 'bad_validity',
+             'reversed', 'high_bool', 'low_string', 'high_nan', 'low_inf', 'high_zero', 'low_negative')
+    for case in cases:
         data = mk(hi=106, lo=94)
         if case == 'missing':
             data.pop('highs'); data.pop('lows')
         elif case == 'empty':
             data['highs'] = []; data['lows'] = []
-        elif case == 'high_none':
-            data['highs'][-1] = None
-        elif case == 'low_none':
-            data['lows'][-1] = None
         elif case == 'mismatched':
             data['highs'] = data['highs'][:-1]
         elif case == 'synthetic':
             data['ma_range_valid'] = [True] * 259 + [False]
-        else:
+        elif case == 'bad_validity':
             data['ma_range_valid'] = [True]
-        from types import SimpleNamespace
+        elif case == 'reversed':
+            data['highs'][-1], data['lows'][-1] = 94, 106
+        else:
+            key, bad = {'high_none': ('highs', None), 'low_none': ('lows', None),
+                        'high_bool': ('highs', True), 'low_string': ('lows', '94'),
+                        'high_nan': ('highs', float('nan')), 'low_inf': ('lows', float('inf')),
+                        'high_zero': ('highs', 0), 'low_negative': ('lows', -1)}[case]
+            data[key][-1] = bad
         x = SimpleNamespace(data=data, closes=data['closes'], price=data['price'], prev=data['prev_close'],
-                            amp_on=False, foldable=True)
-        monitor._intraday_extremes(x)
+                            group=group, touch_up=106, touch_dn=94, amp_yellow=6, amp_red=10, foldable=True)
         al = monitor._Alerts()
         monitor._rule_amplitude(al, x)
         check(x.amp is None and x.foldable is True and al.marks == [] and al.signals == [] and al.level == 'green',
-              f'{group} {case}：无效范围不制造振幅灰、不改变折叠')
-        detail = {'symbol': 'AMPINVALID', 'group': group, 'price': x.price, 'amp': x.amp,
-                  'foldable': x.foldable, 'signal_marks': al.marks, 'signals': al.signals, 'level': al.level}
-        check(monitor.text_only_members([detail]) == [], f'{group} {case}：下游灰统计不计无效振幅')
-    valid_zero = mk(hi=100, lo=100)
-    valid_zero['ma_range_valid'] = [True] * 260
-    with patch.dict(monitor.S, {'near_52w_low_pct': 0, 'ma_short': 0, 'ma_long': 0}), \
-            patch.object(monitor, 'calc_rsi', return_value=50), \
-            patch.object(monitor, 'boll', return_value=(None, None, None)):
-        _, _, detail = monitor.analyze_symbol('AMPVALIDZERO', {}, valid_zero, group=group)
-    check(detail['amp'] == 0 and detail['signal_marks'] == [('amp', 'gray')] and not detail['foldable'],
-          f'{group} 真实有效0%振幅仍灰灯且不折叠')
+              f'{group} {case}：全组无效范围不制造振幅灯、不改变折叠')
+    for validity in (None, [], [True] * 260):
+        valid_zero = mk(hi=100, lo=100)
+        if validity is not None:
+            valid_zero['ma_range_valid'] = validity
+        with patch.dict(monitor.S, {'near_52w_low_pct': 0, 'ma_short': 0, 'ma_long': 0}), \
+                patch.object(monitor, 'calc_rsi', return_value=50), \
+                patch.object(monitor, 'boll', return_value=(None, None, None)):
+            _, _, detail = monitor.analyze_symbol('AMPVALIDZERO', {}, valid_zero, group=group)
+        check(detail['amp'] == 0 and detail['signal_marks'] == [] and detail['foldable'] and detail['signals'] == [],
+              f'{group} 范围有效位{bool(validity)}：真实0%保留数值，默认静默且可折叠')
 
 # --- 6. 验证实际渲染：静态资源抽离后，不再通过 monitor 源码猜测页面 ---
 with patch.object(monitor, '_cost_panel_assets', return_value=('', '')):

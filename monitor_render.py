@@ -70,6 +70,21 @@ POSITION_ZONES = (("long", "长持仓"), ("short", "短持仓"))
 _GRAY_RSI_RE = re.compile(r"RSI ([123])条\s*[↑↓]?(超买|超卖)")
 
 
+def _reverse_rsi_description(text, side):
+    """只为与选中布林轨反向的RSI显示事实加（反），不修改判灯或原始文本。"""
+    if side not in ("上轨", "下轨"):
+        return text
+    opposite = "超卖" if side == "上轨" else "超买"
+
+    def mark(match):
+        value = match[0]
+        if match[1] != opposite or value.endswith("（反）"):
+            return value
+        return value + "（反）"
+
+    return re.sub(r"RSI\s+[123]条\s*[↑↓]?(超买|超卖)(?:（[^）]*）)*", mark, text)
+
+
 # ---------------------------------------------------------------- HTML
 
 def fmt(v, unit="", nd=2):
@@ -144,13 +159,13 @@ def _run_light(snapshot, finished_txt):
 
 
 def _gray_by_kind(snapshot):
-    """灰灯成员按 amp / rsi / boll / boll_rsi 归类。"""
+    """灰灯成员仅按 rsi / boll / boll_rsi 归类。"""
     rows = snapshot.get("text_only") or []
     out = {}
     if not isinstance(rows, list):
         return out
     for r in rows:
-        if (isinstance(r, dict) and str(r.get("kind") or "") in ("amp", "rsi", "boll", "boll_rsi")
+        if (isinstance(r, dict) and str(r.get("kind") or "") in ("rsi", "boll", "boll_rsi")
                 and isinstance(r.get("symbol"), str) and r["symbol"].strip()):
             out.setdefault(r["kind"], []).append(r)
     return out
@@ -297,7 +312,7 @@ class PageRenderer:
                 if match:
                     # 标题说「250日均线上穿」，跟用户口头说法一致
                     label = f"{match.group(2)}日均线{match.group(1)}"
-                return (marker["shape"], self._context._ma_display_text(label, d.get("ma_settings")) or ("均线穿越" if kind == "ma_cross" else "日内触及长均线"))
+                return (marker["shape"], self._context._ma_display_text(label, d.get("ma_settings")) or ("均线穿越" if kind == "ma_cross" else "触及长均线"))
             return ("", "方向待下次更新")
         if kind in ("chg", "amp"):
             for marker in d.get("indicators") or []:
@@ -551,7 +566,12 @@ class PageRenderer:
             # RSI/量比等名称已在原事实开头；组合名称仅用于统计，不前置到个股描述。
             prefix = label + " " if label and not texts[0].startswith(label) and kind not in ("boll_rsi", "vol_ratio", "amp", "low52", "add_price", "reduce_price", "target") else ""
             separator = " · " if kind == "boll_rsi" else "，"
-            body = self._context.arrow_html(html_lib.escape(prefix + separator.join(texts)))
+            display = prefix + separator.join(texts)
+            if kind == "boll_rsi":
+                selected = str(d.get("boll_alert_text") or next((text for text in texts if "布林" in text), ""))
+                side = "上轨" if "上轨" in selected else "下轨" if "下轨" in selected else ""
+                display = _reverse_rsi_description(display, side)
+            body = self._context.arrow_html(html_lib.escape(display))
             parts.append(f'<span class="signal-item" data-signal-kind="{kind}"'
                          + (f' data-signal-level="{level}"' if level else "") + f'>{body}</span>')
         tg = d.get("target") or {}
@@ -862,7 +882,10 @@ class PageRenderer:
         if kind == "boll" and isinstance(d.get("boll_state"), str) and d["boll_state"]:
             return f"布林{d['boll_state']}"
         if kind == "boll_rsi" and isinstance(d.get("direction"), str) and d["direction"]:
-            return f"布林{self._context.boll_rsi_text(d['direction'], d.get('boll_rsi_hits'))}"
+            side, _, _ = self._context._parse_boll_rsi_direction(d["direction"])
+            detail = f"布林{self._context.boll_rsi_text(d['direction'], d.get('boll_rsi_hits'))}"
+            detail = re.sub(r" · (?:反向|方向不一致)$", "", detail)
+            return _reverse_rsi_description(detail, side)
         marks = [m.get("label") for m in d.get("indicators") or []
                  if isinstance(m, dict) and isinstance(m.get("label"), str) and m.get("label")]
         detail = " / ".join(marks) if marks else label
@@ -935,7 +958,7 @@ class PageRenderer:
         filters = {}  # 同时满足筛选：每类信号的已核验成员（红/黄/紫合并）
         gray_by_kind = self._context._gray_by_kind(snapshot)
         kinds_iter = [(kind, value) for kind, value in counts.items() if kind not in ("fund", "target")]
-        for gkind in ("amp", "rsi", "boll", "boll_rsi"):
+        for gkind in ("rsi", "boll", "boll_rsi"):
             if gray_by_kind.get(gkind) and gkind not in counts:
                 kinds_iter.append((gkind, {"label": dict(self._context.SIGNAL_KINDS)[gkind]}))
         # 技术三栏与规则表格同序：布林+RSI（组合）排在单独 RSI、单独布林之前，
@@ -1123,8 +1146,8 @@ class PageRenderer:
                 f'<td class="num" {dim}>灰</td></tr>')
         summary = snapshot.get("summary") or {}
         whole = lambda n: n if type(n) is int and n >= 0 else None
-        gray_count = len({self._context.instrument_identity(m["symbol"]) for m in snapshot.get("text_only") or []
-                          if isinstance(m, dict) and m.get("symbol")}) if isinstance(snapshot.get("text_only"), list) else 0
+        gray_count = len({self._context.instrument_identity(m["symbol"])
+                          for entries in gray_by_kind.values() for m in entries})
         totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
                   ("gray", "灰", gray_count), ("earn", "财报", self._context._earnings_week_panel(snapshot, count_only=True)))
         stats = "".join(
@@ -1171,14 +1194,7 @@ class PageRenderer:
         if ok:
             blocks, order = {}, []
             for r in picked:
-                metric = ""
-                if kind == "amp":
-                    shape, title = self._context._member_block(r, kind)
-                    n = 0
-                    metric = self._context._member_metric_text(r, kind)
-                else:
-                    shape, title, n = self._context._gray_title(kind, r)
-                value = f' <span class="signal-member-metric">{self._context.arrow_html(esc(metric))}</span>' if metric else ""
+                shape, title, n = self._context._gray_title(kind, r)
                 key = (shape, title)
                 if key not in blocks:
                     blocks[key] = []
@@ -1187,14 +1203,16 @@ class PageRenderer:
                 belong = f'<span class="signal-member-belong">（{esc(self._context._member_belong(r))}）</span>'
                 blocks[key].append((group_order.get(str(r.get("group") or ""), len(self._context.GROUPS)),
                                     f'<li><a class="signal-member-jump" href="#{self._context._stock_anchor_id(r["symbol"])}">'
-                                    f'<span class="signal-member-symbol">{esc(r["symbol"])}</span>{note}</a>{belong}{value}</li>'))
+                                    f'<span class="signal-member-symbol">{esc(r["symbol"])}</span>{note}</a>{belong}</li>'))
                 rec = filter_members.setdefault(self._context.instrument_identity(r["symbol"]), {
                     "s": r["symbol"], "n": r.get("note") if isinstance(r.get("note"), str) else "",
                     "g": self._context._member_belong(r),
                     "o": group_order.get(str(r.get("group") or ""), len(self._context.GROUPS)),
                     "l": r.get("level") if r.get("level") in ("red", "yellow", "green") else "green", "d": []})
-                detail = self._context._filter_detail(r, kind, label) if kind == "amp" else (
-                    f"布林{title}" if kind in ("boll", "boll_rsi") else title)
+                detail = f"布林{title}" if kind in ("boll", "boll_rsi") else title
+                if kind == "boll_rsi":
+                    side = "上轨" if shape == "▲" else "下轨" if shape == "▼" else ""
+                    detail = _reverse_rsi_description(detail, side)
                 part = {"l": "gray", "t": detail}
                 if part not in rec["d"]:
                     rec["d"].append(part)
@@ -1365,9 +1383,8 @@ class PageRenderer:
 <h5>数据有效性</h5>
 <p>综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力NFCI最多13日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且垃圾债利差最多落后5日并已为红，或NFCI最多落后13日且达到或高于0；垃圾债利差仅为黄不足以确认。</p>
 <h5>补充参考</h5>
-<p>美联储利率决议、WTI原油、10年美债收益率仅作参考，不计入五指标综合分或有效指标数。</p>
+<p>WTI原油、10年美债收益率仅作参考，不计入五指标综合分或有效指标数。</p>
 <p>10年美债收益率：相对约30个自然日前可用观测，上行至少{self._context.UST_MONTH_YELLOW} bp为参考黄，至少{self._context.UST_MONTH_WATCH}但不足{self._context.UST_MONTH_YELLOW} bp只提示、仍绿；缺历史则不判断。</p>
-{self._context._policy_details(snapshot)}
 </details>
 </section>'''
 

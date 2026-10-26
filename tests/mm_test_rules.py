@@ -301,7 +301,9 @@ class RulesRegression(unittest.TestCase):
                     for condition, expected in (
                             ('布林上轨▲ + RSI 1条 ↓超卖（反）', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
                             ('RSI 2条 ↑超买', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
-                            ('RSI 1条 ↓超卖', [(' colspan="3"', '仅文字')])):
+                            ('RSI 1条 ↓超卖', [(' colspan="3"', '仅文字')]),
+                            ('涨跌幅 · 自适应', [(' colspan="3"', '红灯／黄灯')]),
+                            ('振幅 · 自适应', [(' colspan="3"', '红灯／黄灯')])):
                         with self.subTest(source=label, condition=condition, settings=settings):
                             rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', table, re.S)
                                     if '<td' in row and plain_text(re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1]) == condition]
@@ -311,36 +313,39 @@ class RulesRegression(unittest.TestCase):
                             self.assertEqual(cells, [('', condition)] + expected)
                     self.assertIn('text-align:center', page_assets.RULES_CSS)
 
-    def test_amplitude_gray_is_unconditional_and_keeps_independent_rule_marks(self):
-        for group in (g['item_group'] for g in monitor.GROUPS):
-            for amp in (0, .01, 2, 5, 8, 12):
-                with self.subTest(group=group, amp=amp):
-                    x = SimpleNamespace(group=group, touch_up=100 + amp / 2,
-                        touch_dn=100 - amp / 2, prev=100, amp_on=group in monitor.AMP_GROUPS,
-                        amp_yellow=5, amp_red=8, foldable=True)
-                    al = monitor._Alerts()
-                    al.add('chg', '异动 +6.0%', 'red')
-                    monitor._rule_amplitude(al, x)
-                    expected = ('red' if amp >= 8 else 'yellow' if amp >= 5 else None) if x.amp_on else 'gray'
-                    self.assertEqual(al.marks, [('chg', 'red')] + ([('amp', expected)] if expected else []))
-                    self.assertEqual(al.level, 'red')
-                    self.assertEqual(x.foldable, x.amp_on)
-                    self.assertAlmostEqual(x.amp, amp)
-        for group in ('technology', 'custom_group'):
-            for yellow, red in ((0, 0), (1000, 2000)):
-                x = SimpleNamespace(group=group, touch_up=100, touch_dn=100, prev=100,
-                                    amp_on=False, amp_yellow=yellow, amp_red=red, foldable=True)
-                al = monitor._Alerts()
-                monitor._rule_amplitude(al, x)
-                self.assertEqual((al.level, al.marks, x.foldable), ('green', [('amp', 'gray')], False))
+    def test_amplitude_all_groups_adaptive_boundaries_and_independent_marks(self):
+        groups = [g['item_group'] for g in monitor.GROUPS] + ['custom_group']
+        for group in groups:
+            for tier, sigma, mult in (('low', 1, .6), ('mid', 2, 1), ('high', 3, 1.4)):
+                for amp, expected in ((0, None), (.01, None), (6 * mult - .001, None),
+                                      (6 * mult, 'yellow'), (10 * mult - .001, 'yellow'),
+                                      (10 * mult, 'red'), (12 * mult, 'red')):
+                    with self.subTest(group=group, tier=tier, amp=amp), \
+                            patch.dict(monitor.S, amp_yellow=6, amp_red=10), \
+                            patch.object(monitor, 'vol_profile', return_value=(tier, sigma)), \
+                            patch.object(monitor, 'AMP_GROUPS', ()):
+                        # 同量级价格构造范围，避免在100附近相减丢失边界精度。
+                        x = SimpleNamespace(group=group, closes=[], touch_up=2 * amp if amp else 1,
+                                            touch_dn=amp if amp else 1, prev=100, foldable=True)
+                        monitor._apply_vol_tier(x)
+                        al = monitor._Alerts()
+                        al.add('chg', '异动 +6.0%', 'red')
+                        monitor._rule_amplitude(al, x)
+                        actual = 'red' if x.amp >= x.amp_red else 'yellow' if x.amp >= x.amp_yellow else None
+                        self.assertEqual(actual, expected)
+                        self.assertEqual(al.marks, [('chg', 'red')] + ([('amp', expected)] if expected else []))
+                        self.assertEqual(al.level, 'red')
+                        self.assertTrue(x.foldable)
+                        self.assertAlmostEqual(x.amp, amp)
         for up, down, prev in ((None, 99, 100), (101, None, 100), (101, 99, 0),
                                (99, 101, 100), (float('nan'), 99, 100), (float('inf'), 99, 100),
                                (101, 99, True), (101, 99, float('inf')), (True, True, 100),
-                               (101, -1, 100), (101, 99, -100)):
+                               (101, -1, 100), (101, 99, -100), (101, 99, 1e-320)):
             x = SimpleNamespace(touch_up=up, touch_dn=down, prev=prev,
-                                amp_on=False, amp_yellow=5, amp_red=8, foldable=True)
+                                amp_yellow=6, amp_red=10, foldable=True)
             al = monitor._Alerts()
             monitor._rule_amplitude(al, x)
+            self.assertIsNone(x.amp)
             self.assertEqual((al.marks, al.signals, x.foldable), ([], [], True))
 
     def test_standalone_oversold_reuses_rsi_statistics_kind_without_new_interface(self):
@@ -519,8 +524,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('单独RSI', rules_text)
         self.assertRegex(rules_text, r'RSI 3条 ↓超卖\s*红灯')
         self.assertIn('重点、其他分组不适用', rules_text)
-        for explanation in ('只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯',
-                            '统计由对应红列转灰列', '白字删除线',
+        self.assertNotIn('只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯', glossary_text)
+        for explanation in ('统计由对应红列转灰列', '白字删除线',
                             '双轨命中时，只选带符号距离较小的一轨', '越轨距离为负，相等选', '标的去重'):
             self.assertIn(explanation, glossary_text)
             self.assertNotIn(explanation, rules_text)
