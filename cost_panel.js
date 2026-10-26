@@ -2,11 +2,12 @@
 (function(){
   var LS_LOCAL='mm_position_costs_local_v1';
   var LS_CLOUD='mm_position_costs_cloud_v1';
-  var isolated=location.protocol==='file:' || !(navigator.locks && navigator.locks.request);
-  var SESSION_LOCAL='mm_position_costs_preview_v2';
-  var ISOLATED_NOTICE='隔离预览：仅保存在当前标签页会话中，刷新可恢复；关闭标签页前请导出。不会修改共享本地仓位或上传云端。';
-  /* 真实持仓（券商截图 2026-10-19）：成本价来自 holdings.json、数量来自 position-costs.local.json */
+  /* 正式种子来自持仓档案；合成演示种子显式标记 preview，只走现有隔离编辑路径。 */
   var REAL=__MM_REAL__;
+  var demoPreview=REAL && REAL.preview===true;
+  var isolated=demoPreview || location.protocol==='file:' || !(navigator.locks && navigator.locks.request);
+  var SESSION_LOCAL=demoPreview?'mm_position_costs_demo_v1':'mm_position_costs_preview_v2';
+  var ISOLATED_NOTICE=(demoPreview?'合成DEMO · ':'')+'隔离预览：仅保存在当前标签页会话中，刷新可恢复；关闭标签页前请导出。不会修改共享本地仓位或上传云端。';
 
   function money(n){ return (n<0?'-':'+')+'$'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
   function plain(n){ return '$'+Math.round(n).toLocaleString('en-US'); }
@@ -19,10 +20,10 @@
   var storageErrors={}, NOTICE='';
   function read(k){
     try{
-      if(isolated && k===LS_CLOUD) return null;
+      if(demoPreview && k!==LS_LOCAL || isolated && k===LS_CLOUD) return null;
       var v=isolated && k===LS_LOCAL?sessionStorage.getItem(SESSION_LOCAL):localStorage.getItem(k);
       // 隔离会话第一次打开可只读参考本机旧值，之后只读写本 tab 的 sessionStorage。
-      if(isolated && k===LS_LOCAL && v===null) v=localStorage.getItem(k);
+      if(isolated && !demoPreview && k===LS_LOCAL && v===null) v=localStorage.getItem(k);
       var parsed=v===null?null:JSON.parse(v); delete storageErrors[k]; return parsed;
     }
     catch(e){ storageErrors[k]='本地数据读取失败'; return null; }
@@ -59,20 +60,19 @@
   /* 备注名个别修正：名字太长或带错的前缀，这里按代码替换（正式实现改 holdings.json） */
   var NOTE_FIX={'景顺纳斯达克100指数ETF':'纳斯达克100指数ETF'};
 
-  /* ---------- 0. 页底：两份规则独立展示 ---------- */
+  /* ---------- 0. 页底：预警、名词抓取、综合判断依次独立展示 ---------- */
   (function(){
     var old=document.getElementById('policyAlertDetails');
     var notes=document.getElementById('pageNotes');
     var tpl=document.getElementById('rulesTpl');
     if(!tpl || !notes) return;
     if(old && old.parentNode && !old.closest('#marketRiskRules')) old.parentNode.removeChild(old);
-    var next=notes.nextSibling;
     [['rulesTpl','signalRules'],['glossaryTpl','glossaryRules']].forEach(function(pair){
       var source=document.getElementById(pair[0]); if(!source) return;
       var box=document.createElement('details');
       box.className='card rule-card'; box.id=pair[1];
       box.innerHTML=source.innerHTML;
-      notes.parentNode.insertBefore(box,next);
+      notes.parentNode.insertBefore(box,notes);
     });
     if(typeof window.revealRuleAnchor==='function' && location.hash) window.revealRuleAnchor(location.hash);
   })();
@@ -80,7 +80,7 @@
   /* 页脚只保留规则入口，放在三个说明区块之后，不夹在两份新规则中间。 */
   (function(){
     var foot=document.querySelector('.foot');
-    var tail=document.getElementById('glossaryRules') || document.getElementById('signalRules') || document.getElementById('pageNotes');
+    var tail=document.getElementById('pageNotes') || document.getElementById('glossaryRules') || document.getElementById('signalRules');
     if(!foot || !tail || !tail.parentNode || foot.previousElementSibling===tail) return;
     tail.parentNode.insertBefore(foot, tail.nextSibling);
   })();
@@ -231,10 +231,9 @@
     el.className='cost-warn signal-item lv1'+(acked?' acked':'');
     el.setAttribute('data-signal-level',acked?'gray':'red');
     el.style.display='inline';
-    if(!el.querySelector('.ack-btn')) el.innerHTML='<span class="w"><span class="signal-dot" role="img"></span>'
-      +'<span class="cost-warn-text"></span></span> <button type="button" class="ack-btn">✓</button>';
-    var dot=el.querySelector('.signal-dot'), label=el.querySelector('.cost-warn-text'), button=el.querySelector('.ack-btn');
-    dot.className='signal-dot '+(acked?'gray':'red'); dot.setAttribute('aria-label',acked?'已读':'红灯');
+    if(!el.querySelector('.ack-btn')) el.innerHTML='<span class="w"><span class="cost-warn-text"></span></span>'
+      +' <button type="button" class="ack-btn">✓</button>';
+    var label=el.querySelector('.cost-warn-text'), button=el.querySelector('.ack-btn');
     if(label.textContent!==text) label.textContent=text;
     button.className='ack-btn'+(acked?' on':''); button.setAttribute('data-ack',key);
     button.setAttribute('aria-label',acked?'撤销已读':'标记已读');
@@ -858,7 +857,9 @@
         var id=signalIdentity(m.s||m.id), previous=members.get(id);
         var details=(Array.isArray(m.d)?m.d:[]).slice();
         if(previous){
-          details=previous.d.concat(details.filter(function(t){ return previous.d.indexOf(t)<0; }));
+          details=previous.d.concat(details.filter(function(t){
+            return !previous.d.some(function(old){ return JSON.stringify(old)===JSON.stringify(t); });
+          }));
           if(LV_ORDER.indexOf(m.l)<0 || LV_ORDER.indexOf(previous.l)>=0 &&
             LV_ORDER.indexOf(previous.l)<=LV_ORDER.indexOf(m.l)) m=previous;
         }
@@ -1163,7 +1164,7 @@
     ACK_STATS_CHANGED=false; ACK_STATUS_JSON=ackStatus;
     var filter={label:'成本浮亏',ok:true,members:entries.map(function(e){
       // 筛选看条件是否命中，包含已读，与加减仓筛选一致；灰仅表示这条提醒已读。
-      return {id:e.id,s:e.sym,n:e.note,g:e.group,a:e.anchor,l:e.acked?'gray':'red',d:[e.label+(e.acked?' · 已读':'')]};
+      return {id:e.id,s:e.sym,n:e.note,g:e.group,a:e.anchor,l:e.acked?'gray':'red',d:[{l:e.acked?'gray':'red',t:e.label+(e.acked?' · 已读':'')}]};
     })}, next=JSON.stringify(filter);
     if(box && next!==LOSS_FILTER_JSON){
       var data;
@@ -1325,14 +1326,11 @@
     +'<button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false"'
     +' aria-label="就地编辑成本价与数量">编辑</button></summary>'
     +'<div class="cost-body">'
-    +'<div class="signal-members-panel" id="'+PID+'"></div>'
     +'<div class="cost-acts" id="costActs" hidden>'
     +'<button type="button" class="primary" id="costSave">保存并上传</button>'
     +'<button type="button" id="costCancel">取消</button>'
-    +'<button type="button" id="costExport">导出</button>'
-    +'<button type="button" id="costImport">导入</button>'
-    +'<span class="hint">成本价与数量可填到小数点后四位；现金两框相加，空框按0算</span>'
     +'</div>'
+    +'<div class="signal-members-panel" id="'+PID+'"></div>'
     // 文件选择框放在 acts 外面：没进编辑态也要能用「导入备份」救急
     +'<input type="file" id="costFile" accept=".json" hidden>'
     +'<div class="cost-foot" id="costFoot"></div>'
@@ -1403,7 +1401,8 @@
     // 编辑中由下面的「保存并上传／取消」接管，表头这颗收起来，免得出现两个「退出」入口
     editBtn.hidden=editing;
     actsEl.hidden=!editing;
-    panel.querySelector('#costSave').textContent=isolated?'保存到本标签页':'保存并上传';
+    // 合成DEMO仅统一按钮外观；隔离存储及禁止上传仍由isolated独立控制。
+    panel.querySelector('#costSave').textContent=isolated && !demoPreview?'保存到本标签页':'保存并上传';
   }
   function enterEdit(){
     if(editing || disposed) return;
@@ -1507,10 +1506,6 @@
     a.href=url; a.download='position-costs.json'; a.click();
     setTimeout(function(){ URL.revokeObjectURL(url); },0);
   }
-  panel.querySelector('#costExport').addEventListener('click',exportData);
-  panel.querySelector('#costImport').addEventListener('click', function(){
-    panel.querySelector('#costFile').click();
-  });
   function importData(j){
     var next=normalize(j);
     if(!writer || disposed) throw new Error('本页只读，请先点击编辑接管');

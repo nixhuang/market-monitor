@@ -45,7 +45,14 @@
 /* ===== 2. 「仓位管理」独立面板（统计面板上方，编辑功能内置） ===== */
 /* 它就是一张普通 group-card，跟持仓 / 重点 / 市场风险同级：不再塞进统计面板里，
    也不再有单独的「仓位录入」面板——点标题右侧的「编辑」就地改，改完点保存即上传。 */
-.cost-manage{margin:8px 0 10px}
+.cost-manage{--cost-accent-bg:rgba(126,231,135,.17);margin:8px 0 10px}
+/* 外框、整卡左条与整个收起横条共用短持仓小计底色，内部卡底不变。 */
+#costManage{--collapse-bg:var(--cost-accent-bg);border:1px solid var(--cost-accent-bg);
+  box-shadow:inset 3px 0 0 var(--cost-accent-bg)}
+#costManage>.group-bottom{border-top-color:var(--cost-accent-bg)}
+/* 整条板块标头在收起、展开和编辑时都与向上折叠条同底色，不叠蓝色高亮。 */
+#costManage.cost-manage>summary,
+#costManage.cost-manage[open]>summary{background:var(--cost-accent-bg);box-shadow:none}
 /* 窄屏时标题行允许换行，别把「编辑」按钮顶出屏幕 */
 .cost-manage>summary{flex-wrap:wrap}
 /* 总资产·盈亏：字号字重跟上面「统计」那张卡的计数一致（14px / 600），
@@ -192,13 +199,12 @@
 .cost-cell input:focus{outline:none;border-color:#8fb8f0}
 .cost-cell input::placeholder{color:#5a6473}
 /* [hidden] 只是 UA 的 display:none，作者写的 display:flex 会盖掉它 → 必须显式再压一次 */
-.cost-acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+.cost-acts{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;margin:6px 0 8px}
 .cost-acts[hidden]{display:none}
 .cost-acts button{background:#1b2434;border:1px solid #33415a;color:#cfd8e6;border-radius:7px;
   padding:5px 11px;font-size:12.5px;cursor:pointer}
 .cost-acts button:hover{border-color:#8fb8f0;color:#dfeaff}
 .cost-acts .primary{background:#22314c;border-color:#3a4a66;color:#dfeaff}
-.cost-acts .hint{font-size:11.5px;color:var(--dim)}
 /* ===== 3. 四个区块：长持仓深绿 / 短持仓浅绿 / 现金青 / 固定收益橙 =====
    长／短持仓只保留外框和列头那两行的底色，个股区域不再铺底；
    现金／固定收益本来就是单排，整块铺各自的颜色 */
@@ -213,7 +219,7 @@
 .blk-long .cost-colhead{border-bottom-color:rgba(46,160,67,.22)}
 .blk-short .cost-colhead{border-bottom-color:rgba(126,231,135,.22)}
 .blk-long .cost-block-title{background:rgba(46,160,67,.17)}
-.blk-short .cost-block-title{background:rgba(126,231,135,.17)}
+.blk-short .cost-block-title{background:var(--cost-accent-bg)}
 /* 「总持仓」＝长＋短合计：用中性的淡蓝底，跟长／短持仓各自的绿条区分开 */
 .cost-block-title.is-total{background:rgba(143,184,240,.13);color:#dbe7ff;margin-top:0}
 /* 现金 / 固定收益：不再「分类名 + 下面再列一行」，整框就是一排带底色的信息 */
@@ -325,7 +331,7 @@
   .demo-bar ol{display:none}
   .demo-bar button{height:26px;font-size:12px}
 }
-.cost-warn.acked{color:var(--dim)}
+.cost-warn.acked{color:var(--text)}
 .cost-warn.acked .w{text-decoration:line-through;text-decoration-color:#5a6478}
 /* ===== 底部资产结构：一条横条画占比，下面小文字标金额与比例 ===== */
 .cost-foot{font-size:11.5px;color:var(--dim);margin:8px 0 0;line-height:1.6;

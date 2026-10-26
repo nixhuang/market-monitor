@@ -5,6 +5,7 @@ import html
 import copy
 import io
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -351,14 +352,15 @@ class RulesTemplateTests(unittest.TestCase):
     def test_latest_rules_and_sorting_keep_gray_and_group_conditions(self):
         rules = assets.rules_body({}, {})
         text = self.plain(rules)
-        for term in ('RSI 3条 ↓超卖红灯', 'RSI 3条 ↑超买黄灯黄灯灰灯（折）',
+        for term in ('RSI 3条 ↓超卖红灯', 'RSI 3条 ↑超买黄灯灰灯灰灯（折）',
                      '加仓价提醒标记已读 → 灰灯。',
                      '减仓价提醒标记已读 → 灰灯。', '浮亏提醒标记已读 → 灰灯。',
                      '浮亏10%／20%每只标的只计一次。',
                      '两者只保留在主表，不进入“无异动”，不计入统计面板',
-                     '布林下轨▼ + RSI 0条灰灯（折）',
+                     '布林下轨▼ + RSI 0条灰灯灰灯（折）',
                      'RSI 2条 ↓超卖灰灯',
-                     '布林上轨▲ + RSI 1条 ↑超买灰灯灰灯无提示', '短均线', '长均线'):
+                     '布林上轨▲ + RSI 1条 ↑超买灰灯仅文字无提示',
+                     '布林上轨▲ + RSI 1条 ↓超卖（反）灰灯仅文字无提示', '短均线', '长均线'):
             self.assertIn(term, text)
         for deleted in ('进入下轨报警区（逼近自适应）', '排除指数、期货', '行灯取最严重',
                         '单独RSI 3条向上超买 → 文字。', '基本面黄灯'):
@@ -369,7 +371,7 @@ class RulesTemplateTests(unittest.TestCase):
         third = rules.split('<section id="rule-folded">')[1]
         headings = re.findall(r'<h5 class="rule-layout-heading">(.*?)</h5>', third)
         self.assertEqual(headings, ['目标／共识价', '财报'])
-        self.assertEqual(rules.count('class="nav-gray"'), 19)
+        self.assertEqual(rules.count('class="nav-gray"'), 21)  # 重点上轨两条两方向新增技术灰灯。
 
     def test_threshold_tables_are_only_in_glossary_and_follow_settings_and_constants(self):
         settings = {'chg_yellow': 7, 'chg_red': 11, 'amp_yellow': 13, 'amp_red': 17,
@@ -391,7 +393,7 @@ class RulesTemplateTests(unittest.TestCase):
         self.assertEqual(re.findall(r'<table[^>]*id="([^"]+)"', rules), ['rules-lamp-table'])
         self.assertNotIn('glossary-chg-table', rules)
         self.assertNotIn('glossary-amp-table', rules)
-        self.assertEqual(glossary.count('<table'), 9)
+        self.assertEqual(glossary.count('<table'), 10)
         for kind, expected in (('chg', ['≥3.5%', '≥5.5%', '≥7.7%', '≥12.1%', '≥12.6%', '≥19.8%']),
                                ('amp', ['≥6.5%', '≥8.5%', '≥14.3%', '≥18.7%', '≥23.4%', '≥30.6%'])):
             table = re.search(r'<table[^>]+id="glossary-' + kind + r'-table">.*?</table>', glossary, re.S)[0]
@@ -402,12 +404,158 @@ class RulesTemplateTests(unittest.TestCase):
         for dynamic in ('短均线（启用）', '长均线（启用）', '布林为30日、±2.7倍', '×0.6（当前10%设置）',
                         '≤约0.6%', '≤约1.2%', '≤约1.8%', '固定0.9%', '周期5／10／21日',
                         '≥82超买', '≤24超卖', '距低点≤2.2%', '设置价×1.07', '设置价×0.91',
-                        '≥4.2σ', '≥2.1σ', '≥4.4×', '≥2.2×', '固定±1.7%',
+                        '红k＝4.2', '黄k＝2.1', '红F＝4.4×', '黄F＝2.2×',
+                        '红≥4.4×、黄≥2.2×', '新门槛＝√(T×F)', '固定±1.7%',
                         '限0.75%～1.25%', '检查近8日', '此前22日', '不足19分钟',
                         '有效空间≥40%', '≥90%', '未来6～12天', '&lt;0.8%'):
             self.assertIn(html.unescape(dynamic), combined)
         self.assertIn('有效空间≥40%', self.plain(rules))
         self.assertEqual((settings, constants), before)
+
+    def test_focus_upper_single_rsi_table_cells_are_text_only_in_both_directions(self):
+        for markup in (assets.LAMP_RULE_TABLE, assets.rules_body({}, {})):
+            table = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', markup, re.S)[0]
+            self.assertEqual([self.plain(cell) for cell in re.findall(r'<th[^>]*scope="col"[^>]*>(.*?)</th>', table)],
+                             ['分类', '条件', '持仓分组', '重点', '其他分组'])
+            for condition, position, css_class in (
+                    ('布林上轨▲ + RSI 1条 ↑超买', '灰灯', 'cell-gray'),
+                    ('布林上轨▲ + RSI 1条 ↓超卖（反）', '灰灯', 'cell-gray')):
+                with self.subTest(condition=condition, rendered=markup != assets.LAMP_RULE_TABLE):
+                    rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', table, re.S)
+                            if '<td' in row and self.plain(re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1]) == condition]
+                    self.assertEqual(len(rows), 1, condition + '规则行必须唯一')
+                    cells = [(attrs, self.plain(body)) for attrs, body in
+                             re.findall(r'<td\b([^>]*)>(.*?)</td>', rows[0], re.S)]
+                    self.assertEqual(cells, [('', condition), (' class="' + css_class + '"', position),
+                                             ('', '仅文字'), ('', '无提示')])
+                    self.assertNotRegex(cells[2][0], r'cell-gray|nav-gray|colspan')
+                    self.assertIn('<td>仅文字</td>', rows[0])
+
+    def test_current_three_rule_rows_sync_only_authorized_cells(self):
+        cases = (
+            ('布林上轨▲ + RSI 1条 ↓超卖（反）', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
+            ('RSI 2条 ↑超买', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
+            ('RSI 1条 ↓超卖', [(' colspan="3"', '仅文字')]),
+            ('RSI 1条 ↑超买', [(' colspan="3"', '无提示')]),
+            ('RSI 2条 ↓超卖', [(' class="cell-gray" colspan="3"', '灰灯')]),
+            ('布林下轨▼ + RSI 1条 ↓超卖', [(' class="cell-gray" colspan="3"', '灰灯')]),
+        )
+        for markup in (assets.LAMP_RULE_TABLE, assets.rules_body({}, {}), assets.rules_template({}, {})):
+            table = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', markup, re.S)[0]
+            for condition, expected in cases:
+                with self.subTest(condition=condition, source=markup[:35]):
+                    rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', table, re.S)
+                            if '<td' in row and self.plain(re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1]) == condition]
+                    self.assertEqual(len(rows), 1)
+                    cells = [(attrs, self.plain(body)) for attrs, body in
+                             re.findall(r'<td\b([^>]*)>(.*?)</td>', rows[0], re.S)]
+                    self.assertEqual(cells, [('', condition)] + expected)
+
+    def test_reverse_condition_text_and_amplitude_gray_description_are_scoped(self):
+        rules = assets.rules_body({}, {})
+        reverse = re.findall(r'<span class="rule-reverse">(.*?)</span></td>', rules, re.S)
+        self.assertEqual(len(reverse), 6)
+        for text in reverse:
+            self.assertIn('（反）', self.plain(text))
+            self.assertEqual(len(re.findall(r'<span class="ar-(?:band|rsi)-(?:up|down)">', text)), 2)
+        self.assertIn('.card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}', assets.RULES_CSS)
+        self.assertNotIn('rule-reverse', assets.glossary_body({}, {}))
+        row = next(row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', rules, re.S)
+                   if '振幅 · 自适应' in self.plain(row))
+        cells = re.findall(r'<td\b([^>]*)>(.*?)</td>', row, re.S)
+        self.assertEqual([self.plain(text) for _, text in cells], ['振幅 · 自适应', '红灯／黄灯', '红灯／黄灯', '灰灯'])
+        self.assertIn('class="cell-gray"', cells[-1][0])
+        self.assertIn('振幅有效（含0%）就报灰灯', self.plain(assets.glossary_body({}, {})))
+        self.assertIn('不设门槛、不升红黄', self.plain(assets.glossary_body({}, {})))
+
+    def test_lamp_table_horizontal_center_is_scoped_and_keeps_other_layout(self):
+        css = assets.RULES_CSS
+        blocks = re.findall(r'([^{}]+)\{([^{}]*)\}', css)
+        centered = set()
+        for selectors, declarations in blocks:
+            selector_list = [selector.strip() for selector in selectors.split(',')]
+            targets = [selector for selector in selector_list
+                       if re.search(r'#rules-lamp-table\s+(?:th|td)$', selector)]
+            if targets:
+                self.assertEqual(len(targets), len(selector_list), '水平居中不得覆盖其它表')
+                self.assertEqual(declarations.strip().rstrip(';'), 'text-align:center', '只允许改水平对齐')
+                centered.update(selector.rsplit(' ', 1)[1] for selector in targets)
+        self.assertEqual(centered, {'th', 'td'}, '分类、表头、条件及全部灯级单元格均需居中')
+        common = re.search(r'\.card \.rules-body \.rule-table th,\.card \.rules-body \.rule-table td\{([^}]*)\}', css)[1]
+        for unchanged in ('text-align:left', 'vertical-align:top', 'padding:6px 7px',
+                          'font-size:12px', 'line-height:1.65', 'border:1px solid #5a6478'):
+            self.assertIn(unchanged, common)
+        category = re.search(r'\.card \.rules-body \.rule-table th\.cat-col\{([^}]*)\}', css)[1]
+        for unchanged in ('vertical-align:middle', 'writing-mode:vertical-rl', 'padding:6px 0', 'width:18px'):
+            self.assertIn(unchanged, category)
+
+    def test_four_authorized_rule_rows_preserve_adjacent_group_cells(self):
+        cases = (
+            ('布林下轨▼ + RSI 0条', [(' class="cell-gray"', '灰灯'),
+                                     (' class="cell-gray-fold" colspan="2"', '灰灯（折）')]),
+            ('RSI 3条 ↑超买', [(' class="cell-yellow"', '黄灯'), (' class="cell-gray"', '灰灯'),
+                               (' class="cell-gray-fold"', '灰灯（折）')]),
+            ('布林上轨▲ + RSI 2条 ↑超买', [(' class="cell-yellow"', '黄灯'),
+                                        (' class="cell-gray"', '灰灯'), ('', '仅文字')]),
+            ('布林上轨▲ + RSI 2条 ↓超卖（反）', [(' class="cell-yellow"', '黄灯'),
+                                               (' class="cell-gray"', '灰灯'), ('', '仅文字')]),
+            ('布林上轨▲ + RSI 3条 ↓超卖（反）', [(' class="cell-yellow"', '黄灯'),
+                                               (' class="cell-yellow"', '黄灯'),
+                                               (' class="cell-gray-fold"', '灰灯（折）')]),
+        )
+        for markup in (assets.LAMP_RULE_TABLE, assets.rules_body({}, {}), assets.rules_template({}, {})):
+            table = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', markup, re.S)[0]
+            for condition, expected in cases:
+                with self.subTest(condition=condition, source=markup[:35]):
+                    rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', table, re.S)
+                            if '<td' in row and self.plain(re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1]) == condition]
+                    self.assertEqual(len(rows), 1)
+                    cells = [(attrs, self.plain(body)) for attrs, body in
+                             re.findall(r'<td\b([^>]*)>(.*?)</td>', rows[0], re.S)]
+                    self.assertEqual(cells, [('', condition)] + expected)
+        # 上轨三反向超卖持仓/重点实际黄灯，与既有规则表一致；其他组仍灰灯可折叠。
+        self.assertIn('<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td>'
+                      '<td class="cell-gray-fold">灰灯（折）</td>', assets.LAMP_RULE_TABLE)
+
+    def test_volume_example_table_follows_all_four_settings_and_constant_overrides(self):
+        defaults = dict(vol_ratio=1.5, vol_ratio_red=3, vol_ratio_z=2, vol_ratio_red_z=3.6)
+        cases = [('默认', {}, {}, [('2.27', '1.42'), ('2.97', '1.65'), ('4.26', '2.02')])]
+        for name, value in (('vol_ratio', 2.2), ('vol_ratio_red', 4.4),
+                            ('vol_ratio_z', 2.7), ('vol_ratio_red_z', 4.2)):
+            cases.append((name, {name: value}, {}, None))
+        cases += [('全部设置', dict(vol_ratio=2.2, vol_ratio_red=4.4,
+                                   vol_ratio_z=2.1, vol_ratio_red_z=4.2), {}, None),
+                  ('常量覆盖', dict(vol_ratio=2.2, vol_ratio_red=4.4),
+                   dict(vol_ratio=1.8, vol_ratio_red=3.5, vol_ratio_z=2.5, vol_ratio_red_z=4), None)]
+        for label, settings, constants, expected in cases:
+            with self.subTest(case=label):
+                before = copy.deepcopy((settings, constants))
+                values = dict(defaults, **settings)
+                values.update(constants)
+                glossary = assets.glossary_body(settings, constants)
+                self.assertEqual(glossary.count('id="glossary-vol-table"'), 1)
+                self.assertNotIn('id="glossary-vol-table"', assets.rules_body(settings, constants))
+                table = re.search(r'<table[^>]*id="glossary-vol-table"[^>]*>.*?</table>', glossary, re.S)[0]
+                self.assertEqual(re.findall(r'<th scope="col">(.*?)</th>', table), ['波动', '红灯', '黄灯'])
+                rows = re.findall(r'<tr><th scope="row">(.*?)</th><td>(.*?)</td><td>(.*?)</td></tr>', table)
+                if expected is None:
+                    expected = [(f'{math.sqrt(math.exp(values["vol_ratio_red_z"] * s) * values["vol_ratio_red"]):.2f}',
+                                 f'{math.sqrt(math.exp(values["vol_ratio_z"] * s) * values["vol_ratio"]):.2f}')
+                                for s in (0.15, 0.30, 0.50)]
+                self.assertEqual(rows, [(name, '≥约' + red + '倍', '≥约' + yellow + '倍')
+                                        for name, (red, yellow) in zip(('低', '中', '高'), expected)])
+                volume = self.plain(glossary.split('id="glossary-vol"', 1)[1].split('id="glossary-ma"', 1)[0])
+                for term in ('1.4826×MAD', 'T＝exp(m＋k×s)', '新门槛＝√(T×F)',
+                             '不是固定三档', '达到红门槛优先报红', '两条自适应参数启用且量比≥1×时',
+                             '自适应未命中，不再用固定倍数补灯', '收盘分布无效或自适应关闭时也用固定门槛'):
+                    self.assertIn(term, volume)
+                for prefix, key in (('红k＝', 'vol_ratio_red_z'), ('黄k＝', 'vol_ratio_z'),
+                                    ('红F＝', 'vol_ratio_red'), ('黄F＝', 'vol_ratio')):
+                    self.assertIn(prefix + str(values[key]), volume)
+                self.assertNotRegex(volume, r'≥[\d.]+σ|σ 或|两条σ阈值')
+                self.assertEqual((settings, constants), before)
+        self.assertIn('#glossary-vol-table thead th:nth-child(2){color:#ff8580}', assets.RULES_CSS)
+        self.assertIn('#glossary-vol-table thead th:nth-child(3){color:#f0c674}', assets.RULES_CSS)
 
     def test_disabled_and_equal_moving_averages_and_adaptive_settings_keep_rules(self):
         for short, long in ((0, 0), (0, 250), (50, 50), (25, 180)):
@@ -420,7 +568,8 @@ class RulesTemplateTests(unittest.TestCase):
                 self.assertNotRegex(text, r'当前\d+日|\d+日均线|第一条|第二条|2～250')
                 self.assertIn('两条同周期只计一次，按简单穿越判断', text)
                 self.assertIn('关闭自适应或波动无效时固定0.5%', text)
-                self.assertIn('两条σ阈值启用', text)
+                self.assertIn('两条自适应参数启用', text)
+                self.assertIn('收盘分布无效或自适应关闭时也用固定门槛', text)
                 self.assertIn('均线（短均线穿越；长均线触及±1%或穿越）', text)
                 self.assertNotIn('${', markup)
 
@@ -522,6 +671,32 @@ class RulesTemplateTests(unittest.TestCase):
         for path in ('M3 3H15 M9 15V3 M5 7L9 3L13 7', 'M3 15H15 M9 3V15 M5 11L9 15L13 11',
                      'M7 15V3 M3 7L7 3L11 7', 'M7 3V15 M3 11L7 15L11 11'):
             self.assertIn('d="' + path + '"', markup)
+
+    def test_filter_arrows_preserve_html_as_text_and_use_existing_classes(self):
+        if not shutil.which('node'):
+            self.skipTest('Node 未安装，跳过箭头离线执行')
+        script = assets.PAGE_INTERACTION_JS
+        start = script.index('function appendRsiArrows(')
+        end = script.index('function renderSignalFilter(', start)
+        code = r'''
+const assert=require('assert/strict'),vm=require('vm'),fs=require('fs');
+const input=JSON.parse(fs.readFileSync(0,'utf8'));
+const node=()=>({children:[],appendChild(n){this.children.push(n);}});
+let htmlWrites=0;
+const document={createTextNode:text=>({textContent:text}),createElement:tag=>{
+  const n=node();n.tag=tag;Object.defineProperty(n,'innerHTML',{set(){htmlWrites++;throw Error('不能解析HTML');}});return n;
+}};
+const context={document};vm.createContext(context);vm.runInContext(input.js,context);
+const parent=node();context.appendRsiArrows(parent,input.text);
+assert.equal(parent.children.map(n=>n.textContent).join(''),input.text);
+assert.equal(parent.children.filter(n=>n.className==='arrow-rsi-up').length,1);
+assert.equal(parent.children.filter(n=>n.className==='arrow-rsi-down').length,1);
+assert.equal(htmlWrites,0);assert(parent.children.some(n=>n.textContent.includes('<img')));
+'''
+        text = '布林上轨▲ · RSI 3条 ↓超卖 / RSI ↑超买 <img onerror=bad()> & <script>bad()</script>'
+        result = subprocess.run(['node', '-e', code], input=json.dumps({'js': script[start:end], 'text': text}),
+                                text=True, encoding='utf-8', capture_output=True, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_export_contract_and_python311_syntax(self):
         self.assertTrue(assets.PAGE_CSS.endswith(assets.RULES_CSS))

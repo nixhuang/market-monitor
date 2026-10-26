@@ -39,7 +39,7 @@ _BLOCK_PANEL_KINDS = ("vol_ratio", "boll_rsi", "ma", "ma_cross", "ma_band",
 
 # 框标题已经写明方向的栏目，行尾不再重复同一句话（布林+RSI 曾经标题行尾都写
 # 「上轨▲ · RSI 2条 ↑超买」）。量比那种带数值的照旧保留。
-_NO_ROW_METRIC_KINDS = ("boll_rsi",)
+_NO_ROW_METRIC_KINDS = ("boll_rsi", "rsi")
 
 
 # 方向符号配色：只给 RSI 的「↑ 超买青 / ↓ 超卖品红」上色。
@@ -144,13 +144,13 @@ def _run_light(snapshot, finished_txt):
 
 
 def _gray_by_kind(snapshot):
-    """灰灯成员按 rsi / boll / boll_rsi 归类。"""
+    """灰灯成员按 amp / rsi / boll / boll_rsi 归类。"""
     rows = snapshot.get("text_only") or []
     out = {}
     if not isinstance(rows, list):
         return out
     for r in rows:
-        if (isinstance(r, dict) and str(r.get("kind") or "") in ("rsi", "boll", "boll_rsi")
+        if (isinstance(r, dict) and str(r.get("kind") or "") in ("amp", "rsi", "boll", "boll_rsi")
                 and isinstance(r.get("symbol"), str) and r["symbol"].strip()):
             out.setdefault(r["kind"], []).append(r)
     return out
@@ -513,17 +513,16 @@ class PageRenderer:
             kind = "ma" if kind in ("ma_cross", "ma_band") else kind
             if level in rank and rank[level] > rank.get(levels.get(kind), -1):
                 levels[kind] = level
-        gray_kind = next((m["kind"] for m in self._context.text_only_members([d])), "")
+        for member in self._context.text_only_members([d]):
+            levels.setdefault(member["kind"], "gray")
         combo = "boll_rsi" in levels or self._context._text_only_kind(signals) == "boll_rsi"
-        if gray_kind:
-            levels.setdefault(gray_kind, "gray")
         groups = {}
         for index, text in enumerate(signals):
             kind = next((kind for kind, pattern in self._context._SIGNAL_DESCRIPTION_RULES if pattern.match(text)), "")
             if combo and kind in ("rsi", "boll"):
                 kind = "boll_rsi"
             if kind == "boll_rsi" and re.fullmatch(r"布林\s*\+\s*RSI\s*→\s*[红黄]", text):
-                # 原总结只重复 marks；前置名称和灯点替代它，事实不删除。
+                # 原总结只重复 marks；描述字色表达级别，事实不删除。
                 continue
             text = re.sub(r"\s*·\s*", "，", text)
             if kind == "ma":
@@ -539,27 +538,12 @@ class PageRenderer:
 
 
     def _signal_lamps(self, d):
-        """这一行所有描述分组的灯，按红→黄→紫→灰顺序统一画在标的名称前面。
-
-    灯的位置在首页和统计名单里必须一致：以前首页的灯贴在描述文字前（也就是名称后面），
-    统计名单的灯是列表圆点（名称前面），同一个标的在两处看着像两个东西。"""
-        lamps = []
-        for group in self._context._signal_description_groups(d):
-            level = group["level"]
-            if not level:
-                continue
-            label = self._context._SIGNAL_DESCRIPTION_LABELS.get(group["kind"], "")
-            label_text = {"red": "红灯", "yellow": "黄灯", "purple": "紫灯",
-                          "gray": "灰色文字提示"}[level]
-            lamps.append(f'<span class="signal-dot {level}" role="img" '
-                         f'aria-label="{label_text}：{html_lib.escape(label)}"></span>')
-        return "".join(lamps)
+        """保留旧调用接口；主表不再添加圆点，独立指标级别由描述字色表达。"""
+        return ""
 
 
     def _signals_html(self, d):
-        """每项真实触发独立灯色；不同指标用 /，布林与RSI组合事实用 ·；共识仍仅隐藏描述。
-
-    灯不在这里画：统一由 _signal_lamps() 放到标的名称前面。"""
+        """每项按真实级别着色，不添加圆点；不同指标用 /，组合事实用 ·。"""
         parts = []
         for group in self._context._signal_description_groups(d):
             kind, level, texts = group["kind"], group["level"], group["texts"]
@@ -672,7 +656,7 @@ class PageRenderer:
             f'<tr class="{cls}" id="{self._context._stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
             f'data-price="{html_lib.escape(str(d.get("price") or ""), quote=True)}" '
             f'data-prev-close="{html_lib.escape(str(d.get("prev_close") or ""), quote=True)}"><td class="sym">'
-            f'{self._context._signal_lamps(d)}{self._context.normalize_symbol(d["symbol"])}{note}{hold_html}'
+            f'{self._context.normalize_symbol(d["symbol"])}{note}{hold_html}'
             f'{lv_html}{self._context._row_tags(d, snapshot)}</td>'
             f'<td class="earn-cell">{self._context._earnings_html(d)}</td>'
             f'<td class="num px"><span class="px-price">{self._context.fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
@@ -876,12 +860,12 @@ class PageRenderer:
         if kind == "rsi" and isinstance(d.get("rsi_hits"), str) and d["rsi_hits"]:
             return d["rsi_hits"]   # 已经是「RSI 2条 ↑超买」完整写法，不再补一次前缀
         if kind == "boll" and isinstance(d.get("boll_state"), str) and d["boll_state"]:
-            return f"布林 {d['boll_state']}"
+            return f"布林{d['boll_state']}"
         if kind == "boll_rsi" and isinstance(d.get("direction"), str) and d["direction"]:
-            return f"布林+RSI {self._context.boll_rsi_text(d['direction'], d.get('boll_rsi_hits'))}"
+            return f"布林{self._context.boll_rsi_text(d['direction'], d.get('boll_rsi_hits'))}"
         marks = [m.get("label") for m in d.get("indicators") or []
                  if isinstance(m, dict) and isinstance(m.get("label"), str) and m.get("label")]
-        detail = f"{label} {' / '.join(marks)}" if marks else label
+        detail = " / ".join(marks) if marks else label
         return self._context._ma_display_text(detail, d.get("ma_settings")) if kind in ("ma", "ma_cross", "ma_band") else detail
 
 
@@ -913,8 +897,8 @@ class PageRenderer:
             belong = self._context._member_belong(entry)   # 跟其它名单一样：分组写在代码后面的括号里，持仓分长/短
             level = entry.get("level")
             lamp_name = {"red": "红灯", "yellow": "黄灯", "green": "绿灯", "gray": "缺失"}.get(level)
-            # 灯跟统计表其它栏目同一套：行首的列表圆点，颜色跟着这只股自己的灯级。
-            # marker 读屏读不到，补一段不可见文字，别让灯级信息只靠颜色传达。
+            # 名称前共享竖条，颜色跟着这只股自己的灯级。
+            # CSS竖条读屏读不到，保留不可见文字，别让灯级信息只靠颜色传达。
             lamp_cls = f' class="lamp-{level}"' if lamp_name else ""
             lamp_text = f'<span class="lamp-text">（{lamp_name}）</span>' if lamp_name else ""
             # 名字（含中文备注）整体可点：跳到首页该股所在行，和其它灯的名单同一套 signal-member-jump
@@ -951,7 +935,7 @@ class PageRenderer:
         filters = {}  # 同时满足筛选：每类信号的已核验成员（红/黄/紫合并）
         gray_by_kind = self._context._gray_by_kind(snapshot)
         kinds_iter = [(kind, value) for kind, value in counts.items() if kind not in ("fund", "target")]
-        for gkind in ("rsi", "boll", "boll_rsi"):
+        for gkind in ("amp", "rsi", "boll", "boll_rsi"):
             if gray_by_kind.get(gkind) and gkind not in counts:
                 kinds_iter.append((gkind, {"label": dict(self._context.SIGNAL_KINDS)[gkind]}))
         # 技术三栏与规则表格同序：布林+RSI（组合）排在单独 RSI、单独布林之前，
@@ -999,9 +983,9 @@ class PageRenderer:
                             "o": group_order.get(str(d.get("group") or ""), len(self._context.GROUPS)),
                             "l": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "",
                             "d": []})
-                        text = self._context._filter_detail(d, kind, raw_label)
-                        if text not in rec["d"]:
-                            rec["d"].append(text)
+                        part = {"l": level, "t": self._context._filter_detail(d, kind, raw_label)}
+                        if part not in rec["d"]:
+                            rec["d"].append(part)
                 if not valid:
                     content = '<p>明细待下次更新：当前快照缺少成员或成员人数与计数不一致，暂不展示名单。</p>'
                 else:
@@ -1017,8 +1001,7 @@ class PageRenderer:
                                 if isinstance(d.get("note"), str) and d["note"].strip() else "")
                         # 分组写在代码后面的括号里：持仓内部标长/短，跟首页分区对得上
                         belong = f'<span class="signal-member-belong">（{esc(self._context._member_belong(d))}）</span>'
-                        # 灯统一用列表圆点（marker）画在最前面：
-                        # 52周低位、布林+RSI 等栏目都是这个位置、这个大小、按这一格灯色着色。
+                        # 名称前竖条由统计名单共享CSS生成，按这一格灯色着色。
                         return (f'<li>'
                                 f'<a class="signal-member-jump" href="#{self._context._stock_anchor_id(d["symbol"])}">'
                                 f'<span class="signal-member-symbol">{esc(d["symbol"])}</span>{note}</a>'
@@ -1050,7 +1033,7 @@ class PageRenderer:
                         divider = '<li class="signal-member-split" role="separator"></li>'
                         content = ('<div class="signal-member-groups"><ul class="signal-member-list">'
                                    + divider.join(parts) + '</ul></div>')
-                # tone-* 只用来给名单前面的圆点上色：这一格是红档，圆点就是红的
+                # tone-* 给名称前竖条上色：这一格是红档，竖条就是红的
                 panels.append(f'<div class="signal-members-panel tone-{level}" id="{panel_id}" hidden>{content}</div>')
             gray_rows = gray_by_kind.get(kind) or []
             if gray_rows:
@@ -1093,7 +1076,7 @@ class PageRenderer:
                         "g": self._context._member_belong(d),
                         "o": group_order.get(group, len(self._context.GROUPS)),
                         "l": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "",
-                        "d": [detail_fn(d)],
+                        "d": [{"l": "purple" if kind == "target_purple" else "", "t": detail_fn(d)}],
                     }
             filters[kind] = rec
 
@@ -1188,7 +1171,14 @@ class PageRenderer:
         if ok:
             blocks, order = {}, []
             for r in picked:
-                shape, title, n = self._context._gray_title(kind, r)
+                metric = ""
+                if kind == "amp":
+                    shape, title = self._context._member_block(r, kind)
+                    n = 0
+                    metric = self._context._member_metric_text(r, kind)
+                else:
+                    shape, title, n = self._context._gray_title(kind, r)
+                value = f' <span class="signal-member-metric">{self._context.arrow_html(esc(metric))}</span>' if metric else ""
                 key = (shape, title)
                 if key not in blocks:
                     blocks[key] = []
@@ -1197,15 +1187,17 @@ class PageRenderer:
                 belong = f'<span class="signal-member-belong">（{esc(self._context._member_belong(r))}）</span>'
                 blocks[key].append((group_order.get(str(r.get("group") or ""), len(self._context.GROUPS)),
                                     f'<li><a class="signal-member-jump" href="#{self._context._stock_anchor_id(r["symbol"])}">'
-                                    f'<span class="signal-member-symbol">{esc(r["symbol"])}</span>{note}</a>{belong}</li>'))
+                                    f'<span class="signal-member-symbol">{esc(r["symbol"])}</span>{note}</a>{belong}{value}</li>'))
                 rec = filter_members.setdefault(self._context.instrument_identity(r["symbol"]), {
                     "s": r["symbol"], "n": r.get("note") if isinstance(r.get("note"), str) else "",
                     "g": self._context._member_belong(r),
                     "o": group_order.get(str(r.get("group") or ""), len(self._context.GROUPS)),
                     "l": r.get("level") if r.get("level") in ("red", "yellow", "green") else "green", "d": []})
-                text = f"灰灯 · {label} · {title}"
-                if text not in rec["d"]:
-                    rec["d"].append(text)
+                detail = self._context._filter_detail(r, kind, label) if kind == "amp" else (
+                    f"布林{title}" if kind in ("boll", "boll_rsi") else title)
+                part = {"l": "gray", "t": detail}
+                if part not in rec["d"]:
+                    rec["d"].append(part)
             order.sort(key=lambda k: (self._context._shape_rank(k[0]), -k[2], k[1]))
             content = '<div class="signal-member-groups">' + "".join(
                 f'<div class="signal-member-block"><h5>{self._context._block_title_html(kind, shape, title)}</h5><ul class="signal-member-list">'
@@ -1245,8 +1237,7 @@ class PageRenderer:
                     symbol = self._context.normalize_symbol(d["symbol"])
                     note = f'<span class="note">{esc(d.get("note"))}</span>' if str(d.get("note") or "").strip() else ""
                     tone = "tone-target-high" if section == "space" and d.get("band") == "high" else "tone-purple"
-                    shape = "□" if section == "space" else "■"
-                    lead = f'<span class="signal-member-icon {tone}" aria-hidden="true">{shape}</span>'
+                    lead = f'<span class="signal-name-lamp {tone}" aria-hidden="true"></span>'
                     high_class = ' class="target-space-high"' if tone == "tone-target-high" else ""
                     lines.append(f'<li{high_class}>{lead}<a class="signal-member-jump" href="#{self._context._stock_anchor_id(symbol)}">'
                                  f'<span class="signal-member-symbol">{esc(symbol)}</span>{note}</a>'
@@ -1363,8 +1354,7 @@ class PageRenderer:
 
     def _page_notes(self, snapshot):
         """页底集中收纳说明；不改变任何指标阈值和判断规则。"""
-        return f'''<section class="card page-notes" id="pageNotes" aria-label="规则与数据说明">
-<div class="grp">规则与数据说明</div>
+        return f'''<section class="card page-notes" id="pageNotes" aria-label="综合判断与宏观细则">
 <details class="macro-help" id="marketRiskRules"><summary>综合判断与宏观细则</summary>
 <h5>综合评分</h5>
 <p>{html_lib.escape(self._context.RISK_RULE_TEXT)}</p>
@@ -1596,7 +1586,7 @@ class PageRenderer:
 {group_cards}
 
 <div class="acts">
-<span id="runMsg"></span>
+<a class="board-return" id="btnReturnBoard" href="">返回看板</a>
 </div>
 {self._context._page_notes(snapshot)}
 {run_js}

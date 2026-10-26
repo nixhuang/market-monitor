@@ -58,7 +58,63 @@ lv4, sig4, _ = monitor.analyze_symbol("AMPCFG", {}, mk(hi=102.5, lo=99.5, last=1
 check(any("振幅 3.0%" in s for s in sig4), f"阈值改成 3% 后生效：{sig4}")
 monitor.S["amp_yellow"] = old
 
-# --- 5. 验证实际渲染：静态资源抽离后，不再通过 monitor 源码猜测页面 ---
+# --- 5. 其他所有分组的有效振幅（含0）真实分析计灰，不借持仓阈值过滤 ---
+for group in (g['item_group'] for g in monitor.GROUPS if g['item_group'] not in monitor.AMP_GROUPS):
+    for amplitude in (0, .01, 2, 12):
+        with patch.dict(monitor.S, {'amp_yellow': 1000, 'amp_red': 2000,
+                                   'near_52w_low_pct': 0, 'ma_short': 0, 'ma_long': 0}), \
+                patch.object(monitor, 'calc_rsi', return_value=50), \
+                patch.object(monitor, 'boll', return_value=(None, None, None)):
+            level, signals, detail = monitor.analyze_symbol('AMPGRAY', {},
+                mk(hi=100 + amplitude / 2, lo=100 - amplitude / 2), group=group)
+        check((level, detail['foldable'], detail['signal_marks']) == ('green', False, [('amp', 'gray')]),
+              f'{group} 振幅{amplitude:g}%：灰marks、不折叠，主表仍绿')
+        check(len(signals) == 1 and signals[0].startswith(f'振幅 {amplitude:.1f}%'),
+              f'{group} 振幅{amplitude:g}%：有效振幅无阈值且只有真实振幅描述')
+        gray = monitor.text_only_members([detail])
+        check(len(gray) == 1 and gray[0]['kind'] == 'amp' and gray[0]['metric'] == f'振幅 {amplitude:.1f}%'
+              and monitor.signal_counts([detail])['amp'] == {'label': '振幅', 'red': 0, 'yellow': 0, 'purple': 0},
+              f'{group} 振幅{amplitude:g}%：计振幅灰而非红黄')
+
+# 缺失/合成/错位的日内范围不能以现价回退制造0%或低估振幅的灰灯。
+for group in (g['item_group'] for g in monitor.GROUPS if g['item_group'] not in monitor.AMP_GROUPS):
+    for case in ('missing', 'empty', 'high_none', 'low_none', 'mismatched', 'synthetic', 'bad_validity'):
+        data = mk(hi=106, lo=94)
+        if case == 'missing':
+            data.pop('highs'); data.pop('lows')
+        elif case == 'empty':
+            data['highs'] = []; data['lows'] = []
+        elif case == 'high_none':
+            data['highs'][-1] = None
+        elif case == 'low_none':
+            data['lows'][-1] = None
+        elif case == 'mismatched':
+            data['highs'] = data['highs'][:-1]
+        elif case == 'synthetic':
+            data['ma_range_valid'] = [True] * 259 + [False]
+        else:
+            data['ma_range_valid'] = [True]
+        from types import SimpleNamespace
+        x = SimpleNamespace(data=data, closes=data['closes'], price=data['price'], prev=data['prev_close'],
+                            amp_on=False, foldable=True)
+        monitor._intraday_extremes(x)
+        al = monitor._Alerts()
+        monitor._rule_amplitude(al, x)
+        check(x.amp is None and x.foldable is True and al.marks == [] and al.signals == [] and al.level == 'green',
+              f'{group} {case}：无效范围不制造振幅灰、不改变折叠')
+        detail = {'symbol': 'AMPINVALID', 'group': group, 'price': x.price, 'amp': x.amp,
+                  'foldable': x.foldable, 'signal_marks': al.marks, 'signals': al.signals, 'level': al.level}
+        check(monitor.text_only_members([detail]) == [], f'{group} {case}：下游灰统计不计无效振幅')
+    valid_zero = mk(hi=100, lo=100)
+    valid_zero['ma_range_valid'] = [True] * 260
+    with patch.dict(monitor.S, {'near_52w_low_pct': 0, 'ma_short': 0, 'ma_long': 0}), \
+            patch.object(monitor, 'calc_rsi', return_value=50), \
+            patch.object(monitor, 'boll', return_value=(None, None, None)):
+        _, _, detail = monitor.analyze_symbol('AMPVALIDZERO', {}, valid_zero, group=group)
+    check(detail['amp'] == 0 and detail['signal_marks'] == [('amp', 'gray')] and not detail['foldable'],
+          f'{group} 真实有效0%振幅仍灰灯且不折叠')
+
+# --- 6. 验证实际渲染：静态资源抽离后，不再通过 monitor 源码猜测页面 ---
 with patch.object(monitor, '_cost_panel_assets', return_value=('', '')):
     page = monitor.render({}, [], 0)
 m = re.search(r'<div class="runbar">(.*?)</div>\s*<div class="statusrow">(.*?)</div>\s*\n', page, re.S)

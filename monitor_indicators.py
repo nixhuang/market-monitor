@@ -179,14 +179,8 @@ def ma_confirmed_cross(closes, price, period, th_pct, lookback=MA_CONFIRM_LOOKBA
     return None
 
 
-def _volume_ratio_zscore(volumes, index, window=VOL_Z_WINDOW, base=VOL_RATIO_BASE):
-    """把 index 那天的量比换算成这只股自己的「放量 z 值」。
-
-    样本：此前 window 个完整交易日各自的 ln(当日量 ÷ 此前 base 日均量)。
-    尺度用中位数与 MAD（1.4826×MAD ≈ 标准差），单日天量不会把门槛整体抬走；
-    平稳的票 1.3× 也可能是异常，常年巨量的票 2× 也未必异常，门槛随股而异。
-    数据不足、量非正、分布尺度为 0（天天一模一样）时返回 None，调用方退回固定倍数。
-    """
+def _volume_ratio_distribution(volumes, index, window=VOL_Z_WINDOW, base=VOL_RATIO_BASE):
+    """返回原量比 z 分布的 m/s/z；窗口及目标日参与统计的口径保持不变。"""
     start = index - window
     if start - base < 0:
         return None
@@ -198,17 +192,28 @@ def _volume_ratio_zscore(volumes, index, window=VOL_Z_WINDOW, base=VOL_RATIO_BAS
         return None
     logs = []
     for t in range(base, len(window_vols)):
-        mean_prev = sum(window_vols[t - base:t]) / base
-        if mean_prev <= 0:
+        # 先除后加避免均量求和溢出；对数作差避免量比本身上溢或下溢。
+        mean_prev = sum(v / base for v in window_vols[t - base:t])
+        if not math.isfinite(mean_prev) or mean_prev <= 0:
             return None
-        logs.append(math.log(window_vols[t] / mean_prev))
-    if len(logs) != window + 1:
-        return None
+        logs.append(math.log(window_vols[t]) - math.log(mean_prev))
     median = statistics.median(logs)
     scale = 1.4826 * statistics.median([abs(value - median) for value in logs])
-    if not math.isfinite(scale) or scale <= 0:
+    if not math.isfinite(median) or not math.isfinite(scale) or scale <= 0:
         return None
-    return (logs[-1] - median) / scale
+    return {"m": median, "s": scale, "z": (logs[-1] - median) / scale}
+
+
+def _volume_ratio_zscore(volumes, index, window=VOL_Z_WINDOW, base=VOL_RATIO_BASE):
+    """把 index 那天的量比换算成这只股自己的「放量 z 值」。
+
+    样本：此前 window 个完整交易日各自的 ln(当日量 ÷ 此前 base 日均量)。
+    尺度用中位数与 MAD（1.4826×MAD ≈ 标准差），单日天量不会把门槛整体抬走；
+    平稳的票 1.3× 也可能是异常，常年巨量的票 2× 也未必异常，门槛随股而异。
+    数据不足、量非正、分布尺度为 0（天天一模一样）时返回 None，调用方退回固定倍数。
+    """
+    distribution = _volume_ratio_distribution(volumes, index, window, base)
+    return distribution["z"] if distribution is not None else None
 
 
 class IndicatorCalculator:
@@ -293,6 +298,24 @@ class IndicatorCalculator:
             return None
         try:
             return self._context._volume_ratio_zscore(volumes, index)
+        except (ValueError, TypeError, ZeroDivisionError, OverflowError):
+            return None
+
+
+    def completed_day_volume_distribution(self, sym, data, asof=None):
+        """最近完整日原 z 分布的 ln 量比中位数 m 与 1.4826×MAD 尺度 s；无效返回 None。"""
+        identity = self._context.instrument_identity(sym)
+        if identity.startswith('^') or identity.endswith('=F'):
+            return None
+        dates, volumes = data.get('dates') or [], data.get('volumes') or []
+        if not isinstance(dates, list) or not isinstance(volumes, list) or len(dates) != len(volumes):
+            return None
+        index = self._context._latest_completed_session_index(dates, asof)
+        if index is None:
+            return None
+        try:
+            distribution = _volume_ratio_distribution(volumes, index)
+            return {key: distribution[key] for key in ("m", "s")} if distribution is not None else None
         except (ValueError, TypeError, ZeroDivisionError, OverflowError):
             return None
 

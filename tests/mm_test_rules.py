@@ -4,6 +4,7 @@ import hashlib
 import html
 from html.parser import HTMLParser
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -132,8 +133,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('.up{color:var(--up)} .down{color:var(--down)}', css)
         for lamp, width in (("red", 6), ("yellow", 4), ("green", 2)):
             self.assertIn(f'--lc:var(--{lamp});--lw:{width}px', css)
+        self.assertIn('#signalCounts .signal-name-lamp.tone-target-high{--name-lamp:var(--target-high)}', css)
         for alias in ('tone-target-high', 'target-space-high'):
-            self.assertIn(f'#signalCounts .purple-extra .text-only li>.signal-member-icon.{alias}', css)
             self.assertIn(f'#signalCounts .signal-member-block h5.{alias}', css)
         self.assertNotRegex(css, r'(?:tone-target-high|target-space-high)[^{]*\{[^}]*var\(--red\)')
 
@@ -189,7 +190,7 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('--signal-bg:#182131; --collapse-bg:var(--signal-bg)', css)
         self.assertIn('#group_positions{background:linear-gradient(rgba(46,160,67,.02),rgba(46,160,67,.02)),var(--card);--collapse-bg:rgba(46,160,67,.15)}', css)
         self.assertIn('#group_positions_long.zone-card{background:rgba(46,160,67,.02)}', css)
-        self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:var(--signal-border);border:1px solid var(--signal-border);box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}', css)
+        self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:rgba(102,134,198,.6);border:1px solid var(--signal-border);box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}', css)
         button = re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1]
         self.assertIn('background:var(--collapse-bg)', button)
         self.assertIn('.collapse-group:hover{color:var(--text);background:var(--collapse-bg)}', css)
@@ -291,6 +292,57 @@ class RulesRegression(unittest.TestCase):
         self.assertIn("加仓价提醒标记已读 → 灰灯", text)
         self.assertIn("减仓价提醒标记已读 → 灰灯", text)
 
+    def test_current_three_rule_cells_reach_dynamic_and_rendered_templates(self):
+        for settings in ({}, {'rsi_low': 28, 'rsi_high': 82}):
+            with patch.dict(monitor.S, settings):
+                markup = page_assets.rules_template(monitor.S, monitor._rule_constants())
+                for label, source in (('动态模板', markup), ('实际渲染页', self.render())):
+                    table = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', source, re.S)[0]
+                    for condition, expected in (
+                            ('布林上轨▲ + RSI 1条 ↓超卖（反）', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
+                            ('RSI 2条 ↑超买', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
+                            ('RSI 1条 ↓超卖', [(' colspan="3"', '仅文字')])):
+                        with self.subTest(source=label, condition=condition, settings=settings):
+                            rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', table, re.S)
+                                    if '<td' in row and plain_text(re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1]) == condition]
+                            self.assertEqual(len(rows), 1)
+                            cells = [(attrs, plain_text(body)) for attrs, body in
+                                     re.findall(r'<td\b([^>]*)>(.*?)</td>', rows[0], re.S)]
+                            self.assertEqual(cells, [('', condition)] + expected)
+                    self.assertIn('text-align:center', page_assets.RULES_CSS)
+
+    def test_amplitude_gray_is_unconditional_and_keeps_independent_rule_marks(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for amp in (0, .01, 2, 5, 8, 12):
+                with self.subTest(group=group, amp=amp):
+                    x = SimpleNamespace(group=group, touch_up=100 + amp / 2,
+                        touch_dn=100 - amp / 2, prev=100, amp_on=group in monitor.AMP_GROUPS,
+                        amp_yellow=5, amp_red=8, foldable=True)
+                    al = monitor._Alerts()
+                    al.add('chg', '异动 +6.0%', 'red')
+                    monitor._rule_amplitude(al, x)
+                    expected = ('red' if amp >= 8 else 'yellow' if amp >= 5 else None) if x.amp_on else 'gray'
+                    self.assertEqual(al.marks, [('chg', 'red')] + ([('amp', expected)] if expected else []))
+                    self.assertEqual(al.level, 'red')
+                    self.assertEqual(x.foldable, x.amp_on)
+                    self.assertAlmostEqual(x.amp, amp)
+        for group in ('technology', 'custom_group'):
+            for yellow, red in ((0, 0), (1000, 2000)):
+                x = SimpleNamespace(group=group, touch_up=100, touch_dn=100, prev=100,
+                                    amp_on=False, amp_yellow=yellow, amp_red=red, foldable=True)
+                al = monitor._Alerts()
+                monitor._rule_amplitude(al, x)
+                self.assertEqual((al.level, al.marks, x.foldable), ('green', [('amp', 'gray')], False))
+        for up, down, prev in ((None, 99, 100), (101, None, 100), (101, 99, 0),
+                               (99, 101, 100), (float('nan'), 99, 100), (float('inf'), 99, 100),
+                               (101, 99, True), (101, 99, float('inf')), (True, True, 100),
+                               (101, -1, 100), (101, 99, -100)):
+            x = SimpleNamespace(touch_up=up, touch_dn=down, prev=prev,
+                                amp_on=False, amp_yellow=5, amp_red=8, foldable=True)
+            al = monitor._Alerts()
+            monitor._rule_amplitude(al, x)
+            self.assertEqual((al.marks, al.signals, x.foldable), ([], [], True))
+
     def test_standalone_oversold_reuses_rsi_statistics_kind_without_new_interface(self):
         self.assertIn(('rsi', 'RSI'), monitor.SIGNAL_KINDS)
         self.assertNotIn('rsi_low', dict(monitor.SIGNAL_KINDS))
@@ -315,13 +367,42 @@ class RulesRegression(unittest.TestCase):
                 self.assertIn('<h5>RSI 3条 <span class="arrow-rsi-down">↓</span>超卖</h5>', card)
                 self.assertNotIn('data-kind="rsi_low"', card)
 
-    def test_standalone_three_overbought_uses_yellow_rsi_kind_only_in_active_groups(self):
+    def test_standalone_single_oversold_adds_only_low_text_before_boll_combination(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for values in ((35, 50, 50), (70, 35, 50), (70, 70, 35), (70, 35, 35)):
+                for side in (None, '上轨', '下轨'):
+                    with self.subTest(group=group, values=values, side=side):
+                        x = SimpleNamespace(group=group, rsi=dict(zip((6, 12, 24), values)),
+                                            boll_hits=[] if side is None else [(0, '触及布林' + side)])
+                        alerts = monitor._Alerts()
+                        monitor._rule_rsi(alerts, x)
+                        high, low = values.count(70), values.count(35)
+                        expected = ([f'RSI {high}条 ↑超买（≥70）'] if high >= 2 else [])
+                        expected += ([f'RSI {low}条 ↓超卖（≤35）'] if low >= 2 else [])
+                        if max(high, low) >= 2:
+                            expected += (['RSI 1条 ↑超买（≥70）'] if high == 1 else [])
+                            expected += (['RSI 1条 ↓超卖（≤35）'] if low == 1 else [])
+                        elif side is None:
+                            expected += ['RSI 1条 ↓超卖（≤35）']
+                        self.assertEqual(alerts.signals, expected)
+                        self.assertEqual((alerts.level, alerts.marks), ('green', []))
+                        if side:
+                            monitor._rule_boll(alerts, x)
+                            self.assertEqual(alerts.signals.count('RSI 1条 ↓超卖（≤35）'), int(low == 1))
+                            self.assertEqual(alerts.signals.count('RSI 1条 ↑超买（≥70）'), int(high == 1))
+                            facts = monitor.classify_technical_facts(group, high, low, side)
+                            self.assertEqual(x.foldable, facts['foldable'])
+                            self.assertEqual(alerts.marks, [(facts['kind'], facts['level'])]
+                                             if facts['level'] in ('red', 'yellow') else [])
+
+    def test_standalone_three_overbought_keeps_position_yellow_and_focus_gray(self):
         for group in (g['item_group'] for g in monitor.GROUPS):
             with self.subTest(group=group):
                 x = SimpleNamespace(rsi={period: monitor.S['rsi_high'] for period in (6, 12, 24)}, group=group)
                 alerts = monitor._Alerts()
                 monitor._rule_rsi(alerts, x)
-                level = 'yellow' if group in ('position', 'focus') else 'green'
+                level = 'yellow' if group == 'position' else 'green'
+                self.assertEqual(x.foldable, group != 'focus')
                 self.assertEqual(alerts.level, level)
                 self.assertEqual(alerts.marks, [('rsi', 'yellow')] if level == 'yellow' else [])
                 row = {'symbol': 'OVERBOUGHT', 'group': group, 'level': level,
@@ -333,6 +414,68 @@ class RulesRegression(unittest.TestCase):
                                      [{'shape': '↑', 'tone': 'yellow', 'label': 'RSI 3条 ↑超买'}])
                 else:
                     self.assertEqual(monitor.text_only_members([row])[0]['kind'], 'rsi')
+
+    def test_focus_upper_two_rsi_is_gray_visible_and_preserves_other_lamps(self):
+        for high, low in ((2, 0), (2, 1), (0, 2), (1, 2)):
+            self.assertEqual(monitor.classify_technical_facts('focus', high, low, '上轨'),
+                             dict(kind='boll_rsi', level='gray', foldable=False))
+            self.assertEqual(monitor.classify_technical_facts('position', high, low, '上轨'),
+                             dict(kind='boll_rsi', level='yellow', foldable=True))
+            self.assertEqual(monitor.classify_technical_facts('focus', high, low, '下轨'),
+                             dict(kind='boll_rsi', level='yellow', foldable=True))
+            values = [monitor.S['rsi_high']] * high + [monitor.S['rsi_low']] * low + [50] * (3 - high - low)
+            for chg in (0, -6, 6):
+                with self.subTest(high=high, low=low, chg=chg):
+                    x = SimpleNamespace(group='focus', rsi=dict(zip((6, 12, 24), values)),
+                                        boll_hits=[(0, '触及布林上轨▲')], chg=chg, chg_red=4, usual='')
+                    alerts = monitor._Alerts()
+                    monitor._rule_chg_red(alerts, x)
+                    monitor._rule_rsi(alerts, x)
+                    monitor._rule_boll(alerts, x)
+                    self.assertEqual((alerts.level, alerts.marks),
+                                     ('red', [('chg', 'red')]) if chg else ('green', []))
+                    self.assertFalse(x.foldable)
+                    self.assertFalse(any('布林 + RSI →' in text for text in alerts.signals))
+                    row = dict(symbol='FOCUSGRAY2', group='focus', price=100, level=alerts.level,
+                               signals=alerts.signals, signal_marks=alerts.marks, foldable=x.foldable)
+                    self.assertEqual(monitor.text_only_members([row])[0]['kind'], 'boll_rsi')
+                    self.assertEqual([(g['kind'], g['level']) for g in monitor._signal_description_groups(row)
+                                      if g['kind'] in ('rsi', 'boll', 'boll_rsi')], [('boll_rsi', 'gray')])
+
+    def test_upper_three_oversold_matches_yellow_rule_cells_and_keeps_change_red(self):
+        condition = '布林上轨▲ + RSI 3条 ↓超卖（反）'
+        rules = page_assets.rules_body(monitor.S, monitor._rule_constants())
+        rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', rules, re.S)
+                if '<td' in row and plain_text(re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1]) == condition]
+        self.assertEqual(len(rows), 1)
+        cells = re.findall(r'<td\b([^>]*)>(.*?)</td>', rows[0], re.S)
+        self.assertEqual([(attrs, plain_text(text)) for attrs, text in cells[1:]],
+                         [(' class="cell-yellow"', '黄灯'), (' class="cell-yellow"', '黄灯'),
+                          (' class="cell-gray-fold"', '灰灯（折）')])
+        self.assertIn('.signal-item[data-signal-level="yellow"]{color:#f0c674}', page_assets.PAGE_CSS)
+        for index, group in enumerate(('position', 'focus'), 1):
+            facts = monitor.classify_technical_facts(group, 0, 3, '上轨')
+            self.assertEqual(facts, dict(kind='boll_rsi', level='yellow', foldable=True))
+            self.assertEqual(plain_text(cells[index][1]), '黄灯')
+            for chg in (0, -6, 6):
+                with self.subTest(group=group, chg=chg):
+                    x = SimpleNamespace(group=group, rsi={p: monitor.S['rsi_low'] for p in (6, 12, 24)},
+                                        boll_hits=[(0, '触及布林上轨▲')], chg=chg, chg_red=4, usual='')
+                    alerts = monitor._Alerts()
+                    monitor._rule_chg_red(alerts, x)
+                    monitor._rule_rsi(alerts, x)
+                    monitor._rule_boll(alerts, x)
+                    self.assertEqual(alerts.level, 'red' if chg else 'yellow')
+                    self.assertEqual(alerts.marks, ([('chg', 'red')] if chg else []) + [('boll_rsi', 'yellow')])
+                    self.assertIn('布林 + RSI → 黄', alerts.signals)
+                    self.assertNotIn('布林 + RSI → 红', alerts.signals)
+                    self.assertEqual((x.boll_rsi_direction, x.boll_rsi_hits, x.foldable),
+                                     ('上轨（RSI超卖，方向不一致）', 3, True))
+                    counts = monitor.signal_counts([dict(symbol='UPOS', group=group, price=100,
+                        level=alerts.level, signals=alerts.signals, signal_marks=alerts.marks)])
+                    self.assertEqual((counts['boll_rsi']['red'], counts['boll_rsi']['yellow']), (0, 1))
+                    self.assertEqual(counts['chg']['red'], int(chg != 0))
+                    self.assertTrue(all(counts[k][c] == 0 for k in ('rsi', 'boll') for c in ('red', 'yellow')))
 
     def test_rsi_standalone_lights_are_disabled_for_any_selected_combination(self):
         for side in ('上轨', '下轨'):
@@ -363,10 +506,10 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('Cboe官方VIX日线优先', text)
         self.assertIn('标的去重与显示优先级', text)
         self.assertNotRegex(markup, r'\$\{\w+\}')
-        self.assertEqual(markup.count('<table '), 9)  # 两项阈值、两项连续示例、五项抓取表。
-        for ident in ('glossary-chg-table', 'glossary-amp-table', 'fetch-reference'):
+        self.assertEqual(markup.count('<table '), 10)  # 两项阈值、三项连续示例、五项抓取表。
+        for ident in ('glossary-chg-table', 'glossary-amp-table', 'glossary-vol-table', 'fetch-reference'):
             self.assertEqual(markup.count(f'id="{ident}"'), 1)
-        self.assertEqual(re.search(r'<section id="glossary-calculation">(.*?)</section>', markup, re.S)[1].count('<table '), 4)
+        self.assertEqual(re.search(r'<section id="glossary-calculation">(.*?)</section>', markup, re.S)[1].count('<table '), 5)
         self.assertEqual(re.search(r'<section id="glossary-fetch">(.*?)</section>', markup, re.S)[1].count('<table '), 5)
 
     def test_home_rules_explain_cost_membership_and_boll_upper_without_jargon(self):
@@ -377,7 +520,7 @@ class RulesRegression(unittest.TestCase):
         self.assertRegex(rules_text, r'RSI 3条 ↓超卖\s*红灯')
         self.assertIn('重点、其他分组不适用', rules_text)
         for explanation in ('只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯',
-                            '统计由对应红列转灰列', '灰字删除线',
+                            '统计由对应红列转灰列', '白字删除线',
                             '双轨命中时，只选带符号距离较小的一轨', '越轨距离为负，相等选', '标的去重'):
             self.assertIn(explanation, glossary_text)
             self.assertNotIn(explanation, rules_text)
@@ -469,35 +612,39 @@ class RulesRegression(unittest.TestCase):
         with patch.object(monitor, 'BASE', str(ROOT)):
             loaded = monitor.load_settings()
         self.assertEqual((loaded['vol_ratio_z'], loaded['vol_ratio_red_z']), (2, 3.6))
-        def level(settings, z, ratio=2, intraday=False):
-            x = SimpleNamespace(vol_ratio=ratio, vol_ratio_z=z, vol_ratio_date='2026-10-22',
+        def level(settings, ratio, distribution=True, intraday=False):
+            x = SimpleNamespace(vol_ratio=ratio, vol_ratio_z=999, vol_ratio_date='2026-10-22',
                                 vol_ratio_intraday=intraday, rt_vol_ratio=ratio, rt_vol_time='12:00')
+            if distribution:
+                x.vol_ratio_m, x.vol_ratio_s = 0, 0.3
             alerts = monitor._Alerts()
             with patch.object(monitor, 'S', settings):
                 monitor._rule_vol_ratio(alerts, x)
             return alerts.level
-        for z, expected in ((1.8, 'green'), (1.999999, 'green'), (2, 'yellow'),
-                            (3.599999, 'yellow'), (3.6, 'red'), (3.999999, 'red'), (4, 'red')):
-            self.assertEqual(level(current, z), expected)
+        yellow = math.exp((2 * 0.3 + math.log(1.5)) / 2)
+        red = math.exp((3.6 * 0.3 + math.log(3)) / 2)
+        for ratio, expected in ((yellow * (1 - 1e-12), 'green'), (yellow * (1 + 1e-12), 'yellow'),
+                                (red * (1 - 1e-12), 'yellow'), (red * (1 + 1e-12), 'red')):
+            self.assertEqual(level(current, ratio), expected)
         severity = {'green': 0, 'yellow': 1, 'red': 2}
-        for i in range(-20, 101):
-            z = i / 10
-            self.assertLessEqual(severity[level(current, z)], severity[level(previous, z)])
-            self.assertEqual(level(current, z) == 'red', level(previous, z) == 'red')
-        # 黄灯旧边界收紧；原红灯边界及其上下邻值完全不变。
-        self.assertEqual((level(previous, 1.8), level(current, 1.8)), ('yellow', 'green'))
-        for z in (3.599999, 3.6, 3.600001, 4, 10):
-            self.assertEqual(level(current, z), level(previous, z))
+        for i in range(10, 101):
+            ratio = i / 10
+            self.assertLessEqual(severity[level(current, ratio)], severity[level(previous, ratio)])
+            self.assertEqual(level(current, ratio) == 'red', level(previous, ratio) == 'red')
+        # k 黄由1.8收紧为2仍有效，融合公式使用原设置，而非硬编码档位。
+        self.assertEqual((level(previous, 1.62), level(current, 1.62)), ('yellow', 'green'))
         for intraday in (False, True):
             for ratio, expected in ((1.499999, 'green'), (1.5, 'yellow'),
                                     (2.999999, 'yellow'), (3, 'red')):
-                self.assertEqual(level(current, None, ratio, intraday), expected)
-                self.assertEqual(level(current, None, ratio, intraday), level(previous, None, ratio, intraday))
+                self.assertEqual(level(current, ratio, False, intraday), expected)
+                self.assertEqual(level(current, ratio, False, intraday), level(previous, ratio, False, intraday))
         text = plain_text(page_assets.rules_body(current, monitor._rule_constants()))
-        self.assertIn('红灯（≥3.6σ 或 ≥3×）；黄灯（≥2σ 或 ≥1.5×）', text)
+        self.assertIn('收盘：达到连续自适应门槛报红灯／黄灯', text)
+        self.assertIn('红灯≥3×，黄灯≥1.5×', text)
+        self.assertIn('红k＝3.6、黄k＝2', plain_text(page_assets.glossary_body(current, monitor._rule_constants())))
 
     def test_statistics_collapse_bar_shares_border_color_only_in_statistics(self):
-        self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:var(--signal-border);border:1px solid var(--signal-border)', page_assets.PAGE_CSS)
+        self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:rgba(102,134,198,.6);border:1px solid var(--signal-border)', page_assets.PAGE_CSS)
         self.assertIn('#signalCounts .collapse-group{color:#fff}', page_assets.PAGE_CSS)
         self.assertIn('--collapse-bg:rgba(46,160,67,.15)', page_assets.PAGE_CSS)
         self.assertNotIn('bar.appendChild(shortcut)', page_assets.RULES_INTERACTION_JS)
@@ -511,15 +658,18 @@ class RulesRegression(unittest.TestCase):
                 self.assertEqual(monitor._vol_ratio_z_enabled(), active)
                 al = monitor._Alerts()
                 monitor._rule_vol_ratio(al, SimpleNamespace(vol_ratio=2.5, vol_ratio_z=5,
+                    vol_ratio_m=-1, vol_ratio_s=0.2,
                     vol_ratio_date="2026-10-01", vol_ratio_intraday=False))
                 self.assertEqual(al.level, "red" if active else "yellow")
                 text = page_assets.rules_body(monitor.S, monitor._rule_constants())
                 self.assertEqual(page_assets.rule_flags(monitor.S)["vol_adaptive"], active)
-                self.assertIn(f"红灯（≥{red:g}σ 或 ≥4×）；黄灯（≥{yellow:g}σ 或 ≥2×）", plain_text(text))
+                self.assertIn('红灯≥4×，黄灯≥2×', plain_text(text))
                 glossary = plain_text(page_assets.glossary_body(monitor.S, monitor._rule_constants()))
-                self.assertIn("异常值有效、两条σ阈值启用且量比≥1×，用自适应；否则用固定倍数", glossary)
-                self.assertIn("自适应未命中，不再用固定倍数补灯", glossary)
-                self.assertIn("盘中按已开盘时间折算成交速度，只用固定倍数", glossary)
+                self.assertIn(f'红k＝{red:g}、黄k＝{yellow:g}', glossary)
+                self.assertIn('收盘分布有效、两条自适应参数启用且量比≥1×', glossary)
+                self.assertIn('新门槛＝√(T×F)', glossary)
+                self.assertIn('自适应未命中，不再用固定倍数补灯', glossary)
+                self.assertIn('盘中按已开盘时间折算成交速度，只用固定门槛', glossary)
 
     def test_boll_adaptive_matches_actual_formula_and_off_switch(self):
         monitor.S.update(boll_near_band_pct=25, boll_near_pct=0.75, boll_n=30, boll_k=3)
@@ -542,7 +692,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn("关闭自适应或波动无效时固定0.75%", plain_text(body))
         self.assertIn("历史日波动×0（当前0%设置）", plain_text(body))
         rules = plain_text(page_assets.rules_body(monitor.S, monitor._rule_constants()))
-        self.assertIn("布林上轨▲ + RSI 2条 ↑超买黄灯黄灯仅文字", rules)
+        self.assertIn("布林上轨▲ + RSI 2条 ↑超买黄灯灰灯仅文字", rules)
+        self.assertIn("布林上轨▲ + RSI 2条 ↓超卖（反）黄灯灰灯仅文字", rules)
         self.assertIn("布林下轨▼ + RSI 3条 ↓超卖红灯", rules)
 
     def test_retired_fund_settings_and_frontend_are_absent(self):
@@ -699,15 +850,57 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
         for retired in ('.reference-alert', '.reference-top', '.reference-conclusion',
                         '.reference-data', '.local-preview-banner', '.dca{', '.dca.on{',
                         '.acts button', '.stat-count{', '.gray-signal-row',
-                        '.arrow-band-up{', '.arrow-band-down{', '.lamp-sig-red', '.lamp-sig-yellow'):
+                        '.arrow-band-up{', '.arrow-band-down{', '.lamp-sig-red', '.lamp-sig-yellow',
+                        'signal-dot'):
             self.assertNotIn(retired, css)
         for active in ('.reference-detail{', '.oil-reference-row', '.dca-badge',
-                       '.runbar button', '.signal-dot{', 'li::marker', '.grp-arrow',
+                       '.runbar button', '.signal-filter-condition[data-signal-level=', '.signal-name-lamp,', '.grp-arrow',
                        '.arrow-rsi-up,.arrow-rsi-down', '.rule-table th.cat-col'):
             self.assertIn(active, css)
         self.assertEqual(css.count('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}'), 1)
         for phase in ('busy', 'partial', 'ok', 'bad'):
             self.assertIn(f'.runlight[data-phase="{phase}"]', css)
+
+    def test_multi_condition_colors_are_scoped_and_keep_single_text_and_name_lamps(self):
+        css = page_assets.PAGE_CSS
+        palette = {'red': '#ff8580', 'yellow': '#f0c674', 'gray': 'var(--text)',
+                   'purple': 'var(--purple)', 'green': 'var(--green)'}
+        for level, color in palette.items():
+            selector = f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
+            with self.subTest(level=level):
+                self.assertEqual(css.count(selector + '{color:' + color + '}'), 1)
+        self.assertNotIn('signal-dot', css)
+        self.assertNotIn('signal-dot', page_assets.PAGE_INTERACTION_JS)
+        clean_css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+        for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', clean_css):
+            for selector in selectors.split(','):
+                if '.signal-filter-condition' not in selector:
+                    continue
+                selector = selector.strip()
+                with self.subTest(selector=selector):
+                    if selector == '#signalCounts .signal-filter-condition':
+                        colors = re.findall(r'(?:^|;)\s*color\s*:\s*([^;]+)', body)
+                        self.assertTrue(all(color.strip() == 'inherit' for color in colors))
+                    else:
+                        self.assertIn(selector, {
+                            f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
+                            for level in palette})
+        for single in (
+                '#signalCounts .signal-members-panel .note{display:inline;margin-left:6px}',
+                '#signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}',
+                '#signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}',
+                '#signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted #465e87}',
+                '#signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}'):
+            self.assertIn(single, css, '单选文字原有颜色、字号与间距不随多选改动')
+        self.assertIn('#signalCounts .signal-name-lamp,\n'
+                      '#signalCounts .signal-members-panel li:not(.signal-member-split)::before,\n'
+                      '#signalCounts .earnings-week li::before{content:"";display:inline-block;'
+                      'width:3px;height:12px;border-radius:1px;background:var(--name-lamp,var(--dim));'
+                      'margin-right:6px;vertical-align:-1px}', css)
+        for level in ('red', 'yellow', 'green', 'purple'):
+            self.assertRegex(css, re.escape(f'#signalCounts .signal-name-lamp.{level}')
+                             + r'[^{}]*\{--name-lamp:var\(--' + level + r'\)\}')
+        self.assertIn('#signalCounts .text-only .signal-member-list,#signalCounts .signal-name-lamp.gray{--name-lamp:#9fa3aa}', css)
 
     def test_content_hash_changes_even_with_same_size_and_mtime(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -827,6 +1020,172 @@ process.stdout.write(JSON.stringify(result));
                      "page_assets.py", "tests/mm_test_rules.py",
                      "tests/mm_test_groups.py", "tests/mm_test_render.py"):
             ast.parse((ROOT / name).read_text(encoding="utf-8"), filename=name, feature_version=(3, 11))
+
+
+class ContinuousVolumeRegression(unittest.TestCase):
+    """连续融合门槛、显式分布接口及异常回退的纯 Python 离线覆盖。"""
+
+    def setUp(self):
+        self.enterContext(patch.object(monitor, 'S', dict(monitor.DEFAULT_SETTINGS)))
+
+    def alerts(self, ratio, m=0, s=0.3, **fields):
+        x = SimpleNamespace(vol_ratio=ratio, vol_ratio_m=m, vol_ratio_s=s,
+                            vol_ratio_z=None, vol_ratio_date='2026-10-22', vol_ratio_intraday=False)
+        vars(x).update(fields)
+        alerts = monitor._Alerts()
+        monitor._rule_vol_ratio(alerts, x)
+        return alerts
+
+    def test_examples_are_formula_only_and_intermediate_scales_are_continuous(self):
+        for s, example_y, example_r in ((0.15, 1.42, 2.27), (0.3, 1.65, 2.97), (0.5, 2.02, 4.26)):
+            self.assertEqual(round(math.exp((2 * s + math.log(1.5)) / 2), 2), example_y)
+            self.assertEqual(round(math.exp((3.6 * s + math.log(3)) / 2), 2), example_r)
+        for m in (-0.1, 0, 0.27):
+            for s in (0.15, 0.219, 0.3, 0.417, 0.5):
+                yellow = math.sqrt(math.exp(m + 2 * s) * 1.5)
+                red = math.sqrt(math.exp(m + 3.6 * s) * 3)
+                for ratio, expected in ((yellow * (1 - 1e-12), 'green'), (yellow * (1 + 1e-12), 'yellow'),
+                                        (red * (1 - 1e-12), 'yellow'), (red * (1 + 1e-12), 'red')):
+                    with self.subTest(m=m, s=s, ratio=ratio):
+                        self.assertEqual(self.alerts(ratio, m, s).level, expected)
+
+    def test_exact_log_boundaries_are_inclusive(self):
+        # 将两条融合门槛精确构造为1.5及3，覆盖等于与相邻浮点数。
+        for boundary, k, fixed, expected, below in ((1.5, 2, 1.5, 'yellow', 'green'),
+                                                   (3, 3.6, 3, 'red', 'yellow')):
+            s = math.log(fixed) / k
+            self.assertEqual(self.alerts(math.nextafter(boundary, 0), s=s).level, below)
+            self.assertEqual(self.alerts(boundary, s=s).level, expected)
+            self.assertEqual(self.alerts(math.nextafter(boundary, math.inf), s=s).level, expected)
+
+    def test_nondefault_settings_drive_both_thresholds(self):
+        monitor.S.update(vol_ratio=2.2, vol_ratio_red=4.4, vol_ratio_z=2.1, vol_ratio_red_z=4.2)
+        m, s = 0.17, 0.23
+        for k, fixed, expected in ((2.1, 2.2, 'yellow'), (4.2, 4.4, 'red')):
+            threshold = math.sqrt(math.exp(m + k * s) * fixed)
+            self.assertEqual(self.alerts(threshold * (1 + 1e-12), m, s).level, expected)
+        for overrides in ({'vol_ratio_z': 0}, {'vol_ratio_red_z': 0},
+                          {'vol_ratio_z': 0, 'vol_ratio_red_z': 0}):
+            with patch.dict(monitor.S, overrides):
+                self.assertEqual(self.alerts(2.2, m=-100).level, 'yellow')
+                self.assertEqual(self.alerts(4.4, m=-100).level, 'red')
+
+    def test_valid_distribution_never_gets_fixed_supplement_or_uses_z(self):
+        for z in (None, True, float('nan'), float('inf'), -100, 100):
+            self.assertEqual(self.alerts(3, s=1, vol_ratio_z=z).marks, [])
+            self.assertEqual(self.alerts(1.45, s=0.15, vol_ratio_z=z).marks, [('vol_ratio', 'yellow')])
+        self.assertEqual(self.alerts(3, s=0.5).marks, [('vol_ratio', 'yellow')])
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            self.assertEqual(self.alerts(3, s=1, group=group).marks, [])
+
+    def test_missing_invalid_distribution_and_legacy_z_only_use_fixed(self):
+        for invalid in (None, True, '0.3', float('nan'), float('inf'), -float('inf')):
+            for m, s in ((invalid, 0.3), (0, invalid)):
+                with self.subTest(m=m, s=s):
+                    self.assertEqual(self.alerts(1.5, m, s, vol_ratio_z=100).level, 'yellow')
+                    self.assertEqual(self.alerts(3, m, s, vol_ratio_z=-100).level, 'red')
+        for s in (0, -0.1):
+            self.assertEqual(self.alerts(1.49, s=s).level, 'green')
+            self.assertEqual(self.alerts(3, s=s).level, 'red')
+        x = SimpleNamespace(vol_ratio=2, vol_ratio_z=100, vol_ratio_date='2026-10-22')
+        alerts = monitor._Alerts()
+        monitor._rule_vol_ratio(alerts, x)
+        self.assertEqual(alerts.marks, [('vol_ratio', 'yellow')])
+
+    def test_ratio_gate_and_log_comparison_do_not_overflow(self):
+        for ratio in (None, True, '3', float('nan'), float('inf'), -1, 0, 0.999999):
+            self.assertEqual(self.alerts(ratio, m=-100, s=0.1).marks, [])
+        self.assertEqual(self.alerts(1, m=-100, s=0.1).level, 'red')
+        self.assertEqual(self.alerts(1e308, m=1600, s=0.1).level, 'green')
+        self.assertEqual(self.alerts(1e308, m=1400, s=0.1).level, 'red')
+        self.assertEqual(self.alerts(3, m=1e308, s=1e308).level, 'green')
+        self.assertEqual(self.alerts(1, m=-1e308, s=0.1).level, 'red')
+
+    def test_sub_one_ratio_retains_configurable_fixed_fallback(self):
+        # 仅自适应分支有1倍门控；合法自定义固定阈值仍按原口径生效。
+        with patch.dict(monitor.S, {'vol_ratio': 0.3, 'vol_ratio_red': 0.7}):
+            self.assertEqual(self.alerts(0.5, m=-100, s=0.1).level, 'yellow')
+            self.assertEqual(self.alerts(0.8, m=-100, s=0.1).level, 'red')
+
+    def test_intraday_uses_fixed_and_never_adds_completed_day(self):
+        for ratio, expected in ((1.499999, 'green'), (1.5, 'yellow'), (2.999999, 'yellow'), (3, 'red')):
+            alerts = self.alerts(100, m=-100, s=0.01, vol_ratio_intraday=True,
+                                 rt_vol_ratio=ratio, rt_vol_time='12:00')
+            self.assertEqual(alerts.level, expected)
+            if alerts.signals:
+                self.assertEqual(alerts.signals, [f'盘中量比（截至 12:00 ET）{ratio:.1f}x'])
+
+    def test_distribution_preserves_original_z_definition_and_window(self):
+        import statistics
+        import monitor_indicators as indicators
+        volumes = [1000 * (1 + (i % 7 - 3) / 20) for i in range(81)]
+        logs = [math.log(volumes[t] / (sum(volumes[t-20:t]) / 20)) for t in range(20, 81)]
+        m = statistics.median(logs)
+        s = 1.4826 * statistics.median(abs(v - m) for v in logs)
+        distribution = indicators._volume_ratio_distribution(volumes, 80)
+        self.assertAlmostEqual(distribution['m'], m, places=12)
+        self.assertAlmostEqual(distribution['s'], s, places=12)
+        self.assertAlmostEqual(monitor._volume_ratio_zscore(volumes, 80), (logs[-1] - m) / s, places=12)
+        self.assertEqual(distribution, indicators._volume_ratio_distribution(volumes + [float('nan')], 80))
+        self.assertEqual(monitor._volume_ratio_zscore(volumes, 80), distribution['z'])
+
+    def test_distribution_rejects_insufficient_and_damaged_samples_but_handles_extremes(self):
+        import monitor_indicators as indicators
+        base = [1000 * (1 + (i % 7 - 3) / 20) for i in range(81)]
+        self.assertIsNone(indicators._volume_ratio_distribution(base[:-1], 79))
+        self.assertIsNone(indicators._volume_ratio_distribution([1000] * 80 + [3000], 80))
+        for invalid in (0, -1, True, '1000', None, float('nan'), float('inf')):
+            for index in (0, 40, 80):
+                sample = list(base)
+                sample[index] = invalid
+                self.assertIsNone(indicators._volume_ratio_distribution(sample, 80))
+        extremes = [(1e-300 if i % 2 else 1e300) * (1 + (i % 7) / 20) for i in range(81)]
+        for sample in ([v / 1000 * 1e308 for v in base], extremes):
+            distribution = indicators._volume_ratio_distribution(sample, 80)
+            self.assertIsNotNone(distribution)
+            self.assertTrue(all(math.isfinite(distribution[k]) for k in ('m', 's', 'z')))
+            self.assertGreater(distribution['s'], 0)
+
+    def test_public_distribution_api_and_old_context_mock_compatibility(self):
+        import monitor_indicators as indicators
+        import monitor_rules
+        data = {'dates': [str(i) for i in range(81)],
+                'volumes': [1000 * (1 + (i % 7 - 3) / 20) for i in range(81)]}
+        distribution_api = monitor.completed_day_volume_distribution
+        with patch.object(monitor, '_latest_completed_session_index', return_value=80) as lookup:
+            distribution = distribution_api('AAPL', data)
+            lookup.assert_called_once_with(data['dates'], None)
+            self.assertEqual(set(distribution), {'m', 's'})
+            self.assertEqual(distribution_api('^VIX', data), None)
+            self.assertEqual(distribution_api('ES=F', data), None)
+        old_context = SimpleNamespace(instrument_identity=lambda sym: sym,
+                                      _latest_completed_session_index=lambda dates, asof: 80)
+        self.assertEqual(indicators.IndicatorCalculator(old_context).completed_day_volume_distribution('AAPL', data),
+                         distribution)
+        # context 未新增分布方法仍可使用旧分析入口；保留旧 z mock 原值，不据它反推分布。
+        context = SimpleNamespace(**{key: getattr(monitor, key) for key in (
+            'cost_rule', 'calc_rsi', 'RSI_PERIODS', 'datetime', '_range52_from_history', 'S', 'sma', 'boll')},
+            completed_day_volume_ratio=lambda sym, data: (2, '2026-10-22'),
+            completed_day_volume_z=lambda sym, data: 100,
+            intraday_volume_ratio=lambda sym, data: (None, ''))
+        quote = dict(closes=[100] * 60, price=100, prev_close=100, highs=[], lows=[], dates=[])
+        x = monitor_rules.RuleEngine(context)._analysis_context('AAPL', {}, quote, 'focus')
+        self.assertEqual((x.vol_ratio_m, x.vol_ratio_s, x.vol_ratio_z), (None, None, 100))
+        with patch.object(monitor, 'completed_day_volume_distribution', return_value=distribution) as measure:
+            x = monitor._analysis_context('AAPL', {}, quote, 'focus')
+            measure.assert_called_once_with('AAPL', quote)
+        self.assertEqual((x.vol_ratio_m, x.vol_ratio_s), (distribution['m'], distribution['s']))
+
+    def test_new_fields_flow_through_analysis_detail_and_snapshot(self):
+        data = dict(closes=[100] * 60, price=100, prev_close=100, highs=[], lows=[], dates=[])
+        with patch.object(monitor, 'completed_day_volume_distribution', return_value={'m': 0.2, 's': 0.4}), \
+                patch.object(monitor, 'completed_day_volume_z', return_value=123), \
+                patch.object(monitor, 'global_dca', return_value=None):
+            detail = monitor.analyze_symbol('AAPL', {}, data, 'focus')[2]
+            snapshot = monitor._sanitize_snapshot({'items': [detail]})
+        row = snapshot['items'][0]
+        self.assertEqual((row['vol_ratio_m'], row['vol_ratio_s'], row['vol_ratio_z']), (0.2, 0.4, 123))
+        self.assertEqual((detail['vol_ratio_m'], detail['vol_ratio_s']), (0.2, 0.4))
 
 
 class ModuleBoundaryRegression(unittest.TestCase):

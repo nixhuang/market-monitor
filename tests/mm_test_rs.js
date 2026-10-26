@@ -19,7 +19,7 @@ function element() {
 }
 function fixture(page = snapshot(), onlyRule = false) {
   const els = Object.fromEntries((onlyRule ? ['ruleLight', 'ruleLightTxt'] :
-    ['runLight', 'runLightTxt', 'ruleLight', 'ruleLightTxt', 'runSummary', 'runMsg', 'checkResult', 'btnCheckStatus']).map(id => [id, element()]));
+    ['runLight', 'runLightTxt', 'ruleLight', 'ruleLightTxt', 'runSummary', 'runMsg', 'checkResult', 'btnCheckStatus', 'btnReturnBoard']).map(id => [id, element()]));
   if (page) { els.snapshotData = element(); els.snapshotData.textContent = JSON.stringify(page); }
   const data = {status: snapshot(), published: snapshot(), sha: B, failRules: false, failPublic: false,
     run: {id: 2, event: 'push', head_sha: D, status: 'in_progress', conclusion: null}, delay: null, commitSHA: null, raw: null, reloads: []};
@@ -80,6 +80,52 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.doesNotMatch(f.els.runLightTxt.textContent, /红44 黄20 绿65/);
     assert.doesNotMatch(f.els.runLightTxt.textContent, /项数据已更新/);
     assert.doesNotMatch(f.els.runLightTxt.textContent, /规则/);
+  });
+  await check('返回入口初始化即存在；核对失败仍可避缓存重载本地路径且不伪造规则确认', async () => {
+    const f = fixture();
+    const link = f.els.btnReturnBoard;
+    assert.equal(typeof link.onclick, 'function');
+    f.data.failPublic = true; f.data.failRules = true;
+    f.win.location.href = 'file:///C:/demo/demo-local.html?keep=1&_mm=old&mm_run=stale#rules';
+    await f.win.MMRunStatus.refresh();
+    assert.strictEqual(f.els.btnReturnBoard, link);
+    assert.notEqual(f.els.ruleLight.dataset.phase, 'ok');
+    const requests = f.urls.length;
+    f.advance(1000);
+    link.onclick();
+    const url = new URL(link.href);
+    assert.equal(url.protocol, 'file:');
+    assert.equal(url.pathname, '/C:/demo/demo-local.html');
+    assert.equal(url.hash, '');
+    assert.equal(url.searchParams.get('keep'), '1');
+    assert.notEqual(url.searchParams.get('_mm'), 'old');
+    assert.equal(url.searchParams.getAll('_mm').length, 1);
+    assert(!url.searchParams.has('mm_run'));
+    assert.equal(f.urls.length, requests, '点击仅准备导航，不派发运行或核验请求');
+  });
+  await check('返回入口核验通过携带对应run且不重复创建；编辑页旧返回行为保留', async () => {
+    const f = fixture(); await f.win.MMRunStatus.refresh();
+    const link = f.els.btnReturnBoard;
+    assert.equal(new URL(link.href).searchParams.get('mm_run'), '1');
+    assert(!f.els.runMsg.children.some(child => child.textContent === '返回看板'));
+    await f.win.MMRunStatus.refresh();
+    assert.strictEqual(f.els.btnReturnBoard, link);
+    assert(!f.els.runMsg.children.some(child => child.textContent === '返回看板'));
+    const editor = fixture(); delete editor.els.btnReturnBoard;
+    await editor.win.MMRunStatus.refresh();
+    const legacy = editor.els.runMsg.children.find(child => child.textContent === '返回看板');
+    assert(legacy && legacy.href.startsWith('./index.html?'));
+  });
+  await check('首页无页底运行详情仍核验规则与绑定返回；编辑页保留发布详情', async () => {
+    const f = fixture(); delete f.els.runMsg;
+    await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.ruleLight.dataset.phase, 'ok');
+    assert.match(f.els.ruleLightTxt.textContent, /规则按当前设置生效/);
+    assert.equal(typeof f.els.btnReturnBoard.onclick, 'function');
+    assert.equal(new URL(f.els.btnReturnBoard.href).searchParams.get('mm_run'), '1');
+    const editor = fixture(); delete editor.els.btnReturnBoard;
+    await editor.win.MMRunStatus.refresh();
+    assert.match(editor.els.runMsg.textContent, /已发布完成：看板与状态文件一致/);
   });
   await check('最新设置已保存、Pages 设置尚旧也能检测黄灯', async () => {
     const f = fixture(); f.data.sha = C; await f.win.MMRunStatus.refresh();

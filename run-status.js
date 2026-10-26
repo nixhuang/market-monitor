@@ -1,6 +1,23 @@
 (function (window) {
   'use strict';
 
+  function bindBoardReturn(snapshot = null, revision = 0) {
+    const link = window.document.getElementById('btnReturnBoard');
+    if (!link) return false;
+    // 导航不依赖发布核验；正式页和既有只读预览共用当前路径重载。
+    const updateHref = () => {
+      const url = new window.URL(window.location.href);
+      url.hash = '';
+      url.searchParams.set('_mm', Date.now() + '-' + revision);
+      url.searchParams.delete('mm_run');
+      if (snapshot) url.searchParams.set('mm_run', snapshot.run_id);
+      link.href = url.href;
+    };
+    updateHref();
+    link.onclick = updateHref;
+    return true;
+  }
+
   if (window.location && window.location.origin && window.location.origin !== 'https://nixhuang.github.io') {
     const show = () => {
       ['runState', 'runMsg', 'appliedState', 'appliedBrief'].forEach(id => {
@@ -19,6 +36,7 @@
         const node = window.document.getElementById(id);
         if (node) node.disabled = true;
       });
+      bindBoardReturn();
       return {phase: 'preview', message: '仅本地预览'};
     };
     window.MMRunStatus = {init: () => { show(); return window.MMRunStatus; },
@@ -536,8 +554,9 @@
     }
     ['btnRun', 'btnRunNow'].forEach(id => { if (el(id)) el(id).disabled = !!activeManual(); });
     const box = el('appliedState') || el('runMsg') || el('runState');
-    if (box && verifiedSnapshot && (!Object.keys(targets).length || configState.phase === 'published') &&
-        (!manual || manual.rejected || manualState.phase === 'published')) {
+    const canReturn = verifiedSnapshot && (!Object.keys(targets).length || configState.phase === 'published') &&
+      (!manual || manual.rejected || manualState.phase === 'published');
+    if (!bindBoardReturn(canReturn ? verifiedSnapshot : null, version) && box && canReturn) {
       const link = window.document.createElement('a');
       link.textContent = '返回看板';
       link.href = bust('./index.html') + '&mm_run=' + encodeURIComponent(verifiedSnapshot.run_id);

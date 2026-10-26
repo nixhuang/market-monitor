@@ -15,7 +15,7 @@ TARGET_HIGH_SPACE_PCT = 90
 CONSENSUS_GROUPS = ("position", "focus")   # 仅达到规则限这两组；空间规则覆盖全部个股
 
 
-AMP_GROUPS = ("position", "focus")   # 振幅仅持仓/重点；涨跌幅对所有分组生效
+AMP_GROUPS = ("position", "focus")   # 振幅红黄仅持仓/重点，其他有效振幅计灰；涨跌幅对所有分组生效
 
 
 BOLL_UP_SIGNAL_GROUPS = ("position", "focus")  # 上轨普通过热仅持仓/重点；三超卖红覆盖全组，持仓不分长短。
@@ -126,12 +126,22 @@ def _rule_amplitude(al, x):
     """日内振幅：涨跌幅只看「收盘 vs 昨收」，盘中冲高又回落、最后收平的票不会响，这条专门抓它。
     用当日最高/最低（盘中重跑时再和当前价取极值）除以昨收。"""
     x.amp = None
-    if x.touch_up is None or x.touch_dn is None or not x.prev:
+    # 其他组的灰灯必须来自真实有效日内范围；布林现价回退不能冒充0%振幅。
+    # 复用已对齐收盘序列/有效位的范围校验，不改变持仓/重点原红黄口径。
+    if not x.amp_on and hasattr(x, "data") and not _ma_day_range(x)[2]:
+        return
+    if (not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                and math.isfinite(v) and v > 0 for v in (x.touch_up, x.touch_dn, x.prev))
+            or x.touch_dn > x.touch_up):
         return
     x.amp = (x.touch_up - x.touch_dn) / x.prev * 100
-    if not x.amp_on:
+    if not math.isfinite(x.amp) or x.amp < 0:
         return
     text = f"振幅 {x.amp:.1f}%（{x.touch_dn:,.2f}~{x.touch_up:,.2f}）"
+    if not x.amp_on:
+        al.add("amp", text, "gray")
+        x.foldable = False
+        return
     if x.amp >= x.amp_red:
         al.add("amp", text, "red")
     elif x.amp >= x.amp_yellow:
@@ -360,6 +370,10 @@ class RuleEngine:
         x.range52 = self._context._range52_from_history(data)
         x.vol_ratio, x.vol_ratio_date = self._context.completed_day_volume_ratio(sym, data)
         x.vol_ratio_z = self._context.completed_day_volume_z(sym, data)
+        distribution_fn = getattr(self._context, "completed_day_volume_distribution", None)
+        distribution = distribution_fn(sym, data) if callable(distribution_fn) else None
+        x.vol_ratio_m = distribution.get("m") if isinstance(distribution, dict) else None
+        x.vol_ratio_s = distribution.get("s") if isinstance(distribution, dict) else None
         x.rt_vol_ratio, x.rt_vol_time = self._context.intraday_volume_ratio(sym, data)
         x.vol_ratio_intraday = bool(x.rt_vol_ratio)
         ma_periods = (int(self._context.S["ma_short"]), int(self._context.S["ma_long"]))
@@ -370,7 +384,7 @@ class RuleEngine:
 
     def _apply_vol_tier(self, x):
         """涨跌 / 振幅阈值：设置页的值是中档，按这只股自己的平时波动缩放；
-    涨跌幅对所有分组生效；振幅仅「持仓」和「重点关注」报灯。"""
+    涨跌幅对所有分组生效；振幅仅「持仓」和「重点关注」报红黄，其他有效振幅无阈值计灰。"""
         x.vol_tier, x.vol_sigma = self._context.vol_profile(x.closes)
         mult = self._context.VOL_MULT[x.vol_tier]
         x.chg_red, x.chg_yellow = self._context.S["chg_red"] * mult, self._context.S["chg_yellow"] * mult
@@ -383,7 +397,7 @@ class RuleEngine:
         """纯事实分类，不计算 RSI 或轨距，也不推断选中轨。
 
     selected_side 必须明确传 None / 上轨 / 下轨。命中条数为 0..3 整数且和不超过 3。
-    返回 kind、level、foldable：kind=None / level=green 表示无提醒；gray 表示技术文字，
+    返回 kind、level、foldable：kind=None / level=green 表示不计技术灯（可保留文字）；gray 表示技术灰，
     不改变主表整体绿灯；foldable 是独立于红黄灯的折叠资格。
     """
         if not isinstance(group, str) or not group:
@@ -397,19 +411,31 @@ class RuleEngine:
         active_up = group in self._context.BOLL_UP_SIGNAL_GROUPS
         count = max(high_hits, low_hits)
         if selected_side is None:
-            if count < 2:
+            if count < 2 or group == "focus" and high_hits == 2:
                 return {"kind": None, "level": "green", "foldable": True}
+            if group == "focus" and high_hits == 3:
+                return {"kind": "rsi", "level": "gray", "foldable": False}
             level = "red" if low_hits == 3 else "yellow" if high_hits == 3 and active_up else "gray"
             return {"kind": "rsi", "level": level, "foldable": True}
         up = selected_side == "上轨"
+        if up and group == "focus" and high_hits + low_hits == 1:
+            return {"kind": None, "level": "green", "foldable": True}
+        if up and not active_up and low_hits >= 2:
+            return {"kind": None if low_hits == 2 else "boll_rsi",
+                    "level": "green" if low_hits == 2 else "gray", "foldable": True}
         if count == 0:
             if up and group != "position":
                 return {"kind": None, "level": "green", "foldable": True}
-            return {"kind": "boll", "level": "gray", "foldable": True}
-        foldable = not (not up and count == 1 or up and not active_up and low_hits == 2)
-        # 三超卖全覆盖优先于上轨分组豁免；有轨时只归组合。
+            return {"kind": "boll", "level": "gray",
+                    "foldable": not (group == "position" and not up)}
+        # 重点上轨两条同侧 RSI：灰灯保留可见，第三条反向事实不改变主条件。
+        if up and group == "focus" and count == 2:
+            return {"kind": "boll_rsi", "level": "gray", "foldable": False}
+        foldable = not (not up and count == 1
+                        or up and group == "position" and count == low_hits == 1)
+        # 上轨反向三超卖：持仓/重点黄，其他已在前置分支归灰；下轨三超卖仍红。
         if low_hits == 3:
-            level = "red"
+            level = "yellow" if up else "red"
         elif up and active_up and (high_hits >= 2 or low_hits == 2):
             level = "red" if high_hits == 3 else "yellow"
         elif not up and count >= 2:
@@ -435,7 +461,10 @@ class RuleEngine:
                     al.add(facts["kind"], text, facts["level"])
                 else:
                     al.signals.append(text)
-        # 已有两条同侧提醒时，补齐反向单条事实；单独一条仍然无提醒。
+        # 无轨单条超卖仅留文字；有轨由布林组合保留事实，避免重复或改变组合规则。
+        if facts and x.low_hits == 1 and max(x.high_hits, x.low_hits) < 2:
+            al.signals.append(self._context.rsi_hits_text(1, "超卖", f"≤{self._context.S['rsi_low']:g}"))
+        # 已有两条同侧提醒时，补齐反向单条事实；单独一条超买仍无提醒。
         if max(x.high_hits, x.low_hits) >= 2:
             for count, tag, boundary in ((x.high_hits, "超买", f"≥{self._context.S['rsi_high']:g}"),
                                          (x.low_hits, "超卖", f"≤{self._context.S['rsi_low']:g}")):
@@ -565,7 +594,7 @@ class RuleEngine:
         side = "上轨" if up else "下轨"
         facts = self._context.classify_technical_facts(x.group, x.high_hits, x.low_hits, side)
         x.foldable = facts["foldable"]
-        if len(hits) == 1 and facts["kind"] is None:
+        if len(hits) == 1 and facts["kind"] is None and x.high_hits == x.low_hits == 0:
             return
         x.boll_alert_text = best[1]
         al.signals.extend(hit[1] for hit in hits)
@@ -597,7 +626,8 @@ class RuleEngine:
 
     def _rule_vol_ratio(self, al, x):
         """量比：盘中用当日累计量按已开盘分钟数折算的「盘中量比」，收盘后回落到最近完整日量比。
-    收盘后先按这只股自己的放量分布（z 值）判灯，z 算不出才退回固定倍数；盘中始终用固定倍数。
+    收盘后用 sqrt(exp(m+k*s)*F) 连续门槛；显式分布缺失或无效才退回固定倍数。
+    不从量比与 z 反推分布；盘中始终用固定倍数。
     达到红线报红、达到黄线报黄，所有分组适用；不分涨跌方向。"""
         if getattr(x, "vol_ratio_intraday", False):
             ratio = x.rt_vol_ratio
@@ -605,18 +635,22 @@ class RuleEngine:
             if level:
                 al.add("vol_ratio", f"盘中量比（截至 {x.rt_vol_time} ET）{ratio:.1f}x", level)
             return   # 盘中已拿到当时量比，不再叠加昨天的完整日口径
-        if not x.vol_ratio:
+        ratio = getattr(x, "vol_ratio", None)
+        if (not isinstance(ratio, (int, float)) or isinstance(ratio, bool)
+                or not math.isfinite(ratio) or ratio <= 0):
             return
-        ratio = x.vol_ratio
-        if self._context._vol_ratio_z_enabled() and ratio >= 1.0 and isinstance(getattr(x, "vol_ratio_z", None), (int, float)) \
-                and not isinstance(x.vol_ratio_z, bool) and math.isfinite(x.vol_ratio_z):
-            # 缩量（<1×）不报灯：z 值只用来判断「放得有多异常」，方向仍然是放量。
-            z = x.vol_ratio_z
-            level = "red" if z >= self._context.S["vol_ratio_red_z"] else "yellow" if z >= self._context.S["vol_ratio_z"] else ""
+        m, s = getattr(x, "vol_ratio_m", None), getattr(x, "vol_ratio_s", None)
+        if (self._context._vol_ratio_z_enabled() and ratio >= 1.0
+                and all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+                        for v in (m, s)) and s > 0):
+            # log(sqrt(T*F)) = m/2 + k*s/2 + log(F)/2，不展开可能溢出的指数或乘积。
+            log_ratio = math.log(ratio)
+            yellow = m / 2 + (s / 2) * self._context.S["vol_ratio_z"] + math.log(self._context.S["vol_ratio"]) / 2
+            red = m / 2 + (s / 2) * self._context.S["vol_ratio_red_z"] + math.log(self._context.S["vol_ratio_red"]) / 2
+            level = "red" if log_ratio >= red else "yellow" if log_ratio >= yellow else ""
             if level:
-                # 不把 σ 写进文案：z 只是内部判定尺度，页面只需要「哪天、放量到几倍」
                 al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{ratio:.1f}x", level)
-            return
+            return   # 有效自适应未达标，不按固定倍数补灯
         level = "red" if ratio >= self._context.S["vol_ratio_red"] else "yellow" if ratio >= self._context.S["vol_ratio"] else ""
         if level:
             al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{ratio:.1f}x", level)
@@ -680,6 +714,8 @@ class RuleEngine:
             "range52": x.range52,
             "vol_ratio": x.vol_ratio,
             "vol_ratio_z": getattr(x, "vol_ratio_z", None),
+            "vol_ratio_m": getattr(x, "vol_ratio_m", None),
+            "vol_ratio_s": getattr(x, "vol_ratio_s", None),
             "vol_ratio_date": x.vol_ratio_date,
             "rt_vol_ratio": x.rt_vol_ratio,
             "rt_vol_time": x.rt_vol_time,
@@ -753,10 +789,12 @@ class RuleEngine:
 
 
     def boll_rsi_text(self, direction, hits=None):
-        """组合条件统一文案：上轨▲ · RSI 2条 ↑超买（必要时带「方向不一致／双向命中」）。
+        """组合条件统一文案：上轨▲ · RSI 2条 ↑超买（必要时带「反向／双向命中」）。
 
     组合与单独用同一套措辞：布林只写上下轨，RSI 只写超买超卖，中间用「 · 」隔开。"""
         side, tag, tail = self._context._parse_boll_rsi_direction(direction)
+        if tail == "方向不一致":
+            tail = "反向"
         if not side:
             return "方向待下次更新"
         parts = [self._context.boll_side_text(side)]

@@ -2772,6 +2772,9 @@ _volume_ratio_zscore = monitor_indicators._volume_ratio_zscore
 completed_day_volume_z = _indicator_calculator.completed_day_volume_z
 
 
+completed_day_volume_distribution = _indicator_calculator.completed_day_volume_distribution
+
+
 INTRADAY_VOL_QUIET_MIN = monitor_indicators.INTRADAY_VOL_QUIET_MIN
 
 

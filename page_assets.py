@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import html
 import json
+import math
 from pathlib import Path
 import re
 
@@ -63,57 +64,58 @@ LAMP_RULE_TABLE = (
     '<td>布林上轨▲ + RSI 3条 ↑超买</td>'
     '<td class="cell-red">红灯</td><td class="cell-red">红灯</td>'
     '<td class="cell-gray">灰灯</td></tr>'
-    '<tr class="rule-group-end"><td>布林上轨▲ + RSI 3条 ↓超卖（反）</td>'
-    '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
+    '<tr class="rule-group-end"><td><span class="rule-reverse">布林上轨▲ + RSI 3条 ↓超卖（反）</span></td>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td>'
+    '<td class="cell-gray-fold">灰灯（折）</td></tr>'
     '<tr><td>布林下轨▼ + RSI 3条 ↓超卖</td>'
     '<td class="cell-red" colspan="3">红灯</td></tr>'
-    '<tr class="rule-group-end"><td>布林下轨▼ + RSI 3条 ↑超买（反）</td>'
+    '<tr class="rule-group-end"><td><span class="rule-reverse">布林下轨▼ + RSI 3条 ↑超买（反）</span></td>'
     '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
     '<tr><td>布林上轨▲ + RSI 2条 ↑超买</td>'
-    '<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td><td>仅文字</td></tr>'
-    '<tr class="rule-group-end"><td>布林上轨▲ + RSI 2条 ↓超卖（反）</td>'
-    '<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td>'
-    '<td class="cell-gray">灰灯</td></tr>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-gray">灰灯</td><td>仅文字</td></tr>'
+    '<tr class="rule-group-end"><td><span class="rule-reverse">布林上轨▲ + RSI 2条 ↓超卖（反）</span></td>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-gray">灰灯</td>'
+    '<td>仅文字</td></tr>'
     '<tr><td>布林下轨▼ + RSI 2条 ↓超卖</td>'
     '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
-    '<tr class="rule-group-end"><td>布林下轨▼ + RSI 2条 ↑超买（反）</td>'
+    '<tr class="rule-group-end"><td><span class="rule-reverse">布林下轨▼ + RSI 2条 ↑超买（反）</span></td>'
     '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
     '<tr><td>布林上轨▲ + RSI 1条 ↑超买</td>'
-    '<td class="cell-gray">灰灯</td><td class="cell-gray">灰灯</td><td>无提示</td></tr>'
-    '<tr class="rule-group-end"><td>布林上轨▲ + RSI 1条 ↓超卖（反）</td>'
-    '<td class="cell-gray-fold">灰灯（折）</td><td class="cell-gray-fold">灰灯（折）</td><td>无提示</td></tr>'
+    '<td class="cell-gray">灰灯</td><td>仅文字</td><td>无提示</td></tr>'
+    '<tr class="rule-group-end"><td><span class="rule-reverse">布林上轨▲ + RSI 1条 ↓超卖（反）</span></td>'
+    '<td class="cell-gray">灰灯</td><td>仅文字</td><td>无提示</td></tr>'
     '<tr><td>布林下轨▼ + RSI 1条 ↓超卖</td>'
     '<td class="cell-gray" colspan="3">灰灯</td></tr>'
-    '<tr class="rule-group-end"><td>布林下轨▼ + RSI 1条 ↑超买（反）</td>'
+    '<tr class="rule-group-end"><td><span class="rule-reverse">布林下轨▼ + RSI 1条 ↑超买（反）</span></td>'
     '<td class="cell-gray" colspan="3">灰灯</td></tr>'
     '<tr><th scope="row" class="cat-col" rowspan="6">单独RSI</th>'
     '<td>RSI 3条 ↑超买</td>'
-    '<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-gray">灰灯</td>'
     '<td class="cell-gray-fold">灰灯（折）</td></tr>'
     '<tr class="rule-group-end"><td>RSI 3条 ↓超卖</td>'
     '<td class="cell-red" colspan="3">红灯</td></tr>'
     '<tr><td>RSI 2条 ↑超买</td>'
-    '<td class="cell-gray">灰灯</td><td class="cell-gray">灰灯</td><td>无提示</td></tr>'
+    '<td class="cell-gray">灰灯</td><td>仅文字</td><td>无提示</td></tr>'
     '<tr class="rule-group-end"><td>RSI 2条 ↓超卖</td>'
     '<td class="cell-gray" colspan="3">灰灯</td></tr>'
     '<tr><td>RSI 1条 ↑超买</td><td colspan="3">无提示</td></tr>'
-    '<tr class="rule-group-end"><td>RSI 1条 ↓超卖</td><td colspan="3">无提示</td></tr>'
+    '<tr class="rule-group-end"><td>RSI 1条 ↓超卖</td><td colspan="3">仅文字</td></tr>'
     '<tr><th scope="row" class="cat-col" rowspan="2">单独布林</th>'
     '<td>布林上轨▲ + RSI 0条</td><td class="cell-gray">灰灯</td>'
     '<td>无提示</td><td>无提示</td></tr>'
     '<tr class="rule-group-end"><td>布林下轨▼ + RSI 0条</td>'
-    '<td class="cell-gray-fold" colspan="3">灰灯（折）</td></tr>'
+    '<td class="cell-gray">灰灯</td><td class="cell-gray-fold" colspan="2">灰灯（折）</td></tr>'
     '<tr><th scope="row" class="cat-col" rowspan="5">价格与量能</th>'
     '<td>涨跌幅 · 自适应</td>'
     '<td>红灯／黄灯</td><td>红灯／黄灯</td><td class="cell-gray">灰灯</td></tr>'
-    '<tr><td>振幅 · 自适应</td><td>红灯／黄灯</td><td>红灯／黄灯</td><td>无效</td></tr>'
+    '<tr><td>振幅 · 自适应</td><td>红灯／黄灯</td><td>红灯／黄灯</td><td class="cell-gray">灰灯</td></tr>'
     '<tr><td>52周低位（距低点≤${near_52w_low_pct}%）</td>'
     '<td colspan="3">红灯（新进入／跌破／昨日未知）；黄灯（其余持续低位）</td></tr>'
     '<tr><td>均线（短均线穿越；长均线触及±${ma_long_band_pct}%或穿越）</td>'
     '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
     '<tr><td>量比（收盘自适应／盘中固定）</td>'
-    '<td colspan="3">红灯（≥${vol_ratio_red_z}σ 或 ≥${vol_ratio_red}×）；'
-    '黄灯（≥${vol_ratio_z}σ 或 ≥${vol_ratio}×）</td></tr>'
+    '<td colspan="3">收盘：达到连续自适应门槛报红灯／黄灯；'
+    '盘中或分布无效：红灯≥${vol_ratio_red}×，黄灯≥${vol_ratio}×</td></tr>'
     '</tbody></table>')
 
 # 规则正文不再提供内部跳转；方向图标和阈值仍保留。
@@ -123,7 +125,7 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 <section id="glossary-calculation">
 <h4>名词解释与计算</h4>
 <h5 id="glossary-ack">可点红灯与已读</h5>
-<p>加仓价、减仓价、成本浮亏：点✓已读，再点撤销。已读显示灰字删除线，统计由对应红列转灰列。</p>
+<p>加仓价、减仓价、成本浮亏：点✓已读，再点撤销。已读显示白字删除线，统计由对应红列转灰列。</p>
 <p>已读只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯。是否进入“无异动”，按剩余报灯与保留条件判断。</p>
 <p>条件消失即清除已读，再次触发重新提醒。浮亏10%／20%分档记录、每只只计一次；升降档切换提醒，低于10%清除浮亏已读。</p>
 <h5 id="glossary-chg">涨跌幅 · 计算与阈值</h5>
@@ -133,7 +135,7 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 ${chg_threshold_table}
 <h5 id="glossary-amp">振幅 · 计算与阈值</h5>
 <p>振幅＝（日高−日低）÷昨收×100%，表示日内摆动宽度。涨跌幅接近0，振幅仍可能很大。</p>
-<p>沿用上节波动档；持仓分组、重点报灯，其他分组只显示数值。红门槛优先。</p>
+<p>持仓分组、重点沿用上节波动档，达到红门槛优先报红，否则达到黄门槛报黄。其他分组只要振幅有效（含0%）就报灰灯：白字、计灰且不折叠，不设门槛、不升红黄。</p>
 ${amp_threshold_table}
 <h5 id="glossary-boll">布林逼近 · 自适应</h5>
 <p>布林为${boll_n}日、±${boll_k}倍标准差。逼近范围＝历史日波动×${boll_near_factor}（当前${boll_near_band_pct}%设置）；波动越大，范围越宽。关闭自适应或波动无效时固定${boll_near_pct}%。</p>
@@ -146,9 +148,12 @@ ${amp_threshold_table}
 <p>周期${rsi_periods}日；≥${rsi_high}超买，≤${rsi_low}超卖。</p>
 <p>“1／2／3条”是同方向达标的周期数，不是连续天数；向上／向下指超买／超卖，不等于今日涨跌。</p>
 <h5 id="glossary-vol">量比 · 自适应／固定切换</h5>
-<p>完整日量比＝成交量÷此前${vol_ratio_base}日均量。异常值有效、两条σ阈值启用且量比≥1×，用自适应；否则用固定倍数。</p>
-<p>σ表示放量异常程度，不是均量倍数，也不套股价波动档。自适应未命中，不再用固定倍数补灯。</p>
-<p>盘中按已开盘时间折算成交速度，只用固定倍数；不足${intraday_vol_quiet_min}分钟或盘中值无效，退回最近完整日。完整日量比缺失则不判。</p>
+<p>完整日量比＝成交量÷此前${vol_ratio_base}日均量。收盘分布有效、两条自适应参数启用且量比≥1×时，按每只标的自身历史量比连续计算，不套股价波动档；否则用固定门槛。</p>
+<p>对数量比的中位数为m、稳健波动尺度为s（1.4826×MAD）；原门槛T＝exp(m＋k×s)，红k＝${vol_ratio_red_z}、黄k＝${vol_ratio_z}。新门槛＝√(T×F)，红F＝${vol_ratio_red}×、黄F＝${vol_ratio}×，在对数空间压缩一半高低差异。达到红门槛优先报红，否则达到黄门槛报黄。</p>
+<p>高中低仅为历史量比波动的示意，不是固定三档。假设m＝0、低／中／高的s分别为0.15／0.30／0.50：</p>
+${vol_example_table}
+<p>表中倍数为假设示例；实际门槛随每只标的自身分布连续变化。k不是均量倍数；有效自适应未命中，不再用固定倍数补灯。</p>
+<p>盘中按已开盘时间折算成交速度，只用固定门槛：红≥${vol_ratio_red}×、黄≥${vol_ratio}×；不足${intraday_vol_quiet_min}分钟或盘中值无效，退回最近完整日。收盘分布无效或自适应关闭时也用固定门槛，完整日量比缺失则不判。</p>
 <h5 id="glossary-ma">均线确认 · 短均线／长均线</h5>
 <p>短均线（${ma_short_status}）：确认幅度＝历史日波动×0.5，限${ma_confirm_min}%～${ma_confirm_max}%；波动无效取${ma_confirm_default}%。检查近${ma_confirm_lookback}日另一侧记录，历史不足只判简单穿越。</p>
 <p>启用后的连续自适应示例：</p>
@@ -167,7 +172,7 @@ ${amp_threshold_table}
 <h5 id="glossary-dedup">标的去重与显示优先级</h5>
 <p>显示与报警优先级：市场风险／持仓 → 重点 → 其他。同一实质标的只显示最高级，清单记录不删。</p>
 <p>VIX与标普指数仅在市场风险显示；指数、跟踪ETF、期货不是同一标的。</p>
-<p>文字颜色不等于交易灯。首次只展开统计，不等于标的进入“无异动”的判定。</p>
+<p>主表描述按指标级别着色：红字为红灯内容、黄字为黄灯内容、白字为灰灯内容；仅文字且不计灰灯的内容用灰字。财报日期颜色不计交易灯，竖条灯保留。首次只展开统计，不等于标的进入“无异动”的判定。</p>
 </section>
 <section id="glossary-fetch">
 <h4>抓取规则</h4>
@@ -352,6 +357,19 @@ def _threshold_table(kind, values):
             '</tr></thead><tbody>' + ''.join(rows) + '</tbody></table>')
 
 
+def _volume_example_table(values):
+    """假设分布仅用于解释连续门槛，不参与任何标的的实际判灯。"""
+    rows = []
+    for label, scale in (("低", 0.15), ("中", 0.30), ("高", 0.50)):
+        red = math.sqrt(values["vol_ratio_red"]) * math.exp(values["vol_ratio_red_z"] * scale / 2)
+        yellow = math.sqrt(values["vol_ratio"]) * math.exp(values["vol_ratio_z"] * scale / 2)
+        rows.append(f'<tr><th scope="row">{label}</th><td>≥约{red:.2f}倍</td>'
+                    f'<td>≥约{yellow:.2f}倍</td></tr>')
+    return ('<table class="rule-table" id="glossary-vol-table"><thead><tr>'
+            '<th scope="col">波动</th><th scope="col">红灯</th><th scope="col">黄灯</th>'
+            '</tr></thead><tbody>' + ''.join(rows) + '</tbody></table>')
+
+
 def _rules_source():
     parts = ['<div class="rules-body" id="signalRulesBody">']
     for section, lines in RULE_SECTIONS:
@@ -391,6 +409,7 @@ def rules_body(settings, constants):
 def glossary_body(settings, constants):
     values = _rule_values(settings, constants)
     tables = {kind + "_threshold_table": _threshold_table(kind, values) for kind in ("chg", "amp")}
+    tables["vol_example_table"] = _volume_example_table(values)
     body = re.sub(r"\$\{(\w+)\}", lambda m: tables[m[1]] if m[1] in tables else _text(values[m[1]]),
                   GLOSSARY_BODY)
     body = re.sub(r'<h5 id="([^"]+)"[^>]*>.*?(?=<h5\b|</section>)',
@@ -480,7 +499,7 @@ PAGE_CSS = """:root{
   --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
   --blue:#2f6bd8; --purple:#a371f7; --target-high:#dc62b8;
   --signal-bg:#182131; --collapse-bg:var(--signal-bg);
-  /* 灯（圆点）统一尺寸：首页描述灯、统计名单行首圆点、名单三角同一套大小 */
+  /* 统计名单方向三角尺寸；指标描述使用自身条件文字颜色 */
   --lamp-size:14px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -529,16 +548,10 @@ tr:first-child td{border-top:none}
 .tnote,.sig .tp{color:#c4a3ff}
 .sig{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
 .signal-magenta{color:#ef8de4} .signal-red{color:#ff8580} .signal-yellow{color:#f0c674} .signal-cyan{color:#4dd0e1}
-/* 灯统一画在标的名称前面：直径 .34em（14px 字号下 4.76px，与原生 disc 的 4.75px 一致）、
-   右边距 .875em（12.25px），与统计名单 li::marker 的间距一致。三处灯只在这一处定尺寸和间距。
-   vertical-align:.25em 是实测校准值：与统计名单原生 li::marker 的圆点垂直中心相差 0.00px。
-   不能用 display 的双关键字写法（inline 后接 list-item，靠原生 disc 画圆点）：Safari 与
-   iOS WebView（含微信内置浏览器）不支持，整条声明被丢弃后灯会整个消失。这里画实心圆点。 */
-.signal-dot{display:inline-block;width:.34em;height:.34em;border-radius:50%;background:currentColor;font-size:var(--lamp-size);font-weight:400;margin:0 .875em 0 0;padding:0;vertical-align:.25em;color:var(--dim)}
-.signal-dot.red{color:var(--red)} .signal-dot.yellow{color:var(--yellow)}
-.signal-dot.purple{color:var(--purple)} .signal-dot.gray{color:#9fa3aa}
+.signal-item{color:var(--dim)}
 .signal-item[data-signal-level="red"]{color:#ff8580}
 .signal-item[data-signal-level="yellow"]{color:#f0c674}
+.signal-item[data-signal-level="gray"]{color:var(--text)}
 .signal-item[data-signal-level="purple"]{color:var(--purple)}
 .signal-separator{color:var(--dim);margin:0 2px}
 .group-bottom{padding:0;margin:0 -4px -6px;border-top:1px solid var(--line);text-align:center;line-height:0}
@@ -548,7 +561,7 @@ tr:first-child td{border-top:none}
 .collapse-group .collapse-icon{font-size:16px;line-height:1}
 .collapse-group:hover{color:var(--text);background:var(--collapse-bg)}
 .collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts{--signal-border:#6686c6;--collapse-bg:var(--signal-border);border:1px solid var(--signal-border);box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}
+#signalCounts{--signal-border:#6686c6;--collapse-bg:rgba(102,134,198,.6);border:1px solid var(--signal-border);box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}
 #signalCounts .collapse-group{color:#fff}
 #signalCounts>summary{color:#bfd5ff}
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -566,13 +579,19 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-row>td{padding:0;width:auto;border-top:0}
 #signalCounts .signal-members-panel{padding:10px 12px;background:#121a27;border-top:1px solid #465e87;text-align:left}
 #signalCounts .signal-members-panel[hidden]{display:none}
-#signalCounts .signal-members-panel ul{margin:0;padding-left:18px}
+#signalCounts .signal-members-panel ul{list-style:none;margin:0;padding-left:2px}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
-/* 名单前面的圆点按这一格的灯色走，不再是默认的白点；灰灯没有灯，用灰点 */
-#signalCounts .signal-members-panel li::marker{color:var(--dim);font-size:var(--lamp-size)}
-#signalCounts .signal-members-panel.tone-red li::marker{color:var(--red)}
-#signalCounts .signal-members-panel.tone-yellow li::marker{color:var(--yellow)}
-#signalCounts .text-only .signal-member-list li::marker{color:#9fa3aa}
+/* 名称前竖条共用尺寸与6px间距；单条件用伪元素，多选与紫灯条件用同样的span。 */
+#signalCounts .signal-name-lamp,
+#signalCounts .signal-members-panel li:not(.signal-member-split)::before,
+#signalCounts .earnings-week li::before{content:"";display:inline-block;width:3px;height:12px;border-radius:1px;background:var(--name-lamp,var(--dim));margin-right:6px;vertical-align:-1px}
+#signalCounts .signal-members-panel.tone-red,#signalCounts .signal-name-lamp.red,#signalCounts .earnings-week li.lamp-red{--name-lamp:var(--red)}
+#signalCounts .signal-members-panel.tone-yellow,#signalCounts .signal-name-lamp.yellow,#signalCounts .earnings-week li.lamp-yellow{--name-lamp:var(--yellow)}
+#signalCounts .signal-name-lamp.green,#signalCounts .earnings-week li.lamp-green{--name-lamp:var(--green)}
+#signalCounts .text-only .signal-member-list,#signalCounts .signal-name-lamp.gray{--name-lamp:#9fa3aa}
+#signalCounts .signal-name-lamp.purple{--name-lamp:var(--purple)}
+#signalCounts .signal-name-lamp.tone-purple{--name-lamp:#c4a3ff}
+#signalCounts .signal-name-lamp.tone-target-high{--name-lamp:var(--target-high)}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
 #signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}
 #signalCounts .signal-member-split{list-style:none;height:0;margin:9px 0;border-top:1px solid #465e87}
@@ -582,7 +601,7 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-member-block:last-child{margin-bottom:0}
 #signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:#bfd5ff}
 #signalCounts .signal-member-block h5:first-letter{letter-spacing:0}
-#signalCounts .signal-member-block ul{padding-left:18px}
+#signalCounts .signal-member-block ul{padding-left:2px}
 #signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:var(--lamp-size);font-weight:700;line-height:1;vertical-align:baseline}
 #signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
 #signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:#c4a3ff}
@@ -616,13 +635,8 @@ tr:first-child td{border-top:none}
 #signalCounts .target-purple .signal-member-direction{color:#c4a3ff}
 #signalCounts .target-purple .target-space-high .signal-member-direction,
 .group-card tr.pur-high .sig .tp{color:var(--target-high)}
-#signalCounts .purple-extra .text-only li>.signal-member-icon{margin:0 6px 0 0;color:#c4a3ff;font-size:14px}
 .tone-target-high{color:var(--target-high)}
 #signalCounts .tone-target-high,
-#signalCounts .purple-extra .text-only li>.signal-member-icon.tone-target-high,
-#signalCounts .purple-extra .text-only li>.signal-member-icon.target-space-high,
-#signalCounts .purple-extra .text-only .target-space-high>.signal-member-icon,
-#signalCounts .purple-extra .text-only .tone-target-high>.signal-member-icon,
 #signalCounts .purple-extra .text-only .text-only-kind.tone-target-high,
 #signalCounts .purple-extra .text-only .text-only-kind.target-space-high,
 #signalCounts .purple-extra .text-only>summary.tone-target-high,
@@ -643,15 +657,10 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 #signalCounts .earnings-week:not([open])>*:not(summary){display:none}
 #signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:13.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
 #signalCounts .earnings-week summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts .earnings-week ul{list-style:disc;margin:0;padding:0 0 8.1px 18px}
+#signalCounts .earnings-week ul{list-style:none;margin:0;padding:0 0 8.1px 2px}
 #signalCounts .earnings-week li{font-size:13px;padding:3.6px 0;overflow-wrap:anywhere}
 #signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
-/* 财报名单的灯也用行首圆点，和 52周低位/布林+RSI 等栏目同一位置同一大小 */
-#signalCounts .earnings-week li::marker{color:var(--dim)}
-#signalCounts .earnings-week li.lamp-red::marker{color:var(--red)}
-#signalCounts .earnings-week li.lamp-yellow::marker{color:var(--yellow)}
-#signalCounts .earnings-week li.lamp-green::marker{color:var(--green)}
-#signalCounts .earnings-week li.lamp-gray::marker{color:var(--dim)}
+/* 财报名称前竖条复用统计名单样式，颜色仍来自该股原灯级。 */
 #signalCounts .earnings-week .lamp-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
   overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 #signalCounts .earnings-week-meta{color:var(--dim);font-size:12px}
@@ -672,9 +681,13 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 #signalCounts .signal-filter li{padding:4.5px 0;overflow-wrap:anywhere}
 #signalCounts .signal-filter li+li{border-top:1px solid var(--line)}
 #signalCounts .signal-filter .note{margin-left:5px}
-/* 多选清单与主表共用 .signal-dot 的尺寸和间距；统计名单保留原生 marker。
-   三处灯均在名称前，尺寸由 --lamp-size 控制。 */
+/* 仅多选组合描述按每条条件着色；不借用名称灯色，不影响单选名单。 */
 #signalCounts .signal-filter-detail{display:block;margin-top:2px;color:var(--text)}
+#signalCounts .signal-filter-condition[data-signal-level="red"]{color:#ff8580}
+#signalCounts .signal-filter-condition[data-signal-level="yellow"]{color:#f0c674}
+#signalCounts .signal-filter-condition[data-signal-level="gray"]{color:var(--text)}
+#signalCounts .signal-filter-condition[data-signal-level="purple"]{color:var(--purple)}
+#signalCounts .signal-filter-condition[data-signal-level="green"]{color:var(--green)}
 .earn{display:block;margin:0;color:#8fb8f0;font-size:12.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:12px}
 .earn.soon{color:#f0c674;font-weight:600}
@@ -776,6 +789,9 @@ tr.gray td{color:var(--dim)}
 .macro-help>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
 .page-notes{margin-top:18px}
 .page-notes .macro-help{overflow-wrap:anywhere}
+/* 页底综合细则标头与预警规则同高同色，正文及其他宏观折叠保持原样。 */
+#pageNotes>#marketRiskRules{margin-top:0;margin-bottom:0}
+#pageNotes>#marketRiskRules>summary{padding:9px 0;line-height:1.5;color:#bfd5ff;font-size:13px;font-weight:600}
 .page-notes a{color:#8fb8f0}
 .page-notes .macro-help+ .macro-help{border-top:1px solid var(--line);padding-top:4px}
 .unit{display:block;font-size:11px;color:var(--dim);font-weight:400}
@@ -785,7 +801,8 @@ tr.gray td{color:var(--dim)}
 .quiet{color:var(--dim);font-size:13px;padding:8px 12px 12px}
 .warn{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
   color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:14px}
-.acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.acts{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:16px}
+.acts .board-return{display:inline-block;margin:8px;color:#6ba3f0}
 #runMsg{font-size:13px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}
 #runMsg.ok{color:var(--green)}
 #runMsg.err{color:var(--red)}
@@ -921,6 +938,8 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 .card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:rgba(143,184,240,.07);border-bottom:1px solid #6b7689}
 /* 报灯总表左右撑满卡片：抵消 .card(4px) 与 .rules-body(12px) 的内边距。 */
 #rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border-left:0;border-right:0}
+.card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center}
+.card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}
 /* 最左分类列：竖排、固定 18px 单字宽（不用 em，避免手机端字号缩放把列撑宽）。
    overflow:hidden 兜底：万一竖排不生效，横排文字被裁掉也不会把列顶宽。 */
 .card .rules-body .rule-table col.cat-col{width:18px}
@@ -965,7 +984,9 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 #glossaryRulesBody .rule-table th,#glossaryRulesBody .rule-table td{line-height:1.5}
 #glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:#f0c674}
 #glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:#ff8580}
-#glossary-chg-table td,#glossary-amp-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
+#glossary-vol-table thead th:nth-child(2){color:#ff8580}
+#glossary-vol-table thead th:nth-child(3){color:#f0c674}
+#glossary-chg-table td,#glossary-amp-table td,#glossary-vol-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
 """
 PAGE_CSS += RULES_CSS
 
@@ -1090,7 +1111,30 @@ function intersectSignals(data, kinds) {
   const members = data[kinds[0]].members.filter(function(m) {
     return maps.every(function(map) { return map.has(m.id); });
   }).map(function(m) {
-    return Object.assign({}, m, {details: maps.map(function(map) { return map.get(m.id).d.join(" / "); })});
+    const details = [];
+    maps.forEach(function(map, index) {
+      const member = map.get(m.id), kind = kinds[index];
+      (member.d || []).forEach(function(part) {
+        if (!part || typeof part !== "string" && typeof part !== "object") return;
+        // 新数据逐项携带真实灯级；旧字符串只在读取时兼容，不用整行最高级覆盖新条件。
+        let text = typeof part === "string" ? part : part.t;
+        if (typeof text !== "string" || !text) return;
+        let level = typeof part === "string" ? member.l : part.l;
+        if (typeof part === "string") {
+          const old = text.match(/^(红灯|黄灯|灰灯|紫灯|绿灯)\s*·\s*/);
+          if (old) {
+            level = {红灯:"red",黄灯:"yellow",灰灯:"gray",紫灯:"purple",绿灯:"green"}[old[1]];
+            text = text.slice(old[0].length);
+            const prefix = data[kind].label + " · ";
+            if (text.startsWith(prefix)) text = text.slice(prefix.length);
+          }
+          text = text.replace(/^布林\+RSI\s*/, "布林");
+          if (kind === "boll_rsi" && /^(上轨|下轨)/.test(text)) text = "布林" + text;
+        }
+        details.push({k:kind, l:level || "", t:text});
+      });
+    });
+    return Object.assign({}, m, {details: details});
   });
   return {members: members};
 }
@@ -1156,11 +1200,10 @@ function renderSignalFilter() {
   const list = document.createElement("ul");
   result.members.forEach(function(m) {
     const li = document.createElement("li");
-    // 灯统一画在标的名称前面：与主表、统计名单同一元素、同一位置、同一尺寸（--lamp-size）。
-    // 旧版这里用 9px 的 <i class="stat-dot"> 排在分组后面，跟另外两处既不同位也不同大。
+    // 多选名称前保留对应原灯色竖条；描述内每条条件只用自身文字颜色。
     if (["red", "yellow", "green", "gray", "purple"].indexOf(m.l) >= 0) {
       const dot = document.createElement("span");
-      dot.className = "signal-dot " + m.l;
+      dot.className = "signal-name-lamp " + m.l;
       dot.setAttribute("role", "img");
       dot.setAttribute("aria-label",
         {red: "红灯", yellow: "黄灯", green: "绿灯", gray: "缺失", purple: "紫灯"}[m.l]);
@@ -1185,7 +1228,22 @@ function renderSignalFilter() {
     li.append(link, group);
     const detail = document.createElement("span");
     detail.className = "signal-filter-detail";
-    appendRsiArrows(detail, m.details.join(" / "));
+    m.details.forEach(function(part, index) {
+      if (index) detail.appendChild(document.createTextNode(" / "));
+      const condition = document.createElement("span");
+      condition.className = "signal-filter-condition";
+      condition.dataset.signalKind = part.k;
+      let level = part.l;
+      // 加减仓价已读只改变这条条件的字色，不借用标的其它红黄灯。
+      if (["add_price", "reduce_price"].includes(part.k)) {
+        const row = document.getElementById(m.a);
+        const warning = row && row.querySelector('.cost-warn[data-signal-kind="' + part.k + '"]');
+        if (warning && warning.style.display !== "none") level = warning.dataset.signalLevel || level;
+      }
+      condition.dataset.signalLevel = level;
+      appendRsiArrows(condition, part.t);
+      detail.appendChild(condition);
+    });
     li.append(detail);
     list.append(li);
   });

@@ -178,8 +178,8 @@ class SnapshotBuilder:
 
 
     def text_only_members(self, items):
-        """技术灰按所属指标独立计，与同股其它指标红黄并存；组合与单独指标互斥。
-    主表最高灯级不变；重复身份沿用首页分类优先级，只保留第一条。"""
+        """显式振幅灰与技术灰独立计，与同股其它指标红黄并存；技术组合与单独指标互斥。
+    主表最高灯级不变；重复身份沿用首页分类优先级，只处理优先条目。"""
         priority = {g["item_group"]: i for i, g in enumerate(self._context.GROUPS)}
         seen = set(self._context.RISK_IDENTITIES)
         out = []
@@ -193,6 +193,17 @@ class SnapshotBuilder:
                     or "price" in d and (not isinstance(d["price"], (int, float))
                         or isinstance(d["price"], bool) or not math.isfinite(d["price"]) or d["price"] <= 0)):
                 continue
+            amp = d.get("amp")
+            if (d.get("group") not in self._context.AMP_GROUPS
+                    and isinstance(amp, (int, float)) and not isinstance(amp, bool)
+                    and math.isfinite(amp) and amp >= 0
+                    and any(k == "amp" and level == "gray" for k, level in d.get("signal_marks") or [])):
+                member = {"symbol": symbol, "kind": "amp", "group": d.get("group") or "",
+                          "level": d.get("level") if d.get("level") in ("red", "yellow", "green") else "green",
+                          "hold": str(d.get("hold") or ""), "note": str(d.get("note") or "")}
+                self._context._member_signal_details(d, "amp", member, "gray")
+                member["detail"] = member.get("metric", "")
+                out.append(member)
             kind = self._context._text_only_kind(d.get("signals"))
             technical_marks = {k for k, level in d.get("signal_marks") or []
                                if k in ("boll", "rsi", "boll_rsi") and level in ("red", "yellow")}
@@ -211,12 +222,24 @@ class SnapshotBuilder:
                         if self._context._TEXT_RSI_RE.match(t) or t.startswith(self._context._TEXT_BOLL_PREFIX)]
             detail = re.split(r"（", pool[0])[0].strip() if pool else ""
             rsi_texts = [t for t in texts if self._context._TEXT_RSI_RE.match(t)]
+            if kind == "rsi" and d.get("group") == "focus" and any(
+                    re.match(r"^RSI 2条\s*[↑↓]?超买", t) for t in rsi_texts):
+                continue  # 重点单独两条超买仅文字，含反向单条事实时也不计灰。
             rsi_main = " / ".join(dict.fromkeys(re.split(r"（", t)[0].strip() for t in rsi_texts))
             if kind == "boll_rsi" and rsi_main:
                 detail = f"{detail} · {rsi_main}" if detail else rsi_main
             elif kind == "rsi":
                 detail = rsi_main
             boll_text = next((t for t in texts if t.startswith(self._context._TEXT_BOLL_PREFIX)), "")
+            # 上轨仅文字规则不计技术灰；不借双轨另一侧改归。
+            if "上轨" in boll_text and kind == "boll_rsi":
+                hits = {"超买": 0, "超卖": 0}
+                for text in rsi_texts:
+                    for match in re.finditer(r"([123])条\s*[↑↓]?(超买|超卖)", text):
+                        hits[match[2]] = max(hits[match[2]], int(match[1]))
+                if (d.get("group") == "focus" and sum(hits.values()) == 1
+                        or d.get("group") not in self._context.BOLL_UP_SIGNAL_GROUPS and hits["超卖"] == 2):
+                    continue
             # 非持仓零条上轨被限制后，不能借保留的另一轨事实改归下轨灰灯。
             if kind == "boll" and "上轨" in boll_text and d.get("group") != "position":
                 continue

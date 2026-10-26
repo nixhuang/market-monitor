@@ -10,8 +10,8 @@ import monitor  # noqa: E402
 
 
 def _row_signals(row):
-    """首页一行：灯统一画在标的名称前面（_signal_lamps），描述文字在后（_signals_html）。"""
-    return monitor._signal_lamps(row) + monitor._signals_html(row)
+    """主表只输出各指标描述，级别通过 data-signal-level 表达，不添加圆点。"""
+    return monitor._signals_html(row)
 
 # 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
 monitor.S.clear()
@@ -70,6 +70,11 @@ def check(cond, msg):
     print(("PASS " if cond else "FAIL ") + msg)
     if not cond:
         fail.append(msg)
+
+check('--collapse-bg:rgba(102,134,198,.6)' in re.search(r'#signalCounts\{([^}]+)\}', html)[1]
+      and '#signalCounts .collapse-group{color:#fff}' in html
+      and 'opacity:' not in re.search(r'\.collapse-group\{([^}]+)\}', html)[1],
+      '统计收起背景40%透明，白箭头不使用整体opacity淡化')
 
 # 规则样式只输出一次，且仍在仓位CSS后保持最终覆盖优先级。
 check(html.count(monitor.RULES_CSS) == 1, "规则CSS整块只输出一份")
@@ -481,6 +486,7 @@ def rendered_stock_row(page, row, keep):
               row['symbol'] + '主行' + name + '精确匹配' + repr(value))
     classes = re.findall(r'\bclass="([^"]*)"', attrs)
     check(len(classes) == 1, row['symbol'] + '主行class属性唯一')
+    check('signal-dot' not in body, row['symbol'] + '完整主表行零圆点')
     return classes[0].split() if len(classes) == 1 else [], body
 
 
@@ -545,9 +551,10 @@ check({r['symbol'] for r in _target_snapshot['target_overlays']['space']}
 _target_panel = _target_page.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
 check(bool(re.search(r'空间\s*5\s*只[\s　]*达到\s*2\s*只', _target_panel))
       and not re.search(r'紫灯\s*\d+\s*只', _target_panel), '空间/达到双计数标题替代旧紫灯标题')
-check(_target_panel.count('<ul') == 2 and '□' in _target_panel and '■' in _target_panel
+check(_target_panel.count('<ul') == 2 and _target_panel.count('class="signal-name-lamp ') == 7
+      and 'signal-member-icon' not in _target_panel
       and '今日跌破共识价 190' in _target_panel and _target_panel.count('href="#s-tboth"') == 2,
-      '展开两段方块名单保留具体达到方向及重叠跳转')
+      '展开两段竖条名单保留原紫色/紫红、具体达到方向及重叠跳转')
 check('data-kind="target_purple"' in _target_page and '>目标价</button>' not in _target_page
       and '>共识价</button>' not in _target_page, '底部union按钮保留而目标红黄表行移除')
 check('疑似数据异常' not in _target_panel and 'lvtag tgt high' in _target_page,
@@ -596,8 +603,8 @@ _legacy_consensus.update(target={'kind': 'consensus', 'price': 250, 'failed': Tr
 _legacy_before = _copy.deepcopy(_legacy_consensus)
 _legacy_html = monitor._stock_row(_legacy_consensus, {})
 check(re.search(r'<td class="sig">(.*?)</td>', _legacy_html, re.S)[1] == _expected_sig
-      and re.search(r'<td class="sym">(.*?)</td>', _legacy_html, re.S)[1].startswith(
-          monitor._signal_lamps(_legacy_consensus))   # 灯统一画在标的名称前面
+      and re.search(r'<td class="sym">(.*?)</td>', _legacy_html, re.S)[1].startswith('TFAILOLD')
+      and 'signal-dot' not in _legacy_html and monitor._signal_lamps(_legacy_consensus) == ''
       and 'lvtag tgt bad' in _legacy_html and 'pur-high' not in _legacy_html
       and 'pur-hit' not in _legacy_html,
       '失效旧共识经过stock_row迁移后仅保留原技术描述与失败灰胶囊')
@@ -734,7 +741,7 @@ check('id="' + monitor._stock_anchor_id('QUOTEMISSING') + '"' in _business_page
               for levels in _business_snap['signal_members'].values() for members in levels.values() for r in members),
       '缺/参考仍在主表，所有指标统计成员均排除')
 
-# 三超卖全覆盖：实际分析→快照→整页，所有分组上/下轨组合红、无轨RSI红。
+# 三超卖：无轨与下轨全组红；上轨持仓/重点黄，其他技术灰且可折叠。
 with _patch.object(monitor, 'global_dca', return_value=None):
     _oversold_items = [row for row, _ in _oversold_rows]
     _oversold_snap = monitor.build_snapshot({}, _oversold_items, {}, group_counts={})
@@ -742,20 +749,39 @@ with _patch.object(monitor, 'global_dca', return_value=None):
 for _row, _side in _oversold_rows:
     _kind = 'rsi' if _side is None else 'boll_rsi'
     _facts = monitor.classify_technical_facts(_row['group'], 0, 3, _side)
-    check(_facts == {'kind': _kind, 'level': 'red', 'foldable': True}
-          and _row['signal_marks'] == [(_kind, 'red')],
-          _row['symbol'] + '纯事实与生产分析同为独占红灯')
+    _gray = _side == '上轨' and _row['group'] not in monitor.BOLL_UP_SIGNAL_GROUPS
+    _color = 'gray' if _gray else 'yellow' if _side == '上轨' else 'red'
+    check(_facts == {'kind': _kind, 'level': _color, 'foldable': True}
+          and _row['signal_marks'] == ([] if _gray else [(_kind, _color)]),
+          _row['symbol'] + '纯事实与生产分析一致，上轨持仓/重点黄、其他技术灰')
     _classes, _fragment = rendered_stock_row(_oversold_page, _row, False)
-    check(_classes == ['red'], _row['symbol'] + '红灯主表可见但不因原红永久保留')
-    check(_row['symbol'] in {m['symbol'] for m in _oversold_snap['signal_members'][_kind]['red']},
+    check(_classes == ['green' if _gray else _color], _row['symbol'] + '主表灯不混淆技术灰与红黄灯')
+    check(_row['symbol'] in {m['symbol'] for m in (_oversold_snap['text_only'] if _gray
+                                                 else _oversold_snap['signal_members'][_kind][_color])},
           _row['symbol'] + '快照统计成员归属正确')
-check(_oversold_snap['summary']['red'] == len(_oversold_items)
-      and _oversold_snap['summary']['yellow'] == 0 and not _oversold_snap['text_only'],
-      '三超卖全组全路径最终红，不进入技术灰名单')
-check(_oversold_snap['signal_counts']['boll_rsi']['red'] == 2 * len(monitor.GROUPS)
+    if _color == 'yellow':
+        _sig = re.search(r'<td class="sig">(.*?)</td>', _fragment, re.S)[1]
+        _sig_plain = _unescape(re.sub(r'<[^>]+>', '', _sig))
+        check(re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', _sig)
+              == [('boll_rsi', 'yellow')]
+              and all(term in _sig_plain for term in ('布林上轨▲', 'RSI 3条 ↓超卖'))
+              and '布林 + RSI → 黄' in _row['signals']
+              and '布林 + RSI → 红' not in _row['signals'],
+              _row['symbol'] + '上轨三反向超卖描述仅组合黄字，不重复单独布林或RSI')
+_oversold_gray_symbols = {row['symbol'] for row, side in _oversold_rows
+                         if side == '上轨' and row['group'] not in monitor.BOLL_UP_SIGNAL_GROUPS}
+_oversold_yellow_symbols = {row['symbol'] for row, side in _oversold_rows
+                           if side == '上轨' and row['group'] in monitor.BOLL_UP_SIGNAL_GROUPS}
+check(_oversold_snap['summary']['red'] == 2 * len(monitor.GROUPS)
+      and _oversold_snap['summary']['yellow'] == len(_oversold_yellow_symbols)
+      and {m['symbol'] for m in _oversold_snap['text_only']} == _oversold_gray_symbols,
+      '三超卖无轨/下轨红、上轨持仓/重点黄、其他上轨仅技术灰')
+check(_oversold_snap['signal_counts']['boll_rsi']['red'] == len(monitor.GROUPS)
+      and _oversold_snap['signal_counts']['boll_rsi']['yellow'] == len(_oversold_yellow_symbols)
+      and {m['symbol'] for m in _oversold_snap['signal_members']['boll_rsi']['yellow']} == _oversold_yellow_symbols
       and _oversold_snap['signal_counts']['rsi']['red'] == len(monitor.GROUPS)
       and _oversold_snap['signal_counts']['boll']['red'] == 0,
-      '有轨三超卖仅组合红，无轨仅RSI红，不重复计布林')
+      '上轨持仓/重点组合统计由红转黄，无轨与下轨不变且不重复计布林')
 
 # STX/NEE 型：技术灰与涨跌红黄全页共存，交集保留最终行灯而非伪装成绿色。
 _business.setUp()
@@ -777,14 +803,28 @@ _group_headers = re.findall(r'<details\b[^>]*\bid="group_[^"]*"[^>]*>\s*<summary
 check(_group_headers and all('stat-badge gray' not in header for header in _group_headers)
       and 'stat-badge gray' in _coexist_page,
       '技术灰数字只在统计面板，不出现在个股和长持仓表头')
-check('.signal-dot{display:inline-block;width:.34em;height:.34em;border-radius:50%;background:currentColor;'
-      'font-size:var(--lamp-size);font-weight:400;margin:0 .875em 0 0;padding:0;vertical-align:.25em;'
-      'color:var(--dim)}' in monitor.PAGE_CSS
+check('signal-dot' not in monitor.PAGE_CSS and 'signal-dot' not in monitor.PAGE_INTERACTION_JS
       and '--lamp-size:14px' in monitor.PAGE_CSS
-      and 'display:inline list-item' not in monitor.PAGE_CSS
-      and '.signal-dot::marker' not in monitor.PAGE_CSS
-      and '.signal-dot::before' not in monitor.PAGE_CSS,
-      '灯画成实心圆点、统一 --lamp-size，不用 inline list-item（Safari/微信不支持会整条丢声明）')
+      and 'display:inline list-item' not in monitor.PAGE_CSS,
+      '多选删除全部圆点CSS与创建节点逻辑，其他灯共用字号和Safari兼容性不变')
+_filter_palette = {'red': '#ff8580', 'yellow': '#f0c674', 'gray': 'var(--text)',
+                   'purple': 'var(--purple)', 'green': 'var(--green)'}
+for _level, _color in _filter_palette.items():
+    _selector = f'#signalCounts .signal-filter-condition[data-signal-level="{_level}"]'
+    check(monitor.PAGE_CSS.count(_selector + '{color:' + _color + '}') == 1,
+          '多选' + _level + '只按自身级别着色一次，不改单选或名称竖条')
+_filter_css = re.sub(r'/\*.*?\*/', '', monitor.PAGE_CSS, flags=re.S)
+_filter_rules = [(selector.strip(), body) for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', _filter_css)
+                 if '.signal-filter-condition' in selector]
+check(len(_filter_rules) >= len(_filter_palette)
+      and all(selector == '#signalCounts .signal-filter-condition'
+              or selector in {f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
+                              for level in _filter_palette}
+              for selector, _ in _filter_rules)
+      and all(not re.search(r'(?:^|;)\s*color\s*:', body)
+              or bool(re.search(r'(?:^|;)\s*color\s*:\s*inherit\s*(?:;|$)', body))
+              for selector, body in _filter_rules if selector == '#signalCounts .signal-filter-condition'),
+      '多选条件CSS仅限统计区域，未定级含财报空级继承描述色且不补伪元素圆点')
 check((_coexist_snap['summary']['red'], _coexist_snap['summary']['yellow']) == (1, 2)
       and {m['symbol']: m['level'] for m in _coexist_snap['text_only']}
       == {'STXY': 'yellow', 'STXR': 'red', 'NEEY': 'yellow'},
@@ -793,13 +833,11 @@ for _row, _color, _kind in zip(_coexist_rows, ('yellow', 'red', 'yellow'), ('rsi
     _classes, _body = rendered_stock_row(_coexist_page, _row, not _row.get('foldable', True))
     _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
     _sym = re.search(r'<td class="sym">(.*?)</td>', _body, re.S)[1]
-    # 灯统一画在标的名称前面（td.sym 开头），描述文字留在 td.sig
-    check(_classes == [_color] and _body.count('signal-dot ' + _color) == 1
-          and _body.count('signal-dot gray') == 1
-          and _body.index('signal-dot ' + _color) < _body.index('signal-dot gray')
-          and _sym.startswith('<span class="signal-dot ' + _color)
-          and 'signal-dot' not in _sig,
-          _row['symbol'] + '主表保留红黄且灯在名称前、描述先红黄后指标灰，不重复灯点')
+    check(_classes == [_color] and 'signal-dot' not in _body
+          and _sym.startswith(_row['symbol'])
+          and re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', _sig)
+          == [('chg', _color), (_kind, 'gray')],
+          _row['symbol'] + '主表零圆点且竖条级别保留，独立描述先红黄后技术灰白字')
     check(next(m['l'] for m in _coexist_data[_kind]['members'] if m['s'] == _row['symbol']) == _color
           and all(_coexist_snap['signal_counts'][kind][level] == 0
                   for kind in ('rsi', 'boll', 'boll_rsi') for level in ('red', 'yellow')),
@@ -822,9 +860,12 @@ for _level, _rsi in ((None, None), ('yellow', 'RSI 2条 ↓超卖（≤35）'),
     check(_technical['kind'] == ('boll_rsi' if _rsi else 'boll')
           and _technical['level'] == (_level or 'gray')
           and _plain + '，' + _tail in _technical['texts']
-          and _html_tail.count('signal-dot') == 1 and _html_tail.count('signal-separator') == 1
+          and 'signal-dot' not in _html_tail and _html_tail.count('signal-separator') == 1
+          and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
+                         r'(?: data-signal-level="([^"]*)")?>', _html_tail)
+          == [('boll_rsi' if _rsi else 'boll', _level or 'gray'), ('vol_ratio', '')]
           and _groups_tail[-1]['kind'] == 'vol_ratio' and _groups_tail[-1]['level'] is None,
-          str(_level) + '连续天数留同一技术指标，一点一次计数，斜线后独立量比无灯')
+          str(_level) + '连续天数留同一指标一次级别，斜线后独立量比无灯灰字')
     check(_tail_row == _before_tail, '尾句恢复不改原始signals/marks')
 check(monitor._description_signals([_tail]) == [_tail]
       and monitor._description_signals(['突破布林上轨▲', _tail]) == ['突破布林上轨▲', _tail]
@@ -857,25 +898,280 @@ _order_body = re.search(r'<tr\b[^>]*\bid="s-orderescape"[^>]*>(.*?)</tr>', _orde
 _order_sig = re.search(r'<td class="sig">(.*?)</td>', _order_body, re.S)[1]
 check(re.findall(r'data-signal-kind="([^"]*)"', _order_sig)
       == ['chg', 'add_price', 'ma', 'amp', 'vol_ratio', 'rsi', '', '', 'target']
-      and [ _order_body.count('signal-dot ' + color) for color in ('red', 'yellow', 'gray', 'purple')]
-      == [2, 3, 1, 1], '全页描述稳定按红黄灰无紫排序，同色依首次出现且均线事实合并一点')
+      and 'signal-dot' not in _order_body
+      and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
+                     r'(?: data-signal-level="([^"]*)")?>', _order_sig)
+      == [('chg', 'red'), ('add_price', 'red'), ('ma', 'yellow'), ('amp', 'yellow'),
+          ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', ''), ('', ''), ('target', 'purple')],
+      '全页零圆点，描述稳定按红黄灰无紫排序，同色依首次出现且均线事实合并一次级别')
 check(all(text in _order_sig for text in ('&lt;b&gt;尾部&lt;/b&gt;', '&lt;img onerror=x&gt;', '&amp; 保留'))
       and '<img' not in _order_sig and '<b>' not in _order_sig,
       '排序聚合后描述仍安全HTML转义')
 _order_member = _order_snap['signal_members']['ma']['yellow'][0]
 _order_stats = _order_page.split('id="signalCounts"', 1)[1].split('id="macroCard"', 1)[0]
-_order_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _order_page)[1]))['ma']['members'][0]['d'][0]
+_order_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _order_page)[1]))['ma']['members'][0]['d'][0]['t']
 for _label, _output in (('主表描述', _order_sig), ('统计区', _order_stats),
                        ('交集详情', _order_filter), ('均线图标', monitor._member_icons(_order_member, 'ma', 'yellow'))):
     check('短均线' in _output and '长均线' in _output
           and not re.search(r'\d+日(?:弱)?均线', _output), _label + '采用事实配置短长名称而非当前反置配置或数字')
 check('现价在长均线上方' in _order_stats and '现价在长均线上方' in _order_filter,
       '均线触及与穿越共存时保留同事实长线现价侧文字')
+_order_filter_data = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _order_page)[1]))
+check(_order_filter_data['chg']['members'][0]['d'][0]['l'] == 'red'
+      and _order_filter_data['ma']['members'][0]['d'][0]['l'] == 'yellow'
+      and _order_filter_data['amp']['members'][0]['d'][0]['l'] == 'yellow'
+      and _order_filter_data['rsi']['members'][0]['d'][0]['l'] == 'gray'
+      and all(_order_filter_data[k]['members'][0]['l'] == 'red' for k in ('chg', 'ma', 'amp', 'rsi')),
+      '全页筛选同股红黄灰事实颜色独立取统计条件，不沿用整股红灯')
+check(all(set(fact) == {'l', 't'} and not re.search(r'灰灯|红灯|黄灯|布林\+RSI', fact['t'])
+          for condition in _order_filter_data.values() for member in condition['members'] for fact in member['d']),
+      '全页紧凑事实均为l/t对象且不含可见灯级文字或组合重复标签')
 check(_order_row == _order_before and _order_snap == _order_snap_before
       and _order_member['ma_settings'] == {'ma_short': 60, 'ma_long': 120}
       and any(f['text'] == '上穿60日弱均线' for f in _order_member['ma_facts'])
       and _order_member['indicators'] == monitor._member_direction_markers(_order_row, 'ma'),
       '展示投影不改内部数字signals、marks、方向markers及快照')
+
+# focus 上轨单条两个方向：实际分析→快照→整页，仅文字灰字可折叠但不计技术灰。
+_business.setUp()
+try:
+    _focus_text_rows = []
+    for _group in ('focus', 'position', 'technology'):
+        for _values, _direction in (([70, 50, 50], '↑超买'), ([35, 50, 50], '↓超卖')):
+            for _chg in (0, 6):
+                _symbol = 'FT' + _group.upper() + ('UP' if _direction == '↑超买' else 'DOWN') + str(_chg)
+                _focus_text_rows.append((_business.analyze(_values, _group, bands=(100, 101, 90),
+                                                          symbol=_symbol, chg=_chg), _direction))
+finally:
+    _business.doCleanups()
+_focus_items = [row for row, _ in _focus_text_rows]
+_focus_before = _copy.deepcopy(_focus_items)
+with _patch.object(monitor, 'global_dca', return_value=None):
+    _focus_snap = monitor.build_snapshot({}, _focus_items, {}, group_counts={})
+    _focus_snap_before = _copy.deepcopy(_focus_snap)
+    _focus_page = monitor.render({}, _focus_items, len(_focus_items), snapshot=_focus_snap)
+_focus_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _focus_page)[1]))
+_focus_card = _focus_page.split('id="group_focus"', 1)[1].split('id="group_technology"', 1)[0]
+_focus_shown, _focus_quiet = _focus_card.split('<details class="quiet-list">', 1)
+for _row, _direction in _focus_text_rows:
+    _keep = _row['group'] == 'position' and _direction == '↓超卖'
+    _classes, _body = rendered_stock_row(_focus_page, _row, _keep)
+    _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
+    _focus_only = _row['group'] == 'focus'
+    _expected_levels = ([('chg', 'red')] if _row['chg'] else []) + [('boll_rsi', '' if _focus_only else 'gray')]
+    check(_classes == ['red' if _row['chg'] else 'green'] and _row['foldable'] == (not _keep)
+          and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
+                         r'(?: data-signal-level="([^"]*)")?>', _sig) == _expected_levels
+          and '布林上轨▲' in _unescape(re.sub(r'<[^>]+>', '', _sig))
+          and 'RSI 1条 ' + _direction in _unescape(re.sub(r'<[^>]+>', '', _sig)),
+          _row['symbol'] + '原方向事实保留，focus仅文字灰字、对照组技术灰白字且不继承涨跌红')
+    if _focus_only:
+        _anchor = 'id="' + monitor._stock_anchor_id(_row['symbol']) + '"'
+        check(_anchor in (_focus_shown if _row['chg'] else _focus_quiet)
+              and _anchor not in (_focus_quiet if _row['chg'] else _focus_shown),
+              _row['symbol'] + '仅文字绿行可折叠，独立涨跌红仍留主表')
+        check(all(member['s'] != _row['symbol'] for kind in ('rsi', 'boll', 'boll_rsi')
+                  for member in _focus_filter.get(kind, {}).get('members', [])),
+              _row['symbol'] + '不进入任何技术灰筛选名单')
+check({row['symbol'] for row in _focus_snap['text_only']}
+      == {row['symbol'] for row in _focus_items if row['group'] != 'focus'}
+      and _focus_snap['signal_counts']['chg']['red'] == 6
+      and _focus_snap['summary']['red'] == 6,
+      'focus两方向不计灰，其他组技术灰及六个独立涨跌红完整保留')
+check(_focus_items == _focus_before and _focus_snap == _focus_snap_before,
+      '仅文字全页渲染不突变事实或快照')
+for _page_label, _page in (('基础页', html), ('混合红黄灰无灯页', _order_page), ('focus仅文字页', _focus_page)):
+    _tables = re.findall(r'<table class="stk">.*?</table>', _page, re.S)
+    check(bool(_tables) and all('signal-dot' not in table for table in _tables),
+          _page_label + '全部个股表含无异动折叠表均零圆点')
+check('.signal-item{color:var(--dim)}' in _focus_page
+      and '.signal-item[data-signal-level="gray"]{color:var(--text)}' in _focus_page,
+      '整页保留无灯灰字和技术灰白字两条独立CSS')
+_rules_table = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', _focus_page, re.S)[0]
+for _condition, _position in (('布林上轨▲ + RSI 1条 ↑超买', '灰灯'),
+                             ('布林上轨▲ + RSI 1条 ↓超卖（反）', '灰灯')):
+    _rule_rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', _rules_table, re.S)
+                  if '<td' in row and _unescape(re.sub(r'<[^>]+>', '',
+                      re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1])) == _condition]
+    check(len(_rule_rows) == 1, _condition + '全页规则行唯一')
+    _cells = re.findall(r'<td\b([^>]*)>(.*?)</td>', _rule_rows[0] if _rule_rows else '', re.S)
+    check([_unescape(re.sub(r'<[^>]+>', '', text)) for _, text in _cells]
+          == [_condition, _position, '仅文字', '无提示']
+          and _cells[2][0] == '' and '<td>仅文字</td>' in _rule_rows[0],
+          _condition + '全页规则重点列仅文字且无灰灯样式')
+
+# 四项授权全页专项：独立涨跌灯不改变技术描述、统计归属或折叠资格。
+_business.setUp()
+try:
+    _four_cases = []
+    for _group in (g['item_group'] for g in monitor.GROUPS):
+        _active = _group in monitor.BOLL_UP_SIGNAL_GROUPS
+        _cases = [([50, 50, 50], (100, 110, 99), 'boll', 'gray', _group != 'position'),
+                  ([70, 70, 70], (100, 110, 90), 'rsi',
+                   'yellow' if _group == 'position' else 'gray', _group != 'focus'),
+                  ([35, 35, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
+                  ([70, 35, 35], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
+                  ([70, 70, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else 'gray', _group != 'focus'),
+                  ([70, 70, 35], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else 'gray', _group != 'focus'),
+                  ([35, 35, 35], (100, 101, 90), 'boll_rsi', 'yellow' if _active else 'gray', True)]
+        _cases += [([35, 50, 50], (100, 110, 90), 'rsi', '', True),
+                   ([70, 35, 50], (100, 110, 90), 'rsi', '', True),
+                   ([70, 70, 50], (100, 110, 90), 'rsi', '' if _group == 'focus' else 'gray', True),
+                   ([70, 70, 35], (100, 110, 90), 'rsi', '' if _group == 'focus' else 'gray', True),
+                   ([70, 35, 35], (100, 110, 90), 'rsi', 'gray', True),
+                   ([35, 50, 50], (100, 101, 90), 'boll_rsi', '' if _group == 'focus' else 'gray', _group != 'position'),
+                   ([70, 35, 50], (100, 101, 90), 'boll_rsi', 'gray', _group != 'position')]
+        for _case_index, (_values, _bands, _kind, _technical_level, _foldable) in enumerate(_cases):
+            for _chg in (0, 3, 6):
+                _symbol = 'AUTH' + _group.upper() + str(_case_index) + str(_chg)
+                _row = _business.analyze(_values, _group, bands=_bands, chg=_chg, symbol=_symbol)
+                _overall = ('red' if _technical_level == 'red' or _chg == 6 else 'yellow'
+                            if _technical_level == 'yellow' or _chg else 'green')
+                _four_cases.append((_row, _kind, _technical_level, _foldable, _overall))
+    # 双轨保持双方事实：较负距离优先、相等上轨；不得用未选下轨补灯或补灰。
+    for _group in (g['item_group'] for g in monitor.GROUPS if g['item_group'] not in monitor.BOLL_UP_SIGNAL_GROUPS):
+        for _low_n in (2, 3):
+            for _case_index, (_high, _low, _side) in enumerate(((120, 89, '上轨'), (111, 80, '下轨'),
+                                                               (120, 80, '下轨'), (110, 90, '上轨'))):
+                _values = [35] * _low_n + [50] * (3 - _low_n)
+                _symbol = 'DUAUTH' + _group.upper() + str(_low_n) + str(_case_index)
+                _row = _business.analyze(_values, _group, high=_high, low=_low, symbol=_symbol)
+                _technical_level = ('red' if _low_n == 3 else 'yellow') if _side == '下轨' else ('gray' if _low_n == 3 else '')
+                _overall = _technical_level if _technical_level in ('red', 'yellow') else 'green'
+                check('布林' + _side in _row['boll_alert_text']
+                      and all(any('布林' + side in text for text in _row['signals']) for side in ('上轨', '下轨')),
+                      _symbol + '带符号距离选轨且保留双轨事实')
+                _four_cases.append((_row, 'boll_rsi', _technical_level, True, _overall))
+finally:
+    _business.doCleanups()
+_four_items = [row for row, *_ in _four_cases]
+_four_before = _copy.deepcopy(_four_items)
+with _patch.object(monitor, 'global_dca', return_value=None):
+    _four_snap = monitor.build_snapshot({}, _four_items, {}, group_counts={})
+    _four_snap_before = _copy.deepcopy(_four_snap)
+    _four_page = monitor.render({}, _four_items, len(_four_items), snapshot=_four_snap)
+_four_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _four_page)[1]))
+_four_gray = {row['symbol'] for row, _, level, _, _ in _four_cases if level == 'gray'}
+_four_quiet_tables = re.findall(r'<details class="quiet-list">.*?<table class="stk">(.*?)</table>', _four_page, re.S)
+_four_quiet_html = ''.join(_four_quiet_tables)
+for _row, _kind, _technical_level, _foldable, _overall in _four_cases:
+    _classes, _body = rendered_stock_row(_four_page, _row, not _foldable)
+    _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
+    _levels = re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
+                        r'(?: data-signal-level="([^"]*)")?>', _sig)
+    # 合成输入为0/3/6%，重算后有浮点误差；同色黄灯保留先出现的技术描述，涨跌红优先。
+    _expected = [(_kind, _technical_level)]
+    _expected += [('chg', 'red' if round(_row['chg']) == 6 else 'yellow')] if _row['chg'] else []
+    _expected.sort(key=lambda pair: ({'red': 0, 'yellow': 1, 'gray': 2, '': 3}[pair[1]],
+                                     0 if pair == ('chg', 'red') else 1))
+    check(_classes == [_overall] and _row['foldable'] == _foldable and _levels == _expected,
+          _row['symbol'] + '技术灰白字、仅文字灰字、独立红黄和主行竖条各自保留')
+    _anchor = 'id="' + monitor._stock_anchor_id(_row['symbol']) + '"'
+    check((_anchor in _four_quiet_html) == (_foldable and _overall == 'green'),
+          _row['symbol'] + '可折叠绿行进无异动；不折叠灰灯和独立红黄留主表')
+    _members = {m['s']: m for m in _four_filter.get(_kind, {}).get('members', [])}
+    check((_row['symbol'] in _members) == bool(_technical_level),
+          _row['symbol'] + '仅文字不统计，技术灰或红黄进对应筛选名单')
+    if _technical_level:
+        check(_members.get(_row['symbol'], {}).get('l') == _overall,
+              _row['symbol'] + '统计交集保留最终行灯而非强制降绿')
+    check(all(_row['symbol'] not in {m['s'] for m in _four_filter.get(kind, {}).get('members', [])}
+              for kind in ('rsi', 'boll', 'boll_rsi') if kind != _kind),
+          _row['symbol'] + '技术归属互斥，不重复单独布林或RSI')
+check({m['symbol'] for m in _four_snap['text_only']} == _four_gray,
+      '四项授权全页灰名单准确，其他上轨两超卖及混合一超买不误计灰')
+for _kind in ('rsi', 'boll', 'boll_rsi'):
+    for _color in ('red', 'yellow'):
+        _expected_count = sum(kind == _kind and level == _color for _, kind, level, _, _ in _four_cases)
+        check(_four_snap['signal_counts'][_kind][_color] == _expected_count,
+              _kind + _color + '授权四项仅迁移对应技术统计，不继承其他灯')
+for _color in ('red', 'yellow'):
+    check(_four_snap['summary'][_color] == sum(overall == _color for *_, overall in _four_cases),
+          _color + '总计按最终灯去重')
+check(_four_items == _four_before and _four_snap == _four_snap_before,
+      '四项授权全页渲染不突变分析结果或快照')
+_four_rules = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', _four_page, re.S)[0]
+for _condition, _expected in (
+        ('布林下轨▼ + RSI 0条', ['灰灯', '灰灯（折）']),
+        ('RSI 3条 ↑超买', ['黄灯', '灰灯', '灰灯（折）']),
+        ('布林上轨▲ + RSI 2条 ↑超买', ['黄灯', '灰灯', '仅文字']),
+        ('布林上轨▲ + RSI 2条 ↓超卖（反）', ['黄灯', '灰灯', '仅文字']),
+        ('布林上轨▲ + RSI 3条 ↓超卖（反）', ['黄灯', '黄灯', '灰灯（折）']),
+        ('布林上轨▲ + RSI 1条 ↓超卖（反）', ['灰灯', '仅文字', '无提示']),
+        ('RSI 2条 ↑超买', ['灰灯', '仅文字', '无提示']),
+        ('RSI 1条 ↓超卖', ['仅文字'])):
+    _rule_rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', _four_rules, re.S)
+                  if '<td' in row and _unescape(re.sub(r'<[^>]+>', '',
+                      re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1])) == _condition]
+    check(len(_rule_rows) == 1 and [_unescape(re.sub(r'<[^>]+>', '', text)) for text in
+          re.findall(r'<td\b[^>]*>(.*?)</td>', _rule_rows[0] if _rule_rows else '', re.S)] == [_condition] + _expected,
+          _condition + '全页规则与实际分类一致，持仓重点上轨三反向超卖均黄')
+
+# 振幅专项不复用已隔离振幅的技术fixture：真实分析→快照→灰列/白字/独立灯。
+from tests.mm_test_groups import TestAmplitudeChain as _AmplitudeChain
+_amp_engine = _AmplitudeChain()
+_amp_engine.setUp()
+try:
+    _amp_rows = [_amp_engine.analyze(symbol='AMPUP', prev=99, high=102, low=99),
+                 _amp_engine.analyze(symbol='AMPDOWN', group='healthcare', prev=101, high=101, low=98),
+                 _amp_engine.analyze(symbol='AMPZERO', group='index_funds', high=100, low=100),
+                 _amp_engine.analyze(symbol='AMPDUAL', values=(70, 70, 50)),
+                 _amp_engine.analyze(symbol='AMPCOMBO', values=(35, 35, 35), bands=(100, 110, 99)),
+                 _amp_engine.analyze(symbol='AMPSTACK', prev=100 / 1.06, values=(70, 50, 50),
+                                     bands=(100, 110, 99), cfg={'trigger': 100, 'target': 190}, ratio=3)]
+    _amp_input_before = _copy.deepcopy(_amp_rows)
+    _amp_snap = monitor.build_snapshot({}, _amp_rows, {}, group_counts={})
+    _amp_snap_before = _copy.deepcopy(_amp_snap)
+    _amp_page = monitor.render({}, _amp_rows, len(_amp_rows), snapshot=_amp_snap)
+finally:
+    _amp_engine.doCleanups()
+_amp_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _amp_page)[1]))
+_amp_gray_members = [m for m in _amp_snap['text_only'] if m['kind'] == 'amp']
+check(len(_amp_gray_members) == 6 and len(_amp_snap['text_only']) == 8
+      and set(m['symbol'] for m in _amp_gray_members) == {r['symbol'] for r in _amp_rows},
+      '真实振幅全链：6只振幅灰加2项技术灰，不按kind重复计总数')
+_amp_stats = _amp_page.split('id="signalCounts"', 1)[1].split('id="group_positions"', 1)[0]
+check('aria-label="灰 6 项"' in _amp_stats and 'aria-label="红 2 项"' in _amp_stats,
+      '总灰按身份并集计6，独立组合红和复合红仍各计一次')
+_amp_stat_row = re.search(r'<tr><td><button[^>]*data-kind="amp".*?</tr>', _amp_stats, re.S)[0]
+check([_unescape(re.sub(r'<[^>]+>', '', cell)) for cell in
+       re.findall(r'<td\b[^>]*>(.*?)</td>', _amp_stat_row, re.S)] == ['振幅', '—', '—', '6'],
+      '振幅真实统计表精确列序：红黄空、灰6')
+_amp_panel_id = 'signal-members-gray-' + __import__('hashlib').sha256(b'amp').hexdigest()
+_amp_panel = re.search(r'<div class="signal-members-panel tone-gray" id="' + _amp_panel_id
+                       + r'" hidden>(.*?)</div>(?=</td>|<div class="signal-members-panel)', _amp_stats, re.S)[1]
+check(all(title in _amp_panel for title in ('<h5><span class="grp-arrow">▲</span> 上涨</h5>',
+                                          '<h5><span class="grp-arrow">▼</span> 下跌</h5>', '<h5>平盘</h5>'))
+      and _amp_panel.index('上涨</h5>') < _amp_panel.index('下跌</h5>') < _amp_panel.index('平盘</h5>'),
+      '振幅灰名单复用涨/跌/平分框，次序与红黄名单一致')
+check(_amp_panel.count('<li>') == 6 and '振幅 0.0%' in _amp_panel
+      and all(m['metric'] in _unescape(re.sub(r'<[^>]+>', '', _amp_panel)) for m in _amp_gray_members)
+      and not re.search(r'tone-red|tone-yellow|signal-dot', _amp_panel),
+      '灰名单保留所有数值含0，灯灰且不继承同股其它红黄')
+for _row in _amp_rows:
+    _classes, _body = rendered_stock_row(_amp_page, _row, True)
+    _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
+    _kinds_levels = re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', _sig)
+    _expected_classes = [_row['level']] + (['pur', 'pur-high'] if _row['purple'] else [])
+    check(_row['foldable'] is False and _classes == _expected_classes
+          and _kinds_levels.count(('amp', 'gray')) == 1 and 'signal-dot' not in _sig,
+          _row['symbol'] + '振幅灰描述白字、不折叠，整体灯由独立指标决定')
+    _record = next(m for m in _amp_filter['amp']['members'] if m['s'] == _row['symbol'])
+    _metric = next(m['metric'] for m in _amp_gray_members if m['symbol'] == _row['symbol'])
+    check(_record['l'] == _row['level'] and _record['d'] == [{'l': 'gray', 't': _metric}],
+          _row['symbol'] + '振幅灰筛选保留最终行灯但事实自身始终灰，不重复指标标签')
+check('data-signal-kind="boll_rsi" data-signal-level="red"' in monitor._signals_html(_amp_rows[4])
+      and [m['kind'] for m in monitor.text_only_members([_amp_rows[4]])] == ['amp']
+      and _amp_snap['signal_counts']['boll_rsi']['red'] == 1
+      and all(_amp_snap['signal_counts'][k][c] == 0 for k in ('boll', 'rsi') for c in ('red', 'yellow')),
+      'amp与真实组合红并存：只禁技术灰、不禁振幅灰，也不重复单独布林RSI')
+check(all((kind, 'red') in _amp_rows[-1]['signal_marks'] for kind in ('chg', 'add_price', 'vol_ratio'))
+      and _amp_rows[-1]['purple']
+      and [m['kind'] for m in monitor.text_only_members([_amp_rows[-1]])] == ['amp', 'boll_rsi'],
+      '振幅灰+技术灰+涨跌/加仓/量比红+目标紫各自独立')
+check('.signal-item[data-signal-level="gray"]{color:var(--text)}' in monitor.PAGE_CSS
+      and _amp_rows == _amp_input_before and _amp_snap == _amp_snap_before,
+      '生产灰描述使用白字且完整渲染不突变分析或快照')
 
 # 显式 --chrome 才启动全新隔离实例；HTML 经 CDP 放入 about:blank 内存页。
 if '--chrome' in sys.argv:

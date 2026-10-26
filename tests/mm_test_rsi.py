@@ -1,6 +1,6 @@
-"""离线回归：布林+RSI与单独RSI互斥；单独三超卖全组红、三超买持仓/重点黄。
+"""离线回归：布林+RSI与单独RSI互斥；单独三超卖全组红、三超买仅持仓黄。
 
-组合按选中轨道及分组判灯；单条单独RSI无提醒，技术文字仅在最终绿灯时计灰。
+组合按选中轨道及分组判灯；上轨三反向超卖持仓/重点黄，技术灰可与独立涨跌灯共存。
 """
 import os
 import sys
@@ -33,7 +33,8 @@ class TestRSI(unittest.TestCase):
                 patch.object(monitor, 'calc_rsi', side_effect=values) as rsi, \
                 patch.object(monitor, 'vol_profile', return_value=('mid', sigma)), \
                 patch.object(monitor, 'boll', return_value=bands), \
-                patch.object(monitor, 'boll_streak', return_value=streak or {'up': 0, 'dn': 0}):
+                patch.object(monitor, 'boll_streak', return_value=streak or {'up': 0, 'dn': 0}), \
+                patch.object(monitor, '_rule_amplitude', side_effect=lambda al, x: setattr(x, 'amp', None)):
             result = monitor.analyze_symbol('TEST', cfg or {}, data or neutral_data(), group=group)
             self.assertEqual([call.args[1] for call in rsi.call_args_list], [6, 12, 24])
         return result
@@ -41,10 +42,10 @@ class TestRSI(unittest.TestCase):
     # ---------------------------------------------------------------- 单独 RSI 分组判灯
 
     def test_standalone_rsi_boundaries_and_lights(self):
-        """单条无提醒、两条文字灰、三超卖红、三超买持仓黄，含无效周期边界。"""
+        """单超卖仅文字、单超买无提醒、两条按组判、三超卖红、三超买持仓黄。"""
         cases = [([50, 50, 50], 0), ([70, 69.999, 50], 0), ([36, 36.001, 50], 0),
                  ([70, 70, 50], 1), ([80, 70, 50], 1), ([35, 35, 50], 1),
-                 ([70, 70, 70], 1), ([35, 35, 35], 1), ([80, 20, 50], 0),
+                 ([70, 70, 70], 1), ([35, 35, 35], 1), ([80, 20, 50], 1),
                  ([None, 70, 70], 1), ([None, 34, 34], 1), ([None, None, 80], 0),
                  ([float('nan'), 50, 80], 0)]
         for values, expected_texts in cases:
@@ -58,6 +59,40 @@ class TestRSI(unittest.TestCase):
                 for text in texts:
                     self.assertNotIn('RSI6=', text)
                 self.assertEqual(set(detail['rsi']), {6, 12, 24})
+
+    def test_single_oversold_text_uses_configured_boundary_and_ignores_invalid_periods(self):
+        for group in (g['item_group'] for g in monitor.GROUPS):
+            for invalid in (None, float('nan'), float('inf'), -float('inf')):
+                for index in range(3):
+                    values = [invalid, invalid, invalid]
+                    values[index] = 28
+                    with self.subTest(group=group, invalid=invalid, index=index), \
+                            patch.dict(monitor.S, {'rsi_low': 28, 'rsi_high': 82}):
+                        level, signals, detail = self.analyze(values, group=group)
+                        self.assertEqual((level, detail['foldable'], detail['signal_marks']), ('green', True, []))
+                        self.assertEqual(signals, ['RSI 1条 ↓超卖（≤28）'])
+                        self.assertEqual(monitor.text_only_members([detail]), [])
+                        self.assertEqual(monitor._signal_description_groups(detail),
+                                         [{'kind': 'rsi', 'level': None, 'texts': signals}])
+                        values[index] = 28.001
+                        self.assertEqual(self.analyze(values, group=group)[1], [])
+                        values[index] = 82
+                        self.assertEqual(self.analyze(values, group=group)[1], [])
+
+    def test_focus_two_overbought_with_invalid_or_opposite_period_stays_unlit(self):
+        for third in (50, 28, None, float('nan'), float('inf'), -float('inf')):
+            for index in range(3):
+                values = [82, 82, 82]
+                values[index] = third
+                with self.subTest(third=third, index=index), \
+                        patch.dict(monitor.S, {'rsi_low': 28, 'rsi_high': 82}):
+                    level, signals, detail = self.analyze(values, group='focus')
+                    expected = ['RSI 2条 ↑超买（≥82）'] + (['RSI 1条 ↓超卖（≤28）'] if third == 28 else [])
+                    self.assertEqual(signals, expected)
+                    self.assertEqual((level, detail['foldable'], detail['signal_marks']), ('green', True, []))
+                    self.assertEqual(monitor.text_only_members([detail]), [])
+                    self.assertEqual(monitor._signal_description_groups(detail),
+                                     [{'kind': 'rsi', 'level': None, 'texts': expected}])
 
     def test_rsi_text_shows_boundary_and_count_only(self):
         level, signals, _ = self.analyze([80, 75, 50])
@@ -106,15 +141,24 @@ class TestRSI(unittest.TestCase):
         self.assertEqual(three['boll_rsi_hits'], 3)
 
     def test_direction_mismatch_respects_explicit_upper_and_lower_rules(self):
-        """上轨三超卖全组组合红；下轨三超买仍反向组合黄，不重复单独RSI。"""
+        """上轨三超卖持仓/重点黄，其他技术灰可折叠；下轨三超买仍反向黄。"""
         for group in (g['item_group'] for g in monitor.GROUPS):
             with self.subTest(group=group):
                 level, signals, detail = self.analyze([20, 25, 30], bands=(100, 101, 90), group=group)
-                self.assertEqual(level, 'red')
-                self.assertEqual(detail['signal_marks'], [('boll_rsi', 'red')])
-                self.assertEqual(detail['boll_rsi_direction'], '上轨（RSI超卖，方向不一致）')
-                self.assertEqual(detail['boll_rsi_hits'], 3)
-                self.assertEqual(monitor.text_only_members([detail]), [])
+                active = group in monitor.BOLL_UP_SIGNAL_GROUPS
+                self.assertEqual(level, 'yellow' if active else 'green')
+                self.assertEqual(detail['signal_marks'], [('boll_rsi', 'yellow')] if active else [])
+                self.assertTrue(detail['foldable'])
+                if active:
+                    self.assertEqual(detail['boll_rsi_direction'], '上轨（RSI超卖，方向不一致）')
+                    self.assertEqual(detail['boll_rsi_hits'], 3)
+                    self.assertIn('布林 + RSI → 黄', signals)
+                    self.assertNotIn('布林 + RSI → 红', signals)
+                    self.assertEqual(monitor.text_only_members([detail]), [])
+                else:
+                    members = monitor.text_only_members([detail])
+                    self.assertEqual([(m['kind'], m['side'], m['rsi_n'], m['rsi_side']) for m in members],
+                                     [('boll_rsi', '上轨', 3, '超卖')])
         level, signals, detail = self.analyze([80, 85, 90], bands=(100, 110, 99))
         self.assertEqual(level, 'yellow')
         self.assertEqual(detail['boll_rsi_direction'], '下轨（RSI超买，方向不一致）')
@@ -127,8 +171,11 @@ class TestRSI(unittest.TestCase):
                 active = group in ('position', 'focus')
                 # 上轨 + 2 条超买
                 level, signals, detail = self.analyze([80, 80, 50], bands=(100, 101, 90), group=group)
-                self.assertEqual(level, 'yellow' if active else 'green')
-                self.assertEqual(('boll_rsi', 'yellow') in detail['signal_marks'], active)
+                self.assertEqual(level, 'yellow' if group == 'position' else 'green')
+                self.assertEqual(('boll_rsi', 'yellow') in detail['signal_marks'], group == 'position')
+                self.assertEqual(detail['foldable'], group != 'focus')
+                if group == 'focus':
+                    self.assertEqual(monitor.text_only_members([detail])[0]['kind'], 'boll_rsi')
                 # 状态文字任何分组都要显示
                 self.assertTrue(any('布林上轨' in s for s in signals), signals)
                 # 上轨 + 3 条超买：其他分组照样只展示，不参与灯级
@@ -172,9 +219,11 @@ class TestRSI(unittest.TestCase):
 
     def test_long_position_only_applies_to_positions(self):
         """同标的长持仓标记只在持仓组生效；重点组不看 hold。"""
-        level, _, _ = self.analyze([80, 80, 50], cfg={'hold': 'long'}, bands=(100, 101, 90),
-                                   group='focus')
-        self.assertEqual(level, 'yellow')
+        level, _, detail = self.analyze([80, 80, 50], cfg={'hold': 'long'}, bands=(100, 101, 90),
+                                        group='focus')
+        self.assertEqual(level, 'green')
+        self.assertFalse(detail['foldable'])
+        self.assertEqual(monitor.text_only_members([detail])[0]['kind'], 'boll_rsi')
 
     # ---------------------------------------------------------------- 回归护栏
 
