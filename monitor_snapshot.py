@@ -211,26 +211,21 @@ class SnapshotBuilder:
                         if self._context._TEXT_RSI_RE.match(t) or t.startswith(self._context._TEXT_BOLL_PREFIX)]
             detail = re.split(r"（", pool[0])[0].strip() if pool else ""
             rsi_texts = [t for t in texts if self._context._TEXT_RSI_RE.match(t)]
-            if kind == "rsi" and d.get("group") == "focus" and any(
-                    re.match(r"^RSI 2条\s*[↑↓]?超买", t) for t in rsi_texts):
-                continue  # 重点单独两条超买仅文字，含反向单条事实时也不计灰。
             rsi_main = " / ".join(dict.fromkeys(re.split(r"（", t)[0].strip() for t in rsi_texts))
             if kind == "boll_rsi" and rsi_main:
                 detail = f"{detail} · {rsi_main}" if detail else rsi_main
             elif kind == "rsi":
                 detail = rsi_main
             boll_text = next((t for t in texts if t.startswith(self._context._TEXT_BOLL_PREFIX)), "")
-            # 上轨仅文字规则不计技术灰；不借双轨另一侧改归。
-            if "上轨" in boll_text and kind == "boll_rsi":
-                hits = {"超买": 0, "超卖": 0}
-                for text in rsi_texts:
-                    for match in re.finditer(r"([123])条\s*[↑↓]?(超买|超卖)", text):
-                        hits[match[2]] = max(hits[match[2]], int(match[1]))
-                if (d.get("group") == "focus" and sum(hits.values()) == 1
-                        or d.get("group") not in self._context.BOLL_UP_SIGNAL_GROUPS and hits["超卖"] == 2):
-                    continue
-            # 非持仓零条上轨被限制后，不能借保留的另一轨事实改归下轨灰灯。
-            if kind == "boll" and "上轨" in boll_text and d.get("group") != "position":
+            # 灰统计只接受共享分类器确认的技术灰，不再把“有技术文字且无红黄”当灰。
+            # 兼容旧快照时从已保存的事实读条数；双轨仍用已选轨，不借另一轨补灯。
+            hits = {"超买": 0, "超卖": 0}
+            for text in rsi_texts:
+                for match in re.finditer(r"([123])条\s*[↑↓]?(超买|超卖)", text):
+                    hits[match[2]] = max(hits[match[2]], int(match[1]))
+            side = "上轨" if "上轨" in boll_text else "下轨" if "下轨" in boll_text else None
+            facts = self._context.classify_technical_facts(d.get("group"), hits["超买"], hits["超卖"], side)
+            if facts["level"] != "gray" or facts["kind"] != kind:
                 continue
             rsi_match = max((self._context._TEXT_RSI_RE.match(t) for t in rsi_texts),
                             key=lambda match: int(match.group(0)[4]), default=None)

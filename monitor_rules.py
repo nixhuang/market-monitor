@@ -406,7 +406,7 @@ class RuleEngine:
         active_up = group in self._context.BOLL_UP_SIGNAL_GROUPS
         count = max(high_hits, low_hits)
         if selected_side is None:
-            if count < 2 or group == "focus" and high_hits == 2:
+            if count < 2 or group != "position" and high_hits == 2:
                 return {"kind": None, "level": "green", "foldable": True}
             if group == "focus" and high_hits == 3:
                 return {"kind": "rsi", "level": "gray", "foldable": False}
@@ -415,9 +415,11 @@ class RuleEngine:
         up = selected_side == "上轨"
         if up and group == "focus" and high_hits + low_hits == 1:
             return {"kind": None, "level": "green", "foldable": True}
-        if up and not active_up and low_hits >= 2:
-            return {"kind": None if low_hits == 2 else "boll_rsi",
-                    "level": "green" if low_hits == 2 else "gray", "foldable": True}
+        # 其他组上轨1条无提示、2条仅文字；正向/反向都不计技术灰。
+        if up and not active_up and count in (1, 2):
+            return {"kind": None, "level": "green", "foldable": True}
+        if up and not active_up and low_hits == 3:
+            return {"kind": "boll_rsi", "level": "gray", "foldable": True}
         if count == 0:
             if up and group != "position":
                 return {"kind": None, "level": "green", "foldable": True}

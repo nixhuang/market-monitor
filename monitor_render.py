@@ -562,11 +562,9 @@ class PageRenderer:
         parts = []
         for group in self._context._signal_description_groups(d):
             kind, level, texts = group["kind"], group["level"], group["texts"]
-            label = self._context._SIGNAL_DESCRIPTION_LABELS.get(kind, "")
-            # RSI/量比等名称已在原事实开头；组合名称仅用于统计，不前置到个股描述。
-            prefix = label + " " if label and not texts[0].startswith(label) and kind not in ("boll_rsi", "vol_ratio", "amp", "low52", "add_price", "reduce_price", "target") else ""
+            # 个股描述直接展示事实，不额外前置指标名称；统计分类标签保持原样。
             separator = " · " if kind == "boll_rsi" else "，"
-            display = prefix + separator.join(texts)
+            display = separator.join(texts)
             if kind == "boll_rsi":
                 selected = str(d.get("boll_alert_text") or next((text for text in texts if "布林" in text), ""))
                 side = "上轨" if "上轨" in selected else "下轨" if "下轨" in selected else ""

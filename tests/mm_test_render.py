@@ -829,8 +829,8 @@ check(len(_filter_rules) >= len(_filter_palette)
       '多选条件CSS仅限统计区域，未定级含财报空级继承描述色且不补伪元素圆点')
 check((_coexist_snap['summary']['red'], _coexist_snap['summary']['yellow']) == (1, 2)
       and {m['symbol']: m['level'] for m in _coexist_snap['text_only']}
-      == {'STXY': 'yellow', 'STXR': 'red', 'NEEY': 'yellow'},
-      '技术灰三个成员携带最终红黄行灯，红黄汇总不变')
+      == {'STXR': 'red'},
+      '只保留合法两超卖技术灰，其他组两超买及上轨单超买不计灰，独立红黄汇总不变')
 for _row, _color, _kind in zip(_coexist_rows, ('yellow', 'red', 'yellow'), ('rsi', 'rsi', 'boll_rsi')):
     _classes, _body = rendered_stock_row(_coexist_page, _row, not _row.get('foldable', True))
     _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
@@ -838,12 +838,16 @@ for _row, _color, _kind in zip(_coexist_rows, ('yellow', 'red', 'yellow'), ('rsi
     check(_classes == [_color] and 'signal-dot' not in _body
           and _sym.startswith(_row['symbol'])
           and re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', _sig)
-          == [('chg', _color), (_kind, 'gray')],
-          _row['symbol'] + '主表零圆点且竖条级别保留，独立描述先红黄后技术灰白字')
-    check(next(m['l'] for m in _coexist_data[_kind]['members'] if m['s'] == _row['symbol']) == _color
+          == [('chg', _color)] + ([(_kind, 'gray')] if _row['symbol'] == 'STXR' else [])
+          and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
+                         r'(?: data-signal-level="([^"]*)")?>', _sig)
+          == [('chg', _color), (_kind, 'gray' if _row['symbol'] == 'STXR' else '')],
+          _row['symbol'] + '主表独立红黄保留，合法技术灰白字，无灯技术仅文字')
+    check([m['l'] for m in _coexist_data.get(_kind, {}).get('members', []) if m['s'] == _row['symbol']]
+          == ([_color] if _row['symbol'] == 'STXR' else [])
           and all(_coexist_snap['signal_counts'][kind][level] == 0
                   for kind in ('rsi', 'boll', 'boll_rsi') for level in ('red', 'yellow')),
-          _row['symbol'] + '指标灰筛选l不降成green，单独和组合技术统计不重复')
+          _row['symbol'] + '灰名单仅含规则允许项，独立行灯不制造技术灰或重复技术统计')
 check(_coexist_rows == _coexist_before and _coexist_snap == _coexist_snap_before,
       '技术灰共存全页渲染不突变输入与快照')
 
@@ -881,21 +885,47 @@ _ma_inline.update(signals=['上穿50日均线 / 日内触及200日均线，现�
 check('signal-separator' not in _row_signals(_ma_inline)
       and ' / ' not in _row_signals(_ma_inline), '同一均线指标内部合并事实用逗号不冒充切指标')
 
+# 个股描述不自动补指标标签：单独布林、组合、均线、异动与RSI统一直接展示事实。
+for _kind, _signals, _marks, _expected in (
+        ('boll', ['逼近布林上轨▲'], [], '逼近布林上轨▲'),
+        ('boll', ['跌破布林下轨▼（盘中触及 66.33）', '连续第4日贴近下轨（其中2日穿越）'], [],
+         '跌破布林下轨▼（盘中触及 66.33），连续第4日贴近下轨（其中2日穿越）'),
+        ('boll_rsi', ['跌破布林下轨▼（盘中触及 66.33）', '连续第4日贴近下轨（其中2日穿越）',
+                      'RSI 1条 ↓超卖（≤35）'], [],
+         '跌破布林下轨▼（盘中触及 66.33），连续第4日贴近下轨（其中2日穿越） · RSI 1条 ↓超卖（≤35）'),
+        ('ma', ['日内触及120日均线 ±1%区间'], [('ma_band', 'yellow')], '触及长均线 ±1%区间'),
+        ('ma', ['上穿60日弱均线'], [('ma_cross', 'yellow')], '上穿短均线'),
+        ('chg', ['异动 -21.9%'], [('chg', 'red')], '异动 -21.9%'),
+        ('rsi', ['RSI 1条 ↓超卖（≤35）'], [], 'RSI 1条 ↓超卖（≤35）')):
+    _copy_row = item('DIRECTFACT', 'technology', 'green')
+    _copy_row.update(signals=_signals, signal_marks=_marks, ma_settings={'ma_short': 60, 'ma_long': 120})
+    _copy_before = _copy.deepcopy(_copy_row)
+    _copy_html = _row_signals(_copy_row)
+    _copy_plain = _unescape(re.sub(r'<[^>]+>', '', _copy_html))
+    check(_copy_plain == _expected and f'data-signal-kind="{_kind}"' in _copy_html,
+          _kind + '个股描述直接展示完整事实，不自动添加指标名称')
+    check(_copy_row == _copy_before, _kind + '去标签不修改原始事实、判灯及配置')
+
 # 描述红黄灰无紫稳定排序并安全转义，均线只投影展示，原数字事实与marks保留。
 _order_row = item('ORDERESCAPE', 'technology', 'red')
 _order_row.update(signals=['手填目标价说明 <b>尾部</b>', '无灯说明 <img onerror=x>',
-    'RSI 2条 ↑超买（≥70）', '日内触及120日均线 ±1%区间', '上穿60日弱均线',
+    'RSI 2条 ↓超卖（≤35）', '日内触及120日均线 ±1%区间', '上穿60日弱均线',
     '振幅 6%', '量比 2.8x', '异动 -12.1%', '距加仓价 90 还差 1%', '另条说明 & 保留'],
     signal_marks=[('target', 'purple'), ('ma_band', 'yellow'), ('ma_cross', 'yellow'),
                   ('amp', 'yellow'), ('vol_ratio', 'yellow'), ('chg', 'red'), ('add_price', 'red')],
     ma_band_direction='up', ma_settings={'ma_short': 60, 'ma_long': 120}, trigger=90,
     target=monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 150}, 'technology', 3))
+_order_no_gray = _copy.deepcopy(_order_row)
+_order_no_gray.update(symbol='ORDER2HIGH', signals=[
+    'RSI 2条 ↑超买（≥70）' if text == 'RSI 2条 ↓超卖（≤35）' else text
+    for text in _order_row['signals']])
 _order_before = _copy.deepcopy(_order_row)
+_order_no_gray_before = _copy.deepcopy(_order_no_gray)
 with _patch.dict(monitor.S, {'ma_short': 120, 'ma_long': 60}), \
         _patch.object(monitor, 'global_dca', return_value=None):
-    _order_snap = monitor.build_snapshot({}, [_order_row], {}, group_counts={})
+    _order_snap = monitor.build_snapshot({}, [_order_row, _order_no_gray], {}, group_counts={})
     _order_snap_before = _copy.deepcopy(_order_snap)
-    _order_page = monitor.render({}, [_order_row], 1, snapshot=_order_snap)
+    _order_page = monitor.render({}, [_order_row, _order_no_gray], 2, snapshot=_order_snap)
 _order_body = re.search(r'<tr\b[^>]*\bid="s-orderescape"[^>]*>(.*?)</tr>', _order_page, re.S)[1]
 _order_sig = re.search(r'<td class="sig">(.*?)</td>', _order_body, re.S)[1]
 check(re.findall(r'data-signal-kind="([^"]*)"', _order_sig)
@@ -933,8 +963,22 @@ check(_order_row == _order_before and _order_snap == _order_snap_before
       and any(f['text'] == '上穿60日弱均线' for f in _order_member['ma_facts'])
       and _order_member['indicators'] == monitor._member_direction_markers(_order_row, 'ma'),
       '展示投影不改内部数字signals、marks、方向markers及快照')
+_order_control_classes, _order_control_body = rendered_stock_row(_order_page, _order_no_gray, True)
+_order_control_sig = re.search(r'<td class="sig">(.*?)</td>', _order_control_body, re.S)[1]
+check(_order_control_classes[0] == 'red'
+      and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
+                     r'(?: data-signal-level="([^"]*)")?>', _order_control_sig)
+      == [('chg', 'red'), ('add_price', 'red'), ('ma', 'yellow'), ('amp', 'yellow'),
+          ('vol_ratio', 'yellow'), ('', ''), ('rsi', ''), ('', ''), ('target', 'purple')]
+      and 'RSI 2条' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig))
+      and '↑超买' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig)),
+      '原排序2high控制仅文字，独立红黄紫灯及无灯首次出现排序不变')
+check({member['symbol'] for member in _order_snap['text_only']} == {'ORDERESCAPE'}
+      and all(member['s'] != 'ORDER2HIGH' for member in _order_filter_data.get('rsi', {}).get('members', []))
+      and _order_no_gray == _order_no_gray_before,
+      '合法2low仍进灰名单，原2high控制不进灰名单且渲染不突变输入')
 
-# focus 上轨单条两个方向：实际分析→快照→整页，仅文字灰字可折叠但不计技术灰。
+# 上轨单条两个方向：持仓技术灰，重点/其他仅文字；独立涨跌灯与既有折叠不变。
 _business.setUp()
 try:
     _focus_text_rows = []
@@ -960,26 +1004,27 @@ for _row, _direction in _focus_text_rows:
     _classes, _body = rendered_stock_row(_focus_page, _row, _keep)
     _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
     _focus_only = _row['group'] == 'focus'
-    _expected_levels = ([('chg', 'red')] if _row['chg'] else []) + [('boll_rsi', '' if _focus_only else 'gray')]
+    _expected_levels = ([('chg', 'red')] if _row['chg'] else []) + [('boll_rsi', 'gray' if _row['group'] == 'position' else '')]
     check(_classes == ['red' if _row['chg'] else 'green'] and _row['foldable'] == (not _keep)
           and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
                          r'(?: data-signal-level="([^"]*)")?>', _sig) == _expected_levels
           and '布林上轨▲' in _unescape(re.sub(r'<[^>]+>', '', _sig))
           and 'RSI 1条 ' + _direction in _unescape(re.sub(r'<[^>]+>', '', _sig)),
-          _row['symbol'] + '原方向事实保留，focus仅文字灰字、对照组技术灰白字且不继承涨跌红')
+          _row['symbol'] + '原方向事实保留，持仓技术灰白字、重点/其他仅文字灰字且不继承涨跌红')
     if _focus_only:
         _anchor = 'id="' + monitor._stock_anchor_id(_row['symbol']) + '"'
         check(_anchor in (_focus_shown if _row['chg'] else _focus_quiet)
               and _anchor not in (_focus_quiet if _row['chg'] else _focus_shown),
               _row['symbol'] + '仅文字绿行可折叠，独立涨跌红仍留主表')
+    if _row['group'] != 'position':
         check(all(member['s'] != _row['symbol'] for kind in ('rsi', 'boll', 'boll_rsi')
                   for member in _focus_filter.get(kind, {}).get('members', [])),
               _row['symbol'] + '不进入任何技术灰筛选名单')
 check({row['symbol'] for row in _focus_snap['text_only']}
-      == {row['symbol'] for row in _focus_items if row['group'] != 'focus'}
+      == {row['symbol'] for row in _focus_items if row['group'] == 'position'}
       and _focus_snap['signal_counts']['chg']['red'] == 6
       and _focus_snap['summary']['red'] == 6,
-      'focus两方向不计灰，其他组技术灰及六个独立涨跌红完整保留')
+      '重点/其他上轨两方向单条不计灰，持仓技术灰及六个独立涨跌红完整保留')
 check(_focus_items == _focus_before and _focus_snap == _focus_snap_before,
       '仅文字全页渲染不突变事实或快照')
 for _page_label, _page in (('基础页', html), ('混合红黄灰无灯页', _order_page), ('focus仅文字页', _focus_page)):
@@ -1007,22 +1052,26 @@ _business.setUp()
 try:
     _four_cases = []
     for _group in (g['item_group'] for g in monitor.GROUPS):
-        _active = _group in monitor.BOLL_UP_SIGNAL_GROUPS
+        _active = _group in ('position', 'focus')
         _cases = [([50, 50, 50], (100, 110, 99), 'boll', 'gray', _group != 'position'),
                   ([70, 70, 70], (100, 110, 90), 'rsi',
                    'yellow' if _group == 'position' else 'gray', _group != 'focus'),
                   ([35, 35, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
                   ([70, 35, 35], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
-                  ([70, 70, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else 'gray', _group != 'focus'),
-                  ([70, 70, 35], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else 'gray', _group != 'focus'),
+                  ([70, 70, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
+                  ([70, 70, 35], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
                   ([35, 35, 35], (100, 101, 90), 'boll_rsi', 'yellow' if _active else 'gray', True)]
         _cases += [([35, 50, 50], (100, 110, 90), 'rsi', '', True),
                    ([70, 35, 50], (100, 110, 90), 'rsi', '', True),
-                   ([70, 70, 50], (100, 110, 90), 'rsi', '' if _group == 'focus' else 'gray', True),
-                   ([70, 70, 35], (100, 110, 90), 'rsi', '' if _group == 'focus' else 'gray', True),
+                   ([70, 70, 50], (100, 110, 90), 'rsi', 'gray' if _group == 'position' else '', True),
+                   ([70, 70, 35], (100, 110, 90), 'rsi', 'gray' if _group == 'position' else '', True),
                    ([70, 35, 35], (100, 110, 90), 'rsi', 'gray', True),
-                   ([35, 50, 50], (100, 101, 90), 'boll_rsi', '' if _group == 'focus' else 'gray', _group != 'position'),
-                   ([70, 35, 50], (100, 101, 90), 'boll_rsi', 'gray', _group != 'position')]
+                   ([35, 50, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'position' else '', _group != 'position'),
+                   ([70, 35, 50], (100, 101, 90), 'boll_rsi', 'gray' if _active else '', _group != 'position'),
+                   ([70, 50, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'position' else '', True)]
+        if not _active:
+            _cases += [([50, 50, 50], (100, 101, 90), 'boll', '', True),
+                       ([70, 70, 70], (100, 101, 90), 'boll_rsi', 'gray', True)]
         for _case_index, (_values, _bands, _kind, _technical_level, _foldable) in enumerate(_cases):
             for _chg in (0, 3, 6):
                 _symbol = 'AUTH' + _group.upper() + str(_case_index) + str(_chg)
@@ -1062,7 +1111,8 @@ for _row, _kind, _technical_level, _foldable, _overall in _four_cases:
     _levels = re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
                         r'(?: data-signal-level="([^"]*)")?>', _sig)
     # 合成输入为0/3/6%，重算后有浮点误差；同色黄灯保留先出现的技术描述，涨跌红优先。
-    _expected = [(_kind, _technical_level)]
+    # 其他组零条上轨是无提示，不应生成空级布林描述；有RSI事实的无灯组合仍留文字。
+    _expected = [] if _kind == 'boll' and not _technical_level else [(_kind, _technical_level)]
     _expected += [('chg', 'red' if round(_row['chg']) == 6 else 'yellow')] if _row['chg'] else []
     _expected.sort(key=lambda pair: ({'red': 0, 'yellow': 1, 'gray': 2, '': 3}[pair[1]],
                                      0 if pair == ('chg', 'red') else 1))
@@ -1081,7 +1131,7 @@ for _row, _kind, _technical_level, _foldable, _overall in _four_cases:
               for kind in ('rsi', 'boll', 'boll_rsi') if kind != _kind),
           _row['symbol'] + '技术归属互斥，不重复单独布林或RSI')
 check({m['symbol'] for m in _four_snap['text_only']} == _four_gray,
-      '四项授权全页灰名单准确，其他上轨两超卖及混合一超买不误计灰')
+      '独立矩阵灰名单准确：其他上轨0/1/2及非持仓无轨2high无灰，三高/三低与合法灰保留')
 for _kind in ('rsi', 'boll', 'boll_rsi'):
     for _color in ('red', 'yellow'):
         _expected_count = sum(kind == _kind and level == _color for _, kind, level, _, _ in _four_cases)
@@ -1117,10 +1167,15 @@ try:
     _amp_rows = [_amp_engine.analyze(symbol='AMPUP', prev=99, high=104, low=98),
                  _amp_engine.analyze(symbol='AMPDOWN', group='healthcare', prev=101, high=103, low=96),
                  _amp_engine.analyze(symbol='AMPZERO', group='index_funds', high=100, low=100),
-                 _amp_engine.analyze(symbol='AMPDUAL', high=106, low=94, values=(70, 70, 50)),
+                 _amp_engine.analyze(symbol='AMPDUAL', high=106, low=94, values=(35, 35, 50)),
                  _amp_engine.analyze(symbol='AMPCOMBO', values=(35, 35, 35), bands=(100, 110, 99)),
                  _amp_engine.analyze(symbol='AMPSTACK', high=106, low=94, prev=100 / 1.06, values=(70, 50, 50),
                                      bands=(100, 110, 99), cfg={'trigger': 100, 'target': 190}, ratio=3)]
+    _amp_no_gray_row = _amp_engine.analyze(symbol='AMPDUAL2HIGH', high=106, low=94, values=(70, 70, 50))
+    _amp_no_gray_before = _copy.deepcopy(_amp_no_gray_row)
+    _amp_no_gray_snap = monitor.build_snapshot({}, [_amp_no_gray_row], {}, group_counts={})
+    _amp_no_gray_snap_before = _copy.deepcopy(_amp_no_gray_snap)
+    _amp_no_gray_page = monitor.render({}, [_amp_no_gray_row], 1, snapshot=_amp_no_gray_snap)
     _amp_input_before = _copy.deepcopy(_amp_rows)
     _amp_snap = monitor.build_snapshot({}, _amp_rows, {}, group_counts={})
     _amp_snap_before = _copy.deepcopy(_amp_snap)
@@ -1174,7 +1229,24 @@ check(_amp_rows[2]['amp'] == 0 and _amp_rows[2]['foldable'] and _amp_rows[2]['si
       '合法0保存数值，静默且可进入无异动，不强制不折叠')
 check('data-signal-kind="rsi" data-signal-level="gray"' in monitor._signals_html(_amp_rows[3])
       and 'data-signal-kind="amp" data-signal-level="red"' in monitor._signals_html(_amp_rows[3]),
-      '同股技术灰+振幅红分别白字/红字，不继承整行灯色')
+      '同股合法2low技术灰+振幅红分别白字/红字，不继承整行灯色')
+_amp_control_classes, _amp_control_body = rendered_stock_row(_amp_no_gray_page, _amp_no_gray_row, False)
+_amp_control_sig = re.search(r'<td class="sig">(.*?)</td>', _amp_control_body, re.S)[1]
+_amp_control_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _amp_no_gray_page)[1]))
+check(_amp_control_classes == ['red'] and _amp_no_gray_row['foldable']
+      and _amp_no_gray_row['signal_marks'] == [('amp', 'red')]
+      and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
+                     r'(?: data-signal-level="([^"]*)")?>', _amp_control_sig)
+      == [('amp', 'red'), ('rsi', '')]
+      and '↑超买' in _unescape(re.sub(r'<[^>]+>', '', _amp_control_sig)),
+      '原振幅2high控制保留无灯技术文字、独立振幅红与既有可折叠资格')
+check(_amp_no_gray_snap['text_only'] == [] and _amp_no_gray_snap['summary']['red'] == 1
+      and _amp_no_gray_snap['signal_counts']['amp']['red'] == 1
+      and all(not members for members in _amp_no_gray_snap['signal_members']['rsi'].values())
+      and not _amp_control_filter.get('rsi', {}).get('members', [])
+      and _amp_control_filter['amp']['members'][0]['l'] == 'red'
+      and _amp_no_gray_row == _amp_no_gray_before and _amp_no_gray_snap == _amp_no_gray_snap_before,
+      '原振幅2high控制不进灰名单或RSI筛选，振幅红统计保留且事实快照不突变')
 check('data-signal-kind="boll_rsi" data-signal-level="red"' in monitor._signals_html(_amp_rows[4])
       and monitor.text_only_members([_amp_rows[4]]) == []
       and _amp_snap['signal_counts']['boll_rsi']['red'] == 1
