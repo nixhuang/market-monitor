@@ -1295,10 +1295,16 @@ class PageRenderer:
         order = {g["item_group"]: i for i, g in enumerate(self._context._display_groups())}
         parts = []
         if valid:
+            def space_key(d):
+                value = d.get("space")
+                # 使用原始空间值，不读四舍五入后的文案；旧快照缺值在同档末尾。
+                descending = -value if type(value) in (int, float) and math.isfinite(value) else math.inf
+                return (0 if d.get("band") == "high" else 1, descending, d["symbol"])
+
             for section, entries, label in (("space", space, "空间"), ("reached", reached, "达到")):
                 lines = []
-                ordered = sorted(entries, key=lambda d: (0 if section == "space" and d.get("band") == "high" else 1,
-                                 order.get(d.get("group"), len(order)), d["symbol"]))
+                ordered = sorted(entries, key=space_key if section == "space" else
+                                 lambda d: (order.get(d.get("group"), len(order)), d["symbol"]))
                 for d in ordered:
                     symbol = self._context.normalize_symbol(d["symbol"])
                     note = f'<span class="note">{esc(d.get("note"))}</span>' if str(d.get("note") or "").strip() else ""

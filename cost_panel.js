@@ -1341,6 +1341,7 @@
     +' aria-label="就地编辑成本价与数量">编辑</button></summary>'
     +'<div class="cost-body">'
     +'<div class="cost-acts" id="costActs" hidden>'
+    +'<span class="cost-notice" id="costNotice" role="status" hidden></span>'
     +'<button type="button" class="primary" id="costSave">保存并上传</button>'
     +'<button type="button" id="costCancel">取消</button>'
     +'</div>'
@@ -1408,13 +1409,23 @@
   var editing=false, snapshot=null, prevDirty=false, editOrder={}, editGeneration=0;
   var prevMaintenanceOnly=false, prevMaintenancePending=false, prevDraftPending=false;
   var _paintFrame=null;
+  function syncCostNotice(){
+    var text=Object.keys(storageErrors).map(function(k){ return storageErrors[k]; }).join('；')
+      ||NOTICE||(SYNC==='error'?SYNC_MSG:'');
+    var notice=panel.querySelector('#costNotice');
+    notice.textContent=text; notice.hidden=!text;
+    // 同步异常仅提示，不给旧本机数据提供“重试上传”入口。
+    actsEl.hidden=!editing&&!text;
+    panel.querySelector('#costSave').hidden=!editing;
+    panel.querySelector('#costCancel').hidden=!editing;
+  }
   function syncEditUI(){
     editBtn.textContent=editing?'编辑中':'编辑';
     editBtn.setAttribute('aria-pressed', editing?'true':'false');
     if(editing) editBtn.className='cost-edit-btn on'; else editBtn.className='cost-edit-btn';
     // 编辑中由下面的「保存并上传／取消」接管，表头这颗收起来，免得出现两个「退出」入口
     editBtn.hidden=editing;
-    actsEl.hidden=!editing;
+    syncCostNotice();
     // 合成DEMO仅统一按钮外观；隔离存储及禁止上传仍由isolated独立控制。
     panel.querySelector('#costSave').textContent=isolated && !demoPreview?'保存到本标签页':'保存并上传';
   }
@@ -1989,20 +2000,12 @@
       // 2026-10-19：横条下面不再写「总资产 $xx」——总资产已经在卡片表头（标题行）显示了，
       // 这里重复一份反而抢视线。下面只留「颜色方块 + 比例」。
       +'<div class="cost-footrow"><div class="cost-legend">'+leg+'</div></div>'
-      +(isolated?'<div class="cost-notice">'+ISOLATED_NOTICE+' <button type="button" data-cost-export>导出备份</button></div>':'')
-      +((NOTICE||Object.keys(storageErrors).length||SYNC==='error')
-        ? '<div class="cost-notice" role="status">'+esc(Object.keys(storageErrors).map(function(k){
-          return storageErrors[k]; }).join('；')||NOTICE||SYNC_MSG)
-          +' <button type="button" data-cost-export>导出备份</button>'
-          +(writer?'<button type="button" data-cost-retry>'+(isolated?'重试会话保存':'重试保存/上传')+'</button>':'')+'</div>' : '');
+      +(isolated?'<div class="cost-notice">'+ISOLATED_NOTICE+' <button type="button" data-cost-export>导出备份</button></div>':'');
+    syncCostNotice();
   }
 
   panel.addEventListener('click',function(e){
     if(e.target.closest('[data-cost-export]')) exportData();
-    if(e.target.closest('[data-cost-retry]')){
-      if(editing){ NOTICE='请先保存或取消当前编辑，再重试上传'; paint(); return; }
-      savePaused=false; requestSave(0,true);
-    }
   });
   paint();
   syncEditUI();

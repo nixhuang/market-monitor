@@ -201,6 +201,7 @@
 /* [hidden] 只是 UA 的 display:none，作者写的 display:flex 会盖掉它 → 必须显式再压一次 */
 .cost-acts{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;margin:6px 0 8px}
 .cost-acts[hidden]{display:none}
+.cost-acts .cost-notice{flex:1 1 180px;min-width:0;margin:0;overflow-wrap:anywhere}
 .cost-acts button{background:#1b2434;border:1px solid #33415a;color:#cfd8e6;border-radius:7px;
   padding:5px 11px;font-size:12.5px;cursor:pointer}
 .cost-acts button:hover{border-color:#8fb8f0;color:#dfeaff}

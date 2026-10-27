@@ -729,7 +729,7 @@ test('固收盈利不能抵消股票亏损且编辑成本仍保留',async()=>{
   assert.equal(b.doc.querySelector('.blk-bond .t-pnl').textContent,'');
   assert.equal(b.puts().length,0);
 });
-test('本地写失败显式提示且不清dirty不上传',async()=>{let b=await boot();b.store.failSet.add(LOCAL);await b.enter();b.edit();await b.save();assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未持久化/);assert.equal(b.puts().length,0);assert.ok(b.doc.querySelector('[data-cost-export]'));});
+test('本地写失败显式提示且不清dirty不上传',async()=>{let b=await boot();b.store.failSet.add(LOCAL);await b.enter();b.edit();await b.save();assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未持久化/);assert.equal(b.puts().length,0);assert.match(b.doc.getElementById('costNotice').textContent,/尚未持久化/);assert.equal(b.doc.getElementById('costNotice').hidden,false);assert.equal(b.doc.querySelector('[data-cost-export]'),null);});
 test('存储恢复后可显式重试保存',async()=>{let b=await boot();b.store.failSet.add(LOCAL);await b.enter();b.edit();await b.save();b.store.failSet.delete(LOCAL);b.requestSave(0,true);await b.tick(0);await finishPush(b);assert.equal(b.state().dirty,false);assert.equal(b.local().items.AAA.qty,1);});
 test('节流时间持久化失败禁止上传',async()=>{let b=await boot();b.store.failSet.add(PUSH_AT);await b.enter();b.edit();await b.save();assert.equal(b.puts().length,0);assert.equal(b.state().dirty,true);});
 test('上传成功但本地cloud缓存失败不谎报已同步',async()=>{let b=await boot();await b.enter();b.edit();await b.save();b.store.failSet.add(CLOUD);await finishPush(b);assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未持久化/);});
@@ -756,6 +756,58 @@ test('仓位绿色外框与顶部编辑操作区契约',async()=>{
   assert.match(CSS,/\.blk-short \.cost-block-title\{background:var\(--cost-accent-bg\)\}/);
   assert.match(CSS,/#costManage\.cost-manage>summary,\s*#costManage\.cost-manage\[open\]>summary\{background:var\(--cost-accent-bg\);box-shadow:none\}/);
   await b.enter();assert.equal(acts.hidden,false);b.exitEdit(true);assert.equal(acts.hidden,true);
+});
+test('云端校验失败仅在顶部操作行提示，无备份或重试上传按钮',async()=>{
+  const b=await boot({token:false}),panel=b.doc.getElementById('costManage');
+  const acts=b.doc.getElementById('costActs'),notice=b.doc.getElementById('costNotice');
+  b.respond(b.requests.find(r=>r.init.method!=='PUT'),{...copy(SEED),updated_at:'2026-10-27T05:18:05.8613258+00:00'});
+  await settle();
+  assert.equal(b.state().SYNC,'nocloud');
+  assert.equal(acts.parentNode,panel.querySelector('.cost-body'));
+  assert.equal(acts.nextElementSibling.id,'costMembers');
+  assert.equal(notice.parentNode,acts);assert.equal(notice.getAttribute('role'),'status');
+  assert.equal(acts.hidden,false);assert.equal(notice.hidden,false);
+  assert.equal(notice.textContent,'云端数据校验失败：updated_at 必须是有效日期');
+  assert.equal(b.doc.getElementById('costSave').hidden,true);
+  assert.equal(b.doc.getElementById('costCancel').hidden,true);
+  assert.equal(panel.querySelector('[data-cost-retry]'),null);
+  assert.equal(panel.querySelector('[data-cost-export]'),null);
+  assert.doesNotMatch(b.doc.getElementById('costFoot').textContent,/校验失败|导出备份|重试保存/);
+  const before=b.canonical(b.state().DATA);await b.tick(30000);
+  assert.equal(b.puts().length,0);assert.equal(b.canonical(b.state().DATA),before);
+  await b.enter();assert.equal(acts.hidden,false);assert.equal(notice.hidden,false);
+  assert.equal(b.doc.getElementById('costSave').hidden,false);
+  assert.equal(b.doc.getElementById('costCancel').hidden,false);
+  b.exitEdit(true);assert.equal(b.doc.getElementById('costSave').hidden,true);
+  assert.equal(notice.hidden,false);assert.equal(b.puts().length,0);
+  assert.match(CSS,/\.cost-acts \.cost-notice\{[^}]*min-width:0[^}]*overflow-wrap:anywhere/);
+  await b.dispose();
+});
+test('保存上传失败顶部只留说明，重新编辑保留正常保存取消',async()=>{
+  const b=await boot();await b.enter();b.edit('AAA','qty','7');await b.save();
+  await finishPush(b,403);
+  const acts=b.doc.getElementById('costActs'),notice=b.doc.getElementById('costNotice');
+  assert.equal(b.state().SYNC,'error');assert.equal(acts.hidden,false);assert.equal(notice.hidden,false);
+  assert.ok(notice.textContent);assert.equal(notice.parentNode,acts);
+  assert.equal(b.doc.getElementById('costSave').hidden,true);
+  assert.equal(b.doc.querySelector('[data-cost-retry]'),null);
+  assert.equal(b.doc.querySelector('[data-cost-export]'),null);
+  await b.enter();assert.equal(b.doc.getElementById('costSave').hidden,false);
+  assert.equal(b.doc.getElementById('costCancel').hidden,false);
+  await b.dispose();
+});
+test('本地保存异常也在操作行纯文字提示，隔离导出入口保持独立',async()=>{
+  const store=shared({[LOCAL]:SEED,[TOKEN]:'test-token'});store.failSet.add(LOCAL);
+  const b=await boot({store}),notice=b.doc.getElementById('costNotice');
+  assert.equal(notice.hidden,false);assert.match(notice.textContent,/尚未持久化/);
+  assert.equal(b.doc.getElementById('costActs').hidden,false);
+  assert.equal(b.doc.querySelector('[data-cost-export]'),null);
+  assert.equal(b.doc.querySelector('[data-cost-retry]'),null);
+  assert.equal(b.puts().length,0);await b.dispose();
+  const isolated=await boot({noLocks:true});
+  assert.ok(isolated.doc.getElementById('costFoot').querySelector('[data-cost-export]'));
+  assert.equal(isolated.doc.getElementById('costNotice').hidden,true);
+  await isolated.dispose();
 });
 test('合成DEMO在有Web Locks的HTTPS页面也完全隔离编辑和保存',async()=>{
   const seed={...copy(SEED),preview:true,items:{AAA:{cost:12.3456,qty:7.1234}},cash:400,cash_extra:100};

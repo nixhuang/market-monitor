@@ -8352,6 +8352,62 @@ class TestTargetOverlays(unittest.TestCase):
         self.assertNotIn('>目标价</button>', output)
         self.assertNotIn('>共识价</button>', output)
 
+    def test_space_order_preserves_bands_then_raw_space_descending_across_groups(self):
+        import copy
+        rows = [self.row('HOLDLOW', 'position', 190),
+                self.row('HIGHEST', 'technology', 260),
+                self.row('FOCUSMID', 'focus', 220),
+                self.row('MEDLOW', 'position', 145),
+                self.row('MEDHIGH', 'technology', 180),
+                self.row('TIEZ', 'position', 160),
+                self.row('TIEA', 'technology', 160),
+                self.row('PRECZ', 'technology', 160.044),
+                self.row('PRECA', 'position', 160.041),
+                self.row('ZREACHED', 'position', 101),
+                self.row('AREACHED', 'focus', 100)]
+        snap = self.snapshot(rows)
+        before = copy.deepcopy(snap)
+        panel = monitor._target_purple_panel(snap)
+        spaces, reached = panel.split('<h5>空间</h5>', 1)[1].split('<h5>达到</h5>', 1)
+        symbols = lambda text: re.findall(r'class="signal-member-symbol">([^<]+)</span>', text)
+        expected = ['HIGHEST', 'FOCUSMID', 'HOLDLOW', 'MEDHIGH',
+                    'PRECZ', 'PRECA', 'TIEA', 'TIEZ', 'MEDLOW']
+        self.assertEqual(symbols(spaces), expected)
+        # PRECA/PRECZ显示同为60.0%，排序仍按未舍入原值，不按代码或分组。
+        precision = {m['symbol']: m for m in snap['target_overlays']['space']
+                     if m['symbol'] in ('PRECA', 'PRECZ')}
+        self.assertEqual([round(m['space'], 1) for m in precision.values()], [60.0, 60.0])
+        self.assertGreater(precision['PRECZ']['space'], precision['PRECA']['space'])
+        self.assertEqual(symbols(reached), ['ZREACHED', 'AREACHED'])
+        self.assertEqual(snap, before)
+        card = monitor._signal_counts_card(snap)
+        self.assertEqual(symbols(card.split('<h5>空间</h5>', 1)[1].split('<h5>达到</h5>', 1)[0]), expected)
+        # 反转输入不能改变清单排序、成员或计数。
+        reversed_snap = self.snapshot(list(reversed(rows)))
+        self.assertEqual(monitor._target_purple_panel(reversed_snap), panel)
+        self.assertEqual(reversed_snap['summary']['purple'], snap['summary']['purple'])
+
+    def test_space_order_legacy_missing_values_last_with_band_priority_unchanged(self):
+        import copy
+        def member(symbol, band, value):
+            return {'symbol': symbol, 'group': 'technology', 'band': band,
+                    'space': value, 'detail': '旧快照说明，不从文字猜空间'}
+        snap = {'target_overlays': {
+            'space': [member('LOWBAND', 'medium', 500), member('HIGHBAND', 'high', 90),
+                      member('GOOD', 'medium', 60), member('MISSING', 'medium', None),
+                      member('NAN', 'medium', float('nan')), member('INF', 'medium', float('inf')),
+                      member('STRING', 'medium', '70'), member('BOOLEAN', 'medium', True)],
+            'reached': []}}
+        missing = snap['target_overlays']['space'][3]
+        del missing['space']
+        before = copy.deepcopy(snap)
+        panel = monitor._target_purple_panel(snap)
+        symbols = re.findall(r'class="signal-member-symbol">([^<]+)</span>', panel)
+        self.assertEqual(symbols, ['HIGHBAND', 'LOWBAND', 'GOOD',
+                                   'BOOLEAN', 'INF', 'MISSING', 'NAN', 'STRING'])
+        self.assertNotIn('明细待下次更新', panel)
+        self.assertEqual(snap, before)
+
     def test_old_snapshot_target_red_yellow_tables_are_not_rendered(self):
         old = {'summary': {'red': 1, 'yellow': 1, 'purple': 0},
                'signal_counts': {'chg': {'label': '涨跌幅', 'red': 1},
