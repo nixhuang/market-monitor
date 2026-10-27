@@ -1524,6 +1524,25 @@ if '--chrome' in sys.argv:
     with _patch.object(monitor, 'global_dca', return_value=None):
         _color_snapshot = monitor.build_snapshot({}, _color_rows, {}, group_counts={})
         _color_page = monitor.render({}, _color_rows, len(_color_rows), snapshot=_color_snapshot)
+    _range_rows = []
+    for _sym, _low, _price, _high in (('RANGENORM', 100.0, 150.0, 200.0), ('RANGEHI', 420.0, 688.0, 692.0)):
+        _range_row = item(_sym, 'position', 'green')
+        _range_row.update(price=_price, data_date='2026-10-26',
+                          range52={'low': _low, 'high': _high, 'scope': '52周', 'from': '2025-10-27',
+                                   'to': '2026-10-26', 'position': (_price - _low) / (_high - _low) * 100})
+        _range_rows.append(_range_row)
+    with _patch.object(monitor, 'global_dca', return_value=None):
+        _range_snapshot = monitor.build_snapshot({}, _range_rows, {}, group_counts={})
+        _range_page = monitor.render({}, _range_rows, len(_range_rows), snapshot=_range_snapshot)
+    # 52周页顺带带上成本面板：给两行合成持仓（成本/数量都是假数），
+    # 这样同一页还能验「编辑」胶囊加大、贴右、手机上不错行；仍是纯合成数据，不碰本机或云端。
+    _range_seed = {"asof": "2026-10-26", "cash": 0, "cash_extra": 0, "fixed": 0, "fixed_cost": 0,
+                   "items": {"RANGENORM": {"cost": 125.0, "qty": 10}, "RANGEHI": {"cost": 600.0, "qty": 5}},
+                   "rs20": None}
+    _range_page = re.sub(r'var REAL=.*?;\n',
+                         lambda m: 'var REAL=' + monitor.json_script(_range_seed) + ';\n', _range_page, count=1)
+    if 'var REAL=' + monitor.json_script(_range_seed) + ';' not in _range_page:
+        raise AssertionError('52周页缺少合成成本种子，拒绝启动浏览器')
     _expected_browser_seed = monitor.json_script(
         {"asof": "", "cash": 0, "cash_extra": 0, "fixed": 0, "fixed_cost": 0, "items": {}, "rs20": None})
     if 'var REAL=' + _expected_browser_seed + ';' not in _description_page:
@@ -1860,6 +1879,59 @@ const deadline = setTimeout(() => {
           && ['yellow','gray'].every(tone=>lamps.some(m=>m.tone===tone && m.level==='red')),
         name:width+'px红黄白分类不变，名单唯一3px竖条与主表灯同色，黄白名单中的红主行仍红',actual:lamps});
     }
+    const rangeTree=await cdp('Page.getFrameTree');
+    const rangeHTML=input.rangePage.replace(/var REAL=(.*?);/, (match,json) => {
+      const seed=JSON.parse(json);seed.preview=true;return 'var REAL='+JSON.stringify(seed)+';';
+    }).replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
+      .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
+    await cdp('Page.setDocumentContent', {frameId: rangeTree.frameTree.frame.id, html: rangeHTML});
+    for (const [width,height] of [[1440,1000],[820,1180],[390,844]]) {
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      const bars=await evaluate(`(() => {
+        const rows=[...document.querySelectorAll('tr[id^="s-range"]')];
+        return rows.map(row=>{
+          const rail=row.nextElementSibling?row.nextElementSibling.querySelector('.range52-rail'):null;
+          if(!rail)return {id:row.id,missing:true};
+          const track=rail.querySelector('.range52-track').getBoundingClientRect();
+          const lo=rail.querySelector('.range52-lo').getBoundingClientRect();
+          const hi=rail.querySelector('.range52-hi').getBoundingClientRect();
+          const spans=[...rail.querySelectorAll('.range52-gap')];
+          const gaps=spans.map(g=>g.getBoundingClientRect());
+          const marker=rail.querySelector('.range52-marker').getBoundingClientRect();
+          const rb=rail.getBoundingClientRect();
+          const insideRail=g=>g.left>=rb.left-0.5&&g.right<=rb.right+0.5;
+          return {id:row.id,text:spans.map(g=>g.textContent).join(' / '),
+            height:rail.getBoundingClientRect().height,
+            percent:rail.querySelectorAll('.range52-percent').length,gaps:gaps.length,
+            // 两端第二行必须贴在对应端点价格的正下方，且不越出整条 52 周条
+            underLo:gaps[0]?gaps[0].top>=lo.bottom-0.5&&gaps[0].top<=rb.bottom+0.5&&insideRail(gaps[0]):false,
+            underHi:gaps[1]?gaps[1].top>=hi.bottom-0.5&&gaps[1].top<=rb.bottom+0.5&&insideRail(gaps[1]):false,
+            // 三角上方不再有百分比；第二行不能压到灰轨
+            overlapsTrack:gaps.some(g=>!(g.bottom<=track.top+0.5||g.top>=track.bottom-0.5)),
+            markerWidth:+(marker.width).toFixed(1),markerHeight:+(marker.height).toFixed(1),
+            // 现价三角底宽 8.4px，贴端点时允许露出半边（4.2px）
+            markerInTrack:marker.left>=track.left-5&&marker.right<=track.right+5};
+        });
+      })()`);
+      const edit=await evaluate(`(() => {
+        const card=document.getElementById('costManage'),btn=document.getElementById('costEditBtn');
+        const name=card&&card.querySelector('.grp-name');
+        if(!card||!btn||!name)return {exists:false};
+        const cb=card.getBoundingClientRect(),b=btn.getBoundingClientRect(),nb=name.getBoundingClientRect();
+        return {exists:true,sameRow:Math.abs((b.top+b.bottom)/2-(nb.top+nb.bottom)/2)<=8,
+          rightGap:+(cb.right-b.right).toFixed(1),height:+b.height.toFixed(1),
+          fontSize:getComputedStyle(btn).fontSize,radius:getComputedStyle(btn).borderTopLeftRadius,
+          overflow:document.documentElement.scrollWidth>innerWidth+1};
+      })()`);
+      assertions.push({ok:bars.length===2 && bars.every(b=>!b.missing && b.percent===0 && b.gaps===2
+          && b.underLo && b.underHi && !b.overlapsTrack && b.markerInTrack && b.markerWidth<=8.6
+          // 只收底宽、高度不变（9px）→ 顶角约 50°，比原来的 60° 更尖锐
+          && b.markerHeight>=8.6 && Math.round(b.height)===33)
+          && bars.some(b=>b.text==='-33.3% / +33.3%') && bars.some(b=>b.text==='-39.0% / +0.6%')
+          && edit.exists && edit.sameRow && edit.rightGap<=6 && edit.height>=27 && !edit.overflow
+          && edit.radius==='7px',
+        name:width+'px52周条两端第二行为到低/高点、三角底收窄高度不变，编辑按钮保持原圆角且贴右不错行',actual:{bars,edit}});
+    }
     const injectionTree=await cdp('Page.getFrameTree');
     const injectionHTML=input.injectionPage.replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
       .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
@@ -1895,7 +1967,7 @@ const deadline = setTimeout(() => {
     with _tempfile.TemporaryDirectory(prefix='mm-target-chrome-') as _profile:
         _browser_result = _subprocess.run(['node', '-e', _browser_script],
             input=_json.dumps({'chrome': _chrome, 'profile': _profile, 'html': _description_page,
-                              'colorPage': _color_page,
+                              'colorPage': _color_page, 'rangePage': _range_page,
                               'ciNoSandbox': sys.platform == 'linux' and os.environ.get('GITHUB_ACTIONS') == 'true'
                                   and os.environ.get('MM_TEST_CHROME_NO_SANDBOX') == '1',
                               'injectionPage': _unsafe_page, 'injectionProbe': _unsafe_snapshot['probe']}),

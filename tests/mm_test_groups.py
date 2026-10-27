@@ -6304,12 +6304,16 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertEqual(result['position'], 50.0)
         row = monitor._range52_row({'range52': result, 'price': 150.0, 'data_date': result['to']})
         self.assertIn('style="--range-pos:50.0%"', row)
-        self.assertIn('<span class="range52-percent" aria-hidden="true">50.0%</span>', row)
+        self.assertIn('range52-lo" aria-hidden="true">100.00<span class="range52-gap">-33.3%</span>', row)
+        self.assertIn('range52-hi" aria-hidden="true">200.00<span class="range52-gap">+33.3%</span>', row)
+        self.assertNotIn('range52-percent', row)   # 三角上方不再挂百分比
         self.assertIn('style="left:50.0%"', row)
         self.assertIn('.range52-track{position:relative;flex:1 1 auto;height:2.1px;', monitor.PAGE_CSS)
         # 2026-10-20：现价标记从「压在轨道中间的紫方块」改成「尖角朝下、顶在灰轨上沿的倒三角」
         self.assertIn('.range52-marker{position:absolute;bottom:100%;width:0;height:0;', monitor.PAGE_CSS)
-        self.assertIn('border-top:9px solid #efd9ff;', monitor.PAGE_CSS)   # 顶角 60°（底 10.4 / 高 9）
+        # 2026-10-27：三角只收底宽（10.4 → 8.4px），高度仍 9px 不变 → 顶角 60° 变约 50°（更尖锐）
+        self.assertIn('border-top:9px solid #efd9ff;', monitor.PAGE_CSS)
+        self.assertIn('border-top:7px solid #713caf', monitor.PAGE_CSS)   # 内层高度不跟着缩
         self.assertIn('.range52-marker::before{', monitor.PAGE_CSS)
         self.assertNotIn('width:8.4px;height:8.4px;border-radius:2px;background:#713caf', monitor.PAGE_CSS)
         self.assertIn('height:2.1px;background:#9fa3aa;border-radius:99px}', monitor.PAGE_CSS)
@@ -6325,24 +6329,38 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertEqual(monitor._range52_row({'range52': result, 'price': 200.0, 'data_date': result['to']}).count('left:100.0%'), 1)
         self.assertEqual(monitor._range52_row({'reference_only': True, 'range52': result, 'price': 150.0}), '')
 
-    def test_position_endpoint_gaps_use_current_price_and_do_not_change_signals(self):
+    def test_endpoint_distances_are_labeled_under_both_prices_for_every_group(self):
+        """两端价格下方各写一行「到低点 / 到高点」，以本轮价为基数；全组生效，三角上方不再有百分比。"""
         result = monitor._range52_from_history(self.history())
-        base = {'range52': result, 'price': 150.0, 'data_date': result['to'], 'group': 'position'}
-        row = monitor._range52_row(base)
-        self.assertIn('class="range52-rail has-endpoint-gaps"', row)
-        self.assertIn('range52-lo" aria-hidden="true">100.00<span class="range52-gap">-33.3%</span>', row)
-        self.assertIn('range52-hi" aria-hidden="true">200.00<span class="range52-gap">+33.3%</span>', row)
-        self.assertIn('从本轮价到低点 -33.3%、到高点 +33.3%', row)
-        self.assertIn('>50.0%</span>', row)  # 区间位置不改成端点空间
-        for group in ('focus', 'technology', None):
-            self.assertNotIn('range52-gap', monitor._range52_row({**base, 'group': group}))
-        for price in (100.0, 200.0):
-            boundary = monitor._range52_row({**base, 'price': price})
-            self.assertIn('class="range52-gap">0.0%</span>', boundary)
+        base = {'range52': result, 'price': 150.0, 'data_date': result['to']}
+        for group in ('position', 'focus', 'technology', None):
+            row = monitor._range52_row({**base, 'group': group})
+            self.assertIn('range52-lo" aria-hidden="true">100.00<span class="range52-gap">-33.3%</span>', row)
+            self.assertIn('range52-hi" aria-hidden="true">200.00<span class="range52-gap">+33.3%</span>', row)
+            self.assertIn('从本轮价到低点 -33.3%、到高点 +33.3%', row)
+            self.assertNotIn('range52-percent', row)   # 三角上方不再挂百分比
+            self.assertNotIn('has-endpoint-gaps', row)  # 不再有持仓专属第二行，全组同一套结构
+        # 区间线性位置只保留在三角位置和读屏说明里，不再单列一个百分比
+        visible = re.sub(r' aria-label="[^"]*"', '', monitor._range52_row(base))
+        self.assertNotIn('>50.0%<', visible)
+        self.assertIn('位于区间 50.0%', monitor._range52_row(base))
+        # 现价正好等于端点时，该侧写 0.0%，另一侧仍是真实的到另一点幅度
+        at_low = monitor._range52_row({**base, 'price': 100.0})
+        self.assertIn('range52-lo" aria-hidden="true">100.00<span class="range52-gap">0.0%</span>', at_low)
+        self.assertIn('range52-hi" aria-hidden="true">200.00<span class="range52-gap">+100.0%</span>', at_low)
+        at_high = monitor._range52_row({**base, 'price': 200.0})
+        self.assertIn('range52-lo" aria-hidden="true">100.00<span class="range52-gap">-50.0%</span>', at_high)
+        self.assertIn('range52-hi" aria-hidden="true">200.00<span class="range52-gap">0.0%</span>', at_high)
+        for boundary in (at_low, at_high):
             self.assertNotIn('-0.0%', boundary)
         self.assertIn('数据待更新', monitor._range52_row({**base, 'price': 0}))
         self.assertIn('数据待更新', monitor._range52_row({**base, 'price': float('nan')}))
-        self.assertNotIn('range52-gap', monitor._range52_row({**base, 'reference_only': True}))
+        self.assertEqual(monitor._range52_row({**base, 'reference_only': True}), '')
+        # 第二行占下面 13px，不与三角／灰轨重叠；三角左右再收窄一档
+        self.assertIn('height:33px;padding-bottom:13px', monitor.PAGE_CSS)
+        self.assertIn('border-left:4.2px solid transparent;border-right:4.2px solid transparent', monitor.PAGE_CSS)
+        self.assertNotIn('.range52-percent{', monitor.PAGE_CSS)
+        self.assertNotIn('clamp(40px,var(--range-pos)', monitor.PAGE_CSS)
 
     def test_cost_price_draws_a_white_triangle_without_touching_the_range_bar(self):
         """成本价只在位置条上多一个白三角：紫方块是本轮价（条上），白三角是成本价（条下）。
@@ -6353,8 +6371,8 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('<span class="range52-cost" style="left:25.0%"></span>', row)
         self.assertIn('成本价 125.00 位于区间 25.0%', row)
         self.assertNotIn('低于区间', row)
-        self.assertIn('style="left:50.0%"', row)          # 本轮价的紫方块位置不变
-        self.assertIn('>50.0%</span>', row)               # 百分比文字仍然是本轮价
+        self.assertIn('style="left:50.0%"', row)          # 本轮价的三角位置不变
+        self.assertIn('class="range52-gap">-33.3%</span>', row)   # 端点下方仍是本轮价到两端的幅度
         below = monitor._range52_row({**base, 'cost': 40.0})
         self.assertIn('<span class="range52-cost out-lo"></span>', below)   # 区间外：朝外箭头，不再夹成 0% 假位置
         self.assertIn('range52-cost out-lo', below)
@@ -6379,7 +6397,8 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertEqual(result['scope'], '可用历史')
         short_row = monitor._range52_row({'range52': result, 'price': 150.0, 'data_date': result['to']})
         self.assertIn('aria-label="可用历史低', short_row)
-        self.assertIn('>50.0%</span>', short_row)
+        self.assertIn('class="range52-gap">-33.3%</span>', short_row)
+        self.assertIn('class="range52-gap">+33.3%</span>', short_row)
         self.assertNotIn('未满52周', short_row)
         self.assertIn('数据待更新', monitor._range52_row({'range52': result, 'price': 150.0,
                                                            'data_date': '2026-10-14'}))

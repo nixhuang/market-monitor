@@ -32,6 +32,9 @@
    会把新值盖掉 —— 2026-10-20 手机上「比例数字和紫三角重叠」就是它干的，已整块删除。
    以后改 52 周条只改 monitor.py 一处。 */
 @media (max-width:600px){
+  /* 手机：标题行仍是 nowrap（「编辑」不错行），靠收紧状态文字与汇总字号让出空间 */
+  .cost-manage>summary .cost-state{font-size:10.5px}
+  .cost-manage>summary .cost-sum{font-size:12.5px}
   /* 手机：跟 .stk td.sig 的 12.5px 同字号；极窄屏再降一档，保证这一行不折也不被截 */
   .cost-info{font-size:12.5px;margin-top:7px}
   .cost-info .sep{margin:0 2px}
@@ -53,8 +56,11 @@
 /* 整条板块标头在收起、展开和编辑时都与向上折叠条同底色，不叠蓝色高亮。 */
 #costManage.cost-manage>summary,
 #costManage.cost-manage[open]>summary{background:var(--cost-accent-bg);box-shadow:none}
-/* 窄屏时标题行允许换行，别把「编辑」按钮顶出屏幕 */
-.cost-manage>summary{flex-wrap:wrap}
+/* 标题行不再整体换行：否则窄屏时「编辑」会掉到第二行（手机上错行）。
+   让中间的 .group-stats（已同步/未同步 + 总资产·盈亏）在自己内部折行，编辑按钮始终贴右。 */
+.cost-manage>summary{flex-wrap:nowrap}
+/* 「编辑」贴近卡片右侧：标题行右内边距 12px → 4px（约原来的 0.3 倍） */
+.cost-manage>summary.grp{padding-right:4px}
 /* 总资产·盈亏：字号字重跟上面「统计」那张卡的计数一致（14px / 600），
    总资产用白字（--text），这样一眼能看清；盈亏仍按绿涨红跌单独上色 */
 .cost-manage>summary .cost-sum{font-size:14px;color:var(--text);white-space:nowrap;
@@ -94,13 +100,18 @@
 .cost-nocloud button{background:#1b2434;border:1px solid #33415a;color:#cfd8e6;
   border-radius:7px;padding:3px 9px;font-size:12px;cursor:pointer}
 .cost-nocloud button:hover{border-color:#8fb8f0;color:#dfeaff}
+/* 「编辑」只是加大一点点：字号 12.5→13、内距 4/10→6/13。**形状不动**——仍是原来的
+    7px 圆角小圆角矩形（原「胶囊」观感），不改成 99px 的全圆形。
+    加大后仍必须留在标题行最右侧，不能被挤到下一行（见下面 summary 的 nowrap）。 */
 .cost-edit-btn{flex:none;background:#1b2434;border:1px solid #33415a;
-  color:#cfd8e6;border-radius:7px;padding:4px 10px;font-size:12.5px;cursor:pointer}
+  color:#cfd8e6;border-radius:7px;padding:6px 13px;font-size:13px;line-height:1.2;cursor:pointer}
 .cost-edit-btn:hover{border-color:#8fb8f0;color:#dfeaff}
 .cost-edit-btn.on{background:#22314c;border-color:#8fb8f0;color:#dfeaff}
 /* 「编辑」在标题行最右侧：group-stats 已经是 flex:1 1 auto，按钮再加 margin-left:auto 顶到底；
-   编辑态由下面的「保存并上传／取消」接管，这颗收起来（两个退出入口会打架） */
-.cost-manage>summary .cost-edit-btn{margin-left:auto}
+   编辑态由下面的「保存并上传／取消」接管，这颗收起来（两个退出入口会打架）。
+   右外边距 -4px：与卡片边框的间距从约 17px（12+4+1）压到约 5px（约 0.3 倍），
+   只把这颗按钮往右推，不动标题行背景、不动其他卡片。 */
+.cost-manage>summary .cost-edit-btn{margin-left:auto;margin-right:-4px}
 .cost-manage>summary .cost-edit-btn[hidden]{display:none}
 /* 展开内框左右贴外框内沿：抵消 card 的 4px 横向 padding；框内文字仍留安全边距。
    只拓宽仓位管理内容，不移动标题或改其他卡片。 */
@@ -384,14 +395,14 @@
   .cost-cell .pct,.cost-cell .amt{display:block}
   .cost-name .sy{font-size:11.5px} .cost-name .cn{font-size:10.5px}
   .cost-name .tag{font-size:9.5px}
-  .cost-edit-btn{padding:3px 8px;font-size:12px}
+  /* 「编辑」在手机上仍保持加大后的尺寸（只比桌面略收一点），不再靠缩按钮来防错行：
+     防错行改由标题行 nowrap + 中段内部折行负责（见文件前部 .cost-manage>summary）。 */
+  .cost-edit-btn{padding:5px 11px;font-size:13px}
   /* 窄屏标题行要塞下「仓位管理 + 已同步 + 总资产·盈亏 + 编辑」四样东西。
-     只收紧间隙和按钮内边距，字号仍跟上面统计卡一致（14px 不缩），390 宽刚好排一行；
-     更窄（375/360）会自然换行，按钮仍贴右。 */
+     只收紧间隙，字号仍跟上面统计卡一致（14px 不缩），390 宽刚好排一行。 */
   .cost-manage>summary.grp{gap:5px}
   .cost-manage>summary .group-stats{gap:6px}
   .cost-manage>summary .cost-sum .sep{margin:0}
-  .cost-manage>summary .cost-edit-btn{padding:3px 5px}
   .cost-manage .signal-member-block{padding:4px 6px 6px}
   .cost-mini{grid-template-columns:minmax(0,1fr) 44px 46px 46px 44px 32px;gap:0 3px;
     font-size:10.5px;padding-left:12px}

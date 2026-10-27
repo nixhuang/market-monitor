@@ -136,6 +136,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('color:#fff;background:#8957e5', declarations('.lvtag.tgt.hit'))
         self.assertGreater(css.index('.lvtag.tgt.hit{'), css.index('.lvtag.tgt.bad{'))
         self.assertNotRegex(css, r'\.lvtag\.tgt\.[^{]+\{[^}]*font-size')
+        # 2026-10-27：现价三角只收底宽（10.4 → 8.4px），高度仍 9px 不变 → 顶角 60° 变约 50°（更尖锐）；
+        # 内层维持 1px 描边，高度仍是原来的 7px，不跟着缩。
         self.assertIn('border-top:9px solid #efd9ff', declarations('.range52-marker'))
         self.assertIn('border-top:7px solid #713caf', declarations('.range52-marker::before'))
         self.assertIn('background:#f0c674', declarations('.range52-cost'))

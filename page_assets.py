@@ -716,24 +716,23 @@ table.stk{table-layout:fixed}
 /* 个股之间的横线原来是继承全局 td 的 --line(#252a33)，太淡；股票表这里提亮一档（2026-10-20） */
 table.stk tr>td{border-top-color:#39424f}
 /* 位置条：左端写区间最低价、右端写最高价，中间是灰轨；百分比浮在轨道上方跟随紫方块 */
-.range52-rail{position:relative;display:flex;align-items:flex-end;gap:7px;height:20px;
+.range52-rail{position:relative;display:flex;align-items:flex-end;gap:7px;height:33px;padding-bottom:13px;
   font-variant-numeric:tabular-nums}
-.range52-lo,.range52-hi{flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
-/* 持仓端点第二行：相对现价的下跌／上涨空间。轨道仍对齐第一行价格，保留三角上方间距。 */
-.range52-rail.has-endpoint-gaps{height:33px;padding-bottom:13px}
-.has-endpoint-gaps .range52-lo,.has-endpoint-gaps .range52-hi{position:relative}
+.range52-lo,.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
+.range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
+/* 两端第二行＝从本轮价到低／高点的涨跌空间，以本轮价为基数；全组生效，灰字仅文字层级。
+   轨道仍对齐第一行价格，第二行占下面 13px，不与三角或灰轨重叠。 */
 .range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;color:var(--dim)}
 .range52-hi .range52-gap{left:auto;right:0}
-.range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
-/* 百分比紧贴倒三角的上边缘，但**不能重叠**：三角高 9px，文字底 = 轨道上沿 + 11px（留 2px） */
-.range52-percent{position:absolute;bottom:calc(100% + 11px);left:clamp(14px,var(--range-pos),calc(100% - 14px));transform:translateX(-50%);color:var(--text);font-size:10px;line-height:11px;white-space:nowrap}
-/* 现价标记：倒三角，尖角 60°（等边：底 10.4px、高 9px），尖角朝下**顶在灰轨上沿**，
-   不再压在轨道中间（原来是个 8.4px 的紫方块）。外层浅紫描边 + 内层深紫实心 */
+/* 现价标记：倒三角，尖角朝下**顶在灰轨上沿**；三角之上不再写百分比——位置由三角本身表达，
+   涨跌空间改到两端价格下方。左右收窄 = 只收底的宽度（10.4 → 8.4px），**高度仍 9px 不变**，
+   于是顶角从 60° 变成约 50°（更尖锐）；内层维持四周 1px 的描边厚度，高度仍是原来的 7px，不跟着缩。
+   外层浅紫描边 + 内层深紫实心。 */
 .range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;
-  border-left:5.2px solid transparent;border-right:5.2px solid transparent;
+  border-left:4.2px solid transparent;border-right:4.2px solid transparent;
   border-top:9px solid #efd9ff;transform:translateX(-50%);z-index:1}
-.range52-marker::before{content:"";position:absolute;left:-4.2px;top:-8px;width:0;height:0;
-  border-left:4.2px solid transparent;border-right:4.2px solid transparent;border-top:7px solid #713caf}
+.range52-marker::before{content:"";position:absolute;left:-3.2px;top:-8px;width:0;height:0;
+  border-left:3.2px solid transparent;border-right:3.2px solid transparent;border-top:7px solid #713caf}
 /* 成本价：黄色竖线，横跨灰轨（2026-10-19 改；原来是条下方的白三角）。
    高度 10.5px 上下各露约 4px；z-index 高于现价标记，成本≈现价时黄压紫，成本价优先可见 */
 .range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;background:#f0c674;transform:translate(-50%,-50%);z-index:2}

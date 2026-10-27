@@ -664,25 +664,20 @@ class PageRenderer:
             else:
                 cost_html = f'<span class="range52-cost" style="left:{cpos:.1f}%"></span>'
                 caption += f'；成本价 {self._context.fmt(cost)} 位于区间 {cpos:.1f}%'
-        # 持仓两端第二行＝从本轮价到低／高点的变化幅度，以本轮价为基数；不是区间位置。
-        # 仅展示，不参与报灯、评分或折叠判定；非持仓保留原单行端点。
-        low_gap_html = high_gap_html = ""
-        rail_class = "range52-rail"
-        if d.get("group") == "position":
-            low_gap = (low / price - 1) * 100
-            high_gap = (high / price - 1) * 100
-            gap_text = lambda n: "0.0%" if abs(n) < 0.05 else f"{n:+.1f}%"
-            low_text, high_text = gap_text(low_gap), gap_text(high_gap)
-            low_gap_html = f'<span class="range52-gap">{low_text}</span>'
-            high_gap_html = f'<span class="range52-gap">{high_text}</span>'
-            rail_class += " has-endpoint-gaps"
-            caption += f'；从本轮价到低点 {low_text}、到高点 {high_text}（均以本轮价为基数）'
-        # 成本价是横跨灰轨的黄色竖线，区间位置百分比仍在现价三角之上。
+        # 两端第二行＝从本轮价到低／高点的变化幅度，以本轮价为基数；不是区间位置。
+        # 全组生效（不再只有持仓），仅展示，不参与报灯、评分或折叠判定；等于端点时写 0.0%，不带负号。
+        low_gap = (low / price - 1) * 100
+        high_gap = (high / price - 1) * 100
+        gap_text = lambda n: "0.0%" if abs(n) < 0.05 else f"{n:+.1f}%"
+        low_text, high_text = gap_text(low_gap), gap_text(high_gap)
+        low_gap_html = f'<span class="range52-gap">{low_text}</span>'
+        high_gap_html = f'<span class="range52-gap">{high_text}</span>'
+        caption += f'；从本轮价到低点 {low_text}、到高点 {high_text}（均以本轮价为基数）'
+        # 现价三角之上不再写百分比：位置由三角在灰轨上的位置表达，端点下方两行给出涨跌空间。
         return (f'<tr class="range52-row"><td colspan="4">'
-                f'<div class="{rail_class}" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
+                f'<div class="range52-rail" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
                 f'<span class="range52-lo" aria-hidden="true">{self._context.fmt(low)}{low_gap_html}</span>'
                 f'<div class="range52-track">'
-                f'<span class="range52-percent" aria-hidden="true">{pos:.1f}%</span>'
                 f'<span class="range52-marker" style="left:{pos:.1f}%"></span>'
                 f'{cost_html}</div>'
                 f'<span class="range52-hi" aria-hidden="true">{self._context.fmt(high)}{high_gap_html}</span>'
