@@ -696,6 +696,39 @@ test('初始ACK过期候选仅等待云端，不按旧本地数字构造撤销',
 });
 test('清仓后重绘成本数量和loss状态不会残留',async()=>{let d=copy(SEED);d.items.AAA.cost=200;let b=await boot({local:d});await b.enter();b.edit('AAA','qty','0');await b.tick(16);assert.equal(b.rows[0].qty,0);assert.equal(b.rows[0].lossLv,0);assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'0');});
 test('零固定收益也能在编辑态输入',async()=>{let b=await boot({local:{...SEED,fixed:0,fixed_cost:0}});await b.enter();b.edit('BOND','fixed','12.3456');assert.equal(b.local().fixed,12.3456);});
+for(const [name,fixed,fixedCost] of [['固收盈利',200,15],['固收亏损',20,200],['固收微亏',16916.34,16916.97],['无固收',0,0]]){
+  test('表头仅股票ETF盈亏且保留总资产：'+name,async()=>{
+    const b=await boot({local:{...copy(SEED),fixed,fixed_cost:fixedCost},token:false});
+    const sum=b.doc.querySelector('.cost-sum');
+    // AAA: 100*5成本=500无盈亏；BBB: 100*2-90*2=20，成本合计680。
+    assert.equal(sum.querySelector('b').textContent,'$'+Math.round(700+30+fixed).toLocaleString('en-US'));
+    assert.equal(sum.querySelectorAll('b')[1].textContent,'+$20（+2.9%）');
+    assert.match(sum.getAttribute('title'),/盈亏仅股票\/ETF/);
+    assert.match(sum.getAttribute('aria-label'),/股票\/ETF持仓盈亏/);
+    const bond=b.doc.querySelector('.blk-bond');
+    if(fixed>0){assert.ok(bond);assert.equal(bond.querySelector('.t-pnl').textContent,'');assert.equal(bond.querySelector('.pct'),null);}
+    assert.equal(b.state().DATA.fixed,fixed);assert.equal(b.state().DATA.fixed_cost,fixedCost);
+    b.paint();assert.equal(sum.querySelectorAll('b')[1].textContent,'+$20（+2.9%）');
+    assert.equal(b.puts().length,0);
+  });
+}
+test('仅现金固收无股票ETF时表头盈亏为零',async()=>{
+  const b=await boot({groups:{AAA:'focus',BBB:'focus'},token:false});
+  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$50·+$0（+0.0%）');
+  assert.equal(b.doc.querySelector('.blk-bond .t-pnl').textContent,'');
+});
+test('固收盈利不能抵消股票亏损且编辑成本仍保留',async()=>{
+  const d={...copy(SEED),fixed:2000,fixed_cost:10};d.items.AAA.cost=110;
+  const b=await boot({local:d,token:false});
+  const sum=b.doc.querySelector('.cost-sum');
+  assert.equal(sum.querySelectorAll('b')[1].textContent,'-$30（-4.1%）');
+  assert.equal(sum.querySelectorAll('b')[1].className,'down');
+  await b.enter();b.edit('BOND','fixed_cost','123.4567');b.edit('BOND','fixed','12.3456');await b.tick(16);
+  assert.equal(b.local().fixed_cost,123.4567);assert.equal(b.local().fixed,12.3456);
+  assert.equal(sum.querySelectorAll('b')[1].textContent,'-$30（-4.1%）');
+  assert.equal(b.doc.querySelector('.blk-bond .t-pnl').textContent,'');
+  assert.equal(b.puts().length,0);
+});
 test('本地写失败显式提示且不清dirty不上传',async()=>{let b=await boot();b.store.failSet.add(LOCAL);await b.enter();b.edit();await b.save();assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未持久化/);assert.equal(b.puts().length,0);assert.ok(b.doc.querySelector('[data-cost-export]'));});
 test('存储恢复后可显式重试保存',async()=>{let b=await boot();b.store.failSet.add(LOCAL);await b.enter();b.edit();await b.save();b.store.failSet.delete(LOCAL);b.requestSave(0,true);await b.tick(0);await finishPush(b);assert.equal(b.state().dirty,false);assert.equal(b.local().items.AAA.qty,1);});
 test('节流时间持久化失败禁止上传',async()=>{let b=await boot();b.store.failSet.add(PUSH_AT);await b.enter();b.edit();await b.save();assert.equal(b.puts().length,0);assert.equal(b.state().dirty,true);});
@@ -1289,6 +1322,21 @@ function assertLossBadges(b,red,yellow){
   }
   assert.equal(b.doc.querySelector('#signalCounts summary .stat-badge.purple').textContent,'7');
 }
+test('统计表头新增灰灯插在紫灯和财报前，重绘保留紫灯数量',async()=>{
+  const b=await bootLoss({prepareDocument:doc=>{
+    const earn=doc.createElement('span');earn.className='count-total count-earn';earn.textContent='财报 2';
+    doc.querySelector('#signalCounts summary .group-stats').appendChild(earn);
+  }});
+  ackCurrentLoss(b);
+  for(let i=0;i<3;i++){
+    b.paint();assertLossGrayBadge(b,1);
+    const stats=b.doc.querySelector('#signalCounts summary .group-stats');
+    assert.deepEqual(stats.children.map(x=>x.className),[
+      'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn']);
+    assert.equal(stats.querySelector('.stat-badge.purple').textContent,'7');
+    assert.equal(stats.querySelector('.count-earn').textContent,'财报 2');
+  }
+});
 function ackCurrentLoss(b,sym='AAA'){
   const row=b.rows.find(r=>r.sym===sym),button=row.warn.querySelector('button[data-ack]');
   assert.ok(button,'真实浮亏提醒必须有已读按钮');

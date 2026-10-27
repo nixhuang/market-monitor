@@ -1238,7 +1238,7 @@
     var grayTotal=grayFallback+Object.keys(grayIds).length;
     if(!grayBadge && grayTotal){
       var stats=card.querySelector('summary .group-stats');
-      if(stats){ grayBadge=document.createElement('span'); grayBadge.className='stat-badge gray'; stats.appendChild(grayBadge); }
+      if(stats){ grayBadge=document.createElement('span'); grayBadge.className='stat-badge gray'; stats.insertBefore(grayBadge,stats.querySelector('.stat-badge.purple')||stats.querySelector('.count-earn')); }
     }
     if(grayBadge){ grayBadge.textContent=String(grayTotal); grayBadge.setAttribute('aria-label','灰 '+grayTotal+' 项'); }
     if(notify && typeof window.dispatchEvent==='function' && typeof window.CustomEvent==='function')
@@ -1718,10 +1718,7 @@
     var cash=num(DATA.cash);            // 现金总额（券商余额＋货币市场 ETF，一个数字）
     var fixed=num(DATA.fixed);          // 固定收益市值
     var fixedCost=num(DATA.fixed_cost);
-    // 固定收益的盈亏（按券商给的总成本算），表头的总盈亏要把它算进来
-    var fPnl=(fixed>0&&fixedCost>0)?fixed-fixedCost:0;
-    var fPct=(fixedCost>0&&fixed>0)?fPnl/fixedCost*100:0;
-    var fCls=fPnl>=0?'up':'down';
+    // 固收只参与资产与仓位；其市值、成本保留，不参与股票/ETF盈亏计算。
     var longs=[], shorts=[];
     var totalMv=0, totalPnl=0, totalCost=0;
     ROWS.forEach(function(r){
@@ -1807,14 +1804,14 @@
     var tcls=totalPnl>=0?'up':'down';
     var tPct=totalCost>0?totalPnl/totalCost*100:0;
     var tWt=totalAsset>0?(totalMv/totalAsset*100).toFixed(1)+'%':'—';
-    /* 卡片表头只留两个数：总资产（只写数值，不写「总资产」四个字）
-       ＋ 相对成本的盈亏（金额＋比例，含固定收益） */
-    var allPnl=totalPnl+fPnl, allCost=totalCost+fixedCost;
-    var allPct=allCost>0?allPnl/allCost*100:0;
+    /* 卡片表头保持总资产＋盈亏布局；盈亏金额和成本分母均只取股票/ETF持仓。
+       现金（含归入现金的货币市场ETF）、固收仍计入总资产，不计其盈亏与成本。 */
     var sumEl=panel.querySelector('.cost-sum');
     sumEl.innerHTML='<b>'+plain(totalAsset)+'</b>'
-      +'<span class="sep">·</span><b class="'+(allPnl>=0?'up':'down')+'">'
-      +money(allPnl)+'（'+pct(allPct)+'）</b>';
+      +'<span class="sep">·</span><b class="'+tcls+'">'
+      +money(totalPnl)+'（'+pct(tPct)+'）</b>';
+    sumEl.setAttribute('title','总资产含现金及固收；盈亏仅股票/ETF持仓，不含现金项及固收');
+    sumEl.setAttribute('aria-label','总资产 '+plain(totalAsset)+'；股票/ETF持仓盈亏 '+money(totalPnl)+'，'+pct(tPct));
     renderRs();
 
     // 固定降序：按盈亏（百分比）或按仓位（市值）排，点列头切换。
@@ -1872,8 +1869,7 @@
         +(editing?inp('BOND','fixed_cost',vt(fixedCost),'成本')
           :(fixedCost>0?'<span class="k">成本</span>'+plain(fixedCost):'—'))+'</span>'
         +'<span class="t-mv">'+(editing?inp('BOND','fixed',vt(fixed),'市值'):plain(fixed))+'</span>'
-        +'<span class="t-pnl '+fCls+'"><span class="pct">'+pct(fPct)+'</span> '
-        +'<span class="amt">'+money(fPnl)+'</span></span>'
+        +'<span class="t-pnl"></span>'
         +wtCell(fixed)+'</div>');
     }
     /* ---------- 当日盈亏贡献（默认收起） ----------

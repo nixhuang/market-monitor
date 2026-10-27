@@ -1579,6 +1579,19 @@ const deadline = setTimeout(() => {
       assertions.push({ok: openedAfterClick !== openedBefore && openedAfterSecondClick === openedBefore,
         name: width + 'px真实鼠标点击统计标题可收起并重新展开',
         actual: {openedBefore, openedAfterClick, openedAfterSecondClick}});
+      const header = await evaluate(`(() => {
+        const stats = document.querySelector('#signalCounts > summary .group-stats');
+        const purple = stats.querySelector('.stat-badge.purple');
+        const snapshot = JSON.parse(document.getElementById('snapshotData').textContent);
+        return {order: [...stats.children].map(el => el.className),
+          count: purple.textContent, expected: snapshot.summary.purple,
+          border: getComputedStyle(purple).borderTopColor,
+          overflow: document.documentElement.scrollWidth > innerWidth};
+      })()`);
+      assertions.push({ok: JSON.stringify(header.order) === JSON.stringify([
+        'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn'])
+        && header.count === String(header.expected) && header.border === 'rgb(163, 113, 247)' && !header.overflow,
+        name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
       const actual = await evaluate(`(() => {
         document.querySelectorAll('details.group-card,details.quiet-list').forEach(el => el.open = true);
         const high = document.querySelector('#s-thigh .lvtag.tgt.high');

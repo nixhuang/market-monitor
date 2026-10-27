@@ -353,19 +353,33 @@
     }
     return '还没在这台设备保存过修改';
   }
-  let reloadStarted = false, reloadDeferred = false;
+  let reloadStarted = false;
+  function expectedConfig() {
+    if (!latestRules) return null;
+    return Object.fromEntries(FILES.map(file => {
+      const receipt = targets[file];
+      const remote = latestRules.files[file];
+      const awaitingReceipt = receipt && configState.phase !== 'published' &&
+        remote !== receipt.blobSHA && remote === (pageSnapshot() || verifiedSnapshot)?.config_files[file];
+      return [file, receipt && (receipt.savedAt >= latestRules.checkedAt || awaitingReceipt)
+        ? receipt.blobSHA : remote];
+    }));
+  }
+  function sameConfig(value, expected) {
+    return schema(value) && expected && FILES.every(file => value.config_files[file] === expected[file]);
+  }
   function reloadCurrent(force = false) {
-    if (!verifiedSnapshot || publication.phase !== 'published' || rulesError || !latestRules ||
-        verifiedSnapshot.config_files['settings.json'] !== latestRules.sha) return false;
-    const receipt = targets['settings.json'];
-    if (receipt && configState.phase !== 'published') return false;
+    if (!force) return false; // 配置发布后仅提示手动刷新，不自动替换当前页。
+    if (!verifiedSnapshot || publication.phase !== 'published' || rulesError ||
+        !sameConfig(verifiedSnapshot, expectedConfig())) return false;
+    if (Object.keys(targets).length && configState.phase !== 'published') return false;
     if (!window.location || typeof window.location.replace !== 'function') return false;
     const url = new URL(window.location.href);
-    if (!force && (reloadStarted || url.searchParams.get('mm_refreshed_run') === verifiedSnapshot.run_id)) return false;
+    if (reloadStarted) return false;
     try {
-      if (options.canReload && !options.canReload()) { reloadDeferred = true; return false; }
-    } catch (_) { reloadDeferred = true; return false; }
-    reloadDeferred = false; reloadStarted = true;
+      if (options.canReload && !options.canReload()) return false;
+    } catch (_) { return false; }
+    reloadStarted = true;
     url.searchParams.set('_mm', String(Date.now()));
     url.searchParams.set('mm_refreshed_run', verifiedSnapshot.run_id);
     window.location.replace(url.href);
@@ -373,31 +387,29 @@
   }
   function ruleState() {
     const snap = el('snapshotData') ? pageSnapshot() : verifiedSnapshot;
-    const appliedSHA = snap && snap.config_files['settings.json'];
-    if (rulesError) return {phase: 'idle', text: '暂无法核对最新规则；请稍后查运行状态'};
-    if (!latestRules) return {phase: 'idle', text: '正在核对最新规则…'};
-    const receipt = targets['settings.json'];
-    const expectedSHA = receipt && receipt.savedAt > latestRules.checkedAt
-      ? receipt.blobSHA : latestRules.sha;
-    if (appliedSHA === expectedSHA) return {phase: 'ok', text: '规则按当前设置生效'};
-    if (!appliedSHA) return {phase: 'idle', text: '未读到有效看板快照，暂无法核对规则'};
-    if (verifiedSnapshot && verifiedSnapshot.config_files['settings.json'] === expectedSHA) {
-      return {phase: 'busy', text: reloadDeferred ? '新规则已发布；有未保存编辑，保存后将自动刷新当前页'
-        : '新规则已发布，本页仍是旧规则；正在刷新当前页', reload: true};
+    const expected = expectedConfig();
+    const tracked = Object.keys(targets).length > 0 && expected &&
+      Object.entries(targets).every(([file, receipt]) => expected[file] === receipt.blobSHA);
+    const receiptPending = tracked && (!snap || !configMatches(snap, targets));
+    if (rulesError || !expected) return {phase: 'idle', text: '暂无法核验'};
+    // 清单、分组和规则均一致，且保存回执的本次生成证据已确认，才可显示绿灯。
+    if (sameConfig(snap, expected) && !receiptPending) return {phase: 'ok', text: '已生效'};
+    if (sameConfig(verifiedSnapshot, expected) && (!tracked || configState.phase === 'published')) {
+      return el('snapshotData') ? {phase: 'busy', text: '需要刷新'} : {phase: 'ok', text: '已生效'};
     }
-    const phase = receipt && receipt.blobSHA === expectedSHA && configState.phase === 'failed'
-      ? 'failed' : latestRules.run && phaseForRun(latestRules.run).phase;
-    if (phase === 'failed') {
-      const cancelled = configState.cancelled || (latestRules.run && phaseForRun(latestRules.run).cancelled);
-      return cancelled
-        ? {phase: 'busy', text: '规则尚未生效：对应运行已取消（通常被更新的等待任务替换），稍后以最新运行为准；可点查运行状态'}
-        : {phase: 'bad', text: '规则未生效：对应运行失败，请查看运行记录'};
+    const associated = tracked && (configRun && configRun.head_sha === latestRules.commitSHA ||
+      Object.values(targets).some(receipt => receipt.savedAt >= latestRules.checkedAt));
+    const runState = associated ? configState : latestRules.run ? phaseForRun(latestRules.run) : null;
+    if (runState && runState.phase === 'failed') return runState.cancelled
+      ? {phase: 'busy', text: '等待更新'} : {phase: 'bad', text: '更新失败'};
+    if (sameConfig(latestStatus, expected) && (!tracked || configMatches(latestStatus, targets))) {
+      return {phase: 'busy', text: '等待发布'};
     }
-    if (ruleSince && Date.now() - ruleSince >= MAX_WAIT) {
-      return {phase: 'bad', text: '规则尚未生效：本页仍用旧设置，等待已超过 10 分钟；请查运行状态（不代表运行失败）'};
-    }
-    if (phase === 'generated') return {phase: 'busy', text: '新规则已生成，正在等待看板发布…'};
-    return {phase: 'busy', text: '规则已保存，正在重跑…（通常约 5–9 分钟）'};
+    if (runState && runState.phase === 'generated') return {phase: 'busy', text: '等待发布'};
+    if (latestRules.runError || (actionsError && tracked) || (!schema(snap) && el('snapshotData')) ||
+        (ruleSince && Date.now() - ruleSince >= MAX_WAIT)) return {phase: 'idle', text: '暂无法核验'};
+    if (runState && runState.phase === 'running') return {phase: 'busy', text: '正在更新'};
+    return {phase: 'busy', text: '等待更新'};
   }
   function lightState() {
     // 点了「立即运行」但没令牌/令牌不对：直接把原因写在灯上，否则按钮看着像坏了
@@ -527,9 +539,6 @@
     const rule = ruleState();
     if (el('ruleLight')) el('ruleLight').dataset.phase = rule.phase;
     put('ruleLightTxt', rule.text, rule.phase);
-    if (rule.reload && el('ruleLightTxt') && reloadDeferred) {
-      put('ruleLightTxt', '新规则已发布；有未保存编辑，保存后将自动刷新当前页', 'busy');
-    }
     const currentPage = pageSnapshot();
     compactLegacySummary(currentPage);
     // 运行详情现在只在编辑页展示（首页已移除）：优先本页内嵌快照，其次网络读到的最新状态。
@@ -564,15 +573,6 @@
       box.appendChild(link);
     }
     if (typeof options.onChange === 'function') options.onChange(s);
-    const receipt = targets['settings.json'];
-    if (rule.reload || receipt && configState.phase === 'published') {
-      reloadCurrent();
-      if (reloadDeferred) {
-        const note = '新规则已发布；有未保存编辑，保存后将自动刷新当前页';
-        put('ruleLightTxt', note, 'busy');
-        put('appliedBrief', note, 'busy');
-      }
-    }
     return s;
   }
   function phaseForRun(run) {
@@ -603,12 +603,14 @@
     return null;
   }
   function schedule() {
-    const ruleWaiting = ruleSince > 0 && Date.now() - ruleSince < MAX_WAIT && ruleState().phase === 'busy';
-    const tracking = activeConfig() || activeManual() || retryPending || reloadDeferred;
-    if (!tracking && !ruleWaiting && publicRetry >= PUBLIC_RETRY_MAX) return;
-    const since = Math.min(activeConfig() ? configSince : Infinity, activeManual() ? manual.since : Infinity);
+    const ruleWaiting = ruleSince > 0 && Date.now() - ruleSince < MAX_WAIT && ruleState().text !== '需要刷新';
+    const tracking = activeConfig() || activeManual() || retryPending || ruleWaiting;
+    const boardWatching = !!(el('ruleLight') && el('snapshotData'));
+    if (window.document.hidden || (!tracking && !boardWatching && publicRetry >= PUBLIC_RETRY_MAX)) return;
+    const since = Math.min(activeConfig() ? configSince : Infinity, activeManual() ? manual.since : Infinity,
+      ruleWaiting ? ruleSince : Infinity);
     const delay = Math.max(apiBlockedUntil - Date.now(), tracking ? (Date.now() - since < 120000 ? 8000 : 20000)
-      : ruleWaiting ? 60000 : (publicRetry === 0 ? 4000 : 10000));
+      : publicRetry >= PUBLIC_RETRY_MAX ? 60000 : (publicRetry === 0 ? 4000 : 10000));
     timer = window.setTimeout(() => { void tick(); }, delay);
   }
   async function tick() {
@@ -653,53 +655,65 @@
     let nextRules = null, nextRulesError = '';
     const rulesTask = (async () => {
       const checkedAt = Date.now();
-      try {
-        const settings = await request(bust(apiURL('/contents/settings.json?ref=' +
-          encodeURIComponent(options.branch))), {github: true, signal});
-        if (!SHA.test(settings && settings.sha || '')) throw new Error('最新规则缺少有效 blob SHA');
-        nextRules = {sha: settings.sha, checkedAt, run: null};
-      } catch (error) {
+      const readSHA = async (file, ref = options.branch) => {
         try {
+          const value = await request(bust(apiURL('/contents/' + file + '?ref=' +
+            encodeURIComponent(ref))), {github: true, signal});
+          if (!SHA.test(value && value.sha || '')) throw new Error('配置缺少有效 blob SHA');
+          return value.sha;
+        } catch (error) {
+          // 公开原文按 Git blob 哈希核验，两类配置采用同一口径；令牌不发送给 raw 主机。
           const raw = await request(bust('https://raw.githubusercontent.com/' +
             encodeURIComponent(options.owner) + '/' + encodeURIComponent(options.repo) + '/' +
-            encodeURIComponent(options.branch) + '/settings.json'), {signal, text: true});
+            encodeURIComponent(ref) + '/' + file), {signal, text: true});
           JSON.parse(raw);
           const bytes = new TextEncoder().encode(raw);
           const header = new TextEncoder().encode('blob ' + bytes.length + '\0');
           const blob = new Uint8Array(header.length + bytes.length);
           blob.set(header); blob.set(bytes, header.length);
           const hash = await window.crypto.subtle.digest('SHA-1', blob);
-          nextRules = {sha: Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join(''), checkedAt, run: null};
-        } catch (_) {
-          nextRulesError = networkMessage(error);
-          return;
+          return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
         }
-      }
-      const current = el('snapshotData') ? pageSnapshot() : verifiedSnapshot;
-      if (current && current.config_files['settings.json'] === nextRules.sha) return;
+      };
       try {
-        const commits = await request(bust(apiURL('/commits?path=settings.json&sha=' +
-          encodeURIComponent(options.branch) + '&per_page=1')), {github: true, signal});
-        const commit = Array.isArray(commits) && commits[0];
-        if (commit && SHA.test(commit.sha || '')) {
-          const atCommit = await request(apiURL('/contents/settings.json?ref=' +
-            encodeURIComponent(commit.sha)), {github: true, signal});
-          if (atCommit && atCommit.sha === nextRules.sha) {
-            nextRules.run = await findRun('&event=push', run =>
-              run.event === 'push' && run.head_sha === commit.sha, signal);
-          }
+        const hashes = await Promise.all(FILES.map(file => readSHA(file)));
+        nextRules = {files: Object.fromEntries(FILES.map((file, i) => [file, hashes[i]])),
+          checkedAt, run: null, commitSHA: null, runError: ''};
+      } catch (error) { nextRulesError = networkMessage(error); return; }
+      const current = el('snapshotData') ? pageSnapshot() : verifiedSnapshot;
+      const pending = Object.entries(expected).some(([file, receipt]) =>
+        nextRules.files[file] === receipt.blobSHA && (!current || !configMatches(current, expected)));
+      if (!pending && (sameConfig(current, nextRules.files) || sameConfig(verifiedSnapshot, nextRules.files))) return;
+      try {
+        const changed = FILES.filter(file => !current || current.config_files[file] !== nextRules.files[file] || expected[file]);
+        const commits = await Promise.all(changed.map(async file => {
+          const list = await request(bust(apiURL('/commits?path=' + file + '&sha=' +
+            encodeURIComponent(options.branch) + '&per_page=1')), {github: true, signal});
+          return Array.isArray(list) ? list[0] : null;
+        }));
+        const candidates = [...new Map(commits.filter(c => c && SHA.test(c.sha || '')).map(c => [c.sha, c])).values()];
+        candidates.sort((a, b) => Date.parse(b.commit?.committer?.date || '') - Date.parse(a.commit?.committer?.date || ''));
+        for (const commit of candidates) {
+          const hashes = await Promise.all(FILES.map(file => readSHA(file, commit.sha)));
+          if (!FILES.every((file, i) => hashes[i] === nextRules.files[file])) continue;
+          // 只查确实同时带这份清单和规则的提交对应的运行，不能借用无关任务结论。
+          nextRules.commitSHA = commit.sha;
+          nextRules.run = nextConfigRun && nextConfigRun.head_sha === commit.sha ? nextConfigRun :
+            await findRun('&event=push', run => run.event === 'push' && run.head_sha === commit.sha, signal);
+          if (nextRules.run) break;
         }
-      } catch (_) {
-        // 没有运行证据时保留等待状态，不把无关运行的失败当成规则失败。
-      }
+      } catch (error) { nextRules.runError = networkMessage(error); }
     })();
     await Promise.all([publicTask, actionTask, rulesTask]);
     if (epoch !== version) return state();
     if (nextRules) {
-      if (!latestRules || nextRules.sha !== latestRules.sha) ruleSince = 0;
+      if (!latestRules || FILES.some(file => nextRules.files[file] !== latestRules.files[file])) ruleSince = 0;
       latestRules = nextRules;
       const current = el('snapshotData') ? pageSnapshot() : (snapshot || verifiedSnapshot);
-      if (current && current.config_files['settings.json'] !== nextRules.sha) {
+      const receiptPending = Object.keys(expected).length > 0 &&
+        Object.entries(expected).every(([file, receipt]) => nextRules.files[file] === receipt.blobSHA) &&
+        (!current || !configMatches(current, expected));
+      if (!sameConfig(current, nextRules.files) || receiptPending) {
         if (!ruleSince) ruleSince = Date.now();
       } else ruleSince = 0;
     }
@@ -940,6 +954,11 @@
     return window.MMRunStatus;
   }
   window.MMRunStatus = {refresh, watchConfig, startManual, init};
+  window.document.addEventListener('visibilitychange', () => {
+    if (!initialized) return;
+    if (window.document.hidden) cancelPoll();
+    else void refresh();
+  });
   // 首页这轮改版后已经没有 runState / runMsg / runSummary 了，只看这三个会导致
   // 首页根本不 init —— 按钮没绑 onclick，点了就是「没反应」。改成任一控件存在即初始化。
   function autoInit() {

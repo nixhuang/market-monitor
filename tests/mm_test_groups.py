@@ -7996,6 +7996,31 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertNotIn('(持仓)', output)
         self.assertNotIn('(IT软硬Ai)', output)
 
+    def test_statistics_header_orders_red_yellow_gray_purple_then_earnings(self):
+        rows = [self.member_row('RED', 'position', 'red', ('chg', 'red')),
+                self.member_row('PURPLE', 'focus', 'green', ('target', 'purple'))]
+        snap = monitor.build_snapshot({}, rows, {}, group_counts={})
+        from copy import deepcopy
+        before = deepcopy(snap)
+        output = monitor._signal_counts_card(snap)
+        header = output.split('</summary>', 1)[0]
+        tokens = ['stat-badge red', 'stat-badge yellow', 'stat-badge gray',
+                  'stat-badge purple', 'count-earn']
+        self.assertEqual([header.index(t) for t in tokens], sorted(header.index(t) for t in tokens))
+        self.assertIn('<span class="stat-badge purple" aria-label="紫 1 项">1</span>', header)
+        self.assertEqual(snap, before)
+
+    def test_statistics_header_purple_zero_and_unknown_do_not_guess(self):
+        snap = monitor.build_snapshot({}, [self.member_row('RED', 'position', 'red', ('chg', 'red'))], {}, group_counts={})
+        header = monitor._signal_counts_card(snap).split('</summary>', 1)[0]
+        self.assertIn('<span class="stat-badge purple" aria-label="紫 0 项">0</span>', header)
+        for value in (None, True, -1, '3'):
+            with self.subTest(value=value):
+                snap['summary']['purple'] = value
+                header = monitor._signal_counts_card(snap).split('</summary>', 1)[0]
+                self.assertIn('<span class="count-total count-purple">紫 —</span>', header)
+                self.assertNotIn('stat-badge purple', header)
+
     def test_purple_only_and_missing_quote_keep_original_levels(self):
         rows = [self.member_row('PURPLE', 'focus', 'green', ('target', 'purple'), ('target', 'purple')),
                 self.member_row('GRAY', 'position', 'gray', ('target', 'purple'))]
@@ -8222,6 +8247,8 @@ class TestTargetOverlays(unittest.TestCase):
                 self.assertTrue(member['detail'])
         self.assertEqual(snap['summary']['purple'], 4)
         self.assertEqual(snap['signal_counts']['target']['purple'], 4)
+        header = monitor._signal_counts_card(snap).split('</summary>', 1)[0]
+        self.assertIn('<span class="stat-badge purple" aria-label="紫 4 项">4</span>', header)
         self.assertEqual({m['symbol'] for m in snap['signal_members']['target']['purple']}, {'SPACE', 'HIGH', 'HIT', 'BOTH'})
         self.assertEqual(snap['signal_counts']['target']['red'], 0)
         self.assertEqual(snap['signal_counts']['target']['yellow'], 0)

@@ -1196,9 +1196,10 @@ class PageRenderer:
         gray_count = len({self._context.instrument_identity(m["symbol"])
                           for entries in gray_by_kind.values() for m in entries})
         totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
-                  ("gray", "灰", gray_count), ("earn", "财报", self._context._earnings_week_panel(snapshot, count_only=True)))
+                  ("gray", "灰", gray_count), ("purple", "紫", whole(summary.get("purple"))),
+                  ("earn", "财报", self._context._earnings_week_panel(snapshot, count_only=True)))
         stats = "".join(
-            (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray")
+            (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple")
              else f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>')
             for key, name, n in totals)
         return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'
@@ -1626,7 +1627,7 @@ class PageRenderer:
 </div>
 <div class="statusrow">
   <div class="runlight" id="runLight" data-phase="{init_light_phase}"><i class="dot"></i><span id="runLightTxt">{init_light}</span></div>
-  <div class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">正在核对最新规则…</span></div>
+  <div class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">暂无法核验</span></div>
 </div>
 <div id="checkResult" class="check-result" role="status" hidden></div>
 
