@@ -1513,6 +1513,8 @@ const deadline = setTimeout(() => {
     });
     let seq = 0;
     const pending = new Map();
+    let refreshDocument = null;
+    const refreshBase = 'https://mm-refresh.test/market-monitor/index.html';
     call = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
       const id = ++seq;
       pending.set(id, {resolve, reject});
@@ -1529,8 +1531,15 @@ const deadline = setTimeout(() => {
         requestUrls.add(msg.params.request.url);
       } else if (msg.method === 'Fetch.requestPaused') {
         requestUrls.add(msg.params.request.url);
-        call('Fetch.failRequest', {requestId: msg.params.requestId, errorReason: 'InternetDisconnected'}, msg.sessionId)
-          .catch(() => {});
+        if (refreshDocument && msg.params.resourceType === 'Document'
+            && msg.params.request.url.split(/[?#]/)[0] === refreshBase) {
+          call('Fetch.fulfillRequest', {requestId: msg.params.requestId, responseCode: 200,
+            responseHeaders: [{name:'Content-Type',value:'text/html; charset=utf-8'}],
+            body:Buffer.from(refreshDocument).toString('base64')}, msg.sessionId).catch(() => {});
+        } else {
+          call('Fetch.failRequest', {requestId: msg.params.requestId, errorReason: 'InternetDisconnected'}, msg.sessionId)
+            .catch(() => {});
+        }
       } else if (msg.method === 'Network.loadingFailed') {
         failedRequests.push(msg.params.errorText);
       }
@@ -1642,7 +1651,62 @@ const deadline = setTimeout(() => {
           hitColor: actual.hitColor, hitBackground: actual.hitBackground, badColor: actual.badColor,
           sig: actual.sig, manual: actual.manual, runbarRuleLinks: actual.runbarRuleLinks}});
     }
-    await cdp('Page.setDocumentContent', {frameId: tree.frameTree.frame.id, html: input.injectionPage});
+    // 真实导航/刷新仅由 CDP 提供合成文档；其他请求仍全部拦截，绝不读取云端仓位。
+    refreshDocument = input.html.replace(/var REAL=(.*?);/, (match,json) => {
+      const seed=JSON.parse(json);seed.preview=true;return 'var REAL='+JSON.stringify(seed)+';';
+    }).replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
+      .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
+    await cdp('Network.emulateNetworkConditions', {offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+    const waitLoad = () => new Promise(resolve => {
+      const onLoad = event => {
+        const msg = JSON.parse(event.data);
+        if (msg.method === 'Page.loadEventFired' && msg.sessionId === session) {
+          ws.removeEventListener('message',onLoad); resolve();
+        }
+      };
+      ws.addEventListener('message',onLoad);
+    });
+    for (const [width,height] of [[1440,1000],[820,1180],[390,844]]) {
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      let loaded=waitLoad();
+      await cdp('Page.navigate',{url:refreshBase+'?keep=1&token=synthetic'}); await loaded;
+      await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+      const before = await evaluate(`(() => {
+        const link=document.querySelector('a.signal-member-jump[href="#s-thigh"]');
+        if(!link) throw Error('missing synthetic stock jump');
+        link.click();
+        const u=new URL(location.href);u.searchParams.set('focus','pos');u.searchParams.set('edit','1');
+        history.replaceState(null,'',u.href);
+        return {hash:location.hash,open:document.getElementById('s-thigh').closest('details.group-card').open};
+      })()`);
+      loaded=waitLoad();await evaluate(`document.getElementById('btnHardRefresh').click()`);await loaded;
+      await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+      const after=await evaluate(`(() => {
+        const u=new URL(location.href);
+        return {hash:u.hash,focus:u.searchParams.has('focus'),edit:u.searchParams.has('edit'),
+          marker:u.searchParams.has('_mm_reset_view'),keep:u.searchParams.get('keep'),token:u.searchParams.get('token'),
+          open:[...document.querySelectorAll('details.card,details.cost-manage')].filter(d=>d.open).map(d=>d.id),
+          y:scrollY,restoration:history.scrollRestoration};
+      })()`);
+      assertions.push({ok:before.hash==='#s-thigh' && before.open && after.hash==='' && !after.focus && !after.edit
+        && !after.marker && after.keep==='1' && after.token==='synthetic'
+        && JSON.stringify(after.open)===JSON.stringify(['signalCounts']) && after.y===0,
+        name:width+'px真实股票跳转后刷新清旧定位、分组折叠/统计打开及回顶部',actual:{before,after}});
+      const jumpAfter=await evaluate(`(() => {
+        document.querySelector('a.signal-member-jump[href="#s-thigh"]').click();
+        window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));
+        return new Promise(resolve=>requestAnimationFrame(()=>resolve({hash:location.hash,
+          open:document.getElementById('s-thigh').closest('details.group-card').open})));
+      })()`);
+      assertions.push({ok:jumpAfter.hash==='#s-thigh' && jumpAfter.open,
+        name:width+'px刷新后普通股票跳转仍展开、后续pageshow不反复全页复位',actual:jumpAfter});
+    }
+    refreshDocument=null;
+    await cdp('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
+    const injectionTree=await cdp('Page.getFrameTree');
+    const injectionHTML=input.injectionPage.replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
+      .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
+    await cdp('Page.setDocumentContent', {frameId: injectionTree.frameTree.frame.id, html: injectionHTML});
     const escaped = await evaluate(`(() => {
       const snapshot = JSON.parse(document.getElementById('snapshotData').textContent);
       return {injected: globalThis.__mmInjected === 1,
@@ -1655,7 +1719,8 @@ const deadline = setTimeout(() => {
       && escaped.probe === input.injectionProbe,
       name: '真实浏览器验证HTML属性与script上下文无注入且字符串无损', actual: escaped});
     assertions.push({ok: [...requestUrls].every(url =>
-      url === 'http://127.0.0.1:65530/offline-probe' || url.startsWith('data:') || url === 'about:blank'),
+      url === 'http://127.0.0.1:65530/offline-probe' || url.startsWith('data:') || url === 'about:blank'
+      || url.split(/[?#]/)[0] === refreshBase),
       name:'合成页面不尝试任何云端仓位或外网读写', actual:{requestUrls:[...requestUrls]}});
     process.stdout.write(JSON.stringify(assertions));
   } catch (error) {

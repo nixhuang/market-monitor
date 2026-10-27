@@ -1275,6 +1275,50 @@ test('目标union与行情及财报交集执行真实页面函数并身份唯一
   assert.deepEqual(copy(pending.pending),['空间/达到']);
   assert.deepEqual(copy(context.intersectSignals(data,['target_purple','earnings_week']).members.map(m=>m.id)),['BOTH','HIT']);
 });
+test('页面内强制刷新清旧定位但保留凭据与无关参数，缓存清理失败仍可刷新',async()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','monitor_render.py'),'utf8');
+  const block=source.split('HARD_REFRESH_JS = (')[1].split('\n)')[0];
+  const code=[...block.matchAll(/^\s*("(?:\\.|[^"\\])*")\s*$/gm)].map(m=>JSON.parse(m[1])).join('');
+  assert.ok(code.includes('btnHardRefresh'));
+  for(const fail of [false,true]){
+    const button={},reloads=[];let removed=0,unregistered=0;
+    const location={href:'https://example.test/index.html?focus=pos&edit=1&keep=1&token=synthetic#s-aaa',replace:url=>reloads.push(url)};
+    const context={URL,Date,location,document:{getElementById:()=>button},
+      window:{caches:{keys:async()=>{if(fail)throw Error('cache unavailable');return ['old'];},delete:async()=>{removed++;}}},
+      navigator:{serviceWorker:{getRegistrations:async()=>[{unregister:async()=>{unregistered++;}}]}}};
+    context.caches=context.window.caches;vm.runInNewContext(code,context);await button.onclick();
+    const url=new URL(reloads[0]);assert.equal(url.hash,'');assert.equal(url.searchParams.has('focus'),false);
+    assert.equal(url.searchParams.has('edit'),false);assert.equal(url.searchParams.get('_mm_reset_view'),'1');
+    assert.equal(url.searchParams.get('keep'),'1');assert.equal(url.searchParams.get('token'),'synthetic');
+    assert.ok(url.searchParams.get('_r'));assert.equal(removed,fail?0:1);assert.equal(unregistered,fail?0:1);
+  }
+});
+test('刷新一次性复位顶层卡片和统计并回顶部，不改长持仓默认或普通定位',()=>{
+  const source=fs.readFileSync(path.join(__dirname,'..','page_assets.py'),'utf8');
+  const start=source.indexOf('(function resetBoardOnRefresh()'),end=source.indexOf('\n})();',start)+6;
+  const code=source.slice(start,end);assert.ok(start>=0&&end>start);
+  for(const requested of [false,true]){
+    const stats={id:'signalCounts',open:false},group={id:'group_positions',open:true};
+    const macro={id:'macroCard',open:true},cost={id:'costManage',open:true},long={open:true};
+    const events=[],frames=[],scrolls=[],normalizations=[],replaced=[];
+    const href='https://example.test/index.html?keep=1&mm_refreshed_run=2'+(requested?'&_mm_reset_view=1':'')+'#s-aaa';
+    const history={state:{saved:true},scrollRestoration:'auto',replaceState:(state,unused,url)=>replaced.push({state,url})};
+    const context={URL,history,document:{querySelectorAll:()=>[stats,group,macro,cost],getElementById:id=>id==='signalCounts'?stats:null},
+      normalizeSignalCard:card=>normalizations.push(card),requestAnimationFrame:fn=>frames.push(fn),
+      window:{location:{href},scrollTo:(x,y)=>scrolls.push([x,y]),addEventListener:(name,fn,options)=>events.push({name,fn,options})}};
+    vm.runInNewContext(code,context);
+    if(!requested){assert.equal(group.open,true);assert.equal(events.length,0);assert.equal(scrolls.length,0);continue;}
+    assert.equal(stats.open,true);assert.equal(group.open,false);assert.equal(macro.open,false);assert.equal(cost.open,false);
+    assert.equal(long.open,true);assert.equal(history.scrollRestoration,'manual');
+    assert.equal(events[0].name,'pageshow');assert.equal(events[0].options.once,true);
+    group.open=true;stats.open=false;events[0].fn();frames[0]();
+    assert.equal(group.open,false);assert.equal(stats.open,true);assert.equal(history.scrollRestoration,'auto');
+    const url=new URL(replaced[0].url);assert.equal(url.searchParams.has('_mm_reset_view'),false);
+    assert.equal(url.searchParams.get('keep'),'1');assert.equal(url.searchParams.get('mm_refreshed_run'),'2');
+    assert.deepEqual(replaced[0].state,{saved:true});assert.ok(scrolls.every(p=>p[0]===0&&p[1]===0));
+    assert.equal(normalizations.length,2);
+  }
+});
 test('目标名单跳转执行真实页面监听打开祖先及滚动到成员',()=>{
   const assets=fs.readFileSync(path.join(__dirname,'..','page_assets.py'),'utf8');
   const pos=assets.indexOf('const link = event.target.closest("a.signal-member-jump")');

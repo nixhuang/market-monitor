@@ -1007,6 +1007,38 @@ PAGE_CSS += RULES_CSS
 # 单独导出供 monitor 替换旧锚点处理器；PAGE_INTERACTION_JS 已含此块，勿重复追加。
 RULES_INTERACTION_JS = ""  # 保留导出兼容；规则跳转、hash监听和高亮计时器已删除。
 PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
+// 仅页面内明确刷新复位；普通股票定位和之后的往返缓存不改变用户展开状态。
+(function resetBoardOnRefresh() {
+  var url;
+  try { url = new URL(window.location.href); } catch (_) { return; }
+  if (url.searchParams.get('_mm_reset_view') !== '1') return;
+  var previousRestoration;
+  try {
+    previousRestoration = history.scrollRestoration;
+    history.scrollRestoration = 'manual';
+  } catch (_) {}
+  function resetView() {
+    document.querySelectorAll('details.card,details.cost-manage').forEach(function(card) {
+      card.open = card.id === 'signalCounts';
+    });
+    var stats = document.getElementById('signalCounts');
+    if (stats) normalizeSignalCard(stats);
+    window.scrollTo(0, 0);
+  }
+  resetView();
+  // pageshow 后再复位一次，覆盖浏览器在加载末尾恢复的滚动/details 状态。
+  window.addEventListener('pageshow', function finishRefreshReset() {
+    resetView();
+    url.searchParams.delete('_mm_reset_view');
+    try { history.replaceState(history.state, '', url.href); } catch (_) {}
+    requestAnimationFrame(function() {
+      window.scrollTo(0, 0);
+      try {
+        if (previousRestoration) history.scrollRestoration = previousRestoration;
+      } catch (_) {}
+    });
+  }, {once: true});
+})();
 function revealSignalPanel(panel) {
   // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从清单开头对齐。
   var pad = 12;

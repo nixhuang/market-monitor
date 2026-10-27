@@ -16,7 +16,8 @@ HARD_REFRESH_JS = (
     "try{if(window.caches){var ks=await caches.keys();await Promise.all(ks.map(function(k){return caches.delete(k);}));}"
     "if(navigator.serviceWorker){var rs=await navigator.serviceWorker.getRegistrations();"
     "await Promise.all(rs.map(function(r){return r.unregister();}));}}catch(e){}"
-    "var u=new URL(location.href);u.searchParams.set('_r',String(Date.now()));location.replace(u.toString());};})();"
+    "var u=new URL(location.href);u.hash='';u.searchParams.delete('focus');u.searchParams.delete('edit');"
+    "u.searchParams.set('_mm_reset_view','1');u.searchParams.set('_r',String(Date.now()));location.replace(u.toString());};})();"
 )
 
 

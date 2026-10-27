@@ -270,8 +270,14 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     const result=await f.win.MMRunStatus.refresh();assert.equal(result.config.phase,'published');
     assert.equal(f.els.ruleLightTxt.textContent,'需要刷新');assert.equal(f.data.reloads.length,0);
     const link=f.els.runLightTxt.children.at(-1);assert.equal(link.textContent,'刷新当前看板');
+    f.win.location.href='https://example.test/market-monitor/index.html?focus=pos&edit=1&keep=1&token=synthetic#s-test';
     link.onclick({preventDefault(){}});assert.equal(f.data.reloads.length,1);
+    const refreshed=new URL(f.data.reloads[0]);
+    assert.equal(refreshed.hash,'');assert.equal(refreshed.searchParams.has('focus'),false);
+    assert.equal(refreshed.searchParams.has('edit'),false);assert.equal(refreshed.searchParams.get('keep'),'1');
+    assert.equal(refreshed.searchParams.get('token'),'synthetic');
     assert.equal(new URL(f.data.reloads[0]).searchParams.get('mm_refreshed_run'),'2');
+    assert.equal(new URL(f.data.reloads[0]).searchParams.get('_mm_reset_view'),'1');
   });
   await check('新保存回执在远端读数尚未更新时也立即取消绿灯', async () => {
     const f=fixture();await f.win.MMRunStatus.refresh();f.advance(1);

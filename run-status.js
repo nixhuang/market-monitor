@@ -380,6 +380,10 @@
       if (options.canReload && !options.canReload()) return false;
     } catch (_) { return false; }
     reloadStarted = true;
+    url.hash = '';
+    url.searchParams.delete('focus');
+    url.searchParams.delete('edit');
+    url.searchParams.set('_mm_reset_view', '1');
     url.searchParams.set('_mm', String(Date.now()));
     url.searchParams.set('mm_refreshed_run', verifiedSnapshot.run_id);
     window.location.replace(url.href);
