@@ -9,21 +9,21 @@
     "next_in": 13,
     "next_date": "2026-11-12"
   },
-  "run_id": "40468829025",
+  "run_id": "40476394038",
   "request_id": "",
-  "source_sha": "e6f8acb5c25b7165b1e5041846abafa9b93efed6",
-  "input_hash": "40d21373e624803c129a99b1958e38581ad4e796b94f54c06ba39e4808282dd4",
-  "build_id": "40468829025-1",
-  "started_at": "2026-10-27T07:43:27+00:00",
-  "started_at_bj": "2026-10-27T15:43:27+08:00",
-  "finished_at": "2026-10-27T15:45:40.460196+08:00",
-  "finished_at_bj": "2026-10-27T15:45:40+08:00",
+  "source_sha": "8d109b57b4f104a53aa05ad0a9818cc740e55462",
+  "input_hash": "915de5c9cb4d7a4ea4955d051eb80c94bec9b30f38c29a449da23cae9a19bec1",
+  "build_id": "40476394038-1",
+  "started_at": "2026-10-27T08:50:58+00:00",
+  "started_at_bj": "2026-10-27T16:50:58+08:00",
+  "finished_at": "2026-10-27T16:53:29.280842+08:00",
+  "finished_at_bj": "2026-10-27T16:53:29+08:00",
   "event": "push",
   "target_trade_date": "2026-10-26",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "268c6dbc6f96e005c2741d304ab7c42834ee2a2c",
+    "holdings.json": "e601143a0c842f1db983cd2bd186daa83d2915ac",
     "settings.json": "1386a699b2039959ee8c8731166194d1f75a847e"
   },
   "effective_settings": {
@@ -164,7 +164,7 @@
     "index_funds": 1,
     "technology": 37,
     "healthcare": 8,
-    "financials": 14,
+    "financials": 13,
     "energy": 2,
     "industrials": 10,
     "materials": 2,
@@ -180,7 +180,7 @@
     "index_funds": 1,
     "technology": 27,
     "healthcare": 6,
-    "financials": 11,
+    "financials": 10,
     "energy": 2,
     "industrials": 6,
     "materials": 2,
@@ -194,37 +194,37 @@
     "dca": 1
   },
   "summary": {
-    "red": 6,
+    "red": 5,
     "yellow": 18,
     "green": 74,
     "gray": 0,
-    "purple": 26,
-    "total": 98,
+    "purple": 25,
+    "total": 97,
     "macro_ok": 6,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 98,
+    "today_prices": 97,
     "prior_prices": 0,
     "missing_prices": 0
   },
   "signal_counts": {
     "chg": {
       "label": "涨跌幅",
-      "red": 1,
+      "red": 0,
       "yellow": 5,
       "purple": 0
     },
     "amp": {
       "label": "振幅",
       "red": 0,
-      "yellow": 2,
+      "yellow": 1,
       "purple": 0
     },
     "vol_ratio": {
       "label": "量比",
-      "red": 1,
+      "red": 0,
       "yellow": 1,
       "purple": 0
     },
@@ -243,13 +243,13 @@
     "boll_rsi": {
       "label": "布林+RSI",
       "red": 1,
-      "yellow": 10,
+      "yellow": 9,
       "purple": 0
     },
     "ma": {
       "label": "均线",
       "red": 0,
-      "yellow": 11,
+      "yellow": 10,
       "purple": 0
     },
     "low52": {
@@ -274,28 +274,12 @@
       "label": "共识价",
       "red": 0,
       "yellow": 0,
-      "purple": 26
+      "purple": 25
     }
   },
   "signal_members": {
     "chg": {
-      "red": [
-        {
-          "symbol": "NU",
-          "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "hold": "short",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-26股价下跌16.95%"
-            }
-          ],
-          "metric": "涨跌幅 -16.95%"
-        }
-      ],
+      "red": [],
       "yellow": [
         {
           "symbol": "LMT",
@@ -392,43 +376,12 @@
             }
           ],
           "metric": "振幅 11.2%"
-        },
-        {
-          "symbol": "NU",
-          "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "hold": "short",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-26股价下跌16.95%"
-            }
-          ],
-          "metric": "振幅 7.7%"
         }
       ],
       "purple": []
     },
     "vol_ratio": {
-      "red": [
-        {
-          "symbol": "NU",
-          "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "hold": "short",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-10-26股价下跌16.95%"
-            }
-          ],
-          "metric": "量比 4.0×（2026-10-26）"
-        }
-      ],
+      "red": [],
       "yellow": [
         {
           "symbol": "LMT",
@@ -536,15 +489,6 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "NU",
-          "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "hold": "short",
-          "level": "red",
           "direction": "下轨（超卖）",
           "boll_rsi_hits": 2
         },
@@ -725,30 +669,6 @@
             {
               "kind": "ma_band",
               "text": "日内触及250日均线 ±1%区间（日内 447.61~458.88，现价偏离 -2.0%）"
-            }
-          ]
-        },
-        {
-          "symbol": "NU",
-          "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "hold": "short",
-          "level": "red",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "cyan",
-              "label": "跌破250日均线"
-            }
-          ],
-          "ma_settings": {
-            "ma_short": 0,
-            "ma_long": 250
-          },
-          "ma_facts": [
-            {
-              "kind": "ma_cross",
-              "text": "跌破250日均线"
             }
           ]
         },
@@ -1187,18 +1107,6 @@
           "detail": "共识价 222.71，空间 +51.6%"
         },
         {
-          "symbol": "NU",
-          "note": "Nu Holdings-数字银行",
-          "group": "financials",
-          "hold": "short",
-          "level": "red",
-          "space": 50.67513899920572,
-          "band": "medium",
-          "price": 18.97,
-          "kind": "consensus",
-          "detail": "共识价 18.97，空间 +50.7%"
-        },
-        {
           "symbol": "HOOD",
           "note": "Robinhood-零售券商",
           "group": "financials",
@@ -1502,18 +1410,6 @@
         "price": 222.71,
         "kind": "consensus",
         "detail": "共识价 222.71，空间 +51.6%"
-      },
-      {
-        "symbol": "NU",
-        "note": "Nu Holdings-数字银行",
-        "group": "financials",
-        "hold": "short",
-        "level": "red",
-        "space": 50.67513899920572,
-        "band": "medium",
-        "price": 18.97,
-        "kind": "consensus",
-        "detail": "共识价 18.97，空间 +50.7%"
       },
       {
         "symbol": "HOOD",
@@ -2295,7 +2191,7 @@
     "sp500": "2026-10-26",
     "ust10": "2026-10-26",
     "nfci": "2026-10-16",
-    "breadth": "2026-10-23"
+    "breadth": "2026-10-26"
   },
   "treasury_reference": {
     "ok": true,
@@ -2382,7 +2278,7 @@
     "checked_at": "2026-10-22T11:56:54.517842-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-27T07:44:53.808560+00:00"
+    "asof": "2026-10-27T08:52:47.338801+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
@@ -2940,15 +2836,6 @@
         "try": "2026-10-15",
         "ne": "2027-01-19"
       },
-      "NU": {
-        "avg": 18.97,
-        "upd": "2026-10-26",
-        "r": "2026-10-26",
-        "r_tz": "America/New_York",
-        "s": "ok",
-        "try": "2026-10-27",
-        "ne": "2026-11-12"
-      },
       "CRCL": {
         "avg": 107.35,
         "upd": "2026-10-19",
@@ -3207,7 +3094,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-27T07:45:40.389772+00:00",
+    "asof": "2026-10-27T08:53:29.171360+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -3918,7 +3805,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -3952,7 +3839,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -3969,7 +3856,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4003,7 +3890,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4020,7 +3907,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -4071,7 +3958,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4088,7 +3975,7 @@
           "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "b97f36fd59ba73086b38a650d9ce1d58aa3255ca676925c8a1348c837f5dbe76"
         }
@@ -4105,7 +3992,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -4142,23 +4029,6 @@
           "asof": "2026-10-27T04:03:55.654708+00:00",
           "at": null,
           "digest": "012d95946478345f67f6e1c76fd20182ba027216d7e249c986470983bf7930ae"
-        }
-      },
-      "NU": {
-        "facts": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
-          "at": "2026-10-26T00:00:00+00:00",
-          "digest": "c9b14037c9db31cd572490e223abe7ea919fd3baaa33cefd4ec444f2a90034b3"
-        },
-        "attempt": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
-          "at": "2026-10-27T00:00:00+00:00",
-          "digest": "b3844eb7969dfb344f2beb372b213420a9ef67584bd624132fd1e73bd481314d"
-        },
-        "events": {
-          "asof": "1970-01-01T00:00:00+00:00",
-          "at": null,
-          "digest": "6a4eec78dac2df57c0fdaa52e343555e11846c31d50bf81fb5689c1598540882"
         }
       },
       "CRCL": {
@@ -4309,7 +4179,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4326,7 +4196,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4394,7 +4264,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4428,7 +4298,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -4479,7 +4349,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4496,7 +4366,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -4564,7 +4434,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T07:45:40.389772+00:00",
+          "asof": "2026-10-27T08:53:29.171360+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4572,12 +4442,12 @@
     }
   },
   "earnings": {
-    "targets": 82,
-    "dated": 68,
+    "targets": 81,
+    "dated": 67,
     "pending": 14,
     "failed": 0,
     "fetched": 0,
-    "cached": 82,
+    "cached": 81,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -5055,15 +4925,6 @@
         "fetched": "2026-10-27",
         "status": "ok"
       },
-      "NU": {
-        "date": "2026-11-12",
-        "timing": "",
-        "kind": "expected",
-        "label": "Earnings Date",
-        "cross": "agree",
-        "fetched": "2026-10-26",
-        "status": "ok"
-      },
       "CRCL": {
         "date": "2026-11-04",
         "timing": "pre",
@@ -5342,7 +5203,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-27T07:45:40.366734+00:00",
+    "asof": "2026-10-27T08:53:29.138481+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -6313,23 +6174,6 @@
           "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
         }
       },
-      "NU": {
-        "facts": {
-          "asof": "2026-10-26T08:36:27.806312+00:00",
-          "at": "2026-10-26T00:00:00+00:00",
-          "digest": "31bb2cafd380cdfdbc20683379848de43a4903dff88fbe3ce5ccbfad36a8bb20"
-        },
-        "attempt": {
-          "asof": "2026-10-26T08:36:27.806312+00:00",
-          "at": "2026-10-26T00:00:00+00:00",
-          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
-        },
-        "events": {
-          "asof": "1970-01-01T00:00:00+00:00",
-          "at": null,
-          "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
-        }
-      },
       "CRCL": {
         "facts": {
           "asof": "2026-10-22T00:18:35.550470+00:00",
@@ -6782,18 +6626,18 @@
       "incomplete": false,
       "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-10-27T15:44:52.589532+08:00",
+    "assessed_at": "2026-10-27T16:52:45.672421+08:00",
     "schema_version": 2,
-    "asof": "2026-10-27T07:44:54.140100+00:00"
+    "asof": "2026-10-27T08:52:47.513310+00:00"
   },
   "data_lag": {
     "target": "2026-10-26",
     "fresh": true,
-    "today": 98,
-    "expected": 98,
+    "today": 97,
+    "expected": 97,
     "by_source": {
       "nasdaq": {
-        "2026-10-26": 98
+        "2026-10-26": 97
       }
     }
   }
