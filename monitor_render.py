@@ -124,7 +124,7 @@ def _run_light(snapshot, finished_txt):
     """首页状态灯（第三排）：个股行情失败、市场风险部分缺失、空清单或完整成功。"""
     summary = snapshot.get("summary", {})
     registered = snapshot.get("registered_counts", {})
-    # 无数据状态改叫「缺失」，避免和统计面板里「只出文字不报灯」的灰灯撞名
+    # 无数据状态改叫「缺失」，避免和统计面板里「只出文字不报灯」的白灯撞名
     # （具体文案在下面按「有没有异常」拼，不再单独拼一段）
     bad = list(dict.fromkeys(summary.get("stale_symbols", []) + summary.get("missing_symbols", [])))
     if bad:
@@ -160,7 +160,7 @@ def _run_light(snapshot, finished_txt):
 
 
 def _gray_by_kind(snapshot):
-    """灰灯成员仅按 rsi / boll / boll_rsi 归类。"""
+    """白灯成员仅按 rsi / boll / boll_rsi 归类。"""
     rows = snapshot.get("text_only") or []
     out = {}
     if not isinstance(rows, list):
@@ -594,7 +594,7 @@ class PageRenderer:
 
 
     def _signals_html(self, d):
-        """主表价格提醒分主次；真实级别及统计事实不变，不添加圆点。"""
+        """主表价格提醒分主次但各自按真实灯级着色；统计事实不变，不添加圆点。"""
         # 手填价仅替换共识价；所有目标状态只投影到胶囊，统计仍消费原signals/marks。
         groups = [g for g in self._context._signal_description_groups(d) if g["kind"] != "target"]
         prices = {g["kind"]: g for g in groups
@@ -752,7 +752,7 @@ class PageRenderer:
                         for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"))
                         if (count := sum(d["level"] == lv for d in g)))
         # 技术灰仍进入统计面板及描述，不在个股/持仓分组标题另加数字。
-        # 无数据（缺失）单独用虚线圈，避免和灰灯撞名
+        # 无数据（缺失）单独用虚线圈，避免和白灯撞名
         if (n_miss := sum(d["level"] == "gray" for d in g)):
             stats += self._context._count_badge("missing", n_miss, "缺失")
         # 紫色（目标价 / 共识价警示）：条数跟在红黄灯后面；一条都没有就不显示
@@ -1077,8 +1077,9 @@ class PageRenderer:
                                 if isinstance(d.get("note"), str) and d["note"].strip() else "")
                         # 分组写在代码后面的括号里：持仓内部标长/短，跟首页分区对得上
                         belong = f'<span class="signal-member-belong">（{esc(self._context._member_belong(d))}）</span>'
-                        # 名称前竖条由统计名单共享CSS生成，按这一格灯色着色。
-                        return (f'<li>'
+                        # 分类按指标级别；名称前竖条独立使用主表整股灯级，未知不借分类灯。
+                        lamp = d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "unknown"
+                        return (f'<li class="lamp-{lamp}">'
                                 f'<a class="signal-member-jump" href="#{self._context._stock_anchor_id(d["symbol"])}">'
                                 f'<span class="signal-member-symbol">{esc(d["symbol"])}</span>{note}</a>'
                                 f'{belong}{direction}{value}</li>')
@@ -1109,7 +1110,7 @@ class PageRenderer:
                         divider = '<li class="signal-member-split" role="separator"></li>'
                         content = ('<div class="signal-member-groups"><ul class="signal-member-list">'
                                    + divider.join(parts) + '</ul></div>')
-                # tone-* 给名称前竖条上色：这一格是红档，竖条就是红的
+                # 保留分类面板tone样式；名称前竖条由每个li的整股lamp级别覆盖。
                 panels.append(f'<div class="signal-members-panel tone-{level}" id="{panel_id}" hidden>{content}</div>')
             gray_rows = gray_by_kind.get(kind) or []
             if gray_rows:
@@ -1196,13 +1197,13 @@ class PageRenderer:
                        f'data-filter="{esc(filter_json)}" hidden></div>') if filter_data else ""
         dim = 'style="color:var(--dim)"'
         head = (f'<tr class="gray mh"><td {dim}>信号</td><td class="num" {dim}>红</td><td class="num" {dim}>黄</td>'
-                f'<td class="num" {dim}>灰</td></tr>')
+                f'<td class="num" {dim}>白</td></tr>')
         summary = snapshot.get("summary") or {}
         whole = lambda n: n if type(n) is int and n >= 0 else None
         gray_count = len({self._context.instrument_identity(m["symbol"])
                           for entries in gray_by_kind.values() for m in entries})
         totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
-                  ("gray", "灰", gray_count), ("purple", "紫", whole(summary.get("purple"))),
+                  ("gray", "白", gray_count), ("purple", "紫", whole(summary.get("purple"))),
                   ("earn", "财报", self._context._earnings_week_panel(snapshot, count_only=True)))
         stats = "".join(
             (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple")
@@ -1216,7 +1217,7 @@ class PageRenderer:
 
 
     def _gray_title(self, kind, r):
-        """灰灯名单的框标题 (图形, 文字, RSI条数)：只分上轨 / 下轨和 RSI 条数，不分突破还是逼近。
+        """白灯名单的框标题 (图形, 文字, RSI条数)：只分上轨 / 下轨和 RSI 条数，不分突破还是逼近。
     旧快照没有结构化字段时，从 detail 文字里解析。"""
         detail = str(r.get("detail") or "")
         side = r.get("side") or ("上轨" if "上轨" in detail else "下轨" if "下轨" in detail else "")
@@ -1255,8 +1256,9 @@ class PageRenderer:
                     order.append((shape, title, n))
                 note = f'<span class="note">{esc(r.get("note"))}</span>' if str(r.get("note") or "").strip() else ""
                 belong = f'<span class="signal-member-belong">（{esc(self._context._member_belong(r))}）</span>'
+                lamp = r.get("level") if r.get("level") in ("red", "yellow", "green", "gray") else "unknown"
                 blocks[key].append((group_order.get(str(r.get("group") or ""), len(self._context.GROUPS)),
-                                    f'<li><a class="signal-member-jump" href="#{self._context._stock_anchor_id(r["symbol"])}">'
+                                    f'<li class="lamp-{lamp}"><a class="signal-member-jump" href="#{self._context._stock_anchor_id(r["symbol"])}">'
                                     f'<span class="signal-member-symbol">{esc(r["symbol"])}</span>{note}</a>{belong}</li>'))
                 rec = filter_members.setdefault(self._context.instrument_identity(r["symbol"]), {
                     "s": r["symbol"], "n": r.get("note") if isinstance(r.get("note"), str) else "",
@@ -1279,7 +1281,7 @@ class PageRenderer:
             content = '<p>明细待下次更新：名单中有重复标的，暂不展示。</p>'
         cell = (f'<td class="num"><button type="button" class="signal-count-toggle" data-target="{panel_id}" '
                 f'aria-controls="{panel_id}" aria-expanded="false" '
-                f'aria-label="灰灯 · {esc(label)} · {len(picked)} 只，展开或收起标的">{len(picked)}</button></td>')
+                f'aria-label="白灯 · {esc(label)} · {len(picked)} 只，展开或收起标的">{len(picked)}</button></td>')
         panel = f'<div class="signal-members-panel tone-gray" id="{panel_id}" hidden>{content}</div>'
         return cell, panel, ok
 

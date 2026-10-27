@@ -90,12 +90,13 @@ class RulesRegression(unittest.TestCase):
                 rules = re.search(r'<template id="rulesTpl">(.*?)</template>', markup, re.S)[1]
                 glossary = re.search(r'<template id="glossaryTpl">(.*?)</template>', markup, re.S)[1]
                 text = plain_text(rules)
-                for term in ("目标空间 所有分组", "有效空间≥40% → 紫虚线空心灯",
-                             "≥90% → 紫红虚线空心灯", "达到目标／共识价 持仓分组、重点",
+                for term in ("目标空间 所有分组", "有效空间≥40% → 紫空心灯",
+                             "≥90% → 紫红空心灯", "达到目标／共识价 持仓分组、重点",
                              "当日上穿／跌破或现价在目标±3% → 实心紫灯",
                              "目标空间<40%、未达到目标／共识价、共识获取失败及失败旧价"):
                     self.assertIn(term, text)
                 explanation = plain_text(glossary)
+                self.assertNotRegex(text + explanation, r'灰灯|不计灰|转灰列|紫(?:红)?虚线空心灯')
                 for term in ("有效手填目标价优先", "空间＝（目标／共识价÷现价−1）×100%",
                              "失败旧共识不参与，有效手填价不受影响",
                              "空间／达到各自去重、允许重叠；总数取并集，不直接相加",
@@ -103,8 +104,8 @@ class RulesRegression(unittest.TestCase):
                              "达到按昨收与现价判断，不用日内高低曾触及代替"):
                     self.assertIn(term, explanation)
                 self.assertNotRegex(text, r'空间[^。；]*[>≥][^。；]*(?:50|100)%|目标空间异常红|红胶囊|仅报数据异常')
-                self.assertIn('<span class="lamp-purple">紫虚线空心灯</span>', rules)
-                self.assertIn('<span class="tone-target-high">紫红虚线空心灯</span>', rules)
+                self.assertIn('<span class="lamp-purple">紫空心灯</span>', rules)
+                self.assertIn('<span class="tone-target-high">紫红空心灯</span>', rules)
                 self.assertIn('<span class="lamp-purple">实心紫灯</span>', rules)
 
     def test_target_css_preserves_capsule_geometry_and_range52_markers(self):
@@ -281,8 +282,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn("加仓价 · 所有分组：现价≤设置价×1.07 → 可点红灯", text)
         self.assertIn("减仓价 · 持仓分组：现价≥设置价×0.98 → 可点红灯", text)
         self.assertIn("减仓价：重点、其他分组不适用", text)
-        self.assertIn("加仓价提醒标记已读 → 灰灯", text)
-        self.assertIn("减仓价提醒标记已读 → 灰灯", text)
+        self.assertIn("加仓价提醒标记已读 → 白灯", text)
+        self.assertIn("减仓价提醒标记已读 → 白灯", text)
 
     def test_current_three_rule_cells_reach_dynamic_and_rendered_templates(self):
         for settings in ({}, {'rsi_low': 28, 'rsi_high': 82}):
@@ -291,8 +292,8 @@ class RulesRegression(unittest.TestCase):
                 for label, source in (('动态模板', markup), ('实际渲染页', self.render())):
                     table = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', source, re.S)[0]
                     for condition, expected in (
-                            ('布林上轨▲ + RSI 1条 ↓超卖（反）', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
-                            ('RSI 2条 ↑超买', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
+                            ('布林上轨▲ + RSI 1条 ↓超卖（反）', [(' class="cell-gray"', '白灯'), ('', '仅文字'), ('', '无提示')]),
+                            ('RSI 2条 ↑超买', [(' class="cell-gray"', '白灯'), ('', '仅文字'), ('', '无提示')]),
                             ('RSI 1条 ↓超卖', [(' colspan="3"', '仅文字')]),
                             ('涨跌幅 · 自适应', [(' colspan="3"', '红灯／黄灯')]),
                             ('振幅 · 自适应', [(' colspan="3"', '红灯／黄灯')])):
@@ -448,7 +449,7 @@ class RulesRegression(unittest.TestCase):
         cells = re.findall(r'<td\b([^>]*)>(.*?)</td>', rows[0], re.S)
         self.assertEqual([(attrs, plain_text(text)) for attrs, text in cells[1:]],
                          [(' class="cell-yellow"', '黄灯'), (' class="cell-yellow"', '黄灯'),
-                          (' class="cell-gray-fold"', '灰灯（折）')])
+                          (' class="cell-gray-fold"', '白灯（折）')])
         self.assertIn('.signal-item[data-signal-level="yellow"]{color:#f0c674}', page_assets.PAGE_CSS)
         for index, group in enumerate(('position', 'focus'), 1):
             facts = monitor.classify_technical_facts(group, 0, 3, '上轨')
@@ -517,7 +518,7 @@ class RulesRegression(unittest.TestCase):
         self.assertRegex(rules_text, r'RSI 3条 ↓超卖\s*红灯')
         self.assertIn('重点、其他分组不适用', rules_text)
         self.assertNotIn('只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯', glossary_text)
-        for explanation in ('统计由对应红列转灰列', '白字删除线',
+        for explanation in ('统计由对应红列转白列', '白字删除线',
                             '双轨命中时，只选带符号距离较小的一轨', '越轨距离为负，相等选', '标的去重'):
             self.assertIn(explanation, glossary_text)
             self.assertNotIn(explanation, rules_text)
@@ -689,8 +690,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn("关闭自适应或波动无效时固定0.75%", plain_text(body))
         self.assertIn("历史日波动×0（当前0%设置）", plain_text(body))
         rules = plain_text(page_assets.rules_body(monitor.S, monitor._rule_constants()))
-        self.assertIn("布林上轨▲ + RSI 2条 ↑超买黄灯灰灯仅文字", rules)
-        self.assertIn("布林上轨▲ + RSI 2条 ↓超卖（反）黄灯灰灯仅文字", rules)
+        self.assertIn("布林上轨▲ + RSI 2条 ↑超买黄灯白灯仅文字", rules)
+        self.assertIn("布林上轨▲ + RSI 2条 ↓超卖（反）黄灯白灯仅文字", rules)
         self.assertIn("布林下轨▼ + RSI 3条 ↓超卖红灯", rules)
 
     def test_retired_fund_settings_and_frontend_are_absent(self):
@@ -1000,7 +1001,7 @@ process.stdout.write(JSON.stringify(result));
         self.assertEqual(result.returncode, 0, result.stderr)
         got = json.loads(result.stdout)
         self.assertNotIn('id="effectiveRuleText"', (ROOT / "edit.html").read_text(encoding="utf-8"))
-        self.assertIn('布林上轨▲ + RSI 3条 ↑超买红灯红灯灰灯',
+        self.assertIn('布林上轨▲ + RSI 3条 ↑超买红灯红灯白灯',
                       plain_text(page_assets.rules_body(settings[0], monitor._rule_constants())))
         self.assertEqual(got["errors"], [""] * len(settings))
         self.assertEqual(got["bindings"], [[s["trigger_gap_pct"], s["reduce_gap_pct"]] for s in settings])

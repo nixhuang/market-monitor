@@ -4551,7 +4551,7 @@ class TestBollRsiRules(unittest.TestCase):
                          {'DOWNONE', 'PLAIN', 'RSIONLY'})
         stats = monitor._group_stats_html(rows, group, {}, True)
         self.assertNotIn('stat-badge gray', stats)
-        self.assertNotIn('灰灯 5 项', stats)
+        self.assertNotRegex(stats, r'(?:灰灯|白灯) 5 项')
         card = monitor._signal_counts_card({'signal_counts': counts,
             'signal_members': monitor.signal_count_members(rows), 'text_only': monitor.text_only_members(rows)})
         self.assertIn('<h5>下轨<span class="arrow-band-down">▼</span> · RSI 1条 <span class="arrow-rsi-up">↑</span>超买</h5>', card)
@@ -4780,7 +4780,7 @@ class TestBollRsiRules(unittest.TestCase):
                 colored, = [d for d in member['details'] if d['k'] == 'chg']
                 self.assertIn(gray['k'], ('rsi', 'boll_rsi'))
                 self.assertEqual(colored['l'], expected[member['s']])
-                self.assertNotRegex(gray['t'], r'灰灯|红灯|黄灯|布林\+RSI')
+                self.assertNotRegex(gray['t'], r'灰灯|白灯|红灯|黄灯|布林\+RSI')
         self.assertEqual(rows, before)
 
     def test_combination_red_yellow_never_add_gray_or_duplicate_description_dots(self):
@@ -4884,8 +4884,8 @@ class TestTechnicalFacts(unittest.TestCase):
 
         groups = [g['item_group'] for g in monitor.GROUPS] + ['custom_group']
         self.assertEqual(len(groups), len(set(groups)))
-        lamp_levels = {'红灯': 'red', '黄灯': 'yellow', '灰灯': 'gray',
-                       '灰灯（折）': 'gray', '仅文字': 'green', '无提示': 'green'}
+        lamp_levels = {'红灯': 'red', '黄灯': 'yellow', '白灯': 'gray',
+                       '白灯（折）': 'gray', '仅文字': 'green', '无提示': 'green'}
         bands = {None: (100, 110, 90), '上轨': (100, 101, 90), '下轨': (100, 110, 99)}
         checked, projections = 0, 0
         for category, condition, lamps in table_rows:
@@ -5357,9 +5357,9 @@ class TestAmplitudeChain(unittest.TestCase):
         self.assertEqual((snap['summary']['total'], snap['summary']['red']), (1, 1))
         self.assertEqual(snap['signal_counts']['amp']['red'], 1)
         card = monitor._signal_counts_card(snap)
-        self.assertIn('aria-label="灰 1 项"', card)
-        self.assertNotIn('aria-label="灰灯 · 振幅', card)
-        self.assertEqual(card.count('aria-label="灰灯 · RSI · 1 只'), 1)
+        self.assertIn('aria-label="白 1 项"', card)
+        self.assertNotRegex(card, r'aria-label="(?:灰灯|白灯) · 振幅')
+        self.assertEqual(card.count('aria-label="白灯 · RSI · 1 只'), 1)
         self.assertEqual(rows, before)
 
     def test_gray_survives_independent_lamps_and_never_duplicates_combo_technical_counts(self):
@@ -5418,7 +5418,7 @@ class TestAmplitudeChain(unittest.TestCase):
                 self.assertEqual(member['l'], 'red')
                 for fact in member['d']:
                     self.assertEqual(set(fact), {'l', 't'})
-                    self.assertNotRegex(fact['t'], r'灰灯|红灯|黄灯|布林\+RSI')
+                    self.assertNotRegex(fact['t'], r'灰灯|白灯|红灯|黄灯|布林\+RSI')
         self.assertEqual(row, before)
         self.assertEqual(snapshot, snapshot_before)
 
@@ -5470,8 +5470,8 @@ class TestAmplitudeChain(unittest.TestCase):
             self.assertEqual(legacy, before)
             for source in (legacy, clean):
                 card = monitor._signal_counts_card(source)
-                self.assertIn('aria-label="灰 1 项"', card)
-                self.assertNotIn('aria-label="灰灯 · 振幅', card)
+                self.assertIn('aria-label="白 1 项"', card)
+                self.assertNotRegex(card, r'aria-label="(?:灰灯|白灯) · 振幅')
                 self.assertNotIn('LEGACYAMP', card)
                 data = TestMaMergedStatistics.filters(card)
                 self.assertEqual(data['amp']['members'][0]['d'], [{'l': 'red', 't': '振幅 12.0%'}])
@@ -7226,11 +7226,11 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             self.assertIn('<summary class="grp"><span class="grp-name">统计</span><span class="group-stats">'
                           '<span class="stat-badge red" aria-label="红 0 项">0</span>'
                           '<span class="stat-badge yellow" aria-label="黄 0 项">0</span>', panel)
-            self.assertIn('灰 0', panel)
+            self.assertIn('白 0', panel)
             self.assertIn('财报 2', panel)
             old = monitor._signal_counts_card({'summary': {'red': 4, 'yellow': 32},
                                                'signal_counts': {'target': {'label': '目标价', 'purple': 3}}})
-            for text in ('红 4', '黄 32', '灰 0', '财报 —'):
+            for text in ('红 4', '黄 32', '白 0', '财报 —'):
                 self.assertIn(text, old)
             self.assertNotIn('紫灯 3 只', old)
             self.assertNotIn('class="signal-member-symbol"', old)
@@ -7577,7 +7577,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
 
 
     def test_member_panels_are_toned_so_bullets_follow_the_light(self):
-        """名单前的圆点靠面板上的 tone-* 上色：这一格红档，圆点就是红的。"""
+        """分类面板保持自身等级，名称前竖条独立跟随整股主表灯级。"""
         rows = [self.member_row('AAA', 'position', 'red', ('chg', 'red'), ('rsi', 'yellow')),
                 self.member_row('BBB', 'focus', 'green', ('target', 'purple'))]
         output = monitor._signal_counts_card(monitor.build_snapshot({}, rows, {}, group_counts={}))
@@ -7587,6 +7587,16 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                       + self.panel_id('rsi') + '-yellow" hidden>', output)
         self.assertIn('class="text-only target-purple"', output)
         self.assertIn('data-kind="target_purple"', output)
+        self.assertIn('<li class="lamp-red"><a class="signal-member-jump" href="#s-aaa">',
+                      self.panel(output, 'rsi', 'yellow'))
+        white_rows = [{'symbol': 'AAA', 'group': 'position', 'level': 'red', 'kind': 'rsi',
+                       'detail': 'RSI 2条 ↓超卖', 'rsi_hits': 2, 'rsi_side': '超卖'}]
+        white_output = monitor._signal_counts_card({'text_only': white_rows})
+        self.assertIn('<li class="lamp-red"><a class="signal-member-jump" href="#s-aaa">', white_output)
+        self.assertIn('class="signal-members-panel tone-gray"', white_output)
+        for level, color in (('red', 'var(--red)'), ('yellow', 'var(--yellow)'),
+                             ('green', 'var(--green)'), ('gray', 'var(--text)'), ('unknown', 'var(--dim)')):
+            self.assertIn(f'#signalCounts .signal-members-panel li.lamp-{level}{{--name-lamp:{color}}}', monitor.PAGE_CSS)
         self.assertIn('#signalCounts .signal-members-panel.tone-red,#signalCounts .signal-name-lamp.red,', monitor.PAGE_CSS)
         self.assertIn('#signalCounts .text-only .signal-member-list,#signalCounts .signal-name-lamp.gray{--name-lamp:#9fa3aa}', monitor.PAGE_CSS)
 
@@ -8037,9 +8047,9 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                                               'signal_members': monitor.signal_count_members(rows),
                                               'text_only': members})
         self.assertNotIn('仅此一条黄灯', output)
-        self.assertIn('<span class="stat-badge gray" aria-label="灰 3 项">3</span>', output)
+        self.assertIn('<span class="stat-badge gray" aria-label="白 3 项">3</span>', output)
         # 灰灯现在在统计表按归因分行；每行的灰色计数可展开详细名单
-        self.assertNotIn('<td>灰灯', output)   # 最左列只写 RSI / 布林 / 布林+RSI，不加灰灯前缀
+        self.assertNotRegex(output, r'<td>(?:灰灯|白灯)')   # 最左列只写 RSI / 布林 / 布林+RSI，不加灯级前缀
         self.assertLess(output.index('aria-pressed="false">RSI</button>'), output.index('aria-pressed="false">布林</button>'))
         # 技术三栏与规则表格同序：组合条件（布林+RSI）排在单独布林、单独 RSI 之前
         self.assertLess(output.index('aria-pressed="false">布林+RSI</button>'),
@@ -8067,6 +8077,9 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                   'stat-badge purple', 'count-earn']
         self.assertEqual([header.index(t) for t in tokens], sorted(header.index(t) for t in tokens))
         self.assertIn('<span class="stat-badge purple" aria-label="紫 1 项">1</span>', header)
+        self.assertIn('<span class="stat-badge gray" aria-label="白 0 项">0</span>', header)
+        self.assertRegex(output, r'<td\b[^>]*>白</td>')
+        self.assertNotRegex(output, r'>灰<|aria-label="(?:灰灯|灰 \d+ 项)')
         self.assertEqual(snap, before)
 
     def test_statistics_header_purple_zero_and_unknown_do_not_guess(self):
@@ -8942,7 +8955,10 @@ class TestMainOnlyDescriptionProjection(unittest.TestCase):
                         self.assertIn(f'data-signal-kind="{kind}" data-signal-level="{level}" data-signal-role="{role}"', output)
                     self.assertEqual(output.count('data-signal-role="supplement"'), 1)
                     self.assertNotIn('data-signal-level="gray"', output)
-        self.assertIn('.signal-item[data-signal-role="supplement"]{color:var(--dim)}', monitor.PAGE_CSS)
+        self.assertNotRegex(monitor.PAGE_CSS, r'\.signal-item\[data-signal-role=[^\]]+\]\{[^}]*color\s*:')
+        for level, color in (('red', '#ff8580'), ('yellow', '#f0c674'), ('gray', 'var(--text)')):
+            self.assertIn(f'.signal-item[data-signal-level="{level}"]{{color:{color}}}', monitor.PAGE_CSS)
+        self.assertIn('.signal-item{color:var(--dim)}', monitor.PAGE_CSS)
 
     def test_price_single_legacy_unlit_and_unknown_levels_do_not_guess_primary(self):
         for chg_level, amp_level in ((None, 'red'), ('yellow', None), ('red', 'gray'),

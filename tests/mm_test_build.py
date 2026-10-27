@@ -378,6 +378,7 @@ class RulesTemplateTests(unittest.TestCase):
         self.assertNotIn('${', markup)
         self.assertNotIn('<details', markup)
         self.assertNotIn('<script', markup)
+        self.assertNotRegex(self.plain(markup), r'灰灯|不计灰|转灰列|紫(?:红)?虚线空心灯')
         for summary in ('预警规则', '名词解释和抓取'):
             self.assertIn('<summary>' + summary + '</summary>', markup)
 
@@ -407,15 +408,15 @@ class RulesTemplateTests(unittest.TestCase):
     def test_latest_rules_and_sorting_keep_gray_and_group_conditions(self):
         rules = assets.rules_body({}, {})
         text = self.plain(rules)
-        for term in ('RSI 3条 ↓超卖红灯', 'RSI 3条 ↑超买黄灯灰灯灰灯（折）',
-                     '加仓价提醒标记已读 → 灰灯。',
-                     '减仓价提醒标记已读 → 灰灯。', '浮亏提醒标记已读 → 灰灯。',
+        for term in ('RSI 3条 ↓超卖红灯', 'RSI 3条 ↑超买黄灯白灯白灯（折）',
+                     '加仓价提醒标记已读 → 白灯。',
+                     '减仓价提醒标记已读 → 白灯。', '浮亏提醒标记已读 → 白灯。',
                      '浮亏10%／20%每只标的只计一次。',
                      '两者只保留在主表，不进入“无异动”，不计入统计面板',
-                     '布林下轨▼ + RSI 0条灰灯灰灯（折）',
-                     'RSI 2条 ↓超卖灰灯',
-                     '布林上轨▲ + RSI 1条 ↑超买灰灯仅文字无提示',
-                     '布林上轨▲ + RSI 1条 ↓超卖（反）灰灯仅文字无提示', '短均线', '长均线'):
+                     '布林下轨▼ + RSI 0条白灯白灯（折）',
+                     'RSI 2条 ↓超卖白灯',
+                     '布林上轨▲ + RSI 1条 ↑超买白灯仅文字无提示',
+                     '布林上轨▲ + RSI 1条 ↓超卖（反）白灯仅文字无提示', '短均线', '长均线'):
             self.assertIn(term, text)
         for deleted in ('进入下轨报警区（逼近自适应）', '排除指数、期货', '行灯取最严重',
                         '单独RSI 3条向上超买 → 文字。', '基本面黄灯'):
@@ -473,8 +474,8 @@ class RulesTemplateTests(unittest.TestCase):
             self.assertEqual([self.plain(cell) for cell in re.findall(r'<th[^>]*scope="col"[^>]*>(.*?)</th>', table)],
                              ['分类', '条件', '持仓分组', '重点', '其他分组'])
             for condition, position, css_class in (
-                    ('布林上轨▲ + RSI 1条 ↑超买', '灰灯', 'cell-gray'),
-                    ('布林上轨▲ + RSI 1条 ↓超卖（反）', '灰灯', 'cell-gray')):
+                    ('布林上轨▲ + RSI 1条 ↑超买', '白灯', 'cell-gray'),
+                    ('布林上轨▲ + RSI 1条 ↓超卖（反）', '白灯', 'cell-gray')):
                 with self.subTest(condition=condition, rendered=markup != assets.LAMP_RULE_TABLE):
                     rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', table, re.S)
                             if '<td' in row and self.plain(re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1]) == condition]
@@ -488,12 +489,12 @@ class RulesTemplateTests(unittest.TestCase):
 
     def test_current_three_rule_rows_sync_only_authorized_cells(self):
         cases = (
-            ('布林上轨▲ + RSI 1条 ↓超卖（反）', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
-            ('RSI 2条 ↑超买', [(' class="cell-gray"', '灰灯'), ('', '仅文字'), ('', '无提示')]),
+            ('布林上轨▲ + RSI 1条 ↓超卖（反）', [(' class="cell-gray"', '白灯'), ('', '仅文字'), ('', '无提示')]),
+            ('RSI 2条 ↑超买', [(' class="cell-gray"', '白灯'), ('', '仅文字'), ('', '无提示')]),
             ('RSI 1条 ↓超卖', [(' colspan="3"', '仅文字')]),
             ('RSI 1条 ↑超买', [(' colspan="3"', '无提示')]),
-            ('RSI 2条 ↓超卖', [(' class="cell-gray" colspan="3"', '灰灯')]),
-            ('布林下轨▼ + RSI 1条 ↓超卖', [(' class="cell-gray" colspan="3"', '灰灯')]),
+            ('RSI 2条 ↓超卖', [(' class="cell-gray" colspan="3"', '白灯')]),
+            ('布林下轨▼ + RSI 1条 ↓超卖', [(' class="cell-gray" colspan="3"', '白灯')]),
         )
         for markup in (assets.LAMP_RULE_TABLE, assets.rules_body({}, {}), assets.rules_template({}, {})):
             table = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', markup, re.S)[0]
@@ -526,7 +527,7 @@ class RulesTemplateTests(unittest.TestCase):
         glossary = self.plain(assets.glossary_body({}, {}))
         self.assertIn('所有分组沿用上节波动档', glossary)
         self.assertIn('有效0%保留数值', glossary)
-        self.assertIn('低于黄门槛不提示、不计灰，也不因振幅强制不折叠', glossary)
+        self.assertIn('低于黄门槛不提示、不计白，也不因振幅强制不折叠', glossary)
         self.assertNotIn('不设门槛、不升红黄', glossary)
 
     def test_condition_arrows_white_only_in_lamp_table_and_earnings_list_note(self):
@@ -575,6 +576,15 @@ class RulesTemplateTests(unittest.TestCase):
 
     def test_lamp_table_horizontal_center_is_scoped_and_keeps_other_layout(self):
         css = assets.RULES_CSS
+        for name, background in (('cell-red', 'rgba(248,81,73,.16)'),
+                                 ('cell-yellow', 'rgba(210,153,34,.16)'),
+                                 ('cell-gray', 'rgba(173,181,194,.24)'),
+                                 ('cell-gray-fold', 'rgba(173,181,194,.09)')):
+            self.assertIn('.card .rules-body .rule-table td.' + name
+                          + '{background:' + background + ';text-align:center}', css)
+        self.assertIn('#signalRulesBody .nav-gray{color:#adb5c2}', css)
+        self.assertIn('tr.gray td{color:var(--dim)}', assets.PAGE_CSS)
+        self.assertIn('.stat-badge.gray{border-color:var(--dim)}', assets.PAGE_CSS)
         blocks = re.findall(r'([^{}]+)\{([^{}]*)\}', css)
         centered = set()
         for selectors, declarations in blocks:
@@ -596,17 +606,17 @@ class RulesTemplateTests(unittest.TestCase):
 
     def test_four_authorized_rule_rows_preserve_adjacent_group_cells(self):
         cases = (
-            ('布林下轨▼ + RSI 0条', [(' class="cell-gray"', '灰灯'),
-                                     (' class="cell-gray-fold" colspan="2"', '灰灯（折）')]),
-            ('RSI 3条 ↑超买', [(' class="cell-yellow"', '黄灯'), (' class="cell-gray"', '灰灯'),
-                               (' class="cell-gray-fold"', '灰灯（折）')]),
+            ('布林下轨▼ + RSI 0条', [(' class="cell-gray"', '白灯'),
+                                     (' class="cell-gray-fold" colspan="2"', '白灯（折）')]),
+            ('RSI 3条 ↑超买', [(' class="cell-yellow"', '黄灯'), (' class="cell-gray"', '白灯'),
+                               (' class="cell-gray-fold"', '白灯（折）')]),
             ('布林上轨▲ + RSI 2条 ↑超买', [(' class="cell-yellow"', '黄灯'),
-                                        (' class="cell-gray"', '灰灯'), ('', '仅文字')]),
+                                        (' class="cell-gray"', '白灯'), ('', '仅文字')]),
             ('布林上轨▲ + RSI 2条 ↓超卖（反）', [(' class="cell-yellow"', '黄灯'),
-                                               (' class="cell-gray"', '灰灯'), ('', '仅文字')]),
+                                               (' class="cell-gray"', '白灯'), ('', '仅文字')]),
             ('布林上轨▲ + RSI 3条 ↓超卖（反）', [(' class="cell-yellow"', '黄灯'),
                                                (' class="cell-yellow"', '黄灯'),
-                                               (' class="cell-gray-fold"', '灰灯（折）')]),
+                                               (' class="cell-gray-fold"', '白灯（折）')]),
         )
         for markup in (assets.LAMP_RULE_TABLE, assets.rules_body({}, {}), assets.rules_template({}, {})):
             table = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', markup, re.S)[0]
@@ -618,9 +628,9 @@ class RulesTemplateTests(unittest.TestCase):
                     cells = [(attrs, self.plain(body)) for attrs, body in
                              re.findall(r'<td\b([^>]*)>(.*?)</td>', rows[0], re.S)]
                     self.assertEqual(cells, [('', condition)] + expected)
-        # 上轨三反向超卖持仓/重点实际黄灯，与既有规则表一致；其他组仍灰灯可折叠。
+        # 上轨三反向超卖持仓/重点实际黄灯，与既有规则表一致；其他组仍白灯可折叠。
         self.assertIn('<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td>'
-                      '<td class="cell-gray-fold">灰灯（折）</td>', assets.LAMP_RULE_TABLE)
+                      '<td class="cell-gray-fold">白灯（折）</td>', assets.LAMP_RULE_TABLE)
 
     def test_volume_example_table_follows_all_four_settings_and_constant_overrides(self):
         defaults = dict(vol_ratio=1.5, vol_ratio_red=3, vol_ratio_z=2, vol_ratio_red_z=3.6)

@@ -20,19 +20,19 @@ lamp-table||table|${lamp_table}
 line-34|rule-clickable|h5|可点红灯 可点✓ 标记已读
 line-35|rule-prices|h5|加仓价／减仓价 须设置有效价位
 line-36||p|加仓价 · 所有分组：现价≤设置价×${add_factor} → 可点红灯。
-line-37||p|加仓价提醒标记已读 → 灰灯。
+line-37||p|加仓价提醒标记已读 → 白灯。
 line-38||p|减仓价 · 持仓分组：现价≥设置价×${reduce_factor} → 可点红灯。
-line-39||p|减仓价提醒标记已读 → 灰灯。
+line-39||p|减仓价提醒标记已读 → 白灯。
 line-40||p|减仓价：重点、其他分组不适用。
 line-41|rule-cost-loss|h5|成本浮亏 持仓分组
 line-42||p|浮亏≥10% → 可点红灯；
 line-43||p|浮亏≥20%加重文字 → 可点红灯。
-line-44||p|浮亏提醒标记已读 → 灰灯。
+line-44||p|浮亏提醒标记已读 → 白灯。
 line-45||p|浮亏10%／20%每只标的只计一次。
 line-46||p|重点、其他分组不适用。
 line-47|rule-target-space|h5|目标空间 所有分组
-line-48||p|有效空间≥${target_space_pct}% → 紫虚线空心灯；
-target-space-positive||p|≥${target_high_space_pct}% → 紫红虚线空心灯。
+line-48||p|有效空间≥${target_space_pct}% → 紫空心灯；
+target-space-positive||p|≥${target_high_space_pct}% → 紫红空心灯。
 line-50|rule-target-reached|h5|达到目标／共识价 持仓分组、重点
 target-reached-positive||p|当日上穿／跌破或现价在目标±${target_gap_pct}% → 实心紫灯。"""),
     ("rule-text", r"""line-52||h4|二、不报灯且不折叠
@@ -41,7 +41,7 @@ line-54||p|美东财报日期按北京时间：前一日／当日／后一日 �
 earnings-near||p|财报前2～${earn_soon_days}天 → 黄字。
 earnings-list-note||p|还有 ${earn_far_start}～${earn_list_days}天 → 仅文字，进入统计财报，可折叠。
 line-56|rule-quotes|h5|缺行情／参考行情 数据缺失 所有分组
-line-57||p|缺行情 → 灰灯；参考行情显示参考状态。
+line-57||p|缺行情 → 白灯；参考行情显示参考状态。
 line-58||p|两者只保留在主表，不进入“无异动”，不计入统计面板，不因此制造红灯／黄灯警示。"""),
     ("rule-folded", r"""line-64||h4|三、折叠
 ||h5|目标／共识价
@@ -53,7 +53,7 @@ earnings-far||p|仅有未来${earn_far_start}～${earn_list_days}天财报名单
 )
 
 # 报灯总表：分组 × 灯级，替代原来按指标逐条罗列的正文。
-# 灯级口径：红灯／黄灯／灰灯＝有文字、不折叠；灰灯（折）＝有文字、折叠；仅文字＝折叠且不计灰；
+# 灯级口径：红灯／黄灯／白灯＝有文字、不折叠；白灯（折）＝有文字、折叠；仅文字＝折叠且不计白；
 # 无提示＝规则判定后不出声；无效＝该分组下规则不生效。
 LAMP_RULE_TABLE = (
     '<table class="rule-table" id="rules-lamp-table">'
@@ -65,48 +65,48 @@ LAMP_RULE_TABLE = (
     '<tr><th scope="row" class="cat-col" rowspan="12">布林+RSI</th>'
     '<td>布林上轨▲ + RSI 3条 ↑超买</td>'
     '<td class="cell-red">红灯</td><td class="cell-red">红灯</td>'
-    '<td class="cell-gray">灰灯</td></tr>'
+    '<td class="cell-gray">白灯</td></tr>'
     '<tr class="rule-group-end"><td><span class="rule-reverse">布林上轨▲ + RSI 3条 ↓超卖（反）</span></td>'
     '<td class="cell-yellow">黄灯</td><td class="cell-yellow">黄灯</td>'
-    '<td class="cell-gray-fold">灰灯（折）</td></tr>'
+    '<td class="cell-gray-fold">白灯（折）</td></tr>'
     '<tr><td>布林下轨▼ + RSI 3条 ↓超卖</td>'
     '<td class="cell-red" colspan="3">红灯</td></tr>'
     '<tr class="rule-group-end"><td><span class="rule-reverse">布林下轨▼ + RSI 3条 ↑超买（反）</span></td>'
     '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
     '<tr><td>布林上轨▲ + RSI 2条 ↑超买</td>'
-    '<td class="cell-yellow">黄灯</td><td class="cell-gray">灰灯</td><td>仅文字</td></tr>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-gray">白灯</td><td>仅文字</td></tr>'
     '<tr class="rule-group-end"><td><span class="rule-reverse">布林上轨▲ + RSI 2条 ↓超卖（反）</span></td>'
-    '<td class="cell-yellow">黄灯</td><td class="cell-gray">灰灯</td>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-gray">白灯</td>'
     '<td>仅文字</td></tr>'
     '<tr><td>布林下轨▼ + RSI 2条 ↓超卖</td>'
     '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
     '<tr class="rule-group-end"><td><span class="rule-reverse">布林下轨▼ + RSI 2条 ↑超买（反）</span></td>'
     '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
     '<tr><td>布林上轨▲ + RSI 1条 ↑超买</td>'
-    '<td class="cell-gray">灰灯</td><td>仅文字</td><td>无提示</td></tr>'
+    '<td class="cell-gray">白灯</td><td>仅文字</td><td>无提示</td></tr>'
     '<tr class="rule-group-end"><td><span class="rule-reverse">布林上轨▲ + RSI 1条 ↓超卖（反）</span></td>'
-    '<td class="cell-gray">灰灯</td><td>仅文字</td><td>无提示</td></tr>'
+    '<td class="cell-gray">白灯</td><td>仅文字</td><td>无提示</td></tr>'
     '<tr><td>布林下轨▼ + RSI 1条 ↓超卖</td>'
-    '<td class="cell-gray" colspan="3">灰灯</td></tr>'
+    '<td class="cell-gray" colspan="3">白灯</td></tr>'
     '<tr class="rule-group-end"><td><span class="rule-reverse">布林下轨▼ + RSI 1条 ↑超买（反）</span></td>'
-    '<td class="cell-gray" colspan="3">灰灯</td></tr>'
+    '<td class="cell-gray" colspan="3">白灯</td></tr>'
     '<tr><th scope="row" class="cat-col" rowspan="6">单独RSI</th>'
     '<td>RSI 3条 ↑超买</td>'
-    '<td class="cell-yellow">黄灯</td><td class="cell-gray">灰灯</td>'
-    '<td class="cell-gray-fold">灰灯（折）</td></tr>'
+    '<td class="cell-yellow">黄灯</td><td class="cell-gray">白灯</td>'
+    '<td class="cell-gray-fold">白灯（折）</td></tr>'
     '<tr class="rule-group-end"><td>RSI 3条 ↓超卖</td>'
     '<td class="cell-red" colspan="3">红灯</td></tr>'
     '<tr><td>RSI 2条 ↑超买</td>'
-    '<td class="cell-gray">灰灯</td><td>仅文字</td><td>无提示</td></tr>'
+    '<td class="cell-gray">白灯</td><td>仅文字</td><td>无提示</td></tr>'
     '<tr class="rule-group-end"><td>RSI 2条 ↓超卖</td>'
-    '<td class="cell-gray" colspan="3">灰灯</td></tr>'
+    '<td class="cell-gray" colspan="3">白灯</td></tr>'
     '<tr><td>RSI 1条 ↑超买</td><td colspan="3">无提示</td></tr>'
     '<tr class="rule-group-end"><td>RSI 1条 ↓超卖</td><td colspan="3">仅文字</td></tr>'
     '<tr><th scope="row" class="cat-col" rowspan="2">单独布林</th>'
-    '<td>布林上轨▲ + RSI 0条</td><td class="cell-gray">灰灯</td>'
+    '<td>布林上轨▲ + RSI 0条</td><td class="cell-gray">白灯</td>'
     '<td>无提示</td><td>无提示</td></tr>'
     '<tr class="rule-group-end"><td>布林下轨▼ + RSI 0条</td>'
-    '<td class="cell-gray">灰灯</td><td class="cell-gray-fold" colspan="2">灰灯（折）</td></tr>'
+    '<td class="cell-gray">白灯</td><td class="cell-gray-fold" colspan="2">白灯（折）</td></tr>'
     '<tr><th scope="row" class="cat-col" rowspan="5">价格与量能</th>'
     '<td>涨跌幅 · 自适应</td>'
     '<td colspan="3">红灯／黄灯</td></tr>'
@@ -127,7 +127,7 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 <section id="glossary-calculation">
 <h4>名词解释与计算</h4>
 <h5 id="glossary-ack">可点红灯与已读</h5>
-<p>加仓价、减仓价、成本浮亏：点✓已读，再点撤销。已读显示白字删除线，统计由对应红列转灰列。</p>
+<p>加仓价、减仓价、成本浮亏：点✓已读，再点撤销。已读显示白字删除线，统计由对应红列转白列。</p>
 <p>条件消失即清除已读，再次触发重新提醒。浮亏10%／20%分档记录、每只只计一次；升降档切换提醒，低于10%清除浮亏已读。</p>
 <h5 id="glossary-chg">涨跌幅 · 计算与阈值</h5>
 <p>涨跌幅＝（现价÷昨收−1）×100%；报灯取绝对值。</p>
@@ -136,7 +136,7 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 ${chg_threshold_table}
 <h5 id="glossary-amp">振幅 · 计算与阈值</h5>
 <p>振幅＝（日高−日低）÷昨收×100%，表示日内摆动宽度。涨跌幅接近0，振幅仍可能很大。</p>
-<p>所有分组沿用上节波动档，达到红门槛优先报红，否则达到黄门槛报黄。有效0%保留数值；低于黄门槛不提示、不计灰，也不因振幅强制不折叠。日内高低缺失、错位、无效或仅由现价填补时，不计算振幅。</p>
+<p>所有分组沿用上节波动档，达到红门槛优先报红，否则达到黄门槛报黄。有效0%保留数值；低于黄门槛不提示、不计白，也不因振幅强制不折叠。日内高低缺失、错位、无效或仅由现价填补时，不计算振幅。</p>
 ${amp_threshold_table}
 <h5 id="glossary-boll">布林逼近 · 自适应</h5>
 <p>布林为${boll_n}日、±${boll_k}倍标准差。逼近范围＝历史日波动×${boll_near_factor}（当前${boll_near_band_pct}%设置）；波动越大，范围越宽。关闭自适应或波动无效时固定${boll_near_pct}%。</p>
@@ -172,7 +172,7 @@ ${vol_example_table}
 <h5 id="glossary-dedup">标的去重与显示优先级</h5>
 <p>显示与报警优先级：市场风险／持仓 → 重点 → 其他。同一实质标的只显示最高级，清单记录不删。</p>
 <p>VIX与标普指数仅在市场风险显示。</p>
-<p>主表描述按指标级别着色：红字为红灯内容、黄字为黄灯内容、白字为灰灯内容；仅文字且不计灰灯的内容用灰字。</p>
+<p>主表描述按指标级别着色：红字为红灯内容、黄字为黄灯内容、白字为白灯内容；仅文字且不计白灯的内容用灰字。</p>
 </section>
 <section id="glossary-fetch">
 <h4>抓取规则</h4>
@@ -235,9 +235,9 @@ def _text(value):
     return html.escape(str(value), quote=True).replace("&#x27;", "&#39;")
 
 
-COLORS = {"紫红虚线空心灯": "tone-target-high", "紫虚线空心灯": "lamp-purple",
+COLORS = {"紫红空心灯": "tone-target-high", "紫空心灯": "lamp-purple",
           "实心紫灯": "lamp-purple", "红灯": "lamp-red", "黄灯": "lamp-yellow",
-          "灰灯": "nav-gray", "红字": "lamp-red", "黄字": "lamp-yellow",
+          "白灯": "nav-gray", "红字": "lamp-red", "黄字": "lamp-yellow",
           "持仓分组": "rule-group", "所有分组": "rule-group",
           "其他分组": "rule-group", "重点": "rule-group"}
 
@@ -559,7 +559,6 @@ tr:first-child td{border-top:none}
 .signal-item[data-signal-level="yellow"]{color:#f0c674}
 .signal-item[data-signal-level="gray"]{color:var(--text)}
 .signal-item[data-signal-level="purple"]{color:var(--purple)}
-.signal-item[data-signal-role="supplement"]{color:var(--dim)}
 .signal-separator{color:var(--dim);margin:0 2px}
 .group-bottom{padding:0;margin:0 -4px -6px;border-top:1px solid var(--line);text-align:center;line-height:0}
 .collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);
@@ -596,6 +595,12 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel.tone-yellow,#signalCounts .signal-name-lamp.yellow,#signalCounts .earnings-week li.lamp-yellow{--name-lamp:var(--yellow)}
 #signalCounts .signal-name-lamp.green,#signalCounts .earnings-week li.lamp-green{--name-lamp:var(--green)}
 #signalCounts .text-only .signal-member-list,#signalCounts .signal-name-lamp.gray{--name-lamp:#9fa3aa}
+/* 单选名单标的竖条跟随主表整股灯，不继承所在红/黄/白分类；原尺寸与面板底色不变。 */
+#signalCounts .signal-members-panel li.lamp-red{--name-lamp:var(--red)}
+#signalCounts .signal-members-panel li.lamp-yellow{--name-lamp:var(--yellow)}
+#signalCounts .signal-members-panel li.lamp-green{--name-lamp:var(--green)}
+#signalCounts .signal-members-panel li.lamp-gray{--name-lamp:var(--text)}
+#signalCounts .signal-members-panel li.lamp-unknown{--name-lamp:var(--dim)}
 #signalCounts .signal-name-lamp.purple{--name-lamp:var(--purple)}
 #signalCounts .signal-name-lamp.tone-purple{--name-lamp:#c4a3ff}
 #signalCounts .signal-name-lamp.tone-target-high{--name-lamp:var(--target-high)}
@@ -973,7 +978,7 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 .card .rules-body .rule-table .ar-rsi-up,.card .rules-body .rule-table .ar-rsi-down{font-weight:700}
 /* 同向／反向两行为一组，组间用更亮的横线分开。 */
 .card .rules-body .rule-table tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid #6f7b91}
-/* 同一灯级覆盖多个分组：居中并带灯色底色；混合灯与非灯级不加底色。灰灯（折）比灰灯更淡。 */
+/* 同一灯级覆盖多个分组：居中并带灯色底色；混合灯与非灯级不加底色。白灯（折）比白灯更淡。 */
 .card .rules-body .rule-table td.cell-red{background:rgba(248,81,73,.16);text-align:center}
 .card .rules-body .rule-table td.cell-yellow{background:rgba(210,153,34,.16);text-align:center}
 .card .rules-body .rule-table td.cell-gray{background:rgba(173,181,194,.24);text-align:center}
@@ -1170,9 +1175,9 @@ function intersectSignals(data, kinds) {
         if (typeof text !== "string" || !text) return;
         let level = typeof part === "string" ? member.l : part.l;
         if (typeof part === "string") {
-          const old = text.match(/^(红灯|黄灯|灰灯|紫灯|绿灯)\s*·\s*/);
+          const old = text.match(/^(红灯|黄灯|白灯|灰灯|紫灯|绿灯)\s*·\s*/);
           if (old) {
-            level = {红灯:"red",黄灯:"yellow",灰灯:"gray",紫灯:"purple",绿灯:"green"}[old[1]];
+            level = {红灯:"red",黄灯:"yellow",白灯:"gray",灰灯:"gray",紫灯:"purple",绿灯:"green"}[old[1]];
             text = text.slice(old[0].length);
             const prefix = data[kind].label + " · ";
             if (text.startsWith(prefix)) text = text.slice(prefix.length);

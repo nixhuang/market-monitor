@@ -259,7 +259,7 @@
         if(el.nodeType===3 && (/^[\s/]*$/.test(el.textContent) || items.length && /^\s*—\s*$/.test(el.textContent)) ||
           el.nodeType===1 && el.matches('.signal-separator')) box.removeChild(el);
       });
-      // 主表价格主次是独立显示标记，不能把补充事实改成灰灯或按原等级拆散。
+      // 主表价格主次是独立显示标记，不能把补充事实改成白灯或按原等级拆散。
       var primary=items.find(function(el){
         return el.getAttribute('data-signal-role')==='primary' &&
           ['chg','amp'].indexOf(el.getAttribute('data-signal-kind'))>=0;
@@ -997,7 +997,7 @@
     out.sort(function(a,b){ return a.group<b.group?-1:(a.group>b.group?1:(a.sym<b.sym?-1:1)); });
     return out;
   }
-  /* 灰列：计数按钮 + 展开名单，写法跟其它灰灯名单一致（名字可跳转、分组在括号里、价位跟在后面） */
+  /* 灰列：计数按钮 + 展开名单，写法跟其它白灯名单一致（名字可跳转、分组在括号里、价位跟在后面） */
   function ackGrayUnique(entries){
     var seen={}, n=0;
     entries.forEach(function(e){ if(!seen[e.anchor]){ seen[e.anchor]=true; n++; } });
@@ -1040,7 +1040,7 @@
       if(host) (host.querySelector('td')||host).appendChild(base.grayPanel);
     }
     base.grayBtn.textContent=String(n);
-    base.grayBtn.setAttribute('aria-label','灰灯 · 已读 · '+n+' 只，展开或收起标的');
+    base.grayBtn.setAttribute('aria-label','白灯 · 已读 · '+n+' 只，展开或收起标的');
     if(entries.length){
       base.grayPanel.innerHTML='<div class="signal-member-groups"><div class="signal-member-block">'
         +'<h5>已读</h5><ul class="signal-member-list">'
@@ -1148,12 +1148,26 @@
           +' <span class="signal-member-metric">'+esc(e.label)+'</span></li>';
       }).join('')+'</ul></div>';
   }
+  function syncMemberNameLamps(){
+    var card=document.getElementById('signalCounts'); if(!card) return;
+    Array.prototype.forEach.call(card.querySelectorAll('.signal-members-panel a.signal-member-jump'),function(link){
+      var li=link.closest('li'), panel=link.closest('.signal-members-panel');
+      // 紫目标名单保留自身独立span；这里只同步红/黄/白分类内的单选名称竖条。
+      if(!li || li.querySelector('.signal-name-lamp') || !panel ||
+          !/(?:^|\s)tone-(?:red|yellow|gray)(?:\s|$)/.test(panel.className)) return;
+      var href=link.getAttribute('href')||'', row=href.charAt(0)==='#'?document.getElementById(href.slice(1)):null;
+      var levels=row && row.tagName==='TR' && /^s-/.test(row.id)?(row.className||'').split(/\s+/):[],
+          level=levels.filter(function(c){return LV_ORDER.indexOf(c)>=0;})[0];
+      ['red','yellow','green','gray','unknown'].forEach(function(c){li.classList.remove('lamp-'+c);});
+      li.classList.add('lamp-'+(level||'unknown'));
+    });
+  }
   function refreshLossStats(){
     var card=document.getElementById('signalCounts'); if(!card) return;
     var entries=lossStatEntries(), box=document.getElementById('signalFilterResult');
     if(entries.length && !card.querySelector('table')){
       var table=document.createElement('table');
-      table.innerHTML='<tr class="gray mh"><td>信号</td><td class="num">红</td><td class="num">黄</td><td class="num">灰</td></tr>';
+      table.innerHTML='<tr class="gray mh"><td>信号</td><td class="num">红</td><td class="num">黄</td><td class="num">白</td></tr>';
       card.insertBefore(table,card.querySelector('.group-bottom'));
     }
     if(entries.length && !LOSS_STAT){
@@ -1242,7 +1256,8 @@
       var stats=card.querySelector('summary .group-stats');
       if(stats){ grayBadge=document.createElement('span'); grayBadge.className='stat-badge gray'; stats.insertBefore(grayBadge,stats.querySelector('.stat-badge.purple')||stats.querySelector('.count-earn')); }
     }
-    if(grayBadge){ grayBadge.textContent=String(grayTotal); grayBadge.setAttribute('aria-label','灰 '+grayTotal+' 项'); }
+    if(grayBadge){ grayBadge.textContent=String(grayTotal); grayBadge.setAttribute('aria-label','白 '+grayTotal+' 项'); }
+    syncMemberNameLamps();
     if(notify && typeof window.dispatchEvent==='function' && typeof window.CustomEvent==='function')
       window.dispatchEvent(new window.CustomEvent('mm:ack-change'));
   }

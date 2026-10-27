@@ -1004,7 +1004,7 @@ check(_order_filter_data['chg']['members'][0]['d'][0]['l'] == 'red'
       and _order_filter_data['rsi']['members'][0]['d'][0]['l'] == 'gray'
       and all(_order_filter_data[k]['members'][0]['l'] == 'red' for k in ('chg', 'ma', 'amp', 'rsi')),
       '全页筛选同股红黄灰事实颜色独立取统计条件，不沿用整股红灯')
-check(all(set(fact) == {'l', 't'} and not re.search(r'灰灯|红灯|黄灯|布林\+RSI', fact['t'])
+check(all(set(fact) == {'l', 't'} and not re.search(r'灰灯|白灯|红灯|黄灯|布林\+RSI', fact['t'])
           for condition in _order_filter_data.values() for member in condition['members'] for fact in member['d']),
       '全页紧凑事实均为l/t对象且不含可见灯级文字或组合重复标签')
 check(_order_row == _order_before and _order_snap == _order_snap_before
@@ -1080,12 +1080,16 @@ for _page_label, _page in (('基础页', html), ('混合红黄灰无灯页', _or
     _tables = re.findall(r'<table class="stk">.*?</table>', _page, re.S)
     check(bool(_tables) and all('signal-dot' not in table for table in _tables),
           _page_label + '全部个股表含无异动折叠表均零圆点')
+    _visible = _unescape(re.sub(r'<[^>]+>', '', re.sub(
+        r'<(?:script|style)\b[^>]*>.*?</(?:script|style)>', '', _page, flags=re.S)))
+    check(not re.search(r'灰灯|不计灰|转灰列|紫(?:红)?虚线空心灯', _visible),
+          _page_label + '可见文案无旧灯显示名，脚本兼容前缀不误判为显示')
 check('.signal-item{color:var(--dim)}' in _focus_page
       and '.signal-item[data-signal-level="gray"]{color:var(--text)}' in _focus_page,
       '整页保留无灯灰字和技术灰白字两条独立CSS')
 _rules_table = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', _focus_page, re.S)[0]
-for _condition, _position in (('布林上轨▲ + RSI 1条 ↑超买', '灰灯'),
-                             ('布林上轨▲ + RSI 1条 ↓超卖（反）', '灰灯')):
+for _condition, _position in (('布林上轨▲ + RSI 1条 ↑超买', '白灯'),
+                             ('布林上轨▲ + RSI 1条 ↓超卖（反）', '白灯')):
     _rule_rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', _rules_table, re.S)
                   if '<td' in row and _unescape(re.sub(r'<[^>]+>', '',
                       re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1])) == _condition]
@@ -1094,7 +1098,7 @@ for _condition, _position in (('布林上轨▲ + RSI 1条 ↑超买', '灰灯')
     check([_unescape(re.sub(r'<[^>]+>', '', text)) for _, text in _cells]
           == [_condition, _position, '仅文字', '无提示']
           and _cells[2][0] == '' and '<td>仅文字</td>' in _rule_rows[0],
-          _condition + '全页规则重点列仅文字且无灰灯样式')
+          _condition + '全页规则重点列仅文字且无白灯样式')
 
 # 四项授权全页专项：独立涨跌灯不改变技术描述、统计归属或折叠资格。
 _business.setUp()
@@ -1169,7 +1173,7 @@ for _row, _kind, _technical_level, _foldable, _overall in _four_cases:
           _row['symbol'] + '技术灰白字、仅文字灰字、独立红黄和主行竖条各自保留')
     _anchor = 'id="' + monitor._stock_anchor_id(_row['symbol']) + '"'
     check((_anchor in _four_quiet_html) == (_foldable and _overall == 'green'),
-          _row['symbol'] + '可折叠绿行进无异动；不折叠灰灯和独立红黄留主表')
+          _row['symbol'] + '可折叠绿行进无异动；不折叠白灯和独立红黄留主表')
     _members = {m['s']: m for m in _four_filter.get(_kind, {}).get('members', [])}
     check((_row['symbol'] in _members) == bool(_technical_level),
           _row['symbol'] + '仅文字不统计，技术灰或红黄进对应筛选名单')
@@ -1193,13 +1197,13 @@ check(_four_items == _four_before and _four_snap == _four_snap_before,
       '四项授权全页渲染不突变分析结果或快照')
 _four_rules = re.search(r'<table[^>]*id="rules-lamp-table"[^>]*>.*?</table>', _four_page, re.S)[0]
 for _condition, _expected in (
-        ('布林下轨▼ + RSI 0条', ['灰灯', '灰灯（折）']),
-        ('RSI 3条 ↑超买', ['黄灯', '灰灯', '灰灯（折）']),
-        ('布林上轨▲ + RSI 2条 ↑超买', ['黄灯', '灰灯', '仅文字']),
-        ('布林上轨▲ + RSI 2条 ↓超卖（反）', ['黄灯', '灰灯', '仅文字']),
-        ('布林上轨▲ + RSI 3条 ↓超卖（反）', ['黄灯', '黄灯', '灰灯（折）']),
-        ('布林上轨▲ + RSI 1条 ↓超卖（反）', ['灰灯', '仅文字', '无提示']),
-        ('RSI 2条 ↑超买', ['灰灯', '仅文字', '无提示']),
+        ('布林下轨▼ + RSI 0条', ['白灯', '白灯（折）']),
+        ('RSI 3条 ↑超买', ['黄灯', '白灯', '白灯（折）']),
+        ('布林上轨▲ + RSI 2条 ↑超买', ['黄灯', '白灯', '仅文字']),
+        ('布林上轨▲ + RSI 2条 ↓超卖（反）', ['黄灯', '白灯', '仅文字']),
+        ('布林上轨▲ + RSI 3条 ↓超卖（反）', ['黄灯', '黄灯', '白灯（折）']),
+        ('布林上轨▲ + RSI 1条 ↓超卖（反）', ['白灯', '仅文字', '无提示']),
+        ('RSI 2条 ↑超买', ['白灯', '仅文字', '无提示']),
         ('RSI 1条 ↓超卖', ['仅文字'])):
     _rule_rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', _four_rules, re.S)
                   if '<td' in row and _unescape(re.sub(r'<[^>]+>', '',
@@ -1235,8 +1239,10 @@ _amp_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _amp_pag
 check([m['kind'] for m in _amp_snap['text_only']] == ['rsi', 'boll_rsi'],
       '真实振幅全链：只保留2项技术灰，振幅不再计灰')
 _amp_stats = _amp_page.split('id="signalCounts"', 1)[1].split('id="group_positions"', 1)[0]
-check('aria-label="灰 2 项"' in _amp_stats and 'aria-label="红 3 项"' in _amp_stats,
-      '总灰仅技术身份并集2，振幅红与其他红按最终行去重计3')
+check('aria-label="白 2 项"' in _amp_stats and 'aria-label="红 3 项"' in _amp_stats
+      and '>白</td>' in _amp_stats and '>灰</td>' not in _amp_stats
+      and not re.search(r'aria-label="(?:灰灯|灰 \d+ 项)', _amp_stats),
+      '白标题仍按技术gray身份并集2，振幅红与其他红按最终行去重计3')
 _amp_stat_row = re.search(r'<tr><td><button[^>]*data-kind="amp".*?</tr>', _amp_stats, re.S)[0]
 check([_unescape(re.sub(r'<[^>]+>', '', cell)) for cell in
        re.findall(r'<td\b[^>]*>(.*?)</td>', _amp_stat_row, re.S)] == ['振幅', '2', '2', '—'],
@@ -1251,9 +1257,9 @@ check(all(title in _amp_panels['yellow'] for title in ('<h5><span class="grp-arr
       and _amp_panels['yellow'].index('上涨</h5>') < _amp_panels['yellow'].index('下跌</h5>')
       and '<h5>平盘</h5>' in _amp_panels['red'],
       '振幅红黄名单仍按涨/跌/平分框，方向结构不变')
-check(all(panel.count('<li>') == 2 for panel in _amp_panels.values())
+check(all(len(re.findall(r'<li\b[^>]*>', panel)) == 2 for panel in _amp_panels.values())
       and '振幅 0.0%' not in ''.join(_amp_panels.values())
-      and 'aria-label="灰灯 · 振幅' not in _amp_stats,
+      and not re.search(r'aria-label="(?:灰灯|白灯) · 振幅', _amp_stats),
       '振幅仅已触发红黄进入名单，合法0静默，无旧振幅灰面板')
 for _row, _amp_level in zip(_amp_rows, ('yellow', 'yellow', None, 'red', None, 'red')):
     _classes, _body = rendered_stock_row(_amp_page, _row, not _row['foldable'])
@@ -1506,6 +1512,18 @@ check(_inject not in _safe_cost_js and '__MM_REAL__' not in _safe_cost_js
 
 # 显式 --chrome 才启动全新隔离实例；HTML 经 CDP 放入 about:blank 内存页。
 if '--chrome' in sys.argv:
+    # 生产渲染合成红/黄价格配对，并保留白灯及仅文字同股样本；不读取真实仓位。
+    _color_rows = [_copy.deepcopy(_order_row)]
+    for _chg_level, _amp_level in (('red', 'red'), ('red', 'yellow'), ('yellow', 'red'), ('yellow', 'yellow')):
+        _color_row = item('COLOR' + _chg_level.upper() + _amp_level.upper(), 'technology',
+                          'red' if 'red' in (_chg_level, _amp_level) else 'yellow')
+        _color_row.update(signals=[('异动 -12.0%' if _chg_level == 'red' else '波动 +8.2%'),
+                                   '振幅 11.2%（756.00~840.47）'],
+                          signal_marks=[('chg', _chg_level), ('amp', _amp_level)])
+        _color_rows.append(_color_row)
+    with _patch.object(monitor, 'global_dca', return_value=None):
+        _color_snapshot = monitor.build_snapshot({}, _color_rows, {}, group_counts={})
+        _color_page = monitor.render({}, _color_rows, len(_color_rows), snapshot=_color_snapshot)
     _expected_browser_seed = monitor.json_script(
         {"asof": "", "cash": 0, "cash_extra": 0, "fixed": 0, "fixed_cost": 0, "items": {}, "rs20": None})
     if 'var REAL=' + _expected_browser_seed + ';' not in _description_page:
@@ -1795,6 +1813,53 @@ const deadline = setTimeout(() => {
     }
     refreshDocument=null;
     await cdp('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
+    const colorTree=await cdp('Page.getFrameTree');
+    // 前面的合成导航已建立HTTPS origin；显式preview防止空种子走正式仓位读取路径。
+    const colorHTML=input.colorPage.replace(/var REAL=(.*?);/, (match,json) => {
+      const seed=JSON.parse(json);seed.preview=true;return 'var REAL='+JSON.stringify(seed)+';';
+    }).replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
+      .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
+    await cdp('Page.setDocumentContent', {frameId: colorTree.frameTree.frame.id, html: colorHTML});
+    for (const [width,height] of [[1440,1000],[820,1180],[390,844]]) {
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      const colors=await evaluate(`(() => {
+        const rows=[...document.querySelectorAll('tr[id^="s-color"],#s-orderescape')];
+        const expected={red:'rgb(255, 133, 128)',yellow:'rgb(240, 198, 116)',
+          gray:'rgb(230, 232, 236)','':'rgb(139, 147, 161)'};
+        return rows.map(row=>({id:row.id,items:[...row.querySelectorAll('.signal-item:not(.cost-warn)')]
+          .map(el=>({kind:el.dataset.signalKind,level:el.dataset.signalLevel||'',
+            role:el.dataset.signalRole||'',color:getComputedStyle(el).color,
+            expected:expected[el.dataset.signalLevel||'']}))}));
+      })()`);
+      const all=colors.flatMap(row=>row.items);
+      assertions.push({ok:colors.length===5 && all.length>0 && all.every(el=>el.color===el.expected)
+        && ['red','yellow','gray',''].every(level=>all.some(el=>el.level===level))
+        && colors.every(row=>row.items.filter(el=>el.role==='primary').length===1
+          && row.items.filter(el=>el.role==='supplement').length===1),
+        name:width+'px红红/红黄/黄红/黄黄配对及同股白灯、仅文字均按自身等级着色，补充不再变灰',actual:colors});
+      const lamps=await evaluate(`(() => {
+        const levels=['red','yellow','green','gray'];
+        const expected={red:'rgb(248, 81, 73)',yellow:'rgb(210, 153, 34)',
+          green:'rgb(63, 185, 80)',gray:'rgb(230, 232, 236)'};
+        return [...document.querySelectorAll('#signalCounts .signal-members-panel')]
+          .filter(panel=>['tone-red','tone-yellow','tone-gray'].some(c=>panel.classList.contains(c)))
+          .flatMap(panel=>[...panel.querySelectorAll('a.signal-member-jump')].map(link=>{
+            const li=link.closest('li'),row=document.getElementById(link.getAttribute('href').slice(1));
+            const level=levels.find(c=>row && row.classList.contains(c)),before=getComputedStyle(li,'::before');
+            const rowStyle=row?getComputedStyle(row.querySelector('td.sym')):null;
+            const rowLamp=rowStyle?rowStyle.backgroundImage+' '+rowStyle.boxShadow:'';
+            return {id:row?row.id:'',tone:['red','yellow','gray'].find(c=>panel.classList.contains('tone-'+c)),level,
+              color:before.backgroundColor,expected:expected[level],width:before.width,height:before.height,
+              gap:before.marginRight,content:before.content,spans:li.querySelectorAll('.signal-name-lamp').length,
+              rowLamp};
+          }));
+      })()`);
+      assertions.push({ok:lamps.length>0 && lamps.every(m=>m.color===m.expected && m.width==='3px'
+          && m.height==='12px' && m.gap==='6px' && m.content==='\"\"' && m.spans===0
+          && (!['red','yellow','green'].includes(m.level) || m.rowLamp.includes(m.expected)))
+          && ['yellow','gray'].every(tone=>lamps.some(m=>m.tone===tone && m.level==='red')),
+        name:width+'px红黄白分类不变，名单唯一3px竖条与主表灯同色，黄白名单中的红主行仍红',actual:lamps});
+    }
     const injectionTree=await cdp('Page.getFrameTree');
     const injectionHTML=input.injectionPage.replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
       .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
@@ -1830,6 +1895,7 @@ const deadline = setTimeout(() => {
     with _tempfile.TemporaryDirectory(prefix='mm-target-chrome-') as _profile:
         _browser_result = _subprocess.run(['node', '-e', _browser_script],
             input=_json.dumps({'chrome': _chrome, 'profile': _profile, 'html': _description_page,
+                              'colorPage': _color_page,
                               'ciNoSandbox': sys.platform == 'linux' and os.environ.get('GITHUB_ACTIONS') == 'true'
                                   and os.environ.get('MM_TEST_CHROME_NO_SANDBOX') == '1',
                               'injectionPage': _unsafe_page, 'injectionProbe': _unsafe_snapshot['probe']}),

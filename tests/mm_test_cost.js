@@ -23,7 +23,11 @@ class Element {
     this.tagName=tag.toUpperCase(); this.doc=doc; this.children=[]; this.attrs={};
     this.style={}; this.events={}; this.hidden=false; this.value=''; this.validationMessage='';
     this.selectionStart=0; this.selectionEnd=0; this.selectionDirection='none';
-    this.classList={remove:c=>{this.className=this.className.split(/\s+/).filter(x=>x!==c).join(' ');}};
+    this.classList={
+      remove:(...tokens)=>{this.className=this.className.split(/\s+/).filter(x=>x&&!tokens.includes(x)).join(' ');},
+      add:(...tokens)=>{this.className=[...new Set([...this.className.split(/\s+/).filter(Boolean),...tokens])].join(' ');},
+      contains:token=>this.className.split(/\s+/).includes(token)
+    };
   }
   get id(){return this.attrs.id||'';} set id(v){this.attrs.id=v;}
   get className(){return this.attrs.class||'';} set className(v){this.attrs.class=v;}
@@ -1357,7 +1361,7 @@ function lossStatDocument(doc,opts={}){
   const old=doc.getElementById('signalCounts'),card=doc.createElement('details');
   card.id='signalCounts';card.className='card group-card';card.open=true;
   card.innerHTML='<summary><span class="grp-name">统计</span><span class="group-stats"><span class="stat-badge red">99</span><span class="stat-badge yellow">99</span><span class="stat-badge purple">7</span></span></summary>'
-    +'<table><tr class="gray mh"><td>信号</td><td class="num">红</td><td class="num">黄</td><td class="num">灰</td></tr>'
+    +'<table><tr class="gray mh"><td>信号</td><td class="num">红</td><td class="num">黄</td><td class="num">白</td></tr>'
     +'<tr><td><button class="signal-filter-toggle" data-kind="chg" aria-pressed="false">涨跌幅</button></td><td class="num">2</td><td class="num">—</td><td class="num">—</td></tr></table>'
     +'<div class="purple-extra"><button class="signal-filter-toggle" data-kind="target_purple" aria-pressed="false">空间/达到</button></div>'
     +'<div id="signalFilterResult" class="signal-filter" role="status"></div><div class="group-bottom"><button class="collapse-group" data-target="signalCounts">收起</button></div>';
@@ -1418,7 +1422,7 @@ function assertLossBadges(b,red,yellow){
   }
   assert.equal(b.doc.querySelector('#signalCounts summary .stat-badge.purple').textContent,'7');
 }
-test('统计表头新增灰灯插在紫灯和财报前，重绘保留紫灯数量',async()=>{
+test('统计表头新增白灯插在紫灯和财报前，重绘保留紫灯数量',async()=>{
   const b=await bootLoss({prepareDocument:doc=>{
     const earn=doc.createElement('span');earn.className='count-total count-earn';earn.textContent='财报 2';
     doc.querySelector('#signalCounts summary .group-stats').appendChild(earn);
@@ -1431,6 +1435,8 @@ test('统计表头新增灰灯插在紫灯和财报前，重绘保留紫灯数�
       'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn']);
     assert.equal(stats.querySelector('.stat-badge.purple').textContent,'7');
     assert.equal(stats.querySelector('.count-earn').textContent,'财报 2');
+    assert.deepEqual(b.doc.querySelector('#signalCounts table tr').children.map(x=>x.textContent),['信号','红','黄','白']);
+    assert.doesNotMatch(b.doc.getElementById('signalCounts').textContent,/灰灯|紫(?:红)?虚线空心灯/);
   }
 });
 function ackCurrentLoss(b,sym='AAA'){
@@ -1453,9 +1459,9 @@ function lossGrayDocument(doc,symbols,count=symbols?.length??0){
   }
 }
 function assertLossGrayBadge(b,n){
-  const badges=b.doc.querySelectorAll('#signalCounts summary .stat-badge.gray');assert.equal(badges.length,1,'灰标题不能重复追加');
+  const badges=b.doc.querySelectorAll('#signalCounts summary .stat-badge.gray');assert.equal(badges.length,1,'白标题不能重复追加');
   assert.equal(badges[0].parentNode,b.doc.querySelector('#signalCounts summary .group-stats'));
-  assert.equal(badges[0].textContent,String(n));assert.equal(badges[0].getAttribute('aria-label'),'灰 '+n+' 项');
+  assert.equal(badges[0].textContent,String(n));assert.equal(badges[0].getAttribute('aria-label'),'白 '+n+' 项');
 }
 function realIntersectSignals(){
   const assets=fs.readFileSync(path.join(__dirname,'..','page_assets.py'),'utf8');
@@ -1535,7 +1541,7 @@ test('真实多选DOM无圆点且每段级别独立，箭头斜线与安全文�
     assert.equal(detail.querySelector('.arrow-rsi-down').textContent,'↓');
     assert.equal(box.querySelector('img,script'),null,'恶意数据不能形成元素');
     assert.equal(li.querySelector('.note').textContent,unsafe);
-    assert.doesNotMatch(li.textContent,/灰灯|红灯|黄灯|紫灯|布林\+RSI|\[object Object\]/);
+    assert.doesNotMatch(li.textContent,/灰灯|白灯|红灯|黄灯|紫灯|布林\+RSI|\[object Object\]/);
     assert.equal(box.getAttribute('data-filter'),json);
   }
   facts.boll_rsi[0]={l:'yellow',t:'布林下轨▼ · RSI 2条 ↑超买'};
@@ -1566,6 +1572,16 @@ test('旧字符串交集仍兼容，技术灰与目标紫及无交易灯财报�
     {l:'purple',t:'今日跌破共识价 170',k:'target_purple'},
     {l:'',t:'财报日期',k:'earnings_week'}]);
   assert.deepEqual(data,before);
+  for(const prefix of ['灰灯','白灯']){
+    const compatible=copy(data);
+    for(const kind of ['amp','boll_rsi']){
+      compatible[kind].members[0].d=compatible[kind].members[0].d.map(text=>text.replace(/^灰灯/,prefix));
+    }
+    const compatibleBefore=copy(compatible),result=copy(intersect(compatible,Object.keys(compatible)).members[0].details);
+    assert.deepEqual(result,details,prefix+'前缀保留同一交集事实及条件归因');
+    assert.deepEqual(result.filter(fact=>['amp','boll_rsi'].includes(fact.k)).map(fact=>fact.l),['gray','gray']);
+    assert.deepEqual(compatible,compatibleBefore,prefix+'输入的旧字符串、成员与整股等级均不突变');
+  }
 });
 
 test('真实旧均线merge结构对象按颜色文字值去重，别名一身份且不同事实保留',()=>{
@@ -1746,7 +1762,7 @@ test('成本浮亏mm:ack-change同步回调已看到红黄灰标题、统计行�
     seen.push({type:event.type,badges,data:lossFilter(b),counts:[row.children[1].textContent,row.children[3].textContent],display:row.style.display});
   });
   const expected=(red,yellow,gray,members,counts,display='')=>({type:'mm:ack-change',badges:{
-    red:{text:String(red),label:'红 '+red+' 项'},yellow:{text:String(yellow),label:'黄 '+yellow+' 项'},gray:{text:String(gray),label:'灰 '+gray+' 项'}},
+    red:{text:String(red),label:'红 '+red+' 项'},yellow:{text:String(yellow),label:'黄 '+yellow+' 项'},gray:{text:String(gray),label:'白 '+gray+' 项'}},
     data:{...copy(LOSS_FILTER_BASE),cost_loss:{label:'成本浮亏',ok:true,members}},counts,display});
   const member={id:'AAA',s:'AAA',n:'测试名称',g:'短持仓',a:'s-aaa',l:'gray',d:[{l:'gray',t:'浮亏 10.0%（已达 10%） · 已读'}]};
   assertLossBadges(b,1,0);assertLossGrayBadge(b,1);
@@ -2295,25 +2311,78 @@ test('长持仓内部折叠移行不跨到短持仓，移组后仅用当前区�
   assertRowPair(b,'AAA',false);assert.ok(r.tr.closest('#group_positions_long'));ackCurrentLoss(b);assertRowPair(b,'AAA',true);
   b.move('AAA','focus');assert.equal(r.lossLv,0);assert.ok(r.tr.closest('#group_focus'));assert.equal(r.tr.closest('#group_positions'),null);
 });
+function addMemberLampFixture(doc){
+  const card=doc.getElementById('signalCounts'),fixture=doc.createElement('div');fixture.id='memberLampFixture';
+  fixture.innerHTML=['red','yellow','gray'].map(tone=>'<div class="signal-members-panel tone-'+tone+'" id="lamp-test-'+tone+'">'
+    +'<ul><li class="retained lamp-yellow"><a class="signal-member-jump" href="#s-aaa">AAA</a>'
+    +'<span class="signal-member-metric" data-signal-level="'+tone+'">条件自身'+tone+'</span></li></ul></div>').join('')
+    +'<div class="signal-members-panel tone-target"><ul><li class="purple-retained"><span class="signal-name-lamp purple high"></span>'
+    +'<a class="signal-member-jump" href="#s-aaa">AAA</a></li></ul></div>';
+  card.appendChild(fixture);
+}
+function assertMemberLamps(b,level){
+  for(const tone of ['red','yellow','gray']){
+    const panel=b.doc.getElementById('lamp-test-'+tone),li=panel.querySelector('li');
+    assert.equal(panel.className,'signal-members-panel tone-'+tone,'统计所在分类不随整股灯变化');
+    assert.deepEqual(li.className.split(/\s+/),['retained','lamp-'+level],'仅替换名称灯且保留其它class');
+    assert.equal(li.querySelector('.signal-member-metric').getAttribute('data-signal-level'),tone,'条件等级仍独立');
+    assert.equal(li.querySelectorAll('.signal-name-lamp').length,0,'单选只用一个伪元素，不额外追加灯span');
+  }
+  const purple=b.doc.querySelector('#memberLampFixture .tone-target li');
+  assert.equal(purple.className,'purple-retained');
+  assert.equal(purple.querySelector('.signal-name-lamp').className,'signal-name-lamp purple high');
+  for(const link of b.doc.querySelectorAll('.signal-members-panel a.signal-member-jump')){
+    const panel=link.closest('.signal-members-panel'),li=link.closest('li');
+    if(link.getAttribute('href')==='#s-aaa' && /tone-(red|yellow|gray)/.test(panel.className))
+      assert.ok(li.classList.contains('lamp-'+level),'静态及动态ACK/浮亏名单同步当前主行灯');
+  }
+}
+test('名称灯未知不借分类黄，非主行锚点不冒充灯，紫目标保持独立',async()=>{
+  const b=await bootCash({prepareDocument(doc){
+    addMemberLampFixture(doc);
+    const yellow=doc.getElementById('lamp-test-yellow'),node=doc.createElement('div');node.id='s-notrow';node.className='red';doc.body.appendChild(node);
+    yellow.innerHTML='<ul>'+['#s-missing','#s-notrow','#group_positions','https://example.test/#s-aaa'].map(href=>
+      '<li class="keep lamp-yellow"><a class="signal-member-jump" href="'+href+'">未知</a></li>').join('')+'</ul>';
+  }});
+  for(let i=0;i<3;i++){
+    b.paint();
+    assert.deepEqual(b.doc.querySelectorAll('#lamp-test-yellow li').map(li=>li.className),Array(4).fill('keep lamp-unknown'));
+  }
+  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
+});
+for(const base of ['green','yellow','red','gray'])test('浮亏已读撤销及重绘名称灯跟随基础'+base+'但分类条件不变',async()=>{
+  const b=await bootLoss({symbols:['AAA'],prices:{AAA:80},levels:{AAA:base},prepareDocument:addMemberLampFixture});
+  assertMemberLamps(b,'red');
+  b.ctx.addEventListener('mm:ack-change',()=>{
+    const level=b.rows[0].tr.className.split(/\s+/).find(c=>['red','yellow','green','gray'].includes(c));
+    assertMemberLamps(b,level);
+  });
+  ackCurrentLoss(b);assertMemberLamps(b,base);assertLossStats(b,0,1,['AAA']);
+  for(let i=0;i<3;i++){b.paint();assertMemberLamps(b,base);}
+  ackCurrentLoss(b);assertMemberLamps(b,'red');assertLossStats(b,1,0,['AAA']);
+  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
+});
 // 与新发布页一致：整行初始red，但data-base-level明确排除了可已读价位。
 for(const base of ['green','yellow','red','gray'])test('发布价位红灯已读恢复基础'+base+'且不撤紫条/其它灯，刷新仍正确',async()=>{
   const prepareDocument=doc=>{
     signalCaps(doc);
     const row=doc.getElementById('s-aaa');row.className='red pur pur-high';
     row.setAttribute('data-base-level',base);row.setAttribute('data-quiet-keep','true');
+    addMemberLampFixture(doc);
   };
   const opts={prepareDocument};const b=await bootCash(opts),r=b.rows.find(r=>r.sym==='AAA');
   const levels=()=>r.tr.className.split(/\s+/).filter(c=>['red','yellow','green','gray'].includes(c));
-  assert.deepEqual(levels(),['red']);assert.equal(r.origCls,'red pur pur-high');
-  b.ack('AAA|add|100');assert.deepEqual(levels(),['red'],'另一条未已读减仓红不能撤');
-  b.ack('AAA|cut|100');assert.deepEqual(levels(),[base]);
+  assert.deepEqual(levels(),['red']);assert.equal(r.origCls,'red pur pur-high');assertMemberLamps(b,'red');
+  b.ctx.addEventListener('mm:ack-change',()=>assertMemberLamps(b,levels()[0]));
+  b.ack('AAA|add|100');assert.deepEqual(levels(),['red'],'另一条未已读减仓红不能撤');assertMemberLamps(b,'red');
+  b.ack('AAA|cut|100');assert.deepEqual(levels(),[base]);assertMemberLamps(b,base);
   for(const warn of [r.warnAdd,r.warnCut])assert.equal(warn.getAttribute('data-signal-level'),'gray');
-  for(let i=0;i<3;i++)b.paint();assert.deepEqual(levels(),[base]);
+  for(let i=0;i<3;i++){b.paint();assertMemberLamps(b,base);}assert.deepEqual(levels(),[base]);
   assert.ok(r.tr.className.includes('pur pur-high'));assertRowPair(b,'AAA',false);
   assert.equal(b.doc.querySelector('#costMembers li[data-sym="AAA"]').className,'lv-'+base);
   await b.dispose();const c=await bootCash({...opts,store:b.store,session:b.session}),rr=c.rows.find(r=>r.sym==='AAA');
-  assert.deepEqual(rr.tr.className.split(/\s+/).filter(v=>['red','yellow','green','gray'].includes(v)),[base]);
-  c.ack('AAA|add|100');assert.ok(rr.tr.className.split(/\s+/).includes('red'));
+  assert.deepEqual(rr.tr.className.split(/\s+/).filter(v=>['red','yellow','green','gray'].includes(v)),[base]);assertMemberLamps(c,base);
+  c.ack('AAA|add|100');assert.ok(rr.tr.className.split(/\s+/).includes('red'));assertMemberLamps(c,'red');
   assert.equal(b.requests.length+c.requests.length,0);assert.equal(b.store.writes.length+c.store.writes.length,0);
 });
 for(const base of [null,'','bogus'])test('旧页缺失或非法基础灯'+base+'不能误撤原始红灯',async()=>{
