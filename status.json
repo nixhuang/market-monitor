@@ -9,21 +9,21 @@
     "next_in": 13,
     "next_date": "2026-11-12"
   },
-  "run_id": "40447402110",
+  "run_id": "40449084740",
   "request_id": "",
-  "source_sha": "dcbeac3e0368258499b7bcf464f5dc6749c43bdb",
-  "input_hash": "87b2dbc8ae16ff3635032d739afe090637215818659aba1ad2f72d600b4ca2bb",
-  "build_id": "40447402110-1",
-  "started_at": "2026-10-27T04:01:18+00:00",
-  "started_at_bj": "2026-10-27T12:01:18+08:00",
-  "finished_at": "2026-10-27T12:03:55.757958+08:00",
-  "finished_at_bj": "2026-10-27T12:03:55+08:00",
-  "event": "workflow_dispatch",
+  "source_sha": "f8b6aef1c34a84e7b615de661164270b9c2b1707",
+  "input_hash": "cbada344f53bca2d1be12b7a4e0a01fb54a17bcae010a49e92a81bf49a19f3f2",
+  "build_id": "40449084740-1",
+  "started_at": "2026-10-27T04:19:18+00:00",
+  "started_at_bj": "2026-10-27T12:19:18+08:00",
+  "finished_at": "2026-10-27T12:21:36.771127+08:00",
+  "finished_at_bj": "2026-10-27T12:21:36+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-26",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "3c305d6d69fe3c93568b0527d997d35ede8ebc9d",
+    "holdings.json": "e71535eae862d1cd43b741041ed3fed041134f10",
     "settings.json": "1386a699b2039959ee8c8731166194d1f75a847e"
   },
   "effective_settings": {
@@ -162,11 +162,11 @@
     "positions": 18,
     "focus": 8,
     "index_funds": 1,
-    "technology": 36,
+    "technology": 37,
     "healthcare": 8,
     "financials": 14,
     "energy": 2,
-    "industrials": 11,
+    "industrials": 10,
     "materials": 2,
     "utilities": 3,
     "consumer_staples": 5,
@@ -178,11 +178,11 @@
     "positions": 18,
     "focus": 8,
     "index_funds": 1,
-    "technology": 26,
+    "technology": 27,
     "healthcare": 6,
     "financials": 11,
     "energy": 2,
-    "industrials": 7,
+    "industrials": 6,
     "materials": 2,
     "utilities": 3,
     "consumer_staples": 4,
@@ -1175,6 +1175,18 @@
           "detail": "共识价 668.5，空间 +87.7%"
         },
         {
+          "symbol": "SPCX",
+          "note": "SpaceX-商业航天",
+          "group": "technology",
+          "hold": "short",
+          "level": "green",
+          "space": 51.606535057862494,
+          "band": "medium",
+          "price": 222.71,
+          "kind": "consensus",
+          "detail": "共识价 222.71，空间 +51.6%"
+        },
+        {
           "symbol": "NU",
           "note": "Nu Holdings-数字银行",
           "group": "financials",
@@ -1209,18 +1221,6 @@
           "price": 690.68,
           "kind": "consensus",
           "detail": "共识价 690.68，空间 +62.6%"
-        },
-        {
-          "symbol": "SPCX",
-          "note": "SpaceX-商业航天",
-          "group": "industrials",
-          "hold": "short",
-          "level": "green",
-          "space": 51.606535057862494,
-          "band": "medium",
-          "price": 222.71,
-          "kind": "consensus",
-          "detail": "共识价 222.71，空间 +51.6%"
         },
         {
           "symbol": "TTWO",
@@ -1504,6 +1504,18 @@
         "detail": "共识价 668.5，空间 +87.7%"
       },
       {
+        "symbol": "SPCX",
+        "note": "SpaceX-商业航天",
+        "group": "technology",
+        "hold": "short",
+        "level": "green",
+        "space": 51.606535057862494,
+        "band": "medium",
+        "price": 222.71,
+        "kind": "consensus",
+        "detail": "共识价 222.71，空间 +51.6%"
+      },
+      {
         "symbol": "NU",
         "note": "Nu Holdings-数字银行",
         "group": "financials",
@@ -1538,18 +1550,6 @@
         "price": 690.68,
         "kind": "consensus",
         "detail": "共识价 690.68，空间 +62.6%"
-      },
-      {
-        "symbol": "SPCX",
-        "note": "SpaceX-商业航天",
-        "group": "industrials",
-        "hold": "short",
-        "level": "green",
-        "space": 51.606535057862494,
-        "band": "medium",
-        "price": 222.71,
-        "kind": "consensus",
-        "detail": "共识价 222.71，空间 +51.6%"
       },
       {
         "symbol": "TTWO",
@@ -2407,7 +2407,7 @@
     "checked_at": "2026-10-22T11:56:54.517842-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-27T04:02:58.812422+00:00"
+    "asof": "2026-10-27T04:20:50.592485+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
@@ -2862,6 +2862,17 @@
           "2026-10-22"
         ]
       },
+      "SPCX": {
+        "avg": 222.71,
+        "upd": "2026-10-22",
+        "r": "2026-10-22",
+        "r_tz": "America/New_York",
+        "s": "ok",
+        "try": "2026-10-22",
+        "earn_pending": [
+          "2026-10-20"
+        ]
+      },
       "ABBV": {
         "avg": 282.61,
         "upd": "2026-10-23",
@@ -3039,17 +3050,6 @@
         "s": "ok",
         "try": "2026-10-26",
         "ne": "2026-12-17"
-      },
-      "SPCX": {
-        "avg": 222.71,
-        "upd": "2026-10-22",
-        "r": "2026-10-22",
-        "r_tz": "America/New_York",
-        "s": "ok",
-        "try": "2026-10-22",
-        "earn_pending": [
-          "2026-10-20"
-        ]
       },
       "CAT": {
         "avg": 933.64,
@@ -3243,7 +3243,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-27T04:03:55.654708+00:00",
+    "asof": "2026-10-27T04:21:36.699103+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -3342,7 +3342,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -3971,7 +3971,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4005,9 +4005,26 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
+        }
+      },
+      "SPCX": {
+        "facts": {
+          "asof": "2026-10-22T15:58:02.360316+00:00",
+          "at": "2026-10-22T00:00:00+00:00",
+          "digest": "c9c38eeecaeadcac06ece3cf6ea242a3112c4c96997a1f59e964f27a2f51ac79"
+        },
+        "attempt": {
+          "asof": "2026-10-22T15:58:02.360316+00:00",
+          "at": "2026-10-22T00:00:00+00:00",
+          "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
+        },
+        "events": {
+          "asof": "2026-10-27T04:21:36.699103+00:00",
+          "at": null,
+          "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
       },
       "ABBV": {
@@ -4039,7 +4056,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4056,7 +4073,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -4107,7 +4124,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4124,7 +4141,7 @@
           "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "b97f36fd59ba73086b38a650d9ce1d58aa3255ca676925c8a1348c837f5dbe76"
         }
@@ -4141,7 +4158,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -4316,23 +4333,6 @@
           "digest": "1eb38ef547c17d1712ce3298fb60f5e22fcead51b356fb7dffed1f957ddfe7bf"
         }
       },
-      "SPCX": {
-        "facts": {
-          "asof": "2026-10-22T15:58:02.360316+00:00",
-          "at": "2026-10-22T00:00:00+00:00",
-          "digest": "c9c38eeecaeadcac06ece3cf6ea242a3112c4c96997a1f59e964f27a2f51ac79"
-        },
-        "attempt": {
-          "asof": "2026-10-22T15:58:02.360316+00:00",
-          "at": "2026-10-22T00:00:00+00:00",
-          "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
-        },
-        "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
-          "at": null,
-          "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
-        }
-      },
       "CAT": {
         "facts": {
           "asof": "2026-10-26T08:36:52.184714+00:00",
@@ -4362,7 +4362,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4379,7 +4379,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4447,7 +4447,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4481,7 +4481,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -4532,7 +4532,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4549,7 +4549,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -4617,7 +4617,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T04:03:55.654708+00:00",
+          "asof": "2026-10-27T04:21:36.699103+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4629,8 +4629,8 @@
     "dated": 68,
     "pending": 14,
     "failed": 0,
-    "fetched": 14,
-    "cached": 68,
+    "fetched": 0,
+    "cached": 82,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -5039,6 +5039,12 @@
         "fetched": "2026-10-23",
         "status": "unknown"
       },
+      "SPCX": {
+        "fetched": "2026-10-21",
+        "status": "unknown",
+        "official_attempted": "2026-10-21",
+        "official_error": "no_clear_earnings_event"
+      },
       "ABBV": {
         "date": "2026-10-30",
         "timing": "pre",
@@ -5172,12 +5178,6 @@
         "kind": "estimated",
         "fetched": "2026-10-26",
         "status": "ok"
-      },
-      "SPCX": {
-        "fetched": "2026-10-21",
-        "status": "unknown",
-        "official_attempted": "2026-10-21",
-        "official_error": "no_clear_earnings_event"
       },
       "CAT": {
         "date": "2026-10-29",
@@ -5395,7 +5395,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-27T04:03:55.631653+00:00",
+    "asof": "2026-10-27T04:21:36.660812+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -6179,6 +6179,23 @@
           "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
         }
       },
+      "SPCX": {
+        "facts": {
+          "asof": "2026-10-22T00:18:35.550470+00:00",
+          "at": "2026-10-21T00:00:00+00:00",
+          "digest": "8074375705355d0ef973496c5040a3a241cebedf9b4bf924576e543fef013ea9"
+        },
+        "attempt": {
+          "asof": "2026-10-22T00:18:35.550470+00:00",
+          "at": "2026-10-21T00:00:00+00:00",
+          "digest": "b05c73e49331681a43cdf84a7c0e82048edc7786441f08580ad0a67c4f22f0f4"
+        },
+        "events": {
+          "asof": "1970-01-01T00:00:00+00:00",
+          "at": null,
+          "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+        }
+      },
       "ABBV": {
         "facts": {
           "asof": "2026-10-26T08:36:27.806312+00:00",
@@ -6478,23 +6495,6 @@
           "asof": "2026-10-26T08:36:27.806312+00:00",
           "at": "2026-10-26T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
-        },
-        "events": {
-          "asof": "1970-01-01T00:00:00+00:00",
-          "at": null,
-          "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
-        }
-      },
-      "SPCX": {
-        "facts": {
-          "asof": "2026-10-22T00:18:35.550470+00:00",
-          "at": "2026-10-21T00:00:00+00:00",
-          "digest": "8074375705355d0ef973496c5040a3a241cebedf9b4bf924576e543fef013ea9"
-        },
-        "attempt": {
-          "asof": "2026-10-22T00:18:35.550470+00:00",
-          "at": "2026-10-21T00:00:00+00:00",
-          "digest": "b05c73e49331681a43cdf84a7c0e82048edc7786441f08580ad0a67c4f22f0f4"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6835,9 +6835,9 @@
       "incomplete": false,
       "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-10-27T12:02:57.744776+08:00",
+    "assessed_at": "2026-10-27T12:20:49.209022+08:00",
     "schema_version": 2,
-    "asof": "2026-10-27T04:02:58.982844+00:00"
+    "asof": "2026-10-27T04:20:50.929958+00:00"
   },
   "data_lag": {
     "target": "2026-10-26",
