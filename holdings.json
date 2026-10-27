@@ -57,7 +57,9 @@
     "LMT": {
       "note": "洛克希德马丁",
       "hold": "long",
-      "cost": 513
+      "cost": 513,
+      "target": 680,
+      "target_at": "2026-10"
     },
     "NTNX": {
       "note": "Nutanix-混合云",
