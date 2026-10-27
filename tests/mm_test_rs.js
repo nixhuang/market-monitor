@@ -20,6 +20,8 @@ function element() {
 function fixture(page = snapshot(), onlyRule = false) {
   const els = Object.fromEntries((onlyRule ? ['ruleLight', 'ruleLightTxt'] :
     ['runLight', 'runLightTxt', 'ruleLight', 'ruleLightTxt', 'runSummary', 'runMsg', 'checkResult', 'btnCheckStatus', 'btnReturnBoard']).map(id => [id, element()]));
+  // 首页这颗按钮渲染出来就是「状态」；点完必须还原成页面原本文案，不能变成别的名字。
+  if (els.btnCheckStatus) els.btnCheckStatus.textContent = '状态';
   if (page) { els.snapshotData = element(); els.snapshotData.textContent = JSON.stringify(page); }
   const data = {status: snapshot(), published: snapshot(), sha: B, holdingsSHA: A, failHoldings: false,
     failRules: false, failPublic: false,
@@ -405,7 +407,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
   });
   await check('公开状态读取失败必须显示核对未完成，不是假成功', async () => {
     const f=fixture();await f.win.MMRunStatus.refresh();f.data.failPublic=true;
-    await f.els.btnCheckStatus.onclick();assert.equal(f.els.btnCheckStatus.textContent,'查运行状态');
+    await f.els.btnCheckStatus.onclick();assert.equal(f.els.btnCheckStatus.textContent,'状态');
     assert.match(f.els.checkResult.textContent,/当前发布：暂无法核验/);
     assert.equal(f.els.checkResult.hidden,false);
   });
@@ -414,7 +416,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.match(f.els.checkResult.textContent,/最新任务：运行中 · run 2/);
     assert.match(f.els.checkResult.textContent,/当前发布：run 1/);
     assert.equal(f.els.checkResult.dataset.phase,'busy');
-    assert.equal(f.els.btnCheckStatus.textContent,'查运行状态');
+    assert.equal(f.els.btnCheckStatus.textContent,'状态');
   });
   await check('完成且与线上同版时显示完成；旧页有明确刷新入口', async () => {
     const f=fixture();f.data.run={id:1,status:'completed',conclusion:'success'};

@@ -345,10 +345,11 @@
   .demo-bar button{height:26px;font-size:12px}
   /* 「仓位管理」标题行在手机上必须排成**一行**（跟其它分组卡一样高）：
      原来总资产·盈亏会被挤到第二行，卡片比别的卡高出一截。这里只收紧这一张卡的
-     间隙与总资产·盈亏字号，「编辑」也略收一点，四样东西才能在 360～430px 排下。 */
+     间隙、把「编辑」略收一点，总资产·盈亏字号保持 13px（比桌面的 14px 小一档即可）——
+     手机上数字和「编辑」之间本来就留有余量，压到 12px 只会空出一段没用的距离。 */
   .cost-manage>summary.grp{gap:4px}
   .cost-manage>summary .group-stats{gap:5px}
-  .cost-manage>summary .cost-sum{font-size:12px}
+  .cost-manage>summary .cost-sum{font-size:13px}
   .cost-edit-btn{padding:4px 10px;font-size:12.5px}
 }
 .cost-warn.acked{color:var(--text)}

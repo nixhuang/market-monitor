@@ -62,6 +62,8 @@
   let publicRetry = 0;
   let authNotice = '', checkFeedback = '', checkPhase = 'idle';
   let checkRequest = 0, checkDismissed = false;
+  // 「核对」按钮的原始文案由页面决定（首页就是「状态」），点完必须还原成它，不能写死成别的。
+  let checkLabel = null;
   let latestRules = null, rulesError = '', ruleSince = 0;
 
   function getToken() {
@@ -887,6 +889,7 @@
     const sequence = ++checkRequest;
     checkDismissed = false;
     const b = el('btnCheckStatus');
+    if (b && checkLabel === null) checkLabel = b.textContent;
     if (b) { b.disabled = true; b.textContent = '核对中…'; }
     checkFeedback = '正在核对最新任务和已发布看板…';
     checkPhase = 'busy';
@@ -979,7 +982,7 @@
         render();
       }
     } finally {
-      if (b) { b.disabled = false; b.textContent = '查运行状态'; }
+      if (b) { b.disabled = false; if (checkLabel !== null) b.textContent = checkLabel; }
     }
   }
 
