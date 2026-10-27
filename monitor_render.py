@@ -42,10 +42,10 @@ _BLOCK_PANEL_KINDS = ("vol_ratio", "boll_rsi", "ma", "ma_cross", "ma_band",
 _NO_ROW_METRIC_KINDS = ("boll_rsi", "rsi")
 
 
-# 方向符号配色：只给 RSI 的「↑ 超买青 / ↓ 超卖品红」上色。
-# ▲▼ 是布林上下轨的标志：写在描述文字里时跟随正文（白），
-# 出现在分组位置时由 _grp_arrow() 统一染成分组蓝。
-_ARROW_CLASSES = ((_ARROW_RSI_UP, "arrow-rsi-up"), (_ARROW_RSI_DOWN, "arrow-rsi-down"))
+# 主表描述与统计面板：▲/↑ 使用上涨数值绿，▼/↓ 使用下跌数值红。
+# 箭头独立着色，正文自身的指标灯色不变；规则表使用自己的 ar-* 类。
+_ARROW_CLASSES = (("▲", "arrow-band-up"), ("▼", "arrow-band-down"),
+                  (_ARROW_RSI_UP, "arrow-rsi-up"), (_ARROW_RSI_DOWN, "arrow-rsi-down"))
 
 
 # 描述分类只用于排版，灯色只认对应指标 marks，不从整行灯色或文案猜灯。
@@ -229,11 +229,11 @@ class PageRenderer:
 
 
     def _grp_arrow(self, shape):
-        """分组位置的三角：▲▼ 统一分组蓝；RSI 只分超买/超卖，用 ↑↓（青/品红）。"""
+        """分组方向符号与正文箭头一致：▲/↑ 涨跌绿，▼/↓ 涨跌红。"""
         if shape == "▲":
-            return '<span class="grp-arrow">▲</span>'
+            return '<span class="grp-arrow arrow-band-up">▲</span>'
         if shape == "▼":
-            return '<span class="grp-arrow">▼</span>'
+            return '<span class="grp-arrow arrow-band-down">▼</span>'
         if shape == self._context._ARROW_RSI_UP:
             return f'<span class="arrow-rsi-up">{self._context._ARROW_RSI_UP}</span>'
         if shape == self._context._ARROW_RSI_DOWN:
@@ -246,9 +246,7 @@ class PageRenderer:
 
 
     def _block_title_html(self, kind, shape, title):
-        """框标题：前缀三角是「分组方向」标记，统一走 _grp_arrow()（▲▼ 分组蓝、↑↓ 青/品红）。
-
-    标题文字里的 ▲▼ 属于描述文字，跟随正文颜色（白），只有 RSI 的 ↑↓ 上色。"""
+        """框标题和正文方向符号统一独立着色，标题文字本身保留原颜色。"""
         head = self._context._block_head(shape, title)
         if kind not in ("boll", "rsi", "boll_rsi", "chg", "amp", "vol_ratio",
                         "ma", "ma_cross", "ma_band"):
@@ -557,25 +555,78 @@ class PageRenderer:
         return ""
 
 
+    def _main_description_text(self, text, kind, d):
+        """仅投影主表文案；保留原事实、统计详情及判灯输入不变。"""
+        valid_price = lambda value: (isinstance(value, (int, float)) and not isinstance(value, bool)
+                                     and math.isfinite(value) and value > 0)
+        if kind in ("rsi", "boll_rsi"):
+            text = re.sub(r"（[≤≥][+-]?\d+(?:\.\d+)?）", "", text)
+        if kind in ("boll", "boll_rsi"):
+            text = re.sub(r"（盘中触及\s+[^）]+）", "", text)
+            price, upper, lower = d.get("price"), d.get("boll_up"), d.get("boll_dn")
+            if "突破布林上轨▲" in text and valid_price(price) and valid_price(upper):
+                state = ("突破布林上轨▲，上轨外" if price > upper
+                         else "盘中突破布林上轨▲后收回")
+                text = re.sub(r"(?:盘中)?突破布林上轨▲", lambda _: state, text)
+            if "跌破布林下轨▼" in text and valid_price(price) and valid_price(lower):
+                state = ("跌破布林下轨▼，下轨外" if price < lower
+                         else "盘中跌破布林下轨▼后收回")
+                text = re.sub(r"(?:盘中)?跌破布林下轨▼", lambda _: state, text)
+        if kind == "ma" and "触及" in text and "均线" in text:
+            settings = d.get("ma_settings") or {}
+            period = settings.get("ma_long") if "长均线" in text else settings.get("ma_short") if "短均线" in text else None
+            numeric = re.search(r"(\d+)日(?:弱)?均线", text)
+            if period is None and numeric:
+                period = int(numeric[1])
+            values = d.get("ma_values") or {}
+            value = values.get(str(period)) if isinstance(values, dict) else None
+            label = f"（均线价：{value:,.2f}）" if valid_price(value) else "（均线价：—）"
+            if re.search(r"（日内 [^）]*，现价偏离 [^）]*）", text):
+                text = re.sub(r"（日内 [^）]*，现价偏离 [^）]*）", label, text)
+            elif valid_price(value) and "均线价：" not in text:
+                text += label
+        if kind == "low52" and text.startswith("触及52周新低") and "低点价：" not in text:
+            value = d.get("low52")
+            if valid_price(value):
+                text += f"（低点价：{value:,.2f}）"
+        return text
+
+
     def _signals_html(self, d):
-        """每项按真实级别着色，不添加圆点；不同指标用 /，组合事实用 ·。"""
+        """主表价格提醒分主次；真实级别及统计事实不变，不添加圆点。"""
+        groups = list(self._context._signal_description_groups(d))
+        prices = {g["kind"]: g for g in groups
+                  if g["kind"] in ("chg", "amp") and g["level"] in ("red", "yellow")}
+        primary = supplement = None
+        if len(prices) == 2:
+            primary = "amp" if prices["amp"]["level"] == "red" and prices["chg"]["level"] == "yellow" else "chg"
+            supplement = "chg" if primary == "amp" else "amp"
+            # 只重排主表副本，补充事实紧跟主要提醒，不改共享分组及原marks。
+            groups.remove(prices[supplement])
+            groups.insert(groups.index(prices[primary]) + 1, prices[supplement])
         parts = []
-        for group in self._context._signal_description_groups(d):
+        for group in groups:
             kind, level, texts = group["kind"], group["level"], group["texts"]
             # 个股描述直接展示事实，不额外前置指标名称；统计分类标签保持原样。
             separator = " · " if kind == "boll_rsi" else "，"
-            display = separator.join(texts)
+            display = separator.join(self._main_description_text(text, kind, d) for text in texts)
             if kind == "boll_rsi":
                 selected = str(d.get("boll_alert_text") or next((text for text in texts if "布林" in text), ""))
                 side = "上轨" if "上轨" in selected else "下轨" if "下轨" in selected else ""
                 display = _reverse_rsi_description(display, side)
             body = self._context.arrow_html(html_lib.escape(display))
+            role = "primary" if kind == primary else "supplement" if kind == supplement else None
+            if parts:
+                parts.append(' <span class="signal-separator">' + ('，' if role == "supplement" else '/') + '</span> ')
             parts.append(f'<span class="signal-item" data-signal-kind="{kind}"'
-                         + (f' data-signal-level="{level}"' if level else "") + f'>{body}</span>')
+                         + (f' data-signal-level="{level}"' if level else "")
+                         + (f' data-signal-role="{role}"' if role else "") + f'>{body}</span>')
         tg = d.get("target") or {}
         if tg.get("kind") == "manual" and self._context.target_display_state(tg) == "low":
+            if parts:
+                parts.append(' <span class="signal-separator">/</span> ')
             parts.append(f'<span class="tnote">目标价 {self._context._price_text(tg["price"])}，空间 {tg["space"]:+.0f}%</span>')
-        return ' <span class="signal-separator">/</span> '.join(parts) if parts else "—"
+        return ''.join(parts) if parts else "—"
 
 
     def _range52_row(self, d):
@@ -781,9 +832,6 @@ class PageRenderer:
         earnings_week = (snapshot.get("earnings_week") or {}).get("asof") or self._context._bj_today()
         parts = []
         enabled = monitoring.get(group["key"], True)
-        if not enabled:
-            note = f"行业监测关闭 · {group['sector_etf']} 仍监测（仅限原组已有标的）" if group.get("sector_etf") else "分组监测已关闭"
-            parts.append(f'<div class="quiet">{note} · 清单保留，普通标的暂停抓取和报警</div>')
         empty_note = ''
         if not g and enabled:
             empty_note = ('本组标的已在优先分组展示，避免重复信号' if registered.get(group["key"], 0)
@@ -866,7 +914,8 @@ class PageRenderer:
                 icons.append(f'<span class="signal-member-icon {cls}" role="img" '
                              f'aria-label="{esc(label)}">{shape}</span>')
                 continue
-            icons.append(f'<span class="signal-member-icon tone-{tone}" role="img" '
+            direction_class = " arrow-band-up" if shape == "▲" else " arrow-band-down" if shape == "▼" else ""
+            icons.append(f'<span class="signal-member-icon tone-{tone}{direction_class}" role="img" '
                          f'aria-label="{esc(label)}">{shape}</span>')
         return "".join(icons) or ' <span class="signal-member-direction">方向待下次更新</span>'
 
@@ -1258,7 +1307,7 @@ class PageRenderer:
                     lines.append(f'<li{high_class}>{lead}<a class="signal-member-jump" href="#{self._context._stock_anchor_id(symbol)}">'
                                  f'<span class="signal-member-symbol">{esc(symbol)}</span>{note}</a>'
                                  f'<span class="signal-member-belong">（{esc(self._context._member_belong(d))}）</span>'
-                                 f' <span class="signal-member-direction">{esc(d["detail"])}</span></li>')
+                                 f' <span class="signal-member-direction">{self._context.arrow_html(esc(d["detail"]))}</span></li>')
                 parts.append(f'<h5>{label}</h5><ul class="signal-member-list">{"".join(lines)}</ul>')
             content = "".join(parts)
         else:

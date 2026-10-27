@@ -741,9 +741,11 @@ const parent=node();context.appendRsiArrows(parent,input.text);
 assert.equal(parent.children.map(n=>n.textContent).join(''),input.text);
 assert.equal(parent.children.filter(n=>n.className==='arrow-rsi-up').length,1);
 assert.equal(parent.children.filter(n=>n.className==='arrow-rsi-down').length,1);
+assert.equal(parent.children.filter(n=>n.className==='arrow-band-up').length,1);
+assert.equal(parent.children.filter(n=>n.className==='arrow-band-down').length,1);
 assert.equal(htmlWrites,0);assert(parent.children.some(n=>n.textContent.includes('<img')));
 '''
-        text = '布林上轨▲ · RSI 3条 ↓超卖 / RSI ↑超买 <img onerror=bad()> & <script>bad()</script>'
+        text = '布林上轨▲ / 下轨▼ · RSI 3条 ↓超卖 / RSI ↑超买 <img onerror=bad()> & <script>bad()</script>'
         result = subprocess.run(['node', '-e', code], input=json.dumps({'js': script[start:end], 'text': text}),
                                 text=True, encoding='utf-8', capture_output=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)

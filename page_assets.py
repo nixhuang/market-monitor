@@ -146,7 +146,6 @@ ${amp_threshold_table}
 <p id="glossary-boll-dual">双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。布林与RSI的组合、分组限制及文字／报灯条件统一见《预警规则》。</p>
 <h5 id="glossary-rsi">RSI周期与条数</h5>
 <p>周期${rsi_periods}日；≥${rsi_high}超买，≤${rsi_low}超卖。</p>
-<p>“1／2／3条”是同方向达标的周期数，不是连续天数；向上／向下指超买／超卖，不等于今日涨跌。</p>
 <h5 id="glossary-vol">量比 · 自适应／固定切换</h5>
 <p>完整日量比＝成交量÷此前${vol_ratio_base}日均量。收盘分布有效、两条自适应参数启用且量比≥1×时，按每只标的自身历史量比连续计算，不套股价波动档；否则用固定门槛。</p>
 <p>对数量比的中位数为m、稳健波动尺度为s（1.4826×MAD）；原门槛T＝exp(m＋k×s)，红k＝${vol_ratio_red_z}、黄k＝${vol_ratio_z}。新门槛＝√(T×F)，红F＝${vol_ratio_red}×、黄F＝${vol_ratio}×，在对数空间压缩一半高低差异。达到红门槛优先报红，否则达到黄门槛报黄。</p>
@@ -551,6 +550,7 @@ tr:first-child td{border-top:none}
 .signal-item[data-signal-level="yellow"]{color:#f0c674}
 .signal-item[data-signal-level="gray"]{color:var(--text)}
 .signal-item[data-signal-level="purple"]{color:var(--purple)}
+.signal-item[data-signal-role="supplement"]{color:var(--dim)}
 .signal-separator{color:var(--dim);margin:0 2px}
 .group-bottom{padding:0;margin:0 -4px -6px;border-top:1px solid var(--line);text-align:center;line-height:0}
 .collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);
@@ -959,10 +959,14 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 #rules-lamp-table tbody td:first-of-type .ar-band-down,
 #rules-lamp-table tbody td:first-of-type .ar-rsi-up,
 #rules-lamp-table tbody td:first-of-type .ar-rsi-down{color:#fff}
-/* RSI 的 ↑↓ 继承文字颜色，仅放大字号；布林 ▲▼ 直接使用正文文字。 */
+/* 保留 RSI ↑↓ 的原字号；目标区域的方向颜色由下方限域规则覆盖继承色。 */
 .arrow-rsi-up,.arrow-rsi-down{color:inherit;font-size:1.15em;line-height:1}
-/* 分组位置的上下三角：统一分组蓝，跟框标题同色系，不再绿红黄白各一个样。 */
-.grp-arrow{color:#bfd5ff;font-weight:700}
+/* 保留方向符号的原字号/粗细；仅主表描述与统计面板独立使用涨跌数值色。 */
+.grp-arrow{font-weight:700}
+.stk .sig .arrow-band-up,.stk .sig .arrow-rsi-up,
+#signalCounts .arrow-band-up,#signalCounts .arrow-rsi-up{color:var(--up)}
+.stk .sig .arrow-band-down,.stk .sig .arrow-rsi-down,
+#signalCounts .arrow-band-down,#signalCounts .arrow-rsi-down{color:var(--down)}
 .card .rules-body .rule-table .ar-band-up,.card .rules-body .rule-table .ar-band-down,
 .card .rules-body .rule-table .ar-rsi-up,.card .rules-body .rule-table .ar-rsi-down{font-weight:700}
 /* 同向／反向两行为一组，组间用更亮的横线分开。 */
@@ -1148,21 +1152,21 @@ function intersectSignals(data, kinds) {
   });
   return {members: members};
 }
-// 多选清单里的 ↑↓ 必须和主表描述、统计名单用同一套配色/字号（.arrow-rsi-up / .arrow-rsi-down）。
-// 以前这里整段用 textContent 写纯文本，箭头既不上色也不放大，所以跟另外两处对不上。
-// 逐字符拆成文本节点 + span，不拼 innerHTML，避免把数据当 HTML 解析。
+// 多选条件的四种方向符号与主表/单选统计共用配色，正文灯色不变。
+// 保留原函数名兼容旧调用；逐字符生成安全文本节点，不解析数据中的 HTML。
 function appendRsiArrows(parent, text) {
-  const UP = "↑", DOWN = "↓";
+  const classes = {"▲": "arrow-band-up", "▼": "arrow-band-down",
+    "↑": "arrow-rsi-up", "↓": "arrow-rsi-down"};
   let buf = "";
   const flush = function() {
     if (buf) { parent.appendChild(document.createTextNode(buf)); buf = ""; }
   };
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (ch === UP || ch === DOWN) {
+    if (Object.prototype.hasOwnProperty.call(classes, ch)) {
       flush();
       const span = document.createElement("span");
-      span.className = ch === UP ? "arrow-rsi-up" : "arrow-rsi-down";
+      span.className = classes[ch];
       span.textContent = ch;
       parent.appendChild(span);
     } else { buf += ch; }

@@ -1986,6 +1986,33 @@ test('技术灰与有效ACK并集仍排除缺价、参考和不存在，移除�
   for(let i=0;i<4;i++){b.paint();assertLossGrayBadge(b,0);}
   assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
 });
+test('价格主次在初始化及多次paint后相邻，保留真实等级且不新增灰灯',async()=>{
+  for(const [chgLevel,ampLevel,primaryKind] of [['red','red','chg'],['red','yellow','chg'],['yellow','red','amp'],['yellow','yellow','chg']]){
+    let original;
+    const other=primaryKind==='chg'?'amp':'chg';
+    const b=await bootLoss({prices:{AAA:100},levels:{AAA:chgLevel==='red'||ampLevel==='red'?'red':'yellow'},prepareDocument(doc){
+      const td=doc.getElementById('s-aaa').querySelector('td.sig');
+      const make=(kind,level,role)=>'<span class="signal-item" data-signal-kind="'+kind+'" data-signal-level="'+level+'"'+(role?' data-signal-role="'+role+'"':'')+'>'+kind+'</span>';
+      td.innerHTML=make('amp',ampLevel,primaryKind==='amp'?'primary':'supplement')+' / '+make('ma','red','')+' / '
+        +make('chg',chgLevel,primaryKind==='chg'?'primary':'supplement')+' / '+make('target','purple','');
+      original=[...td.querySelectorAll('.signal-item')];
+    }});
+    const td=b.rows[0].tr.querySelector('td.sig');
+    for(let i=0;i<4;i++){
+      b.paint();
+      const items=td.children.filter(el=>el.matches('.signal-item')&&el.style.display!=='none');
+      const kinds=items.map(el=>el.getAttribute('data-signal-kind'));
+      assert.equal(kinds.indexOf(other),kinds.indexOf(primaryKind)+1);
+      for(const [kind,level] of [['chg',chgLevel],['amp',ampLevel]])assert.equal(items.find(el=>el.getAttribute('data-signal-kind')===kind).getAttribute('data-signal-level'),level);
+      assert.equal(items.filter(el=>el.getAttribute('data-signal-level')==='gray').length,0);
+      assert.equal(items.at(-1).getAttribute('data-signal-kind'),'target');
+      assert.equal(td.querySelectorAll('.signal-separator').length,items.length-1);
+      assert.equal(items.find(el=>el.getAttribute('data-signal-kind')===other).previousElementSibling.textContent,'，');
+      for(const el of original)assert.equal(el.parentNode,td);
+    }
+    assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
+  }
+});
 test('动态加减仓及浮亏红灰与后端描述共同排序，节点按钮保留且多次paint无分隔累积',async()=>{
   let staticItems,target,tnote,cap,cut;
   const b=await bootLoss({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prices:{AAA:100},levels:{AAA:'yellow pur-high'},prepareDocument(doc){

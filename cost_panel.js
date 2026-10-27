@@ -257,7 +257,17 @@
         if(el.nodeType===3 && (/^[\s/]*$/.test(el.textContent) || items.length && /^\s*—\s*$/.test(el.textContent)) ||
           el.nodeType===1 && el.matches('.signal-separator')) box.removeChild(el);
       });
-      items.map(function(el,index){
+      // 主表价格主次是独立显示标记，不能把补充事实改成灰灯或按原等级拆散。
+      var primary=items.find(function(el){
+        return el.getAttribute('data-signal-role')==='primary' &&
+          ['chg','amp'].indexOf(el.getAttribute('data-signal-kind'))>=0;
+      });
+      var supplement=primary && items.find(function(el){
+        return el.getAttribute('data-signal-role')==='supplement' &&
+          ['chg','amp'].indexOf(el.getAttribute('data-signal-kind'))>=0 &&
+          el.getAttribute('data-signal-kind')!==primary.getAttribute('data-signal-kind');
+      });
+      items.filter(function(el){return el!==supplement;}).map(function(el,index){
         var level=el.getAttribute('data-signal-level');
         return {el:el,index:index,rank:el.matches('.tnote') ||
           el.getAttribute('data-signal-kind')==='target' || level==='purple'?4:own(rank,level)?rank[level]:3};
@@ -267,6 +277,10 @@
           separator.textContent=' / '; box.appendChild(separator);
         }
         box.appendChild(item.el);
+        if(item.el===primary && supplement){
+          var extraSeparator=document.createElement('span'); extraSeparator.className='signal-separator';
+          extraSeparator.textContent='，'; box.appendChild(extraSeparator); box.appendChild(supplement);
+        }
       });
     });
   }

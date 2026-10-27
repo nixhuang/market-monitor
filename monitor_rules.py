@@ -740,6 +740,8 @@ class RuleEngine:
             "boll_alert_text": getattr(x, "boll_alert_text", ""),
             "ma_band_direction": getattr(x, "ma_band_direction", ""),
             "ma_settings": {key: self._context.S.get(key) for key in ("ma_short", "ma_long")},
+            # 展示均线价必须使用本轮已算出的SMA，不从现价/偏离百分比反推。
+            "ma_values": {str(period): value for period, value in x.moving_averages},
             # ETF 标签：静态表命中，或行情源明确给出 assetclass=etf
             "etf": self._context.is_etf(x.sym) or x.data.get("asset") == "etf",
             "signals": al.signals,

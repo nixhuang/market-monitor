@@ -95,7 +95,7 @@
       "cost": 296.8
     },
     "XLI": {
-      "note": "工业精选行业ETF",
+      "note": "工业行业",
       "hold": "long",
       "cost": 167.9
     },
@@ -149,7 +149,7 @@
   },
   "technology": {
     "XLK": {
-      "note": "科技精选行业ETF"
+      "note": "科技行业"
     },
     "U": {
       "note": "Unity-游戏引擎"
@@ -259,7 +259,7 @@
   },
   "healthcare": {
     "XLV": {
-      "note": "医疗保健精选行业ETF"
+      "note": "医疗保健行业"
     },
     "ABBV": {
       "note": "艾伯维"
@@ -285,7 +285,7 @@
   },
   "financials": {
     "XLF": {
-      "note": "金融精选行业ETF"
+      "note": "金融行业"
     },
     "MA": {
       "note": "万事达"
@@ -329,7 +329,7 @@
   },
   "energy": {
     "XLE": {
-      "note": "能源精选行业ETF"
+      "note": "能源行业"
     },
     "XOM": {
       "note": "埃克森美孚"
@@ -372,7 +372,7 @@
   },
   "materials": {
     "XLB": {
-      "note": "原材料精选行业ETF"
+      "note": "原材料行业"
     },
     "LIN": {
       "note": "林德-工业气体"
@@ -380,7 +380,7 @@
   },
   "utilities": {
     "XLU": {
-      "note": "公用事业精选行业ETF"
+      "note": "公用事业行业"
     },
     "CEG": {
       "note": "Constellation-核电"
@@ -391,7 +391,7 @@
   },
   "consumer_staples": {
     "XLP": {
-      "note": "必需消费精选行业ETF"
+      "note": "必需消费行业"
     },
     "WMT": {
       "note": "沃尔玛"
@@ -408,7 +408,7 @@
   },
   "communications": {
     "XLC": {
-      "note": "通信服务精选行业ETF"
+      "note": "通信服务行业"
     },
     "TTWO": {
       "note": "Take-Two-游戏"
@@ -422,7 +422,7 @@
   },
   "consumer_discretionary": {
     "XLY": {
-      "note": "非必需消费精选行业ETF"
+      "note": "非必需消费行业"
     },
     "PDD": {
       "note": "拼多多"
@@ -442,7 +442,7 @@
   },
   "real_estate": {
     "XLRE": {
-      "note": "房地产精选行业ETF"
+      "note": "房地产行业"
     }
   }
 }

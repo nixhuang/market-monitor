@@ -749,9 +749,33 @@ class TestGroups(unittest.TestCase):
         page = monitor.render({}, [row], 1, snapshot=snap)
         self.assertIn('化材金纸 (1)', page)          # 括号里是页面实际显示数（登记 2，监测关闭只显示板块 ETF）
         self.assertIn('仅板块ETF', page)
-        self.assertIn('XLB 仍监测', page)
+        self.assertNotIn('XLB 仍监测', page)
+        self.assertNotIn('行业监测关闭', page)
+        self.assertNotIn('清单保留，普通标的暂停抓取和报警', page)
         self.assertIn('异动测试', page)
         self.assertNotIn('DD</td>', page)
+
+    def test_sector_note_sources_and_rsi_glossary_are_concise(self):
+        from pathlib import Path
+        root = Path(__file__).resolve().parent.parent
+        names = json.loads((root / 'symbol-names.json').read_text(encoding='utf-8'))
+        holdings = json.loads((root / 'holdings.json').read_text(encoding='utf-8'))
+        expected = {'XLK': '科技行业', 'XLV': '医疗保健行业', 'XLF': '金融行业',
+                    'XLE': '能源行业', 'XLI': '工业行业', 'XLB': '原材料行业',
+                    'XLU': '公用事业行业', 'XLP': '必需消费行业', 'XLC': '通信服务行业',
+                    'XLY': '非必需消费行业', 'XLRE': '房地产行业'}
+        for symbol, label in expected.items():
+            self.assertEqual(names[symbol], label)
+        for group in monitor.GROUPS:
+            for symbol, entry in holdings.get(group['key'], {}).items():
+                if symbol in expected:
+                    self.assertEqual(entry['note'], expected[symbol])
+        self.assertNotIn('精选行业ETF', json.dumps(names, ensure_ascii=False))
+        self.assertNotIn('精选行业ETF', json.dumps(holdings, ensure_ascii=False))
+        page = monitor.render({}, [], 0, snapshot=monitor.build_snapshot({}, [], {}))
+        self.assertNotIn('同方向达标的周期数', page)
+        self.assertNotIn('不等于今日涨跌', page)
+        self.assertIn('RSI', page)
 
     def test_main_skips_closed_stocks_but_alerts_sector_etfs(self):
         import tempfile
@@ -3978,13 +4002,16 @@ class TestMaCrossConflict(unittest.TestCase):
 
     def test_single_direction_still_draws_triangle(self):
         up = self.row([{'shape': '▲', 'tone': 'cyan', 'label': '上穿250日均线'}])
-        self.assertIn('▲', monitor._member_icons(up, 'ma_cross', 'yellow'))
-        self.assertIn('上穿长均线', monitor._member_icons(up, 'ma_cross', 'yellow'))
+        self.assertEqual(monitor._member_icons(up, 'ma_cross', 'yellow'),
+                         '<span class="signal-member-icon tone-cyan arrow-band-up" role="img" '
+                         'aria-label="上穿长均线">▲</span>')
 
     def test_other_kinds_keep_icons(self):
         # 只有均线穿越做这条防冲突处理；布林/RSI 本身不会产生同格反向标记
         boll = self.row([{'shape': '▼', 'tone': 'yellow', 'label': '盘中跌破下轨'}])
-        self.assertIn('▼', monitor._member_icons(boll, 'boll', 'yellow'))
+        self.assertEqual(monitor._member_icons(boll, 'boll', 'yellow'),
+                         '<span class="signal-member-icon tone-yellow arrow-band-down" role="img" '
+                         'aria-label="盘中跌破下轨">▼</span>')
 
 
 class TestMemberDetailDirectionSplit(unittest.TestCase):
@@ -4008,6 +4035,33 @@ class TestMemberDetailDirectionSplit(unittest.TestCase):
         self.assertIsNotNone(match, output)
         return match.group(1)
 
+    def test_group_titles_and_member_icons_share_direction_classes_without_recoloring_tones(self):
+        import copy
+        for shape, cls in (('▲', 'arrow-band-up'), ('▼', 'arrow-band-down')):
+            with self.subTest(shape=shape):
+                self.assertEqual(monitor._grp_arrow(shape), f'<span class="grp-arrow {cls}">{shape}</span>')
+                entry = self._entry('ARROW', 'position', shape)
+                before = copy.deepcopy(entry)
+                for kind in ('chg', 'amp', 'vol_ratio'):
+                    self.assertEqual(monitor._member_icons(entry, kind, 'red'),
+                                     f'<span class="signal-member-icon tone-white {cls}" role="img" '
+                                     f'aria-label="方向">{shape}</span>')
+                self.assertEqual(entry, before)
+        for shape, cls, tone in (('↑', 'arrow-rsi-up', 'yellow'), ('↓', 'arrow-rsi-down', 'red')):
+            entry = {'indicators': [{'shape': shape, 'tone': tone, 'label': 'RSI方向'}]}
+            self.assertEqual(monitor._grp_arrow(shape), f'<span class="{cls}">{shape}</span>')
+            self.assertEqual(monitor._member_icons(entry, 'rsi', tone),
+                             f'<span class="signal-member-icon {cls}" role="img" '
+                             f'aria-label="RSI方向">{shape}</span>')
+        neutral = {'indicators': [{'shape': '■', 'tone': 'cyan', 'label': '触及长均线'}]}
+        self.assertEqual(monitor._member_icons(neutral, 'ma_band', 'yellow'),
+                         '<span class="signal-member-icon tone-cyan" role="img" '
+                         'aria-label="触及长均线">■</span>')
+        target = {'indicators': [{'shape': '□', 'tone': 'purple', 'label': '目标价空间'}]}
+        self.assertEqual(monitor._member_icons(target, 'target', 'purple'),
+                         '<span class="signal-member-icon tone-purple" role="img" '
+                         'aria-label="目标价空间">□</span>')
+
     def test_up_block_then_divider_then_down_block(self):
         entries = [self._entry('DN_FOCUS', 'focus', '▼', '下备注'),
                    self._entry('UP_FOCUS', 'focus', '▲', '上备注'),
@@ -4015,10 +4069,10 @@ class TestMemberDetailDirectionSplit(unittest.TestCase):
                    self._entry('UP_POS', 'position', '▲')]
         body = self._panel(entries)
         self.assertNotIn('<h4>', body)                       # 没有分组小标题
-        # 方向统一放到框标题（分组蓝三角）：上涨一框在前、下跌一框在后
+        # 方向统一放到框标题（上涨绿／下跌红三角）：上涨一框在前、下跌一框在后
         self.assertNotIn('class="signal-member-split"', body)
         self.assertEqual(body.count('class="signal-member-block"'), 2)
-        head, tail = body.split('<h5><span class="grp-arrow">▼</span> 下跌</h5>', 1)
+        head, tail = body.split('<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>', 1)
         for sym in ('UP_POS', 'UP_FOCUS'):
             self.assertIn(sym, head, body)
             self.assertNotIn(sym, tail, body)
@@ -4046,7 +4100,7 @@ class TestMemberDetailDirectionSplit(unittest.TestCase):
         body = self._panel(entries)
         # 顺序固定为 ▲ 框 → ▼ 框 → 方向不明的「平盘」框垫底
         self.assertEqual(body.count('class="signal-member-block"'), 3)
-        up, rest = body.split('<h5><span class="grp-arrow">▼</span> 下跌</h5>', 1)
+        up, rest = body.split('<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>', 1)
         down, text = rest.split('<h5>平盘</h5>', 1)
         self.assertIn('UP_A', up)
         self.assertIn('DN_B', down)
@@ -4407,8 +4461,8 @@ class TestBollRsiRules(unittest.TestCase):
         self.assertNotIn('灰灯 5 项', stats)
         card = monitor._signal_counts_card({'signal_counts': counts,
             'signal_members': monitor.signal_count_members(rows), 'text_only': monitor.text_only_members(rows)})
-        self.assertIn('<h5>下轨▼ · RSI 1条 <span class="arrow-rsi-up">↑</span>超买</h5>', card)
-        self.assertNotIn('<h5>上轨▲ · RSI 2条 <span class="arrow-rsi-down">↓</span>超卖</h5>', card)
+        self.assertIn('<h5>下轨<span class="arrow-band-down">▼</span> · RSI 1条 <span class="arrow-rsi-up">↑</span>超买</h5>', card)
+        self.assertNotIn('<h5>上轨<span class="arrow-band-up">▲</span> · RSI 2条 <span class="arrow-rsi-down">↓</span>超卖</h5>', card)
 
     def test_standalone_rsi_complete_group_matrix_includes_mixed_and_single_silence(self):
         for group in (g['item_group'] for g in monitor.GROUPS):
@@ -5848,8 +5902,8 @@ class TestMaMergedStatistics(unittest.TestCase):
         self.assertEqual(snapshot['signal_counts']['ma']['yellow'], 1)
         page = monitor._signal_counts_card(snapshot)
         self.assertEqual(page.count('href="#s-brk-b"'), 1)
-        self.assertIn('▲ 短均线上穿', page)
-        self.assertIn('▼ 均线（归属待确认）跌破', page)
+        self.assertIn('<span class="arrow-band-up">▲</span> 短均线上穿', page)
+        self.assertIn('<span class="arrow-band-down">▼</span> 均线（归属待确认）跌破', page)
         detail = self.filters(page)['ma']['members'][0]['d'][0]['t']
         for fact in member['indicators']:
             self.assertIn(monitor._ma_display_text(fact['label'], member['ma_settings']), detail)
@@ -6300,8 +6354,14 @@ class TestDisplayInteractions(unittest.TestCase):
                         self.assertTrue(rendered.startswith(f'<span class="{cls}">'), rendered)
                     else:
                         # 无灯色文案不套灯色 span；方向箭头（▲▼↑↓）的配色 span 是唯一例外
-                        stripped = re.sub(r'<span class="arrow-[a-z-]+">[▲▼↑↓]</span>', '', rendered)
+                        stripped = re.sub(r'<span class="arrow-[a-z-]+">([▲▼↑↓])</span>', r'\1', rendered)
                         self.assertNotIn('<span', stripped, rendered)
+                    self.assertEqual(monitor.html_lib.unescape(plain_text(rendered)), text)
+                    self.assertEqual(re.findall(r'<span class="(arrow-[a-z-]+)">([▲▼↑↓])</span>', rendered),
+                                     [(cls, char) for char in text
+                                      for symbol, cls in (('▲', 'arrow-band-up'), ('▼', 'arrow-band-down'),
+                                                          ('↑', 'arrow-rsi-up'), ('↓', 'arrow-rsi-down'))
+                                      if char == symbol])
         with patch.dict(monitor.S, {'ma_long': 0}):
             self.assertNotIn('signal-cyan', monitor._signal_text_html('上穿250日均线'))
 
@@ -6312,7 +6372,9 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertEqual(re.findall(r'data-signal-level="([^"]+)"', output), ['yellow'])
         self.assertIn('data-signal-kind="boll" data-signal-level="yellow"', output)
         self.assertNotIn('signal-dot', output)
-        self.assertIn('逼近布林下轨▼', output)
+        self.assertIn('逼近布林下轨<span class="arrow-band-down">▼</span>', output)
+        self.assertEqual(plain_text(output), '逼近布林下轨▼ 还差0.08%')
+        self.assertEqual(row['signals'], ['逼近布林下轨▼ 还差0.08%（盘中触及 50.04）'])
         self.assertEqual(row['level'], 'yellow')
         self.assertEqual(row['signal_marks'], [('boll', 'yellow')])
 
@@ -6837,11 +6899,7 @@ assert.equal(renders, 20);
                        capture_output=True, text=True, encoding='utf-8')
 
     def test_filter_detail_arrows_use_same_classes_as_panel(self):
-        """多选清单的 ↑↓ 必须走 .arrow-rsi-up / .arrow-rsi-down，不能再整段用 textContent 写死。
-
-        样式上是「纯文本色 + 略微放大」，不再给 ↑↓ 上彩色：只有一层 span 控制字号，
-        不额外产生颜色计算，也不加粗字形。
-        """
+        """多选四箭头共用方向类与限域涨跌色；RSI 原继承色/字号基础规则保留。"""
         script = monitor.PAGE_INTERACTION_JS
         seg = script.split('function renderSignalFilter', 1)[1].split('box.append(list);', 1)[0]
         self.assertRegex(seg, r'appendRsiArrows\([^;]*\.t\)')
@@ -6860,6 +6918,36 @@ assert.equal(renders, 20);
         self.assertNotIn('#3ec9d6', rule[0])
         self.assertNotIn('#e061c9', rule[0])
         self.assertNotIn('font-weight:700', rule[0])
+        for direction in ('up', 'down'):
+            selectors = ','.join(f'{scope} .arrow-{kind}-{direction}'
+                                 for scope in ('.stk .sig', '#signalCounts')
+                                 for kind in ('band', 'rsi'))
+            self.assertIn(selectors + '{color:var(--' + direction + ')}',
+                          re.sub(r'\s+', ' ', css).replace(', ', ','))
+        arrow_function = 'function appendRsiArrows' + script.split('function appendRsiArrows', 1)[1].split(
+            'function renderSignalFilter', 1)[0]
+        import subprocess
+        code = r'''
+const assert = require('assert/strict');
+const document = {
+  createTextNode(textContent) {return {textContent};},
+  createElement(tagName) {assert.equal(tagName, 'span'); return {tagName};}
+};
+FUNCTION
+for (const level of ['red', 'yellow', 'gray', undefined]) {
+  const parent = {dataset: {signalLevel: level}, children: [],
+    appendChild(node) {this.children.push(node);}};
+  const text = '布林▲ / RSI↑ / 布林▼ / RSI↓ <img src=x onerror=bad()> & 保留';
+  appendRsiArrows(parent, text);
+  assert.deepEqual(parent.children.filter(node => node.tagName).map(node => [node.className, node.textContent]),
+    [['arrow-band-up', '▲'], ['arrow-rsi-up', '↑'], ['arrow-band-down', '▼'], ['arrow-rsi-down', '↓']]);
+  assert.equal(parent.children.map(node => node.textContent).join(''), text);
+  assert.equal(parent.dataset.signalLevel, level);
+  assert.ok(parent.children.every(node => !('innerHTML' in node)));
+}
+'''.replace('FUNCTION', arrow_function)
+        subprocess.run([os.environ.get('NODE') or 'node', '-e', code], check=True,
+                       capture_output=True, text=True, encoding='utf-8')
 
     def test_earnings_is_not_added_to_signal_kinds_counts_or_members(self):
         expected = ['chg', 'amp', 'vol_ratio', 'rsi', 'boll', 'boll_rsi',
@@ -7346,7 +7434,7 @@ assert.equal(renders, 20);
         cases = {
             ('rsi', 'yellow'): ['<h5>RSI 2条 <span class="arrow-rsi-up">↑</span>超买</h5>'],
             ('rsi', 'red'): ['<h5>RSI 3条 <span class="arrow-rsi-down">↓</span>超卖</h5>'],
-            ('boll', 'yellow'): [f'<h5><span class="grp-arrow">▲</span> 突破上轨</h5>', f'<h5><span class="grp-arrow">▼</span> 触及下轨</h5>'],
+            ('boll', 'yellow'): [f'<h5><span class="grp-arrow arrow-band-up">▲</span> 突破上轨</h5>', f'<h5><span class="grp-arrow arrow-band-down">▼</span> 触及下轨</h5>'],
         }
         output = monitor._signal_counts_card(snap)
         for (kind, level), expected in cases.items():
@@ -7358,8 +7446,8 @@ assert.equal(renders, 20);
                     self.assertIn(title, panel)
             self.assertNotIn('signal-member-icon', panel)
         # 均线合并一栏：同一成员的穿越与触及事实都写在标题里，不重复名单。
-        for kind, titles in (('ma', [f'<span class="grp-arrow">▲</span> 短均线上穿 / 触及长均线，现价在长均线上方',
-                                   f'<span class="grp-arrow">▼</span> 长均线跌破 / 现价贴近长均线，现价在长均线下方',
+        for kind, titles in (('ma', [f'<span class="grp-arrow arrow-band-up">▲</span> 短均线上穿 / 触及长均线，现价在长均线上方',
+                                   f'<span class="grp-arrow arrow-band-down">▼</span> 长均线跌破 / 现价贴近长均线，现价在长均线下方',
                                    '■ 触及长均线，现价与长均线相等']),):
             panel = self.panel(output, kind, 'yellow')
             with self.subTest(kind=kind):
@@ -7400,11 +7488,11 @@ assert.equal(renders, 20);
         amp_yellow = self.panel(output, 'amp', 'yellow')
         amp_red = self.panel(output, 'amp', 'red')
         volume = self.panel(output, 'vol_ratio', 'yellow')
-        # 量比/振幅/涨跌幅都按方向分框：三角只出现在框标题（分组蓝），名单里不再逐条画三角
-        self.assertIn(f'<h5><span class="grp-arrow">▲</span> 上涨</h5>', amp_yellow)
-        self.assertIn(f'<h5><span class="grp-arrow">▼</span> 下跌</h5>', amp_red)
-        self.assertIn(f'<h5><span class="grp-arrow">▲</span> 上涨</h5>', volume)
-        self.assertIn(f'<h5><span class="grp-arrow">▼</span> 下跌</h5>', volume)
+        # 量比/振幅/涨跌幅都按方向分框：三角只出现在框标题（上涨绿／下跌红），名单里不再逐条画三角
+        self.assertIn(f'<h5><span class="grp-arrow arrow-band-up">▲</span> 上涨</h5>', amp_yellow)
+        self.assertIn(f'<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>', amp_red)
+        self.assertIn(f'<h5><span class="grp-arrow arrow-band-up">▲</span> 上涨</h5>', volume)
+        self.assertIn(f'<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>', volume)
         self.assertIn('<h5>平盘</h5>', volume)
         self.assertNotIn('signal-member-icon', volume)
         self.assertIn('振幅 5.4%', amp_yellow)
@@ -7413,19 +7501,19 @@ assert.equal(renders, 20);
         self.assertIn('量比 1.6×（2026-10-13完整日）', volume)
         self.assertNotIn('量比数字取标注的完整交易日，不一定与股价三角同日', volume)
         self.assertNotIn('振幅为本轮行情日高低价之差占昨收的比例', amp_yellow)
-        self.assertIn(f'<h5><span class="grp-arrow">▼</span> 下跌</h5>', amp_red)
+        self.assertIn(f'<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>', amp_red)
         self.assertNotIn('title=', output)
 
-    def test_change_members_show_signed_percent_and_white_direction(self):
+    def test_change_members_show_signed_percent_and_independent_arrow_direction(self):
         rows = [self.member_row('UP', 'position', 'red', ('chg', 'red')),
                 self.member_row('DOWN', 'focus', 'yellow', ('chg', 'yellow'))]
         rows[0].update(chg=6.237, data_date='2026-10-14')
         rows[1].update(chg=-1.45, data_date='2026-10-14')
         page = monitor._signal_counts_card(monitor.build_snapshot({}, rows, {}, group_counts={}))
         red, yellow = self.panel(page, 'chg', 'red'), self.panel(page, 'chg', 'yellow')
-        self.assertIn(f'<h5><span class="grp-arrow">▲</span> 上涨</h5>', red)
+        self.assertIn(f'<h5><span class="grp-arrow arrow-band-up">▲</span> 上涨</h5>', red)
         self.assertIn('涨跌幅 +6.24%', red)
-        self.assertIn(f'<h5><span class="grp-arrow">▼</span> 下跌</h5>', yellow)
+        self.assertIn(f'<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>', yellow)
         self.assertIn('涨跌幅 -1.45%', yellow)
         self.assertNotIn('tone-red', red)
         self.assertNotIn('白▲ / 白▼', yellow)
@@ -7444,7 +7532,8 @@ assert.equal(renders, 20);
                 row.update(boll_alert_text=text, signals=[text])
                 page = self.panel(monitor._signal_counts_card(monitor.build_snapshot({}, [row], {}, group_counts={})),
                                   'boll', 'yellow')
-                self.assertIn(f'<h5><span class="grp-arrow">{shape}</span> {name}</h5>', page)
+                arrow_class = 'arrow-band-up' if shape == '▲' else 'arrow-band-down'
+                self.assertIn(f'<h5><span class="grp-arrow {arrow_class}">{shape}</span> {name}</h5>', page)
                 self.assertIn(f'<span class="signal-member-metric">{name}</span>', page)
                 self.assertNotIn('tone-red', page)
         row = self.member_row('INFO', 'technology', 'green', ('boll', 'yellow'))
@@ -7467,7 +7556,7 @@ assert.equal(renders, 20);
         output = monitor._signal_counts_card(snap)
         yellow = self.panel(output, 'rsi', 'yellow')
         red = self.panel(output, 'rsi', 'red')
-        # 方向写到框标题上（↑超买青 / ↓超卖品红），名单里不再逐条画三角
+        # 方向写到框标题上（↑上涨绿 / ↓下跌红），名单里不再逐条画三角
         self.assertIn('<h5>RSI 2条 <span class="arrow-rsi-down">↓</span>超卖</h5>', yellow)
         self.assertIn('<h5>RSI 2条 <span class="arrow-rsi-up">↑</span>超买</h5>', yellow)
         self.assertIn('<h5>RSI 3条 <span class="arrow-rsi-down">↓</span>超卖</h5>', red)
@@ -7571,13 +7660,13 @@ assert.equal(renders, 20);
         output = self.panel(monitor._signal_counts_card({'signal_counts': counts,
                                                             'signal_members': members}), 'boll_rsi', 'red')
         # 轨道 + RSI 条数写在框标题上，名单里不再逐条画三角
-        for label in ('<h5>上轨▲ · RSI 2条 <span class="arrow-rsi-up">↑</span>超买</h5>', '<h5>下轨▼ · RSI 3条 <span class="arrow-rsi-down">↓</span>超卖</h5>',
-                      '<h5>上轨▲ · RSI 3条 <span class="arrow-rsi-down">↓</span>超卖 · 反向</h5>', '<h5>方向待下次更新</h5>'):
+        for label in ('<h5>上轨<span class="arrow-band-up">▲</span> · RSI 2条 <span class="arrow-rsi-up">↑</span>超买</h5>', '<h5>下轨<span class="arrow-band-down">▼</span> · RSI 3条 <span class="arrow-rsi-down">↓</span>超卖</h5>',
+                      '<h5>上轨<span class="arrow-band-up">▲</span> · RSI 3条 <span class="arrow-rsi-down">↓</span>超卖 · 反向</h5>', '<h5>方向待下次更新</h5>'):
             self.assertIn(label, output)
         # 黄档同样分框
         yellow = self.panel(monitor._signal_counts_card({'signal_counts': counts,
                                                          'signal_members': members}), 'boll_rsi', 'yellow')
-        self.assertIn('<h5>下轨▼ · RSI 2条 <span class="arrow-rsi-down">↓</span>超卖</h5>', yellow)
+        self.assertIn('<h5>下轨<span class="arrow-band-down">▼</span> · RSI 2条 <span class="arrow-rsi-down">↓</span>超卖</h5>', yellow)
         self.assertIn('RSI 2条', output)
         self.assertIn('RSI 3条', output)
         self.assertIn('>UP</span><span class="note">上方</span></a>', output)  # 备注名回到代码后面
@@ -7609,7 +7698,7 @@ assert.equal(renders, 20);
                 self.assertEqual(snapshot, before)
 
     def test_combination_counts_follow_matching_rsi_side_but_red_lamp_stays_unchanged(self):
-        # 三角按轨道方向画，颜色跟灯级走：红档红、黄档黄（方向不一致 3 条也是黄）
+        # 保留红黄 tone 与计数；方向类独立使用涨跌色，不改变条件灯级。
         cases = [('red', '上轨（超买）', 2, 'tone-red', '▲'),
                  ('red', '上轨（超买）', 3, 'tone-red', '▲'),
                  ('red', '下轨（超卖）', 2, 'tone-red', '▼'),
@@ -7625,6 +7714,12 @@ assert.equal(renders, 20);
                 page = self.panel(monitor._signal_counts_card(snap), 'boll_rsi', level)
                 head = monitor.boll_rsi_text(direction, hits)
                 self.assertIn(head, plain_text(page))   # 方向 + 条数写在框标题上
+                arrow_class = 'arrow-band-up' if shape == '▲' else 'arrow-band-down'
+                member = snap['signal_members']['boll_rsi'][level][0]
+                self.assertEqual(monitor._member_icons(member, 'boll_rsi', level),
+                                 f'<span class="signal-member-icon {tone} {arrow_class}" role="img" '
+                                 f'aria-label="{head}">{shape}</span>')
+                self.assertIn(f'<span class="{arrow_class}">{shape}</span>', page)
                 self.assertIn(f'RSI {hits}条', page)
                 self.assertIn('上轨' if direction.startswith('上轨') else '下轨', page)  # 轨道方向要可见
                 self.assertNotIn('signal-member-icon', page)      # 名单里不再逐条画三角
@@ -7633,7 +7728,7 @@ assert.equal(renders, 20);
         conflict.update(boll_rsi_direction='下轨（RSI超买，方向不一致）', boll_rsi_hits=3)
         page = self.panel(monitor._signal_counts_card(monitor.build_snapshot({}, [conflict], {}, group_counts={})),
                           'boll_rsi', 'red')
-        self.assertIn('<h5>下轨▼ · RSI 3条 <span class="arrow-rsi-up">↑</span>超买 · 反向</h5>', page)  # 轨道方向明确，照样分框
+        self.assertIn('<h5>下轨<span class="arrow-band-down">▼</span> · RSI 3条 <span class="arrow-rsi-up">↑</span>超买 · 反向</h5>', page)  # 轨道方向明确，照样分框
         legacy = dict(conflict, boll_rsi_direction='上轨（超买）')
         legacy.pop('boll_rsi_hits')
         page = self.panel(monitor._signal_counts_card(monitor.build_snapshot({}, [legacy], {}, group_counts={})),
@@ -7659,9 +7754,9 @@ assert.equal(renders, 20);
         output = monitor._signal_counts_card({'signal_counts': monitor.signal_counts(rows),
                                               'signal_members': monitor.signal_count_members(rows)})
         panel = self.panel(output, 'ma', 'yellow')
-        for title in ('<span class="grp-arrow">▲</span> 长均线上穿', '<span class="grp-arrow">▼</span> 短均线跌破',
-                      '<span class="grp-arrow">▲</span> 触及长均线，现价在长均线上方',
-                      '<span class="grp-arrow">▼</span> 触及长均线，现价在长均线下方'):
+        for title in ('<span class="grp-arrow arrow-band-up">▲</span> 长均线上穿', '<span class="grp-arrow arrow-band-down">▼</span> 短均线跌破',
+                      '<span class="grp-arrow arrow-band-up">▲</span> 触及长均线，现价在长均线上方',
+                      '<span class="grp-arrow arrow-band-down">▼</span> 触及长均线，现价在长均线下方'):
             self.assertIn(f'<h5>{title}</h5>', panel)
         for group in ('长持仓', '重点', '短持仓', '金融'):
             self.assertIn(f'<span class="signal-member-belong">（{group}）</span>', panel)
@@ -7674,7 +7769,7 @@ assert.equal(renders, 20);
         output = monitor._signal_counts_card({'signal_counts': monitor.signal_counts([row]),
                                               'signal_members': monitor.signal_count_members([row])})
         page = self.panel(output, 'boll_rsi', 'yellow')
-        self.assertIn('<h5>下轨▼ · RSI 2条 <span class="arrow-rsi-down">↓</span>超卖</h5>', page)
+        self.assertIn('<h5>下轨<span class="arrow-band-down">▼</span> · RSI 2条 <span class="arrow-rsi-down">↓</span>超卖</h5>', page)
         self.assertEqual(page.count('RSI 2条'), 1)   # 只有框标题一处
         self.assertIn('<span class="signal-member-belong">（长持仓）</span>', page)
 
@@ -7726,8 +7821,8 @@ assert.equal(renders, 20);
         self.assertLess(output.index('aria-pressed="false">布林+RSI</button>'),
                         output.index('aria-pressed="false">布林</button>'))
         self.assertIn('<h5>RSI 2条 <span class="arrow-rsi-up">↑</span>超买</h5>', output)
-        self.assertIn('<h5>下轨▼</h5>', output)
-        self.assertIn('<h5>下轨▼ · RSI 1条 <span class="arrow-rsi-down">↓</span>超卖</h5>', output)
+        self.assertIn('<h5>下轨<span class="arrow-band-down">▼</span></h5>', output)
+        self.assertIn('<h5>下轨<span class="arrow-band-down">▼</span> · RSI 1条 <span class="arrow-rsi-down">↓</span>超卖</h5>', output)
         self.assertNotIn('OLDUP', output)
         self.assertNotIn('OLDRSI', output)
         self.assertNotIn('逼近布林', output.split('signal-members-gray-')[1])
@@ -8092,6 +8187,51 @@ class TestTargetOverlays(unittest.TestCase):
 
 
 class TestSignalDescriptionLamps(unittest.TestCase):
+    def test_arrow_html_wraps_all_four_symbols_and_preserves_escaped_text(self):
+        text = '▲↑▼↓ / ▲▼ / &lt;img src=x onerror=bad()&gt; &amp; 保留'
+        expected = ('<span class="arrow-band-up">▲</span><span class="arrow-rsi-up">↑</span>'
+                    '<span class="arrow-band-down">▼</span><span class="arrow-rsi-down">↓</span>'
+                    ' / <span class="arrow-band-up">▲</span><span class="arrow-band-down">▼</span>'
+                    ' / &lt;img src=x onerror=bad()&gt; &amp; 保留')
+        self.assertEqual(monitor.arrow_html(text), expected)
+        self.assertEqual(plain_text(expected), text)
+
+    def test_main_description_arrow_wrappers_preserve_body_lamp_and_row_data(self):
+        import copy
+        for level in ('red', 'yellow', 'gray'):
+            for side, triangle, band_class in (('上轨', '▲', 'arrow-band-up'),
+                                                ('下轨', '▼', 'arrow-band-down')):
+                for direction, symbol, rsi_class in (('超买', '↑', 'arrow-rsi-up'),
+                                                       ('超卖', '↓', 'arrow-rsi-down')):
+                    with self.subTest(level=level, side=side, direction=direction):
+                        boll = f'触及布林{side}{triangle}'
+                        rsi = f'RSI 3条 {symbol}{direction}'
+                        row = {'symbol': 'ARROWBODY', 'group': 'technology', 'price': 100, 'chg': 1,
+                               'note': '', 'level': 'red', 'signals': [boll, rsi],
+                               'signal_marks': [('boll_rsi', level)]}
+                        before = copy.deepcopy(row)
+                        reverse = (side, direction) in (('上轨', '超卖'), ('下轨', '超买'))
+                        body = (f'触及布林{side}<span class="{band_class}">{triangle}</span> · '
+                                f'RSI 3条 <span class="{rsi_class}">{symbol}</span>{direction}'
+                                + ('（反）' if reverse else ''))
+                        attr = f' data-signal-level="{level}"'
+                        expected = f'<span class="signal-item" data-signal-kind="boll_rsi"{attr}>{body}</span>'
+                        output = monitor._signals_html(row)
+                        self.assertEqual(output, expected)
+                        self.assertIn('<td class="sig">' + expected + '</td>', monitor._stock_row(row, {}))
+                        self.assertEqual(row, before)
+                        row['level'] = 'yellow'
+                        self.assertEqual(monitor._signals_html(row), output)
+        unlit = {'signals': ['无灯说明 ▲↑▼↓'], 'signal_marks': [], 'level': 'red'}
+        self.assertEqual(monitor._signals_html(unlit),
+                         '<span class="signal-item" data-signal-kind="">无灯说明 '
+                         '<span class="arrow-band-up">▲</span><span class="arrow-rsi-up">↑</span>'
+                         '<span class="arrow-band-down">▼</span><span class="arrow-rsi-down">↓</span></span>')
+        self.assertEqual(unlit, {'signals': ['无灯说明 ▲↑▼↓'], 'signal_marks': [], 'level': 'red'})
+        for level, color in (('red', '#ff8580'), ('yellow', '#f0c674'), ('gray', 'var(--text)')):
+            self.assertIn(f'.signal-item[data-signal-level="{level}"]{{color:{color}}}', monitor.PAGE_CSS)
+        self.assertIn('.signal-item{color:var(--dim)}', monitor.PAGE_CSS)
+
     def test_legacy_amp_gray_retired_without_losing_technical_foldability(self):
         import copy
         analyzer = TestBollRsiRules()
@@ -8217,7 +8357,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         self.assertEqual(output.count('signal-separator'), 3)
         self.assertIn(monitor.html_lib.escape(row['signals'][0]), output)
         self.assertEqual(monitor.html_lib.unescape(plain_text(output)),
-                         '异动 -6% / 量比 2.8x / RSI 2条 ↓超卖（≤35） / ' + row['signals'][0])
+                         '异动 -6% / 量比 2.8x / RSI 2条 ↓超卖 / ' + row['signals'][0])
         stock = monitor._stock_row(row, {})
         self.assertNotIn('signal-dot', stock)
         self.assertNotRegex(stock, r'<img\b|<b\b|<[^>]+\sonerror\s*=')
@@ -8305,8 +8445,10 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                                            if level != 'gray' else [('vol_ratio', 'yellow')]}
                     original = copy.deepcopy(row)
                     result = monitor._signals_html(row)
-                    self.assertIn(boll + ' · RSI 3条 ', result)
-                    self.assertNotIn(boll + '，RSI', result)
+                    arrow_class = 'arrow-band-up' if side == '上轨' else 'arrow-band-down'
+                    boll_html = f'{state}布林{side}<span class="{arrow_class}">{arrow}</span>'
+                    self.assertIn(boll_html + ' · RSI 3条 ', result)
+                    self.assertNotIn(boll + '，RSI', plain_text(result))
                     self.assertNotIn('布林+RSI', result)
                     self.assertEqual(result.count('data-signal-kind="boll_rsi"'), 1)
                     self.assertEqual(result.count('signal-separator'), 1)
@@ -8321,8 +8463,9 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                'signal_marks': [('boll_rsi', 'yellow'), ('vol_ratio', 'yellow')]}
         before = copy.deepcopy(row)
         result = monitor._signals_html(row)
-        self.assertIn('触及布林下轨▼，连续第2日贴近下轨 · RSI 2条 ', result)
-        self.assertIn('<span class="arrow-rsi-down">↓</span>超卖（≤35）', result)
+        self.assertIn('触及布林下轨<span class="arrow-band-down">▼</span>，连续第2日贴近下轨 · RSI 2条 ', result)
+        self.assertIn('<span class="arrow-rsi-down">↓</span>超卖', result)
+        self.assertNotIn('（≤35）', result)
         self.assertEqual(result.count(' · '), 1)
         self.assertEqual(result.count('signal-separator'), 1)
         self.assertEqual(row, before)
@@ -8341,8 +8484,10 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         self.assertEqual(result.count('data-signal-kind="boll_rsi"'), 1)
         self.assertNotIn('data-signal-kind="rsi"', result)
         self.assertNotIn('data-signal-kind="boll"', result)
-        self.assertIn('RSI 3条 <span class="arrow-rsi-down">↓</span>超卖（≤35） · '
-                      '逼近布林下轨▼ 还差0.29%', result)
+        self.assertIn('RSI 3条 <span class="arrow-rsi-down">↓</span>超卖 · '
+                      '逼近布林下轨<span class="arrow-band-down">▼</span> 还差0.29%', result)
+        self.assertNotIn('（≤35）', result)
+        self.assertNotIn('盘中触及', result)
         self.assertNotIn('布林+RSI', monitor._signals_html(row))
         self.assertEqual(monitor._signal_lamps(row), '')
         self.assertIn('data-signal-kind="boll_rsi" data-signal-level="red"', result)
@@ -8391,13 +8536,15 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                           ('', None), ('', None), ('target', 'purple')])
         output = _row_signals(row)
         self.assertEqual(re.findall(r'data-signal-kind="([^"]*)"', output),
-                         ['chg', 'add_price', 'ma', 'amp', 'vol_ratio', 'rsi', '', '', 'target'])
+                         ['chg', 'amp', 'add_price', 'ma', 'vol_ratio', 'rsi', '', '', 'target'])
         self.assertNotIn('signal-dot', output)
         self.assertEqual(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                                   r'(?: data-signal-level="([^"]*)")?>', output),
-                         [('chg', 'red'), ('add_price', 'red'), ('ma', 'yellow'),
-                          ('amp', 'yellow'), ('vol_ratio', 'yellow'), ('rsi', 'gray'),
+                                   r'(?: data-signal-level="([^"]*)")?(?: data-signal-role="[^"]*")?>', output),
+                         [('chg', 'red'), ('amp', 'yellow'), ('add_price', 'red'), ('ma', 'yellow'),
+                          ('vol_ratio', 'yellow'), ('rsi', 'gray'),
                           ('', ''), ('', ''), ('target', 'purple')])
+        self.assertIn('data-signal-kind="amp" data-signal-level="yellow" data-signal-role="supplement"', output)
+        self.assertEqual(monitor._signal_description_groups(row), groups)
         self.assertEqual(output.count('触及长均线±1%'), 1)
         self.assertIn('&lt;b&gt;尾部&lt;/b&gt;', output)
         self.assertIn('&lt;img onerror=x&gt;', output)
@@ -8431,6 +8578,292 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         self.assertIn('上穿长均线，触及长均线±1%', result)
         self.assertIn('&lt;img onerror=x&gt;，说明', result)
         self.assertNotIn('<img', result)
+
+
+class TestMainOnlyDescriptionProjection(unittest.TestCase):
+    """主表精简独立于原始事实、统计及技术判灯。"""
+
+    def assert_main_only(self, row, expected):
+        import copy
+        before = copy.deepcopy(row)
+        groups = monitor._signal_description_groups(row)
+        counts = monitor.signal_counts([row])
+        members = monitor.signal_count_members([row])
+        gray = monitor.text_only_members([row])
+        snapshot = monitor.build_snapshot({}, [row], {}, group_counts={})
+        snapshot_before = copy.deepcopy(snapshot)
+        card = monitor._signal_counts_card(snapshot)
+        filters = TestMaMergedStatistics.filters(card) if 'data-filter=' in card else {}
+        output = monitor._signals_html(row)
+        self.assertEqual(monitor.html_lib.unescape(plain_text(output)), expected)
+        self.assertEqual(monitor._signals_html(row), output)
+        self.assertEqual(monitor._signal_description_groups(row), groups)
+        self.assertEqual(monitor.signal_counts([row]), counts)
+        self.assertEqual(monitor.signal_count_members([row]), members)
+        self.assertEqual(monitor.text_only_members([row]), gray)
+        from monitor_render import PageRenderer
+        with patch.object(PageRenderer, '_main_description_text',
+                          side_effect=AssertionError('统计不能调用主表投影')):
+            repeated_card = monitor._signal_counts_card(snapshot)
+        self.assertEqual(repeated_card, card)
+        self.assertEqual(TestMaMergedStatistics.filters(repeated_card) if filters else {}, filters)
+        self.assertEqual(snapshot, snapshot_before)
+        self.assertEqual(row, before)
+        return output
+
+    def test_price_reminders_have_one_primary_without_mutating_facts(self):
+        for chg_level, amp_level, primary in (
+                ('red', 'red', 'chg'), ('red', 'yellow', 'chg'),
+                ('yellow', 'red', 'amp'), ('yellow', 'yellow', 'chg')):
+            for reverse in (False, True):
+                with self.subTest(chg=chg_level, amp=amp_level, reverse=reverse):
+                    texts = {'chg': '异动 -9.0%' if chg_level == 'red' else '波动 +6.0%',
+                             'amp': '振幅 12.0%（96.00~108.00）' if amp_level == 'red' else '振幅 7.0%（99.00~106.00）'}
+                    order = ['amp', 'chg'] if reverse else ['chg', 'amp']
+                    row = {'symbol': 'PRICEPAIR', 'group': 'focus', 'price': 100, 'chg': -9, 'amp': 12,
+                           'level': 'red' if 'red' in (chg_level, amp_level) else 'yellow',
+                           'signals': [texts[k] for k in order],
+                           'signal_marks': [('chg', chg_level), ('amp', amp_level)]}
+                    secondary = 'amp' if primary == 'chg' else 'chg'
+                    output = self.assert_main_only(row, texts[primary] + ' ， ' + texts[secondary])
+                    for kind, role in ((primary, 'primary'), (secondary, 'supplement')):
+                        level = chg_level if kind == 'chg' else amp_level
+                        self.assertIn(f'data-signal-kind="{kind}" data-signal-level="{level}" data-signal-role="{role}"', output)
+                    self.assertEqual(output.count('data-signal-role="supplement"'), 1)
+                    self.assertNotIn('data-signal-level="gray"', output)
+        self.assertIn('.signal-item[data-signal-role="supplement"]{color:var(--dim)}', monitor.PAGE_CSS)
+
+    def test_price_single_legacy_unlit_and_unknown_levels_do_not_guess_primary(self):
+        for chg_level, amp_level in ((None, 'red'), ('yellow', None), ('red', 'gray'),
+                                      ('green', 'yellow'), ('red', 'invalid'), (None, None)):
+            with self.subTest(chg=chg_level, amp=amp_level):
+                row = {'symbol': 'LEGACYPRICE', 'group': 'focus', 'price': 100, 'level': 'red',
+                       'signals': ['异动 +9.0%', '振幅 7.0%（99.00~106.00）'],
+                       'signal_marks': [(kind, lv) for kind, lv in (('chg', chg_level), ('amp', amp_level)) if lv]}
+                expected = ' / '.join('，'.join(g['texts']) for g in monitor._signal_description_groups(row))
+                output = self.assert_main_only(row, expected)
+                self.assertNotIn('data-signal-role', output)
+        for text, kind in (('异动 +9.0%', 'chg'), ('振幅 12.0%', 'amp')):
+            row = {'symbol': 'SINGLEPRICE', 'group': 'focus', 'signals': [text],
+                   'level': 'red', 'signal_marks': [(kind, 'red')]}
+            self.assertNotIn('data-signal-role', self.assert_main_only(row, text))
+
+    def test_helper_is_not_a_monitor_export(self):
+        from monitor_render import PageRenderer
+        self.assertIn('_main_description_text', PageRenderer.__dict__)
+        self.assertFalse(hasattr(monitor, '_main_description_text'))
+        self.assertEqual(monitor._signals_html({'signals': [], 'signal_marks': []}), '—')
+
+    def test_default_and_custom_rsi_thresholds_only_removed_from_main(self):
+        for threshold, arrow, tag, wrapper in (
+                ('≤35', '↓', '超卖', 'arrow-rsi-down'),
+                ('≥70', '↑', '超买', 'arrow-rsi-up'),
+                ('≤28.5', '↓', '超卖', 'arrow-rsi-down'),
+                ('≥81.25', '↑', '超买', 'arrow-rsi-up')):
+            for kind in ('rsi', 'boll_rsi'):
+                for level in ('red', 'yellow', 'gray'):
+                    with self.subTest(threshold=threshold, kind=kind, level=level):
+                        rsi = f'RSI 3条 {arrow}{tag}（{threshold}）：RSI6=22.50'
+                        boll = ('触及布林下轨▼（盘中触及 998.25）' if tag == '超卖'
+                                else '触及布林上轨▲（盘中触及 1,002.75）')
+                        row = {'symbol': 'PROJRSI', 'group': 'position', 'price': 1000,
+                               'level': 'red', 'signals': [boll, rsi] if kind == 'boll_rsi' else [rsi],
+                               'signal_marks': [(kind, level)]}
+                        body = f'RSI 3条 {arrow}{tag}：RSI6=22.50'
+                        if kind == 'boll_rsi':
+                            body = ('触及布林下轨▼' if tag == '超卖' else '触及布林上轨▲') + ' · ' + body
+                        output = self.assert_main_only(row, body)
+                        self.assertIn(f'data-signal-kind="{kind}" data-signal-level="{level}"', output)
+                        self.assertIn(f'<span class="{wrapper}">{arrow}</span>{tag}：RSI6=22.50', output)
+                        self.assertNotIn('（' + threshold + '）', output)
+                        self.assertIn(rsi, monitor._signal_description_groups(row)[0]['texts'])
+                        self.assertIn(rsi, row['signals'])
+                        if kind == 'boll_rsi':
+                            self.assertIn(boll, monitor._signal_description_groups(row)[0]['texts'])
+
+    def test_custom_thresholds_from_analysis_remain_detailed_in_raw_groups(self):
+        analyzer = TestBollRsiRules()
+        analyzer.setUp()
+        self.addCleanup(analyzer.doCleanups)
+        for value, raw, expected in ((28.5, 'RSI 3条 ↓超卖（≤28.5）', 'RSI 3条 ↓超卖'),
+                                     (81.25, 'RSI 3条 ↑超买（≥81.25）', 'RSI 3条 ↑超买')):
+            with self.subTest(value=value), patch.dict(monitor.S, {'rsi_low': 28.5, 'rsi_high': 81.25}):
+                row = analyzer.analyze([value] * 3, bands=(None, None, None))
+            self.assertEqual(row['signals'], [raw])
+            self.assert_main_only(row, expected)
+            self.assertEqual(monitor._signal_description_groups(row)[0]['texts'], [raw])
+            self.assertEqual(monitor.html_lib.unescape(plain_text(monitor._signal_text_html(raw))), raw)
+
+    def test_lower_break_below_above_and_equal_are_separate_main_states(self):
+        tail = '连续第≥120日贴近下轨（其中3日穿越）'
+        for price, state in ((999.999999999, '跌破布林下轨▼，下轨外'),
+                             (1000.000000001, '盘中跌破布林下轨▼后收回'),
+                             (1000, '盘中跌破布林下轨▼后收回')):
+            for kind in ('boll', 'boll_rsi'):
+                with self.subTest(price=price, kind=kind):
+                    raw = '跌破布林下轨▼（盘中触及 987.65）'
+                    row = {'symbol': 'PROJBOLL', 'group': 'position', 'price': price, 'boll_dn': 1000,
+                           'level': 'red', 'signals': [raw, tail], 'signal_marks': [(kind, 'red')]}
+                    expected = state + '，' + tail
+                    if kind == 'boll_rsi':
+                        row['signals'].append('RSI 3条 ↓超卖（≤28.5）')
+                        expected += ' · RSI 3条 ↓超卖'
+                    output = self.assert_main_only(row, expected)
+                    self.assertIn('data-signal-level="red"', output)
+                    self.assertEqual(output.count('<span class="arrow-band-down">▼</span>'), 1)
+                    self.assertIn(raw + '，' + tail, monitor._signal_description_groups(row)[0]['texts'])
+
+    def test_lower_break_does_not_guess_from_missing_or_invalid_prices(self):
+        for key in ('price', 'boll_dn'):
+            for value in (None, 0, -1, float('nan'), float('inf'), True, '1000'):
+                for kind in ('boll', 'boll_rsi'):
+                    with self.subTest(key=key, value=value, kind=kind):
+                        row = {'symbol': 'PROJBAD', 'group': 'position', 'price': 1001, 'boll_dn': 1000,
+                               'level': 'yellow', 'signals': ['跌破布林下轨▼（盘中触及 987.65）'],
+                               'signal_marks': [(kind, 'yellow')]}
+                        row[key] = value
+                        expected = '跌破布林下轨▼'
+                        if kind == 'boll_rsi':
+                            row['signals'].append('RSI 3条 ↓超卖（≤35）')
+                            expected += ' · RSI 3条 ↓超卖'
+                        self.assert_main_only(row, expected)
+            row = {'symbol': 'PROJABSENT', 'group': 'position', 'level': 'yellow',
+                   'signals': ['跌破布林下轨▼（盘中触及 987.65）'], 'signal_marks': [('boll', 'yellow')]}
+            row['boll_dn' if key == 'price' else 'price'] = 1000
+            self.assert_main_only(row, '跌破布林下轨▼')
+
+    def test_upper_break_outside_recovered_equal_and_invalid_prices(self):
+        tail = '连续第4日贴近上轨（其中2日穿越）'
+        for price, state in ((1000.000000001, '突破布林上轨▲，上轨外'),
+                             (999.999999999, '盘中突破布林上轨▲后收回'),
+                             (1000, '盘中突破布林上轨▲后收回')):
+            for kind in ('boll', 'boll_rsi'):
+                for prefix in ('', '盘中'):
+                    with self.subTest(price=price, kind=kind, prefix=prefix):
+                        raw = prefix + '突破布林上轨▲（盘中触及 1,023.45）'
+                        row = {'symbol': 'PROJUP', 'group': 'position', 'price': price, 'boll_up': 1000,
+                               'level': 'yellow', 'signals': [raw, tail], 'signal_marks': [(kind, 'yellow')]}
+                        expected = state + '，' + tail
+                        if kind == 'boll_rsi':
+                            row['signals'].append('RSI 2条 ↑超买（≥70）')
+                            expected += ' · RSI 2条 ↑超买'
+                        output = self.assert_main_only(row, expected)
+                        self.assertEqual(output.count('<span class="arrow-band-up">▲</span>'), 1)
+        for key in ('price', 'boll_up'):
+            for value in (None, 0, -1, float('nan'), float('inf'), True, '1000'):
+                for prefix in ('', '盘中'):
+                    with self.subTest(key=key, value=value, prefix=prefix):
+                        raw = prefix + '突破布林上轨▲（盘中触及 1,023.45）'
+                        row = {'symbol': 'PROJUPBAD', 'group': 'position', 'price': 1001, 'boll_up': 1000,
+                               'level': 'yellow', 'signals': [raw], 'signal_marks': [('boll', 'yellow')]}
+                        row[key] = value
+                        self.assert_main_only(row, prefix + '突破布林上轨▲')
+
+    def test_upper_and_nonbreak_lower_keep_state_gap_and_continuous_days(self):
+        for raw, expected in (
+                ('盘中突破布林上轨▲（盘中触及 1,023.45）', '盘中突破布林上轨▲'),
+                ('突破布林上轨▲（盘中触及 1,023.45）', '突破布林上轨▲'),
+                ('触及布林上轨▲（盘中触及 1,023.45）', '触及布林上轨▲'),
+                ('逼近布林上轨▲ 还差0.15%（盘中触及 1,023.45）', '逼近布林上轨▲ 还差0.15%'),
+                ('触及布林下轨▼（盘中触及 987.65）', '触及布林下轨▼'),
+                ('逼近布林下轨▼ 还差0.15%（盘中触及 987.65）', '逼近布林下轨▼ 还差0.15%')):
+            with self.subTest(raw=raw):
+                side = '上轨' if '上轨' in raw else '下轨'
+                tail = f'连续第4日贴近{side}（其中2日穿越）'
+                row = {'symbol': 'PROJUP', 'group': 'position', 'level': 'yellow', 'price': 1,
+                       'boll_dn': 1000, 'signals': [raw, tail], 'signal_marks': [('boll', 'yellow')]}
+                self.assert_main_only(row, expected + '，' + tail)
+        context = {'symbol': 'PROJCTX', 'group': 'position', 'price': 100, 'level': 'green',
+                   'signals': ['说明（≤28.5）（盘中触及 99.75）'], 'signal_marks': []}
+        self.assert_main_only(context, context['signals'][0])
+
+    def test_ma_uses_real_values_and_row_settings_not_current_price_or_rounded_gap(self):
+        row = {'symbol': 'PROJMA', 'group': 'position', 'price': 2222.22, 'level': 'yellow',
+               'signals': ['日内触及60日均线 ±1%区间（日内 1,230.00~2,223.00，现价偏离 +0.1%）',
+                           '日内触及120日均线 ±1%区间（日内 1,230.00~2,223.00，现价偏离 +0.1%）'],
+               'signal_marks': [('ma_band', 'yellow')], 'ma_settings': {'ma_short': 60, 'ma_long': 120},
+               'ma_values': {'60': 1234.567, '120': 1567.894}}
+        with patch.dict(monitor.S, {'ma_short': 120, 'ma_long': 60}):
+            self.assert_main_only(row, '日内触及短均线 ±1%区间（均线价：1,234.57），'
+                                       '触及长均线 ±1%区间（均线价：1,567.89）')
+        self.assertIn('日内 1,230.00~2,223.00，现价偏离 +0.1%',
+                      monitor._signal_description_groups(row)[0]['texts'][0])
+        row['price'] = 9999.99
+        self.assert_main_only(row, '日内触及短均线 ±1%区间（均线价：1,234.57），'
+                                   '触及长均线 ±1%区间（均线价：1,567.89）')
+        cross = dict(row, signals=['上穿60日均线', '现价贴近120日均线 +0.1%（日内高低缺失，仅按现价）'])
+        self.assert_main_only(cross, '上穿短均线，现价贴近长均线 +0.1%（日内高低缺失，仅按现价）')
+
+    def test_ma_missing_zero_nan_and_wrong_key_never_reverse_calculated(self):
+        for values in (None, {}, {'120': None}, {'120': 0}, {'120': -1}, {'120': float('nan')},
+                       {'120': float('inf')}, {'120': True}, {'120': '1234.57'}, {120: 1234.57}):
+            with self.subTest(values=values):
+                row = {'symbol': 'PROJMANONE', 'group': 'position', 'price': 1235.8, 'level': 'yellow',
+                       'signals': ['日内触及120日均线 ±1%区间（日内 1,234.00~1,240.00，现价偏离 +0.1%）'],
+                       'signal_marks': [('ma_band', 'yellow')], 'ma_settings': {'ma_short': 60, 'ma_long': 120},
+                       'ma_values': values}
+                self.assert_main_only(row, '触及长均线 ±1%区间（均线价：—）')
+        del row['ma_values']
+        self.assert_main_only(row, '触及长均线 ±1%区间（均线价：—）')
+
+    def test_analysis_ma_values_are_this_round_averages_and_zero_settings_disable_them(self):
+        closes = [1234.567] * 129 + [1290.123]
+        data = {'closes': closes, 'highs': [1300.] * 130, 'lows': [1230.] * 130,
+                'volumes': [1000] * 130, 'price': closes[-1], 'prev_close': closes[-2],
+                'dates': ['2026-10-26'] * 130, 'source': 'test', 'realtime': False}
+        for short, long in ((60, 120), (120, 60), (0, 120), (60, 0), (0, 0)):
+            with self.subTest(short=short, long=long), \
+                    patch.object(monitor, 'TARGET_DATE', ''), \
+                    patch.dict(monitor.S, {'ma_short': short, 'ma_long': long, 'near_52w_low_pct': 0}), \
+                    patch.object(monitor, 'calc_rsi', return_value=50), \
+                    patch.object(monitor, 'boll', return_value=(None, None, None)):
+                _, signals, row = monitor.analyze_symbol('PROJMACALC', {}, data, 'position')
+            expected = {str(period): sum(closes[-period:]) / period for period in (short, long) if period > 0}
+            self.assertEqual(row['ma_settings'], {'ma_short': short, 'ma_long': long})
+            self.assertEqual(set(row['ma_values']), set(expected))
+            for key, value in expected.items():
+                self.assertAlmostEqual(row['ma_values'][key], value)
+            output = monitor._signals_html(row)
+            self.assertEqual(row['signals'], signals)
+            if long:
+                self.assertTrue(any(text.startswith(f'日内触及{long}日均线') for text in signals), signals)
+                self.assertIn(f'触及长均线 ±1%区间（均线价：{expected[str(long)]:,.2f}）', plain_text(output))
+                self.assertNotIn('现价偏离', output)
+            else:
+                self.assertNotIn('均线价：', output)
+
+    def test_low52_main_and_statistics_share_real_value_without_changing_raw_fact(self):
+        for low in (12.3456, 1234.567):
+            with self.subTest(low=low):
+                raw = '触及52周新低（距低点 +2.6%）'
+                row = {'symbol': 'PROJLOW', 'group': 'position', 'level': 'red', 'price': 9999.99,
+                       'dist_low': 2.6, 'low52': low, 'signals': [raw], 'signal_marks': [('low52', 'red')]}
+                self.assert_main_only(row, raw + f'（低点价：{low:,.2f}）')
+                member, = monitor.signal_count_members([row])['low52']['red']
+                self.assertEqual(member['low52_price'], f'{low:,.2f}')
+                card = monitor._signal_counts_card(monitor.build_snapshot({}, [row], {}, group_counts={}))
+                self.assertIn(f'52周低 {low:,.2f}', card)
+                self.assertEqual(monitor._signal_description_groups(row)[0]['texts'], [raw])
+        _, _, actual = Test52wLow.run_sym([100.] * 150 + [80.] * 20 + [90.] * 29 + [82.])
+        self.assertAlmostEqual(actual['low52'], 79.92)
+        self.assertIn('（低点价：79.92）', monitor._signals_html(actual))
+        self.assertEqual(monitor.signal_count_members([actual])['low52']['red'][0]['low52_price'], '79.92')
+
+    def test_low52_missing_or_invalid_does_not_use_current_price_or_distance(self):
+        for value in (None, 0, -1, float('nan'), float('inf'), True, '12.35'):
+            with self.subTest(value=value):
+                row = {'symbol': 'PROJLOWNONE', 'group': 'position', 'level': 'red', 'price': 1234.57,
+                       'dist_low': 2.6, 'low52': value, 'signals': ['触及52周新低（距低点 +2.6%）'],
+                       'signal_marks': [('low52', 'red')]}
+                self.assert_main_only(row, row['signals'][0])
+                self.assertNotIn('low52_price', monitor.signal_count_members([row])['low52']['red'][0])
+        del row['low52']
+        self.assert_main_only(row, row['signals'][0])
+        row['low52'] = 12.3456
+        row['signals'] = ['仍在52周低位（距低点 +2.6%）']
+        self.assert_main_only(row, row['signals'][0])
+        row['signals'] = ['触及52周新低（低点价：12.35）']
+        self.assert_main_only(row, row['signals'][0])
 
 
 if __name__ == '__main__':

@@ -889,14 +889,14 @@ check('signal-separator' not in _row_signals(_ma_inline)
 for _kind, _signals, _marks, _expected in (
         ('boll', ['逼近布林上轨▲'], [], '逼近布林上轨▲'),
         ('boll', ['跌破布林下轨▼（盘中触及 66.33）', '连续第4日贴近下轨（其中2日穿越）'], [],
-         '跌破布林下轨▼（盘中触及 66.33），连续第4日贴近下轨（其中2日穿越）'),
+         '盘中跌破布林下轨▼后收回，连续第4日贴近下轨（其中2日穿越）'),
         ('boll_rsi', ['跌破布林下轨▼（盘中触及 66.33）', '连续第4日贴近下轨（其中2日穿越）',
                       'RSI 1条 ↓超卖（≤35）'], [],
-         '跌破布林下轨▼（盘中触及 66.33），连续第4日贴近下轨（其中2日穿越） · RSI 1条 ↓超卖（≤35）'),
+         '盘中跌破布林下轨▼后收回，连续第4日贴近下轨（其中2日穿越） · RSI 1条 ↓超卖'),
         ('ma', ['日内触及120日均线 ±1%区间'], [('ma_band', 'yellow')], '触及长均线 ±1%区间'),
         ('ma', ['上穿60日弱均线'], [('ma_cross', 'yellow')], '上穿短均线'),
         ('chg', ['异动 -21.9%'], [('chg', 'red')], '异动 -21.9%'),
-        ('rsi', ['RSI 1条 ↓超卖（≤35）'], [], 'RSI 1条 ↓超卖（≤35）')):
+        ('rsi', ['RSI 1条 ↓超卖（≤35）'], [], 'RSI 1条 ↓超卖')):
     _copy_row = item('DIRECTFACT', 'technology', 'green')
     _copy_row.update(signals=_signals, signal_marks=_marks, ma_settings={'ma_short': 60, 'ma_long': 120})
     _copy_before = _copy.deepcopy(_copy_row)
@@ -929,13 +929,14 @@ with _patch.dict(monitor.S, {'ma_short': 120, 'ma_long': 60}), \
 _order_body = re.search(r'<tr\b[^>]*\bid="s-orderescape"[^>]*>(.*?)</tr>', _order_page, re.S)[1]
 _order_sig = re.search(r'<td class="sig">(.*?)</td>', _order_body, re.S)[1]
 check(re.findall(r'data-signal-kind="([^"]*)"', _order_sig)
-      == ['chg', 'add_price', 'ma', 'amp', 'vol_ratio', 'rsi', '', '', 'target']
+      == ['chg', 'amp', 'add_price', 'ma', 'vol_ratio', 'rsi', '', '', 'target']
       and 'signal-dot' not in _order_body
       and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                     r'(?: data-signal-level="([^"]*)")?>', _order_sig)
-      == [('chg', 'red'), ('add_price', 'red'), ('ma', 'yellow'), ('amp', 'yellow'),
-          ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', ''), ('', ''), ('target', 'purple')],
-      '全页零圆点，描述稳定按红黄灰无紫排序，同色依首次出现且均线事实合并一次级别')
+                     r'(?: data-signal-level="([^"]*)")?(?: data-signal-role="[^"]*")?>', _order_sig)
+      == [('chg', 'red'), ('amp', 'yellow'), ('add_price', 'red'), ('ma', 'yellow'),
+          ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', ''), ('', ''), ('target', 'purple')]
+      and 'data-signal-kind="amp" data-signal-level="yellow" data-signal-role="supplement"' in _order_sig,
+      '全页零圆点，价格补充紧跟主要提醒，其余描述稳定排序且均线合并一次级别')
 check(all(text in _order_sig for text in ('&lt;b&gt;尾部&lt;/b&gt;', '&lt;img onerror=x&gt;', '&amp; 保留'))
       and '<img' not in _order_sig and '<b>' not in _order_sig,
       '排序聚合后描述仍安全HTML转义')
@@ -967,8 +968,8 @@ _order_control_classes, _order_control_body = rendered_stock_row(_order_page, _o
 _order_control_sig = re.search(r'<td class="sig">(.*?)</td>', _order_control_body, re.S)[1]
 check(_order_control_classes[0] == 'red'
       and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                     r'(?: data-signal-level="([^"]*)")?>', _order_control_sig)
-      == [('chg', 'red'), ('add_price', 'red'), ('ma', 'yellow'), ('amp', 'yellow'),
+                     r'(?: data-signal-level="([^"]*)")?(?: data-signal-role="[^"]*")?>', _order_control_sig)
+      == [('chg', 'red'), ('amp', 'yellow'), ('add_price', 'red'), ('ma', 'yellow'),
           ('vol_ratio', 'yellow'), ('', ''), ('rsi', ''), ('', ''), ('target', 'purple')]
       and 'RSI 2条' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig))
       and '↑超买' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig)),
@@ -1197,8 +1198,8 @@ for _level in ('red', 'yellow'):
     _panel_id = 'signal-members-' + __import__('hashlib').sha256(b'amp').hexdigest() + '-' + _level
     _amp_panels[_level] = re.search(r'<div class="signal-members-panel tone-' + _level + '" id="' + _panel_id
         + r'" hidden>(.*?)</div>(?=</td>|<div class="signal-members-panel)', _amp_stats, re.S)[1]
-check(all(title in _amp_panels['yellow'] for title in ('<h5><span class="grp-arrow">▲</span> 上涨</h5>',
-                                                     '<h5><span class="grp-arrow">▼</span> 下跌</h5>'))
+check(all(title in _amp_panels['yellow'] for title in ('<h5><span class="grp-arrow arrow-band-up">▲</span> 上涨</h5>',
+                                                     '<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>'))
       and _amp_panels['yellow'].index('上涨</h5>') < _amp_panels['yellow'].index('下跌</h5>')
       and '<h5>平盘</h5>' in _amp_panels['red'],
       '振幅红黄名单仍按涨/跌/平分框，方向结构不变')
@@ -1259,6 +1260,133 @@ check(all((kind, 'red') in _amp_rows[-1]['signal_marks'] for kind in ('chg', 'ad
 check('.signal-item[data-signal-level="gray"]{color:var(--text)}' in monitor.PAGE_CSS
       and _amp_rows == _amp_input_before and _amp_snap == _amp_snap_before,
       '生产技术灰仍白字且完整渲染不突变分析或快照')
+
+# 四箭头只独立着色；使用既有生产分析样本，不改变灯规则与输入事实。
+for _row, _side in _oversold_rows:
+    _arrow_before = _copy.deepcopy(_row)
+    _arrow_level = 'gray' if _side == '上轨' and _row['group'] not in monitor.BOLL_UP_SIGNAL_GROUPS else (
+        'yellow' if _side == '上轨' else 'red')
+    _arrow_kind = 'rsi' if _side is None else 'boll_rsi'
+    _classes, _arrow_fragment = rendered_stock_row(_oversold_page, _row, False)
+    _arrow_sig = re.search(r'<td class="sig">(.*?)</td>', _arrow_fragment, re.S)[1]
+    _arrow_expected = [('arrow-rsi-down', '↓')] + ([('arrow-band-up', '▲')] if _side == '上轨' else
+                                                    [('arrow-band-down', '▼')] if _side == '下轨' else [])
+    check(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
+                     r'(?: data-signal-level="([^"]*)")?>', _arrow_sig) == [(_arrow_kind, _arrow_level)]
+          and re.findall(r'<span class="(arrow-[a-z-]+)">([▲▼↑↓])</span>', _arrow_sig) == _arrow_expected
+          and _row == _arrow_before,
+          _row['symbol'] + '主表红黄灰正文层级不变，轨道和RSI箭头有独立方向wrapper且不改事实')
+_rsi_yellow = next(row for row in _business_rows if row['symbol'] == 'RSIYELLOW')
+_, _rsi_up_fragment = rendered_stock_row(_business_page, _rsi_yellow, False)
+check('<span class="signal-item" data-signal-kind="rsi" data-signal-level="yellow">'
+      'RSI 3条 <span class="arrow-rsi-up">↑</span>超买</span>' in _rsi_up_fragment,
+      '上涨RSI箭头独立wrapper，正文仍为原黄色条件而非上涨绿')
+
+_arrow_css = re.sub(r'/\*.*?\*/', '', monitor.PAGE_CSS, flags=re.S)
+check('--up:#3fb950' in _arrow_css and '--down:#f85149' in _arrow_css,
+      '方向色变量继续使用页面上涨绿#3fb950、下跌红#f85149')
+for _direction in ('up', 'down'):
+    _expected_selectors = {f'{scope} .arrow-{kind}-{_direction}'
+                           for scope in ('.stk .sig', '#signalCounts') for kind in ('band', 'rsi')}
+    _direction_rules = [(set(selector.strip() for selector in selectors.split(',')), body.strip())
+                        for selectors, body in re.findall(r'([^{}]+)\{([^{}]+)\}', _arrow_css)
+                        if '.arrow-' in selectors and f'color:var(--{_direction})' in body]
+    check(_direction_rules == [(_expected_selectors, f'color:var(--{_direction})')],
+          _direction + '四类箭头涨跌色仅限主表描述与统计卡，未添加全局颜色覆盖')
+for _level, _body_color in (('red', '#ff8580'), ('yellow', '#f0c674'), ('gray', 'var(--text)')):
+    check(f'.signal-item[data-signal-level="{_level}"]{{color:{_body_color}}}' in _arrow_css,
+          _level + '主表条件正文继续使用原色，与箭头涨跌色独立')
+check('.signal-item{color:var(--dim)}' in _arrow_css
+      and '.arrow-rsi-up,.arrow-rsi-down{color:inherit;font-size:1.15em;line-height:1}' in _arrow_css,
+      '无灯正文灰字与RSI继承色/字号基础规则均保持')
+
+_rules_arrow_table = re.search(r'<table\b[^>]*id="rules-lamp-table"[^>]*>.*?</table>',
+                              re.search(r'<template id="rulesTpl">(.*?)</template>', html, re.S)[1], re.S)[0]
+check(all(f'<span class="{cls}">{symbol}</span>' in _rules_arrow_table
+          for cls, symbol in (('ar-band-up', '▲'), ('ar-band-down', '▼'),
+                              ('ar-rsi-up', '↑'), ('ar-rsi-down', '↓')))
+      and not re.search(r'\b(?:arrow-band|arrow-rsi|grp-arrow)\b', _rules_arrow_table),
+      '规则表四箭头仍使用独立ar-* wrapper，不套主表或统计方向类')
+_white_rule_selectors = ','.join(f'#rules-lamp-table tbody td:first-of-type .{cls}'
+                               for cls in ('ar-band-up', 'ar-band-down', 'ar-rsi-up', 'ar-rsi-down'))
+check(_white_rule_selectors + '{color:#fff}' in re.sub(r'\s+', ' ', _arrow_css).replace(', ', ',')
+      and '.card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}' in _arrow_css,
+      '规则表条件列四白箭头与反向灰字仍原样保留，不受涨跌色覆盖')
+
+# 主表投影贯通完整渲染；统计单选、多选数据及原始技术事实保持原样。
+_projection_row = item('PROJECTION', 'position', 'red')
+_projection_row.update(price=1290.123, boll_dn=1300, low52=1230.126, dist_low=2.6,
+    signals=['跌破布林下轨▼（盘中触及 1,280.25）', '连续第4日贴近下轨（其中2日穿越）',
+             'RSI 3条 ↓超卖（≤28.5）',
+             '日内触及120日均线 ±1%区间（日内 1,230.00~1,300.00，现价偏离 +0.1%）',
+             '触及52周新低（距低点 +2.6%）'],
+    signal_marks=[('boll_rsi', 'red'), ('ma_band', 'yellow'), ('low52', 'red')],
+    ma_settings={'ma_short': 60, 'ma_long': 120}, ma_values={'60': 1111.111, '120': 1234.567})
+_projection_before = _copy.deepcopy(_projection_row)
+_projection_groups = monitor._signal_description_groups(_projection_row)
+_projection_snapshot = monitor.build_snapshot({}, [_projection_row], {}, group_counts={})
+_projection_snapshot_before = _copy.deepcopy(_projection_snapshot)
+_projection_card = monitor._signal_counts_card(_projection_snapshot)
+_projection_filters = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _projection_card)[1]))
+_projection_page = monitor.render({}, [_projection_row], 1, snapshot=_projection_snapshot)
+_, _projection_stock = rendered_stock_row(_projection_page, _projection_row, False)
+_projection_sig = re.search(r'<td class="sig">(.*?)</td>', _projection_stock, re.S)[1]
+check(_unescape(re.sub(r'<[^>]+>', '', _projection_sig)) ==
+      '跌破布林下轨▼，下轨外，连续第4日贴近下轨（其中2日穿越） · RSI 3条 ↓超卖 / '
+      '触及52周新低（距低点 +2.6%）（低点价：1,230.13） / '
+      '触及长均线 ±1%区间（均线价：1,234.57）',
+      '完整主表仅投影阈值、触及价、下轨状态、真实均线价与52周低点')
+check(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
+                 r'(?: data-signal-level="([^"]*)")?>', _projection_sig) ==
+      [('boll_rsi', 'red'), ('low52', 'red'), ('ma', 'yellow')]
+      and re.findall(r'<span class="(arrow-[a-z-]+)">([▲▼↑↓])</span>', _projection_sig) ==
+      [('arrow-band-down', '▼'), ('arrow-rsi-down', '↓')]
+      and 'signal-dot' not in _projection_stock,
+      '新投影仍使用原指标红黄级别及独立轨道/RSI箭头class')
+check(_projection_card in _projection_page
+      and _projection_filters == _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _projection_page)[1]))
+      and '52周低 1,230.13' in _projection_card
+      and _projection_snapshot['signal_members']['low52']['red'][0]['low52_price'] == '1,230.13'
+      and _projection_snapshot['signal_members']['ma']['yellow'][0]['ma_facts'][0]['text'] ==
+      _projection_row['signals'][3],
+      '完整统计与单选多选数据不走主表投影，低点数字同源且原均线日内/偏离事实不丢')
+check(monitor._signal_description_groups(_projection_row) == _projection_groups
+      and _projection_row == _projection_before and _projection_snapshot == _projection_snapshot_before,
+      '投影不突变signals/marks、详细描述分组或统计快照')
+for _projection_price, _projection_state in (
+        (1299.999999999, '跌破布林下轨▼，下轨外'),
+        (1300, '盘中跌破布林下轨▼后收回'),
+        (1300.000000001, '盘中跌破布林下轨▼后收回'),
+        (None, '跌破布林下轨▼'), (0, '跌破布林下轨▼'), (float('nan'), '跌破布林下轨▼')):
+    _projection_control = dict(_projection_row, price=_projection_price,
+        signals=_projection_row['signals'][:3], signal_marks=[('boll_rsi', 'red')])
+    check(_unescape(re.sub(r'<[^>]+>', '', monitor._signals_html(_projection_control))) ==
+          _projection_state + '，连续第4日贴近下轨（其中2日穿越） · RSI 3条 ↓超卖',
+          repr(_projection_price) + '下轨严格高低/等于收回，缺失或无效不猜状态')
+for _upper_price, _upper_state in (
+        (1300.000000001, '突破布林上轨▲，上轨外'),
+        (1300, '盘中突破布林上轨▲后收回'),
+        (1299.999999999, '盘中突破布林上轨▲后收回'),
+        (None, '盘中突破布林上轨▲'), (0, '盘中突破布林上轨▲'),
+        (float('nan'), '盘中突破布林上轨▲')):
+    _upper_row = item('UPPROJECTION', 'position', 'yellow')
+    _upper_row.update(price=_upper_price, boll_up=1300,
+        signals=['盘中突破布林上轨▲（盘中触及 1,320.25）', 'RSI 2条 ↑超买（≥70）'],
+        signal_marks=[('boll_rsi', 'yellow')])
+    _upper_before = _copy.deepcopy(_upper_row)
+    _upper_html = monitor._signals_html(_upper_row)
+    check(_unescape(re.sub(r'<[^>]+>', '', _upper_html)) == _upper_state + ' · RSI 2条 ↑超买'
+          and _upper_html.count('<span class="arrow-band-up">▲</span>') == 1
+          and 'data-signal-level="yellow"' in _upper_html and _upper_row == _upper_before,
+          repr(_upper_price) + '上轨外不加括号/等于及回落统一后收回，原事实和箭头级别不变')
+for _projection_values, _projection_ma_label in (({'120': 1234.567}, '1,234.57'),
+        ({}, '—'), ({'120': 0}, '—'), ({'120': float('nan')}, '—')):
+    _projection_control = dict(_projection_row, ma_values=_projection_values,
+        signals=[_projection_row['signals'][3]], signal_marks=[('ma_band', 'yellow')])
+    check(_unescape(re.sub(r'<[^>]+>', '', monitor._signals_html(_projection_control))) ==
+          '触及长均线 ±1%区间（均线价：' + _projection_ma_label + '）',
+          repr(_projection_values) + '主表均线用真实值，缺失/0/NaN留—且不从现价或偏离反推')
+check(not hasattr(monitor, '_main_description_text'), '主表投影helper不新增monitor导出')
 
 # 显式 --chrome 才启动全新隔离实例；HTML 经 CDP 放入 about:blank 内存页。
 if '--chrome' in sys.argv:
