@@ -1,10 +1,10 @@
 {
  "schema_version": 2,
  "real": true,
- "updated_at": "2026-10-23T06:41:17+00:00",
- "cash": 23674.25,
- "cash_extra": 23626,
- "fixed": 16916.34,
+ "updated_at": "2026-10-27T05:18:05.8613258+00:00",
+ "cash": 23683.64,
+ "cash_extra": 23635.39,
+ "fixed": 16893.24,
  "fixed_cost": 16916.97,
  "items": {
   "BRK-B": {
