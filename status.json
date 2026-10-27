@@ -9,21 +9,21 @@
     "next_in": 13,
     "next_date": "2026-11-12"
   },
-  "run_id": "40425331225",
+  "run_id": "40438422681",
   "request_id": "",
-  "source_sha": "edf4b945d6d2ba444a8f7672cc1eb0065912591e",
-  "input_hash": "27135626ba26749246552262036d15aa2c9737eef1a795f391dca3e3ab8053bb",
-  "build_id": "40425331225-1",
-  "started_at": "2026-10-27T00:16:21+00:00",
-  "started_at_bj": "2026-10-27T08:16:21+08:00",
-  "finished_at": "2026-10-27T08:19:05.942422+08:00",
-  "finished_at_bj": "2026-10-27T08:19:05+08:00",
-  "event": "schedule",
+  "source_sha": "7233d6e3d1db6e117f7751f0237cf55b7170f23c",
+  "input_hash": "8f6ec9308c3c593d86bc17ed1a5dfb44f2fa20a39861cbd20bb4a8ede57785e5",
+  "build_id": "40438422681-1",
+  "started_at": "2026-10-27T02:26:24+00:00",
+  "started_at_bj": "2026-10-27T10:26:24+08:00",
+  "finished_at": "2026-10-27T10:28:26.058615+08:00",
+  "finished_at_bj": "2026-10-27T10:28:26+08:00",
+  "event": "push",
   "target_trade_date": "2026-10-26",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "9de211a547703eb23165c7de37d32256cf477fc1",
+    "holdings.json": "3c305d6d69fe3c93568b0527d997d35ede8ebc9d",
     "settings.json": "1386a699b2039959ee8c8731166194d1f75a847e"
   },
   "effective_settings": {
@@ -406,7 +406,7 @@
               "label": "2026-10-26股价下跌16.95%"
             }
           ],
-          "metric": "振幅 7.5%"
+          "metric": "振幅 7.7%"
         }
       ],
       "purple": []
@@ -559,7 +559,7 @@
         },
         {
           "symbol": "XLC",
-          "note": "通信服务精选行业ETF",
+          "note": "通信服务行业",
           "group": "communications",
           "hold": "short",
           "level": "red",
@@ -648,7 +648,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 238.02~249.71，现价偏离 +2.5%）"
+              "text": "日内触及250日均线 ±1%区间（日内 238.02~249.72，现价偏离 +2.5%）"
             },
             {
               "kind": "ma_cross",
@@ -700,7 +700,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 340.30~364.02，现价偏离 -2.6%）"
+              "text": "日内触及250日均线 ±1%区间（日内 340.30~364.13，现价偏离 -2.6%）"
             }
           ]
         },
@@ -724,7 +724,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 447.65~458.81，现价偏离 -2.0%）"
+              "text": "日内触及250日均线 ±1%区间（日内 447.61~458.88，现价偏离 -2.0%）"
             }
           ]
         },
@@ -810,7 +810,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 627.82~647.69，现价偏离 -0.7%）"
+              "text": "日内触及250日均线 ±1%区间（日内 627.80~647.69，现价偏离 -0.7%）"
             },
             {
               "kind": "ma_cross",
@@ -820,7 +820,7 @@
         },
         {
           "symbol": "XLY",
-          "note": "非必需消费精选行业ETF",
+          "note": "非必需消费行业",
           "group": "consumer_discretionary",
           "hold": "short",
           "level": "yellow",
@@ -838,7 +838,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 113.84~115.40，现价偏离 -1.8%）"
+              "text": "日内触及250日均线 ±1%区间（日内 113.82~115.40，现价偏离 -1.8%）"
             }
           ]
         },
@@ -862,13 +862,13 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 383.84~397.27，现价偏离 -1.6%）"
+              "text": "日内触及250日均线 ±1%区间（日内 383.73~397.27，现价偏离 -1.6%）"
             }
           ]
         },
         {
           "symbol": "XLRE",
-          "note": "房地产精选行业ETF",
+          "note": "房地产行业",
           "group": "real_estate",
           "hold": "short",
           "level": "yellow",
@@ -897,7 +897,7 @@
       "red": [
         {
           "symbol": "XLC",
-          "note": "通信服务精选行业ETF",
+          "note": "通信服务行业",
           "group": "communications",
           "hold": "short",
           "level": "red",
@@ -909,7 +909,7 @@
           "group": "communications",
           "hold": "short",
           "level": "red",
-          "low52_price": "62.87"
+          "low52_price": "62.86"
         },
         {
           "symbol": "BKNG",
@@ -1650,11 +1650,11 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨▼ 还差0.22%",
+      "detail": "逼近布林下轨▼ 还差0.20%",
       "group": "position",
       "level": "green",
       "hold": "long",
-      "note": "工业精选行业ETF"
+      "note": "工业行业"
     },
     {
       "symbol": "VRT",
@@ -1793,7 +1793,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨▼ 还差1.12%",
+      "detail": "逼近布林下轨▼ 还差1.09%",
       "group": "financials",
       "level": "green",
       "hold": "short",
@@ -1806,7 +1806,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨▼ 还差0.55%",
+      "detail": "逼近布林下轨▼ 还差0.54%",
       "group": "financials",
       "level": "yellow",
       "hold": "short",
@@ -2355,9 +2355,9 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 18.389999389648438,
+      "value": 18.39,
       "date": "2026-10-26",
-      "source": "Yahoo ^VIX",
+      "source": "Cboe VIX 官方日线",
       "drawdown": null
     },
     "sp500": {
@@ -2407,15 +2407,15 @@
     "checked_at": "2026-10-22T11:56:54.517842-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-27T00:17:54.495745+00:00"
+    "asof": "2026-10-27T02:27:38.608438+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 14,
+      "due": 2,
       "deferred": 2,
-      "tried": 12,
-      "ok": 12,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -3219,7 +3219,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-27T00:19:05.869431+00:00",
+    "asof": "2026-10-27T02:28:26.011191+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -3318,7 +3318,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -3947,7 +3947,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -3981,7 +3981,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -4015,7 +4015,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4032,7 +4032,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -4083,7 +4083,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4100,7 +4100,7 @@
           "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "b97f36fd59ba73086b38a650d9ce1d58aa3255ca676925c8a1348c837f5dbe76"
         }
@@ -4117,7 +4117,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -4304,7 +4304,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4338,7 +4338,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4355,7 +4355,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4423,7 +4423,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4457,7 +4457,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -4508,7 +4508,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4525,7 +4525,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -4593,7 +4593,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T00:19:05.869431+00:00",
+          "asof": "2026-10-27T02:28:26.011191+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5332,7 +5332,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-27T00:18:41.978890+00:00",
+    "asof": "2026-10-27T02:28:25.989408+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -6758,23 +6758,14 @@
       "rules": "美联储仅展示最近已核实的正式利率决议、目标区间、发布日期和官方来源；调整基点仅在声明明确且可核实时显示，不从区间或其他数据猜测。决议信息为neutral中性状态，不作风险灯或买卖解读。成功后持久缓存，日常仅本地比较下次公布时间，到期随下一次监测运行查询新决议，不按24小时重复抓取。失败或待更新后至少1小时重试，到期不绕过错误限速；日程缺失仅补查日历，已核实的同一声明不重复下载。仅按例行日程更新，临时决议可能延迟发现。旧正式决议不按天数或跨年删除，新决议到期或查询失败明确待更新并保留旧日期。原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。原油参考不计入综合灯，不是官方风险线、市场概率或交易指令。"
     },
     "oil": {
-      "level": "green",
-      "text": "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。",
+      "level": "gray",
+      "text": "原油数据待更新，暂不能判断成本压力。",
       "source": "Yahoo NYMEX WTI期货",
-      "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 101.33000183105469,
-      "date": "2026-10-26",
-      "contract": "Crude Oil Dec 26",
-      "day": -1.8785657742557527,
-      "day_from": "2026-10-23",
-      "week": 2.831338430693802,
-      "month": 13.841140769739978,
-      "incomplete": false,
-      "contract_symbol": "CLZ26.NYM"
+      "url": "https://finance.yahoo.com/quote/CL=F/"
     },
-    "assessed_at": "2026-10-27T08:17:52.966906+08:00",
+    "assessed_at": "2026-10-27T10:27:37.100369+08:00",
     "schema_version": 2,
-    "asof": "2026-10-27T00:17:54.841799+00:00"
+    "asof": "2026-10-27T02:27:38.761126+00:00"
   },
   "data_lag": {
     "target": "2026-10-26",
@@ -6783,9 +6774,6 @@
     "expected": 98,
     "by_source": {
       "nasdaq": {
-        "2026-10-23": 98
-      },
-      "yahoo": {
         "2026-10-26": 98
       }
     }
