@@ -85,7 +85,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.equal(f.els.ruleLight.dataset.phase, 'ok');
     assert.match(f.els.ruleLightTxt.textContent, /^已生效$/);
     // 2026-10-20：运行灯不再重复念灯级计数，也不报「N 项数据已更新」，只报完成时间
-    assert.match(f.els.runLightTxt.textContent, /抓取成功 · 完成于/);
+    assert.match(f.els.runLightTxt.textContent, /^成功 ·(?:未记录|\d{4}-\d{2}-\d{2} \d{2}:\d{2})（北京时间）/);
     assert.doesNotMatch(f.els.runLightTxt.textContent, /红44 黄20 绿65/);
     assert.doesNotMatch(f.els.runLightTxt.textContent, /项数据已更新/);
     assert.doesNotMatch(f.els.runLightTxt.textContent, /规则/);
@@ -151,7 +151,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.equal(f.els.ruleLightTxt.textContent, '需要刷新');
     assert.equal(f.data.reloads.length, 0, '状态更新不能自动刷新当前页');
     // 计数已从运行灯移除（2026-10-20）：只核对仍是「本页成功」这条，且不再念计数
-    assert.match(f.els.runLightTxt.textContent, /抓取成功 · 完成于/);
+    assert.match(f.els.runLightTxt.textContent, /^成功 ·(?:未记录|\d{4}-\d{2}-\d{2} \d{2}:\d{2})（北京时间）/);
     assert.doesNotMatch(f.els.runLightTxt.textContent, /红\d/);
     f.els.snapshotData.textContent = JSON.stringify(f.data.published);
     await f.win.MMRunStatus.refresh(); assert.equal(f.els.ruleLight.dataset.phase, 'ok');
@@ -180,7 +180,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     page.market_risk = {missing: ['垃圾债利差'], valid_count: 4};
     const f = fixture(page); await f.win.MMRunStatus.refresh();
     assert.equal(f.els.runLightTxt.textContent,
-      '自动运行已完成 · 市场风险数据缺失：垃圾债利差（有效指标 4/5） · 完成于 2026-10-22 08:18:36（北京时间）');
+      '自动运行已完成 · 市场风险数据缺失：垃圾债利差（有效指标 4/5） · 完成于 2026-10-22 08:18（北京时间）');
     page.summary.unsupported_symbols = ['SPECIAL'];
     for (const risk of [page.market_risk, {missing: [], valid_count: 5}]) {
       page.market_risk = risk;
@@ -558,12 +558,12 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.match(g.els.checkResult.textContent,/查状态不会重新派发/);
     assert.equal(g.data.posts,1);
   });
-  await check('完成时间显示北京时间时分秒，开始时间不能冒充完成时间', async () => {
+  await check('完成时间显示北京时间到分钟，开始时间不能冒充完成时间', async () => {
     const page=snapshot();page.finished_at='2026-10-08T01:05:06Z';
     const f=fixture(page);await f.win.MMRunStatus.refresh();
-    assert.match(f.els.runLightTxt.textContent,/完成于 2026-10-08 09:05:06（北京时间）/);
+    assert.match(f.els.runLightTxt.textContent,/成功 ·2026-10-08 09:05（北京时间）/);
     delete page.finished_at;f.els.snapshotData.textContent=JSON.stringify(page);
-    await f.win.MMRunStatus.refresh();assert.match(f.els.runLightTxt.textContent,/完成于 未记录/);
+    await f.win.MMRunStatus.refresh();assert.match(f.els.runLightTxt.textContent,/成功 ·未记录（北京时间）/);
     assert.doesNotMatch(f.els.runLightTxt.textContent,/09:05:06/);
   });
   await check('本次手动运行发布后显示新完成时间，但不伪装旧表格已经刷新', async () => {
@@ -577,7 +577,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     f.data.run={id:2,event:'workflow_dispatch',display_title:f.data.requestId,status:'completed',conclusion:'success'};
     const result=await f.win.MMRunStatus.refresh();
     assert.equal(result.manual.phase,'published');
-    assert.match(f.els.runLightTxt.textContent,/完成于 2026-10-08 10:11:12/);
+    assert.match(f.els.runLightTxt.textContent,/成功 ·2026-10-08 10:11（北京时间）/);
     assert.doesNotMatch(f.els.runLightTxt.textContent,/红\d/);
     assert.match(f.els.runLightTxt.textContent,/本页仍是旧数据/);
     assert.equal(f.els.runLightTxt.children.at(-1).textContent,'刷新当前看板');
@@ -617,10 +617,13 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.equal(result.config.phase,'published');
   });
   await check('自动、手动、保存后完成标签仅依据实际事件', async () => {
+    // 成功灯已精简为「成功 ·时间」（2026-10-27），事件标签只在「…运行已完成」这条里出现，
+    // 所以用市场风险缺项那条分支来核对 kind 仍然只认真实事件。
     for(const [event,label] of [['schedule','自动'],['workflow_dispatch','手动'],['push','保存后']]){
-      const page=snapshot();page.event=event;
+      const page=snapshot();page.event=event;page.market_risk={missing:['VIX'],valid_count:4};
       const f=fixture(page);await f.win.MMRunStatus.refresh();
-      assert.match(f.els.runLightTxt.textContent,new RegExp('^'+label+'抓取成功'));
+      assert.equal(f.els.runLight.dataset.phase,'partial');
+      assert.match(f.els.runLightTxt.textContent,new RegExp('^'+label+'运行已完成'));
     }
   });
   await check('核对结果可关闭，轮询不会重现；下次点击仍可重新查看', async () => {
@@ -656,7 +659,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
       reference_dates:{'BD#US10Y':'2026-10-06'},today_prices:1,prior_prices:0,missing_prices:0};
     const f=fixture(page);await f.win.MMRunStatus.refresh();
     assert.equal(f.els.runLight.dataset.phase,'ok');
-    assert.match(f.els.runLightTxt.textContent,/抓取成功 · 完成于/);
+    assert.match(f.els.runLightTxt.textContent,/^成功 ·(?:未记录|\d{4}-\d{2}-\d{2} \d{2}:\d{2})（北京时间）/);
     assert.doesNotMatch(f.els.runLightTxt.textContent,/项数据已更新|当日行情未取得|项参考值|只日线/);
   });
   await check('取消的运行不叫失败，且说明看板仍是上次成功数据', async () => {
@@ -676,7 +679,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
       stale_symbols:[],missing_symbols:[],unsupported_symbols:[],
       reference_dates:{'BD#US10Y':'2026-10-07'},today_prices:42,prior_prices:0,missing_prices:0};
     const f=fixture(page);await f.win.MMRunStatus.refresh();
-    assert.match(f.els.runLightTxt.textContent,/抓取成功 · 完成于/);
+    assert.match(f.els.runLightTxt.textContent,/^成功 ·(?:未记录|\d{4}-\d{2}-\d{2} \d{2}:\d{2})（北京时间）/);
     assert.doesNotMatch(f.els.runLightTxt.textContent,/红3 黄14 绿26|项数据已更新/);
     assert.doesNotMatch(f.els.runLightTxt.textContent,/项参考值|42 只/);
   });

@@ -282,7 +282,7 @@
     const date = new Date(value);
     if (!Number.isFinite(date.getTime())) return '';
     return date.toLocaleString('sv-SE', {timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit',
-      day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false});
+      day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false});
   }
   function humanTime(s) {
     const raw = s && (s.finished_at_bj || s.finished_at || s.started_at_bj || s.started_at);
@@ -430,9 +430,10 @@
     const oldPage = current && snap && !samePublication(current, snap);
     const finished = completedTime(snap);
     const kind = {schedule: '自动', workflow_dispatch: '手动', push: '保存后'}[snap && snap.event] || '';
-    // 一切正常只报完成时间：红/黄/绿计数统计卡里已有一份，「N 项数据已更新」也是废话（2026-10-20）。
+    // 一切正常只报「成功 ·YYYY-MM-DD HH:MM（北京时间）」：红/黄/绿计数统计卡里已有一份，
+    // 「N 项数据已更新」是废话（2026-10-20），「保存后抓取成功 · 完成于 …」在手机上会撑成两行（2026-10-27）。
     // 只有真有缺失（灰）或不支持报价的特殊代码时才补一句，跟 monitor.py 的静态文案同一口径。
-    const success = kind + '抓取成功 · 完成于 ' + (finished || '未记录') + '（北京时间）';
+    const success = '成功 ·' + (finished || '未记录') + '（北京时间）';
     const suffix = oldPage ? ' · 新结果已发布，本页仍是旧数据' : '';
     const info = snap ? (snap.summary || {}) : {};
     const busyText = phase => {

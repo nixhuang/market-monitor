@@ -32,9 +32,10 @@
    会把新值盖掉 —— 2026-10-20 手机上「比例数字和紫三角重叠」就是它干的，已整块删除。
    以后改 52 周条只改 monitor.py 一处。 */
 @media (max-width:600px){
-  /* 手机：标题行仍是 nowrap（「编辑」不错行），靠收紧状态文字与汇总字号让出空间 */
+  /* 手机：标题行仍是 nowrap（「编辑」不错行），状态文字略收一点让出横向空间。
+     总资产·盈亏的字号不在这里改 —— 这条规则在文件后面还有一份同权重的 14px 基准，
+     写在这里会被盖掉；字号统一放在文件后部的窄屏块里。 */
   .cost-manage>summary .cost-state{font-size:10.5px}
-  .cost-manage>summary .cost-sum{font-size:12.5px}
   /* 手机：跟 .stk td.sig 的 12.5px 同字号；极窄屏再降一档，保证这一行不折也不被截 */
   .cost-info{font-size:12.5px;margin-top:7px}
   .cost-info .sep{margin:0 2px}
@@ -342,6 +343,13 @@
   .demo-bar .only-desk{display:none}
   .demo-bar ol{display:none}
   .demo-bar button{height:26px;font-size:12px}
+  /* 「仓位管理」标题行在手机上必须排成**一行**（跟其它分组卡一样高）：
+     原来总资产·盈亏会被挤到第二行，卡片比别的卡高出一截。这里只收紧这一张卡的
+     间隙与总资产·盈亏字号，「编辑」也略收一点，四样东西才能在 360～430px 排下。 */
+  .cost-manage>summary.grp{gap:4px}
+  .cost-manage>summary .group-stats{gap:5px}
+  .cost-manage>summary .cost-sum{font-size:12px}
+  .cost-edit-btn{padding:4px 10px;font-size:12.5px}
 }
 .cost-warn.acked{color:var(--text)}
 .cost-warn.acked .w{text-decoration:line-through;text-decoration-color:#5a6478}
@@ -395,13 +403,10 @@
   .cost-cell .pct,.cost-cell .amt{display:block}
   .cost-name .sy{font-size:11.5px} .cost-name .cn{font-size:10.5px}
   .cost-name .tag{font-size:9.5px}
-  /* 「编辑」在手机上仍保持加大后的尺寸（只比桌面略收一点），不再靠缩按钮来防错行：
-     防错行改由标题行 nowrap + 中段内部折行负责（见文件前部 .cost-manage>summary）。 */
-  .cost-edit-btn{padding:5px 11px;font-size:13px}
-  /* 窄屏标题行要塞下「仓位管理 + 已同步 + 总资产·盈亏 + 编辑」四样东西。
-     只收紧间隙，字号仍跟上面统计卡一致（14px 不缩），390 宽刚好排一行。 */
-  .cost-manage>summary.grp{gap:5px}
-  .cost-manage>summary .group-stats{gap:6px}
+  /* 「编辑」在手机上比桌面略收一点（4/10 + 12.5px），仍比改版前的 3/5 + 12px 大；
+     防错行由标题行 nowrap 负责（见文件前部 .cost-manage>summary），不靠把按钮压小。
+     更窄屏的间隙与字号统一沿用上面 max-width:600px 那一块，这里不再重复覆盖。 */
+  /* 窄屏标题行要塞下「仓位管理 + 已同步 + 总资产·盈亏 + 编辑」四样东西。 */
   .cost-manage>summary .cost-sum .sep{margin:0}
   .cost-manage .signal-member-block{padding:4px 6px 6px}
   .cost-mini{grid-template-columns:minmax(0,1fr) 44px 46px 46px 44px 32px;gap:0 3px;

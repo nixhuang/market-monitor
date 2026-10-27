@@ -155,8 +155,10 @@ def _run_light(snapshot, finished_txt):
         parts.extend(deficits)
         parts.append(f"完成于 {finished_txt}（北京时间）")
         return "partial", " · ".join(parts)
-    parts = [f"完成于 {finished_txt}（北京时间）"] + deficits
-    return "ok", f"{kind}抓取成功 · " + " · ".join(parts)
+    # 正常只报「成功 ·YYYY-MM-DD HH:MM（北京时间）」：统计卡里已有一份计数，
+    # 再写「保存后抓取成功 · 完成于 …」是废话，手机上还会被撑成两行（2026-10-27）。
+    parts = [f"{finished_txt}（北京时间）"] + deficits
+    return "ok", "成功 ·" + " · ".join(parts)
 
 
 def _gray_by_kind(snapshot):
@@ -1589,7 +1591,8 @@ class PageRenderer:
         dca_title = self._context.dca_badge(snapshot.get("dca_reminder"))  # 顶栏最右侧（2026-10-19：从市场风险标题挪过来）
         snapshot_json = self._context.json_script(snapshot)
         finished_iso = self._context.beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
-        finished_txt = finished_iso[:19].replace("T", " ") if finished_iso else "未记录"
+        # 只到分钟：秒对看板没有意义，还把状态灯那一行撑长（2026-10-27）。
+        finished_txt = finished_iso[:16].replace("T", " ") if finished_iso else "未记录"
         # 一行摘要升级为状态灯文案（首页第三排）
         init_light_phase, init_light = self._context._run_light(snapshot, finished_txt)
         # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
@@ -1616,14 +1619,14 @@ class PageRenderer:
 <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <link rel="manifest" href="./manifest.webmanifest">
-<title>AI监测</title>
+<title>MatrixPulse</title>
 <style>
 {self._context.PAGE_CSS.removesuffix(self._context.RULES_CSS)}
 {cost_css}
 {self._context.RULES_CSS}</style>
 </head>
 <body>{current_rules}<div class="wrap">
-<h1>AI监测</h1>
+<h1 class="brand">MatrixPulse</h1>
 <div class="sub">{html_lib.escape(sub_line)}</div>
 
 <div class="runbar">

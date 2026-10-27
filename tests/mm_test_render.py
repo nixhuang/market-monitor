@@ -89,11 +89,13 @@ _cost_css, _cost_js = monitor._cost_panel_assets(items)
 check(html.index(_cost_css) < html.index(monitor.RULES_CSS), "规则CSS仍在仓位CSS之后覆盖")
 
 # 标题与排
-check("<title>AI监测</title>" in html and "<h1>AI监测</h1>" in html, "标题 = AI监测")
+check("<title>MatrixPulse</title>" in html and '<h1 class="brand">MatrixPulse</h1>' in html,
+      "标题 = MatrixPulse（带 brand 类，上涨绿）")
+check("h1.brand{color:var(--up)}" in html, "站名用上涨绿 --up，不写死颜色")
 check("市场自检" not in html, "旧标题已移除")
 check("数据时间 2026-10-06 收盘（美东交易日）" in html and "本页数据更新" not in html,
       "休市顶部显示行情收盘日，不重复抓取完成时间")
-check("抓取成功 · 完成于 2026-10-07 20:40:28（北京时间）" in html, "静态成功灯显示真实完成时间")
+check("成功 ·2026-10-07 20:40（北京时间）" in html, "静态成功灯只报「成功 ·日期 时:分」，不带秒")
 check("自动计划：美东周一至五 20:15（北京 " in html, "第二排自动计划")
 check(("夏令时次日 08:15" in html) != ("冬令时次日 09:15" in html), "冬夏令时只出现一个")
 check('id="btnRunNow"' in html and 'id="btnCheckStatus"' in html, "第三排两个按钮都在")
@@ -183,7 +185,7 @@ check("47.0%<span class=\"unit\">的成分股站上宏观长均线（长期趋�
 # 2026-10-19：顶栏不再重复念灯级计数（统计卡里已有一份），只保留时间＋数据量；「缺失 N」是告警要留
 # 2026-10-19：一切正常时只报完成时间；「N 项数据已更新」只在有缺失/不支持代码时才写
 check("红2 黄2 绿4" not in html and "10 项数据已更新" not in html
-      and "抓取成功 · 完成于 2026-10-07 20:40:28（北京时间） · 缺失 2" in html,
+      and "成功 ·2026-10-07 20:40（北京时间） · 缺失 2" in html,
       "运行灯只报完成时间与缺失，正常时不写数据量与灯级计数")
 check('id="runLight" data-phase="ok"' in html, "运行灯初始为绿")
 check('id="ruleLight" data-phase="idle"' in html and 'id="ruleLightTxt"' in html,
@@ -241,10 +243,10 @@ snap_live = dict(snap2, actual_dates={"min":"2026-10-07", "max":"2026-10-07"})
 check("数据时间 2026-10-07 23:19:00（盘中快照，北京时间）" in monitor.render(macro, items, 10, snapshot=snap_live),
       "当前交易日盘中数据才显示时间点")
 snap_utc = dict(snapshot, finished_at_bj="", finished_at="2026-10-07T12:40:28Z")
-check("抓取成功 · 完成于 2026-10-07 20:40:28（北京时间）" in monitor.render(macro, items, 10, snapshot=snap_utc),
-      "UTC抓取完成时间正确转为北京时间，行情时间仍为收盘日")
+check("成功 ·2026-10-07 20:40（北京时间）" in monitor.render(macro, items, 10, snapshot=snap_utc),
+      "UTC抓取完成时间正确转为北京时间（只到分钟），行情时间仍为收盘日")
 snap_no_finish = {k:v for k,v in snapshot.items() if k not in ('finished_at', 'finished_at_bj')}
-check("完成于 未记录" in monitor.render(macro, items, 10, snapshot=snap_no_finish),
+check("成功 ·未记录（北京时间）" in monitor.render(macro, items, 10, snapshot=snap_no_finish),
       "缺少完成时间不以开始时间或当前时间冒充")
 
 # 重点关注为空
@@ -1918,8 +1920,14 @@ const deadline = setTimeout(() => {
         const name=card&&card.querySelector('.grp-name');
         if(!card||!btn||!name)return {exists:false};
         const cb=card.getBoundingClientRect(),b=btn.getBoundingClientRect(),nb=name.getBoundingClientRect();
+        const sum=card.querySelector('.cost-sum'),sb=sum&&sum.getBoundingClientRect();
+        const grp=card.querySelector('summary.grp');
         return {exists:true,sameRow:Math.abs((b.top+b.bottom)/2-(nb.top+nb.bottom)/2)<=8,
           rightGap:+(cb.right-b.right).toFixed(1),height:+b.height.toFixed(1),
+          // 2026-10-27：标题行必须排成一行（跟其它分组卡一样高），
+          // 总资产·盈亏不能掉到第二行把卡片撑高；按钮也不许掉行
+          headH:+grp.getBoundingClientRect().height.toFixed(1),
+          sumSameRow:!!sb&&Math.abs((sb.top+sb.bottom)/2-(nb.top+nb.bottom)/2)<=10,
           fontSize:getComputedStyle(btn).fontSize,radius:getComputedStyle(btn).borderTopLeftRadius,
           overflow:document.documentElement.scrollWidth>innerWidth+1};
       })()`);
@@ -1928,9 +1936,10 @@ const deadline = setTimeout(() => {
           // 只收底宽、高度不变（9px）→ 顶角约 50°，比原来的 60° 更尖锐
           && b.markerHeight>=8.6 && Math.round(b.height)===33)
           && bars.some(b=>b.text==='-33.3% / +33.3%') && bars.some(b=>b.text==='-39.0% / +0.6%')
-          && edit.exists && edit.sameRow && edit.rightGap<=6 && edit.height>=27 && !edit.overflow
+          && edit.exists && edit.sameRow && edit.sumSameRow && edit.headH<=56
+          && edit.rightGap<=6 && edit.height>=24 && !edit.overflow
           && edit.radius==='7px',
-        name:width+'px52周条两端第二行为到低/高点、三角底收窄高度不变，编辑按钮保持原圆角且贴右不错行',actual:{bars,edit}});
+        name:width+'px52周条两端第二行为到低/高点、三角底收窄高度不变；仓位管理标题行单行、编辑按钮保持原圆角且贴右不错行',actual:{bars,edit}});
     }
     const injectionTree=await cdp('Page.getFrameTree');
     const injectionHTML=input.injectionPage.replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')

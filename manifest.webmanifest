@@ -1,6 +1,6 @@
 {
-  "name": "AI监测市场",
-  "short_name": "AI监测市场",
+  "name": "MatrixPulse",
+  "short_name": "MatrixPulse",
   "start_url": "./",
   "scope": "./",
   "display": "browser",

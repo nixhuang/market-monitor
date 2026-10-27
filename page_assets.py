@@ -513,6 +513,8 @@ body{margin:0;background:var(--bg);color:var(--text);
   padding:env(safe-area-inset-top) 14px 40px}
 .wrap{max-width:720px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
+/* 站名：用「上涨绿」--up，与涨跌箭头同色系；只这一处，其它标题颜色不动 */
+h1.brand{color:var(--up)}
 .sub{color:var(--dim);font-size:12px;margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:6px 4px;margin-bottom:14px;overflow:hidden}
