@@ -1481,6 +1481,8 @@ const assertions = [];
 const failedRequests = [];
 const requestUrls = new Set();
 const chrome = spawn(input.chrome, [
+  // 仅一次性 GitHub hosted Linux CI 的合成内存页允许绕过不可用的 userns sandbox。
+  ...(input.ciNoSandbox ? ['--no-sandbox'] : []),
   '--headless=new', '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
   '--user-data-dir=' + input.profile, '--no-first-run', '--no-default-browser-check',
   '--disable-background-networking', '--disable-component-update', '--disable-sync',
@@ -1658,6 +1660,8 @@ const deadline = setTimeout(() => {
     with _tempfile.TemporaryDirectory(prefix='mm-target-chrome-') as _profile:
         _browser_result = _subprocess.run(['node', '-e', _browser_script],
             input=_json.dumps({'chrome': _chrome, 'profile': _profile, 'html': _description_page,
+                              'ciNoSandbox': sys.platform == 'linux' and os.environ.get('GITHUB_ACTIONS') == 'true'
+                                  and os.environ.get('MM_TEST_CHROME_NO_SANDBOX') == '1',
                               'injectionPage': _unsafe_page, 'injectionProbe': _unsafe_snapshot['probe']}),
             capture_output=True, text=True, encoding='utf-8', timeout=90)
     check(_browser_result.returncode == 0,

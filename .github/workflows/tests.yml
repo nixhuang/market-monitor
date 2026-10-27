@@ -104,6 +104,8 @@ jobs:
         run: |
           # 使用 hosted runner 已有 Chromium 内核，无 npm/浏览器下载，无用户 profile。
           export MM_TEST_CHROME="$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)"
+          # hosted Ubuntu AppArmor 禁用 userns；只对隔离合成内存页实例启用，网络仍阻断。
+          export MM_TEST_CHROME_NO_SANDBOX=1
           if [ -z "$MM_TEST_CHROME" ]; then
             echo "::error::runner 缺少 Chromium/Chrome，浏览器质量门槛不能跳过"
             exit 1
