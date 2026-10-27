@@ -3045,7 +3045,7 @@ class TestTargets(unittest.TestCase):
         return dict(symbol=sym, note=note, price=100.0, chg=0.0, level=level, signals=signals or [],
                     group=group, data_date='2026-10-08', purple=purple, target=evaluated)
 
-    def test_page_purple_rows_are_unfolded_and_stripe_class_stacks(self):
+    def test_page_purple_rows_are_unfolded_and_state_class_stacks(self):
         t_hit = {'kind': 'consensus', 'price': 160.0, 'month': 10, 'failed': False, 'hit': False,
                  'space': 60.0, 'space_hit': True, 'band': 'medium'}
         t_ok = {'kind': 'consensus', 'price': 110.0, 'month': 10, 'failed': False, 'hit': False, 'space': 10.0}
@@ -3073,7 +3073,7 @@ class TestTargets(unittest.TestCase):
         self.assertNotIn('>DDD', shown)                   # 普通绿灯行仍然折叠
         self.assertIn('>DDD', folded)
         self.assertIn('lvtag tgt space', page)
-        self.assertIn('tr.pur td.sig', page)
+        self.assertNotIn('tr.pur td.sig', page)
         self.assertIn('--purple:', page)
         glossary = re.search(r'<template id="glossaryTpl">(.*?)</template>', page, re.S)[1]
         self.assertIn('StockAnalysis · S&amp;P Global美元平均目标价；不抓晨星', glossary)
@@ -3090,16 +3090,21 @@ class TestTargets(unittest.TestCase):
         pos = [page.index(f'id="s-{s.lower()}"') for s in ('RED', 'YEL', 'GRN')]
         self.assertEqual(pos, sorted(pos))
 
-    def test_page_manual_target_always_shows_space_in_alert_column(self):
+    def test_page_manual_target_only_shows_space_in_capsule(self):
         t = {'kind': 'manual', 'price': 108.0, 'month': 10, 'failed': False, 'hit': False, 'anomaly': False, 'space': 8.0}
         page = self._page([self._row('MAN', 'yellow', False, t, ['波动 +2.1%'])])
-        self.assertIn('波动 +2.1%</span> <span class="signal-separator">/</span> <span class="tnote">目标价 108，空间 +8%</span>', page)
+        body = re.search(r'<tr\b[^>]*\bid="s-man"[^>]*>(.*?)</tr>', page, re.S)[1]
+        sig = re.search(r'<td class="sig">(.*?)</td>', body, re.S)[1]
+        self.assertIn('波动 +2.1%', sig)
+        self.assertNotIn('目标价', sig)
+        self.assertNotIn('data-signal-kind="target"', sig)
+        self.assertNotIn('<span class="tnote">', page)
         # 手填目标价胶囊同样不写「目标」，开头是距现价的空间百分比（2026-10-15 改）
         self.assertIn('<span>+8%</span> <span>108</span> <span>· 10月</span>', page)
         self.assertNotIn('<span>目标</span>', page)
         self.assertNotIn('共识价来源', page)               # 只有手填：不显示共识来源
 
-    def test_page_consensus_hidden_but_purple_bar_kept_on_right(self):
+    def test_page_consensus_hidden_and_no_right_purple_bar(self):
         t = {'kind': 'consensus', 'price': 101.0, 'month': 10, 'failed': False, 'hit': True,
              'space': 1.0, 'space_hit': False, 'band': 'low'}
         page = self._page([self._row('PUR', 'green', True, t, ['在共识价 101 ±3% 内（偏离 -1.0%）', '异动 +2.1%', 'RSI 超买'])])
@@ -3107,14 +3112,67 @@ class TestTargets(unittest.TestCase):
         self.assertIn('异动 +2.1%</span> <span class="signal-separator">/</span> <span class="signal-item" data-signal-kind="rsi">RSI 超买', page)
         self.assertNotIn('<span class="tp">在共识价 101 ±3% 内（偏离 -1.0%）</span>', page)
         css = page.split('<style>')[1]
-        # 红黄绿竖条在左、宽度不变（6/4/2px）；紫条改画在整行右侧（警示栏右缘），宽 2px
+        # 红黄绿左条仍为6/4/2px；主行和52周续行不再绘制右侧紫条。
         self.assertIn('tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red)', css)
         self.assertIn('tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow)', css)
         self.assertIn('tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}', css)
-        self.assertIn('.group-card tr.pur td.sig{', css)
-        self.assertIn('.group-card tr.pur-hit td.sig{', css)
-        self.assertIn('background-position:right bottom', css)
+        self.assertNotRegex(css, r'tr\.pur(?:-(?:space|high|hit))?(?::has\([^}]*\))?\s*(?:td\.sig|\+tr\.range52-row>td)\{')
+        self.assertNotIn('--pstripe', css)
         self.assertNotIn('tr.pur td:first-child', css)
+
+    def test_target_states_keep_lamps_and_range52_left_stripes_without_right_bar(self):
+        css = monitor.PAGE_CSS
+        for level, width in (('red', 6), ('yellow', 4), ('green', 2)):
+            self.assertIn('tr.' + level + ':has(+tr.range52-row)>td:first-child{--lc:var(--'
+                          + level + ');--lw:' + str(width) + 'px}', css)
+            self.assertIn('tr.' + level + '+tr.range52-row>td{--lc:var(--'
+                          + level + ');--lw:' + str(width) + 'px}', css)
+            for target_price, state in ((150, 'space'), (200, 'high'), (101, 'hit')):
+                with self.subTest(level=level, state=state):
+                    row = self._row('NOPUR', level, True,
+                                    {'kind': 'consensus', 'price': target_price, 'failed': False},
+                                    ['异动 +2.1%'])
+                    row['range52'] = {'low': 50, 'high': 150, 'position': 50, 'scope': '52周',
+                                      'from': '2025-10-20', 'to': '2026-10-20'}
+                    rendered = monitor._stock_row(row, {})
+                    self.assertIn('class="' + level + ' pur pur-' + state + '"', rendered)
+                    self.assertIn('data-base-level="' + level + '"', rendered)
+                    self.assertIn('lvtag tgt ' + state, rendered)
+                    self.assertIn('class="range52-row"', rendered)
+                    self.assertNotRegex(rendered, r'\bstyle="[^"]*(?:--pstripe|background-image)')
+        self.assertNotRegex(css, r'tr\.pur(?:-(?:space|high|hit))?(?::has\([^}]*\))?\s*(?:td\.sig|\+tr\.range52-row>td)\{')
+        self.assertNotIn('--pstripe', css)
+        continuation = re.search(r'\.stk tr\.range52-row>td\{([^}]*)\}', css)[1]
+        self.assertIn('background-image:linear-gradient(var(--lc),var(--lc))', continuation)
+        self.assertIn('background-size:var(--lw) 18px', continuation)
+        self.assertIn('background-position:left top', continuation)
+        self.assertNotIn('right', continuation)
+
+    def test_low_and_failed_target_capsules_use_sparse_gray_svg_border(self):
+        from urllib.parse import unquote
+        import xml.etree.ElementTree as ET
+
+        css = monitor.PAGE_CSS
+        overlay = re.search(r'\.lvtag\.tgt\.low::after,\.lvtag\.tgt\.bad::after\{([^}]*)\}', css)[1]
+        encoded = re.search(r'url\("(data:image/svg\+xml,[^"]+)"\)', overlay)[1]
+        rect = ET.fromstring(unquote(encoded.split(',', 1)[1])).find('{http://www.w3.org/2000/svg}rect')
+        self.assertIsNotNone(rect)
+        for key, value in (('stroke', '#8b93a1'), ('stroke-width', '1'),
+                           ('stroke-dasharray', '3 5'), ('rx', '4'), ('fill', 'none')):
+            self.assertEqual(rect.attrib[key], value)
+        self.assertIn('inset:-1px', overlay)
+        self.assertIn('border-radius:inherit', overlay)
+        self.assertIn('pointer-events:none', overlay)
+        self.assertIn('center/100% 100% no-repeat', overlay)
+        self.assertIn('color:#c4a3ff', re.search(r'\.lvtag\.tgt\{([^}]*)\}', css)[1])
+        self.assertIn('padding:1px 5px;border-radius:4px;line-height:1.35', css)
+        for state in ('low', 'bad'):
+            rule = re.search(r'\.lvtag\.tgt\.' + state + r'\{([^}]*)\}', css)[1]
+            self.assertIn('border:1px solid transparent', rule)
+            self.assertNotIn('dashed', rule)
+            self.assertNotIn('padding:', rule)
+        self.assertIn('color:var(--dim)', re.search(r'\.lvtag\.tgt\.bad\{([^}]*)\}', css)[1])
+        self.assertNotRegex(css, r'\.lvtag\.tgt\.bad::after[^}]*content:none')
 
     def test_group_header_shows_purple_count_only_when_there_is_one(self):
         t = {'kind': 'consensus', 'price': 101.0, 'month': 10, 'failed': False, 'hit': True,
@@ -6419,7 +6477,8 @@ class TestDisplayInteractions(unittest.TestCase):
                'target': {}, 'level': 'yellow', 'signal_marks': [('boll', 'yellow')]}
         old = copy.deepcopy(row)
         output = _row_signals(row)
-        self.assertLess(output.index('跌破布林'), output.index('距目标价'))
+        self.assertIn('跌破布林', output)
+        self.assertNotIn('距目标价', output)
         self.assertEqual(row, old)
 
     def test_render_moves_index_funds_below_real_estate_without_changing_groups(self):
@@ -8667,7 +8726,10 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                             current = monitor._stock_row(row, {}, '2026-10-20')
                         lamps.assert_not_called()
                         self.assertNotIn('signal-dot', current)
-                        self.assertEqual(current, expected)
+                        # 新发布页新增基础灯元数据，布局对照单独剥离并精确验值。
+                        self.assertIn('data-base-level="' + level + '"', current)
+                        self.assertEqual(re.sub(r' data-base-level="[^"]*"', '', current),
+                                         re.sub(r' data-base-level="[^"]*"', '', expected))
                         self.assertIn('<tr class="' + level, current)
                         self.assertIn('class="range52-row"', current)
                         self.assertEqual(row, before)
@@ -8784,17 +8846,17 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                           ('', None), ('', None), ('target', 'purple')])
         output = _row_signals(row)
         self.assertEqual(re.findall(r'data-signal-kind="([^"]*)"', output),
-                         ['chg', 'amp', 'add_price', 'ma', 'vol_ratio', 'rsi', '', '', 'target'])
+                         ['chg', 'amp', 'add_price', 'ma', 'vol_ratio', 'rsi', '', ''])
         self.assertNotIn('signal-dot', output)
         self.assertEqual(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
                                    r'(?: data-signal-level="([^"]*)")?(?: data-signal-role="[^"]*")?>', output),
                          [('chg', 'red'), ('amp', 'yellow'), ('add_price', 'red'), ('ma', 'yellow'),
                           ('vol_ratio', 'yellow'), ('rsi', 'gray'),
-                          ('', ''), ('', ''), ('target', 'purple')])
+                          ('', ''), ('', '')])
         self.assertIn('data-signal-kind="amp" data-signal-level="yellow" data-signal-role="supplement"', output)
         self.assertEqual(monitor._signal_description_groups(row), groups)
         self.assertEqual(output.count('触及长均线±1%'), 1)
-        self.assertIn('&lt;b&gt;尾部&lt;/b&gt;', output)
+        self.assertNotIn('手填目标价', output)
         self.assertIn('&lt;img onerror=x&gt;', output)
         self.assertIn('&amp; 未触发', output)
         self.assertNotIn('<img', output)
@@ -8810,8 +8872,9 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         low = {'signals': ['手填目标价说明', '普通说明'], 'signal_marks': [],
                'target': monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 120}, 'technology', 3)}
         output = _row_signals(low)
-        self.assertLess(output.index('普通说明'), output.index('手填目标价说明'))
-        self.assertLess(output.index('手填目标价说明'), output.index('class="tnote"'))
+        self.assertIn('普通说明', output)
+        self.assertNotIn('手填目标价说明', output)
+        self.assertNotIn('tnote', output)
 
     def test_html_escape_and_multiple_ma_facts_preserved(self):
         row = {'symbol': 'SAFE', 'level': 'yellow', 'group': 'position', 'price': 10,

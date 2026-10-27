@@ -105,10 +105,11 @@
   var LV_ORDER=['red','yellow','green','gray'];
   function maxLv(a,b){ if(!a) return b; if(!b) return a;
     return LV_ORDER.indexOf(a)<=LV_ORDER.indexOf(b)?a:b; }
-  function withLv(cls, want){
+  function withLv(cls, want, base){
     var parts=(cls||'').split(/\s+/).filter(Boolean), cur=null;
     parts=parts.filter(function(p){ if(LV_ORDER.indexOf(p)>=0){ cur=p; return false; } return true; });
-    var lv=maxLv(cur, want);
+    // 新生成页带不含可已读价位的基础灯；旧页缺失/非法元数据不猜测降灯。
+    var lv=maxLv(LV_ORDER.indexOf(base)>=0?base:cur, want);
     if(lv) parts.push(lv);
     return parts.join(' ');
   }
@@ -212,6 +213,7 @@
     var quietBox=tr.closest('details.quiet-list');
     ROWS.push({sym:sym,note:note,isLong:isLong,isEtf:isEtf,lv:lv,price:price,prevClose:prevClose,chg:chg,low:low,high:high,
                rail:rail,lab0:lab,lowTxt:m?m[1]:'',highTxt:m?m[4]:'',tr:tr,origCls:tr.className||'',
+               baseLv:tr.getAttribute('data-base-level'),
                rangeTr:railTr && railTr.className.split(/\s+/).indexOf('range52-row')>=0?railTr:null,
                quietZone:quietBox?quietBox.parentNode:null,
                trig:trig,cut:cut,cap:cap,cutCap:cutCap,sigAdd:sigAdd,
@@ -346,7 +348,7 @@
       if(r.sigAdd) r.sigAdd.textContent=sigTxt;
       // ③ 浮亏 ≥10%：也是红灯（红字 + 行级 red），点掉已读就撤掉这一份
       if(r.lossLv>0 && !r.lossAcked) want='red';
-      r.tr.className=withLv(r.origCls, want);
+      r.tr.className=withLv(r.origCls, want, r.baseLv);
       r.lv=(r.tr.className||'').split(/\s+/).filter(function(c){ return LV_ORDER.indexOf(c)>=0; })[0]||'green';
     });
   }

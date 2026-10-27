@@ -2295,6 +2295,40 @@ test('长持仓内部折叠移行不跨到短持仓，移组后仅用当前区�
   assertRowPair(b,'AAA',false);assert.ok(r.tr.closest('#group_positions_long'));ackCurrentLoss(b);assertRowPair(b,'AAA',true);
   b.move('AAA','focus');assert.equal(r.lossLv,0);assert.ok(r.tr.closest('#group_focus'));assert.equal(r.tr.closest('#group_positions'),null);
 });
+// 与新发布页一致：整行初始red，但data-base-level明确排除了可已读价位。
+for(const base of ['green','yellow','red','gray'])test('发布价位红灯已读恢复基础'+base+'且不撤紫条/其它灯，刷新仍正确',async()=>{
+  const prepareDocument=doc=>{
+    signalCaps(doc);
+    const row=doc.getElementById('s-aaa');row.className='red pur pur-high';
+    row.setAttribute('data-base-level',base);row.setAttribute('data-quiet-keep','true');
+  };
+  const opts={prepareDocument};const b=await bootCash(opts),r=b.rows.find(r=>r.sym==='AAA');
+  const levels=()=>r.tr.className.split(/\s+/).filter(c=>['red','yellow','green','gray'].includes(c));
+  assert.deepEqual(levels(),['red']);assert.equal(r.origCls,'red pur pur-high');
+  b.ack('AAA|add|100');assert.deepEqual(levels(),['red'],'另一条未已读减仓红不能撤');
+  b.ack('AAA|cut|100');assert.deepEqual(levels(),[base]);
+  for(const warn of [r.warnAdd,r.warnCut])assert.equal(warn.getAttribute('data-signal-level'),'gray');
+  for(let i=0;i<3;i++)b.paint();assert.deepEqual(levels(),[base]);
+  assert.ok(r.tr.className.includes('pur pur-high'));assertRowPair(b,'AAA',false);
+  assert.equal(b.doc.querySelector('#costMembers li[data-sym="AAA"]').className,'lv-'+base);
+  await b.dispose();const c=await bootCash({...opts,store:b.store,session:b.session}),rr=c.rows.find(r=>r.sym==='AAA');
+  assert.deepEqual(rr.tr.className.split(/\s+/).filter(v=>['red','yellow','green','gray'].includes(v)),[base]);
+  c.ack('AAA|add|100');assert.ok(rr.tr.className.split(/\s+/).includes('red'));
+  assert.equal(b.requests.length+c.requests.length,0);assert.equal(b.store.writes.length+c.store.writes.length,0);
+});
+for(const base of [null,'','bogus'])test('旧页缺失或非法基础灯'+base+'不能误撤原始红灯',async()=>{
+  const b=await bootCash({prepareDocument(doc){signalCaps(doc);const row=doc.getElementById('s-aaa');
+    row.className='red';if(base!==null)row.setAttribute('data-base-level',base);}});
+  b.ack('AAA|add|100');b.ack('AAA|cut|100');assert.equal(b.rows[0].tr.className,'red');
+});
+test('新发布纯价位两项已读回无异动，剩余浮亏未读仍红',async()=>{
+  const b=await bootCash({prepareDocument(doc){signalCaps(doc);const row=doc.getElementById('s-aaa');
+    row.className='red';row.setAttribute('data-base-level','green');row.setAttribute('data-quiet-keep','false');}});
+  b.ack('AAA|add|100');b.ack('AAA|cut|100');assert.equal(b.rows[0].tr.className,'green');assertRowPair(b,'AAA',true);
+  await b.enter();b.edit('AAA','cost','200');await b.tick(16);assert.equal(b.rows[0].tr.className,'red');assertRowPair(b,'AAA',false);
+  b.ack('AAA|loss20');assert.equal(b.rows[0].tr.className,'green');assertRowPair(b,'AAA',true);
+});
+
 test('已读折叠刷新恢复生成位置口径，再撤销可即时移回主表',async()=>{
   const b=await bootCash({rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>quietDocument(doc)});
   b.ack('AAA|add|95');b.ack('AAA|cut|104');assertRowPair(b,'AAA',true);await b.dispose();

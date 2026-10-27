@@ -115,13 +115,21 @@ class RulesRegression(unittest.TestCase):
         for stable in ('margin:0 4px 2px 0', 'padding:0 7px', 'font-size:11px', 'line-height:17px'):
             self.assertIn(stable, base)
         self.assertIn('padding:1px 5px', declarations('.tgs .lvtag'))
-        self.assertIn('border:1px solid var(--dim)', declarations('.lvtag.tgt.low'))
+        self.assertIn('border:1px solid transparent', declarations('.lvtag.tgt.low'))
+        overlay = declarations('.lvtag.tgt.low::after,.lvtag.tgt.bad::after')
+        self.assertIn('inset:-1px', overlay)
+        self.assertIn('border-radius:inherit', overlay)
+        from urllib.parse import unquote
+        svg = unquote(page_assets.TARGET_DASH_BORDER)
+        self.assertIn('stroke="#8b93a1"', svg)
+        self.assertIn('stroke-width="1" stroke-dasharray="3 5"', svg)
+        self.assertIn('url("' + page_assets.TARGET_DASH_BORDER + '")', overlay)
         self.assertIn('border:1.5px solid var(--purple)', declarations('.lvtag.tgt.space::after'))
         self.assertIn('border:1.5px solid var(--target-high)', declarations('.lvtag.tgt.high::after'))
         self.assertIn('text-shadow:.2px 0 currentColor,-.2px 0 currentColor', declarations('.lvtag.tgt.high'))
         self.assertNotIn('font-weight', declarations('.lvtag.tgt.high'))
         self.assertIn('text-shadow:none', declarations('.lvtag.tgt.hit'))
-        self.assertIn('border:1px dashed var(--dim)', declarations('.lvtag.tgt.bad'))
+        self.assertIn('border:1px solid transparent', declarations('.lvtag.tgt.bad'))
         self.assertIn('color:var(--dim)', declarations('.lvtag.tgt.bad'))
         self.assertIn('inset:-1px', declarations('.lvtag.tgt.space::after,.lvtag.tgt.high::after'))
         self.assertIn('color:#fff;background:#8957e5', declarations('.lvtag.tgt.hit'))
@@ -138,26 +146,21 @@ class RulesRegression(unittest.TestCase):
             self.assertIn(f'#signalCounts .signal-member-block h5.{alias}', css)
         self.assertNotRegex(css, r'(?:tone-target-high|target-space-high)[^{]*\{[^}]*var\(--red\)')
 
-    def test_target_right_stripes_use_same_state_in_both_rows_and_continuous_dash_phase(self):
+    def test_target_right_stripes_removed_from_main_and_range52_rows(self):
         css = page_assets.PAGE_CSS
-        def declarations(selector):
-            return re.search(r'(?:^|\n)' + re.escape(selector) + r'\{([^}]*)\}', css)[1]
-        for state, color, width in (("space", "purple", 2), ("high", "target-high", 3), ("hit", "purple", 2)):
-            upper = declarations(f'.group-card tr.pur-{state} td.sig')
-            lower = declarations(f'.stk tr.pur-{state}+tr.range52-row>td')
-            self.assertEqual(upper, lower)
-            self.assertIn(f'--pw:{width}px', upper)
-            self.assertIn(f'--pc:var(--{color})', upper)
-            self.assertEqual('repeating-linear-gradient' in upper, state != 'hit')
-        main = declarations('.stk tr.pur:has(+tr.range52-row)>td.sig')
-        tail = declarations('.stk tr.range52-row>td')
-        self.assertIn('background-image:var(--pstripe)', main)
-        self.assertIn('background-size:var(--pw) calc(85% - 2.1px)', main)
-        self.assertIn('background-position:right bottom', main)
-        self.assertIn('linear-gradient(var(--lc),var(--lc)),var(--pstripe)', tail)
-        self.assertIn('background-size:var(--lw) 18px,var(--pw) 18px', tail)
-        self.assertIn('background-position:left top,right top', tail)
-        self.assertIn('to top,var(--pc) 0 10px,transparent 10px 18px', css)
+        for state in ('space', 'high', 'hit'):
+            self.assertNotIn(f'.group-card tr.pur-{state} td.sig{{', css)
+            self.assertNotIn(f'.stk tr.pur-{state}+tr.range52-row>td{{', css)
+        self.assertNotIn('.group-card tr.pur td.sig{', css)
+        self.assertNotIn('.stk tr.pur:has(+tr.range52-row)>td.sig{', css)
+        self.assertNotIn('--pstripe', css)
+        self.assertNotIn('--pw:', css)
+        tail = re.search(r'(?:^|\n)\.stk tr\.range52-row>td\{([^}]*)\}', css)[1]
+        self.assertIn('background-image:linear-gradient(var(--lc),var(--lc))', tail)
+        self.assertIn('background-size:var(--lw) 18px', tail)
+        self.assertIn('background-position:left top', tail)
+        self.assertNotIn('right', tail)
+        self.assertNotIn('to top,var(--pc) 0 10px,transparent 10px 18px', css)
         self.assertIn('--target-high:#dc62b8', css)
         self.assertIn('.target-purple>h5{margin:6px 0 3px', css)
         self.assertIn('.target-purple .signal-member-list{padding-bottom:0}', css)
@@ -170,20 +173,9 @@ class RulesRegression(unittest.TestCase):
         self.assertNotIn('.tone-target-high,.target-space-high{', css)
         self.assertNotIn('#signalCounts .tone-target-high,#signalCounts .target-space-high,', css)
         self.assertIn('.group-card tr.pur-high .sig .tp{color:var(--target-high)}', css)
-        # 按真实CSS提取周期及下段长度，覆盖主行高度变化和接缝上下两侧。
-        tail_height = float(re.search(r'var\(--pw\) ([\d.]+)px', tail)[1])
-        stripe = declarations('.group-card tr.pur-space td.sig')
-        dash, gap_start, period = map(float, re.search(r'0 ([\d.]+)px,transparent ([\d.]+)px ([\d.]+)px', stripe).groups())
-        self.assertEqual(dash, gap_start)
-        self.assertEqual(tail_height % period, 0)
-        for upper_height in (20, 47.5, 83.2, 150):
-            for y in (-8, -5, -3, -1, -0.25, 0.25, 1, 3, 5, 8):
-                separate_distance = -y if y < 0 else tail_height - y
-                continuous_distance = upper_height + tail_height - (upper_height + y)
-                self.assertEqual(separate_distance % period < dash,
-                                 continuous_distance % period < dash, (upper_height, y))
-        self.assertGreater(css.index('.group-card tr.pur-hit td.sig'), css.index('.group-card tr.pur-high td.sig'))
-        self.assertGreater(css.index('.stk tr.pur-hit+tr.range52-row>td'), css.index('.stk tr.pur-high+tr.range52-row>td'))
+        # 删除右条后不再存在跨行虚线相位；原左侧灯条续行高度仍为18px。
+        self.assertIn('background-size:var(--lw) 18px', tail)
+        self.assertNotIn('var(--pw)', tail)
 
     def test_positions_green_tints_and_shared_collapse_background(self):
         css = page_assets.PAGE_CSS

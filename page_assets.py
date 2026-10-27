@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import re
+from urllib.parse import quote
 
 from rules_config import DEFAULT_SETTINGS, browser_schema
 
@@ -490,6 +491,13 @@ def main():
         print("已同步设置页生成片段与内容 hash（未修改用户配置）")
 
 
+# 原生 dashed 不支持指定间隙；与确认的 DEMO 相同：1px灰线，短线3px、间隔5px。
+TARGET_DASH_BORDER = 'data:image/svg+xml,' + quote(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">'
+    '<rect x="0.5" y="0.5" style="width:calc(100% - 1px);height:calc(100% - 1px)" '
+    'rx="4" fill="none" stroke="#8b93a1" stroke-width="1" stroke-dasharray="3 5"/>'
+    '</svg>', safe='')
+
 # 页面 CSS 与纯展示交互从 monitor 原样迁移，公开名称由 monitor 重导出。
 PAGE_CSS = """:root{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
@@ -532,15 +540,16 @@ tr:first-child td{border-top:none}
 .tgs .lvtag{margin:0;padding:1px 5px;border-radius:4px;line-height:1.35;white-space:normal;text-align:center}
 .tgs .lvtag span{display:inline-block;white-space:nowrap}
 .lvtag.tgt{position:relative;color:#c4a3ff;border-color:var(--dim)}
-.lvtag.tgt.low{border:1px solid var(--dim);background:transparent}
+.lvtag.tgt.low{border:1px solid transparent;background:transparent}
+.lvtag.tgt.low::after,.lvtag.tgt.bad::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:url("__TARGET_DASH_BORDER__") center/100% 100% no-repeat}
 /* 描边绘在原1px边框内部，文字等宽视觉加粗：分档不增加尺寸、不移动文字。 */
 .lvtag.tgt.space,.lvtag.tgt.high{border-color:transparent;background:transparent}
 .lvtag.tgt.space::after,.lvtag.tgt.high::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none}
 .lvtag.tgt.space::after{border:1.5px solid var(--purple)}
 .lvtag.tgt.high{color:var(--target-high);text-shadow:.2px 0 currentColor,-.2px 0 currentColor}
 .lvtag.tgt.high::after{border:1.5px solid var(--target-high)}
-.lvtag.tgt.bad{color:var(--dim);background:transparent;border:1px dashed var(--dim);text-shadow:none}
-.lvtag.tgt.bad::after,.lvtag.tgt.hit::after{content:none}
+.lvtag.tgt.bad{color:var(--dim);background:transparent;border:1px solid transparent;text-shadow:none}
+.lvtag.tgt.hit::after{content:none}
 .lvtag.tgt.hit{color:#fff;background:#8957e5;border:1px solid #8957e5;text-shadow:none}
 .tnote,.sig .tp{color:#c4a3ff}
 .sig{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
@@ -767,24 +776,17 @@ tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12p
 tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}
 tr.gray td{color:var(--dim)}
 .group-card tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
-.group-card tr.pur td.sig{--pc:var(--purple);--pw:2px;--pstripe:linear-gradient(var(--pc),var(--pc));box-shadow:none;padding-right:12px;background-image:var(--pstripe);background-size:var(--pw) 100%;background-position:right bottom;background-repeat:no-repeat}
-.group-card tr.pur-space td.sig{--pc:var(--purple);--pw:2px;--pstripe:repeating-linear-gradient(to top,var(--pc) 0 10px,transparent 10px 18px)}
-.group-card tr.pur-high td.sig{--pc:var(--target-high);--pw:3px;--pstripe:repeating-linear-gradient(to top,var(--pc) 0 10px,transparent 10px 18px)}
-.group-card tr.pur-hit td.sig{--pc:var(--purple);--pw:2px;--pstripe:linear-gradient(var(--pc),var(--pc))}
+/* 目标状态只由胶囊和统计展示；主表描述右侧不再绘制紫色灯条。 */
 /* 有52周条的股票：左侧灯条顶部再减去整只股票高度（主行+位置条）的约15%（85%-6.1px，位置条行约22px），延伸覆盖自己的位置条、在条下方4px处结束，与上下股票留出空隙 */
 .stk tr:has(+tr.range52-row)>td{--lc:transparent;--lw:0px}
 .stk tr.red:has(+tr.range52-row)>td:first-child{--lc:var(--red);--lw:6px}
 .stk tr.yellow:has(+tr.range52-row)>td:first-child{--lc:var(--yellow);--lw:4px}
 .stk tr.green:has(+tr.range52-row)>td:first-child{--lc:var(--green);--lw:2px}
 .stk tr:has(+tr.range52-row)>td:first-child{box-shadow:none;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom;background-repeat:no-repeat}
-.stk tr.pur:has(+tr.range52-row)>td.sig{background-image:var(--pstripe);background-size:var(--pw) calc(85% - 2.1px);background-position:right bottom;background-repeat:no-repeat}
-/* 长划线10px、间隔8px，参考图的长段节奏；下段18px正好一个周期，与上段同向且锚定底部，跨行接缝不断拍。 */
-.stk tr.range52-row>td{--lc:transparent;--lw:0px;--pc:transparent;--pw:0px;--pstripe:linear-gradient(var(--pc),var(--pc));background-image:linear-gradient(var(--lc),var(--lc)),var(--pstripe);background-size:var(--lw) 18px,var(--pw) 18px;background-position:left top,right top;background-repeat:no-repeat}
+/* 52周位置行只延续原左侧红黄绿灯条，不再延续右侧紫条。 */
+.stk tr.range52-row>td{--lc:transparent;--lw:0px;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) 18px;background-position:left top;background-repeat:no-repeat}
 .stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px} .stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}
-.stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px} .stk tr.pur+tr.range52-row>td{--pc:var(--purple);--pw:2px}
-.stk tr.pur-space+tr.range52-row>td{--pc:var(--purple);--pw:2px;--pstripe:repeating-linear-gradient(to top,var(--pc) 0 10px,transparent 10px 18px)}
-.stk tr.pur-high+tr.range52-row>td{--pc:var(--target-high);--pw:3px;--pstripe:repeating-linear-gradient(to top,var(--pc) 0 10px,transparent 10px 18px)}
-.stk tr.pur-hit+tr.range52-row>td{--pc:var(--purple);--pw:2px;--pstripe:linear-gradient(var(--pc),var(--pc))}
+.stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px}
 #macroCard tr.mh td{padding:5px 10px;font-size:12.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
 .macro-help{margin:8px 12px;color:var(--dim);font-size:13px;line-height:1.7}
 .macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
@@ -1002,6 +1004,7 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 #glossary-vol-table thead th:nth-child(3){color:#f0c674}
 #glossary-chg-table td,#glossary-amp-table td,#glossary-vol-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
 """
+PAGE_CSS = PAGE_CSS.replace('__TARGET_DASH_BORDER__', TARGET_DASH_BORDER)
 PAGE_CSS += RULES_CSS
 
 # 单独导出供 monitor 替换旧锚点处理器；PAGE_INTERACTION_JS 已含此块，勿重复追加。

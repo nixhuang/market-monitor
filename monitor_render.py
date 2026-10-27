@@ -595,7 +595,8 @@ class PageRenderer:
 
     def _signals_html(self, d):
         """主表价格提醒分主次；真实级别及统计事实不变，不添加圆点。"""
-        groups = list(self._context._signal_description_groups(d))
+        # 手填价仅替换共识价；所有目标状态只投影到胶囊，统计仍消费原signals/marks。
+        groups = [g for g in self._context._signal_description_groups(d) if g["kind"] != "target"]
         prices = {g["kind"]: g for g in groups
                   if g["kind"] in ("chg", "amp") and g["level"] in ("red", "yellow")}
         primary = supplement = None
@@ -622,11 +623,6 @@ class PageRenderer:
             parts.append(f'<span class="signal-item" data-signal-kind="{kind}"'
                          + (f' data-signal-level="{level}"' if level else "")
                          + (f' data-signal-role="{role}"' if role else "") + f'>{body}</span>')
-        tg = d.get("target") or {}
-        if tg.get("kind") == "manual" and self._context.target_display_state(tg) == "low":
-            if parts:
-                parts.append(' <span class="signal-separator">/</span> ')
-            parts.append(f'<span class="tnote">目标价 {self._context._price_text(tg["price"])}，空间 {tg["space"]:+.0f}%</span>')
         return ''.join(parts) if parts else "—"
 
 
@@ -713,6 +709,14 @@ class PageRenderer:
         state = self._context.target_display_state(d.get("target"))
         stripe = {"reached": "pur-hit", "space": "pur-space", "high": "pur-high"}.get(state)
         cls = d["level"] + (" pur " + stripe if self._context._target_active(d) and stripe else "")
+        # 已读只撤加/减仓价的贡献；基础灯来自结构化marks，不能从描述或紫灯反推。
+        # 旧快照的无来源红黄/缺失灰保持原样，避免把不明信号误降绿。
+        base_level = d["level"]
+        marks = d.get("signal_marks") or []
+        if base_level in ("red", "yellow") and any(
+                kind in ("add_price", "reduce_price") and level == base_level for kind, level in marks):
+            remaining = {level for kind, level in marks if kind not in ("add_price", "reduce_price")}
+            base_level = "red" if "red" in remaining else "yellow" if "yellow" in remaining else "green"
         chg_cls = "up" if (d["chg"] or 0) > 0 else (
             "down" if (d["chg"] or 0) < 0 else "")
         chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
@@ -724,6 +728,7 @@ class PageRenderer:
                      if d.get("group") == "position" and str(d.get("hold") or "") == "long" else "")
         return (
             f'<tr class="{html_lib.escape(cls, quote=True)}" id="{self._context._stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
+            f'data-base-level="{html_lib.escape(base_level, quote=True)}" '
             f'data-price="{html_lib.escape(str(d.get("price") or ""), quote=True)}" '
             f'data-prev-close="{html_lib.escape(str(d.get("prev_close") or ""), quote=True)}"><td class="sym">'
             f'{html_lib.escape(self._context.normalize_symbol(d["symbol"]))}{note}{hold_html}'

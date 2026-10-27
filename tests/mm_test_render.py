@@ -499,6 +499,34 @@ def rendered_stock_row(page, row, keep):
     return classes[0].split() if len(classes) == 1 else [], body
 
 
+# 发布行基础灯只排除可已读加减仓贡献，原marks/灯及紫/折叠保持完整。
+for _side in ('add', 'cut', 'both'):
+    for _extra in (None, 'yellow', 'red'):
+        _al = monitor._Alerts()
+        _x = monitor.SimpleNamespace(cfg={'trigger': 100 if _side != 'cut' else None,
+                                         'reduce': 100 if _side != 'add' else None},
+                                     price=100, group='position')
+        monitor._rule_add_price(_al, _x)
+        monitor._rule_reduce_price(_al, _x)
+        if _extra:
+            _al.add('vol_ratio', '量比 5.0×（2026-10-26）', _extra)
+        _row = item('BASE' + _side.upper() + str(_extra), 'position', _al.level, chg=0)
+        _row.update(signals=_al.signals, signal_marks=_al.marks, trigger=_x.trig, reduce=_x.reduce,
+                    target=monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 101}, 'position', 3))
+        _before = _copy.deepcopy(_row)
+        _fragment = monitor._stock_row(_row, {})
+        _attrs = _fragment.split('><td', 1)[0]
+        check('data-base-level="' + (_extra or 'green') + '"' in _attrs
+              and 'class="red pur pur-hit"' in _attrs,
+              _side + str(_extra) + '发布仍红，基础灯独立且紫状态保留')
+        check(_row == _before, _side + str(_extra) + '渲染不改判灯/marks/目标事实')
+for _level, _marks in (('red', []), ('red', [('add_price', 'yellow')]),
+                       ('yellow', []), ('green', [('boll', 'gray')]), ('gray', [('add_price', 'red')])):
+    _row = item('BASELEGACY', 'position', _level, chg=0)
+    _row.update(signal_marks=_marks, signals=[], trigger=100)
+    check('data-base-level="' + _level + '"' in monitor._stock_row(_row, {}),
+          _level + repr(_marks) + '无来源旧灯和缺失灰不能凭已读猜测降绿')
+
 # 目标/共识40/90：状态与主表折叠分别验证，旧基本面及财报三日回归保持不动。
 _target_cases = []
 for _symbol, _group, _price, _prev, _state in (
@@ -534,14 +562,14 @@ for _row, _state in _target_cases:
     _classes, _fragment = rendered_stock_row(_target_page, _row, _state != 'low')
     check('lvtag tgt ' + _state in _fragment,
           '40/90胶囊状态 ' + _row['symbol'] + '=' + _state)
-    _stripe = {'space': 'pur-space', 'high': 'pur-high', 'hit': 'pur-hit'}.get(_state)
-    check('green' in _classes and (_stripe in _classes if _stripe else 'pur' not in _classes),
-          '目标行独立条纹 ' + _row['symbol'] + '=' + (_stripe or '无'))
+    _target_class = {'space': 'pur-space', 'high': 'pur-high', 'hit': 'pur-hit'}.get(_state)
+    check('green' in _classes and (_target_class in _classes if _target_class else 'pur' not in _classes),
+          '目标行独立状态 ' + _row['symbol'] + '=' + (_target_class or '无'))
 
 for _row in _target_rows[-3:]:
     _classes, _fragment = rendered_stock_row(_target_page, _row, False)
     check(_row['level'] in _classes and 'pur' not in _classes,
-          _row['symbol'] + '失败不新增紫色条纹或改变灯级')
+          _row['symbol'] + '失败不新增紫色状态或改变灯级')
     check('lvtag tgt bad' in _fragment and '获取失败' in _fragment and '+150%' not in _fragment,
           _row['symbol'] + '失败灰胶囊不展示旧空间')
 _tech = _target_page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
@@ -569,12 +597,29 @@ check('data-kind="target_purple"' in _target_page and '>目标价</button>' not 
 check('疑似数据异常' not in _target_panel and 'lvtag tgt high' in _target_page,
       '>100只作高空间不复活异常红')
 for _state in ('space', 'high', 'hit'):
-    check('tr.pur-' + _state + ' td.sig{' in _target_page
-          and 'tr.pur-' + _state + '+tr.range52-row>td{' in _target_page,
-          _state + '右侧条纹贯通52周行的CSS存在')
-check(bool(re.search(r'\.lvtag\.tgt\.bad\{[^}]*color:var\(--dim\)[^}]*border:1px dashed', _target_page))
-      and '.lvtag.tgt.low{' in _target_page and '.lvtag.tgt.hit{' in _target_page,
-      '失败灰虚线及低空间/达到胶囊CSS存在')
+    check(not re.search(r'tr\.pur-' + _state
+                        + r'(?::has\([^}]*\))?\s*(?:td\.sig|\+tr\.range52-row>td)\{', monitor.PAGE_CSS)
+          and '--pstripe' not in monitor.PAGE_CSS,
+          _state + '主行及52周续行均不再绘制右紫条')
+for _level, _width in (('red', 6), ('yellow', 4), ('green', 2)):
+    check('tr.' + _level + ' td:first-child{box-shadow:inset ' + str(_width) + 'px 0 0 var(--' + _level in monitor.PAGE_CSS
+          and 'tr.' + _level + '+tr.range52-row>td{--lc:var(--' + _level + ');--lw:' + str(_width) + 'px}' in monitor.PAGE_CSS,
+          _level + '左条及52周续接原宽度保持' + str(_width) + 'px')
+from urllib.parse import unquote as _unquote
+import xml.etree.ElementTree as _ET
+_target_dash_rule = re.search(r'\.lvtag\.tgt\.low::after,\.lvtag\.tgt\.bad::after\{([^}]*)\}', monitor.PAGE_CSS)
+_target_dash_url = re.search(r'url\("(data:image/svg\+xml,[^"]+)"\)', _target_dash_rule[1]) if _target_dash_rule else None
+_target_dash_rect = (_ET.fromstring(_unquote(_target_dash_url[1].split(',', 1)[1]))
+                     .find('{http://www.w3.org/2000/svg}rect')) if _target_dash_url else None
+check(_target_dash_rect is not None and all(_target_dash_rect.get(key) == value for key, value in (
+          ('stroke', '#8b93a1'), ('stroke-width', '1'), ('stroke-dasharray', '3 5'), ('rx', '4'), ('fill', 'none')))
+      and 'inset:-1px' in _target_dash_rule[1] and 'pointer-events:none' in _target_dash_rule[1],
+      'low/bad共用1px灰色SVG短线3px间隔5px的4px圆角边框')
+check(all('border:1px solid transparent' in re.search(r'\.lvtag\.tgt\.' + state + r'\{([^}]*)\}', monitor.PAGE_CSS)[1]
+          for state in ('low', 'bad'))
+      and not re.search(r'\.lvtag\.tgt\.bad::after[^}]*content:none', monitor.PAGE_CSS)
+      and '.lvtag.tgt.hit::after{content:none}' in monitor.PAGE_CSS,
+      '灰胶囊保留1px占位且SVG虚线不改变达到胶囊')
 
 # 共识只在描述列隐藏；完整信号、空间/达到统计与原胶囊仍保留。
 for _row in _target_rows:
@@ -646,14 +691,9 @@ for _row in _description_rows:
     if _row['target']['kind'] == 'consensus':
         check(_sig == _expected_sig, _row['symbol'] + '全页td.sig无自动共识且原技术描述完全一致')
     else:
-        _sig_plain = re.sub(r'<[^>]+>', '', _sig)   # 方向符号的配色 span 不影响文字比对
-        check(all(monitor.html_lib.escape(monitor._ma_display_text(text, _row.get('ma_settings'))) in _sig_plain
-                  for text in _row['signals'])
-              and '&lt;b&gt;保留&lt;/b&gt;' in _sig,
-              _row['symbol'] + '手填目标描述不误删并保持安全转义')
-        if monitor.target_display_state(_row['target']) == 'low':
-            check('<span class="tnote">目标价 120，空间 +20%</span>' in _sig,
-                  '手填低空间说明继续显示')
+        _expected_manual = monitor._signals_html({**_row, 'signals': [_technical_texts[0]], 'target': {}})
+        check(_sig == _expected_manual and '目标价' not in _sig and 'tnote' not in _sig,
+              _row['symbol'] + '手填高/低/达到只显示胶囊，不重复进入描述')
     check(monitor.target_tag(_row['target']) in _body,
           _row['symbol'] + '原胶囊内容与属性原样保留')
 
@@ -936,15 +976,16 @@ with _patch.dict(monitor.S, {'ma_short': 120, 'ma_long': 60}), \
 _order_body = re.search(r'<tr\b[^>]*\bid="s-orderescape"[^>]*>(.*?)</tr>', _order_page, re.S)[1]
 _order_sig = re.search(r'<td class="sig">(.*?)</td>', _order_body, re.S)[1]
 check(re.findall(r'data-signal-kind="([^"]*)"', _order_sig)
-      == ['chg', 'amp', 'add_price', 'ma', 'vol_ratio', 'rsi', '', '', 'target']
+      == ['chg', 'amp', 'add_price', 'ma', 'vol_ratio', 'rsi', '', '']
       and 'signal-dot' not in _order_body
       and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
                      r'(?: data-signal-level="([^"]*)")?(?: data-signal-role="[^"]*")?>', _order_sig)
       == [('chg', 'red'), ('amp', 'yellow'), ('add_price', 'red'), ('ma', 'yellow'),
-          ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', ''), ('', ''), ('target', 'purple')]
+          ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', ''), ('', '')]
       and 'data-signal-kind="amp" data-signal-level="yellow" data-signal-role="supplement"' in _order_sig,
       '全页零圆点，价格补充紧跟主要提醒，其余描述稳定排序且均线合并一次级别')
-check(all(text in _order_sig for text in ('&lt;b&gt;尾部&lt;/b&gt;', '&lt;img onerror=x&gt;', '&amp; 保留'))
+check(all(text in _order_sig for text in ('&lt;img onerror=x&gt;', '&amp; 保留'))
+      and '目标价' not in _order_sig
       and '<img' not in _order_sig and '<b>' not in _order_sig,
       '排序聚合后描述仍安全HTML转义')
 _order_member = _order_snap['signal_members']['ma']['yellow'][0]
@@ -977,7 +1018,7 @@ check(_order_control_classes[0] == 'red'
       and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
                      r'(?: data-signal-level="([^"]*)")?(?: data-signal-role="[^"]*")?>', _order_control_sig)
       == [('chg', 'red'), ('amp', 'yellow'), ('add_price', 'red'), ('ma', 'yellow'),
-          ('vol_ratio', 'yellow'), ('', ''), ('rsi', ''), ('', ''), ('target', 'purple')]
+          ('vol_ratio', 'yellow'), ('', ''), ('rsi', ''), ('', '')]
       and 'RSI 2条' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig))
       and '↑超买' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig)),
       '原排序2high控制仅文字，独立红黄紫灯及无灯首次出现排序不变')
@@ -1614,7 +1655,42 @@ const deadline = setTimeout(() => {
         high.style.color = '#c4a3ff';
         const priorSize = rect(high);
         high.style.removeProperty('color');
+        const sparseBorder = el => {
+          const after = getComputedStyle(el, '::after');
+          const url = after.backgroundImage.match(/url\\(["']?(data:image\\/svg\\+xml,[^"')]+)["']?\\)/);
+          const svg = url ? decodeURIComponent(url[1].split(',').slice(1).join(',')) : '';
+          const borderRect = new DOMParser().parseFromString(svg, 'image/svg+xml').querySelector('rect');
+          const original = rect(el);
+          el.style.borderStyle = 'dashed';
+          const nativeSize = rect(el);
+          el.style.removeProperty('border-style');
+          return {color: style(el).color, border: style(el).borderTopColor,
+            width: style(el).borderTopWidth, radius: style(el).borderTopLeftRadius,
+            afterContent: after.content, afterInset: [after.top, after.right, after.bottom, after.left],
+            pointerEvents: after.pointerEvents, backgroundSize: after.backgroundSize,
+            stroke: borderRect?.getAttribute('stroke'), strokeWidth: borderRect?.getAttribute('stroke-width'),
+            dash: borderRect?.getAttribute('stroke-dasharray'), rx: borderRect?.getAttribute('rx'),
+            original, nativeSize};
+        };
+        const stripes = [];
+        for (const [state, capsule] of [['space', space], ['high', high], ['hit', hit]]) {
+          const row = capsule.closest('tr');
+          const originalClass = row.className;
+          for (const [level, width, color] of [['red', 6, 'rgb(248, 81, 73)'],
+              ['yellow', 4, 'rgb(210, 153, 34)'], ['green', 2, 'rgb(63, 185, 80)']]) {
+            row.className = originalClass.replace(/\\b(red|yellow|green|gray)\\b/, level);
+            const sig = style(row.querySelector('td.sig'));
+            const left = style(row.firstElementChild);
+            const continuation = style(row.nextElementSibling.firstElementChild);
+            stripes.push({state, level, width, color, sigImage: sig.backgroundImage,
+              sigShadow: sig.boxShadow, leftImage: left.backgroundImage, leftSize: left.backgroundSize,
+              rangeImage: continuation.backgroundImage, rangeSize: continuation.backgroundSize,
+              rangePosition: continuation.backgroundPosition});
+          }
+          row.className = originalClass;
+        }
         return {
+          stripes, sparseBorders: [sparseBorder(low), sparseBorder(bad)],
           highColor: style(high).color,
           highNumbers: [...high.querySelectorAll('span')].map(el => style(el).color),
           highBorder: getComputedStyle(high, '::after').borderTopColor,
@@ -1642,14 +1718,30 @@ const deadline = setTimeout(() => {
         && actual.spaceColor === 'rgb(196, 163, 255)' && actual.spaceBorder === 'rgb(163, 113, 247)'
         && actual.hitColor === 'rgb(255, 255, 255)' && actual.hitBackground === 'rgb(137, 87, 229)'
         && actual.hitAfter === 'none' && actual.hitClass.includes('pur-hit') && !actual.hitClass.includes('pur-high')
-        && actual.badColor === 'rgb(139, 147, 161)' && actual.badBorderStyle === 'dashed'
-        && actual.lowBorder === 'rgb(139, 147, 161)'
-        && !actual.sig.includes('共识') && actual.manual.includes('手填目标价说明，与共识价交叉核对 <b>保留</b>')
+        && actual.badColor === 'rgb(139, 147, 161)' && actual.badBorderStyle === 'solid'
+        && actual.lowBorder === 'rgba(0, 0, 0, 0)'
+        && !actual.sig.includes('共识') && !actual.manual.includes('目标价') && !actual.manual.includes('共识价')
         && actual.runbarRuleLinks === 0,
         name: width + 'px尺寸不变、达到优先、失败灰虚线及描述过滤', actual: {
           size: actual.originalSize, priorSize: actual.priorSize,
           hitColor: actual.hitColor, hitBackground: actual.hitBackground, badColor: actual.badColor,
           sig: actual.sig, manual: actual.manual, runbarRuleLinks: actual.runbarRuleLinks}});
+      assertions.push({ok: actual.stripes.length === 9 && actual.stripes.every(s =>
+        s.sigImage === 'none' && s.sigShadow === 'none'
+        && s.leftImage === 'linear-gradient(' + s.color + ', ' + s.color + ')'
+        && s.leftSize.startsWith(s.width + 'px ')
+        && s.rangeImage === s.leftImage && s.rangeSize === s.width + 'px 18px'
+        && s.rangePosition === '0% 0%'),
+        name: width + 'px普通/高/达到目标均无右紫条，红黄绿左条及52周续接保留', actual: actual.stripes});
+      assertions.push({ok: actual.sparseBorders.length === 2 && actual.sparseBorders.every((s, i) =>
+        s.color === (i === 0 ? 'rgb(196, 163, 255)' : 'rgb(139, 147, 161)')
+        && s.border === 'rgba(0, 0, 0, 0)' && s.width === '1px' && s.radius === '4px'
+        && s.afterContent !== 'none' && s.afterInset.every(value => value === '-1px')
+        && s.pointerEvents === 'none' && s.backgroundSize === '100% 100%'
+        && s.stroke === '#8b93a1' && s.strokeWidth === '1' && s.dash === '3 5' && s.rx === '4'
+        && s.original[0] > 0 && s.original[1] > 0
+        && JSON.stringify(s.original) === JSON.stringify(s.nativeSize)),
+        name: width + 'pxlow/bad实际CSS为稀疏灰SVG虚线且尺寸、字色、4px圆角不变', actual: actual.sparseBorders});
     }
     // 真实导航/刷新仅由 CDP 提供合成文档；其他请求仍全部拦截，绝不读取云端仓位。
     refreshDocument = input.html.replace(/var REAL=(.*?);/, (match,json) => {
