@@ -285,10 +285,15 @@
       day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false});
   }
   function humanTime(s) {
-    const raw = s && (s.finished_at_bj || s.started_at_bj || s.finished_at || s.started_at);
+    const raw = s && (s.finished_at_bj || s.finished_at || s.started_at_bj || s.started_at);
     if (!raw) return '';
-    const match = String(raw).match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
-    return match ? match[1] + ' ' + match[2] : String(raw);
+    const value = String(raw), date = new Date(value);
+    if (/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) && Number.isFinite(date.getTime())) {
+      return date.toLocaleString('sv-SE', {timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit',
+        day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false});
+    }
+    const match = value.match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+    return match ? match[1] + ' ' + match[2] : value;
   }
   function dataTimeText(s) {
     if (s && s.data_time_text) return s.data_time_text;
@@ -493,12 +498,12 @@
     if (s.phase === 'published' && embedded && verifiedSnapshot) {
       try {
         if (!samePublication(verifiedSnapshot, JSON.parse(embedded.textContent))) {
-          message += '；当前页面仍是旧快照，可点击「刷新当前看板」查看新版本';
+          message += ' 已有新版，请刷新当前看板。';
         }
       } catch (_) { message += '；当前页快照无效，请刷新当前看板'; }
     }
     if (actionsError && (activeManual() || activeConfig())) {
-      message += '\n运行记录暂时无法读取：' + actionsError;
+      message += '\n运行记录：暂无法核对；' + actionsError;
     }
     put('runState', message, s.phase);
     put('runMsg', message, s.phase);
@@ -580,19 +585,18 @@
     return s;
   }
   function phaseForRun(run) {
-    if (!run) return {phase: 'queued', message: '等待定位对应运行；尚未确认开始'};
+    if (!run) return {phase: 'queued', message: '等待定位对应运行'};
     const id = String(run.id);
     if (run.status === 'completed') {
-      if (run.conclusion === 'success') return {phase: 'generated', message: 'run ' + id + ' 生成成功，尚未验证 Pages 发布'};
+      if (run.conclusion === 'success') return {phase: 'generated', message: 'run ' + id + ' 生成完成，等待发布'};
       if (run.conclusion === 'cancelled') {
-        // 并发队列里被更新的等待任务替换、或被手动取消：不是抓取失败，不能写成"运行失败"
-        return {phase: 'failed', cancelled: true,
-          message: 'run ' + id + ' 已取消（通常是被更新的等待任务替换，或被手动取消）'};
+        // 取消可能来自队列替换或手动取消，不能归为抓取失败。
+        return {phase: 'failed', cancelled: true, message: 'run ' + id + ' 已取消'};
       }
       return {phase: 'failed', message: 'run ' + id + ' 未成功：' + (run.conclusion || '结论未知')};
     }
-    if (run.status === 'in_progress') return {phase: 'running', message: 'run ' + id + ' 正在运行'};
-    return {phase: 'queued', message: 'run ' + id + ' 排队/等待中（' + run.status + '）'};
+    if (run.status === 'in_progress') return {phase: 'running', message: 'run ' + id + ' 运行中'};
+    return {phase: 'queued', message: 'run ' + id + ' 排队中'};
   }
   async function findRun(query, match, signal) {
     // run-name 在 GitHub REST 中对应 display_title，绝不以“最新一次”代替 request_id。
@@ -728,21 +732,21 @@
     if (snapshot) verifiedSnapshot = snapshot;
     configRun = nextConfigRun;
     publication = snapshot
-      ? {phase: 'published', message: '已发布完成：看板与状态文件一致（run ' + snapshot.run_id + '）'}
-      : {phase: 'waiting', message: publicError || '尚未验证发布'};
+      ? {phase: 'published', message: '当前发布：run ' + snapshot.run_id + '，已核验。'}
+      : {phase: 'waiting', message: publicError || '发布结果尚未核验'};
     if (snapshot) { saveLast(snapshot); publicRetry = PUBLIC_RETRY_MAX; }
     else if (publicError && publicRetry < PUBLIC_RETRY_MAX) publicRetry++;
     retryPending = !snapshot && (!!publicError || !!actionError) && retryPending;
     if (Object.keys(expected).length) {
       if (snapshot && configMatches(status, expected) && configMatches(snapshot, expected)) {
-        configState = {phase: 'published', message: '本页已提交的全部配置已发布生效（blob SHA 与看板快照双验证）'};
+        configState = {phase: 'published', message: '本页保存的清单与规则均已发布生效。'};
       } else {
         configState = phaseForRun(nextConfigRun);
         if (configState.phase !== 'failed' && status && configMatches(status, expected)) {
-          configState = {phase: 'generated', message: '配置生成结果已出现，尚未验证看板发布一致'};
+          configState = {phase: 'generated', message: '配置生成完成，等待发布'};
         }
         if (Date.now() - configSince >= MAX_WAIT && configState.phase !== 'failed') {
-          configState = {phase: 'expired', message: '配置跟踪已达 10 分钟，停止自动轮询；提交目标已保留，请稍后查运行状态。这不代表运行失败'};
+          configState = {phase: 'expired', message: '配置跟踪超时（10 分钟）；保存记录仍保留，请稍后查运行状态，不代表运行失败'};
         } else if (publicError) configState.message += '\n' + publicError;
       }
     }
@@ -752,20 +756,20 @@
       const runPhase = phaseForRun(nextManualRun);
       if (runPhase.phase === 'failed') manualState = runPhase;
       else if (snapshot && manualMatches(status, manual) && manualMatches(snapshot, manual)) {
-        manualState = {phase: 'published', message: '指定 run ' + manual.run_id + ' 已发布完成（request_id、run_id、配置 blob 与看板快照均匹配）'};
+        manualState = {phase: 'published', message: '本次 run ' + manual.run_id + ' 已发布，核验通过。'};
       } else {
         manualState = runPhase;
-        if (manualMatches(status, manual)) manualState = {phase: 'generated', message: '指定 run 已生成，尚未验证看板发布一致'};
+        if (manualMatches(status, manual)) manualState = {phase: 'generated', message: '本次运行生成完成，等待发布'};
         if (Date.now() - manual.since >= MAX_WAIT) {
-          manualState = {phase: 'expired', message: '指定运行跟踪已达 10 分钟，停止自动轮询；request_id/run_id 已保留，请稍后查运行状态。这不代表运行失败'};
+          manualState = {phase: 'expired', message: '运行跟踪超时（10 分钟）；请求记录仍保留，请稍后查运行状态，不代表运行失败'};
         } else if (publicError) manualState.message += '\n' + publicError;
       }
     }
     if (Date.now() - configSince >= MAX_WAIT && activeConfig()) {
-      configState = {phase: 'expired', message: '配置自动跟踪窗口已结束，目标仍保留；请稍后查运行状态，不代表运行失败'};
+      configState = {phase: 'expired', message: '配置跟踪超时；保存记录仍保留，请稍后查运行状态，不代表运行失败'};
     }
     if (manual && Date.now() - manual.since >= MAX_WAIT && activeManual()) {
-      manualState = {phase: 'expired', message: '指定运行自动跟踪窗口已结束，request_id/run_id 仍保留；请稍后查运行状态，不代表运行失败'};
+      manualState = {phase: 'expired', message: '运行跟踪超时；请求记录仍保留，请稍后查运行状态，不代表运行失败'};
     }
     // 已验证目标也保留；之后保存另一文件时仍校验旧文件，防止被旧运行回滚。
     render();
@@ -789,7 +793,7 @@
     configSince = Date.now();
     retrySince = Date.now();
     configRun = null;
-    configState = {phase: 'queued', message: file + ' 已提交，正在跟踪全部待生效配置'};
+    configState = {phase: 'queued', message: '清单或规则已保存，等待更新'};
     verifiedSnapshot = null;
     render();
     return tick();
@@ -833,17 +837,17 @@
     cancelPoll();
     retrySince = Date.now();
     manual = {request_id: uuid(), run_id: null, since: Date.now()};
-    manualState = {phase: 'dispatching', message: '正在提交立即运行请求（' + manual.request_id + '）'};
+    manualState = {phase: 'dispatching', message: '正在提交运行请求…'};
     render();
     try {
       await request(apiURL('/actions/workflows/daily.yml/dispatches'), {
         method: 'POST', github: true, body: {ref: options.branch, inputs: {request_id: manual.request_id}}
       });
-      manualState = {phase: 'queued', message: '运行请求已接受；正在按 request_id 定位指定运行，尚未完成'};
+      manualState = {phase: 'queued', message: '请求已接受，等待定位运行'};
     } catch (error) {
       if (!error.status) {
         // POST 超时可能已被接受：继续查同一 UUID，不自动重复派发。
-        manualState = {phase: 'queued', message: '派发响应未确认：' + error.message + '；仅跟踪此 request_id，不重复发送'};
+        manualState = {phase: 'queued', message: '请求是否接受尚未确认：' + error.message + '；继续跟踪，不重复发送'};
       } else {
         manual.rejected = true;
         manualState = {phase: 'failed', message: '未启动：运行请求被拒绝。' + error.message +
@@ -899,43 +903,75 @@
       const published = publication.phase === 'published' && verifiedSnapshot;
       checkPhase = published ? 'ok' : 'busy';
       const lines = [];
+      let task = null, action = '', reason = '';
       if (manual && manual.rejected) {
-        lines.push('上次立即运行未启动：' + manualState.message.replace(/^未启动：运行请求被拒绝。/, ''));
-        lines.push('查状态不会重新派发，请处理拒绝原因后再点立即运行。');
+        lines.push('最新任务：未启动（手动）');
+        reason = manualState.message.replace(/^未启动：运行请求被拒绝。/, '');
+        action = '处理拒绝原因后再点立即运行；查状态不会重新派发。';
         checkPhase = 'bad';
       } else if (manual) {
-        lines.push('你的运行：' + manualState.message);
-        if (manualState.phase === 'failed') checkPhase = 'bad';
-        else if (manualState.phase !== 'published') checkPhase = 'busy';
+        task = {state: manualState, id: manual.run_id, origin: '手动'};
       } else if (Object.keys(targets).length) {
-        lines.push('保存后的运行：' + configState.message);
-        if (configState.phase === 'failed') checkPhase = 'bad';
-        else if (configState.phase !== 'published') checkPhase = 'busy';
+        task = {state: configState, id: configRun && configRun.id, origin: '保存后'};
       } else if (recentRun) {
         const phase = phaseForRun(recentRun);
         const samePublished = published && String(recentRun.id) === verifiedSnapshot.run_id;
-        // 运行「成功」不等于发布了：当日日线未就绪时生成步骤会主动不发布，要看提交步骤有没有被跳过
-        const skip = phase.phase === 'generated' && !samePublished ? await publishSkip(recentRun.id, recentRun.run_started_at || recentRun.created_at) : null;
-        const label = phase.phase === 'generated'
-          ? (samePublished ? '已完成并发布'
-            : skip ? '数据源当日日线未就绪，本轮未发布（页面保留上一版）' + (skip.retry ? '，约 30 分钟后自动再试' : '')
-            : '生成成功，等待看板发布')
-          : phase.phase === 'running' ? '运行中'
-          : phase.phase === 'failed' ? (phase.cancelled ? '已取消（通常被更新的等待任务替换，不是抓取失败）'
-            : '失败（' + (recentRun.conclusion || '未知') + '）') : '排队中';
-        const at = runTime(recentRun.run_started_at || recentRun.created_at);
-        lines.push('最新任务：' + label + ' · run ' + recentRun.id + (at ? '（' + at + ' 北京时间）' : ''));
-        if (phase.phase === 'failed') checkPhase = phase.cancelled ? 'busy' : 'bad';
-        else if (!samePublished) checkPhase = 'busy';
-      } else lines.push(recentError ? '最新任务状态未能核对：' + recentError : '未找到最新任务记录。');
+        // 生成成功不等于发布；仅在提交步骤确实跳过时说明本轮未发布。
+        const skip = phase.phase === 'generated' && !samePublished
+          ? await publishSkip(recentRun.id, recentRun.run_started_at || recentRun.created_at) : null;
+        task = {state: samePublished && phase.phase === 'generated' ? {phase: 'published'} : phase,
+          id: recentRun.id, at: runTime(recentRun.run_started_at || recentRun.created_at),
+          conclusion: recentRun.conclusion, skip};
+      } else {
+        lines.push(recentError ? '最新任务：暂无法核对' : '最新任务：未找到记录');
+        reason = recentError;
+      }
+      if (task) {
+        const phase = task.state.phase;
+        const labels = {dispatching: '提交中', queued: task.id ? '排队中' : '等待定位',
+          running: '运行中', generated: task.skip ? '本轮未发布' : '等待发布',
+          published: '已完成并发布', expired: '跟踪超时', waiting: '等待核验'};
+        const label = phase === 'failed' ? (task.state.cancelled ? '已取消'
+          : '失败' + (task.conclusion ? '（' + task.conclusion + '）' : '')) : labels[phase] || '等待核验';
+        lines.push('最新任务：' + label + (task.origin ? '（' + task.origin + '）' : '') +
+          (task.id ? ' · run ' + task.id : '') + (task.at ? '（' + task.at + ' 北京时间）' : ''));
+        if (phase === 'failed') {
+          checkPhase = task.state.cancelled ? 'busy' : 'bad';
+          action = task.state.cancelled ? '不是抓取失败；继续使用上一版。'
+            : '本轮未发布，继续使用上一版；请查看运行记录。';
+          if (!task.state.cancelled && !task.conclusion) {
+            reason = task.state.message.replace(/^run \S+ 未成功：/, '');
+          }
+        } else if (phase !== 'published') {
+          checkPhase = 'busy';
+          action = task.skip ? '当日日线未就绪，保留上一版。' +
+            (task.skip.retry ? '约 30 分钟后自动再试。' : '')
+            : phase === 'expired' ? '尚不能确认运行结果，请稍后查运行状态。'
+            : phase === 'generated' ? '生成完成，等待发布；暂不需要刷新。'
+            : '新任务尚未发布，暂不需要刷新。';
+        }
+      }
       if (published) {
-        lines.push('已核对线上 run ' + verifiedSnapshot.run_id + '，看板与状态文件一致。');
-        lines.push('数据更新时间：' + (humanTime(verifiedSnapshot) || '未知') + '（北京时间）');
         const current = pageSnapshot();
-        lines.push(current && !samePublication(current, verifiedSnapshot)
-          ? '当前页面仍是旧数据，可刷新当前看板。' : '当前页面已是这版发布结果，暂无页面更新。');
-      } else lines.push('核对尚未完成：' + publication.message);
-      if (actionsError) lines.push('对应运行记录无法核对：' + actionsError);
+        const oldPage = current && !samePublication(current, verifiedSnapshot);
+        lines.push('当前发布：run ' + verifiedSnapshot.run_id +
+          (oldPage ? '。' : current ? '，当前页面与线上版本一致。' : '，已核验。'));
+        lines.push('数据更新时间：' + (humanTime(verifiedSnapshot) || '未知') + '（北京时间）');
+        if (oldPage) {
+          // 已有可用新版时刷新提示优先，不能因另一个任务未结束而误称无需刷新。
+          action = action.replace(/[，；]?暂不需要刷新。/, '');
+          if (action && !action.endsWith('。')) action += '。';
+          action = (task && task.state.phase === 'published' ? '' : action) + '已有新版，请刷新当前看板。';
+        }
+      } else {
+        lines.push('当前发布：暂无法核验；' + publication.message);
+        // 未核验发布时不宣称当前页最新，也不建议盲目刷新。
+        action = action.replace(/[，；]?暂不需要刷新。/, '');
+        if (action && !action.endsWith('。')) action += '。';
+      }
+      if (reason) lines.push('原因：' + reason);
+      if (actionsError) lines.push('运行记录：暂无法核对；' + actionsError);
+      if (action) lines.push(action);
       if (recentError || actionsError) checkPhase = 'bad';
       if (sequence === checkRequest && !checkDismissed) {
         checkFeedback = lines.join('\n');

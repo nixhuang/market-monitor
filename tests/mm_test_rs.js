@@ -134,7 +134,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.equal(new URL(f.els.btnReturnBoard.href).searchParams.get('mm_run'), '1');
     const editor = fixture(); delete editor.els.btnReturnBoard;
     await editor.win.MMRunStatus.refresh();
-    assert.match(editor.els.runMsg.textContent, /已发布完成：看板与状态文件一致/);
+    assert.match(editor.els.runMsg.textContent, /当前发布：run 1，已核验/);
   });
   await check('最新设置已保存、Pages 设置尚旧也能检测黄灯', async () => {
     const f = fixture(); f.data.sha = C; await f.win.MMRunStatus.refresh();
@@ -380,8 +380,8 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     await f.els.btnCheckStatus.onclick();
     assert.equal(f.data.posts,1);
     assert.equal(f.els.runLight.dataset.phase,'ok');
-    assert.match(f.els.checkResult.textContent,/已核对线上 run 1/);
-    assert.match(f.els.checkResult.textContent,/上次立即运行未启动/);
+    assert.match(f.els.checkResult.textContent,/当前发布：run 1/);
+    assert.match(f.els.checkResult.textContent,/最新任务：未启动（手动）/);
     assert.equal(f.els.checkResult.hidden,false);
   });
   await check('限流响应尊重冷却时间，查状态仍读公开页面且不反复请求API', async () => {
@@ -406,13 +406,13 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
   await check('公开状态读取失败必须显示核对未完成，不是假成功', async () => {
     const f=fixture();await f.win.MMRunStatus.refresh();f.data.failPublic=true;
     await f.els.btnCheckStatus.onclick();assert.equal(f.els.btnCheckStatus.textContent,'查运行状态');
-    assert.match(f.els.checkResult.textContent,/核对尚未完成/);
+    assert.match(f.els.checkResult.textContent,/当前发布：暂无法核验/);
     assert.equal(f.els.checkResult.hidden,false);
   });
   await check('核对显示最新任务运行中，而不是把旧版已发布误称新任务完成', async () => {
     const f=fixture();await f.els.btnCheckStatus.onclick();
     assert.match(f.els.checkResult.textContent,/最新任务：运行中 · run 2/);
-    assert.match(f.els.checkResult.textContent,/已核对线上 run 1/);
+    assert.match(f.els.checkResult.textContent,/当前发布：run 1/);
     assert.equal(f.els.checkResult.dataset.phase,'busy');
     assert.equal(f.els.btnCheckStatus.textContent,'查运行状态');
   });
@@ -421,7 +421,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     await f.els.btnCheckStatus.onclick();assert.match(f.els.checkResult.textContent,/最新任务：已完成并发布/);
     assert.equal(f.els.checkResult.dataset.phase,'ok');
     f.data.status=snapshot(B,'3');f.data.published=snapshot(B,'3');
-    await f.els.btnCheckStatus.onclick();assert.match(f.els.checkResult.textContent,/当前页面仍是旧数据/);
+    await f.els.btnCheckStatus.onclick();assert.match(f.els.checkResult.textContent,/已有新版，请刷新当前看板/);
     assert.equal(f.els.checkResult.children.at(-1).textContent,'刷新当前看板');
     f.els.checkResult.children.at(-1).onclick({preventDefault(){}});
     assert.equal(new URL(f.data.reloads.at(-1)).searchParams.get('mm_refreshed_run'),'3');
@@ -432,7 +432,8 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     f.data.jobs=[{steps:[{name:'抓数据并生成页面',conclusion:'success'},{name:'当日日线未就绪：约 30 分钟后自动再试',conclusion:'success'},
       {name:'校验最新输入并提交更新',conclusion:'skipped'}]}];
     await f.els.btnCheckStatus.onclick();
-    assert.match(f.els.checkResult.textContent,/最新任务：数据源当日日线未就绪，本轮未发布（页面保留上一版），约 30 分钟后自动再试 · run 2（10\/21 08:46 北京时间）/);
+    assert.match(f.els.checkResult.textContent,/最新任务：本轮未发布 · run 2（10\/21 08:46 北京时间）/);
+    assert.match(f.els.checkResult.textContent,/当日日线未就绪，保留上一版。约 30 分钟后自动再试/);
     assert.equal(f.els.checkResult.dataset.phase,'busy');
     f.data.run.run_started_at='2026-10-21T03:15:21Z'; // 美东23:15仍在重试窗口
     await f.els.btnCheckStatus.onclick();
@@ -443,14 +444,119 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     f.data.run.run_started_at='2026-10-21T00:46:21Z';
     f.data.jobs=[{steps:[{name:'抓数据并生成页面',conclusion:'success'},{name:'校验最新输入并提交更新',conclusion:'success'}]}];
     await f.els.btnCheckStatus.onclick();
-    assert.match(f.els.checkResult.textContent,/最新任务：生成成功，等待看板发布 · run 2（10\/21 08:46 北京时间）/);
+    assert.match(f.els.checkResult.textContent,/最新任务：等待发布 · run 2（10\/21 08:46 北京时间）/);
   });
   await check('最新任务失败和排队各有清楚结果，不影响已发布数据', async () => {
     for(const [status,conclusion,label] of [['queued',null,'排队中'],['completed','failure','失败']]){
       const f=fixture();f.data.run={id:2,status,conclusion};await f.els.btnCheckStatus.onclick();
       assert.match(f.els.checkResult.textContent,new RegExp('最新任务：'+label));
-      assert.match(f.els.checkResult.textContent,/已核对线上 run 1/);
+      assert.match(f.els.checkResult.textContent,/当前发布：run 1/);
     }
+  });
+  await check('状态详情统一四段且去重，运行排队发布失败取消均保留真实语义', async () => {
+    for (const [status, conclusion, label, action, phase] of [
+      ['queued', null, '排队中', '新任务尚未发布，暂不需要刷新。', 'busy'],
+      ['in_progress', null, '运行中', '新任务尚未发布，暂不需要刷新。', 'busy'],
+      ['completed', 'success', '等待发布', '生成完成，等待发布；暂不需要刷新。', 'busy'],
+      ['completed', 'failure', '失败（failure）', '本轮未发布，继续使用上一版；请查看运行记录。', 'bad'],
+      ['completed', 'cancelled', '已取消', '不是抓取失败；继续使用上一版。', 'busy']
+    ]) {
+      const page=snapshot();page.finished_at='2026-10-08T01:05:06Z';
+      const f=fixture(page);f.data.status=clone(page);f.data.published=clone(page);
+      f.data.run={id:2,status,conclusion,run_started_at:'2026-10-08T02:00:00Z'};
+      await f.els.btnCheckStatus.onclick();
+      assert.deepEqual(f.els.checkResult.textContent.split('\n'),[
+        '最新任务：'+label+' · run 2（10/08 10:00 北京时间）',
+        '当前发布：run 1，当前页面与线上版本一致。',
+        '数据更新时间：2026-10-08 09:05（北京时间）',action]);
+      assert.equal(f.els.checkResult.dataset.phase,phase);
+      assert.doesNotMatch(f.els.checkResult.textContent,/看板与状态文件一致|暂无页面更新|blob SHA|request_id/);
+      assert.equal(f.data.reloads.length,0);assert.equal(f.data.posts||0,0);
+    }
+  });
+  await check('同版已发布只需三行，编辑页不伪称当前看板已刷新', async () => {
+    for(const page of [snapshot(),null]) {
+      const f=fixture(page);f.data.run={id:1,status:'completed',conclusion:'success'};
+      await f.els.btnCheckStatus.onclick();
+      const text=f.els.checkResult.textContent;
+      assert.equal(text.split('\n').length,3);
+      assert.match(text,/最新任务：已完成并发布/);
+      assert.match(text,page?/当前页面与线上版本一致/:/当前发布：run 1，已核验/);
+      assert.doesNotMatch(text,/暂无页面更新|暂不需要刷新|看板与状态文件一致/);
+      if(!page)assert.doesNotMatch(text,/当前页面与线上版本一致/);
+    }
+  });
+  await check('已有新版时刷新提示优先，其他任务运行排队生成不遮蔽', async () => {
+    for(const [status,conclusion] of [['queued',null],['in_progress',null],['completed','success']]) {
+      const f=fixture();f.data.status=snapshot(B,'3');f.data.published=snapshot(B,'3');
+      f.data.run={id:4,status,conclusion};await f.els.btnCheckStatus.onclick();
+      assert.match(f.els.checkResult.textContent,/当前发布：run 3。/);
+      assert.match(f.els.checkResult.textContent,/已有新版，请刷新当前看板/);
+      assert.doesNotMatch(f.els.checkResult.textContent,/暂不需要刷新|暂无页面更新|与线上版本一致|发布已有新版/);
+      assert.equal(f.els.checkResult.children.at(-1).textContent,'刷新当前看板');
+      assert.equal(f.data.reloads.length,0);
+    }
+  });
+  await check('发布不同步或网络失败不宣称无需刷新，缺任务记录也不猜状态', async () => {
+    for(const mode of ['network','mismatch','missing','invalid']) {
+      const f=fixture();
+      if(mode==='network')f.data.failPublic=true;
+      if(mode==='mismatch')f.data.status=snapshot(B,'2');
+      if(mode==='missing')f.data.run=null;
+      if(mode==='invalid')f.data.published={run_id:'bad'};
+      await f.els.btnCheckStatus.onclick();
+      const text=f.els.checkResult.textContent;
+      if(mode==='missing')assert.match(text,/最新任务：未找到记录/);
+      else {
+        assert.match(text,/当前发布：暂无法核验/);
+        assert.doesNotMatch(text,/当前页面与线上版本一致|暂不需要刷新|已有新版，请刷新/);
+      }
+      assert.equal(f.data.reloads.length,0);
+    }
+  });
+  await check('手动与保存回执各阶段沿用统一简短详情，不混入其他最新任务', async () => {
+    for(const origin of ['手动','保存后']) {
+      for(const [status,conclusion,label] of [
+        ['queued',null,'排队中'],['in_progress',null,'运行中'],
+        ['completed','success','等待发布'],['completed','failure','失败'],
+        ['completed','cancelled','已取消'],['expired',null,'跟踪超时'],['published','success','已完成并发布']
+      ]) {
+        const f=fixture();
+        if(origin==='手动') {
+          f.data.dispatchSuccess=true;f.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});
+          await f.win.MMRunStatus.startManual();
+          f.data.run={id:2,event:'workflow_dispatch',display_title:f.data.requestId,status,conclusion};
+        } else {
+          f.data.sha=C;await f.win.MMRunStatus.watchConfig({file:'settings.json',blobSHA:C,commitSHA:D});
+          f.data.run={id:2,event:'push',head_sha:D,status,conclusion};
+        }
+        if(status==='expired') {f.data.run.status='in_progress';f.advance(601000);}
+        if(status==='published') {
+          f.data.run.status='completed';const fresh=snapshot(origin==='手动'?B:C,'2');
+          fresh.request_id=origin==='手动'?f.data.requestId:'';
+          f.data.status=fresh;f.data.published=fresh;
+        }
+        await f.els.btnCheckStatus.onclick();const text=f.els.checkResult.textContent;
+        assert(text.startsWith('最新任务：'+label+'（'+origin+'） · run 2'),text);
+        assert.doesNotMatch(text,/你的运行：|保存后的运行：|blob SHA|request_id、|暂无页面更新/);
+        if(status==='expired')assert.match(text,/尚不能确认运行结果/);
+        if(conclusion==='cancelled')assert.notEqual(f.els.checkResult.dataset.phase,'bad');
+        assert.equal(f.data.posts||0,origin==='手动'?1:0);assert.equal(f.data.reloads.length,0);
+      }
+    }
+  });
+  await check('手动请求未定位时不填造run号，拒绝原因及仅查询边界保持', async () => {
+    const f=fixture();f.data.run=null;f.data.dispatchSuccess=true;
+    f.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});await f.win.MMRunStatus.startManual();
+    await f.els.btnCheckStatus.onclick();
+    assert.match(f.els.checkResult.textContent,/最新任务：等待定位（手动）/);
+    assert.doesNotMatch(f.els.checkResult.textContent.split('\n')[0],/run/);
+    assert.equal(f.data.posts,1);
+    const g=fixture();g.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});
+    await g.win.MMRunStatus.startManual();await g.els.btnCheckStatus.onclick();
+    assert.match(g.els.checkResult.textContent,/原因：403：此令牌无权/);
+    assert.match(g.els.checkResult.textContent,/查状态不会重新派发/);
+    assert.equal(g.data.posts,1);
   });
   await check('完成时间显示北京时间时分秒，开始时间不能冒充完成时间', async () => {
     const page=snapshot();page.finished_at='2026-10-08T01:05:06Z';
@@ -530,7 +636,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.equal(f.els.checkResult.hidden,true);
     await f.els.btnCheckStatus.onclick();
     assert.equal(f.els.checkResult.hidden,false);
-    assert.match(f.els.checkResult.textContent,/已核对线上/);
+    assert.match(f.els.checkResult.textContent,/当前发布：/);
   });
   await check('查询尚未结束时关闭也不会在结果返回后重新出现', async () => {
     const f=fixture();
