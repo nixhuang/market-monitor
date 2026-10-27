@@ -3883,6 +3883,81 @@ class TestIntradayVolumeRatio(unittest.TestCase):
         self.assertFalse(any('盘中量比' in text for text in signals), signals)
 
 
+class TestIntradayVolumeThresholds(unittest.TestCase):
+    """盘中量比的门槛随开盘进度放宽：抵消线性折算在早盘的系统性高估，量比数值本身不变。"""
+
+    def test_bands_widen_early_and_settle_afternoon(self):
+        base = (1.5, 3.0)
+        cases = ((30, 390, 1.69), (44, 390, 1.69), (50, 390, 1.45), (75, 390, 1.30),
+                 (100, 390, 1.13), (150, 390, 1.0), (380, 390, 1.0))
+        for elapsed, total, factor in cases:
+            with self.subTest(elapsed=elapsed, total=total):
+                yellow, red = monitor.intraday_volume_thresholds(elapsed, total, *base)
+                self.assertAlmostEqual(yellow, 1.5 * factor, places=6)
+                self.assertAlmostEqual(red, 3.0 * factor, places=6)
+
+    def test_half_day_converts_to_equivalent_minutes(self):
+        # 半日市全天更短，同一时刻的线性进度更大、高估更少 → 等效分钟更长、门槛更窄
+        early_full = monitor.intraday_volume_thresholds(30, 390, 1.5, 3.0)
+        early_half = monitor.intraday_volume_thresholds(30, 210, 1.5, 3.0)
+        self.assertLess(early_half[0], early_full[0])
+        self.assertEqual(early_half, monitor.intraday_volume_thresholds(30 * 390 / 210, 390, 1.5, 3.0))
+
+    def test_invalid_inputs_fall_back_to_given_thresholds(self):
+        for args in ((None, 390, 1.5, 3.0), (30, 0, 1.5, 3.0), (30, 390, 0, 3.0),
+                     (float('nan'), 390, 1.5, 3.0), (30, 390, float('inf'), 3.0)):
+            with self.subTest(args=args):
+                self.assertEqual(monitor.intraday_volume_thresholds(*args), (args[2], args[3]))
+
+    def test_custom_thresholds_are_scaled_not_overridden(self):
+        yellow, red = monitor.intraday_volume_thresholds(31, 390, 2.0, 4.0)
+        self.assertAlmostEqual(yellow, 2.0 * 1.69, places=6)
+        self.assertAlmostEqual(red, 4.0 * 1.69, places=6)
+
+    def test_quiet_minutes_extended_to_thirty(self):
+        self.assertEqual(monitor.INTRADAY_VOL_QUIET_MIN, 30)
+
+    def _analyze(self, volume, moment):
+        from datetime import datetime
+        import exchange_calendars as xcals
+        cal = xcals.get_calendar('XNYS')
+        sessions = cal.sessions_in_range('2026-04-01', '2026-10-13')[-23:]
+        data = {'dates': [d.date().isoformat() for d in sessions],
+                'volumes': [1000] * 22 + [0], 'closes': [100] * 23,
+                'highs': [100] * 23, 'lows': [100] * 23, 'price': 100, 'prev_close': 100,
+                'rt_volume': volume, 'rt_ts': moment}
+        at = datetime.fromisoformat(moment)
+
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return at.astimezone(tz)
+        with patch.object(monitor, 'NOW', at), patch.object(monitor, 'datetime', Clock), \
+                patch.object(monitor, 'TARGET_DATE', data['dates'][-1]):
+            return monitor.analyze_symbol('AAPL', {}, data)
+
+    def test_same_ratio_ignored_early_and_flagged_at_noon(self):
+        # 同一 2.0× 的折算量比：开盘 31 分钟被抬高到 2.535× 而不报，午间仍是黄灯
+        _, early_signals, early = self._analyze(159, '2026-10-13T10:01:00-04:00')
+        _, noon_signals, noon = self._analyze(769, '2026-10-13T12:00:00-04:00')
+        self.assertTrue(early['vol_ratio_intraday'])
+        self.assertAlmostEqual(early['rt_vol_ratio'], 2.0, places=2)
+        self.assertAlmostEqual(noon['rt_vol_ratio'], 2.0, places=2)
+        self.assertEqual(early['rt_vol_elapsed'], 31)
+        self.assertEqual(noon['rt_vol_elapsed'], 150)
+        self.assertFalse(any('量比' in text for text in early_signals), early_signals)
+        self.assertIn(('vol_ratio', 'yellow'), noon['signal_marks'])
+
+    def test_early_red_requires_much_higher_ratio(self):
+        # 早盘红线抬到 5.07×：3.0× 不报红，5.2× 才报红
+        _, below_signals, below = self._analyze(238, '2026-10-13T10:01:00-04:00')     # ≈3.0×
+        _, above_signals, above = self._analyze(413, '2026-10-13T10:01:00-04:00')     # ≈5.2×
+        self.assertNotIn(('vol_ratio', 'red'), below['signal_marks'])          # 3.0× < 早盘红线 5.07×
+        self.assertIn(('vol_ratio', 'yellow'), below['signal_marks'])         # 但已过抬高的黄线 2.535×
+        self.assertIn('盘中量比 5.2×（截至 10:01 ET）', above_signals)
+        self.assertIn(('vol_ratio', 'red'), above['signal_marks'])
+
+
 class TestVolumeRatioZscore(unittest.TestCase):
     """保留原 z 指标，收盘按显式分布的连续融合门槛判灯；缺失回退固定，盘中不动。"""
 

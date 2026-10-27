@@ -370,7 +370,11 @@ class RuleEngine:
         distribution = distribution_fn(sym, data) if callable(distribution_fn) else None
         x.vol_ratio_m = distribution.get("m") if isinstance(distribution, dict) else None
         x.vol_ratio_s = distribution.get("s") if isinstance(distribution, dict) else None
-        x.rt_vol_ratio, x.rt_vol_time = self._context.intraday_volume_ratio(sym, data)
+        rt = self._intraday_volume_detail(sym, data)
+        x.rt_vol_ratio = rt['ratio'] if rt else None
+        x.rt_vol_time = rt['label'] if rt else ''
+        x.rt_vol_elapsed = rt['elapsed'] if rt else None
+        x.rt_vol_total = rt['total'] if rt else None
         x.vol_ratio_intraday = bool(x.rt_vol_ratio)
         ma_periods = (int(self._context.S["ma_short"]), int(self._context.S["ma_long"]))
         x.moving_averages = [(period, self._context.sma(closes, period)) for period in dict.fromkeys(ma_periods) if period > 0]
@@ -616,6 +620,15 @@ class RuleEngine:
         al.add(facts["kind"], f"布林 + RSI → {'红' if level == 'red' else '黄'}", level)
 
 
+    def _intraday_volume_detail(self, sym, data):
+        """盘中量比 + 当刻进度。优先走 detail 接口；只有旧的两元组接口时进度记为未知。"""
+        fn = getattr(self._context, "intraday_volume_ratio_detail", None)
+        if callable(fn):
+            return fn(sym, data)
+        ratio, label = self._context.intraday_volume_ratio(sym, data)
+        return {'ratio': ratio, 'label': label, 'elapsed': None, 'total': None} if ratio else None
+
+
     def _vol_ratio_z_enabled(self):
         """收盘后的「自身波动」自适应开关：两条 z 阈值都大于 0 才生效，否则退回固定倍数。"""
         return self._context.S.get("vol_ratio_z", 0) > 0 and self._context.S.get("vol_ratio_red_z", 0) > 0
@@ -624,11 +637,18 @@ class RuleEngine:
     def _rule_vol_ratio(self, al, x):
         """量比：盘中用当日累计量按已开盘分钟数折算的「盘中量比」，收盘后回落到最近完整日量比。
     收盘后用 sqrt(exp(m+k*s)*F) 连续门槛；显式分布缺失或无效才退回固定倍数。
-    不从量比与 z 反推分布；盘中始终用固定倍数。
+    不从量比与 z 反推分布；盘中按开盘进度放大固定倍数（成交节奏是 U 型的，线性折算在
+    开盘头一小时会把比值系统性高估，不放大就会早盘普遍误报），放大的是门槛不是数值。
     达到红线报红、达到黄线报黄，所有分组适用；不分涨跌方向。"""
         if getattr(x, "vol_ratio_intraday", False):
             ratio = x.rt_vol_ratio
-            level = "red" if ratio >= self._context.S["vol_ratio_red"] else "yellow" if ratio >= self._context.S["vol_ratio"] else ""
+            thresholds = getattr(self._context, "intraday_volume_thresholds", None)
+            yellow, red = (thresholds(getattr(x, "rt_vol_elapsed", None),
+                                      getattr(x, "rt_vol_total", None),
+                                      self._context.S["vol_ratio"], self._context.S["vol_ratio_red"])
+                           if callable(thresholds)
+                           else (self._context.S["vol_ratio"], self._context.S["vol_ratio_red"]))
+            level = "red" if ratio >= red else "yellow" if ratio >= yellow else ""
             if level:
                 al.add("vol_ratio", f"盘中量比 {ratio:.1f}×（截至 {x.rt_vol_time} ET）", level)
             return   # 盘中已拿到当时量比，不再叠加昨天的完整日口径
@@ -716,6 +736,8 @@ class RuleEngine:
             "vol_ratio_date": x.vol_ratio_date,
             "rt_vol_ratio": x.rt_vol_ratio,
             "rt_vol_time": x.rt_vol_time,
+            "rt_vol_elapsed": getattr(x, "rt_vol_elapsed", None),
+            "rt_vol_total": getattr(x, "rt_vol_total", None),
             "vol_ratio_intraday": x.vol_ratio_intraday,
             "amp": x.amp,
             "vol_tier": x.vol_tier,

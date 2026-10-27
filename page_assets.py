@@ -115,9 +115,10 @@ LAMP_RULE_TABLE = (
     '<td colspan="3">红灯（新进入／跌破／昨日未知）；黄灯（其余持续低位）</td></tr>'
     '<tr><td>均线（短均线穿越；长均线触及±${ma_long_band_pct}%或穿越）</td>'
     '<td class="cell-yellow" colspan="3">黄灯</td></tr>'
-    '<tr><td>量比（收盘自适应／盘中固定）</td>'
+    '<tr><td>量比（收盘自适应／盘中分段固定）</td>'
     '<td colspan="3">收盘：达到连续自适应门槛报红灯／黄灯；'
-    '盘中或分布无效：红灯≥${vol_ratio_red}×，黄灯≥${vol_ratio}×</td></tr>'
+    '盘中或分布无效：红灯≥${vol_ratio_red}×，黄灯≥${vol_ratio}×'
+    '（开盘头两小时按已开盘进度放宽）</td></tr>'
     '</tbody></table>')
 
 # 规则正文不再提供内部跳转；方向图标和阈值仍保留。
@@ -153,7 +154,8 @@ ${amp_threshold_table}
 <p>高中低仅为历史量比波动的示意，不是固定三档。假设m＝0、低／中／高的s分别为0.15／0.30／0.50：</p>
 ${vol_example_table}
 <p>表中倍数为假设示例；实际门槛随每只标的自身分布连续变化。k不是均量倍数；有效自适应未命中，不再用固定倍数补灯。</p>
-<p>盘中按已开盘时间折算成交速度，只用固定门槛：红≥${vol_ratio_red}×、黄≥${vol_ratio}×；不足${intraday_vol_quiet_min}分钟或盘中值无效，退回最近完整日。收盘分布无效或自适应关闭时也用固定门槛，完整日量比缺失则不判。</p>
+<p>盘中量比＝（当日累计量÷已开盘分钟数）÷（${vol_ratio_base}日均量÷全日分钟数），也就是把已开盘这段时间的成交速度折算成全天速度再比较。真实成交是全天不均匀的，开盘与收盘明显快于全天平均，线性折算在开盘头一小时会把比值系统性高估约 1.7 倍起，所以盘中门槛按已开盘进度临时放宽后再比较：不足 45／60／90／120 分钟分别放宽约 1.69／1.45／1.30／1.13 倍，之后回到设定页的固定门槛（红≥${vol_ratio_red}×、黄≥${vol_ratio}×）。放宽的是门槛，页面显示的量比仍是原始折算值。</p>
+<p>开盘不足${intraday_vol_quiet_min}分钟、非交易时段或盘中值无效时不报盘中口径，退回最近完整日。收盘分布无效或自适应关闭时也用固定门槛，完整日量比缺失则不判。</p>
 <h5 id="glossary-ma">均线确认 · 短均线／长均线</h5>
 <p>短均线（${ma_short_status}）：确认幅度＝历史日波动×0.5，限${ma_confirm_min}%～${ma_confirm_max}%；波动无效取${ma_confirm_default}%。检查近${ma_confirm_lookback}日另一侧记录，历史不足只判简单穿越。</p>
 <p>启用后的连续自适应示例：</p>
@@ -310,7 +312,7 @@ def _rules_markup(body):
 
 def _rule_values(settings, constants):
     values = {**DEFAULT_SETTINGS, "rsi_periods": "6／12／24", "vol_ratio_base": 20,
-              "intraday_vol_quiet_min": 15, "vol_low_sigma": 1.2, "vol_high_sigma": 2.5,
+              "intraday_vol_quiet_min": 30, "vol_low_sigma": 1.2, "vol_high_sigma": 2.5,
               "vol_min_returns": 40, "ma_confirm_lookback": 10, "ma_confirm_min": 0.5,
               "ma_confirm_max": 3, "ma_confirm_default": 1, "ma_long_band_pct": 1,
               "boll_sigma_factor": 1.29, "earn_soon_days": 7, "earn_list_days": 15,

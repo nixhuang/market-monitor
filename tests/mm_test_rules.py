@@ -669,7 +669,8 @@ class RulesRegression(unittest.TestCase):
                 self.assertIn('收盘分布有效、两条自适应参数启用且量比≥1×', glossary)
                 self.assertIn('新门槛＝√(T×F)', glossary)
                 self.assertIn('自适应未命中，不再用固定倍数补灯', glossary)
-                self.assertIn('盘中按已开盘时间折算成交速度，只用固定门槛', glossary)
+                self.assertIn('盘中量比＝（当日累计量÷已开盘分钟数）÷', glossary)
+                self.assertIn('按已开盘进度临时放宽', glossary)
 
     def test_boll_adaptive_matches_actual_formula_and_off_switch(self):
         monitor.S.update(boll_near_band_pct=25, boll_near_pct=0.75, boll_n=30, boll_k=3)

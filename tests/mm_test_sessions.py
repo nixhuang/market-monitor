@@ -584,7 +584,7 @@ class IntradayVolumeTests(unittest.TestCase):
         self.assertEqual(monitor.intraday_volume_ratio("AAPL", duplicate, at(moment)), (None, ""))
 
     def test_quiet_period_and_historical_target(self):
-        for minute, valid in (("09:44:59", False), ("09:45:00", True)):
+        for minute, valid in (("09:59:59", False), ("10:00:00", True)):   # 静默 30 分钟
             moment = "2026-10-20T" + minute + "-04:00"
             ratio, _ = monitor.intraday_volume_ratio("AAPL", self.data(moment), at(moment))
             self.assertEqual(ratio is not None, valid)

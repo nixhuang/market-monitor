@@ -2915,6 +2915,18 @@ completed_day_volume_distribution = _indicator_calculator.completed_day_volume_d
 INTRADAY_VOL_QUIET_MIN = monitor_indicators.INTRADAY_VOL_QUIET_MIN
 
 
+INTRADAY_VOL_BANDS = monitor_indicators.INTRADAY_VOL_BANDS
+
+
+FULL_SESSION_MINUTES = monitor_indicators.FULL_SESSION_MINUTES
+
+
+intraday_volume_thresholds = monitor_indicators.intraday_volume_thresholds
+
+
+intraday_volume_ratio_detail = _indicator_calculator.intraday_volume_ratio_detail
+
+
 intraday_volume_ratio = _indicator_calculator.intraday_volume_ratio
 
 

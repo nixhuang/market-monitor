@@ -290,12 +290,15 @@ check('<div class="foot">' not in html5 and 'href="#signalRules"' not in html5,
       '页底重复规则入口已删除，完整规则模板仍保留')
 head5 = html5.split('</head>', 1)[0]
 check('rel="icon"' in head5 and './icons/favicon-32.png' in head5, "页头有网页图标（相对路径）")
-check('rel="apple-touch-icon" href="./icons/apple-touch-icon.png"' in head5, "页头有 apple-touch-icon")
+check('rel="apple-touch-icon" href="./icons/apple-touch-icon.png' in head5, "页头有 apple-touch-icon")
 check('rel="manifest" href="./manifest.webmanifest"' in head5 and 'name="theme-color"' in head5, "页头有 manifest 与 theme-color")
 import json as _json, os as _os
 _root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
 _mf = _json.load(open(_os.path.join(_root, 'manifest.webmanifest'), encoding='utf-8'))
-check(all(_os.path.exists(_os.path.join(_root, i['src'])) for i in _mf['icons']), "manifest 里的图标文件都存在")
+check(all(_os.path.exists(_os.path.join(_root, i['src'].split('?', 1)[0])) for i in _mf['icons']),
+      "manifest 里的图标文件都存在")
+check(any('maskable' in (i.get('purpose') or '') for i in _mf['icons']),
+      "manifest 提供 Android 自适应图标（maskable）")
 check(all(_os.path.exists(_os.path.join(_root, 'icons', n)) for n in ('favicon-32.png', 'apple-touch-icon.png')), "页头引用的图标文件存在")
 check(sum(_os.path.getsize(_os.path.join(_root, 'icons', n)) for n in _os.listdir(_os.path.join(_root, 'icons'))) < 400 * 1024, "图标总体积小于 400KB")
 check('<div class="foot">' not in html5 and 'href="#marketRiskRules"' not in html5

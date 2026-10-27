@@ -46,7 +46,35 @@ VOL_RATIO_BASE = 20    # 量比的均量窗口：最近完整日量 ÷ 此前 20
 VOL_Z_WINDOW = 60      # 量比 z 值的回看长度：这只股自己 60 个交易日的放量分布
 
 
-INTRADAY_VOL_QUIET_MIN = 15   # 开盘后这段分钟数内不报盘中量比：分母太小会把比值放大到没有意义
+INTRADAY_VOL_QUIET_MIN = 30   # 开盘后这段分钟数内不报盘中量比：分母太小会把比值放大到没有意义
+
+
+FULL_SESSION_MINUTES = 390    # 常规交易日 09:30–16:00 的总分钟数，用于把半日市折算成等效分钟
+
+
+# 盘中量比的「开盘进度放大系数」。成交节奏是 U 型的，开盘与收盘的每分钟成交速度远高于
+# 全天平均，而盘中量比用线性进度折算（已开盘分钟 ÷ 全日分钟），会把比值系统性高估：
+# 开盘 30 分钟大约高估 1.7×、60 分钟 1.3×、90 分钟约 1.13×，午间之后基本持平。
+# 所以在这些时段把门槛按系数抬高，抵消高估；系数只乘门槛，不动量比数值本身，
+# 设置页自定义的黄/红倍数仍然完全生效。表按「等效已开盘分钟」从早到晚匹配第一个命中项。
+INTRADAY_VOL_BANDS = ((45, 1.69), (60, 1.45), (90, 1.30), (120, 1.13))
+
+
+def intraday_volume_thresholds(elapsed, total, yellow, red,
+                               bands=INTRADAY_VOL_BANDS, full=FULL_SESSION_MINUTES):
+    """盘中量比的当刻门槛：把固定倍数按开盘进度放大，抵消线性折算的系统性高估。
+
+    半日市全天分钟数更短，同一时刻的线性进度更大、高估更少，因此先折算成等效分钟再查表。
+    任一入参非法就退回调用方给的原始门槛，绝不因为缺数据而放宽或收紧判定。"""
+    numbers = (elapsed, total, yellow, red)
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+               and math.isfinite(v) and v > 0 for v in numbers):
+        return yellow, red
+    equiv = elapsed * (full / total)
+    for bound, factor in bands:
+        if equiv < bound:
+            return yellow * factor, red * factor
+    return yellow, red
 
 
 def calc_rsi(prices, period=14):
@@ -341,23 +369,26 @@ class IndicatorCalculator:
             return None
 
 
-    def intraday_volume_ratio(self, sym, data, asof=None):
-        """盘中量比 =（当日累计成交量 ÷ 已开盘分钟数）÷（此前20个完整交易日均量 ÷ 当日总交易分钟数）。
+    def intraday_volume_ratio_detail(self, sym, data, asof=None):
+        """盘中量比及其当刻上下文。
 
+    盘中量比 =（当日累计成交量 ÷ 已开盘分钟数）÷（此前20个完整交易日均量 ÷ 当日总交易分钟数）。
     用「每分钟成交速度」相比，时间进度天然被约掉，所以盘中不用等到收盘也能算。
     /info 的累计量实测实时递增且不含盘前；均量窗口沿用 completed_day_volume_ratio 的 20 日。
     期货/指数不走同一股票日历口径；静默期内、非交易时段、源没给量或历史不足时一律不报。
     rt_ts 必须通过时效校验，进度与返回标签均取成交时间；此前20个日期必须连续且完整。
+
+    返回 None（不报）或 {'ratio','label','elapsed','total'}：elapsed/total 供规则层换算当刻门槛。
     """
         if self._context.instrument_identity(sym).startswith('^') or self._context.instrument_identity(sym).endswith('=F'):
-            return None, ''
+            return None
         vol = data.get("rt_volume")
         if not isinstance(vol, (int, float)) or isinstance(vol, bool) or not math.isfinite(vol) or vol <= 0:
-            return None, ''
+            return None
         dates, volumes = data.get('dates') or [], data.get('volumes') or []
         if (not isinstance(dates, list) or not isinstance(volumes, list)
                 or len(dates) != len(volumes) or len(dates) < self._context.VOL_RATIO_BASE + 1):
-            return None, ''
+            return None
         try:
             # 实时量以成交时点计进度；NOW 是任务启动时间，不能拿它误判抓取后的报价为未来。
             now = asof or self._context.datetime.now(self._context.US_TZ)
@@ -365,24 +396,33 @@ class IndicatorCalculator:
             quoted = self._context.market_sessions.validated_quote_time(data.get("rt_ts"), now)
             if (not session or quoted is None or dates[-1] != session[0]
                     or (self._context.TARGET_DATE and self._context.TARGET_DATE != session[0])):
-                return None, ''
+                return None
             if not self._volume_window_complete(dates, len(dates) - 1, self._context.VOL_RATIO_BASE):
-                return None, ''
+                return None
             elapsed = (quoted - session[1]).total_seconds() / 60
             total = (session[2] - session[1]).total_seconds() / 60
             if elapsed < self._context.INTRADAY_VOL_QUIET_MIN or total <= 0:
-                return None, ''
+                return None
             sample = volumes[-self._context.VOL_RATIO_BASE-1:-1]
             if any(not isinstance(v, (int, float)) or isinstance(v, bool)
                    or not math.isfinite(v) or v <= 0 for v in sample):
-                return None, ''
+                return None
             average = sum(volume / self._context.VOL_RATIO_BASE for volume in sample)
             if average <= 0 or not math.isfinite(average):
-                return None, ''
+                return None
             ratio = (vol / elapsed) / (average / total)
-            return (ratio, quoted.strftime("%H:%M")) if math.isfinite(ratio) and ratio > 0 else (None, '')
+            if not math.isfinite(ratio) or ratio <= 0:
+                return None
+            return {'ratio': ratio, 'label': quoted.strftime("%H:%M"),
+                    'elapsed': elapsed, 'total': total}
+
         except (ValueError, TypeError, KeyError, OverflowError):
-            return None, ''
+            return None
+
+    def intraday_volume_ratio(self, sym, data, asof=None):
+        """只要 (比值, 时点) 的旧签名，内部走 intraday_volume_ratio_detail，两处口径必须一致。"""
+        detail = self.intraday_volume_ratio_detail(sym, data, asof=asof)
+        return (detail['ratio'], detail['label']) if detail else (None, '')
 
 
     def _range52_from_history(self, data):
