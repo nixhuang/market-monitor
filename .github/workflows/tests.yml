@@ -1,8 +1,8 @@
 name: 自动测试
 run-name: "自动测试 · ${{ github.event_name }}"
 
-# 生产文件的 main push 由 daily 调用本矩阵，不再重复启动独立测试工作流。
-# tests-only 变更仍自动跑，但不会触发 daily；PR 和手动测试入口保留。
+# 生产文件的 main push 由 daily 调用本矩阵；生产+tests 混改时独立入口只做路径去重。
+# tests-only 变更仍自动跑，但不会触发 daily；PR、手动和 daily 调用始终保留全部门槛。
 on:
   push:
     branches: [main]
@@ -17,13 +17,42 @@ on:
       - 'position-costs.json'
       - 'import-audit.json'
   workflow_call:
+    inputs:
+      called_by_daily:
+        description: '发布工作流调用时必须完整执行，不能因 push 路径重复判断而跳过'
+        type: boolean
+        default: false
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      run_tests: ${{ steps.scope.outputs.run_tests }}
+    steps:
+      - name: 拉取完整变更范围
+        if: ${{ github.event_name == 'push' && inputs.called_by_daily != true }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 去重混合 push，保留非 push 与发布门槛
+        id: scope
+        env:
+          MM_CALLED_BY_DAILY: ${{ inputs.called_by_daily == true && 'true' || 'false' }}
+        run: |
+          if [ "$MM_CALLED_BY_DAILY" = true ] || [ "$GITHUB_EVENT_NAME" != push ]; then
+            echo "run_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            python tests/run_all.py --ci-should-run >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: scope
+    if: ${{ needs.scope.outputs.run_tests == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -38,6 +67,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: 准备 Node
         uses: actions/setup-node@v4
@@ -49,3 +79,33 @@ jobs:
 
       - name: 跑全部离线测试
         run: python tests/run_all.py
+
+  browser:
+    needs: scope
+    if: ${{ needs.scope.outputs.run_tests == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 拉取仓库
+        uses: actions/checkout@v4
+      - name: 准备 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: 准备 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: 安装运行依赖
+        run: python -m pip install -r requirements.txt
+      - name: Chromium 合成页面交互与离线隔离
+        timeout-minutes: 3
+        run: |
+          # 使用 hosted runner 已有 Chromium 内核，无 npm/浏览器下载，无用户 profile。
+          export MM_TEST_CHROME="$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)"
+          if [ -z "$MM_TEST_CHROME" ]; then
+            echo "::error::runner 缺少 Chromium/Chrome，浏览器质量门槛不能跳过"
+            exit 1
+          fi
+          python tests/run_all.py --offline-python tests/mm_test_render.py --chrome

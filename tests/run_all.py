@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
-"""默认离线运行全部测试（Python 九项 + Node 五项），任何一项不过就返回非 0。
+"""默认离线运行全部测试（Python 十一项 + Node 五项），任何一项不过就返回非 0。
 
 本地：python tests/run_all.py（可用环境变量 NODE 指定 node 可执行文件）
 护栏自测：python tests/run_all.py --self-test-offline（不运行任何业务测试）
+预算：MM_TEST_SUITE_TIMEOUT 默认 120 秒，MM_TEST_TOTAL_TIMEOUT 默认 480 秒；超时非零退出。
 单项入口：--offline-python script.py [args] / -m unittest [args] / -c code [args]
           --offline-node script.js [args] / -e code [args]
 CI：.github/workflows/tests.yml 直接调用本脚本，daily.yml 的发布依赖它通过。
 护栏用于防止测试意外联网，不是针对恶意代码、原生扩展或另起进程的安全沙箱。
 """
+import json
+import math
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -19,14 +23,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNNER = os.path.abspath(__file__)
 NODE = os.environ.get("NODE") or shutil.which("node")
 OFFLINE_EXIT = 86
+TIMEOUT_EXIT = 124
 
 PY = [
+    ("mm_test_runner", [sys.executable, "-m", "unittest", "tests.run_all.RunnerTests"]),
     ("mm_test_amp", [sys.executable, "tests/mm_test_amp.py"]),
     ("mm_test_groups", [sys.executable, "tests/mm_test_groups.py"]),
     ("mm_test_render", [sys.executable, "tests/mm_test_render.py"]),
     ("mm_test_rsi", [sys.executable, "-m", "unittest", "tests.mm_test_rsi"]),
     ("mm_test_policy_alerts", [sys.executable, "-m", "unittest", "tests.mm_test_policy_alerts"]),
     ("mm_test_build", [sys.executable, "tests/mm_test_build.py"]),
+    ("mm_test_budget", [sys.executable, "tests/mm_test_budget.py"]),
     ("mm_test_runtime", [sys.executable, "tests/mm_test_runtime.py"]),
     ("mm_test_sessions", [sys.executable, "tests/mm_test_sessions.py"]),
     ("mm_test_rules", [sys.executable, "tests/mm_test_rules.py"]),
@@ -243,6 +250,187 @@ def _node_command(args):
 
 def _child_env():
     return dict(os.environ, PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONDONTWRITEBYTECODE="1")
+
+
+def _test_limits():
+    values = tuple(float(os.environ.get(key, default)) for key, default in (
+        ("MM_TEST_SUITE_TIMEOUT", "120"), ("MM_TEST_TOTAL_TIMEOUT", "480")))
+    if any(not math.isfinite(value) or value <= 0 for value in values):
+        raise ValueError("测试超时必须是有限正数")
+    return values
+
+
+def _run_command(command, timeout, **kwargs):
+    """超时清理本次测试进程树，避免后代持有输出管道导致 communicate 永久等待。"""
+    options = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          text=True, encoding="utf-8", errors="replace", **options, **kwargs) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            if os.name == "nt":
+                try:
+                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                                   capture_output=True, timeout=5, check=False)
+                except (OSError, subprocess.TimeoutExpired):
+                    process.kill()
+            else:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            try:
+                stdout, stderr = process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = exc.output, exc.stderr
+                process.stdout.close()
+                process.stderr.close()
+            raise subprocess.TimeoutExpired(command, timeout, output=stdout, stderr=stderr) from None
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _output_text(value):
+    return value.decode("utf-8", "replace") if isinstance(value, bytes) else value or ""
+
+
+def _run_jobs(jobs, suite_timeout, total_timeout):
+    deadline = time.monotonic() + total_timeout
+    failed, passed = [], 0
+    for index, (name, command) in enumerate(jobs):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            skipped = [name for name, _ in jobs[index:]]
+            failed.extend(skipped)
+            print(f"FAIL  总预算 {total_timeout:g}s 已耗尽；未运行：{', '.join(skipped)}", flush=True)
+            break
+        timeout = min(suite_timeout, remaining)
+        started = time.monotonic()
+        try:
+            result = _run_command(command, timeout, cwd=ROOT, env=_child_env())
+            ok = result.returncode == 0
+            detail = f"退出码 {result.returncode}"
+            stdout, stderr = result.stdout, result.stderr
+        except subprocess.TimeoutExpired as exc:
+            ok = False
+            detail = f"超时 {timeout:.2f}s（单套上限 {suite_timeout:g}s，总预算 {total_timeout:g}s）"
+            stdout, stderr = exc.output, exc.stderr
+        except OSError as exc:
+            ok, detail, stdout, stderr = False, f"无法启动：{exc}", "", ""
+        print(f"{'PASS' if ok else 'FAIL'}  {name}  ({time.monotonic() - started:.1f}s；{detail})", flush=True)
+        if ok:
+            passed += 1
+        else:
+            failed.append(name)
+            print(_output_text(stdout)[-3000:])
+            # 不截断 stderr，保留离线护栏和超时前诊断。
+            print(_output_text(stderr))
+    print(f"\n{passed}/{len(jobs)} 项通过" + (f"；未通过：{', '.join(failed)}" if failed else ""), flush=True)
+    return 1 if failed else 0
+
+
+def _ci_should_run():
+    # reusable workflow 保留调用者 event_name，必须显式标明 daily 调用，不能误跳发布门槛。
+    if os.environ.get("MM_CALLED_BY_DAILY") == "true" or os.environ.get("GITHUB_EVENT_NAME") != "push":
+        return True
+    try:
+        sys.path.insert(0, ROOT)
+        import build_support
+        with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as source:
+            event = json.load(source)
+        before, after = event["before"], event["after"]
+        if not before.strip("0"):
+            return True
+        changed = subprocess.run(["git", "diff", "--no-renames", "--name-only", "-z", before, after, "--"],
+                                 cwd=ROOT, capture_output=True, check=True, timeout=20).stdout
+        paths = [path for path in changed.decode("utf-8").split("\0") if path]
+        # GitHub paths 只检查前 300 个文件；大 diff 无法保证 daily 被触发，不能去重。
+        if len(paths) > 300:
+            return True
+        # 含生产输入的 push 由 daily 的同一矩阵负责；tests-only push 仍独立完整运行。
+        return not any(build_support.is_build_input(path) for path in paths)
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+        print(f"无法证明 daily 已覆盖，本轮保留完整测试：{exc}", file=sys.stderr)
+        return True
+
+
+class RunnerTests(unittest.TestCase):
+    def test_real_timeout_cleans_descendants_and_preserves_partial_diagnostics(self):
+        child = "import threading; print('后代超时前输出', flush=True); threading.Event().wait(60)"
+        code = f"import subprocess,sys; subprocess.run([sys.executable, '-u', '-c', {child!r}])"
+        with self.assertRaises(subprocess.TimeoutExpired) as caught:
+            _run_command([sys.executable, "-u", "-c", code], 1, env=_child_env())
+        self.assertIn("后代超时前输出", _output_text(caught.exception.output))
+
+    def test_nonzero_exit_and_stderr_are_preserved(self):
+        result = _run_command([sys.executable, "-c", "import sys; print('诊断', file=sys.stderr); sys.exit(7)"],
+                              10, env=_child_env())
+        self.assertEqual(result.returncode, 7)
+        self.assertIn("诊断", result.stderr)
+
+    def test_total_timeout_fails_unrun_suites_and_caps_each_child(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        output = io.StringIO()
+        with patch.object(time, "monotonic", side_effect=[0, 0, 0, 2, 2]), \
+                patch(__name__ + "._run_command", return_value=subprocess.CompletedProcess([], 0, "", "")) as run, \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(_run_jobs([("first", []), ("second", [])], 120, 1), 1)
+        self.assertEqual(run.call_args.args[1], 1)
+        self.assertIn("未运行：second", output.getvalue())
+        self.assertIn("1/2 项通过", output.getvalue())
+
+    def test_timeout_is_reported_as_failure(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        output = io.StringIO()
+        with patch(__name__ + "._run_command", side_effect=subprocess.TimeoutExpired([], 1, b"partial", b"error")), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(_run_jobs([("blocked", [])], 1, 5), 1)
+        for value in ("blocked", "超时", "partial", "error", "0/1"):
+            self.assertIn(value, output.getvalue())
+
+    def test_invalid_timeout_values_are_rejected(self):
+        from unittest.mock import patch
+        for value in ("0", "-1", "nan", "inf", "invalid"):
+            with self.subTest(value=value), patch.dict(os.environ, {"MM_TEST_TOTAL_TIMEOUT": value}):
+                with self.assertRaises(ValueError):
+                    _test_limits()
+
+    def test_ci_route_covers_mixed_test_only_manual_and_reusable_push(self):
+        import io
+        from unittest.mock import patch
+        event = json.dumps({"before": "a" * 40, "after": "b" * 40})
+        for mode, called, paths, expected in (
+                ("push", "false", b"monitor.py\0tests/mm_test_build.py\0", False),
+                ("push", "false", b"tests/mm_test_build.py\0", True),
+                ("push", "false", b".github/workflows/tests.yml\0", True),
+                ("push", "false", b"status.json\0tests/new.py\0", True),
+                ("push", "false", b"monitor.py\0" + b"\0".join(f"tests/file-{i}.py".encode() for i in range(300)), True),
+                ("push", "true", b"monitor.py\0", True),
+                ("workflow_dispatch", "false", b"monitor.py\0", True),
+                ("pull_request", "false", b"monitor.py\0", True)):
+            with self.subTest(mode=mode, called=called, paths=paths), \
+                    patch.dict(os.environ, {"GITHUB_EVENT_NAME": mode, "MM_CALLED_BY_DAILY": called,
+                                            "GITHUB_EVENT_PATH": "synthetic-event.json"}), \
+                    patch("builtins.open", return_value=io.StringIO(event)), \
+                    patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, paths, b"")):
+                self.assertEqual(_ci_should_run(), expected)
+
+    def test_ci_missing_history_or_event_never_skips_tests(self):
+        import io
+        from unittest.mock import patch
+        for event in ({"before": "0" * 40, "after": "b" * 40},
+                      {"before": "a" * 40, "after": "b" * 40}, {}):
+            with self.subTest(event=event), \
+                    patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push", "MM_CALLED_BY_DAILY": "false",
+                                            "GITHUB_EVENT_PATH": "synthetic-event.json"}), \
+                    patch("builtins.open", return_value=io.StringIO(json.dumps(event))), \
+                    patch.object(subprocess, "run", side_effect=subprocess.CalledProcessError(1, ["git"])), \
+                    patch.object(sys, "stderr", io.StringIO()):
+                self.assertTrue(_ci_should_run())
 
 
 class OfflineGuardTests(unittest.TestCase):
@@ -477,16 +665,22 @@ console.log('NODE_SOCKET_OK');
         return 1
 
     failed = []
-    for name, command, expected, markers in checks:
+    suite_timeout, total_timeout = _test_limits()
+    deadline = time.monotonic() + total_timeout
+    for index, (name, command, expected, markers) in enumerate(checks):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            failed.extend(check[0] for check in checks[index:])
+            print(f"FAIL  护栏自测总预算 {total_timeout:g}s 耗尽；未运行：{', '.join(failed)}")
+            break
         try:
-            result = subprocess.run(command, cwd=ROOT, env=_child_env(), capture_output=True,
-                                    text=True, encoding="utf-8", errors="replace", timeout=20)
+            result = _run_command(command, min(20, suite_timeout, remaining), cwd=ROOT, env=_child_env())
             output = result.stdout + result.stderr
             ok = (result.returncode == expected and all(marker in output for marker in markers)
                   and (("[OFFLINE]" in result.stderr) == (expected == OFFLINE_EXIT)))
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             ok = False
-            output = "护栏自测超时"
+            output = f"护栏自测超时 {exc.timeout:g}s\n" + _output_text(exc.output) + _output_text(exc.stderr)
             result = None
         print(f"{'PASS' if ok else 'FAIL'}  {name}")
         if not ok:
@@ -505,7 +699,18 @@ def main():
             if not NODE:
                 print("找不到 node（可设置环境变量 NODE）", file=sys.stderr)
                 return 1
-            return subprocess.run(_node_command(args[1:]), env=_child_env()).returncode
+            try:
+                result = _run_command(_node_command(args[1:]), min(_test_limits()), env=_child_env())
+            except subprocess.TimeoutExpired as exc:
+                print(_output_text(exc.output))
+                print(f"Node 单套超时 {exc.timeout:g}s\n" + _output_text(exc.stderr), file=sys.stderr)
+                return TIMEOUT_EXIT
+            print(result.stdout, end="")
+            print(result.stderr, end="", file=sys.stderr)
+            return result.returncode
+        if args == ["--ci-should-run"]:
+            print("run_tests=" + str(_ci_should_run()).lower())
+            return 0
         if args == ["--self-test-offline"]:
             return _self_test_offline()
         if args[0] == "--offline-probe":
@@ -513,26 +718,18 @@ def main():
         print("未知参数；可使用 --self-test-offline、--offline-python 或 --offline-node", file=sys.stderr)
         return 2
 
-    env = _child_env()
+    try:
+        suite_timeout, total_timeout = _test_limits()
+    except ValueError as exc:
+        print(f"无效测试预算：{exc}", file=sys.stderr)
+        return 2
     jobs = [(name, _python_command(cmd[1:])) for name, cmd in PY]
     if NODE:
         jobs += [(n, _node_command([f"tests/{n}.js"])) for n in JS]
     else:
         print("找不到 node（可设置环境变量 NODE），Node 测试无法运行")
         return 1
-    failed = []
-    for name, cmd in jobs:
-        t0 = time.time()
-        r = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        ok = r.returncode == 0
-        print(f"{'PASS' if ok else 'FAIL'}  {name}  ({time.time() - t0:.1f}s)")
-        if not ok:
-            failed.append(name)
-            print((r.stdout or "")[-3000:])
-            # 不截断 stderr，避免漏掉退出阶段汇总的违规 URL。
-            print(r.stderr or "")
-    print(f"\n{len(jobs) - len(failed)}/{len(jobs)} 项通过" + (f"；未通过：{', '.join(failed)}" if failed else ""))
-    return 1 if failed else 0
+    return _run_jobs(jobs, suite_timeout, total_timeout)
 
 
 if __name__ == "__main__":

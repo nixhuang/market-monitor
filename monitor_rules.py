@@ -630,7 +630,7 @@ class RuleEngine:
             ratio = x.rt_vol_ratio
             level = "red" if ratio >= self._context.S["vol_ratio_red"] else "yellow" if ratio >= self._context.S["vol_ratio"] else ""
             if level:
-                al.add("vol_ratio", f"盘中量比（截至 {x.rt_vol_time} ET）{ratio:.1f}x", level)
+                al.add("vol_ratio", f"盘中量比 {ratio:.1f}×（截至 {x.rt_vol_time} ET）", level)
             return   # 盘中已拿到当时量比，不再叠加昨天的完整日口径
         ratio = getattr(x, "vol_ratio", None)
         if (not isinstance(ratio, (int, float)) or isinstance(ratio, bool)
@@ -646,11 +646,11 @@ class RuleEngine:
             red = m / 2 + (s / 2) * self._context.S["vol_ratio_red_z"] + math.log(self._context.S["vol_ratio_red"]) / 2
             level = "red" if log_ratio >= red else "yellow" if log_ratio >= yellow else ""
             if level:
-                al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{ratio:.1f}x", level)
+                al.add("vol_ratio", f"量比 {ratio:.1f}×（{x.vol_ratio_date}）", level)
             return   # 有效自适应未达标，不按固定倍数补灯
         level = "red" if ratio >= self._context.S["vol_ratio_red"] else "yellow" if ratio >= self._context.S["vol_ratio"] else ""
         if level:
-            al.add("vol_ratio", f"最近完整日量比（{x.vol_ratio_date}）{ratio:.1f}x", level)
+            al.add("vol_ratio", f"量比 {ratio:.1f}×（{x.vol_ratio_date}）", level)
 
 
     def _rule_moving_averages(self, al, x):

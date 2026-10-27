@@ -15,6 +15,7 @@
 
 import argparse
 import atexit
+import base64
 import csv
 import hashlib
 import html as html_lib
@@ -30,7 +31,9 @@ import sys
 import threading
 import time
 import urllib.robotparser
+from urllib.parse import parse_qsl, quote, quote_plus, unquote, urlencode, urlsplit, urlunsplit
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -64,16 +67,77 @@ QUOTE_SYMBOL_SECONDS = 40       # 单只标的最长耗时：超时就换下一�
 QUOTE_WORKERS = 6               # 有界并发：既比串行快，又不至于把行情源打到限流
 QUOTE_RETRY_PASSES = 1          # 第一轮失败的标的，预算够时再补抓一轮
 _QUOTE_TLS = threading.local()
+RUN_DEADLINE = None
+RUN_BUDGET_SECONDS = 12 * 60
+FINALIZE_RESERVE_SECONDS = 90  # 生成、封存及推送留白；早于外部15分钟任务上限
+MACRO_BUDGET_SECONDS = 120
+REFERENCE_BUDGET_SECONDS = 45
+EARN_BUDGET_SECONDS = 90
+_REQUEST_TLS = threading.local()
+
+
+class BudgetExhausted(requests.Timeout, TimeoutError):
+    """协作式预算已用完；不承诺终止DNS或持续分块响应等阻塞。"""
+
+
+def request_remaining(deadline=None, clock=None):
+    clock = clock or getattr(_REQUEST_TLS, "clock", None) or time.monotonic
+    limits = [d for d in (RUN_DEADLINE, deadline, getattr(_REQUEST_TLS, "deadline", None))
+              if d is not None]
+    return min(limits) - clock() if limits else float("inf")
+
+
+def request_timeout(seconds, deadline=None, clock=None):
+    remaining = request_remaining(deadline, clock)
+    if remaining <= 0:
+        raise BudgetExhausted("本轮取数时间预算已用完，沿用旧辅助值或标记缺失")
+    # requests 的标量超时分别用于连接与读取，两阶段各分至多一半剩余预算。
+    return min(seconds, remaining / 2)
+
+
+@contextmanager
+def request_budget(deadline, clock=None):
+    old = getattr(_REQUEST_TLS, "deadline", None), getattr(_REQUEST_TLS, "clock", None)
+    _REQUEST_TLS.deadline = min(d for d in (deadline, old[0]) if d is not None)
+    _REQUEST_TLS.clock = clock or old[1] or time.monotonic
+    try:
+        yield
+    finally:
+        _REQUEST_TLS.deadline, _REQUEST_TLS.clock = old
+
+
+def budget_sleep(seconds, sleep=None, deadline=None, clock=None):
+    if request_remaining(deadline, clock) <= seconds:
+        return False  # 不为已无余量的下一次请求继续等待
+    (sleep or time.sleep)(seconds)
+    return request_remaining(deadline, clock) > 0
+
+
+@contextmanager
+def bounded_http_requests():
+    """入口统一约束跨模块GET；嵌套的HTTP快照先恢复，本包装后恢复。"""
+    original = requests.Session.request
+
+    def bounded(session, method, url, *args, **kwargs):
+        if str(method).upper() == "GET" and request_remaining() != float("inf"):
+            timeout = kwargs.get("timeout")
+            if isinstance(timeout, tuple):
+                kwargs["timeout"] = tuple(request_timeout(t if t is not None else float("inf"))
+                                          for t in timeout)
+            else:
+                kwargs["timeout"] = request_timeout(timeout if timeout is not None else float("inf"))
+        return original(session, method, url, *args, **kwargs)
+
+    requests.Session.request = bounded
+    try:
+        yield
+    finally:
+        requests.Session.request = original
 
 
 def quote_timeout(seconds):
     deadlines = [d for d in (QUOTE_DEADLINE, getattr(_QUOTE_TLS, "deadline", None)) if d is not None]
-    if not deadlines:
-        return seconds
-    remaining = min(deadlines) - time.monotonic()
-    if remaining <= 0:
-        raise TimeoutError("本轮行情抓取时间预算已用完")
-    return max(0.1, min(seconds, remaining))
+    return request_timeout(seconds, min(deadlines) if deadlines else None)
 
 
 class SourceGate:
@@ -653,6 +717,10 @@ def cached_financial_conditions(previous=None, state=None):
         log(f"  · 金融压力NFCI沿用已核验周度缓存（截至 {rows[-1][0]}）")
         return rows, source
 
+    if request_remaining() <= 0:
+        if state is not None and prior:
+            state.update(prior, deferred="budget")
+        return rows, source
     try:
         official = valid_rows(financial_conditions_series())
     except Exception as exc:
@@ -794,6 +862,11 @@ def build_macro(previous=None, nfci_state=None):
     macro = {}
     SP500_RS_ROWS.clear()
     for key, cfg in FRED_SERIES.items():
+        if key not in ("hy_oas", "vix", "sp500", "ust10", "nfci"):
+            continue
+        if key != "nfci" and request_remaining() <= 0:
+            macro[key] = {"ok": False, "name": cfg["name"], "deferred": "budget"}
+            continue
         source_info = {}
         if key == "hy_oas":
             rows = fred_series(cfg["id"])
@@ -809,10 +882,8 @@ def build_macro(previous=None, nfci_state=None):
             rows, source_info['source'] = cached_financial_conditions(previous, nfci_state)
         else:
             continue
-        if not rows and key in ("vix", "sp500", "ust10"):
-            # 只有 3 个请求，值得多等一会儿再试一次：这三项决定风险参考的综合灯
-            log(f"  · {cfg['name']} 首次取数失败，稍后重试一次")
-            time.sleep(MACRO_RETRY_WAIT)
+        if not rows and key in ("vix", "sp500", "ust10") and budget_sleep(MACRO_RETRY_WAIT):
+            log(f"  · {cfg['name']} 首次取数失败，重试一次")
             if key == 'vix':
                 rows = vix_index_series(source_info)
             elif key == "ust10":
@@ -857,7 +928,8 @@ def build_macro(previous=None, nfci_state=None):
         macro[key] = item
         log(f"  {cfg['name']}: {cur:.2f} ({rows[-1][0]})")
     target = TARGET_DATE or NOW.astimezone(US_TZ).date().isoformat()
-    macro["breadth"] = market_breadth(target)
+    macro["breadth"] = (market_breadth(target) if request_remaining() > 0 else
+                        {"ok": False, "name": "上涨参与度", "deferred": "budget"})
     def recent(item, days):
         if not item.get("ok"):
             return False
@@ -1547,7 +1619,7 @@ def nasdaq_earnings(sym, timeout=12):
     res = {"status": "error"}
     try:
         url = f"https://api.nasdaq.com/api/analyst/{key.replace('-', '.')}/earnings-date"
-        r = _earn_session().get(url, timeout=timeout)
+        r = _earn_session().get(url, timeout=request_timeout(timeout))
         if r.status_code == 404:
             res = {"status": "na", "reason": "http404"}
         elif r.status_code == 200:
@@ -1666,7 +1738,7 @@ def stockanalysis_earnings(sym, timeout=15):
     try:
         if not SA_EARN_GATE.allow():
             return res
-        r = _sa_earn_session().get(SA_EARN_URL.format(slug=slug), timeout=timeout)
+        r = _sa_earn_session().get(SA_EARN_URL.format(slug=slug), timeout=request_timeout(timeout))
         if r.status_code == 429:
             SA_EARN_GATE.fail()
         elif r.status_code == 404:
@@ -1686,6 +1758,27 @@ _YAHOO_CRUMB_LOCK = threading.Lock()
 _YAHOO_EARN_CACHE = {}
 
 
+def reset_run_caches():
+    """进程内重跑不得把上一轮解析结果/认证会话当成本轮新取数。"""
+    _EARN_CACHE.clear()
+    _SA_EARN_CACHE.clear()
+    _YAHOO_EARN_CACHE.clear()
+    sessions = (getattr(_EARN_TLS, "s", None), _SA_EARN_SESSION.get("sess"),
+                _YAHOO_CRUMB.get("session"))
+    for session in sessions:
+        if session is not None:
+            session.close()
+    _EARN_TLS.s = None
+    _SA_EARN_SESSION.update(sess=None, t=0.0)
+    _YAHOO_CRUMB.update(crumb=None, session=None, t=0.0)
+    SA_EARN_GATE.reset(False)
+    YAHOO_GATE.reset(False)
+    STOOQ_GATE.reset(False)
+    SP500_RS_ROWS.clear()
+    with _SRC_DAYS_LOCK:
+        _SRC_DAYS.clear()
+
+
 def _yahoo_crumb_session():
     """Yahoo quoteSummary 需要 cookie + crumb；整轮复用一份，30 分钟后重取。拿不到返回 (None, None)。"""
     with _YAHOO_CRUMB_LOCK:
@@ -1694,8 +1787,8 @@ def _yahoo_crumb_session():
             return _YAHOO_CRUMB["session"], _YAHOO_CRUMB["crumb"]
         sess = requests.Session()
         sess.headers.update({**UA, "Accept": "*/*"})
-        sess.get("https://fc.yahoo.com/", timeout=8)                      # 只为拿 cookie，返回 404 也正常
-        r = sess.get("https://query1.finance.yahoo.com/v1/test/getcrumb", timeout=8)
+        sess.get("https://fc.yahoo.com/", timeout=request_timeout(8))  # 只为拿 cookie，返回 404 也正常
+        r = sess.get("https://query1.finance.yahoo.com/v1/test/getcrumb", timeout=request_timeout(8))
         crumb = (r.text or "").strip()
         if r.status_code == 429:
             YAHOO_GATE.fail()
@@ -1738,7 +1831,7 @@ def yahoo_earnings(sym, timeout=8):
         if not sess:
             return res
         url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{key}"
-        r = sess.get(url, params={"modules": "calendarEvents", "crumb": crumb}, timeout=timeout)
+        r = sess.get(url, params={"modules": "calendarEvents", "crumb": crumb}, timeout=request_timeout(timeout))
         if r.status_code == 429:
             YAHOO_GATE.fail()
         elif r.status_code == 404:
@@ -1863,8 +1956,16 @@ def resolve_earnings(sym, today, previous=None, verified=None):
             return primary
     if sym not in earnings_sources.SOURCES:
         return primary
+    remaining = request_remaining()
+    if remaining <= 0:
+        return {"status": "error", "reason": "budget"} if trusted else primary
     try:
-        official = earnings_sources.fetch_official_earnings(sym, today)
+        if remaining == float("inf"):
+            official = earnings_sources.fetch_official_earnings(sym, today)
+        else:
+            clock = getattr(_REQUEST_TLS, "clock", None) or time.monotonic
+            deadline = min(d for d in (RUN_DEADLINE, getattr(_REQUEST_TLS, "deadline", None)) if d is not None)
+            official = earnings_sources.fetch_official_earnings(sym, today, deadline=deadline, clock=clock)
     except Exception as exc:
         official = {"status": "error", "reason": type(exc).__name__}
     if not isinstance(official, dict):
@@ -2059,12 +2160,23 @@ def _earn_cache_usable(entry, today):
         return False
 
 
-def attach_earnings(items, prev=None, today=None, prev_events=None):
+def attach_earnings(items, prev=None, today=None, prev_events=None, deadline=None, clock=None):
     """全部非 ETF 个股都查财报日期，但靠跨次缓存按远近分档刷新，大部分运行只需少量请求。
     抓到的日期全部挂到页面上；财报在 EARN_SOON_DAYS 天内的文字标黄（由 earnings_soon 决定）。
     ETF、指数、期货和参考值不适用。返回统计，其中 data 是下一轮复用的缓存。"""
     today = today or _earn_today()
     prev = prev if isinstance(prev, dict) else {}
+    clock = clock or time.monotonic
+    deadline = min(clock() + EARN_BUDGET_SECONDS, deadline if deadline is not None else float("inf"))
+
+    def resolve_one(k):
+        with request_budget(deadline, clock):
+            if request_remaining() <= 0:
+                return None
+            result = resolve_earnings(k, today, prev.get(k), verified.get(k))
+            if request_remaining() <= 0 and result.get("status") == "error":
+                return None
+            return result
 
     def wants(d):
         sym = d.get("symbol") or ""
@@ -2129,8 +2241,14 @@ def attach_earnings(items, prev=None, today=None, prev_events=None):
     try:
         if queue:
             with ThreadPoolExecutor(max_workers=4) as ex:
-                got = list(ex.map(lambda k: resolve_earnings(k, today, prev.get(k), verified.get(k)), queue))
+                got = list(ex.map(resolve_one, queue))
             for k, e in zip(queue, got):
+                if e is None:
+                    stat["deferred"] += 1
+                    stat["stopped"] = "budget"
+                    if isinstance(prev.get(k), dict):
+                        resolved[k] = prev[k]
+                    continue
                 stat["fetched"] += 1
                 old = prev.get(k)
                 old_is_red = (isinstance(old, dict) and _iso_date(old.get("date"))
@@ -2188,14 +2306,20 @@ def valid_history(data):
         if any(datetime.strptime(d, "%Y-%m-%d").strftime("%Y-%m-%d") != d for d in dates):
             return False
         for key in ("closes", "highs", "lows", "volumes"):
+            if isinstance(data.get(key), bool):
+                return False
             seq = data.get(key) or []
             if seq and len(seq) != len(dates):
                 return False
-            if any(not isinstance(v, (int, float)) or not math.isfinite(v) or
+            if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or
                    (v < 0 if key == "volumes" else v <= 0) for v in seq):
                 return False
         for low, close, high in zip(data.get("lows") or [], data["closes"], data.get("highs") or []):
             if low > close * 1.001 or close > high * 1.001:
+                return False
+        for key in ("price", "prev_close"):
+            value = data[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                 return False
         return (math.isclose(data["price"], data["closes"][-1], rel_tol=1e-5) and
                 math.isclose(data["prev_close"], data["closes"][-2], rel_tol=1e-5))
@@ -2443,7 +2567,7 @@ def parse_consensus(text):
 def consensus_robots_ok(sess):
     """先读对方 robots.txt：读不到（网络/5xx）或明确禁止就不取；4xx 视为没有限制。"""
     try:
-        r = sess.get(CONSENSUS_ROBOTS, timeout=15)
+        r = sess.get(CONSENSUS_ROBOTS, timeout=request_timeout(15))
     except Exception as e:
         log(f"  · 共识价：robots.txt 读取失败，本轮不取：{str(e)[:60]}")
         return False
@@ -2459,7 +2583,9 @@ def consensus_robots_ok(sess):
 def fetch_consensus_one(sess, sym):
     """明确无覆盖与页面解析失败分开；不再根据一个批次的数量猜测改版。"""
     try:
-        r = sess.get(CONSENSUS_URL.format(slug=consensus_slug(sym)), timeout=25)
+        r = sess.get(CONSENSUS_URL.format(slug=consensus_slug(sym)), timeout=request_timeout(25))
+    except BudgetExhausted:
+        raise  # 尚未请求，不写入失败缓存或消费额度
     except Exception as e:
         return {"s": "fail", "why": str(e)[:60]}
     if r.status_code == 404:
@@ -2566,9 +2692,12 @@ def _consensus_quota(prev, quota_day):
     return {"date": quota_day, "symbols": sorted(symbols), "retry_symbols": sorted(retries)}
 
 
-def update_consensus(symbols, prev, today_iso, sess=None, sleep=time.sleep, clock=time.monotonic,
-                     force=False, next_earn=None, earnings_events=None, quota_day=None):
+def update_consensus(symbols, prev, today_iso, sess=None, sleep=None, clock=None,
+                     force=False, next_earn=None, earnings_events=None, quota_day=None, deadline=None):
     """事件/TTL 用美东日，额度用独立北京日；force 仅强制到期，不绕过日额度或同日去重。"""
+    clock = clock or time.monotonic
+    sleep = sleep or time.sleep
+    deadline = min(clock() + CONSENSUS_BUDGET, deadline if deadline is not None else float("inf"))
     quota_day = quota_day or today_iso
     old = prev.get("data") if isinstance(prev, dict) else None
     old = {k: v for k, v in (old or {}).items() if isinstance(v, dict)} if isinstance(old, dict) else {}
@@ -2602,29 +2731,37 @@ def update_consensus(symbols, prev, today_iso, sess=None, sleep=time.sleep, cloc
     data = {s: e for s, e in data.items() if e}
     if not todo:
         return data, stat
+    if request_remaining(deadline, clock) <= 0:
+        stat["stopped"] = "budget"
+        return data, stat
     sess = sess or requests.Session()
     sess.headers.update(CONSENSUS_UA)
-    if not consensus_robots_ok(sess):
-        stat["stopped"] = "robots"
+    with request_budget(deadline, clock):
+        robots_ok = consensus_robots_ok(sess)
+    if not robots_ok:
+        stat["stopped"] = "budget" if request_remaining(deadline, clock) <= 0 else "robots"
         log("  · 共识价：robots.txt 不允许或读取失败，本轮不取，沿用旧值")
         return data, stat
     log(f"  取共识价：{len(ranked)} 只到期，本轮最多取 {len(todo)} 只，每只间隔 {CONSENSUS_GAP:g} 秒…")
-    start, streak = clock(), 0
+    streak = 0
     for i, s in enumerate(todo):
-        if i:
-            sleep(CONSENSUS_GAP)
-        if clock() - start > CONSENSUS_BUDGET:
+        if (request_remaining(deadline, clock) <= 0 or
+                i and not budget_sleep(CONSENSUS_GAP, sleep, deadline, clock)):
             stat["stopped"] = "budget"
             break
         entry = data.get(s, {})
+        try:
+            with request_budget(deadline, clock):
+                res = fetch_consensus_one(sess, s)
+        except BudgetExhausted:
+            stat["stopped"] = "budget"
+            break
+        except Exception as e:
+            res = {"s": "fail", "why": str(e)[:60]}
         attempted.add(s)
         if entry.get("s") == "fail":
             retried.add(s)
         ledger.update(symbols=sorted(attempted), retry_symbols=sorted(retried))
-        try:
-            res = fetch_consensus_one(sess, s)
-        except Exception as e:
-            res = {"s": "fail", "why": str(e)[:60]}
         stat["tried"] += 1
         stat[res["s"]] += 1
         if res["s"] == "fail":
@@ -3199,7 +3336,7 @@ QUOTE_EXHAUSTED = object()  # 总预算用完、这只根本没来得及尝试�
 
 def _fetch_quote(symbol):
     """工作线程里抓一只：返回行情 dict / None（失败）/ QUOTE_EXHAUSTED（总预算已用完）。"""
-    if QUOTE_DEADLINE is not None and time.monotonic() >= QUOTE_DEADLINE:
+    if request_remaining(QUOTE_DEADLINE) <= 0:
         return QUOTE_EXHAUSTED
     _QUOTE_TLS.deadline = time.monotonic() + QUOTE_SYMBOL_SECONDS  # 单只限时，卡住也不拖累整批
     try:
@@ -3227,18 +3364,20 @@ def collect_quotes(symbols):
     run(symbols, QUOTE_WORKERS)
     for _ in range(QUOTE_RETRY_PASSES):
         failed = [s for s in symbols if results.get(s) is None]
-        remaining = (QUOTE_DEADLINE - time.monotonic()) if QUOTE_DEADLINE is not None else 999
+        remaining = request_remaining(QUOTE_DEADLINE)
         if not failed or remaining < 60:
             break
         log(f"补抓 {len(failed)} 只第一轮失败的标的…")
         # 指数/期货只有 Yahoo 一个源，熔断冷却期内会被跳过；预算充足就等冷却结束再补抓，
         # 否则补抓轮还是撞同一堵墙。等待时间受总预算约束。
         wait = max(0.0, max(YAHOO_GATE.blocked_until, STOOQ_GATE.blocked_until) - time.monotonic())
-        if wait and (QUOTE_DEADLINE is None or remaining > wait + 45):
+        if wait and remaining > wait + 45:
             log(f"  等待行情源限流冷却约 {wait:.0f} 秒后再补抓…")
-            time.sleep(wait + 1)
+            delay = wait + 1
         else:
-            time.sleep(3)
+            delay = 3
+        if not budget_sleep(delay, deadline=QUOTE_DEADLINE):
+            break
         YAHOO_GATE.reset(True)
         STOOQ_GATE.reset(True)
         run(failed, max(1, QUOTE_WORKERS // 2), keep_better=True)
@@ -3250,6 +3389,8 @@ def collect_quotes(symbols):
 def build_reference_alerts(prev=None):
     """额外指标独立取数入口；任何失败只影响参考提示，不拖垮原行情。"""
     prev = prev if isinstance(prev, dict) else {}
+    if request_remaining() <= 0:
+        return {**prev, "deferred": "budget"}
     old_policy = prev.get("policy")
     old_policy = old_policy if isinstance(old_policy, dict) else {}
     try:
@@ -3278,111 +3419,309 @@ def build_reference_alerts(prev=None):
 
 # ---------------------------------------------------------------- main
 
-class _ReplayResponse:
-    """回放用的假响应，只覆盖代码里实际用到的字段。"""
+_HTTP_REDACTED = "[REDACTED]"
+_HTTP_SECRET_FIELD = re.compile(
+    r"(?i)(\b(?:api[_-]?key|(?:access[_-]?|refresh[_-]?|auth[_-]?)?token|"
+    r"client[_-]?secret|secret|password|authorization|signature|key)\b[\"']?\s*[:=]\s*[\"']?"
+    r"(?:(?:Bearer|Basic)\s+)?)"
+    r"([^\s&<>\"',;}]+)")
 
-    def __init__(self, status, text):
+
+def _http_sensitive(name):
+    name = re.sub(r"[^a-z0-9]", "", str(name).lower())
+    return (name in {"key", "auth", "authorization", "cookie", "setcookie", "signature", "credential"}
+            or name.endswith(("apikey", "token", "secret", "password")))
+
+
+def _http_cookie_secrets(value):
+    if hasattr(value, "get_dict"):
+        value = value.get_dict()
+    if isinstance(value, dict):
+        return {item for item in value.values() if isinstance(item, str) and item}
+    if not isinstance(value, str):
+        return set()
+    attributes = {"path", "domain", "expires", "max-age", "samesite"}
+    return {match[2].strip().strip('"') for match in
+            re.finditer(r'(?:^|[;,]\s*)([^=;,\s]+)=("[^"]*"|[^;,]*)', value)
+            if match[1].lower() not in attributes and match[2].strip().strip('"')}
+
+
+def _http_secrets(value):
+    secrets = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if _http_sensitive(key) and isinstance(item, str) and item and item != _HTTP_REDACTED:
+                secrets.add(item)
+                if str(key).lower() == "authorization" and " " in item:
+                    scheme, credential = item.split(" ", 1)
+                    secrets.add(credential)
+                    if scheme.lower() == "basic":
+                        try:
+                            secrets.update(part for part in base64.b64decode(credential, validate=True)
+                                           .decode("latin-1").split(":", 1) if part)
+                        except (ValueError, UnicodeError):
+                            pass
+                if str(key).lower() in {"cookie", "set-cookie"}:
+                    secrets.update(_http_cookie_secrets(item))
+            secrets.update(_http_secrets(item))
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            secrets.update(_http_secrets(item))
+    return secrets
+
+
+def _http_redact(value, secrets=()):
+    if isinstance(value, dict):
+        secrets = set(secrets) | _http_secrets(value)
+        return {_http_redact(key, secrets): _HTTP_REDACTED if _http_sensitive(key) else _http_redact(item, secrets)
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [_http_redact(item, secrets) for item in value]
+    if not isinstance(value, str):
+        return value
+    for secret in sorted(secrets, key=len, reverse=True):
+        if secret and secret != _HTTP_REDACTED:
+            for encoded in {secret, quote(secret, safe=""), quote_plus(secret),
+                            html_lib.escape(secret), json.dumps(secret)[1:-1]}:
+                value = value.replace(encoded, _HTTP_REDACTED)
+    return _HTTP_SECRET_FIELD.sub(lambda match: match[1] + _HTTP_REDACTED, value)
+
+
+def _http_snapshot_key(url, secrets=()):
+    parts = urlsplit(str(url))
+    pairs = parse_qsl(parts.query, keep_blank_values=True)
+    secrets = set(secrets) | {value for name, value in pairs if _http_sensitive(name) and value}
+    netloc = parts.netloc
+    if "@" in netloc:
+        userinfo, netloc = netloc.rsplit("@", 1)
+        secrets.update(unquote(value) for value in userinfo.split(":") if value)
+        netloc = quote(_HTTP_REDACTED, safe="") + "@" + netloc
+    query = urlencode(sorted(((name, _HTTP_REDACTED if _http_sensitive(name) else _http_redact(value, secrets))
+                              for name, value in pairs), key=lambda pair: pair[0]))
+    key = "GET " + urlunsplit((parts.scheme, netloc, _http_redact(parts.path, secrets), query, ""))
+    return key, secrets
+
+
+def _http_snapshot_hit(hit, secrets=()):
+    out = {key: value for key, value in hit.items() if key in {"status", "text", "encoding", "headers"}}
+    if isinstance(out.get("headers"), dict):
+        secrets = set(secrets) | _http_secrets(out["headers"])
+        out["headers"] = {key: value for key, value in out["headers"].items() if key.lower() == "content-type"}
+    text = out.get("text")
+    if isinstance(text, str):
+        try:
+            body = json.loads(text)
+        except ValueError:
+            secrets = set(secrets) | {unquote(match[2]) for match in _HTTP_SECRET_FIELD.finditer(text)}
+            out["text"] = _http_redact(text, secrets)
+        else:
+            secrets = set(secrets) | _http_secrets(body)
+            out["text"] = json.dumps(_http_redact(body, secrets), ensure_ascii=False)
+    return _http_redact(out, secrets)
+
+
+def _http_snapshot_data(data):
+    if not isinstance(data, dict):
+        return {}
+    clean = {}
+    for key, hit in data.items():
+        if not isinstance(key, str) or not key.startswith("GET ") or not isinstance(hit, dict):
+            continue
+        safe_key, secrets = _http_snapshot_key(key[4:])
+        clean[safe_key] = _http_snapshot_hit(hit, secrets)
+    return clean
+
+
+class _ReplayResponse(requests.Response):
+    """内存响应复用 requests 的上下文、分块读取与 close 语义。"""
+
+    def __init__(self, status, text, headers=None, encoding="utf-8"):
+        super().__init__()
         self.status_code = status
-        self.text = text or ""
-        self.content = self.text.encode("utf-8")
-        self.encoding = "utf-8"
-        self.headers = {"Content-Type": "application/json"}
-        self.ok = 200 <= status < 300
-
-    def json(self):
-        return json.loads(self.text)
-
-    def raise_for_status(self):
-        if not self.ok:
-            raise RuntimeError(f"replay http {self.status_code}")
+        self.encoding = encoding or "utf-8"
+        self._content = (text or "").encode(self.encoding)
+        self._content_consumed = True
+        self.headers.update(headers or {})
 
 
 def install_http_snapshot(mode=None, path=None):
-    """把 requests 的底层请求换成「记录 / 回放」。
-
-    mode='dump'   边跑边记下成功的 GET 响应；
-    mode='replay' 只读快照，未命中的一律按取数失败处理（不联网）。
-    POST（派发、推送）不参与快照，照常走原逻辑。
-    """
-    state = {"mode": mode, "path": path, "data": {}, "miss": 0}
+    """记录脱敏 GET；回放 GET 未命中返回 599，非 GET 抛连接错误且绝不外发。"""
+    state = {"mode": mode, "path": path, "data": {}, "miss": 0, "blocked": 0}
     if mode == "replay" and path:
         try:
             with open(path, encoding="utf-8") as f:
-                state["data"] = json.load(f)
-        except Exception as e:
-            log(f"HTTP 快照读取失败，本次全部按取数失败处理：{e}")
+                state["data"] = _http_snapshot_data(json.load(f))
+        except Exception as exc:
+            log(f"HTTP 快照读取失败，本次全部按取数失败处理：{type(exc).__name__}")
+    previous = getattr(requests.Session.request, "__dict__", {}).get("_http_snapshot_state")
+    if previous:
+        restore_http_snapshot(previous)
     original = requests.Session.request
+    original_send = requests.Session.send
+    if mode not in {"dump", "replay"}:
+        return state
+
+    def lookup(url, secrets=(), legacy_url=None):
+        key, secrets = _http_snapshot_key(url, secrets)
+        hit = state["data"].get(key)
+        if hit is None and legacy_url:
+            legacy = state["data"].get(_http_snapshot_key(legacy_url, secrets)[0])
+            if legacy is not None and "headers" not in legacy and "encoding" not in legacy:
+                hit = legacy
+        if hit is None:
+            state["miss"] += 1
+            return _ReplayResponse(599, "")
+        hit = _http_snapshot_hit(hit, secrets)
+        response = _ReplayResponse(hit.get("status", 200), hit.get("text", ""),
+                                   hit.get("headers"), hit.get("encoding"))
+        response.url = url
+        return response
+
+    def record(url, response, secrets):
+        if state["mode"] != "dump" or getattr(response, "status_code", 0) != 200:
+            return
+        try:
+            secrets |= _http_secrets(dict(response.headers))
+            # 响应中披露的敏感字段也可能回显到请求 URL。
+            hit = {"status": response.status_code, "text": response.text,
+                   "encoding": response.encoding or "utf-8", "headers": dict(response.headers)}
+            try:
+                secrets |= _http_secrets(json.loads(response.text))
+            except ValueError:
+                secrets |= {unquote(match[2]) for match in _HTTP_SECRET_FIELD.finditer(response.text)}
+            key, secrets = _http_snapshot_key(url, secrets)
+            state["data"][key] = _http_snapshot_hit(hit, secrets)
+        except Exception as exc:
+            log(f"HTTP 快照记录失败，已跳过该响应：{type(exc).__name__}")
+
+    def blocked():
+        state["blocked"] += 1
+        raise requests.ConnectionError("HTTP replay 模式禁止非 GET 请求，未发送")
+
+    def patched_send(self, request, **kw):
+        secrets = _http_secrets(dict(request.headers)) | _http_cookie_secrets(self.cookies)
+        if state["mode"] == "replay":
+            if str(request.method).upper() != "GET":
+                blocked()
+            response = lookup(request.url, secrets)
+            response.request = request
+            return response
+        response = original_send(self, request, **kw)
+        if str(request.method).upper() == "GET":
+            record(request.url, response, secrets)
+        return response
 
     def patched(self, method, url, *a, **kw):
         if str(method).upper() != "GET":
+            if state["mode"] == "replay":
+                state["blocked"] += 1
+                raise requests.ConnectionError("HTTP replay 模式禁止非 GET 请求，未发送")
             return original(self, method, url, *a, **kw)
-        key = f"GET {url}"
+        params = kw.get("params", a[0] if a else None)
+        params = requests.sessions.merge_setting(params, self.params)
+        prepared = requests.PreparedRequest()
+        prepared.prepare_url(url, params)
+        headers = kw.get("headers", a[2] if len(a) > 2 else {})
+        secrets = _http_secrets(dict(self.headers)) | _http_secrets(headers)
+        cookies = kw.get("cookies", a[3] if len(a) > 3 else None)
+        secrets |= _http_cookie_secrets(self.cookies) | _http_cookie_secrets(cookies)
+        auth = kw.get("auth", a[5] if len(a) > 5 else self.auth)
+        if isinstance(auth, tuple):
+            auth = requests.auth.HTTPBasicAuth(*auth)
+        if isinstance(auth, requests.auth.HTTPBasicAuth):
+            secrets.update(value for value in (auth.username, auth.password) if isinstance(value, str) and value)
+            prepared.headers = {}
+            auth(prepared)
+            secrets |= _http_secrets(dict(prepared.headers))
         if state["mode"] == "replay":
-            hit = state["data"].get(key)
-            if hit is None:
-                state["miss"] += 1
-                return _ReplayResponse(599, "")
-            return _ReplayResponse(hit.get("status", 200), hit.get("text", ""))
+            return lookup(prepared.url, secrets, url if params else None)
         resp = original(self, method, url, *a, **kw)
-        if state["mode"] == "dump" and getattr(resp, "status_code", 0) == 200:
-            try:
-                state["data"][key] = {"status": resp.status_code, "text": resp.text}
-            except Exception:
-                pass
+        record(prepared.url, resp, secrets)
         return resp
 
+    patched._http_snapshot_original = original
+    patched._http_snapshot_mode = mode
+    patched._http_snapshot_state = state
+    state.update(original_request=original, original_send=original_send,
+                 patched_request=patched, patched_send=patched_send)
     requests.Session.request = patched
+    requests.Session.send = patched_send
     return state
+
+
+def restore_http_snapshot(state):
+    """仅恢复自己安装的包装，不覆盖调用方后续的 mock 或包装。"""
+    if not isinstance(state, dict):
+        return
+    if requests.Session.request is state.get("patched_request"):
+        requests.Session.request = state["original_request"]
+    if requests.Session.send is state.get("patched_send"):
+        requests.Session.send = state["original_send"]
 
 
 def dump_http_snapshot(state):
     if not isinstance(state, dict) or state.get("mode") != "dump" or not state.get("path"):
         return
     try:
+        state["data"] = _http_snapshot_data(state["data"])
         atomic_write_json(state["path"], state["data"])
         log(f"HTTP 快照已写入 {state['path']}（{len(state['data'])} 条请求）")
-    except Exception as e:
-        log(f"HTTP 快照写入失败：{e}")
+    except Exception as exc:
+        log(f"HTTP 快照写入失败：{type(exc).__name__}")
 
 
 def main(argv=None):
-    global QUOTE_DEADLINE
+    global QUOTE_DEADLINE, RUN_DEADLINE
     runtime = RuntimeState(BASE, target=TARGET_DATE, event=EVENT)
     try:
-        return _main(argv, runtime)
+        with bounded_http_requests():
+            snapshots = []
+            try:
+                return _main(argv, runtime, snapshots)
+            finally:
+                for state in reversed(snapshots):
+                    try:
+                        dump_http_snapshot(state)
+                    finally:
+                        restore_http_snapshot(state)
     except Exception as exc:
         runtime.receipt("failed", f"{type(exc).__name__}: {str(exc)[:300]}")
         raise
     finally:
-        QUOTE_DEADLINE = None
+        QUOTE_DEADLINE = RUN_DEADLINE = None
         YAHOO_GATE.reset(False)
         STOOQ_GATE.reset(False)
 
 
-def _main(argv, runtime):
-    global TARGET_DATE, CLOSED_ONLY, QUOTE_DEADLINE
+def _main(argv, runtime, snapshots=None):
+    global TARGET_DATE, CLOSED_ONLY, QUOTE_DEADLINE, RUN_DEADLINE
     parser = argparse.ArgumentParser(description="市场自检生成器")
     parser.add_argument("--prepare-run", action="store_true", help="锁定本次运行目标交易日并输出 GitHub Actions 环境变量")
     parser.add_argument("--ensure-schedule-run", action="store_true", help="定时任务保险：缺失时补派发一次运行")
     parser.add_argument("--dump-http", metavar="PATH", help="记录本次成功的 GET 响应，供 --replay-http 离线重跑")
     parser.add_argument("--replay-http", metavar="PATH", help="只读 HTTP 快照渲染，全程零网络（未命中的按取数失败）")
     args = parser.parse_args(argv)
+    if args.dump_http and args.replay_http:
+        parser.error("--dump-http 与 --replay-http 不能同时使用")
+    if args.dump_http or args.replay_http:
+        snap_mode = "dump" if args.dump_http else "replay"
+        snap_path = args.dump_http or args.replay_http
+        snap_state = install_http_snapshot(snap_mode, snap_path)
+        if snapshots is not None:
+            snapshots.append(snap_state)
+        log(f"HTTP 快照模式：{snap_mode}（{snap_path}）")
     if args.prepare_run:
         prepare_run()
         return 0
     if args.ensure_schedule_run:
         return ensure_schedule_run(runtime)
-    if args.dump_http or args.replay_http:
-        snap_mode = "dump" if args.dump_http else "replay"
-        snap_path = args.dump_http or args.replay_http
-        snap_state = install_http_snapshot(snap_mode, snap_path)
-        atexit.register(dump_http_snapshot, snap_state)
-        log(f"HTTP 快照模式：{snap_mode}（{snap_path}）")
 
     if not TARGET_DATE:
         plan = plan_run(EVENT, datetime.now(timezone.utc))
         TARGET_DATE, CLOSED_ONLY = plan["target"], plan["closed_only"]
     runtime.target = TARGET_DATE
+    RUN_DEADLINE = time.monotonic() + RUN_BUDGET_SECONDS - FINALIZE_RESERVE_SECONDS
+    reset_run_caches()
 
     cfg_path = os.path.join(BASE, "holdings.json")
     try:
@@ -3393,8 +3732,7 @@ def _main(argv, runtime):
         cfg = {}
 
     universe, group_counts, dup_hidden = grouped_universe(cfg)
-    # 一轮只读一个快照；进程内重复调用也必须重新取本轮到期数据。
-    _EARN_CACHE.clear()
+    # 一轮只读一个快照；进程内数据和会话已在入口重置。
     try:
         with open(os.path.join(BASE, "status.json"), encoding="utf-8") as f:
             prev_status = json.load(f)
@@ -3411,18 +3749,20 @@ def _main(argv, runtime):
 
     nfci_state = {}
     try:
-        macro = build_macro(prev_status, nfci_state)
+        with request_budget(time.monotonic() + MACRO_BUDGET_SECONDS):
+            macro = build_macro(prev_status, nfci_state)
     finally:
         if nfci_state:
             nfci_state = runtime.checkpoint("nfci_cache", nfci_state)
-    reference_alerts = build_reference_alerts(prev_status.get("reference_alerts"))
+    with request_budget(time.monotonic() + REFERENCE_BUDGET_SECONDS):
+        reference_alerts = build_reference_alerts(prev_status.get("reference_alerts"))
     reference_alerts = runtime.checkpoint("reference_alerts", reference_alerts)
     items = []
     if universe:
         log("抓取 " + " + ".join(f"{group_counts[g['key']]} 只{g['label']}" for g in GROUPS
                                  if group_counts[g['key']])
             + (f"（另有 {dup_hidden} 只重复，已跳过）" if dup_hidden else "") + "...")
-        QUOTE_DEADLINE = time.monotonic() + QUOTE_BUDGET_SECONDS
+        QUOTE_DEADLINE = min(RUN_DEADLINE, time.monotonic() + QUOTE_BUDGET_SECONDS)
         YAHOO_GATE.reset(True)
         STOOQ_GATE.reset(True)
         to_fetch = [sym for sym, _, _ in universe
@@ -3570,6 +3910,9 @@ def push_serverchan(macro, items, snapshot=None):
     仓库 Secret 里配 SERVERCHAN_KEY 才生效；没配就静默跳过。
     推送失败只记日志，绝不影响页面生成 —— 页面是主产物，推送是附赠。
     """
+    if getattr(requests.Session.request, "_http_snapshot_mode", None) == "replay":
+        log("HTTP replay 模式跳过微信推送，未发送")
+        return
     key = (os.environ.get("SERVERCHAN_KEY") or "").strip()
     if not key:
         log("未配置 SERVERCHAN_KEY，跳过微信推送")

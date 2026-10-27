@@ -49,19 +49,70 @@ def _member_metric(d, kind):
     if kind == "amp":
         return f"振幅 {value:.1f}%"
     day = d.get("vol_ratio_date")
-    date_text = f"（{day}完整日）" if isinstance(day, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
+    date_text = f"（{day}）" if isinstance(day, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
     # σ 不出现在页面上：判灯照常用 z，展示只留「哪天、几倍」
     return f"量比 {value:.1f}×{date_text}"
+
+
+def _signal_texts(value):
+    return [text for text in value if isinstance(text, str)] if isinstance(value, (list, tuple)) else []
+
+
+def _signal_marks(value):
+    return [mark for mark in value if isinstance(mark, (list, tuple)) and len(mark) == 2
+            and all(isinstance(part, str) for part in mark)] if isinstance(value, (list, tuple)) else []
 
 
 class SnapshotBuilder:
     def __init__(self, context):
         self._context = context
 
+    def _valid_stat_price(self, d):
+        # 缺字段的旧成员接口没有行情，显式提供行情时必须与分析入口采用同一数值校验。
+        return "price" not in d or self._context._pos_num(d.get("price")) is not None
+
+    def _saved_technical_facts(self, d):
+        """只解释可核验的旧事实；单条坏数据不得中断构建或被猜成技术灰。"""
+        if (d.get("technical_pending") or not isinstance(d.get("group"), str)
+                or not d["group"].strip()):
+            return None
+        signals = d.get("signals")
+        if signals is None:
+            signals = []
+        if not isinstance(signals, (list, tuple)) or any(not isinstance(text, str) for text in signals):
+            return None
+        marks = d.get("signal_marks")
+        if marks is None:
+            marks = []
+        if not isinstance(marks, (list, tuple)) or len(_signal_marks(marks)) != len(marks):
+            return None
+        texts = _signal_texts(signals)
+        selected = d.get("boll_alert_text")
+        if selected:
+            if not isinstance(selected, str) or selected not in texts or not selected.startswith(self._context._TEXT_BOLL_PREFIX):
+                return None
+        else:
+            selected = next((text for text in texts if text.startswith(self._context._TEXT_BOLL_PREFIX)), "")
+        side = "上轨" if "上轨" in selected else "下轨" if "下轨" in selected else None
+        if selected and (side is None or "上轨" in selected and "下轨" in selected):
+            return None
+        hits = {"超买": 0, "超卖": 0}
+        for text in texts:
+            if not text.startswith("RSI"):
+                continue
+            if not self._context._TEXT_RSI_RE.match(text):
+                return None
+            for match in re.finditer(r"(\d+)条\s*[↑↓]?(超买|超卖)", text):
+                hits[match[2]] = max(hits[match[2]], int(match[1]))
+        try:
+            return self._context.classify_technical_facts(d.get("group"), hits["超买"], hits["超卖"], side)
+        except (ValueError, TypeError):
+            return None
+
     def _apply_target(self, d):
         """在副本中迁移旧条目；只用真实目标与行情重算，不相信旧紫计数或异常灯。"""
         out = dict(d)
-        marks = list(d.get("signal_marks") or [])
+        marks = list(_signal_marks(d.get("signal_marks")))
         target = d.get("target")
         if isinstance(target, dict) and self._context._target_stock(d):
             if not all(key in target for key in ("band", "space_hit", "space_detail", "reached_detail")):
@@ -85,9 +136,13 @@ class SnapshotBuilder:
         if (any(kind == "target" and level in ("red", "yellow") for kind, level in marks)
                 or isinstance(d.get("target"), dict) and d["target"].get("anomaly")):
             remaining = {level for _, level in out["signal_marks"]}
-            out["level"] = ("red" if "red" in remaining else "yellow" if "yellow" in remaining
-                            else "green" if self._context._pos_num(d.get("price")) is not None else "gray")
-        out["signals"] = [text for text in d.get("signals") or []
+            if self._context._pos_num(d.get("price")) is None:
+                out["level"] = "gray"
+            elif remaining & {"red", "yellow"}:
+                out["level"] = "red" if "red" in remaining else "yellow"
+            elif not out.get("technical_pending"):
+                out["level"] = "green"
+        out["signals"] = [text for text in _signal_texts(d.get("signals"))
                           if not self._context._consensus_description(text, d.get("target") or {})
                           and not (not d.get("target") and any(kind == "target" for kind, _ in marks)
                                    and text == "目标价疑似数据异常")]
@@ -104,7 +159,7 @@ class SnapshotBuilder:
         priority = {g["item_group"]: i for i, g in enumerate(self._context.GROUPS)}
         seen = set(self._context.RISK_IDENTITIES)
         out = {"space": [], "reached": []}
-        for item in sorted(items, key=lambda d: priority.get(d.get("group"), len(self._context.GROUPS))):
+        for item in sorted(items, key=lambda d: priority.get(str(d.get("group") or ""), len(self._context.GROUPS))):
             symbol = self._context.normalize_symbol(item.get("symbol"))
             identity = self._context.instrument_identity(symbol)
             if identity in seen:
@@ -155,7 +210,7 @@ class SnapshotBuilder:
     def _text_only_kind(self, signals):
         """技术灰归因：单独 RSI 至少两条才归 rsi；只有布林文字归 boll；
     两者都有归 boll_rsi（含单条 RSI），不重复归入单独指标。"""
-        texts = [str(s) for s in (signals or []) if isinstance(s, str)]
+        texts = _signal_texts(signals)
         has_rsi = any(self._context._TEXT_RSI_RE.match(t) for t in texts)
         has_boll = any(t.startswith(self._context._TEXT_BOLL_PREFIX) for t in texts)
         if has_rsi and has_boll:
@@ -169,7 +224,7 @@ class SnapshotBuilder:
 
     def _text_only_shape(self, signals):
         """灰灯名单里的方向：优先看布林轨道，没有布林文字才看 RSI 的买卖方向。"""
-        texts = [str(s) for s in (signals or []) if isinstance(s, str)]
+        texts = _signal_texts(signals)
         boll = next((t for t in texts if t.startswith(self._context._TEXT_BOLL_PREFIX)), "")
         if boll:
             return "▲" if "上轨" in boll else "▼"
@@ -183,23 +238,21 @@ class SnapshotBuilder:
         priority = {g["item_group"]: i for i, g in enumerate(self._context.GROUPS)}
         seen = set(self._context.RISK_IDENTITIES)
         out = []
-        for d in sorted(items, key=lambda item: priority.get(item.get("group"), len(self._context.GROUPS))):
+        for d in sorted(items, key=lambda item: priority.get(str(item.get("group") or ""), len(self._context.GROUPS))):
             symbol = self._context.normalize_symbol(d.get("symbol"))
             identity = self._context.instrument_identity(symbol)
             if identity in seen:
                 continue
             seen.add(identity)
-            if (d.get("level") == "gray" or d.get("reference_only")
-                    or "price" in d and (not isinstance(d["price"], (int, float))
-                        or isinstance(d["price"], bool) or not math.isfinite(d["price"]) or d["price"] <= 0)):
+            if d.get("level") == "gray" or d.get("reference_only") or not self._valid_stat_price(d):
                 continue
             kind = self._context._text_only_kind(d.get("signals"))
-            technical_marks = {k for k, level in d.get("signal_marks") or []
+            technical_marks = {k for k, level in _signal_marks(d.get("signal_marks"))
                                if k in ("boll", "rsi", "boll_rsi") and level in ("red", "yellow")}
             # 同一组技术事实已有红黄就不能再计灰；涨跌幅/均线等不影响技术灰资格。
             if not kind or technical_marks:
                 continue
-            texts = [str(s) for s in (d.get("signals") or []) if isinstance(s, str)]
+            texts = _signal_texts(d.get("signals"))
             selected = d.get("boll_alert_text")
             if isinstance(selected, str) and selected in texts and selected.startswith(self._context._TEXT_BOLL_PREFIX):
                 texts = [selected] + [text for text in texts if text != selected]
@@ -219,13 +272,8 @@ class SnapshotBuilder:
             boll_text = next((t for t in texts if t.startswith(self._context._TEXT_BOLL_PREFIX)), "")
             # 灰统计只接受共享分类器确认的技术灰，不再把“有技术文字且无红黄”当灰。
             # 兼容旧快照时从已保存的事实读条数；双轨仍用已选轨，不借另一轨补灯。
-            hits = {"超买": 0, "超卖": 0}
-            for text in rsi_texts:
-                for match in re.finditer(r"([123])条\s*[↑↓]?(超买|超卖)", text):
-                    hits[match[2]] = max(hits[match[2]], int(match[1]))
-            side = "上轨" if "上轨" in boll_text else "下轨" if "下轨" in boll_text else None
-            facts = self._context.classify_technical_facts(d.get("group"), hits["超买"], hits["超卖"], side)
-            if facts["level"] != "gray" or facts["kind"] != kind:
+            facts = self._saved_technical_facts(d)
+            if not facts or facts["level"] != "gray" or facts["kind"] != kind:
                 continue
             rsi_match = max((self._context._TEXT_RSI_RE.match(t) for t in rsi_texts),
                             key=lambda match: int(match.group(0)[4]), default=None)
@@ -261,7 +309,7 @@ class SnapshotBuilder:
 
     def _member_direction_markers(self, d, kind):
         """仅从本轮已经触发的信号取方向；图形只描述触轨/穿越位置，不预测后续涨跌。"""
-        signals = [s for s in (d.get("signals") or []) if isinstance(s, str)]
+        signals = _signal_texts(d.get("signals"))
         markers = []
         def add(shape, tone, label):
             marker = {"shape": shape, "tone": tone, "label": label}
@@ -301,7 +349,7 @@ class SnapshotBuilder:
                         add(shape, tone, label)
                         break
         elif kind == "ma":
-            marks = {k for k, _ in d.get("signal_marks") or []}
+            marks = {k for k, _ in _signal_marks(d.get("signal_marks"))}
             if marks & {"ma", "ma_cross"}:
                 markers.extend(self._context._member_direction_markers(d, "ma_cross"))
             if marks & {"ma", "ma_band"}:
@@ -353,9 +401,9 @@ class SnapshotBuilder:
         if kind == "ma":
             settings = d.get("ma_settings") if isinstance(d.get("ma_settings"), dict) else self._context.S
             member["ma_settings"] = {key: settings.get(key) for key in ("ma_short", "ma_long")}
-            marks = {k for k, _ in d.get("signal_marks") or []}
+            marks = {k for k, _ in _signal_marks(d.get("signal_marks"))}
             facts = []
-            for text in d.get("signals") or []:
+            for text in _signal_texts(d.get("signals")):
                 if not isinstance(text, str):
                     continue
                 fact_kind = ("ma_cross" if re.match(r"^(上穿|跌破)\d+日(?:弱)?均线", text)
@@ -388,7 +436,7 @@ class SnapshotBuilder:
         levels = ("red", "yellow", "purple")
         priority = {g["item_group"]: i for i, g in enumerate(self._context.GROUPS)}
         unique = {}
-        for level, source in sorted(candidates, key=lambda pair: priority.get(pair[1].get("group"), len(self._context.GROUPS))):
+        for level, source in sorted(candidates, key=lambda pair: priority.get(str(pair[1].get("group") or ""), len(self._context.GROUPS))):
             identity = self._context.instrument_identity(source["symbol"])
             if identity in self._context.RISK_IDENTITIES:
                 continue
@@ -416,11 +464,10 @@ class SnapshotBuilder:
         priority = {g["item_group"]: i for i, g in enumerate(self._context.GROUPS)}
         seen = set(self._context.RISK_IDENTITIES)
         ma_candidates = []
-        for d in sorted(items, key=lambda item: priority.get(item.get("group"), len(self._context.GROUPS))):
-            if (d.get("reference_only") or d.get("level") == "gray"
-                    or "price" in d and d["price"] is None):
+        for d in sorted(items, key=lambda item: priority.get(str(item.get("group") or ""), len(self._context.GROUPS))):
+            if d.get("reference_only") or d.get("level") == "gray" or not self._valid_stat_price(d):
                 continue
-            ma_levels = {level for kind, level in d.get("signal_marks") or []
+            ma_levels = {level for kind, level in _signal_marks(d.get("signal_marks"))
                          if kind in ("ma", "ma_cross", "ma_band") and level in levels}
             if ma_levels:
                 level = min(ma_levels, key=levels.index)
@@ -430,20 +477,19 @@ class SnapshotBuilder:
                 self._context._member_signal_details(d, "ma", entry, level)
                 ma_candidates.append((level, entry))
         out["ma"] = self._context._merge_ma_members(ma_candidates)
-        for d in sorted(items, key=lambda item: priority.get(item.get("group"), len(self._context.GROUPS))):
+        for d in sorted(items, key=lambda item: priority.get(str(item.get("group") or ""), len(self._context.GROUPS))):
             symbol = self._context.normalize_symbol(d.get("symbol"))
             identity = self._context.instrument_identity(symbol)
             if identity in seen:
                 continue
             seen.add(identity)
-            if (d.get("reference_only") or d.get("level") == "gray"
-                    or "price" in d and d["price"] is None):
+            if d.get("reference_only") or d.get("level") == "gray" or not self._valid_stat_price(d):
                 continue
             member = {"symbol": symbol, "note": d.get("note") or "", "group": d.get("group") or "",
                       # hold 只给持仓组用：统计面板要在名单里标「长持仓 / 短持仓」
                       "hold": str(d.get("hold") or ""),
                       "level": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else ""}
-            marks = d.get("signal_marks") or []
+            marks = _signal_marks(d.get("signal_marks"))
             if any(kind == "boll_rsi" for kind, _ in marks) or self._context._text_only_kind(d.get("signals")) == "boll_rsi":
                 marks = [(kind, level) for kind, level in marks if kind not in ("boll", "rsi")]
             for kind in {k for k, _ in marks}:
@@ -475,7 +521,7 @@ class SnapshotBuilder:
         priority = {group["item_group"]: index for index, group in enumerate(self._context.GROUPS)}
         seen = set(self._context.RISK_IDENTITIES)
         members = []
-        for d in sorted(items, key=lambda item: priority.get(item.get("group"), len(self._context.GROUPS))):
+        for d in sorted(items, key=lambda item: priority.get(str(item.get("group") or ""), len(self._context.GROUPS))):
             symbol = self._context.normalize_symbol(d.get("symbol"))
             identity = self._context.instrument_identity(symbol)
             if identity in seen:
@@ -494,8 +540,16 @@ class SnapshotBuilder:
     def _sanitize_snapshot_fields(self, value):
         """浅复制并过滤已知退役键；其它字段保持原值。"""
         out = {key: item for key, item in value.items() if key not in self._context._RETIRED_SNAPSHOT_KEYS}
+        facts = self._saved_technical_facts(value)
+        if "symbol" in out:
+            if "price" in out and not self._valid_stat_price(out):
+                out.update(price=None, level="gray")
+            if facts is None and (out.get("signals") or out.get("signal_marks")):
+                out["technical_pending"] = True
+        if "signals" in out:
+            out["signals"] = _signal_texts(out["signals"])
         if "signal_marks" in out:
-            out["signal_marks"] = [mark for mark in out["signal_marks"] or [] if mark[0] != "fund"]
+            out["signal_marks"] = [mark for mark in _signal_marks(out["signal_marks"]) if mark[0] != "fund"]
             retired_amp = any(kind == "amp" and level == "gray" for kind, level in out["signal_marks"])
             if retired_amp:
                 out["signal_marks"] = [mark for mark in out["signal_marks"] if mark != ("amp", "gray") and mark != ["amp", "gray"]]
@@ -503,21 +557,8 @@ class SnapshotBuilder:
                     out["signals"] = [text for text in out.get("signals") or []
                                       if not isinstance(text, str) or not text.startswith("振幅 ")]
                 # 旧振幅灰曾强制不折叠；仅按已保存技术事实恢复资格，不回查行情或重判振幅。
-                texts = [text for text in out.get("signals") or [] if isinstance(text, str)]
-                selected = out.get("boll_alert_text") or next(
-                    (text for text in texts if text.startswith(self._context._TEXT_BOLL_PREFIX)), "")
-                side = ("上轨" if "上轨" in selected else "下轨" if "下轨" in selected else None) if isinstance(selected, str) else None
-                hits = {"超买": 0, "超卖": 0}
-                for text in texts:
-                    match = re.match(r"^RSI ([123])条\s*[↑↓]?(超买|超卖)", text)
-                    if match:
-                        hits[match[2]] = max(hits[match[2]], int(match[1]))
-                facts = self._context.classify_technical_facts(out.get("group"), hits["超买"], hits["超卖"], side)
                 technical_marks = {kind for kind, _ in out["signal_marks"] if kind in ("rsi", "boll", "boll_rsi")}
-                known = isinstance(selected, str) and (not selected or side is not None) and all(
-                    not text.startswith("RSI") or re.match(r"^RSI ([123])条\s*[↑↓]?(超买|超卖)", text)
-                    for text in texts)
-                if facts and known and (not technical_marks or technical_marks == {facts["kind"]}):
+                if facts and (not technical_marks or technical_marks == {facts["kind"]}):
                     out["foldable"] = facts["foldable"]
         if "symbol" in out and any(key in out for key in ("target", "purple", "signal_marks", "signals")):
             out = self._context._apply_target(out)
@@ -644,6 +685,9 @@ class SnapshotBuilder:
                     else:
                         out["summary"][level] = None
         if isinstance(rows, list) and isinstance(out.get("signal_counts"), dict):
+            if any(not self._valid_stat_price(row) for row in rows):
+                out["signal_members"] = self._context.signal_count_members(rows)
+                out["signal_counts"] = self._context.signal_counts(rows)
             ma_members = self._context.signal_count_members(rows)["ma"]
             out["signal_counts"] = {kind: value for kind, value in out["signal_counts"].items()
                                     if kind not in ("ma_cross", "ma_band")}
@@ -655,20 +699,24 @@ class SnapshotBuilder:
 
 
     def build_snapshot(self, macro, items, cfg, group_counts=None):
-        ma_members = self._context.signal_count_members(items)["ma"]
+        # 均线按跨组全部有效事实合并，不因主行去重丢失较高级别或第二种事实。
+        ma_members = self._context.signal_count_members(
+            [dict(item, price=item.get("price")) for item in items])["ma"]
         priority = {g["item_group"]: i for i, g in enumerate(self._context.GROUPS)}
         unique = {}
-        for item in sorted(items, key=lambda d: priority.get(d.get("group"), len(self._context.GROUPS))):
+        for item in sorted(items, key=lambda d: priority.get(str(d.get("group") or ""), len(self._context.GROUPS))):
             identity = self._context.instrument_identity(item["symbol"])
             if identity not in self._context.RISK_IDENTITIES:
                 unique.setdefault(identity, item)
-        items = [self._context._sanitize_snapshot_fields(item) for item in unique.values()]
+        # 完整行情快照显式保留缺价，轻量成员 API 的缺字段兼容不延伸到这里。
+        items = [self._context._sanitize_snapshot_fields(dict(item, price=item.get("price")))
+                 for item in unique.values()]
         dates = sorted({d.get("data_date") for d in items if d.get("data_date") and not d.get("reference_only")})
         references = {self._context.normalize_symbol(d["symbol"]): d["data_date"] for d in items
                       if d.get("reference_only") and d.get("data_date")}
         unsupported = [self._context.normalize_symbol(d["symbol"]) for d in items if not self._context.quote_supported(d["symbol"])]
         missing = [self._context.normalize_symbol(d["symbol"]) for d in items
-                   if d.get("price") is None and self._context.quote_supported(d["symbol"])]
+                   if self._context._pos_num(d.get("price")) is None and self._context.quote_supported(d["symbol"])]
         stale = [self._context.normalize_symbol(d["symbol"]) for d in items
                  if not d.get("reference_only") and d.get("data_date") and self._context.TARGET_DATE and d["data_date"] < self._context.TARGET_DATE]
         monitoring = self._context.group_monitoring(cfg)
@@ -699,15 +747,15 @@ class SnapshotBuilder:
                             "reduces": sum(bool(self._context.reduce_rule(c)) for c in positions.values()),
                             "dca": 1 if dca else 0},
             "summary": {**{lv: sum(d["level"] == lv and (lv not in ("red", "yellow")
-                                  or not d.get("reference_only") and ("price" not in d or d["price"] is not None))
+                                  or not d.get("reference_only") and self._valid_stat_price(d))
                                   for d in items) for lv in ("red", "yellow", "green", "gray")},
                         "purple": self._context.purple_counts(items),
                         "total": len(items), "macro_ok": sum(bool(m.get("ok")) for m in macro.values()),
                         "stale_symbols": stale, "missing_symbols": missing,
                         "unsupported_symbols": unsupported, "reference_dates": references,
-                        "today_prices": sum(not d.get("reference_only") and d.get("price") is not None and d.get("data_date") == self._context.TARGET_DATE for d in items),
-                        "prior_prices": sum(not d.get("reference_only") and d.get("price") is not None and d.get("data_date") != self._context.TARGET_DATE for d in items),
-                        "missing_prices": sum(d.get("price") is None for d in items)},
+                        "today_prices": sum(not d.get("reference_only") and self._context._pos_num(d.get("price")) is not None and d.get("data_date") == self._context.TARGET_DATE for d in items),
+                        "prior_prices": sum(not d.get("reference_only") and self._context._pos_num(d.get("price")) is not None and d.get("data_date") != self._context.TARGET_DATE for d in items),
+                        "missing_prices": sum(self._context._pos_num(d.get("price")) is None for d in items)},
             "signal_counts": self._context.signal_counts(items),
             "signal_members": self._context.signal_count_members(items),
             "target_overlays": self._context.target_overlay_members(items),

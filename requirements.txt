@@ -1,5 +1,17 @@
-# 固定直接运行依赖：版本取自现有 .venv 的发行元数据，均支持 Python >=3.10。
-# 不复制整个 3.13 环境：其中 numpy==2.5.3 要求 Python >=3.12，不兼容生产 3.11。
-# 传递依赖由 pip 按目标 Python 的 Requires-Python 解析；本文件不是完整依赖锁。
+# 固定 Python 3.11 / 3.13 的直接及传递运行依赖，不包含本机绘图或测试工具。
+# numpy 2.5.3 要求 >=3.12；生产 3.11 使用兼容的 2.2.6，避免解析时漂移。
 requests==2.34.2
 exchange-calendars==4.13.2
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
+urllib3==2.8.0
+numpy==2.2.6; python_version < "3.12"
+numpy==2.5.3; python_version >= "3.12"
+pandas==3.0.6
+pyluach==2.3.0
+toolz==1.2.0
+tzdata==2026.5
+korean-lunar-calendar==0.4.0
+python-dateutil==2.9.0.post0
+six==1.17.0

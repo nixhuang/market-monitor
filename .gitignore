@@ -12,3 +12,12 @@ run-receipt.json
 
 # 测试临时目录（Windows 下沙箱删不掉会残留）
 tmp*/
+
+# 已核实的本地预览、审阅导出与合成快照；不忽略生产数据目录或通配根文件。
+/outputs/
+/output/20261023-rules/
+/data/empty-snapshot.json
+/_s818.json
+/n.html
+/risk-preview.html
+/fred-sp500-compare-2023-2026.png

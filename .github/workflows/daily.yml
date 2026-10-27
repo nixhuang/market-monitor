@@ -66,6 +66,8 @@ jobs:
   # 复用离线矩阵；测试不过，不生成或发布。
   test:
     uses: ./.github/workflows/tests.yml
+    with:
+      called_by_daily: true
 
   build:
     needs: test
@@ -84,6 +86,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
 
       - name: 冻结构建输入
         run: |

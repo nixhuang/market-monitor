@@ -1118,7 +1118,7 @@ class ContinuousVolumeRegression(unittest.TestCase):
                                  rt_vol_ratio=ratio, rt_vol_time='12:00')
             self.assertEqual(alerts.level, expected)
             if alerts.signals:
-                self.assertEqual(alerts.signals, [f'盘中量比（截至 12:00 ET）{ratio:.1f}x'])
+                self.assertEqual(alerts.signals, [f'盘中量比 {ratio:.1f}×（截至 12:00 ET）'])
 
     def test_distribution_preserves_original_z_definition_and_window(self):
         import statistics
@@ -1154,7 +1154,7 @@ class ContinuousVolumeRegression(unittest.TestCase):
     def test_public_distribution_api_and_old_context_mock_compatibility(self):
         import monitor_indicators as indicators
         import monitor_rules
-        data = {'dates': [str(i) for i in range(81)],
+        data = {'dates': monitor.market_sessions.preceding_sessions('2026-10-26', 80) + ['2026-10-26'],
                 'volumes': [1000 * (1 + (i % 7 - 3) / 20) for i in range(81)]}
         distribution_api = monitor.completed_day_volume_distribution
         with patch.object(monitor, '_latest_completed_session_index', return_value=80) as lookup:
@@ -1180,6 +1180,32 @@ class ContinuousVolumeRegression(unittest.TestCase):
             x = monitor._analysis_context('AAPL', {}, quote, 'focus')
             measure.assert_called_once_with('AAPL', quote)
         self.assertEqual((x.vol_ratio_m, x.vol_ratio_s), (distribution['m'], distribution['s']))
+
+    def test_old_volume_context_uses_live_window_constants_and_session_module(self):
+        import monitor_indicators as indicators
+        dates = monitor.market_sessions.preceding_sessions('2026-10-26', 80) + ['2026-10-26']
+        data = {'dates': dates, 'volumes': [1000 * (1 + (i % 7 - 3) / 20) for i in range(81)]}
+        context = SimpleNamespace(instrument_identity=lambda sym: sym,
+            _latest_completed_session_index=lambda days, asof: len(days) - 1,
+            _volume_ratio_zscore=lambda volumes, index: 123)
+        calculator = indicators.IndicatorCalculator(context)
+        original = dict(vars(context))
+        self.assertEqual(calculator.completed_day_volume_z('AAPL', data), 123)
+        self.assertIsNotNone(calculator.completed_day_volume_distribution('AAPL', data))
+        with patch.object(indicators, 'VOL_Z_WINDOW', 61):
+            self.assertIsNone(calculator.completed_day_volume_z('AAPL', data))
+            self.assertIsNone(calculator.completed_day_volume_distribution('AAPL', data))
+        with patch.object(indicators, 'VOL_RATIO_BASE', 21):
+            self.assertIsNone(calculator.completed_day_volume_distribution('AAPL', data))
+        with patch.object(indicators.market_sessions, 'preceding_sessions', return_value=[]) as sessions:
+            self.assertIsNone(calculator.completed_day_volume_distribution('AAPL', data))
+            sessions.assert_called_once_with('2026-10-26', 80)
+        context.market_sessions = SimpleNamespace(preceding_sessions=lambda day, count: dates[-count-1:-1])
+        with patch.object(indicators.market_sessions, 'preceding_sessions', side_effect=AssertionError('不得替换 context')):
+            self.assertEqual(calculator.completed_day_volume_z('AAPL', data), 123)
+        del context.market_sessions
+        self.assertEqual(vars(context), original)
+        self.assertEqual(vars(calculator), {'_context': context})
 
     def test_new_fields_flow_through_analysis_detail_and_snapshot(self):
         data = dict(closes=[100] * 60, price=100, prev_close=100, highs=[], lows=[], dates=[])
@@ -1231,9 +1257,10 @@ class ModuleBoundaryRegression(unittest.TestCase):
 
     def test_indicator_internal_lookup_keeps_old_patch_surface(self):
         ratio = monitor.completed_day_volume_ratio
-        data = {"dates": [str(i) for i in range(21)], "volumes": [100] * 21}
+        data = {"dates": monitor.market_sessions.preceding_sessions('2026-10-26', 20) + ['2026-10-26'],
+                "volumes": [100] * 21}
         with patch.object(monitor, "_latest_completed_session_index", return_value=20) as index:
-            self.assertEqual(ratio("AAPL", data), (1.0, "20"))
+            self.assertEqual(ratio("AAPL", data), (1.0, "2026-10-26"))
             index.assert_called_once_with(data["dates"], None)
 
     def test_statistics_internal_lookup_keeps_old_patch_surface(self):

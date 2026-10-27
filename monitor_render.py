@@ -143,14 +143,14 @@ def _run_light(snapshot, finished_txt):
     # 仅列出缺失或不支持的项目，不重复显示完整数据的已更新计数。
     deficits = []
     if summary.get("gray"):
-        deficits.append(f"缺失 {summary.get('gray')}")
+        deficits.append(f"缺失 {html_lib.escape(str(summary.get('gray')))}")
     if unsupported_count:
         deficits.append(f"{unsupported_count} 个特殊代码暂不支持报价")
     if isinstance(missing_risk, list) and missing_risk:
         names = "、".join(html_lib.escape(str(name)) for name in missing_risk)
         valid = risk.get("valid_count", 5 - len(missing_risk))
         parts = [f"{kind}运行已完成",
-                 f"市场风险数据缺失：{names}（有效指标 {valid}/5）"]
+                 f"市场风险数据缺失：{names}（有效指标 {html_lib.escape(str(valid))}/5）"]
         parts.extend(deficits)
         parts.append(f"完成于 {finished_txt}（北京时间）")
         return "partial", " · ".join(parts)
@@ -722,10 +722,10 @@ class PageRenderer:
         hold_html = ('<span class="unit" title="长持仓：不看一般过热，RSI 三条全超卖才提醒">长</span>'
                      if d.get("group") == "position" and str(d.get("hold") or "") == "long" else "")
         return (
-            f'<tr class="{cls}" id="{self._context._stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
+            f'<tr class="{html_lib.escape(cls, quote=True)}" id="{self._context._stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
             f'data-price="{html_lib.escape(str(d.get("price") or ""), quote=True)}" '
             f'data-prev-close="{html_lib.escape(str(d.get("prev_close") or ""), quote=True)}"><td class="sym">'
-            f'{self._context.normalize_symbol(d["symbol"])}{note}{hold_html}'
+            f'{html_lib.escape(self._context.normalize_symbol(d["symbol"]))}{note}{hold_html}'
             f'{lv_html}{self._context._row_tags(d, snapshot)}</td>'
             f'<td class="earn-cell">{self._context._earnings_html(d)}</td>'
             f'<td class="num px"><span class="px-price">{self._context.fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
@@ -762,7 +762,7 @@ class PageRenderer:
                 f'{group["sector_etf"]} {rs["days"]}日 {rs["etf"]:+.1f}% − {bn} {rs["bench"]:+.1f}% = {diff:+.1f} 个百分点'
                 f'（{rs["start"]} → {rs["end"]}）')
             stats += (f'<span class="rs-spy {rs_cls}" aria-label="{rs_tip}">'
-                      f'{rs["days"]}日对{".SPX" if bn == self._context.RS_BENCH_NAME else html_lib.escape(bn)} {diff:+.1f}%</span>')
+                      f'{html_lib.escape(str(rs["days"]))}日对{".SPX" if bn == self._context.RS_BENCH_NAME else html_lib.escape(bn)} {diff:+.1f}%</span>')
         if not enabled:
             note = "仅板块ETF" if g else "监测关闭"
             stats = f'<span class="monitor-note">{note}</span>' + stats
@@ -848,8 +848,8 @@ class PageRenderer:
         body = "\n".join(parts)
         stats = self._context._group_stats_html(g, group, items_by_symbol, enabled)
         # 打开网页时只展开「统计」；所有分组（含持仓、重点）默认折叠。持仓点开后长/短两区默认展开。
-        return (f'<details class="card group-card" id="group_{group["key"]}">'
-                f'<summary class="grp"><span class="grp-name">{group["label"]} ({len(g)})</span>'
+        return (f'<details class="card group-card" id="group_{html_lib.escape(str(group["key"]), quote=True)}">'
+                f'<summary class="grp"><span class="grp-name">{html_lib.escape(str(group["label"]))} ({len(g)})</span>'
                 f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
 
 
@@ -870,7 +870,7 @@ class PageRenderer:
                          "下轨（RSI超买/超卖均命中）")
                 # 旧快照缺条数时也要按新措辞显示方向，不再回显「下轨（超卖）」这种裸字段
                 value = self._context.boll_rsi_text(direction, hits) if direction.startswith(("上轨", "下轨")) \
-                    else ("方向待下次更新" if direction in known or not direction else esc(direction))
+                    else ("方向待下次更新" if direction in known or not direction else direction)
                 return f' <span class="signal-member-direction">{esc(value)}</span>'
         elif kind in ("rsi", "boll", "ma", "ma_cross", "ma_band", "chg", "amp", "vol_ratio") or (kind == "target" and level == "purple"):
             markers = d.get("indicators")
@@ -1512,8 +1512,8 @@ class PageRenderer:
         except Exception:
             rs20 = None
         # asof＝内置快照的日期（种子文件里的券商截图日期）：换设备取不到云端时页面要拿它说明数据来源
-        return _json.dumps({"asof": asof, "cash": cash, "cash_extra": cash_extra, "fixed": fixed,
-                            "fixed_cost": fixed_cost, "items": items, "rs20": rs20}, ensure_ascii=False)
+        return self._context.json_script({"asof": asof, "cash": cash, "cash_extra": cash_extra, "fixed": fixed,
+                                          "fixed_cost": fixed_cost, "items": items, "rs20": rs20})
 
 
     def _cost_panel_assets(self, items=None):
@@ -1577,8 +1577,7 @@ class PageRenderer:
                        f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
                        f'综合：{html_lib.escape(risk["label"])}</span>')
         dca_title = self._context.dca_badge(snapshot.get("dca_reminder"))  # 顶栏最右侧（2026-10-19：从市场风险标题挪过来）
-        snapshot_json = json.dumps(snapshot, ensure_ascii=False, separators=(",", ":"))
-        snapshot_json = snapshot_json.replace("</", "<\\/")
+        snapshot_json = self._context.json_script(snapshot)
         finished_iso = self._context.beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
         finished_txt = finished_iso[:19].replace("T", " ") if finished_iso else "未记录"
         # 一行摘要升级为状态灯文案（首页第三排）
@@ -1615,7 +1614,7 @@ class PageRenderer:
 </head>
 <body>{current_rules}<div class="wrap">
 <h1>AI监测</h1>
-<div class="sub">{sub_line}</div>
+<div class="sub">{html_lib.escape(sub_line)}</div>
 
 <div class="runbar">
   <button class="primary" id="btnRunNow">运行</button>

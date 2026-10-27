@@ -8,6 +8,7 @@ const m = src.match(/<script>\r?\n([\s\S]*?)<\/script>\s*<\/body>/);
 if (!m) { console.error('未找到内联脚本'); process.exit(1); }
 const code = m[1];
 
+const decodeAttribute=value=>value.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
 function makeEl(id) {
   return {
     id, tagName: '', textContent: '', value: '', _html: '', className: '', open: false,
@@ -19,7 +20,8 @@ function makeEl(id) {
       for (const match of v.matchAll(/<([a-z][\w-]*)\b([^>]*)>/gi)) {
         const id = match[2].match(/\bid="([^"]+)"/);
         if (!id) continue;
-        const child = els[id[1]] = makeEl(id[1]);
+        const decodedId=decodeAttribute(id[1]);
+        const child = els[decodedId] = makeEl(decodedId);
         child.tagName = match[1].toUpperCase();
         if (child.tagName === 'DETAILS') child.open = /(?:^|\s)open(?:\s|=|$)/.test(match[2]);
       }
@@ -261,6 +263,21 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
     !['target_space_pct','target_high_space_pct'].includes(k)).every(k=>doc.getElementById('set_'+k)),
   '完整规则不重复展示，全部真实可编辑参数控件保留');
 
+// 分组与行数据同样走双引号属性和文字上下文转义。
+const unsafeKey='offline" data-injected="yes',unsafeText='<img src=x onerror="bad()"> & 中文';
+const baseGroups=JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8'));
+T.initGroups([...baseGroups,{key:unsafeKey,label:unsafeText}]);
+T.data[unsafeKey]={'A&B<CODE>':{note:unsafeText,trigger:'" onfocus="bad()'}};T.render();
+check(!els.groupEditor.innerHTML.includes(' data-injected="yes')&&
+  els.groupEditor.innerHTML.includes('offline&quot; data-injected=&quot;yes')&&
+  els.groupEditor.innerHTML.includes('&lt;img src=x onerror=&quot;bad()&quot;> &amp; 中文'),
+  '分组键和标签转义后不能逃出属性或注入HTML且中文与&只转义一次');
+check(els['list_'+unsafeKey].innerHTML.includes('data-k="offline&quot; data-injected=&quot;yes"')&&
+  els['list_'+unsafeKey].innerHTML.includes('A&amp;B&lt;CODE>')&&
+  !els['list_'+unsafeKey].innerHTML.includes('<img')&&!els['list_'+unsafeKey].innerHTML.includes(' onfocus="bad()'),
+  '行分组、代码、备注、价格属性均不能注入HTML或事件属性');
+delete T.data[unsafeKey];T.initGroups(baseGroups);
+
 (async () => {
   // 等初始化的模拟读取结束，避免其错误文案与本次迁移断言竞争。
   await new Promise(resolve=>setImmediate(resolve));
@@ -462,11 +479,91 @@ check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场�
     '保存规则真实序列化并保留黄2／红3.6σ与VIX20／30／40');
   check(T.trackReceipt('settings.json',{content:{sha:'bad'}})===false&&els.msg.className==='err',
     '移除生效UI不移除有效blob／commit回执校验');
-  T.SET.dca_start='2026-10-01';T.SET.dca_every=5;T.SET.vol_ratio_z=1;
+  T.SET.dca_start='2026-10-01';T.SET.dca_every=5;T.SET.vol_ratio_z=1;T.renderSettings();
   els.dcaCard.open=true;els.btnResetRules.onclick();
   check(T.SET.vol_ratio_z===2&&T.SET.vol_ratio_red_z===3.6&&T.SET.dca_every===5&&T.SET.dca_start==='2026-10-01'&&
     els.dcaCard.open&&els.setToggle.open, '恢复默认保留定投和手动折叠状态，并恢复黄2／红3.6σ');
-  T.setToken('');
+
+  // 延迟回执：快照、编辑基线和共享写锁必须彼此独立，所有请求均为内存桩。
+  Object.assign(T.SET,expectedDefaults);T.renderSettings();
+  await T.saveRules(els.btnSaveRules);
+  const pendingWrites=[];
+  global.fetch=(url,options)=>new Promise(resolve=>pendingWrites.push({url,options,resolve}));
+  const finishWrite=(job,blob='d',commit='e',status=200)=>job.resolve({ok:status===200,status,
+    json:async()=>({content:{sha:blob.repeat(40)},...(commit?{commit:{sha:commit.repeat(40)}}:{})})});
+  const decoded=job=>JSON.parse(Buffer.from(JSON.parse(job.options.body).content,'base64').toString('utf8'));
+  const editSetting=(key,value)=>{els['set_'+key].value=value;els['set_'+key].oninput();};
+  const firstSave=T.saveRules(els.btnSaveRules);
+  const firstWrite=pendingWrites[0];
+  editSetting('vol_ratio','1.8');
+  check(['btnSaveRules','btnSaveDca','btnClearDca'].every(id=>els[id].disabled)&&
+    !els.set_vol_ratio.disabled&&!els.btnResetRules.disabled,'写入期间共享保存按钮锁定，但输入与恢复默认仍可用');
+  await T.saveRules(els.btnSaveRules);await els.btnSaveDca.onclick({target:els.btnSaveDca});
+  await els.btnClearDca.onclick({target:els.btnClearDca});
+  check(pendingWrites.length===1&&decoded(firstWrite).vol_ratio===1.5,
+    '连续保存及跨定投入口不重复写入，首个请求保持1.5快照');
+  finishWrite(firstWrite);await firstSave;
+  check(els.set_vol_ratio.value==='1.8'&&els.rulesDirty.textContent.includes('未保存')&&
+    els.msg.textContent.includes('尚未保存'),'1.5提交回执不覆盖1.8后续输入且不会把后改值误报已保存');
+  editSetting('vol_ratio','1.5');
+  check(els.rulesDirty.textContent==='', '退回实际已提交快照可准确清除dirty，而非只靠单调编辑计数');
+  editSetting('vol_ratio','1.8');
+  const secondSave=T.saveRules(els.btnSaveRules),secondWrite=pendingWrites[1];
+  check(JSON.parse(secondWrite.options.body).sha==='d'.repeat(40)&&decoded(secondWrite).vol_ratio===1.8,
+    '下一次保存携带首个有效blob SHA并提交后改1.8');
+  finishWrite(secondWrite,'f','a');await secondSave;
+  check(els.rulesDirty.textContent.includes('已提交')&&!els.msg.textContent.includes('尚未保存')&&
+    ['btnSaveRules','btnSaveDca','btnClearDca'].every(id=>!els[id].disabled),'无新编辑时准确提示本次提交且三个入口恢复可用');
+  editSetting('vol_ratio','1.9');
+  const failedSave=T.saveRules(els.btnSaveRules),failedWrite=pendingWrites[2];
+  editSetting('vol_ratio','2.0');finishWrite(failedWrite,'b','c',409);await failedSave;
+  check(els.msg.textContent.includes('409')&&els.set_vol_ratio.value==='2.0'&&els.rulesDirty.textContent.includes('未保存'),
+    '冲突失败保留提交期间输入及dirty');
+  editSetting('vol_ratio','1.8');check(els.rulesDirty.textContent==='', '失败不推进已提交基线');
+  editSetting('vol_ratio','2.0');
+  const missingSave=T.saveRules(els.btnSaveRules),missingWrite=pendingWrites[3];
+  check(JSON.parse(missingWrite.options.body).sha==='f'.repeat(40),'失败不推进blob SHA');
+  finishWrite(missingWrite,'b','');await missingSave;
+  check(els.msg.className==='err'&&els.rulesDirty.textContent.includes('未保存'), '缺commit回执不把规则误标已确认提交');
+  const resetSave=T.saveRules(els.btnSaveRules),resetWrite=pendingWrites[4];
+  check(JSON.parse(resetWrite.options.body).sha==='b'.repeat(40), '已接受但缺commit时仍保存有效新blob SHA供后续冲突校验');
+  editSetting('dca_start','2026-10-08');editSetting('dca_every','7');
+  T.SET.custom_rule=42;els.btnResetRules.onclick();
+  check(els.set_dca_start.value==='2026-10-08'&&els.set_dca_every.value==='7'&&T.SET.custom_rule===42&&
+    Number(els.set_vol_ratio.value)===1.5, '提交期间恢复默认保留当前未提交定投与表单外参数');
+  await T.loadSettings();
+  check(pendingWrites.length===5, '写入期间重新读取不覆盖当前规则或抢改SHA');
+  finishWrite(resetWrite,'c','d');await resetSave;
+  check(Number(els.set_vol_ratio.value)===1.5&&els.set_dca_every.value==='7'&&els.rulesDirty.textContent.includes('未保存'),
+    '恢复默认后旧请求成功仍只确认旧快照，新默认值及定投保持dirty');
+  await T.loadSettings();check(pendingWrites.length===5,'已存在未保存规则时清单重读不顺带覆盖规则');
+  const afterResetSave=els.btnSaveDca.onclick({target:els.btnSaveDca}),afterResetWrite=pendingWrites[5];
+  check(decoded(afterResetWrite).vol_ratio===1.5&&decoded(afterResetWrite).dca_every===7&&
+    decoded(afterResetWrite).dca_start==='2026-10-08', '定投入口提交恢复默认后的完整最新快照');
+  finishWrite(afterResetWrite,'e','f');await afterResetSave;
+  const clearSave=els.btnClearDca.onclick({target:els.btnClearDca}),clearWrite=pendingWrites[6];
+  check(decoded(clearWrite).dca_every===0&&decoded(clearWrite).dca_start==='','关闭定投仍提交关闭值');
+  finishWrite(clearWrite,'a','b');await clearSave;
+  editSetting('vol_ratio','1.9');
+  global.fetch=async()=>{throw new Error('模拟断网');};
+  await T.saveRules(els.btnSaveRules);
+  check(els.msg.className==='err'&&els.rulesDirty.textContent.includes('未保存')&&!els.btnSaveRules.disabled,
+    '网络失败保留dirty并释放写锁');
+  T.setToken('');await T.saveRules(els.btnSaveRules);
+  check(els.rulesDirty.textContent.includes('未保存')&&JSON.parse(els.rulesOut.value).vol_ratio===1.9,
+    '手动复制模式只生成JSON，不冒认已提交或清空dirty');
+  T.setToken('github_pat_memory_only');
+  global.fetch=async()=>({ok:true,status:200,json:async()=>({content:{sha:'c'.repeat(40)},commit:{sha:'d'.repeat(40)}})});
+  await T.saveRules(els.btnSaveRules);
+  let resolveSettings;
+  global.fetch=()=>new Promise(resolve=>{resolveSettings=resolve;});
+  const lateLoad=T.loadSettings();els.btnResetRules.onclick();
+  resolveSettings({ok:true,status:200,json:async()=>({content:Buffer.from('{"vol_ratio":2.3}').toString('base64'),sha:'e'.repeat(40)})});
+  await lateLoad;
+  check(Number(els.set_vol_ratio.value)===1.5&&els.rulesDirty.textContent.includes('未保存'),
+    '恢复默认推进读取版本，慢GET不能覆盖默认值');
+  global.fetch=async()=>({ok:true,status:200,json:async()=>({content:{sha:'e'.repeat(40)},commit:{sha:'f'.repeat(40)}})});
+  await T.saveRules(els.btnSaveRules);T.setToken('');
 
   // 运行共享状态脚本而非桩：所有已删除节点查询必须返回null。
   const requests=[],reloads=[];

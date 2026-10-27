@@ -431,6 +431,85 @@ class EntryVersionTests(TemporaryBase):
         self.assertEqual(actual["ne"], "2026-10-24")
         self.assertEqual(actual["r"], "2026-10-20")
 
+    def test_beijing_quota_day_survives_midnight_load_checkpoint_and_restart(self):
+        for instant in (datetime(2026, 10, 19, 16, tzinfo=timezone.utc),
+                        datetime(2026, 10, 19, 23, 59, tzinfo=timezone.utc),
+                        datetime(2026, 10, 20, 0, tzinfo=timezone.utc)):
+            with self.subTest(instant=instant):
+                self.instant = instant
+                today = {"date": "2026-10-20", "symbols": ["AAA"], "retry_symbols": ["AAA"]}
+                yesterday = {"date": "2026-10-19", "symbols": ["OLD"], "retry_symbols": []}
+                self.save_cache(self.cache("consensus", {"quota": today}, OLD))
+                runtime = rt.RuntimeState(self.base)
+                restored = runtime.load_previous({"finished_at": instant.isoformat(),
+                    "consensus": {"quota": yesterday}})
+                self.assertEqual(restored["consensus"]["quota"], today)
+                runtime.checkpoint("consensus", {"quota": {
+                    "date": "2026-10-20", "symbols": ["BBB"], "retry_symbols": ["BBB"]}})
+                runtime.checkpoint("consensus", {"quota": yesterday})
+                restarted = rt.RuntimeState(self.base).load_previous({})["consensus"]["quota"]
+                self.assertEqual(restarted, {"date": "2026-10-20", "symbols": ["AAA", "BBB"],
+                                             "retry_symbols": ["AAA", "BBB"]})
+
+    def test_beijing_consensus_attempt_day_sorts_before_utc_midnight(self):
+        failure = {"s": "fail", "r": "2026-10-18", "avg": 10, "try": "2026-10-20",
+                   "failures": 3, "next_retry": "2026-10-22"}
+        success = {"s": "ok", "r": "2026-10-19", "avg": 20, "try": "2026-10-19"}
+        for instant in (datetime(2026, 10, 19, 16, tzinfo=timezone.utc),
+                        datetime(2026, 10, 19, 23, 59, tzinfo=timezone.utc),
+                        datetime(2026, 10, 20, 0, tzinfo=timezone.utc)):
+            with self.subTest(instant=instant):
+                self.instant = instant
+                for cached, saved in ((failure, success), (success, failure)):
+                    actual = self.restored("consensus", cached, saved, asof=instant.isoformat())
+                    self.assertEqual((actual["r"], actual["avg"]), ("2026-10-19", 20))
+                    self.assertEqual((actual["s"], actual["try"], actual["failures"]),
+                                     ("fail", "2026-10-20", 3))
+                    self.assertEqual(actual["next_retry"], "2026-10-22")
+                runtime = rt.RuntimeState(self.base)
+                runtime.load_previous({"consensus": {"data": {"AAA": failure}}})
+                runtime.checkpoint("consensus", {"data": {"AAA": success}})
+                metadata = runtime.sections["consensus"]["entry_meta"]["AAA"]["attempt"]
+                self.assertEqual(metadata["at"], "2026-10-19T16:00:00+00:00")
+                restarted = rt.RuntimeState(self.base).load_previous({})["consensus"]["data"]["AAA"]
+                self.assertEqual((restarted["s"], restarted["try"], restarted["failures"]),
+                                 ("fail", "2026-10-20", 3))
+                self.assertTrue(rt.verify_checkpoint(self.base, self.read(".cache/market-monitor.json")["checkpoint"]["id"]))
+
+    def test_consensus_beijing_attempt_boundary_keeps_facts_and_timestamps_strict(self):
+        self.instant = datetime(2026, 10, 19, 15, 59, tzinfo=timezone.utc)
+        entry = {"s": "fail", "try": "2026-10-20", "r": "2026-10-20"}
+        self.assertIsNone(rt._own_stamp("consensus", "attempt", entry))
+        self.instant = self.instant.replace(hour=16, minute=0)
+        expected = self.instant
+        for day in ("2026-10-20", "10/20/2026"):
+            self.assertEqual(rt._own_stamp("consensus", "attempt", {**entry, "try": day}), expected)
+        self.assertIsNone(rt._own_stamp("consensus", "facts", entry))
+        self.assertIsNone(rt._own_stamp("earnings", "attempt", {"attempted": "2026-10-20"}))
+        for value in ("2026-10-21", "2026-10-20T00:00:00Z", "2026-10-20T00:00:01+08:00",
+                      "2026-10-20T00:00:00", "invalid", True, None):
+            self.assertIsNone(rt._own_stamp("consensus", "attempt", {"s": "fail", "try": value}))
+        self.assertEqual(rt._own_stamp("consensus", "attempt", {"try": "2026-10-19T16:00:00Z"}), expected)
+
+    def test_quota_date_boundary_does_not_relax_utc_fact_or_event_dates(self):
+        self.instant = datetime(2026, 10, 19, 15, 59, tzinfo=timezone.utc)
+        self.assertIsNone(rt._quota_date("2026-10-20"))
+        self.instant = self.instant.replace(hour=16, minute=0)
+        self.assertEqual(rt._quota_date("2026-10-20").isoformat(), "2026-10-20")
+        self.assertIsNone(rt._date("2026-10-20"))
+        self.assertIsNone(rt._entry_stamp("2026-10-20"))
+        self.assertEqual(rt._dates(["2026-10-19", "2026-10-20"]), {"2026-10-19"})
+
+    def test_future_or_invalid_quota_cannot_displace_valid_beijing_ledger(self):
+        self.instant = datetime(2026, 10, 19, 16, tzinfo=timezone.utc)
+        valid = {"quota": {"date": "2026-10-20", "symbols": ["AAA"], "retry_symbols": []}}
+        for day in ("2026-10-21", "invalid", True, None):
+            with self.subTest(day=day):
+                invalid = {"quota": {"date": day, "symbols": ["BAD"]}}
+                self.assertEqual(rt._merge_auxiliary(valid, invalid), valid)
+                self.assertEqual(rt._merge_auxiliary(invalid, valid), valid)
+                self.assertNotIn("quota", rt._merge_auxiliary({}, invalid))
+
     def test_quota_union_and_newest_ledger_day_win_over_section_time(self):
         runtime = rt.RuntimeState(self.base)
         runtime.load_previous({"consensus": {"quota": {"date": "2026-10-20", "symbols": ["AAA"], "retry_symbols": ["AAA"]}}})

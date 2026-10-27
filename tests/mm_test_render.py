@@ -7,6 +7,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 sys.path.insert(0, ROOT)
 import monitor  # noqa: E402
+from unittest.mock import patch as _patch, mock_open as _mock_open
+
+# 整页与可选隔离浏览器只接收合成种子，不把本机真实仓位带进测试页面。
+_real_cost_seed_json = monitor._cost_seed_json
+_seed_patch = _patch.object(monitor, '_cost_seed_json', return_value=monitor.json_script(
+    {"asof": "", "cash": 0, "cash_extra": 0, "fixed": 0, "fixed_cost": 0, "items": {}, "rs20": None}))
+_seed_patch.start()
 
 
 def _row_signals(row):
@@ -1388,8 +1395,81 @@ for _projection_values, _projection_ma_label in (({'120': 1234.567}, '1,234.57')
           repr(_projection_values) + '主表均线用真实值，缺失/0/NaN留—且不从现价或偏离反推')
 check(not hasattr(monitor, '_main_description_text'), '主表投影helper不新增monitor导出')
 
+# 输出上下文回归：只用合成字段，既不能闭合属性/脚本，也不能双转义显示文本。
+from html.parser import HTMLParser as _HTMLParser
+
+class _OutputProbe(_HTMLParser):
+    def __init__(self, source):
+        super().__init__(convert_charrefs=True)
+        self.tags, self.text = [], []
+        self.feed(source)
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
+
+    def handle_data(self, text):
+        self.text.append(text)
+
+_inject = '</script><script>globalThis.__mmInjected=1</script><img src=x onerror="bad()">'
+_symbol = '<img src=x onerror="bad()">'
+_escaped_row = item(_symbol, 'position', 'green', note='中文 & "引号" <b>备注</b>')
+_escaped_row['signals'] = ['普通描述 ' + _inject]
+_row_html = monitor._stock_row(_escaped_row, snapshot)
+_probe = _OutputProbe(_row_html)
+check(not any(tag in ('img', 'script') or any(key.startswith('on') for key in attrs)
+              for tag, attrs in _probe.tags)
+      and monitor.normalize_symbol(_symbol) in ''.join(_probe.text)
+      and _escaped_row['note'] in ''.join(_probe.text),
+      '主表代码、备注、描述作为文字显示，单次转义且不新增标签或事件属性')
+_attr_row = dict(_escaped_row, symbol='ATTR', level='green" onmouseover="bad()')
+_attr_probe = _OutputProbe(monitor._stock_row(_attr_row, snapshot))
+check(_attr_probe.tags[0][1]['class'] == _attr_row['level']
+      and not any(key.startswith('on') for _, attrs in _attr_probe.tags for key in attrs),
+      '行级class字符串不能逃逸双引号属性')
+_unsafe_group = dict(monitor.GROUPS[2], key='test" onfocus="bad()', label='中文 & <b>分组</b>')
+_group_html = monitor._group_card(_unsafe_group, [], {}, snapshot)
+_group_probe = _OutputProbe(_group_html)
+check(_group_probe.tags[0][1]['id'] == 'group_' + _unsafe_group['key']
+      and _unsafe_group['label'] in ''.join(_group_probe.text)
+      and not any(tag == 'b' or any(key.startswith('on') for key in attrs) for tag, attrs in _group_probe.tags),
+      '分组名称和id按各自上下文转义，不注入标签或事件')
+_plain_direction = 'A&B <待确认>'
+_direction_html = monitor._member_icons({'direction': _plain_direction}, 'boll_rsi', 'red')
+check(''.join(_OutputProbe(_direction_html).text).strip() == _plain_direction,
+      '旧方向兜底文字只转义一次，不显示&amp;等二次编码')
+_unsafe_snapshot = dict(snapshot, probe=_inject + '\u2028\u2029',
+                        actual_dates={'min': '2026-10-06', 'max': _inject})
+_unsafe_page = monitor.render({}, [item('SAFE', 'position', 'green')], 1, snapshot=_unsafe_snapshot)
+_embedded = re.search(r'<script id="snapshotData" type="application/json">(.*?)</script>', _unsafe_page, re.S)[1]
+check('<' not in _embedded and '\u2028' not in _embedded and '\u2029' not in _embedded
+      and _json.loads(_embedded)['probe'] == _unsafe_snapshot['probe']
+      and not any(tag == 'img' for tag, _ in _OutputProbe(_unsafe_page).tags),
+      '快照统一使用脚本安全JSON，日期文案也不能注入HTML且JSON无损往返')
+_seed_payload = {'positions': {_inject: {'cost': 25}}}
+with _patch('io.open', _mock_open(read_data=_json.dumps(_seed_payload))), \
+        _patch('os.path.exists', return_value=False), \
+        _patch.object(monitor, '_position_symbols', return_value=[_inject]):
+    _seed_text = _real_cost_seed_json([{'symbol': _inject, 'rs_spy': {
+        'bench': 1, 'etf': 2, 'days': 20, 'end': '2026-10-06', 'start': '2026-09-08',
+        'bench_name': _inject + '\u2028\u2029'}}])
+check('<' not in _seed_text and '\u2028' not in _seed_text and '\u2029' not in _seed_text
+      and _json.loads(_seed_text)['items'][_inject]['cost'] == 25
+      and _json.loads(_seed_text)['rs20']['bench_name'] == _inject + '\u2028\u2029',
+      '成本种子代码与基准名安全JSON序列化，不允许script结束标签且保留原值')
+with _patch.object(monitor, '_cost_seed_json', return_value=_seed_text):
+    _safe_cost_css, _safe_cost_js = monitor._cost_panel_assets([])
+    _unsafe_page = monitor.render({}, [_escaped_row], 1, snapshot=_unsafe_snapshot)
+check(_inject not in _safe_cost_js and '__MM_REAL__' not in _safe_cost_js
+      and _safe_cost_js.count('<script>') == _safe_cost_js.count('</script>'),
+      '合成恶意种子内联到实际成本脚本后不产生额外script标签')
+
 # 显式 --chrome 才启动全新隔离实例；HTML 经 CDP 放入 about:blank 内存页。
 if '--chrome' in sys.argv:
+    _expected_browser_seed = monitor.json_script(
+        {"asof": "", "cash": 0, "cash_extra": 0, "fixed": 0, "fixed_cost": 0, "items": {}, "rs20": None})
+    if 'var REAL=' + _expected_browser_seed + ';' not in _description_page:
+        raise AssertionError('浏览器输入缺少合成仓位种子，拒绝启动')
+    check(True, '浏览器输入只包含空合成仓位种子，不嵌入本机或云端仓位')
     import subprocess as _subprocess
     import tempfile as _tempfile
     _chrome = os.environ.get('MM_TEST_CHROME', 'C:/Program Files/Google/Chrome/Application/chrome.exe')
@@ -1399,6 +1479,7 @@ const {spawn} = require('node:child_process');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
 const assertions = [];
 const failedRequests = [];
+const requestUrls = new Set();
 const chrome = spawn(input.chrome, [
   '--headless=new', '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
   '--user-data-dir=' + input.profile, '--no-first-run', '--no-default-browser-check',
@@ -1408,7 +1489,10 @@ const chrome = spawn(input.chrome, [
   '--disable-features=MediaRouter,OptimizationHints,AutofillServerCommunication', 'about:blank'
 ], {stdio: ['ignore', 'ignore', 'pipe']});
 let ws, call, session, diagnostic = '';
-const deadline = setTimeout(() => { chrome.kill(); process.exit(2); }, 60000);
+const deadline = setTimeout(() => {
+  process.stderr.write('Chromium 合成测试超过60秒，终止独立实例\n' + diagnostic);
+  chrome.kill(); process.exit(2);
+}, 60000);
 (async () => {
   try {
     const endpoint = await new Promise((resolve, reject) => {
@@ -1439,7 +1523,10 @@ const deadline = setTimeout(() => { chrome.kill(); process.exit(2); }, 60000);
         pending.delete(msg.id);
         if (msg.error) job.reject(new Error(JSON.stringify(msg.error)));
         else job.resolve(msg.result);
+      } else if (msg.method === 'Network.requestWillBeSent') {
+        requestUrls.add(msg.params.request.url);
       } else if (msg.method === 'Fetch.requestPaused') {
+        requestUrls.add(msg.params.request.url);
         call('Fetch.failRequest', {requestId: msg.params.requestId, errorReason: 'InternetDisconnected'}, msg.sessionId)
           .catch(() => {});
       } else if (msg.method === 'Network.loadingFailed') {
@@ -1471,8 +1558,25 @@ const deadline = setTimeout(() => { chrome.kill(); process.exit(2); }, 60000);
     assertions.push({ok: isolation.href === 'about:blank' && isolation.origin === 'null' && isolation.blocked
       && failedRequests.includes('net::ERR_INTERNET_DISCONNECTED'),
       name: '独立Chrome内存页与请求阻断', actual: isolation});
+    const clickSummary = async () => {
+      const point = await evaluate(`(() => {
+        const summary = document.querySelector('#signalCounts > summary');
+        summary.scrollIntoView({block:'center'});
+        const rect = summary.getBoundingClientRect();
+        return {x:rect.left + Math.min(rect.width / 2, 80), y:rect.top + rect.height / 2};
+      })()`);
+      await cdp('Input.dispatchMouseEvent', {type:'mousePressed', ...point, button:'left', clickCount:1});
+      await cdp('Input.dispatchMouseEvent', {type:'mouseReleased', ...point, button:'left', clickCount:1});
+      return evaluate(`new Promise(resolve => requestAnimationFrame(() => resolve(document.getElementById('signalCounts').open)))`);
+    };
     for (const [width, height] of [[1440, 1000], [820, 1180], [390, 844]]) {
       await cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
+      const openedBefore = await evaluate(`document.getElementById('signalCounts').open`);
+      const openedAfterClick = await clickSummary();
+      const openedAfterSecondClick = await clickSummary();
+      assertions.push({ok: openedAfterClick !== openedBefore && openedAfterSecondClick === openedBefore,
+        name: width + 'px真实鼠标点击统计标题可收起并重新展开',
+        actual: {openedBefore, openedAfterClick, openedAfterSecondClick}});
       const actual = await evaluate(`(() => {
         document.querySelectorAll('details.group-card,details.quiet-list').forEach(el => el.open = true);
         const high = document.querySelector('#s-thigh .lvtag.tgt.high');
@@ -1523,6 +1627,21 @@ const deadline = setTimeout(() => { chrome.kill(); process.exit(2); }, 60000);
           hitColor: actual.hitColor, hitBackground: actual.hitBackground, badColor: actual.badColor,
           sig: actual.sig, manual: actual.manual, runbarRuleLinks: actual.runbarRuleLinks}});
     }
+    await cdp('Page.setDocumentContent', {frameId: tree.frameTree.frame.id, html: input.injectionPage});
+    const escaped = await evaluate(`(() => {
+      const snapshot = JSON.parse(document.getElementById('snapshotData').textContent);
+      return {injected: globalThis.__mmInjected === 1,
+        images: document.querySelectorAll('img').length,
+        events: document.querySelectorAll('[onerror],[onmouseover],[onfocus]').length,
+        symbol: document.querySelector('td.sym').textContent, probe: snapshot.probe};
+    })()`);
+    assertions.push({ok: !escaped.injected && escaped.images === 0 && escaped.events === 0
+      && escaped.symbol.includes('<IMG SRC=X ONERROR="BAD()">')
+      && escaped.probe === input.injectionProbe,
+      name: '真实浏览器验证HTML属性与script上下文无注入且字符串无损', actual: escaped});
+    assertions.push({ok: [...requestUrls].every(url =>
+      url === 'http://127.0.0.1:65530/offline-probe' || url.startsWith('data:') || url === 'about:blank'),
+      name:'合成页面不尝试任何云端仓位或外网读写', actual:{requestUrls:[...requestUrls]}});
     process.stdout.write(JSON.stringify(assertions));
   } catch (error) {
     process.stderr.write(String(error.stack || error));
@@ -1538,7 +1657,8 @@ const deadline = setTimeout(() => { chrome.kill(); process.exit(2); }, 60000);
 '''
     with _tempfile.TemporaryDirectory(prefix='mm-target-chrome-') as _profile:
         _browser_result = _subprocess.run(['node', '-e', _browser_script],
-            input=_json.dumps({'chrome': _chrome, 'profile': _profile, 'html': _description_page}),
+            input=_json.dumps({'chrome': _chrome, 'profile': _profile, 'html': _description_page,
+                              'injectionPage': _unsafe_page, 'injectionProbe': _unsafe_snapshot['probe']}),
             capture_output=True, text=True, encoding='utf-8', timeout=90)
     check(_browser_result.returncode == 0,
           '独立Chrome样式验证执行成功' + (('：' + _browser_result.stderr) if _browser_result.returncode else ''))
@@ -1547,6 +1667,7 @@ const deadline = setTimeout(() => { chrome.kill(); process.exit(2); }, 60000);
             check(_assertion['ok'], _assertion['name'] + '：'
                   + _json.dumps(_assertion['actual'], ensure_ascii=False, separators=(',', ':')))
 
+_seed_patch.stop()
 print()
 if fail:
     print(f"{checks_total} 项检查中 {len(fail)} 项失败"); sys.exit(1)

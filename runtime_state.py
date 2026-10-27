@@ -1,7 +1,7 @@
 """运行辅助状态：不缓存行情快照，不将生成回执当作发布证明。"""
 import argparse
 import copy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 import os
@@ -130,12 +130,27 @@ def _date(value):
     return None
 
 
-def _entry_stamp(value):
+def _quota_date(value):
+    """配额按北京时间的台账日校验，不放宽其他字段的 UTC 日期边界。"""
+    if not isinstance(value, str):
+        return None
+    today = datetime.now(timezone(timedelta(hours=8))).date()
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y"):
+        try:
+            day = datetime.strptime(value, fmt).date()
+            return day if day <= today else None
+        except ValueError:
+            pass
+    return None
+
+
+def _entry_stamp(value, *, beijing_day=False):
     stamp = _stamp(value)
     if stamp is not None:
         return stamp if stamp <= datetime.now(timezone.utc) else None
-    day = _date(value)
-    return datetime.combine(day, datetime.min.time(), timezone.utc) if day else None
+    day = _quota_date(value) if beijing_day else _date(value)
+    zone = timezone(timedelta(hours=8)) if beijing_day else timezone.utc
+    return datetime.combine(day, datetime.min.time(), zone).astimezone(timezone.utc) if day else None
 
 
 def _parts(name, entry):
@@ -154,7 +169,8 @@ def _own_stamp(name, aspect, entry):
     else:
         keys = {"earnings": ("attempted", "official_attempted"),
                 "consensus": ("try",)}[name]
-        explicit = [_entry_stamp(entry.get(k)) for k in keys]
+        # consensus.try 是北京台账日；带时区钟点仍按严格的 UTC 时点校验。
+        explicit = [_entry_stamp(entry.get(k), beijing_day=name == "consensus") for k in keys]
         if any(s is not None for s in explicit):
             return max(s for s in explicit if s is not None)
         failed = (entry.get("official_error") or entry.get("s") == "fail"
@@ -234,16 +250,19 @@ def _merge_auxiliary(older, newer):
     if "events" in older or "events" in newer:
         out["events"] = events
     a, b = older.get("quota"), newer.get("quota")
-    if isinstance(a, dict) and isinstance(b, dict):
-        # 配额按台账日合并；section 更新时间不允许把今天台账换回昨天。
-        day_a, day_b = _date(a.get("date")), _date(b.get("date"))
-        if day_a and (not day_b or day_a > day_b):
-            out["quota"] = copy.deepcopy(a)
-        elif day_a == day_b:
-            out["quota"] = dict(b)
+    day_a = _quota_date(a.get("date")) if isinstance(a, dict) else None
+    day_b = _quota_date(b.get("date")) if isinstance(b, dict) else None
+    # 配额按北京台账日合并；section 更新时间不能把今天台账换回昨天。
+    if day_a and (not day_b or day_a > day_b):
+        out["quota"] = copy.deepcopy(a)
+    elif day_b:
+        out["quota"] = copy.deepcopy(b)
+        if day_a == day_b:
             for key in ("symbols", "retry_symbols"):
                 out["quota"][key] = sorted({v for q in (a, b) if isinstance(q.get(key), list)
                                              for v in q[key] if isinstance(v, str)})
+    else:
+        out.pop("quota", None)
     return out
 
 

@@ -457,6 +457,89 @@ class RealtimeTests(unittest.TestCase):
             get.assert_not_called()
 
 
+class CompletedVolumeWindowTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(patch.object(monitor, "TARGET_DATE", ""))
+
+    def measure(self, data, day="2026-11-27", symbol="AAPL"):
+        return monitor.completed_day_volume_ratio(symbol, data, at(day + "T20:15:00-05:00"))
+
+    def test_continuous_windows_include_exchange_holidays_and_half_days(self):
+        for day in ("2026-10-20", "2026-11-27", "2026-12-28", "2026-07-06"):
+            data = history(day)
+            data["volumes"][-1] = 2500
+            for symbol in ("AAPL", "SPY"):
+                with self.subTest(day=day, symbol=symbol):
+                    self.assertEqual(self.measure(data, day, symbol), (2.5, day))
+        self.assertNotIn("2026-11-26", history("2026-11-27")["dates"])
+        self.assertNotIn("2026-07-03", history("2026-07-06")["dates"])
+
+    def test_missing_required_day_cannot_be_replaced_by_an_older_day(self):
+        for index in (-1, -2, -10, -21):
+            data = history("2026-11-27", 95)
+            for key in ("dates", "volumes"):
+                del data[key][index]
+            before = copy.deepcopy(data)
+            with self.subTest(index=index):
+                self.assertEqual(self.measure(data), (None, ""))
+                self.assertEqual(data, before)
+        data = history("2026-11-27", 95)
+        for key in ("dates", "volumes"):
+            del data[key][-22]
+        self.assertEqual(self.measure(data), (1.0, "2026-11-27"))
+
+    def test_out_of_order_duplicate_and_non_session_dates_are_rejected(self):
+        base = history("2026-11-27", 95)
+        mutations = []
+        swapped = copy.deepcopy(base)
+        swapped["dates"][-2], swapped["dates"][-3] = swapped["dates"][-3], swapped["dates"][-2]
+        mutations.append(swapped)
+        for index, day in ((-2, base["dates"][-3]), (-1, base["dates"][-2]),
+                           (-2, "2026-11-26"), (-10, None), (-10, ["2026-11-10"])):
+            data = copy.deepcopy(base)
+            data["dates"][index] = day
+            mutations.append(data)
+        mutations.append(dict(base, dates=base["dates"] + [base["dates"][-1]],
+                              volumes=base["volumes"] + [1000]))
+        for data in mutations:
+            with self.subTest(dates=data["dates"][-10:]):
+                self.assertEqual(self.measure(data), (None, ""))
+
+    def test_incomplete_distribution_window_falls_back_without_changing_daily_ratio(self):
+        data = history("2026-11-27", 100)
+        data["volumes"] = [1000 + (i % 7) * 50 for i in range(100)]
+        when = at("2026-11-27T20:15:00-05:00")
+        self.assertIsNotNone(monitor.completed_day_volume_z("AAPL", data, when))
+        self.assertIsNotNone(monitor.completed_day_volume_distribution("AAPL", data, when))
+        for index in (-22, -60, -81):
+            missing = copy.deepcopy(data)
+            for key in ("dates", "volumes"):
+                del missing[key][index]
+            with self.subTest(index=index):
+                self.assertEqual(self.measure(missing), self.measure(data))
+                self.assertIsNone(monitor.completed_day_volume_z("AAPL", missing, when))
+                self.assertIsNone(monitor.completed_day_volume_distribution("AAPL", missing, when))
+
+    def test_invalid_volume_arrays_and_non_stock_identity_remain_unavailable(self):
+        base = history("2026-11-27")
+        for data in (dict(base, dates="2026-11-27"), dict(base, volumes=1000),
+                     dict(base, volumes=base["volumes"][:-1])):
+            self.assertEqual(self.measure(data), (None, ""))
+        for index in (-1, -10):
+            for value in (None, 0, -1, True, False, float("nan"), float("inf"), "1000"):
+                data = copy.deepcopy(base)
+                data["volumes"][index] = value
+                self.assertEqual(self.measure(data), (None, ""))
+        for symbol in ("ESMAIN", "ES=F", "^VIX", ".SPX"):
+            self.assertEqual(self.measure(base, symbol=symbol), (None, ""))
+
+    def test_intraday_window_uses_the_same_ordered_session_boundary(self):
+        moment = "2026-11-27T12:00:00-05:00"
+        data = dict(history("2026-11-27"), rt_volume=1500, rt_ts=moment)
+        data["dates"][-2], data["dates"][-3] = data["dates"][-3], data["dates"][-2]
+        self.assertEqual(monitor.intraday_volume_ratio("SPY", data, at(moment)), (None, ""))
+
+
 class IntradayVolumeTests(unittest.TestCase):
     def setUp(self):
         self.enterContext(patch.object(monitor, "TARGET_DATE", ""))
@@ -534,7 +617,8 @@ class IntradayVolumeTests(unittest.TestCase):
             self.assertTrue(detail["vol_ratio_intraday"])
             self.assertAlmostEqual(detail["rt_vol_ratio"], (1500 / 150) / (average / 390))
             self.assertIn(("vol_ratio", "red"), detail["signal_marks"])
-            self.assertTrue(any("盘中量比（截至 12:00 ET）" in text for text in signals))
+            self.assertTrue(any(text.startswith("盘中量比 ") and text.endswith("×（截至 12:00 ET）")
+                                for text in signals))
             with patch.dict(monitor.S, vol_ratio_red=4.0):
                 _, _, detail = monitor.analyze_symbol("AAPL", {}, data)
                 self.assertIn(("vol_ratio", "yellow"), detail["signal_marks"])
@@ -676,6 +760,20 @@ class OfficialCandidateTests(unittest.TestCase):
             result, request = self.fetch({self.list_url: self.listing(self.urls[:1]), self.urls[0]: "x" * 513})
         self.assertEqual((result["status"], result["reason"]), ("error", "page_too_large"))
         self.assertEqual(request.call_count, 2)
+
+    def test_download_only_receives_fifth_argument_for_explicit_clock(self):
+        clock = lambda: 100.0
+        for kwargs, count in (({}, 4), ({"clock": None}, 4), ({"clock": clock}, 5)):
+            with self.subTest(kwargs=kwargs), patch.object(es, "_download", side_effect=[
+                    self.listing(self.urls[:1]), self.page("Q4 2030 Earnings Results", "2030-10-21")]) as download:
+                result = es.fetch_official_earnings("COST", "2030-10-20", **kwargs)
+            self.assertEqual((result["status"], result["date"]), ("ok", "2030-10-21"))
+            self.assertEqual(download.call_count, 2)
+            for call in download.call_args_list:
+                self.assertEqual(len(call.args), count)
+                self.assertEqual(call.kwargs, {})
+                if count == 5:
+                    self.assertIs(call.args[-1], clock)
 
     def test_expired_budget_does_not_claim_first_candidate_is_nearest(self):
         clock = [100.0]

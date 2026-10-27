@@ -219,6 +219,7 @@ details.fold .pane{padding-bottom:8px}
     <div class="row" style="margin-top:10px">
       <button class="primary" id="btnSaveRules">保存规则</button>
       <button id="btnResetRules">恢复默认</button>
+      <span class="note" id="rulesDirty" role="status" aria-live="polite"></span>
     </div>
     <p class="note">
       保存规则只提交 <kbd>settings.json</kbd>；清单另行保存。
@@ -320,7 +321,7 @@ function moveOptions(sel){
   return POS_ZONES.map(z=>{const v='positions:'+z.v;
       return '<option value="'+v+'"'+(v===sel?' selected':'')+'>'+z.label+'</option>';}).join('')
     +GROUPS.filter(g=>g.key!=='positions').map(g=>
-      '<option value="'+g.key+'"'+(g.key===sel?' selected':'')+'>'+esc(g.label)+'</option>').join('');
+      '<option value="'+esc(g.key)+'"'+(g.key===sel?' selected':'')+'>'+esc(g.label)+'</option>').join('');
 }
 function zoneOf(kind,c){return kind==='positions'?(isLongHeld(c)?'long':'short'):null;}
 function targetLabel(t){
@@ -506,20 +507,20 @@ function initGroups(groups){
   GROUPS=groups;
   KIND_LABEL=Object.fromEntries(groups.map(g=>[g.key,g.label]));
   KINDS=groups.map(g=>({k:g.key,list:'list_'+g.key,pager:'pager_'+g.key,cnt:'cnt_'+g.key,sort:g.key!=='positions'}));
-  $('csvKind').innerHTML=groups.map(g=>'<option value="'+g.key+'">'+esc(g.label)+'</option>').join('');
-  $('groupEditor').innerHTML=groups.map(g=>'<details class="fold edit-group" id="fold_'+g.key+'">'
-    +'<summary>'+esc(g.label)+' <span id="cnt_'+g.key+'">(0)</span>'
+  $('csvKind').innerHTML=groups.map(g=>'<option value="'+esc(g.key)+'">'+esc(g.label)+'</option>').join('');
+  $('groupEditor').innerHTML=groups.map(g=>'<details class="fold edit-group" id="fold_'+esc(g.key)+'">'
+    +'<summary>'+esc(g.label)+' <span id="cnt_'+esc(g.key)+'">(0)</span>'
     +(alwaysMonitored(g.key)?'<span class="monitor-note" style="margin:0 0 0 auto">始终监测</span>'
-      :'<button type="button" class="monitor-toggle" id="monitor_'+g.key+'" role="switch" aria-checked="false" aria-label="'+esc(g.label)+'分组监测">监测关闭</button>')+'</summary>'
+      :'<button type="button" class="monitor-toggle" id="monitor_'+esc(g.key)+'" role="switch" aria-checked="false" aria-label="'+esc(g.label)+'分组监测">监测关闭</button>')+'</summary>'
     +'<div class="pane">'
-    +'<div id="list_'+g.key+'"></div><div class="pager" id="pager_'+g.key+'"></div>'
-    +'<div class="add row"><input class="s" id="newSym_'+g.key+'" placeholder="股票代码" aria-label="'+esc(g.label)+'股票代码">'
-    +'<input class="n" id="newNote_'+g.key+'" placeholder="名称备注（选填）" aria-label="'+esc(g.label)+'名称备注（选填）">'
-    +'<input class="t" id="newTrig_'+g.key+'" placeholder="加仓价" inputmode="decimal">'
-    +(hasReduce(g.key)?'<input class="t r" id="newReduce_'+g.key+'" placeholder="减仓价" inputmode="decimal" aria-label="减仓价">':'')
-    +(hasTarget(g.key)?'<input class="t g" id="newTarget_'+g.key+'" placeholder="目标价" inputmode="decimal" aria-label="目标价">':'')
-    +'<select class="move" id="newMove_'+g.key+'" aria-label="新增到分区或分组">'+moveOptions(targetOf(g.key))+'</select>'
-    +'<button class="primary" id="add_'+g.key+'">添加</button></div></div></details>').join('');
+    +'<div id="list_'+esc(g.key)+'"></div><div class="pager" id="pager_'+esc(g.key)+'"></div>'
+    +'<div class="add row"><input class="s" id="newSym_'+esc(g.key)+'" placeholder="股票代码" aria-label="'+esc(g.label)+'股票代码">'
+    +'<input class="n" id="newNote_'+esc(g.key)+'" placeholder="名称备注（选填）" aria-label="'+esc(g.label)+'名称备注（选填）">'
+    +'<input class="t" id="newTrig_'+esc(g.key)+'" placeholder="加仓价" inputmode="decimal">'
+    +(hasReduce(g.key)?'<input class="t r" id="newReduce_'+esc(g.key)+'" placeholder="减仓价" inputmode="decimal" aria-label="减仓价">':'')
+    +(hasTarget(g.key)?'<input class="t g" id="newTarget_'+esc(g.key)+'" placeholder="目标价" inputmode="decimal" aria-label="目标价">':'')
+    +'<select class="move" id="newMove_'+esc(g.key)+'" aria-label="新增到分区或分组">'+moveOptions(targetOf(g.key))+'</select>'
+    +'<button class="primary" id="add_'+esc(g.key)+'">添加</button></div></div></details>').join('');
   groups.forEach(g=>{
     data[g.key] ||= {}; pageState[g.key]=0;
     $('add_'+g.key).onclick=()=>addSymbol(g.key);
@@ -620,7 +621,7 @@ function render(){
       const rv=(c.reduce===null||c.reduce===undefined)?'':c.reduce;
       const gv=(c.target===null||c.target===undefined)?'':c.target;
       const cv2=(c.cost===null||c.cost===undefined)?'':c.cost;
-      h+='<div class="row" data-k="'+K.k+'" data-s="'+esc(s)+'">'
+      h+='<div class="row" data-k="'+esc(K.k)+'" data-s="'+esc(s)+'">'
         +'<span class="sym">'+esc(s)+'</span>'
         +'<input class="n" value="'+esc(c.note||'')+'" placeholder="备注" data-f="note">'
         +'<input class="t" value="'+esc(tv)+'" placeholder="加仓价" data-f="trigger" inputmode="decimal">'
@@ -761,9 +762,20 @@ function settingsError(){
   return '';
 }
 let SET=Object.assign({},SET_DEFS), SET_SHA='', settingsRevision=0;
+let settingsBaseline=null, settingsSaving=false, settingsDirty=false;
+const SETTINGS_SAVE_BUTTONS=['btnSaveRules','btnSaveDca','btnClearDca'];
 function settingsInputs(){
-  return JSON.stringify(SET_KEYS.map(k=>{const el=$('set_'+k);return el?el.value:null;}));
+  return JSON.stringify(SET_KEYS.map(k=>{const el=$('set_'+k);return el?String(el.value):null;}));
 }
+function updateSettingsDirty(){
+  settingsDirty=settingsBaseline!==settingsInputs();
+  $('rulesDirty').textContent=settingsDirty?'规则／定投有未保存的改动':'';
+  return settingsDirty;
+}
+SET_KEYS.forEach(k=>{
+  const el=$('set_'+k);if(!el)return;
+  el.oninput=el.onchange=()=>{settingsRevision++;updateSettingsDirty();};
+});
 
 function renderSettings(){
   SET_KEYS.forEach(k=>{
@@ -832,6 +844,7 @@ function normalizeSettings(raw){
   return {values,warnings};
 }
 async function loadSettings(){
+  if(settingsSaving||settingsDirty||(settingsBaseline!==null&&settingsInputs()!==settingsBaseline))return;
   const revision=++settingsRevision, inputs=settingsInputs();
   const r=await gh('GET','/contents/settings.json?ref='+BRANCH);
   if(revision!==settingsRevision||inputs!==settingsInputs())return;
@@ -841,52 +854,71 @@ async function loadSettings(){
   try{
     const normalized=normalizeSettings(JSON.parse(b64dec(r.data.content)));
     SET=normalized.values;SET_SHA=r.data.sha||'';renderSettings();
+    settingsBaseline=settingsInputs();updateSettingsDirty();
     if(normalized.warnings.length)setMsg('规则参数警告：'+normalized.warnings.join('；'),'err');
   }catch(e){setMsg('settings.json 不是合法 JSON；保留当前编辑内容','err');}
 }
 async function saveRules(btn){
+  if(settingsSaving)return;
   const error=settingsError();
   if(error){setMsg('规则未保存：'+error,'err');return;}
   settingsRevision++;
   collectSettings();
-  const text=setJsonText();
+  const text=setJsonText(),inputs=settingsInputs();
+  updateSettingsDirty();
   if(LOCAL_PREVIEW){setMsg('本地预览：规则仅用于查看，未写入 GitHub','ok');return;}
-  if(!TOKEN){
-    $('rulesOut').value=text;$('rulesOut').classList.remove('hide');
-    let copied=false;try{await navigator.clipboard.writeText(text);copied=true;}catch(err){}
-    setMsg(copied?'规则 JSON 已复制：新建仓库里的 settings.json 粘进去提交'
-                 :'规则 JSON 已显示在下面，复制到仓库的 settings.json','ok');
-    return;
+  settingsSaving=true;SETTINGS_SAVE_BUTTONS.forEach(id=>$(id).disabled=true);
+  try{
+    if(!TOKEN){
+      $('rulesOut').value=text;$('rulesOut').classList.remove('hide');
+      let copied=false;try{await navigator.clipboard.writeText(text);copied=true;}catch(err){}
+      setMsg((copied?'规则 JSON 已复制：新建仓库里的 settings.json 粘进去提交'
+                   :'规则 JSON 已显示在下面，复制到仓库的 settings.json')
+        +(inputs!==settingsInputs()?'；生成后又修改了规则／定投，请重新生成最新 JSON':''),'ok');
+      return;
+    }
+    setMsg('正在写入设置…','busy');
+    const body={message:'更新规则/定投设置',content:b64enc(text),branch:BRANCH};
+    if(SET_SHA)body.sha=SET_SHA;
+    const r=await gh('PUT','/contents/settings.json',body);
+    if(r.ok){
+      const sha=r.data.content&&r.data.content.sha;
+      if(/^[a-f0-9]{40,64}$/i.test(sha||''))SET_SHA=sha;
+      if(trackReceipt('settings.json',r.data)){
+        settingsBaseline=inputs;
+        const dirty=updateSettingsDirty();
+        $('rulesDirty').textContent=dirty?'规则／定投有未保存的改动（提交期间又修改了）':'规则／定投已提交，等待发布验证';
+        if(dirty)setMsg('settings.json 本次快照已提交；提交期间新增的规则／定投改动尚未保存，请再次保存','ok');
+      }
+    }else{
+      setMsg('保存失败：'+whyFail(r.status,r.data.message),'err');
+    }
+  }finally{
+    settingsSaving=false;SETTINGS_SAVE_BUTTONS.forEach(id=>$(id).disabled=false);
   }
-  btn.disabled=true;setMsg('正在写入设置…','busy');
-  const body={message:'更新规则/定投设置',content:b64enc(text),branch:BRANCH};
-  if(SET_SHA)body.sha=SET_SHA;
-  const r=await gh('PUT','/contents/settings.json',body);
-  if(r.ok){
-    SET_SHA=(r.data.content&&r.data.content.sha)||SET_SHA;
-    trackReceipt('settings.json',r.data);
-  }else{
-    setMsg('保存失败：'+whyFail(r.status,r.data.message),'err');
-  }
-  btn.disabled=false;
 }
 $('btnSaveRules').onclick=e=>saveRules(e.target);
 $('btnSaveDca').onclick=e=>{
+  if(settingsSaving)return;
   const s=$('set_dca_start').value.trim(),n=$('set_dca_every').value.trim();
   if(s&&!DATE_RE.test(s)){setMsg('起点日格式要写成 2026-10-01','err');return;}
   if(n&&!(parseInt(n,10)>0)){setMsg('间隔要填大于 0 的整数（交易日数）','err');return;}
   if(n&&!s){setMsg('填了间隔还要填起点日，否则不会提醒','err');return;}
   if(s&&!n){setMsg('填了起点日还要填间隔','err');return;}
-  saveRules(e.target);
+  return saveRules(e.target);
 };
 $('btnClearDca').onclick=e=>{
+  if(settingsSaving)return;
   $('set_dca_start').value='';$('set_dca_every').value='';
-  saveRules(e.target);
+  return saveRules(e.target);
 };
 $('btnResetRules').onclick=()=>{
   if(!confirm('把所有规则阈值恢复成默认值？（定投提醒设置不受影响）'))return;
-  const keep={dca_every:SET.dca_every,dca_start:SET.dca_start};
-  SET=Object.assign({},SET_DEFS,keep);renderSettings();
+  settingsRevision++;
+  const keep={dca_every:$('set_dca_every').value,dca_start:$('set_dca_start').value};
+  SET=Object.assign({},SET,SET_DEFS);renderSettings();
+  Object.entries(keep).forEach(([key,value])=>{$('set_'+key).value=value;});
+  collectSettings();updateSettingsDirty();
   setMsg('已填回默认值，点「保存规则」才写入仓库','ok');
 };
 

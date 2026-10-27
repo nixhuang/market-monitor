@@ -305,6 +305,61 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("git push origin HEAD:main", loop)
         self.assertNotIn("--force", loop)
 
+    def test_mixed_push_dedup_keeps_publishing_manual_and_browser_gates(self):
+        tests = (ROOT / ".github/workflows/tests.yml").read_text(encoding="utf-8")
+        daily = (ROOT / ".github/workflows/daily.yml").read_text(encoding="utf-8")
+        self.assertIn("called_by_daily: true", daily)
+        self.assertIn("workflow_call:", tests)
+        self.assertIn("workflow_dispatch:", tests)
+        self.assertIn("pull_request:", tests)
+        self.assertIn("fetch-depth: 0", tests)
+        self.assertIn("--ci-should-run", tests)
+        self.assertEqual(tests.count("if: ${{ needs.scope.outputs.run_tests == 'true' }}"), 2)
+        self.assertIn('"$GITHUB_EVENT_NAME" != push', tests)
+        self.assertIn("python-version: ['3.11', '3.13']", tests)
+        self.assertIn("tests/mm_test_render.py --chrome", tests)
+        self.assertIn("runner 缺少 Chromium/Chrome", tests)
+        self.assertNotIn("continue-on-error", tests)
+        self.assertNotIn("npm install", tests)
+        self.assertNotIn("playwright install", tests)
+        self.assertIn("needs: test", daily)
+
+    def test_ensure_serializes_check_and_dispatch_without_taking_daily_lock(self):
+        ensure = (ROOT / ".github/workflows/ensure-morning.yml").read_text(encoding="utf-8")
+        daily = (ROOT / ".github/workflows/daily.yml").read_text(encoding="utf-8")
+        self.assertRegex(ensure, r"concurrency:\s+group: market-monitor-ensure\s+cancel-in-progress: false")
+        self.assertRegex(daily, r"concurrency:\s+group: market-monitor\s+cancel-in-progress: false")
+        self.assertLess(ensure.index("concurrency:"), ensure.index("jobs:"))
+        self.assertIn("python monitor.py --ensure-schedule-run", ensure)
+        self.assertNotRegex(ensure, r"(?m)^\s+schedule:")
+
+    def test_runtime_dependency_closure_is_pinned_for_both_python_versions(self):
+        # 不依赖联网解析：先验证每项均精确固定，以及已知运行依赖闭包未遗漏。
+        lines = [line.strip() for line in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines()
+                 if line.strip() and not line.startswith("#")]
+        names = set()
+        for line in lines:
+            match = re.fullmatch(r'([A-Za-z0-9_-]+)==([0-9][0-9a-z.]*)(?:; python_version (?:<|>=) "3.12")?', line)
+            self.assertIsNotNone(match, line)
+            names.add(match[1].lower().replace("_", "-"))
+        self.assertEqual(names, {"requests", "exchange-calendars", "certifi", "charset-normalizer", "idna",
+                                 "urllib3", "numpy", "pandas", "pyluach", "toolz", "tzdata",
+                                 "korean-lunar-calendar", "python-dateutil", "six"})
+        self.assertIn('numpy==2.2.6; python_version < "3.12"', lines)
+        self.assertIn('numpy==2.5.3; python_version >= "3.12"', lines)
+
+    def test_preview_ignores_do_not_hide_production_or_future_data(self):
+        patterns = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("/data/empty-snapshot.json", patterns)
+        for forbidden in ("data/", "/data/", "*.json", "*.html", "*.py", "assets/", "config/"):
+            self.assertNotIn(forbidden, patterns.splitlines())
+        files = sorted(b.REQUIRED_INPUTS | {"data/production.json", "assets/card.css", "config/settings.json"})
+        result = subprocess.run(["git", "check-ignore", "--no-index", "--stdin"],
+                                cwd=ROOT, input="\n".join(files) + "\n", text=True,
+                                encoding="utf-8", capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "")
+
 
 class RulesTemplateTests(unittest.TestCase):
     """独立纯内存模板专项，不导入 monitor、不生成正式产物。"""
@@ -864,6 +919,327 @@ console.log('无规则跳转处理器、监听或高亮计时器');
         result = subprocess.run(['node', '-e', code], input=json.dumps({'js': assets.RULES_INTERACTION_JS}),
                                 text=True, encoding='utf-8', capture_output=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class HttpSnapshotSafetyTests(unittest.TestCase):
+    def setUp(self):
+        self.stack = contextlib.ExitStack()
+        self.addCleanup(self.stack.close)
+        self.stack.enter_context(patch.dict(os.environ, {"FRED_API_KEY": ""}, clear=True))
+        import monitor
+        self.monitor = monitor
+        self.base = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix="mm-http-")))
+        self.path = self.base / "http.json"
+        self.transport = self.stack.enter_context(patch.object(monitor.requests.Session, "request",
+            side_effect=AssertionError("禁止真实 HTTP 外发")))
+        self.stack.enter_context(patch.object(monitor.requests.Session, "send",
+            side_effect=AssertionError("禁止 PreparedRequest 真实外发")))
+        self.stack.enter_context(patch.object(socket, "socket", side_effect=AssertionError("禁止联网")))
+        self.logger = self.stack.enter_context(patch.object(monitor, "log"))
+
+    def response(self, text, content_type="application/json", encoding="utf-8"):
+        return self.monitor._ReplayResponse(200, text, {"Content-Type": content_type}, encoding)
+
+    def install(self, data):
+        self.path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        return self.monitor.install_http_snapshot("replay", str(self.path))
+
+    def test_replay_blocks_all_non_get_and_get_misses_without_original_transport(self):
+        m = self.monitor
+        state = self.install({"GET https://offline.invalid/data": {"status": 200, "text": '{"ok": true}'}})
+        self.assertEqual(m.requests.get("https://offline.invalid/data").json(), {"ok": True})
+        for method in ("POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "post"):
+            with self.subTest(method=method), self.assertRaisesRegex(m.requests.ConnectionError, "禁止非 GET"):
+                m.requests.request(method, "https://offline.invalid/canary-not-in-error")
+        missed = m.requests.get("https://offline.invalid/missing")
+        self.assertEqual(missed.status_code, 599)
+        with self.assertRaises(m.requests.HTTPError):
+            missed.raise_for_status()
+        self.assertEqual((state["miss"], state["blocked"]), (1, 7))
+        self.transport.assert_not_called()
+
+    def test_replay_notification_returns_before_reading_credentials_or_posting(self):
+        m = self.monitor
+        self.install({})
+        with patch.object(os.environ, "get", side_effect=AssertionError("不得读取通知凭据")), \
+                patch.object(m.requests, "post", side_effect=AssertionError("通知不得发送")) as post:
+            self.assertIsNone(m.push_serverchan({}, [{"symbol": "AAA", "level": "red"}]))
+        post.assert_not_called()
+        self.assertIn("跳过微信推送", self.logger.call_args.args[0])
+        self.transport.assert_not_called()
+
+    def test_replay_streams_official_earnings_with_context_close_and_original_media_type(self):
+        m = self.monitor
+        page = '<html><body>合成财报页面 ' + '内容' * 20000 + '</body></html>'
+        self.install({"GET https://offline.invalid/earnings": {
+            "status": 200, "text": page, "headers": {"Content-Type": "text/html; charset=utf-8"},
+            "encoding": "utf-8"}})
+        with m.requests.Session() as session:
+            actual = m.earnings_sources._download(session, "https://offline.invalid/earnings", 5,
+                                                  m.time.monotonic() + 10)
+            self.assertEqual(actual, page)
+            with session.get("https://offline.invalid/earnings", stream=True) as response:
+                chunks = list(response.iter_content(chunk_size=1024))
+                self.assertGreater(len(chunks), 1)
+                self.assertEqual(b"".join(chunks), page.encode("utf-8"))
+            response.close()
+            response.close()
+        self.transport.assert_not_called()
+
+    def test_replay_legacy_html_without_headers_is_stream_compatible(self):
+        m = self.monitor
+        self.install({"GET https://offline.invalid/legacy": {"status": 200, "text": "合成旧页面"}})
+        with m.requests.Session() as session:
+            self.assertEqual(m.earnings_sources._download(session, "https://offline.invalid/legacy", 5,
+                m.time.monotonic() + 10), "合成旧页面")
+        self.transport.assert_not_called()
+
+    def test_dump_redacts_canaries_in_keys_json_headers_and_echoes_then_replays(self):
+        m = self.monitor
+        canaries = ["canary-key-A+/%", "canary-token-B", "canary-auth-C", "canary-response-D"]
+        body = {"value": 42, "api_key": canaries[0], "nested": [{"refresh_token": canaries[3]}],
+                "echo": " ".join(canaries), "url": "https://offline.invalid/?token=" + canaries[1]}
+        self.transport.side_effect = None
+        self.transport.return_value = self.response(json.dumps(body))
+        self.transport.return_value.headers["Set-Cookie"] = "session=" + canaries[3]
+        state = m.install_http_snapshot("dump", str(self.path))
+        url = "https://offline.invalid/observations?series_id=SERIES&token=" + canaries[1]
+        response = m.requests.get(url, params={"api_key": canaries[0]},
+                                  headers={"Authorization": "Bearer " + canaries[2]})
+        self.assertEqual(response.json(), body, "脱敏不能改变调用方收到的原始响应")
+        m.dump_http_snapshot(state)
+        encoded = json.dumps(state["data"]) + self.path.read_text(encoding="utf-8")
+        for canary in canaries:
+            self.assertNotIn(canary, encoded)
+            self.assertNotIn(m.quote(canary, safe=""), encoded)
+        self.assertNotIn("Set-Cookie", encoded)
+        self.assertIn("SERIES", encoded)
+        self.transport.reset_mock()
+        self.transport.side_effect = AssertionError("回放禁止原始请求")
+        replay = m.install_http_snapshot("replay", str(self.path))
+        restored = m.requests.get("https://offline.invalid/observations?series_id=SERIES&token=changed-token",
+                                  params={"api_key": "changed-key"})
+        self.assertEqual(restored.json()["value"], 42)
+        self.assertEqual(restored.json()["api_key"], m._HTTP_REDACTED)
+        self.assertEqual(replay["miss"], 0)
+        self.transport.assert_not_called()
+
+    def test_dump_plain_text_redacts_secret_assignments_and_keeps_request_params_separate(self):
+        m = self.monitor
+        self.transport.side_effect = None
+        self.transport.return_value = self.response(
+            'token=canary-plain api_key="canary-quoted" Authorization: Bearer canary-bearer '
+            'echo=canary-plain/canary-bearer ok=1', "text/plain")
+        state = m.install_http_snapshot("dump", str(self.path))
+        with m.requests.Session() as session:
+            session.params = {"api_key": "canary-session"}
+            for series in ("FIRST", "SECOND"):
+                session.get("https://offline.invalid/data", params={"series_id": series})
+        m.dump_http_snapshot(state)
+        content = self.path.read_text(encoding="utf-8")
+        for canary in ("canary-plain", "canary-quoted", "canary-session", "canary-bearer"):
+            self.assertNotIn(canary, content)
+        self.assertEqual(len(state["data"]), 2)
+        self.assertIn("FIRST", content)
+        self.assertIn("SECOND", content)
+
+    def test_legacy_keys_are_sanitized_on_load_and_export_without_leaking_canaries(self):
+        m = self.monitor
+        canary = "canary-legacy-secret"
+        raw = {"GET https://offline.invalid/data?api_key=" + canary + "&series_id=SERIES": {
+            "status": 200, "text": json.dumps({"value": 7, "echo": canary})}}
+        state = self.install(raw)
+        self.assertNotIn(canary, json.dumps(state["data"]))
+        actual = m.requests.get("https://offline.invalid/data?series_id=SERIES&api_key=other-key")
+        self.assertEqual(actual.json(), {"value": 7, "echo": m._HTTP_REDACTED})
+        state["mode"] = "dump"
+        m.dump_http_snapshot(state)
+        self.assertNotIn(canary, self.path.read_text(encoding="utf-8"))
+        self.transport.assert_not_called()
+
+    def test_url_userinfo_and_basic_auth_are_redacted_without_breaking_replay(self):
+        m = self.monitor
+        canaries = ("canary-user", "canary-pass", "canary-basic-user", "canary-basic-password")
+        self.transport.side_effect = None
+        self.transport.return_value = self.response(json.dumps({"echo": ":".join(canaries)}))
+        state = m.install_http_snapshot("dump", str(self.path))
+        m.requests.get("https://canary-user:canary-pass@offline.invalid/data",
+                       auth=m.requests.auth.HTTPBasicAuth(canaries[2], canaries[3]))
+        m.dump_http_snapshot(state)
+        for canary in canaries:
+            self.assertNotIn(canary, self.path.read_text(encoding="utf-8"))
+        self.transport.reset_mock()
+        self.transport.side_effect = AssertionError("回放禁止原始请求")
+        m.install_http_snapshot("replay", str(self.path))
+        response = m.requests.get("https://other-user:other-pass@offline.invalid/data")
+        self.assertEqual(response.status_code, 200)
+        self.transport.assert_not_called()
+
+    def test_header_auth_and_cookie_only_secrets_are_removed_from_url_and_echo(self):
+        m = self.monitor
+        cases = ("header", "basic", "cookie-header", "cookie-kwargs", "cookie-jar", "set-cookie")
+        for source in cases:
+            with self.subTest(source=source):
+                canary = "canary-only-" + source + "+/%"
+                self.transport.side_effect = None
+                self.transport.return_value = self.response(json.dumps({"echo": canary, "ok": 1}))
+                state = m.install_http_snapshot("dump", str(self.path))
+                with m.requests.Session() as session:
+                    kwargs = {}
+                    if source == "header":
+                        kwargs["headers"] = {"Authorization": "Bearer " + canary}
+                    elif source == "basic":
+                        kwargs["auth"] = ("synthetic-user", canary)
+                    elif source == "cookie-header":
+                        kwargs["headers"] = {"Cookie": "sid=" + canary + "; another=fixture"}
+                    elif source == "cookie-kwargs":
+                        kwargs["cookies"] = {"sid": canary}
+                    elif source == "cookie-jar":
+                        session.cookies.set("sid", canary)
+                    else:
+                        self.transport.return_value.headers["Set-Cookie"] = "sid=" + canary + "; Path=/; HttpOnly"
+                    url = "https://offline.invalid/" + m.quote(canary, safe="")
+                    session.get(url, params={"ordinary": canary}, **kwargs)
+                m.dump_http_snapshot(state)
+                encoded = self.path.read_text(encoding="utf-8")
+                for form in (canary, m.quote(canary, safe=""), m.quote_plus(canary)):
+                    self.assertNotIn(form, encoded)
+                self.assertIn('"ok": 1', encoded.replace('\\"', '"'))
+                m.restore_http_snapshot(state)
+
+    def test_dump_real_request_send_path_has_no_secondary_unsanitized_record(self):
+        m = self.monitor
+        canary = "canary-real-send-password"
+        with patch.object(m.requests.Session, "send", return_value=self.response(json.dumps({"echo": canary}))) as send:
+            # 模拟 request 委托链，prepare_request 和认证头仍由 requests 真实实现。
+            self.transport.side_effect = lambda session, method, url, **kw: session.send(
+                session.prepare_request(m.requests.Request(method, url, auth=kw.get("auth"))))
+            state = m.install_http_snapshot("dump", str(self.path))
+            try:
+                m.requests.get("https://offline.invalid/" + canary, auth=("synthetic-user", canary))
+                m.dump_http_snapshot(state)
+                self.assertNotIn(canary, self.path.read_text(encoding="utf-8"))
+                self.assertEqual(len(state["data"]), 1)
+                send.assert_called_once()
+            finally:
+                m.restore_http_snapshot(state)
+
+    def test_prepared_send_replays_or_blocks_without_transport_and_restores(self):
+        m = self.monitor
+        original_request, original_send = m.requests.Session.request, m.requests.Session.send
+        state = self.install({"GET https://offline.invalid/data": {"status": 200, "text": "ok"}})
+        try:
+            with m.requests.Session() as session:
+                request = m.requests.Request("GET", "https://offline.invalid/data").prepare()
+                response = session.send(request)
+                self.assertEqual(response.text, "ok")
+                self.assertIs(response.request, request)
+                request = m.requests.Request("GET", "https://offline.invalid/miss").prepare()
+                self.assertEqual(session.send(request).status_code, 599)
+                request = m.requests.Request("POST", "https://offline.invalid/data").prepare()
+                with self.assertRaises(m.requests.ConnectionError):
+                    session.send(request)
+            self.assertEqual((state["miss"], state["blocked"]), (1, 1))
+            self.transport.assert_not_called()
+            original_send.assert_not_called()
+        finally:
+            m.restore_http_snapshot(state)
+        self.assertIs(m.requests.Session.request, original_request)
+        self.assertIs(m.requests.Session.send, original_send)
+
+    def test_main_dumps_and_restores_on_success_and_failure_without_exit_callbacks(self):
+        m = self.monitor
+        original_request, original_send = m.requests.Session.request, m.requests.Session.send
+        for failure in (False, True):
+            with self.subTest(failure=failure):
+                self.transport.side_effect = None
+                self.transport.return_value = self.response('{"ok": 1}')
+                def prepare():
+                    m.requests.get("https://offline.invalid/data")
+                    if failure:
+                        raise ValueError("synthetic failure")
+                with patch.object(m, "RuntimeState"), patch.object(m, "prepare_run", side_effect=prepare):
+                    if failure:
+                        with self.assertRaisesRegex(ValueError, "synthetic failure"):
+                            m.main(["--dump-http", str(self.path), "--prepare-run"])
+                    else:
+                        self.assertEqual(m.main(["--dump-http", str(self.path), "--prepare-run"]), 0)
+                self.assertIn("GET https://offline.invalid/data", json.loads(self.path.read_text(encoding="utf-8")))
+                self.assertIs(m.requests.Session.request, original_request)
+                self.assertIs(m.requests.Session.send, original_send)
+                with patch.object(m, "RuntimeState"), patch.object(m, "prepare_run"):
+                    self.assertEqual(m.main(["--prepare-run"]), 0)
+                self.assertIs(m.requests.Session.request, original_request)
+
+    def test_response_preserves_encoding_and_requests_stream_api(self):
+        response = self.response("café", "text/plain", "latin-1")
+        with response as entered:
+            self.assertIs(entered, response)
+            self.assertEqual(response.content, b"caf\xe9")
+            self.assertEqual(list(response.iter_content(2, decode_unicode=True)), ["ca", "fé"])
+            self.assertEqual(response.text, "café")
+        response.close()
+
+    def test_dump_sanitizes_legacy_data_even_without_install(self):
+        m = self.monitor
+        canary = "canary-direct-export"
+        m.dump_http_snapshot({"mode": "dump", "path": str(self.path), "data": {
+            "GET https://offline.invalid/data?access_token=" + canary: {"status": 200, "text": canary}}})
+        self.assertNotIn(canary, self.path.read_text(encoding="utf-8"))
+
+    def test_legacy_params_fallback_does_not_alias_new_format_series(self):
+        m = self.monitor
+        self.install({"GET https://offline.invalid/legacy": {"status": 200, "text": "old"},
+            "GET https://offline.invalid/new": {"status": 200, "text": "new", "headers": {}, "encoding": "utf-8"}})
+        self.assertEqual(m.requests.get("https://offline.invalid/legacy", params={"id": "ONE"}).text, "old")
+        self.assertEqual(m.requests.get("https://offline.invalid/new", params={"id": "ONE"}).status_code, 599)
+        self.transport.assert_not_called()
+
+    def test_invalid_snapshot_fails_closed_without_echoing_document_content(self):
+        m = self.monitor
+        self.path.write_text('{"canary-invalid-document": invalid}', encoding="utf-8")
+        state = m.install_http_snapshot("replay", str(self.path))
+        self.assertEqual(state["data"], {})
+        self.assertEqual(m.requests.get("https://offline.invalid/data").status_code, 599)
+        self.assertNotIn("canary-invalid-document", str(self.logger.call_args_list))
+        self.transport.assert_not_called()
+
+    def test_replay_is_installed_before_dispatch_and_conflicting_modes_are_rejected(self):
+        m = self.monitor
+        self.path.write_text("{}", encoding="utf-8")
+        runtime = object()
+        with patch.object(m.atexit, "register"), patch.object(m, "ensure_schedule_run",
+                side_effect=lambda _runtime: m.requests.post("https://offline.invalid/dispatch")):
+            with self.assertRaisesRegex(m.requests.ConnectionError, "禁止非 GET"):
+                m._main(["--replay-http", str(self.path), "--ensure-schedule-run"], runtime)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            m._main(["--replay-http", str(self.path), "--dump-http", str(self.path)], runtime)
+        self.assertEqual(error.exception.code, 2)
+        self.transport.assert_not_called()
+
+
+class HistoryValidationTests(unittest.TestCase):
+    def test_bool_is_not_a_valid_ohlcv_price_or_previous_close(self):
+        import monitor as m
+        dates = [f"2026-01-{day:02d}" for day in range(1, 31)]
+        valid = {"dates": dates, "closes": [1.0] * 30, "highs": [1.0] * 30,
+                 "lows": [1.0] * 30, "volumes": [1.0] * 30, "price": 1.0, "prev_close": 1.0}
+        original = copy.deepcopy(valid)
+        self.assertTrue(m.valid_history(valid))
+        for key in ("closes", "highs", "lows", "volumes", "price", "prev_close"):
+            for value in (True, False):
+                with self.subTest(key=key, value=value):
+                    data = copy.deepcopy(valid)
+                    if isinstance(data[key], list):
+                        data[key][0] = value
+                    else:
+                        data[key] = value
+                    self.assertFalse(m.valid_history(data))
+        for key in ("highs", "lows", "volumes"):
+            self.assertFalse(m.valid_history(dict(valid, **{key: False})))
+        self.assertEqual(valid, original)
+        valid["volumes"][0] = 0
+        self.assertTrue(m.valid_history(valid), "真实零成交量仍合法")
 
 
 if __name__ == "__main__":

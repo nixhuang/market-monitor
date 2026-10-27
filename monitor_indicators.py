@@ -4,6 +4,8 @@ import math
 import statistics
 from datetime import timedelta
 
+import market_sessions
+
 RS_BENCH_NAME = "标普500"
 
 
@@ -257,10 +259,23 @@ class IndicatorCalculator:
         if not isinstance(dates, list) or not dates:
             return None
         try:
-            expected = self._context.market_sessions.latest_completed_session(asof or self._context.NOW, self._context.TARGET_DATE)
+            sessions = getattr(self._context, "market_sessions", market_sessions)
+            expected = sessions.latest_completed_session(asof or self._context.NOW, self._context.TARGET_DATE)
             return dates.index(expected) if dates.count(expected) == 1 else None
         except (ValueError, TypeError, KeyError, OverflowError):
             return None
+
+
+    def _volume_window_complete(self, dates, index, count):
+        """必须是目标日前的指定连续交易日；缺日、乱序或重复不得用更早日补足。"""
+        if not isinstance(dates, list) or index is None or index < count or index >= len(dates):
+            return False
+        try:
+            sessions = getattr(self._context, "market_sessions", market_sessions)
+            expected = sessions.preceding_sessions(dates[index], count)
+            return len(expected) == count and dates[index-count:index] == expected
+        except (ValueError, TypeError, KeyError, OverflowError):
+            return False
 
 
     def completed_day_volume_ratio(self, sym, data, asof=None):
@@ -272,18 +287,20 @@ class IndicatorCalculator:
         if self._context.instrument_identity(sym).startswith('^') or self._context.instrument_identity(sym).endswith('=F'):
             return None, ''
         dates, volumes = data.get('dates') or [], data.get('volumes') or []
-        if len(dates) != len(volumes) or len(dates) < self._context.VOL_RATIO_BASE + 1:
+        if (not isinstance(dates, list) or not isinstance(volumes, list)
+                or len(dates) != len(volumes) or len(dates) < self._context.VOL_RATIO_BASE + 1):
             return None, ''
         index = self._context._latest_completed_session_index(dates, asof)
-        if index is None:
+        if not self._volume_window_complete(dates, index, self._context.VOL_RATIO_BASE):
             return None, ''
         # 不跳过缺量日凑均值：分子与此前20根日线必须来自同一行情源且有效。
         sample = volumes[index-self._context.VOL_RATIO_BASE:index+1]
         if len(sample) != self._context.VOL_RATIO_BASE + 1 or any(not isinstance(v, (int, float)) or isinstance(v, bool)
                                                     or not math.isfinite(v) or v <= 0 for v in sample):
             return None, ''
-        average = sum(sample[:-1]) / self._context.VOL_RATIO_BASE
-        return (sample[-1] / average, dates[index]) if average > 0 else (None, '')
+        average = sum(volume / self._context.VOL_RATIO_BASE for volume in sample[:-1])
+        ratio = sample[-1] / average if average > 0 else None
+        return (ratio, dates[index]) if ratio is not None and math.isfinite(ratio) and ratio > 0 else (None, '')
 
 
     def completed_day_volume_z(self, sym, data, asof=None):
@@ -294,7 +311,9 @@ class IndicatorCalculator:
         if not isinstance(dates, list) or not isinstance(volumes, list) or len(dates) != len(volumes):
             return None
         index = self._context._latest_completed_session_index(dates, asof)
-        if index is None:
+        window = getattr(self._context, "VOL_Z_WINDOW", VOL_Z_WINDOW)
+        base = getattr(self._context, "VOL_RATIO_BASE", VOL_RATIO_BASE)
+        if not self._volume_window_complete(dates, index, window + base):
             return None
         try:
             return self._context._volume_ratio_zscore(volumes, index)
@@ -311,7 +330,9 @@ class IndicatorCalculator:
         if not isinstance(dates, list) or not isinstance(volumes, list) or len(dates) != len(volumes):
             return None
         index = self._context._latest_completed_session_index(dates, asof)
-        if index is None:
+        window = getattr(self._context, "VOL_Z_WINDOW", VOL_Z_WINDOW)
+        base = getattr(self._context, "VOL_RATIO_BASE", VOL_RATIO_BASE)
+        if not self._volume_window_complete(dates, index, window + base):
             return None
         try:
             distribution = _volume_ratio_distribution(volumes, index)
@@ -345,7 +366,7 @@ class IndicatorCalculator:
             if (not session or quoted is None or dates[-1] != session[0]
                     or (self._context.TARGET_DATE and self._context.TARGET_DATE != session[0])):
                 return None, ''
-            if dates[-self._context.VOL_RATIO_BASE-1:-1] != self._context.market_sessions.preceding_sessions(session[0], self._context.VOL_RATIO_BASE):
+            if not self._volume_window_complete(dates, len(dates) - 1, self._context.VOL_RATIO_BASE):
                 return None, ''
             elapsed = (quoted - session[1]).total_seconds() / 60
             total = (session[2] - session[1]).total_seconds() / 60
@@ -355,10 +376,11 @@ class IndicatorCalculator:
             if any(not isinstance(v, (int, float)) or isinstance(v, bool)
                    or not math.isfinite(v) or v <= 0 for v in sample):
                 return None, ''
-            average = sum(sample) / self._context.VOL_RATIO_BASE
-            if average <= 0:
+            average = sum(volume / self._context.VOL_RATIO_BASE for volume in sample)
+            if average <= 0 or not math.isfinite(average):
                 return None, ''
-            return (vol / elapsed) / (average / total), quoted.strftime("%H:%M")
+            ratio = (vol / elapsed) / (average / total)
+            return (ratio, quoted.strftime("%H:%M")) if math.isfinite(ratio) and ratio > 0 else (None, '')
         except (ValueError, TypeError, KeyError, OverflowError):
             return None, ''
 

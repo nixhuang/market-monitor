@@ -828,8 +828,8 @@ class TestGroups(unittest.TestCase):
                     patch.object(monitor, 'QUOTE_WORKERS', 1), patch.object(monitor, 'QUOTE_RETRY_PASSES', 0), \
                     patch.object(monitor, 'nasdaq_earnings', return_value={'status': 'unknown'}), \
                     patch.object(monitor, 'build_reference_alerts', return_value={}), \
-                    patch.object(monitor, 'build_macro', return_value={}), \
-                    patch.object(monitor, 'SP500_RS_ROWS', list(bench_rows)), \
+                    patch.object(monitor, 'build_macro', side_effect=lambda *args: (monitor.SP500_RS_ROWS.extend(bench_rows) or {})), \
+                    patch.object(monitor, 'SP500_RS_ROWS', []), \
                     patch.object(monitor, 'sp500_rows_fallback', return_value=list(fallback_rows or [])) as fallback, \
                     patch.object(monitor, 'fetch_history', side_effect=hist), \
                     patch.object(monitor, 'analyze_symbol', side_effect=analyzed), \
@@ -3667,8 +3667,7 @@ class TestCompletedDayVolume(unittest.TestCase):
             level, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
             self.assertEqual(detail['vol_ratio_date'], data['dates'][-2])
             self.assertAlmostEqual(detail['vol_ratio'], 2.0)
-            self.assertTrue(any('最近完整日量比' in text and data['dates'][-2] in text
-                                for text in signals), signals)
+            self.assertIn(f"量比 2.0×（{data['dates'][-2]}）", signals)
             self.assertIn(('vol_ratio', 'yellow'), detail['signal_marks'])
             with patch.object(monitor, 'S', {**monitor.S, 'vol_ratio_red': 2.0}):  # 达到红线报红，所有分组
                 for group in ('position', 'technology'):
@@ -3795,8 +3794,8 @@ class TestIntradayVolumeRatio(unittest.TestCase):
             _, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
         self.assertTrue(detail['vol_ratio_intraday'])
         self.assertAlmostEqual(detail['rt_vol_ratio'], (1500 / 150) / (average / 390), places=4)
-        self.assertTrue(any('盘中量比（截至 12:00 ET）' in text for text in signals), signals)
-        self.assertFalse(any('最近完整日量比' in text for text in signals), signals)
+        self.assertIn('盘中量比 3.6×（截至 12:00 ET）', signals)
+        self.assertFalse(any(text.startswith('量比 ') for text in signals), signals)
         self.assertIn(('vol_ratio', 'red'), detail['signal_marks'])     # 3.6× ≥ 默认红线 3.0
         self.assertEqual(monitor._member_metric(detail, 'vol_ratio'), '盘中量比 3.6×（截至 12:00 ET）')
         with patch.object(monitor, 'NOW', midday), patch.object(monitor, 'datetime', TradingClock), \
@@ -3822,7 +3821,7 @@ class TestIntradayVolumeRatio(unittest.TestCase):
             _, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
         self.assertFalse(detail['vol_ratio_intraday'])
         self.assertAlmostEqual(detail['vol_ratio'], 2000 / ((2600 + 19 * 1000) / 20), places=4)
-        self.assertTrue(any('最近完整日量比' in text for text in signals), signals)
+        self.assertIn(monitor._member_metric(detail, 'vol_ratio'), signals)
         self.assertFalse(any('盘中量比' in text for text in signals), signals)
 
 
@@ -3894,7 +3893,7 @@ class TestVolumeRatioZscore(unittest.TestCase):
                     al = self.run_rule(x)
                     self.assertEqual(al.marks, [] if level is None else [('vol_ratio', level)])
                     if level:
-                        self.assertEqual(al.signals[0], f'最近完整日量比（2026-10-13）{ratio:.1f}x')
+                        self.assertEqual(al.signals[0], f'量比 {ratio:.1f}×（2026-10-13）')
         x = self.context(ratio=1.7)
         x.vol_ratio_m, x.vol_ratio_s = 0, 0.3
         self.assertEqual(self.run_rule(x, vol_ratio_z=3).marks, [])
@@ -3925,20 +3924,56 @@ class TestVolumeRatioZscore(unittest.TestCase):
         # 盘中口径一点不动：仍按固定倍数、仍带时刻、不叠加昨日完整日
         al = self.run_rule(self.context(intraday=True, rt=1.6, z=9.9))
         self.assertEqual(al.marks, [('vol_ratio', 'yellow')])
-        self.assertIn('盘中量比（截至 12:00 ET）1.6x', al.signals[0])
+        self.assertIn('盘中量比 1.6×（截至 12:00 ET）', al.signals[0])
         self.assertNotIn('自身波动', al.signals[0])
         self.assertEqual(len(al.signals), 1)
         self.assertEqual(self.run_rule(self.context(intraday=True, rt=1.2, z=9.9)).marks, [])
 
+    def test_volume_text_matches_main_and_statistics_in_all_modes(self):
+        import copy
+        import html
+        import re
+        cases = (
+            (True, 2.1, False, 'yellow', '盘中量比 2.1×（截至 10:30 ET）'),
+            (True, 4.0, False, 'red', '盘中量比 4.0×（截至 10:30 ET）'),
+            (False, 2.1, False, 'yellow', '量比 2.1×（2026-10-26）'),
+            (False, 4.0, False, 'red', '量比 4.0×（2026-10-26）'),
+            (False, 2.1, True, 'yellow', '量比 2.1×（2026-10-26）'),
+            (False, 4.0, True, 'red', '量比 4.0×（2026-10-26）'),
+        )
+        for intraday, ratio, adaptive, level, expected in cases:
+            with self.subTest(intraday=intraday, ratio=ratio, adaptive=adaptive):
+                x = self.context(ratio=ratio, intraday=intraday, rt=ratio)
+                x.rt_vol_time, x.vol_ratio_date = '10:30', '2026-10-26'
+                if adaptive:
+                    x.vol_ratio_m, x.vol_ratio_s = 0.0, 0.30
+                al = self.run_rule(x, vol_ratio=1.5, vol_ratio_red=3,
+                                   vol_ratio_z=2, vol_ratio_red_z=3.6)
+                self.assertEqual(al.signals, [expected])
+                self.assertEqual(al.marks, [('vol_ratio', level)])
+                d = dict(vars(x), symbol='VOLTEXT', group='focus', price=100.0, chg=1.0,
+                         level=al.level, signals=al.signals, signal_marks=al.marks)
+                before = copy.deepcopy(d)
+                main = monitor._signals_html(d)
+                self.assertEqual(html.unescape(re.sub(r'<[^>]+>', '', main)), expected)
+                self.assertIn(f'data-signal-level="{level}"', main)
+                self.assertEqual(monitor._member_metric(d, 'vol_ratio'), expected)
+                snap = monitor.build_snapshot({}, [d], {}, group_counts={})
+                member = snap['signal_members']['vol_ratio'][level][0]
+                self.assertEqual(member['metric'], expected)
+                self.assertIn(expected, monitor._signal_counts_card(snap))
+                self.assertEqual(snap['signal_counts']['vol_ratio'][level], 1)
+                self.assertEqual(d, before)
+
     def test_detail_carries_z_but_page_never_prints_sigma(self):
         d = {'vol_ratio': 1.3, 'vol_ratio_z': 1.6, 'vol_ratio_date': '2026-10-13'}
-        self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×（2026-10-13完整日）')
+        self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×（2026-10-13）')
         with patch.object(monitor, 'S', {**monitor.S, 'vol_ratio_z': 0}):
-            self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×（2026-10-13完整日）')
+            self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×（2026-10-13）')
         # 自适应开着也不把 σ 写出来：用户看不懂，判定照用
         self.assertNotIn('σ', monitor._member_metric(d, 'vol_ratio'))
         self.assertEqual(monitor._member_metric(dict(d, vol_ratio_z=None), 'vol_ratio'),
-                         '量比 1.3×（2026-10-13完整日）')
+                         '量比 1.3×（2026-10-13）')
 
     def test_end_to_end_after_close_lights_by_own_swing(self):
         from datetime import datetime
@@ -3950,7 +3985,7 @@ class TestVolumeRatioZscore(unittest.TestCase):
         self.assertIsInstance(detail.get('vol_ratio_z'), float)
         self.assertGreater(detail['vol_ratio_z'], 1.8)   # 这条波动序列上 1.5× 已超过 1.8σ
         self.assertIn(('vol_ratio', 'yellow'), detail['signal_marks'])
-        self.assertTrue(any(text == '最近完整日量比（2026-10-13）1.5x' for text in signals), signals)
+        self.assertTrue(any(text == '量比 1.5×（2026-10-13）' for text in signals), signals)
         # 同一只股放到 3× 量：z 更高，直接红
         huge = dict(data, volumes=data['volumes'][:-1] + [self.base_mean(data) * 3])
         with patch.object(monitor, 'NOW', datetime.fromisoformat(self.CLOSE)), \
@@ -6690,12 +6725,142 @@ class TestPositionZones(unittest.TestCase):
         self.assertNotIn('zone-card', monitor._group_card(group, [], {}, {}))
 
 
+class TestSnapshotDataBoundaries(unittest.TestCase):
+    def row(self, symbol='SAFE', **changes):
+        row = dict(symbol=symbol, group='position', price=100.0, level='yellow',
+                   signals=['RSI 2条↓超卖'], signal_marks=[('chg', 'yellow'), ('ma_cross', 'yellow')],
+                   foldable=False, data_date='2026-10-20')
+        row.update(changes)
+        return row
+
+    def test_invalid_explicit_prices_are_missing_in_every_statistics_projection(self):
+        invalid = (None, 0, -1, True, False, float('nan'), float('inf'), float('-inf'),
+                   '100', 'nan', '', [], {})
+        for price in invalid:
+            for level in ('red', 'yellow', 'green'):
+                row = self.row('BAD', price=price, level=level)
+                with self.subTest(price=price, level=level), patch.object(monitor, 'TARGET_DATE', '2026-10-20'):
+                    self.assertEqual(monitor.text_only_members([row]), [])
+                    self.assertTrue(all(not entries for levels in monitor.signal_count_members([row]).values()
+                                        for entries in levels.values()))
+                    snap = monitor.build_snapshot({}, [row], {}, group_counts={})
+                    self.assertEqual([snap['summary'][key] for key in ('red', 'yellow', 'green', 'gray')], [0, 0, 0, 1])
+                    self.assertEqual([snap['summary'][key] for key in ('today_prices', 'prior_prices', 'missing_prices')], [0, 0, 1])
+                    self.assertEqual(snap['summary']['missing_symbols'], ['BAD'])
+                    self.assertEqual(snap['text_only'], [])
+                    self.assertEqual(snap['signal_members'], monitor.signal_count_members([row]))
+                    self.assertIs(row['price'], price)
+                    self.assertEqual(row['level'], level)
+
+    def test_missing_price_is_compatible_only_in_lightweight_members_not_full_snapshot(self):
+        row = self.row()
+        row.pop('price')
+        self.assertEqual([m['symbol'] for m in monitor.signal_count_members([row])['chg']['yellow']], ['SAFE'])
+        self.assertEqual([m['symbol'] for m in monitor.signal_count_members([row])['ma']['yellow']], ['SAFE'])
+        snap = monitor.build_snapshot({}, [row], {}, group_counts={})
+        self.assertEqual(snap['summary']['yellow'], 0)
+        self.assertEqual(snap['summary']['gray'], 1)
+        self.assertEqual(snap['summary']['missing_symbols'], ['SAFE'])
+        self.assertEqual(snap['signal_members']['chg']['yellow'], [])
+        self.assertEqual(snap['signal_members']['ma']['yellow'], [])
+        self.assertNotIn('price', row)
+
+    def test_corrupt_technical_facts_keep_independent_change_amplitude_volume_members(self):
+        row = self.row(signals=['RSI 2条↑超买', 'RSI 2条↓超卖', '异动 +3%', '振幅 4%', '量比 2.0×'],
+                       signal_marks=[('chg', 'yellow'), ('amp', 'yellow'), ('vol_ratio', 'yellow')])
+        for candidate in (row, monitor._sanitize_snapshot_fields(row)):
+            members = monitor.signal_count_members([candidate])
+            for kind in ('chg', 'amp', 'vol_ratio'):
+                self.assertEqual([m['symbol'] for m in members[kind]['yellow']], ['SAFE'])
+            self.assertEqual(monitor.text_only_members([candidate]), [])
+        snap = monitor.build_snapshot({}, [row], {}, group_counts={})
+        for kind in ('chg', 'amp', 'vol_ratio'):
+            self.assertEqual([m['symbol'] for m in snap['signal_members'][kind]['yellow']], ['SAFE'])
+        self.assertEqual(snap['summary']['yellow'], 1)
+
+    def test_retired_target_light_cannot_restore_invalid_price_or_downgrade_unknown_facts(self):
+        missing = self.row(price=0, level='red', signal_marks=[('chg', 'red'), ('target', 'yellow')])
+        clean = monitor._sanitize_snapshot_fields(missing)
+        self.assertEqual((clean['price'], clean['level']), (None, 'gray'))
+        bad = self.row(level='yellow', signals=['RSI 2条↑超买', 'RSI 2条↓超卖'],
+                       signal_marks=[('target', 'yellow')])
+        clean = monitor._sanitize_snapshot_fields(bad)
+        self.assertEqual(clean['level'], 'yellow')
+        self.assertTrue(clean['technical_pending'])
+        self.assertEqual(monitor.text_only_members([clean]), [])
+
+    def test_finite_positive_prices_keep_valid_members_and_counts(self):
+        for price in (1, 100.5, 1e-9):
+            row = self.row(price=price)
+            with self.subTest(price=price):
+                members = monitor.signal_count_members([row])
+                self.assertEqual([item['symbol'] for item in members['chg']['yellow']], ['SAFE'])
+                self.assertEqual([item['symbol'] for item in members['ma']['yellow']], ['SAFE'])
+                self.assertEqual([item['symbol'] for item in monitor.text_only_members([row])], ['SAFE'])
+
+    def test_old_snapshots_rebuild_counts_when_price_is_invalid(self):
+        import copy
+        row = self.row('BAD', price=0, level='red')
+        good = self.row()
+        original = {'items': [row, good], 'summary': {'red': 1, 'yellow': 1, 'green': 0, 'gray': 0},
+                    'signal_counts': {'chg': {'label': '涨跌幅', 'red': 1, 'yellow': 1, 'purple': 0}},
+                    'signal_members': {'chg': {'red': [row], 'yellow': [good], 'purple': []}}}
+        before = copy.deepcopy(original)
+        clean = monitor._sanitize_snapshot(original)
+        self.assertEqual(clean['summary']['red'], 0)
+        self.assertEqual(clean['summary']['gray'], 1)
+        self.assertEqual(clean['signal_counts']['chg']['red'], 0)
+        self.assertEqual([item['symbol'] for item in clean['signal_members']['chg']['yellow']], ['SAFE'])
+        self.assertEqual([item['symbol'] for item in clean['text_only']], ['SAFE'])
+        self.assertEqual(original, before)
+
+    def test_malformed_legacy_technical_facts_are_isolated_without_changing_main_level(self):
+        import copy
+        mutations = [
+            {'signals': ['RSI 2条↑超买', 'RSI 2条↓超卖']},
+            {'signals': ['RSI 2条↑超买 / 2条↓超卖']},
+            {'signals': ['RSI 4条↓超卖']},
+            {'signals': ['RSI 未知', '触及布林下轨 90']},
+            {'signals': 123}, {'signals': 'RSI 2条↓超卖'},
+            {'signals': ['RSI 2条↓超卖', None]},
+            {'signals': ['触及布林轨道未知', 'RSI 1条↓超卖']},
+            {'signal_marks': [None, ('rsi',), ('chg', 'yellow', 'extra')]},
+            {'signal_marks': 'bad'},
+            {'group': None}, {'group': ''}, {'group': []}, {'group': {}},
+            {'group': ['position']}, {'group': {'name': 'position'}}, {'group': ' '},
+        ]
+        for mutation in mutations:
+            bad = self.row('BAD', **mutation)
+            if mutation == {'group': None}:
+                bad.pop('group')
+            safe = self.row()
+            before = copy.deepcopy(bad)
+            with self.subTest(mutation=mutation):
+                self.assertEqual([item['symbol'] for item in monitor.text_only_members([bad, safe])], ['SAFE'])
+                snap = monitor.build_snapshot({}, [bad, safe], {}, group_counts={})
+                self.assertEqual([item['symbol'] for item in snap['text_only']], ['SAFE'])
+                clean = monitor._sanitize_snapshot_fields(bad)
+                self.assertEqual(clean['level'], before['level'])
+                self.assertEqual(clean['foldable'], before['foldable'])
+                self.assertTrue(clean['technical_pending'])
+                self.assertEqual(bad, before)
+
+    def test_retired_amplitude_gray_does_not_reclassify_corrupt_technical_facts(self):
+        for group in ('position', None, []):
+            row = self.row(group=group, signals=['振幅 2.0%', 'RSI 2条↑超买', 'RSI 2条↓超卖'],
+                           signal_marks=[('amp', 'gray')], foldable=False)
+            clean = monitor._sanitize_snapshot_fields(row)
+            self.assertFalse(clean['foldable'])
+            self.assertEqual(clean['level'], 'yellow')
+            self.assertEqual(monitor.text_only_members([clean]), [])
+
+
 class TestSignalCounts(unittest.TestCase):
     """status.json 的 signal_counts：各类信号各触发多少、哪些黄灯只由一类信号造成。"""
 
     @staticmethod
     def row(level, *marks):
-        return {'symbol': 'T', 'level': level, 'signal_marks': list(marks)}
+        return {'symbol': 'T', 'price': 100.0, 'level': level, 'signal_marks': list(marks)}
 
     def test_counts_by_kind_and_level(self):
         rows = [self.member_row('CHANGE', 'position', 'red', ('chg', 'red'), ('rsi', 'yellow')),
@@ -6791,8 +6956,8 @@ class TestSignalCounts(unittest.TestCase):
         self.assertIn(('chg', 'red'), marks)
 
     def test_signal_counts_card_on_homepage(self):
-        rows = [{'symbol': 'AAA', 'level': 'yellow', 'signal_marks': [('boll', 'yellow')]},
-                {'symbol': 'BBB', 'level': 'red', 'signal_marks': [('chg', 'red'), ('rsi', 'yellow')]}]
+        rows = [{'symbol': 'AAA', 'price': 100.0, 'level': 'yellow', 'signal_marks': [('boll', 'yellow')]},
+                {'symbol': 'BBB', 'price': 100.0, 'level': 'red', 'signal_marks': [('chg', 'red'), ('rsi', 'yellow')]}]
         snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         page = monitor.render({}, [], 0, snapshot=snap)
         self.assertIn('id="signalCounts"', page)
@@ -7174,7 +7339,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
 
     @staticmethod
     def member_row(symbol, group, level, *marks, note=''):
-        row = {'symbol': symbol, 'group': group, 'note': note,
+        row = {'symbol': symbol, 'group': group, 'note': note, 'price': 100.0,
                'level': level, 'signal_marks': list(marks)}
         if ('target', 'purple') in marks:
             row.update(price=100, purple=True, target=monitor.evaluate_target(
@@ -7483,7 +7648,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertEqual(snap['signal_counts']['vol_ratio']['yellow'], 3)
         self.assertEqual(snap['signal_members']['amp']['red'][0]['metric'], '振幅 7.1%')
         self.assertEqual(snap['signal_members']['vol_ratio']['yellow'][0]['metric'],
-                         '量比 2.4×（2026-10-13完整日）')
+                         '量比 2.4×（2026-10-13）')
         output = monitor._signal_counts_card(snap)
         amp_yellow = self.panel(output, 'amp', 'yellow')
         amp_red = self.panel(output, 'amp', 'red')
@@ -7497,8 +7662,8 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertNotIn('signal-member-icon', volume)
         self.assertIn('振幅 5.4%', amp_yellow)
         self.assertIn('振幅 7.1%', amp_red)
-        self.assertIn('量比 2.4×（2026-10-13完整日）', volume)
-        self.assertIn('量比 1.6×（2026-10-13完整日）', volume)
+        self.assertIn('量比 2.4×（2026-10-13）', volume)
+        self.assertIn('量比 1.6×（2026-10-13）', volume)
         self.assertNotIn('量比数字取标注的完整交易日，不一定与股价三角同日', volume)
         self.assertNotIn('振幅为本轮行情日高低价之差占昨收的比例', amp_yellow)
         self.assertIn(f'<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>', amp_red)

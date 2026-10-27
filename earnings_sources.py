@@ -556,8 +556,9 @@ class _FetchError(Exception):
         self.status = status
 
 
-def _download(session, url, timeout, deadline):
-    remaining = deadline - time.monotonic()
+def _download(session, url, timeout, deadline, clock=None):
+    clock = clock or time.monotonic
+    remaining = deadline - clock()
     if remaining <= 0:
         raise _FetchError("budget_exhausted")
     # trust_env=False 禁止读取 netrc/环境代理；每次请求前清空服务端设置的 Cookie。
@@ -573,13 +574,13 @@ def _download(session, url, timeout, deadline):
                 raise _FetchError("unsupported_content_type")
             chunks, size = [], 0
             for chunk in response.iter_content(chunk_size=16384):
-                if time.monotonic() >= deadline:
+                if clock() >= deadline:
                     raise _FetchError("budget_exhausted")
                 size += len(chunk)
                 if size > _MAX_BYTES:
                     raise _FetchError("page_too_large")
                 chunks.append(chunk)
-            if time.monotonic() >= deadline:
+            if clock() >= deadline:
                 raise _FetchError("budget_exhausted")
             return b"".join(chunks).decode(response.encoding or "utf-8", errors="replace")
     except requests.RequestException as exc:
@@ -588,7 +589,7 @@ def _download(session, url, timeout, deadline):
         raise _FetchError("invalid_response_encoding") from exc
 
 
-def fetch_official_earnings(symbol, today, timeout=8):
+def fetch_official_earnings(symbol, today, timeout=8, deadline=None, clock=None):
     """列表一次、至多前三个相关详情；禁跳转/重试/认证，约 20 秒总预算。
 
     ok 为已收集候选中最近的当天或未来财报事件；unknown 为不覆盖/无日期/冲突/结构不明；
@@ -610,13 +611,17 @@ def fetch_official_earnings(symbol, today, timeout=8):
     url = _allowed_url(SOURCES[symbol]["list_url"], symbol)
     if not url:
         return _result("unknown", checked, reason="invalid_source_configuration")
-    deadline = time.monotonic() + _BUDGET
+    download_clock = (clock,) if clock is not None else ()
+    clock = clock or time.monotonic
+    deadline = min(clock() + _BUDGET, deadline if deadline is not None else float("inf"))
+    if clock() >= deadline:
+        return _result("error", checked, url, reason="budget_exhausted")
     with requests.Session() as session:
         session.trust_env = False
         session.auth = None
         session.mount("https://", requests.adapters.HTTPAdapter(max_retries=0))
         try:
-            text = _download(session, url, timeout, deadline)
+            text = _download(session, url, timeout, deadline, *download_clock)
         except _FetchError as exc:
             return _result("error", checked, url, reason=exc.reason)
         records = []
@@ -625,10 +630,10 @@ def fetch_official_earnings(symbol, today, timeout=8):
             return result
         last_error = None
         for detail in _detail_links(root, url, symbol):
-            if time.monotonic() >= deadline:
+            if clock() >= deadline:
                 return _result("error", checked, url, reason="budget_exhausted")
             try:
-                text = _download(session, detail, timeout, deadline)
+                text = _download(session, detail, timeout, deadline, *download_clock)
             except _FetchError as exc:
                 last_error = _result("error", checked, detail, reason=exc.reason)
                 if exc.status in {403, 429} or exc.reason == "budget_exhausted":
