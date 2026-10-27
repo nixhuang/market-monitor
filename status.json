@@ -9,21 +9,21 @@
     "next_in": 13,
     "next_date": "2026-11-12"
   },
-  "run_id": "40459220713",
+  "run_id": "40460742812",
   "request_id": "",
-  "source_sha": "b3e768633c269b9e38735e5aca6b512843067ff6",
-  "input_hash": "962d0a719bf07406fa5c059a60c56f9632d87f867812596207a6307e6f48dbd4",
-  "build_id": "40459220713-1",
-  "started_at": "2026-10-27T06:07:24+00:00",
-  "started_at_bj": "2026-10-27T14:07:24+08:00",
-  "finished_at": "2026-10-27T14:09:52.618706+08:00",
-  "finished_at_bj": "2026-10-27T14:09:52+08:00",
+  "source_sha": "8321280ce0c9826281fe3fac51bd1060062e558e",
+  "input_hash": "555c06ecab34bb010d122778a8f558a7497168322b6ee992ac008bc71c2836da",
+  "build_id": "40460742812-1",
+  "started_at": "2026-10-27T06:22:45+00:00",
+  "started_at_bj": "2026-10-27T14:22:45+08:00",
+  "finished_at": "2026-10-27T14:25:24.846291+08:00",
+  "finished_at_bj": "2026-10-27T14:25:24+08:00",
   "event": "push",
   "target_trade_date": "2026-10-26",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "e71535eae862d1cd43b741041ed3fed041134f10",
+    "holdings.json": "268c6dbc6f96e005c2741d304ab7c42834ee2a2c",
     "settings.json": "1386a699b2039959ee8c8731166194d1f75a847e"
   },
   "effective_settings": {
@@ -198,7 +198,7 @@
     "yellow": 18,
     "green": 74,
     "gray": 0,
-    "purple": 27,
+    "purple": 26,
     "total": 98,
     "macro_ok": 6,
     "stale_symbols": [],
@@ -274,7 +274,7 @@
       "label": "共识价",
       "red": 0,
       "yellow": 0,
-      "purple": 27
+      "purple": 26
     }
   },
   "signal_members": {
@@ -1257,18 +1257,6 @@
           "price": 233.83,
           "kind": "consensus",
           "detail": "共识价 233.83，空间 +52.7%"
-        },
-        {
-          "symbol": "LMT",
-          "note": "洛克希德马丁",
-          "group": "position",
-          "hold": "long",
-          "level": "red",
-          "space": -0.24874055415617127,
-          "band": "low",
-          "price": 633.62,
-          "kind": "consensus",
-          "detail": "今日上穿共识价 633.62"
         }
       ]
     }
@@ -1588,20 +1576,7 @@
         "detail": "共识价 233.83，空间 +52.7%"
       }
     ],
-    "reached": [
-      {
-        "symbol": "LMT",
-        "note": "洛克希德马丁",
-        "group": "position",
-        "hold": "long",
-        "level": "red",
-        "space": -0.24874055415617127,
-        "band": "low",
-        "price": 633.62,
-        "kind": "consensus",
-        "detail": "今日上穿共识价 633.62"
-      }
-    ]
+    "reached": []
   },
   "text_only": [
     {
@@ -2407,7 +2382,7 @@
     "checked_at": "2026-10-22T11:56:54.517842-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-10-27T06:09:04.814792+00:00"
+    "asof": "2026-10-27T06:24:38.032389+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
@@ -2483,17 +2458,6 @@
         "s": "ok",
         "try": "2026-10-16",
         "ne": "2026-10-28"
-      },
-      "LMT": {
-        "avg": 633.62,
-        "upd": "2026-10-23",
-        "r": "2026-10-24",
-        "r_tz": "America/New_York",
-        "s": "ok",
-        "try": "2026-10-24",
-        "earn_pending": [
-          "2026-10-22"
-        ]
       },
       "NTNX": {
         "avg": 77.79,
@@ -3243,7 +3207,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-10-27T06:09:52.513429+00:00",
+    "asof": "2026-10-27T06:25:24.739165+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -3328,23 +3292,6 @@
           "asof": "1970-01-01T00:00:00+00:00",
           "at": null,
           "digest": "6f1776fb4a092f6ff35134edaf39e31dbf057342b1889e259cdf2f03ad90ad5f"
-        }
-      },
-      "LMT": {
-        "facts": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
-          "at": "2026-10-24T00:00:00+00:00",
-          "digest": "0fc2354467d22a2199d71ad3a1d6d44bf3bd832d7f503393f7046914da689770"
-        },
-        "attempt": {
-          "asof": "2026-10-24T14:12:56.285740+00:00",
-          "at": "2026-10-24T00:00:00+00:00",
-          "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
-        },
-        "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
-          "at": null,
-          "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
       },
       "NTNX": {
@@ -3971,7 +3918,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4005,7 +3952,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -4022,7 +3969,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4056,7 +4003,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4073,7 +4020,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -4124,7 +4071,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4141,7 +4088,7 @@
           "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "b97f36fd59ba73086b38a650d9ce1d58aa3255ca676925c8a1348c837f5dbe76"
         }
@@ -4158,7 +4105,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -4362,7 +4309,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4379,7 +4326,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4447,7 +4394,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4481,7 +4428,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -4532,7 +4479,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4549,7 +4496,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -4617,7 +4564,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-10-27T06:09:52.513429+00:00",
+          "asof": "2026-10-27T06:25:24.739165+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5395,7 +5342,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-10-27T06:09:52.481586+00:00",
+    "asof": "2026-10-27T06:25:24.706563+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -6835,9 +6782,9 @@
       "incomplete": false,
       "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-10-27T14:09:03.303879+08:00",
+    "assessed_at": "2026-10-27T14:24:36.897725+08:00",
     "schema_version": 2,
-    "asof": "2026-10-27T06:09:05.183033+00:00"
+    "asof": "2026-10-27T06:24:38.214834+00:00"
   },
   "data_lag": {
     "target": "2026-10-26",
