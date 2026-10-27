@@ -27,12 +27,12 @@
     "BRK-B": {
       "note": "伯克希尔哈撒韦",
       "hold": "long",
-      "cost": 505.0
+      "cost": 505
     },
     "HII": {
       "note": "亨廷顿英格尔斯工业",
       "hold": "short",
-      "cost": 272.0
+      "cost": 272
     },
     "APH": {
       "note": "安费诺",
@@ -57,7 +57,7 @@
     "LMT": {
       "note": "洛克希德马丁",
       "hold": "long",
-      "cost": 513.0
+      "cost": 513
     },
     "NTNX": {
       "note": "Nutanix-混合云",
@@ -107,7 +107,7 @@
     "NXPI": {
       "note": "恩智浦半导体",
       "hold": "short",
-      "cost": 220.0
+      "cost": 220
     },
     "PDD": {
       "note": "拼多多",
@@ -255,6 +255,9 @@
     },
     "WDC": {
       "note": "西部数据"
+    },
+    "SPCX": {
+      "note": "SpaceX-商业航天"
     }
   },
   "healthcare": {
@@ -347,9 +350,6 @@
     },
     "HEI": {
       "note": "HEICO-航空零部件"
-    },
-    "SPCX": {
-      "note": "SpaceX-商业航天"
     },
     "CAT": {
       "note": "卡特彼勒"
