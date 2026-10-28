@@ -257,10 +257,14 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('.zone-card{margin:10px -2px 12px;padding-left:2px;padding-right:2px;\n'
                       '  border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}', css)
         self.assertIn('.zone-card .group-bottom{margin:0 -2px 0}', css)
-        # 数字胶囊右边的三角：字号 10px→16px、占位 10px→14px，只放大三角本身，胶囊框不被撑大（间距 6px）
+        # 数字胶囊：个位压在胶囊中线（右边 17px 内边距给三角留位），两位数时十位向左长，不折行；
+        # 三角字号仍是 16px，只是绝对定位贴到右侧（距右边框 2px），胶囊仍是 44px。
+        self.assertIn('#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;'
+                      'max-width:100%;\n  position:relative;padding:0 17px 0 4px;', css)
+        self.assertIn('white-space:nowrap;display:inline-flex;align-items:center;justify-content:flex-end;'
+                      'touch-action:manipulation}', css)
         self.assertIn('#signalCounts .signal-count-toggle::after{content:"▾";font-size:16px;line-height:1;\n'
-                      '  display:inline-block;width:14px;text-align:center}', css)
-        self.assertIn('display:inline-flex;align-items:center;justify-content:center;gap:6px;touch-action:manipulation}', css)
+                      '  position:absolute;right:2px;top:50%;transform:translateY(-50%)}', css)
         # 手机：整页左右只留 4px，外框贴住屏幕边；上下沿用 body 原值
         media = re.search(r'@media \(max-width:600px\)\{(.*?)\n\}', css, re.S)
         self.assertIsNotNone(media)

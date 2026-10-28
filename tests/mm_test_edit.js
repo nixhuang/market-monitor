@@ -120,6 +120,11 @@ check(!/[?&]rules=|#rule[-\w]*|#signalRules|#glossaryRules|#pageNotes|location\.
   '设置页无规则链接、规则锚点或旧书签自动跳转（三块只读首页模板挂载）');
 check(src.includes('href="./index.html"')&&src.includes('id="authCard"')&&src.includes('id="manualCard"'),
   '删除规则跳转不删除普通返回看板链接和授权／手动操作入口');
+// 「← 回看板」原来只是 .sub 里 12px 的裸链接，手机上太小点不到；单独放大成按钮大小的块，
+// 但必须保持同一个 href 与文案，不能变成新入口或改跳转。
+check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>')
+  && /\.sub a\.back-board\{display:inline-block;margin-top:8px;padding:9px 16px;font-size:15px;/.test(src),
+  '返回看板链接已放大为按钮大小（字号 15px + 内边距），href 与文案不变');
 store.mm_gh_token_v1='github_pat_test_dispatch';
 check(runOptions.getToken()==='github_pat_test_dispatch', '编辑页仍可核验保存生效所需的授权状态');
 check(!src.includes('id="runCard"')&&!src.includes('id="btnRun"')&&!src.includes('id="btnRuns"')&&

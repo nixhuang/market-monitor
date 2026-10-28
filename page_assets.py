@@ -592,15 +592,17 @@ tr:first-child td{border-top:none}
 #signalCounts td{padding:6.3px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
 #signalCounts td.num{text-align:center}   /* 计数列居中：破折号与展开按钮对齐 */
 #signalCounts td:first-child{width:26%}
-/* 胶囊宽度写死 44px（原来是 min-width）：三角放大后两位数计数也不会把胶囊撑宽 */
-#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;max-width:100%;padding:0 4px;
+/* 数字胶囊 44px 写死：宽度不跟着位数变。数字右对齐到「个位正好压在胶囊中线」的位置 ——
+   个位右缘固定在 x=26（= 中线 22 + 半个字宽 4），两位数时十位向左长、个位仍停在中线上。
+   右边 17px 内边距就是给三角预留的位置；white-space:nowrap 保证任何情况下都不折行。 */
+#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;max-width:100%;
+  position:relative;padding:0 17px 0 4px;
   color:#bfd5ff;font:inherit;font-size:14px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
-  display:inline-flex;align-items:center;justify-content:center;gap:6px;touch-action:manipulation}
-/* 数字右边的展开三角：字号 10px → 16px（占位 10px → 14px），只放大三角本身。
-   胶囊宽度仍由 min-width:44px 决定（最宽的两位数胶囊内容 16+6+14+8=44px，正好不撑大），
-   数字与三角的间距同步 3px → 6px，避免三角变大后贴住数字。 */
+  white-space:nowrap;display:inline-flex;align-items:center;justify-content:flex-end;touch-action:manipulation}
+/* 三角字号仍是 16px（不放大也不缩小），只从「跟在数字后面」改成绝对定位贴到胶囊右侧
+   （距右边框 2px）：数字回到中线，三角去右边，左右留白都被用上，胶囊仍是 44px。 */
 #signalCounts .signal-count-toggle::after{content:"▾";font-size:16px;line-height:1;
-  display:inline-block;width:14px;text-align:center}
+  position:absolute;right:2px;top:50%;transform:translateY(-50%)}
 #signalCounts .signal-count-toggle[aria-expanded="true"]::after{content:"▴"}
 #signalCounts .signal-members-row>td{padding:0;width:auto;border-top:0}
 #signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid #465e87;text-align:left}

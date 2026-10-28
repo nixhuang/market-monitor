@@ -24,6 +24,11 @@ body{margin:0;background:var(--bg);color:var(--text);
 h1{font-size:19px;margin:18px 0 4px;font-weight:600}
 .sub{color:var(--dim);font-size:12px;margin-bottom:16px;line-height:1.7}
 .sub a{color:#6ba3f0;text-decoration:none}
+/* 「← 回看板」原来只是一行 12px 的普通链接，手机上点不到。单独放大成一颗和页面按钮同高
+   （约 37px）的可点块：字号 12→15px、加内边距，配色沿用 .sub 的链接蓝，不改文案和跳转。 */
+.sub a.back-board{display:inline-block;margin-top:8px;padding:9px 16px;font-size:15px;
+  background:#232833;border:1px solid #333a47;border-radius:8px}
+.sub a.back-board:hover{background:#2b303c}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:14px;margin-bottom:14px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:0 0 10px;letter-spacing:.3px}
@@ -209,7 +214,7 @@ details.fold .pane{padding-bottom:8px}
 <h1>编辑自选清单</h1>
 <div class="sub">
   改完点保存 → 直接写回你自己的仓库 <a href="https://github.com/nixhuang/market-monitor" target="_blank">nixhuang/market-monitor</a> → 自动重跑看板。<br>
-  <a href="./index.html">← 回看板</a>
+  <a class="back-board" href="./index.html">← 回看板</a>
 </div>
 
 <div id="msg"></div>
