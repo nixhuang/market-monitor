@@ -1703,7 +1703,7 @@ const deadline = setTimeout(() => {
       })()`);
       assertions.push({ok: JSON.stringify(header.order) === JSON.stringify([
         'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn'])
-        && header.count === String(header.expected) && header.border === 'rgb(196, 163, 255)' && !header.overflow,
+        && header.count === String(header.expected) && header.border === 'rgb(176, 132, 255)' && !header.overflow,
         name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
       const actual = await evaluate(`(() => {
         document.querySelectorAll('details.group-card,details.quiet-list').forEach(el => el.open = true);
@@ -1778,7 +1778,7 @@ const deadline = setTimeout(() => {
         name: width + 'px真实CSS高空间外框、数字及等宽加重同色#dc62b8', actual});
       assertions.push({ok: actual.originalSize[0] > 0 && actual.originalSize[1] > 0
         && JSON.stringify(actual.originalSize) === JSON.stringify(actual.priorSize)
-        && actual.spaceColor === 'rgb(196, 163, 255)' && actual.spaceBorder === 'rgb(196, 163, 255)'
+        && actual.spaceColor === 'rgb(176, 132, 255)' && actual.spaceBorder === 'rgb(176, 132, 255)'
         && actual.hitColor === 'rgb(255, 255, 255)' && actual.hitBackground === 'rgb(137, 87, 229)'
         && actual.hitAfter === 'none' && actual.hitClass.includes('pur-hit') && !actual.hitClass.includes('pur-high')
         && actual.badColor === 'rgb(139, 147, 161)' && actual.badBorderStyle === 'solid'
@@ -1797,7 +1797,7 @@ const deadline = setTimeout(() => {
         && s.rangePosition === '0% 0%'),
         name: width + 'px普通/高/达到目标均无右紫条，红黄绿左条及52周续接保留', actual: actual.stripes});
       assertions.push({ok: actual.sparseBorders.length === 2 && actual.sparseBorders.every((s, i) =>
-        s.color === (i === 0 ? 'rgb(196, 163, 255)' : 'rgb(139, 147, 161)')
+        s.color === (i === 0 ? 'rgb(176, 132, 255)' : 'rgb(139, 147, 161)')
         && s.border === 'rgba(0, 0, 0, 0)' && s.width === '1px' && s.radius === '4px'
         && s.afterContent !== 'none' && s.afterInset.every(value => value === '-1px')
         && s.pointerEvents === 'none' && s.backgroundSize === '100% 100%'
