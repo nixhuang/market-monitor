@@ -170,15 +170,15 @@ for _label, _css, _widths in (("电脑", _desktop_css, (18, 22, 13, 47)),
     check(sum(_widths) == 100, _label + "端四栏宽度合计100%")
 _macro_u = dict(macro, ust10=dict(macro["ust10"], value=4.55, delta_week=0.12, month_ago=4.0, delta_month=0.55))
 _html_u = monitor.render(_macro_u, items, 10, snapshot=snapshot, dup_hidden=2)
-check('id="ust10Ref"' in _html_u and "一个月急升 +55 bp" in _html_u and '<span class="unit">参考</span>' in _html_u and "不计入综合灯" not in _html_u
+check('id="ust10Ref"' in _html_u and "急升 +55 bp" in _html_u and '<span class="unit">参考</span>' in _html_u and "不计入综合灯" not in _html_u
       and '<td class="num dim">+12<span class="unit">周变化 bp</span></td>' in _html_u, "10Y美债参考行：一个月急升标黄，周变化按 bp 显示")
 check('id="ust10Ref"' in html and "无数据或已过期" in html.split('id="ust10Ref"')[1].split("</tr>")[0],
       "10Y美债缺一个月数据时显示无数据")
 _macro_b = dict(macro, breadth={"ok": True, "name": "上涨参与度", "date": "2026-10-06", "value": 47.0,
                                "pct50": 29.3, "unit": "%", "source": "History of Market"})
 _html_b = monitor.render(_macro_b, items, 10, snapshot=snapshot, dup_hidden=2)
-check("47.0%<span class=\"unit\">的成分股站上宏观长均线（长期趋势）</span>" in _html_b
-      and "站上宏观短均线（短期）：29.3%" in _html_b
+check("47.0%<span class=\"unit\">上宏观长均线</span>" in _html_b
+      and "上宏观短均线：29.3%" in _html_b
       and "宏观均线沿用数据源固定口径，不随个股均线设置变化" in _html_b
       and not re.search(r'\d+日(?:均线|线)', _html_b.split('id="macroCard"', 1)[1].split('</table>', 1)[0]),
       "上涨参与度短长命名，沿用固定宏观口径及原数据值")

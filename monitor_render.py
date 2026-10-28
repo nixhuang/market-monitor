@@ -397,8 +397,8 @@ class PageRenderer:
             elif key == "curve":
                 val = f'{it["value"]:.2f}<span class="unit">个百分点</span>'
             elif key == "breadth":
-                val = (f'{it["value"]:.1f}%<span class="unit">的成分股站上宏观长均线（长期趋势）</span>'
-                       f'<span class="unit">站上宏观短均线（短期）：{it["pct50"]:.1f}%</span>')
+                val = (f'{it["value"]:.1f}%<span class="unit">上宏观长均线</span>'
+                       f'<span class="unit">上宏观短均线：{it["pct50"]:.1f}%</span>')
             elif key == "nfci":
                 val = f'{it["value"]:+.2f}'
             else:
@@ -1411,21 +1411,7 @@ class PageRenderer:
         value = f'{price:.2f}<span class="unit">美元／桶</span>' if valid(price) else '—<span class="unit">美元／桶</span>'
         day_class = "oil-rise" if valid(day) and day > 0 else "oil-fall" if valid(day) and day < 0 else "dim"
         change = f'{day:+.2f}%' if valid(day) else "—"
-        changes = ''.join(f'<p>{period}交易日涨幅：{oil[key]:+.1f}%</p>' if valid(oil.get(key))
-                          else f'<p>{period}交易日涨幅：待核实</p>' for period, key in ((5, "week"), (20, "month")))
-        details = (f'<details class="reference-detail"><summary>依据与来源</summary>{changes}'
-                   f'<p>日变化：{esc(oil.get("day_from") or "前一日待核实")} → {esc(oil.get("date") or "本期待更新")}。'
-                   f'主连价格来自CL=F；所有涨幅使用同一实际交割合约 '
-                   f'{esc(oil.get("contract_symbol") or "未核实")} / {esc(oil.get("contract") or "未核实")}，避免换月误报。</p>'
-                   f'<p><a href="{esc(oil.get("url") or "https://finance.yahoo.com/quote/CL=F/")}" target="_blank" rel="noopener noreferrer">'
-                   f'{esc(oil.get("source") or "Yahoo NYMEX WTI期货")}</a> · 日线，非实时夜盘</p>')
-        if oil.get("fetch_error"):
-            details += f'<p>取数状态：{esc(oil["fetch_error"])}</p>'
-        checked = self._context.policy_alerts.moment(oil.get("checked_at") or refs.get("assessed_at"))
-        if checked:
-            details += f'<p>最近核对：{checked.astimezone(self._context.TZ).strftime("%Y-%m-%d %H:%M")} 北京时间</p>'
-        details += ('<p>自定义规则：5日涨≥10%注意／≥20%警惕，20日涨≥20%注意／≥30%警惕。'
-                    '上涨速度反映价格冲击，不推断必然加息。</p></details>')  # 「不计入综合灯」2026-10-15 从面板移除，页底规则仍写明
+        # 「依据与来源」整块删除（2026-10-28）：状态列只留灯名 + 一句精简结论
         text = oil.get("text")
         if (not isinstance(text, str) or not text.strip()
                 or (level == "gray" and oil.get("level") != "gray")):
@@ -1433,7 +1419,7 @@ class PageRenderer:
         return (f'<tr class="{level} oil-reference-row" id="oilAlert" data-level="{level}">'
                 f'<td>WTI原油<span class="unit">CLmain · 参考</span><span class="unit">{esc(oil.get("date") or "日线待更新")}</span></td>'
                 f'<td class="num">{value}</td><td class="num {day_class}">{change}<span class="unit">日涨跌</span></td>'
-                f'<td><b class="oil-state">{names[level]}</b><div class="oil-explanation">{esc(text)}</div>{details}</td></tr>')
+                f'<td><b class="oil-state">{names[level]}</b><div class="oil-explanation">{esc(text)}</div></td></tr>')
 
 
     def _page_notes(self, snapshot):
@@ -1443,7 +1429,7 @@ class PageRenderer:
 <h5>综合评分</h5>
 <p>{html_lib.escape(self._context.RISK_RULE_TEXT)}</p>
 <h5>宏观指标细则</h5>
-<p>垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到黄线，一周扩大至少 {self._context.HY_WEEK_YELLOW} bp 为黄、至少 {self._context.HY_WEEK_RED} bp 为红（水平仍低于黄线也照常报灯，说明另提醒观察是否持续）；达到 500 bp 会标注“信用压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
+<p>垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到黄线，一周扩大至少 {self._context.HY_WEEK_YELLOW} bp 为黄、至少 {self._context.HY_WEEK_RED} bp 为红（水平仍低于黄线也照常报灯，说明另提醒观察是否持续）；达到 500 bp 会标注“压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
 <p>VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500距近一段高点回撤不足10%为绿、达到10%或15%为黄、达到20%为红，这些是已发生的跌幅。</p>
 <p>上涨参与度：站上宏观长均线的股票不足50%为黄；不足30%时，还需近期垃圾债利差已为红，或金融压力NFCI达到或高于0，才升级红；站上宏观短均线的股票不足30%也为黄。宏观均线沿用数据源固定口径，不随个股均线设置变化。NFCI为周度：达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
 <h5>数据有效性</h5>

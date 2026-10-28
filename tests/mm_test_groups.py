@@ -2289,8 +2289,8 @@ class TestGroups(unittest.TestCase):
                     self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': value})[0], expected)
             self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 30})[0], 'yellow')
             self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 29})[0], 'green')
-            self.assertIn('水平不高', monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 60})[1])
-            self.assertNotIn('水平不高', monitor.macro_status('hy_oas', {'ok': True, 'value': 360, 'delta_week': 60})[1])
+            self.assertIn('待观察', monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 60})[1])
+            self.assertNotIn('待观察', monitor.macro_status('hy_oas', {'ok': True, 'value': 360, 'delta_week': 60})[1])
             self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320,
                                                              'delta_week': 50})[0], 'red')
         finally:
@@ -2419,12 +2419,12 @@ class TestGroups(unittest.TestCase):
             breadth = monitor.market_breadth('2026-10-08')
         self.assertEqual(req.call_count, 1)
         self.assertEqual(monitor.macro_status('breadth', breadth)[0], 'yellow')
-        self.assertIn('过半股票跌破长期均线', monitor.macro_status('breadth', breadth)[1])
+        self.assertIn('过半跌破长均线', monitor.macro_status('breadth', breadth)[1])
         breadth['pressure_confirmed'] = True
         self.assertEqual(monitor.macro_status('breadth', breadth)[0], 'red')
         body['latest']['pct200'] = 65
         with patch.object(monitor.requests, 'get', return_value=Response()):
-            self.assertIn('短期上涨只由少数股票支撑',
+            self.assertIn('短期仅少数支撑',
                           monitor.macro_status('breadth', monitor.market_breadth('2026-10-08'))[1])
             self.assertEqual(monitor.macro_status('breadth', monitor.market_breadth('2026-10-08'))[0], 'yellow')
             self.assertFalse(monitor.market_breadth('2026-10-20')['ok'])
@@ -2491,7 +2491,7 @@ class TestGroups(unittest.TestCase):
         self.assertIn('id="marketRiskLight" data-level="red"', summary)
         self.assertIn('综合：升高', summary)
         self.assertNotIn('红1 · 黄1', summary)
-        self.assertIn('多数股票走弱，且信用或金融压力也在升高', page)
+        self.assertIn('走弱，压力同步升高', page)
         self.assertIn('截至 2026-10-02', page)
         glossary = re.search(r'<template id="glossaryTpl">(.*?)</template>', page, re.S)[1]
         self.assertRegex(glossary, '<a href="' + re.escape(monitor.BREADTH_CREDIT)

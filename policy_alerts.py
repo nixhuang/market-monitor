@@ -328,25 +328,25 @@ def oil_warning(continuous, contract=None, target=None):
         return result
     result.update(price=value, date=dates[-1], contract=continuous.get("quote_name"))
     if not contract or contract.get("quote_type") != "FUTURE" or contract.get("currency") != "USD" or contract.get("quote_timezone") != "America/New_York" or not oil_contract_symbol(continuous.get("quote_name")) or contract.get("quote_symbol") != oil_contract_symbol(continuous.get("quote_name")) or contract.get("quote_name") != continuous.get("quote_name"):
-        return {**result, "text": "油价已取得，同月份合约未核实；暂不判定涨幅，避免换月误报。"}
+        return {**result, "text": "同月合约未核实，未判定涨幅"}
     ds, cs = contract.get("dates") or [], contract.get("closes") or []
     if len(cs) < 2 or len(ds) != len(cs) or ds[-1] != target or ds != sorted(set(ds)) or any(not valid_number(v) or v <= 0 for v in cs) or abs(cs[-1]/value-1) > .005:
-        return {**result, "text": "同月份原油历史不足或口径不一致，暂不判定涨幅。"}
+        return {**result, "text": "历史不足或口径不一致，未判定涨幅"}
     # 日涨跌、5日和20日全部使用同一合约；足够两根时仍可显示日变化。
     def change(period):
         return float((Decimal(str(cs[-1])) / Decimal(str(cs[-period-1])) - 1) * 100) if len(cs) > period else None
     day, week, month = change(1), change(5), change(20)
     incomplete = week is None or month is None
     if (week is not None and week >= 20) or (month is not None and month >= 30):
-        lv, text = "red", "原油快速上涨，能源与运输成本压力明显增加；不等于必然加息。"
+        lv, text = "red", "快速上涨，成本压力上升"
     elif (week is not None and week >= 10) or (month is not None and month >= 20):
-        lv, text = "yellow", "原油涨幅偏快，需留意后续通胀和企业成本压力。"
+        lv, text = "yellow", "涨幅偏快，留意成本"
     elif incomplete:
-        lv, text = "gray", "日涨跌已核实，5日或20日历史不足，成本压力判断待更新。"
+        lv, text = "gray", "历史不足，成本压力判断待更新"
     else:
-        lv, text = "green", "原油暂未触发快速上涨警示；下跌也不能直接视为经济利好。"
+        lv, text = "green", "未快速上涨"
     if incomplete and lv != "gray":
-        text += "部分历史不足，判断不完整。"
+        text += "，判断不完整"
     return {**result, "level": lv, "text": text, "day": day, "day_from": ds[-2],
             "week": week, "month": month, "incomplete": incomplete, "contract_symbol": contract["quote_symbol"]}
 

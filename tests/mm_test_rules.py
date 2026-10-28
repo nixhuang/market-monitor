@@ -258,13 +258,30 @@ class RulesRegression(unittest.TestCase):
                       '  border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}', css)
         self.assertIn('.zone-card .group-bottom{margin:0 -2px 0}', css)
         # 数字胶囊：个位压在胶囊中线（右边 17px 内边距给三角留位），两位数时十位向左长，不折行；
-        # 三角字号仍是 16px，只是绝对定位贴到右侧（距右边框 2px），胶囊仍是 44px。
+        # 胶囊仍是 44px。三角维持线上版：16px 的 ▾/▴ 字形，绝对定位贴到胶囊右侧（距右边框 2px）。
         self.assertIn('#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;'
                       'max-width:100%;\n  position:relative;padding:0 17px 0 4px;', css)
         self.assertIn('white-space:nowrap;display:inline-flex;align-items:center;justify-content:flex-end;'
                       'touch-action:manipulation}', css)
-        self.assertIn('#signalCounts .signal-count-toggle::after{content:"▾";font-size:16px;line-height:1;\n'
-                      '  position:absolute;right:2px;top:50%;transform:translateY(-50%)}', css)
+        self.assertIn('#signalCounts .signal-count-toggle::after{content:"\u25be";font-size:16px;'
+                      'line-height:1;\n  position:absolute;right:2px;top:50%;transform:translateY(-50%)}', css)
+        self.assertIn('#signalCounts .signal-count-toggle[aria-expanded="true"]::after{content:"\u25b4"}', css)
+        # 市场风险表：固定列宽，不再让 WTI 参考行那一大段说明把状态列撑到 138.6px
+        # （短文案「平静」后面空一大截），也不再把指标列挤到 65.8px（「垃圾债利差」逐字折三行）。
+        # 四列不换行所需（含左右各 10px 内边距）实测 126/159/90/114：
+        # 宽屏 26/33/18/23 → 184.6/234.3/127.8/163.3；≤600px 30/34/15/21 → 112.5/127.5/56.3/78.8。
+        # 指标列仍左对齐，其余三列居中；原油「依据与来源」整块删除，不再留 .reference-detail。
+        self.assertIn('#macroCard table{table-layout:fixed}', css)
+        self.assertIn('#macroCard td:first-child{width:26%} #macroCard td:nth-child(2){width:33%}\n'
+                      '#macroCard td:nth-child(3){width:18%} #macroCard td:nth-child(4){width:23%}\n'
+                      '#macroCard td{overflow-wrap:anywhere}\n'
+                      '@media(max-width:600px){#macroCard td:first-child{width:30%} '
+                      '#macroCard td:nth-child(2){width:34%}\n'
+                      '  #macroCard td:nth-child(3){width:15%} '
+                      '#macroCard td:nth-child(4){width:21%}}', css)
+        self.assertIn('#macroCard td:nth-child(2),#macroCard td:nth-child(3),'
+                      '#macroCard td:nth-child(4){text-align:center}', css)
+        self.assertNotIn('.reference-detail{', css)
         # 手机：整页左右只留 4px，外框贴住屏幕边；上下沿用 body 原值
         media = re.search(r'@media \(max-width:600px\)\{(.*?)\n\}', css, re.S)
         self.assertIsNotNone(media)
@@ -1007,7 +1024,7 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
                         '.arrow-band-up{', '.arrow-band-down{', '.lamp-sig-red', '.lamp-sig-yellow',
                         'signal-dot'):
             self.assertNotIn(retired, css)
-        for active in ('.reference-detail{', '.oil-reference-row', '.dca-badge',
+        for active in ('.oil-state{', '.oil-reference-row', '.dca-badge',
                        '.runbar button', '.signal-filter-condition[data-signal-level=', '.signal-name-lamp,', '.grp-arrow',
                        '.arrow-rsi-up,.arrow-rsi-down', '.rule-table th.cat-col'):
             self.assertIn(active, css)

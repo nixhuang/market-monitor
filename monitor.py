@@ -964,16 +964,16 @@ def macro_status(key, item, drawdown=None):
         dw = item.get("delta_week")
         if dw is not None and dw >= HY_WEEK_RED:
             if v >= S["hy_green"]:
-                return "red", "一周急升，信用风险升温"
-            return "red", "一周急升但水平不高，观察是否持续"
+                return "red", "一周急升，信用升温"
+            return "red", "一周急升，待观察"
         if v >= 500:
-            return "red", "信用压力很高"
+            return "red", "压力很高"
         if v >= S["hy_red"]:
-            return "red", "信用压力升高"
+            return "red", "压力升高"
         if v >= S["hy_green"]:
             return "yellow", "收紧"
         if dw is not None and dw >= HY_WEEK_YELLOW:
-            return "yellow", "一周走阔，信用转弱"
+            return "yellow", "走阔转弱"
         return "green", "平静"
 
     if key == "vix":
@@ -1004,10 +1004,10 @@ def macro_status(key, item, drawdown=None):
             return "gray", "一个月前数据不足"
         bp = round(dm * 100, 6)  # 避免 0.4999999 这类浮点误差让刚好 50 bp 漏判
         if bp >= UST_MONTH_YELLOW:
-            return "yellow", f"一个月急升 {bp:+.0f} bp，留意利率冲击"
+            return "yellow", f"急升 {bp:+.0f} bp"
         if bp >= UST_MONTH_WATCH:
-            return "green", f"一个月 {bp:+.0f} bp，上行偏快"
-        return "green", f"一个月 {bp:+.0f} bp，利率平稳"
+            return "green", f"{bp:+.0f} bp 偏快"
+        return "green", f"{bp:+.0f} bp 平稳"
 
     if key == "curve":
         v = item["value"]
@@ -1016,17 +1016,17 @@ def macro_status(key, item, drawdown=None):
         return "green", "正常"
 
     if key == "nfci":
-        return ("yellow", "金融环境偏紧，留意风险") if item["value"] >= 0 else ("green", "金融环境偏宽松")
+        return ("yellow", "偏紧，留意风险") if item["value"] >= 0 else ("green", "偏宽松")
 
     if key == "breadth":
         long_term, short_term = item["value"], item["pct50"]
         if long_term < 30 and item.get("pressure_confirmed"):
-            return "red", "多数股票走弱，且信用或金融压力也在升高"
+            return "red", "走弱，压力同步升高"
         if long_term < 50:
-            return "yellow", "过半股票跌破长期均线，注意风险"
+            return "yellow", "过半跌破长均线"
         if short_term < 30:
-            return "yellow", "短期上涨只由少数股票支撑"
-        return "green", "多数股票趋势尚稳"
+            return "yellow", "短期仅少数支撑"
+        return "green", "趋势尚稳"
 
     return "gray", "—"
 

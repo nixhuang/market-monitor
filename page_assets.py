@@ -836,6 +836,22 @@ tr.gray td{color:var(--dim)}
 .stk tr.range52-row>td{--lc:transparent;--lw:0px;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) 14px;background-position:left top;background-repeat:no-repeat}
 .stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px} .stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}
 .stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px}
+/* 市场风险表改固定列宽：WTI 参考行最后一列原本是一大段说明，自动列宽会按「整段不换行有多宽」
+   去分列，结果状态列被撑到 138.6px（短文案「平静」后面空掉一大截），指标列被挤到 65.8px
+   （「垃圾债利差」逐字折成三行）。文案精简后自动列宽虽已回到 98/130/59/88，但仍按内容多少
+   天天变，所以固定按比例分配，四列空余均匀、结果可预期。
+   四列不换行所需（含左右各 10px 内边距）实测 126/159/90/114。
+   宽屏（表宽 710）26/33/18/23 → 184.6/234.3/127.8/163.3，四列空余各 40～60px；
+   ≤600px（表宽 375）30/34/15/21 → 112.5/127.5/56.3/78.8，行高合计 574 → 487，
+   且 360/600/768/1280 各视口均无横向溢出、无单元格内溢出。 */
+#macroCard table{table-layout:fixed}
+#macroCard td:first-child{width:26%} #macroCard td:nth-child(2){width:33%}
+#macroCard td:nth-child(3){width:18%} #macroCard td:nth-child(4){width:23%}
+#macroCard td{overflow-wrap:anywhere}
+@media(max-width:600px){#macroCard td:first-child{width:30%} #macroCard td:nth-child(2){width:34%}
+  #macroCard td:nth-child(3){width:15%} #macroCard td:nth-child(4){width:21%}}
+/* 指标列仍左对齐，当前／变化／状态三列居中（.num 默认右对齐，这里按列覆盖） */
+#macroCard td:nth-child(2),#macroCard td:nth-child(3),#macroCard td:nth-child(4){text-align:center}
 #macroCard tr.mh td{padding:5px 10px;font-size:12.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
 .macro-help{margin:8px 12px;color:var(--dim);font-size:13px;line-height:1.7}
 .macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
@@ -976,11 +992,7 @@ tr.gray td{color:var(--dim)}
 .oil-reference-row.green .oil-state{color:var(--green)}
 .oil-rise{color:var(--up)} .oil-fall{color:var(--down)}
 #macroCard td:nth-child(3) .unit{white-space:nowrap}
-@media(max-width:600px){.oil-reference-row td{padding:8px 6px}.oil-reference-row .reference-detail{font-size:10.5px}#macroCard td:nth-child(3) .unit{font-size:9px}}
-.reference-detail{margin:8px 0 0;font-size:12px;color:var(--dim);line-height:1.7}
-.reference-detail summary{cursor:pointer;color:#8fb8f0;padding:3px 0}
-.reference-detail a{color:#8fb8f0}
-.reference-detail p{margin:5px 0}
+@media(max-width:600px){.oil-reference-row td{padding:8px 6px}#macroCard td:nth-child(3) .unit{font-size:9px}}
 """
 
 # 主页面将此块放在现有 rules/cost CSS 之后，避免旧规则样式覆盖紧凑版。
