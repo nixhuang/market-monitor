@@ -99,15 +99,42 @@ jobs:
           node-version: '22'
       - name: 安装运行依赖
         run: python -m pip install -r requirements.txt
+      - name: 定位镜像预装浏览器
+        id: find-chrome
+        run: |
+          # 优先 hosted runner 已有 Chromium/Chrome 内核，无 npm/浏览器下载，无用户 profile。
+          p=""
+          for c in chromium chromium-browser google-chrome google-chrome-stable chrome; do
+            if command -v "$c" >/dev/null 2>&1; then p="$(command -v "$c")"; break; fi
+          done
+          if [ -z "$p" ]; then
+            for c in /usr/bin/google-chrome /usr/bin/google-chrome-stable /usr/bin/chromium \
+                     /usr/bin/chromium-browser /opt/google/chrome/chrome /snap/bin/chromium; do
+              if [ -x "$c" ]; then p="$c"; break; fi
+            done
+          fi
+          if [ -z "$p" ]; then
+            echo "镜像未预装浏览器，候选路径扫描："
+            (ls /usr/bin 2>/dev/null | grep -i -E 'chrom|chrome') || echo "  /usr/bin 无 chrom*"
+            ls /opt/google 2>/dev/null || true
+          fi
+          echo "path=$p" >> "$GITHUB_OUTPUT"
+      - name: 安装 Chrome（镜像未预装时兜底）
+        if: ${{ steps.find-chrome.outputs.path == '' }}
+        uses: browser-actions/setup-chrome@v1
       - name: Chromium 合成页面交互与离线隔离
         timeout-minutes: 3
         run: |
-          # 使用 hosted runner 已有 Chromium 内核，无 npm/浏览器下载，无用户 profile。
-          export MM_TEST_CHROME="$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)"
+          export MM_TEST_CHROME="${{ steps.find-chrome.outputs.path }}"
+          # 上一步安装兜底时由 setup-chrome 放入 PATH
+          if [ -z "$MM_TEST_CHROME" ]; then
+            export MM_TEST_CHROME="$(command -v chrome || command -v google-chrome || true)"
+          fi
           # hosted Ubuntu AppArmor 禁用 userns；只对隔离合成内存页实例启用，网络仍阻断。
           export MM_TEST_CHROME_NO_SANDBOX=1
           if [ -z "$MM_TEST_CHROME" ]; then
             echo "::error::runner 缺少 Chromium/Chrome，浏览器质量门槛不能跳过"
             exit 1
           fi
+          echo "使用浏览器：$MM_TEST_CHROME"
           python tests/run_all.py --offline-python tests/mm_test_render.py --chrome
