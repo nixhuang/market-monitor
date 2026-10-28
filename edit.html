@@ -14,6 +14,7 @@
 :root{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
   --green:#3fb950; --yellow:#d29922; --red:#f85149; --blue:#2f6bd8;
+  --up:#3fb950; --down:#f85149; --purple:#b084ff; --target-high:#dc62b8;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--text);
@@ -64,6 +65,92 @@ button.danger{color:var(--red)}
 .group-tools{color:var(--dim);font-size:12px;gap:8px;margin:20px 2px 12px}
 .group-tools h2{margin:0 auto 0 0;color:var(--text);font-size:14px}
 .group-tools button{padding:5px 9px;font-size:12px}
+/* MM_RULECSS_BEGIN：由 page_assets 生成，不手改 */
+#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:#bfd5ff;font-size:13px;font-weight:600;touch-action:manipulation}
+#fedRules[open]>summary,#fedGlossary[open]>summary,details.card[open]:has(>.rules-body)>summary{border-bottom:1px solid var(--line)}
+#fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:-2px}
+.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body section+section{margin-top:16px;padding-top:4px;border-top:1px solid var(--line)}
+.card .rules-body h4{margin:6px 0 8px;color:#bfd5ff;font-size:12.5px;font-weight:600}
+.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}
+.card .rules-body p{margin:4px 0;color:var(--dim);font-size:12px;line-height:1.65}
+.card .rules-body .rule-group{color:#8fb8f0}
+.card .rules-body a{color:#8fb8f0;text-underline-offset:3px}
+.card .rules-body a:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
+.card .rules-body .lamp-red{color:#ff8580;font-weight:600}
+.card .rules-body .lamp-yellow{color:#f0c674;font-weight:600}
+.card .rules-body .lamp-purple{color:var(--purple);font-weight:600}
+.card .rules-body .tone-target-high{color:var(--target-high);font-weight:600}
+.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid #6b7689;font-size:12px;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid #5a6478;text-align:left;vertical-align:top;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:rgba(143,184,240,.07);border-bottom:1px solid #6b7689}
+/* 报灯总表左右撑满卡片：抵消 .card(4px) 与 .rules-body(12px) 的内边距。 */
+#rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border-left:0;border-right:0}
+.card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center}
+.card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}
+/* 分类列四块之间的三条边界加粗；条件、灯级列与组内分隔线不变。 */
+#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid #6f7b91}
+/* 最左分类列：竖排、固定 18px 单字宽（不用 em，避免手机端字号缩放把列撑宽）。
+   overflow:hidden 兜底：万一竖排不生效，横排文字被裁掉也不会把列顶宽。 */
+.card .rules-body .rule-table col.cat-col{width:18px}
+.card .rules-body .rule-table col.col-cond{width:40%}
+.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:1.1;font-size:12px;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:rgba(143,184,240,.04);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
+.card .rules-body .ar-band-up{color:#3fb950}
+.card .rules-body .ar-band-down{color:#f85149}
+.card .rules-body .ar-rsi-up{color:#3ec9d6}
+.card .rules-body .ar-rsi-down{color:#e061c9}
+/* 仅报灯总表条件列的四种方向符号统一白色；其它区块配色与反向灰字不变。 */
+#rules-lamp-table tbody td:first-of-type .ar-band-up,
+#rules-lamp-table tbody td:first-of-type .ar-band-down,
+#rules-lamp-table tbody td:first-of-type .ar-rsi-up,
+#rules-lamp-table tbody td:first-of-type .ar-rsi-down{color:#fff}
+/* 保留 RSI ↑↓ 的原字号；目标区域的方向颜色由下方限域规则覆盖继承色。 */
+.arrow-rsi-up,.arrow-rsi-down{color:inherit;font-size:1.15em;line-height:1}
+/* 保留方向符号的原字号/粗细；仅主表描述与统计面板独立使用涨跌数值色。 */
+.grp-arrow{font-weight:700}
+.stk .sig .arrow-band-up,.stk .sig .arrow-rsi-up,
+#signalCounts .arrow-band-up,#signalCounts .arrow-rsi-up{color:var(--up)}
+.stk .sig .arrow-band-down,.stk .sig .arrow-rsi-down,
+#signalCounts .arrow-band-down,#signalCounts .arrow-rsi-down{color:var(--down)}
+.card .rules-body .rule-table .ar-band-up,.card .rules-body .rule-table .ar-band-down,
+.card .rules-body .rule-table .ar-rsi-up,.card .rules-body .rule-table .ar-rsi-down{font-weight:700}
+/* 同向／反向两行为一组，组间用更亮的横线分开。 */
+.card .rules-body .rule-table tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid #6f7b91}
+/* 同一灯级覆盖多个分组：居中并带灯色底色；混合灯与非灯级不加底色。白灯（折）比白灯更淡。 */
+.card .rules-body .rule-table td.cell-red{background:rgba(248,81,73,.16);text-align:center}
+.card .rules-body .rule-table td.cell-yellow{background:rgba(210,153,34,.16);text-align:center}
+.card .rules-body .rule-table td.cell-gray{background:rgba(173,181,194,.24);text-align:center}
+.card .rules-body .rule-table td.cell-gray-fold{background:rgba(173,181,194,.09);text-align:center}
+/* 条件列：表头与条件文字用白字，便于与右侧灯级列区分。 */
+.card .rules-body #rules-lamp-table thead th.col-cond{color:#fff}
+.card .rules-body #rules-lamp-table tbody td:first-of-type{color:#e6edf3}
+.card .rules-body .signal-term{display:inline-block;white-space:nowrap;overflow-wrap:normal}
+.card .rules-body .dir-arrow{display:inline-block;vertical-align:-4px;margin-left:2px;overflow:visible}
+.card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
+.card .rules-body .rule-anchor{display:block;height:0}
+@media(max-width:520px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{font-size:11px}}
+#signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
+#signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
+#signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:#dce1e9}
+#signalRulesBody h5.rule-original,#signalRulesBody .rule-layout-heading,#glossaryRulesBody h5{margin:14px 0 4px}
+#signalRulesBody .rule-layout-scope{margin:1px 0;line-height:1.5;color:#dce1e9}
+#signalRulesBody h4.rule-original{margin:18px 0 7px}
+.card .rules-body .signal-term{display:inline-flex;align-items:center;vertical-align:baseline;white-space:nowrap;gap:1px}
+.card .rules-body .dir-arrow{display:inline-block;flex:none;width:auto;height:18px;vertical-align:middle}
+#signalRulesBody .nav-gray{color:#adb5c2}
+/* 名词解释／抓取规则：两个分区标题页面居中；指标名（h5）统一用站内强调蓝，
+   与页底链接、分组词同色，覆盖上面 .card .rules-body h5 的白字（只在这两块生效）。 */
+#glossaryRulesBody h4{text-align:center}
+#glossaryRulesBody h5{color:#8fb8f0}
+#glossaryRulesBody p{margin:2px 0;line-height:1.5;color:#dce1e9}
+#glossaryRulesBody .rule-table{margin:6px 0 8px}
+#glossaryRulesBody .rule-table th,#glossaryRulesBody .rule-table td{line-height:1.5}
+#glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:#f0c674}
+#glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:#ff8580}
+#glossary-vol-table thead th:nth-child(2){color:#ff8580}
+#glossary-vol-table thead th:nth-child(3){color:#f0c674}
+#glossary-chg-table td,#glossary-amp-table td,#glossary-vol-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
+/* MM_RULECSS_END */
 @media(max-width:480px){.edit-group .row{display:grid;grid-template-columns:82px minmax(0,1fr) 42px;gap:6px}
 .edit-group .sym{width:82px;grid-column:1;grid-row:1}
 .edit-group .row input.n{min-width:0;width:100%;grid-column:2;grid-row:1}
@@ -281,6 +368,9 @@ details.fold .pane{padding-bottom:8px}
   <p class="note">
     <button id="btnWipe" class="danger" style="padding:5px 10px;font-size:12px">清除本机令牌</button>
   </p>
+
+  <div class="group-tools" id="rulesTools"><h2>规则与说明</h2></div>
+  <div id="rulesHost"><p class="note">正在读取最近一次构建的规则说明…</p></div>
 
 </div>
 </div>
@@ -736,7 +826,7 @@ const SET_SCHEMA={"defaults":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"boll
 const SET_DEFS=SET_SCHEMA.defaults;
 const SET_KEYS=Object.keys(SET_DEFS);
 const SET_LIMITS=SET_SCHEMA.limits;
-/* 规则说明仅在首页按生效配置生成，设置页只保留可编辑参数。 */
+/* 规则说明正文不在设置页重算：只展示最近一次构建生成的同一份内容。 */
 /* MM_SCHEMA_END */
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
 function settingsError(){
@@ -1071,6 +1161,40 @@ async function bootstrap(){
     }else if(TOKEN){$('authCard').classList.add('hide');$('main').classList.remove('hide');await load();}
   }catch(e){setMsg('分类页面初始化失败：'+e.message,'err');}
 }
+/* 三块说明（预警规则／名词解释和抓取／综合判断与宏观细则）只在设置页展示：
+   正文取自最近一次构建的首页模板，设置页不重算规则，也不会显示与生效配置不一致的阈值。 */
+(function(){
+  var host=document.getElementById('rulesHost');
+  if(!host) return;
+  var fail=function(msg){host.innerHTML='<div class="card"><p class="note">'+msg+'</p></div>';};
+  fetch('./index.html',{cache:'no-store'}).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.text();
+  }).then(function(text){
+    var doc=new DOMParser().parseFromString(text,'text/html');
+    var frag=document.createDocumentFragment(), found=0;
+    [['rulesTpl','signalRules'],['glossaryTpl','glossaryRules']].forEach(function(pair){
+      var tpl=doc.getElementById(pair[0]);
+      if(!tpl) return;
+      var box=document.createElement('details');
+      box.className='card fold rule-card'; box.id=pair[1];
+      box.innerHTML=tpl.innerHTML;
+      frag.appendChild(box); found++;
+    });
+    var notes=doc.getElementById('notesTpl');
+    if(notes){
+      var holder=document.createElement('div');
+      holder.innerHTML=notes.innerHTML;
+      while(holder.firstChild) frag.appendChild(holder.firstChild);
+      found++;
+    }
+    if(!found) throw new Error('未读取到规则内容');
+    host.innerHTML='';
+    host.appendChild(frag);
+  }).catch(function(e){
+    fail('规则说明需要读取同目录的看板页（index.html），本次未成功：'+e.message+'。可稍后刷新重试。');
+  });
+})();
 void bootstrap();
 </script>
 </body>

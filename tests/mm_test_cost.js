@@ -647,7 +647,7 @@ test('退役fund键不会影响加减仓浮亏ACK及普通无异动折叠',async
   let b=await boot({local:d,rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument(doc){
     const table=doc.getElementById('s-aaa').closest('table.stk');
     const q=doc.createElement('details');q.className='quiet-list';q.open=true;
-    q.innerHTML='<summary>无异动 1 只 · 点击查看</summary><table class="stk"></table>';
+    q.innerHTML='<summary>无异动 1 只</summary><table class="stk"></table>';
     table.parentNode.insertBefore(q,table.nextElementSibling);
     const r=doc.getElementById('s-bbb'),rail=r.nextElementSibling;q.querySelector('table').appendChild(r);q.querySelector('table').appendChild(rail);
     doc.getElementById('signalCounts').innerHTML='<table></table>';
@@ -657,7 +657,7 @@ test('退役fund键不会影响加减仓浮亏ACK及普通无异动折叠',async
   for(const key of ['AAA|add|95','AAA|cut|104','AAA|loss20'])assert.ok(b.state().DATA.acks[key]);
   assert.ok(b.state().DATA.ack_tombstones['AAA|loss10']);assert.equal(b.state().DATA.acks[old],undefined);
   b.ack(old);b.paint();
-  assert.equal(row.parentNode,parent);assert.equal(q.open,true);assert.equal(q.querySelector('summary').textContent,'无异动 0 只 · 点击查看');
+  assert.equal(row.parentNode,parent);assert.equal(q.open,true);assert.equal(q.querySelector('summary').textContent,'无异动 0 只');
   assert.equal(q.hidden,true);assert.equal(b.doc.getElementById('s-bbb').closest('.quiet-list'),null,'有效价格提醒必须即时移出无异动');
   assert.equal(b.doc.querySelectorAll('.fund-ack-list').length,0);
   assert.equal(b.doc.querySelector('.signal-filter-toggle[data-kind="fund"]'),null);
@@ -754,11 +754,13 @@ test('仓位绿色外框与顶部编辑操作区契约',async()=>{
   assert.equal(panel.querySelector('#costExport'),null);assert.equal(panel.querySelector('#costImport'),null);
   assert.equal(acts.hidden,true);
   assert.doesNotMatch(panel.textContent,/成本价与数量可填到小数点后四位|现金两框相加，空框按0算/);
-  assert.match(CSS,/\.cost-manage\{--cost-accent-bg:rgba\(126,231,135,\.17\)/);
-  assert.match(CSS,/#costManage\{--collapse-bg:var\(--cost-accent-bg\);border:1px solid var\(--cost-accent-bg\);\s*box-shadow:inset 3px 0 0 var\(--cost-accent-bg\)\}/);
+  assert.match(CSS,/\.cost-manage\{--cost-accent-bg:rgba\(126,231,135,\.17\);--cost-accent:#2c8f3e/);
+  // 整卡只留一圈 1.5px 绿色外框：左侧绿条取消，标头不再铺底色
+  assert.match(CSS,/#costManage\.cost-manage\{--collapse-bg:var\(--cost-accent-bg\);border:1\.5px solid var\(--cost-accent\);\s*box-shadow:none\}/);
+  assert.doesNotMatch(CSS,/box-shadow:inset 3px 0 0 var\(--cost-accent-bg\)/);
   assert.match(CSS,/#costManage>\.group-bottom\{border-top-color:var\(--cost-accent-bg\)\}/);
   assert.match(CSS,/\.blk-short \.cost-block-title\{background:var\(--cost-accent-bg\)\}/);
-  assert.match(CSS,/#costManage\.cost-manage>summary,\s*#costManage\.cost-manage\[open\]>summary\{background:var\(--cost-accent-bg\);box-shadow:none\}/);
+  assert.match(CSS,/#costManage\.cost-manage>summary,\s*#costManage\.cost-manage\[open\]>summary\{background:none;box-shadow:none\}/);
   await b.enter();assert.equal(acts.hidden,false);b.exitEdit(true);assert.equal(acts.hidden,true);
 });
 test('云端校验失败仅在顶部操作行提示，无备份或重试上传按钮',async()=>{
@@ -1185,7 +1187,14 @@ test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
   }
   assert.match(CSS,/\.cost-name\{[^}]*text-align:left/);assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
   assert.match(CSS,/grid-template-columns:minmax\(110px,1\.55fr\) \.9fr \.85fr 1\.05fr 1\.45fr \.8fr/);
-  assert.match(CSS,/\.cost-cell\.up\{color:var\(--up\)\}/);assert.match(CSS,/#costMembers li\.lv-red::marker\{color:var\(--red\)\}/);
+  assert.match(CSS,/\.cost-cell\.up\{color:var\(--up\)\}/);
+  // 行首灯条（2026-10-28）：和统计面板个股前同款的 3×12px 竖条，不再是圆点 marker
+  assert.match(CSS,/#costMembers li::before\{content:"";position:absolute;left:-9px;top:6px;\s*width:3px;height:12px;border-radius:1px;background:var\(--name-lamp,var\(--dim\)\)\}/);
+  assert.match(CSS,/#costMembers li\.lv-red\{--name-lamp:var\(--red\)\}/);
+  assert.match(CSS,/#costMembers li\.lv-yellow\{--name-lamp:var\(--yellow\)\}/);
+  assert.match(CSS,/#costMembers li\.lv-green\{--name-lamp:var\(--green\)\}/);
+  assert.match(CSS,/#costMembers li\.lv-gray\{--name-lamp:var\(--text\)\}/);
+  assert.doesNotMatch(CSS,/#costMembers li\.lv-[a-z]+::marker/);
 });
 
 // 目标状态由后端页面提供，面板只叠加自己的行情灯，不重新推断30/70或复活旧异常红。
@@ -1361,7 +1370,7 @@ function lossStatDocument(doc,opts={}){
   const old=doc.getElementById('signalCounts'),card=doc.createElement('details');
   card.id='signalCounts';card.className='card group-card';card.open=true;
   card.innerHTML='<summary><span class="grp-name">统计</span><span class="group-stats"><span class="stat-badge red">99</span><span class="stat-badge yellow">99</span><span class="stat-badge purple">7</span></span></summary>'
-    +'<table><tr class="gray mh"><td>信号</td><td class="num">红</td><td class="num">黄</td><td class="num">白</td></tr>'
+    +'<table>'
     +'<tr><td><button class="signal-filter-toggle" data-kind="chg" aria-pressed="false">涨跌幅</button></td><td class="num">2</td><td class="num">—</td><td class="num">—</td></tr></table>'
     +'<div class="purple-extra"><button class="signal-filter-toggle" data-kind="target_purple" aria-pressed="false">空间/达到</button></div>'
     +'<div id="signalFilterResult" class="signal-filter" role="status"></div><div class="group-bottom"><button class="collapse-group" data-target="signalCounts">收起</button></div>';
@@ -1435,7 +1444,9 @@ test('统计表头新增白灯插在紫灯和财报前，重绘保留紫灯数�
       'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn']);
     assert.equal(stats.querySelector('.stat-badge.purple').textContent,'7');
     assert.equal(stats.querySelector('.count-earn').textContent,'财报 2');
-    assert.deepEqual(b.doc.querySelector('#signalCounts table tr').children.map(x=>x.textContent),['信号','红','黄','白']);
+    // 统计表不再有「信号/红/黄/白」表头排：第一行就是信号行（涨跌幅 + 红/黄/白三格）
+    assert.equal(b.doc.querySelector('#signalCounts table tr .mh'),null);
+    assert.deepEqual(b.doc.querySelector('#signalCounts table tr').children.map(x=>x.textContent),['涨跌幅','2','—','—']);
     assert.doesNotMatch(b.doc.getElementById('signalCounts').textContent,/灰灯|紫(?:红)?虚线空心灯/);
   }
 });
@@ -1659,7 +1670,7 @@ test('成本浮亏启动没有signalCounts仍补details骨架、统计表和filt
   assert.equal(bottom.querySelector('.collapse-group').getAttribute('data-target'),'signalCounts');
   assert.equal(b.doc.getElementById('costManage').nextElementSibling,card,'仓位管理与补出的统计卡同级且位于其上方');
   assert.equal(table.parentNode,card);assert.equal(box.parentNode,card);assert.equal(box.nextElementSibling,bottom);
-  assert.ok(card.children.indexOf(table)<card.children.indexOf(box));assert.equal(table.querySelector('.mh').children.length,4);
+  assert.ok(card.children.indexOf(table)<card.children.indexOf(box));assert.equal(table.querySelector('.mh'),null,'统计表不再有「信号/红/黄/白」表头排');
   assert.equal(box.className,'signal-filter');assert.equal(box.getAttribute('role'),'status');assert.equal(box.hidden,true);
   assertLossStats(b,1,0,['AAA'],{filter:{},cardFilter:null});assert.deepEqual(Object.keys(lossFilter(b)),['cost_loss']);
   ackCurrentLoss(b);assertLossStats(b,0,1,['AAA'],{filter:{},cardFilter:null});assertLossGrayBadge(b,1);
@@ -2255,7 +2266,7 @@ function quietDocument(doc,{quietSymbols=['AAA'],keep,level='green',onlyQuiet=fa
   const row=doc.getElementById('s-aaa'),main=row.closest('table.stk'),root=main.parentNode;
   row.className=level;if(keep!==undefined)row.setAttribute('data-quiet-keep',String(keep));
   const fold=doc.createElement('details');fold.className='quiet-list';
-  fold.innerHTML='<summary>无异动 '+quietSymbols.length+' 只 · 点击查看</summary><table class="stk"><colgroup><col><col></colgroup><tr class="mh"><td>标的</td><td>价格</td></tr></table>';
+  fold.innerHTML='<summary>无异动 '+quietSymbols.length+' 只</summary><table class="stk"><colgroup><col><col></colgroup><tr class="mh"><td>标的</td><td>价格</td></tr></table>';
   root.insertBefore(fold,main.nextSibling);
   for(const sym of quietSymbols){const r=doc.getElementById('s-'+sym.toLowerCase()),rail=r.nextElementSibling;fold.querySelector('table').appendChild(r);if(rail)fold.querySelector('table').appendChild(rail);}
   if(onlyQuiet){const b=doc.getElementById('s-bbb'),rail=b.nextElementSibling;b.remove();rail.remove();main.remove();}
@@ -2270,7 +2281,7 @@ test('双价格提醒即时移出无异动，单已读仍主表、两已读回�
   assertRowPair(b,'AAA',false);assert.equal(fold.hidden,true);assert.equal(fold.open,false);
   b.ack('AAA|add|95');assertRowPair(b,'AAA',false);assert.equal(b.rows[0].tr.className,'red');
   b.ack('AAA|cut|104');assertRowPair(b,'AAA',true);assert.equal(fold.hidden,false);assert.equal(fold.open,false);
-  assert.equal(fold.querySelector('summary').textContent,'无异动 1 只 · 点击查看');
+  assert.equal(fold.querySelector('summary').textContent,'无异动 1 只');
   b.ack('AAA|cut|104');assertRowPair(b,'AAA',false);assert.equal(fold.hidden,true);assert.equal(fold.open,false);
   for(let i=0;i<3;i++)b.paint();assert.equal(b.doc.querySelectorAll('.quiet-list').length,1);
 });
@@ -2295,7 +2306,7 @@ test('明确quiet_keep保留与未标记主表行不擅自折叠，false才允�
     const b=await bootLoss({prices:{AAA:100},prepareDocument(doc){if(keep!==undefined)doc.getElementById('s-aaa').setAttribute('data-quiet-keep',String(keep));}});
     assertRowPair(b,'AAA',keep===false);await b.enter();b.edit('AAA','cost','125');await b.tick(16);assertRowPair(b,'AAA',false);
     ackCurrentLoss(b);assertRowPair(b,'AAA',keep===false);
-    if(keep===false){const fold=b.doc.querySelector('.quiet-list');assert.equal(fold.open,false);assert.equal(fold.querySelector('summary').textContent,'无异动 1 只 · 点击查看');}
+    if(keep===false){const fold=b.doc.querySelector('.quiet-list');assert.equal(fold.open,false);assert.equal(fold.querySelector('summary').textContent,'无异动 1 只');}
   }
 });
 test('只有无异动表时动态创建主表保留列头及colgroup，撤灯回原表不复制行情行',async()=>{

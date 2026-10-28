@@ -187,9 +187,9 @@ class RulesRegression(unittest.TestCase):
         """分组标题紫灯圈与主表紫色胶囊必须同一个紫：都走 --purple，不允许任何一处写死十六进制紫。"""
         css = page_assets.PAGE_CSS
         # 变量是唯一紫源；旧暗紫 #a371f7 与任何 rgb 形式的写死紫都不许再出现。
-        self.assertIn('--purple:#c4a3ff', css)
-        self.assertEqual(css.count('#c4a3ff'), 1)
-        for dead in ('#a371f7', '163,113,247', '196,163,255'):
+        self.assertIn('--purple:#b084ff', css)
+        self.assertEqual(css.count('#b084ff'), 1)
+        for dead in ('#a371f7', '#c4a3ff', '163,113,247', '196,163,255', '176,132,255'):
             self.assertNotIn(dead, css)
         # 灯圈（计数徽章）与胶囊（共识价标签）本体、描边圈同源。
         self.assertIn('.stat-badge.purple{border-color:var(--purple)}', css)
@@ -207,9 +207,87 @@ class RulesRegression(unittest.TestCase):
         self.assertEqual(bad, [])
         # 成本面板隔离页共用主站变量，不许留自己的一套紫。
         cost_css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
-        for dead in ('#a371f7', '#c4a3ff', '163,113,247', '196,163,255'):
+        for dead in ('#a371f7', '#c4a3ff', '163,113,247', '196,163,255', '176,132,255'):
             self.assertNotIn(dead, cost_css)
         self.assertIn('.rules-body .lamp-purple{color:var(--purple);font-weight:600}', cost_css)
+
+    def test_settings_page_hosts_the_three_rule_blocks_without_recomputing(self):
+        """三块说明搬进设置页：首页只留 inert 模板，设置页读取最近一次构建的同名模板。"""
+        source = (ROOT / "edit.html").read_text(encoding="utf-8")
+        markup = source.split('<script src=', 1)[0]
+        self.assertIn('<div id="rulesHost">', markup)
+        self.assertIn("fetch('./index.html',{cache:'no-store'})", source)
+        # 只读取首页模板，不把规则正文复制一份，也不自己按设置重算阈值。
+        for dead in ('RULES_SUMMARY', 'glossary_body(', 'rules_body(', 'lamp_table', '${'):
+            self.assertNotIn(dead, source)
+        # 样式由 page_assets 生成块注入，设置页不另抄一份 CSS。
+        block = re.search(r'/\* MM_RULECSS_BEGIN[^\n]*\*/(.*?)/\* MM_RULECSS_END \*/', source, re.S)
+        self.assertIsNotNone(block)
+        self.assertEqual(block.group(1).strip(), page_assets.RULES_CSS.strip())
+        generated = page_assets.sync_edit_html(source, ROOT, monitor._rule_constants())
+        self.assertEqual(generated, source)
+        # 首页：三块都是模板，且不再挂载成可见区块。
+        page = self.render()
+        for template in ('rulesTpl', 'glossaryTpl', 'notesTpl'):
+            self.assertEqual(page.count('<template id="%s">' % template), 1)
+        self.assertNotIn("['rulesTpl','signalRules']", page)
+        self.assertEqual(page.count('class="card rule-card"'), 0)
+
+    def test_frames_replace_highlight_fills_on_stats_cost_and_open_groups(self):
+        """统计／仓位／展开分组：外框色统一（1.5px #6686c6，仓位绿 #2c8f3e），底色全部去掉。"""
+        css = page_assets.PAGE_CSS
+        cost = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
+        # 外框色与宽度只有 :root 一处来源，避免又冒出第二套框线
+        self.assertIn('--signal-border:#6686c6; --frame-w:1.5px;', css)
+        self.assertEqual(css.count('--signal-border:#6686c6'), 1)
+        # 统计面板：只剩外框，卡底 / 名单面板底 / 紫灯财报行底全部去掉，左侧蓝条取消
+        self.assertIn('border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
+        self.assertIn('#signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid #465e87;text-align:left}', css)
+        self.assertNotIn('background:#121a27', css)
+        self.assertIn('--chip-w:74px;position:relative;display:block;padding:8px 12px 8px 5px;border-top:1px solid #465e87}', css)
+        # 手机上紫灯／财报胶囊也同宽 74px，不再比信号列那几颗窄一截
+        self.assertIn('@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:74px;', css)
+        self.assertNotIn('background:#182130', css)
+        # 展开的分组卡：整卡套外框，标题不再铺底色、不再画左条
+        self.assertIn('.group-card[open]:not(#signalCounts):not(#costManage),.macro-card[open]{\n'
+                      '  border:var(--frame-w) solid var(--signal-border)}', css)
+        # 卡中卡「长持仓」单独再细一档，不跟着整卡 1.5px
+        self.assertIn('.zone-card[open]{border:1px solid var(--signal-border)}', css)
+        # 长持仓框左右外扩 2px（内容补 2px 内边距，灯条位置不动），区内 ▲ 收起条不再溢出子框
+        self.assertIn('.zone-card{margin:10px -2px 12px;padding-left:2px;padding-right:2px;\n'
+                      '  border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}', css)
+        self.assertIn('.zone-card .group-bottom{margin:0 -2px 0}', css)
+        # 数字胶囊右边的三角：字号 10px→16px、占位 10px→14px，只放大三角本身，胶囊框不被撑大（间距 6px）
+        self.assertIn('#signalCounts .signal-count-toggle::after{content:"▾";font-size:16px;line-height:1;\n'
+                      '  display:inline-block;width:14px;text-align:center}', css)
+        self.assertIn('display:inline-flex;align-items:center;justify-content:center;gap:6px;touch-action:manipulation}', css)
+        # 手机：整页左右只留 4px，外框贴住屏幕边；上下沿用 body 原值
+        media = re.search(r'@media \(max-width:600px\)\{(.*?)\n\}', css, re.S)
+        self.assertIsNotNone(media)
+        self.assertIn('body{padding-left:4px;padding-right:4px}', media[1])
+        self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.20)', css)
+        self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
+        # 「信号」列所有胶囊同宽且文字居中
+        self.assertIn('#signalCounts td .signal-filter-toggle{width:74px;padding:0 4px}', css)
+        # 仓位管理：整卡绿色外框 1.5px，标头不再铺底色
+        self.assertIn('--cost-accent:#2c8f3e', cost)
+        self.assertIn('#costManage.cost-manage{--collapse-bg:var(--cost-accent-bg);border:1.5px solid var(--cost-accent);\n'
+                      '  box-shadow:none}', cost)
+        self.assertIn('#costManage.cost-manage>summary,\n#costManage.cost-manage[open]>summary{background:none;box-shadow:none}', cost)
+        self.assertNotIn('inset 3px 0 0 var(--cost-accent-bg)', cost)
+        # 「无异动」展开条跟分组标题同一口径：不铺底色、不画左条，只提亮文字
+        self.assertIn('.quiet-list[open]>summary{background:none;box-shadow:none;color:#bfd5ff}', cost)
+        self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.18)', cost)
+
+    def test_statistics_table_has_no_signal_red_yellow_white_header_row(self):
+        """统计表不再有「信号 / 红 / 黄 / 白」表头排。"""
+        page = monitor.render({}, [], 0, snapshot={'signal_counts': {'ma': {'label': '均线', 'red': 1, 'yellow': 0}},
+                                                   'summary': {'red': 1, 'yellow': 0}})
+        table = page.split('id="signalCounts"', 1)[1].split('</table>', 1)[0]
+        self.assertNotIn('class="gray mh"', table)
+        for token in ('>信号<', '>红</td>', '>黄</td>', '>白</td>'):
+            self.assertNotIn(token, table)
+        self.assertTrue(table.split('</summary>', 1)[-1].lstrip().startswith('<table><tr><td><button'))
 
     def test_target_right_stripes_removed_from_main_and_range52_rows(self):
         css = page_assets.PAGE_CSS
@@ -233,7 +311,7 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('.target-purple .target-space-high .signal-member-direction', css)
         self.assertIn('.target-purple .note{display:inline;margin-left:6px}', css)
         self.assertIn('.target-purple .signal-member-direction{color:var(--purple)}', css)
-        self.assertIn('--purple:#c4a3ff', css)
+        self.assertIn('--purple:#b084ff', css)
         self.assertNotIn('#a371f7', css)
         self.assertNotIn('.target-purple .target-space-high .note', css)
         self.assertNotIn('.target-purple .target-space-high .signal-member-belong', css)
@@ -249,7 +327,7 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('--signal-bg:#182131; --collapse-bg:var(--signal-bg)', css)
         self.assertIn('#group_positions{background:linear-gradient(rgba(46,160,67,.02),rgba(46,160,67,.02)),var(--card);--collapse-bg:rgba(46,160,67,.15)}', css)
         self.assertIn('#group_positions_long.zone-card{background:rgba(46,160,67,.02)}', css)
-        self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:rgba(102,134,198,.6);border:1px solid var(--signal-border);box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}', css)
+        self.assertIn('#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
         button = re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1]
         self.assertIn('background:var(--collapse-bg)', button)
         self.assertIn('.collapse-group:hover{color:var(--text);background:var(--collapse-bg)}', css)
@@ -708,7 +786,7 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('红k＝3.6、黄k＝2', plain_text(page_assets.glossary_body(current, monitor._rule_constants())))
 
     def test_statistics_collapse_bar_shares_border_color_only_in_statistics(self):
-        self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:rgba(102,134,198,.6);border:1px solid var(--signal-border)', page_assets.PAGE_CSS)
+        self.assertIn('#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page_assets.PAGE_CSS)
         self.assertIn('#signalCounts .collapse-group{color:#fff}', page_assets.PAGE_CSS)
         self.assertIn('--collapse-bg:rgba(46,160,67,.15)', page_assets.PAGE_CSS)
         self.assertNotIn('bar.appendChild(shortcut)', page_assets.RULES_INTERACTION_JS)
@@ -865,7 +943,10 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
         for tag, attrs in elements.tags:
             if tag == 'a':
                 self.assertNotRegex(attrs.get('href', ''), r'(?i)(?:[?&]rules=|#(?:signalRules|rule[-\w]*))')
-        self.assertNotIn('signalRules', source)
+        # 设置页挂载规则说明（id 由模板配对给出），但不提供任何指向规则的站内跳转或入口。
+        self.assertIn("['rulesTpl','signalRules'],['glossaryTpl','glossaryRules']", source)
+        self.assertIn("doc.getElementById('notesTpl')", source)
+        self.assertNotRegex(source, r'#signalRules\b|#glossaryRules\b|#pageNotes\b')
         self.assertNotRegex(script, r"\.get\(['\"]rules['\"]\)")
         self.assertNotRegex(script, r'location\.(?:replace|assign)\s*\(')
         schema = json.loads(re.search(r'const SET_SCHEMA=(.*?);\n', script)[1])
@@ -877,9 +958,11 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
         generated = page_assets.sync_edit_html(source, ROOT, monitor._rule_constants())
         self.assertEqual(source, generated)
         self.assertEqual(generated, page_assets.sync_edit_html(generated, ROOT, monitor._rule_constants()))
-        for phrase in ('targetSpaceNote', 'appliedState', 'runSummary', 'monitorNote_', '判定说明', 'signalRules'):
+        for phrase in ('targetSpaceNote', 'appliedState', 'runSummary', 'monitorNote_', '判定说明'):
             self.assertNotIn(phrase, generated)
-        self.assertNotRegex(generated, r'(?i)(?:[?&]rules=|#rule[-\w]*)')
+        # 规则样式生成块里的 #rules-lamp-table 等是 CSS 选择器，不是站内跳转锚点。
+        without_css = re.sub(r'/\* MM_RULECSS_BEGIN[^\n]*\*/.*?/\* MM_RULECSS_END \*/', '', generated, flags=re.S)
+        self.assertNotRegex(without_css, r'(?i)(?:[?&]rules=|#rule[-\w]*|#signalRules\b|#glossaryRules\b)')
         self.assertNotRegex(generated, r'<details\b[^>]*\sopen(?:\s|=|>)')
         # 生成器与保存前校验仍保留全部参数，不因删除展示说明缩减规则。
         self.assertEqual(json.loads(re.search(r'const SET_SCHEMA=(.*?);\n', generated)[1]),
@@ -965,6 +1048,10 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
                 '#signalCounts .signal-members-panel .note{display:inline;margin-left:6px}',
                 '#signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}',
                 '#signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}',
+                # 名单里的描述性数值跟着这一条条件的等级走（红红字／黄黄字／白仍白字），与主表描述同一套配色
+                '#signalCounts .signal-members-panel.tone-red .signal-member-metric{color:#ff8580}',
+                '#signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:#f0c674}',
+                '#signalCounts .signal-members-panel.tone-gray .signal-member-metric{color:var(--text)}',
                 '#signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted #465e87}',
                 '#signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}'):
             self.assertIn(single, css, '单选文字原有颜色、字号与间距不随多选改动')

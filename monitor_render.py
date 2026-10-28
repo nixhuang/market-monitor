@@ -801,7 +801,7 @@ class PageRenderer:
         if shown:
             parts.append(f'<table class="stk">{self._context.STK_COLS}{self._context.STK_HEAD}{self._context._stock_rows(shown, snapshot, earnings_week)}</table>')
         if quiet:
-            parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只 · 点击查看</summary>'
+            parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只</summary>'
                          f'<table class="stk">{self._context.STK_COLS}{self._context.STK_HEAD}{self._context._stock_rows(quiet, snapshot, earnings_week)}</table></details>')
         parts.append(self._context._collapse_button(collapse_id, collapse_label))
         return "\n".join(parts)
@@ -1201,9 +1201,6 @@ class PageRenderer:
         filter_json = json.dumps(filter_data, ensure_ascii=False, separators=(",", ":"))
         filter_html = (f'<div class="signal-filter" id="signalFilterResult" role="status" '
                        f'data-filter="{esc(filter_json)}" hidden></div>') if filter_data else ""
-        dim = 'style="color:var(--dim)"'
-        head = (f'<tr class="gray mh"><td {dim}>信号</td><td class="num" {dim}>红</td><td class="num" {dim}>黄</td>'
-                f'<td class="num" {dim}>白</td></tr>')
         summary = snapshot.get("summary") or {}
         whole = lambda n: n if type(n) is int and n >= 0 else None
         gray_count = len({self._context.instrument_identity(m["symbol"])
@@ -1217,7 +1214,7 @@ class PageRenderer:
             for key, name, n in totals)
         return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'
                 f'<span class="group-stats">{stats}</span></summary>'
-                f'{f"<table>{head}{rows}</table>" if rows else ""}{purple_panel}'
+                f'{f"<table>{rows}</table>" if rows else ""}{purple_panel}'
                 f'{earnings_panel}{filter_html}'
                 f'{self._context._collapse_button("signalCounts", "统计")}</details>\n')
 
@@ -1608,12 +1605,16 @@ class PageRenderer:
         # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
         ny_now = self._context.datetime.now(self._context.US_TZ)
         bj_auto = "夏令时次日 08:15" if ny_now.dst() != timedelta(0) else "冬令时次日 09:15"
-        sub_line = (f"数据时间 {self._context.market_data_time(snapshot)} · "
-                    f"自动计划：美东周一至五 20:15（北京 {bj_auto}）")
+        sub_line = f"数据时间 {self._context.market_data_time(snapshot)}"
+        # 自动计划从头部第二排挪到页底返回看板下方；措辞与时点口径不变。
+        autoplan_line = f"自动计划：美东周一至五 20:15（北京 {bj_auto}）"
         # 「在册：…」一整行按 2026-10-15 要求删除，不再在首页展示分组在册数与去重说明。
 
         cost_css, cost_js = self._context._cost_panel_assets(items)
         current_rules = self._context.rules_template(self._context.S, self._context._rule_constants())
+        # 三块说明（预警规则／名词解释和抓取／综合判断与宏观细则）只在设置页展示；
+        # 首页只留 inert 模板，供设置页按最近一次构建的原样内容读取，不另起一份措辞。
+        notes_tpl = '<template id="notesTpl">' + self._context._page_notes(snapshot) + '</template>'
         # 离线/回放可把 BASE 指向仅含配置的数据目录；静态脚本仍来自实际源码目录。
         asset_base = self._context.BASE if os.path.isfile(os.path.join(self._context.BASE, "run-status.js")) else os.path.dirname(__file__)
         run_js = self._context.script_asset(asset_base, "run-status.js")
@@ -1675,7 +1676,8 @@ class PageRenderer:
 <div class="acts">
 <a class="board-return" id="btnReturnBoard" href="">返回看板</a>
 </div>
-{self._context._page_notes(snapshot)}
+<div class="autoplan">{autoplan_line}</div>
+{notes_tpl}
 {run_js}
 <script>window.MM_SETTINGS={{"signal_single_open":{int(self._context.S.get("signal_single_open", 1))}}};</script>
 <script>{self._context.PAGE_INTERACTION_JS}</script>

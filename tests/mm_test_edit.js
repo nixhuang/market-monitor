@@ -111,8 +111,13 @@ check(removedIds.every(id=>doc.getElementById(id)===null&&!src.includes(id)),
   '规则说明与底部生效／运行详情节点及内联引用真实删除');
 check(!/布林判定说明|RSI判定说明|量比判定说明|monitorNote_|单独布林|RSI 三条全过界/.test(src),
   '参数区和清单组无残留金融规则说明及动态更新引用');
-check(!/signalRules|[?&]rules=|#rule[-\w]*|location\.(?:replace|assign)\s*\(/i.test(src),
-  '设置页无规则链接、规则锚点或旧书签自动跳转');
+// 三块说明搬进设置页：允许模板挂载用的 id，仍禁止任何站内规则锚点、书签跳转与 ?rules= 入口。
+// 规则样式生成块里的 #rules-lamp-table 等是 CSS 选择器，先剔除以免误判成锚点。
+const srcNoRuleCss=src.replace(/\/\* MM_RULECSS_BEGIN[\s\S]*?\/\* MM_RULECSS_END \*\//,'');
+check(!/[?&]rules=|#rule[-\w]*|#signalRules|#glossaryRules|#pageNotes|location\.(?:replace|assign)\s*\(/i.test(srcNoRuleCss)
+  && src.includes("['rulesTpl','signalRules'],['glossaryTpl','glossaryRules']")
+  && src.includes("doc.getElementById('notesTpl')"),
+  '设置页无规则链接、规则锚点或旧书签自动跳转（三块只读首页模板挂载）');
 check(src.includes('href="./index.html"')&&src.includes('id="authCard"')&&src.includes('id="manualCard"'),
   '删除规则跳转不删除普通返回看板链接和授权／手动操作入口');
 store.mm_gh_token_v1='github_pat_test_dispatch';

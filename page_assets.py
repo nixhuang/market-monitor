@@ -447,7 +447,7 @@ def editor_generated(constants):
             + "const SET_SCHEMA=" + json_script(schema) + ";\n"
             + "const SET_DEFS=SET_SCHEMA.defaults;\nconst SET_KEYS=Object.keys(SET_DEFS);\n"
             + "const SET_LIMITS=SET_SCHEMA.limits;\n"
-            + "/* 规则说明仅在首页按生效配置生成，设置页只保留可编辑参数。 */\n"
+            + "/* 规则说明正文不在设置页重算：只展示最近一次构建生成的同一份内容。 */\n"
             + "/* MM_SCHEMA_END */")
 
 
@@ -464,6 +464,13 @@ def sync_edit_html(source, base, constants):
         result, count = re.subn(pattern, lambda _: asset_url(base, name), result)
         if count != 1:
             raise ValueError(f"edit.html 必须有且仅有一个 {name} 引用")
+    # 设置页展示规则说明，样式取自同一份 RULES_CSS，不在 edit.html 里另抄一份。
+    pattern = r"/\* MM_RULECSS_BEGIN[^\n]*\*/.*?/\* MM_RULECSS_END \*/"
+    generated = ("/* MM_RULECSS_BEGIN：由 page_assets 生成，不手改 */\n"
+                 + RULES_CSS.rstrip("\n") + "\n/* MM_RULECSS_END */").replace("\n", newline)
+    result, count = re.subn(pattern, lambda _: generated, result, flags=re.S)
+    if count != 1:
+        raise ValueError("edit.html 必须有且仅有一个规则样式生成区块")
     return result
 
 
@@ -504,8 +511,10 @@ TARGET_DASH_BORDER = 'data:image/svg+xml,' + quote(
 PAGE_CSS = """:root{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
   --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
-  --blue:#2f6bd8; --purple:#c4a3ff; --target-high:#dc62b8;
+  --blue:#2f6bd8; --purple:#b084ff; --target-high:#dc62b8;
   --signal-bg:#182131; --collapse-bg:var(--signal-bg);
+  /* 统计面板与「展开的分组卡」共用的外框色：两边同色同宽，不再各写一份 */
+  --signal-border:#6686c6; --frame-w:1.5px;
   /* 统计名单方向三角尺寸；指标描述使用自身条件文字颜色 */
   --lamp-size:14px;
 }
@@ -571,7 +580,9 @@ tr:first-child td{border-top:none}
 .collapse-group .collapse-icon{font-size:16px;line-height:1}
 .collapse-group:hover{color:var(--text);background:var(--collapse-bg)}
 .collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts{--signal-border:#6686c6;--collapse-bg:rgba(102,134,198,.6);border:1px solid var(--signal-border);box-shadow:inset 3px 0 0 #8fb8f0;background:var(--signal-bg)}
+/* 统计面板：只剩一圈外框，不再铺底色（卡片底、名单展开面板底、紫灯/财报行底全部去掉）。
+   外框四边同宽 1.5px，左侧蓝条随之取消（手机上外框左右各留 4px 贴着屏幕边）。 */
+#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}
 #signalCounts .collapse-group{color:#fff}
 #signalCounts>summary{color:#bfd5ff}
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -581,13 +592,18 @@ tr:first-child td{border-top:none}
 #signalCounts td{padding:6.3px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
 #signalCounts td.num{text-align:center}   /* 计数列居中：破折号与展开按钮对齐 */
 #signalCounts td:first-child{width:26%}
-#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;max-width:100%;padding:0 4px;
+/* 胶囊宽度写死 44px（原来是 min-width）：三角放大后两位数计数也不会把胶囊撑宽 */
+#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;max-width:100%;padding:0 4px;
   color:#bfd5ff;font:inherit;font-size:14px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
-  display:inline-flex;align-items:center;justify-content:center;gap:3px;touch-action:manipulation}
-#signalCounts .signal-count-toggle::after{content:"▾";font-size:10px}
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;touch-action:manipulation}
+/* 数字右边的展开三角：字号 10px → 16px（占位 10px → 14px），只放大三角本身。
+   胶囊宽度仍由 min-width:44px 决定（最宽的两位数胶囊内容 16+6+14+8=44px，正好不撑大），
+   数字与三角的间距同步 3px → 6px，避免三角变大后贴住数字。 */
+#signalCounts .signal-count-toggle::after{content:"▾";font-size:16px;line-height:1;
+  display:inline-block;width:14px;text-align:center}
 #signalCounts .signal-count-toggle[aria-expanded="true"]::after{content:"▴"}
 #signalCounts .signal-members-row>td{padding:0;width:auto;border-top:0}
-#signalCounts .signal-members-panel{padding:10px 12px;background:#121a27;border-top:1px solid #465e87;text-align:left}
+#signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid #465e87;text-align:left}
 #signalCounts .signal-members-panel[hidden]{display:none}
 #signalCounts .signal-members-panel ul{list-style:none;margin:0;padding-left:2px}
 #signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
@@ -613,6 +629,12 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}
 #signalCounts .signal-member-split{list-style:none;height:0;margin:9px 0;border-top:1px solid #465e87}
 #signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}
+/* 名单里的描述性数值跟着「这一条条件」的等级走，和主表描述同一套配色：
+   红名单红字 #ff8580、黄名单黄字 #f0c674、白名单（灰灯）仍白字；
+   ▲▼ 三角自带涨跌色，不跟着条件等级变，和主表保持一致。 */
+#signalCounts .signal-members-panel.tone-red .signal-member-metric{color:#ff8580}
+#signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:#f0c674}
+#signalCounts .signal-members-panel.tone-gray .signal-member-metric{color:var(--text)}
 /* 分框展示：方向写在框标题上（「▲ 上涨」/「上轨▲ · RSI 3条 ↑超买」），名单里不再逐条画三角 */
 #signalCounts .signal-member-block{margin:0 0 10px}
 #signalCounts .signal-member-block:last-child{margin-bottom:0}
@@ -640,7 +662,9 @@ tr:first-child td{border-top:none}
 /* 紫灯 / 财报两块（紫灯在上、财报在下）：胶囊永远钉在第一排左侧不动，
    标题(summary)始终在胶囊右边同一排，点开后名单只向下展开、占满整行宽度。
    胶囊绝对定位在行内，summary 用左内边距给它让位，所以名单区域不受胶囊影响。 */
-#signalCounts .signal-extra-row{--chip-w:72px;position:relative;display:block;padding:8px 12px 8px 5px;border-top:1px solid #465e87;background:#182130}
+/* 2026-10-28：紫灯／财报这两行的胶囊宽度改成和「信号」列胶囊完全一致（74px），
+   手机上不再比上面那几颗窄一截；summary 的让位内边距跟着 --chip-w 走，文字仍单行。 */
+#signalCounts .signal-extra-row{--chip-w:74px;position:relative;display:block;padding:8px 12px 8px 5px;border-top:1px solid #465e87}
 #signalCounts .signal-extra-row>.signal-filter-toggle{position:absolute;top:8px;left:5px;width:var(--chip-w);padding:0;justify-content:center;text-align:center}
 #signalCounts .signal-extra-row>.text-only,#signalCounts .signal-extra-row>.earnings-week{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
 #signalCounts .signal-extra-row>.text-only>summary,#signalCounts .signal-extra-row>.earnings-week>summary{box-sizing:border-box;min-height:38px;padding:8px 0 8px calc(var(--chip-w) + 12px);line-height:22px;font-size:13.5px;font-weight:600}
@@ -667,14 +691,14 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-member-block h5.target-space-high,
 #signalCounts .signal-member-block.tone-target-high h5,
 #signalCounts .signal-member-block.target-space-high h5{color:var(--target-high)}
-@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:62px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:12px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:12px;line-height:1.1}}
+@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:74px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:12px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:12px;line-height:1.1}}
 tr[id^="s-"]{scroll-margin-top:64px}
 /* 闪烁只改 background-color：带 52 周条的行，灯条是用 background-image 画的，
    用 background 简写做动画会把灯条一起清掉（看起来就是高亮盖住了灯）。
    位置条是主行的下一个兄弟行，一起闪才不会断成两截。 */
 tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out 1}
 @keyframes stkflash{0%,55%{background-color:#2b3f63}100%{background-color:transparent}}
-#signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;background:#182130;color:var(--text)}
+#signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;color:var(--text)}
 /* 折叠态绝对不占高度：个别移动内核在父面板隐藏期间改 open 后不重排，这里用 CSS 兜底 */
 #signalCounts .earnings-week:not([open])>*:not(summary){display:none}
 #signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:13.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
@@ -691,9 +715,12 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 #signalCounts .earnings-week .note{display:inline;margin-left:6px}
 #signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;line-height:1;color:var(--text);
   display:inline-flex;align-items:center;justify-content:center;white-space:normal;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:center;line-height:1.15;touch-action:manipulation}
+/* 「信号」列的所有胶囊按钮同宽（＝最宽的「布林+RSI」这一档，取 74px 让「52周低位」也不折行），
+   文字／内容居中；紫灯、财报两行的胶囊是另一套定位（--chip-w），不受这条影响。 */
+#signalCounts td .signal-filter-toggle{width:74px;padding:0 4px}
 #signalCounts .signal-filter-toggle[aria-pressed="true"]{background:#2f6bd8;border-color:#2f6bd8;color:#fff}
 #signalCounts .signal-filter-toggle:focus-visible,#signalCounts .signal-filter-clear:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;background:#121a27;font-size:13px}
+#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;font-size:13px}
 #signalCounts .signal-filter[hidden]{display:none}
 #signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:#bfd5ff;font-weight:600}
 #signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:38px;padding:0 10px;font:inherit;font-weight:400;color:var(--text);
@@ -771,6 +798,9 @@ td.px{text-align:center}
 .px-price,.px-chg{display:block}
 .px-chg{font-size:13.5px}
 @media (max-width:600px){
+  /* 手机：整页左右只留 4px（原来 14px），外框基本贴住屏幕边，卡片里的内容可用宽度最大。
+     只覆盖左右，上（安全区）下（40px）沿用 body 原值。 */
+  body{padding-left:4px;padding-right:4px}
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
   .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
   .stk td{padding:8px 5px}
@@ -825,6 +855,8 @@ tr.gray td{color:var(--dim)}
   color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:14px}
 .acts{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:16px}
 .acts .board-return{display:inline-block;margin:8px;color:#6ba3f0}
+/* 自动计划从第二排数据时间挪到页底返回看板下方；与原 sub 行同一档灰字，不再挤在头部。 */
+.autoplan{color:var(--dim);font-size:12px;text-align:center;line-height:1.7;margin:2px 0 0}
 #runMsg{font-size:13px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}
 #runMsg.ok{color:var(--green)}
 #runMsg.err{color:var(--red)}
@@ -854,8 +886,14 @@ tr.gray td{color:var(--dim)}
 .group-stats{margin-left:auto;color:var(--dim);font-size:14px;font-weight:400}
 .group-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
 .group-card>summary .rs-spy{margin-left:auto}
-/* 持仓里的「长持仓」区：可折叠，默认展开；下方就是短持仓主体，所以底部要留出间距 */
-.zone-card{margin:10px 0 12px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}
+/* 持仓里的「长持仓」区：可折叠，默认展开；下方就是短持仓主体，所以底部要留出间距。
+   框左右各外扩 2px、内部补 2px 内边距 —— 内容（含主行左侧红黄绿灯条）位置一像素不动，
+   框正好落在「持仓卡片边框」与「灯条」的正中间，不再压住灯条。 */
+.zone-card{margin:10px -2px 12px;padding-left:2px;padding-right:2px;
+  border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}
+/* 区内那条 ▲ 收起条：原来是按「贴外层卡片」的 -4px 拉宽的，套上子框后会溢出边框 3px，
+   底色看着和框错位。改成只抵消本区的 2px 内边距，底色左右正好贴到子框内侧，底部也不再溢出。 */
+.zone-card .group-bottom{margin:0 -2px 0}
 .zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;
   list-style:none;touch-action:manipulation}
 .zone-card>summary::-webkit-details-marker{display:none}
@@ -867,12 +905,14 @@ tr.gray td{color:var(--dim)}
   justify-content:flex-start;text-align:left;flex:1 1 auto}
 .zone-card>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
 .zone-card .quiet{font-size:12px;color:var(--dim);padding:8px 10px 0;line-height:1.6}
-/* 展开的那一组整条标题高亮：左边一条蓝＋向左渐隐的底色提亮，
-   一眼就能看出「持仓」和里面的「长持仓」到底有没有打开（两条叠在一起时尤其重要）。
-   统计面板本来就有蓝边框＋左侧蓝条＋#bfd5ff 组名，默认又是展开的，再叠一层高亮是多余的，故排除。 */
-.group-card[open]:not(#signalCounts)>summary,.macro-card[open]>summary,.zone-card[open]>summary{
-  background:linear-gradient(90deg,rgba(143,184,240,.20),rgba(143,184,240,.05) 72%,transparent);
-  box-shadow:inset 3px 0 0 #8fb8f0}
+/* 展开的那一组：整张卡片套上与统计面板同色（#6686c6）同宽（2px）的外框，
+   标题不再铺底色、不再画左侧蓝条 —— 一眼就能看出「持仓」和里面的「长持仓」有没有打开。
+   折叠后没有 [open]，卡片自动回到默认灰框，不显示外框色。
+   统计面板自己恒带外框、仓位管理用自己的绿色外框，两者都不进这条（:not 里排除）。
+   持仓内的「长持仓」是卡中卡，单独再细一档（1px），见下一条。 */
+.group-card[open]:not(#signalCounts):not(#costManage),.macro-card[open]{
+  border:var(--frame-w) solid var(--signal-border)}
+.zone-card[open]{border:1px solid var(--signal-border)}
 /* 鼠标／触摸点标题时不要再套一圈蓝描边：那条 2px 线会被误当成高亮，
    而且点完失焦就消失，看着像「闪一下」。键盘 Tab 过去的 :focus-visible 照旧显示。 */
 .group-card>summary:focus:not(:focus-visible),.macro-card>summary:focus:not(:focus-visible),
@@ -907,7 +947,7 @@ tr.gray td{color:var(--dim)}
 .market-risk-badge[data-level="yellow"]{color:var(--yellow)}
 .market-risk-badge[data-level="green"]{color:var(--green)}
 .macro-card>summary .group-stats{margin-left:0;text-align:left}
-/* 「无异动 N 只 · 点击查看」自己就是一个可点开的条目：上下各一条细横线，
+/* 「无异动 N 只」自己就是一个可点开的条目（不再写「点击查看」）：上下各一条细横线，
    把「这一整块点下去会展开」的范围圈出来；清单内部股票行之间的线照旧，两者不混。 */
 .quiet-list{margin:8px 0;border-top:1px solid #46525f;border-bottom:1px solid #46525f}
 .quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:13px;cursor:pointer}

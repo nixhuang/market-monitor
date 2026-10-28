@@ -60,30 +60,8 @@
   /* 备注名个别修正：名字太长或带错的前缀，这里按代码替换（正式实现改 holdings.json） */
   var NOTE_FIX={'景顺纳斯达克100指数ETF':'纳斯达克100指数ETF'};
 
-  /* ---------- 0. 页底：预警、名词抓取、综合判断依次独立展示 ---------- */
-  (function(){
-    var old=document.getElementById('policyAlertDetails');
-    var notes=document.getElementById('pageNotes');
-    var tpl=document.getElementById('rulesTpl');
-    if(!tpl || !notes) return;
-    if(old && old.parentNode && !old.closest('#marketRiskRules')) old.parentNode.removeChild(old);
-    [['rulesTpl','signalRules'],['glossaryTpl','glossaryRules']].forEach(function(pair){
-      var source=document.getElementById(pair[0]); if(!source) return;
-      var box=document.createElement('details');
-      box.className='card rule-card'; box.id=pair[1];
-      box.innerHTML=source.innerHTML;
-      notes.parentNode.insertBefore(box,notes);
-    });
-    if(typeof window.revealRuleAnchor==='function' && location.hash) window.revealRuleAnchor(location.hash);
-  })();
-
-  /* 页脚只保留规则入口，放在三个说明区块之后，不夹在两份新规则中间。 */
-  (function(){
-    var foot=document.querySelector('.foot');
-    var tail=document.getElementById('pageNotes') || document.getElementById('glossaryRules') || document.getElementById('signalRules');
-    if(!foot || !tail || !tail.parentNode || foot.previousElementSibling===tail) return;
-    tail.parentNode.insertBefore(foot, tail.nextSibling);
-  })();
+  /* ---------- 0. 三块说明（预警规则／名词解释和抓取／综合判断与宏观细则）已移到设置页 ----------
+     首页只保留 inert 模板（rulesTpl / glossaryTpl / notesTpl）供设置页原样读取，这里不再挂载。 */
 
   /* ---------- 1. 扫描行情行；是否持仓只由实际 positions 分组决定 ---------- */
   function isPosition(r){
@@ -395,7 +373,7 @@
     });
     Array.prototype.forEach.call(document.querySelectorAll('details.quiet-list'),function(fold){
       var count=fold.querySelectorAll('tr[id^="s-"]').length, summary=fold.querySelector('summary');
-      if(summary) summary.textContent='无异动 '+count+' 只 · 点击查看';
+      if(summary) summary.textContent='无异动 '+count+' 只';
       fold.hidden=!count;
     });
   }
@@ -1167,7 +1145,7 @@
     var entries=lossStatEntries(), box=document.getElementById('signalFilterResult');
     if(entries.length && !card.querySelector('table')){
       var table=document.createElement('table');
-      table.innerHTML='<tr class="gray mh"><td>信号</td><td class="num">红</td><td class="num">黄</td><td class="num">白</td></tr>';
+      table.innerHTML='';   /* 统计表不再有「信号／红／黄／白」表头行，骨架也跟着省掉 */
       card.insertBefore(table,card.querySelector('.group-bottom'));
     }
     if(entries.length && !LOSS_STAT){
@@ -1345,7 +1323,7 @@
   panel.id='costManage';
   // 跟其它分组一致：默认折叠（全站只有「统计」默认展开）
   panel.innerHTML='<summary class="grp">'
-    +'<span class="grp-name">仓位管理</span>'
+    +'<span class="grp-name">仓位</span>'
     // 顺序：仓位管理 → 已同步/未同步 → 总资产·盈亏
     // （「20日对.SPX」不放这里，改挂到「持仓」卡标题右侧，跟其他板块同一位置）
     +'<span class="group-stats">'
@@ -1368,7 +1346,7 @@
     +'<div class="cost-foot" id="costFoot"></div>'
     +'</div>'
     +'<div class="group-bottom"><button type="button" class="collapse-group"'
-    +' aria-controls="costManage" aria-label="收起仓位管理">'
+    +' aria-controls="costManage" aria-label="收起仓位">'
     +'<span class="collapse-icon" aria-hidden="true">▲</span></button></div>';
   sc.parentNode.insertBefore(panel, sc);
   var stateEl=panel.querySelector('#costState');

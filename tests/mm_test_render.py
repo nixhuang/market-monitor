@@ -221,7 +221,7 @@ check(all('<thead' not in table and '<th>名称</th>' not in table and 'class="h
       "表头「名称｜财报」整行已删除（2026-10-15）")
 check(monitor.STK_HEAD == '', "STK_HEAD 不再输出表头")
 check("财报 美东" not in html and "下一次财报" not in html.split('id="group_positions"')[1].split('<div class="acts">')[0], "每行不再重复写「财报」二字")
-check('无异动 1 只 · 点击查看' in html and 'SPYM' in html, "无异动标的可展开查看")
+check('无异动 1 只' in html and 'SPYM' in html, "无异动标的可展开查看")
 pos_card = html.split('id="group_positions"')[1].split('id="group_focus"')[0]
 check('NTNX' in pos_card and 'SPYM' in pos_card, "持仓包含警示及无异动标的")
 focus_card = html.split('id="group_focus"')[1].split('id="group_technology"')[0]
@@ -1264,8 +1264,9 @@ _amp_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _amp_pag
 check([m['kind'] for m in _amp_snap['text_only']] == ['rsi', 'boll_rsi'],
       '真实振幅全链：只保留2项技术灰，振幅不再计灰')
 _amp_stats = _amp_page.split('id="signalCounts"', 1)[1].split('id="group_positions"', 1)[0]
+_amp_stats_table = _amp_stats.split('</table>', 1)[0]   # 只看统计表本身（宏观表另有自己的 mh 表头）
 check('aria-label="白 2 项"' in _amp_stats and 'aria-label="红 3 项"' in _amp_stats
-      and '>白</td>' in _amp_stats and '>灰</td>' not in _amp_stats
+      and 'class="gray mh"' not in _amp_stats_table and '>灰</td>' not in _amp_stats
       and not re.search(r'aria-label="(?:灰灯|灰 \d+ 项)', _amp_stats),
       '白标题仍按技术gray身份并集2，振幅红与其他红按最终行去重计3')
 _amp_stat_row = re.search(r'<tr><td><button[^>]*data-kind="amp".*?</tr>', _amp_stats, re.S)[0]
@@ -1714,7 +1715,7 @@ const deadline = setTimeout(() => {
         const style = el => getComputedStyle(el);
         const rect = el => { const r = el.getBoundingClientRect(); return [r.width, r.height]; };
         const originalSize = rect(high);
-        high.style.color = '#c4a3ff';
+        high.style.color = '#b084ff';
         const priorSize = rect(high);
         high.style.removeProperty('color');
         const sparseBorder = el => {

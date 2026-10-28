@@ -1660,13 +1660,23 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('marketRiskNotes', page)
         self.assertNotIn('指标阈值与数据说明', page)
         self.assertNotIn('规则与数据说明', page)
-        self.assertIn('id="pageNotes" aria-label="综合判断与宏观细则"', page)
+        # 三块说明只以 inert 模板留在首页，供设置页读取；首页不再渲染成可见区块。
+        self.assertIn('<template id="notesTpl"><section class="card page-notes" id="pageNotes" '
+                      'aria-label="综合判断与宏观细则">', page)
+        self.assertEqual(page.count('id="pageNotes"'), 1)
+        self.assertNotIn('class="card rule-card"', page)
         self.assertEqual(page.count('id="btnReturnBoard"'), 1)
         self.assertIn('id="btnReturnBoard" href="">返回看板</a>', page)
         self.assertNotIn('id="runMsg"', page)
         self.assertIn('id="runLightTxt"', page)
         self.assertIn('id="ruleLightTxt"', page)
         self.assertLess(page.index('id="btnReturnBoard"'), page.index('id="pageNotes"'))
+        # 自动计划从头部第二排挪到页底返回看板下方；头部只留数据时间。
+        self.assertIn('<div class="autoplan">自动计划：美东周一至五 20:15（北京 ', page)
+        sub = re.search(r'<div class="sub">([^<]*)</div>', page)[1]
+        self.assertIn('数据时间', sub)
+        self.assertNotIn('自动计划', sub)
+        self.assertLess(page.index('id="btnReturnBoard"'), page.index('class="autoplan"'))
         m = re.search(r'<details class="macro-help" id="marketRiskRules">(.*?)</details>', page, re.S)
         self.assertIsNotNone(m)
         self.assertNotIn(' open', page[m.start():m.start() + 60])
@@ -2539,7 +2549,7 @@ class TestGroups(unittest.TestCase):
         self.assertIn('IT软硬Ai (1)', page)
         self.assertIn('房地产 (0)', page)
         self.assertIn('&lt;公司 &amp; 名称&gt;', page)
-        self.assertIn('无异动 1 只 · 点击查看', page)
+        self.assertIn('无异动 1 只', page)
         self.assertNotIn('其他关注', page)
 
 
@@ -3164,10 +3174,11 @@ class TestTargets(unittest.TestCase):
         self.assertIn('border-radius:inherit', overlay)
         self.assertIn('pointer-events:none', overlay)
         self.assertIn('center/100% 100% no-repeat', overlay)
-        # 紫灯文字与紫灯胶囊外框同色（统一走 --purple，#c4a3ff 为该变量的取值）。
+        # 紫灯文字与紫灯胶囊外框同色（统一走 --purple，#b084ff 为该变量的取值）。
         self.assertIn('color:var(--purple)', re.search(r'\.lvtag\.tgt\{([^}]*)\}', css)[1])
-        self.assertIn('--purple:#c4a3ff', css)
-        self.assertNotIn('#a371f7', css)
+        self.assertIn('--purple:#b084ff', css)
+        for dead in ('#a371f7', '#c4a3ff'):
+            self.assertNotIn(dead, css)
         self.assertIn('padding:1px 5px;border-radius:4px;line-height:1.35', css)
         for state in ('low', 'bad'):
             rule = re.search(r'\.lvtag\.tgt\.' + state + r'\{([^}]*)\}', css)[1]
@@ -6693,7 +6704,7 @@ class TestDisplayInteractions(unittest.TestCase):
                  'yellow': 5, 'purple': 0}}, 'summary': {'yellow': 5}}
         page = monitor.render({}, [], 0, snapshot=snap)
         self.assertLess(page.index('id="signalCounts"'), page.index('id="macroCard"'))
-        self.assertIn('#signalCounts{--signal-border:#6686c6;--collapse-bg:rgba(102,134,198,.6);border:1px solid var(--signal-border)', page)
+        self.assertIn('#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page)
         self.assertIn(monitor.PAGE_INTERACTION_JS, page)
         controls = re.findall(r'<button type="button" class="collapse-group" aria-controls="([^"]+)"', page)
         self.assertEqual(controls, ['signalCounts', 'macroCard'] + [f'group_{g["key"]}' for g in monitor._display_groups()])
@@ -6873,7 +6884,7 @@ class TestPositionZones(unittest.TestCase):
                          self.item('CCC', 'green', 'short')])
         # 渲染时不带 open 属性 —— 第一次进来就是折叠的
         self.assertNotIn('<details class="quiet-list" open>', out)
-        self.assertIn('<details class="quiet-list"><summary>无异动 1 只 · 点击查看</summary>', out)
+        self.assertIn('<details class="quiet-list"><summary>无异动 1 只</summary>', out)
         # 收起卡片时把内部已展开的无异动清单一并复位（浏览器不会自己忘掉 details 的 open）
         js = monitor.PAGE_INTERACTION_JS
         self.assertIn('function resetQuietLists(card) {', js)
@@ -7348,7 +7359,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             self.assertIn('#signalCounts .earnings-week:not([open])>*:not(summary){display:none}', monitor.PAGE_CSS)
             self.assertIn('#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text)', monitor.PAGE_CSS)
             self.assertIn('#signalCounts td{padding:6.3px 5px;', monitor.PAGE_CSS)  # 统计面板压缩上下留白
-            self.assertIn('.signal-count-toggle{box-sizing:border-box;height:38px;min-width:44px;', monitor.PAGE_CSS)  # 数字胶囊扁长方形
+            self.assertIn('.signal-count-toggle{box-sizing:border-box;height:38px;width:44px;', monitor.PAGE_CSS)  # 数字胶囊扁长方形
             self.assertIn('.signal-filter-toggle{box-sizing:border-box;height:38px;', monitor.PAGE_CSS)  # 与信号名胶囊同高对齐
             # 财报的灯跟统计表其它栏目一致：行首圆点（marker），不再在行尾挂一个 stat-dot
             # 跟其它名单同一套：名字可点跳转 + 分组写在括号里 + 灰色小字说明，不再有加粗蓝色分组
@@ -8208,7 +8219,9 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertEqual([header.index(t) for t in tokens], sorted(header.index(t) for t in tokens))
         self.assertIn('<span class="stat-badge purple" aria-label="紫 1 项">1</span>', header)
         self.assertIn('<span class="stat-badge gray" aria-label="白 0 项">0</span>', header)
-        self.assertRegex(output, r'<td\b[^>]*>白</td>')
+        # 统计表不再有「信号 / 红 / 黄 / 白」表头行：整排删除，第一行就是信号行
+        self.assertNotIn('class="gray mh"', output)
+        self.assertNotRegex(output, r'>白</td>')
         self.assertNotRegex(output, r'>灰<|aria-label="(?:灰灯|灰 \d+ 项)')
         self.assertEqual(snap, before)
 
