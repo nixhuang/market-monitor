@@ -301,9 +301,26 @@
 .blk-pnl-fold[open]>summary::before{transform:translateY(-50%) rotate(90deg)}
 .blk-pnl-fold>summary:hover,.blk-pnl-fold>summary:focus-visible{color:#dbe8ff}
 .cost-contrib{list-style:none;margin:0;padding:0 0 0 16px}
+/* 列顺序（2026-10-29）：名称 → 盈亏比 → 金额 → 贡献条（图表挪到最右边）。
+   名称列原来 1.4fr（宽屏下一路吃到 300 多 px，而最长的一行也就 120 来 px），
+   贡献条反倒被挤到只剩一半。现在名称 : 贡献条 = 1.15 : 1，
+   名称够放「QQQM 纳斯达克100指数」，剩下的都给贡献条。 */
 .cost-contrib li{display:grid;align-items:center;gap:0 8px;padding:2px 0;font-size:12px;
-  grid-template-columns:minmax(70px,1.4fr) minmax(70px,1.6fr) 48px 64px;font-variant-numeric:tabular-nums}
+  grid-template-columns:minmax(0,1.15fr) 48px 64px minmax(0,1fr);font-variant-numeric:tabular-nums}
 .cost-contrib .cn-name{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+/* 每排之间一条淡淡的分隔线（比主表持仓行的 .12 更淡，只是分行不抢视线） */
+.cost-contrib li+li{border-top:1px solid rgba(255,255,255,.07);padding-top:4px;margin-top:2px}
+/* 行首灯条＝这只标的自己的灯级（红/黄/绿/灰），跟主表 #costMembers li::before 完全同款
+   （3×12px 竖条、1px 圆角），只是这里一行只有一行文字，改成垂直居中。
+   绝对定位在 ul 的左内边距里、不占文档流，所以四列的格子边界不受影响。 */
+.cost-contrib li{position:relative}
+.cost-contrib li::before{content:"";position:absolute;left:-9px;top:50%;
+  width:3px;height:12px;border-radius:1px;background:var(--name-lamp,var(--dim));
+  transform:translateY(-50%)}
+.cost-contrib li.lv-red{--name-lamp:var(--red)}
+.cost-contrib li.lv-yellow{--name-lamp:var(--yellow)}
+.cost-contrib li.lv-green{--name-lamp:var(--green)}
+.cost-contrib li.lv-gray{--name-lamp:var(--text)}
 /* 贡献条：中间一条基线，正贡献往右（绿）、负贡献往左（红），长度按最大那条的绝对值归一 */
 .cost-contrib .cbar{position:relative;height:7px;background:#121924;border:1px solid #1d2635;
   border-radius:3px;overflow:hidden}
@@ -392,10 +409,14 @@
 @media (max-width:560px){
   .cost-body{padding:2px 0 10px}
   .cost-manage .signal-member-list{padding-left:12px}
-  /* 五列重新分配（2026-10-20）：名称列让出约 20px 给数值列，右侧五列不再挤成一坨；
-     名称列留 85px 左右，代码行不换行、中文备注最多两行（超了省略号），避免行高忽高忽低 */
+  /* 五列重新分配（2026-10-20 首版，2026-10-28 重配）：窄屏名称列原本吃掉 1fr 的全部剩余
+     （390 视口 127px、430 视口 157px），五个数值列只有 40～48px，多位数一进位就顶出格子
+     （iOS 上字形略宽，「337.54」「46.0903」在 40px 的格子里直接溢出）。
+     现在给数值列按最坏情况留足：成本 48（放得下 23635.39）、数量 54（放得下 1234.5678）、
+     市值 54（放得下 $1,234,567）、盈亏 52（放得下 +$12,345）、仓位 38（放得下 100.0%），
+     名称列拿剩下的（390 → 103px、430 → 133px）：代码 + ETF 胶囊仍然一行放得下。 */
   .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 42px 48px 46px 48px 38px;gap:0 3px}
+    grid-template-columns:minmax(0,1fr) 48px 54px 54px 52px 38px;gap:0 3px}
   .cost-name{min-width:0}
   .cost-name .syrow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cost-name .sy{flex:none}
@@ -424,7 +445,9 @@
   /* 窄屏标题行要塞下「仓位管理 + 已同步 + 总资产·盈亏 + 编辑」四样东西。 */
   .cost-manage>summary .cost-sum .sep{margin:0}
   .cost-manage .signal-member-block{padding:4px 6px 6px}
-  .cost-mini{grid-template-columns:minmax(0,1fr) 44px 46px 46px 44px 32px;gap:0 3px;
+  /* 现金／固定收益：数值是四～五位数（23,684 / 16,917），比个股行的金额还长一档，
+     所以这两列比主表再宽 2px，仓位列从 32 → 34（36.9% 原来差 1px 就顶到边） */
+  .cost-mini{grid-template-columns:minmax(0,1fr) 46px 48px 48px 46px 34px;gap:0 3px;
     font-size:10.5px;padding-left:12px}
   /* 窄屏第 1 列只有 70 来 px：副标题整个藏起来，名称不再溢出到「成本」那格上 */
   .cost-mini .t-name{overflow:hidden}
@@ -437,21 +460,32 @@
   .cost-subhead{font-size:11.5px;padding-left:12px}
   .cost-subhead .cnt{font-size:10.5px}
   .cost-contrib{padding-left:12px}
-  .cost-contrib li{grid-template-columns:minmax(0,1fr) 54px 40px 56px;gap:0 4px;font-size:10.5px}
+  /* 名称列原来独占 1fr（390 视口 192px、430 视口 232px），贡献条只剩 54px，
+     涨跌／金额两列也紧。改成名称与贡献条按 1.15 : 1 分剩余空间：
+     390 → 名称 131 / 条 114，430 → 名称 152 / 条 132，名称列比原来窄 32%，
+     同时够放下「QQQM 纳斯达克100指数」这类最长的一行（约 118px 墨宽），不至于出省略号。 */
+  .cost-contrib li{grid-template-columns:minmax(0,1.15fr) 44px 56px minmax(0,1fr);gap:0 3px;
+    font-size:10.5px}
   .cost-contrib .cbar{height:6px}
 }
-/* 375 / 360 / 320 这类窄屏：数值列再收几 px，把宽度让给代码行（否则 GOOGL/QQQM 会被压扁） */
+/* 375 / 360 / 320 这类窄屏：数值列同比例收几 px（仍以「放得下多位数」为前提，
+   只是把字号下的最大位数按窄屏常见取值收紧一档），名称列不至于被压到代码都放不下 */
 @media (max-width:400px){
   .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 40px 46px 44px 46px 36px;gap:0 3px}
+    grid-template-columns:minmax(0,1fr) 46px 52px 52px 50px 36px;gap:0 3px}
 }
 @media (max-width:365px){
   .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 36px 44px 42px 42px 32px;gap:0 2px}
+    grid-template-columns:minmax(0,1fr) 42px 48px 48px 46px 34px;gap:0 2px}
 }
-/* 320 这类超窄屏：名称列只剩 40 多 px，代码 + ETF 胶囊放不下一行 →
+/* 320 这类超窄屏：名称列只剩 60 多 px，代码 + ETF 胶囊放不下一行 →
    允许它们折成两行（宁可多一行，也别把 QQQM 截成 Q…） */
 @media (max-width:340px){
+  .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
+    grid-template-columns:minmax(0,1fr) 40px 44px 46px 48px 34px;gap:0 2px}
+  /* 320 视口总宽只有 284px，五个数值列已经压到极限，这里把数值字号降 0.5px
+     换一点余量（「36.7%」这类五字符正好卡在格子边上，再宽一点就顶出去） */
+  .cost-cell{font-size:10px}
   .cost-name .syrow{flex-wrap:wrap;overflow:visible}
 }
 

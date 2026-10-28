@@ -1196,6 +1196,42 @@ test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
   assert.match(CSS,/#costMembers li\.lv-gray\{--name-lamp:var\(--text\)\}/);
   assert.doesNotMatch(CSS,/#costMembers li\.lv-[a-z]+::marker/);
 });
+test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀且不中英混排',()=>{
+  // 灯条跟主表同款 3×12px，四色齐全；灰灯按新约定为白（--text），不是旧的 --dim
+  assert.match(CSS,/\.cost-contrib li::before\{content:"";position:absolute;left:-9px;top:50%;\s*width:3px;height:12px;border-radius:1px;background:var\(--name-lamp,var\(--dim\)\);/);
+  for(const [lv,v] of [['red','--red'],['yellow','--yellow'],['green','--green'],['gray','--text']])
+    assert.match(CSS,new RegExp('\\.cost-contrib li\\.lv-'+lv+'\\{--name-lamp:var\\('+v+'\\)\\}'));
+  // 渲染用这只标的自己的灯级，不再全部灰灯
+  assert.match(SOURCE,/lv:r\.lv\|\|'green'/);
+  assert.match(SOURCE,/class="lv-'\+esc\(x\.lv\|\|'green'\)/);
+  // 列宽：名称列不再独占剩余空间，数值列按多位数留足；顺序 名称 → 盈亏比 → 金额 → 图表
+  assert.match(CSS,/grid-template-columns:minmax\(0,1\.15fr\) 48px 64px minmax\(0,1fr\)/);
+  assert.match(CSS,/grid-template-columns:minmax\(0,1\.15fr\) 44px 56px minmax\(0,1fr\)/);
+  const iName=SOURCE.indexOf('\'<span class="cn-name">'), iCv=SOURCE.indexOf('\'<span class="cv '),
+        iCa=SOURCE.indexOf('\'<span class="ca '), iBar=SOURCE.indexOf('\'<span class="cbar">');
+  assert.ok(iName>=0&&iName<iCv&&iCv<iCa&&iCa<iBar,'渲染顺序应为 名称→盈亏比→金额→图表');
+  // 每排之间一条淡分隔线
+  assert.match(CSS,/\.cost-contrib li\+li\{border-top:1px solid rgba\(255,255,255,\.07\);padding-top:4px;margin-top:2px\}/);
+  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 48px 54px 54px 52px 38px/);
+  // 备注名：ETF 已有胶囊标签就不再重复写 ETF；含中文的只保留中文部分
+  const read=f=>JSON.parse(fs.readFileSync(path.join(__dirname,'..',f),'utf8'));
+  const names=read('symbol-names.json'), holdings=read('holdings.json');
+  const latin=/[A-Za-z]/, cn=/[一-鿿]/;
+  const dirty=v=>typeof v==='string'&&v&&((latin.test(v)&&cn.test(v))||v.indexOf('ETF')>=0);
+  for(const [k,v] of Object.entries(names)) assert.equal(dirty(v),false,'symbol-names '+k+'='+v);
+  let seen=0;
+  for(const [g,items] of Object.entries(holdings)){
+    if(g==='_说明'||g==='group_monitoring'||typeof items!=='object'||!items) continue;
+    for(const [k,entry] of Object.entries(items)){
+      if(!entry||typeof entry!=='object'||typeof entry.note!=='string') continue;
+      seen++; assert.equal(dirty(entry.note),false,'holdings '+g+'/'+k+'='+entry.note);
+      if(names[k]!==undefined) assert.equal(entry.note,names[k],'双源不一致 '+k);
+    }
+  }
+  assert.ok(seen>50,'备注名条目过少：'+seen);
+  assert.equal(names.SCHD,'嘉信红利');
+  assert.equal(holdings.positions.SCHD.note,'嘉信红利');
+});
 
 // 目标状态由后端页面提供，面板只叠加自己的行情灯，不重新推断30/70或复活旧异常红。
 function targetDocument(doc,state,opts={}){

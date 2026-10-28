@@ -45,12 +45,12 @@
       "cost": 364.92
     },
     "CRSP": {
-      "note": "CRISPR-基因编辑",
+      "note": "基因编辑",
       "hold": "short",
       "cost": 46.92
     },
     "GOOGL": {
-      "note": "谷歌（Alphabet）",
+      "note": "谷歌",
       "hold": "long",
       "cost": 337.54
     },
@@ -62,7 +62,7 @@
       "target_at": "2026-10"
     },
     "NTNX": {
-      "note": "Nutanix-混合云",
+      "note": "混合云",
       "hold": "short",
       "cost": 58.27
     },
@@ -77,22 +77,22 @@
       "cost": 69.36
     },
     "DRAM": {
-      "note": "Memory ETF-存储芯片",
+      "note": "存储芯片",
       "hold": "short",
       "cost": 49.58
     },
     "SPYM": {
-      "note": "SPDR标普500指数ETF",
+      "note": "标普500指数",
       "hold": "long",
       "cost": 88.77
     },
     "SCHD": {
-      "note": "嘉信美国红利股票ETF",
+      "note": "嘉信红利",
       "hold": "long",
       "cost": 32.88
     },
     "QQQM": {
-      "note": "纳斯达克100指数ETF",
+      "note": "纳斯达克100指数",
       "hold": "long",
       "cost": 296.8
     },
@@ -119,7 +119,7 @@
   },
   "focus": {
     "ZS": {
-      "note": "Zscaler-云安全"
+      "note": "云安全"
     },
     "COST": {
       "note": "好市多"
@@ -131,7 +131,7 @@
       "note": "万事达"
     },
     "V": {
-      "note": "Visa-支付"
+      "note": "支付"
     },
     "AAPL": {
       "note": "苹果",
@@ -146,7 +146,7 @@
   },
   "index_funds": {
     "IBIT": {
-      "note": "iShares比特币ETF"
+      "note": "比特币"
     }
   },
   "technology": {
@@ -154,22 +154,22 @@
       "note": "科技行业"
     },
     "U": {
-      "note": "Unity-游戏引擎"
+      "note": "游戏引擎"
     },
     "GOOGL": {
-      "note": "谷歌（Alphabet）"
+      "note": "谷歌"
     },
     "NXPI": {
       "note": "恩智浦半导体"
     },
     "SNOW": {
-      "note": "Snowflake-数据云"
+      "note": "数据云"
     },
     "DRAM": {
-      "note": "Memory ETF-存储芯片"
+      "note": "存储芯片"
     },
     "SKHY": {
-      "note": "SK海力士ADR"
+      "note": "海力士"
     },
     "MU": {
       "note": "美光科技"
@@ -181,28 +181,28 @@
       "note": "希捷科技"
     },
     "NOW": {
-      "note": "ServiceNow-工作流软件"
+      "note": "工作流软件"
     },
     "CRWD": {
-      "note": "CrowdStrike-终端安全"
+      "note": "终端安全"
     },
     "FTNT": {
-      "note": "Fortinet-防火墙"
+      "note": "防火墙"
     },
     "QCOM": {
       "note": "高通"
     },
     "ANET": {
-      "note": "Arista-数据中心网络"
+      "note": "数据中心网络"
     },
     "ZS": {
-      "note": "Zscaler-云安全"
+      "note": "云安全"
     },
     "NTNX": {
-      "note": "Nutanix-混合云"
+      "note": "混合云"
     },
     "COHR": {
-      "note": "Coherent-光器件"
+      "note": "光器件"
     },
     "INTC": {
       "note": "英特尔"
@@ -211,13 +211,13 @@
       "note": "应用材料"
     },
     "ARM": {
-      "note": "Arm Holdings-芯片架构"
+      "note": "芯片架构"
     },
     "CIEN": {
-      "note": "Ciena-光网络"
+      "note": "光网络"
     },
     "LITE": {
-      "note": "Lumentum-光模块"
+      "note": "光模块"
     },
     "MRVL": {
       "note": "迈威尔科技"
@@ -226,16 +226,16 @@
       "note": "安费诺"
     },
     "CRDO": {
-      "note": "Credo-高速互连"
+      "note": "高速互连"
     },
     "PANW": {
-      "note": "Palo Alto-网络安全"
+      "note": "网络安全"
     },
     "TER": {
       "note": "泰瑞达"
     },
     "PLTR": {
-      "note": "Palantir-AI数据分析"
+      "note": "数据分析"
     },
     "MSFT": {
       "note": "微软"
@@ -259,7 +259,7 @@
       "note": "西部数据"
     },
     "SPCX": {
-      "note": "SpaceX-商业航天"
+      "note": "商业航天"
     }
   },
   "healthcare": {
@@ -282,7 +282,7 @@
       "note": "联合健康"
     },
     "CRSP": {
-      "note": "CRISPR-基因编辑"
+      "note": "基因编辑"
     },
     "JNJ": {
       "note": "强生"
@@ -314,16 +314,16 @@
       "note": "伯克希尔哈撒韦"
     },
     "V": {
-      "note": "Visa-支付"
+      "note": "支付"
     },
     "CRCL": {
-      "note": "Circle-稳定币"
+      "note": "稳定币"
     },
     "COIN": {
-      "note": "Coinbase-加密交易所"
+      "note": "加密交易所"
     },
     "HOOD": {
-      "note": "Robinhood-零售券商"
+      "note": "零售券商"
     },
     "JPM": {
       "note": "摩根大通"
@@ -345,10 +345,10 @@
       "note": "优步"
     },
     "AXON": {
-      "note": "Axon-执法科技"
+      "note": "执法科技"
     },
     "HEI": {
-      "note": "HEICO-航空零部件"
+      "note": "航空零部件"
     },
     "CAT": {
       "note": "卡特彼勒"
@@ -360,7 +360,7 @@
       "note": "洛克希德马丁"
     },
     "RTX": {
-      "note": "RTX-航空防务"
+      "note": "航空防务"
     },
     "VRT": {
       "note": "维谛技术"
@@ -382,7 +382,7 @@
       "note": "公用事业行业"
     },
     "CEG": {
-      "note": "Constellation-核电"
+      "note": "核电"
     },
     "NEE": {
       "note": "新纪元能源"
@@ -410,10 +410,10 @@
       "note": "通信服务行业"
     },
     "TTWO": {
-      "note": "Take-Two-游戏"
+      "note": "游戏"
     },
     "META": {
-      "note": "Meta-社交广告"
+      "note": "社交广告"
     },
     "NFLX": {
       "note": "奈飞"
@@ -427,7 +427,7 @@
       "note": "拼多多"
     },
     "BKNG": {
-      "note": "Booking-在线旅游"
+      "note": "在线旅游"
     },
     "AMZN": {
       "note": "亚马逊"

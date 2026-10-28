@@ -57,8 +57,8 @@
   function clone(v){ return JSON.parse(JSON.stringify(v)); }
   function own(o,k){ return Object.prototype.hasOwnProperty.call(o,k); }
 
-  /* 备注名个别修正：名字太长或带错的前缀，这里按代码替换（正式实现改 holdings.json） */
-  var NOTE_FIX={'景顺纳斯达克100指数ETF':'纳斯达克100指数ETF'};
+  /* 备注名不再在运行时改写：ETF 后缀、中英混排已在 holdings.json / symbol-names.json 里改干净
+     （ETF 有胶囊标签就不再重复写 ETF；含中文的备注名只留中文部分），这里保持原样直读。 */
 
   /* ---------- 0. 三块说明（预警规则／名词解释和抓取／综合判断与宏观细则）已移到设置页 ----------
      首页只保留 inert 模板（rulesTpl / glossaryTpl / notesTpl）供设置页原样读取，这里不再挂载。 */
@@ -113,7 +113,6 @@
     var isLong=!!tr.closest('#group_positions_long');
     var noteEl=sd.querySelector('.note');
     var note=noteEl?(noteEl.textContent||'').trim():'';
-    if(note && NOTE_FIX[note]) note=NOTE_FIX[note];
     // ETF 胶囊：个股行里就是 td.sym 内的 .tag，文本为 ETF
     var isEtf=false;
     Array.prototype.forEach.call(sd.querySelectorAll('.tag'), function(t){
@@ -1893,7 +1892,7 @@
       var prev=r.prevClose>0?r.prevClose:r.price/(1+r0);
       r.dayAmt=(r.price-prev)*r.qty;
       prevMv+=prev*r.qty;
-      cl.push({sym:r.sym,cn:r.note||'',amt:r.dayAmt,chg:(r.price/prev-1)*100});
+      cl.push({sym:r.sym,cn:r.note||'',amt:r.dayAmt,chg:(r.price/prev-1)*100,lv:r.lv||'green'});
     });
     if(cl.length){
       var gross=0; cl.forEach(function(x){ gross+=Math.abs(x.amt); });
@@ -1905,12 +1904,15 @@
         // 条长按最大那条的绝对值归一：最长刚好从基线画到格子端点（半个格子）
         var w=mx>0?Math.min(Math.abs(x.share)/mx*50,50):0;
         var cg=x.chg>=0?'up':'down';
-        return '<li aria-label="占当日盈亏绝对值 '+fmt1(Math.abs(x.share))+'%">'
+        // 行首灯条用这只标的自己的灯级（红/黄/绿/灰），跟主表行同一套口径：
+        // 只看信号灯，不看当天是赚是亏（盈亏由后面的百分比／金额颜色表达）
+        return '<li class="lv-'+esc(x.lv||'green')+'"'
+          +' aria-label="占当日盈亏绝对值 '+fmt1(Math.abs(x.share))+'%">'
           +'<span class="cn-name">'+esc(x.sym)
           +(x.cn?' <span style="color:var(--dim)">'+esc(x.cn)+'</span>':'')+'</span>'
-          +'<span class="cbar"><i class="'+c+'" style="width:'+w.toFixed(1)+'%"></i></span>'
           +'<span class="cv '+cg+'">'+pct(x.chg)+'</span>'
-          +'<span class="ca '+c+'">'+money(x.amt)+'</span></li>';
+          +'<span class="ca '+c+'">'+money(x.amt)+'</span>'
+          +'<span class="cbar"><i class="'+c+'" style="width:'+w.toFixed(1)+'%"></i></span></li>';
       }).join('');
       // 合计：今日净盈亏金额 + 相对「昨日持仓市值」的百分比
       var dayNet=0; cl.forEach(function(x){ dayNet+=x.amt; });
