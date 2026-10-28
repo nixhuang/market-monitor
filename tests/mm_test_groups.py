@@ -3144,7 +3144,7 @@ class TestTargets(unittest.TestCase):
         self.assertNotIn('--pstripe', css)
         continuation = re.search(r'\.stk tr\.range52-row>td\{([^}]*)\}', css)[1]
         self.assertIn('background-image:linear-gradient(var(--lc),var(--lc))', continuation)
-        self.assertIn('background-size:var(--lw) 18px', continuation)
+        self.assertIn('background-size:var(--lw) 14px', continuation)
         self.assertIn('background-position:left top', continuation)
         self.assertNotIn('right', continuation)
 
@@ -3164,7 +3164,10 @@ class TestTargets(unittest.TestCase):
         self.assertIn('border-radius:inherit', overlay)
         self.assertIn('pointer-events:none', overlay)
         self.assertIn('center/100% 100% no-repeat', overlay)
-        self.assertIn('color:#c4a3ff', re.search(r'\.lvtag\.tgt\{([^}]*)\}', css)[1])
+        # 紫灯文字与紫灯胶囊外框同色（统一走 --purple，#c4a3ff 为该变量的取值）。
+        self.assertIn('color:var(--purple)', re.search(r'\.lvtag\.tgt\{([^}]*)\}', css)[1])
+        self.assertIn('--purple:#c4a3ff', css)
+        self.assertNotIn('#a371f7', css)
         self.assertIn('padding:1px 5px;border-radius:4px;line-height:1.35', css)
         for state in ('low', 'bad'):
             rule = re.search(r'\.lvtag\.tgt\.' + state + r'\{([^}]*)\}', css)[1]
@@ -4164,8 +4167,8 @@ class TestMaCrossConflict(unittest.TestCase):
         icons = monitor._member_icons(mixed, 'ma_cross', 'yellow')
         self.assertNotIn('▲', icons)
         self.assertNotIn('▼', icons)
-        self.assertIn('上穿短均线', icons)
-        self.assertIn('跌破长均线', icons)
+        self.assertIn('短均线上穿，长均线跌破', icons)
+        self.assertNotIn(' / ', icons)
         self.assertNotRegex(icons, r'\d+日(?:弱)?均线')
 
     def test_single_direction_still_draws_triangle(self):
@@ -6056,7 +6059,8 @@ class TestMaMergedStatistics(unittest.TestCase):
         data = self.filters(page)
         self.assertEqual([m['id'] for m in data['ma']['members']], ['BRK-B'])
         self.assertEqual(data['ma']['members'][0]['l'], 'red')
-        self.assertIn('跌破长均线', data['ma']['members'][0]['d'][0]['t'])
+        self.assertIn('长均线跌破', data['ma']['members'][0]['d'][0]['t'])
+        self.assertNotIn(' / ', data['ma']['members'][0]['d'][0]['t'])
         self.assertEqual(rows, before)
 
     def test_multiple_periods_and_opposite_directions_remain_in_one_member(self):
@@ -6074,7 +6078,9 @@ class TestMaMergedStatistics(unittest.TestCase):
         self.assertIn('<span class="arrow-band-down">▼</span> 均线（归属待确认）跌破', page)
         detail = self.filters(page)['ma']['members'][0]['d'][0]['t']
         for fact in member['indicators']:
-            self.assertIn(monitor._ma_display_text(fact['label'], member['ma_settings']), detail)
+            # 与分组标题同一套措辞：穿越倒装，且同一指标内部不再出现白色「 / 」。
+            self.assertIn(monitor._ma_stat_label(fact['label'], member['ma_settings']), detail)
+        self.assertNotIn(' / ', detail)
         self.assertNotRegex(detail, r'\d+日(?:弱)?均线')
 
     def test_same_mark_at_two_levels_uses_highest_and_exclusions_hold(self):
@@ -6217,8 +6223,10 @@ class TestMaMergedStatistics(unittest.TestCase):
             self.assertIn('短均线上穿', output)
             self.assertIn('触及长均线', output)
             detail = self.filters(output)['ma']['members'][0]['d'][0]['t']
-            self.assertIn('上穿短均线', detail)
+            # 多选组合清单与统计分组标题同一套措辞（穿越倒装），同指标内部用「，」。
+            self.assertIn('短均线上穿', detail)
             self.assertIn('触及长均线，现价在长均线上方', detail)
+            self.assertNotIn(' / ', detail)
             self.assertNotRegex(output, r'\d+日(?:弱)?均线')
             self.assertEqual(normalized['signal_counts']['ma']['yellow'], 1)
         self.assertEqual(legacy, before)
@@ -6234,6 +6242,10 @@ class TestMaMergedStatistics(unittest.TestCase):
         member, = monitor._sanitize_snapshot(override)['signal_members']['ma']['yellow']
         self.assertEqual(member['ma_settings'], {'ma_short': 120, 'ma_long': 60})
         self.assertIn('长均线上穿', monitor._member_block(member, 'ma')[1])
+        # 分组标题与筛选详情不再一个倒装一个不倒装：去掉方向前缀后逐字相同。
+        title = monitor._member_block(member, 'ma')[1]
+        self.assertEqual(re.sub(r'^[▲▼■]\s*', '', title),
+                         monitor._filter_detail(member, 'ma', '均线'))
 
     def test_legacy_rows_without_ma_settings_use_snapshot_not_current_config(self):
         import copy
@@ -6298,8 +6310,9 @@ class TestMaMergedStatistics(unittest.TestCase):
         result = json.loads(subprocess.run([node, '-e', code], capture_output=True, text=True,
                                           encoding='utf-8', check=True).stdout)
         self.assertEqual([m['id'] for m in result['current']['members']], ['BRK-B'])
-        self.assertIn('上穿长均线', result['current']['members'][0]['details'][0]['t'])
+        self.assertIn('长均线上穿', result['current']['members'][0]['details'][0]['t'])
         self.assertIn('触及长均线', result['current']['members'][0]['details'][0]['t'])
+        self.assertNotIn(' / ', result['current']['members'][0]['details'][0]['t'])
         member, = result['old']['members']
         self.assertEqual(member['id'], 'BRK-B')
         self.assertEqual(member['l'], 'red')
@@ -6432,7 +6445,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('数据待更新', monitor._range52_row({**base, 'price': float('nan')}))
         self.assertEqual(monitor._range52_row({**base, 'reference_only': True}), '')
         # 第二行占下面 13px，不与三角／灰轨重叠；三角左右再收窄一档
-        self.assertIn('height:33px;padding-bottom:13px', monitor.PAGE_CSS)
+        self.assertIn('height:26px;padding-bottom:13px', monitor.PAGE_CSS)
         self.assertIn('border-left:4.2px solid transparent;border-right:4.2px solid transparent', monitor.PAGE_CSS)
         self.assertNotIn('.range52-percent{', monitor.PAGE_CSS)
         self.assertNotIn('clamp(40px,var(--range-pos)', monitor.PAGE_CSS)
@@ -6500,7 +6513,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('HII', output)
         self.assertEqual(output.count('class="range52-row"'), 1)
         self.assertIn('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}', monitor.PAGE_CSS)  # 位置条贴近本股
-        self.assertIn('.stk tr.range52-row td{padding:0 12px 7px 18px;', monitor.PAGE_CSS)  # 与下一只股票拉开
+        self.assertIn('.stk tr.range52-row td{padding:0 12px 4px 18px;', monitor.PAGE_CSS)  # 位置条下方只留 4px
         self.assertIn('.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px}', monitor.PAGE_CSS)  # 灯条延伸到本股位置条
         self.assertIn('background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom', monitor.PAGE_CSS)  # 灯条顶部下移
         self.assertIn('</tr><tr class="range52-row"><td colspan="4">', output)
@@ -7400,7 +7413,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', panel).group(1)))
                     self.assertTrue(data['earnings_week']['ok'])
                     filtered, = data['earnings_week']['members']
-                    self.assertEqual(filtered['d'][0]['l'], '')
+                    self.assertEqual(filtered['d'][0]['l'], 'gray')   # 10/30 距基准 10 天：不红不黄，跟财报名单同为灰字
                     self.assertIn(f'财报 {date} {label} · ', filtered['d'][0]['t'])
                     position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
                     self.assertIn('无异动 1 只', position)
@@ -7581,14 +7594,21 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             rows = [item('BOTH', 'position', (('target', 'purple'),), '2026-10-18'),
                     item('PURPLE', 'focus', (('target', 'purple'),), '2026-11-30'),
                     item('EARN', 'technology', (), '2026-10-20'),
-                    item('ANOM', 'focus', (('target', 'red'),), '2026-10-19')]
+                    item('ANOM', 'focus', (('target', 'red'),), '2026-10-19'),
+                    item('SOON', 'focus', (), '2026-10-15'),      # D+1：红
+                    item('FAR', 'focus', (), '2026-10-25')]       # D+11：灰（不红不黄）
             snap = monitor.build_snapshot({}, rows, {}, group_counts={})
         output = monitor._signal_counts_card(snap)
         data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', output).group(1)))
         ids = lambda kind: [m['s'] for m in data[kind]['members']]
         self.assertEqual(set(ids('target_purple')), {'BOTH', 'PURPLE'})
-        self.assertEqual(set(ids('earnings_week')), {'BOTH', 'EARN', 'ANOM'})
+        self.assertEqual(set(ids('earnings_week')), {'BOTH', 'EARN', 'ANOM', 'SOON', 'FAR'})
         self.assertNotIn('ANOM', ids('target_purple'))  # 目标价异常红不混入紫灯条件
+        # 财报条件带自身红/黄/灰（与财报名单同一套），不再整条白字；紫灯条件仍是紫字。
+        self.assertEqual({m['s']: m['d'][0]['l'] for m in data['earnings_week']['members']},
+                         {'SOON': 'red', 'BOTH': 'yellow', 'EARN': 'yellow', 'ANOM': 'yellow', 'FAR': 'gray'})
+        for member in data['target_purple']['members']:
+            self.assertEqual(member['d'][0]['l'], 'purple')
         for kind in ('target_purple', 'earnings_week'):
             for member in data[kind]['members']:
                 row = next(r for r in rows if r['symbol'] == member['s'])
@@ -7596,7 +7616,12 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                 self.assertEqual(member['a'], monitor._stock_anchor_id(row['symbol']))
         self.assertIn('data-kind="target_purple"', output)
         self.assertIn('data-kind="earnings_week"', output)
-        self.assertLess(output.index('earnings-extra'), output.index('purple-extra'))  # 紫灯占原灰灯位置
+        # 两块叠加条件：紫灯在上、财报在下；按钮文案就是「紫灯」「财报」，不再带「条件」二字。
+        self.assertLess(output.index('purple-extra'), output.index('earnings-extra'))
+        self.assertIn('aria-label="选择紫灯叠加条件">紫灯</button>', output)
+        self.assertIn('aria-label="选择财报叠加条件">财报</button>', output)
+        self.assertNotIn('紫灯条件', output)
+        self.assertNotIn('财报条件', output)
         node = os.environ.get('NODE')
         if node:
             import subprocess
@@ -7774,18 +7799,26 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     self.assertIn(title, panel)
             self.assertNotIn('signal-member-icon', panel)
         # 均线合并一栏：同一成员的穿越与触及事实都写在标题里，不重复名单。
-        for kind, titles in (('ma', [f'<span class="grp-arrow arrow-band-up">▲</span> 短均线上穿 / 触及长均线，现价在长均线上方',
-                                   f'<span class="grp-arrow arrow-band-down">▼</span> 长均线跌破 / 现价贴近长均线，现价在长均线下方',
+        for kind, titles in (('ma', [f'<span class="grp-arrow arrow-band-up">▲</span> 短均线上穿，触及长均线，现价在长均线上方',
+                                   f'<span class="grp-arrow arrow-band-down">▼</span> 长均线跌破，现价贴近长均线，现价在长均线下方',
                                    '■ 触及长均线，现价与长均线相等']),):
             panel = self.panel(output, kind, 'yellow')
             with self.subTest(kind=kind):
                 self.assertEqual(panel.count('class="signal-member-block"'), len(titles))
                 for title in titles:
                     self.assertIn(f'<h5>{title}</h5>', panel)
+                # 同一指标内部只用「，」；白色「 / 」只留给指标之间切换。
                 self.assertNotIn('signal-member-icon', panel)
+        ma_panel = self.panel(output, 'ma', 'yellow')
+        self.assertNotIn(' / ', ' '.join(re.findall(r'<h5>(.*?)</h5>', ma_panel)))
         self.assertEqual(snap['signal_counts']['target']['purple'], 4)
         target = output.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
-        self.assertEqual(target.count('class="signal-name-lamp tone-purple"'), 4)
+        # 竖条跟随个股自身灯级（UP 黄 / DOWN 红 / SPACE、CROSS 绿），不因紫灯条件染紫。
+        self.assertEqual(target.count('class="signal-name-lamp '), 4)
+        self.assertEqual(target.count('class="signal-name-lamp yellow"'), 1)
+        self.assertEqual(target.count('class="signal-name-lamp red"'), 1)
+        self.assertEqual(target.count('class="signal-name-lamp green"'), 2)
+        self.assertNotIn('class="signal-name-lamp tone-purple"', target)
         self.assertNotIn('signal-member-icon', target)
         self.assertIn('今日上穿共识价 200', target)
         self.assertIn('今日跌破目标价 90', target)
@@ -7935,8 +7968,11 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         output = monitor._signal_counts_card(snap)
         output = output.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
         self.assertEqual(output.count('class="signal-name-lamp '), 2)
-        self.assertIn('class="signal-name-lamp tone-purple"', output)
-        self.assertIn('class="signal-name-lamp tone-target-high"', output)
+        # 竖条跟随个股自身灯级（BOTH 绿灯），高空间段仍靠 li.target-space-high 区分。
+        self.assertEqual(output.count('class="signal-name-lamp green"'), 2)
+        self.assertNotIn('class="signal-name-lamp tone-purple"', output)
+        self.assertNotIn('class="signal-name-lamp tone-target-high"', output)
+        self.assertIn('class="target-space-high"', output)
         self.assertNotIn('signal-member-icon', output)
         self.assertIn('今日跌破目标价 190', output)
         self.assertNotIn('title=', output)

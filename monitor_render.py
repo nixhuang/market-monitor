@@ -287,22 +287,19 @@ class PageRenderer:
                 return ("▲" if side == "上轨" else "▼", self._context.boll_rsi_text(state, hits))
             return ("", "方向待下次更新")
         if kind == "ma":
+            settings = d.get("ma_settings")
             markers = [m for m in d.get("indicators") or [] if isinstance(m, dict)
                        and m.get("shape") in ("▲", "▼", "■") and m.get("label")]
             if not markers:
                 facts = [f.get("text") for f in d.get("ma_facts") or []
                          if isinstance(f, dict) and isinstance(f.get("text"), str)]
-                return ("", self._context._ma_display_text(" / ".join(facts), d.get("ma_settings")) or "方向待下次更新")
+                return ("", self._context._ma_stat_text(facts, settings) or "方向待下次更新")
             shapes = {m["shape"] for m in markers}
             labels = []
             for m in markers:
-                label = str(m["label"])
-                match = re.match(r"^(上穿|跌破)(\d+)日均线$", label)
-                if match:
-                    label = f"{match[2]}日均线{match[1]}"
-                label = self._context._ma_display_text(label, d.get("ma_settings"))
+                label = self._context._ma_stat_label(m["label"], settings)
                 labels.append((f'{m["shape"]} ' if len(shapes) > 1 else "") + label)
-            return (markers[0]["shape"] if len(shapes) == 1 else "", " / ".join(dict.fromkeys(labels)))
+            return (markers[0]["shape"] if len(shapes) == 1 else "", "，".join(dict.fromkeys(labels)))
         if kind in ("ma_cross", "ma_band"):
             # 旧成员仍可读取；对外统计统一使用 ma。
             for marker in d.get("indicators") or []:
@@ -885,10 +882,10 @@ class PageRenderer:
                                                      if isinstance(m, dict)}:
                 # 不同周期均线方向相反（如站上短均线却跌破长均线）：同格上下箭头会互相打架，
                 # 跟布林+RSI 方向不一致时一样改成文字，不画三角。
-                labels = [self._context._ma_display_text(m["label"], d.get("ma_settings")) for m in markers
+                labels = [self._context._ma_stat_label(m["label"], d.get("ma_settings")) for m in markers
                           if isinstance(m, dict) and isinstance(m.get("label"), str) and m["label"]]
                 return (f' <span class="signal-member-direction">'
-                        f'{esc(" / ".join(labels) or "多周期均线方向不一致")}</span>')
+                        f'{esc("，".join(labels) or "多周期均线方向不一致")}</span>')
         else:
             return ""
         icons = []
@@ -938,8 +935,10 @@ class PageRenderer:
             return _reverse_rsi_description(detail, side)
         marks = [m.get("label") for m in d.get("indicators") or []
                  if isinstance(m, dict) and isinstance(m.get("label"), str) and m.get("label")]
-        detail = " / ".join(marks) if marks else label
-        return self._context._ma_display_text(detail, d.get("ma_settings")) if kind in ("ma", "ma_cross", "ma_band") else detail
+        if kind in ("ma", "ma_cross", "ma_band"):
+            # 与分框标题同一套措辞（穿越倒装），同一指标内部用「，」而不是「 / 」。
+            return self._context._ma_stat_text(marks, d.get("ma_settings")) or label
+        return " / ".join(marks) if marks else label
 
 
     def _earnings_week_panel(self, snapshot, count_only=False):
@@ -990,7 +989,7 @@ class PageRenderer:
         summary = f'未来15天财报 · {len(lines)} 只'
         return (f'<div class="signal-extra-row earnings-extra">'
                 f'<button type="button" class="signal-filter-toggle" data-kind="earnings_week" '
-                f'aria-pressed="false" aria-label="选择未来15天财报叠加条件">财报条件</button>'
+                f'aria-pressed="false" aria-label="选择财报叠加条件">财报</button>'
                 f'<details class="earnings-week"><summary>{summary}</summary>'
                 f'<ul>{"".join(lines)}</ul></details></div>')
 
@@ -1131,7 +1130,7 @@ class PageRenderer:
         group_order = {g["item_group"]: i for i, g in enumerate(self._context._display_groups())}
         group_labels = {g["item_group"]: g["label"] for g in self._context.GROUPS}
 
-        def add_overlay_filter(kind, label, entries, expected, detail_fn):
+        def add_overlay_filter(kind, label, entries, expected, detail_fn, level_fn=None):
             valid = (isinstance(entries, list) and type(expected) is int and expected >= 0
                      and len(entries) == expected
                      and all(isinstance(d, dict) and isinstance(d.get("symbol"), str) and d["symbol"].strip()
@@ -1150,7 +1149,10 @@ class PageRenderer:
                         "g": self._context._member_belong(d),
                         "o": group_order.get(group, len(self._context.GROUPS)),
                         "l": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "",
-                        "d": [{"l": "purple" if kind == "target_purple" else "", "t": detail_fn(d)}],
+                        # 逐条条件的字色只跟着这条条件自身的等级：紫灯紫字；
+                        # 财报跟财报名单同一套红/黄/灰，不再整条白字。
+                        "d": [{"l": "purple" if kind == "target_purple"
+                               else (level_fn(d) if level_fn else ""), "t": detail_fn(d)}],
                     }
             filters[kind] = rec
 
@@ -1179,10 +1181,17 @@ class PageRenderer:
             if valid_earnings and earn_members:
                 timing_labels = {"pre": "盘前", "post": "盘后", "during": "盘中"}
                 kind_labels = {"official": "官方日期", "expected": "预计", "estimated": "估算"}
+                def earn_level(d):
+                    """财报的字色＝财报名单同一套：近 3 日红、7 日内黄、其余灰。"""
+                    urg = self._context.earnings_urgency(
+                        {"status": "ok", "date": d.get("date"), "timing": d.get("timing")}, asof)
+                    return urg if urg in ("red", "yellow") else "gray"
+
                 add_overlay_filter("earnings_week", "未来15天财报", earn_members, len(earn_members),
                                    lambda d: f"财报 {d.get('date', '')} "
                                    f"{timing_labels.get(d.get('timing'), '时段待定')} · "
-                                   f"{kind_labels.get(d.get('kind'), '来源待确认')}")
+                                   f"{kind_labels.get(d.get('kind'), '来源待确认')}",
+                                   earn_level)
 
         filter_data = {kind: {"label": f["label"], "ok": f["ok"],
                               "members": sorted(({"id": key, "a": self._context._stock_anchor_id(rec["s"]), **rec}
@@ -1208,8 +1217,8 @@ class PageRenderer:
             for key, name, n in totals)
         return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'
                 f'<span class="group-stats">{stats}</span></summary>'
-                f'{f"<table>{head}{rows}</table>" if rows else ""}{earnings_panel}'
-                f'{purple_panel}{filter_html}'
+                f'{f"<table>{head}{rows}</table>" if rows else ""}{purple_panel}'
+                f'{earnings_panel}{filter_html}'
                 f'{self._context._collapse_button("signalCounts", "统计")}</details>\n')
 
 
@@ -1313,9 +1322,10 @@ class PageRenderer:
                 for d in ordered:
                     symbol = self._context.normalize_symbol(d["symbol"])
                     note = f'<span class="note">{esc(d.get("note"))}</span>' if str(d.get("note") or "").strip() else ""
-                    tone = "tone-target-high" if section == "space" and d.get("band") == "high" else "tone-purple"
-                    lead = f'<span class="signal-name-lamp {tone}" aria-hidden="true"></span>'
-                    high_class = ' class="target-space-high"' if tone == "tone-target-high" else ""
+                    # 竖条跟这支个股自身的灯级（红/黄/绿/灰），不因进了紫灯就染成紫色。
+                    lamp = d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "unknown"
+                    lead = f'<span class="signal-name-lamp {lamp}" aria-hidden="true"></span>'
+                    high_class = ' class="target-space-high"' if section == "space" and d.get("band") == "high" else ""
                     lines.append(f'<li{high_class}>{lead}<a class="signal-member-jump" href="#{self._context._stock_anchor_id(symbol)}">'
                                  f'<span class="signal-member-symbol">{esc(symbol)}</span>{note}</a>'
                                  f'<span class="signal-member-belong">（{esc(self._context._member_belong(d))}）</span>'
@@ -1326,7 +1336,7 @@ class PageRenderer:
             content = '<p>明细待下次更新：当前快照名单无效或有重复标的，暂不展示。</p>'
         return (f'<div class="signal-extra-row purple-extra">'
                 f'<button type="button" class="signal-filter-toggle" data-kind="target_purple" '
-                f'aria-pressed="false" aria-label="选择空间或达到叠加条件">紫灯条件</button>'
+                f'aria-pressed="false" aria-label="选择紫灯叠加条件">紫灯</button>'
                 f'<details class="text-only target-purple"><summary>空间{len(space)}只　达到{len(reached)}只</summary>'
                 f'{content}</details></div>')
 

@@ -3086,6 +3086,13 @@ text_only_members = _snapshot_builder.text_only_members
 _ma_display_text = _snapshot_builder._ma_display_text
 
 
+# 统计侧均线措辞唯一出口：穿越倒装与分框标题一致，同一指标内部用「，」。
+_ma_stat_label = _snapshot_builder._ma_stat_label
+
+
+_ma_stat_text = _snapshot_builder._ma_stat_text
+
+
 _member_direction_markers = _snapshot_builder._member_direction_markers
 
 

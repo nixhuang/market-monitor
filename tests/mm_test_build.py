@@ -662,7 +662,7 @@ class RulesTemplateTests(unittest.TestCase):
                 volume = self.plain(glossary.split('id="glossary-vol"', 1)[1].split('id="glossary-ma"', 1)[0])
                 for term in ('1.4826×MAD', 'T＝exp(m＋k×s)', '新门槛＝√(T×F)',
                              '不是固定三档', '达到红门槛优先报红', '两条自适应参数启用且量比≥1×时',
-                             '自适应未命中，不再用固定倍数补灯', '收盘分布无效或自适应关闭时也用固定门槛'):
+                             '自适应未命中，不再用固定倍数补灯', '收盘分布无效或自适应关闭用固定门槛'):
                     self.assertIn(term, volume)
                 for prefix, key in (('红k＝', 'vol_ratio_red_z'), ('黄k＝', 'vol_ratio_z'),
                                     ('红F＝', 'vol_ratio_red'), ('黄F＝', 'vol_ratio')):
@@ -684,7 +684,7 @@ class RulesTemplateTests(unittest.TestCase):
                 self.assertIn('两条同周期只计一次，按简单穿越判断', text)
                 self.assertIn('关闭自适应或波动无效时固定0.5%', text)
                 self.assertIn('两条自适应参数启用', text)
-                self.assertIn('收盘分布无效或自适应关闭时也用固定门槛', text)
+                self.assertIn('收盘分布无效或自适应关闭用固定门槛', text)
                 self.assertIn('均线（短均线穿越；长均线触及±1%或穿越）', text)
                 self.assertNotIn('${', markup)
 

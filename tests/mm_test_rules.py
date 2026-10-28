@@ -149,6 +149,68 @@ class RulesRegression(unittest.TestCase):
             self.assertIn(f'#signalCounts .signal-member-block h5.{alias}', css)
         self.assertNotRegex(css, r'(?:tone-target-high|target-space-high)[^{]*\{[^}]*var\(--red\)')
 
+    def test_earnings_text_is_never_bold_and_uses_description_red(self):
+        css = page_assets.PAGE_CSS
+        # 财报不是涨跌方向：红字跟个股描述红 #ff8580 同色，不能用上涨红 var(--red)。
+        self.assertIn('#signalCounts .earnings-week-meta.is-red{color:#ff8580;font-weight:400}', css)
+        self.assertIn('#signalCounts .earnings-week-meta.is-yellow{color:#f0c674;font-weight:400}', css)
+        self.assertIn('.earn.urgent{color:#ff8580;font-weight:400}', css)
+        self.assertIn('.earn.soon{color:#f0c674;font-weight:400}', css)
+        # 所有位置的财报文字都不加粗（名单 meta、主表财报单元、多选组合条件）。
+        for selector, body in re.findall(r'([^{}]*(?:earnings-week-meta|\.earn)[^{}]*)\{([^{}]*)\}', css):
+            if 'summary' in selector:  # 「未来15天财报」这类区块标题照旧加粗
+                continue
+            with self.subTest(selector=selector.strip()):
+                self.assertNotIn('font-weight:600', body)
+        # 紫灯条件清单的竖条跟个股自身灯级，未知灯级留灰。
+        self.assertIn('#signalCounts .signal-name-lamp.unknown{--name-lamp:var(--dim)}', css)
+
+    def test_glossary_headings_centered_and_metric_names_blue(self):
+        css = page_assets.PAGE_CSS
+        # 名词解释与抓取规则：两个分区标题页面居中；指标名（h5）统一站内强调蓝。
+        self.assertIn('#glossaryRulesBody h4{text-align:center}', css)
+        self.assertIn('#glossaryRulesBody h5{color:#8fb8f0}', css)
+        # 只在这两块生效：报灯规则的小标题仍是白字。
+        self.assertIn('.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}', css)
+        # 蓝色规则必须写在通用 h5 规则之后（同文件内顺序即层叠顺序），否则会被白字覆盖。
+        self.assertLess(css.index('.card .rules-body h5{'), css.index('#glossaryRulesBody h5{'))
+        # 成本面板隔离页同步：名词解释块的分区标题也居中，不动报灯规则 h4。
+        cost_css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
+        self.assertIn('#glossaryRulesBody h4{text-align:center}', cost_css)
+        self.assertIn('.rules-body h5{margin:8px 0 3px;font-size:12px;color:#8fb8f0;font-weight:600}', cost_css)
+        # 两块分区标题就是「名词解释与计算」「抓取规则」，指标名全部是 h5。
+        glossary = page_assets.GLOSSARY_BODY
+        self.assertEqual(re.findall(r'<h4>(.*?)</h4>', glossary), ['名词解释与计算', '抓取规则'])
+        self.assertEqual(len(re.findall(r'<h5 id="(?:glossary|fetch)-', glossary)), 16)
+
+    def test_purple_ring_and_capsule_share_one_variable(self):
+        """分组标题紫灯圈与主表紫色胶囊必须同一个紫：都走 --purple，不允许任何一处写死十六进制紫。"""
+        css = page_assets.PAGE_CSS
+        # 变量是唯一紫源；旧暗紫 #a371f7 与任何 rgb 形式的写死紫都不许再出现。
+        self.assertIn('--purple:#c4a3ff', css)
+        self.assertEqual(css.count('#c4a3ff'), 1)
+        for dead in ('#a371f7', '163,113,247', '196,163,255'):
+            self.assertNotIn(dead, css)
+        # 灯圈（计数徽章）与胶囊（共识价标签）本体、描边圈同源。
+        self.assertIn('.stat-badge.purple{border-color:var(--purple)}', css)
+        self.assertIn('.stat-dot.purple{background:var(--purple)}', css)
+        self.assertIn('.lvtag.tgt{position:relative;color:var(--purple);border-color:var(--dim)}', css)
+        self.assertIn('.lvtag.tgt.space::after{border:1.5px solid var(--purple)}', css)
+        # 紫红（空间≥90%）与实心紫（达到）是另外两档，允许独立取值；其余紫规则只能是 var(--purple)。
+        allowed = {'var(--purple)', 'var(--target-high)', '#8957e5'}
+        bad = []
+        for selector, body in re.findall(r'([^{}]*purple[^{}]*)\{([^{}]*)\}', css):
+            for decl in re.findall(r'(?:^|;)(?:color|--name-lamp|--lamp|background|background-color|border-color)\s*:\s*([^;{}]+)', body):
+                for token in re.findall(r'#[0-9a-fA-F]{3,8}|var\(--[a-z-]+\)', decl):
+                    if token not in allowed:
+                        bad.append((selector.strip()[-60:], decl.strip(), token))
+        self.assertEqual(bad, [])
+        # 成本面板隔离页共用主站变量，不许留自己的一套紫。
+        cost_css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
+        for dead in ('#a371f7', '#c4a3ff', '163,113,247', '196,163,255'):
+            self.assertNotIn(dead, cost_css)
+        self.assertIn('.rules-body .lamp-purple{color:var(--purple);font-weight:600}', cost_css)
+
     def test_target_right_stripes_removed_from_main_and_range52_rows(self):
         css = page_assets.PAGE_CSS
         for state in ('space', 'high', 'hit'):
@@ -160,7 +222,7 @@ class RulesRegression(unittest.TestCase):
         self.assertNotIn('--pw:', css)
         tail = re.search(r'(?:^|\n)\.stk tr\.range52-row>td\{([^}]*)\}', css)[1]
         self.assertIn('background-image:linear-gradient(var(--lc),var(--lc))', tail)
-        self.assertIn('background-size:var(--lw) 18px', tail)
+        self.assertIn('background-size:var(--lw) 14px', tail)
         self.assertIn('background-position:left top', tail)
         self.assertNotIn('right', tail)
         self.assertNotIn('to top,var(--pc) 0 10px,transparent 10px 18px', css)
@@ -170,14 +232,16 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('.target-purple li{margin:2px 0}', css)
         self.assertIn('.target-purple .target-space-high .signal-member-direction', css)
         self.assertIn('.target-purple .note{display:inline;margin-left:6px}', css)
-        self.assertIn('.target-purple .signal-member-direction{color:#c4a3ff}', css)
+        self.assertIn('.target-purple .signal-member-direction{color:var(--purple)}', css)
+        self.assertIn('--purple:#c4a3ff', css)
+        self.assertNotIn('#a371f7', css)
         self.assertNotIn('.target-purple .target-space-high .note', css)
         self.assertNotIn('.target-purple .target-space-high .signal-member-belong', css)
         self.assertNotIn('.tone-target-high,.target-space-high{', css)
         self.assertNotIn('#signalCounts .tone-target-high,#signalCounts .target-space-high,', css)
         self.assertIn('.group-card tr.pur-high .sig .tp{color:var(--target-high)}', css)
         # 删除右条后不再存在跨行虚线相位；原左侧灯条续行高度仍为18px。
-        self.assertIn('background-size:var(--lw) 18px', tail)
+        self.assertIn('background-size:var(--lw) 14px', tail)
         self.assertNotIn('var(--pw)', tail)
 
     def test_positions_green_tints_and_shared_collapse_background(self):
@@ -639,8 +703,8 @@ class RulesRegression(unittest.TestCase):
                 self.assertEqual(level(current, ratio, False, intraday), expected)
                 self.assertEqual(level(current, ratio, False, intraday), level(previous, ratio, False, intraday))
         text = plain_text(page_assets.rules_body(current, monitor._rule_constants()))
-        self.assertIn('收盘：达到连续自适应门槛报红灯／黄灯', text)
-        self.assertIn('红灯≥3×，黄灯≥1.5×', text)
+        self.assertIn('收盘：达自适应门槛报红／黄', text)
+        self.assertIn('红≥3×、黄≥1.5×', text)
         self.assertIn('红k＝3.6、黄k＝2', plain_text(page_assets.glossary_body(current, monitor._rule_constants())))
 
     def test_statistics_collapse_bar_shares_border_color_only_in_statistics(self):
@@ -663,14 +727,16 @@ class RulesRegression(unittest.TestCase):
                 self.assertEqual(al.level, "red" if active else "yellow")
                 text = page_assets.rules_body(monitor.S, monitor._rule_constants())
                 self.assertEqual(page_assets.rule_flags(monitor.S)["vol_adaptive"], active)
-                self.assertIn('红灯≥4×，黄灯≥2×', plain_text(text))
+                self.assertIn('红≥4×、黄≥2×', plain_text(text))
                 glossary = plain_text(page_assets.glossary_body(monitor.S, monitor._rule_constants()))
                 self.assertIn(f'红k＝{red:g}、黄k＝{yellow:g}', glossary)
                 self.assertIn('收盘分布有效、两条自适应参数启用且量比≥1×', glossary)
                 self.assertIn('新门槛＝√(T×F)', glossary)
                 self.assertIn('自适应未命中，不再用固定倍数补灯', glossary)
-                self.assertIn('盘中量比＝（当日累计量÷已开盘分钟数）÷', glossary)
-                self.assertIn('按已开盘进度临时放宽', glossary)
+                self.assertIn('盘中量比＝（当日累计量÷已开盘分钟）÷', glossary)
+                self.assertIn('按已开盘进度放宽', glossary)
+                self.assertIn('放宽的是门槛，显示仍是原始折算值', glossary)
+                self.assertNotIn('盘中量比＝（当日累计量÷已开盘分钟数）÷', glossary)
 
     def test_boll_adaptive_matches_actual_formula_and_off_switch(self):
         monitor.S.update(boll_near_band_pct=25, boll_near_pct=0.75, boll_n=30, boll_k=3)
@@ -870,6 +936,12 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
             selector = f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
             with self.subTest(level=level):
                 self.assertEqual(css.count(selector + '{color:' + color + '}'), 1)
+        # 财报条件不是交易灯：红/黄/灰跟统计「未来15天财报」名单同一套，不能整条白字。
+        for level, color in (('red', '#ff8580'), ('yellow', '#f0c674'), ('gray', 'var(--dim)')):
+            selector = ('#signalCounts .signal-filter-condition'
+                        f'[data-signal-kind="earnings_week"][data-signal-level="{level}"]')
+            with self.subTest(level=level):
+                self.assertEqual(css.count(selector + '{color:' + color + '}'), 1)
         self.assertNotIn('signal-dot', css)
         self.assertNotIn('signal-dot', page_assets.PAGE_INTERACTION_JS)
         clean_css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
@@ -885,7 +957,10 @@ assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled
                     else:
                         self.assertIn(selector, {
                             f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
-                            for level in palette})
+                            for level in palette} | {
+                            '#signalCounts .signal-filter-condition'
+                            f'[data-signal-kind="earnings_week"][data-signal-level="{level}"]'
+                            for level in ('red', 'yellow', 'gray')})
         for single in (
                 '#signalCounts .signal-members-panel .note{display:inline;margin-left:6px}',
                 '#signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}',

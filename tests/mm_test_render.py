@@ -307,7 +307,17 @@ def _png_color_type(path):
         return _f.read(26)[25]
 check(_png_color_type(_os.path.join(_root, 'icons', 'apple-touch-icon-180.png')) == 2,
       "apple-touch-icon 必须是无 alpha 的真彩 PNG（iOS 主屏图标不认调色板/透明 PNG）")
+_icons_dir = _os.path.join(_root, 'icons')
+_bad = [n for n in _os.listdir(_icons_dir) if n.endswith('.png') and _png_color_type(_os.path.join(_icons_dir, n)) != 2]
+check(not _bad, "所有图标都必须是无 alpha 的真彩 PNG，调色板/透明 PNG 会让 iOS 主屏图标退回字母：" + ",".join(_bad))
 check(sum(_os.path.getsize(_os.path.join(_root, 'icons', n)) for n in _os.listdir(_os.path.join(_root, 'icons'))) < 400 * 1024, "图标总体积小于 400KB")
+_cost_css = open(_os.path.join(_root, 'cost_panel.css'), encoding='utf-8').read()
+check('.quiet-list{margin:8px 0;border-top:1px solid #46525f;border-bottom:1px solid #46525f}' in monitor.PAGE_CSS,
+      "「无异动 N 只」整体作为可点开的条目，上下各有一条细横线")
+check('.cost-manage .blk-pnl-fold{border-top-color:rgba(143,184,240,.6);border-bottom-color:rgba(143,184,240,.6)}' in _cost_css,
+      "「当日盈亏贡献」作为可点开的条目，上下边框提亮为明确的横线")
+check('.quiet-list .stk tr[id^="s-"]' not in _cost_css and 'margin-bottom:-1px' not in _cost_css,
+      "细框不再加在清单内部的股票行／盈亏贡献的每一行上（那是条目内部，不是可展开范围）")
 check('<div class="foot">' not in html5 and 'href="#marketRiskRules"' not in html5
       and 'href="#glossary-fetch"' not in html5,
       '页底三个重复入口已删，规则与来源仍在折叠正文')
@@ -881,6 +891,9 @@ check(len(_filter_rules) >= len(_filter_palette)
       and all(selector == '#signalCounts .signal-filter-condition'
               or selector in {f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
                               for level in _filter_palette}
+              or selector in {'#signalCounts .signal-filter-condition'
+                              f'[data-signal-kind="earnings_week"][data-signal-level="{level}"]'
+                              for level in ('red', 'yellow', 'gray')}
               for selector, _ in _filter_rules)
       and all(not re.search(r'(?:^|;)\s*color\s*:', body)
               or bool(re.search(r'(?:^|;)\s*color\s*:\s*inherit\s*(?:;|$)', body))
@@ -1689,7 +1702,7 @@ const deadline = setTimeout(() => {
       })()`);
       assertions.push({ok: JSON.stringify(header.order) === JSON.stringify([
         'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn'])
-        && header.count === String(header.expected) && header.border === 'rgb(163, 113, 247)' && !header.overflow,
+        && header.count === String(header.expected) && header.border === 'rgb(196, 163, 255)' && !header.overflow,
         name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
       const actual = await evaluate(`(() => {
         document.querySelectorAll('details.group-card,details.quiet-list').forEach(el => el.open = true);
@@ -1764,7 +1777,7 @@ const deadline = setTimeout(() => {
         name: width + 'px真实CSS高空间外框、数字及等宽加重同色#dc62b8', actual});
       assertions.push({ok: actual.originalSize[0] > 0 && actual.originalSize[1] > 0
         && JSON.stringify(actual.originalSize) === JSON.stringify(actual.priorSize)
-        && actual.spaceColor === 'rgb(196, 163, 255)' && actual.spaceBorder === 'rgb(163, 113, 247)'
+        && actual.spaceColor === 'rgb(196, 163, 255)' && actual.spaceBorder === 'rgb(196, 163, 255)'
         && actual.hitColor === 'rgb(255, 255, 255)' && actual.hitBackground === 'rgb(137, 87, 229)'
         && actual.hitAfter === 'none' && actual.hitClass.includes('pur-hit') && !actual.hitClass.includes('pur-high')
         && actual.badColor === 'rgb(139, 147, 161)' && actual.badBorderStyle === 'solid'
@@ -1779,7 +1792,7 @@ const deadline = setTimeout(() => {
         s.sigImage === 'none' && s.sigShadow === 'none'
         && s.leftImage === 'linear-gradient(' + s.color + ', ' + s.color + ')'
         && s.leftSize.startsWith(s.width + 'px ')
-        && s.rangeImage === s.leftImage && s.rangeSize === s.width + 'px 18px'
+        && s.rangeImage === s.leftImage && s.rangeSize === s.width + 'px 14px'   // 位置条收矮后，左侧灯条续接同步收短
         && s.rangePosition === '0% 0%'),
         name: width + 'px普通/高/达到目标均无右紫条，红黄绿左条及52周续接保留', actual: actual.stripes});
       assertions.push({ok: actual.sparseBorders.length === 2 && actual.sparseBorders.every((s, i) =>
@@ -1944,7 +1957,7 @@ const deadline = setTimeout(() => {
       assertions.push({ok:bars.length===2 && bars.every(b=>!b.missing && b.percent===0 && b.gaps===2
           && b.underLo && b.underHi && !b.overlapsTrack && b.markerInTrack && b.markerWidth<=8.6
           // 只收底宽、高度不变（9px）→ 顶角约 50°，比原来的 60° 更尖锐
-          && b.markerHeight>=8.6 && Math.round(b.height)===33)
+          && b.markerHeight>=8.6 && Math.round(b.height)===26)   // 三角之上不再写百分比，整条从 33px 回收到 26px
           && bars.some(b=>b.text==='-33.3% / +33.3%') && bars.some(b=>b.text==='-39.0% / +0.6%')
           && edit.exists && edit.sameRow && edit.sumSameRow && edit.headH<=56
           && edit.rightGap<=6 && edit.height>=24 && !edit.overflow

@@ -307,6 +307,27 @@ class SnapshotBuilder:
         return output
 
 
+    def _ma_stat_label(self, text, settings=None):
+        """统计侧单条均线事实的唯一措辞：穿越倒装成「长均线上穿」，与分框标题一致。
+
+    只投影显示，不改周期归属、原始信号或判灯；主表另有一套（主表不做倒装），互不借用。"""
+        label = str(text or "")
+        match = re.match(r"^(上穿|跌破)(\d+)日均线$", label)
+        if match:
+            label = f"{match.group(2)}日均线{match.group(1)}"
+        return self._ma_display_text(label, settings if isinstance(settings, dict) else None)
+
+    def _ma_stat_text(self, texts, settings=None):
+        """同一指标内的多条均线事实用「，」连接；白色「 / 」只留给指标之间切换。"""
+        labels = []
+        for text in texts or []:
+            if not isinstance(text, str) or not text:
+                continue
+            label = self._ma_stat_label(text, settings)
+            if label and label not in labels:
+                labels.append(label)
+        return "，".join(labels).replace(" / ", "，").replace("短均线/长均线", "短均线与长均线")
+
     def _member_direction_markers(self, d, kind):
         """仅从本轮已经触发的信号取方向；图形只描述触轨/穿越位置，不预测后续涨跌。"""
         signals = _signal_texts(d.get("signals"))

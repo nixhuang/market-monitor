@@ -274,6 +274,10 @@
 .cost-subhead .cnt b.up{color:var(--up)} .cost-subhead .cnt b.down{color:var(--down)}
 /* 默认收起：点标题展开。三角跟全站收起条一致（收起 ▸ / 展开 ▾） */
 .blk-pnl-fold{margin:6px 0 0}
+/* 「当日盈亏贡献」同样是点一下才展开的条目：把上下两条边框提亮成明确的横线
+   （左右仍维持本块原来的淡边框），收起时两条线夹住标题行，展开时夹住整块。
+   选择器必须带上 .cost-manage —— 否则压不过 .cost-manage .signal-member-block 的 border shorthand。 */
+.cost-manage .blk-pnl-fold{border-top-color:rgba(143,184,240,.6);border-bottom-color:rgba(143,184,240,.6)}
 .blk-pnl-fold>summary{list-style:none;cursor:pointer;-webkit-tap-highlight-color:transparent;
   /* 左边留 16px 给箭头；这段 shorthand 会覆盖 .cost-subhead 的 padding-left，必须显式写 */
   padding:3px 0 2px 16px}
@@ -459,6 +463,8 @@
 .rules-body h4{margin:10px 0 4px;font-size:12.5px;color:#bfd5ff;font-weight:600}
 .rules-body h4:first-child{margin-top:4px}
 .rules-body h5{margin:8px 0 3px;font-size:12px;color:#8fb8f0;font-weight:600}
+/* 与主站一致：名词解释与抓取规则的分区标题居中（只作用在名词解释块，不动报灯规则的 h4）。 */
+#glossaryRulesBody h4{text-align:center}
 .rules-body ul{margin:0 0 2px;padding-left:18px}
 .rules-body li{font-size:12px;line-height:1.65;color:var(--dim);margin:0 0 2px}
 .rules-body ul ul{margin:1px 0 3px;padding-left:14px}
@@ -466,7 +472,7 @@
 .rules-body li b{color:var(--text);font-weight:600}
 .rules-body .lamp-red{color:#ff8580;font-weight:600}
 .rules-body .lamp-yellow{color:#f0c674;font-weight:600}
-.rules-body .lamp-purple{color:#c4a3ff;font-weight:600}
+.rules-body .lamp-purple{color:var(--purple);font-weight:600}
 .rules-body .lamp-green{color:var(--up);font-weight:600}
 .rules-body li.rule-setting{margin-left:6px;border-left:2px solid var(--line);padding-left:8px}
 .rules-body .lamp-magenta{color:#ef8de4;font-weight:600}
