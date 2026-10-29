@@ -95,7 +95,7 @@ check("h1.brand{color:var(--up)}" in html, "站名用上涨绿 --up，不写死�
 check("市场自检" not in html, "旧标题已移除")
 check("数据时间 2026-10-06 收盘（美东交易日）" in html and "本页数据更新" not in html,
       "休市顶部显示行情收盘日，不重复抓取完成时间")
-check("成功 ·2026-10-07 20:40（北京时间）" in html, "静态成功灯只报「成功 ·日期 时:分」，不带秒")
+check("成功 ·2026-10-07 20:40（北京）" in html, "静态成功灯只报「成功 ·日期 时:分」，不带秒")
 check("自动计划：美东周一至五 20:15（北京 " in html, "第二排自动计划")
 check(("夏令时次日 08:15" in html) != ("冬令时次日 09:15" in html), "冬夏令时只出现一个")
 check('id="btnRunNow"' in html and 'id="btnCheckStatus"' in html, "第三排两个按钮都在")
@@ -185,7 +185,7 @@ check("47.0%<span class=\"unit\">上宏观长均线</span>" in _html_b
 # 2026-10-19：顶栏不再重复念灯级计数（统计卡里已有一份），只保留时间＋数据量；「缺失 N」是告警要留
 # 2026-10-19：一切正常时只报完成时间；「N 项数据已更新」只在有缺失/不支持代码时才写
 check("红2 黄2 绿4" not in html and "10 项数据已更新" not in html
-      and "成功 ·2026-10-07 20:40（北京时间） · 缺失 2" in html,
+      and "成功 ·2026-10-07 20:40（北京） · 缺失 2" in html,
       "运行灯只报完成时间与缺失，正常时不写数据量与灯级计数")
 check('id="runLight" data-phase="ok"' in html, "运行灯初始为绿")
 check('id="ruleLight" data-phase="idle"' in html and 'id="ruleLightTxt"' in html,
@@ -243,10 +243,10 @@ snap_live = dict(snap2, actual_dates={"min":"2026-10-07", "max":"2026-10-07"})
 check("数据时间 2026-10-07 23:19:00（盘中快照，北京时间）" in monitor.render(macro, items, 10, snapshot=snap_live),
       "当前交易日盘中数据才显示时间点")
 snap_utc = dict(snapshot, finished_at_bj="", finished_at="2026-10-07T12:40:28Z")
-check("成功 ·2026-10-07 20:40（北京时间）" in monitor.render(macro, items, 10, snapshot=snap_utc),
+check("成功 ·2026-10-07 20:40（北京）" in monitor.render(macro, items, 10, snapshot=snap_utc),
       "UTC抓取完成时间正确转为北京时间（只到分钟），行情时间仍为收盘日")
 snap_no_finish = {k:v for k,v in snapshot.items() if k not in ('finished_at', 'finished_at_bj')}
-check("成功 ·未记录（北京时间）" in monitor.render(macro, items, 10, snapshot=snap_no_finish),
+check("成功 ·未记录（北京）" in monitor.render(macro, items, 10, snapshot=snap_no_finish),
       "缺少完成时间不以开始时间或当前时间冒充")
 
 # 重点关注为空

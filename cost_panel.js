@@ -9,8 +9,31 @@
   var SESSION_LOCAL=demoPreview?'mm_position_costs_demo_v1':'mm_position_costs_preview_v2';
   var ISOLATED_NOTICE=(demoPreview?'合成DEMO · ':'')+'隔离预览：仅保存在当前标签页会话中，刷新可恢复；关闭标签页前请导出。不会修改共享本地仓位或上传云端。';
 
-  function money(n){ return (n<0?'-':'+')+'$'+Math.abs(Math.round(n)).toLocaleString('en-US'); }
-  function plain(n){ return '$'+Math.round(n).toLocaleString('en-US'); }
+  /* 盈亏金额：默认**一位小数**（2026-10-29）。原来 Math.round 取整，误差最大 ±$0.5，
+     现在 ±$0.05。符号按**舍入后的值**判（原来是先 round 再 abs，-0.4 会显示成「-$0」）。
+     ——金额再大就自动降档（2026-10-29 补）：手机上盈亏格最窄只有 55～57px（≤365 视口），
+     11.5px 加粗下「+$1,247.3」已经占满（55px），每多一位整数就必须少一位精度，
+     否则会顶出格子 / 折行把行高撑开。实测墨宽（11.5px 加粗 / 不加粗）：
+       <1万     一位小数 +$1,247.3   55 / 50px
+       <10万    整数    +$12,347    52 / 47px
+       <100万   k 缩写  +$123.5k    52 / 47px
+       ≥100万   M 缩写  +$1.23M     50 / 46px
+     降档只影响金额本身，比例（+5.5%）始终是 toFixed(1)。 */
+  function money(n){ var r=Math.round(num(n)*10)/10, a=Math.abs(r), s=(r<0?'-':'+');
+    // 999,999 这类贴边的数：k 档会算成「1000.0k」（10 字符，反而更长）→ 直接进位到 M
+    if(a>=1e6||a>=999950) return s+'$'+(a/1e6).toFixed(2)+'M';
+    if(a>=1e5) return s+'$'+(a/1e3).toFixed(1)+'k';
+    return s+'$'+a.toLocaleString('en-US',
+      {minimumFractionDigits:(a>=1e4?0:1),maximumFractionDigits:(a>=1e4?0:1)}); }
+  /* 数量列的**显示**只取整数：录入仍可到 0.0001，且全程按精确值计算，
+     这里只是不把「46.0903」铺在窄列里（2026-10-29）。 */
+  function qtyInt(n){ return Math.round(num(n)).toLocaleString('en-US'); }
+  /* 市值 / 现金 / 总资产：整数。≥100万 也按 M 缩写（市值列最窄 44px，
+     「$1,234,567」在 10px 下约 51px 放不下，「$1.23M」约 38px）。 */
+  function plain(n){ var r=Math.round(n), a=Math.abs(r);
+    // 负号位置沿用原口径：跟在 $ 后面（'$-1,234,567'），不改成 '- $…'
+    if(a>=1e6) return '$'+(r<0?'-':'')+(a/1e6).toFixed(2)+'M';
+    return '$'+r.toLocaleString('en-US'); }
   function pct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
   /* 最多 4 位小数、去掉多余的 0：录入允许 0.0001 这种精度，显示不拖尾 */
   function trim(n){ var s=(Math.round(n*10000)/10000).toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
@@ -1349,6 +1372,31 @@
     +'<span class="collapse-icon" aria-hidden="true">▲</span></button></div>';
   sc.parentNode.insertBefore(panel, sc);
   var stateEl=panel.querySelector('#costState');
+  /* 手机（≤600px）：「已同步 / 未同步」和「总资产·盈亏 + 编辑」挤在一行太满，
+     把它搬到「数据时间 …」那一排的最右侧（2026-10-29）。桌面档原地不动。
+     只有一份交互入口：点外面那个＝点标题行里那个（填 / 改 GitHub token）。 */
+  var syncMirror=null;
+  function syncMirrorEl(){
+    var mobile=window.matchMedia?window.matchMedia('(max-width:600px)').matches:false;
+    if(!mobile){
+      if(syncMirror&&syncMirror.parentNode) syncMirror.parentNode.removeChild(syncMirror);
+      syncMirror=null; return null;
+    }
+    if(syncMirror) return syncMirror;
+    var row=document.querySelector('.sub');
+    if(!row) return null;
+    syncMirror=document.createElement('span');
+    syncMirror.className='cost-state';
+    syncMirror.id='costSyncState';
+    syncMirror.setAttribute('aria-live','polite');
+    syncMirror.addEventListener('click',function(e){
+      e.preventDefault(); e.stopPropagation(); stateEl.click();
+    });
+    row.appendChild(syncMirror);
+    return syncMirror;
+  }
+  // 编辑态的校验提示仍写在标题行（就在要改的格子上方），顶栏那颗同时清空，避免两处重复
+  function showNotice(t){ if(stateEl) stateEl.textContent=t; if(syncMirror) syncMirror.innerHTML=''; }
   var footEl=panel.querySelector('#costFoot');
   var actsEl=panel.querySelector('#costActs');
   var editBtn=panel.querySelector('#costEditBtn');
@@ -1465,7 +1513,7 @@
   });
   panel.querySelector('#costSave').addEventListener('click', function(){
     if(!writer || disposed) return;
-    if(panel.querySelector('input:invalid')){ NOTICE='存在无效输入，请修正后保存'; stateEl.textContent=NOTICE; return; }
+    if(panel.querySelector('input:invalid')){ NOTICE='存在无效输入，请修正后保存'; showNotice(NOTICE); return; }
     // 保存立即结束本轮编辑；异步回执绝不关闭后来开始的编辑会话。
     editing=false; snapshot=null; savePaused=false; editGeneration++; pullGeneration++;
     if(draftPending || !maintenanceOnly){
@@ -1562,7 +1610,7 @@
     if(!/^(?:\d+(?:\.\d{0,4})?|\.\d{1,4})?$/.test(raw) || !isFinite(value) || value<0){
       el.setCustomValidity('请输入非负数，最多四位小数');
       NOTICE='输入无效，保留上一次有效数值；请输入非负数，最多四位小数';
-      if(stateEl) stateEl.textContent=NOTICE;
+      showNotice(NOTICE);
       return;
     }
     el.setCustomValidity(''); NOTICE='';
@@ -1572,7 +1620,7 @@
       var total=(Math.round(first*10000)+Math.round(second*10000))/10000;
       if(!isFinite(total)){
         el.setCustomValidity('现金合计过大'); NOTICE='现金合计过大，保留上一次有效数值';
-        if(stateEl) stateEl.textContent=NOTICE; return;
+        showNotice(NOTICE); return;
       }
       DATA.cash=total; DATA.cash_extra=second;
     }else if(f==='fixed'||f==='fixed_cost') DATA[f]=value;
@@ -1605,7 +1653,7 @@
     return '<li class="lv-'+(it.lv||'green')+'" data-sym="'+esc(it.sym)+'"><span class="cost-grid">'
       +nameCell
       +'<span class="cost-cell">'+(editing?inp(it.sym,'cost',vt(it.cost),'成本价'):trim(it.cost))+'</span>'
-      +'<span class="cost-cell">'+(editing?inp(it.sym,'qty',vt(it.qty),'数量'):trim(it.qty))+'</span>'
+      +'<span class="cost-cell">'+(editing?inp(it.sym,'qty',vt(it.qty),'数量'):qtyInt(it.qty))+'</span>'
       +'<span class="cost-cell'+(it.has?'':' dim')+'">'+(it.has?plain(it.mv):'—')+'</span>'
       +'<span class="cost-cell '+(it.has?c:'dim')+'">'
       +(it.has?('<span class="pct">'+pct(it.pnlPct)+'</span> '
@@ -1960,7 +2008,7 @@
     var ncTip='没取到云端持仓数据：'+(tk?'点这里更换 GitHub token':'点这里填 GitHub token')
       +'；本机数据不受影响';
     var okTip='已同步'+(CLOUD&&CLOUD.updated_at?('：云端数据 '+esc(String(CLOUD.updated_at).slice(0,16))):'');
-    stateEl.innerHTML = Object.keys(storageErrors).length ? '<span class="warn">本地未持久化</span>'
+    var syncChip = Object.keys(storageErrors).length ? '<span class="warn">本地未持久化</span>'
       : isolated ? '<span class="warn">隔离预览 · 不上传</span>'
       : !writer ? '<span class="warn">只读标签页</span>'
       : SYNC==='pulling' ? '<span class="warn">拉取中…</span>'
@@ -1971,6 +2019,10 @@
       : maintenancePending && !cloudVerified ? '<span class="warn">ACK 维护待云端核验</span>'
       : dirty || !sameAsCloud() ? '<span class="warn">未同步'+(tk?'':' · 未填 token')+'</span>'
       : '<span class="ok" aria-label="'+okTip+'">已同步</span>';
+    // 手机：状态胶囊搬到状态行，标题行留空（只剩「总资产·盈亏 + 编辑」）
+    var mirror=syncMirrorEl();
+    if(mirror){ mirror.innerHTML=syncChip; stateEl.innerHTML=''; }
+    else stateEl.innerHTML=syncChip;
     /* 底部：一条横条画资产结构占比（长持仓深绿 / 短持仓浅绿 / 现金青 / 固定收益橙），
        下面只留「颜色图标 + 比例」，不再写名称和金额——横条本身已经用颜色分段，
        读屏标签里仍保留完整说明 */

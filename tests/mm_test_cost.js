@@ -194,7 +194,7 @@ async function boot(opts={}){
     alert:s=>alerts.push(s),prompt:()=>null,
     __MM_RULES__:opts.rules};
   ctx.window=ctx;
-  const hooks=`globalThis.__costTest={normalize,canonical,mergeCloud,requestSave,autoPush,doPush,startPull,enterEdit,exitEdit,importData,exportData,cashFirst,nearPrice,ackStatEntries,paint,setAck,pruneAck,
+  const hooks=`globalThis.__costTest={money,plain,qtyInt,normalize,canonical,mergeCloud,requestSave,autoPush,doPush,startPull,enterEdit,exitEdit,importData,exportData,cashFirst,nearPrice,ackStatEntries,paint,setAck,pruneAck,
     state:()=>({DATA:clone(DATA),CLOUD:CLOUD&&clone(CLOUD),revision,dirty,maintenanceOnly,maintenancePending,cloudVerified,cloudFirstPending,positionsAuthorized,positionSave:positionSave&&clone(positionSave),positionGeneration,ackRevision,draftPending,uncertain:uncertain&&clone(uncertain),deadline:REQUEST_DEADLINE,activeRequests:activeRequests.length,editing,inFlight:inFlight&&clone(inFlight),queued,writer,SYNC,NOTICE,savePaused,storageErrors:clone(storageErrors)}),
     rows:ROWS};`;
   const code=SOURCE.replace(/^<script>\s*/,'').replace(/\s*<\/script>\s*$/,'').replace('__MM_REAL__',JSON.stringify(opts.seed||SEED))
@@ -706,30 +706,30 @@ for(const [name,fixed,fixedCost] of [['固收盈利',200,15],['固收亏损',20,
     const sum=b.doc.querySelector('.cost-sum');
     // AAA: 100*5成本=500无盈亏；BBB: 100*2-90*2=20，成本合计680。
     assert.equal(sum.querySelector('b').textContent,'$'+Math.round(700+30+fixed).toLocaleString('en-US'));
-    assert.equal(sum.querySelectorAll('b')[1].textContent,'+$20（+2.9%）');
+    assert.equal(sum.querySelectorAll('b')[1].textContent,'+$20.0（+2.9%）');
     assert.match(sum.getAttribute('title'),/盈亏仅股票\/ETF/);
     assert.match(sum.getAttribute('aria-label'),/股票\/ETF持仓盈亏/);
     const bond=b.doc.querySelector('.blk-bond');
     if(fixed>0){assert.ok(bond);assert.equal(bond.querySelector('.t-pnl').textContent,'');assert.equal(bond.querySelector('.pct'),null);}
     assert.equal(b.state().DATA.fixed,fixed);assert.equal(b.state().DATA.fixed_cost,fixedCost);
-    b.paint();assert.equal(sum.querySelectorAll('b')[1].textContent,'+$20（+2.9%）');
+    b.paint();assert.equal(sum.querySelectorAll('b')[1].textContent,'+$20.0（+2.9%）');
     assert.equal(b.puts().length,0);
   });
 }
 test('仅现金固收无股票ETF时表头盈亏为零',async()=>{
   const b=await boot({groups:{AAA:'focus',BBB:'focus'},token:false});
-  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$50·+$0（+0.0%）');
+  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$50·+$0.0（+0.0%）');
   assert.equal(b.doc.querySelector('.blk-bond .t-pnl').textContent,'');
 });
 test('固收盈利不能抵消股票亏损且编辑成本仍保留',async()=>{
   const d={...copy(SEED),fixed:2000,fixed_cost:10};d.items.AAA.cost=110;
   const b=await boot({local:d,token:false});
   const sum=b.doc.querySelector('.cost-sum');
-  assert.equal(sum.querySelectorAll('b')[1].textContent,'-$30（-4.1%）');
+  assert.equal(sum.querySelectorAll('b')[1].textContent,'-$30.0（-4.1%）');
   assert.equal(sum.querySelectorAll('b')[1].className,'down');
   await b.enter();b.edit('BOND','fixed_cost','123.4567');b.edit('BOND','fixed','12.3456');await b.tick(16);
   assert.equal(b.local().fixed_cost,123.4567);assert.equal(b.local().fixed,12.3456);
-  assert.equal(sum.querySelectorAll('b')[1].textContent,'-$30（-4.1%）');
+  assert.equal(sum.querySelectorAll('b')[1].textContent,'-$30.0（-4.1%）');
   assert.equal(b.doc.querySelector('.blk-bond .t-pnl').textContent,'');
   assert.equal(b.puts().length,0);
 });
@@ -1206,13 +1206,23 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(SOURCE,/class="lv-'\+esc\(x\.lv\|\|'green'\)/);
   // 列宽：名称列不再独占剩余空间，数值列按多位数留足；顺序 名称 → 盈亏比 → 金额 → 图表
   assert.match(CSS,/grid-template-columns:minmax\(0,1\.15fr\) 48px 64px minmax\(0,1fr\)/);
-  assert.match(CSS,/grid-template-columns:minmax\(0,1\.15fr\) 44px 56px minmax\(0,1fr\)/);
+  // 手机档（2026-10-29）：名单文字 10.5 → 11.5px，右侧比例图相应缩短
+  // （名称 : 图 = 1.15:1 → 1.3:0.85），数值列各让出 2px
+  assert.match(CSS,/grid-template-columns:minmax\(0,1\.3fr\) 46px 66px minmax\(0,0\.6fr\);gap:0 6px;\s*font-size:13px;line-height:15\.75px\}/);
   const iName=SOURCE.indexOf('\'<span class="cn-name">'), iCv=SOURCE.indexOf('\'<span class="cv '),
         iCa=SOURCE.indexOf('\'<span class="ca '), iBar=SOURCE.indexOf('\'<span class="cbar">');
   assert.ok(iName>=0&&iName<iCv&&iCv<iCa&&iCa<iBar,'渲染顺序应为 名称→盈亏比→金额→图表');
   // 每排之间一条淡分隔线
   assert.match(CSS,/\.cost-contrib li\+li\{border-top:1px solid rgba\(255,255,255,\.07\);padding-top:4px;margin-top:2px\}/);
-  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 48px 54px 54px 52px 38px/);
+  // 手机档（2026-10-29）：五个数值列再放宽 4～8px（数字 10.5 → 11.5px），名称列相应被挤压
+  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 54px 46px 62px 68px 44px/);
+  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 48px 42px 58px 64px 38px/);
+  // ≤365 / ≤340 两档：盈亏列必须留得下最长的金额（「+$12.35M」在 10px 档约 57px）
+  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 44px 40px 52px 58px 34px/);
+  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 38px 38px 46px 58px 34px/);
+  // 标题行极端兜底：金额长到顶按钮时截省略号，而不是压到「编辑」上
+  assert.match(CSS,/\.cost-manage>summary \.cost-sum\{min-width:0;overflow:hidden;text-overflow:ellipsis\}/);
+  assert.match(CSS,/\.cost-cell\{font-size:11\.5px\}/);
   // 备注名：ETF 已有胶囊标签就不再重复写 ETF；含中文的只保留中文部分
   const read=f=>JSON.parse(fs.readFileSync(path.join(__dirname,'..',f),'utf8'));
   const names=read('symbol-names.json'), holdings=read('holdings.json');
@@ -2529,7 +2539,8 @@ for(const [rawPrice,rawPrev,text,chg] of [
   }}),r=b.rows.find(r=>r.sym==='AAA'),amt=(price-prev)*qty,dayPct=amt/(prev*qty)*100;
   assert.equal(r.price,price);assert.equal(r.prevClose,prev);assert.equal(r.dayAmt,amt);
   assert.equal(r.chg,(price/prev-1)*100);
-  const money=(amt<0?'-':'+')+'$'+Math.abs(Math.round(amt)).toLocaleString('en-US');
+  // 直接用 cost_panel.js 真源的 money()（2026-10-29 起：一位小数，大额自动降档）
+  const money=b.money(amt);
   const summary=b.doc.querySelector('.blk-pnl-fold .cnt b');
   assert.equal(summary.textContent,money+' '+(dayPct>=0?'+':'')+dayPct.toFixed(1)+'%');
   assert.equal(b.doc.querySelector('.cost-contrib .ca').textContent,money);
@@ -2570,6 +2581,48 @@ for(const original of ['red','green'])test('ACKCASE原'+original+'三条ACK只�
   assertRowPair(b,'AAA',original==='green');
   for(const k of ['AAA|add|100','AAA|cut|100','AAA|loss10'])assert.ok(b.state().DATA.acks[k]);
   b.ack('AAA|loss10');assert.equal(r.tr.className,'red');assertRowPair(b,'AAA',false);
+});
+
+/* ===== 金额宽度护栏（2026-10-29）=====
+   手机上盈亏格最窄只有 55～57px（≤365 视口 .cost-block-title 的 .t-pnl），11.5px 加粗下
+   「+$1,247.3」= 9 字符 = 55px 已到边。金额每多一位整数就必须少一位精度：
+     <1万 一位小数 → <10万 整数 → <100万 k 缩写 → ≥100万 M 缩写。
+   下面同时断言「真源函数的分档」与「渲染出来的每一格金额不超过 9 个字符」。 */
+for(const [v,want] of [
+  [0,'+$0.0'],[0.04,'+$0.0'],[-0.04,'+$0.0'],[-0.06,'-$0.1'],
+  [1247.34,'+$1,247.3'],[-1247.34,'-$1,247.3'],
+  [9999.94,'+$9,999.9'],[9999.96,'+$10,000'],
+  [12347.3,'+$12,347'],[-12347.3,'-$12,347'],
+  [99999.6,'+$100,000'],
+  [123457,'+$123.5k'],[-123457,'-$123.5k'],
+  [999999,'+$1.00M'],[999949,'+$999.9k'],[999950,'+$1.00M'],
+  [1234567,'+$1.23M'],[-12345678,'-$12.35M']
+])test('金额分档 '+v+' → '+want,async()=>{
+  const b=await bootCash();assert.equal(b.money(v),want);
+});
+for(const [v,want] of [[0,'$0'],[64526,'$64,526'],[123456,'$123,456'],[1234567,'$1.23M'],[-1234567,'$-1.23M']])
+test('plain 分档 '+v+' → '+want,async()=>{
+  const b=await bootCash();assert.equal(b.plain(v),want);
+});
+test('渲染出的每一格金额都不超过 9 个字符（最窄格 55px 的硬上限）',async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:1,qty:200000},BBB:{cost:1,qty:0}}},prepareDocument(doc){
+    const tr=doc.getElementById('s-aaa');tr.setAttribute('data-price','1.0617');tr.setAttribute('data-prev-close','1');
+    tr.querySelector('.px-price').textContent='1.06';tr.querySelector('.px-chg').textContent='+6.17%';
+  }});
+  // 盈亏 200000×(1.0617-1)=12,340 → 触发「整数」档；同时把市值推到 21 万 → k 档
+  const cells=[...b.doc.querySelectorAll('.cost-block-title .amt,.cost-cell .amt,.cost-contrib .ca')];
+  assert.ok(cells.length,'必须渲染出金额格');
+  for(const el of cells){
+    const t=(el.textContent||'').trim();
+    if(!/[$]/.test(t))continue;
+    assert.ok(t.length<=9,'金额「'+t+'」共 '+t.length+' 个字符，超过最窄格上限');
+  }
+  // 标题行「总资产 · 盈亏（±N%）」：只取里面的金额片段来量宽度
+  for(const el of b.doc.querySelectorAll('.cost-sum b')){
+    const m=(el.textContent||'').match(/[-+]?\$[\d,.]+[kM]?/g)||[];
+    for(const t of m)assert.ok(t.length<=9,'标题行金额「'+t+'」共 '+t.length+' 个字符，超过上限');
+  }
+  assert.equal(b.money(12340),'+$12,340');
 });
 
 const selectedTests=process.env.MM_COST_TEST_FILTER?tests.filter(t=>t.name.includes(process.env.MM_COST_TEST_FILTER)):tests;

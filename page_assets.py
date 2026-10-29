@@ -693,7 +693,9 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-member-block h5.target-space-high,
 #signalCounts .signal-member-block.tone-target-high h5,
 #signalCounts .signal-member-block.target-space-high h5{color:var(--target-high)}
-@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:74px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:12px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:12px;line-height:1.1}}
+/* 手机：统计面板里每个「指标名称」胶囊的**框**（74px 宽 × 38px 高）一个像素不动，
+   只把框里的文字从 12px 提到 13px（「布林+RSI」「52周低位」在 74px 里仍是单行）。 */
+@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:74px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:13px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:13px;line-height:1.1}}
 tr[id^="s-"]{scroll-margin-top:64px}
 /* 闪烁只改 background-color：带 52 周条的行，灯条是用 background-image 画的，
    用 background 简写做动画会把灯条一起清掉（看起来就是高亮盖住了灯）。
@@ -812,8 +814,9 @@ td.px{text-align:center}
   .stk th.h-earn,.earn-cell{text-align:left}
   .stk td.sym{font-size:14px}
   .stk td.sym .note{font-size:11.5px;line-height:1.35}
-  .stk .earn{font-size:11.5px;line-height:1.4}
-  .stk .earn .unit{font-size:11px;line-height:1.35}
+  /* 财报列：美东时间跟「指标描述」同字号（12.5px），下面的北京时间跟原来美东时间同字号（11.5px） */
+  .stk .earn{font-size:12.5px;line-height:1.4}
+  .stk .earn .unit{font-size:11.5px;line-height:1.35}
   .stk .px-price{font-size:14px}
   .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:10.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
   .stk td.sig{font-size:12.5px;line-height:1.45}
@@ -993,6 +996,39 @@ tr.gray td{color:var(--dim)}
 .oil-rise{color:var(--up)} .oil-fall{color:var(--down)}
 #macroCard td:nth-child(3) .unit{white-space:nowrap}
 @media(max-width:600px){.oil-reference-row td{padding:8px 6px}#macroCard td:nth-child(3) .unit{font-size:9px}}
+/* ===== 手机（iOS Chrome）文字加大：只加字号，外框上下高度一像素不动 =====
+   这一段必须放在 PAGE_CSS 的**最后**：里面几条选择器和上面的基础规则同权重
+   （.group-card>summary.grp、.stat-badge…），写在前面会被后面的基础规则盖掉。 */
+@media (max-width:600px){
+  /* 分块折叠栏标题（统计 / 仓位 / 持仓 / 市场风险）：16 → 17px，
+     行高写死 24px（＝原来 16px×1.5 的行盒）→ 标题行与卡片外框上下高度完全不变 */
+  .group-card>summary.grp,.macro-card>summary.grp{font-size:17px;line-height:24px}
+  /* 标题行右侧的统计数字、灯级计数、财报 N：14 → 15px（行盒仍 24px） */
+  .group-card>summary .group-stats,.macro-card>summary .group-stats{font-size:15px;line-height:24px}
+  #signalCounts>summary .count-total{font-size:15px}
+  /* 持仓里的「长持仓 / 短持仓」子框：15 → 16px，行高压回原来的 22.5px */
+  .zone-card>summary{line-height:22.5px}
+  .zone-card>summary .zone-name{font-size:16px}
+  .zone-card>summary .group-stats{font-size:14px;line-height:22.5px}
+  /* 数字灯圈：圈 17 → 20px、数字 12.5 → 14px。它是 group-stats 里的 flex item，
+     20px 仍小于标题行 24px 的行盒，所以折叠栏高度不变。 */
+  .stat-badge{min-width:20px;height:20px;padding:0 4px;font-size:14px}
+  /* 顶栏「定投：N」原本被 margin-left:auto 顶到最右侧，手机上往左挪 10px，
+     跟左边的「设置」按钮挨得近一点（不再贴着屏幕边）；字号 14 → 16px（2026-10-29）。 */
+  .runbar .dca-badge{font-size:16px;margin-left:auto;margin-right:10px}
+  /* 「数据时间 …」那一排改成 flex：手机上的「已同步 / 未同步」胶囊（见 cost_panel.js 的
+     syncMirrorEl）用 margin-left:auto 顶到这一排最右侧，与左边的日期同一行（2026-10-29）。
+     胶囊本身的字号/颜色在 cost_panel.css 的手机档里（跟其他 .cost-state 规则放一起）。 */
+  .sub{display:flex;align-items:center;gap:8px}
+  /* 主表各组的个股代码 + 备注名（「ZS」/「云安全」）：代码 14 → 15.5px、
+     备注名 11.5 → 13px。**行高写死成原来的 21px / 15.5px**，跟 td 里并排的
+     「长/短」角标、灯级角标同处一行，行的上下高度一像素不变（2026-10-29）。 */
+  .stk td.sym{font-size:16px;line-height:21px}
+  .stk td.sym .note{font-size:13.5px;line-height:15.5px}
+}
+/* 注：345 这类极窄屏整行会比线上高 6.24px —— A/B 实测过，元凶是上一轮把财报列
+   「美东/北京」加大（.stk .earn），**不是**代码/备注名：把 sym 压回 14/11.5px 高度纹丝不动，
+   把 .earn 一起压回才降到 96.27px。375 及以上视口不受影响，行的高度与线上完全一致。 */
 """
 
 # 主页面将此块放在现有 rules/cost CSS 之后，避免旧规则样式覆盖紧凑版。

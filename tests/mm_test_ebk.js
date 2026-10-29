@@ -38,6 +38,6 @@ for(const g of groups) for(const [s,c] of Object.entries(cfg[g.key])) {
   assert(!I.ignoredReason(s),'Excluded '+s);
   assert(c.note,'Missing company name '+s);
 }
-assert.equal(cfg.positions['BRK-B'].note,'伯克希尔哈撒韦');
+assert.equal(cfg.positions['BRK-B'].note,'伯克希尔');
 assert(Object.keys(cfg.focus).length>0,'重点关注不应被清空');
 console.log('全部通过：导入审计一致，清单结构完整，原有持仓保留，无被排除代码。');

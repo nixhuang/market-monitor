@@ -155,9 +155,10 @@ def _run_light(snapshot, finished_txt):
         parts.extend(deficits)
         parts.append(f"完成于 {finished_txt}（北京时间）")
         return "partial", " · ".join(parts)
-    # 正常只报「成功 ·YYYY-MM-DD HH:MM（北京时间）」：统计卡里已有一份计数，
+    # 正常只报「成功 ·YYYY-MM-DD HH:MM（北京）」：统计卡里已有一份计数，
     # 再写「保存后抓取成功 · 完成于 …」是废话，手机上还会被撑成两行（2026-10-27）。
-    parts = [f"{finished_txt}（北京时间）"] + deficits
+    # 括号里只写「北京」不写「北京时间」：手机上这排要跟「已生效」挨着，省两个字（2026-10-29）。
+    parts = [f"{finished_txt}（北京）"] + deficits
     return "ok", "成功 ·" + " · ".join(parts)
 
 

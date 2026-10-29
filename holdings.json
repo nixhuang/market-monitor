@@ -25,12 +25,12 @@
   },
   "positions": {
     "BRK-B": {
-      "note": "伯克希尔哈撒韦",
+      "note": "伯克希尔",
       "hold": "long",
       "cost": 505
     },
     "HII": {
-      "note": "亨廷顿英格尔斯工业",
+      "note": "亨廷顿工业",
       "hold": "short",
       "cost": 272
     },
@@ -52,7 +52,7 @@
     "GOOGL": {
       "note": "谷歌",
       "hold": "long",
-      "cost": 337.54
+      "cost": 328.12
     },
     "LMT": {
       "note": "洛克希德马丁",
@@ -92,7 +92,7 @@
       "cost": 32.88
     },
     "QQQM": {
-      "note": "纳斯达克100指数",
+      "note": "纳指",
       "hold": "long",
       "cost": 296.8
     },
@@ -311,7 +311,7 @@
       "note": "高盛"
     },
     "BRK-B": {
-      "note": "伯克希尔哈撒韦"
+      "note": "伯克希尔"
     },
     "V": {
       "note": "支付"
@@ -339,7 +339,7 @@
   },
   "industrials": {
     "HII": {
-      "note": "亨廷顿英格尔斯工业"
+      "note": "亨廷顿工业"
     },
     "UBER": {
       "note": "优步"

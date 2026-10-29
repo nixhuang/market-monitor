@@ -200,6 +200,10 @@ details.fold[open]>summary{padding-bottom:6px;border-bottom:1px solid var(--line
   margin-bottom:10px}
 details.fold>summary span{color:#5f6672;font-weight:400}
 .card>details.fold{background:none;border:none;border-radius:0;padding:0;margin-bottom:0}
+/* 手机（iOS）：分组标题框（长持仓 / 短持仓 / …）里的文字 13 → 15px，行高压回原来的 20.15px
+   （＝13px×1.55），标题框上下高度一像素不变：有「监测开关」按钮的组由按钮的 36px 撑高，
+   只有一个「始终监测」灰字的组仍是 20 + 13 + 13，跟改前一致。 */
+@media(max-width:600px){details.fold>summary{font-size:15px;line-height:20px}}
 details.fold .pane{padding-bottom:8px}
 .pager{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
   font-size:12px;color:var(--dim);padding:8px 0 4px}
@@ -380,7 +384,7 @@ details.fold .pane{padding-bottom:8px}
 </div>
 </div>
 
-<script src="./run-status.js?v=8d19acc6db7037ed"></script>
+<script src="./run-status.js?v=0eddec7212723e14"></script>
 <script src="./list-import.js?v=ed47203227cd9f6f"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
