@@ -1,1 +1,89 @@
-{"schema_version":2,"real":true,"updated_at":"2026-10-29T15:32:18.717Z","cash":23110.72,"cash_extra":23039.14,"fixed":16878.66,"fixed_cost":16916.97,"items":{"BRK-B":{"cost":505,"qty":1},"HII":{"cost":272,"qty":2},"APH":{"cost":78.94,"qty":30},"AVGO":{"cost":364.92,"qty":4},"CRSP":{"cost":46.92,"qty":12},"GOOGL":{"cost":328.12,"qty":10},"LMT":{"cost":513,"qty":3},"NTNX":{"cost":58.27,"qty":23},"UNH":{"cost":387.6,"qty":6},"UBER":{"cost":69.36,"qty":5},"DRAM":{"cost":49.58,"qty":16},"SPYM":{"cost":88.77,"qty":25.0188},"SCHD":{"cost":32.88,"qty":46.0903},"QQQM":{"cost":296.8,"qty":7.0022},"XLI":{"cost":167.9,"qty":2},"VRT":{"cost":208.98,"qty":4},"NXPI":{"cost":220,"qty":2},"PDD":{"cost":79,"qty":10}},"acks":{},"ack_tombstones":{"AVGO|loss10":"2026-10-27T00:45:44.678Z"}}
+{
+ "schema_version": 2,
+ "real": true,
+ "updated_at": "2026-10-29T15:32:18.717Z",
+ "cash": 23110.72,
+ "cash_extra": 23039.14,
+ "fixed": 16878.66,
+ "fixed_cost": 16916.97,
+ "items": {
+  "BRK-B": {
+   "cost": 505,
+   "qty": 1
+  },
+  "HII": {
+   "cost": 272,
+   "qty": 2
+  },
+  "APH": {
+   "cost": 78.94,
+   "qty": 30
+  },
+  "AVGO": {
+   "cost": 364.92,
+   "qty": 4
+  },
+  "CRSP": {
+   "cost": 46.92,
+   "qty": 12
+  },
+  "GOOGL": {
+   "cost": 328.12,
+   "qty": 10
+  },
+  "LMT": {
+   "cost": 513,
+   "qty": 3
+  },
+  "NTNX": {
+   "cost": 58.27,
+   "qty": 23
+  },
+  "UNH": {
+   "cost": 387.6,
+   "qty": 6
+  },
+  "UBER": {
+   "cost": 69.36,
+   "qty": 5
+  },
+  "DRAM": {
+   "cost": 49.58,
+   "qty": 16
+  },
+  "SPYM": {
+   "cost": 88.77,
+   "qty": 25.0188
+  },
+  "SCHD": {
+   "cost": 32.88,
+   "qty": 46.0903
+  },
+  "QQQM": {
+   "cost": 296.8,
+   "qty": 7.0022
+  },
+  "XLI": {
+   "cost": 167.9,
+   "qty": 2
+  },
+  "VRT": {
+   "cost": 208.98,
+   "qty": 4
+  },
+  "NXPI": {
+   "cost": 220,
+   "qty": 2
+  },
+  "PDD": {
+   "cost": 79,
+   "qty": 10
+  }
+ },
+ "acks": {
+  "GOOGL|loss10": "2026-10-29T15:40:43.411Z"
+ },
+ "ack_tombstones": {
+  "AVGO|loss10": "2026-10-27T00:45:44.678Z"
+ }
+}
