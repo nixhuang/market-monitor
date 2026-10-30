@@ -1896,7 +1896,7 @@ class TestGroups(unittest.TestCase):
                      '2026-10-08T04:00:00+08:00', '2026-10-10T23:00:00+08:00']:
             self.assertEqual(monitor.market_data_time(snap(when)), '2026-10-07 收盘（美东交易日）')
         live = snap('2026-10-08T21:30:00+08:00', '2026-10-08')
-        self.assertIn('2026-10-08 21:30:00（盘中快照，北京时间）', monitor.market_data_time(live))
+        self.assertIn('2026-10-08 21:30:00（盘中，北京）', monitor.market_data_time(live))
         self.assertNotIn('盘中快照', monitor.market_data_time(snap('2026-10-08T21:30:00+08:00')))
         self.assertNotIn('盘中快照', monitor.market_data_time(snap('2026-10-08T21:30:00+08:00', '2026-10-08', 'closed')))
         holiday = monitor.plan_run('workflow_dispatch', monitor.datetime.fromisoformat('2026-12-25T15:00:00-05:00'))
@@ -2117,12 +2117,12 @@ class TestGroups(unittest.TestCase):
             snap['finished_at_bj'] = '2026-10-08T22:35:12+08:00'
             page = monitor.render({}, rows, 3, snapshot=snap)
         self.assertEqual([snap['summary'][k] for k in ('today_prices','prior_prices','missing_prices')], [1,1,1])
-        self.assertIn('2026-10-08 22:35:12（盘中快照，北京时间） · 当日价 1 只 / 较早日线 1 只 / 无数据 1 只',page)
+        self.assertIn('2026-10-08 22:35:12（盘中，北京） · 当日价 1 只 / 较早日线 1 只 / 无数据 1 只',page)
         self.assertIn('日线 2026-10-07 收盘', page)
         self.assertIn('class="tag quote-note">无数据</span>', page)
         self.assertNotIn('日线 2026-10-08 收盘', page)
         none = dict(snap, actual_dates={'min':'','max':''}, summary={'missing_prices':3})
-        self.assertIn('22:35:12（盘中运行，北京时间 · 未取得行情） · 无数据 3 只',
+        self.assertIn('22:35:12（盘中，北京 · 未取得行情） · 无数据 3 只',
                       monitor.market_data_time(none))
 
     def test_render_is_side_effect_free_and_layout(self):

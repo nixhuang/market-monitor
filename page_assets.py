@@ -608,7 +608,14 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid #465e87;text-align:left}
 #signalCounts .signal-members-panel[hidden]{display:none}
 #signalCounts .signal-members-panel ul{list-style:none;margin:0;padding-left:2px}
-#signalCounts .signal-members-panel li{margin:5px 0;overflow-wrap:anywhere}
+/* 名单行距：红/黄/白与各灯分框的清单**没有分隔线**，原来上下各 5px（个股之间 5px）
+   挤在一起，2026-10-30 起上下各加到 8px（个股之间 10px）。
+   财报（.earnings-week li+li）与多选筛选（.signal-filter li+li）自带 1px 分隔线，
+   行距按用户要求保持原样不动。 */
+#signalCounts .signal-members-panel li{margin:8px 0;overflow-wrap:anywhere}
+/* 统计面板名单里的股票代码（红/黄/白、财报名单共用这个 span）跟主表 .sym、仓位 .sy 一样加粗，
+   只改字重不改字号（2026-10-30）——原来只有它是 400，看起来比别处的代码细一截。 */
+#signalCounts .signal-member-symbol{font-weight:600}
 /* 名称前竖条共用尺寸与6px间距；单条件用伪元素，多选与紫灯用同样的span。 */
 #signalCounts .signal-name-lamp,
 #signalCounts .signal-members-panel li:not(.signal-member-split)::before,
@@ -660,7 +667,7 @@ tr:first-child td{border-top:none}
 #signalCounts .text-only>summary{cursor:pointer;padding:8px 12px;color:var(--text);font-size:13px}
 #signalCounts .text-only[open]>summary{border-bottom:1px solid #2b3546}
 #signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
-#signalCounts .text-only li{margin:5px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
+#signalCounts .text-only li{margin:8px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
 /* 紫灯 / 财报两块（紫灯在上、财报在下）：胶囊永远钉在第一排左侧不动，
    标题(summary)始终在胶囊右边同一排，点开后名单只向下展开、占满整行宽度。
    胶囊绝对定位在行内，summary 用左内边距给它让位，所以名单区域不受胶囊影响。 */
@@ -673,12 +680,13 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-extra-row>.text-only[open]>summary{border-bottom:0}
 #signalCounts .purple-extra .text-only>summary{color:var(--purple)}
 #signalCounts .purple-extra .text-only .signal-member-list{margin:0;padding:0 0 8.1px 18px}
-#signalCounts .purple-extra .text-only li{margin:5px 0;list-style:none}
+#signalCounts .purple-extra .text-only li{margin:8px 0;list-style:none}
 #signalCounts .purple-extra .text-only .signal-member-list{padding-left:2px}
 /* 空间/达到只用紧凑段落间距，覆盖浏览器 h5 的默认大外边距。 */
 #signalCounts .purple-extra .target-purple>h5{margin:6px 0 3px;font-size:13px;line-height:1.5}
 #signalCounts .purple-extra .target-purple .signal-member-list{padding-bottom:0}
-#signalCounts .purple-extra .target-purple li{margin:2px 0}
+/* 目标空间/达到也没有分隔线，跟其它无分隔线清单统一到上下 8px（原 2px 太挤）。 */
+#signalCounts .purple-extra .target-purple li{margin:8px 0}
 #signalCounts .target-purple .note{display:inline;margin-left:6px}
 #signalCounts .target-purple .signal-member-direction{color:var(--purple)}
 #signalCounts .target-purple .target-space-high .signal-member-direction,
@@ -886,7 +894,9 @@ tr.gray td{color:var(--dim)}
   border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
 .runbar button:disabled{opacity:.5;cursor:not-allowed}
 .runbar button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-.runbar a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
+/* 「设置」2026-10-29 从顶栏搬到页底 .acts（与「返回看板」同排），选择器必须一起带上 .acts，
+   否则搬到 .acts 后这条不再命中，「设置」会退化成浏览器默认的蓝色下划线链接。 */
+.runbar a.btnlink,.acts a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
   border:1px solid #333a47;border-radius:8px;text-decoration:none;display:inline-block}
 .statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
   margin:-4px 0 14px;font-size:13.5px;line-height:1.5}
@@ -1010,21 +1020,61 @@ tr.gray td{color:var(--dim)}
   .zone-card>summary{line-height:22.5px}
   .zone-card>summary .zone-name{font-size:16px}
   .zone-card>summary .group-stats{font-size:14px;line-height:22.5px}
-  /* 数字灯圈：圈 17 → 20px、数字 12.5 → 14px。它是 group-stats 里的 flex item，
+  /* 数字灯圈：圈 17 → 20px、数字 12.5 → 14 → **15px**（2026-10-30 二轮加大）。
+     内边距同时 4 → 3px：两位数「21」的圈宽仍是 26px 上下、高度恒 20px，
+     也就是**框一个像素都没变大**，只把圈里的数字撑大。它是 group-stats 里的 flex item，
      20px 仍小于标题行 24px 的行盒，所以折叠栏高度不变。 */
-  .stat-badge{min-width:20px;height:20px;padding:0 4px;font-size:14px}
-  /* 顶栏「定投：N」原本被 margin-left:auto 顶到最右侧，手机上往左挪 10px，
-     跟左边的「设置」按钮挨得近一点（不再贴着屏幕边）；字号 14 → 16px（2026-10-29）。 */
-  .runbar .dca-badge{font-size:16px;margin-left:auto;margin-right:10px}
+  .stat-badge{min-width:20px;height:20px;padding:0 3px;font-size:15px}
+  /* 顶栏左右对称留白：页面本身左右各留 4px，这里再给 .runbar 各加 10px，
+     于是最左边的「运行」按钮和最右边的「定投：N」距屏幕边缘都是 14px（2026-10-29）。
+     原来只给「定投」加 margin-right:10px，是单边的，左边三个按钮仍贴着屏幕边。 */
+  .runbar{padding-left:10px;padding-right:10px}
+  /* 字号 14 → 16px（2026-10-29）；贴右仍靠 margin-left:auto，间距改由 .runbar 的右内边距给。 */
+  .runbar .dca-badge{font-size:16px;margin-left:auto}
   /* 「数据时间 …」那一排改成 flex：手机上的「已同步 / 未同步」胶囊（见 cost_panel.js 的
      syncMirrorEl）用 margin-left:auto 顶到这一排最右侧，与左边的日期同一行（2026-10-29）。
+     左右各 10px 内边距 + 页面 4px → 日期距左边 14px、「已同步」距右边 14px，与顶栏对齐。
      胶囊本身的字号/颜色在 cost_panel.css 的手机档里（跟其他 .cost-state 规则放一起）。 */
-  .sub{display:flex;align-items:center;gap:8px}
+  .sub{display:flex;align-items:center;gap:8px;padding-left:10px;padding-right:10px}
+  /* 页底那一排现在是「返回看板」+「设置」两枚：间隔拉开（2026-10-29「设置」从顶栏搬下来）。 */
+  .acts{gap:26px}
   /* 主表各组的个股代码 + 备注名（「ZS」/「云安全」）：代码 14 → 15.5px、
      备注名 11.5 → 13px。**行高写死成原来的 21px / 15.5px**，跟 td 里并排的
      「长/短」角标、灯级角标同处一行，行的上下高度一像素不变（2026-10-29）。 */
   .stk td.sym{font-size:16px;line-height:21px}
-  .stk td.sym .note{font-size:13.5px;line-height:15.5px}
+  /* 中文备注名 13.5 → **12.5px**，跟同一行右边的财报描述（.stk .earn 12.5px）同号；
+     代码仍是 16px 不动。行高继续写死 15.5px，行的上下高度一像素不变（2026-10-30）。 */
+  .stk td.sym .note{font-size:12.5px;line-height:15.5px}
+  /* 代码后面的「ETF」小标签跟**仓位板块**同款：仓位 .cost-name .tag 在 ≤560 档是
+     10px / 内边距 0 4px / 行高 1.3，主表原来 11px / 1px 5px 明显大一圈（2026-10-30）。 */
+  .stk td.sym .tag{font-size:10px;padding:0 4px;line-height:1.3}
+  /* ===== 统计面板：所有胶囊的**框**一像素不动，只放大框里的文字与数字（2026-10-30） =====
+     指标名称胶囊（74×38）：13 → 14.5px。最紧的「布林+RSI」「52周低位」墨宽 53px
+       → 59.1px，可用 64px，仍是单行不折行（再大一档 15px 就只剩 2px 余量，容易在别的字体下折行）。
+     数字胶囊（44×38）：14 → 16px。最紧的「12」墨宽 16 → 18.3px，可用 21px。
+     紫灯／财报两行的胶囊（--chip-w 74px）跟指标名称胶囊同字号，不再比上面那几颗小一截。 */
+  #signalCounts td .signal-filter-toggle{font-size:14.5px;line-height:1.1}
+  #signalCounts .signal-extra-row>.signal-filter-toggle{font-size:14.5px}
+  #signalCounts .signal-count-toggle{font-size:16px}
+  /* 顶栏三个按钮加大一点：15 → 16.5px，内边距 6/12 → 7/14（2026-10-30）。 */
+  .runbar button{padding:7px 14px;font-size:16.5px}
+  /* 「数据时间 …」那一排与下方按钮的行距拉近：下外边距 16 → 8px（2026-10-30）。 */
+  .sub{margin-bottom:8px}
+  /* 状态排（「成功 ·…（北京）」+「已生效」）：上下留白收紧（上 -4 → -6px、下 14 → 8px），
+     两枚灯之间 8 → 4px、行盒 1.4 → 1.25；左边跟上面一样留 14px（页面 4 + 内边距 10）。 */
+  .statusrow{margin:-6px 0 8px;gap:4px;padding-left:10px}
+  .statusrow .runlight{line-height:1.25}
+  /* 页底「返回看板」+「设置」：15 → 16px，两枚做成**同款胶囊框**（描边 + 8px 圆角），
+     「设置」的文字颜色跟「返回看板」统一成 #6ba3f0（2026-10-30）。 */
+  .acts .board-return,.acts a.btnlink{font-size:16px;color:#6ba3f0;background:transparent;
+    border:1px solid #333a47;border-radius:8px;padding:7px 15px;margin:0}
+  /* 页底「自动计划：…」12 → 14px（2026-10-30）。 */
+  .autoplan{font-size:14px}
+}
+/* ≤400 的窄屏：主表「ETF」标签跟仓位板块一起再收半档（9px / 内边距 0 3px），
+   仓位那边的 .cost-name .tag 在同一断点也是这个值（cost_panel.css），两边始终同款（2026-10-30）。 */
+@media (max-width:400px){
+  .stk td.sym .tag{font-size:9px;padding:0 3px}
 }
 /* 注：345 这类极窄屏整行会比线上高 6.24px —— A/B 实测过，元凶是上一轮把财报列
    「美东/北京」加大（.stk .earn），**不是**代码/备注名：把 sym 压回 14/11.5px 高度纹丝不动，

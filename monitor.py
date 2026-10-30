@@ -3036,7 +3036,7 @@ def market_data_time(snapshot):
         finished = beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
         if snapshot.get("mode") == "manual_or_config" and finished and not plan_run("local", datetime.fromisoformat(finished))["closed_only"]:
             missing = snapshot.get("summary", {}).get("missing_prices", 0)
-            return f'{finished[:19].replace("T", " ")}（盘中运行，北京时间 · 未取得行情） · 无数据 {missing} 只'
+            return f'{finished[:19].replace("T", " ")}（盘中，北京 · 未取得行情） · 无数据 {missing} 只'
         return "未取得行情"
     earliest = dates.get("min") or latest
     date_text = f"{earliest}～{latest}" if earliest != latest else latest
@@ -3060,8 +3060,8 @@ def market_data_time(snapshot):
                         parts.append(f"无数据 {counts['missing_prices']} 只")
                 detail = (" · " + " / ".join(parts)) if parts else ""
             if latest == plan["target"]:
-                return finished[:19].replace("T", " ") + "（盘中快照，北京时间）" + detail
-            return finished[:19].replace("T", " ") + f"（盘中运行，北京时间 · 仍为 {date_text} 日线）" + detail
+                return finished[:19].replace("T", " ") + "（盘中，北京）" + detail
+            return finished[:19].replace("T", " ") + f"（盘中，北京 · 仍为 {date_text} 日线）" + detail
     return date_text + " 收盘（美东交易日）"
 
 

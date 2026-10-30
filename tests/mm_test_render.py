@@ -237,10 +237,10 @@ snap2 = dict(snapshot)
 snap2["mode"] = "manual_or_config"
 snap2["finished_at_bj"] = "2026-10-07T23:19:00+08:00"
 html2 = monitor.render(macro, items, 10, snapshot=snap2, dup_hidden=0)
-check("盘中运行，北京时间 · 仍为 2026-10-06 日线" in html2,
+check("盘中，北京 · 仍为 2026-10-06 日线" in html2,
       "盘中运行若数据仍为前日不能冒充当天行情")
 snap_live = dict(snap2, actual_dates={"min":"2026-10-07", "max":"2026-10-07"})
-check("数据时间 2026-10-07 23:19:00（盘中快照，北京时间）" in monitor.render(macro, items, 10, snapshot=snap_live),
+check("数据时间 2026-10-07 23:19:00（盘中，北京）" in monitor.render(macro, items, 10, snapshot=snap_live),
       "当前交易日盘中数据才显示时间点")
 snap_utc = dict(snapshot, finished_at_bj="", finished_at="2026-10-07T12:40:28Z")
 check("成功 ·2026-10-07 20:40（北京）" in monitor.render(macro, items, 10, snapshot=snap_utc),

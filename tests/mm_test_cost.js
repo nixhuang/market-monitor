@@ -1208,7 +1208,16 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(CSS,/grid-template-columns:minmax\(0,1\.15fr\) 48px 64px minmax\(0,1fr\)/);
   // 手机档（2026-10-29）：名单文字 10.5 → 11.5px，右侧比例图相应缩短
   // （名称 : 图 = 1.15:1 → 1.3:0.85），数值列各让出 2px
-  assert.match(CSS,/grid-template-columns:minmax\(0,1\.3fr\) 46px 66px minmax\(0,0\.6fr\);gap:0 6px;\s*font-size:13px;line-height:15\.75px\}/);
+  assert.match(CSS,/grid-template-columns:minmax\(0,1\.3fr\) 46px 66px minmax\(0,0\.66fr\);gap:0 6px;\s*font-size:13px;line-height:15\.75px\}/);
+  // 中文备注名（.cncn）跟仓位面板 .cost-name .cn 同号 11.5px；代码单独 .cnsym 加粗（2026-10-30）
+  assert.match(CSS,/\.cost-contrib \.cncn\{font-size:11\.5px\}/);
+  assert.match(CSS,/\.cost-contrib li>\.cn-name,\.cost-contrib li>\.cv,\.cost-contrib li>\.ca\{height:15\.75px\}/);
+  // 320 这类超窄屏：比例图再压到 0.45fr，把名称列换回 114px（最长一行 110px 不被截）
+  assert.match(CSS,/minmax\(0,1\.3fr\) 46px 66px minmax\(0,0\.45fr\)/);
+  // 持仓代码 12.5 → 13px（跟统计面板名单同号），中文备注名仍 11.5px 不动（2026-10-30）
+  assert.match(CSS,/\.cost-name \.sy\{font-size:13px;font-weight:600/);
+  assert.match(CSS,/\.cost-name \.sy\{font-size:13px\} \.cost-name \.cn\{font-size:11\.5px\}/);
+  assert.ok(!/\.cost-name \.sy\{font-size:12\.5px/.test(CSS),'仓位代码不应再是 12.5px');
   const iName=SOURCE.indexOf('\'<span class="cn-name">'), iCv=SOURCE.indexOf('\'<span class="cv '),
         iCa=SOURCE.indexOf('\'<span class="ca '), iBar=SOURCE.indexOf('\'<span class="cbar">');
   assert.ok(iName>=0&&iName<iCv&&iCv<iCa&&iCa<iBar,'渲染顺序应为 名称→盈亏比→金额→图表');
@@ -1945,6 +1954,24 @@ test('成本浮亏多人、重复身份与双档ack去重，长短名单展示�
   assert.match(gray.textContent,/AAA.*短持仓.*浮亏 25\.0%.*已达 20%/);
   for(let i=0;i<4;i++)b.paint();assertLossStats(b,2,1,['BBB','AAA','CCC']);
   ackCurrentLoss(b,'CCC');assertLossStats(b,1,2,['BBB','AAA','CCC']);assertLossBadges(b,1,0);
+});
+test('仓位面板不再挂「亏损超N%」小字标签，行级红灯与浮亏统计照旧',async()=>{
+  assert.equal(CSS.includes('.loss-tag'),false,'真源 CSS 已删除 .loss-tag 规则');
+  assert.doesNotMatch(SOURCE,/亏损超\d+%/,'真源 JS 不再输出「亏损超N%」小字');
+  const b=await bootLoss({symbols:['AAA','BBB','CCC'],
+    local:{...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2},CCC:{cost:100,qty:1}}},
+    prices:{AAA:70,BBB:90,CCC:100}});
+  for(const [sym,lv] of [['AAA',2],['BBB',1],['CCC',0]]){
+    const li=b.doc.querySelector('#costMembers li[data-sym="'+sym+'"]');
+    assert.ok(li,sym+' 仍正常出现在仓位面板');
+    assert.doesNotMatch(li.textContent,/亏损超/);
+    assert.equal(li.querySelectorAll('.loss-tag').length,0,sym+' 行没有亏损小字标签');
+    assert.equal(b.rows.find(r=>r.sym===sym).lossLv,lv,sym+' 浮亏档位不变');
+    assert.equal(li.className.split(/\s+/)[0],lv?'lv-red':'lv-green',sym+' 行级灯不受影响');
+  }
+  assert.equal(b.doc.querySelectorAll('#costMembers .loss-tag').length,0);
+  assertLossStats(b,2,0,['AAA','BBB']);assertLossBadges(b,2,0);
+  await b.dispose();
 });
 test('成本浮亏技术原红不重复计数，已读仍红；原黄被浮亏提升后恢复黄色',async()=>{
   const b=await bootLoss({local:{...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2}}},prices:{AAA:80,BBB:90},levels:{AAA:'red pur-high',BBB:'yellow'}});

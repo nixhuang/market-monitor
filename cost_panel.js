@@ -1638,14 +1638,11 @@
     var c=it.pnlPct>=0?'up':'down';
     var wv=it.has&&totalAsset>0?it.mv/totalAsset*100:0;
     var w=it.has&&totalAsset>0?wv.toFixed(1)+'%':'—';
-    /* 浮亏 10%／20%：盈亏列下面挂一行小字提醒（跟持仓个股行同一口径，不报灯） */
-    var lvl=it.has&&it.pnlPct<=-10?(it.pnlPct<=-20?2:1):0;
-    var lossTag=lvl?('<span class="loss-tag'+(lvl===2?' big':'')+'">亏损超'+(lvl===2?'20':'10')+'%</span>'):'';
+    /* 浮亏 10%／20% 只走报灯与统计（行级红灯、成本浮亏计数），名称下不再挂小字标签 */
     var marks=(it.isEtf?'<span class="tag">ETF</span>':'');
     var name='<span class="cost-name">'
       +'<span class="syrow"><span class="sy">'+esc(it.sym)+'</span>'+marks+'</span>'
       +(it.note?'<span class="cn">'+esc(it.note)+'</span>':'')
-      +lossTag
       +'</span>';
     // 编辑态下名称不再做成跳转链接，免得点一下就跳走、改的东西还没保存
     var nameCell=editing?name
@@ -1956,8 +1953,8 @@
         // 只看信号灯，不看当天是赚是亏（盈亏由后面的百分比／金额颜色表达）
         return '<li class="lv-'+esc(x.lv||'green')+'"'
           +' aria-label="占当日盈亏绝对值 '+fmt1(Math.abs(x.share))+'%">'
-          +'<span class="cn-name">'+esc(x.sym)
-          +(x.cn?' <span style="color:var(--dim)">'+esc(x.cn)+'</span>':'')+'</span>'
+          +'<span class="cn-name"><span class="cnsym">'+esc(x.sym)+'</span>'
+          +(x.cn?' <span class="cncn">'+esc(x.cn)+'</span>':'')+'</span>'
           +'<span class="cv '+cg+'">'+pct(x.chg)+'</span>'
           +'<span class="ca '+c+'">'+money(x.amt)+'</span>'
           +'<span class="cbar"><i class="'+c+'" style="width:'+w.toFixed(1)+'%"></i></span></li>';

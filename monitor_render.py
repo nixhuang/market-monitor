@@ -1632,7 +1632,6 @@ class PageRenderer:
   <button class="primary" id="btnRunNow">运行</button>
   <button id="btnCheckStatus">状态</button>
   <button id="btnHardRefresh">刷新</button>
-  <a class="btnlink" href="./edit.html">设置</a>
   {dca_title}
   <script>{self._context.HARD_REFRESH_JS}</script>
 </div>
@@ -1662,6 +1661,7 @@ class PageRenderer:
 
 <div class="acts">
 <a class="board-return" id="btnReturnBoard" href="">返回看板</a>
+<a class="btnlink" href="./edit.html">设置</a>
 </div>
 <div class="autoplan">{autoplan_line}</div>
 {notes_tpl}

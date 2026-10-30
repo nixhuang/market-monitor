@@ -328,7 +328,14 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('--target-high:#dc62b8', css)
         self.assertIn('.target-purple>h5{margin:6px 0 3px', css)
         self.assertIn('.target-purple .signal-member-list{padding-bottom:0}', css)
-        self.assertIn('.target-purple li{margin:2px 0}', css)
+        self.assertIn('.target-purple li{margin:8px 0}', css)
+        # 无分隔线的清单（红/黄/白与各灯分框、紫灯 text-only）行距 5 → 8px（2026-10-30）
+        self.assertIn('#signalCounts .signal-members-panel li{margin:8px 0;', css)
+        self.assertIn('#signalCounts .text-only li{margin:8px 0;', css)
+        # 有分隔线的财报/多选筛选清单：行距不动（财报仍无 margin，靠 li+li 的 1px 线分隔）
+        self.assertIn('#signalCounts .earnings-week li{font-size:13px;padding:3.6px 0', css)
+        self.assertIn('#signalCounts .earnings-week li+li{border-top:1px solid var(--line)}', css)
+        self.assertIn('#signalCounts .signal-filter li+li{border-top:1px solid var(--line)}', css)
         self.assertIn('.target-purple .target-space-high .signal-member-direction', css)
         self.assertIn('.target-purple .note{display:inline;margin-left:6px}', css)
         self.assertIn('.target-purple .signal-member-direction{color:var(--purple)}', css)

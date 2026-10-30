@@ -132,11 +132,17 @@ check(bool(m), "runbar 与 statusrow 两排结构存在")
 if m:
     bar, row = m.group(1), m.group(2)
     check('id="btnRunNow"' in bar and 'btnHardRefresh' in bar
-          and bar.index('btnRunNow') < bar.index('btnCheckStatus') < bar.index('btnHardRefresh') < bar.index('btnlink'),
-          "第三排顺序：立即运行 → 查运行状态 → 强制刷新 → 设置")
-    check('>设置</a>' in bar and './edit.html' in bar, "按钮改名「设置」且指向 edit.html")
+          and bar.index('btnRunNow') < bar.index('btnCheckStatus') < bar.index('btnHardRefresh'),
+          "第三排顺序：立即运行 → 查运行状态 → 强制刷新")
+    check('btnlink' not in bar, "「设置」已从顶栏搬走（顶栏只留三个按钮 + 定投）")
     check('id="runLight"' in row and 'id="runLightTxt"' in row, "第四排：状态灯 + 文案")
     check('runLight' not in bar, "灯已从第三排移走")
+# 「设置」与「返回看板」同在页底 .acts 一排，顺序：返回看板 → 设置（2026-10-29）
+_acts = re.search(r'<div class="acts">(.*?)</div>', page, re.S)
+check(bool(_acts) and 'id="btnReturnBoard"' in _acts[1] and '>设置</a>' in _acts[1]
+      and './edit.html' in _acts[1]
+      and _acts[1].index('btnReturnBoard') < _acts[1].index('./edit.html'),
+      "页底一排：「返回看板」与「设置」同排且「设置」指向 edit.html")
 styles = ''.join(re.findall(r'<style>(.*?)</style>', page, re.S))
 check(monitor.PAGE_CSS == page_assets.PAGE_CSS and '.statusrow{' in page_assets.PAGE_CSS
       and page_assets.PAGE_CSS.removesuffix(page_assets.RULES_CSS) in styles
