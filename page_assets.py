@@ -982,11 +982,20 @@ tr.gray td{color:var(--dim)}
    卡中卡「长持仓」跟着压一档（40.5 → 34），仍比外层矮、保留层级。
    只对 :not([open]) 生效——展开态一像素不变；手机（≤600px）不进这条，维持原来的触摸高度。 */
 @media(min-width:601px){
-  .group-card:not([open]),.macro-card:not([open]){padding-top:2px;padding-bottom:2px}
-  .group-card:not([open])>summary.grp,.macro-card:not([open])>summary.grp,
-  #costManage.cost-manage:not([open])>summary.grp{
+  /* 顶部链路两态统一 —— 这是「展开时标题文字往下跳」的根治办法：
+     卡片上内边距两态都 2px + 标题行两态都锁 44px（内容垂直居中），
+     文字距卡片顶恒 = 边框 1px + 2px + (44 − 内容高)/2，展开／收起同一位置。
+     原来只有 :not([open]) 生效，展开态走的是「卡片 6px + summary padding-top 12px 顶部对齐」，
+     顶部差 6px，所以一点开就下跳。底部保持原样：收起态 2px（保住压矮 20%），
+     展开态 6px（内容不贴底边）。「统计」#signalCounts 也一起统一（它收起态本来就在压矮范围内，
+     只统一顶部就不会再跳；底部仍按各自原样）。 */
+  .group-card,.macro-card,#costManage.cost-manage{padding-top:2px}
+  .group-card:not([open]),.macro-card:not([open]),#costManage.cost-manage:not([open]){
+    padding-bottom:2px}
+  .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
     box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
-  .zone-card:not([open])>summary{box-sizing:border-box;height:34px;padding-top:0;padding-bottom:0}
+  /* 长持仓（卡中卡）同样两态统一锁 34px，与外层保持层级差 */
+  .zone-card>summary{box-sizing:border-box;height:34px;padding-top:0;padding-bottom:0}
 }
 /* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
 .stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
@@ -1104,6 +1113,25 @@ tr.gray td{color:var(--dim)}
     border:1px solid #333a47;border-radius:8px;padding:7px 15px;margin:0}
   /* 页底「自动计划：…」12 → 14px（2026-10-30）。 */
   .autoplan{font-size:14px}
+  /* ===== 手机分组框高度再压约 15%（62 → 53）：只动「卡片上内边距 + 标题行高度」=====
+     用 min-height 而不是 height —— 320 这种窄屏上标题行会折成两行（实测 76~80px），
+     硬锁高度会把第二行裁掉；min-height 单行时生效、多行时自动让高。
+     顶部链路两态统一（卡片 padding-top 2px + 标题行居中），展开／收起标题文字位置仍一致；
+     底部跟桌面同款：收起 2px、展开 6px（内容不贴底边）。
+     仓位那行内容高 29.6px（「编辑」按钮），单独给 51px 才也是约 -15%（67 → 57）。
+     长持仓（卡中卡）42.5 → 36。 */
+  .group-card,.macro-card,#costManage.cost-manage{padding-top:2px}
+  .group-card:not([open]),.macro-card:not([open]),#costManage.cost-manage:not([open]){
+    padding-bottom:2px}
+  .group-card>summary.grp,.macro-card>summary.grp{
+    box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0}
+  #costManage.cost-manage>summary.grp{
+    box-sizing:border-box;min-height:51px;padding-top:0;padding-bottom:0}
+  .zone-card>summary{box-sizing:border-box;min-height:34px;padding-top:0;padding-bottom:0}
+  /* 标题文字各减 0.5px：分类名 17 → 16.5px，右侧「20日对.SPX -5.3%」等 15 → 14.5px。
+     行高仍是写死的 24px，所以标题行的行盒高度不变（2026-10-30）。 */
+  .group-card>summary.grp,.macro-card>summary.grp{font-size:16.5px}
+  .group-card>summary .group-stats,.macro-card>summary .group-stats{font-size:14.5px}
 }
 /* ≤400 的窄屏：主表「ETF」标签跟仓位板块一起再收半档（9px / 内边距 0 3px），
    仓位那边的 .cost-name .tag 在同一断点也是这个值（cost_panel.css），两边始终同款（2026-10-30）。 */
@@ -1502,12 +1530,18 @@ document.addEventListener("click", function(event) {
   if (closeButton) {
     const card = closeButton.closest("details");
     if (!card) return;
+    // 只收本组。收起会让按钮以上整段塌掉、把下方内容一起拽上来，所以拿「本组之后的第一个
+    // 元素」当锚点，收起后把它拉回原来的屏幕位置：视觉上按钮以上的部分向下折叠、收进按钮
+    // 所在的这一行，下面的内容原地不动（不再用 scrollIntoView 把整页拉到分组标题）。
+    const anchor = card.nextElementSibling;
+    const anchorTop = anchor ? anchor.getBoundingClientRect().top : null;
     card.open = false;
-    const heading = card.querySelector(":scope > summary");
-    if (heading) {
-      heading.focus({preventScroll: true});
-      heading.scrollIntoView({block: "start", behavior: "auto"});
+    if (anchor && anchorTop !== null) {
+      const delta = anchor.getBoundingClientRect().top - anchorTop;
+      if (Math.abs(delta) > 1) window.scrollBy(0, delta);
     }
+    const heading = card.querySelector(":scope > summary");
+    if (heading) heading.focus({preventScroll: true});
     return;
   }
   const filterButton = event.target.closest(".signal-filter-toggle");

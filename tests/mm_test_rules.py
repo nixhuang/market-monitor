@@ -900,7 +900,10 @@ class RulesRegression(unittest.TestCase):
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const events={},windowEvents={};
 class Details {}
-const context={HTMLDetailsElement:Details,document:{querySelector:()=>null,
+const Node={DOCUMENT_POSITION_PRECEDING:2,DOCUMENT_POSITION_FOLLOWING:4,
+  DOCUMENT_POSITION_CONTAINED_BY:16};
+const context={HTMLDetailsElement:Details,Node,
+  document:{querySelector:()=>null,querySelectorAll:()=>[],
   addEventListener:(k,f)=>(events[k]||=[]).push(f)},
   window:{location:{hash:''},addEventListener:(k,f)=>(windowEvents[k]||=[]).push(f)}};
 vm.createContext(context);vm.runInContext(fs.readFileSync(0,'utf8'),context);
@@ -916,10 +919,18 @@ assert.equal(sub.open,true);
 const clickEvents=events.click;
 const closed=new Details();closed.open=true;let focused=false,scrolled=false;
 closed.querySelector=()=>({focus:()=>{focused=true;},scrollIntoView:()=>{scrolled=true;}});
+// 点底部 ▲：只收本组；拿「本组之后的第一个元素」当锚点把下方内容拉回原屏幕位置，
+// 不再用 scrollIntoView 把整页拉到分组标题。
+const anchor={getBoundingClientRect:()=>({top:closed.open?500:100})};
+closed.nextElementSibling=anchor;
+let scrolledBy=null;
+context.window.scrollBy=(x,y)=>{scrolledBy=y;};
 class Element {closest(s){return s==='.collapse-group'?{closest:()=>closed}:null;}}
 context.Element=Element;
 for(const f of clickEvents)f({target:new Element()});
-assert.equal(closed.open,false);assert.equal(focused,true);assert.equal(scrolled,true);
+assert.equal(closed.open,false);assert.equal(focused,true);
+assert.equal(scrolled,false);      // 不再 scrollIntoView，页面不整体跳到标题
+assert.equal(scrolledBy,-400);     // 锚点被上拽 400，反向补回原位
 '''
         result = subprocess.run([sys.executable, "-B", str(ROOT / "tests/run_all.py"),
             "--offline-node", "-e", script], cwd=ROOT, input=page_assets.PAGE_INTERACTION_JS,
