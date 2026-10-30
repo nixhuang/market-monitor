@@ -1118,15 +1118,14 @@ tr.gray td{color:var(--dim)}
      硬锁高度会把第二行裁掉；min-height 单行时生效、多行时自动让高。
      顶部链路两态统一（卡片 padding-top 2px + 标题行居中），展开／收起标题文字位置仍一致；
      底部跟桌面同款：收起 2px、展开 6px（内容不贴底边）。
-     仓位那行内容高 29.6px（「编辑」按钮），单独给 51px 才也是约 -15%（67 → 57）。
-     长持仓（卡中卡）42.5 → 36。 */
+     **「仓位」跟其它分组同一个 47px**（内容高 29.6px 的「编辑」按钮塞得下）—— 一开始为凑
+     「减 15%」单独给它 51px，结果收起来比别的分组高 4px，看着不齐，2026-10-30 改回统一。
+     长持仓（卡中卡）42.5 → 36，比外层矮一档是层级，保留。 */
   .group-card,.macro-card,#costManage.cost-manage{padding-top:2px}
   .group-card:not([open]),.macro-card:not([open]),#costManage.cost-manage:not([open]){
     padding-bottom:2px}
-  .group-card>summary.grp,.macro-card>summary.grp{
+  .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
     box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0}
-  #costManage.cost-manage>summary.grp{
-    box-sizing:border-box;min-height:51px;padding-top:0;padding-bottom:0}
   .zone-card>summary{box-sizing:border-box;min-height:34px;padding-top:0;padding-bottom:0}
   /* 标题文字各减 0.5px：分类名 17 → 16.5px，右侧「20日对.SPX -5.3%」等 15 → 14.5px。
      行高仍是写死的 24px，所以标题行的行盒高度不变（2026-10-30）。 */
