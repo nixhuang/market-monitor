@@ -1781,7 +1781,7 @@ const deadline = setTimeout(() => {
         for (const [state, capsule] of [['space', space], ['high', high], ['hit', hit]]) {
           const row = capsule.closest('tr');
           const originalClass = row.className;
-          for (const [level, width, color] of [['red', 6, 'rgb(248, 81, 73)'],
+          for (const [level, width, color] of [['red', 4, 'rgb(248, 81, 73)'],   // 红灯条已与黄灯条等宽
               ['yellow', 4, 'rgb(210, 153, 34)'], ['green', 2, 'rgb(63, 185, 80)']]) {
             row.className = originalClass.replace(/\\b(red|yellow|green|gray)\\b/, level);
             const sig = style(row.querySelector('td.sig'));
