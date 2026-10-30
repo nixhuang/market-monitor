@@ -529,9 +529,14 @@ h1.brand{color:var(--up)}
 .sub{color:var(--dim);font-size:12px;margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:6px 4px;margin-bottom:14px;overflow:hidden}
-/* 持仓卡：2%绿叠层；长持仓再叠2%（合成约4%），不影响文字和灯级。 */
-#group_positions{background:linear-gradient(rgba(46,160,67,.02),rgba(46,160,67,.02)),var(--card);--collapse-bg:rgba(46,160,67,.15)}
-#group_positions_long.zone-card{background:rgba(46,160,67,.02)}
+/* 持仓卡：2026-10-31 起**整块去掉绿叠层**（原来 2% 绿盖在 --card 上），跟其它分组一样是纯卡片底色；
+   --collapse-bg 只留给底部 ▲ 收起条，不动。
+   长持仓（卡中卡）**底色也全部去掉**（连 .zone-card 自带的那层 2.2% 白提亮一并清掉），
+   层级改由**外框**表达：绿框 #2c8f3e，与「仓位」外框同色（--cost-accent）。
+   折起／展开都是这一圈绿框 —— 原来折起是 --line 灰（在深色卡片上几乎看不见，等于没有框）、
+   展开是 --signal-border 蓝，两态色不一致。这里 id 选择器优先级高于 .zone-card[open]，一次写死两态。 */
+#group_positions{background:var(--card);--collapse-bg:rgba(46,160,67,.15)}
+#group_positions_long.zone-card{background:none;border:1px solid #2c8f3e}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
@@ -994,14 +999,16 @@ tr.gray td{color:var(--dim)}
     padding-bottom:2px}
   .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
     box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
-  /* 长持仓（卡中卡）同样两态统一锁 34px，与外层保持层级差 */
-  .zone-card>summary{box-sizing:border-box;height:34px;padding-top:0;padding-bottom:0}
+  /* 长持仓（卡中卡）同样两态统一锁 36px（34 → 36，折起来高一点），与外层保持层级差 */
+  .zone-card>summary{box-sizing:border-box;height:36px;padding-top:0;padding-bottom:0}
 }
 /* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
 .stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
   box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-radius:999px;
   border:1.5px solid var(--dim);background:transparent;
-  font-size:12.5px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;color:#fff;
+  /* 字号跟同一行右侧的「20日对.SPX -5.3%」(.group-stats) 完全一致：桌面 14px、手机 14.5px；
+     **不加粗**（2026-10-31）：原来 12.5px/700 在这一行里又小又跳，现在跟旁边数字同号同重。 */
+  font-size:14px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums;color:#fff;
   position:relative;top:2px}   /* 与分组名文字底部对齐（圆底原本比文字底高 2px） */
 .stat-badge.red{border-color:var(--red)}
 .stat-badge.yellow{border-color:var(--yellow)}
@@ -1063,11 +1070,13 @@ tr.gray td{color:var(--dim)}
   .zone-card>summary{line-height:22.5px}
   .zone-card>summary .zone-name{font-size:16px}
   .zone-card>summary .group-stats{font-size:14px;line-height:22.5px}
-  /* 数字灯圈：圈 17 → 20px、数字 12.5 → 14 → **15px**（2026-10-30 二轮加大）。
-     内边距同时 4 → 3px：两位数「21」的圈宽仍是 26px 上下、高度恒 20px，
-     也就是**框一个像素都没变大**，只把圈里的数字撑大。它是 group-stats 里的 flex item，
-     20px 仍小于标题行 24px 的行盒，所以折叠栏高度不变。 */
-  .stat-badge{min-width:20px;height:20px;padding:0 3px;font-size:15px}
+  /* 数字灯圈：2026-10-30 二轮加大到「圈 20px / 数字 15px」，2026-10-30 晚间又收回——
+     分组框压掉 15%（62 → 53）后，20px 的圈在 47px 的标题行里占 0.43，比桌面（17px / 44px
+     行，占 0.39）明显偏大，而且在 360/320 窄屏上会把「科技」这类灯多的标题行撑到 52px
+     （别的分组是 47），折叠栏比别人高一截。
+     现在改成**跟桌面同尺寸 17px**，数字 14px（仍比桌面 12.5px 大一圈，手机可读性保住）：
+     一位数 17×17、两位数「13」24×17，窄屏标题行回落到 47，卡片高度重新齐平，零横向溢出。 */
+  .stat-badge{min-width:17px;height:17px;padding:0 3px;font-size:14.5px}
   /* 顶栏左右对称留白：页面本身左右各留 4px，这里再给 .runbar 各加 16px，
      于是最左边的「运行」按钮和最右边的「定投：N」距屏幕边缘都是 20px（2026-10-30 二次加大）。
      原来只给「定投」加 margin-right:10px，是单边的，左边三个按钮仍贴着屏幕边。 */
@@ -1113,29 +1122,47 @@ tr.gray td{color:var(--dim)}
     border:1px solid #333a47;border-radius:8px;padding:7px 15px;margin:0}
   /* 页底「自动计划：…」12 → 14px（2026-10-30）。 */
   .autoplan{font-size:14px}
-  /* ===== 手机分组框高度再压约 15%（62 → 53）：只动「卡片上内边距 + 标题行高度」=====
-     用 min-height 而不是 height —— 320 这种窄屏上标题行会折成两行（实测 76~80px），
-     硬锁高度会把第二行裁掉；min-height 单行时生效、多行时自动让高。
+  /* ===== 手机分组框高度：62 → 53 → **57**（2026-10-31 全体加高 4px）=====
+     只动「卡片上内边距 + 标题行高度」。用 min-height 而不是 height —— 320 这种窄屏上标题行
+     会折成两行（实测 76~80px），硬锁高度会把第二行裁掉；min-height 单行时生效、多行时自动让高。
      顶部链路两态统一（卡片 padding-top 2px + 标题行居中），展开／收起标题文字位置仍一致；
      底部跟桌面同款：收起 2px、展开 6px（内容不贴底边）。
-     **「仓位」跟其它分组同一个 47px**（内容高 29.6px 的「编辑」按钮塞得下）—— 一开始为凑
-     「减 15%」单独给它 51px，结果收起来比别的分组高 4px，看着不齐，2026-10-30 改回统一。
-     长持仓（卡中卡）42.5 → 36，比外层矮一档是层级，保留。 */
+     **所有分组（含「仓位」）同一个 51px**（内容高 29.6px 的「编辑」按钮塞得下）：
+     10/30 曾为凑「减 15%」把仓位单独降到 47（53），用户看到的是旧的 57 那档、觉得其它栏目偏矮，
+     于是 10/31 反过来**把其它栏目加高到 57**、与仓位那档对齐——现在全体 57，不再有单独特例。
+     长持仓（卡中卡）42.5 → 36 → **40**，比外层矮一档是层级，保留。 */
   .group-card,.macro-card,#costManage.cost-manage{padding-top:2px}
   .group-card:not([open]),.macro-card:not([open]),#costManage.cost-manage:not([open]){
     padding-bottom:2px}
   .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
-    box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0}
-  .zone-card>summary{box-sizing:border-box;min-height:34px;padding-top:0;padding-bottom:0}
+    box-sizing:border-box;min-height:51px;padding-top:0;padding-bottom:0}
+  /* 长持仓 34 → 38：折起来的标题行加高一点（触摸目标更舒适，仍比外层矮一档） */
+  .zone-card>summary{box-sizing:border-box;min-height:38px;padding-top:0;padding-bottom:0}
   /* 标题文字各减 0.5px：分类名 17 → 16.5px，右侧「20日对.SPX -5.3%」等 15 → 14.5px。
      行高仍是写死的 24px，所以标题行的行盒高度不变（2026-10-30）。 */
   .group-card>summary.grp,.macro-card>summary.grp{font-size:16.5px}
   .group-card>summary .group-stats,.macro-card>summary .group-stats{font-size:14.5px}
+  /* 标题行右侧那一串（灯圈 + 「20日对.SPX …」）间距 8 → 6px：360/320 窄屏上灯多的分组
+     会被挤成两行（标题行 49~56 → 卡片 55~62），比单行的 57 高一截。收窄后能单行，
+     所有分组栏高度一致；320 极窄屏个别超长标题仍会折行（见下一条兜底）。 */
+  .group-card>summary .group-stats,.macro-card>summary .group-stats,
+  .zone-card>summary .group-stats{gap:6px}
 }
 /* ≤400 的窄屏：主表「ETF」标签跟仓位板块一起再收半档（9px / 内边距 0 3px），
    仓位那边的 .cost-name .tag 在同一断点也是这个值（cost_panel.css），两边始终同款（2026-10-30）。 */
 @media (max-width:400px){
   .stk td.sym .tag{font-size:9px;padding:0 3px}
+}
+/* ≤340 极窄屏（iPhone SE 一类）：标题行那一串再收一档 —— 分组名与右侧串的间距 6 → 4px、
+   右侧串内部 6 → 4px、灯圈内边距 3 → 2px、右内边距 12 → 6px、「仅板块ETF」这类小注 12px。
+   目的：让「房地产 (1)」这种「名字 + 小注 + 灯圈 + 20日对.SPX …」最长的组合也能压在一行，
+   320px 上所有分组栏（含「仓位」）收起高度统一 **53px**（2026-10-31）。 */
+@media (max-width:340px){
+  .group-card>summary.grp,.macro-card>summary.grp{gap:4px;padding-right:6px}
+  .group-card>summary .group-stats,.macro-card>summary .group-stats,
+  .zone-card>summary .group-stats{gap:4px}
+  .stat-badge{padding:0 2px}
+  .monitor-note{font-size:12px}
 }
 /* 注：345 这类极窄屏整行会比线上高 6.24px —— A/B 实测过，元凶是上一轮把财报列
    「美东/北京」加大（.stk .earn），**不是**代码/备注名：把 sym 压回 14/11.5px 高度纹丝不动，

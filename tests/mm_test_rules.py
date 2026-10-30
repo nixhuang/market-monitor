@@ -354,8 +354,8 @@ class RulesRegression(unittest.TestCase):
     def test_positions_green_tints_and_shared_collapse_background(self):
         css = page_assets.PAGE_CSS
         self.assertIn('--signal-bg:#182131; --collapse-bg:var(--signal-bg)', css)
-        self.assertIn('#group_positions{background:linear-gradient(rgba(46,160,67,.02),rgba(46,160,67,.02)),var(--card);--collapse-bg:rgba(46,160,67,.15)}', css)
-        self.assertIn('#group_positions_long.zone-card{background:rgba(46,160,67,.02)}', css)
+        self.assertIn('#group_positions{background:var(--card);--collapse-bg:rgba(46,160,67,.15)}', css)
+        self.assertIn('#group_positions_long.zone-card{background:none;border:1px solid #2c8f3e}', css)
         self.assertIn('#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
         button = re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1]
         self.assertIn('background:var(--collapse-bg)', button)

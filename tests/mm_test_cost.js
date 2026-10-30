@@ -1991,11 +1991,12 @@ test('成本价写到代码名称下面那一排，成本行第一组改显示�
   const lvs=ci.parentNode;
   assert.ok(lvs.className.split(/\s+/).includes('lvs'));
   assert.equal(lvs.children[0],ci,'成本价排在所有胶囊前面');
-  // 成本行首组改「数 N」：只显示整数，且不再出现「成本」
+  // 2026-10-31：个股下面「数 N · ±x% · ±$x · 市值 x · 仓位 x%」这一整排去掉
+  // （数量／盈亏／市值／仓位在表格各自的列里都有），只保留成本价那一排。
   const info=b.doc.querySelector('.cost-info');
-  assert.ok(info,'成本行仍在');
-  assert.match(info.textContent,/^数 7/,'数量显示取整（7.004 → 7）');
-  assert.doesNotMatch(info.textContent,/成本/,'成本行不再重复写成本价');
+  assert.ok(info,'成本行节点仍在（只是清空并隐藏）');
+  assert.equal(info.textContent.trim(),'','这一排内容已全部清空');
+  assert.equal(info.style.display,'none','清空后不再占位');
   await b.dispose();
 });
 test('没有持仓成本时收起成本价节点，空容器不占高度',async()=>{

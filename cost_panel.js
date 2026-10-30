@@ -1878,14 +1878,10 @@
       /* 成本价已经写到「代码 + 备注名」下面那一排（r.costInline），这一排第一组改成「数 N」——
          跟仓位面板同一档：数量显示整数，精确值仍参与计算 */
       setCostInline(r,r.cost>0?trim(r.cost):'');
-      /* 三组各自成块（inline-block + nowrap）：手机放不下时**整组换行**，
-         不会像以前那样把「仓位 2.6%」截成「仓位 2....」；组内数字间留 5px，组间用细点分隔 */
-      r.info.innerHTML='<span class="cg"><span class="k">数</span> <b>'+qtyInt(r.qty)+'</b>'
-        +'<b class="pct '+cls+'">'+pct(r.pnlPct)+'</b>'
-        +'<b class="amt '+cls+'">'+money(r.pnlAmt)+'</b></span>'
-        +'<span class="sep">·</span><span class="cg"><span class="k">市值</span> <b>'+plain(r.mv)+'</b></span>'
-        +'<span class="sep">·</span><span class="cg"><span class="k">仓位</span> <b'
-        +(w>10?' class="wt-hi"':'')+'>'+(totalAsset>0?w.toFixed(1)+'%':'—')+'</b></span>';
+      /* 2026-10-31：个股下面「数 N · ±x% · ±$x · 市值 x · 仓位 x%」这一整排**去掉** ——
+         数量／盈亏／市值／仓位在表格各自的列里都有，这排是重复信息，且手机上要多占一行。
+         「仓位 >10% 黄字」的提示随这一排一起走，列里的 wt 列本来就有同样的加重。 */
+      if(r.info){ r.info.innerHTML=''; r.info.style.display='none'; }
       /* 浮亏 10%/20%：这里也做成可手动关闭的临时提醒——按钮挂在成本价那一排的提醒后面。
          浮亏收窄到阈值以内时 key 自动清掉，下次再跌破会重新提醒 */
       var lv=r.pnlPct<=-20?2:(r.pnlPct<=-10?1:0);

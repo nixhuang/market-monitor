@@ -6698,7 +6698,7 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('#signalCounts .collapse-group{color:#fff}', monitor.PAGE_CSS)
         self.assertNotIn('opacity:', button_rule.group(1))
         self.assertIn('--collapse-bg:var(--signal-bg)', monitor.PAGE_CSS)
-        self.assertIn('#group_positions{background:linear-gradient(rgba(46,160,67,.02),rgba(46,160,67,.02)),var(--card);--collapse-bg:rgba(46,160,67,.15)}', monitor.PAGE_CSS)
+        self.assertIn('#group_positions{background:var(--card);--collapse-bg:rgba(46,160,67,.15)}', monitor.PAGE_CSS)
 
     def test_jump_flash_never_overwrites_the_lamp_bar(self):
         """闪烁只能用 background-color：带 52 周条的行灯条是 background-image 画的，
