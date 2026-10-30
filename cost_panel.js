@@ -28,6 +28,16 @@
   /* 数量列的**显示**只取整数：录入仍可到 0.0001，且全程按精确值计算，
      这里只是不把「46.0903」铺在窄列里（2026-10-29）。 */
   function qtyInt(n){ return Math.round(num(n)).toLocaleString('en-US'); }
+  /* 成本价：写到「代码 + 备注名」下面那一排（跟加减仓价胶囊同一个 .lvs 容器、排在最前）。
+     只标数字、不写「成本」二字——上面就是代码和备注名，那一行本来只会有成本价和加减仓价，
+     加「成本」反而跟右边的「加 325 / 减 400」胶囊不是一个读法。
+     传空串＝没有持仓成本，整块收起（自动新建的 .lvs 也要一起收，否则空块会白占 4px 上边距）。 */
+  function setCostInline(r,txt){
+    if(!r.costInline) return;
+    r.costInline.textContent=txt||'';
+    r.costInline.style.display=txt?'':'none';
+    if(r.costLvsAuto&&r.costLvs) r.costLvs.style.display=txt?'':'none';
+  }
   /* 市值 / 现金 / 总资产：整数。≥100万 也按 M 缩写（市值列最窄 44px，
      「$1,234,567」在 10px 下约 51px 放不下，「$1.23M」约 38px）。 */
   function plain(n){ var r=Math.round(n), a=Math.abs(r);
@@ -188,6 +198,22 @@
     if(rail) (track||rail).appendChild(tick);
     var info=document.createElement('span');
     info.className='cost-info';
+    /* 成本价挪到「代码 + 备注名」下面那一排：跟加减仓价胶囊共用同一个 .lvs 容器、
+       排在所有胶囊前面，只出文字、不做胶囊 —— 那一排只会有成本价和加减仓价两样东西 */
+    var symTd=tr.querySelector('td.sym');
+    var costInline=null,costLvs=null,costLvsAuto=false;
+    if(symTd){
+      var lvs=symTd.querySelector('.lvs');
+      if(!lvs){
+        lvs=document.createElement('span'); lvs.className='lvs';
+        symTd.appendChild(lvs); costLvsAuto=true;
+      }
+      costInline=document.createElement('span');
+      costInline.className='cost-inline';
+      costInline.style.display='none';
+      lvs.insertBefore(costInline,lvs.firstChild);
+      costLvs=lvs;
+    }
     /* 三条可手动关闭的提醒，模式完全一致：一行文字 + ✓ 按钮（再点一下撤销）
        ① 加仓价 ② 减仓价 ③ 浮亏 ≥10%。位置统一在成本价那一排下面 */
     var warnAdd=document.createElement('span');
@@ -217,7 +243,8 @@
                rangeTr:railTr && railTr.className.split(/\s+/).indexOf('range52-row')>=0?railTr:null,
                quietZone:quietBox?quietBox.parentNode:null,
                trig:trig,cut:cut,cap:cap,cutCap:cutCap,sigAdd:sigAdd,
-               tick:tick,info:info,warnAdd:warnAdd,warnCut:warnCut,warn:warn});
+               tick:tick,info:info,costInline:costInline,costLvs:costLvs,costLvsAuto:costLvsAuto,
+               warnAdd:warnAdd,warnCut:warnCut,warn:warn});
   });
 
   /* ---------- 1.5 「已读」：临时提醒可以手动关 ----------
@@ -1820,12 +1847,19 @@
        ① 字号跟报警描述一致（CSS）② 盈亏比例＋金额绿涨红跌 ③ 仓位 >10% 黄字
        ④ 浮亏到 10%／20% 另起一行提醒，附加红色报灯，并实时计入成本浮亏统计 */
     ROWS.forEach(function(r){
-      if(!r.has){ if(r.info) r.info.innerHTML=''; return; }
+      if(!r.has){
+        if(r.info) r.info.innerHTML='';
+        setCostInline(r,'');
+        return;
+      }
       var w=totalAsset>0?r.mv/totalAsset*100:0;
       var cls=r.pnlPct>=0?'up':'down';
+      /* 成本价已经写到「代码 + 备注名」下面那一排（r.costInline），这一排第一组改成「数 N」——
+         跟仓位面板同一档：数量显示整数，精确值仍参与计算 */
+      setCostInline(r,r.cost>0?trim(r.cost):'');
       /* 三组各自成块（inline-block + nowrap）：手机放不下时**整组换行**，
          不会像以前那样把「仓位 2.6%」截成「仓位 2....」；组内数字间留 5px，组间用细点分隔 */
-      r.info.innerHTML='<span class="cg"><span class="k">成本</span> <b>'+trim(r.cost)+'</b>'
+      r.info.innerHTML='<span class="cg"><span class="k">数</span> <b>'+qtyInt(r.qty)+'</b>'
         +'<b class="pct '+cls+'">'+pct(r.pnlPct)+'</b>'
         +'<b class="amt '+cls+'">'+money(r.pnlAmt)+'</b></span>'
         +'<span class="sep">·</span><span class="cg"><span class="k">市值</span> <b>'+plain(r.mv)+'</b></span>'

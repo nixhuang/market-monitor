@@ -142,7 +142,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('border-top:7px solid #713caf', declarations('.range52-marker::before'))
         self.assertIn('background:#f0c674', declarations('.range52-cost'))
         self.assertIn('.up{color:var(--up)} .down{color:var(--down)}', css)
-        for lamp, width in (("red", 6), ("yellow", 4), ("green", 2)):
+        # 2026-10-30：红灯条与黄灯条等宽（6 → 4px），只有颜色不同。
+        for lamp, width in (("red", 4), ("yellow", 4), ("green", 2)):
             self.assertIn(f'--lc:var(--{lamp});--lw:{width}px', css)
         self.assertIn('#signalCounts .signal-name-lamp.tone-target-high{--name-lamp:var(--target-high)}', css)
         for alias in ('tone-target-high', 'target-space-high'):

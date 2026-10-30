@@ -388,7 +388,9 @@ class PageRenderer:
                 continue
             lv, txt = self._context.macro_status(key, it)
             if key == "sp500":
-                val = f'{it["value"]:,.2f}<span class="unit">较近一年高点回撤 {it["drawdown"]:.1f}%</span>' if it.get("drawdown") is not None else "—"
+                # 2026-10-30：「较近一年高点」六个字删掉，只留「回撤 -1.3%」——同一格还有点位，
+                # 前缀太长会把数字挤到第二行，行高也压不下来。
+                val = f'{it["value"]:,.2f}<span class="unit">回撤 {it["drawdown"]:.1f}%</span>' if it.get("drawdown") is not None else "—"
             elif key == "hy_oas":
                 val = f'{it["value"]:.0f} bp'
             elif key == "vix":
@@ -398,8 +400,9 @@ class PageRenderer:
             elif key == "curve":
                 val = f'{it["value"]:.2f}<span class="unit">个百分点</span>'
             elif key == "breadth":
-                val = (f'{it["value"]:.1f}%<span class="unit">上宏观长均线</span>'
-                       f'<span class="unit">上宏观短均线：{it["pct50"]:.1f}%</span>')
+                # 2026-10-30：「上宏观」三字删掉（长／短均线本身就是宏观口径，不必重复）
+                val = (f'{it["value"]:.1f}%<span class="unit">长均线</span>'
+                       f'<span class="unit">短均线：{it["pct50"]:.1f}%</span>')
             elif key == "nfci":
                 val = f'{it["value"]:+.2f}'
             else:
@@ -408,7 +411,8 @@ class PageRenderer:
             dw = it.get("delta_week")
             dw_txt = f'{dw:+.0f}' if (key == "hy_oas" and dw is not None) else "—"
             label = html_lib.escape(str(it.get("name") or self._context.RISK_LABELS[key]))
-            label += f'<span class="unit">截至 {html_lib.escape(it["date"])}</span>'
+            # 2026-10-30：「截至」二字删掉，只留日期（单独一行小字，谁都看得出是数据日期）
+            label += f'<span class="unit">{html_lib.escape(it["date"])}</span>'
             # 数据来源（FRED / Cboe / Yahoo …）按 2026-10-15 要求不再在指标行里展示，页底仍保留整体来源说明
             rows_macro.append(
                 f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
@@ -423,12 +427,29 @@ class PageRenderer:
             uw_txt = f'{uw * 100:+.0f}' if uw is not None else "—"
             ulabel = (f'{html_lib.escape(str(ut.get("name") or "10Y美债"))}'
                       f'<span class="unit">参考</span>'
-                      f'<span class="unit">截至 {html_lib.escape(ut["date"])}</span>')
+                      f'<span class="unit">{html_lib.escape(ut["date"])}</span>')
             rows_macro.append(
                 f'<tr class="{ulv}" id="ust10Ref"><td>{ulabel}</td><td class="num">{ut["value"]:.2f}%</td>'
                 f'<td class="num dim">{uw_txt}<span class="unit">周变化 bp</span></td><td>{utxt}</td></tr>')
         else:
             rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债<span class="unit">参考</span></td>'
+                              '<td colspan="3">无数据或已过期</td></tr>')
+        # 纳斯达克指数参考行（2026-10-30）：纯展示点位与周变化，不带灯级、不计分。
+        # 指标格沿用 10Y美债的写法：「纳斯达克指数 + 参考 + 日期」三行小字。
+        nd = macro.get("nasdaq") or {}
+        nd_val = self._context._pos_num(nd.get("value"))
+        nd_week = nd.get("delta_week")
+        nd_week = (nd_week if isinstance(nd_week, (int, float)) and not isinstance(nd_week, bool)
+                   and nd_week == nd_week and nd_week not in (float("inf"), float("-inf")) else None)
+        if nd.get("ok") is True and nd_val is not None:
+            ndw_txt = f'{nd_week:+,.0f}' if nd_week is not None else "—"
+            rows_macro.append(
+                f'<tr id="nasdaqRef"><td>纳斯达克指数<span class="unit">参考</span>'
+                f'<span class="unit">{html_lib.escape(str(nd.get("date") or ""))}</span></td>'
+                f'<td class="num">{nd_val:,.2f}</td>'
+                f'<td class="num dim">{ndw_txt}<span class="unit">周变化</span></td><td>参考</td></tr>')
+        else:
+            rows_macro.append('<tr class="gray" id="nasdaqRef"><td>纳斯达克指数<span class="unit">参考</span></td>'
                               '<td colspan="3">无数据或已过期</td></tr>')
         return "".join(rows_macro)
 
@@ -1399,7 +1420,6 @@ class PageRenderer:
         refs = refs if isinstance(refs, dict) else {}
         oil = refs.get("oil")
         oil = oil if isinstance(oil, dict) else {}
-        esc = lambda value: html_lib.escape(str(value))
         valid = self._context.policy_alerts.valid_number
         level = oil.get("level", "gray")
         names = {"red": "警惕", "yellow": "注意", "green": "未触发", "gray": "待更新"}
@@ -1412,15 +1432,13 @@ class PageRenderer:
         value = f'{price:.2f}<span class="unit">美元／桶</span>' if valid(price) else '—<span class="unit">美元／桶</span>'
         day_class = "oil-rise" if valid(day) and day > 0 else "oil-fall" if valid(day) and day < 0 else "dim"
         change = f'{day:+.2f}%' if valid(day) else "—"
-        # 「依据与来源」整块删除（2026-10-28）：状态列只留灯名 + 一句精简结论
-        text = oil.get("text")
-        if (not isinstance(text, str) or not text.strip()
-                or (level == "gray" and oil.get("level") != "gray")):
-            text = "原油数据待更新，暂不能判断成本压力。"
+        # 2026-10-30：指标格的「CLmain · 参考」「日线待更新」两行小字、状态格下面那句
+        # 「原油数据待更新，暂不能判断成本压力。」全部删掉 —— 状态列只留灯名（「待更新」/「未触发」…）。
+        # 灯名本身就是结论，那句话只是把灯名复述一遍，白白把这一行撑高一倍。
         return (f'<tr class="{level} oil-reference-row" id="oilAlert" data-level="{level}">'
-                f'<td>WTI原油<span class="unit">CLmain · 参考</span><span class="unit">{esc(oil.get("date") or "日线待更新")}</span></td>'
+                f'<td>WTI原油</td>'
                 f'<td class="num">{value}</td><td class="num {day_class}">{change}<span class="unit">日涨跌</span></td>'
-                f'<td><b class="oil-state">{names[level]}</b><div class="oil-explanation">{esc(text)}</div></td></tr>')
+                f'<td><b class="oil-state">{names[level]}</b></td></tr>')
 
 
     def _page_notes(self, snapshot):
@@ -1618,14 +1636,14 @@ class PageRenderer:
 <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png?v=2">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png">
 <link rel="manifest" href="./manifest.webmanifest">
-<title>MatrixPulse</title>
+<title>NIX-Matrix</title>
 <style>
 {self._context.PAGE_CSS.removesuffix(self._context.RULES_CSS)}
 {cost_css}
 {self._context.RULES_CSS}</style>
 </head>
 <body>{current_rules}<div class="wrap">
-<h1 class="brand">MatrixPulse</h1>
+<h1 class="brand">NIX-Matrix</h1>
 <div class="sub">{html_lib.escape(sub_line)}</div>
 
 <div class="runbar">

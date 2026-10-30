@@ -296,7 +296,7 @@ class TestGroups(unittest.TestCase):
     def test_macro_prefers_official_vix_and_only_credit_spread_from_fred(self):
         from datetime import date, datetime, timedelta  # 固定时钟：NFCI按真实时间判断到期，不能依赖跑测试的时刻
         def bars(alias):
-            prices = {'^VIX': 15.08, '^GSPC': 7801.77, '^TNX': 5.3}
+            prices = {'^VIX': 15.08, '^GSPC': 7801.77, '^TNX': 5.3, '^IXIC': 23918.44}
             value = prices[alias]
             dates = [(date(2026, 10, 7) - timedelta(days=i)).isoformat() for i in range(39, -1, -1)]
             return {'dates': dates, 'closes': [value]*40, 'highs': [value]*40, 'lows': [value]*40,
@@ -313,9 +313,11 @@ class TestGroups(unittest.TestCase):
             macro = monitor.build_macro()
             self.assertEqual(fred.call_args_list, [unittest.mock.call('BAMLH0A0HYM2')])
             cboe.assert_called_once()
-            self.assertEqual([call.args[0] for call in yahoo.call_args_list], ['^GSPC', '^TNX'])
+            # 2026-10-30：末尾新增纳斯达克指数（^IXIC）参考行的取数
+            self.assertEqual([call.args[0] for call in yahoo.call_args_list], ['^GSPC', '^TNX', '^IXIC'])
             self.assertEqual((macro['vix']['value'], macro['vix']['date']), (15.08, '2026-10-07'))
             self.assertEqual(macro['vix']['source'], 'Cboe VIX 官方日线')
+            self.assertTrue(macro['nasdaq']['ok'], '纳斯达克指数参考行取到数据')
             cfg = {'index_funds': {'.VIX': {}, '.SPX': {}, 'SPY': {}}, 'group_monitoring':{'index_funds':True}}
             with patch.object(monitor, 'global_dca', return_value=None):
                 snap = monitor.build_snapshot(macro, [], cfg)
@@ -323,7 +325,11 @@ class TestGroups(unittest.TestCase):
         risk = page.split('id="macroCard"')[1].split('id="group_positions"')[0]
         self.assertIn('15.08', risk)
         self.assertIn('7,801.77', risk)
-        self.assertIn('截至 2026-10-07', risk)
+        # 2026-10-30：指标行的「截至」二字删除，只留日期
+        self.assertIn('<span class="unit">2026-10-07</span>', risk)
+        self.assertNotIn('截至', risk)
+        self.assertIn('23,918.44', risk)
+        self.assertIn('id="nasdaqRef"', risk)
         self.assertNotIn('Cboe VIX 官方日线', risk)   # 2026-10-15：指标行不再逐条展示数据来源
         self.assertNotIn('.VIX</td>', page)
         self.assertNotIn('.SPX</td>', page)
@@ -2133,8 +2139,9 @@ class TestGroups(unittest.TestCase):
         self.assertEqual([r['symbol'] for r in rows], ['FIRST', 'SECOND'])
         self.assertNotIn('class="overall', page)
         self.assertNotIn('绿框 · 不用动', page)
-        self.assertIn('.group-card tr.red td:first-child{box-shadow:inset 6px', page)
-        for color, width in [('red', 6), ('yellow', 4), ('green', 2)]:
+        self.assertIn('.group-card tr.red td:first-child{box-shadow:inset 4px', page)
+        # 2026-10-30 起：红灯条宽度跟黄灯条对齐（6px → 4px），两档只有颜色不同。
+        for color, width in [('red', 4), ('yellow', 4), ('green', 2)]:
             self.assertIn(f'tr.{color} td:first-child{{box-shadow:inset {width}px', page)
         self.assertNotIn('0.51 个百分点', page)
         risk = page.split('id="macroCard"', 1)[1].split('id="group_positions"', 1)[0]
@@ -2159,7 +2166,8 @@ class TestGroups(unittest.TestCase):
                 patch.object(monitor, 'financial_conditions_series', return_value=[]), \
                 patch.object(monitor, 'market_breadth', return_value={'ok': False, 'name': '上涨参与度'}):
             macro = monitor.build_macro()
-        self.assertEqual(attempts, ['^VIX', '^VIX', '^GSPC', '^GSPC'])
+        # 2026-10-30：末尾新增纳斯达克指数（同样失败一次后重试一次）
+        self.assertEqual(attempts, ['^VIX', '^VIX', '^GSPC', '^GSPC', '^IXIC', '^IXIC'])
         self.assertTrue(macro['vix']['ok'] and macro['sp500']['ok'])
         self.assertEqual(macro['vix']['date'], '2026-10-07')
 
@@ -2492,7 +2500,7 @@ class TestGroups(unittest.TestCase):
         self.assertIn('综合：升高', summary)
         self.assertNotIn('红1 · 黄1', summary)
         self.assertIn('走弱，压力同步升高', page)
-        self.assertIn('截至 2026-10-02', page)
+        self.assertIn('<span class="unit">2026-10-02</span>', page)  # 2026-10-30：指标行不再写「截至」
         glossary = re.search(r'<template id="glossaryTpl">(.*?)</template>', page, re.S)[1]
         self.assertRegex(glossary, '<a href="' + re.escape(monitor.BREADTH_CREDIT)
                          + '"[^>]*>History of Market</a>')
@@ -3122,8 +3130,8 @@ class TestTargets(unittest.TestCase):
         self.assertIn('异动 +2.1%</span> <span class="signal-separator">/</span> <span class="signal-item" data-signal-kind="rsi">RSI 超买', page)
         self.assertNotIn('<span class="tp">在共识价 101 ±3% 内（偏离 -1.0%）</span>', page)
         css = page.split('<style>')[1]
-        # 红黄绿左条仍为6/4/2px；主行和52周续行不再绘制右侧紫条。
-        self.assertIn('tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red)', css)
+        # 红黄绿左条仍为4/4/2px（红灯条已与黄灯条等宽）；主行和52周续行不再绘制右侧紫条。
+        self.assertIn('tr.red td:first-child{box-shadow:inset 4px 0 0 var(--red)', css)
         self.assertIn('tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow)', css)
         self.assertIn('tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}', css)
         self.assertNotRegex(css, r'tr\.pur(?:-(?:space|high|hit))?(?::has\([^}]*\))?\s*(?:td\.sig|\+tr\.range52-row>td)\{')
@@ -3132,7 +3140,8 @@ class TestTargets(unittest.TestCase):
 
     def test_target_states_keep_lamps_and_range52_left_stripes_without_right_bar(self):
         css = monitor.PAGE_CSS
-        for level, width in (('red', 6), ('yellow', 4), ('green', 2)):
+        # 2026-10-30：红灯条与黄灯条等宽（6 → 4px）。
+        for level, width in (('red', 4), ('yellow', 4), ('green', 2)):
             self.assertIn('tr.' + level + ':has(+tr.range52-row)>td:first-child{--lc:var(--'
                           + level + ');--lw:' + str(width) + 'px}', css)
             self.assertIn('tr.' + level + '+tr.range52-row>td{--lc:var(--'
@@ -6525,7 +6534,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertEqual(output.count('class="range52-row"'), 1)
         self.assertIn('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}', monitor.PAGE_CSS)  # 位置条贴近本股
         self.assertIn('.stk tr.range52-row td{padding:0 12px 4px 18px;', monitor.PAGE_CSS)  # 位置条下方只留 4px
-        self.assertIn('.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px}', monitor.PAGE_CSS)  # 灯条延伸到本股位置条
+        self.assertIn('.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:4px}', monitor.PAGE_CSS)  # 灯条延伸到本股位置条（与黄灯等宽）
         self.assertIn('background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom', monitor.PAGE_CSS)  # 灯条顶部下移
         self.assertIn('</tr><tr class="range52-row"><td colspan="4">', output)
         self.assertEqual(monitor.signal_counts([row])['low52']['red'], 0)
@@ -8889,10 +8898,10 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                         self.assertIn('<tr class="' + level, current)
                         self.assertIn('class="range52-row"', current)
                         self.assertEqual(row, before)
-        for rule in ('tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}',
+        for rule in ('tr.red td:first-child{box-shadow:inset 4px 0 0 var(--red);padding-left:14px}',
                      'tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}',
                      'tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}',
-                     '.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px}',
+                     '.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:4px}',
                      '.stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}',
                      '.stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px}'):
             self.assertIn(rule, monitor.PAGE_CSS)

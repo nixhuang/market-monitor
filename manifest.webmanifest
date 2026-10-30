@@ -1,6 +1,6 @@
 {
-  "name": "MatrixPulse",
-  "short_name": "MatrixPulse",
+  "name": "NIX-Matrix",
+  "short_name": "NIX-Matrix",
   "start_url": "./",
   "scope": "./",
   "display": "browser",

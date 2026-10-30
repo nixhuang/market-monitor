@@ -1973,6 +1973,39 @@ test('仓位面板不再挂「亏损超N%」小字标签，行级红灯与浮亏
   assertLossStats(b,2,0,['AAA','BBB']);assertLossBadges(b,2,0);
   await b.dispose();
 });
+test('成本价写到代码名称下面那一排，成本行第一组改显示数量（整数）',async()=>{
+  const d=copy(SEED);d.items={AAA:{cost:80,qty:7.004}};
+  const b=await boot({local:d});await b.tick(16);
+  const tr=b.doc.getElementById('s-aaa');
+  const ci=tr.querySelector('.cost-inline');
+  assert.ok(ci,'td.sym 下面必须挂成本价节点');
+  assert.equal(ci.textContent,'80','只标数字，不写「成本」二字');
+  assert.doesNotMatch(ci.textContent,/成本/);
+  assert.notEqual(ci.style.display,'none','有持仓成本时要显示');
+  // 与加减仓价胶囊共用同一个 .lvs 容器、排在最前
+  const lvs=ci.parentNode;
+  assert.ok(lvs.className.split(/\s+/).includes('lvs'));
+  assert.equal(lvs.children[0],ci,'成本价排在所有胶囊前面');
+  // 成本行首组改「数 N」：只显示整数，且不再出现「成本」
+  const info=b.doc.querySelector('.cost-info');
+  assert.ok(info,'成本行仍在');
+  assert.match(info.textContent,/^数 7/,'数量显示取整（7.004 → 7）');
+  assert.doesNotMatch(info.textContent,/成本/,'成本行不再重复写成本价');
+  await b.dispose();
+});
+test('没有持仓成本时收起成本价节点，空容器不占高度',async()=>{
+  const b=await boot({local:{...copy(SEED),items:{}}});await b.tick(16);
+  for(const sym of ['aaa','bbb']){
+    const tr=b.doc.getElementById('s-'+sym);
+    const ci=tr.querySelector('.cost-inline');
+    assert.ok(ci,sym+' 节点仍存在（只是收起）');
+    assert.equal(ci.textContent,'');
+    assert.equal(ci.style.display,'none',sym+' 无成本时收起');
+    if(ci.parentNode.className.split(/\s+/).includes('lvs'))
+      assert.equal(ci.parentNode.style.display,'none',sym+' 自动新建的空容器一起收起');
+  }
+  await b.dispose();
+});
 test('成本浮亏技术原红不重复计数，已读仍红；原黄被浮亏提升后恢复黄色',async()=>{
   const b=await bootLoss({local:{...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2}}},prices:{AAA:80,BBB:90},levels:{AAA:'red pur-high',BBB:'yellow'}});
   assertLossStats(b,2,0,['AAA','BBB']);assertLossBadges(b,2,0);

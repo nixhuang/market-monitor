@@ -89,8 +89,9 @@ _cost_css, _cost_js = monitor._cost_panel_assets(items)
 check(html.index(_cost_css) < html.index(monitor.RULES_CSS), "规则CSS仍在仓位CSS之后覆盖")
 
 # 标题与排
-check("<title>MatrixPulse</title>" in html and '<h1 class="brand">MatrixPulse</h1>' in html,
-      "标题 = MatrixPulse（带 brand 类，上涨绿）")
+check("<title>NIX-Matrix</title>" in html and '<h1 class="brand">NIX-Matrix</h1>' in html
+      and "MatrixPulse" not in html,
+      "标题 = NIX-Matrix（带 brand 类，上涨绿，旧名 MatrixPulse 全站清除）")
 check("h1.brand{color:var(--up)}" in html, "站名用上涨绿 --up，不写死颜色")
 check("市场自检" not in html, "旧标题已移除")
 check("数据时间 2026-10-06 收盘（美东交易日）" in html and "本页数据更新" not in html,
@@ -177,11 +178,41 @@ check('id="ust10Ref"' in html and "无数据或已过期" in html.split('id="ust
 _macro_b = dict(macro, breadth={"ok": True, "name": "上涨参与度", "date": "2026-10-06", "value": 47.0,
                                "pct50": 29.3, "unit": "%", "source": "History of Market"})
 _html_b = monitor.render(_macro_b, items, 10, snapshot=snapshot, dup_hidden=2)
-check("47.0%<span class=\"unit\">上宏观长均线</span>" in _html_b
-      and "上宏观短均线：29.3%" in _html_b
+check("47.0%<span class=\"unit\">长均线</span>" in _html_b
+      and "短均线：29.3%" in _html_b
+      and "上宏观" not in _html_b.split('id="macroCard"', 1)[1].split('</table>', 1)[0]
       and "宏观均线沿用数据源固定口径，不随个股均线设置变化" in _html_b
       and not re.search(r'\d+日(?:均线|线)', _html_b.split('id="macroCard"', 1)[1].split('</table>', 1)[0]),
-      "上涨参与度短长命名，沿用固定宏观口径及原数据值")
+      "上涨参与度短长命名（去掉「上宏观」前缀），沿用固定宏观口径及原数据值")
+# ===== 2026-10-30 市场风险表：极致压缩 + 文案删减 + 新增纳斯达克指数参考行 =====
+_mcard = lambda h: h.split('id="macroCard"', 1)[1].split('</table>', 1)[0]
+check('#macroCard td{padding:2px 8px;line-height:1.35}' in monitor.PAGE_CSS
+      and '#macroCard tr.mh td{padding:2px 8px}' in monitor.PAGE_CSS
+      and '#macroCard td .unit{line-height:1.15}' in monitor.PAGE_CSS
+      and '@media(max-width:600px){#macroCard td,#macroCard tr.mh td{padding:2px 6px}}' in monitor.PAGE_CSS,
+      "市场风险表上下留白压到 2px（正文行高 1.35、小字 1.15）")
+check('截至' not in _mcard(html) and '较近一年高点' not in _mcard(html) and '上宏观' not in _mcard(html)
+      and 'CLmain' not in _mcard(html) and 'oil-explanation' not in _mcard(html),
+      "市场风险表删掉「截至／较近一年高点／上宏观／CLmain · 参考／原油解释句」")
+check('id="nasdaqRef"' in html and "无数据或已过期" in html.split('id="nasdaqRef"')[1].split("</tr>")[0],
+      "纳斯达克指数参考行在无数据时显示「无数据或已过期」，不冒充安全信号")
+_macro_n = dict(macro, nasdaq={"ok": True, "name": "纳斯达克指数", "value": 23918.44,
+                               "date": "2026-10-06", "delta_week": 312.4, "source": "Yahoo ^IXIC"})
+_html_n = monitor.render(_macro_n, items, 10, snapshot=snapshot, dup_hidden=2)
+check('<tr id="nasdaqRef">' in _html_n and '23,918.44' in _html_n
+      and '<td class="num dim">+312<span class="unit">周变化</span></td>' in _html_n
+      and '纳斯达克指数<span class="unit">参考</span>' in _html_n,
+      "纳斯达克指数参考行：点位两位小数、周变化取整数、标注参考")
+# 参考行不能影响综合灯与「有效指标 N/5」：它不在 RISK_INDICATORS 里
+_vc = lambda h: re.search(r'有效指标 (\d+)/5', h).group(1)
+check(_vc(html) == _vc(_html_n) and monitor.RISK_INDICATORS == ("hy_oas", "vix", "sp500", "breadth", "nfci"),
+      "纳斯达克只作参考，不进五项综合计分、不改有效指标数")
+for _bad in ({"ok": True, "name": "纳斯达克指数", "value": float("nan"), "date": "2026-10-06"},
+             {"ok": True, "name": "纳斯达克指数"}, {"ok": False, "name": "纳斯达克指数"},
+             {"ok": "yes", "name": "纳斯达克指数", "value": 100, "date": "2026-10-06"}):
+    check("无数据或已过期" in monitor.render(dict(macro, nasdaq=_bad), items, 10,
+                                          snapshot=snapshot, dup_hidden=2).split('id="nasdaqRef"')[1].split("</tr>")[0],
+          "纳斯达克值非法（%s）时按无数据处理" % str(_bad.get("value")))
 # 2026-10-19：顶栏不再重复念灯级计数（统计卡里已有一份），只保留时间＋数据量；「缺失 N」是告警要留
 # 2026-10-19：一切正常时只报完成时间；「N 项数据已更新」只在有缺失/不支持代码时才写
 check("红2 黄2 绿4" not in html and "10 项数据已更新" not in html
@@ -623,10 +654,21 @@ for _state in ('space', 'high', 'hit'):
                         + r'(?::has\([^}]*\))?\s*(?:td\.sig|\+tr\.range52-row>td)\{', monitor.PAGE_CSS)
           and '--pstripe' not in monitor.PAGE_CSS,
           _state + '主行及52周续行均不再绘制右紫条')
-for _level, _width in (('red', 6), ('yellow', 4), ('green', 2)):
+# 2026-10-30：红灯条宽度跟黄灯条对齐（6 → 4px），左内边距保持 14px 不动（文字左缘不变）。
+for _level, _width in (('red', 4), ('yellow', 4), ('green', 2)):
     check('tr.' + _level + ' td:first-child{box-shadow:inset ' + str(_width) + 'px 0 0 var(--' + _level in monitor.PAGE_CSS
           and 'tr.' + _level + '+tr.range52-row>td{--lc:var(--' + _level + ');--lw:' + str(_width) + 'px}' in monitor.PAGE_CSS,
           _level + '左条及52周续接原宽度保持' + str(_width) + 'px')
+# 2026-10-30：成本价搬到「代码 + 备注名」下面那一排，跟加／减仓价胶囊共用 .lvs 容器，
+# 只出文字不做胶囊 —— 规则里不能出现 border / border-radius，否则又变成一颗胶囊。
+_cost_inline = re.search(r'\.cost-inline\{([^}]*)\}', monitor.PAGE_CSS)
+check(_cost_inline is not None and 'border' not in _cost_inline[1]
+      and 'font-size:11.5px' in _cost_inline[1] and 'line-height:17px' in _cost_inline[1],
+      '成本价在代码名称下面那一排且不做胶囊（纯文字、比胶囊大0.5px、同行高17px）')
+check(_cost_inline is not None and 'color:var(--text)' in _cost_inline[1]
+      and 'text-decoration:underline' in _cost_inline[1]
+      and 'var(--dim)' not in _cost_inline[1],
+      '成本价是正文白色 + 下划线（不再用 dim 灰）')
 from urllib.parse import unquote as _unquote
 import xml.etree.ElementTree as _ET
 _target_dash_rule = re.search(r'\.lvtag\.tgt\.low::after,\.lvtag\.tgt\.bad::after\{([^}]*)\}', monitor.PAGE_CSS)

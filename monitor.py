@@ -945,6 +945,29 @@ def build_macro(previous=None, nfci_state=None):
             recent(macro["breadth"], 5) and (
                 recent(hy, 5) and macro_status("hy_oas", hy)[0] == "red"
                 or recent(nfci, NFCI_MAX_LAG_DAYS) and nfci["value"] >= 0))
+    # 纳斯达克指数（2026-10-30 新增）：只在市场风险表作**参考**展示（点位 + 周变化），
+    # 不进 RISK_INDICATORS、不参与综合计分与「有效指标 5/5」——加它只是为了跟标普500一起看趋势。
+    # 抓不到或日期过期就整行显示「无数据或已过期」，不当成安全信号。
+    macro["nasdaq"] = {"ok": False, "name": "纳斯达克指数"}
+    if request_remaining() > 0:
+        nd_rows = market_index_series("^IXIC")
+        if not nd_rows and budget_sleep(MACRO_RETRY_WAIT):
+            nd_rows = market_index_series("^IXIC")
+        if nd_rows:
+            try:
+                nd_age = (datetime.strptime(target, "%Y-%m-%d") -
+                          datetime.strptime(nd_rows[-1][0], "%Y-%m-%d")).days
+            except ValueError:
+                nd_age = 999
+            if 0 <= nd_age <= 7:
+                cur_nd = nd_rows[-1][1]
+                week_nd = nd_rows[-6][1] if len(nd_rows) >= 6 else None
+                macro["nasdaq"] = {"ok": True, "name": "纳斯达克指数", "value": cur_nd,
+                                   "date": nd_rows[-1][0], "source": "Yahoo ^IXIC",
+                                   "delta_week": (cur_nd - week_nd) if week_nd is not None else None}
+                log(f"  纳斯达克指数: {cur_nd:,.2f} ({nd_rows[-1][0]})")
+            else:
+                log("  ! 纳斯达克指数数据日期过期，参考行显示无数据")
     return macro
 
 

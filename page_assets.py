@@ -545,6 +545,12 @@ tr:first-child td{border-top:none}
   color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}
 .tag.quote-note{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}
 .lvs{display:block;margin:4px 0 0;line-height:1.5}
+/* 成本价：跟加／减仓价胶囊共用同一排、排在所有胶囊最前面，只出文字、**不做胶囊**
+   （跟胶囊只差一个描边框和圆角）。2026-10-30 起字色改成正文白 + 下划线：它是成本基准、
+   要一眼看见，不能跟 dim 灰的辅助信息一个待遇；比胶囊大 0.5px 但同为 17px 行高，不会撑高行盒。 */
+.cost-inline{display:inline-block;margin:0 6px 2px 0;font-size:11.5px;font-weight:400;
+  line-height:17px;white-space:nowrap;color:var(--text);font-variant-numeric:tabular-nums;
+  text-decoration:underline;text-underline-offset:2px}
 .lvtag{display:inline-block;margin:0 4px 2px 0;padding:0 7px;border-radius:999px;border:1px solid;
   background:transparent;font-size:11px;font-weight:400;line-height:17px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .lvtag.add{color:#ffa94d;border-color:rgba(255,169,77,.6)}
@@ -831,21 +837,24 @@ td.px{text-align:center}
   .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
 }
 .up{color:var(--up)} .down{color:var(--down)}
-tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
+/* 2026-10-30：红灯条宽度跟黄灯条对齐（6px → 4px）。左内边距**保持 14px 不动**——
+   主表 `table.stk tr td:first-child` 把首列内边距定成 14px，红黄两档的文字左缘必须同为 14px
+   （灯条画在内边距区里，宽度变窄只是灯条与文字的间距从 8px 变成 10px，两档仍然一致）。 */
+tr.red td:first-child{box-shadow:inset 4px 0 0 var(--red);padding-left:14px}
 tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}
 tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}
 tr.gray td{color:var(--dim)}
-.group-card tr.red td:first-child{box-shadow:inset 6px 0 0 var(--red);padding-left:14px}
+.group-card tr.red td:first-child{box-shadow:inset 4px 0 0 var(--red);padding-left:14px}
 /* 目标状态只由胶囊和统计展示；主表描述右侧不再绘制紫色灯条。 */
 /* 有52周条的股票：左侧灯条顶部再减去整只股票高度（主行+位置条）的约15%（85%-6.1px，位置条行约22px），延伸覆盖自己的位置条、在条下方4px处结束，与上下股票留出空隙 */
 .stk tr:has(+tr.range52-row)>td{--lc:transparent;--lw:0px}
-.stk tr.red:has(+tr.range52-row)>td:first-child{--lc:var(--red);--lw:6px}
+.stk tr.red:has(+tr.range52-row)>td:first-child{--lc:var(--red);--lw:4px}
 .stk tr.yellow:has(+tr.range52-row)>td:first-child{--lc:var(--yellow);--lw:4px}
 .stk tr.green:has(+tr.range52-row)>td:first-child{--lc:var(--green);--lw:2px}
 .stk tr:has(+tr.range52-row)>td:first-child{box-shadow:none;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom;background-repeat:no-repeat}
 /* 52周位置行只延续原左侧红黄绿灯条，不再延续右侧紫条。 */
 .stk tr.range52-row>td{--lc:transparent;--lw:0px;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) 14px;background-position:left top;background-repeat:no-repeat}
-.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:6px} .stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}
+.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:4px} .stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}
 .stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px}
 /* 市场风险表改固定列宽：WTI 参考行最后一列原本是一大段说明，自动列宽会按「整段不换行有多宽」
    去分列，结果状态列被撑到 138.6px（短文案「平静」后面空掉一大截），指标列被挤到 65.8px
@@ -864,6 +873,17 @@ tr.gray td{color:var(--dim)}
 /* 指标列仍左对齐，当前／变化／状态三列居中（.num 默认右对齐，这里按列覆盖） */
 #macroCard td:nth-child(2),#macroCard td:nth-child(3),#macroCard td:nth-child(4){text-align:center}
 #macroCard tr.mh td{padding:5px 10px;font-size:12.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
+/* ===== 市场风险表：极致压缩每行的上下留白（2026-10-30） =====
+   原来 td 上下各 9px，叠上 .unit 小字行（11px × 1.5 行高 ≈ 16.5px）后：
+   两行小字的行 56.5px、三行的上涨参与度 73px、手机上 WTI 那行 117px，文字离分隔线太远。
+   现在：上下内边距 9 → 2px、表头行 5 → 2px、.unit 行高 1.5 → 1.3（11px → 14.3px）、
+   横向内边距 10 → 8px（手机 6px，四列文字不贴表格边）。
+   实测 1400 视口：56.5 → 36.5、73 → 53、WTI 80.3 → 43.6；整表 481.5 → 约 320。
+   只动 #macroCard 内的 td，主表（.stk）与其它表格一像素不受影响。 */
+#macroCard td{padding:2px 8px;line-height:1.35}
+#macroCard tr.mh td{padding:2px 8px}
+#macroCard td .unit{line-height:1.15}
+@media(max-width:600px){#macroCard td,#macroCard tr.mh td{padding:2px 6px}}
 .macro-help{margin:8px 12px;color:var(--dim);font-size:13px;line-height:1.7}
 .macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
 .macro-help p{margin:6px 0}
@@ -954,6 +974,20 @@ tr.gray td{color:var(--dim)}
 .zone-card[open]>summary::before{color:#8fb8f0}
 /* 子区自己的收起条和外层「持仓」卡底部收起条之间拉开距离，两条 ▲ 挨太近会误点 */
 .zone-card + .group-bottom,.zone-card + .quiet + .group-bottom{margin-top:22px}
+/* ===== 电脑端（>600px）：折叠起来的板块框压矮约 20%（62 → 50），字号／行高／编辑按钮一像素不动 =====
+   折叠高度 = 卡片上下边框 2px + 卡片上下内边距 + 标题行高。原来是 2 + 12 + 48 = 62：
+   卡片内边距 6 → 2、标题行锁死 44px（box-sizing 包住内边距，内容靠 align-items 垂直居中），
+   得到 2 + 4 + 44 = 50。「仓位」那行因为「编辑」按钮高 29.6px，标题行被撑到 53.6px、
+   整框 67.6px，锁 44px 后与其它板块完全等高（按钮本身 54×29.6 不变）。
+   卡中卡「长持仓」跟着压一档（40.5 → 34），仍比外层矮、保留层级。
+   只对 :not([open]) 生效——展开态一像素不变；手机（≤600px）不进这条，维持原来的触摸高度。 */
+@media(min-width:601px){
+  .group-card:not([open]),.macro-card:not([open]){padding-top:2px;padding-bottom:2px}
+  .group-card:not([open])>summary.grp,.macro-card:not([open])>summary.grp,
+  #costManage.cost-manage:not([open])>summary.grp{
+    box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
+  .zone-card:not([open])>summary{box-sizing:border-box;height:34px;padding-top:0;padding-bottom:0}
+}
 /* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
 .stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
   box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-radius:999px;
@@ -1025,17 +1059,17 @@ tr.gray td{color:var(--dim)}
      也就是**框一个像素都没变大**，只把圈里的数字撑大。它是 group-stats 里的 flex item，
      20px 仍小于标题行 24px 的行盒，所以折叠栏高度不变。 */
   .stat-badge{min-width:20px;height:20px;padding:0 3px;font-size:15px}
-  /* 顶栏左右对称留白：页面本身左右各留 4px，这里再给 .runbar 各加 10px，
-     于是最左边的「运行」按钮和最右边的「定投：N」距屏幕边缘都是 14px（2026-10-29）。
+  /* 顶栏左右对称留白：页面本身左右各留 4px，这里再给 .runbar 各加 16px，
+     于是最左边的「运行」按钮和最右边的「定投：N」距屏幕边缘都是 20px（2026-10-30 二次加大）。
      原来只给「定投」加 margin-right:10px，是单边的，左边三个按钮仍贴着屏幕边。 */
-  .runbar{padding-left:10px;padding-right:10px}
+  .runbar{padding-left:16px;padding-right:16px}
   /* 字号 14 → 16px（2026-10-29）；贴右仍靠 margin-left:auto，间距改由 .runbar 的右内边距给。 */
   .runbar .dca-badge{font-size:16px;margin-left:auto}
   /* 「数据时间 …」那一排改成 flex：手机上的「已同步 / 未同步」胶囊（见 cost_panel.js 的
      syncMirrorEl）用 margin-left:auto 顶到这一排最右侧，与左边的日期同一行（2026-10-29）。
      左右各 10px 内边距 + 页面 4px → 日期距左边 14px、「已同步」距右边 14px，与顶栏对齐。
      胶囊本身的字号/颜色在 cost_panel.css 的手机档里（跟其他 .cost-state 规则放一起）。 */
-  .sub{display:flex;align-items:center;gap:8px;padding-left:10px;padding-right:10px}
+  .sub{display:flex;align-items:center;gap:8px;padding-left:16px;padding-right:16px}
   /* 页底那一排现在是「返回看板」+「设置」两枚：间隔拉开（2026-10-29「设置」从顶栏搬下来）。 */
   .acts{gap:26px}
   /* 主表各组的个股代码 + 备注名（「ZS」/「云安全」）：代码 14 → 15.5px、
@@ -1061,8 +1095,8 @@ tr.gray td{color:var(--dim)}
   /* 「数据时间 …」那一排与下方按钮的行距拉近：下外边距 16 → 8px（2026-10-30）。 */
   .sub{margin-bottom:8px}
   /* 状态排（「成功 ·…（北京）」+「已生效」）：上下留白收紧（上 -4 → -6px、下 14 → 8px），
-     两枚灯之间 8 → 4px、行盒 1.4 → 1.25；左边跟上面一样留 14px（页面 4 + 内边距 10）。 */
-  .statusrow{margin:-6px 0 8px;gap:4px;padding-left:10px}
+     两枚灯之间 8 → 4px、行盒 1.4 → 1.25；左右各 16px，跟上面两排对齐（页面 4 + 16 = 20px）。 */
+  .statusrow{margin:-6px 0 8px;gap:4px;padding-left:16px;padding-right:16px}
   .statusrow .runlight{line-height:1.25}
   /* 页底「返回看板」+「设置」：15 → 16px，两枚做成**同款胶囊框**（描边 + 8px 圆角），
      「设置」的文字颜色跟「返回看板」统一成 #6ba3f0（2026-10-30）。 */

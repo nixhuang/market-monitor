@@ -154,14 +154,17 @@
 /* 框标题＝合计行：放在「标的／成本价／…」那一排栏目名称的下方，
    名称在第 1 列，市值／盈亏／仓位各自落在第 4／5／6 列，跟列表共用同一套列宽，右边缘对齐。
    整条加一层淡蓝底色，压在栏目名称下面当小计条看，不再用「·」串成一句话 */
-.cost-block-title{margin:3px 0 4px;font-size:12.5px;font-weight:600;color:#bfd5ff;
+/* 2026-10-30：「总持仓 18 只 / 长持仓 10 只 / 短持仓 8 只」12.5 → 14px。
+   line-height 写死 18.75px（＝原继承值 12.5×1.5）而不是倍数——绝对值会被子元素原样继承，
+   所以「N 只」那个 .cnt 跟着加到 13px 也不会把条子顶高，整条高度仍是 18.75+3+4≈25.75px。 */
+.cost-block-title{margin:3px 0 4px;font-size:14px;font-weight:600;color:#bfd5ff;
   font-variant-numeric:tabular-nums;white-space:nowrap;padding:3px 0 4px 16px;
-  background:rgba(143,184,240,.10);border-radius:5px}
+  line-height:18.75px;background:rgba(143,184,240,.10);border-radius:5px}
 .cost-block-title>span{text-align:center;min-width:0}
 .cost-block-title .t-name{grid-column:1;text-align:left;overflow:hidden;text-overflow:ellipsis}
 /* 名称与数量之间必须有间隔：grid 容器会把两个 span 之间的空白文本节点吃掉，
    靠字面空格是排不出来的，只能给 margin */
-.cost-block-title .cnt{font-size:11.5px;font-weight:400;color:var(--dim);margin-left:5px}
+.cost-block-title .cnt{font-size:13px;font-weight:400;color:var(--dim);margin-left:5px}
 .cost-block-title .t-mv{grid-column:4}
 .cost-block-title .t-pnl{grid-column:5}
 .cost-block-title .t-wt{grid-column:6}
@@ -444,10 +447,11 @@
   .cost-manage .signal-member-list li>.cost-grid>:nth-child(n+2){
     border-left-color:rgba(255,255,255,.18);padding-left:3px}
   .cost-colhead{font-size:10.5px;padding-left:12px}
-  /* 「总持仓 N 只 / 长持仓 N 只 / 短持仓 N 只」：文字 10.5 → 11.5px，
-     行高压到 1.35（≈15.5px／行）把加字号多吃掉的高度还回去 —— 这一栏的面积高度不变。 */
-  .cost-block-title{font-size:11.5px;padding-left:12px;line-height:1.35}
-  .cost-block-title .cnt{font-size:11px}
+  /* 「总持仓 N 只 / 长持仓 N 只 / 短持仓 N 只」：文字 11.5 → 13px（2026-10-30 再加大一档），
+     行高压到 15.5px 固定值（＝原 11.5×1.35）把加字号多吃掉的高度还回去 ——
+     这一栏是两行（比例／金额上下排），两根 15.5px 加起来高度跟改前完全一致。 */
+  .cost-block-title{font-size:13px;padding-left:12px;line-height:15.5px}
+  .cost-block-title .cnt{font-size:12.5px}
   /* 窄屏第 1 列只有 50 来 px，名称允许溢出到空着的第 2／3 列，别被截成「长持仓 1…」 */
   .cost-block-title .t-name{overflow:visible}
   .cost-block-title .k{display:none}
