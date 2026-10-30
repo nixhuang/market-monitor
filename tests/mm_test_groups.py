@@ -318,6 +318,8 @@ class TestGroups(unittest.TestCase):
             self.assertEqual((macro['vix']['value'], macro['vix']['date']), (15.08, '2026-10-07'))
             self.assertEqual(macro['vix']['source'], 'Cboe VIX 官方日线')
             self.assertTrue(macro['nasdaq']['ok'], '纳斯达克指数参考行取到数据')
+            # 2026-10-30：补评语需要一周前的点位，取数要一起带出来
+            self.assertEqual((macro['nasdaq']['week_ago'], macro['nasdaq']['delta_week']), (23918.44, 0.0))
             cfg = {'index_funds': {'.VIX': {}, '.SPX': {}, 'SPY': {}}, 'group_monitoring':{'index_funds':True}}
             with patch.object(monitor, 'global_dca', return_value=None):
                 snap = monitor.build_snapshot(macro, [], cfg)
@@ -330,6 +332,11 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('截至', risk)
         self.assertIn('23,918.44', risk)
         self.assertIn('id="nasdaqRef"', risk)
+        # 2026-10-30：纳斯达克补评语（持平/上涨＝绿「一周平稳」），标普500 补一周点差＋百分比
+        self.assertIn('<tr class="green" id="nasdaqRef"', risk)
+        self.assertIn('<td>一周平稳</td>', risk)
+        self.assertIn('周变化 +0.0%', risk)
+        self.assertIn('<td class="num dim">+0<span class="unit">周变化 +0.0%</span></td>', risk)
         self.assertNotIn('Cboe VIX 官方日线', risk)   # 2026-10-15：指标行不再逐条展示数据来源
         self.assertNotIn('.VIX</td>', page)
         self.assertNotIn('.SPX</td>', page)

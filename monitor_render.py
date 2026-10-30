@@ -409,14 +409,23 @@ class PageRenderer:
                 val = f'{it["value"]:.2f}'
 
             dw = it.get("delta_week")
-            dw_txt = f'{dw:+.0f}' if (key == "hy_oas" and dw is not None) else "—"
+            base = it.get("week_ago")
+            # 2026-10-30：标普500 补上周变化（点差作主数、百分比进小字），与纳斯达克参考行同口径；
+            # 垃圾债利差维持 bp 点差原样，其余指标仍留「—」（它们的评语不看一周变化）。
+            if key == "hy_oas" and dw is not None:
+                dw_txt, dw_pct = f'{dw:+.0f}', ""
+            elif key == "sp500" and dw is not None:
+                dw_txt = f'{dw:+.0f}'
+                dw_pct = f' {dw / base * 100:+.1f}%' if base else ""
+            else:
+                dw_txt, dw_pct = "—", ""
             label = html_lib.escape(str(it.get("name") or self._context.RISK_LABELS[key]))
             # 2026-10-30：「截至」二字删掉，只留日期（单独一行小字，谁都看得出是数据日期）
             label += f'<span class="unit">{html_lib.escape(it["date"])}</span>'
             # 数据来源（FRED / Cboe / Yahoo …）按 2026-10-15 要求不再在指标行里展示，页底仍保留整体来源说明
             rows_macro.append(
                 f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
-                f'<td class="num dim">{dw_txt}<span class="unit">周变化</span></td><td>{txt}</td></tr>'
+                f'<td class="num dim">{dw_txt}<span class="unit">周变化{dw_pct}</span></td><td>{txt}</td></tr>'
             )
 
         # 参考行：10Y 美债一个月变化。只看利率冲击，不进 RISK_INDICATORS，不影响综合灯和有效指标数
@@ -434,7 +443,8 @@ class PageRenderer:
         else:
             rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债<span class="unit">参考</span></td>'
                               '<td colspan="3">无数据或已过期</td></tr>')
-        # 纳斯达克指数参考行（2026-10-30）：纯展示点位与周变化，不带灯级、不计分。
+        # 纳斯达克指数参考行（2026-10-30）：展示点位与周变化，并按一周涨跌给评语（只提示下跌）。
+        # 灯级只作用于本行显示，仍不进 RISK_INDICATORS、不计入综合灯与有效指标数。
         # 指标格沿用 10Y美债的写法：「纳斯达克指数 + 参考 + 日期」三行小字。
         nd = macro.get("nasdaq") or {}
         nd_val = self._context._pos_num(nd.get("value"))
@@ -442,12 +452,16 @@ class PageRenderer:
         nd_week = (nd_week if isinstance(nd_week, (int, float)) and not isinstance(nd_week, bool)
                    and nd_week == nd_week and nd_week not in (float("inf"), float("-inf")) else None)
         if nd.get("ok") is True and nd_val is not None:
+            nd_lv, nd_txt = self._context.macro_status("nasdaq", nd)
             ndw_txt = f'{nd_week:+,.0f}' if nd_week is not None else "—"
+            nd_base = self._context._pos_num(nd.get("week_ago"))
+            nd_pct = f' {nd_week / nd_base * 100:+.1f}%' if (nd_week is not None and nd_base) else ""
             rows_macro.append(
-                f'<tr id="nasdaqRef"><td>纳斯达克指数<span class="unit">参考</span>'
+                f'<tr class="{nd_lv}" id="nasdaqRef"><td>纳斯达克指数<span class="unit">参考</span>'
                 f'<span class="unit">{html_lib.escape(str(nd.get("date") or ""))}</span></td>'
                 f'<td class="num">{nd_val:,.2f}</td>'
-                f'<td class="num dim">{ndw_txt}<span class="unit">周变化</span></td><td>参考</td></tr>')
+                f'<td class="num dim">{ndw_txt}<span class="unit">周变化{nd_pct}</span></td>'
+                f'<td>{nd_txt}</td></tr>')
         else:
             rows_macro.append('<tr class="gray" id="nasdaqRef"><td>纳斯达克指数<span class="unit">参考</span></td>'
                               '<td colspan="3">无数据或已过期</td></tr>')

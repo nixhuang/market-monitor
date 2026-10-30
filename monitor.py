@@ -964,6 +964,7 @@ def build_macro(previous=None, nfci_state=None):
                 week_nd = nd_rows[-6][1] if len(nd_rows) >= 6 else None
                 macro["nasdaq"] = {"ok": True, "name": "纳斯达克指数", "value": cur_nd,
                                    "date": nd_rows[-1][0], "source": "Yahoo ^IXIC",
+                                   "week_ago": week_nd,
                                    "delta_week": (cur_nd - week_nd) if week_nd is not None else None}
                 log(f"  纳斯达克指数: {cur_nd:,.2f} ({nd_rows[-1][0]})")
             else:
@@ -973,6 +974,9 @@ def build_macro(previous=None, nfci_state=None):
 
 UST_MONTH_WATCH = 30  # 10Y 美债一个月上行 >= 30 bp：偏快（仅提示，不变色）
 UST_MONTH_YELLOW = 50  # 一个月上行 >= 50 bp：急升，利率冲击风险（参考行，不计入综合灯）
+# 纳斯达克指数一周涨跌（百分比）：只提示下行风险，上涨不出警（参考行，不计入综合灯）
+NASDAQ_WEEK_YELLOW = -2.0  # 一周跌 >= 2%：走弱
+NASDAQ_WEEK_RED = -4.0  # 一周跌 >= 4%：急跌
 HY_WEEK_YELLOW = 30   # 垃圾债利差一周（5个交易日）扩大 >= 30 bp → 黄
 HY_WEEK_RED = 50      # 一周扩大 >= 50 bp → 红
 
@@ -1020,6 +1024,20 @@ def macro_status(key, item, drawdown=None):
         if dd <= -10:
             return "yellow", "第1档"
         return "green", "第0档"
+
+    if key == "nasdaq":
+        # 2026-10-30：纳斯达克指数参考行补评语，口径与标普500错开——标普看回撤档位，
+        # 纳斯达克只看一周涨跌（跨指数可比用百分比），上涨不出字，仍不计入综合灯。
+        dw = item.get("delta_week")
+        base = item.get("week_ago")
+        if dw is None or not base:
+            return "gray", "一周前数据不足"
+        pct = dw / base * 100
+        if pct <= NASDAQ_WEEK_RED:
+            return "red", "一周急跌"
+        if pct <= NASDAQ_WEEK_YELLOW:
+            return "yellow", "一周走弱"
+        return "green", "一周平稳"
 
     if key == "ust10":
         dm = item.get("delta_month")

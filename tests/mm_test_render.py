@@ -197,12 +197,37 @@ check('截至' not in _mcard(html) and '较近一年高点' not in _mcard(html) 
 check('id="nasdaqRef"' in html and "无数据或已过期" in html.split('id="nasdaqRef"')[1].split("</tr>")[0],
       "纳斯达克指数参考行在无数据时显示「无数据或已过期」，不冒充安全信号")
 _macro_n = dict(macro, nasdaq={"ok": True, "name": "纳斯达克指数", "value": 23918.44,
-                               "date": "2026-10-06", "delta_week": 312.4, "source": "Yahoo ^IXIC"})
+                               "date": "2026-10-06", "delta_week": 312.4, "week_ago": 23606.04,
+                               "source": "Yahoo ^IXIC"})
 _html_n = monitor.render(_macro_n, items, 10, snapshot=snapshot, dup_hidden=2)
-check('<tr id="nasdaqRef">' in _html_n and '23,918.44' in _html_n
-      and '<td class="num dim">+312<span class="unit">周变化</span></td>' in _html_n
+check('<tr class="green" id="nasdaqRef">' in _html_n and '23,918.44' in _html_n
+      and '<td class="num dim">+312<span class="unit">周变化 +1.3%</span></td>' in _html_n
+      and '<td>一周平稳</td>' in _html_n
       and '纳斯达克指数<span class="unit">参考</span>' in _html_n,
-      "纳斯达克指数参考行：点位两位小数、周变化取整数、标注参考")
+      "纳斯达克指数参考行：点位两位小数、周变化＝点差＋百分比小字、上涨给「一周平稳」")
+# 一周下跌分档：>=2% 黄「一周走弱」、>=4% 红「一周急跌」；上涨不出警
+_nrow = lambda nd: re.search(r'<tr class="(\w+)" id="nasdaqRef".*?</tr>',
+                             monitor.render(dict(macro, nasdaq=nd), items, 10,
+                                            snapshot=snapshot, dup_hidden=2), re.S)
+for _dw, _lv, _txt in ((312.4, "green", "一周平稳"), (-480.0, "yellow", "一周走弱"),
+                       (-960.0, "red", "一周急跌")):
+    _nd = {"ok": True, "name": "纳斯达克指数", "value": 23606.04 + _dw, "date": "2026-10-06",
+           "week_ago": 23606.04, "delta_week": _dw}
+    _m = _nrow(_nd)
+    check(_m is not None and _m.group(1) == _lv and f'<td>{_txt}</td>' in _m.group(0)
+          and monitor.macro_status("nasdaq", _nd)[0] == _lv,
+          "纳斯达克一周 %+.1f%% → %s「%s」" % (_dw / 23606.04 * 100, _lv, _txt))
+check(monitor.macro_status("nasdaq", {"ok": True, "value": 23918.44, "delta_week": None})[0] == "gray"
+      and monitor.macro_status("nasdaq", {"ok": True, "value": 23918.44, "delta_week": 10,
+                                          "week_ago": 0})[0] == "gray",
+      "纳斯达克缺一周前数据时灰灯「一周前数据不足」，不当成安全信号")
+# 标普500 补周变化：点差作主数、百分比进小字，与纳斯达克参考行同口径
+_macro_s = {k: (dict(v) if isinstance(v, dict) else v) for k, v in macro.items()}
+_macro_s["sp500"] = dict(macro["sp500"], value=6800.0, week_ago=6700.0, delta_week=100.0)
+_html_s = monitor.render(_macro_s, items, 10, snapshot=snapshot, dup_hidden=2)
+check('<td class="num dim">+100<span class="unit">周变化 +1.5%</span></td>' in _html_s
+      and '<td class="num dim">—<span class="unit">周变化</span></td>' in _html_s,
+      "标普500 显示一周点差＋百分比；VIX／参与度等不看周变化的仍留「—」")
 # 参考行不能影响综合灯与「有效指标 N/5」：它不在 RISK_INDICATORS 里
 _vc = lambda h: re.search(r'有效指标 (\d+)/5', h).group(1)
 check(_vc(html) == _vc(_html_n) and monitor.RISK_INDICATORS == ("hy_oas", "vix", "sp500", "breadth", "nfci"),
