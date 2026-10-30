@@ -125,6 +125,43 @@ check(src.includes('href="./index.html"')&&src.includes('id="authCard"')&&src.in
 check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>')
   && /\.sub a\.back-board\{display:inline-block;margin-top:8px;padding:9px 16px;font-size:15px;/.test(src),
   '返回看板链接已放大为按钮大小（字号 15px + 内边距），href 与文案不变');
+// 2026-10-30 设置页版面统一：折叠标题一律 15px、写死 46px 同高；字号分档统一；间距收窄。
+// 统一总块必须写在 MM_RULECSS_END 之后（后声明压过生成块里 13px 的规则卡标题）。
+{
+  const iEnd=src.indexOf('MM_RULECSS_END');
+  const uni=src.indexOf('设置页版面统一');
+  check(iEnd>=0&&uni>iEnd, '设置页统一总块位于规则生成块之后（能覆盖 13px 规则卡标题）');
+  check(/details\.fold>summary,\.edit-group>summary\{box-sizing:border-box;height:46px;\s*padding-top:0;padding-bottom:0;display:flex;align-items:center;flex-wrap:nowrap\}/.test(src)
+    && /#fedRules>summary,#fedGlossary>summary,details\.card:has\(>\.rules-body\)>summary\{\s*box-sizing:border-box;height:46px;/.test(src),
+    '三处折叠标题（编辑分组／定投／规则卡）统一写死 46px、flex 垂直居中');
+  check(/details\.fold>summary\{font-size:15px/.test(src)
+    && /\.edit-group>summary\{color:var\(--text\);font-size:15px/.test(src),
+    '折叠标题字号统一 15px（手机桌面同档）');
+  check(/\.setrow label\{flex:1;font-size:13px/.test(src)
+    && /\.setsec\{font-size:12px/.test(src) && /\.subsec\{font-size:12px/.test(src)
+    && /\.note\{color:var\(--dim\);font-size:12\.5px/.test(src)
+    && /h2\{font-size:14px/.test(src),
+    '设置项文字加大：label 13px、分节小字 12px、说明 12.5px、小节标题 14px');
+  check(/\.card\{background:var\(--card\);border:1px solid var\(--line\);border-radius:12px;\s*padding:12px;margin-bottom:10px\}/.test(src)
+    && /\.setgrid\{display:grid;grid-template-columns:1fr;gap:5px\}/.test(src)
+    && /\.row\{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:5px\}/.test(src)
+    && !/details\.fold>summary\{font-size:15px;line-height:20px\}/.test(src),
+    '间距收窄：卡片外距 14→10、网格间隙 7→5、行距 7→5；手机 15px 覆盖行已删');
+  // 2026-10-30 二次调整：同卡并列的两行开关、回看板下方的空隙、三块说明卡标题。
+  check(/details\.set summary\{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;/.test(src)
+    && /details\.set>summary\{box-sizing:border-box;height:46px;display:flex;/.test(src),
+    '参数开关「布林 / 均线 / …」15px 蓝色 600 粗细，与「显示与交互」字号字重同高全部一致');
+  check(/#displayCard>summary\{color:#6ba3f0\}/.test(src),
+    '「显示与交互」标题改蓝色，与同卡参数开关同色（其它卡片标题仍灰）');
+  check(/\.sub\{color:var\(--dim\);font-size:12\.5px;margin-bottom:4px;/.test(src)
+    && /#msg\{font-size:13px;min-height:20px;margin:0 2px 4px;/.test(src),
+    '回看板按钮到「规则参数」卡之间的空隙收窄（46 → 28px）');
+  // 「综合判断与宏观细则」：注入时拆掉模板自带的 section 卡壳 + 补 fold 卡类，三块说明卡完全同款
+  check(/var sec=frag\.querySelector\('section\.card\.page-notes'\);/.test(src)
+    && /mr\.className='card fold';/.test(src)
+    && /#marketRiskRules>summary\{color:#bfd5ff\}/.test(src),
+    '「综合判断与宏观细则」拆壳补 fold 类与「预警规则」同款（46px/15px/#bfd5ff/600）');
+}
 store.mm_gh_token_v1='github_pat_test_dispatch';
 check(runOptions.getToken()==='github_pat_test_dispatch', '编辑页仍可核验保存生效所需的授权状态');
 check(!src.includes('id="runCard"')&&!src.includes('id="btnRun"')&&!src.includes('id="btnRuns"')&&

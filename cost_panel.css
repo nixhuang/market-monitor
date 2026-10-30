@@ -135,7 +135,7 @@
    列头和框标题留同样的 padding-left，三者的列边界才会严丝合缝地对齐。 */
 .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
   display:grid;align-items:center;gap:0 8px;
-  grid-template-columns:minmax(110px,1.55fr) .9fr .85fr 1.05fr 1.45fr .8fr}
+  grid-template-columns:minmax(110px,1.55fr) minmax(56px,.9fr) minmax(52px,.85fr) minmax(76px,1.05fr) minmax(126px,1.45fr) minmax(48px,.8fr)}
 .cost-manage .signal-member-list{margin:0;padding-left:16px;list-style:none}
 /* 列间竖向细分隔线（2026-10-20）：列头 / 合计行 / 每行用同一套 —— 都画在列的左边缘，
    因为三处共用同一组列宽，线自然上下对齐。2026-10-28 按用户要求加明显（.075 → .20），
@@ -246,7 +246,7 @@
 .cost-block-title.is-total{background:rgba(143,184,240,.13);color:#dbe7ff;margin-top:0}
 /* 现金 / 固定收益：不再「分类名 + 下面再列一行」，整框就是一排带底色的信息 */
 .cost-mini{display:grid;align-items:center;gap:0 8px;font-size:12.5px;
-  grid-template-columns:minmax(110px,1.55fr) .9fr .85fr 1.05fr 1.45fr .8fr;
+  grid-template-columns:minmax(110px,1.55fr) minmax(56px,.9fr) minmax(52px,.85fr) minmax(76px,1.05fr) minmax(126px,1.45fr) minmax(48px,.8fr);
   padding:2px 0 2px 16px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .cost-mini>span{min-width:0}
 .cost-mini .t-name{grid-column:1;text-align:left;color:#bfd5ff;font-weight:600;
@@ -431,12 +431,15 @@
   /* 五列重新分配（2026-10-20 首版，2026-10-28 重配，2026-10-29 再放宽）：窄屏名称列原本吃掉
      1fr 的全部剩余（390 视口 127px、430 视口 157px），五个数值列只有 40～48px，多位数一进位
      就顶出格子（iOS 上字形略宽，「337.54」「46.0903」在 40px 的格子里直接溢出）。
-     现在给数值列按最坏情况留足（10-29：数值字号 10.5 → 11.5px，各列再放宽 4～8px）：
-     成本 54（放得下 23635.39）、数量 60（放得下 1234.5678）、市值 62（放得下 $1,234,567）、
-     盈亏 58（放得下 +$12,345）、仓位 44（放得下 100.0%），名称列拿剩下的
-     （390 → 81px、430 → 101px）：代码 + ETF 胶囊仍然一行放得下。 */
+     现在给数值列按最坏情况留足（10-29：数值字号 10.5 → 11.5px，各列再放宽 4～8px；
+     10-30 二轮：标题行盈亏「+$1,021.8」13px 墨宽 63px 顶到 68px 格的边，盈亏列再 +6px）：
+     成本 52（放得下 513.12）、数量 44（放得下 12,345）、市值 60（放得下 $999,999）、
+     盈亏 74（放得下 +$12,345 和 13px 的「+$1,021.8」）、仓位 48（放得下 100.0%），名称列拿剩下的
+     （390 → 77px、430 → 103px）：代码 + ETF 胶囊仍然一行放得下。
+     10-30 三轮：仓位 44 → 48（13px 的「37.8%」墨宽 35px，44px 格内容区只剩 34px 会顶出去），
+     成本 / 数量 / 市值各让 2px，合计不变。 */
   .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 54px 46px 62px 68px 44px;gap:0 3px}
+    grid-template-columns:minmax(0,1fr) 52px 44px 60px 74px 48px;gap:0 3px}
   .cost-name{min-width:0}
   .cost-name .syrow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cost-name .sy{flex:none}
@@ -526,26 +529,38 @@
    只是把字号下的最大位数按窄屏常见取值收紧一档），名称列不至于被压到代码都放不下 */
 @media (max-width:400px){
   /* 390 这类窄屏没有 430 那么多余量：数值列只放宽到「刚好放得下加大后的数字」
-     （成本 48 / 数量 56 / 市值 58 / 盈亏 54 / 仓位 38，合计 +18px），
-     名称列从 88 → 70px。为让「QQQM ETF」这最长的一行还能整行放下（约 74px），
-     ETF 胶囊在窄屏收半档（10 → 9.5px、内边距 4 → 3px），省出 4px 给代码。 */
+     （成本 46 / 数量 42 / 市值 56 / 盈亏 70 / 仓位 46，合计 +4px），
+     名称列从 88 → 66px。为让「QQQM ETF」这最长的一行还能整行放下（约 74px），
+     ETF 胶囊在窄屏收半档（10 → 9.5px、内边距 4 → 3px），省出 4px 给代码。
+     10-30 三轮：仓位 38 → 46（13px 的「37.8%」墨宽 35px，38px 格内容区只剩 34px），
+     成本 / 市值各让 2px 补回来。 */
   .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 48px 42px 58px 64px 38px;gap:0 3px}
+    grid-template-columns:minmax(0,1fr) 46px 42px 56px 70px 46px;gap:0 3px}
   .cost-name .tag{font-size:9px;padding:0 3px}
 }
 @media (max-width:365px){
-  /* 360 这类更窄的屏：数值列只放宽到合计 +8px（44/49/52/47/34），
-     名称列 81 → 73px —— 「QQQM ETF」这一行（约 71px）仍能整行放下。 */
+  /* 360 这类更窄的屏：数值列只放宽到合计 +8px（42/38/50/64/40），
+     名称列 81 → 73px —— 「QQQM ETF」这一行（约 71px）仍能整行放下。
+     10-30 二轮：盈亏列 58 → 64 后 13px 的「+$1,021.8」（墨宽 63px）仍超内容区 2～3px，
+     金额单独降到 12px（墨宽 ≈58px），比例与「N 只」保持 13px 不动、行高 15.5px 不变。
+     10-30 三轮：仓位 34 → 45（13px 的「37.8%」墨宽 35px、理论上限「100.0%」41px，
+     34px 格内容区只剩 30px），成本 / 数量 / 市值各让 2px，列间距 2 → 1px 再让 4px，合计不变。 */
   .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 44px 40px 52px 58px 34px;gap:0 2px}
+    grid-template-columns:minmax(0,1fr) 42px 38px 50px 64px 45px;gap:0 1px}
+  .cost-block-title .amt{font-size:12px;line-height:15.5px}
 }
 /* 320 这类超窄屏：名称列只剩 60 多 px，代码 + ETF 胶囊放不下一行 →
    允许它们折成两行（宁可多一行，也别把 QQQM 截成 Q…） */
 @media (max-width:340px){
   /* 盈亏列 56 → 58（成本列 40 → 38 让出，合计不变、名称列不变）：
-     「+$12.35M」在 10px 档下墨宽 57px，原来 56px 的格子差 1～2px 会折行。 */
+     「+$12.35M」在 10px 档下墨宽 57px，原来 56px 的格子差 1～2px 会折行。
+     10-30 二轮再 +6（58 → 64，从名称列让）：13px 标题行「+$1,021.8」墨宽 63px。
+     10-30 三轮：仓位 34 → 40、市值 46 → 50（13px 的「37.8%」墨宽 35px、
+     「$24,304」墨宽 45px，原内容区只剩 30 / 42px）；数量列 38 → 36 后再与成本列对调
+     （两者最长都是 6 字符，列头 10.5px 墨宽同为 33px，各 38px 才都放得下；
+     列间距 2 → 1px 让出 4px，名称列少 4px —— 320 下代码 + ETF 胶囊本来就允许折两行）。 */
   .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 38px 38px 46px 58px 34px;gap:0 2px}
+    grid-template-columns:minmax(0,1fr) 38px 38px 50px 64px 40px;gap:0 1px}
   /* 320 视口总宽只有 284px，五个数值列已经压到极限，这里把数值字号降 0.5px
      换一点余量（「36.7%」这类五字符正好卡在格子边上，再宽一点就顶出去） */
   .cost-cell{font-size:10px}

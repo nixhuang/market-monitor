@@ -21,8 +21,8 @@ body{margin:0;background:var(--bg);color:var(--text);
   font:15px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
   padding:env(safe-area-inset-top) 14px 60px}
 .wrap{max-width:720px;margin:0 auto}
-h1{font-size:19px;margin:18px 0 4px;font-weight:600}
-.sub{color:var(--dim);font-size:12px;margin-bottom:16px;line-height:1.7}
+h1{font-size:19px;margin:14px 0 4px;font-weight:600}
+.sub{color:var(--dim);font-size:12.5px;margin-bottom:4px;line-height:1.7}
 .sub a{color:#6ba3f0;text-decoration:none}
 /* 「← 回看板」原来只是一行 12px 的普通链接，手机上点不到。单独放大成一颗和页面按钮同高
    （约 37px）的可点块：字号 12→15px、加内边距，配色沿用 .sub 的链接蓝，不改文案和跳转。 */
@@ -30,8 +30,8 @@ h1{font-size:19px;margin:18px 0 4px;font-weight:600}
   background:#232833;border:1px solid #333a47;border-radius:8px}
 .sub a.back-board:hover{background:#2b303c}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:14px;margin-bottom:14px}
-h2{font-size:13px;color:var(--dim);font-weight:600;margin:0 0 10px;letter-spacing:.3px}
+  padding:12px;margin-bottom:10px}
+h2{font-size:14px;color:var(--dim);font-weight:600;margin:0 0 8px;letter-spacing:.3px}
 h2 span{color:#5f6672;font-weight:400}
 input,select{padding:8px 10px;font-size:16px;background:#0e1014;color:var(--text);
   border:1px solid var(--line);border-radius:7px;outline:none;font-family:inherit}
@@ -44,7 +44,7 @@ button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
 button.primary:hover{background:#3a78e6}
 button:disabled{opacity:.5;cursor:not-allowed}
 button.danger{color:var(--red)}
-.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:7px}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:5px}
 .sym{width:104px;font-family:ui-monospace,Menlo,monospace;font-size:13px;
   padding:8px 8px;background:#0e1014;border:1px solid var(--line);border-radius:7px;
   color:#9fd3ff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -53,23 +53,25 @@ button.danger{color:var(--red)}
 .del{padding:7px 11px;font-size:13px;color:var(--red);background:#2a1d20;
   border:1px solid #48292c;border-radius:7px}
 .del:hover{background:#3a2528}
-.add{margin-top:10px}
+.add{margin-top:8px}
 .add input.s{width:104px}
 .add select{width:104px}   /* 「长持仓 / 短持仓 / 各分组」要一眼看全 */
-.edit-group>summary{color:var(--text);font-size:14px;list-style:none;display:flex;gap:8px;align-items:center}
+/* 2026-10-30 统一：折叠标题一律 15px、写死 46px（box-sizing 含边框），三处折叠框同高。
+   「监测开关」按钮 min-height 36px 在 46px 里居中；组名 nowrap + 省略号兜底。 */
+.edit-group>summary{color:var(--text);font-size:15px;list-style:none;display:flex;gap:8px;align-items:center}
 .edit-group>summary::-webkit-details-marker{display:none}
 .edit-group>summary{flex-wrap:wrap}
-.monitor-toggle{margin-left:auto;font-size:12px;padding:8px 10px;min-height:36px;touch-action:manipulation}
+.monitor-toggle{margin-left:auto;font-size:13px;padding:8px 10px;min-height:36px;touch-action:manipulation}
 .monitor-toggle[aria-checked="true"]{color:var(--green);border-color:var(--green)}
-.monitor-note{font-size:12px;color:var(--dim);margin:4px 0 10px;line-height:1.6}
+.monitor-note{font-size:12.5px;color:var(--dim);margin:4px 0 10px;line-height:1.6}
 .monitor-toggle:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
 .edit-group>summary::before{content:'›';font-size:20px;color:var(--dim)}
 .edit-group[open]>summary::before{transform:rotate(90deg)}
-.edit-group .move{font-size:12px;max-width:120px;padding:7px}
+.edit-group .move{font-size:13px;max-width:120px;padding:7px}
 .edit-group .row input.n{min-width:140px}
-.group-tools{color:var(--dim);font-size:12px;gap:8px;margin:20px 2px 12px}
+.group-tools{color:var(--dim);font-size:13px;gap:8px;margin:14px 2px 10px}
 .group-tools h2{margin:0 auto 0 0;color:var(--text);font-size:14px}
-.group-tools button{padding:5px 9px;font-size:12px}
+.group-tools button{padding:5px 9px;font-size:13px}
 /* MM_RULECSS_BEGIN：由 page_assets 生成，不手改 */
 #fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:#bfd5ff;font-size:13px;font-weight:600;touch-action:manipulation}
 #fedRules[open]>summary,#fedGlossary[open]>summary,details.card[open]:has(>.rules-body)>summary{border-bottom:1px solid var(--line)}
@@ -165,52 +167,76 @@ button.danger{color:var(--red)}
 .edit-group .row input.g,.edit-group .add input.g{grid-column:2;grid-row:2}
 /* 每行只剩一个下拉（分区/分组都在这里选），手机上占满下半行 */
 .edit-group .move{grid-column:2 / span 2;grid-row:3;max-width:none;width:100%}.edit-group .add .s{width:82px;font-size:13px}
-.edit-group .add button{grid-column:3;grid-row:1;padding:7px 3px;font-size:12px}
+.edit-group .add button{grid-column:3;grid-row:1;padding:7px 3px;font-size:13px}
 .edit-group .add .t{grid-row:2}}
 .edit-group summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
 .empty{color:#5f6672;font-size:13px;padding:3px 0 8px}
-#msg{font-size:13px;min-height:22px;margin:0 2px 12px;line-height:1.6}
+/* 消息区排在「← 回看板」按钮下面：原来是 min-height 22 + 下外距 12，加上 .sub 的下外距，
+   按钮到「规则参数」卡之间空 46px；这里收成 20 + 4，配合 .sub 的 4px 共 28px，
+   min-height 仍留得下一行 13px/1.6 的提示文字（约 21px），出现提示不会明显顶开版面。 */
+#msg{font-size:13px;min-height:20px;margin:0 2px 4px;line-height:1.6}
 #msg.ok{color:var(--green)} #msg.err{color:var(--red)} #msg.busy{color:var(--dim)}
 .filebtn{display:inline-block;padding:8px 14px;font-size:13px;background:#232833;
   border:1px solid #333a47;border-radius:8px;cursor:pointer}
 .filebtn:hover{background:#2b303c}
-.csvinfo{font-size:12px;color:var(--dim);line-height:1.9;margin:10px 0}
+.csvinfo{font-size:12.5px;color:var(--dim);line-height:1.9;margin:8px 0}
 .csvinfo b{color:var(--text);font-weight:500}
-.savebar{background:var(--bg);padding:10px 0 4px;
+.savebar{background:var(--bg);padding:8px 0 4px;
   display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.savebar .sp{flex:1;font-size:12px;color:var(--dim)}
+.savebar .sp{flex:1;font-size:12.5px;color:var(--dim)}
 .hide{display:none}
-.note{color:var(--dim);font-size:12px;line-height:1.75;margin:8px 0 0}
+.note{color:var(--dim);font-size:12.5px;line-height:1.75;margin:6px 0 0}
 .note b{color:var(--text);font-weight:500}
 kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
   padding:1px 5px;font-size:11px;font-family:ui-monospace,Menlo,monospace}
-.setgrid{display:grid;grid-template-columns:1fr;gap:7px}
+.setgrid{display:grid;grid-template-columns:1fr;gap:5px}
 .setrow{display:flex;gap:8px;align-items:center}
-.setrow label{flex:1;font-size:12px;color:var(--dim);line-height:1.4}
+.setrow label{flex:1;font-size:13px;color:var(--dim);line-height:1.4}
 .setrow input{width:96px;text-align:right;font-variant-numeric:tabular-nums}
 details.set{margin-top:4px}
-details.set summary{font-size:12px;color:#6ba3f0;cursor:pointer;padding:4px 0;outline:none}
-details.set[open] summary{margin-bottom:10px}
-.setsec{font-size:11px;color:#5f6672;margin:10px 0 2px;letter-spacing:.4px}
+details.set summary{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;padding:4px 0;outline:none}
+details.set[open] summary{margin-bottom:8px}
+.setsec{font-size:12px;color:#5f6672;margin:8px 0 2px;letter-spacing:.4px}
 details.fold{background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:0 14px;margin-bottom:14px}
-details.fold>summary{font-size:13px;color:var(--dim);font-weight:600;cursor:pointer;
-  padding:13px 0;outline:none;letter-spacing:.3px}
-details.fold[open]>summary{padding-bottom:6px;border-bottom:1px solid var(--line);
-  margin-bottom:10px}
+  padding:0 12px;margin-bottom:10px}
+details.fold>summary{font-size:15px;color:var(--dim);font-weight:600;cursor:pointer;
+  padding:0;outline:none;letter-spacing:.3px}
+details.fold[open]>summary{border-bottom:1px solid var(--line);
+  margin-bottom:8px}
 details.fold>summary span{color:#5f6672;font-weight:400}
 .card>details.fold{background:none;border:none;border-radius:0;padding:0;margin-bottom:0}
-/* 手机（iOS）：分组标题框（长持仓 / 短持仓 / …）里的文字 13 → 15px，行高压回原来的 20.15px
-   （＝13px×1.55），标题框上下高度一像素不变：有「监测开关」按钮的组由按钮的 36px 撑高，
-   只有一个「始终监测」灰字的组仍是 20 + 13 + 13，跟改前一致。 */
-@media(max-width:600px){details.fold>summary{font-size:15px;line-height:20px}}
-details.fold .pane{padding-bottom:8px}
+/* 手机上折叠标题同样 15px、46px 高（统一写在下面的总块里，这里不再单独覆盖）。 */
+details.fold .pane{padding-bottom:6px}
 .pager{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
-  font-size:12px;color:var(--dim);padding:8px 0 4px}
-.pager button{padding:5px 11px;font-size:12px}
+  font-size:12.5px;color:var(--dim);padding:6px 0 4px}
+.pager button{padding:5px 11px;font-size:13px}
 .pager .pg{font-variant-numeric:tabular-nums}
-.subsec{font-size:11px;color:#5f6672;margin:12px 0 4px;letter-spacing:.4px;
-  border-top:1px dashed var(--line);padding-top:10px}
+.subsec{font-size:12px;color:#5f6672;margin:9px 0 3px;letter-spacing:.4px;
+  border-top:1px dashed var(--line);padding-top:8px}
+/* ===== 2026-10-30 设置页版面统一（一次性总块，放在最后压过上面所有同权重规则）=====
+   1) 字号：折叠标题一律 15px；小节标题 h2 14px；设置项 label 13px；分节小字 12px；
+      说明文字 12.5px；按钮统一 13px（主按钮保持 14px）。
+   2) 折叠列表高度：所有折叠标题写死 46px（含边框），编辑分组 / 定投 / 规则三处同高，
+      指示箭头与内容垂直居中；展开态只加一条底线，高度不变。
+   3) 间距：卡片与折叠框外距 14 → 10px、行距与网格间隙同步收窄。 */
+details.fold>summary,.edit-group>summary{box-sizing:border-box;height:46px;
+  padding-top:0;padding-bottom:0;display:flex;align-items:center;flex-wrap:nowrap}
+details.fold[open]>summary{padding-bottom:0}
+#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{
+  box-sizing:border-box;height:46px;padding-top:0;padding-bottom:0;display:flex;
+  align-items:center;font-size:15px}
+/* 卡片内的参数展开开关（布林 / 均线 / …）：2026-10-30 二次调整——它和同卡的「显示与交互」
+   是并列的同级开关，文字同样 15px、同样蓝色，高度也一起并到卡片级的 46px（原 36px）。 */
+details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:center;
+  padding-top:0;padding-bottom:0}
+/* 「显示与交互」原本是折叠卡的灰色标题，与它上面蓝色小字的参数开关不同色；
+   同一张「规则参数」卡内两行并列，颜色统一成链接蓝 #6ba3f0（只改这一行，不动其它卡片标题）。 */
+#displayCard>summary{color:#6ba3f0}
+/* 「综合判断与宏观细则」注入时已拆掉模板自带的 section 卡壳、并补上 fold 卡类（见页尾脚本），
+   高度/字号随上面的 fold 总块走；这里只补标题颜色，与「预警规则」「名词解释」一致。
+   id 全页唯一，直接用 id 选择器。 */
+#marketRiskRules>summary{color:#bfd5ff}
+#marketRiskRules[open]{padding-bottom:8px}
 </style>
 </head>
 <body>
@@ -1198,6 +1224,16 @@ async function bootstrap(){
       found++;
     }
     if(!found) throw new Error('未读取到规则内容');
+    /* 「综合判断与宏观细则」的模板自带一层 section 卡壳，直接注入会和外层 details
+       叠成双层框（比「预警规则」「名词解释」高出一截）；这里拆掉外壳、
+       给内层 details 补上与另两块说明卡一致的 fold 卡类名，三张卡完全同款。 */
+    var sec=frag.querySelector('section.card.page-notes');
+    if(sec){
+      while(sec.firstChild) sec.parentNode.insertBefore(sec.firstChild,sec);
+      sec.parentNode.removeChild(sec);
+    }
+    var mr=frag.querySelector('details.macro-help');
+    if(mr) mr.className='card fold';
     host.innerHTML='';
     host.appendChild(frag);
   }).catch(function(e){

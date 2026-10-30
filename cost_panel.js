@@ -26,8 +26,13 @@
     return s+'$'+a.toLocaleString('en-US',
       {minimumFractionDigits:(a>=1e4?0:1),maximumFractionDigits:(a>=1e4?0:1)}); }
   /* 数量列的**显示**只取整数：录入仍可到 0.0001，且全程按精确值计算，
-     这里只是不把「46.0903」铺在窄列里（2026-10-29）。 */
-  function qtyInt(n){ return Math.round(num(n)).toLocaleString('en-US'); }
+     这里只是不把「46.0903」铺在窄列里（2026-10-29）。
+     2026-10-30：窄屏数量列内容区只有 34～38px，六位股数（「123,456」墨宽 39px）会顶出格子，
+     所以跟金额一样做降档 —— ≥10万 用 k、≥100万 用 M，显示上限压到 6 字符（「99,999」约 33px）。 */
+  function qtyInt(n){ var r=Math.round(num(n)), a=Math.abs(r), s=(r<0?'-':'');
+    if(a>=1e6) return s+(a/1e6).toFixed(2)+'M';
+    if(a>=1e5) return s+Math.round(a/1e3)+'k';
+    return s+a.toLocaleString('en-US'); }
   /* 成本价：写到「代码 + 备注名」下面那一排（跟加减仓价胶囊同一个 .lvs 容器、排在最前）。
      只标数字、不写「成本」二字——上面就是代码和备注名，那一行本来只会有成本价和加减仓价，
      加「成本」反而跟右边的「加 325 / 减 400」胶囊不是一个读法。
@@ -45,8 +50,22 @@
     if(a>=1e6) return '$'+(r<0?'-':'')+(a/1e6).toFixed(2)+'M';
     return '$'+r.toLocaleString('en-US'); }
   function pct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
-  /* 最多 4 位小数、去掉多余的 0：录入允许 0.0001 这种精度，显示不拖尾 */
-  function trim(n){ var s=(Math.round(n*10000)/10000).toFixed(4).replace(/0+$/,'').replace(/\.$/,'');
+  /* 价格（成本价 / 加仓价 / 减仓价）：整数位越多、小数位越少，显示上限恒为 6 字符。
+     录入仍允许 0.0001 这种精度，全程按精确值计算，只是不把「12345.6789」铺进 34～42px 的窄列
+     （2026-10-30：窄屏成本列内容区只有 34～42px，4 位小数会顶出格子压到相邻列）。
+     分档：≥10000 → 0 位、≥1000 → 1 位、≥100 → 2 位、≥10 → 3 位、<10 → 4 位，
+     再去尾随的 0（只在有小数点时去，避免把「12340」吃成「1234」）。 */
+  function trim(n){
+    var v=num(n), a=Math.abs(v);
+    var d=a>=10000?0:a>=1000?1:a>=100?2:a>=10?3:4;
+    var p=Math.pow(10,d), s=(Math.round(v*p)/p).toFixed(d);
+    if(s.indexOf('.')>=0) s=s.replace(/0+$/,'').replace(/\.$/,'');
+    return s===''?'0':s; }
+  /* 金额（现金合计等）不按价格降档：仍保留最多 4 位小数、去尾随的 0
+     （只在这类「录入精度就是显示精度」的金额上用，不进窄列）。 */
+  function trim4(n){
+    var s=(Math.round(num(n)*10000)/10000).toFixed(4);
+    if(s.indexOf('.')>=0) s=s.replace(/0+$/,'').replace(/\.$/,'');
     return s===''?'0':s; }
   function nowStr(){ var d=new Date(),p=function(x){return (x<10?'0':'')+x;};
     return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
@@ -1656,7 +1675,9 @@
     if(!_paintFrame) _paintFrame=requestAnimationFrame(function(){ _paintFrame=null; paint(); });
   });
 
-  function vt(v){ return trim(num(v)); }
+  /* 输入框里一律用「录入精度就是显示精度」的原始值（最多 4 位小数）：
+     价格降档只作用于展示，不能把用户录入的 12.3456 在编辑框里截成 12.346 再存回去。 */
+  function vt(v){ return trim4(num(v)); }
   function inp(sym, f, val, ph){
     return '<input data-sym="'+esc(sym)+'" data-f="'+f+'" inputmode="decimal" step="0.0001"'
       +' value="'+esc(val)+'" placeholder="'+ph+'" aria-label="'+esc(sym)+' '+ph+'">';
@@ -1939,7 +1960,7 @@
           +inp('USD','cash',firstCash?vt(firstCash):'','现金1')+'</label>'
           +'<span class="cash-plus" aria-hidden="true">＋</span><label><span>现金 2 · USD$</span>'
           +inp('USD','cash_extra',cashSecond?vt(cashSecond):'','现金2')+'</label></span>'
-          +'<span class="cash-total">合计 USD$'+trim(cash)+'</span>'
+          +'<span class="cash-total">合计 USD$'+trim4(cash)+'</span>'
         :plain(cash))+'</span>'
       +'<span class="t-pnl"></span>'
       +wtCell(cash)+'</div>');

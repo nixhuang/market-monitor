@@ -194,7 +194,7 @@ async function boot(opts={}){
     alert:s=>alerts.push(s),prompt:()=>null,
     __MM_RULES__:opts.rules};
   ctx.window=ctx;
-  const hooks=`globalThis.__costTest={money,plain,qtyInt,normalize,canonical,mergeCloud,requestSave,autoPush,doPush,startPull,enterEdit,exitEdit,importData,exportData,cashFirst,nearPrice,ackStatEntries,paint,setAck,pruneAck,
+  const hooks=`globalThis.__costTest={money,plain,qtyInt,trim,trim4,normalize,canonical,mergeCloud,requestSave,autoPush,doPush,startPull,enterEdit,exitEdit,importData,exportData,cashFirst,nearPrice,ackStatEntries,paint,setAck,pruneAck,
     state:()=>({DATA:clone(DATA),CLOUD:CLOUD&&clone(CLOUD),revision,dirty,maintenanceOnly,maintenancePending,cloudVerified,cloudFirstPending,positionsAuthorized,positionSave:positionSave&&clone(positionSave),positionGeneration,ackRevision,draftPending,uncertain:uncertain&&clone(uncertain),deadline:REQUEST_DEADLINE,activeRequests:activeRequests.length,editing,inFlight:inFlight&&clone(inFlight),queued,writer,SYNC,NOTICE,savePaused,storageErrors:clone(storageErrors)}),
     rows:ROWS};`;
   const code=SOURCE.replace(/^<script>\s*/,'').replace(/\s*<\/script>\s*$/,'').replace('__MM_REAL__',JSON.stringify(opts.seed||SEED))
@@ -1186,7 +1186,9 @@ test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
     const escaped=selector.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');assert.match(CSS,new RegExp(escaped+'\\{[^}]*text-align:center'));
   }
   assert.match(CSS,/\.cost-name\{[^}]*text-align:left/);assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
-  assert.match(CSS,/grid-template-columns:minmax\(110px,1\.55fr\) \.9fr \.85fr 1\.05fr 1\.45fr \.8fr/);
+  // 2026-10-30 三轮：桌面档五个数值列各加 min 下限（56/52/76/126/48），
+  // 601～768 这类窄桌面下纯 fr 会把盈亏格压到 101px，14px 的「+4.4% +$1,021.8」墨宽 109px 顶出去。
+  assert.match(CSS,/grid-template-columns:minmax\(110px,1\.55fr\) minmax\(56px,\.9fr\) minmax\(52px,\.85fr\) minmax\(76px,1\.05fr\) minmax\(126px,1\.45fr\) minmax\(48px,\.8fr\)/);
   assert.match(CSS,/\.cost-cell\.up\{color:var\(--up\)\}/);
   // 行首灯条（2026-10-28）：和统计面板个股前同款的 3×12px 竖条，不再是圆点 marker
   assert.match(CSS,/#costMembers li::before\{content:"";position:absolute;left:-9px;top:6px;\s*width:3px;height:12px;border-radius:1px;background:var\(--name-lamp,var\(--dim\)\)\}/);
@@ -1224,11 +1226,14 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   // 每排之间一条淡分隔线
   assert.match(CSS,/\.cost-contrib li\+li\{border-top:1px solid rgba\(255,255,255,\.07\);padding-top:4px;margin-top:2px\}/);
   // 手机档（2026-10-29）：五个数值列再放宽 4～8px（数字 10.5 → 11.5px），名称列相应被挤压
-  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 54px 46px 62px 68px 44px/);
-  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 48px 42px 58px 64px 38px/);
-  // ≤365 / ≤340 两档：盈亏列必须留得下最长的金额（「+$12.35M」在 10px 档约 57px）
-  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 44px 40px 52px 58px 34px/);
-  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 38px 38px 46px 58px 34px/);
+  // 2026-10-30 二轮：标题行盈亏「+$1,021.8」13px 墨宽 63px 顶到格子边，盈亏列四档各再 +6px
+  // 2026-10-30 三轮：仓位列再放宽（13px 的「37.8%」墨宽 35px，44/38/34px 格的内容区只剩
+  // 34/34/30px 会顶出去），成本 / 数量 / 市值三列各让 2～4px 补回来，合计基本不变。
+  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 52px 44px 60px 74px 48px/);
+  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 46px 42px 56px 70px 46px/);
+  // ≤365 / ≤340 两档：盈亏列必须留得下最长的金额（13px 标题行「+$1,021.8」墨宽 63px）
+  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 42px 38px 50px 64px 45px/);
+  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 38px 38px 50px 64px 40px/);
   // 标题行极端兜底：金额长到顶按钮时截省略号，而不是压到「编辑」上
   assert.match(CSS,/\.cost-manage>summary \.cost-sum\{min-width:0;overflow:hidden;text-overflow:ellipsis\}/);
   assert.match(CSS,/\.cost-cell\{font-size:11\.5px\}/);
@@ -2663,6 +2668,24 @@ for(const [v,want] of [
 for(const [v,want] of [[0,'$0'],[64526,'$64,526'],[123456,'$123,456'],[1234567,'$1.23M'],[-1234567,'$-1.23M']])
 test('plain 分档 '+v+' → '+want,async()=>{
   const b=await bootCash();assert.equal(b.plain(v),want);
+});
+/* 价格（成本价 / 加仓价 / 减仓价）与数量同样有显示上限：窄屏这两列的内容区只有
+   34～42px，4 位小数（「12345.6789」墨宽 57px）、六位股数（「123,456」墨宽 39px）都会顶出格子
+   压到相邻列上。2026-10-30 起按整数位数降精度，显示恒为 6 字符以内；
+   金额（现金合计）走 trim4 保留录入精度，编辑框也用 trim4，避免把 12.3456 截成 12.346 存回去。 */
+for(const [v,want] of [[364.92,'364.92'],[32.88,'32.88'],[0.0001,'0.0001'],[5.1234,'5.1234'],
+  [12.3456,'12.346'],[364.1234,'364.12'],[1234.5678,'1234.6'],[12345.6789,'12346'],
+  [12340,'12340'],[-364.92,'-364.92']])
+test('价格降档 trim '+v+' → '+want,async()=>{
+  const b=await bootCash();assert.equal(b.trim(v),want);
+});
+for(const [v,want] of [[12.3456,'12.3456'],[12340,'12340'],[0.0001,'0.0001']])
+test('金额不降档 trim4 '+v+' → '+want,async()=>{
+  const b=await bootCash();assert.equal(b.trim4(v),want);
+});
+for(const [v,want] of [[46,'46'],[1234,'1,234'],[99999,'99,999'],[123456,'123k'],[1234567,'1.23M']])
+test('数量降档 qtyInt '+v+' → '+want,async()=>{
+  const b=await bootCash();assert.equal(b.qtyInt(v),want);
 });
 test('渲染出的每一格金额都不超过 9 个字符（最窄格 55px 的硬上限）',async()=>{
   const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:1,qty:200000},BBB:{cost:1,qty:0}}},prepareDocument(doc){
