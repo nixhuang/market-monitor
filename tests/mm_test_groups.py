@@ -6503,7 +6503,7 @@ class Test52wRangeBar(unittest.TestCase):
         plain = monitor._range52_row(base)
         self.assertNotIn('range52-cost', plain)
         self.assertIn('.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;', monitor.PAGE_CSS)
-        self.assertIn('background:#f0c674', monitor.PAGE_CSS)
+        self.assertIn('background:var(--lamp-yellow,#f0c674)', monitor.PAGE_CSS)
 
     def test_short_history_and_missing_or_filled_range_do_not_claim_52_weeks(self):
         data = self.history()
@@ -6698,7 +6698,10 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('#signalCounts .collapse-group{color:#fff}', monitor.PAGE_CSS)
         self.assertNotIn('opacity:', button_rule.group(1))
         self.assertIn('--collapse-bg:var(--signal-bg)', monitor.PAGE_CSS)
-        self.assertIn('#group_positions{background:var(--card);--collapse-bg:rgba(46,160,67,.15)}', monitor.PAGE_CSS)
+        pos_rule = re.search(r'#group_positions\{([^}]+)\}', monitor.PAGE_CSS)[1]
+        self.assertIn('--collapse-bg:rgba(46,160,67,.15)', pos_rule)
+        self.assertIn('--signal-border:var(--frame-green,#2c8f3e)', pos_rule)
+        self.assertIn('border-color:var(--frame-green,#2c8f3e)', pos_rule)
 
     def test_jump_flash_never_overwrites_the_lamp_bar(self):
         """闪烁只能用 background-color：带 52 周条的行灯条是 background-image 画的，
@@ -7192,7 +7195,7 @@ class TestSignalCounts(unittest.TestCase):
         self.assertIn('margin-right:6px;vertical-align:-1px', css)
         self.assertNotIn('#signalCounts .signal-members-panel li::marker', css)
         self.assertNotIn('.signal-filter .stat-dot', css)
-        for level, color in (('red', '#ff8580'), ('yellow', '#f0c674'), ('gray', 'var(--text)')):
+        for level, color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
             self.assertIn(f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
                           '{color:' + color + '}', css)
         self.assertNotIn('condition.append(dot', monitor.PAGE_INTERACTION_JS)
@@ -8707,7 +8710,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                          '<span class="arrow-band-up">▲</span><span class="arrow-rsi-up">↑</span>'
                          '<span class="arrow-band-down">▼</span><span class="arrow-rsi-down">↓</span></span>')
         self.assertEqual(unlit, {'signals': ['无灯说明 ▲↑▼↓'], 'signal_marks': [], 'level': 'red'})
-        for level, color in (('red', '#ff8580'), ('yellow', '#f0c674'), ('gray', 'var(--text)')):
+        for level, color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
             self.assertIn(f'.signal-item[data-signal-level="{level}"]{{color:{color}}}', monitor.PAGE_CSS)
         self.assertIn('.signal-item{color:var(--dim)}', monitor.PAGE_CSS)
 
@@ -8842,7 +8845,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         self.assertNotRegex(stock, r'<img\b|<b\b|<[^>]+\sonerror\s*=')
         self.assertIn('&lt;b&gt;不可执行&lt;/b&gt;', stock)
         self.assertIn('<td class="sig">' + output + '</td>', stock)
-        for level, color in (('red', '#ff8580'), ('yellow', '#f0c674'), ('gray', 'var(--text)')):
+        for level, color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
             self.assertIn('.signal-item[data-signal-level="' + level + '"]{color:' + color + '}',
                           monitor.PAGE_CSS)
         row['level'] = 'yellow'
@@ -9115,7 +9118,7 @@ class TestMainOnlyDescriptionProjection(unittest.TestCase):
                     self.assertEqual(output.count('data-signal-role="supplement"'), 1)
                     self.assertNotIn('data-signal-level="gray"', output)
         self.assertNotRegex(monitor.PAGE_CSS, r'\.signal-item\[data-signal-role=[^\]]+\]\{[^}]*color\s*:')
-        for level, color in (('red', '#ff8580'), ('yellow', '#f0c674'), ('gray', 'var(--text)')):
+        for level, color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
             self.assertIn(f'.signal-item[data-signal-level="{level}"]{{color:{color}}}', monitor.PAGE_CSS)
         self.assertIn('.signal-item{color:var(--dim)}', monitor.PAGE_CSS)
 

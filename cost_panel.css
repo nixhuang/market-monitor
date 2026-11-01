@@ -21,10 +21,10 @@
    （.cost-info b 是 0-1-1、.up 是 0-1-0），必须显式补回来，否则盈亏永远是普通白字 */
 .cost-info b.up{color:var(--up)} .cost-info b.down{color:var(--down)}
 /* 仓位 > 10%：黄字（集中度提示。只改这一个数字的颜色，不报灯、不进统计） */
-.cost-info b.wt-hi{color:#f0c674}
+.cost-info b.wt-hi{color:var(--lamp-yellow,#f0c674)}
 /* 亏损提醒：浮亏 10% 黄字、20% 红字。同样只出文字，不报灯、不进红黄紫统计 */
 .cost-warn{display:block;font-size:12.5px;margin:2px 0 0;line-height:1.4;white-space:normal}
-.cost-warn.lv1{color:#ff8580}      /* 浮亏 ≥10%：红字＋行级红灯（不再分黄/红两档颜色） */
+.cost-warn.lv1{color:var(--lamp-red,#ff8580)}      /* 浮亏 ≥10%：红字＋行级红灯（不再分黄/红两档颜色） */
 .cost-warn.lv2{color:#ff5f5a}      /* ≥20%：更亮的红，只区别于文案 */
 /* ===== 1.4 52 周条 =====
    这套几何（rail / 灰轨 / 倒三角 / 百分比 / 黄竖线）现在**只在 monitor.py 的 PAGE_CSS 里定义**。
@@ -49,7 +49,14 @@
 /* ===== 2. 「仓位管理」独立面板（统计面板上方，编辑功能内置） ===== */
 /* 它就是一张普通 group-card，跟持仓 / 重点 / 市场风险同级：不再塞进统计面板里，
    也不再有单独的「仓位录入」面板——点标题右侧的「编辑」就地改，改完点保存即上传。 */
-.cost-manage{--cost-accent-bg:rgba(126,231,135,.17);--cost-accent:#2c8f3e;margin:8px 0 10px}
+/* 2026-11-01 整理：列宽模板与栏目条高度提为变量，列头／框标题／每行／现金固定收益四处共用一份，
+   手机档只改变量值（原来要在 @media 里整条重抄一遍 grid-template-columns，改一处漏三处）。
+   名称列按用户要求压缩（代码与中文名是上下两行，不需要那么宽），省下的全给数值列。 */
+.cost-manage{--cost-accent-bg:rgba(126,231,135,.17);--cost-accent:var(--frame-green,#2c8f3e);margin:8px 0 10px;
+  --cost-cols:minmax(96px,1.05fr) minmax(60px,1fr) minmax(56px,.95fr) minmax(84px,1.2fr) minmax(132px,1.7fr) minmax(54px,.9fr);
+  /* 现金 / 固定收益只有一行，名称列要放得下「现金 含货币市场ETF」，比个股行再宽一档 */
+  --cost-mini-cols:minmax(130px,1.5fr) minmax(60px,.95fr) minmax(52px,.85fr) minmax(84px,1.15fr) minmax(126px,1.5fr) minmax(56px,.9fr);
+  --cost-head-h:26px}
 /* 整卡只留一圈绿色外框（与统计面板同宽 1.5px）：左侧绿条取消、卡底不变，
    收起横条仍沿用原来的浅绿底色。 */
 #costManage.cost-manage{--collapse-bg:var(--cost-accent-bg);border:1.5px solid var(--cost-accent);
@@ -77,18 +84,19 @@
    位置（margin-left:auto 顶到最右）、字号、绿涨红跌规则跟其他板块完全一致，不另起样式 */
 /* 「仓位」这一列的数字：白字加粗（原来跟着 dim 走是灰的，读不出重点）。
    注意「仓位」这两个字的小标签 .k 仍保持灰、不加粗，只有数字变色 */
-.cost-manage .t-wt,.cost-manage .cost-cell.wt{color:var(--text);font-weight:600}
+/* 仓位列原来加粗（600），2026-11-01 按用户要求：盈亏相关的数字一律不加粗，跟其它数值列同字重 */
+.cost-manage .t-wt,.cost-manage .cost-cell.wt{color:var(--text);font-weight:400}
 .cost-manage .t-wt .k{color:var(--dim);font-weight:400}
 .cost-state{font-size:11px;white-space:nowrap;color:var(--dim)}
 .cost-manage .cost-sum,.cost-manage .cost-legend b,.cost-subhead .cnt b{text-align:center}
-.cost-notice{margin-top:6px;color:#f0c674;white-space:normal}
+.cost-notice{margin-top:6px;color:var(--lamp-yellow,#f0c674);white-space:normal}
 .cost-notice button{margin-left:6px;background:#1b2434;border:1px solid #33415a;
   color:#cfd8e6;border-radius:5px;font:inherit;cursor:pointer}
 /* 全局 .warn 是「带背景边框的整块警告框」（padding 11px 14px / 14px / 圆角），
    标题右侧只是个小状态字，必须整块样式还原成纯文字 */
 .cost-state .warn,.cost-state .ok{background:none;border:0;padding:0;margin:0;border-radius:0;
   font-size:11px;line-height:inherit;display:inline}
-.cost-state .warn{color:#f0c674}
+.cost-state .warn{color:var(--lamp-yellow,#f0c674)}
 .cost-state .ok{color:#7fbf7f}
 /* 「云端未取到」在本机本来就有完整数据时只是个备注（灰字，不抢视线）；
    本机没数据、只能靠默认值显示时由 JS 换成 .warn 黄字 */
@@ -97,18 +105,18 @@
 /* 「云端未取到」提示条：换设备且本机没数据时才出现，说明眼前是内置快照 + 给两个出口 */
 .cost-nocloud{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
   margin:0 0 8px;padding:7px 9px;border:1px solid #5a4a1f;border-radius:7px;background:#2a2313;
-  color:#f0c674;font-size:12.5px;line-height:1.5}
+  color:var(--lamp-yellow,#f0c674);font-size:12.5px;line-height:1.5}
 .cost-nocloud .nb-acts{display:flex;gap:6px;flex:none}
 .cost-nocloud button{background:#1b2434;border:1px solid #33415a;color:#cfd8e6;
   border-radius:7px;padding:3px 9px;font-size:12px;cursor:pointer}
-.cost-nocloud button:hover{border-color:#8fb8f0;color:#dfeaff}
+.cost-nocloud button:hover{border-color:var(--head-blue-on,#8fb8f0);color:#dfeaff}
 /* 「编辑」只是加大一点点：字号 12.5→13、内距 4/10→6/13。**形状不动**——仍是原来的
     7px 圆角小圆角矩形（原「胶囊」观感），不改成 99px 的全圆形。
     加大后仍必须留在标题行最右侧，不能被挤到下一行（见下面 summary 的 nowrap）。 */
 .cost-edit-btn{flex:none;background:#1b2434;border:1px solid #33415a;
   color:#cfd8e6;border-radius:7px;padding:6px 13px;font-size:13px;line-height:1.2;cursor:pointer}
-.cost-edit-btn:hover{border-color:#8fb8f0;color:#dfeaff}
-.cost-edit-btn.on{background:#22314c;border-color:#8fb8f0;color:#dfeaff}
+.cost-edit-btn:hover{border-color:var(--head-blue-on,#8fb8f0);color:#dfeaff}
+.cost-edit-btn.on{background:#22314c;border-color:var(--head-blue-on,#8fb8f0);color:#dfeaff}
 /* 「编辑」在标题行最右侧：group-stats 已经是 flex:1 1 auto，按钮再加 margin-left:auto 顶到底；
    编辑态由下面的「保存并上传／取消」接管，这颗收起来（两个退出入口会打架）。
    右外边距 -4px：与卡片边框的间距从约 17px（12+4+1）压到约 5px（约 0.3 倍），
@@ -127,15 +135,15 @@
    注意 grid 要放在 li 里面的 .cost-grid 上：直接把 li 设成 display:grid 会覆盖
    display:list-item，行首那个列表圆点（::marker）就没了。 */
 .cost-manage .signal-member-block h5{margin-bottom:2px}
-/* 框标题里的盈亏：金额 + 比例，颜色吃页面的 .up/.down（绿涨红跌） */
-.cost-manage .signal-member-block h5 b{font-weight:600}
+/* 框标题里的盈亏：金额 + 比例，颜色吃页面的 .up/.down（绿涨红跌）。
+   2026-11-01：数字一律不加粗（跟列表盈亏列同一口径），只靠颜色区分涨跌 */
+.cost-manage .signal-member-block h5 b{font-weight:400}
 
 /* 列宽模板三处共用：列头、框标题（汇总行）、每行的 grid。
    行首圆点画在 ul 的 padding 里，所以行的 grid 从 padding 内侧起算；
    列头和框标题留同样的 padding-left，三者的列边界才会严丝合缝地对齐。 */
 .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-  display:grid;align-items:center;gap:0 8px;
-  grid-template-columns:minmax(110px,1.55fr) minmax(56px,.9fr) minmax(52px,.85fr) minmax(76px,1.05fr) minmax(126px,1.45fr) minmax(48px,.8fr)}
+  display:grid;align-items:center;gap:0 var(--cost-gap,8px);grid-template-columns:var(--cost-cols)}
 .cost-manage .signal-member-list{margin:0;padding-left:16px;list-style:none}
 /* 列间竖向细分隔线（2026-10-20）：列头 / 合计行 / 每行用同一套 —— 都画在列的左边缘，
    因为三处共用同一组列宽，线自然上下对齐。2026-10-28 按用户要求加明显（.075 → .20），
@@ -157,9 +165,11 @@
 /* 2026-10-30：「总持仓 18 只 / 长持仓 10 只 / 短持仓 8 只」12.5 → 14px。
    line-height 写死 18.75px（＝原继承值 12.5×1.5）而不是倍数——绝对值会被子元素原样继承，
    所以「N 只」那个 .cnt 跟着加到 13px 也不会把条子顶高，整条高度仍是 18.75+3+4≈25.75px。 */
-.cost-block-title{margin:3px 0 4px;font-size:14px;font-weight:600;color:#bfd5ff;
-  font-variant-numeric:tabular-nums;white-space:nowrap;padding:3px 0 4px 16px;
-  line-height:18.75px;background:rgba(143,184,240,.10);border-radius:5px}
+/* 高度统一用 --cost-head-h：跟「当日盈亏贡献」的标题条同一高度（桌面 26 / 窄屏 24），
+   两块栏目条一眼看齐。原来是 18.75px 行高 + 上下 padding 自己算出来的高度，跟下面那条对不齐。 */
+.cost-block-title{margin:3px 0 4px;font-size:14px;font-weight:600;color:var(--head-blue,#bfd5ff);
+  font-variant-numeric:tabular-nums;white-space:nowrap;padding:0 0 0 16px;
+  min-height:var(--cost-head-h);line-height:18.75px;background:rgba(143,184,240,.10);border-radius:5px}
 .cost-block-title>span{text-align:center;min-width:0}
 .cost-block-title .t-name{grid-column:1;text-align:left;overflow:hidden;text-overflow:ellipsis}
 /* 名称与数量之间必须有间隔：grid 容器会把两个 span 之间的空白文本节点吃掉，
@@ -189,7 +199,7 @@
 .cost-name .cn{font-size:11.5px;color:var(--dim);margin-top:1px;overflow-wrap:anywhere;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .cost-name .tag{flex:none;margin-left:0;font-size:10px;font-weight:600;letter-spacing:.3px;padding:0 4px;
-  line-height:1.5;border-radius:4px;color:#8fb8f0;background:rgba(107,163,240,.14);
+  line-height:1.5;border-radius:4px;color:var(--head-blue-on,#8fb8f0);background:rgba(107,163,240,.14);
   border:1px solid rgba(107,163,240,.32)}
 .cost-cell{text-align:center;font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap;
   color:var(--text)}
@@ -200,13 +210,13 @@
 .cost-manage .signal-member-jump{color:var(--text);text-decoration:none}
 .cost-manage .cost-name .sy{border-bottom:1px dotted #465e87}
 .cost-manage .signal-member-jump:hover .sy,.cost-manage .signal-member-jump:focus-visible .sy{
-  color:#bfd5ff;border-bottom-color:#bfd5ff}
+  color:var(--head-blue,#bfd5ff);border-bottom-color:var(--head-blue,#bfd5ff)}
 /* 只有「盈亏」这一列跟着盈亏着色；成本价/数量/市值保持正常字色，
    不要整行继承 li 的 .up/.down（否则亏损行的成本价也会变红，看着像价格在跌） */
 .cost-cell.up{color:var(--up)} .cost-cell.down{color:var(--down)}
 .cost-cell.dim{color:var(--dim)}
 /* 仓位 > 10%：黄字（跟持仓个股行同一条规则；合计行／现金／固定收益不参与） */
-.cost-cell.wt.hi{color:#f0c674}
+.cost-cell.wt.hi{color:var(--lamp-yellow,#f0c674)}
 /* 浮亏 10%／20% 只走行级红灯与统计，名称下不再挂「亏损超N%」小字标签 */
 .cost-manage li.is-cash .cost-name .sy{color:var(--dim)}
 .cost-cell .pct{display:inline}
@@ -216,7 +226,7 @@
 /* 编辑态：成本价 / 数量 / 现金 / 固定收益 就地换成输入框，列宽与版式不变 */
 .cost-cell input{width:100%;min-width:0;background:#0d121b;border:1px solid #2a3342;color:var(--text);
   border-radius:6px;padding:2px 5px;font-size:12px;text-align:center;font-variant-numeric:tabular-nums}
-.cost-cell input:focus{outline:none;border-color:#8fb8f0}
+.cost-cell input:focus{outline:none;border-color:var(--head-blue-on,#8fb8f0)}
 .cost-cell input::placeholder{color:#5a6473}
 /* [hidden] 只是 UA 的 display:none，作者写的 display:flex 会盖掉它 → 必须显式再压一次 */
 .cost-acts{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;margin:6px 0 8px}
@@ -224,7 +234,7 @@
 .cost-acts .cost-notice{flex:1 1 180px;min-width:0;margin:0;overflow-wrap:anywhere}
 .cost-acts button{background:#1b2434;border:1px solid #33415a;color:#cfd8e6;border-radius:7px;
   padding:5px 11px;font-size:12.5px;cursor:pointer}
-.cost-acts button:hover{border-color:#8fb8f0;color:#dfeaff}
+.cost-acts button:hover{border-color:var(--head-blue-on,#8fb8f0);color:#dfeaff}
 .cost-acts .primary{background:#22314c;border-color:#3a4a66;color:#dfeaff}
 /* ===== 3. 四个区块：长持仓深绿 / 短持仓浅绿 / 现金青 / 固定收益橙 =====
    长／短持仓只保留外框和列头那两行的底色，个股区域不再铺底；
@@ -245,22 +255,25 @@
 /* 「总持仓」＝长＋短合计：用中性的淡蓝底，跟长／短持仓各自的绿条区分开 */
 .cost-block-title.is-total{background:rgba(143,184,240,.13);color:#dbe7ff;margin-top:0}
 /* 现金 / 固定收益：不再「分类名 + 下面再列一行」，整框就是一排带底色的信息 */
-.cost-mini{display:grid;align-items:center;gap:0 8px;font-size:12.5px;
-  grid-template-columns:minmax(110px,1.55fr) minmax(56px,.9fr) minmax(52px,.85fr) minmax(76px,1.05fr) minmax(126px,1.45fr) minmax(48px,.8fr);
+/* 现金 / 固定收益：字号跟框标题（长／短持仓那一条）同号，两块看起来是同一张表 */
+.cost-mini{display:grid;align-items:center;gap:0 var(--cost-gap,8px);font-size:14px;
+  grid-template-columns:var(--cost-mini-cols);
   padding:2px 0 2px 16px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .cost-mini>span{min-width:0}
-.cost-mini .t-name{grid-column:1;text-align:left;color:#bfd5ff;font-weight:600;
+.cost-mini .t-name{grid-column:1;text-align:left;color:var(--head-blue,#bfd5ff);font-weight:600;
   overflow:hidden;text-overflow:ellipsis}
 .cost-mini .t-name .cnt{font-size:11.5px;font-weight:400;color:var(--dim);margin-left:5px}
-.cost-mini .c-cost{grid-column:2;text-align:center;font-size:12px}
-.cost-mini .t-mv{grid-column:4;text-align:center;font-size:12px}
-.cost-mini .t-pnl{grid-column:5;text-align:center;font-size:12px}
-.cost-mini .t-wt{grid-column:6;text-align:center;font-size:12px}
+.cost-mini .c-cost{grid-column:2;text-align:center;font-size:14px}
+.cost-mini .t-mv{grid-column:4;text-align:center;font-size:14px}
+.cost-mini .t-pnl{grid-column:5;text-align:center;font-size:14px}
+.cost-mini .t-wt{grid-column:6;text-align:center;font-size:14px}
 .cost-mini .dim{color:var(--dim)}
-.cost-mini .k{font-size:11px;font-weight:400;color:var(--dim);margin-right:3px}
+/* 「成本／仓位」这类格内前缀标签整站都不再显示：列头已经写明这一列是什么，
+   窄屏空间本来就紧（2026-11-01 把 ≤560 档的隐藏提到全局，桌面也一致） */
+.cost-mini .k{display:none}
 .cost-mini input{width:100%;min-width:0;background:#0d121b;border:1px solid #2a3342;color:var(--text);
   border-radius:6px;padding:2px 5px;font-size:12px;text-align:center;font-variant-numeric:tabular-nums}
-.cost-mini input:focus{outline:none;border-color:#8fb8f0}
+.cost-mini input:focus{outline:none;border-color:var(--head-blue-on,#8fb8f0)}
 /* 双现金仅改变编辑态；空框按0，平时保持一笔现金总额。 */
 .cost-mini.cash-edit{grid-template-columns:minmax(48px,1fr) minmax(0,3fr) 52px;gap:0 10px}
 .cost-mini.cash-edit>.c-cost,.cost-mini.cash-edit>.t-pnl{display:none}
@@ -277,7 +290,9 @@
 
 /* ===== 当日盈亏贡献：只看今天谁在赚、谁在亏（总盈亏券商里能看到，这里不重复） ===== */
 .blk-pnl{border-color:rgba(143,184,240,.24)}
-.cost-subhead{font-size:12.5px;font-weight:600;color:#bfd5ff;margin:5px 0 4px;padding-left:16px;
+/* 当日盈亏贡献的标题条：高度跟框标题共用 --cost-head-h（2026-11-01），两块栏目条对齐 */
+.cost-subhead{font-size:12.5px;font-weight:600;color:var(--head-blue,#bfd5ff);margin:5px 0 4px;padding-left:16px;
+  min-height:var(--cost-head-h);display:flex;align-items:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cost-subhead .cnt{font-size:11.5px;font-weight:400;color:var(--dim);margin-left:5px}
 .cost-subhead .cnt b.up{color:var(--up)} .cost-subhead .cnt b.down{color:var(--down)}
@@ -295,20 +310,22 @@
    用边框画三角而不是文字字符 —— 「▸」在部分安卓字体里是空白，用户根本看不见。 */
 .blk-pnl-fold>summary{position:relative}
 .blk-pnl-fold>summary::before{content:"";position:absolute;left:4px;top:50%;width:0;height:0;
-  border-left:5px solid #8fb8f0;border-top:4px solid transparent;border-bottom:4px solid transparent;
+  border-left:5px solid var(--head-blue-on,#8fb8f0);border-top:4px solid transparent;border-bottom:4px solid transparent;
   transform:translateY(-50%)}
 .blk-pnl-fold[open]>summary::before{transform:translateY(-50%) rotate(90deg)}
 .blk-pnl-fold>summary:hover,.blk-pnl-fold>summary:focus-visible{color:#dbe8ff}
 /* 展开时标题转蓝字（跟其它分组卡「展开提亮」同一口径）：收起是浅蓝 #bfd5ff，
    展开后明确变成蓝 #8fb8f0，一眼能看出这一块是打开的。 */
-.blk-pnl-fold[open]>summary{color:#8fb8f0}
+.blk-pnl-fold[open]>summary{color:var(--head-blue-on,#8fb8f0)}
 .cost-contrib{list-style:none;margin:0;padding:0 0 0 16px}
 /* 列顺序（2026-10-29）：名称 → 盈亏比 → 金额 → 贡献条（图表挪到最右边）。
    名称列原来 1.4fr（宽屏下一路吃到 300 多 px，而最长的一行也就 120 来 px），
    贡献条反倒被挤到只剩一半。现在名称 : 贡献条 = 1.15 : 1，
    名称够放「QQQM 纳指」，剩下的都给贡献条。 */
-.cost-contrib li{display:grid;align-items:center;gap:0 8px;padding:2px 0;font-size:12px;
-  grid-template-columns:minmax(0,1.15fr) 48px 64px minmax(0,1fr);font-variant-numeric:tabular-nums}
+/* 2026-11-01：名称列 1.15fr → .8fr（代码与中文名上下两行，占不了那么宽），gap 8 → 6 ——
+   盈亏比列整体左移，省下的宽度全部给最右边的贡献条。 */
+.cost-contrib li{display:grid;align-items:center;gap:0 6px;padding:2px 0;font-size:12px;
+  grid-template-columns:minmax(0,.8fr) 46px 62px minmax(0,1fr);font-variant-numeric:tabular-nums}
 .cost-contrib .cn-name{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
 /* 代码单独包一层，好只给它加粗（跟主表 .sym、仓位 .sy 同款 600），中文备注名保持正常字重；
    中文名也从 inline style 换成 class，手机档才能单独定字号（2026-10-30）。 */
@@ -346,9 +363,9 @@
    ② 成本浮亏 10%/20% 的已读按钮在持仓个股下方「成本价」那一排的提醒后面 */
 .lvtag.add-ck{display:inline-flex;align-items:center;gap:3px;margin-left:5px;padding:0 5px;
   height:17px;border-radius:4px;border:1px solid #7a5a2a;background:rgba(240,198,116,.12);
-  color:#f0c674;font-size:11px;line-height:17px;white-space:nowrap;cursor:pointer;
+  color:var(--lamp-yellow,#f0c674);font-size:11px;line-height:17px;white-space:nowrap;cursor:pointer;
   vertical-align:1px;-webkit-tap-highlight-color:transparent}
-.lvtag.add-ck:hover{border-color:#f0c674}
+.lvtag.add-ck:hover{border-color:var(--lamp-yellow,#f0c674)}
 .lvtag.add-ck.acked{border-color:#2a3242;background:rgba(143,152,168,.1);color:var(--dim)}
 .lvtag.add-ck.acked .t{text-decoration:line-through;text-decoration-color:#5a6478}
 .lvtag.add-ck .ck{font-style:normal;margin-left:2px;font-size:10px}
@@ -361,12 +378,12 @@
 /* DEMO 顶部试用条：只在预览页存在，正式 monitor.py 不带 */
 .demo-bar{position:relative;z-index:5;margin:0 0 10px;padding:8px 12px;border:1px dashed #46536b;
   border-radius:8px;background:#101725;color:var(--dim);font-size:12.5px;line-height:1.6}
-.demo-bar b{color:#f0c674;font-weight:600;letter-spacing:.5px;margin-right:6px}
+.demo-bar b{color:var(--lamp-yellow,#f0c674);font-weight:600;letter-spacing:.5px;margin-right:6px}
 .demo-bar .sp{color:#3f4a5c;margin:0 5px}
 .demo-bar button{margin:0 4px 0 0;padding:0 8px;height:24px;border:1px solid #3a465c;border-radius:5px;
-  background:#16202f;color:#bfd5ff;font-size:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  background:#16202f;color:var(--head-blue,#bfd5ff);font-size:12px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .demo-bar button:hover{border-color:#6f86ae;color:#dbe8ff}
-.demo-bar button.on{border-color:#7a5a2a;background:rgba(240,198,116,.14);color:#f0c674}
+.demo-bar button.on{border-color:#7a5a2a;background:rgba(240,198,116,.14);color:var(--lamp-yellow,#f0c674)}
 .demo-bar ol{margin:5px 0 0;padding-left:18px}
 .demo-bar li{margin:1px 0}
 .demo-bar .st{display:inline-block;margin-left:6px;padding:0 6px;height:18px;line-height:18px;
@@ -438,8 +455,13 @@
      （390 → 77px、430 → 103px）：代码 + ETF 胶囊仍然一行放得下。
      10-30 三轮：仓位 44 → 48（13px 的「37.8%」墨宽 35px，44px 格内容区只剩 34px 会顶出去），
      成本 / 数量 / 市值各让 2px，合计不变。 */
-  .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 52px 44px 60px 74px 48px;gap:0 3px}
+  /* 2026-11-01：四档窄屏原来各抄一整条 grid-template-columns（改一处漏三处），
+     现在只覆盖 --cost-cols / --cost-gap 两个变量，列头／框标题／列表／现金固定收益四处一起变。
+     名称列按用户要求压缩（代码 + 中文名是上下两行，占不了那么宽），省下的全给数值列；
+     430 视口名称列仍有 77px，「SCHD ETF」这类最长一行整行放得下。 */
+  .cost-manage{--cost-cols:minmax(0,1fr) 52px 44px 60px 92px 50px;--cost-gap:3px;
+    --cost-mini-cols:minmax(0,1fr) 56px 44px 60px 66px 46px;
+    --cost-head-h:24px}
   .cost-name{min-width:0}
   .cost-name .syrow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cost-name .sy{flex:none}
@@ -453,15 +475,16 @@
   /* 「总持仓 N 只 / 长持仓 N 只 / 短持仓 N 只」：文字 11.5 → 13px（2026-10-30 再加大一档），
      行高压到 15.5px 固定值（＝原 11.5×1.35）把加字号多吃掉的高度还回去 ——
      这一栏是两行（比例／金额上下排），两根 15.5px 加起来高度跟改前完全一致。 */
-  .cost-block-title{font-size:13px;padding-left:12px;line-height:15.5px}
+  /* 高度跟「当日盈亏贡献」那条共用 --cost-head-h（24px）：比例与金额在 ≤400 档起横排一行
+     （2026-11-01，名称列压缩后盈亏列有 92px，放得下「+1.7% +$385.3」），不再靠上下两行撑高。 */
+  .cost-block-title{font-size:13px;padding:0 0 0 12px;min-height:var(--cost-head-h);line-height:18px}
   .cost-block-title .cnt{font-size:12.5px}
   /* 窄屏第 1 列只有 50 来 px，名称允许溢出到空着的第 2／3 列，别被截成「长持仓 1…」 */
   .cost-block-title .t-name{overflow:visible}
   .cost-block-title .k{display:none}
-  /* 窄屏：比例和金额上下排，跟列表里的盈亏列一致 */
-  .cost-block-title .pct,.cost-block-title .amt{display:block}
-  /* 五个数值列的数字 10.5 → 11.5px（iOS 上小字发虚），行内比例 / 金额仍上下排 */
-  .cost-cell{font-size:11.5px}
+  /* 五个数值列的数字：11.5 → **13px**（2026-11-01），跟「当日盈亏贡献」列表的数字同号 ——
+     原来这块比那块小 1.5px，同一张表里两种字号。行内比例 / 金额仍上下排。 */
+  .cost-cell{font-size:13px}
   .cost-cell input{font-size:11px;padding:2px 3px}
   .cost-cell .pct,.cost-cell .amt{display:block}
   /* 代码 / 中文备注名：13 + 11.5px（代码 2026-10-30 从 12.5 提到 13，跟统计面板名单
@@ -480,15 +503,13 @@
   .cost-manage .signal-member-block{padding:4px 6px 6px}
   /* 现金／固定收益：数值是四～五位数（23,684 / 16,917），比个股行的金额还长一档，
      所以这两列比主表再宽 2px，仓位列从 32 → 34（36.9% 原来差 1px 就顶到边） */
-  .cost-mini{grid-template-columns:minmax(0,1fr) 52px 44px 58px 64px 42px;gap:0 3px;
-    font-size:11.5px;padding-left:12px}
+  /* 现金／固定收益跟主表共用同一套列宽变量（2026-11-01），不再单独抄一份；
+     字号 11.5 → 13px，与框标题（长／短持仓）和当日盈亏贡献的数字同号 */
+  .cost-mini{font-size:13px;padding-left:12px}
   /* 窄屏第 1 列只有 70 来 px：副标题整个藏起来，名称不再溢出到「成本」那格上 */
   .cost-mini .t-name{overflow:hidden}
   .cost-mini .cnt{display:none}
-  .cost-mini .k{display:none}
-  .cost-mini .c-cost{font-size:11px}
-  .cost-mini .t-pnl .pct,.cost-mini .t-pnl .amt{display:block}
-  .cost-mini .c-cost,.cost-mini .t-mv,.cost-mini .t-pnl,.cost-mini .t-wt{font-size:11.5px}
+  .cost-mini .c-cost,.cost-mini .t-mv,.cost-mini .t-pnl,.cost-mini .t-wt{font-size:13px}
   .cost-legend{font-size:10.5px;gap:3px 10px}
   /* 「当日盈亏贡献」标题：11.5 → 12.5 → **14.5px**；右边的「今日净 ±N ±N%」10.5 → 12 → **13.5px**。
      行高按线上实测值**写死 18px**：标题 14.5px 与「今日净」13.5px 两个字号混排后行盒 = 19px，
@@ -534,8 +555,9 @@
      ETF 胶囊在窄屏收半档（10 → 9.5px、内边距 4 → 3px），省出 4px 给代码。
      10-30 三轮：仓位 38 → 46（13px 的「37.8%」墨宽 35px，38px 格内容区只剩 34px），
      成本 / 市值各让 2px 补回来。 */
-  .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 46px 42px 56px 70px 46px;gap:0 3px}
+  /* 390 这类窄屏：盈亏列给到 92px（标题行「+1.7% +$385.3」13px 横排约 86px），
+     名称列 79 → 55px —— 「SCHD ETF」约 52px 仍整行放得下，中文名两行 clamp 也不被截。 */
+  .cost-manage{--cost-cols:minmax(0,1fr) 46px 42px 58px 92px 46px}
   .cost-name .tag{font-size:9px;padding:0 3px}
 }
 @media (max-width:365px){
@@ -545,8 +567,10 @@
      金额单独降到 12px（墨宽 ≈58px），比例与「N 只」保持 13px 不动、行高 15.5px 不变。
      10-30 三轮：仓位 34 → 45（13px 的「37.8%」墨宽 35px、理论上限「100.0%」41px，
      34px 格内容区只剩 30px），成本 / 数量 / 市值各让 2px，列间距 2 → 1px 再让 4px，合计不变。 */
-  .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 42px 38px 50px 64px 45px;gap:0 1px}
+  /* 360 这类更窄的屏放不下横排的盈亏（86px > 可用），标题行仍比例／金额上下两排 */
+  .cost-manage{--cost-cols:minmax(0,1fr) 42px 38px 50px 74px 45px;--cost-gap:1px;--cost-head-h:32px;
+    --cost-mini-cols:minmax(0,1fr) 48px 40px 54px 64px 42px}
+  .cost-block-title .pct,.cost-block-title .amt{display:block}
   .cost-block-title .amt{font-size:12px;line-height:15.5px}
 }
 /* 320 这类超窄屏：名称列只剩 60 多 px，代码 + ETF 胶囊放不下一行 →
@@ -559,8 +583,13 @@
      「$24,304」墨宽 45px，原内容区只剩 30 / 42px）；数量列 38 → 36 后再与成本列对调
      （两者最长都是 6 字符，列头 10.5px 墨宽同为 33px，各 38px 才都放得下；
      列间距 2 → 1px 让出 4px，名称列少 4px —— 320 下代码 + ETF 胶囊本来就允许折两行）。 */
-  .cost-colhead,.cost-block-title,.cost-manage .signal-member-list li>.cost-grid{
-    grid-template-columns:minmax(0,1fr) 38px 38px 50px 64px 40px;gap:0 1px}
+  .cost-manage{--cost-cols:minmax(0,1fr) 38px 38px 50px 64px 40px;--cost-gap:1px;
+    /* 320：名称列必须留够「固定收益」四个字，否则会被截成「固定收…」。
+       这档总宽只有 284px，六个格子实在塞不下 13px 的数字，现金／固定收益跟列表数字一样
+       降一档到 11.5px（列表 .cost-cell 在这档是 10px），换来名称列与成本列都放得下全名。 */
+    --cost-mini-cols:minmax(0,1fr) 46px 36px 50px 58px 42px}
+  .cost-mini{font-size:11.5px}
+  .cost-mini .c-cost,.cost-mini .t-mv,.cost-mini .t-pnl,.cost-mini .t-wt{font-size:11.5px}
   /* 320 视口总宽只有 284px，五个数值列已经压到极限，这里把数值字号降 0.5px
      换一点余量（「36.7%」这类五字符正好卡在格子边上，再宽一点就顶出去） */
   .cost-cell{font-size:10px}
@@ -574,20 +603,20 @@
 /* 列头「盈亏 / 仓位」可点排序：固定降序，只切换按哪一列排；当前列高亮 */
 .cost-colhead .sortable{cursor:pointer;color:var(--dim);user-select:none;
   border-bottom:1px dashed transparent;padding-bottom:3px}
-.cost-colhead .sortable:hover{color:#bfd5ff}
-.cost-colhead .sortable.on{color:#bfd5ff;border-bottom-color:#8fb8f0}
+.cost-colhead .sortable:hover{color:var(--head-blue,#bfd5ff)}
+.cost-colhead .sortable.on{color:var(--head-blue,#bfd5ff);border-bottom-color:var(--head-blue-on,#8fb8f0)}
 .cost-colhead .sortable .arw{font-size:9px;margin-left:2px;opacity:.9}
 
 /* ===== 4. 「无异动」展开时同样高亮 ===== */
 /* 跟分组标题同一口径：展开不再铺底色、不再画左侧蓝条，只把文字提亮成浅蓝。 */
 .quiet-list[hidden]{display:none}
-.quiet-list[open]>summary{background:none;box-shadow:none;color:#bfd5ff}
+.quiet-list[open]>summary{background:none;box-shadow:none;color:var(--head-blue,#bfd5ff)}
 
 /* ===== 5. 页底「完整报灯规则」（替换掉美联储块） ===== */
 #signalRules.rules-body{padding:2px 0 8px}
-.rules-body h4{margin:10px 0 4px;font-size:12.5px;color:#bfd5ff;font-weight:600}
+.rules-body h4{margin:10px 0 4px;font-size:12.5px;color:var(--head-blue,#bfd5ff);font-weight:600}
 .rules-body h4:first-child{margin-top:4px}
-.rules-body h5{margin:8px 0 3px;font-size:12px;color:#8fb8f0;font-weight:600}
+.rules-body h5{margin:8px 0 3px;font-size:12px;color:var(--head-blue-on,#8fb8f0);font-weight:600}
 /* 与主站一致：名词解释与抓取规则的分区标题居中（只作用在名词解释块，不动报灯规则的 h4）。 */
 #glossaryRulesBody h4{text-align:center}
 .rules-body ul{margin:0 0 2px;padding-left:18px}
@@ -595,15 +624,15 @@
 .rules-body ul ul{margin:1px 0 3px;padding-left:14px}
 .rules-body ul ul li{font-size:11.5px;line-height:1.6}
 .rules-body li b{color:var(--text);font-weight:600}
-.rules-body .lamp-red{color:#ff8580;font-weight:600}
-.rules-body .lamp-yellow{color:#f0c674;font-weight:600}
+.rules-body .lamp-red{color:var(--lamp-red,#ff8580);font-weight:600}
+.rules-body .lamp-yellow{color:var(--lamp-yellow,#f0c674);font-weight:600}
 .rules-body .lamp-purple{color:var(--purple);font-weight:600}
 .rules-body .lamp-green{color:var(--up);font-weight:600}
 .rules-body li.rule-setting{margin-left:6px;border-left:2px solid var(--line);padding-left:8px}
 .rules-body .lamp-magenta{color:#ef8de4;font-weight:600}
 .rules-body .lamp-cyan{color:#4dd0e1;font-weight:600}
 /* 上面是「灯」的颜色；下面是页面上「文字」的颜色，两者同色系但深浅不同，分开写 */
-.rules-body .lamp-sig-red{color:#ff8580;font-weight:600}
-.rules-body .lamp-sig-yellow{color:#f0c674;font-weight:600}
+.rules-body .lamp-sig-red{color:var(--lamp-red,#ff8580);font-weight:600}
+.rules-body .lamp-sig-yellow{color:var(--lamp-yellow,#f0c674);font-weight:600}
 .rules-body .lamp-none{color:var(--dim);font-weight:600}
 </style>

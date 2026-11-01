@@ -520,6 +520,10 @@ PAGE_CSS = """:root{
   --signal-bg:#182131; --collapse-bg:var(--signal-bg);
   /* 统计面板与「展开的分组卡」共用的外框色：两边同色同宽，不再各写一份 */
   --signal-border:#6686c6; --frame-w:1.5px;
+/* 2026-11-01：整页统一色板 —— 以前这五个色值在两百多处写死，改一个要全文 grep。
+   每处都带 fallback，变量没定义时自动回落到原色值，不会出现「没颜色」。 */
+  --head-blue:#bfd5ff; --head-blue-on:#8fb8f0; --lamp-red:#ff8580; --lamp-yellow:#f0c674;
+  --frame-green:#2c8f3e;
   /* 统计名单方向三角尺寸；指标描述使用自身条件文字颜色 */
   --lamp-size:14px;
 }
@@ -540,8 +544,14 @@ h1.brand{color:var(--up)}
    层级改由**外框**表达：绿框 #2c8f3e，与「仓位」外框同色（--cost-accent）。
    折起／展开都是这一圈绿框 —— 原来折起是 --line 灰（在深色卡片上几乎看不见，等于没有框）、
    展开是 --signal-border 蓝，两态色不一致。这里 id 选择器优先级高于 .zone-card[open]，一次写死两态。 */
-#group_positions{background:var(--card);--collapse-bg:rgba(46,160,67,.15)}
-#group_positions_long.zone-card{background:none;border:1px solid #2c8f3e}
+/* 2026-11-01：持仓板块**外框也改绿**，跟长持仓子框、仓位面板（--cost-accent #2c8f3e）同一套绿，
+   不再跟其它分组一样是蓝框（--signal-border）；子框与外框之间留的间距再加大一点（10/12 → 12/14），
+   两圈绿框不贴在一起。 */
+/* 绿靠变量传下去：下面 .group-card[open] 那条外框规则的特指度（带两个 :not(#id)）比单 id 高，
+   改它的 --signal-border 才能让展开态也变绿；同时 id 级 border-color 负责收起态（默认灰框）。 */
+#group_positions{background:var(--card);--collapse-bg:rgba(46,160,67,.15);
+  --signal-border:var(--frame-green,#2c8f3e);border-color:var(--frame-green,#2c8f3e)}
+#group_positions_long.zone-card{background:none;border:1px solid var(--frame-green,#2c8f3e);margin:12px -2px 14px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
@@ -552,7 +562,7 @@ tr:first-child td{border-top:none}
 .note{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
 .tag{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;
   font-size:11px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
-  color:#8fb8f0;background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}
+  color:var(--head-blue-on,#8fb8f0);background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}
 .tag.quote-note{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}
 .lvs{display:block;margin:4px 0 0;line-height:1.5}
 /* 成本价：跟加／减仓价胶囊共用同一排、排在所有胶囊最前面，只出文字、**不做胶囊**
@@ -582,10 +592,10 @@ tr:first-child td{border-top:none}
 .lvtag.tgt.hit{color:#fff;background:#8957e5;border:1px solid #8957e5;text-shadow:none}
 .tnote,.sig .tp{color:var(--purple)}
 .sig{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
-.signal-magenta{color:#ef8de4} .signal-red{color:#ff8580} .signal-yellow{color:#f0c674} .signal-cyan{color:#4dd0e1}
+.signal-magenta{color:#ef8de4} .signal-red{color:var(--lamp-red,#ff8580)} .signal-yellow{color:var(--lamp-yellow,#f0c674)} .signal-cyan{color:#4dd0e1}
 .signal-item{color:var(--dim)}
-.signal-item[data-signal-level="red"]{color:#ff8580}
-.signal-item[data-signal-level="yellow"]{color:#f0c674}
+.signal-item[data-signal-level="red"]{color:var(--lamp-red,#ff8580)}
+.signal-item[data-signal-level="yellow"]{color:var(--lamp-yellow,#f0c674)}
 .signal-item[data-signal-level="gray"]{color:var(--text)}
 .signal-item[data-signal-level="purple"]{color:var(--purple)}
 .signal-separator{color:var(--dim);margin:0 2px}
@@ -595,12 +605,12 @@ tr:first-child td{border-top:none}
   background:var(--collapse-bg);border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
 .collapse-group .collapse-icon{font-size:16px;line-height:1}
 .collapse-group:hover{color:var(--text);background:var(--collapse-bg)}
-.collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
+.collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:2px}
 /* 统计面板：只剩一圈外框，不再铺底色（卡片底、名单展开面板底、紫灯/财报行底全部去掉）。
    外框四边同宽 1.5px，左侧蓝条随之取消（手机上外框左右各留 4px 贴着屏幕边）。 */
 #signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}
 #signalCounts .collapse-group{color:#fff}
-#signalCounts>summary{color:#bfd5ff}
+#signalCounts>summary{color:var(--head-blue,#bfd5ff)}
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 #signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-earn{color:var(--text)}
@@ -613,7 +623,7 @@ tr:first-child td{border-top:none}
    右边 17px 内边距就是给三角预留的位置；white-space:nowrap 保证任何情况下都不折行。 */
 #signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;max-width:100%;
   position:relative;padding:0 17px 0 4px;
-  color:#bfd5ff;font:inherit;font-size:14px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
+  color:var(--head-blue,#bfd5ff);font:inherit;font-size:14px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
   white-space:nowrap;display:inline-flex;align-items:center;justify-content:flex-end;touch-action:manipulation}
 /* 三角字号仍是 16px（不放大也不缩小），只从「跟在数字后面」改成绝对定位贴到胶囊右侧
    （距右边框 2px）：数字回到中线，三角去右边，左右留白都被用上，胶囊仍是 44px。 */
@@ -657,28 +667,28 @@ tr:first-child td{border-top:none}
 /* 名单里的描述性数值跟着「这一条条件」的等级走，和主表描述同一套配色：
    红名单红字 #ff8580、黄名单黄字 #f0c674、白名单（灰灯）仍白字；
    ▲▼ 三角自带涨跌色，不跟着条件等级变，和主表保持一致。 */
-#signalCounts .signal-members-panel.tone-red .signal-member-metric{color:#ff8580}
-#signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:#f0c674}
+#signalCounts .signal-members-panel.tone-red .signal-member-metric{color:var(--lamp-red,#ff8580)}
+#signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:var(--lamp-yellow,#f0c674)}
 #signalCounts .signal-members-panel.tone-gray .signal-member-metric{color:var(--text)}
 /* 分框展示：方向写在框标题上（「▲ 上涨」/「上轨▲ · RSI 3条 ↑超买」），名单里不再逐条画三角 */
 #signalCounts .signal-member-block{margin:0 0 10px}
 #signalCounts .signal-member-block:last-child{margin-bottom:0}
-#signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:#bfd5ff}
+#signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--head-blue,#bfd5ff)}
 #signalCounts .signal-member-block h5:first-letter{letter-spacing:0}
 #signalCounts .signal-member-block ul{padding-left:2px}
 #signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:var(--lamp-size);font-weight:700;line-height:1;vertical-align:baseline}
-#signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:#f0c674} #signalCounts .tone-red{color:#ff8580}
+#signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:var(--lamp-yellow,#f0c674)} #signalCounts .tone-red{color:var(--lamp-red,#ff8580)}
 #signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:var(--purple)}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
 /* 点开的是哪个数字胶囊，就亮哪个胶囊本身（不整行高亮） */
-#signalCounts .signal-count-toggle[aria-expanded="true"]{background:#2f4f86;border-color:#8fb8f0;color:#fff}
+#signalCounts .signal-count-toggle[aria-expanded="true"]{background:#2f4f86;border-color:var(--head-blue-on,#8fb8f0);color:#fff}
 #signalCounts .signal-count-toggle[data-target$="-red"]{border-color:rgba(255,133,128,.45)}
 #signalCounts .signal-count-toggle[data-target$="-yellow"]{border-color:rgba(240,198,116,.45)}
 #signalCounts .signal-count-toggle[data-target$="-red"][aria-expanded="true"]{background:rgba(255,133,128,.16)}
 #signalCounts .signal-count-toggle[data-target$="-yellow"][aria-expanded="true"]{background:rgba(240,198,116,.16)}
 #signalCounts .signal-count-toggle[data-target^="signal-members-gray-"][aria-expanded="true"]{background:rgba(201,209,217,.14);border-color:rgba(201,209,217,.45)}
 #signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted #465e87}
-#signalCounts .signal-member-jump:hover,.signal-member-jump:focus-visible{color:#bfd5ff;border-bottom-color:#bfd5ff}
+#signalCounts .signal-member-jump:hover,.signal-member-jump:focus-visible{color:var(--head-blue,#bfd5ff);border-bottom-color:var(--head-blue,#bfd5ff)}
 #signalCounts .text-only{margin:8px 0 0;border:1px solid #2b3546;border-radius:8px;background:#12161f;text-align:left}
 #signalCounts .text-only>summary{cursor:pointer;padding:8px 12px;color:var(--text);font-size:13px}
 #signalCounts .text-only[open]>summary{border-bottom:1px solid #2b3546}
@@ -730,7 +740,7 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 /* 折叠态绝对不占高度：个别移动内核在父面板隐藏期间改 open 后不重排，这里用 CSS 兜底 */
 #signalCounts .earnings-week:not([open])>*:not(summary){display:none}
 #signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:13.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
-#signalCounts .earnings-week summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
+#signalCounts .earnings-week summary:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:2px}
 #signalCounts .earnings-week ul{list-style:none;margin:0;padding:0 0 8.1px 2px}
 #signalCounts .earnings-week li{font-size:13px;padding:3.6px 0;overflow-wrap:anywhere}
 #signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
@@ -738,8 +748,8 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 #signalCounts .earnings-week .lamp-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
   overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 #signalCounts .earnings-week-meta{color:var(--dim);font-size:12px}
-#signalCounts .earnings-week-meta.is-red{color:#ff8580;font-weight:400}
-#signalCounts .earnings-week-meta.is-yellow{color:#f0c674;font-weight:400}
+#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red,#ff8580);font-weight:400}
+#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow,#f0c674);font-weight:400}
 #signalCounts .earnings-week .note{display:inline;margin-left:6px}
 #signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;line-height:1;color:var(--text);
   display:inline-flex;align-items:center;justify-content:center;white-space:normal;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:center;line-height:1.15;touch-action:manipulation}
@@ -747,10 +757,10 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
    文字／内容居中；紫灯、财报两行的胶囊是另一套定位（--chip-w），不受这条影响。 */
 #signalCounts td .signal-filter-toggle{width:74px;padding:0 4px}
 #signalCounts .signal-filter-toggle[aria-pressed="true"]{background:#2f6bd8;border-color:#2f6bd8;color:#fff}
-#signalCounts .signal-filter-toggle:focus-visible,#signalCounts .signal-filter-clear:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
+#signalCounts .signal-filter-toggle:focus-visible,#signalCounts .signal-filter-clear:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:2px}
 #signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;font-size:13px}
 #signalCounts .signal-filter[hidden]{display:none}
-#signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:#bfd5ff;font-weight:600}
+#signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:var(--head-blue,#bfd5ff);font-weight:600}
 #signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:38px;padding:0 10px;font:inherit;font-weight:400;color:var(--text);
   background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer}
 #signalCounts .signal-filter p{margin:6px 0 0;color:var(--dim)}
@@ -760,19 +770,19 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 #signalCounts .signal-filter .note{margin-left:5px}
 /* 仅多选组合描述按每条条件着色；不借用名称灯色，不影响单选名单。 */
 #signalCounts .signal-filter-detail{display:block;margin-top:2px;color:var(--text)}
-#signalCounts .signal-filter-condition[data-signal-level="red"]{color:#ff8580}
-#signalCounts .signal-filter-condition[data-signal-level="yellow"]{color:#f0c674}
+#signalCounts .signal-filter-condition[data-signal-level="red"]{color:var(--lamp-red,#ff8580)}
+#signalCounts .signal-filter-condition[data-signal-level="yellow"]{color:var(--lamp-yellow,#f0c674)}
 #signalCounts .signal-filter-condition[data-signal-level="gray"]{color:var(--text)}
 #signalCounts .signal-filter-condition[data-signal-level="purple"]{color:var(--purple)}
 #signalCounts .signal-filter-condition[data-signal-level="green"]{color:var(--green)}
 /* 财报不是交易灯：字色跟统计「未来15天财报」名单一致，红＝近3日、黄＝7日内、灰＝其余。 */
-#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="red"]{color:#ff8580}
-#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="yellow"]{color:#f0c674}
+#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="red"]{color:var(--lamp-red,#ff8580)}
+#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="yellow"]{color:var(--lamp-yellow,#f0c674)}
 #signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="gray"]{color:var(--dim)}
-.earn{display:block;margin:0;color:#8fb8f0;font-size:12.5px;font-weight:400;line-height:1.5}
+.earn{display:block;margin:0;color:var(--head-blue-on,#8fb8f0);font-size:12.5px;font-weight:400;line-height:1.5}
 .earn .unit{display:block;color:var(--dim);font-size:12px}
-.earn.soon{color:#f0c674;font-weight:400}
-.earn.urgent{color:#ff8580;font-weight:400}
+.earn.soon{color:var(--lamp-yellow,#f0c674);font-weight:400}
+.earn.urgent{color:var(--lamp-red,#ff8580);font-weight:400}
 table.stk{table-layout:fixed}
 .stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}  /* 股票行下边距让给位置条，条靠近本股、远离下一只 */
 /* 位置条下方只留 4px 就把位置条交给下一行（成本/市值行或下一只股票）；
@@ -803,15 +813,15 @@ table.stk tr>td{border-top-color:#39424f}
   border-left:3.2px solid transparent;border-right:3.2px solid transparent;border-top:7px solid #713caf}
 /* 成本价：黄色竖线，横跨灰轨（2026-10-19 改；原来是条下方的白三角）。
    高度 10.5px 上下各露约 4px；z-index 高于现价标记，成本≈现价时黄压紫，成本价优先可见 */
-.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;background:#f0c674;transform:translate(-50%,-50%);z-index:2}
+.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;background:var(--lamp-yellow,#f0c674);transform:translate(-50%,-50%);z-index:2}
 /* 成本价落在 52 周区间之外（比低点还低 / 比高点还高）：竖线贴到对应端点并稍淡，
    端点外侧补一个朝外的小箭头，避免被当成「成本刚好等于最高价／最低价」 */
 .range52-cost.out-lo{left:0;opacity:.85}
 .range52-cost.out-hi{left:100%;opacity:.85}
 .range52-cost.out-lo::after,.range52-cost.out-hi::after{content:"";position:absolute;top:50%;
   transform:translateY(-50%);border-top:3.2px solid transparent;border-bottom:3.2px solid transparent}
-.range52-cost.out-lo::after{right:calc(100% + 1px);border-right:4px solid #f0c674}
-.range52-cost.out-hi::after{left:calc(100% + 1px);border-left:4px solid #f0c674}
+.range52-cost.out-lo::after{right:calc(100% + 1px);border-right:4px solid var(--lamp-yellow,#f0c674)}
+.range52-cost.out-hi::after{left:calc(100% + 1px);border-left:4px solid var(--lamp-yellow,#f0c674)}
 .range52-missing{display:block;color:var(--dim);font-size:11px;line-height:15px}
 .c-sym{width:18%} .c-earn{width:22%} .c-px{width:13%} .c-sig{width:47%}
 .earn-cell{vertical-align:middle;overflow-wrap:anywhere}
@@ -895,15 +905,15 @@ tr.gray td{color:var(--dim)}
 #macroCard td .unit{line-height:1.15}
 @media(max-width:600px){#macroCard td,#macroCard tr.mh td{padding:2px 6px}}
 .macro-help{margin:8px 12px;color:var(--dim);font-size:13px;line-height:1.7}
-.macro-help>summary{cursor:pointer;color:#8fb8f0;padding:8px 0;touch-action:manipulation}
+.macro-help>summary{cursor:pointer;color:var(--head-blue-on,#8fb8f0);padding:8px 0;touch-action:manipulation}
 .macro-help p{margin:6px 0}
 .macro-help>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
 .page-notes{margin-top:18px}
 .page-notes .macro-help{overflow-wrap:anywhere}
 /* 页底综合细则标头与预警规则同高同色，正文及其他宏观折叠保持原样。 */
 #pageNotes>#marketRiskRules{margin-top:0;margin-bottom:0}
-#pageNotes>#marketRiskRules>summary{padding:9px 0;line-height:1.5;color:#bfd5ff;font-size:13px;font-weight:600}
-.page-notes a{color:#8fb8f0}
+#pageNotes>#marketRiskRules>summary{padding:9px 0;line-height:1.5;color:var(--head-blue,#bfd5ff);font-size:13px;font-weight:600}
+.page-notes a{color:var(--head-blue-on,#8fb8f0)}
 .page-notes .macro-help+ .macro-help{border-top:1px solid var(--line);padding-top:4px}
 .unit{display:block;font-size:11px;color:var(--dim);font-weight:400}
 .foot{color:var(--dim);font-size:12.5px;text-align:center;margin-top:22px;line-height:1.7}
@@ -979,9 +989,9 @@ tr.gray td{color:var(--dim)}
 .group-card>summary:focus:not(:focus-visible),.macro-card>summary:focus:not(:focus-visible),
 .zone-card>summary:focus:not(:focus-visible){outline:none}
 .group-card[open]:not(#signalCounts)>summary .grp-name,.macro-card[open]>summary .grp-name,
-.zone-card[open]>summary .zone-name{color:#bfd5ff}
+.zone-card[open]>summary .zone-name{color:var(--head-blue,#bfd5ff)}
 .group-card[open]:not(#signalCounts)>summary::before,.macro-card[open]>summary::before,
-.zone-card[open]>summary::before{color:#8fb8f0}
+.zone-card[open]>summary::before{color:var(--head-blue-on,#8fb8f0)}
 /* 子区自己的收起条和外层「持仓」卡底部收起条之间拉开距离，两条 ▲ 挨太近会误点 */
 .zone-card + .group-bottom,.zone-card + .quiet + .group-bottom{margin-top:22px}
 /* ===== 电脑端（>600px）：折叠起来的板块框压矮约 20%（62 → 50），字号／行高／编辑按钮一像素不动 =====
@@ -1175,19 +1185,19 @@ tr.gray td{color:var(--dim)}
 """
 
 # 主页面将此块放在现有 rules/cost CSS 之后，避免旧规则样式覆盖紧凑版。
-RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:#bfd5ff;font-size:13px;font-weight:600;touch-action:manipulation}
+RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:var(--head-blue,#bfd5ff);font-size:13px;font-weight:600;touch-action:manipulation}
 #fedRules[open]>summary,#fedGlossary[open]>summary,details.card[open]:has(>.rules-body)>summary{border-bottom:1px solid var(--line)}
-#fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid #8fb8f0;outline-offset:-2px}
+#fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:-2px}
 .card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:12px;line-height:1.65;overflow-wrap:anywhere}
 .card .rules-body section+section{margin-top:16px;padding-top:4px;border-top:1px solid var(--line)}
-.card .rules-body h4{margin:6px 0 8px;color:#bfd5ff;font-size:12.5px;font-weight:600}
+.card .rules-body h4{margin:6px 0 8px;color:var(--head-blue,#bfd5ff);font-size:12.5px;font-weight:600}
 .card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}
 .card .rules-body p{margin:4px 0;color:var(--dim);font-size:12px;line-height:1.65}
-.card .rules-body .rule-group{color:#8fb8f0}
-.card .rules-body a{color:#8fb8f0;text-underline-offset:3px}
-.card .rules-body a:focus-visible{outline:2px solid #8fb8f0;outline-offset:2px}
-.card .rules-body .lamp-red{color:#ff8580;font-weight:600}
-.card .rules-body .lamp-yellow{color:#f0c674;font-weight:600}
+.card .rules-body .rule-group{color:var(--head-blue-on,#8fb8f0)}
+.card .rules-body a{color:var(--head-blue-on,#8fb8f0);text-underline-offset:3px}
+.card .rules-body a:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:2px}
+.card .rules-body .lamp-red{color:var(--lamp-red,#ff8580);font-weight:600}
+.card .rules-body .lamp-yellow{color:var(--lamp-yellow,#f0c674);font-weight:600}
 .card .rules-body .lamp-purple{color:var(--purple);font-weight:600}
 .card .rules-body .tone-target-high{color:var(--target-high);font-weight:600}
 .card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid #6b7689;font-size:12px;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
@@ -1250,14 +1260,14 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 /* 名词解释／抓取规则：两个分区标题页面居中；指标名（h5）统一用站内强调蓝，
    与页底链接、分组词同色，覆盖上面 .card .rules-body h5 的白字（只在这两块生效）。 */
 #glossaryRulesBody h4{text-align:center}
-#glossaryRulesBody h5{color:#8fb8f0}
+#glossaryRulesBody h5{color:var(--head-blue-on,#8fb8f0)}
 #glossaryRulesBody p{margin:2px 0;line-height:1.5;color:#dce1e9}
 #glossaryRulesBody .rule-table{margin:6px 0 8px}
 #glossaryRulesBody .rule-table th,#glossaryRulesBody .rule-table td{line-height:1.5}
-#glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:#f0c674}
-#glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:#ff8580}
-#glossary-vol-table thead th:nth-child(2){color:#ff8580}
-#glossary-vol-table thead th:nth-child(3){color:#f0c674}
+#glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:var(--lamp-yellow,#f0c674)}
+#glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:var(--lamp-red,#ff8580)}
+#glossary-vol-table thead th:nth-child(2){color:var(--lamp-red,#ff8580)}
+#glossary-vol-table thead th:nth-child(3){color:var(--lamp-yellow,#f0c674)}
 #glossary-chg-table td,#glossary-amp-table td,#glossary-vol-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
 """
 PAGE_CSS = PAGE_CSS.replace('__TARGET_DASH_BORDER__', TARGET_DASH_BORDER)

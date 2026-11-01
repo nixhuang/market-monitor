@@ -112,7 +112,7 @@ with _patch.object(monitor, "_bj_today", return_value="2026-10-07"):   # 财报�
 check('<span class="earn soon"' in _html_e and _html_e.count('<span class="earn soon"') == 1
       and '<span class="earn">' in _html_e, "D 距北京今天 2 天的财报标黄（earn soon），更远的保持蓝色")
 check(' title="' not in _html_e and " title='" not in _html_e, "首页不含任何 title 悬停提示（手机/iPad 无法悬停）")
-check(".earn.soon{color:#f0c674" in _html_e, "财报标黄样式存在")
+check(".earn.soon{color:var(--lamp-yellow,#f0c674)" in _html_e, "财报标黄样式存在")
 # 整页验证冬夏令时北京午夜：同一 D 的时段文字仍不同，但红黄窗口必须完全一致。
 from datetime import date as _date, datetime as _datetime, timedelta as _timedelta
 for _d in ('2026-01-15', '2026-07-15', '2026-10-11', '2027-01-01'):
@@ -947,7 +947,7 @@ check('signal-dot' not in monitor.PAGE_CSS and 'signal-dot' not in monitor.PAGE_
       and '--lamp-size:14px' in monitor.PAGE_CSS
       and 'display:inline list-item' not in monitor.PAGE_CSS,
       '多选删除全部圆点CSS与创建节点逻辑，其他灯共用字号和Safari兼容性不变')
-_filter_palette = {'red': '#ff8580', 'yellow': '#f0c674', 'gray': 'var(--text)',
+_filter_palette = {'red': 'var(--lamp-red,#ff8580)', 'yellow': 'var(--lamp-yellow,#f0c674)', 'gray': 'var(--text)',
                    'purple': 'var(--purple)', 'green': 'var(--green)'}
 for _level, _color in _filter_palette.items():
     _selector = f'#signalCounts .signal-filter-condition[data-signal-level="{_level}"]'
@@ -1442,7 +1442,7 @@ for _direction in ('up', 'down'):
                         if '.arrow-' in selectors and f'color:var(--{_direction})' in body]
     check(_direction_rules == [(_expected_selectors, f'color:var(--{_direction})')],
           _direction + '四类箭头涨跌色仅限主表描述与统计卡，未添加全局颜色覆盖')
-for _level, _body_color in (('red', '#ff8580'), ('yellow', '#f0c674'), ('gray', 'var(--text)')):
+for _level, _body_color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
     check(f'.signal-item[data-signal-level="{_level}"]{{color:{_body_color}}}' in _arrow_css,
           _level + '主表条件正文继续使用原色，与箭头涨跌色独立')
 check('.signal-item{color:var(--dim)}' in _arrow_css

@@ -669,8 +669,8 @@ class RulesTemplateTests(unittest.TestCase):
                     self.assertIn(prefix + str(values[key]), volume)
                 self.assertNotRegex(volume, r'≥[\d.]+σ|σ 或|两条σ阈值')
                 self.assertEqual((settings, constants), before)
-        self.assertIn('#glossary-vol-table thead th:nth-child(2){color:#ff8580}', assets.RULES_CSS)
-        self.assertIn('#glossary-vol-table thead th:nth-child(3){color:#f0c674}', assets.RULES_CSS)
+        self.assertIn('#glossary-vol-table thead th:nth-child(2){color:var(--lamp-red,#ff8580)}', assets.RULES_CSS)
+        self.assertIn('#glossary-vol-table thead th:nth-child(3){color:var(--lamp-yellow,#f0c674)}', assets.RULES_CSS)
 
     def test_disabled_and_equal_moving_averages_and_adaptive_settings_keep_rules(self):
         for short, long in ((0, 0), (0, 250), (50, 50), (25, 180)):

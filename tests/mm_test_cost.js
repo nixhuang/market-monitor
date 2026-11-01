@@ -754,7 +754,7 @@ test('仓位绿色外框与顶部编辑操作区契约',async()=>{
   assert.equal(panel.querySelector('#costExport'),null);assert.equal(panel.querySelector('#costImport'),null);
   assert.equal(acts.hidden,true);
   assert.doesNotMatch(panel.textContent,/成本价与数量可填到小数点后四位|现金两框相加，空框按0算/);
-  assert.match(CSS,/\.cost-manage\{--cost-accent-bg:rgba\(126,231,135,\.17\);--cost-accent:#2c8f3e/);
+  assert.match(CSS,/\.cost-manage\{--cost-accent-bg:rgba\(126,231,135,\.17\);--cost-accent:var\(--frame-green,#2c8f3e\)/);
   // 整卡只留一圈 1.5px 绿色外框：左侧绿条取消，标头不再铺底色
   assert.match(CSS,/#costManage\.cost-manage\{--collapse-bg:var\(--cost-accent-bg\);border:1\.5px solid var\(--cost-accent\);\s*box-shadow:none\}/);
   assert.doesNotMatch(CSS,/box-shadow:inset 3px 0 0 var\(--cost-accent-bg\)/);
@@ -1188,7 +1188,13 @@ test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
   assert.match(CSS,/\.cost-name\{[^}]*text-align:left/);assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
   // 2026-10-30 三轮：桌面档五个数值列各加 min 下限（56/52/76/126/48），
   // 601～768 这类窄桌面下纯 fr 会把盈亏格压到 101px，14px 的「+4.4% +$1,021.8」墨宽 109px 顶出去。
-  assert.match(CSS,/grid-template-columns:minmax\(110px,1\.55fr\) minmax\(56px,\.9fr\) minmax\(52px,\.85fr\) minmax\(76px,1\.05fr\) minmax\(126px,1\.45fr\) minmax\(48px,\.8fr\)/);
+  // 2026-11-01：列宽提为 --cost-cols 变量（列头／框标题／列表行／现金固收四处共用一份，
+  // 窄屏只改变量值）。桌面档六列仍各自带 min 下限，601～768 这类窄桌面不会把盈亏格压爆；
+  // 名称列 1.55fr → 1.05fr（代码与中文名上下两行，用不着那么宽），省下的全给数值列。
+  assert.match(CSS,/--cost-cols:minmax\(96px,1\.05fr\) minmax\(60px,1fr\) minmax\(56px,\.95fr\) minmax\(84px,1\.2fr\) minmax\(132px,1\.7fr\) minmax\(54px,\.9fr\)/);
+  assert.match(CSS,/grid-template-columns:var\(--cost-cols\)/);
+  assert.match(CSS,/grid-template-columns:var\(--cost-mini-cols\)/);
+  assert.match(CSS,/gap:0 var\(--cost-gap,8px\)/);
   assert.match(CSS,/\.cost-cell\.up\{color:var\(--up\)\}/);
   // 行首灯条（2026-10-28）：和统计面板个股前同款的 3×12px 竖条，不再是圆点 marker
   assert.match(CSS,/#costMembers li::before\{content:"";position:absolute;left:-9px;top:6px;\s*width:3px;height:12px;border-radius:1px;background:var\(--name-lamp,var\(--dim\)\)\}/);
@@ -1207,7 +1213,8 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(SOURCE,/lv:r\.lv\|\|'green'/);
   assert.match(SOURCE,/class="lv-'\+esc\(x\.lv\|\|'green'\)/);
   // 列宽：名称列不再独占剩余空间，数值列按多位数留足；顺序 名称 → 盈亏比 → 金额 → 图表
-  assert.match(CSS,/grid-template-columns:minmax\(0,1\.15fr\) 48px 64px minmax\(0,1fr\)/);
+  // 2026-11-01：名称列 1.15fr → .8fr、gap 8 → 6，盈亏比列整体左移，省下的全给右侧贡献条
+  assert.match(CSS,/grid-template-columns:minmax\(0,\.8fr\) 46px 62px minmax\(0,1fr\)/);
   // 手机档（2026-10-29）：名单文字 10.5 → 11.5px，右侧比例图相应缩短
   // （名称 : 图 = 1.15:1 → 1.3:0.85），数值列各让出 2px
   assert.match(CSS,/grid-template-columns:minmax\(0,1\.3fr\) 46px 66px minmax\(0,0\.66fr\);gap:0 6px;\s*font-size:13px;line-height:15\.75px\}/);
@@ -1229,14 +1236,18 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   // 2026-10-30 二轮：标题行盈亏「+$1,021.8」13px 墨宽 63px 顶到格子边，盈亏列四档各再 +6px
   // 2026-10-30 三轮：仓位列再放宽（13px 的「37.8%」墨宽 35px，44/38/34px 格的内容区只剩
   // 34/34/30px 会顶出去），成本 / 数量 / 市值三列各让 2～4px 补回来，合计基本不变。
-  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 52px 44px 60px 74px 48px/);
-  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 46px 42px 56px 70px 46px/);
-  // ≤365 / ≤340 两档：盈亏列必须留得下最长的金额（13px 标题行「+$1,021.8」墨宽 63px）
-  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 42px 38px 50px 64px 45px/);
-  assert.match(CSS,/grid-template-columns:minmax\(0,1fr\) 38px 38px 50px 64px 40px/);
+  // 2026-11-01：四档窄屏改为只覆盖 --cost-cols（不再各抄一条 grid-template-columns），
+  // 名称列让位、盈亏列给到 92／74px —— ≤400 档起标题行的比例与金额能横排一行，
+  // 栏目条高度因此与「当日盈亏贡献」那条统一（24px）。
+  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 52px 44px 60px 92px 50px/);
+  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 46px 42px 58px 92px 46px/);
+  // ≤365 / ≤340 两档放不下横排，盈亏列仍按上下两排给（74 / 64px）
+  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 42px 38px 50px 74px 45px/);
+  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 38px 38px 50px 64px 40px/);
   // 标题行极端兜底：金额长到顶按钮时截省略号，而不是压到「编辑」上
   assert.match(CSS,/\.cost-manage>summary \.cost-sum\{min-width:0;overflow:hidden;text-overflow:ellipsis\}/);
-  assert.match(CSS,/\.cost-cell\{font-size:11\.5px\}/);
+  // 五个数值列的数字：11.5 → 13px（2026-11-01），跟「当日盈亏贡献」列表的数字同号
+  assert.match(CSS,/\.cost-cell\{font-size:13px\}/);
   // 备注名：ETF 已有胶囊标签就不再重复写 ETF；含中文的只保留中文部分
   const read=f=>JSON.parse(fs.readFileSync(path.join(__dirname,'..',f),'utf8'));
   const names=read('symbol-names.json'), holdings=read('holdings.json');

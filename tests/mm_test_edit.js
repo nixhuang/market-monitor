@@ -159,7 +159,7 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
   // 「综合判断与宏观细则」：注入时拆掉模板自带的 section 卡壳 + 补 fold 卡类，三块说明卡完全同款
   check(/var sec=frag\.querySelector\('section\.card\.page-notes'\);/.test(src)
     && /mr\.className='card fold';/.test(src)
-    && /#marketRiskRules>summary\{color:#bfd5ff\}/.test(src),
+    && /#marketRiskRules>summary\{color:var\(--head-blue,#bfd5ff\)\}/.test(src),
     '「综合判断与宏观细则」拆壳补 fold 类与「预警规则」同款（46px/15px/#bfd5ff/600）');
 }
 store.mm_gh_token_v1='github_pat_test_dispatch';
