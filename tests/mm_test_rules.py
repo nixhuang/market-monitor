@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import monitor
 import page_assets
+from monitor_render import strip_css_comments
 import rules_config
 
 
@@ -1029,10 +1030,12 @@ assert.equal(scrolledBy,-400);     // 锚点被上拽 400，反向补回原位
         self.assertNotIn("PAGE_CSS", assigned)
         self.assertNotIn("PAGE_INTERACTION_JS", assigned)
         page = self.render()
-        self.assertIn(page_assets.PAGE_CSS.removesuffix(page_assets.RULES_CSS), page)
-        self.assertEqual(page.count(page_assets.RULES_CSS), 1)
+        # 产物里的 CSS 已剥掉注释（构建期压缩），对照时两边用同一口径
+        self.assertIn(strip_css_comments(page_assets.PAGE_CSS.removesuffix(page_assets.RULES_CSS)), page)
+        self.assertEqual(page.count(strip_css_comments(page_assets.RULES_CSS)), 1)
         cost_css, _ = monitor._cost_panel_assets()
-        self.assertLess(page.index(cost_css), page.index(page_assets.RULES_CSS))
+        self.assertLess(page.index(strip_css_comments(cost_css)),
+                        page.index(strip_css_comments(page_assets.RULES_CSS)))
         self.assertIn(page_assets.PAGE_INTERACTION_JS, page)
 
     def test_css_cleanup_keeps_active_features_and_drops_retired_selectors(self):

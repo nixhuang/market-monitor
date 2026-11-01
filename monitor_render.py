@@ -21,6 +21,26 @@ HARD_REFRESH_JS = (
 )
 
 
+# 产物构建期剥离 CSS 注释（2026-11-01）：源码（page_assets.py 的 PAGE_CSS、cost_panel.css）
+# 里保留了大量中文说明注释，这些注释在 gzip 之后仍占整页约 23KB —— 线上 index.html 压缩后
+# 140KB，注释就占 16%（实测剥离后 140,183 → 117,451 字节）。产物是生成物、线上不需要人读，
+# 源码照旧保留注释。已校验 CSS 里没有 content:"/*" 这类字面量、url() 只有 1 处且不含注释符，
+# 剥离对渲染零影响。
+_STYLE_BLOCK = re.compile(r"(<style[^>]*>)(.*?)(</style>)", re.S)
+_CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)
+
+
+def strip_css_comments(css):
+    """剥掉一段 CSS 里的注释（源码对照、产物构建都用它，保证两边口径一致）。"""
+    return _CSS_COMMENT.sub("", css)
+
+
+def _strip_css_comments(page):
+    def _one(m):
+        return m.group(1) + strip_css_comments(m.group(2)) + m.group(3)
+    return _STYLE_BLOCK.sub(_one, page)
+
+
 # 个股/ETF 表统一用固定列宽，三张表（警示 / ETF / 折叠的无异动）栏位才能上下对齐
 STK_COLS = ('<colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>')
 
@@ -1636,9 +1656,12 @@ class PageRenderer:
         notes_tpl = '<template id="notesTpl">' + self._context._page_notes(snapshot) + '</template>'
         # 离线/回放可把 BASE 指向仅含配置的数据目录；静态脚本仍来自实际源码目录。
         asset_base = self._context.BASE if os.path.isfile(os.path.join(self._context.BASE, "run-status.js")) else os.path.dirname(__file__)
-        run_js = self._context.script_asset(asset_base, "run-status.js")
+        # async：不阻塞 HTML 解析，也不推迟 DOMContentLoaded —— 仓位栏目由后面内联的
+        # cost_panel.js 在 DOMContentLoaded 插入，若这个外链同步加载，弱网下要等它下载完
+        # （实测 2.7s）才轮到内联脚本，栏目就会晚好几秒才出现。
+        run_js = self._context.script_asset(asset_base, "run-status.js", "async")
 
-        return f"""<!DOCTYPE html>
+        return _strip_css_comments(f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -1701,4 +1724,4 @@ class PageRenderer:
 <script>window.MM_SETTINGS={{"signal_single_open":{int(self._context.S.get("signal_single_open", 1))}}};</script>
 <script>{self._context.PAGE_INTERACTION_JS}</script>
 {cost_js}
-</div></body></html>"""
+</div></body></html>""")

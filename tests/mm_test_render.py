@@ -7,6 +7,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 sys.path.insert(0, ROOT)
 import monitor  # noqa: E402
+from monitor_render import strip_css_comments  # noqa: E402
 from unittest.mock import patch as _patch, mock_open as _mock_open
 
 # 整页与可选隔离浏览器只接收合成种子，不把本机真实仓位带进测试页面。
@@ -84,9 +85,10 @@ check('--collapse-bg:rgba(102,134,198,.6)' in re.search(r'#signalCounts\{([^}]+)
       '统计收起背景40%透明，白箭头不使用整体opacity淡化')
 
 # 规则样式只输出一次，且仍在仓位CSS后保持最终覆盖优先级。
-check(html.count(monitor.RULES_CSS) == 1, "规则CSS整块只输出一份")
+check(html.count(strip_css_comments(monitor.RULES_CSS)) == 1, "规则CSS整块只输出一份")
 _cost_css, _cost_js = monitor._cost_panel_assets(items)
-check(html.index(_cost_css) < html.index(monitor.RULES_CSS), "规则CSS仍在仓位CSS之后覆盖")
+check(html.index(strip_css_comments(_cost_css)) < html.index(strip_css_comments(monitor.RULES_CSS)),
+      "规则CSS仍在仓位CSS之后覆盖")
 
 # 标题与排
 check("<title>NIX-Matrix</title>" in html and '<h1 class="brand">NIX-Matrix</h1>' in html

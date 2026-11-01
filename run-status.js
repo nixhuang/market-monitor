@@ -104,7 +104,10 @@
     return {kind: 'http', text: 'HTTP ' + status};
   }
   // 令牌只发送给 GitHub API；超时覆盖请求和响应体读取。
-  async function request(url, {method = 'GET', body, github = false, signal, text = false} = {}) {
+  // revalidate：静态文件（看板 index.html、raw 配置原文）用「必须向服务器校验但允许 304」，
+  // 而不是 no-store 的每次全量重传。语义不变——拿到的仍是线上当前内容，只是未变更时不传 body。
+  async function request(url, opts = {}) {
+    const {method = 'GET', body, github = false, signal, text = false, revalidate = false} = opts;
     if (github && Date.now() < apiBlockedUntil) {
       const error = new Error(authMessage(429, '', '0', '', apiBlockedUntil, !!getToken()).text);
       error.status = 429; error.kind = 'rate_limit'; error.retryAt = apiBlockedUntil;
@@ -133,9 +136,14 @@
     try {
       return await Promise.race([expired, (async () => {
         const response = await window.fetch(url, {
-          method, headers, cache: 'no-store', signal: local.signal,
+          method, headers, cache: revalidate ? 'no-cache' : 'no-store', signal: local.signal,
           ...(body !== undefined ? {body: JSON.stringify(body)} : {})
         });
+        // 304 只在浏览器缓存里已有该 URL 副本时才会被 fetch 折成可用响应；冷缓存（例如首次进入
+        // 且页面未入缓存）会原样抛回 304，这时退回一次全量读取，保证拿到的仍是线上真实内容。
+        if (revalidate && response.status === 304) {
+          return await request(url, {...opts, revalidate: false});
+        }
         if (!response.ok) {
           let diagnostic = {kind: 'http', text: response.status === 404
             ? 'status.json 尚未发布或页面不存在（404）' : '公开页面 HTTP ' + response.status};
@@ -638,7 +646,9 @@
       try {
         status = await request(bust('./status.json'), {signal});
         if (!schema(status)) throw new Error('status.json 缺少有效 run_id/配置 blob SHA，无法验证生效');
-        const html = await request(bust('./index.html'), {signal, text: true});
+        // index.html 走条件校验（revalidate）：Pages 带 ETag，本页没变时返回 304、零 body，
+        // 弱网下从「重传 140KB」降为一次小往返；内容真变了仍会拿到完整新页面，语义不变。
+        const html = await request('./index.html', {signal, text: true, revalidate: true});
         const parsed = new window.DOMParser().parseFromString(html, 'text/html');
         const node = parsed.querySelector('script#snapshotData');
         if (!node) throw new Error('看板缺少 snapshotData；生成成功不等于已发布');

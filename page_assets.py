@@ -437,8 +437,13 @@ def asset_url(base, filename):
     return f"./{filename}?v={digest}"
 
 
-def script_asset(base, filename):
-    return '<script src="' + html.escape(asset_url(base, filename), quote=True) + '"></script>'
+def script_asset(base, filename, attrs=""):
+    # attrs 可传 "async" 等：2026-10-31 起首页 run-status.js 用 async —— 它是外链脚本，
+    # 同步加载会挡住后面内联的 cost_panel.js（仓位栏目是 JS 插入的），弱网下要等 1~3 秒才出现。
+    # 它内部自己处理 DOMContentLoaded，且首页内联脚本不引用 window.MMRunStatus，延后执行安全。
+    # 用 async 而不是 defer：defer 会把 DOMContentLoaded 一起推迟，栏目该晚还是晚。
+    return ('<script src="' + html.escape(asset_url(base, filename), quote=True) + '"'
+            + (" " + attrs if attrs else "") + '></script>')
 
 
 def editor_generated(constants):
