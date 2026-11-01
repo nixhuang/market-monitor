@@ -50,9 +50,9 @@
    手机档只改变量值（原来要在 @media 里整条重抄一遍 grid-template-columns，改一处漏三处）。
    名称列按用户要求压缩（代码与中文名是上下两行，不需要那么宽），省下的全给数值列。 */
 .cost-manage{--cost-accent-bg:rgba(126,231,135,.17);--cost-accent:var(--frame-green,#2c8f3e);margin:8px 0 10px;
-  --cost-cols:minmax(96px,1.05fr) minmax(60px,1fr) minmax(56px,.95fr) minmax(84px,1.2fr) minmax(132px,1.7fr) minmax(54px,.9fr);
+  --cost-cols:minmax(96px,1.05fr) minmax(60px,1fr) minmax(56px,.85fr) minmax(84px,1.3fr) minmax(132px,1.7fr) minmax(54px,.9fr);
   /* 现金 / 固定收益只有一行，名称列要放得下「现金 含货币市场ETF」，比个股行再宽一档 */
-  --cost-mini-cols:minmax(130px,1.5fr) minmax(60px,.95fr) minmax(52px,.85fr) minmax(84px,1.15fr) minmax(126px,1.5fr) minmax(56px,.9fr);
+  --cost-mini-cols:minmax(130px,1.5fr) minmax(60px,.95fr) minmax(52px,.75fr) minmax(84px,1.25fr) minmax(126px,1.5fr) minmax(56px,.9fr);
   --cost-head-h:26px}
 /* 整卡只留一圈绿色外框（与统计面板同宽 1.5px）：左侧绿条取消、卡底不变，
    收起横条仍沿用原来的浅绿底色。 */
@@ -335,9 +335,12 @@
    盈亏比列整体左移，省下的宽度全部给最右边的贡献条。
    同日二轮：盈亏比再左移约 10px（用户要求「和盈亏金额拉开一点距离」）——
    列宽 46 → 56px 腾出内边距的余量，名称列 .8fr → .77fr 收窄 10px 把整列往左带，
-   金额列左缘仍是 692px（1440 视口实测）**一像素不动**，两列墨迹间距 26 → 35.5px。 */
+   金额列左缘仍是 692px（1440 视口实测）**一像素不动**，两列墨迹间距 26 → 35.5px。
+   同日三轮（用户要求「继续左移」）：盈亏比列 56 → 66px、名称列 .77fr → .74fr 再收窄 10px，
+   内边距 12 → 24px 把文字再推左 6px —— 累计左移约 21px，金额列左缘仍是 692.8px，
+   两列墨迹间距 26 → 46.5px。内容盒 66-24 = 42px，最长一格「+0.8%」33px 墨宽还有 9px 余量。 */
 .cost-contrib li{display:grid;align-items:center;gap:0 6px;padding:2px 0;font-size:12px;
-  grid-template-columns:minmax(0,.77fr) 56px 62px minmax(0,1fr);font-variant-numeric:tabular-nums}
+  grid-template-columns:minmax(0,.74fr) 66px 62px minmax(0,1fr);font-variant-numeric:tabular-nums}
 .cost-contrib .cn-name{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
 /* 代码单独包一层，好只给它加粗（跟主表 .sym、仓位 .sy 同款 600），中文备注名保持正常字重；
    中文名也从 inline style 换成 class，手机档才能单独定字号（2026-10-30）。 */
@@ -369,7 +372,7 @@
    给 .cv 加 padding-right:12px，居中文字的内容盒右缩 12 → 中心左移 6px。
    不用 text-align:left ——「面板里所有数值一律居中」是既有口径（2026-10-29 定），不开这个口子。
    内容盒剩 56-12 = 44px，放得下最长的一格「+0.8%」（手机 37 / 桌面 33px 墨宽），还有 7px 余量。 */
-.cost-contrib li>.cv{padding-right:12px}
+.cost-contrib li>.cv{padding-right:24px}
 .cost-contrib .cv.up,.cost-contrib .ca.up{color:var(--up)}
 .cost-contrib .cv.down,.cost-contrib .ca.down{color:var(--down)}
 .cost-contrib li.is-bond .cn-name{color:var(--dim)}
@@ -478,8 +481,11 @@
      现在只覆盖 --cost-cols / --cost-gap 两个变量，列头／框标题／列表／现金固定收益四处一起变。
      名称列按用户要求压缩（代码 + 中文名是上下两行，占不了那么宽），省下的全给数值列；
      430 视口名称列仍有 77px，「SCHD ETF」这类最长一行整行放得下。 */
-  .cost-manage{--cost-cols:minmax(0,1fr) 52px 44px 60px 92px 50px;--cost-gap:3px;
-    --cost-mini-cols:minmax(0,1fr) 56px 44px 60px 66px 46px;
+  /* 2026-11-01 晚：市值列 60 → 68px（用户要求给持仓市值多点宽度）；这 8px 全从**名称列**（1fr）里出
+     —— 不能从数量列扣：44px 是按「12,345」这种五位数的墨宽定的，扣到 36px 会顶出去。
+     名称列 440 视口 91 → 83px，仍比「SCHD ETF 胶囊」这类最长一行的 77px 宽，不出省略号。 */
+  .cost-manage{--cost-cols:minmax(0,1fr) 52px 44px 68px 92px 50px;--cost-gap:3px;
+    --cost-mini-cols:minmax(0,1fr) 56px 44px 68px 66px 46px;
     --cost-head-h:28px}
   .cost-name{min-width:0}
   .cost-name .syrow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -549,9 +555,10 @@
      名称 : 图 = 1.15:1 → 1.3:0.85（390 视口：名称 132 → 146px 够放下加大的字，图 114 → 96px），
      两列数值各让出 2px。**行高写死成线上实测的 15.75px**
      每排的分隔线上下高度、整块高度一像素都不变（2026-10-29）。 */
-  /* 同上（2026-11-01 二轮）：盈亏比列 46 → 56px、名称列 1.3fr → 1.23fr（收窄 10px 把整列左带），
-     金额列左缘仍是 263.7px（440 视口实测）不动，两列墨迹间距 23.5 → 33px。 */
-  .cost-contrib li{grid-template-columns:minmax(0,1.23fr) 56px 66px minmax(0,0.66fr);gap:0 6px;
+  /* 同上（2026-11-01 二轮 / 三轮）：盈亏比列 46 → 56 → **66px**、
+     名称列 1.3fr → 1.23fr → **1.16fr**（每轮收窄 10px 把整列左带），
+     金额列左缘仍是 263.7px（440 视口实测）不动，两列墨迹间距 23.5 → 34.5 → **44px**。 */
+  .cost-contrib li{grid-template-columns:minmax(0,1.16fr) 66px 66px minmax(0,0.66fr);gap:0 6px;
     font-size:13px;line-height:15.75px}
   /* 中文备注名跟**仓位面板持仓名称**同一档：那里是 .cost-name .cn = 11.5px（代码 .sy 12.5px），
      这里也定 11.5px，「代码 13px ＞ 中文 11.5px」的层级与那边完全一致（2026-10-30）。

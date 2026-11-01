@@ -287,7 +287,8 @@ class RulesRegression(unittest.TestCase):
         # 手机：整页左右只留 4px，外框贴住屏幕边；上下沿用 body 原值
         media = re.search(r'@media \(max-width:600px\)\{(.*?)\n\}', css, re.S)
         self.assertIsNotNone(media)
-        self.assertIn('body{padding-left:4px;padding-right:4px}', media[1])
+        # 2026-11-01：右侧页面距比左侧多 2px（4 → 6），左侧仍是 4
+        self.assertIn('body{padding-left:4px;padding-right:6px}', media[1])
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.20)', css)
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
         # 「信号」列所有胶囊同宽且文字居中

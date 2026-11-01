@@ -530,7 +530,11 @@ PAGE_CSS = """:root{
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--text);
   font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
-  padding:env(safe-area-inset-top) 14px 40px}
+  /* 右侧页面距比左侧多 2px（2026-11-01 用户要求）：上 安全区 / 右 16 / 下 40 / 左 14。
+     注意 .wrap 是 max-width:720px + margin:0 auto 居中的，所以视口宽于 748px 时
+     这 2px 表现为「整块内容比正中位置左移 1px」，不是肉眼可见的右边距；
+     视口在 601～748px 之间（wrap 还没到 720 上限）才真的是右边多 2px。 */
+  padding:env(safe-area-inset-top) 16px 40px 14px}
 .wrap{max-width:720px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 /* 站名：用「上涨绿」--up，与涨跌箭头同色系；只这一处，其它标题颜色不动 */
@@ -841,9 +845,10 @@ td.px{text-align:center}
 .px-price,.px-chg{display:block}
 .px-chg{font-size:13.5px}
 @media (max-width:600px){
-  /* 手机：整页左右只留 4px（原来 14px），外框基本贴住屏幕边，卡片里的内容可用宽度最大。
+  /* 手机：整页左 4px / 右 6px（右侧比左侧多 2px，2026-11-01 用户要求）——
+     原来左右都是 4px，外框基本贴住屏幕边、卡片里的内容可用宽度最大。
      只覆盖左右，上（安全区）下（40px）沿用 body 原值。 */
-  body{padding-left:4px;padding-right:4px}
+  body{padding-left:4px;padding-right:6px}
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
   .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
   .stk td{padding:8px 5px}
