@@ -7,7 +7,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 sys.path.insert(0, ROOT)
 import monitor  # noqa: E402
-from monitor_render import strip_css_comments, slim_snapshot, strip_js_comments  # noqa: E402
+from monitor_render import strip_css_comments, slim_snapshot  # noqa: E402
 from unittest.mock import patch as _patch, mock_open as _mock_open
 
 # 整页与可选隔离浏览器只接收合成种子，不把本机真实仓位带进测试页面。
@@ -1552,6 +1552,26 @@ class _OutputProbe(_HTMLParser):
     def handle_data(self, text):
         self.text.append(text)
 
+# data-symbol 保存规范化代码，不能从已丢失标点/大小写的锚点反推代码。
+for _raw_symbol, _normalized_symbol, _anchor in (
+        (' aapl-us ', 'AAPL', 's-aapl'),
+        ('31#00700-HK', '0700.HK', 's-0700-hk'),
+        ('.ndx', '.NDX', 's-ndx'),
+        ('a&b"\'<x>', 'A&B"\'<X>', 's-a-b-x')):
+    _symbol_html = monitor._stock_row(item(_raw_symbol, 'position', 'green'), snapshot)
+    _symbol_probe = _OutputProbe(_symbol_html)
+    _tag, _attrs = _symbol_probe.tags[0]
+    check(_tag == 'tr' and _attrs.get('data-symbol') == _normalized_symbol
+          and _attrs.get('id') == _anchor == monitor._stock_anchor_id(_raw_symbol)
+          and _attrs['data-symbol'] != _attrs['id']
+          and _symbol_html.split('>', 1)[0].count('data-symbol=') == 1,
+          repr(_raw_symbol) + '主行情行保留规范化代码，锚点不变且与代码分离')
+    if _raw_symbol.startswith('a&b'):
+        check('data-symbol="A&amp;B&quot;&#x27;&lt;X&gt;"' in _symbol_html
+              and not any(tag == 'x' or any(key.startswith('on') for key in attrs)
+                          for tag, attrs in _symbol_probe.tags),
+              'data-symbol 的单双引号、&及尖括号按属性上下文单次转义且可无损解析')
+
 _inject = '</script><script>globalThis.__mmInjected=1</script><img src=x onerror="bad()">'
 _symbol = '<img src=x onerror="bad()">'
 _escaped_row = item(_symbol, 'position', 'green', note='中文 & "引号" <b>备注</b>')
@@ -1650,7 +1670,14 @@ if '--chrome' in sys.argv:
 const fs = require('node:fs');
 const {spawn} = require('node:child_process');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
-const assertions = [];
+// 四组浏览器回归共享手机/平板横竖屏及桌面视口，禁止各自维护宽度。
+const VIEWPORTS = Object.freeze([
+  [440, 956], [956, 440], [744, 1133], [1133, 744], [1440, 1000], [1920, 1080]
+].map(pair => Object.freeze(pair)));
+const assertions = [{
+  ok: VIEWPORTS.map(([width]) => width).join(',') === '440,956,744,1133,1440,1920',
+  name: '共享浏览器目标宽度列表及顺序固定为六档，防止覆盖范围漂移', actual: VIEWPORTS
+}];
 const failedRequests = [];
 const requestUrls = new Set();
 const chrome = spawn(input.chrome, [
@@ -1753,7 +1780,7 @@ const deadline = setTimeout(() => {
       await cdp('Input.dispatchMouseEvent', {type:'mouseReleased', ...point, button:'left', clickCount:1});
       return evaluate(`new Promise(resolve => requestAnimationFrame(() => resolve(document.getElementById('signalCounts').open)))`);
     };
-    for (const [width, height] of [[1440, 1000], [820, 1180], [390, 844]]) {
+    for (const [width, height] of VIEWPORTS) {
       await cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
       const openedBefore = await evaluate(`document.getElementById('signalCounts').open`);
       const openedAfterClick = await clickSummary();
@@ -1890,7 +1917,7 @@ const deadline = setTimeout(() => {
       };
       ws.addEventListener('message',onLoad);
     });
-    for (const [width,height] of [[1440,1000],[820,1180],[390,844]]) {
+    for (const [width, height] of VIEWPORTS) {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
       let loaded=waitLoad();
       await cdp('Page.navigate',{url:refreshBase+'?keep=1&token=synthetic'}); await loaded;
@@ -1934,7 +1961,7 @@ const deadline = setTimeout(() => {
     }).replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
       .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
     await cdp('Page.setDocumentContent', {frameId: colorTree.frameTree.frame.id, html: colorHTML});
-    for (const [width,height] of [[1440,1000],[820,1180],[390,844]]) {
+    for (const [width, height] of VIEWPORTS) {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
       const colors=await evaluate(`(() => {
         const rows=[...document.querySelectorAll('tr[id^="s-color"],#s-orderescape')];
@@ -1980,7 +2007,7 @@ const deadline = setTimeout(() => {
     }).replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
       .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
     await cdp('Page.setDocumentContent', {frameId: rangeTree.frameTree.frame.id, html: rangeHTML});
-    for (const [width,height] of [[1440,1000],[820,1180],[390,844]]) {
+    for (const [width, height] of VIEWPORTS) {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
       const bars=await evaluate(`(() => {
         const rows=[...document.querySelectorAll('tr[id^="s-range"]')];
@@ -2081,7 +2108,7 @@ const deadline = setTimeout(() => {
             check(_assertion['ok'], _assertion['name'] + '：'
                   + _json.dumps(_assertion['actual'], ensure_ascii=False, separators=(',', ':')))
 
-# 2026-11-01 产物瘦身：内联快照只留前端会读的字段；JS 注释在构建期剥离（源码注释不动）
+# 产物瘦身保留快照黑名单与 CSS 注释剥离；JS 原文内联，不做词法改写。
 _slim = slim_snapshot({'run_id': '1', 'request_id': 'r', 'config_files': {'a': 'x'}, 'source_sha': 's',
                        'consensus': {'AAPL': 1}, 'earnings': [1, 2], 'signal_members': {'red': []},
                        'target_overlays': [], 'earnings_week': {}, 'reference_alerts': []})
@@ -2092,12 +2119,40 @@ check(not any(k in _slim for k in ('consensus', 'earnings', 'signal_members', 't
       '瘦身剔除前端从不读取的服务端渲染输入（黑名单）')
 check(slim_snapshot({'groups': [1], 'new_field': 2}) == {'groups': [1], 'new_field': 2},
       '瘦身用黑名单：新字段自动带进内联快照，不会被静默丢掉')
-# 字符串里的 // 与 <\/script> 不能被当成注释删掉；整行 // 注释要删干净
-_js = "var u='https://api.github.com/x';\n// 整行注释\nvar re=/\\/\\*a\\//g;\n/* 块注释 */var b=1;\n"
-_js2 = strip_js_comments(_js)
-check('https://api.github.com/x' in _js2 and '/\\/\\*a\\//g' in _js2 and 'var b=1' in _js2,
-      '剥 JS 注释不动字符串里的 URL 与正则字面量')
-check('整行注释' not in _js2 and '块注释' not in _js2, '剥 JS 注释删掉整行 // 与 /* */ 块')
+_css_asset = '<style>/* 合成 CSS 注释 */.asset-probe{color:red}</style>'
+_js_asset = r'''<script>
+var REAL=__MM_REAL__;
+// 整行注释也必须保留
+function separated(x) { return/* 保留词法边界 */x; }
+function asi(x) { return/*
+保留自动分号换行
+*/x; }
+var url='https://example.test/a//b';
+var regex=/\/\*a\//g;
+var template=`模板 /* 文本 */ ${'// 字符串'}`;
+</script>'''
+_asset_seed = monitor.json_script({'items': {}, 'probe': '</script>'})
+_asset_files = {'cost_panel.css': _css_asset, 'cost_panel.js': _js_asset}
+_original_asset_open = __import__('io').open
+
+
+def _open_asset_probe(file, *args, **kwargs):
+    asset = _asset_files.get(os.path.basename(str(file)))
+    return (_mock_open(read_data=asset)() if asset is not None
+            else _original_asset_open(file, *args, **kwargs))
+
+
+with _patch('io.open', side_effect=_open_asset_probe), \
+        _patch.object(monitor, '_cost_seed_json', return_value=_asset_seed):
+    _, _asset_js = monitor._cost_panel_assets([])
+    _asset_page = monitor.render({}, [], 0, snapshot={})
+_expected_asset_js = ('<script>window.__MM_RULES__='
+                      + monitor.json_script({**monitor.DEFAULT_SETTINGS, **monitor.S})
+                      + ';</script>\n' + _js_asset.replace('__MM_REAL__', _asset_seed))
+check(_asset_js == _expected_asset_js and _asset_page.count(_expected_asset_js) == 1,
+      'JS 仅替换成本种子并前置规则，return 块注释边界、换行、URL、正则和模板原文完整内联')
+check('合成 CSS 注释' not in _asset_page and '.asset-probe{color:red}' in _asset_page,
+      'JS 保留注释不影响原有 CSS 注释剥离')
 
 _seed_patch.stop()
 print()

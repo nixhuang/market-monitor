@@ -57,74 +57,6 @@ def slim_snapshot(snapshot):
     return {k: v for k, v in snapshot.items() if k not in _SNAPSHOT_DROP_KEYS}
 
 
-def strip_js_comments(js):
-    """剥掉一段 JS 里的注释（只在构建产物上用，源码保留注释）。
-
-    保守实现：逐字符跟踪单引号 / 双引号 / 模板串 / 转义 / 正则字面量，只删真正的注释，
-    字符串里的 'http://…'、正则里的 '/\\/\\*' 都不会被当成注释。
-    只删两类：① 整行注释（该行有效内容以 // 起头）—— 行尾的 // 说明一律保留，
-    免得误伤 URL 或除法；② /* */ 块注释。删完仍保留换行，行号基本对得上。"""
-    out = []
-    i, n = 0, len(js)
-    # 上一个"有意义的字符"，用来判断 / 是除号还是正则起头
-    def prev_token(idx):
-        j = idx - 1
-        while j >= 0 and js[j] in " \t\r\n":
-            j -= 1
-        return js[j] if j >= 0 else ""
-    while i < n:
-        ch = js[i]
-        if ch == "/" and i + 1 < n and js[i + 1] == "/":
-            # 只有「本行到这里全是空白」才当成整行注释
-            k = i
-            while k >= 0 and js[k] not in "\n":
-                k -= 1
-            if js[k + 1:i].strip() == "":
-                end = js.find("\n", i)
-                end = n if end < 0 else end
-                out.append("\n")
-                i = end
-                continue
-            out.append(ch); i += 1; continue
-        if ch == "/" and i + 1 < n and js[i + 1] == "*":
-            end = js.find("*/", i + 2)
-            end = n if end < 0 else end + 2
-            out.append("\n" if "\n" in js[i:end] else "")
-            i = end
-            continue
-        if ch in "'\"`":
-            quote = ch
-            out.append(ch); i += 1
-            while i < n:
-                c = js[i]
-                if c == "\\":
-                    out.append(js[i:i + 2]); i += 2; continue
-                out.append(c); i += 1
-                if c == quote:
-                    break
-            continue
-        if ch == "/" and prev_token(i) in "=(,:[!&|?{};+*%~^<>":
-            # 正则字面量：原样搬过去，直到配对的 /（跳过字符类 []）
-            out.append(ch); i += 1
-            in_class = False
-            while i < n:
-                c = js[i]
-                if c == "\\":
-                    out.append(js[i:i + 2]); i += 2; continue
-                if in_class:
-                    if c == "]":
-                        in_class = False
-                elif c == "[":
-                    in_class = True
-                elif c == "/":
-                    out.append(c); i += 1
-                    break
-                out.append(c); i += 1
-            continue
-        out.append(ch); i += 1
-    return "".join(out)
-
-
 # 个股/ETF 表统一用固定列宽，三张表（警示 / ETF / 折叠的无异动）栏位才能上下对齐
 STK_COLS = ('<colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>')
 
@@ -862,6 +794,7 @@ class PageRenderer:
                      if d.get("group") == "position" and str(d.get("hold") or "") == "long" else "")
         return (
             f'<tr class="{html_lib.escape(cls, quote=True)}" id="{self._context._stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
+            f'data-symbol="{html_lib.escape(self._context.normalize_symbol(d["symbol"]), quote=True)}" '
             f'data-base-level="{html_lib.escape(base_level, quote=True)}" '
             f'data-price="{html_lib.escape(str(d.get("price") or ""), quote=True)}" '
             f'data-prev-close="{html_lib.escape(str(d.get("prev_close") or ""), quote=True)}"><td class="sym">'
@@ -1671,8 +1604,7 @@ class PageRenderer:
             # 否则 HTML 里出现嵌套 <style>，浏览器会把后面的 </style> 当正文渲染出来
             css = _re.sub(r"</?style[^>]*>", "", css)
             with _io.open(os.path.join(self._context.BASE, "cost_panel.js"), encoding="utf-8") as stream:
-                # 产物构建期剥 JS 注释（2026-11-01）：跟 CSS 同一套口径，源码注释照旧保留。
-                js = strip_js_comments(stream.read())
+                js = stream.read()
         except Exception as e:
             self._context.log(f"  ! 仓位面板资源缺失，跳过：{e}")
             return "", ""

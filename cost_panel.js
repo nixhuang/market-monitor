@@ -161,7 +161,15 @@
   var GAP_REDUCE=own(RULES,'reduce_gap_pct')?RULES.reduce_gap_pct:3;
   // 清仓通过移组完成，不能按代码硬删除行；移回 positions 时沿用保留的成本/数量供用户复核。
   Array.prototype.forEach.call(document.querySelectorAll('tr[id^="s-"]'), function(tr){
-    var sym=tr.id.slice(2).toUpperCase();
+    // 数据键与导航锚点分离；旧页面从代码单元格的直接文本恢复，不反推有损 id。
+    var sym=tr.getAttribute('data-symbol');
+    if(!sym){
+      var symbolCell=tr.querySelector('td.sym');
+      sym=symbolCell?Array.prototype.map.call(symbolCell.childNodes,function(n){
+        return n.nodeType===3?n.textContent:'';
+      }).join('').trim():'';
+    }
+    sym=String(sym||tr.id.slice(2)).trim().toUpperCase();
     var pxEl=tr.querySelector('.px-price'); if(!pxEl) return;
     // 原值优先；显示价格与百分比均已舍入，不能作为新页面的边界或昨收依据。
     var rawPrice=Number(tr.getAttribute('data-price'));
@@ -507,6 +515,9 @@
     for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
     return new TextDecoder().decode(bytes);
   }
+  function cloudReadError(message,retryable,kind){
+    var error=new Error(message); error.retryable=retryable; error.kind=kind; return error;
+  }
   var REQUEST_DEADLINE=60000, activeRequests=[];
   function requestJson(url,options){
     return new Promise(function(resolve,reject){
@@ -530,6 +541,11 @@
         if(finished || !response) return;
         return response.json().then(function(data){
           finish(null,{status:response.status,ok:response.ok,data:data});
+        },function(error){
+          // HTTP 错误页可能是 HTML；保留状态码，不误报成持仓文件损坏。
+          if(!response.ok) finish(null,{status:response.status,ok:false,data:null});
+          else if(error && error.name==='SyntaxError') finish(cloudReadError('响应内容不是合法 JSON',false,'data'));
+          else finish(cloudReadError('响应体读取失败：'+(error&&error.message||'网络中断'),true,'network'));
         });
       }).catch(function(error){ finish(error); });
     });
@@ -539,59 +555,82 @@
         （raw 地址有约 5 分钟 CDN 缓存；本机「干净」时云端会全量覆盖本机，读到旧缓存就会把刚传的数字冲回去）；
      ② 没 token（只读设备）：raw.githubusercontent.com 的 data 分支，带时间戳。
      站点同目录那份已不再更新（main 里的副本已删除），不再读取。 */
-  /* 远端内容是 base64 包着的 JSON。原来裸调 unb64 + JSON.parse，遇到「合法 base64 但不是 JSON」
-     只抛一个没有上下文的错误，被链尾 catch 吞成「云端未取到」，用户分不清是网络问题还是数据损坏。
-     两个来源的解码统一收口，带上来源名抛可读错误，让已有的 NOTICE 能显示真因。 */
+  /* API 内容需解码；格式错误不可重试，网络/限流/服务端错误才退避。
+     两个只读来源仍允许依次兜底，全部失败时将具体原因传到提示条。 */
   function parseCloud(content,from){
     var raw;
     try{ raw=unb64(content); }
-    catch(e){ throw new Error(from+'返回的内容不是合法 base64：'+(e&&e.message||e)); }
+    catch(e){ throw cloudReadError(from+'返回的内容不是合法 base64',false,'data'); }
     try{ return JSON.parse(raw); }
-    catch(e){ throw new Error(from+'内容解析失败，不是合法 JSON：'+(e&&e.message||e)); }
+    catch(e){ throw cloudReadError(from+'内容解析失败，不是合法 JSON',false,'data'); }
+  }
+  function readCloudSource(url,options,from,encoded){
+    return requestJson(url,options).then(function(r){
+      if(!r.ok) throw cloudReadError('HTTP '+r.status,
+        r.status===408 || r.status===429 || r.status>=500
+          || r.status===403 && /rate limit|secondary rate|abuse detection/i.test(r.data&&r.data.message||''),'http');
+      var j=encoded?(r.data&&r.data.content?parseCloud(r.data.content,from):null):r.data;
+      if(!j || !object(j.items)) throw cloudReadError('持仓内容缺少有效 items 对象',false,'data');
+      return j;
+    }).catch(function(error){
+      var message=error&&error.message||'网络请求失败';
+      throw cloudReadError(message.indexOf(from)===0?message:from+'：'+message,
+        !error || error.retryable!==false,error&&error.kind||'network');
+    });
   }
   function cloudSources(){
     var list=[], h=ghHead();
     if(h) list.push(function(){
-      return requestJson(GH_API+'?ref='+GH.branch+'&t='+Date.now(),{headers:h,cache:'no-store'})
-        .then(function(r){ var m=r.ok?r.data:null; return m&&m.content?parseCloud(m.content,'GitHub API'):null; });
+      return readCloudSource(GH_API+'?ref='+GH.branch+'&t='+Date.now(),
+        {headers:h,cache:'no-store'},'GitHub API',true);
     });
     list.push(function(){
-      return requestJson('https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/'+GH.branch+'/'+GH.path+'?t='+Date.now(),
-                   {cache:'no-store'}).then(function(r){ return r.ok?r.data:null; });
+      return readCloudSource('https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/'+GH.branch+'/'+GH.path+'?t='+Date.now(),
+        {cache:'no-store'},'GitHub raw',false);
     });
     return list;
   }
   function pullCloud(cb){
-    var us=cloudSources(), i=0;
+    var us=cloudSources(), i=0, failures=[];
     (function next(){
       if(disposed || !writer) return;
-      if(i>=us.length){ cb(null); return; }
-      us[i++]().then(function(j){ if(j&&j.items) cb(j); else next(); })
-        .catch(function(){ next(); });
+      if(i>=us.length){
+        // 格式错误不空转；某来源短暂失败时，另一来源的 404 不应阻止它恢复。
+        var retryable=!failures.some(function(e){ return e.kind==='data'; })
+          && failures.some(function(e){ return e.retryable!==false; });
+        cb(null,cloudReadError(failures.map(function(e){ return e.message; }).join('；'),retryable));
+        return;
+      }
+      us[i++]().then(function(j){ cb(j,null); },function(error){
+        failures.push(error); next();
+      });
     })();
   }
   /* data 分支读取遇到弱网时最多尝试三轮；提示条的“重试”可重开一轮，不补传种子。 */
   var _pullTry=0, _pullTimer=null;
   function startPull(){
     if(isolated || !writer || disposed) return;
+    if(_pullTimer){ clearTimeout(_pullTimer); _pullTimer=null; }
     /* 2026-11-01：离线时 fetch 会立刻 reject，原来仍要走完三轮退避（5s + 20s）才显示
        「云端未取到」，用户干等约 25 秒。先问一次 navigator.onLine，离线就直接落 nocloud，
        恢复联网由下面的 online 事件重新拉一轮。 */
     if(typeof navigator!=='undefined' && navigator.onLine===false){
-      if(_pullTimer){ clearTimeout(_pullTimer); _pullTimer=null; }
       SYNC=inFlight?'loading':'nocloud'; NOTICE=inFlight?'':'设备离线，暂不读取云端';
       paint(); return;
     }
     var generation=++pullGeneration;
     SYNC='pulling';
-    pullCloud(function(j){
+    pullCloud(function(j,error){
       if(disposed || !writer || generation!==pullGeneration) return;
       if(j){
-        try{ mergeCloud(j,cloudFirstPending); _pullTry=0; SYNC=inFlight?'loading':(!dirty && sameAsCloud()?'synced':'local'); }
+        try{ mergeCloud(j,cloudFirstPending); _pullTry=0; NOTICE=''; SYNC=inFlight?'loading':(!dirty && sameAsCloud()?'synced':'local'); }
         catch(e){ SYNC='nocloud'; NOTICE='云端数据校验失败：'+e.message; }
       }else{
         SYNC=inFlight?'loading':'nocloud';
-        if(_pullTry<2){ _pullTry++; _pullTimer=setTimeout(startPull,_pullTry===1?5000:20000); }
+        NOTICE='云端读取失败：'+(error&&error.message||'未取得有效持仓数据');
+        if((!error || error.retryable!==false) && _pullTry<2){
+          _pullTry++; _pullTimer=setTimeout(startPull,_pullTry===1?5000:20000);
+        }
       }
       // 拉取失败不上传内置快照；打开页面不是一次用户保存操作。
       paint();
@@ -1036,7 +1075,10 @@
     table.appendChild(tr); table.appendChild(members);
     return tr;
   }
-  function rowAnchor(sym){ return 's-'+String(sym||'').toLowerCase().replace(/[^a-z0-9]/g,'-'); }
+  function rowAnchor(sym){
+    var row=rowBySym(sym);
+    return row&&row.tr?row.tr.id:signalRowAnchor(sym);
+  }
   function ackStatEntries(kind){
     var cfg=ACK_KINDS[kind], out=[], seen={};
     if(!cfg) return out;
@@ -1180,7 +1222,7 @@
     var out=[], seen={};
     ROWS.forEach(function(r){
       if(!isPosition(r) || !r.has || !r.lossLv || !(r.price>0) || !isFinite(r.pnlPct)) return;
-      var id=r.sym.toUpperCase().replace(/\//g,'-');
+      var id=signalIdentity(r.sym);
       if(seen[id]) return;
       seen[id]=true;
       out.push({id:id,sym:r.sym,note:r.note||'',group:r.isLong?'长持仓':'短持仓',
@@ -1280,7 +1322,7 @@
     var totals={red:0,yellow:0}, seen={}, finalLevels={};
     ROWS.forEach(function(r){
       if(!live(r)) return;
-      var id=r.sym.toUpperCase().replace(/\//g,'-'); if(seen[id]) return; seen[id]=true;
+      var id=signalIdentity(r.sym); if(seen[id]) return; seen[id]=true;
       var lv=(r.tr.className||'').split(/\s+/);
       finalLevels[id]=lv.indexOf('red')>=0?'red':lv.indexOf('yellow')>=0?'yellow':lv.indexOf('green')>=0?'green':'gray';
       if(finalLevels[id]==='red') totals.red++; else if(finalLevels[id]==='yellow') totals.yellow++;
@@ -1415,7 +1457,7 @@
     if(first) first.parentNode.insertBefore(sc,first); else document.body.appendChild(sc);
   }
   if(!sc) return;
-  var PID='costMembers';
+  var PID='costMembers', membersNode=null, membersHtml=null;
   var panel=document.createElement('details');
   // 跟统计 / 持仓 / 市场风险完全同级：card + group-card，底部一条整宽收起条
   panel.className='card group-card cost-manage';
@@ -1731,7 +1773,7 @@
       +'</span>';
     // 编辑态下名称不再做成跳转链接，免得点一下就跳走、改的东西还没保存
     var nameCell=editing?name
-      :'<a class="signal-member-jump" href="#s-'+it.sym.toLowerCase()+'" style="min-width:0">'+name+'</a>';
+      :'<a class="signal-member-jump" href="#'+esc(rowAnchor(it.sym))+'" style="min-width:0">'+name+'</a>';
     return '<li class="lv-'+(it.lv||'green')+'" data-sym="'+esc(it.sym)+'"><span class="cost-grid">'
       +nameCell
       +'<span class="cost-cell">'+(editing?inp(it.sym,'cost',vt(it.cost),'成本价'):trim(it.cost))+'</span>'
@@ -2057,7 +2099,7 @@
       var dCls=dayNet>=0?'up':'down';
       var prevPnl=pidNode&&pidNode.querySelector('.blk-pnl-fold');
       var pnlOpen=!!(prevPnl&&prevPnl.hasAttribute('open'));
-      html+='<details class="signal-member-block blk-pnl blk-pnl-fold"'+(pnlOpen?' open':'')+'>'
+      html+='<details class="signal-member-block blk-pnl blk-pnl-fold">'
         +'<summary class="cost-subhead" aria-label="当日盈亏＝(现价−昨收)×数量；占比按全部持仓当日盈亏绝对值之和（正负共用分母）">'
         +'当日盈亏贡献'
         +'<span class="cnt">今日净 <b class="'+dCls+'">'+money(dayNet)+' '+pct(dayPct)+'</b></span></summary>'
@@ -2074,10 +2116,13 @@
         +'<button type="button" id="costImportBak">导入备份</button>'
         +'</span></div>'+html;
     }
-    /* 内容一字没变就别重写 innerHTML：一次 paint 要重建约 40 行 × 6 列 + 贡献表，
-       而多数 paint（排序没变、数值没变）算出来的字符串跟上次完全相同。
-       短路掉既能省掉整棵子树的重建，也不会动到用户此刻的光标与选区。 */
-    if(pidNode && pidNode.innerHTML!==html) pidNode.innerHTML=html;
+    /* 比较上次生成串，不读取 DOM 序列化（open 与 open="" 并不相等）。
+       折叠态不放进比较串；数据变化才重建，并恢复用户当前展开态。 */
+    if(pidNode && (pidNode!==membersNode || html!==membersHtml)){
+      pidNode.innerHTML=html; membersNode=pidNode; membersHtml=html;
+      var nextPnl=pidNode.querySelector('.blk-pnl-fold');
+      if(nextPnl && pnlOpen) nextPnl.setAttribute('open','');
+    }
     refreshAckStats();
     refreshLossStats();
     // 自动失效只记录维护 tombstone；初次核验前不冒充用户整份编辑，也不失效 pull。

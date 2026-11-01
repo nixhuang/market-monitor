@@ -70,6 +70,7 @@ class Element {
   get innerHTML(){return this._html||'';}
   set innerHTML(html){
     this._html=html;for(const n of this.children)n.parentNode=null;this.children=[];this.doc.renders++;
+    this.htmlWrites=(this.htmlWrites||0)+1;
     const stack=[this];
     for(const t of String(html).match(/<[^>]+>|[^<]+/g)||[]){
       if(t.startsWith('</')){if(stack.length>1)stack.pop();continue;}
@@ -130,6 +131,7 @@ class MockCustomEvent {
   preventDefault(){if(this.cancelable)this.defaultPrevented=true;}
   stopPropagation(){}
 }
+const fixtureAnchor=sym=>'s-'+sym.replace(/[^0-9A-Za-z]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase();
 function makeDocument(opts={}){
   const doc={renders:0,activeElement:null,events:{}};
   doc.body=new Element('body',doc);doc.documentElement=doc.body;
@@ -143,7 +145,8 @@ function makeDocument(opts={}){
   doc.body.innerHTML='<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><table></table></details><div id="signalCounts"></div>';
   const table=doc.querySelector('table');table.className='stk';
   for(const sym of opts.symbols||['AAA','BBB']){
-    const tr=new Element('tr',doc);tr.id='s-'+sym.toLowerCase();tr.className='green';
+    const tr=new Element('tr',doc);tr.id=fixtureAnchor(sym);tr.className='green';
+    if(!opts.legacySymbols)tr.setAttribute('data-symbol',sym);
     tr.innerHTML='<td class="sym">'+sym+'<span class="note">测试名称</span></td><td><span class="px-price">100.00</span><span class="px-chg">+1.00%</span></td><td class="sig"><span class="lvtag add">加 95</span><span class="lvtag cut">减 104</span></td>';
     table.appendChild(tr);
     const rail=new Element('tr',doc);rail.className='range52-row';rail.innerHTML='<td><span class="range52-rail" aria-label="50.00低，本轮价 100.00 位于区间 50%，本轮高 150.00"><span class="range52-track"></span></span></td>';table.appendChild(rail);
@@ -153,7 +156,7 @@ function makeDocument(opts={}){
   return doc;
 }
 function moveRow(doc,sym,group){
-  let tr=doc.getElementById('s-'+sym.toLowerCase());assert.ok(tr);
+  let tr=doc.getElementById(fixtureAnchor(sym));assert.ok(tr);
   let rail=tr.nextElementSibling;
   if(group===null){tr.remove();if(rail)rail.remove();return;}
   let root=doc.getElementById('group_'+group);
@@ -2745,6 +2748,101 @@ test('渲染出的每一格金额都不超过 9 个字符（最窄格 55px 的�
     for(const t of m)assert.ok(t.length<=9,'标题行金额「'+t+'」共 '+t.length+' 个字符，超过上限');
   }
   assert.equal(b.money(12340),'+$12,340');
+});
+
+test('优化回归：未变化不读取或重建DOM，展开态独立保留，变化才重建一次',async()=>{
+  const b=await boot(),host=b.doc.getElementById('costMembers');
+  const write=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML').set;
+  Object.defineProperty(host,'innerHTML',{
+    get(){throw Error('禁止用DOM序列化字符串比较内容');},set(value){write.call(this,value);}
+  });
+  const fold=host.querySelector('.blk-pnl-fold'),row=host.querySelector('li[data-sym="AAA"]');
+  const writes=host.htmlWrites;fold.open=true;
+  b.paint();b.paint();
+  assert.equal(host.htmlWrites,writes);assert.equal(host.querySelector('.blk-pnl-fold'),fold);
+  assert.equal(host.querySelector('li[data-sym="AAA"]'),row);assert.equal(fold.open,true);
+  fold.open=false;b.paint();assert.equal(host.htmlWrites,writes);assert.equal(fold.open,false);
+  fold.open=true;b.rows[0].price=102;b.paint();
+  assert.equal(host.htmlWrites,writes+1);assert.equal(host.querySelector('.blk-pnl-fold').open,true);
+  b.paint();assert.equal(host.htmlWrites,writes+1);assert.equal(b.puts().length,0);
+});
+test('优化回归：编辑无变化保留输入节点光标，容器替换后重建缓存',async()=>{
+  const b=await boot();await b.enter();
+  const host=b.doc.getElementById('costMembers'),input=host.querySelector('input[data-sym="AAA"][data-f="qty"]');
+  input.value='5.';input.focus();input.setSelectionRange(1,2,'backward');
+  const writes=host.htmlWrites;b.paint();
+  assert.equal(host.htmlWrites,writes);assert.equal(host.querySelector('input[data-sym="AAA"][data-f="qty"]'),input);
+  assert.equal(input.value,'5.');assert.equal(input.selectionStart,1);assert.equal(input.selectionEnd,2);
+  const replacement=b.doc.createElement('div');replacement.id='costMembers';host.parentNode.replaceChild(replacement,host);
+  b.paint();assert.equal(replacement.htmlWrites,1);assert.ok(replacement.querySelector('input[data-sym="AAA"]'));
+  assert.equal(b.puts().length,0);
+});
+for(const legacySymbols of [false,true])test('优化回归：含点及等号代码按原键计数编辑与导航 legacy='+legacySymbols,async()=>{
+  const symbols=['0700.HK','600519.SS','ES=F'];
+  const local={items:Object.fromEntries(symbols.map((s,i)=>[s,{cost:100,qty:i+1}])),cash:0,fixed:0};
+  const b=await boot({symbols,legacySymbols,local});
+  assert.deepEqual(Array.from(b.rows,r=>r.sym),symbols);
+  assert.deepEqual(Array.from(b.rows,r=>r.mv),[100,200,300]);
+  assert.equal(b.doc.querySelector('.cost-sum b').textContent,'$600');
+  for(const sym of symbols){
+    const row=b.doc.querySelector('#costMembers li[data-sym="'+sym+'"]');assert.ok(row);
+    assert.equal(row.querySelector('a').getAttribute('href'),'#'+fixtureAnchor(sym));
+    b.rows.find(r=>r.sym===sym).trig=100;b.setAck(sym+'|add|100',true);
+  }
+  b.paint();assert.equal(b.ackStatEntries('add_price').length,3);
+  for(const entry of b.ackStatEntries('add_price'))assert.equal(entry.anchor,fixtureAnchor(entry.sym));
+  await b.enter();b.edit('0700.HK','qty','4');await b.tick(16);
+  assert.equal(b.state().DATA.items['0700.HK'].qty,4);assert.equal(b.state().DATA.items['0700-HK'],undefined);
+  assert.equal(b.puts().length,0);
+});
+test('优化回归：API解码错误不被raw网络失败吞掉，不重复请求或上传',async()=>{
+  const b=await boot(),before=b.canonical(b.state().DATA);
+  b.respond(b.requests[0],{content:Buffer.from('not JSON').toString('base64')});await settle();
+  b.requests.at(-1).reject(Error('网络断开'));await settle();
+  assert.match(b.state().NOTICE,/GitHub API.*不是合法 JSON/);assert.match(b.state().NOTICE,/GitHub raw.*网络断开/);
+  assert.equal(b.doc.getElementById('costNotice').textContent,b.state().NOTICE);
+  await b.tick(600000);assert.equal(b.requests.length,2);assert.equal(b.puts().length,0);
+  assert.equal(b.canonical(b.state().DATA),before);
+});
+for(const invalid of ['syntax','shape'])test('优化回归：raw格式错误立即提示且无退避 '+invalid,async()=>{
+  const b=await boot({token:false}),r=b.requests[0];
+  if(invalid==='syntax')r.resolve({ok:true,status:200,json:()=>Promise.reject(new SyntaxError('bad JSON'))});
+  else b.respond(r,{items:[]});
+  await settle();assert.match(b.state().NOTICE,invalid==='syntax'?/不是合法 JSON/:/items 对象/);
+  await b.tick(600000);assert.equal(b.requests.length,1);assert.equal(b.puts().length,0);
+});
+test('优化回归：暂时失败与404并存仍能退避，成功清除错误和旧重试计时器',async()=>{
+  const b=await boot();b.respond(b.requests[0],{},503);await settle();
+  b.respond(b.requests.at(-1),{},404);await settle();assert.match(b.state().NOTICE,/HTTP 503.*HTTP 404/);
+  const before=b.requests.length;b.startPull();await settle();
+  b.respond(b.requests.at(-1),meta(SEED));await settle();assert.equal(b.state().NOTICE,'');
+  assert.equal(b.state().SYNC,'synced');await b.tick(25000);
+  assert.equal(b.requests.length,before+1);assert.equal(b.puts().length,0);
+});
+test('优化回归：数据源兜底成功可用，HTTP非JSON错误页保持原始状态',async()=>{
+  const b=await boot();b.requests[0].resolve({ok:false,status:503,json:()=>Promise.reject(new SyntaxError('HTML'))});
+  await settle();b.respond(b.requests.at(-1),SEED);await settle();
+  assert.equal(b.state().SYNC,'synced');assert.equal(b.state().NOTICE,'');assert.equal(b.puts().length,0);
+});
+
+test('网络分类回归：响应体传输中断允许退避，不误报数据损坏',async()=>{
+  const b=await boot({token:false});
+  b.requests[0].resolve({ok:true,status:200,json:()=>Promise.reject(new TypeError('连接中断'))});
+  await settle();assert.match(b.state().NOTICE,/响应体读取失败.*连接中断/);
+  assert.doesNotMatch(b.state().NOTICE,/不是合法 JSON/);
+  await b.tick(5000);assert.equal(b.requests.length,2);
+  b.respond(b.requests.at(-1),SEED);await settle();assert.equal(b.state().SYNC,'synced');
+  assert.equal(b.state().NOTICE,'');assert.equal(b.puts().length,0);
+});
+test('网络分类回归：403限流允许退避，普通权限拒绝不反复请求',async()=>{
+  for(const limited of [true,false]){
+    const b=await boot();b.respond(b.requests[0],{message:limited?'API rate limit exceeded':'Resource not accessible'},403);
+    await settle();b.respond(b.requests.at(-1),{},404);await settle();
+    assert.match(b.state().NOTICE,/HTTP 403/);await b.tick(5000);
+    assert.equal(b.requests.length,limited?3:2);
+    if(limited){b.respond(b.requests.at(-1),meta(SEED));await settle();assert.equal(b.state().NOTICE,'');}
+    assert.equal(b.puts().length,0);await b.dispose();
+  }
 });
 
 const selectedTests=process.env.MM_COST_TEST_FILTER?tests.filter(t=>t.name.includes(process.env.MM_COST_TEST_FILTER)):tests;
