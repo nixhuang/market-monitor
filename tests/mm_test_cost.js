@@ -1214,16 +1214,22 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(SOURCE,/class="lv-'\+esc\(x\.lv\|\|'green'\)/);
   // 列宽：名称列不再独占剩余空间，数值列按多位数留足；顺序 名称 → 盈亏比 → 金额 → 图表
   // 2026-11-01：名称列 1.15fr → .8fr、gap 8 → 6，盈亏比列整体左移，省下的全给右侧贡献条
-  assert.match(CSS,/grid-template-columns:minmax\(0,\.8fr\) 46px 62px minmax\(0,1fr\)/);
+  assert.match(CSS,/grid-template-columns:minmax\(0,\.77fr\) 56px 62px minmax\(0,1fr\)/);
   // 手机档（2026-10-29）：名单文字 10.5 → 11.5px，右侧比例图相应缩短
   // （名称 : 图 = 1.15:1 → 1.3:0.85），数值列各让出 2px
-  assert.match(CSS,/grid-template-columns:minmax\(0,1\.3fr\) 46px 66px minmax\(0,0\.66fr\);gap:0 6px;\s*font-size:13px;line-height:15\.75px\}/);
+  assert.match(CSS,/grid-template-columns:minmax\(0,1\.23fr\) 56px 66px minmax\(0,0\.66fr\);gap:0 6px;\s*font-size:13px;line-height:15\.75px\}/);
   // 中文备注名（.cncn）跟仓位面板 .cost-name .cn 同号 11.5px；代码单独 .cnsym 加粗（2026-10-30）
   assert.match(CSS,/\.cost-contrib \.cncn\{font-size:11\.5px\}/);
   assert.match(CSS,/\.cost-contrib li>\.cn-name,\.cost-contrib li>\.cv,\.cost-contrib li>\.ca\{height:15\.75px\}/);
   // 手机档只剩 ≤600 一档（2026-11-01 删掉 400/365/340/320 细分，只按 440 定稿）：
   // 比例图 0.66fr，名称列在 440 上约 182px，最长一行「LMT 洛克希德马丁」墨宽 113px 不会被截
-  assert.match(CSS,/minmax\(0,1\.3fr\) 46px 66px minmax\(0,0\.66fr\)/);
+  // 2026-11-01 二轮（盈亏比左移、与金额拉开距离）：盈亏比列 46 → 56px，
+  // 名称列手机 1.3fr → 1.23fr / 桌面 .8fr → .77fr（收窄 10px 把整列左带），
+  // 再用 .cv 的 padding-right:12px 把居中文字往左推 6px（合计左移约 10.6px）。
+  // 实测：金额列左缘 692.4（1440）/ 263.8（440）一像素不动，两列墨迹间距 26 → 37 / 23.5 → 34.5。
+  assert.match(CSS,/minmax\(0,1\.23fr\) 56px 66px minmax\(0,0\.66fr\)/);
+  assert.match(CSS,/minmax\(0,\.77fr\) 56px 62px minmax\(0,1fr\)/);
+  assert.match(CSS,/\.cost-contrib li>\.cv\{padding-right:12px\}/);
   assert.ok(!/max-width:3[0-9][0-9]px|max-width:400px|max-width:365px/.test(CSS),
     '手机档不应再保留比 440 更窄的细分断点');
   // 持仓代码 12.5 → 13px（跟统计面板名单同号），中文备注名仍 11.5px 不动（2026-10-30）
