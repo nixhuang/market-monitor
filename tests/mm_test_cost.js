@@ -1191,9 +1191,11 @@ test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
   // 2026-11-01：列宽提为 --cost-cols 变量（列头／框标题／列表行／现金固收四处共用一份，
   // 窄屏只改变量值）。桌面档六列仍各自带 min 下限，601～768 这类窄桌面不会把盈亏格压爆；
   // 名称列 1.55fr → 1.05fr（代码与中文名上下两行，用不着那么宽），省下的全给数值列。
-  assert.match(CSS,/--cost-cols:minmax\(96px,1\.05fr\) minmax\(60px,1fr\) minmax\(56px,\.85fr\) minmax\(84px,1\.3fr\) minmax\(132px,1\.7fr\) minmax\(54px,\.9fr\)/);
+  assert.match(CSS,/--cost-cols:minmax\(96px,1\.05fr\) minmax\(60px,1fr\) minmax\(56px,\.85fr\) minmax\(84px,1\.5fr\) minmax\(132px,1\.5fr\) minmax\(54px,\.9fr\)/);
   assert.match(CSS,/grid-template-columns:var\(--cost-cols\)/);
   assert.match(CSS,/grid-template-columns:var\(--cost-mini-cols\)/);
+  // 同四轮：现金／固定收益行的市值列与主表同步加宽、盈亏占位列同步收窄（净和为零，仓位列起点不动）。
+  assert.match(CSS,/--cost-mini-cols:minmax\(130px,1\.5fr\) minmax\(60px,\.95fr\) minmax\(52px,\.75fr\) minmax\(84px,1\.45fr\) minmax\(110px,1\.3fr\) minmax\(56px,\.9fr\)/);
   assert.match(CSS,/gap:0 var\(--cost-gap,8px\)/);
   assert.match(CSS,/\.cost-cell\.up\{color:var\(--up\)\}/);
   // 行首灯条（2026-10-28）：和统计面板个股前同款的 3×12px 竖条，不再是圆点 marker
@@ -1232,10 +1234,12 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(CSS,/minmax\(0,\.74fr\) 66px 62px minmax\(0,1fr\)/);
   assert.match(CSS,/\.cost-contrib li>\.cv\{padding-right:24px\}/);
   // 持仓市值列加宽（2026-11-01 晚）：手机 60 → 68px（这 8px 从名称列 1fr 出，不从数量列扣），
-  // 桌面 fr 由 1.2 → 1.3（数量列 .95 → .85 让位）；现金／固定收益那套 mini-cols 同步
-  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 52px 44px 68px 92px 50px/);
-  assert.match(CSS,/--cost-mini-cols:minmax\(0,1fr\) 56px 44px 68px 66px 46px/);
-  assert.match(CSS,/minmax\(84px,1\.3fr\)/);assert.match(CSS,/minmax\(84px,1\.25fr\)/);
+  // 桌面 fr 由 1.2 → 1.3（数量列 .95 → .85 让位）；现金／固定收益那套 mini-cols 同步。
+  // 四轮再加一档：手机市值 68 → 82px（盈亏 92 → 78px 让位，固定列总和不变、名称列不受影响），
+  // 桌面市值 1.3 → 1.5fr、盈亏 1.7 → 1.5fr；mini 市值 1.25 → 1.45fr、盈亏占位 1.5 → 1.3fr。
+  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 52px 44px 82px 78px 50px/);
+  assert.match(CSS,/--cost-mini-cols:minmax\(0,1fr\) 56px 44px 82px 52px 46px/);
+  assert.match(CSS,/minmax\(84px,1\.5fr\)/);assert.match(CSS,/minmax\(84px,1\.45fr\)/);
   assert.ok(!/max-width:3[0-9][0-9]px|max-width:400px|max-width:365px/.test(CSS),
     '手机档不应再保留比 440 更窄的细分断点');
   // 持仓代码 12.5 → 13px（跟统计面板名单同号），中文备注名仍 11.5px 不动（2026-10-30）
@@ -1253,8 +1257,8 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   // 34/34/30px 会顶出去），成本 / 数量 / 市值三列各让 2～4px 补回来，合计基本不变。
   // 2026-11-01：手机档只剩 ≤600 一档（400 / 365 / 340 / 320 细分全删，只按 440 定稿），
   // 列宽只覆盖 --cost-cols（不再各抄一条 grid-template-columns），名称列让位、盈亏列给到 92px。
-  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 52px 44px 68px 92px 50px/);
-  assert.match(CSS,/--cost-mini-cols:minmax\(0,1fr\) 56px 44px 68px 66px 46px/);
+  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 52px 44px 82px 78px 50px/);
+  assert.match(CSS,/--cost-mini-cols:minmax\(0,1fr\) 56px 44px 82px 52px 46px/);
   // 手机档整个文件只有一条断点，且必须是 ≤600（不能残留更窄的细分档）
   assert.strictEqual((CSS.match(/@media[^{]*max-width:\d+px/g)||[]).length,
     (CSS.match(/@media[^{]*max-width:600px/g)||[]).length, '手机档只允许 ≤600 一个断点');

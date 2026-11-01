@@ -50,9 +50,15 @@
    手机档只改变量值（原来要在 @media 里整条重抄一遍 grid-template-columns，改一处漏三处）。
    名称列按用户要求压缩（代码与中文名是上下两行，不需要那么宽），省下的全给数值列。 */
 .cost-manage{--cost-accent-bg:rgba(126,231,135,.17);--cost-accent:var(--frame-green,#2c8f3e);margin:8px 0 10px;
-  --cost-cols:minmax(96px,1.05fr) minmax(60px,1fr) minmax(56px,.85fr) minmax(84px,1.3fr) minmax(132px,1.7fr) minmax(54px,.9fr);
-  /* 现金 / 固定收益只有一行，名称列要放得下「现金 含货币市场ETF」，比个股行再宽一档 */
-  --cost-mini-cols:minmax(130px,1.5fr) minmax(60px,.95fr) minmax(52px,.75fr) minmax(84px,1.25fr) minmax(126px,1.5fr) minmax(56px,.9fr);
+  /* 2026-11-01 四轮：盈亏列实测过剩（161px 里最长内容「+25.2% +$387.3」只有 83px，
+     就算按最坏「+100.0% +$1,234.5」也才 ~100px），让 0.2fr 给持仓市值列：
+     盈亏 1.7 → 1.5fr（161 → 142px，余 42px），市值 1.3 → 1.5fr（123 → 142px）。
+     总 fr 守恒 6.8、两列一加一减净和为 0，第 6 列（仓位）起点不动，与现金行仍对齐。 */
+  --cost-cols:minmax(96px,1.05fr) minmax(60px,1fr) minmax(56px,.85fr) minmax(84px,1.5fr) minmax(132px,1.5fr) minmax(54px,.9fr);
+  /* 现金 / 固定收益只有一行，名称列要放得下「现金 含货币市场ETF」，比个股行再宽一档。
+     同四轮：第 4 列（市值）与主表同步 +0.2fr，第 5 列（盈亏占位，此行恒空）同步 -0.2fr 抵消；
+     该列下限 126 → 110px：1.3fr 只有 122px，不降会被下限顶住、破坏净和为零的对齐。 */
+  --cost-mini-cols:minmax(130px,1.5fr) minmax(60px,.95fr) minmax(52px,.75fr) minmax(84px,1.45fr) minmax(110px,1.3fr) minmax(56px,.9fr);
   --cost-head-h:26px}
 /* 整卡只留一圈绿色外框（与统计面板同宽 1.5px）：左侧绿条取消、卡底不变，
    收起横条仍沿用原来的浅绿底色。 */
@@ -484,8 +490,12 @@
   /* 2026-11-01 晚：市值列 60 → 68px（用户要求给持仓市值多点宽度）；这 8px 全从**名称列**（1fr）里出
      —— 不能从数量列扣：44px 是按「12,345」这种五位数的墨宽定的，扣到 36px 会顶出去。
      名称列 440 视口 91 → 83px，仍比「SCHD ETF 胶囊」这类最长一行的 77px 宽，不出省略号。 */
-  .cost-manage{--cost-cols:minmax(0,1fr) 52px 44px 68px 92px 50px;--cost-gap:3px;
-    --cost-mini-cols:minmax(0,1fr) 56px 44px 68px 66px 46px;
+  /* 2026-11-01 四轮：盈亏列 92 → 78px，让出的 14px 给市值列（68 → 82px）。
+     依据：盈亏两排（block）最长内容是 amt「-$1,234.5」墨宽 53px，money() 的分档保证
+     不会再更长（≥1e5 会缩成「+$123.5k」），78px 余 25px；市值最坏「$999,999」墨宽 52px，
+     82px 余 30px。一加一减总宽不变，名称列（1fr）不受影响。 */
+  .cost-manage{--cost-cols:minmax(0,1fr) 52px 44px 82px 78px 50px;--cost-gap:3px;
+    --cost-mini-cols:minmax(0,1fr) 56px 44px 82px 52px 46px;
     --cost-head-h:28px}
   .cost-name{min-width:0}
   .cost-name .syrow{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
