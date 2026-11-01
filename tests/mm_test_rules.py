@@ -376,7 +376,9 @@ class RulesRegression(unittest.TestCase):
         self.assertNotIn('border-color:', pos)
         lng = re.search(r'#group_positions_long\.zone-card\{([^}]+)\}', css)[1]
         self.assertIn('background:none;border:1px solid var(--frame-green,#2c8f3e)', lng)
-        self.assertIn('margin:12px -2px 14px', lng)
+        # 2026-11-01 二次调整：12/14 → 9/9，与仓位面板「当日盈亏贡献」条的上下留白（上 9 / 下 8）对齐，
+        # 消除「两条同样 49px 高、但长持仓留白更大显得更孤立，肉眼看像盈亏贡献更高」的错觉。
+        self.assertIn('margin:9px -2px 9px', lng)
         self.assertIn('#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
         button = re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1]
         self.assertIn('background:var(--collapse-bg)', button)

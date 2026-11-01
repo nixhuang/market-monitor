@@ -545,15 +545,18 @@ h1.brand{color:var(--up)}
    折起／展开都是这一圈绿框 —— 原来折起是 --line 灰（在深色卡片上几乎看不见，等于没有框）、
    展开是 --signal-border 蓝，两态色不一致。这里 id 选择器优先级高于 .zone-card[open]，一次写死两态。 */
 /* 2026-11-01：持仓板块**外框也改绿**，跟长持仓子框、仓位面板（--cost-accent #2c8f3e）同一套绿，
-   不再跟其它分组一样是蓝框（--signal-border）；子框与外框之间留的间距再加大一点（10/12 → 12/14），
-   两圈绿框不贴在一起。 */
+   不再跟其它分组一样是蓝框（--signal-border）。
+   子框上下留白最终定 **9 / 9**（同一天改过两次：先 10/12 → 12/14「让两圈绿框不贴在一起」，
+   又改回 9/9）—— 依据是**与仓位面板「当日盈亏贡献」那条对齐**：那条上留白 9px、下留白 8px
+   （下方 8px 就是底部的长/短占比条）。两条同样高（都是 49px），但长持仓 12/14 的留白更大、
+   显得更孤立，肉眼会误判成「盈亏贡献比长持仓高」。留白拉平到 9/9 后两者观感一致。 */
 /* 绿只在**展开态**亮（2026-11-01 改）：收起时跟其它分组一样是 .card 的默认灰框，不抢视线；
    展开后才是绿框，和长持仓子框、仓位面板同一套绿。
    绿靠变量传下去：下面 .group-card[open] 那条外框规则的特指度（带两个 :not(#id)）比单 id 高，
    只能改它的 --signal-border；这里**不写** id 级 border-color（写了就会收起态也常亮）。 */
 #group_positions{background:var(--card);--collapse-bg:rgba(46,160,67,.15);
   --signal-border:var(--frame-green,#2c8f3e)}
-#group_positions_long.zone-card{background:none;border:1px solid var(--frame-green,#2c8f3e);margin:12px -2px 14px}
+#group_positions_long.zone-card{background:none;border:1px solid var(--frame-green,#2c8f3e);margin:9px -2px 9px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
