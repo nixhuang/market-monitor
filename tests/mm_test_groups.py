@@ -644,7 +644,9 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('.SPX', index)
         self.assertIn('参考值 · 截至 2026-10-07', index)
         self.assertIn('<span class="px-price">4.25%</span>', index)
-        self.assertEqual(index.count('BD#US10Y'), 1)
+        # 代码同时存在于可见文本和 data-symbol；分别校验，属性不能算重复显示。
+        self.assertEqual(plain_text(index).count('BD#US10Y'), 1)
+        self.assertEqual(index.count('data-symbol="BD#US10Y"'), 1)
         self.assertNotIn('市场参考（独立指标，不属于清单标的）', index)
         self.assertIn('不计算交易警示', index)
         self.assertNotIn('无异动 3 只', index)
