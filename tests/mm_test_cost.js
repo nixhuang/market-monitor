@@ -1248,8 +1248,17 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
     (CSS.match(/@media[^{]*max-width:600px/g)||[]).length, '手机档只允许 ≤600 一个断点');
   // 标题行极端兜底：金额长到顶按钮时截省略号，而不是压到「编辑」上
   assert.match(CSS,/\.cost-manage>summary \.cost-sum\{min-width:0;overflow:hidden;text-overflow:ellipsis\}/);
-  // 五个数值列的数字：11.5 → 13px（2026-11-01），跟「当日盈亏贡献」列表的数字同号
-  assert.match(CSS,/\.cost-cell\{font-size:13px\}/);
+  // 五个数值列的数字：11.5 → 13px（2026-11-01），跟「当日盈亏贡献」列表的数字同号；
+  // 行高写死线上实测的 17.25px（＝线上 11.5px×1.5）——只加大字号、不加行距，整行仍是 42.5px
+  assert.match(CSS,/\.cost-cell\{font-size:13px;line-height:17\.25px\}/);
+  // 手机档「总持仓/长持仓/短持仓」：行高 15.5px + 上下 3/4px 内边距 = 38px，与线上一致
+  // （11-01 早些时候压成 28px 那版被用户判定「变矮了」已还原，这里盯住别再改回去）
+  assert.match(CSS,/\.cost-block-title\{font-size:13px;padding:3px 0 4px 12px;min-height:var\(--cost-head-h\);line-height:15\.5px\}/);
+  assert.match(CSS,/\.cost-block-title \.pct,\.cost-block-title \.amt\{display:block;line-height:15\.5px\}/);
+  // 现金／固定收益：字号加大到 13px（手机）/14px（桌面），行高仍锁线上实测值（17.25 / 18.75px）
+  assert.match(CSS,/\.cost-mini\{font-size:13px;line-height:17\.25px;padding-left:12px\}/);
+  assert.match(CSS,/font-size:14px;line-height:18\.75px/);
+  assert.match(CSS,/\.cost-mini \.t-name \.cnt\{font-size:11\.5px;line-height:17\.25px/);
   // 备注名：ETF 已有胶囊标签就不再重复写 ETF；含中文的只保留中文部分
   const read=f=>JSON.parse(fs.readFileSync(path.join(__dirname,'..',f),'utf8'));
   const names=read('symbol-names.json'), holdings=read('holdings.json');

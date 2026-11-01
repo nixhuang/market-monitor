@@ -257,13 +257,19 @@
 .cost-block-title.is-total{background:rgba(143,184,240,.13);color:#dbe7ff;margin-top:0}
 /* 现金 / 固定收益：不再「分类名 + 下面再列一行」，整框就是一排带底色的信息 */
 /* 现金 / 固定收益：字号跟框标题（长／短持仓那一条）同号，两块看起来是同一张表 */
-.cost-mini{display:grid;align-items:center;gap:0 var(--cost-gap,8px);font-size:14px;
+/* 桌面档：字号 12.5 → 14px（2026-11-01 与框标题同号），**行高写死线上实测的 18.75px**
+   （＝线上 12.5px×1.5）＋上下 2/2 内边距 = 22.75px＝线上 22.8px；
+   若沿用 1.5 倍行高会是 21px、整排 25px，比线上高 2.2px（2026-11-01 晚按线上还原）。 */
+.cost-mini{display:grid;align-items:center;gap:0 var(--cost-gap,8px);font-size:14px;line-height:18.75px;
   grid-template-columns:var(--cost-mini-cols);
   padding:2px 0 2px 16px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .cost-mini>span{min-width:0}
 .cost-mini .t-name{grid-column:1;text-align:left;color:var(--head-blue,#bfd5ff);font-weight:600;
   overflow:hidden;text-overflow:ellipsis}
-.cost-mini .t-name .cnt{font-size:11.5px;font-weight:400;color:var(--dim);margin-left:5px}
+/* 副标题（「含货币市场ETF」）行高写死 17.25px（＝线上 11.5px×1.5）：
+   主排的行高改成绝对值 18.75px 后，这个 11.5px 的小字会**继承** 18.75px，
+   半行距比字号大出一截，把整排从 22.8 顶到 23.8px（比线上高 1px）。写死即与线上一像素不差。 */
+.cost-mini .t-name .cnt{font-size:11.5px;line-height:17.25px;font-weight:400;color:var(--dim);margin-left:5px}
 .cost-mini .c-cost{grid-column:2;text-align:center;font-size:14px}
 .cost-mini .t-mv{grid-column:4;text-align:center;font-size:14px}
 .cost-mini .t-pnl{grid-column:5;text-align:center;font-size:14px}
@@ -478,17 +484,23 @@
     border-left-color:rgba(255,255,255,.18);padding-left:3px}
   .cost-colhead{font-size:10.5px;padding-left:12px}
   /* 「总持仓 N 只 / 长持仓 N 只 / 短持仓 N 只」：文字 11.5 → 13px（2026-10-30 再加大一档）。
-     盈亏比 / 金额**上下两排**（2026-11-01 用户要求，中途短暂改过横排现在改回来）：
-     两根各压到 14px 行高 = 28px，正好等于手机档 --cost-head-h，多一行也不把栏目条撑胖。 */
-  .cost-block-title{font-size:13px;padding:0 0 0 12px;min-height:var(--cost-head-h);line-height:18px}
-  .cost-block-title .pct,.cost-block-title .amt{display:block;line-height:14px}
+     盈亏比 / 金额**上下两排**（2026-11-01 用户要求，中途短暂改过横排现在改回来）。
+     2026-11-01 晚：**行高与整排高度都按线上实测值还原**（行高 15.5px + 上下内边距 3/4px = 38px）——
+     11-01 早些时候为了「跟 --cost-head-h 28px 对齐」把两根压到 14px、内边距清零（→ 28px），
+     用户对比线上后判定「变矮了、不合适」，以线上 38px 为准。
+     min-height:--cost-head-h 保留（38 > 28，不生效，仅作下限兜底）。 */
+  .cost-block-title{font-size:13px;padding:3px 0 4px 12px;min-height:var(--cost-head-h);line-height:15.5px}
+  .cost-block-title .pct,.cost-block-title .amt{display:block;line-height:15.5px}
   .cost-block-title .cnt{font-size:12.5px}
   /* 窄屏第 1 列只有 50 来 px，名称允许溢出到空着的第 2／3 列，别被截成「长持仓 1…」 */
   .cost-block-title .t-name{overflow:visible}
   .cost-block-title .k{display:none}
   /* 五个数值列的数字：11.5 → **13px**（2026-11-01），跟「当日盈亏贡献」列表的数字同号 ——
-     原来这块比那块小 1.5px，同一张表里两种字号。行内比例 / 金额仍上下排。 */
-  .cost-cell{font-size:13px}
+     原来这块比那块小 1.5px，同一张表里两种字号。行内比例 / 金额仍上下排。
+     2026-11-01 晚：字号保持 13px 不动，**行高写死线上实测的 17.25px**（＝线上 11.5px×1.5）。
+     字号由 11.5 → 13 后若沿用 1.5 倍行高会是 19.5px，盈亏列上下两排 39px，整行 42.5 → 47px，
+     用户判定「行距不该加大」。写死 17.25px 后两排仍是 34.5px、整行 42.5px，与线上一像素不差。 */
+  .cost-cell{font-size:13px;line-height:17.25px}
   .cost-cell input{font-size:11px;padding:2px 3px}
   .cost-cell .pct,.cost-cell .amt{display:block}
   /* 代码 / 中文备注名：13 + 11.5px（代码 2026-10-30 从 12.5 提到 13，跟统计面板名单
@@ -505,8 +517,10 @@
   /* 现金／固定收益：数值是四～五位数（23,684 / 16,917），比个股行的金额还长一档，
      所以这两列比主表再宽 2px，仓位列从 32 → 34（36.9% 原来差 1px 就顶到边） */
   /* 现金／固定收益跟主表共用同一套列宽变量（2026-11-01），不再单独抄一份；
-     字号 11.5 → 13px，与框标题（长／短持仓）和当日盈亏贡献的数字同号 */
-  .cost-mini{font-size:13px;padding-left:12px}
+     字号 11.5 → 13px，与框标题（长／短持仓）和当日盈亏贡献的数字同号。
+     行高同样写死线上实测的 17.25px（＋上下 2/2 内边距 = 21.25px＝线上 21.3px）：
+     字号加大后若用 1.5 倍行高会是 19.5px、整排 23.5px，比线上高 2.2px。 */
+  .cost-mini{font-size:13px;line-height:17.25px;padding-left:12px}
   /* 窄屏第 1 列只有 70 来 px：副标题整个藏起来，名称不再溢出到「成本」那格上 */
   .cost-mini .t-name{overflow:hidden}
   .cost-mini .cnt{display:none}
