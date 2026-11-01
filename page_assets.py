@@ -1014,8 +1014,10 @@ tr.gray td{color:var(--dim)}
     padding-bottom:2px}
   .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
     box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
-  /* 长持仓（卡中卡）同样两态统一锁 36px（34 → 36，折起来高一点），与外层保持层级差 */
-  .zone-card>summary{box-sizing:border-box;height:36px;padding-top:0;padding-bottom:0}
+  /* 长持仓（卡中卡）两态统一锁 47px（36 → 47）：折叠后整条 = 47 + 上下 1px 边框 = 49px，
+     与仓位面板「当日盈亏贡献」收起后的整条（实测 49px）同高，全站折叠栏目条一个高度。
+     两态同一套顶部链路是硬要求——只锁高不统一 padding，点标题展开时标题行会跳。 */
+  .zone-card>summary{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}
 }
 /* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
 .stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
@@ -1151,8 +1153,9 @@ tr.gray td{color:var(--dim)}
     padding-bottom:2px}
   .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
     box-sizing:border-box;min-height:51px;padding-top:0;padding-bottom:0}
-  /* 长持仓 34 → 38：折起来的标题行加高一点（触摸目标更舒适，仍比外层矮一档） */
-  .zone-card>summary{box-sizing:border-box;min-height:38px;padding-top:0;padding-bottom:0}
+  /* 长持仓 38 → 43：折叠后整条 = 43 + 上下 1px 边框 = 45px，与「当日盈亏贡献」收起后的
+     整条（实测 45px）同高。手机用 min-height 不用 height：320 窄屏标题行会折两行，硬锁会裁。 */
+  .zone-card>summary{box-sizing:border-box;min-height:43px;padding-top:0;padding-bottom:0}
   /* 标题文字各减 0.5px：分类名 17 → 16.5px，右侧「20日对.SPX -5.3%」等 15 → 14.5px。
      行高仍是写死的 24px，所以标题行的行盒高度不变（2026-10-30）。 */
   .group-card>summary.grp,.macro-card>summary.grp{font-size:16.5px}
