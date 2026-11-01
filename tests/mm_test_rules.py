@@ -248,7 +248,7 @@ class RulesRegression(unittest.TestCase):
         self.assertNotIn('background:#121a27', css)
         self.assertIn('--chip-w:74px;position:relative;display:block;padding:8px 12px 8px 5px;border-top:1px solid #465e87}', css)
         # 手机上紫灯／财报胶囊也同宽 74px，不再比信号列那几颗窄一截
-        self.assertIn('@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:74px;', css)
+        self.assertIn('@media(max-width:600px){#signalCounts .signal-extra-row{--chip-w:74px;', css)
         self.assertNotIn('background:#182130', css)
         # 展开的分组卡：整卡套外框，标题不再铺底色、不再画左条
         self.assertIn('.group-card[open]:not(#signalCounts):not(#costManage),.macro-card[open]{\n'
@@ -301,6 +301,18 @@ class RulesRegression(unittest.TestCase):
         # 「无异动」展开条跟分组标题同一口径：不铺底色、不画左条，只提亮文字
         self.assertIn('.quiet-list[open]>summary{background:none;box-shadow:none;color:var(--head-blue,#bfd5ff)}', cost)
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.18)', cost)
+
+    def test_only_two_breakpoints_phone_600_and_desktop_601(self):
+        """只适配三台设备（2026-11-01 定）：手机档 ≤600（按 iPhone 18 Pro Max 竖屏 440 定稿）、
+        桌面档 ≥601（iPad mini 744/1133 与 PC 共用）。不允许再冒出更细的断点。"""
+        css = page_assets.PAGE_CSS
+        cost = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
+        for name, text in (('PAGE_CSS', css), ('cost_panel.css', cost)):
+            conds = re.findall(r'@media[^{]*?(?:max|min)-width:\s*(\d+)px', text)
+            bad = sorted({c for c in conds if c not in ('600', '601')})
+            self.assertEqual(bad, [], f'{name} 出现了 600/601 之外的断点：{bad}')
+        # 桌面档只认 ≥601，手机档只认 ≤600，两边不能有重叠或空档
+        self.assertIn('@media(min-width:601px){', css)
 
     def test_statistics_table_has_no_signal_red_yellow_white_header_row(self):
         """统计表不再有「信号 / 红 / 黄 / 白」表头排。"""
@@ -355,12 +367,13 @@ class RulesRegression(unittest.TestCase):
     def test_positions_green_tints_and_shared_collapse_background(self):
         css = page_assets.PAGE_CSS
         self.assertIn('--signal-bg:#182131; --collapse-bg:var(--signal-bg)', css)
-        # 持仓卡：收起态的 id 级 border-color 与展开态的 --signal-border 都指向同一个绿 #2c8f3e
-        # （展开态那条 .group-card[open]:not(...) 特指度更高，只能靠变量改色）
+        # 持仓卡：绿框**只在展开态亮**——靠 --signal-border 传给 .group-card[open]:not(...)
+        # （那条特指度更高，只能靠变量改色）；这里**不能**写 id 级 border-color，
+        # 写了收起态也会常亮，跟其它分组的灰框不一致（2026-11-01 定）。
         pos = re.search(r'#group_positions\{([^}]+)\}', css)[1]
         self.assertIn('--collapse-bg:rgba(46,160,67,.15)', pos)
         self.assertIn('--signal-border:var(--frame-green,#2c8f3e)', pos)
-        self.assertIn('border-color:var(--frame-green,#2c8f3e)', pos)
+        self.assertNotIn('border-color:', pos)
         lng = re.search(r'#group_positions_long\.zone-card\{([^}]+)\}', css)[1]
         self.assertIn('background:none;border:1px solid var(--frame-green,#2c8f3e)', lng)
         self.assertIn('margin:12px -2px 14px', lng)

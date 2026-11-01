@@ -1221,8 +1221,11 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   // 中文备注名（.cncn）跟仓位面板 .cost-name .cn 同号 11.5px；代码单独 .cnsym 加粗（2026-10-30）
   assert.match(CSS,/\.cost-contrib \.cncn\{font-size:11\.5px\}/);
   assert.match(CSS,/\.cost-contrib li>\.cn-name,\.cost-contrib li>\.cv,\.cost-contrib li>\.ca\{height:15\.75px\}/);
-  // 320 这类超窄屏：比例图再压到 0.45fr，把名称列换回 114px（最长一行 110px 不被截）
-  assert.match(CSS,/minmax\(0,1\.3fr\) 46px 66px minmax\(0,0\.45fr\)/);
+  // 手机档只剩 ≤600 一档（2026-11-01 删掉 400/365/340/320 细分，只按 440 定稿）：
+  // 比例图 0.66fr，名称列在 440 上约 182px，最长一行「LMT 洛克希德马丁」墨宽 113px 不会被截
+  assert.match(CSS,/minmax\(0,1\.3fr\) 46px 66px minmax\(0,0\.66fr\)/);
+  assert.ok(!/max-width:3[0-9][0-9]px|max-width:400px|max-width:365px/.test(CSS),
+    '手机档不应再保留比 440 更窄的细分断点');
   // 持仓代码 12.5 → 13px（跟统计面板名单同号），中文备注名仍 11.5px 不动（2026-10-30）
   assert.match(CSS,/\.cost-name \.sy\{font-size:13px;font-weight:600/);
   assert.match(CSS,/\.cost-name \.sy\{font-size:13px\} \.cost-name \.cn\{font-size:11\.5px\}/);
@@ -1236,14 +1239,13 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   // 2026-10-30 二轮：标题行盈亏「+$1,021.8」13px 墨宽 63px 顶到格子边，盈亏列四档各再 +6px
   // 2026-10-30 三轮：仓位列再放宽（13px 的「37.8%」墨宽 35px，44/38/34px 格的内容区只剩
   // 34/34/30px 会顶出去），成本 / 数量 / 市值三列各让 2～4px 补回来，合计基本不变。
-  // 2026-11-01：四档窄屏改为只覆盖 --cost-cols（不再各抄一条 grid-template-columns），
-  // 名称列让位、盈亏列给到 92／74px —— ≤400 档起标题行的比例与金额能横排一行，
-  // 栏目条高度因此与「当日盈亏贡献」那条统一（24px）。
+  // 2026-11-01：手机档只剩 ≤600 一档（400 / 365 / 340 / 320 细分全删，只按 440 定稿），
+  // 列宽只覆盖 --cost-cols（不再各抄一条 grid-template-columns），名称列让位、盈亏列给到 92px。
   assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 52px 44px 60px 92px 50px/);
-  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 46px 42px 58px 92px 46px/);
-  // ≤365 / ≤340 两档放不下横排，盈亏列仍按上下两排给（74 / 64px）
-  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 42px 38px 50px 74px 45px/);
-  assert.match(CSS,/--cost-cols:minmax\(0,1fr\) 38px 38px 50px 64px 40px/);
+  assert.match(CSS,/--cost-mini-cols:minmax\(0,1fr\) 56px 44px 60px 66px 46px/);
+  // 手机档整个文件只有一条断点，且必须是 ≤600（不能残留更窄的细分档）
+  assert.strictEqual((CSS.match(/@media[^{]*max-width:\d+px/g)||[]).length,
+    (CSS.match(/@media[^{]*max-width:600px/g)||[]).length, '手机档只允许 ≤600 一个断点');
   // 标题行极端兜底：金额长到顶按钮时截省略号，而不是压到「编辑」上
   assert.match(CSS,/\.cost-manage>summary \.cost-sum\{min-width:0;overflow:hidden;text-overflow:ellipsis\}/);
   // 五个数值列的数字：11.5 → 13px（2026-11-01），跟「当日盈亏贡献」列表的数字同号

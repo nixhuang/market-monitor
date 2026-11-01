@@ -547,10 +547,12 @@ h1.brand{color:var(--up)}
 /* 2026-11-01：持仓板块**外框也改绿**，跟长持仓子框、仓位面板（--cost-accent #2c8f3e）同一套绿，
    不再跟其它分组一样是蓝框（--signal-border）；子框与外框之间留的间距再加大一点（10/12 → 12/14），
    两圈绿框不贴在一起。 */
-/* 绿靠变量传下去：下面 .group-card[open] 那条外框规则的特指度（带两个 :not(#id)）比单 id 高，
-   改它的 --signal-border 才能让展开态也变绿；同时 id 级 border-color 负责收起态（默认灰框）。 */
+/* 绿只在**展开态**亮（2026-11-01 改）：收起时跟其它分组一样是 .card 的默认灰框，不抢视线；
+   展开后才是绿框，和长持仓子框、仓位面板同一套绿。
+   绿靠变量传下去：下面 .group-card[open] 那条外框规则的特指度（带两个 :not(#id)）比单 id 高，
+   只能改它的 --signal-border；这里**不写** id 级 border-color（写了就会收起态也常亮）。 */
 #group_positions{background:var(--card);--collapse-bg:rgba(46,160,67,.15);
-  --signal-border:var(--frame-green,#2c8f3e);border-color:var(--frame-green,#2c8f3e)}
+  --signal-border:var(--frame-green,#2c8f3e)}
 #group_positions_long.zone-card{background:none;border:1px solid var(--frame-green,#2c8f3e);margin:12px -2px 14px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -729,7 +731,7 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-member-block.target-space-high h5{color:var(--target-high)}
 /* 手机：统计面板里每个「指标名称」胶囊的**框**（74px 宽 × 38px 高）一个像素不动，
    只把框里的文字从 12px 提到 13px（「布林+RSI」「52周低位」在 74px 里仍是单行）。 */
-@media(max-width:520px){#signalCounts .signal-extra-row{--chip-w:74px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:13px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:13px;line-height:1.1}}
+@media(max-width:600px){#signalCounts .signal-extra-row{--chip-w:74px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:13px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:13px;line-height:1.1}}
 tr[id^="s-"]{scroll-margin-top:64px}
 /* 闪烁只改 background-color：带 52 周条的行，灯条是用 background-image 画的，
    用 background 简写做动画会把灯条一起清掉（看起来就是高亮盖住了灯）。
@@ -1153,9 +1155,11 @@ tr.gray td{color:var(--dim)}
     padding-bottom:2px}
   .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
     box-sizing:border-box;min-height:51px;padding-top:0;padding-bottom:0}
-  /* 长持仓 38 → 43：折叠后整条 = 43 + 上下 1px 边框 = 45px，与「当日盈亏贡献」收起后的
-     整条（实测 45px）同高。手机用 min-height 不用 height：320 窄屏标题行会折两行，硬锁会裁。 */
-  .zone-card>summary{box-sizing:border-box;min-height:43px;padding-top:0;padding-bottom:0}
+  /* 长持仓 38 → 47：折叠后整条 = 47 + 上下 1px 边框 = 49px，与「当日盈亏贡献」收起后的
+     整条（实测 49px：内容行 28 + 上下 padding 4/6 + summary 自带 margin 5/4 + 边框 2）同高。
+     （盈亏比 / 金额改回上下两排后那条从 45 涨到 49，这里同步跟。）
+     手机用 min-height 不用 height：320 窄屏标题行会折两行，硬锁会裁。 */
+  .zone-card>summary{box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0}
   /* 标题文字各减 0.5px：分类名 17 → 16.5px，右侧「20日对.SPX -5.3%」等 15 → 14.5px。
      行高仍是写死的 24px，所以标题行的行盒高度不变（2026-10-30）。 */
   .group-card>summary.grp,.macro-card>summary.grp{font-size:16.5px}
@@ -1166,22 +1170,8 @@ tr.gray td{color:var(--dim)}
   .group-card>summary .group-stats,.macro-card>summary .group-stats,
   .zone-card>summary .group-stats{gap:6px}
 }
-/* ≤400 的窄屏：主表「ETF」标签跟仓位板块一起再收半档（9px / 内边距 0 3px），
-   仓位那边的 .cost-name .tag 在同一断点也是这个值（cost_panel.css），两边始终同款（2026-10-30）。 */
-@media (max-width:400px){
-  .stk td.sym .tag{font-size:9px;padding:0 3px}
-}
-/* ≤340 极窄屏（iPhone SE 一类）：标题行那一串再收一档 —— 分组名与右侧串的间距 6 → 4px、
-   右侧串内部 6 → 4px、灯圈内边距 3 → 2px、右内边距 12 → 6px、「仅板块ETF」这类小注 12px。
-   目的：让「房地产 (1)」这种「名字 + 小注 + 灯圈 + 20日对.SPX …」最长的组合也能压在一行，
-   320px 上所有分组栏（含「仓位」）收起高度统一 **53px**（2026-10-31）。 */
-@media (max-width:340px){
-  .group-card>summary.grp,.macro-card>summary.grp{gap:4px;padding-right:6px}
-  .group-card>summary .group-stats,.macro-card>summary .group-stats,
-  .zone-card>summary .group-stats{gap:4px}
-  .stat-badge{padding:0 2px}
-  .monitor-note{font-size:12px}
-}
+/* 窄屏细分档（400 / 340）已整段删除 —— 2026-11-01 用户定：只适配 iPhone 18 Pro Max 竖屏
+   440px（CSS 视口）／iPad mini 744·1133／PC，更窄的屏不再支持。 */
 /* 注：345 这类极窄屏整行会比线上高 6.24px —— A/B 实测过，元凶是上一轮把财报列
    「美东/北京」加大（.stk .earn），**不是**代码/备注名：把 sym 压回 14/11.5px 高度纹丝不动，
    把 .earn 一起压回才降到 96.27px。375 及以上视口不受影响，行的高度与线上完全一致。 */
@@ -1250,7 +1240,7 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 .card .rules-body .dir-arrow{display:inline-block;vertical-align:-4px;margin-left:2px;overflow:visible}
 .card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
 .card .rules-body .rule-anchor{display:block;height:0}
-@media(max-width:520px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{font-size:11px}}
+@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{font-size:11px}}
 #signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
 #signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
 #signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:#dce1e9}

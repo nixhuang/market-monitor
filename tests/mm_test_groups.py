@@ -6701,7 +6701,8 @@ class TestDisplayInteractions(unittest.TestCase):
         pos_rule = re.search(r'#group_positions\{([^}]+)\}', monitor.PAGE_CSS)[1]
         self.assertIn('--collapse-bg:rgba(46,160,67,.15)', pos_rule)
         self.assertIn('--signal-border:var(--frame-green,#2c8f3e)', pos_rule)
-        self.assertIn('border-color:var(--frame-green,#2c8f3e)', pos_rule)
+        # 收起态不常亮：没有 id 级 border-color，绿只由展开态的 --signal-border 带出来
+        self.assertNotIn('border-color:', pos_rule)
 
     def test_jump_flash_never_overwrites_the_lamp_bar(self):
         """闪烁只能用 background-color：带 52 周条的行灯条是 background-image 画的，
