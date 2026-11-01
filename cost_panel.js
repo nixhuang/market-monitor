@@ -67,8 +67,6 @@
     var s=(Math.round(num(n)*10000)/10000).toFixed(4);
     if(s.indexOf('.')>=0) s=s.replace(/0+$/,'').replace(/\.$/,'');
     return s===''?'0':s; }
-  function nowStr(){ var d=new Date(),p=function(x){return (x<10?'0':'')+x;};
-    return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes()); }
   var storageErrors={}, NOTICE='';
   function read(k){
     try{
@@ -116,9 +114,24 @@
      首页只保留 inert 模板（rulesTpl / glossaryTpl / notesTpl）供设置页原样读取，这里不再挂载。 */
 
   /* ---------- 1. 扫描行情行；是否持仓只由实际 positions 分组决定 ---------- */
+  /* 2026-11-01：「这一行还在不在文档里」这个判断在 paint() 里每行要跑 5~8 次
+     （isPosition 被调 11 次、裸 contains 另有 8 处），40 行就是约 280 次祖先遍历。
+     抽成 live() 一个原语，语义不变，后面所有点都走它。 */
+  function live(r){ return !!(r && r.tr && document.documentElement.contains(r.tr)); }
+  /* 按代码找行：原来是 ROWS.some(...) 逐个比较，输入每次敲键都要扫一遍全表；
+     建一次索引变 O(1)。ROWS 只在扫描阶段写一次，索引建好即可长期复用。 */
+  var ROW_BY_SYM=null;
+  function rowBySym(sym){
+    if(!ROW_BY_SYM){
+      ROW_BY_SYM=Object.create(null);
+      // 保留第一个同代码的行，跟原来 ROWS.some 找到第一个就停的语义一致
+      ROWS.forEach(function(r){ if(!ROW_BY_SYM[r.sym]) ROW_BY_SYM[r.sym]=r; });
+    }
+    return ROW_BY_SYM[sym]||null;
+  }
   function isPosition(r){
     // 后端 group=position 渲染为 #group_positions，含长持仓子组；DATA.items 仅是成本档案。
-    return document.documentElement.contains(r.tr) && !!r.tr.closest('#group_positions');
+    return live(r) && !!r.tr.closest('#group_positions');
   }
   // ETF 胶囊必须在代码后面（第一行），不能留到中文备注后面。全站所有个股行都处理。
   // 正式实现改 monitor.py 的个股行：<td class="sym">CODE<span class="tag">ETF</span><span class="note">…</span></td>
@@ -209,7 +222,6 @@
     var cutCap=tr.querySelector('.lvtag.reduce,.lvtag.cut');
     var trig=cap?num(cap.textContent.replace(/[^\d.]/g,'')):0;
     var cut=cutCap?num(cutCap.textContent.replace(/[^\d.]/g,'')):0;
-    var sigAdd=null;
     var tick=document.createElement('span');
     tick.className='range52-cost'; tick.style.display='none';
     // 挂到灰轨上（而不是整条 rail）：rail 里还夹着左右两个价格文字，
@@ -261,7 +273,7 @@
                baseLv:tr.getAttribute('data-base-level'),
                rangeTr:railTr && railTr.className.split(/\s+/).indexOf('range52-row')>=0?railTr:null,
                quietZone:quietBox?quietBox.parentNode:null,
-               trig:trig,cut:cut,cap:cap,cutCap:cutCap,sigAdd:sigAdd,
+               trig:trig,cut:cut,cap:cap,cutCap:cutCap,
                tick:tick,info:info,costInline:costInline,costLvs:costLvs,costLvsAuto:costLvsAuto,
                warnAdd:warnAdd,warnCut:warnCut,warn:warn});
   });
@@ -291,7 +303,7 @@
   function sortDescriptions(){
     var rank={red:0,yellow:1,gray:2};
     ROWS.forEach(function(r){
-      if(!document.documentElement.contains(r.tr)) return;
+      if(!live(r)) return;
       var box=r.tr.querySelector('td.sig'); if(!box) return;
       Array.prototype.forEach.call(box.children,function(el){
         var kind=el.getAttribute('data-signal-kind');
@@ -339,7 +351,7 @@
       var parts=k.split('|');
       if(parts[1]!=='add' && parts[1]!=='cut') return;
       var active=ROWS.some(function(r){
-        if(r.sym!==parts[0] || !document.documentElement.contains(r.tr)) return false;
+        if(r.sym!==parts[0] || !live(r)) return false;
         var add=parts[1]==='add', target=add?r.trig:r.cut;
         return target>0 && num(parts[2])===target && (add || isPosition(r))
           && nearPrice(r.price,target,add?GAP_TRIGGER:GAP_REDUCE,add?1:-1);
@@ -347,8 +359,8 @@
       if(!active) pruneAck(k);
     });
     ROWS.forEach(function(r){
-      if(!document.documentElement.contains(r.tr)) return;
-      var want=null, sigTxt='';
+      if(!live(r)) return;
+      var want=null;
       // ① 加仓价：已跌破、或进入注入的门槛；百分比仅作显示，边界用十进制判断。
       if(r.cap) r.cap.style.display=r.trig>0?'':'none';
       if(r.trig>0){
@@ -366,8 +378,6 @@
         if(on){
           renderWarn(r.warnAdd, (gap<=0?'已跌破加仓价 '+r.trig
             :'距加仓价 '+r.trig+' 还差 '+gap.toFixed(1)+'%'), k, acked);
-          if(!acked) sigTxt+=(gap<=0?'已跌破加仓价 ':'距加仓价 ')+r.trig
-            +(gap<=0?'':' 还差 '+gap.toFixed(1)+'%')+' / ';
           if(!acked) want='red';
         } else hideWarn(r.warnAdd);
       } else hideWarn(r.warnAdd);
@@ -381,8 +391,6 @@
         if(onR){
           renderWarn(r.warnCut, (rgap>=0?'已涨到减仓价 '+r.cut+'（高出 '+rgap.toFixed(1)+'%）'
             :'距减仓价 '+r.cut+' 还差 '+(-rgap).toFixed(1)+'%'), kc, aR);
-          if(!aR) sigTxt+=(rgap>=0?'已涨到减仓价 '+r.cut+'（高出 '+rgap.toFixed(1)+'%）'
-            :'距减仓价 '+r.cut+' 还差 '+(-rgap).toFixed(1)+'%')+' / ';
           if(!aR) want='red';
         } else hideWarn(r.warnCut);
       } else {
@@ -391,7 +399,6 @@
           if(key.indexOf(r.sym+'|cut|')===0) pruneAck(key);
         });
       }
-      if(r.sigAdd) r.sigAdd.textContent=sigTxt;
       // ③ 浮亏 ≥10%：也是红灯（红字 + 行级 red），点掉已读就撤掉这一份
       if(r.lossLv>0 && !r.lossAcked) want='red';
       r.tr.className=withLv(r.origCls, want, r.baseLv);
@@ -409,7 +416,7 @@
       return table;
     }
     ROWS.forEach(function(r){
-      if(!document.documentElement.contains(r.tr)) return;
+      if(!live(r)) return;
       var table=r.tr.closest('table.stk'); if(!table) return;
       var quiet=table.closest('details.quiet-list'), zone=quiet?quiet.parentNode:table.parentNode;
       var keep=r.tr.getAttribute('data-quiet-keep');
@@ -532,11 +539,21 @@
         （raw 地址有约 5 分钟 CDN 缓存；本机「干净」时云端会全量覆盖本机，读到旧缓存就会把刚传的数字冲回去）；
      ② 没 token（只读设备）：raw.githubusercontent.com 的 data 分支，带时间戳。
      站点同目录那份已不再更新（main 里的副本已删除），不再读取。 */
+  /* 远端内容是 base64 包着的 JSON。原来裸调 unb64 + JSON.parse，遇到「合法 base64 但不是 JSON」
+     只抛一个没有上下文的错误，被链尾 catch 吞成「云端未取到」，用户分不清是网络问题还是数据损坏。
+     两个来源的解码统一收口，带上来源名抛可读错误，让已有的 NOTICE 能显示真因。 */
+  function parseCloud(content,from){
+    var raw;
+    try{ raw=unb64(content); }
+    catch(e){ throw new Error(from+'返回的内容不是合法 base64：'+(e&&e.message||e)); }
+    try{ return JSON.parse(raw); }
+    catch(e){ throw new Error(from+'内容解析失败，不是合法 JSON：'+(e&&e.message||e)); }
+  }
   function cloudSources(){
     var list=[], h=ghHead();
     if(h) list.push(function(){
       return requestJson(GH_API+'?ref='+GH.branch+'&t='+Date.now(),{headers:h,cache:'no-store'})
-        .then(function(r){ var m=r.ok?r.data:null; return m&&m.content?JSON.parse(unb64(m.content)):null; });
+        .then(function(r){ var m=r.ok?r.data:null; return m&&m.content?parseCloud(m.content,'GitHub API'):null; });
     });
     list.push(function(){
       return requestJson('https://raw.githubusercontent.com/'+GH.owner+'/'+GH.repo+'/'+GH.branch+'/'+GH.path+'?t='+Date.now(),
@@ -557,6 +574,14 @@
   var _pullTry=0, _pullTimer=null;
   function startPull(){
     if(isolated || !writer || disposed) return;
+    /* 2026-11-01：离线时 fetch 会立刻 reject，原来仍要走完三轮退避（5s + 20s）才显示
+       「云端未取到」，用户干等约 25 秒。先问一次 navigator.onLine，离线就直接落 nocloud，
+       恢复联网由下面的 online 事件重新拉一轮。 */
+    if(typeof navigator!=='undefined' && navigator.onLine===false){
+      if(_pullTimer){ clearTimeout(_pullTimer); _pullTimer=null; }
+      SYNC=inFlight?'loading':'nocloud'; NOTICE=inFlight?'':'设备离线，暂不读取云端';
+      paint(); return;
+    }
     var generation=++pullGeneration;
     SYNC='pulling';
     pullCloud(function(j){
@@ -582,7 +607,7 @@
         return r.data;
       }).then(function(meta){
         if(disposed || !writer) throw new Error('页面已退出，上传已取消');
-        var remote=meta&&meta.content?normalize(JSON.parse(unb64(meta.content))):null;
+        var remote=meta&&meta.content?normalize(parseCloud(meta.content,'远端版本')):null;
         if(sent.recovery){
           if(meta && (!remote || !meta.sha)) throw new Error('上传结果未知，远端内容及 SHA 未完整核验，暂停重传');
           if(remote && canonical(remote)===canonical(sent.payload)){
@@ -1020,9 +1045,8 @@
       if(parts.length<2 || parts[1]!==cfg.tail) return;
       var sym=parts[0];
       if(seen[sym]) return;
-      var row=null;
-      ROWS.some(function(r){ if(r.sym===sym && r.tr && document.documentElement.contains(r.tr)){ row=r; return true; } return false; });
-      if(!row || !document.documentElement.contains(row.tr)) return;
+      var row=rowBySym(sym);
+      if(!row || !live(row)) return;
       var add=kind==='add_price', target=add?row.trig:row.cut;
       if(!(target>0) || num(parts[2])!==target || !add && !isPosition(row)
         || !nearPrice(row.price,target,add?GAP_TRIGGER:GAP_REDUCE,add?1:-1)) return;
@@ -1176,7 +1200,8 @@
       rec.button.setAttribute('aria-expanded','false');
       rec.panel=document.createElement('div'); rec.panel.id=pid;
       rec.panel.className='signal-members-panel tone-red'; rec.panel.hidden=true;
-      base.membersRow.querySelector('td').appendChild(rec.panel);
+      var mtd=base.membersRow&&base.membersRow.querySelector('td');
+      if(mtd) mtd.appendChild(rec.panel);
     }
     if(!entries.length){
       rec.cell.textContent='—'; rec.panel.hidden=true;
@@ -1228,7 +1253,8 @@
         LOSS_STAT.grayBtn.setAttribute('aria-expanded','false');
       LOSS_STAT.row.style.display=entries.length?'':'none';
       LOSS_STAT.membersRow.style.display=entries.length?'':'none';
-      if(!entries.length) LOSS_STAT.row.querySelector('.signal-filter-toggle').setAttribute('aria-pressed','false');
+      var ltoggle=LOSS_STAT.row&&LOSS_STAT.row.querySelector('.signal-filter-toggle');
+      if(!entries.length && ltoggle) ltoggle.setAttribute('aria-pressed','false');
     }
     if(!box && entries.length){
       box=document.createElement('div'); box.id='signalFilterResult'; box.className='signal-filter';
@@ -1253,7 +1279,7 @@
     // 总红/黄数按标的最终报灯去重，不将同股的技术红灯与浮亏红灯相加。
     var totals={red:0,yellow:0}, seen={}, finalLevels={};
     ROWS.forEach(function(r){
-      if(!document.documentElement.contains(r.tr)) return;
+      if(!live(r)) return;
       var id=r.sym.toUpperCase().replace(/\//g,'-'); if(seen[id]) return; seen[id]=true;
       var lv=(r.tr.className||'').split(/\s+/);
       finalLevels[id]=lv.indexOf('red')>=0?'red':lv.indexOf('yellow')>=0?'yellow':lv.indexOf('green')>=0?'green':'gray';
@@ -1280,7 +1306,7 @@
     var grayIds={}, available={}, availableAnchors={}, grayFallback=LOSS_GRAY_BASE.members?0:LOSS_GRAY_BASE.count;
     ROWS.forEach(function(r){
       var id=signalIdentity(r.sym);
-      if(document.documentElement.contains(r.tr) && r.price>0 && !LOSS_GRAY_BASE.excluded[id] && !LOSS_GRAY_BASE.excludedAnchors[r.tr.id]){
+      if(live(r) && r.price>0 && !LOSS_GRAY_BASE.excluded[id] && !LOSS_GRAY_BASE.excludedAnchors[r.tr.id]){
         available[id]=true;
         availableAnchors[r.tr.id]=true;
       }
@@ -1354,6 +1380,11 @@
     if(isolated || writer || disposed || (e.key!==LS_LOCAL && e.key!==LS_CLOUD)) return;
     cloud=read(LS_CLOUD); loadLocal(); pullGeneration++;
     SYNC='pulling'; paint();
+  });
+  // 断网期间 startPull 会提前返回，联网后补拉一轮（离线提示也在这时清掉）。
+  window.addEventListener('online',function(){
+    if(isolated || !writer || disposed) return;
+    NOTICE=''; _pullTry=0; startPull();
   });
   window.addEventListener('pagehide',function(){
     disposed=true; pullGeneration++; clearSaveTimers();
@@ -1500,12 +1531,15 @@
   function syncCostNotice(){
     var text=Object.keys(storageErrors).map(function(k){ return storageErrors[k]; }).join('；')
       ||NOTICE||(SYNC==='error'?SYNC_MSG:'');
+    /* 2026-11-01：这三个按钮／提示条由面板骨架提供，理论上恒在；但 syncCostNotice 是 paint()
+       的收尾步骤，一旦其中任何一个缺失就会抛异常、整个面板停在半渲染状态。
+       这里统一降级为「跳过」，不让单点缺失拖垮整块渲染。 */
     var notice=panel.querySelector('#costNotice');
-    notice.textContent=text; notice.hidden=!text;
+    if(notice){ notice.textContent=text; notice.hidden=!text; }
     // 同步异常仅提示，不给旧本机数据提供“重试上传”入口。
     actsEl.hidden=!editing&&!text;
-    panel.querySelector('#costSave').hidden=!editing;
-    panel.querySelector('#costCancel').hidden=!editing;
+    var saveBtn=panel.querySelector('#costSave'); if(saveBtn) saveBtn.hidden=!editing;
+    var cancelBtn=panel.querySelector('#costCancel'); if(cancelBtn) cancelBtn.hidden=!editing;
   }
   function syncEditUI(){
     editBtn.textContent=editing?'编辑中':'编辑';
@@ -1651,7 +1685,10 @@
     if(!writer || !editing || disposed || !el || !el.getAttribute) return;
     var f=el.getAttribute('data-f'), sym=el.getAttribute('data-sym');
     if(['cash','cash_extra','fixed','fixed_cost','cost','qty'].indexOf(f)<0) return;
-    if((f==='cost'||f==='qty') && !ROWS.some(function(r){ return r.sym===sym && isPosition(r); })) return;
+    if(f==='cost'||f==='qty'){
+      var ir=rowBySym(sym);
+      if(!ir || !isPosition(ir)) return;
+    }
     var raw=el.value.trim(), value=raw===''?0:Number(raw);
     if(!/^(?:\d+(?:\.\d{0,4})?|\.\d{1,4})?$/.test(raw) || !isFinite(value) || value<0){
       el.setCustomValidity('请输入非负数，最多四位小数');
@@ -1797,6 +1834,8 @@
   function paint(){
     if(!panel || disposed) return;
     if(_paintFrame){ cancelAnimationFrame(_paintFrame); _paintFrame=null; }
+    // 2026-11-01：容器只查一次（原来拼接时查一次、写入时再查一次），后面复用。
+    var pidNode=document.getElementById(PID);
     var active=document.activeElement, focus=null;
     if(editing && active && panel.contains(active) && active.getAttribute('data-f')){
       focus={sym:active.getAttribute('data-sym'),field:active.getAttribute('data-f'),value:active.value,
@@ -1908,11 +1947,13 @@
     /* 卡片表头保持总资产＋盈亏布局；盈亏金额和成本分母均只取股票/ETF持仓。
        现金（含归入现金的货币市场ETF）、固收仍计入总资产，不计其盈亏与成本。 */
     var sumEl=panel.querySelector('.cost-sum');
-    sumEl.innerHTML='<b>'+plain(totalAsset)+'</b>'
-      +'<span class="sep">·</span><b class="'+tcls+'">'
-      +money(totalPnl)+'（'+pct(tPct)+'）</b>';
-    sumEl.setAttribute('title','总资产含现金及固收；盈亏仅股票/ETF持仓，不含现金项及固收');
-    sumEl.setAttribute('aria-label','总资产 '+plain(totalAsset)+'；股票/ETF持仓盈亏 '+money(totalPnl)+'，'+pct(tPct));
+    if(sumEl){
+      sumEl.innerHTML='<b>'+plain(totalAsset)+'</b>'
+        +'<span class="sep">·</span><b class="'+tcls+'">'
+        +money(totalPnl)+'（'+pct(tPct)+'）</b>';
+      sumEl.setAttribute('title','总资产含现金及固收；盈亏仅股票/ETF持仓，不含现金项及固收');
+      sumEl.setAttribute('aria-label','总资产 '+plain(totalAsset)+'；股票/ETF持仓盈亏 '+money(totalPnl)+'，'+pct(tPct));
+    }
     renderRs();
 
     // 固定降序：按盈亏（百分比）或按仓位（市值）排，点列头切换。
@@ -2014,7 +2055,7 @@
       var dayNet=0; cl.forEach(function(x){ dayNet+=x.amt; });
       var dayPct=prevMv>0?dayNet/prevMv*100:0;
       var dCls=dayNet>=0?'up':'down';
-      var prevPnl=document.getElementById(PID).querySelector('.blk-pnl-fold');
+      var prevPnl=pidNode&&pidNode.querySelector('.blk-pnl-fold');
       var pnlOpen=!!(prevPnl&&prevPnl.hasAttribute('open'));
       html+='<details class="signal-member-block blk-pnl blk-pnl-fold"'+(pnlOpen?' open':'')+'>'
         +'<summary class="cost-subhead" aria-label="当日盈亏＝(现价−昨收)×数量；占比按全部持仓当日盈亏绝对值之和（正负共用分母）">'
@@ -2033,7 +2074,10 @@
         +'<button type="button" id="costImportBak">导入备份</button>'
         +'</span></div>'+html;
     }
-    document.getElementById(PID).innerHTML=html;
+    /* 内容一字没变就别重写 innerHTML：一次 paint 要重建约 40 行 × 6 列 + 贡献表，
+       而多数 paint（排序没变、数值没变）算出来的字符串跟上次完全相同。
+       短路掉既能省掉整棵子树的重建，也不会动到用户此刻的光标与选区。 */
+    if(pidNode && pidNode.innerHTML!==html) pidNode.innerHTML=html;
     refreshAckStats();
     refreshLossStats();
     // 自动失效只记录维护 tombstone；初次核验前不冒充用户整份编辑，也不失效 pull。

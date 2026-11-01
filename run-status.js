@@ -90,7 +90,9 @@
   function authMessage(status, message = '', remaining = null, required = '', retryAt = 0, authenticated = false) {
     const isLimit = status === 429 || status === 403 && (remaining === '0' || /rate limit|secondary rate|abuse detection/i.test(message));
     if (isLimit) {
-      const wait = retryAt ? '；请在 ' + new Date(retryAt).toLocaleTimeString('zh-CN') + ' 后再试' : '；请稍后再试';
+      // 2026-11-01：这里原来不带 timeZone，会按**用户本地时区**显示，跟全页「只认北京时间」不一致。
+      const wait = retryAt ? '；请在 ' + new Date(retryAt).toLocaleTimeString('zh-CN',
+        {timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}) + ' 后再试' : '；请稍后再试';
       return {kind: 'rate_limit', text: status + '：GitHub API 限流，不代表令牌过期' + wait};
     }
     if (status === 401) return {kind: 'auth', text: '401：令牌无效、被撤销或过期，请在设置页更新'};
@@ -240,13 +242,40 @@
     ].join('\n');
   }
   function el(id) { return window.document.getElementById(id); }
+  /* 2026-11-01：一次 render() 里 pageSnapshot() 会被调 4~6 次，每次都把 141KB 的
+     <script id="snapshotData"> 整段重新 JSON.parse 一遍（约 560KB 解析 / render）。
+     缓存「textContent 原文 + 解析结果」：原文没变就直接复用，只有内容真换了才重解析。 */
+  let snapRaw = null, snapCache = null;
   function pageSnapshot() {
     const embedded = el('snapshotData');
     if (!embedded) return null;
+    const raw = embedded.textContent;
+    if (raw === snapRaw) return snapCache;
+    snapRaw = raw; snapCache = null;
     try {
-      const value = JSON.parse(embedded.textContent);
-      return schema(value) ? value : null;
-    } catch (_) { return null; }
+      const value = JSON.parse(raw);
+      snapCache = schema(value) ? value : null;
+    } catch (_) { snapCache = null; }
+    return snapCache;
+  }
+  /* 每轮 tick 都要从 index.html 里取出内联快照。整篇 617KB 交给 DOMParser 会真的建出一整棵
+     DOM（含 141KB 的 JSON 文本节点与 124KB 的脚本文本节点），主线程 60~200ms。
+     先用字符串索引把 <script id="snapshotData"> 的内容切出来再 JSON.parse；切不到
+     （页面被改写、结构变了）才回退 DOMParser，保证取不到就报错的语义不丢。 */
+  function embeddedSnapshot(html) {
+    const text = String(html || '');
+    const open = text.indexOf('<script id="snapshotData"');
+    if (open >= 0) {
+      const start = text.indexOf('>', open) + 1;
+      // 写成 <\/script>：斜杠转义对 JS 等价，但这段被内联进 HTML 的 <script> 时
+      // 不会提前终止标签（内联版 run-status.js 就是这样挂进页面的）。
+      const end = text.indexOf('<\/script>', start);
+      if (start > 0 && end > start) return text.slice(start, end);
+    }
+    try {
+      const node = new window.DOMParser().parseFromString(text, 'text/html').querySelector('script#snapshotData');
+      return node ? node.textContent : '';
+    } catch (_) { return ''; }
   }
   function shortSummary(s) {
     const info = s.summary || {}, dates = s.actual_dates || {};
@@ -291,16 +320,20 @@
     if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) return '';
     const date = new Date(value);
     if (!Number.isFinite(date.getTime())) return '';
-    return date.toLocaleString('sv-SE', {timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit',
-      day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false});
+    return fmtBJ(date);
   }
+  /* 北京时间格式化：两个函数原本各抄一份 12 个 option 的 toLocaleString，改一处漏一处。
+     统一走这一个（sv-SE 本身就是 24 小时制，再用 hourCycle:'h23' 显式钉死，
+     避免 hour12:false 在部分 ICU 下把零点渲染成「24」）。 */
+  const BJ_FMT = {timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'};
+  function fmtBJ(date) { return date.toLocaleString('sv-SE', BJ_FMT); }
   function humanTime(s) {
     const raw = s && (s.finished_at_bj || s.finished_at || s.started_at_bj || s.started_at);
     if (!raw) return '';
     const value = String(raw), date = new Date(value);
     if (/(?:Z|[+-]\d{2}:\d{2})$/i.test(value) && Number.isFinite(date.getTime())) {
-      return date.toLocaleString('sv-SE', {timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit',
-        day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false});
+      return fmtBJ(date);
     }
     const match = value.match(/(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
     return match ? match[1] + ' ' + match[2] : value;
@@ -581,7 +614,9 @@
           : '数据时间 未能读取（不影响已保存内容）', publication.phase);
       }
     }
-    ['btnRun', 'btnRunNow'].forEach(id => { if (el(id)) el(id).disabled = !!activeManual(); });
+    // btnRun 在现网页面里已不存在（只有设置页的 btnRunNow），留着只会每次 render 白查一次 null。
+    const runBtn = el('btnRunNow');
+    if (runBtn) runBtn.disabled = !!activeManual();
     const box = el('appliedState') || el('runMsg') || el('runState');
     const canReturn = verifiedSnapshot && (!Object.keys(targets).length || configState.phase === 'published') &&
       (!manual || manual.rejected || manualState.phase === 'published');
@@ -592,7 +627,6 @@
       link.style.cssText = 'display:inline-block;margin:8px;color:#6ba3f0';
       box.appendChild(link);
     }
-    if (typeof options.onChange === 'function') options.onChange(s);
     return s;
   }
   function phaseForRun(run) {
@@ -644,15 +678,17 @@
     let nextConfigRun = configRun, nextManualRun = null;
     const publicTask = (async () => {
       try {
-        status = await request(bust('./status.json'), {signal});
+        /* 2026-11-01：status.json 改条件校验。原来带 _mm 时间戳 + no-store，60s 一轮
+           就是 232KB 全量重传（约 14MB/小时）；Pages 带 ETag，未变更时折成 304、零 body，
+           内容真变了照样拿到完整新文件，语义不变。 */
+        status = await request('./status.json', {signal, revalidate: true});
         if (!schema(status)) throw new Error('status.json 缺少有效 run_id/配置 blob SHA，无法验证生效');
         // index.html 走条件校验（revalidate）：Pages 带 ETag，本页没变时返回 304、零 body，
         // 弱网下从「重传 140KB」降为一次小往返；内容真变了仍会拿到完整新页面，语义不变。
         const html = await request('./index.html', {signal, text: true, revalidate: true});
-        const parsed = new window.DOMParser().parseFromString(html, 'text/html');
-        const node = parsed.querySelector('script#snapshotData');
-        if (!node) throw new Error('看板缺少 snapshotData；生成成功不等于已发布');
-        const candidate = JSON.parse(node.textContent);
+        const raw = embeddedSnapshot(html);
+        if (!raw) throw new Error('看板缺少 snapshotData；生成成功不等于已发布');
+        const candidate = JSON.parse(raw);
         if (samePublication(status, candidate)) snapshot = candidate;
         else publicError = 'status.json 与看板快照不一致，仍在等待 Pages 发布';
       } catch (error) { publicError = networkMessage(error); }
@@ -890,7 +926,9 @@
       if (!gen || gen.conclusion !== 'success' || !commit || commit.conclusion !== 'skipped') return null;
       const retry = step('当日日线未就绪：约 30 分钟后自动再试');
       // 重试步骤只在美东 20–23 点派发；到零点由保险任务的窗口检查终止。
-      const h = Number(new Date(String(startedAt || '')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', hour12: false}));
+      // hourCycle:'h23' 而不是 hour12:false —— 后者在部分 ICU 下把零点渲染成「24」，
+      // h >= 20 && h < 24 会误判成「不在重试窗口」。
+      const h = Number(new Date(String(startedAt || '')).toLocaleString('en-US', {timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23'}));
       return {retry: !!(retry && retry.conclusion === 'success' && h >= 20 && h < 24)};
     } catch (error) { return null; }
   }

@@ -41,6 +41,90 @@ def _strip_css_comments(page):
     return _STYLE_BLOCK.sub(_one, page)
 
 
+# 产物构建期瘦身（2026-11-01）：内联快照 <script id="snapshotData"> 只保留前端真正会读的字段。
+# 这几个字段是**服务端渲染的输入**——页面上的共识价、财报日期、名单、目标价覆盖都已经渲染进
+# HTML 里了，前端 JS（cost_panel.js / run-status.js / 页面内联脚本）从不读取它们，
+# 却占了内联快照的 93%（141KB 里的 131KB）。status.json 仍保留完整字段，发布证据不受影响。
+# 用黑名单而不是白名单：以后新增字段自动带进内联快照，不会被静默丢掉；
+# 若将来前端要消费其中某个字段，把它的键从这里删掉即可（并补一条测试断言）。
+_SNAPSHOT_DROP_KEYS = ("consensus", "earnings", "signal_members", "target_overlays",
+                       "earnings_week", "reference_alerts")
+
+
+def slim_snapshot(snapshot):
+    if not isinstance(snapshot, dict):
+        return snapshot
+    return {k: v for k, v in snapshot.items() if k not in _SNAPSHOT_DROP_KEYS}
+
+
+def strip_js_comments(js):
+    """剥掉一段 JS 里的注释（只在构建产物上用，源码保留注释）。
+
+    保守实现：逐字符跟踪单引号 / 双引号 / 模板串 / 转义 / 正则字面量，只删真正的注释，
+    字符串里的 'http://…'、正则里的 '/\\/\\*' 都不会被当成注释。
+    只删两类：① 整行注释（该行有效内容以 // 起头）—— 行尾的 // 说明一律保留，
+    免得误伤 URL 或除法；② /* */ 块注释。删完仍保留换行，行号基本对得上。"""
+    out = []
+    i, n = 0, len(js)
+    # 上一个"有意义的字符"，用来判断 / 是除号还是正则起头
+    def prev_token(idx):
+        j = idx - 1
+        while j >= 0 and js[j] in " \t\r\n":
+            j -= 1
+        return js[j] if j >= 0 else ""
+    while i < n:
+        ch = js[i]
+        if ch == "/" and i + 1 < n and js[i + 1] == "/":
+            # 只有「本行到这里全是空白」才当成整行注释
+            k = i
+            while k >= 0 and js[k] not in "\n":
+                k -= 1
+            if js[k + 1:i].strip() == "":
+                end = js.find("\n", i)
+                end = n if end < 0 else end
+                out.append("\n")
+                i = end
+                continue
+            out.append(ch); i += 1; continue
+        if ch == "/" and i + 1 < n and js[i + 1] == "*":
+            end = js.find("*/", i + 2)
+            end = n if end < 0 else end + 2
+            out.append("\n" if "\n" in js[i:end] else "")
+            i = end
+            continue
+        if ch in "'\"`":
+            quote = ch
+            out.append(ch); i += 1
+            while i < n:
+                c = js[i]
+                if c == "\\":
+                    out.append(js[i:i + 2]); i += 2; continue
+                out.append(c); i += 1
+                if c == quote:
+                    break
+            continue
+        if ch == "/" and prev_token(i) in "=(,:[!&|?{};+*%~^<>":
+            # 正则字面量：原样搬过去，直到配对的 /（跳过字符类 []）
+            out.append(ch); i += 1
+            in_class = False
+            while i < n:
+                c = js[i]
+                if c == "\\":
+                    out.append(js[i:i + 2]); i += 2; continue
+                if in_class:
+                    if c == "]":
+                        in_class = False
+                elif c == "[":
+                    in_class = True
+                elif c == "/":
+                    out.append(c); i += 1
+                    break
+                out.append(c); i += 1
+            continue
+        out.append(ch); i += 1
+    return "".join(out)
+
+
 # 个股/ETF 表统一用固定列宽，三张表（警示 / ETF / 折叠的无异动）栏位才能上下对齐
 STK_COLS = ('<colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>')
 
@@ -1587,7 +1671,8 @@ class PageRenderer:
             # 否则 HTML 里出现嵌套 <style>，浏览器会把后面的 </style> 当正文渲染出来
             css = _re.sub(r"</?style[^>]*>", "", css)
             with _io.open(os.path.join(self._context.BASE, "cost_panel.js"), encoding="utf-8") as stream:
-                js = stream.read()
+                # 产物构建期剥 JS 注释（2026-11-01）：跟 CSS 同一套口径，源码注释照旧保留。
+                js = strip_js_comments(stream.read())
         except Exception as e:
             self._context.log(f"  ! 仓位面板资源缺失，跳过：{e}")
             return "", ""
@@ -1635,7 +1720,9 @@ class PageRenderer:
                        f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
                        f'综合：{html_lib.escape(risk["label"])}</span>')
         dca_title = self._context.dca_badge(snapshot.get("dca_reminder"))  # 顶栏最右侧（2026-10-19：从市场风险标题挪过来）
-        snapshot_json = self._context.json_script(snapshot)
+        # 只把前端会读的字段内联进页面（见 slim_snapshot 的说明）：页面体积 −131KB，
+        # 状态核验用到的 run_id / request_id / config_files / source_sha 全部保留。
+        snapshot_json = self._context.json_script(slim_snapshot(snapshot))
         finished_iso = self._context.beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
         # 只到分钟：秒对看板没有意义，还把状态灯那一行撑长（2026-10-27）。
         finished_txt = finished_iso[:16].replace("T", " ") if finished_iso else "未记录"

@@ -7,7 +7,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 sys.path.insert(0, ROOT)
 import monitor  # noqa: E402
-from monitor_render import strip_css_comments  # noqa: E402
+from monitor_render import strip_css_comments, slim_snapshot, strip_js_comments  # noqa: E402
 from unittest.mock import patch as _patch, mock_open as _mock_open
 
 # 整页与可选隔离浏览器只接收合成种子，不把本机真实仓位带进测试页面。
@@ -2080,6 +2080,24 @@ const deadline = setTimeout(() => {
         for _assertion in _json.loads(_browser_result.stdout):
             check(_assertion['ok'], _assertion['name'] + '：'
                   + _json.dumps(_assertion['actual'], ensure_ascii=False, separators=(',', ':')))
+
+# 2026-11-01 产物瘦身：内联快照只留前端会读的字段；JS 注释在构建期剥离（源码注释不动）
+_slim = slim_snapshot({'run_id': '1', 'request_id': 'r', 'config_files': {'a': 'x'}, 'source_sha': 's',
+                       'consensus': {'AAPL': 1}, 'earnings': [1, 2], 'signal_members': {'red': []},
+                       'target_overlays': [], 'earnings_week': {}, 'reference_alerts': []})
+check(_slim['run_id'] == '1' and _slim['config_files'] == {'a': 'x'} and _slim['source_sha'] == 's',
+      '瘦身保留状态核验需要的 run_id / config_files / source_sha')
+check(not any(k in _slim for k in ('consensus', 'earnings', 'signal_members', 'target_overlays',
+                                   'earnings_week', 'reference_alerts')),
+      '瘦身剔除前端从不读取的服务端渲染输入（黑名单）')
+check(slim_snapshot({'groups': [1], 'new_field': 2}) == {'groups': [1], 'new_field': 2},
+      '瘦身用黑名单：新字段自动带进内联快照，不会被静默丢掉')
+# 字符串里的 // 与 <\/script> 不能被当成注释删掉；整行 // 注释要删干净
+_js = "var u='https://api.github.com/x';\n// 整行注释\nvar re=/\\/\\*a\\//g;\n/* 块注释 */var b=1;\n"
+_js2 = strip_js_comments(_js)
+check('https://api.github.com/x' in _js2 and '/\\/\\*a\\//g' in _js2 and 'var b=1' in _js2,
+      '剥 JS 注释不动字符串里的 URL 与正则字面量')
+check('整行注释' not in _js2 and '块注释' not in _js2, '剥 JS 注释删掉整行 // 与 /* */ 块')
 
 _seed_patch.stop()
 print()
