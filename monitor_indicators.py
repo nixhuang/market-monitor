@@ -170,9 +170,12 @@ def boll_streak(closes, n=20, k=2.0, near_pct=0.5, max_days=120, highs=None, low
             sd = (sum((x - mid) ** 2 for x in win) / n) ** 0.5
             up = mid + k * sd
             dn = mid - k * sd
+            rail = up if side == "up" else dn
+            if not math.isfinite(rail) or rail <= 0:
+                break  # 非正轨道没有有效百分比距离；只中断这一侧，不影响另一侧。
             px = hi[i] if side == "up" else lo[i]
             gap = (up - px) / up * 100 if side == "up" else (px - dn) / dn * 100
-            if gap > near_pct:             # 这一天远离了，连续性断掉
+            if not math.isfinite(gap) or gap > near_pct:             # 这一天远离了，连续性断掉
                 break
             days += 1
             if gap <= 0:

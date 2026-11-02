@@ -255,10 +255,10 @@ class RulesRegression(unittest.TestCase):
                       '  border:var(--frame-w) solid var(--signal-border)}', css)
         # 卡中卡「长持仓」单独再细一档，不跟着整卡 1.5px
         self.assertIn('.zone-card[open]{border:1px solid var(--signal-border)}', css)
-        # 长持仓框左右外扩 2px（内容补 2px 内边距，灯条位置不动），区内 ▲ 收起条不再溢出子框
-        self.assertIn('.zone-card{margin:10px -2px 12px;padding-left:2px;padding-right:2px;\n'
+        # 长持仓框左右外扩 2px，内部4px与普通分组一致；收起条抵消同样内边距
+        self.assertIn('.zone-card{margin:10px -2px 12px;padding-left:4px;padding-right:4px;\n'
                       '  border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}', css)
-        self.assertIn('.zone-card .group-bottom{margin:0 -2px 0}', css)
+        self.assertIn('.zone-card .group-bottom{margin:0 -4px 0}', css)
         # 数字胶囊：个位压在胶囊中线（右边 17px 内边距给三角留位），两位数时十位向左长，不折行；
         # 胶囊仍是 44px。三角维持线上版：16px 的 ▾/▴ 字形，绝对定位贴到胶囊右侧（距右边框 2px）。
         self.assertIn('#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;'
@@ -284,11 +284,17 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('#macroCard td:nth-child(2),#macroCard td:nth-child(3),'
                       '#macroCard td:nth-child(4){text-align:center}', css)
         self.assertNotIn('.reference-detail{', css)
-        # 手机：整页左右只留 4px，外框贴住屏幕边；上下沿用 body 原值
+        # 整页左右各加1px；宽屏同步收窄wrap保证实际边距也各增加1px
         media = re.search(r'@media \(max-width:600px\)\{(.*?)\n\}', css, re.S)
         self.assertIsNotNone(media)
-        # 2026-11-01：右侧页面距比左侧多 2px（4 → 6），左侧仍是 4
-        self.assertIn('body{padding-left:4px;padding-right:6px}', media[1])
+        self.assertIn('body{padding-left:5px;padding-right:7px}', media[1])
+        self.assertIn('padding:env(safe-area-inset-top) 17px 40px 15px}', css)
+        self.assertIn('.wrap{max-width:718px;margin:0 auto}', css)
+        self.assertIn('padding-bottom:2px;min-height:63px}', css)
+        self.assertIn('box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0', css)
+        self.assertIn('.group-card>summary.grp,.macro-card>summary.grp{font-size:18px}', css)
+        self.assertIn('.group-card>summary .group-stats,.macro-card>summary .group-stats{font-size:16px}', css)
+        self.assertIn('.stat-badge{min-width:17px;height:17px;padding:0 3px;font-size:16px}', css)
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.20)', css)
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
         # 「信号」列所有胶囊同宽且文字居中
@@ -865,7 +871,8 @@ class RulesRegression(unittest.TestCase):
                 self.assertIn('新门槛＝√(T×F)', glossary)
                 self.assertIn('自适应未命中，不再用固定倍数补灯', glossary)
                 self.assertIn('盘中量比＝（当日累计量÷已开盘分钟）÷', glossary)
-                self.assertIn('按已开盘进度放宽', glossary)
+                self.assertIn('常规交易日等效分钟（已开盘分钟÷当日全日分钟×390）', glossary)
+                self.assertIn('半日市按当日实际交易时长折算', glossary)
                 self.assertIn('放宽的是门槛，显示仍是原始折算值', glossary)
                 self.assertNotIn('盘中量比＝（当日累计量÷已开盘分钟数）÷', glossary)
 

@@ -289,6 +289,48 @@ class TestRSI(unittest.TestCase):
             self.assertAlmostEqual(monitor.calc_rsi(prices, period),
                                    100 * (0.5 * (period - 1) + 1) / period)
 
+    def test_audit_boll_nonpositive_lower_keeps_upper_and_group_rules(self):
+        data = neutral_data()
+        data.update(closes=[1.0, 3.0] * 30, highs=[6.0] * 60, lows=[1.0] * 60,
+                    price=3.0, prev_close=1.0)
+        for k, lower in ((2, 0), (3, -1)):
+            self.assertEqual(monitor.boll(data['closes'], 2, k)[2], lower)
+            streak = monitor.boll_streak(data['closes'], 2, k, highs=data['highs'], lows=data['lows'])
+            self.assertEqual(streak['dn'], {'days': 0, 'cross': 0})
+            self.assertEqual(streak['up'], {'days': 59, 'cross': 59})
+            for group in (g['item_group'] for g in monitor.GROUPS):
+                with self.subTest(k=k, group=group), patch.dict(monitor.S, dict(QUIET, boll_n=2, boll_k=k)), \
+                        patch.object(monitor, 'calc_rsi', return_value=20):
+                    _, signals, detail = monitor.analyze_symbol('TEST', {}, data, group=group)
+                self.assertTrue(any('布林上轨' in s for s in signals))
+                self.assertFalse(any('布林下轨' in s for s in signals))
+                marks = [mark for mark in detail['signal_marks'] if mark[0] == 'boll_rsi']
+                self.assertEqual(marks, [('boll_rsi', 'yellow')] if group in ('position', 'focus') else [])
+
+    def test_audit_boll_invalid_historical_rail_breaks_only_its_streak(self):
+        streak = monitor.boll_streak([1, 3, 3, 3], n=2, k=2, highs=[6] * 4, lows=[1] * 4)
+        self.assertEqual(streak['dn'], {'days': 2, 'cross': 2})
+        self.assertEqual(streak['up'], {'days': 3, 'cross': 3})
+        for invalid in (0, -1, float('nan'), float('inf'), -float('inf')):
+            with self.subTest(invalid=invalid):
+                _, signals, _ = self.analyze([50, 50, 50], bands=(100, 101, invalid))
+                self.assertFalse(any('布林下轨' in s for s in signals))
+                self.assertTrue(any('布林上轨' in s for s in signals))
+                _, signals, _ = self.analyze([50, 50, 50], bands=(100, invalid, 99))
+                self.assertFalse(any('布林上轨' in s for s in signals))
+                self.assertTrue(any('布林下轨' in s for s in signals))
+
+    def test_audit_boll_valid_signed_distance_and_upper_tie_stay_unchanged(self):
+        for high, low, bands, side in ((110, 90, (100, 101, 99), '下轨'),
+                                      (101, 99, (100, 100, 100), '上轨')):
+            data = neutral_data()
+            data['highs'][-1], data['lows'][-1] = high, low
+            _, signals, detail = self.analyze([20, 20, 20], data=data, bands=bands)
+            self.assertTrue(detail['boll_rsi_direction'].startswith(side))
+            self.assertEqual(detail['signal_marks'], [('boll_rsi', 'red' if side == '下轨' else 'yellow')])
+            self.assertTrue(any('布林上轨' in s for s in signals))
+            self.assertTrue(any('布林下轨' in s for s in signals))
+
     def test_insufficient_long_period(self):
         data = neutral_data()
         for key in ('closes', 'highs', 'lows', 'volumes', 'dates'):

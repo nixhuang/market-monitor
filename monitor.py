@@ -42,6 +42,7 @@ import policy_alerts
 import earnings_sources
 import market_sessions
 from runtime_state import RuntimeState, atomic_write_json, build_identity, write_artifacts
+from build_support import generation_failure_reason
 
 
 # 职责实例只保存当前入口模块；兼容导出仍支持旧调用与动态 patch。
@@ -74,6 +75,12 @@ MACRO_BUDGET_SECONDS = 120
 REFERENCE_BUDGET_SECONDS = 45
 EARN_BUDGET_SECONDS = 90
 _REQUEST_TLS = threading.local()
+_RETRY_BLOCKED = threading.Event()  # 工作线程遇到非传输异常时，只阻止自动续链。
+
+
+def note_generation_failure(exc):
+    if generation_failure_reason(exc) == "blocked":
+        _RETRY_BLOCKED.set()
 
 
 class BudgetExhausted(requests.Timeout, TimeoutError):
@@ -154,16 +161,17 @@ class SourceGate:
             self.fails, self.blocked_until, self.enabled = 0, 0.0, enabled
 
     def allow(self):
-        return not self.enabled or time.monotonic() >= self.blocked_until
+        with self.lock:
+            return not self.enabled or time.monotonic() >= self.blocked_until
 
     def ok(self):
         with self.lock:
             self.fails = 0
 
     def fail(self):
-        if not self.enabled:
-            return False
         with self.lock:
+            if not self.enabled:
+                return False
             self.fails += 1
             if self.fails >= self.threshold:
                 self.blocked_until = time.monotonic() + self.cooldown
@@ -363,8 +371,12 @@ def ensure_schedule_run(runtime=None):
             runtime.receipt("skipped", "candidate_run_busy", candidate_run_id=run["id"],
                             candidate_status=run["status"], candidate_target_verified=False)
             return 0
+    dispatch_inputs = {"source": "schedule-fallback"}
+    if os.environ.get("MM_RETRY_DAY"):
+        dispatch_inputs.update(retry_day=os.environ["MM_RETRY_DAY"],
+                               retry_attempt=os.environ["MM_RETRY_ATTEMPT"])
     d = requests.post(base + "/dispatches", headers=headers, timeout=20,
-                      json={"ref": "main", "inputs": {"source": "schedule-fallback"}})
+                      json={"ref": "main", "inputs": dispatch_inputs})
     d.raise_for_status()
     print(f"今晚收盘结果缺失，已补派发运行（目标交易日 {plan['target']}）")
     runtime.receipt("skipped", "dispatch_requested", dispatched=True)
@@ -1298,9 +1310,11 @@ def yahoo_history(symbol):
                     **({"close_patch": "yahoo-meta"} if patched else {}),
                 }
             except requests.HTTPError as e:
+                note_generation_failure(e)
                 last_err = str(e)[:60]
                 continue
             except Exception as e:
+                note_generation_failure(e)
                 last_err = str(e)[:60]
                 continue
     log(f"  ! {symbol} 抓取失败: {last_err}")
@@ -1349,6 +1363,7 @@ def stooq_history(symbol):
             "source": "stooq",
         }
     except Exception as e:
+        note_generation_failure(e)
         log(f"  ! {symbol} stooq 失败: {e}")
         return None
 
@@ -1524,6 +1539,7 @@ def nasdaq_history(symbol):
                     "source": "nasdaq",
                 }
             except Exception as e:
+                note_generation_failure(e)
                 log(f"  ! {symbol} nasdaq({sym}/{ac}) 失败: {str(e)[:60]}")
                 continue
     return None
@@ -1728,7 +1744,7 @@ SA_EARN_EST_RE = re.compile(r'earningsDateLabel:\s*"([^"]*)"')
 SA_EARN_GATE = SourceGate(threshold=3, cooldown=1800)
 _SA_EARN_CACHE = {}
 _SA_EARN_SESSION = {"sess": None, "t": 0.0}
-_SA_EARN_LOCK = threading.Lock()
+_SA_EARN_LOCK = threading.RLock()
 _SA_MONTHS = {m: i for i, m in enumerate(
     ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), 1)}
 
@@ -1739,6 +1755,8 @@ def _sa_earn_session():
         now = time.monotonic()
         if _SA_EARN_SESSION["sess"] and now - _SA_EARN_SESSION["t"] < 1800:
             return _SA_EARN_SESSION["sess"]
+        if _SA_EARN_SESSION["sess"] is not None:
+            _SA_EARN_SESSION["sess"].close()
         sess = requests.Session()
         sess.headers.update(CONSENSUS_UA)
         _SA_EARN_SESSION.update(sess=sess, t=now)
@@ -1766,37 +1784,47 @@ def parse_stockanalysis_earnings(text, today):
 
 
 def stockanalysis_earnings(sym, timeout=15):
-    """第二来源。任何失败返回 error（调用方静默忽略）；限流走 SA_EARN_GATE 熔断。"""
+    """财报主源独立熔断；锁内复查闸门并使用会话，避免排队线程越过熔断。"""
     key = normalize_symbol(sym).upper()
     if is_etf(key):
         return {"status": "na", "reason": "etf"}
-    if key in _SA_EARN_CACHE:
-        return _SA_EARN_CACHE[key]
     slug = consensus_slug(key)
     if not slug:
         return {"status": "na", "reason": "not_supported"}
-    res = {"status": "error"}
-    try:
-        if not SA_EARN_GATE.allow():
+    with _SA_EARN_LOCK:
+        if key in _SA_EARN_CACHE:
+            return _SA_EARN_CACHE[key]
+        res = {"status": "error"}
+        try:
+            if not SA_EARN_GATE.allow():
+                return res
+            timeout = request_timeout(timeout)
+            r = _sa_earn_session().get(SA_EARN_URL.format(slug=slug), timeout=timeout)
+            if r.status_code in (403, 429) or r.status_code >= 500:
+                SA_EARN_GATE.fail()
+            elif r.status_code == 404:
+                SA_EARN_GATE.ok()
+                res = {"status": "na", "reason": "http404"}
+            elif r.status_code == 200:
+                res = parse_stockanalysis_earnings(r.text, _earn_today())
+                if res.get('status') == 'error':
+                    SA_EARN_GATE.fail()
+                else:
+                    SA_EARN_GATE.ok()
+        except BudgetExhausted:
             return res
-        r = _sa_earn_session().get(SA_EARN_URL.format(slug=slug), timeout=request_timeout(timeout))
-        if r.status_code == 429:
+        except Exception as e:
             SA_EARN_GATE.fail()
-        elif r.status_code == 404:
-            res = {"status": "na", "reason": "http404"}
-        elif r.status_code == 200:
-            SA_EARN_GATE.ok()
-            res = parse_stockanalysis_earnings(r.text, _earn_today())
-    except Exception as e:
-        log(f"  · {key} stockanalysis 财报日期读取失败：{str(e)[:60]}")
-    if res.get("status") != "error":
-        _SA_EARN_CACHE[key] = res
-    return res
+            log(f"  · {key} stockanalysis 财报日期读取失败：{str(e)[:60]}")
+        if res.get("status") != "error":
+            _SA_EARN_CACHE[key] = res
+        return res
 
 
 _YAHOO_CRUMB = {"crumb": None, "session": None, "t": 0.0}
-_YAHOO_CRUMB_LOCK = threading.Lock()
+_YAHOO_CRUMB_LOCK = threading.RLock()
 _YAHOO_EARN_CACHE = {}
+YAHOO_EARN_GATE = SourceGate(threshold=3, cooldown=90)
 
 
 def reset_run_caches():
@@ -1813,6 +1841,7 @@ def reset_run_caches():
     _SA_EARN_SESSION.update(sess=None, t=0.0)
     _YAHOO_CRUMB.update(crumb=None, session=None, t=0.0)
     SA_EARN_GATE.reset(False)
+    YAHOO_EARN_GATE.reset(False)
     YAHOO_GATE.reset(False)
     STOOQ_GATE.reset(False)
     SP500_RS_ROWS.clear()
@@ -1826,18 +1855,28 @@ def _yahoo_crumb_session():
         now = time.monotonic()
         if _YAHOO_CRUMB["crumb"] and now - _YAHOO_CRUMB["t"] < 1800:
             return _YAHOO_CRUMB["session"], _YAHOO_CRUMB["crumb"]
+        if not YAHOO_EARN_GATE.allow():
+            return None, None
+        if _YAHOO_CRUMB["session"] is not None:
+            _YAHOO_CRUMB["session"].close()
+        _YAHOO_CRUMB.update(crumb=None, session=None, t=0.0)
         sess = requests.Session()
         sess.headers.update({**UA, "Accept": "*/*"})
-        sess.get("https://fc.yahoo.com/", timeout=request_timeout(8))  # 只为拿 cookie，返回 404 也正常
-        r = sess.get("https://query1.finance.yahoo.com/v1/test/getcrumb", timeout=request_timeout(8))
-        crumb = (r.text or "").strip()
-        if r.status_code == 429:
-            YAHOO_GATE.fail()
-            return None, None
-        if r.status_code != 200 or not crumb or len(crumb) > 64 or "<" in crumb or " " in crumb:
-            return None, None
-        _YAHOO_CRUMB.update(crumb=crumb, session=sess, t=now)
-        return sess, crumb
+        try:
+            cookie = sess.get("https://fc.yahoo.com/", timeout=request_timeout(8))  # 返回 404 也正常
+            if cookie.status_code in (403, 429) or cookie.status_code >= 500:
+                YAHOO_EARN_GATE.fail()
+                return None, None
+            r = sess.get("https://query1.finance.yahoo.com/v1/test/getcrumb", timeout=request_timeout(8))
+            crumb = (r.text or "").strip()
+            if r.status_code != 200 or not crumb or len(crumb) > 64 or "<" in crumb or " " in crumb:
+                YAHOO_EARN_GATE.fail()
+                return None, None
+            _YAHOO_CRUMB.update(crumb=crumb, session=sess, t=now)
+            return sess, crumb
+        finally:
+            if _YAHOO_CRUMB["session"] is not sess:
+                sess.close()
 
 
 def parse_yahoo_earnings(body, today):
@@ -1858,35 +1897,45 @@ def parse_yahoo_earnings(body, today):
 
 
 def yahoo_earnings(sym, timeout=8):
-    """第二来源：Yahoo calendarEvents。任何失败都返回 error（调用方静默忽略），限流走 YAHOO_GATE 熔断。"""
+    """Yahoo 财报兜底使用独立闸门；会话、认证和缓存与同源请求一起加锁。"""
     key = normalize_symbol(sym).upper()
     if is_etf(key):
         return {"status": "na", "reason": "etf"}
-    if key in _YAHOO_EARN_CACHE:
-        return _YAHOO_EARN_CACHE[key]
-    res = {"status": "error"}
-    try:
-        if not YAHOO_GATE.allow():
+    with _YAHOO_CRUMB_LOCK:
+        if key in _YAHOO_EARN_CACHE:
+            return _YAHOO_EARN_CACHE[key]
+        res = {"status": "error"}
+        try:
+            if not YAHOO_EARN_GATE.allow():
+                return res
+            request_timeout(timeout)
+            sess, crumb = _yahoo_crumb_session()
+            if not sess:
+                return res
+            url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{key}"
+            r = sess.get(url, params={"modules": "calendarEvents", "crumb": crumb}, timeout=request_timeout(timeout))
+            if r.status_code in (401, 403):
+                _YAHOO_CRUMB["crumb"] = None  # crumb 失效，下次重取；连续认证失败也应有界。
+                YAHOO_EARN_GATE.fail()
+            elif r.status_code == 429 or r.status_code >= 500:
+                YAHOO_EARN_GATE.fail()
+            elif r.status_code == 404:
+                YAHOO_EARN_GATE.ok()
+                res = {"status": "na", "reason": "http404"}
+            elif r.status_code == 200:
+                res = parse_yahoo_earnings(r.json(), _earn_today())
+                if res.get('status') == 'error':
+                    YAHOO_EARN_GATE.fail()
+                else:
+                    YAHOO_EARN_GATE.ok()
+        except BudgetExhausted:
             return res
-        sess, crumb = _yahoo_crumb_session()
-        if not sess:
-            return res
-        url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{key}"
-        r = sess.get(url, params={"modules": "calendarEvents", "crumb": crumb}, timeout=request_timeout(timeout))
-        if r.status_code == 429:
-            YAHOO_GATE.fail()
-        elif r.status_code == 404:
-            res = {"status": "na", "reason": "http404"}
-        elif r.status_code == 200:
-            YAHOO_GATE.ok()
-            res = parse_yahoo_earnings(r.json(), _earn_today())
-        elif r.status_code in (401, 403):
-            _YAHOO_CRUMB["crumb"] = None                                   # crumb 失效，下次重取
-    except Exception as e:
-        log(f"  · {key} Yahoo 财报日期读取失败：{str(e)[:60]}")
-    if res.get("status") != "error":
-        _YAHOO_EARN_CACHE[key] = res
-    return res
+        except Exception as e:
+            YAHOO_EARN_GATE.fail()
+            log(f"  · {key} Yahoo 财报日期读取失败：{str(e)[:60]}")
+        if res.get("status") != "error":
+            _YAHOO_EARN_CACHE[key] = res
+        return res
 
 
 def cross_check_earnings(primary, secondary, today, secondary_source="yahoo"):
@@ -2281,8 +2330,14 @@ def attach_earnings(items, prev=None, today=None, prev_events=None, deadline=Non
         + (f"，{stat['deferred']} 只留到下一轮" if stat["deferred"] else "") + "…")
     try:
         if queue:
-            with ThreadPoolExecutor(max_workers=4) as ex:
-                got = list(ex.map(resolve_one, queue))
+            SA_EARN_GATE.reset(True)
+            YAHOO_EARN_GATE.reset(True)
+            try:
+                with ThreadPoolExecutor(max_workers=4) as ex:
+                    got = list(ex.map(resolve_one, queue))
+            finally:
+                SA_EARN_GATE.reset(False)
+                YAHOO_EARN_GATE.reset(False)
             for k, e in zip(queue, got):
                 if e is None:
                     stat["deferred"] += 1
@@ -2368,6 +2423,27 @@ def valid_history(data):
         return False
 
 
+def _daily_previous_matches(data, symbol):
+    """只核验作为昨收的末两根日线；周末、节假日按对应交易所日历跨越。"""
+    try:
+        dates = data.get("dates") or []
+        if len(dates) < 2:
+            return False
+        identity = instrument_identity(symbol)
+        if identity.endswith(".HK"):
+            calendar_name = "XHKG"
+        elif identity.endswith((".SS", ".SZ")):
+            calendar_name = "XSHG"
+        elif identity.endswith("=F"):
+            calendar_name = "CMES"
+        else:
+            calendar_name = "XNYS"
+        calendar = market_sessions.xcals.get_calendar(calendar_name)
+        return calendar.previous_session(dates[-1]).date().isoformat() == dates[-2]
+    except (ValueError, TypeError, KeyError, IndexError, OverflowError):
+        return False
+
+
 def valid_futures_identity(data, identity):
     """主连只接受供应商明确返回的期货身份，不用ETF、现金指数或CFD冒充。
     ESMAIN 接 Yahoo ES=F 的供应商连续序列；换月/复权口径不承诺与其他平台一致。
@@ -2432,6 +2508,9 @@ def fetch_history(symbol):
             _note_source_day(name, data)
         if not data or not valid_history(data) or data["dates"][-1] > TARGET_DATE:
             log(f"  ! {symbol} {name} 日线不合法或超过目标交易日，换源")
+            continue
+        if not _daily_previous_matches(data, symbol):
+            log(f"  ! {symbol} {name} 昨收交易日缺失或日历不可用，日线不足，换源")
             continue
         data["source"] = name
         # 大幅跳变可能是拆股口径错位；找另一个同日来源佐证，不直接制造红信号。
@@ -3394,6 +3473,25 @@ render = _page_renderer.render
 QUOTE_EXHAUSTED = object()  # 总预算用完、这只根本没来得及尝试（与"尝试了但失败"区分）
 
 
+def _analyze_symbol_safely(sym, cfg, data, group):
+    """初算和共识刷新后的重算共用隔离边界；失败行不计入当日有效行情。"""
+    try:
+        return analyze_symbol(sym, cfg, data, group=group)
+    except Exception as exc:
+        _RETRY_BLOCKED.set()
+        signals = [f"指标分析失败（{type(exc).__name__}）：{str(exc)[:160]}"]
+        detail = {
+            "symbol": sym, "note": cfg.get("note", ""), "group": group,
+            "price": None, "prev_close": None, "chg": None,
+            "rsi": {period: None for period in RSI_PERIODS},
+            "dist_high": None, "dist_low": None, "vol_ratio": None,
+            "trigger": cfg.get("trigger"), "boll_up": None, "boll_dn": None,
+            "source": data.get("source", ""), "data_date": "",
+            "signals": signals, "signal_marks": [], "level": "gray",
+        }
+        return "gray", signals, detail
+
+
 def _fetch_quote(symbol):
     """工作线程里抓一只：返回行情 dict / None（失败）/ QUOTE_EXHAUSTED（总预算已用完）。"""
     if request_remaining(QUOTE_DEADLINE) <= 0:
@@ -3402,6 +3500,7 @@ def _fetch_quote(symbol):
     try:
         return fetch_history(symbol)
     except Exception as e:
+        note_generation_failure(e)
         log(f"  ! {symbol} 抓取异常：{str(e)[:70]}")
         return None
     finally:
@@ -3730,8 +3829,22 @@ def dump_http_snapshot(state):
         log(f"HTTP 快照写入失败：{type(exc).__name__}")
 
 
+def retry_output(reason):
+    """只输出明确分类，不将失败改成成功，也不替代缓存或发布证明。"""
+    output = os.environ.get("GITHUB_OUTPUT")
+    if output:
+        reason = "blocked" if _RETRY_BLOCKED.is_set() else reason
+        try:
+            with open(output, "a", encoding="utf-8") as stream:
+                stream.write(f"retry_reason={reason}\n")
+        except (OSError, ValueError):
+            # 输出只是可选续跑提示；写入失败不能遮蔽根因，CI 缺少分类时默认不重试。
+            pass
+
+
 def main(argv=None):
     global QUOTE_DEADLINE, RUN_DEADLINE
+    _RETRY_BLOCKED.clear()
     runtime = RuntimeState(BASE, target=TARGET_DATE, event=EVENT)
     try:
         with bounded_http_requests():
@@ -3746,9 +3859,12 @@ def main(argv=None):
                         restore_http_snapshot(state)
     except Exception as exc:
         runtime.receipt("failed", f"{type(exc).__name__}: {str(exc)[:300]}")
+        retry_output(generation_failure_reason(exc))
         raise
     finally:
         QUOTE_DEADLINE = RUN_DEADLINE = None
+        SA_EARN_GATE.reset(False)
+        YAHOO_EARN_GATE.reset(False)
         YAHOO_GATE.reset(False)
         STOOQ_GATE.reset(False)
 
@@ -3787,9 +3903,17 @@ def _main(argv, runtime, snapshots=None):
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-    except Exception as e:
-        log(f"holdings.json 读取失败，按空清单处理：{e}")
-        cfg = {}
+    except (OSError, ValueError) as e:
+        raise ValueError(f"holdings.json 读取失败（{type(e).__name__}）：{e}") from e
+    if not isinstance(cfg, dict):
+        raise ValueError("holdings.json 格式错误：顶层必须是对象")
+    for group in GROUPS:
+        entries = cfg.get(group["key"], {})
+        if not isinstance(entries, dict):
+            raise ValueError(f"holdings.json 格式错误：{group['key']} 必须是对象")
+        for symbol, entry in entries.items():
+            if not isinstance(symbol, str) or not symbol.strip() or not isinstance(entry, dict):
+                raise ValueError(f"holdings.json 格式错误：{group['key']} 的 {symbol!r} 必须是非空代码和配置对象")
 
     universe, group_counts, dup_hidden = grouped_universe(cfg)
     # 一轮只读一个快照；进程内数据和会话已在入口重置。
@@ -3871,7 +3995,7 @@ def _main(argv, runtime, snapshots=None):
                     continue
             if data:
                 cons = cons_data.get(normalize_symbol(sym))
-                lv, sig, detail = analyze_symbol(sym, {**sc, "_consensus": cons} if cons else sc, data, group=grp)
+                lv, sig, detail = _analyze_symbol_safely(sym, {**sc, "_consensus": cons} if cons else sc, data, group=grp)
                 if bench_data and normalize_symbol(sym) in rs_targets:
                     rs = relative_strength(data, bench_data, bench_name=bench_name)
                     if rs:
@@ -3889,7 +4013,7 @@ def _main(argv, runtime, snapshots=None):
                 "vol_ratio": None, "trigger": sc.get("trigger"),
                 "group": grp, "data_date": "", "boll_up": None, "boll_dn": None,
                 "signals": ["无数据：暂不支持该代码报价"] if not supported else
-                           (["本轮抓取时间预算不足，尚未取数"] if exhausted else ["数据获取失败或报价异常"]),
+                           (["本轮抓取时间预算不足，尚未取数"] if exhausted else ["数据获取失败、日线不足或报价异常"]),
                 "level": "gray",
             })
 
@@ -3918,7 +4042,7 @@ def _main(argv, runtime, snapshots=None):
             continue
         sc, grp = configs[sym]
         cons = cons_data.get(key)
-        _, _, detail = analyze_symbol(sym, {**sc, "_consensus": cons} if cons else sc, fetched[sym], group=grp)
+        _, _, detail = _analyze_symbol_safely(sym, {**sc, "_consensus": cons} if cons else sc, fetched[sym], group=grp)
         for field in ("earnings", "rs_spy"):
             if field in d:
                 detail[field] = d[field]
@@ -3946,6 +4070,7 @@ def _main(argv, runtime, snapshots=None):
             with open(gh_out, "a", encoding="utf-8") as f:
                 f.write("publish=no\n")
         runtime.receipt("skipped", "freshness_below_threshold", detail=msg)
+        retry_output("missing-data")
         return 0
     supported_items = [d for d in items if quote_supported(d["symbol"])]
     html = render(macro, items, len(universe), data_down=bool(supported_items)
@@ -3961,6 +4086,7 @@ def _main(argv, runtime, snapshots=None):
         push_serverchan(macro, items, snapshot=snapshot)
     except Exception as e:
         log(f"推送环节异常（忽略）：{str(e)[:90]}")
+    retry_output("none")
     return 0
 
 
@@ -3978,15 +4104,17 @@ def push_serverchan(macro, items, snapshot=None):
         log("未配置 SERVERCHAN_KEY，跳过微信推送")
         return
 
-    reds = [d for d in items if d["level"] == "red"]
-    yellows = [d for d in items if d["level"] == "yellow"]
+    identity = snapshot if isinstance(snapshot, dict) else build_identity()
+    target = identity.get("target_trade_date", TARGET_DATE)
+    fresh_items = [d for d in items if _iso_date(target) and d.get("data_date") == target
+                   and _finite_pos(d.get("price")) and not d.get("reference_only")]
+    reds = [d for d in fresh_items if d["level"] == "red"]
+    yellows = [d for d in fresh_items if d["level"] == "yellow"]
     grays = [d for d in items if d["level"] == "gray"]
     if not reds and not yellows:
         log("今晚无异动，不推送微信")
         return
 
-    identity = snapshot if isinstance(snapshot, dict) else build_identity()
-    target = identity.get("target_trade_date", TARGET_DATE)
     build_id = identity.get("build_id", "")
     lines = ["本轮已生成待发布；尚未确认提交或 Pages 更新，在线页面可能仍为上一版。",
              f"目标交易日：{target or '未提供'}；build_id：{build_id or '未提供'}", ""]

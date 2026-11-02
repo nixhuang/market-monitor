@@ -15,7 +15,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from datetime import datetime, timedelta
+from unittest.mock import patch, mock_open
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import build_support as b
@@ -41,8 +43,9 @@ class BuildTests(unittest.TestCase):
         self.addCleanup(guard.stop)
         self.git("init", "--quiet", "--initial-branch=main")
         self.git("config", "core.autocrlf", "false")
-        self.files = {name: "初始输入\n" for name in b.REQUIRED_INPUTS}
-        self.files.update({"index.html": "旧页面", "status.json": "{}", "README.md": "说明"})
+        self.files = {name: "{}" if name.endswith(".json") else "初始输入\n" for name in b.REQUIRED_INPUTS}
+        self.files.update({"settings.json": '{"rsi_low":35}', "groups.json": "[]",
+                           "index.html": "旧页面", "status.json": "{}", "README.md": "说明"})
         for name, value in self.files.items():
             (self.root / name).write_text(value, encoding="utf-8")
         self.git("add", "--", ".")
@@ -177,10 +180,194 @@ class BuildTests(unittest.TestCase):
 
     def test_changed_inputs_during_generation_cannot_be_sealed(self):
         self.generated()
+        self.assertNotEqual((self.root / "settings.json").read_bytes(), b"{}")
         (self.root / "settings.json").write_text("{}", encoding="utf-8")
         with self.assertRaises(b.BuildError):
             b.seal_artifacts(self.root, self.frozen, self.bundle)
         self.assertFalse(self.bundle.exists())
+
+    def test_same_size_same_mtime_input_is_verified_when_git_reports_clean(self):
+        self.generated()
+        path = self.root / "settings.json"
+        before = path.read_bytes()
+        after = before.replace(b"35", b"36")
+        self.assertNotEqual(before, after)
+        self.assertEqual(len(before), len(after))
+        stamp = path.stat()
+        for flag in ("assume-unchanged", "skip-worktree"):
+            with self.subTest(flag=flag):
+                self.git("update-index", "--" + flag, "--", "settings.json")
+                try:
+                    path.write_bytes(after)
+                    os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+                    self.assertEqual(path.stat().st_mtime_ns, stamp.st_mtime_ns)
+                    self.assertEqual(path.stat().st_size, stamp.st_size)
+                    self.assertEqual(self.git("diff", "--name-only", "HEAD", "--", "settings.json"), b"")
+                    for action in (lambda: b.snapshot(self.root, "123-2"),
+                                   lambda: b.seal_artifacts(self.root, self.frozen, self.bundle)):
+                        with self.assertRaisesRegex(b.BuildError, "未提交内容修改：settings.json"):
+                            action()
+                    self.assertFalse(self.bundle.exists())
+                finally:
+                    path.write_bytes(before)
+                    self.git("update-index", "--no-" + flag, "--", "settings.json")
+
+    def test_identical_input_rewrite_is_still_allowed_by_content_proof(self):
+        path = self.root / "settings.json"
+        path.write_bytes(path.read_bytes())
+        self.assertEqual(b.snapshot(self.root, "123-2")["input_hash"], self.frozen["input_hash"])
+        self.sealed()
+        self.assertTrue(self.bundle.is_dir())
+
+    def test_unreadable_content_fails_closed_even_with_clean_git_diff(self):
+        self.generated()
+        with patch.object(Path, "read_bytes", side_effect=PermissionError("合成输入不可读")):
+            with self.assertRaisesRegex(b.BuildError, "构建输入无法读取") as raised:
+                b.seal_artifacts(self.root, self.frozen, self.bundle)
+        self.assertIsInstance(raised.exception.__cause__, PermissionError)
+        self.assertFalse(self.bundle.exists())
+
+    def cleaning_checkout(self, changes, worktree, *, autocrlf):
+        # 全部对象按 LF/原始二进制建立；只在临时仓库手动构造合法 checkout，不调用外部过滤器。
+        contents = {name: value.encode("utf-8") for name, value in self.files.items()}
+        contents.update(changes)
+        self.git("config", "core.autocrlf", autocrlf)
+        sha = self.revision(contents)
+        self.git("read-tree", sha)
+        self.git("update-ref", "refs/heads/main", sha)
+        for name, content in contents.items():
+            (self.root / name).write_bytes(worktree.get(name, content))
+        self.base = sha
+
+    def test_git_cleaning_accepts_crlf_and_blocks_same_stat_edits(self):
+        content = b'{"rsi_low":35}\n'
+        checkout = b'{"rsi_low":35}\r\n'
+        self.cleaning_checkout({"settings.json": content}, {"settings.json": checkout}, autocrlf="true")
+        index = self.root / ".git/index"
+        before_index = index.read_bytes()
+        objects = self.root / ".git/objects"
+        before_objects = {str(p.relative_to(objects)): p.read_bytes() for p in objects.rglob("*") if p.is_file()}
+        with patch.object(b, "_git", wraps=b._git) as calls:
+            self.frozen = b.snapshot(self.root, "crlf-1")
+            self.generated()
+            b.seal_artifacts(self.root, self.frozen, Path(self.temp.name) / "clean-crlf-bundle")
+        hash_calls = [call for call in calls.call_args_list if "hash-object" in call.args]
+        self.assertEqual(len(hash_calls), 2)
+        for call in hash_calls:
+            self.assertIn("--stdin-paths", call.args)
+            self.assertNotIn("-w", call.args)
+            self.assertNotIn("--no-filters", call.args)
+            self.assertIn(b'"settings.json"\n', call.kwargs["input"])
+        self.assertEqual(index.read_bytes(), before_index)
+        self.assertEqual({str(p.relative_to(objects)): p.read_bytes() for p in objects.rglob("*") if p.is_file()}, before_objects)
+        path = self.root / "settings.json"
+        self.assertEqual(path.read_bytes(), checkout)
+        self.assertEqual(self.git("show", "HEAD:settings.json"), content)
+        stamp = path.stat()
+        for flag in ("assume-unchanged", "skip-worktree"):
+            with self.subTest(flag=flag):
+                self.git("update-index", "--" + flag, "--", "settings.json")
+                try:
+                    path.write_bytes(checkout.replace(b"35", b"36"))
+                    os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+                    self.assertEqual((path.stat().st_size, path.stat().st_mtime_ns), (stamp.st_size, stamp.st_mtime_ns))
+                    self.assertEqual(self.git("diff", "--name-only", "HEAD", "--", "settings.json"), b"")
+                    flagged_index = index.read_bytes()
+                    for action in (lambda: b.snapshot(self.root, "crlf-2"),
+                                   lambda: b.seal_artifacts(self.root, self.frozen, self.bundle)):
+                        with self.assertRaisesRegex(b.BuildError, "未提交内容修改：settings.json"):
+                            action()
+                    self.assertEqual(index.read_bytes(), flagged_index)
+                    self.assertFalse(self.bundle.exists())
+                finally:
+                    path.write_bytes(checkout)
+                    self.git("update-index", "--no-" + flag, "--", "settings.json")
+
+        # 暂存区必须独立校验，不能被工作树已经恢复到 HEAD 的内容掩盖。
+        changed_oid = self.git("hash-object", "-w", "--stdin", input=content.replace(b"35", b"36")).decode().strip()
+        for mode, oid in (("100644", changed_oid), ("100755", self.frozen["files"]["settings.json"]["oid"])):
+            with self.subTest(staged_mode=mode):
+                self.git("update-index", "--cacheinfo", f"{mode},{oid},settings.json")
+                staged_index = index.read_bytes()
+                try:
+                    with self.assertRaisesRegex(b.BuildError, "未提交修改：settings.json"):
+                        b.snapshot(self.root, "staged-change")
+                    self.assertEqual(index.read_bytes(), staged_index)
+                finally:
+                    self.git("read-tree", self.base)
+        untracked = self.root / "future.py"
+        untracked.write_bytes(b"new_input = True\n")
+        try:
+            with self.assertRaisesRegex(b.BuildError, "未提交修改：future.py"):
+                b.snapshot(self.root, "untracked-change")
+        finally:
+            untracked.unlink()
+        # Windows 无法可靠 chmod 执行位，用 lstat 边界模拟；清洗和 Git 证明仍使用真实实现。
+        real_lstat = Path.lstat
+        def executable_stat(candidate):
+            result = real_lstat(candidate)
+            return os.stat_result((result.st_mode | 0o100, *result[1:])) if candidate == path else result
+        for enabled in ("true", "false"):
+            with self.subTest(filemode=enabled):
+                self.git("config", "core.filemode", enabled)
+                mode_index = index.read_bytes()
+                with patch.object(Path, "lstat", executable_stat):
+                    if enabled == "true":
+                        with self.assertRaisesRegex(b.BuildError, "未提交模式修改：settings.json"):
+                            b.snapshot(self.root, "mode-change")
+                    else:
+                        self.assertEqual(b.snapshot(self.root, "mode-ignored")["input_hash"], self.frozen["input_hash"])
+                self.assertEqual(index.read_bytes(), mode_index)
+
+    def test_git_cleaning_respects_text_binary_and_eol_attributes(self):
+        attributes = b'settings.json text eol=crlf\nfuture.py -text\nbinary.js binary\nauto.png text=auto\n'
+        changes = {".gitattributes": attributes, "settings.json": b'{"rsi_low":35}\n',
+                   "future.py": b"A\nB\n", "binary.js": b"A\nB\n", "auto.png": b"A\0\nB\n"}
+        self.cleaning_checkout(changes, {"settings.json": b'{"rsi_low":35}\r\n'}, autocrlf="false")
+        self.frozen = b.snapshot(self.root, "attributes-1")
+        self.assertEqual(self.frozen["source_sha"], self.base)
+        for name in ("future.py", "binary.js", "auto.png"):
+            with self.subTest(path=name):
+                self.git("update-index", "--assume-unchanged", "--", name)
+                try:
+                    # 这些路径不能因换行归一化而掩盖真实二进制/显式 -text 内容变化。
+                    (self.root / name).write_bytes(changes[name].replace(b"\n", b"\r\n"))
+                    self.assertEqual(self.git("diff", "--name-only", "HEAD", "--", name), b"")
+                    with self.assertRaisesRegex(b.BuildError, "未提交内容修改：" + re.escape(name)):
+                        b.snapshot(self.root, "attributes-2")
+                finally:
+                    (self.root / name).write_bytes(changes[name])
+                    self.git("update-index", "--no-assume-unchanged", "--", name)
+
+    def test_git_cleaning_never_runs_external_filters_or_optional_index_updates(self):
+        self.cleaning_checkout({".gitattributes": b"settings.json filter=audit\n"}, {}, autocrlf="false")
+        for key in ("filter.audit.clean", "filter.audit.process", "diff.external", "core.fsmonitor"):
+            self.git("config", key, "mm-forbidden-external-command")
+        self.git("config", "filter.audit.required", "true")
+        with patch.object(b, "_git", wraps=b._git) as calls:
+            with self.assertRaisesRegex(b.BuildError, "依赖外部过滤器"):
+                b.snapshot(self.root, "filter-1")
+        self.assertFalse(any("diff" in call.args or "hash-object" in call.args for call in calls.call_args_list))
+        # 非构建输入的工作树变更不参与内容证明；所有可能执行外部命令的配置仍须禁用。
+        (self.root / ".gitattributes").write_bytes(b"README.md filter=audit diff=audit\n")
+        (self.root / "README.md").write_bytes(b"unrelated edit\n")
+        self.git("config", "diff.audit.textconv", "mm-forbidden-external-command")
+        before_index = (self.root / ".git/index").read_bytes()
+        with patch.object(b.subprocess, "run", wraps=b.subprocess.run) as commands:
+            self.assertEqual(b.snapshot(self.root, "filter-2")["source_sha"], self.base)
+        self.assertEqual((self.root / ".git/index").read_bytes(), before_index)
+        for call in commands.call_args_list:
+            self.assertFalse(call.kwargs.get("shell", False))
+            self.assertIn("core.fsmonitor=false", call.args[0])
+            self.assertIn("diff.autoRefreshIndex=false", call.args[0])
+            self.assertEqual(call.kwargs["env"]["GIT_OPTIONAL_LOCKS"], "0")
+            if "hash-object" in call.args[0] or "diff" in call.args[0]:
+                for setting in ("filter.audit.clean=", "filter.audit.process=", "filter.audit.required=false"):
+                    self.assertIn(setting, call.args[0])
+            if "diff" in call.args[0]:
+                self.assertIn("--cached", call.args[0])
+                self.assertIn("--no-ext-diff", call.args[0])
+                self.assertIn("--no-textconv", call.args[0])
 
     def test_old_or_mislabelled_status_cannot_be_sealed(self):
         for field in ("source_sha", "input_hash", "build_id"):
@@ -235,6 +422,22 @@ class BuildTests(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(b.BuildError):
                 b.verify_inputs(self.root, dict(self.frozen, **changes), self.base)
 
+    def test_corrupt_json_configuration_is_rejected_before_generation(self):
+        for name in ("holdings.json", "settings.json", "config/new.json"):
+            with self.subTest(path=name):
+                sha = self.revision({name: '{"broken":'})
+                with patch.object(b, "_check_clean_inputs"), patch.object(b, "_source_sha", return_value=sha):
+                    with self.assertRaisesRegex(b.BuildError, "配置 JSON 损坏"):
+                        b.snapshot(self.root, "123-2")
+
+    def test_wrong_configuration_container_is_rejected_before_generation(self):
+        for name, content in (("settings.json", "[]"), ("holdings.json", "null"), ("groups.json", "{}")):
+            with self.subTest(path=name):
+                sha = self.revision({name: content})
+                with patch.object(b, "_check_clean_inputs"), patch.object(b, "_source_sha", return_value=sha):
+                    with self.assertRaisesRegex(b.BuildError, "配置必须是"):
+                        b.snapshot(self.root, "123-2")
+
     def test_cli_exports_identity_and_does_not_overwrite_snapshot(self):
         path = str(Path(self.temp.name) / "build-inputs.json")
         args = ["snapshot", "--root", str(self.root), "--snapshot", path, "--build-id", "456-2"]
@@ -259,6 +462,368 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(b.main(args + [sha]), 3)
             path.write_text("not-json", encoding="utf-8")
             self.assertEqual(b.main(args + [self.base]), 1)
+
+
+class RetryPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.now = datetime(2026, 10, 20, 21, 0, tzinfo=ZoneInfo("America/New_York"))
+        self.steps = {
+            "inputs": {"outcome": "success"}, "prepare": {"outcome": "success"},
+            "receipt": {"outcome": "success"}, "cache-proof": {"outcome": "success"},
+            "gen": {"outcome": "success", "outputs": {"publish": "no", "retry_reason": "missing-data"}},
+            "seal": {"outcome": "skipped"}, "commit": {"outcome": "skipped"},
+        }
+
+    def plan(self, **overrides):
+        options = dict(event="schedule", started_at=self.now.isoformat(), attempt="0",
+                       day=self.now.date().isoformat(), test_result="success", steps=self.steps)
+        options.update(overrides)
+        return b.schedule_retry_plan(self.now, **options)
+
+    def test_generation_failure_classification_is_explicit_and_fail_closed(self):
+        import requests
+        for exc in (requests.Timeout(), requests.ConnectionError(), requests.exceptions.ConnectTimeout()):
+            self.assertEqual(b.generation_failure_reason(exc), "network")
+        for status in (400, 401, 403, 404, 408, 422, 425, 429, 500, 501, 502, 503, 504, 599):
+            response = requests.Response()
+            response.status_code = status
+            reason = b.generation_failure_reason(requests.HTTPError(response=response))
+            self.assertEqual(reason, "network" if status in (408, 425, 429, 500, 502, 503, 504) else "blocked")
+        for exc in (ValueError("配置损坏"), TypeError("代码异常"), KeyError("字段缺失"),
+                    OSError("磁盘满"), RuntimeError("timeout connection reset"), requests.HTTPError(),
+                    requests.exceptions.SSLError(), requests.exceptions.ProxyError()):
+            self.assertEqual(b.generation_failure_reason(exc), "blocked")
+        wrapped = ValueError("不能因 cause 是网络异常而重跑配置错误")
+        wrapped.__cause__ = requests.Timeout()
+        self.assertEqual(b.generation_failure_reason(wrapped), "blocked")
+
+    def test_git_failures_only_allow_network_or_local_push_race(self):
+        for operation in ("fetch", "push"):
+            for error in ("fatal: unable to access: Could not resolve host: github.com",
+                          "fatal: Failed to connect to github.com port 443",
+                          "fatal: the requested URL returned error: 503", "error: RPC failed; curl 56 Recv failure:"):
+                with self.subTest(operation=operation, error=error):
+                    self.assertEqual(b.git_failure_reason(operation, 128, error), "network")
+            for error in ("fatal: Authentication failed", "Permission denied", "Repository not found",
+                          "GH013 protected branch", "pre-receive hook declined", "SSL certificate problem",
+                          "disk full", "unknown timeout", "the requested URL returned error: 403"):
+                self.assertEqual(b.git_failure_reason(operation, 1, error), "blocked")
+        race = "! [rejected] HEAD -> main (fetch first)"
+        self.assertEqual(b.git_failure_reason("push", 1, race), "race")
+        self.assertEqual(b.git_failure_reason("fetch", 1, race), "blocked")
+        self.assertEqual(b.git_failure_reason("verify", 1, "Connection reset by peer"), "blocked")
+        self.assertEqual(b.git_failure_reason("push", 0, "Connection reset by peer"), "blocked")
+        self.assertEqual(b.git_failure_reason("push", 1, "Permission denied\nConnection reset by peer"), "blocked")
+
+    def test_three_retry_reasons_have_fixed_delay_and_incremented_bound(self):
+        self.assertEqual(self.plan(), {"allowed": True, "retry_day": "2026-10-20",
+            "retry_attempt": 1, "delay_minutes": 30, "reason": "missing-data"})
+        self.steps["gen"] = {"outcome": "failure", "outputs": {"retry_reason": "network"}}
+        self.assertEqual(self.plan()["reason"], "generation-network")
+        self.steps["gen"] = {"outcome": "success", "outputs": {"retry_reason": "none"}}
+        self.steps["seal"] = {"outcome": "success"}
+        self.steps["commit"] = {"outcome": "failure", "outputs": {"retry_reason": "network"}}
+        self.assertEqual(self.plan()["reason"], "commit-network")
+        self.assertEqual(self.plan(attempt="6")["retry_attempt"], 7)
+        self.assertFalse(self.plan(attempt="7")["allowed"])
+
+    def test_unknown_failure_missing_outputs_and_skipped_gen_never_retry(self):
+        for outcome in ("failure", "skipped", "cancelled", "success"):
+            for reason in ("", "none", "blocked", "exception"):
+                with self.subTest(outcome=outcome, reason=reason):
+                    self.steps["gen"] = {"outcome": outcome, "outputs": {"retry_reason": reason}}
+                    self.assertFalse(self.plan()["allowed"])
+        self.steps["gen"] = {"outcome": "success", "outputs": {"publish": "no"}}
+        self.assertFalse(self.plan()["allowed"])
+
+    def test_any_proof_or_test_failure_blocks_retry_even_with_network_failure(self):
+        self.steps["gen"] = {"outcome": "failure", "outputs": {"retry_reason": "network"}}
+        for test in ("failure", "cancelled", "skipped", ""):
+            self.assertFalse(self.plan(test_result=test)["allowed"])
+        for key in ("inputs", "prepare", "cache-proof", "cache-save", "receipt", "seal", "other-step"):
+            for outcome in ("failure", "cancelled"):
+                steps = copy.deepcopy(self.steps)
+                steps[key] = {"outcome": outcome}
+                self.assertFalse(self.plan(steps=steps)["allowed"], (key, outcome))
+        for event in ("workflow_dispatch", "push", "local", ""):
+            self.assertFalse(self.plan(event=event)["allowed"])
+
+    def test_commit_proof_failure_race_or_success_never_restarts_generation(self):
+        self.steps["gen"] = {"outcome": "success", "outputs": {"retry_reason": "none"}}
+        self.steps["seal"] = {"outcome": "success"}
+        for outcome, reason in (("failure", "blocked"), ("failure", "race"), ("failure", ""),
+                                ("success", "network"), ("cancelled", "network")):
+            self.steps["commit"] = {"outcome": outcome, "outputs": {"retry_reason": reason}}
+            self.assertFalse(self.plan()["allowed"])
+        self.steps["commit"] = {"outcome": "failure", "outputs": {"retry_reason": "network"}}
+        self.steps["gen"]["outputs"]["retry_reason"] = "blocked"
+        self.assertFalse(self.plan()["allowed"], "已隔离的代码异常也不能当作缺数续链")
+
+    def test_window_delay_and_same_day_boundaries_in_both_dst_offsets(self):
+        for month in (1, 7, 11):
+            for hour, minute, expected in ((19, 59, False), (20, 0, True), (23, 29, True),
+                                            (23, 30, False), (23, 59, False), (0, 0, False)):
+                with self.subTest(month=month, hour=hour, minute=minute):
+                    self.now = datetime(2026, month, 20, hour, minute, tzinfo=ZoneInfo("America/New_York"))
+                    self.assertEqual(self.plan()["allowed"], expected)
+        self.now = datetime(2026, 10, 21, 21, 0, tzinfo=ZoneInfo("America/New_York"))
+        self.assertFalse(self.plan(day="2026-10-20")["allowed"])
+        self.assertFalse(self.plan(started_at=(self.now - timedelta(days=1)).isoformat())["allowed"])
+        for started in ("", "bad", "2026-10-21T21:00:00"):
+            self.assertFalse(self.plan(started_at=started)["allowed"])
+
+    def test_context_rejects_invalid_counts_dates_and_non_thirty_minute_delay(self):
+        self.assertEqual(b.retry_context(self.now)["retry_attempt"], 0)
+        for attempt, day, delay in (("8", "2026-10-20", "30"), ("-1", "2026-10-20", ""),
+                ("1", "", "30"), ("", "", "30"), ("0", "2026-10-20", "30"),
+                ("1", "2026-02-30", "30"), ("1", "2026-10-20", "0"),
+                ("01", "2026-10-20", "30"), ("1", "2026-10-20", "35"),
+                ("1\n2", "2026-10-20", "30")):
+            with self.subTest(attempt=attempt, day=day, delay=delay), self.assertRaises(b.BuildError):
+                b.retry_context(self.now, attempt, day, delay)
+        self.assertFalse(b.retry_context(self.now, "1", "2026-10-19", "30")["allowed"])
+        self.assertTrue(b.retry_context(self.now, "7", "2026-10-20", "30")["allowed"])
+        with self.assertRaises(b.BuildError):
+            b.retry_context(self.now.replace(tzinfo=None))
+        with self.assertRaises(b.BuildError):
+            b.retry_context(self.now, "1", "2026-10-20", require_delay=True)
+
+    def test_cli_retry_outputs_and_git_classification_are_offline(self):
+        from unittest.mock import Mock
+        clock = Mock(wraps=b.datetime)
+        clock.now.return_value = self.now
+        env = {"MM_EVENT": "schedule", "MM_STARTED_AT": self.now.isoformat(),
+               "MM_RETRY_ATTEMPT": "2", "MM_RETRY_DAY": "2026-10-20", "MM_TEST_RESULT": "success",
+               "MM_STEP_RESULTS": json.dumps(self.steps)}
+        expected = self.plan()
+        with patch.dict(os.environ, env, clear=True), patch.object(b, "datetime", clock), \
+                patch.object(socket, "socket", side_effect=AssertionError("禁止联网")):
+            with patch.object(b, "schedule_retry_plan", return_value=expected) as plan:
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    self.assertEqual(b.main(["retry-plan"]), 0)
+                self.assertIn("allowed=true", output.getvalue())
+                self.assertEqual(plan.call_args.kwargs["attempt"], "2")
+        with patch.object(sys, "stdin", io.StringIO("fatal: Could not resolve host: github.com")):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(b.main(["git-failure", "--operation", "fetch", "--returncode", "128"]), 0)
+            self.assertEqual(output.getvalue(), "network\n")
+
+    def test_monitor_failure_outputs_preserve_exception_and_do_not_write_real_receipts(self):
+        import monitor as m
+        with tempfile.TemporaryDirectory(prefix="mm-retry-output-") as directory:
+            output = Path(directory) / "github-output"
+            for exc in (m.requests.Timeout("合成网络故障"), ValueError("合成配置错误"), TypeError("合成代码错误")):
+                output.write_text("", encoding="utf-8")
+                with patch.object(m, "RuntimeState") as runtime, patch.object(m, "_main", side_effect=exc), \
+                        patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}), \
+                        patch.object(socket, "socket", side_effect=AssertionError("禁止联网")):
+                    with self.assertRaises(type(exc)) as raised:
+                        m.main([])
+                    self.assertIs(raised.exception, exc)
+                    runtime.return_value.receipt.assert_called_once()
+                self.assertEqual(output.read_text(encoding="utf-8"), "retry_reason=" + b.generation_failure_reason(exc) + "\n")
+
+    def test_retry_output_io_failures_preserve_original_exception_and_real_receipt(self):
+        import monitor as m
+        failures = (
+            ("open", FileNotFoundError("合成输出目录缺失")),
+            ("open", PermissionError("合成输出权限不足")),
+            ("open", UnicodeDecodeError("utf-8", b"\xff", 0, 1, "合成编码损坏")),
+            ("write", OSError("合成输出写入失败")),
+            ("write", ValueError("合成输出流已关闭")),
+            ("close", OSError("合成输出关闭失败")),
+        )
+        for stage, output_error in failures:
+            with self.subTest(stage=stage, error=type(output_error).__name__), \
+                    tempfile.TemporaryDirectory(prefix="mm-output-failure-") as directory:
+                root = Path(directory)
+                output = root / "github-output"
+                original = ValueError("holdings.json 读取失败：合成原始根因")
+                original.__cause__ = FileNotFoundError("合成清单缺失")
+                opened = mock_open()
+                if stage == "open":
+                    opened.side_effect = output_error
+                elif stage == "write":
+                    opened.return_value.write.side_effect = output_error
+                else:
+                    opened.return_value.__exit__.side_effect = output_error
+                with patch.object(m, "BASE", directory), patch.object(m, "_main", side_effect=original), \
+                        patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)}), \
+                        patch("builtins.open", opened), \
+                        patch.object(socket, "socket", side_effect=AssertionError("禁止联网")):
+                    with self.assertRaises(ValueError) as raised:
+                        m.main([])
+                self.assertIs(raised.exception, original)
+                self.assertIsInstance(raised.exception.__cause__, FileNotFoundError)
+                receipt = json.loads((root / "run-receipt.json").read_bytes())
+                self.assertEqual(receipt["result"], "failed")
+                self.assertEqual(receipt["reason"], "ValueError: " + str(original))
+                opened.assert_called_once_with(str(output), "a", encoding="utf-8")
+                self.assertFalse(output.exists())
+                self.assertFalse((root / "index.html").exists())
+                self.assertFalse((root / "status.json").exists())
+
+    def test_missing_retry_output_does_not_authorize_network_failure_retry(self):
+        self.steps["gen"] = {"outcome": "failure", "outputs": {}}
+        self.assertFalse(self.plan()["allowed"])
+        self.steps["gen"] = {"outcome": "success", "outputs": {"publish": "no"}}
+        self.assertFalse(self.plan()["allowed"])
+
+    def test_isolated_analysis_error_is_structured_not_a_missing_quote(self):
+        import monitor as m
+        m._RETRY_BLOCKED.clear()
+        self.addCleanup(m._RETRY_BLOCKED.clear)
+        with patch.object(m, "analyze_symbol", side_effect=TypeError("合成代码异常")):
+            _, _, detail = m._analyze_symbol_safely("TEST", {}, {"source": "offline"}, "watchlist")
+        self.assertTrue(m._RETRY_BLOCKED.is_set())
+        self.assertIsNone(detail["price"])
+
+    def test_swallowed_quote_code_errors_block_missing_data_retry_outputs(self):
+        import monitor as m
+        self.addCleanup(m._RETRY_BLOCKED.clear)
+        for loader in (m._fetch_quote, m.nasdaq_history, m.stooq_history, m.yahoo_history):
+            for exc, reason in ((TypeError("合成代码异常"), "blocked"), (m.requests.Timeout(), "missing-data")):
+                m._RETRY_BLOCKED.clear()
+                output = mock_open()
+                with patch.object(m, "fetch_history", side_effect=exc), \
+                        patch.object(m.requests, "get", side_effect=exc), patch.object(m, "log"), \
+                        patch.object(m, "QUOTE_DEADLINE", None), patch.object(m, "RUN_DEADLINE", None), \
+                        patch.object(m.YAHOO_GATE, "allow", return_value=True), \
+                        patch.object(m.STOOQ_GATE, "allow", return_value=True), \
+                        patch.object(socket, "socket", side_effect=AssertionError("禁止联网")), \
+                        patch.dict(os.environ, {"GITHUB_OUTPUT": "synthetic-output"}), patch("builtins.open", output):
+                    self.assertIsNone(loader("TEST"))
+                    m.retry_output("missing-data")
+                output().write.assert_called_once_with("retry_reason=" + reason + "\n")
+
+    def test_ensure_dispatch_preserves_retry_day_and_attempt(self):
+        import monitor as m
+        from unittest.mock import Mock
+        clock = Mock(wraps=m.datetime)
+        clock.now.return_value = self.now
+        env = {"MM_RETRY_DAY": "2026-10-20", "MM_RETRY_ATTEMPT": "3"}
+        with patch.dict(os.environ, env), patch.object(m, "datetime", clock), \
+                patch.object(m, "plan_run", return_value={"target": "2026-10-20"}), \
+                patch("builtins.open", mock_open(read_data="{}")), patch.object(m, "RuntimeState"), \
+                patch.object(m.requests, "get") as get, patch.object(m.requests, "post") as post, \
+                patch.object(socket, "socket", side_effect=AssertionError("禁止联网")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            get.return_value.json.return_value = {"workflow_runs": []}
+            self.assertEqual(m.ensure_schedule_run(), 0)
+        self.assertEqual(post.call_args.kwargs["json"], {"ref": "main", "inputs": {
+            "source": "schedule-fallback", "retry_day": "2026-10-20", "retry_attempt": "3"}})
+
+
+@unittest.skipUnless(shutil.which("bash"), "本机没有 Bash；提交步骤仿真须在 CI 验证")
+class RetryCommitShellTests(unittest.TestCase):
+    """执行真实工作流 Shell；git 全部为函数桩，证明命令仅记录顺序，分类器真实运行。"""
+    def run_commit(self, scenario):
+        daily = (ROOT / ".github/workflows/daily.yml").read_text(encoding="utf-8")
+        block = daily.split("      - name: 校验最新输入并提交更新", 1)[1].split("      - name:", 1)[0]
+        script = "\n".join(line[10:] for line in block.split("        run: |", 1)[1].splitlines() if line.strip())
+        harness = r'''
+function git() {
+  printf 'git %s\n' "$*" >> "$TRACE"
+  case "$1" in
+    config|reset|add|commit) return 0 ;;
+    fetch)
+      n=$(< "$COUNT"); printf '%s' "$((n+1))" > "$COUNT"
+      if [ "$SCENARIO" = fetch-network ]; then printf 'fatal: Could not resolve host: github.com\n'; return 128; fi
+      return 0 ;;
+    rev-parse) printf 'target-%s\n' "$(< "$COUNT")"; return 0 ;;
+    push)
+      case "$SCENARIO" in
+        denied) printf 'fatal: Authentication failed\n'; return 128 ;;
+        race|input-changed) printf '! [rejected] HEAD -> main (fetch first)\n'; return 1 ;;
+        success) return 0 ;;
+        *) printf 'fatal: the requested URL returned error: 503\n'; return 128 ;;
+      esac ;;
+    *) return 91 ;;
+  esac
+}
+function python() {
+  printf 'python %s\n' "$*" >> "$TRACE"
+  case "$2" in
+    git-failure) "$REAL_PYTHON" -B "$HELPER" "${@:2}" ;;
+    verify)
+      if [ "$SCENARIO" = input-changed ] && [ "$(< "$COUNT")" = 2 ]; then return 3; fi
+      return 0 ;;
+    artifact-state)
+      if [ "$SCENARIO" = no-change ]; then printf 'no-change\n'; else printf 'changed\n'; fi ;;
+    *) return 92 ;;
+  esac
+}
+'''
+        with tempfile.TemporaryDirectory(prefix="mm-retry-shell-") as directory:
+            root = Path(directory)
+            bundle = root / "build-artifacts"
+            bundle.mkdir()
+            for name in b.ARTIFACTS:
+                (bundle / name).write_text("合成产物", encoding="utf-8")
+            output, trace, count = root / "output", root / "trace", root / "count"
+            output.write_text("", encoding="utf-8")
+            count.write_text("0", encoding="utf-8")
+            env = dict(os.environ, RUNNER_TEMP=root.as_posix(), GITHUB_OUTPUT=output.as_posix(),
+                       TRACE=trace.as_posix(), COUNT=count.as_posix(), SCENARIO=scenario,
+                       REAL_PYTHON=Path(sys.executable).as_posix(), HELPER=(ROOT / "build_support.py").as_posix(),
+                       GIT_ALLOW_PROTOCOL="", BASH_ENV="")
+            result = subprocess.run([shutil.which("bash"), "--noprofile", "--norc", "-c", harness + script],
+                cwd=root, env=env, text=True, encoding="utf-8", capture_output=True, timeout=30)
+            events = trace.read_text(encoding="utf-8").splitlines()
+            outputs = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
+            return result, events, outputs
+
+    def test_five_network_pushes_verify_full_inputs_before_every_reset_and_push(self):
+        result, events, outputs = self.run_commit("network")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(outputs["retry_reason"], "network")
+        self.assertEqual(events.count("git push origin HEAD:main"), 5)
+        self.assertEqual(events.count("git fetch origin main"), 5)
+        for attempt in range(1, 6):
+            verify = next(i for i, event in enumerate(events) if " verify " in event and event.endswith(f"--ref target-{attempt}"))
+            state = next(i for i, event in enumerate(events) if " artifact-state " in event and event.endswith(f"--ref target-{attempt}"))
+            reset = events.index(f"git reset --hard target-{attempt}")
+            push = events.index("git push origin HEAD:main", reset)
+            self.assertLess(verify, state)
+            self.assertLess(state, reset)
+            self.assertLess(reset, push)
+
+    def test_input_change_after_push_race_stops_before_second_reset(self):
+        result, events, outputs = self.run_commit("input-changed")
+        self.assertEqual(result.returncode, 3, result.stderr)
+        self.assertEqual(outputs["retry_reason"], "blocked")
+        self.assertEqual(events.count("git fetch origin main"), 2)
+        self.assertEqual(events.count("git push origin HEAD:main"), 1)
+        self.assertNotIn("git reset --hard target-2", events)
+
+    def test_permanent_push_failure_stops_immediately_and_keeps_job_failed(self):
+        result, events, outputs = self.run_commit("denied")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(outputs["retry_reason"], "blocked")
+        self.assertEqual(events.count("git push origin HEAD:main"), 1)
+
+    def test_exhausted_races_do_not_schedule_a_new_generation(self):
+        result, events, outputs = self.run_commit("race")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(outputs["retry_reason"], "blocked")
+        self.assertEqual(events.count("git push origin HEAD:main"), 5)
+
+    def test_fetch_network_failure_is_bounded_and_never_uses_unverified_target(self):
+        result, events, outputs = self.run_commit("fetch-network")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(outputs["retry_reason"], "network")
+        self.assertEqual(events.count("git fetch origin main"), 5)
+        self.assertFalse(any(event.startswith("git reset") or event.startswith("git push") for event in events))
+
+    def test_success_and_no_change_keep_existing_commit_results(self):
+        for scenario, expected in (("success", "committed"), ("no-change", "no-change")):
+            with self.subTest(scenario=scenario):
+                result, events, outputs = self.run_commit(scenario)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(outputs["result"], expected)
+                self.assertEqual(events.count("git push origin HEAD:main"), int(scenario == "success"))
 
 
 class WorkflowContractTests(unittest.TestCase):
@@ -332,6 +897,48 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertLess(ensure.index("concurrency:"), ensure.index("jobs:"))
         self.assertIn("python monitor.py --ensure-schedule-run", ensure)
         self.assertNotRegex(ensure, r"(?m)^\s+schedule:")
+
+    def test_delayed_ensure_checks_latest_main_and_validates_metadata(self):
+        ensure = (ROOT / ".github/workflows/ensure-morning.yml").read_text(encoding="utf-8")
+        checkout = ensure.split("uses: actions/checkout@v4", 1)[1].split("      - name:", 1)[0]
+        self.assertIn("ref: main", checkout)
+        self.assertLess(ensure.index("sleep $((DELAY * 60))"), ensure.index("uses: actions/checkout@v4"))
+        self.assertIn('if [ "$DELAY" != 30 ]', ensure)
+        self.assertNotIn("DELAY=35", ensure)
+        self.assertIn("python build_support.py retry-context", ensure)
+        for name in ("MM_RETRY_ATTEMPT", "MM_RETRY_DAY", "MM_RETRY_DELAY"):
+            self.assertIn(name, ensure)
+        self.assertEqual(ensure.count("if: ${{ steps.retry-context.outputs.allowed == 'true' }}"), 2)
+
+    def test_retry_dispatch_is_after_commit_always_without_failure_masking(self):
+        daily = (ROOT / ".github/workflows/daily.yml").read_text(encoding="utf-8")
+        retry = daily[daily.index("      - name: 判断是否允许延迟重试"):]
+        self.assertLess(daily.index("git push origin HEAD:main"), daily.index("id: retry-plan"))
+        self.assertEqual(retry.count("always() && !cancelled()"), 2)
+        self.assertIn("MM_TEST_RESULT: ${{ needs.test.result }}", retry)
+        self.assertIn("MM_STEP_RESULTS: ${{ toJSON(steps) }}", retry)
+        self.assertIn('python "$RUNNER_TEMP/build_support.py" retry-plan', retry)
+        self.assertIn('gh workflow run ensure-morning.yml --ref main', retry)
+        self.assertIn('-f delay_minutes=30 -f retry_attempt="$RETRY_ATTEMPT" -f retry_day="$RETRY_DAY"', retry)
+        self.assertNotIn("continue-on-error", daily)
+        self.assertEqual(daily.count("gh workflow run ensure-morning.yml"), 1)
+        for step_id in ("inputs", "prepare", "cache-proof", "cache-save", "receipt", "seal", "commit"):
+            self.assertIn("id: " + step_id, daily)
+        self.assertIn("needs: test", daily)
+
+    def test_commit_failures_are_classified_only_at_transport_boundaries(self):
+        daily = (ROOT / ".github/workflows/daily.yml").read_text(encoding="utf-8")
+        commit = daily.split("      - name: 校验最新输入并提交更新", 1)[1].split("      - name:", 1)[0]
+        self.assertIn('echo "retry_reason=blocked"', commit)
+        self.assertIn("git-failure --operation fetch", commit)
+        self.assertIn("git-failure --operation push", commit)
+        self.assertIn('case "$reason" in network|race)', commit)
+        self.assertIn('if [ "$reason" = network ]; then echo "retry_reason=network"', commit)
+        self.assertTrue(commit.rstrip().endswith("exit 1"))
+        self.assertNotIn("|| true", commit)
+        loop = commit[commit.index("for i in 1 2 3 4 5;"):]
+        for proof in ('verify \\', 'artifact-state \\'):
+            self.assertLess(loop.index(proof), loop.index('git reset --hard "$target"'))
 
     def test_runtime_dependency_closure_is_pinned_for_both_python_versions(self):
         # 不依赖联网解析：先验证每项均精确固定，以及已知运行依赖闭包未遗漏。

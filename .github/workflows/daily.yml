@@ -53,6 +53,14 @@ on:
         description: '内部使用：schedule-fallback = 定时任务缺失时的自动补跑（按定时任务口径运行）'
         required: false
         type: string
+      retry_attempt:
+        description: '内部使用：自动重试轮数，0–7'
+        required: false
+        type: string
+      retry_day:
+        description: '内部使用：本轮保险链的美东日期，不允许跨日续跑'
+        required: false
+        type: string
 
 concurrency:
   group: market-monitor
@@ -77,6 +85,8 @@ jobs:
       MM_EVENT: ${{ inputs.source == 'schedule-fallback' && 'schedule' || github.event_name }}
       MM_REQUEST_ID: ${{ inputs.request_id }}
       MM_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      MM_RETRY_ATTEMPT: ${{ inputs.retry_attempt }}
+      MM_RETRY_DAY: ${{ inputs.retry_day }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: 拉取仓库
@@ -89,6 +99,7 @@ jobs:
           cache: pip
 
       - name: 冻结构建输入
+        id: inputs
         run: |
           set -euo pipefail
           python build_support.py snapshot --snapshot "$RUNNER_TEMP/build-inputs.json" >> "$GITHUB_ENV"
@@ -106,27 +117,24 @@ jobs:
           restore-keys: |
             market-monitor-v1-${{ runner.os }}-py311-
 
+      - name: 检查自动重试上下文
+        id: retry-context
+        if: ${{ env.MM_EVENT == 'schedule' }}
+        run: python "$RUNNER_TEMP/build_support.py" retry-context >> "$GITHUB_OUTPUT"
+
       - name: 锁定本次目标交易日
+        id: prepare
+        if: ${{ env.MM_EVENT != 'schedule' || steps.retry-context.outputs.allowed == 'true' }}
         run: python monitor.py --prepare-run >> "$GITHUB_ENV"
 
       - name: 抓数据并生成页面
         id: gen
+        if: ${{ steps.prepare.outcome == 'success' }}
         # publish=no 不提交页面，但成功写入的辅助缓存仍保存。
         env:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
         run: python monitor.py
-
-      - name: 当日日线未就绪：约 30 分钟后自动再试
-        if: ${{ steps.gen.outcome == 'success' && steps.gen.outputs.publish == 'no' && env.MM_EVENT == 'schedule' }}
-        run: |
-          h=$(TZ=America/New_York date +%-H)
-          if [ "$h" -ge 20 ] && [ "$h" -lt 24 ]; then
-            gh workflow run ensure-morning.yml --ref main -R "$GITHUB_REPOSITORY" -f delay_minutes=30
-            echo "::notice title=已安排重试::美东 ${h} 点数据未齐，约 30 分钟后再检查一次（最晚到美东 24 点）"
-          else
-            echo "美东 ${h} 点，已过重试时段，不再安排"
-          fi
 
       - name: 验证本轮辅助缓存凭证
         id: cache-proof
@@ -137,6 +145,7 @@ jobs:
           python runtime_state.py verify-cache --checkpoint-id "$CACHE_CHECKPOINT_ID"
 
       - name: 保存成功辅助缓存
+        id: cache-save
         if: ${{ always() && steps.cache-proof.outcome == 'success' && hashFiles('.cache/market-monitor.json') != '' }}
         uses: actions/cache/save@v4
         with:
@@ -144,6 +153,7 @@ jobs:
           key: market-monitor-v1-${{ runner.os }}-py311-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: 上传运行回执与输入快照
+        id: receipt
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
@@ -154,6 +164,7 @@ jobs:
           if-no-files-found: warn
 
       - name: 封存本轮产物
+        id: seal
         if: ${{ steps.gen.outcome == 'success' && steps.gen.outputs.publish != 'no' }}
         run: |
           python "$RUNNER_TEMP/build_support.py" seal \
@@ -165,10 +176,22 @@ jobs:
         # 仅无关更新允许复用本轮产物。输入改变或校验失败即退出，绝不贴新 SHA。
         run: |
           set -euo pipefail
+          # 只有终端 fetch/push 网络诊断能改成 network；证明、配置、权限错误默认禁止续链。
+          echo "retry_reason=blocked" >> "$GITHUB_OUTPUT"
+          export LC_ALL=C GIT_TERMINAL_PROMPT=0
           git config user.name "market-bot"
           git config user.email "bot@users.noreply.github.com"
+          reason=blocked
           for i in 1 2 3 4 5; do
-            git fetch origin main
+            if error=$(git fetch origin main 2>&1); then
+              printf '%s\n' "$error"
+            else
+              code=$?
+              printf '%s\n' "$error"
+              reason=$(printf '%s' "$error" | python "$RUNNER_TEMP/build_support.py" git-failure --operation fetch --returncode "$code")
+              if [ "$reason" != network ]; then exit 1; fi
+              continue
+            fi
             target=$(git rev-parse --verify origin/main)
             python "$RUNNER_TEMP/build_support.py" verify \
               --snapshot "$RUNNER_TEMP/build-inputs.json" --ref "$target"
@@ -189,12 +212,38 @@ jobs:
             cp "$RUNNER_TEMP/build-artifacts/index.html" "$RUNNER_TEMP/build-artifacts/status.json" .
             git add -- index.html status.json
             git commit -m "更新 $(date -u '+%Y-%m-%d %H:%M UTC')"
-            if git push origin HEAD:main; then
+            if error=$(git push origin HEAD:main 2>&1); then
+              printf '%s\n' "$error"
               echo "result=committed" >> "$GITHUB_OUTPUT"
               echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
               exit 0
+            else
+              code=$?
+              printf '%s\n' "$error"
+              reason=$(printf '%s' "$error" | python "$RUNNER_TEMP/build_support.py" git-failure --operation push --returncode "$code")
+              case "$reason" in network|race) ;; *) exit 1 ;; esac
             fi
             echo "推送失败，第 $i/5 次；下次重试重新检查最新 main 的完整输入集合"
           done
-          echo "连续5次推送失败，未确认提交，请查看 git 错误信息"
+          if [ "$reason" = network ]; then echo "retry_reason=network" >> "$GITHUB_OUTPUT"; fi
+          echo "连续5次传输或推送失败，未确认提交，请查看 git 错误信息"
           exit 1
+
+      - name: 判断是否允许延迟重试
+        id: retry-plan
+        if: ${{ always() && !cancelled() && env.MM_EVENT == 'schedule' && steps.inputs.outcome == 'success' }}
+        env:
+          MM_TEST_RESULT: ${{ needs.test.result }}
+          MM_STEP_RESULTS: ${{ toJSON(steps) }}
+          MM_RETRY_ATTEMPT: ${{ steps.retry-context.outputs.retry_attempt }}
+          MM_RETRY_DAY: ${{ steps.retry-context.outputs.retry_day }}
+        run: python "$RUNNER_TEMP/build_support.py" retry-plan >> "$GITHUB_OUTPUT"
+
+      - name: 可恢复失败或缺数：30 分钟后同日有界重试
+        if: ${{ always() && !cancelled() && steps.retry-plan.outputs.allowed == 'true' }}
+        env:
+          RETRY_ATTEMPT: ${{ steps.retry-plan.outputs.retry_attempt }}
+          RETRY_DAY: ${{ steps.retry-plan.outputs.retry_day }}
+        run: |
+          gh workflow run ensure-morning.yml --ref main -R "$GITHUB_REPOSITORY" \
+            -f delay_minutes=30 -f retry_attempt="$RETRY_ATTEMPT" -f retry_day="$RETRY_DAY"

@@ -4,9 +4,18 @@ const path = require('path');
 const vm = require('node:vm');
 const ROOT = path.resolve(__dirname, '..');
 const src = fs.readFileSync(path.join(ROOT, 'edit.html'), 'utf8');
-const m = src.match(/<script>\r?\n([\s\S]*?)<\/script>\s*<\/body>/);
-if (!m) { console.error('未找到内联脚本'); process.exit(1); }
-const code = m[1];
+const scripts=[...src.matchAll(/<script\b((?:"[^"]*"|'[^']*'|[^'">])*)>([\s\S]*?)<\/script\s*>/gi)]
+  .map(([,attrs,body])=>({src:attrs.match(/(?:^|\s)src\s*=\s*(?:"([^"]*)"|'([^']*)')/i)?.slice(1).find(value=>value!==undefined),body}));
+const inlineScripts=scripts.filter(script=>script.src===undefined&&script.body.trim());
+if(inlineScripts.length!==1)throw new Error('设置页应有且仅有一个非空内联脚本，实际：'+inlineScripts.length);
+const code=inlineScripts[0].body;
+function localScriptPath(filename){
+  const matches=scripts.filter(script=>script.src?.split(/[?#]/,1)[0]==='./'+filename);
+  if(matches.length!==1)throw new Error('设置页应唯一引用本地脚本 '+filename+'，实际：'+matches.length);
+  return path.join(ROOT,filename);
+}
+const importScriptPath=localScriptPath('list-import.js');
+const runStatusScriptPath=localScriptPath('run-status.js');
 
 const decodeAttribute=value=>value.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
 function makeEl(id) {
@@ -17,7 +26,7 @@ function makeEl(id) {
     style: {},
     set innerHTML(v) {
       this._html = v;
-      for (const match of v.matchAll(/<([a-z][\w-]*)\b([^>]*)>/gi)) {
+      for (const match of v.matchAll(/<([a-z][\w-]*)\b((?:"[^"]*"|'[^']*'|[^'">])*)>/gi)) {
         const id = match[2].match(/\bid="([^"]+)"/);
         if (!id) continue;
         const decodedId=decodeAttribute(id[1]);
@@ -25,18 +34,35 @@ function makeEl(id) {
         child.tagName = match[1].toUpperCase();
         if (child.tagName === 'DETAILS') child.open = /(?:^|\s)open(?:\s|=|$)/.test(match[2]);
       }
+      this._rows=[];
+      for(const match of v.matchAll(/<div class="row" data-k="([^"]*)" data-s="([^"]*)">([\s\S]*?)<\/div>/g)){
+        const row=makeEl('row');row.dataset={k:decodeAttribute(match[1]),s:decodeAttribute(match[2])};
+        row._inputs=[...match[3].matchAll(/<input\b((?:"[^"]*"|'[^']*'|[^'">])*)>/gi)].map(([,attrs])=>{
+          const input=makeEl('input');input.tagName='INPUT';
+          const field=attrs.match(/(?:^|\s)data-f="([^"]+)"/),value=attrs.match(/(?:^|\s)value="([^"]*)"/);
+          if(!field||!value)throw new Error('清单输入控件缺少 data-f 或 value 属性');
+          input.dataset.f=field[1];
+          input.value=decodeAttribute(value[1]);return input;
+        });
+        row._del=makeEl('delete');row._move=makeEl('move');this._rows.push(row);
+      }
     },
     get innerHTML() { return this._html; },
     addEventListener() {}, attachEvent() {}, setAttribute(k,v) { this[k]=v; },
-    querySelector() { return null; },
-    querySelectorAll() { return []; },
-    insertAdjacentHTML() {}, appendChild() {}, scrollIntoView() {},
-    select() {}, focus() {}, click() {},
+    querySelector(selector) {
+      if(selector==='.del')return this._del||null;
+      if(selector==='.move')return this._move||null;
+      const field=selector.match(/^\[data-f="([^"]+)"\]$/);
+      return field?(this._inputs||[]).find(input=>input.dataset.f===field[1])||null:null;
+    },
+    querySelectorAll(selector) { return selector==='.row'?(this._rows||[]):selector==='input'?(this._inputs||[]):[]; },
+    insertAdjacentHTML() {}, appendChild() {}, scrollIntoView() { this.scrolled=true; },
+    select() {}, focus() { doc.activeElement=this; }, click() {},
     onclick: null, oninput: null, onload: null,
   };
 }
 const els = {};
-for (const match of src.slice(0, src.indexOf('<script')).matchAll(/<([a-z][\w-]*)\b([^>]*)>/gi)) {
+for (const match of src.slice(0, src.indexOf('<script')).matchAll(/<([a-z][\w-]*)\b((?:"[^"]*"|'[^']*'|[^'">])*)>/gi)) {
   const id = match[2].match(/\bid="([^"]+)"/);
   if (!id) continue;
   const el = els[id[1]] = makeEl(id[1]);
@@ -58,20 +84,20 @@ global.localStorage = {
 };
 global.location = { origin: 'https://nixhuang.github.io', pathname: '/market-monitor/edit.html', search: '', hash: '' };
 global.history = { replaceState() {} };
-global.navigator = { clipboard: { writeText: async () => {} } };
+Object.defineProperty(global,'navigator',{value:{clipboard:{writeText:async()=>{}}},configurable:true});
 global.confirm = () => true;
 global.alert = () => {};
 global.fetch = async () => { throw new Error('no network in test'); };
 let runOptions;
 global.MMRunStatus = { init(options) { runOptions=options; }, refresh() { return {}; }, watchConfig() {}, startManual: async () => {} };
-global.MMListImport = require(path.join(ROOT,'list-import.js'));
+global.MMListImport = require(importScriptPath);
 
 let fails = 0;
 const check = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if (!cond) fails++; };
 global.window.addEventListener = () => {};
 
 try {
-  eval(code + '\n;globalThis.__T={render,data,pageState,ETF_SET,get SET(){return SET;},SET_DEFS,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError,normalizeSettings,trackReceipt,saveRules,loadRun,bootstrap,setToken:t=>{TOKEN=t;}};');
+  eval(code + '\n;globalThis.__T={render,get data(){return data;},pageState,ETF_SET,get SET(){return SET;},SET_DEFS,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError,normalizeSettings,trackReceipt,saveRules,loadRun,bootstrap,setToken:t=>{TOKEN=t;}};');
   globalThis.__T.initGroups(JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8')));
   console.log('PASS 脚本加载无异常');
 } catch (e) {
@@ -80,6 +106,134 @@ try {
 }
 
 const T = globalThis.__T;
+async function runDraftRecovery(){
+  await new Promise(resolve=>setImmediate(resolve));
+  const clone=value=>JSON.parse(JSON.stringify(value));
+  const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  let holdings={positions:{AAPL:{note:'原备注',trigger:80,reduce:200,target:250,target_at:'2026-10',cost:90}},
+    focus:{},technology:Object.fromEntries(Array.from({length:60},(_,i)=>['S'+String(i).padStart(3,'0'),{trigger:10}]))};
+  let settings={...T.SET_DEFS,custom_rule:{kept:true}};
+  let sha='a'.repeat(40),putStatus=200,getStatus=200;
+  const requests=[],copies=[],prompts=[];
+  const response=(payload,status=200)=>({ok:status===200,status,json:async()=>payload});
+  const mockFetch=async(url,options)=>{
+    requests.push({url,method:options.method,body:options.body&&JSON.parse(options.body)});
+    if(options.method==='GET')return response({content:Buffer.from(JSON.stringify(url.includes('settings.json')?settings:holdings)).toString('base64'),sha},getStatus);
+    return response({content:{sha:'b'.repeat(40)},commit:{sha:'c'.repeat(40)}},putStatus);
+  };
+  global.fetch=mockFetch;
+  global.confirm=text=>{prompts.push(text);return true;};
+  global.navigator.clipboard.writeText=async text=>copies.push(text);
+  T.setToken('github_pat_offline_fixture');
+  await T.load();await new Promise(resolve=>setImmediate(resolve));
+  const input=(kind,symbol,field)=>els['list_'+kind].querySelectorAll('.row').find(row=>row.dataset.s===symbol)?.querySelector('[data-f="'+field+'"]');
+  const edit=(kind,symbol,field,value)=>{const el=input(kind,symbol,field);el.value=value;el.oninput();return el;};
+  const saveList=()=>els.btnSave.onclick({target:els.btnSave});
+  const saveSettings=()=>els.btnSaveRules.onclick({target:els.btnSaveRules});
+  const editSetting=(key,value)=>{els['set_'+key].value=value;els['set_'+key].oninput();};
+  const bodyValue=()=>JSON.parse(Buffer.from(requests.at(-1).body.content,'base64').toString('utf8'));
+
+  for(const field of ['trigger','reduce','target','cost']){
+    for(const raw of ['  bad" <&  ','Infinity','1e309',...(field==='trigger'?[]:['0','-1'])]){
+      const before=T.configText(),count=requests.length;
+      edit('positions','AAPL',field,raw);T.render();
+      check(input('positions','AAPL',field).value===raw&&input('positions','AAPL',field)['aria-invalid']==='true',field+' 无效原文跨渲染保留');
+      els.fold_positions.open=false;
+      await saveList();
+      check(requests.length===count&&T.configText()===before&&els.fold_positions.open&&doc.activeElement===input('positions','AAPL',field)&&doc.activeElement.scrolled,
+        field+' 无效草稿阻断提交并定位分组、标的与字段');
+      edit('positions','AAPL',field,'100');
+    }
+    edit('positions','AAPL',field,'');
+    check(!(field in T.data.positions.AAPL)&&(field!=='target'||!('target_at' in T.data.positions.AAPL)),field+' 留空可清除错误及旧值');
+    edit('positions','AAPL',field,'100');
+  }
+  T.pageState.technology=1;T.render();edit('technology','S055','trigger','abc');
+  T.pageState.technology=0;T.render();els.fold_technology.open=false;
+  const beforeHidden=requests.length;await saveList();
+  check(requests.length===beforeHidden&&T.pageState.technology===1&&els.fold_technology.open&&
+    doc.activeElement===input('technology','S055','trigger')&&doc.activeElement.value==='abc','非当前分页错误也能阻断并准确翻页定位');
+  T.moveSymbol('technology','positions','S055');
+  check(!!T.data.technology.S055&&!T.data.positions.S055&&input('technology','S055','trigger').value==='abc','移动不会丢弃无效输入');
+  edit('technology','S055','trigger','');
+  edit('positions','AAPL','reduce','bad');
+  T.previewCsv('symbol\nMSFT\n','positions','replace.csv');els.btnApply.onclick();
+  check(!!T.data.positions.AAPL&&!T.data.positions.MSFT&&input('positions','AAPL','reduce').value==='bad','替换导入不能丢弃目标组无效草稿');
+  const beforeManual=copies.length;T.setToken('');await saveList();await els.btnCopy.onclick();
+  check(copies.length===beforeManual,'手动导出与复制入口同样阻断无效草稿');
+  T.setToken('github_pat_offline_fixture');edit('positions','AAPL','reduce','100');
+  await saveList();check(requests.at(-1).method==='PUT'&&bodyValue().positions.AAPL.reduce===100,'修正全部草稿后才允许提交新值');
+  let resolveWrite;
+  global.fetch=()=>new Promise(resolve=>{resolveWrite=resolve;});
+  const inFlight=saveList();edit('positions','AAPL','cost','bad');
+  resolveWrite(response({content:{sha:'d'.repeat(40)},commit:{sha:'e'.repeat(40)}}));await inFlight;
+  check(els.dirty.textContent.includes('未保存')&&input('positions','AAPL','cost').value==='bad','提交期间新增的无效输入不能被旧快照回执标为已保存');
+  global.fetch=mockFetch;
+  edit('positions','AAPL','cost','');
+
+  const importHash=require('node:crypto').createHash('sha256').update(fs.readFileSync(importScriptPath,'utf8').replace(/\r\n/g,'\n')).digest('hex').slice(0,16);
+  check(src.includes('./list-import.js?v='+importHash),'编辑页导入脚本缓存摘要与实际内容一致');
+  const records=MMListImport.csvRecords('\uFEFFsymbol,name,extra\r\nAAPL,"第一行\r\nMSFT\r\n第二行 ""引号""",\r\nNVDA,,\r\n');
+  check(same(records,[['symbol','name','extra'],['AAPL','第一行\r\nMSFT\r\n第二行 "引号"',''],['NVDA','','']]),'记录级CSV保留CRLF、转义引号和连续/尾部空字段');
+  check(same(MMListImport.csvRecords('"symbol"\t"name,with,commas"\rAAPL\t"甲\n乙"\r'),[['symbol','name,with,commas'],['AAPL','甲\n乙']]),'TSV分隔符识别忽略引号内逗号并支持CR记录边界');
+  T.previewCsv('symbol,name\r\nAAPL,"第一行\r\nMSFT\r\n第二行 ""引号"""\r\nNVDA,\r\n','focus','multiline.csv');els.btnApply.onclick();
+  check(!!T.data.focus.AAPL&&!!T.data.focus.NVDA&&!T.data.focus.MSFT&&T.data.focus.AAPL.note==='第一行\r\nMSFT\r\n第二行 "引号"','导入完整多行名称，不把名称中的代码误导入');
+  for(const bad of ['symbol,name\nAAPL,"未闭合','symbol,name\nAAPL,"名称"非法','symbol,name\nAAPL,错"误']){
+    const before=T.configText();T.previewCsv(bad,'positions','bad.csv');els.btnApply.onclick();
+    check(T.configText()===before&&els.csvInfo.textContent.includes('引号'),'损坏CSV拒绝整次导入且不保留可应用的旧预览');
+  }
+
+  // 清单409：取消、读取失败、确认合并、显式重试和二次冲突。
+  holdings=clone(JSON.parse(T.configText()));await T.load();await new Promise(resolve=>setImmediate(resolve));
+  edit('positions','AAPL','note','本地备注');putStatus=409;await saveList();
+  check(els.msg.textContent.includes('409')&&els.msg.textContent.includes('保留草稿后读取最新版'),'清单冲突提供真实的保留草稿恢复入口');
+  const beforeCancel=requests.length,beforeDraft=T.configText();global.confirm=()=>false;await saveList();
+  check(requests.length===beforeCancel&&T.configText()===beforeDraft,'取消恢复不请求、不改草稿、不重试旧SHA');
+  global.confirm=text=>{prompts.push(text);return true;};getStatus=503;await saveList();
+  check(requests.at(-1).method==='GET'&&T.configText()===beforeDraft,'远端读取失败仍保留清单草稿');
+  getStatus=200;holdings.positions.AAPL.note='远端备注';holdings.positions.AAPL.trigger=123;holdings.remote_extra={keep:true};sha='f'.repeat(40);
+  let confirms=0;global.confirm=()=>++confirms===1;
+  await els.btnReload.onclick();check(T.configText()===beforeDraft,'取消同字段合并保留原草稿和冲突状态');
+  global.confirm=text=>{prompts.push(text);return true;};const beforeMerge=requests.length;
+  await els.btnReload.onclick();
+  check(requests.length===beforeMerge+1&&requests.at(-1).method==='GET'&&T.data.positions.AAPL.note==='本地备注'&&
+    T.data.positions.AAPL.trigger===123&&JSON.parse(T.configText()).remote_extra.keep,'清单合并只GET，保留本地修改和远端非冲突更新');
+  check(prompts.some(text=>text.includes('本地备注')&&text.includes('远端备注')),'清单同字段冲突明确展示双方值再确认');
+  putStatus=200;await saveList();
+  check(requests.at(-1).method==='PUT'&&requests.at(-1).body.sha==='f'.repeat(40)&&bodyValue().positions.AAPL.trigger===123,'明确再次保存使用新版SHA而不是旧SHA或强推');
+
+  // 规则409：dirty不阻断显式恢复，未修改字段与未知字段保留远端值。
+  editSetting('vol_ratio','1.8');putStatus=409;await saveSettings();
+  editSetting('dca_start','2026-10-08');editSetting('dca_every','7');
+  const settingDraft=els.set_vol_ratio.value,ruleCount=requests.length;
+  await T.loadSettings();check(requests.length===ruleCount,'普通后台重读不能覆盖冲突草稿');
+  settings={...settings,vol_ratio:2.2,amp_red:12,custom_rule:{remote:true}};sha='e'.repeat(40);
+  confirms=0;global.confirm=()=>++confirms===1;await saveSettings();
+  check(els.set_vol_ratio.value===settingDraft&&els.set_amp_red.value==='8','规则取消同字段合并不换SHA或表单');
+  global.confirm=text=>{prompts.push(text);return true;};
+  getStatus=503;await saveSettings();check(els.set_vol_ratio.value==='1.8'&&els.rulesDirty.textContent.includes('未保存'),'规则读取失败保留草稿和dirty');
+  getStatus=200;
+  let resolveRead;global.fetch=()=>new Promise(resolve=>{resolveRead=resolve;});
+  const loading=saveSettings();editSetting('vol_ratio','not-a-number');
+  resolveRead(response({content:Buffer.from(JSON.stringify(settings)).toString('base64'),sha}));await loading;
+  check(els.set_vol_ratio.value==='not-a-number'&&els.msg.textContent.includes('停止合并'),'恢复期间继续输入时慢GET不能覆盖草稿');
+  global.fetch=mockFetch;await saveSettings();
+  check(els.set_vol_ratio.value==='not-a-number'&&els.set_amp_red.value==='12'&&els.set_dca_every.value==='7'&&T.SET.custom_rule.remote,'显式恢复保留无效原始输入、定投草稿和远端隐藏字段');
+  const beforeInvalid=requests.length;await saveSettings();
+  check(requests.length===beforeInvalid&&els.msg.textContent.includes('vol_ratio'),'恢复后的无效规则仍不能提交');
+  editSetting('vol_ratio','1.9');putStatus=200;await saveSettings();
+  check(requests.at(-1).method==='PUT'&&requests.at(-1).body.sha==='e'.repeat(40)&&bodyValue().amp_red===12&&
+    bodyValue().vol_ratio===1.9&&bodyValue().custom_rule.remote&&bodyValue().dca_every===7,'规则经再次保存携带最新SHA和显式合并结果');
+  editSetting('vol_ratio','2.0');putStatus=409;await saveSettings();
+  const beforeSecond=requests.length;settings.vol_ratio=2.3;sha='9'.repeat(40);await saveSettings();
+  check(requests.length===beforeSecond+1&&requests.at(-1).method==='GET','合并后再次409仍先读取，不自动PUT覆盖他人');
+  check(Object.keys(store).length===0,'恢复过程不写本地存储或令牌备份');
+  T.setToken('');
+}
+if(process.argv.includes('--draft-recovery')){
+  runDraftRecovery().then(()=>{if(fails)process.exitCode=1;else console.log('定向用例全部通过');})
+    .catch(error=>{console.error(error);process.exitCode=1;});
+}else{
 // 独立固定历史默认值，不能用生成器自身的值充当期望值而漏掉默认参数漂移。
 const expectedDefaults = {
   boll_n:20,boll_k:2,boll_near_pct:0.5,boll_near_band_pct:15,chg_red:4,chg_yellow:2,
@@ -323,6 +477,10 @@ check(els['list_'+unsafeKey].innerHTML.includes('data-k="offline&quot; data-inje
   els['list_'+unsafeKey].innerHTML.includes('A&amp;B&lt;CODE>')&&
   !els['list_'+unsafeKey].innerHTML.includes('<img')&&!els['list_'+unsafeKey].innerHTML.includes(' onfocus="bad()'),
   '行分组、代码、备注、价格属性均不能注入HTML或事件属性');
+const unsafeRow=els['list_'+unsafeKey].querySelectorAll('.row')[0];
+check(unsafeRow.querySelector('[data-f="note"]').value===unsafeText&&
+  unsafeRow.querySelector('[data-f="trigger"]').value==='" onfocus="bad()',
+  'DOM桩保留属性内的大于号、引号和实体，不截断控件或遗漏后续字段');
 delete T.data[unsafeKey];T.initGroups(baseGroups);
 
 (async () => {
@@ -568,6 +726,11 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
     '冲突失败保留提交期间输入及dirty');
   editSetting('vol_ratio','1.8');check(els.rulesDirty.textContent==='', '失败不推进已提交基线');
   editSetting('vol_ratio','2.0');
+  const recovery=T.saveRules(els.btnSaveRules),recoveryRead=pendingWrites[3];
+  check(recoveryRead.options.method==='GET','409后再次保存先保留草稿并读取最新版，不重复提交旧SHA');
+  recoveryRead.resolve({ok:true,status:200,json:async()=>({content:Buffer.from(JSON.stringify({...T.SET,vol_ratio:1.8})).toString('base64'),sha:'f'.repeat(40)})});
+  await recovery;pendingWrites.pop();
+  check(els.set_vol_ratio.value==='2.0'&&els.rulesDirty.textContent.includes('未保存'),'恢复只合并规则草稿，仍需再次明确保存');
   const missingSave=T.saveRules(els.btnSaveRules),missingWrite=pendingWrites[3];
   check(JSON.parse(missingWrite.options.body).sha==='f'.repeat(40),'失败不推进blob SHA');
   finishWrite(missingWrite,'b','');await missingSave;
@@ -637,7 +800,7 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
       return {ok:true,status:200,json:async()=>response};
     }};
   runtime.window=runtime;
-  vm.runInNewContext(fs.readFileSync(path.join(ROOT,'run-status.js'),'utf8'),runtime);
+  vm.runInNewContext(fs.readFileSync(runStatusScriptPath,'utf8'),runtime);
   runtime.MMRunStatus.init({...runOptions,getToken:()=> 'github_pat_memory_only'});
   const beforeRefresh=Object.fromEntries(foldIds.map(id=>[id,els[id].open]));
   const published=await runtime.MMRunStatus.refresh();
@@ -684,7 +847,9 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
     removedIds.every(id=>doc.getElementById(id)===null), '旧书签初始化只模拟GET、不写存储、不重建已删除说明和详情DOM');
   T.setToken('');global.fetch=previousFetch;
   Object.assign(global.location,savedLocation);
+  await runDraftRecovery();
   console.log();
   if (fails) { console.error(fails + ' 项失败'); process.exitCode = 1; }
   else console.log('全部通过');
 })().catch(error => { console.error(error); process.exitCode = 1; });
+}

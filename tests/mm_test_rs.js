@@ -7,17 +7,33 @@ const {webcrypto, createHash} = require('node:crypto');
 const code = fs.readFileSync(path.join(__dirname, '..', 'run-status.js'), 'utf8');
 const A = 'a'.repeat(40), B = 'b'.repeat(40), C = 'c'.repeat(40), D = 'd'.repeat(40);
 const clone = v => JSON.parse(JSON.stringify(v));
+const response = v => ({ok: true, status: 200, json: async () => clone(v), text: async () => JSON.stringify(v)});
+const flush = () => new Promise(resolve => setImmediate(resolve));
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return {promise, resolve, reject};
+}
+function workflowRetryStepName() {
+  const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'daily.yml'), 'utf8');
+  const dispatch = workflow.split(/(?=^      - name:)/m)
+    .filter(step => /^\s+gh workflow run ensure-morning\.yml\b/m.test(step));
+  assert.equal(dispatch.length, 1, 'daily 必须有唯一实际派发延迟重试的步骤');
+  return dispatch[0].match(/^      - name: ([^\r\n]+)/m)[1].trim();
+}
 function snapshot(sha = B, run = '1') {
   return {run_id: run, request_id: '', source_sha: D, started_at: '2026-10-08T01:00:00Z',
     config_files: {'holdings.json': A, 'settings.json': sha},
     summary: {red: 44, yellow: 20, green: 65, total: 129, stale_symbols: [], missing_symbols: []}};
 }
 function element() {
-  return {textContent: '', style: {}, dataset: {}, children: [], disabled: false,
+  return {_text: '', get textContent() { return this._text; },
+    set textContent(value) { this._text = value; this.children = []; },
+    style: {}, dataset: {}, children: [], disabled: false,
     setAttribute(name, value) { this[name] = value; }, appendChild(child) { this.children.push(child); },
     classList: {contains() { return false; }}};
 }
-function fixture(page = snapshot(), onlyRule = false) {
+function fixture(page = snapshot(), onlyRule = false, initial = {}) {
   const els = Object.fromEntries((onlyRule ? ['ruleLight', 'ruleLightTxt'] :
     ['runLight', 'runLightTxt', 'ruleLight', 'ruleLightTxt', 'runSummary', 'runMsg', 'checkResult', 'btnCheckStatus', 'btnReturnBoard']).map(id => [id, element()]));
   // 首页这颗按钮渲染出来就是「状态」；点完必须还原成页面原本文案，不能变成别的名字。
@@ -25,26 +41,31 @@ function fixture(page = snapshot(), onlyRule = false) {
   if (page) { els.snapshotData = element(); els.snapshotData.textContent = JSON.stringify(page); }
   const data = {status: snapshot(), published: snapshot(), sha: B, holdingsSHA: A, failHoldings: false,
     failRules: false, failPublic: false,
-    run: {id: 2, event: 'push', head_sha: D, status: 'in_progress', conclusion: null}, delay: null, commitSHA: null, raw: null, reloads: []};
-  const urls = [], timers = [], events = {};
+    run: {id: 2, event: 'push', head_sha: D, status: 'in_progress', conclusion: null}, delay: null, commitSHA: null, raw: null, reloads: [], ...initial};
+  const urls = [], calls = [], timers = [], events = {};
   let now = Date.parse('2026-10-08T02:00:00Z');
   class Clock extends Date { static now() { return now; } }
   const win = {document: {readyState: 'complete', getElementById: id => els[id] || null,
       createElement: element, addEventListener(name, fn) { events[name] = fn; }},
     addEventListener(name, fn) { events[name] = fn; },
     localStorage: {getItem() { return null; }, setItem() {}},
-    setTimeout(fn, ms) { timers.push({fn, ms}); return timers.length; }, clearTimeout() {},
-    location: {href: 'https://example.test/market-monitor/index.html', replace(url) { data.reloads.push(url); }},
+    setTimeout(fn, ms) { timers.push({fn, ms, active: true}); return timers.length; },
+    clearTimeout(id) { if (timers[id - 1]) timers[id - 1].active = false; },
+    location: {origin: data.origin, href: 'https://example.test/market-monitor/index.html', replace(url) { data.reloads.push(url); }},
     URL, Date: Clock, AbortController, TextEncoder, crypto: webcrypto, DOMParser: class { parseFromString(html) {
       return {querySelector() { return {textContent: html}; }};
     }},
     fetch: async (url, options) => {
-      urls.push(url);
-      const response = v => ({ok: true, status: 200, json: async () => clone(v), text: async () => JSON.stringify(v)});
+      urls.push(url); calls.push({url, options});
+      if (data.intercept) {
+        const result = data.intercept(url, options);
+        if (result !== undefined) return result;
+      }
       if (url.includes('/dispatches')) {
         data.posts=(data.posts||0)+1;
         data.requestId=JSON.parse(options.body).inputs.request_id;
         assert.equal(options.headers.Authorization,'Bearer github_pat_test');
+        if (data.dispatchDelay) return data.dispatchDelay;
         if(data.dispatchSuccess)return {ok:true,status:204};
         const failure=data.dispatchError||{status:403,message:'Resource not accessible by personal access token'};
         return {ok:false,status:failure.status,json:async()=>({message:failure.message}),
@@ -78,9 +99,20 @@ function fixture(page = snapshot(), onlyRule = false) {
     }};
   win.window = win;
   vm.runInNewContext(code, win);
-  return {win, els, data, urls, timers, events, advance(ms) { now += ms; }};
+  return {win, els, data, urls, calls, timers, events, advance(ms) { now += ms; }};
 }
-async function check(name, fn) { await fn(); console.log('PASS ' + name); }
+const filter = process.env.MM_RS_TEST_FILTER || '';
+let checked = 0, completed = false;
+process.on('beforeExit', () => {
+  if (!completed && !process.exitCode) {
+    console.error('用例尚有未完成的异步核对，不能判定通过');
+    process.exitCode = 1;
+  }
+});
+async function check(name, fn) {
+  if (filter && !name.includes(filter)) return;
+  await fn(); checked++; console.log('PASS ' + name);
+}
 (async () => {
   await check('相同 settings blob 规则绿灯；运行灯不再声明规则生效', async () => {
     const f = fixture(); await f.win.MMRunStatus.refresh();
@@ -431,7 +463,7 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
   await check('成功但当日日线未就绪：写明未发布与重试，并带北京时间', async () => {
     const f=fixture();
     f.data.run={id:2,status:'completed',conclusion:'success',run_started_at:'2026-10-21T00:46:21Z',created_at:'2026-10-21T00:46:21Z'};
-    f.data.jobs=[{steps:[{name:'抓数据并生成页面',conclusion:'success'},{name:'当日日线未就绪：约 30 分钟后自动再试',conclusion:'success'},
+    f.data.jobs=[{steps:[{name:'抓数据并生成页面',conclusion:'success'},{name:workflowRetryStepName(),conclusion:'success'},
       {name:'校验最新输入并提交更新',conclusion:'skipped'}]}];
     await f.els.btnCheckStatus.onclick();
     assert.match(f.els.checkResult.textContent,/最新任务：本轮未发布 · run 2（10\/21 08:46 北京时间）/);
@@ -685,5 +717,451 @@ async function check(name, fn) { await fn(); console.log('PASS ' + name); }
     assert.doesNotMatch(f.els.runLightTxt.textContent,/红3 黄14 绿26|项数据已更新/);
     assert.doesNotMatch(f.els.runLightTxt.textContent,/项参考值|42 只/);
   });
-  console.log('全部通过');
+  await check('状态机审计：首次规则未完成显示正在核验，成功不等公开请求', async () => {
+    const rules = deferred(), pub = deferred();
+    const f = fixture(snapshot(), false, {delay: rules.promise,
+      intercept: url => url === './status.json' ? pub.promise : undefined});
+    assert.equal(f.els.ruleLightTxt.textContent, '正在核验');
+    assert.equal(f.els.ruleLight.dataset.phase, 'busy');
+    let finished = false;
+    const pending = f.win.MMRunStatus.refresh().then(value => { finished = true; return value; });
+    rules.resolve(response({sha: B})); await flush();
+    assert.equal(finished, false);
+    assert.equal(f.els.ruleLightTxt.textContent, '已生效');
+    pub.resolve(response(snapshot())); await pending;
+    assert.equal(f.timers.filter(t => t.active).length, 1);
+    assert.equal(f.data.posts || 0, 0);
+  });
+  await check('状态机审计：首次失败不假绿，恢复后按真实新规则核验', async () => {
+    const f = fixture(snapshot(), false, {failRules: true, failPublic: true});
+    assert.equal(f.els.ruleLightTxt.textContent, '正在核验');
+    await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.ruleLightTxt.textContent, '暂无法核验');
+    assert.equal(f.els.ruleLight.dataset.phase, 'idle');
+    f.data.failRules = false; f.data.sha = C;
+    await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.ruleLightTxt.textContent, '正在更新');
+    f.data.failPublic = false; f.data.status = snapshot(C, '2'); f.data.published = snapshot(C, '2');
+    await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.ruleLightTxt.textContent, '需要刷新');
+    assert.equal(f.data.reloads.length, 0);
+  });
+  await check('状态机审计：新规则SHA与运行结果分段渲染，不等发布或运行延迟', async () => {
+    const pub = deferred(), commits = deferred();
+    const f = fixture(snapshot(), false, {sha: C, intercept: url =>
+      url === './status.json' ? pub.promise : url.includes('/commits?') ? commits.promise : undefined});
+    let finished = false;
+    const pending = f.win.MMRunStatus.refresh().then(() => { finished = true; });
+    await flush();
+    assert.equal(f.els.ruleLightTxt.textContent, '等待更新');
+    assert.equal(finished, false);
+    commits.resolve(response([{sha: D}])); await flush();
+    assert.equal(f.els.ruleLightTxt.textContent, '正在更新');
+    assert.equal(finished, false);
+    pub.resolve(response(snapshot())); await pending;
+    assert.equal(f.timers.filter(t => t.active).length, 1);
+  });
+  await check('状态机审计：规则失败立即反馈，不等公开请求结束', async () => {
+    const pub = deferred();
+    const f = fixture(snapshot(), false, {failRules: true,
+      intercept: url => url === './status.json' ? pub.promise : undefined});
+    const pending = f.win.MMRunStatus.refresh(); await flush();
+    assert.equal(f.els.ruleLightTxt.textContent, '暂无法核验');
+    pub.resolve(response(snapshot())); await pending;
+    assert.equal(f.els.ruleLight.dataset.phase, 'idle');
+  });
+  await check('状态机审计：保存确认发布后断网不倒退超时，新目标必须重核', async () => {
+    const f = fixture(); f.data.sha = C;
+    await f.win.MMRunStatus.watchConfig({file: 'settings.json', blobSHA: C, commitSHA: D});
+    f.data.status = snapshot(C, '2'); f.data.published = snapshot(C, '2');
+    assert.equal((await f.win.MMRunStatus.refresh()).config.phase, 'published');
+    f.data.failPublic = true; f.advance(11 * 60000);
+    let s = await f.win.MMRunStatus.refresh();
+    assert.equal(s.config.phase, 'published');
+    assert.equal(s.publication.phase, 'waiting', '本次查询失败不能被历史证据冒充成功');
+    assert.equal(f.els.ruleLightTxt.textContent, '需要刷新');
+    f.data.failRules = true; s = await f.win.MMRunStatus.refresh();
+    assert.equal(s.config.phase, 'published');
+    assert.equal(f.els.ruleLightTxt.textContent, '暂无法核验');
+    f.data.failRules = false; f.data.failPublic = false;
+    await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.ruleLightTxt.textContent, '需要刷新');
+    f.data.sha = A; await f.win.MMRunStatus.refresh();
+    assert.notEqual(f.els.ruleLight.dataset.phase, 'ok');
+    assert.notEqual(f.els.ruleLightTxt.textContent, '需要刷新');
+    f.advance(1);
+    const commit = 'e'.repeat(40);
+    f.data.run = {id: 3, event: 'push', head_sha: commit, status: 'in_progress'};
+    f.data.sha = C;
+    const next = f.win.MMRunStatus.watchConfig({file: 'settings.json', blobSHA: C, commitSHA: commit});
+    assert.notEqual(f.els.ruleLight.dataset.phase, 'ok');
+    s = await next;
+    assert.notEqual(s.config.phase, 'published', '恢复相同blob也需要本次提交的运行证据');
+    assert.notEqual(f.els.ruleLightTxt.textContent, '需要刷新');
+  });
+  await check('状态机审计：手动确认发布后断网不回退，新UUID不沿用旧确认', async () => {
+    const f = fixture(); f.data.dispatchSuccess = true;
+    f.win.MMRunStatus.init({getToken: () => 'github_pat_test'});
+    await f.win.MMRunStatus.startManual();
+    const fresh = snapshot(B, '2'); fresh.request_id = f.data.requestId;
+    f.data.status = fresh; f.data.published = fresh;
+    f.data.run = {id: 2, event: 'workflow_dispatch', display_title: f.data.requestId,
+      status: 'completed', conclusion: 'success'};
+    assert.equal((await f.win.MMRunStatus.refresh()).manual.phase, 'published');
+    f.data.failPublic = true; f.advance(11 * 60000);
+    const s = await f.win.MMRunStatus.refresh();
+    assert.equal(s.manual.phase, 'published');
+    assert.equal(s.request_id, fresh.request_id);
+    assert.match(f.els.runLightTxt.textContent, /本页仍是旧数据/);
+    f.data.failPublic = false;
+    const next = await f.win.MMRunStatus.startManual();
+    assert.notEqual(next.request_id, fresh.request_id);
+    assert.notEqual(next.manual.phase, 'published');
+    assert.equal(f.data.posts, 2);
+  });
+  await check('状态机审计：刷新链接受阻有反馈，恢复后可执行且只重置视图', async () => {
+    for (const reason of ['public', 'rules', 'target', 'dirty']) {
+      const f = fixture(); let dirty = false;
+      f.win.MMRunStatus.init({canReload: () => !dirty});
+      f.data.sha = C;
+      await f.win.MMRunStatus.watchConfig({file: 'settings.json', blobSHA: C, commitSHA: D});
+      f.data.status = snapshot(C, '2'); f.data.published = snapshot(C, '2');
+      await f.win.MMRunStatus.refresh();
+      if (reason === 'public') f.data.failPublic = true;
+      if (reason === 'rules') f.data.failRules = true;
+      if (reason === 'target') f.data.sha = A;
+      if (reason === 'dirty') dirty = true;
+      await f.win.MMRunStatus.refresh();
+      let link = f.els.runLightTxt.children.at(-1);
+      assert.equal(link.textContent, '刷新当前看板');
+      const count = f.urls.length;
+      link.onclick({preventDefault() {}});
+      assert.match(link.textContent, /^暂不能刷新：/, reason);
+      assert.equal(f.data.reloads.length, 0);
+      assert.equal(f.urls.length, count);
+      f.data.failPublic = false; f.data.failRules = false; f.data.sha = C; dirty = false;
+      await f.win.MMRunStatus.refresh();
+      link = f.els.runLightTxt.children.at(-1);
+      f.win.location.href = 'https://example.test/market-monitor/index.html?focus=pos&edit=1&keep=1#rules';
+      link.onclick({preventDefault() {}}); link.onclick({preventDefault() {}});
+      assert.equal(f.data.reloads.length, 1);
+      const url = new URL(f.data.reloads[0]);
+      assert.equal(url.hash, ''); assert.equal(url.searchParams.has('focus'), false);
+      assert.equal(url.searchParams.has('edit'), false); assert.equal(url.searchParams.get('keep'), '1');
+      assert.equal(url.searchParams.get('_mm_reset_view'), '1');
+      assert.equal(url.searchParams.get('mm_refreshed_run'), '2');
+    }
+  });
+  await check('状态机审计：核对结果中的刷新入口也反馈目标不匹配', async () => {
+    const f = fixture(); f.data.status = snapshot(C, '3'); f.data.published = snapshot(C, '3');
+    await f.els.btnCheckStatus.onclick();
+    const link = f.els.checkResult.children.at(-1);
+    assert.equal(link.textContent, '刷新当前看板');
+    link.onclick({preventDefault() {}});
+    assert.match(link.textContent, /最新规则已变化/);
+    assert.equal(f.data.reloads.length, 0);
+  });
+  await check('状态机审计：取消旧规则请求立即收束，迟到成功失败均不覆盖新目标', async () => {
+    for (const fail of [false, true]) {
+      const f = fixture(); await f.win.MMRunStatus.refresh();
+      const gate = deferred(); f.data.delay = gate.promise;
+      let finished = false;
+      const old = f.win.MMRunStatus.refresh().then(() => { finished = true; });
+      f.data.delay = null; f.data.sha = C;
+      await f.win.MMRunStatus.refresh(); await flush();
+      assert.equal(finished, true, '取消不能等待忽略signal的旧fetch');
+      const count = f.urls.length;
+      if (fail) gate.reject(new TypeError('Failed to fetch'));
+      else gate.resolve(response({sha: B}));
+      await old; await flush();
+      assert.equal(f.els.ruleLightTxt.textContent, '正在更新');
+      assert.equal(f.urls.length, count, '取消后不应回退raw或查旧提交');
+      assert.equal(f.timers.filter(t => t.active).length, 1);
+    }
+  });
+  await check('状态机审计：旧公开响应与已取消定时器不得覆盖新一代或发请求', async () => {
+    const f = fixture(); await f.win.MMRunStatus.refresh();
+    const timer = f.timers.at(-1), gate = deferred();
+    f.data.intercept = url => url === './status.json' ? gate.promise : undefined;
+    const old = f.win.MMRunStatus.refresh();
+    f.data.intercept = null; f.data.sha = C;
+    f.data.status = snapshot(C, '2'); f.data.published = snapshot(C, '2');
+    await f.win.MMRunStatus.refresh();
+    const count = f.urls.length;
+    gate.resolve(response(snapshot())); await old; await flush();
+    timer.fn(); await flush();
+    assert.equal(f.urls.length, count);
+    assert.equal(f.els.ruleLightTxt.textContent, '需要刷新');
+    assert.match(f.els.runMsg.textContent, /run 2/);
+    assert.equal(f.timers.filter(t => t.active).length, 1);
+  });
+  await check('状态机审计：旧错误响应体不能污染新一代API冷却', async () => {
+    const f = fixture(); await f.win.MMRunStatus.refresh();
+    const body = deferred();
+    f.data.intercept = url => url.includes('/contents/settings.json') ?
+      {ok: false, status: 429, json: () => body.promise, headers: {get: () => null}} : undefined;
+    const old = f.win.MMRunStatus.refresh(); await flush();
+    f.data.intercept = null; f.data.sha = C;
+    await f.win.MMRunStatus.refresh();
+    body.resolve({message: 'API rate limit exceeded'}); await old; await flush();
+    const count = f.calls.filter(c => c.url.includes('/contents/settings.json')).length;
+    await f.win.MMRunStatus.refresh();
+    assert(f.calls.filter(c => c.url.includes('/contents/settings.json')).length > count);
+    assert.equal(f.els.ruleLightTxt.textContent, '正在更新');
+  });
+  await check('状态机审计：并发核对旧结果和finally不能覆盖新结果或提前恢复按钮', async () => {
+    const f = fixture(); await f.win.MMRunStatus.refresh();
+    const oldRun = deferred();
+    f.data.intercept = url => url.includes('&per_page=1') ? oldRun.promise : undefined;
+    const old = f.els.btnCheckStatus.onclick(); await flush();
+    const rules = deferred(); f.data.delay = rules.promise; f.data.intercept = null;
+    const next = f.els.btnCheckStatus.onclick(); await flush();
+    assert.equal(f.els.btnCheckStatus.disabled, true);
+    assert.equal(f.els.btnCheckStatus.textContent, '核对中…');
+    oldRun.resolve(response({workflow_runs: [{id: 9, status: 'completed', conclusion: 'failure'}]}));
+    await old; await flush();
+    assert.equal(f.els.btnCheckStatus.disabled, true);
+    rules.resolve(response({sha: B})); await next;
+    assert.match(f.els.checkResult.textContent, /最新任务：运行中 · run 2/);
+    assert.doesNotMatch(f.els.checkResult.textContent, /run 9/);
+    assert.equal(f.els.btnCheckStatus.textContent, '状态');
+  });
+  await check('状态机审计：销毁取消规则和核对请求，旧响应不再渲染调度', async () => {
+    for (const stage of ['rules', 'jobs']) {
+      const f = fixture(); await f.win.MMRunStatus.refresh();
+      const gate = deferred();
+      if (stage === 'rules') f.data.delay = gate.promise;
+      else {
+        f.data.run = {id: 2, status: 'completed', conclusion: 'success'};
+        f.data.intercept = url => url.includes('/jobs') ? gate.promise : undefined;
+      }
+      const pending = f.els.btnCheckStatus.onclick(); await flush();
+      const before = f.els.ruleLightTxt.textContent;
+      f.win.MMRunStatus.destroy();
+      const count = f.urls.length;
+      gate.resolve(stage === 'rules' ? response({sha: C}) : response({jobs: []}));
+      await pending; await flush();
+      await f.win.MMRunStatus.refresh(); await f.win.MMRunStatus.startManual();
+      await f.win.MMRunStatus.watchConfig({file: 'settings.json', blobSHA: C, commitSHA: D});
+      f.events.visibilitychange(); f.win.MMRunStatus.init();
+      assert.equal(f.urls.length, count);
+      assert.equal(f.els.ruleLightTxt.textContent, before);
+      assert.equal(f.els.btnCheckStatus.onclick, null);
+      assert.equal(f.timers.filter(t => t.active).length, 0);
+    }
+  });
+  await check('状态机审计：慢派发只发送一次，旧POST不回退已发布或复活销毁组件', async () => {
+    for (const stop of [false, true]) {
+      const f = fixture(), gate = deferred(); f.data.dispatchDelay = gate.promise;
+      f.win.MMRunStatus.init({getToken: () => 'github_pat_test'});
+      const pending = f.win.MMRunStatus.startManual();
+      await f.win.MMRunStatus.startManual();
+      assert.equal(f.data.posts, 1);
+      if (stop) f.win.MMRunStatus.destroy();
+      else {
+        const fresh = snapshot(B, '2'); fresh.request_id = f.data.requestId;
+        f.data.status = fresh; f.data.published = fresh;
+        assert.equal((await f.win.MMRunStatus.refresh()).manual.phase, 'published');
+      }
+      const count = f.urls.length;
+      gate.resolve({ok: true, status: 204});
+      const result = await pending; await flush();
+      assert.equal(f.urls.length, count);
+      if (!stop) assert.equal(result.manual.phase, 'published');
+      else assert.equal(f.timers.filter(t => t.active).length, 0);
+      assert.equal(f.data.posts, 1);
+    }
+  });
+  await check('状态机审计：响应体超时后迟到结果不写入状态或追加请求', async () => {
+    const body = deferred();
+    const f = fixture(snapshot(), false, {intercept: url => url === './status.json' ?
+      {ok: true, status: 200, json: () => body.promise} : undefined});
+    const pending = f.win.MMRunStatus.refresh(); await flush();
+    const timeouts = f.timers.filter(t => t.active && t.ms === 15000);
+    assert.equal(timeouts.length, 1); timeouts[0].fn();
+    const result = await pending;
+    assert.equal(result.publication.phase, 'waiting');
+    assert.equal(result.verified, false);
+    const count = f.urls.length;
+    body.resolve(snapshot(C, '9')); await flush();
+    assert.equal(f.urls.length, count);
+    assert.doesNotMatch(f.els.runMsg.textContent, /run 9/);
+    assert.equal(f.timers.filter(t => t.active).length, 1);
+  });
+  await check('状态机审计：公开304最多回退一次，令牌仅发GitHub且云端预览不运行', async () => {
+    const raw = '{"说明":"规则"}\n';
+    const sha = createHash('sha1').update(Buffer.from('blob ' + Buffer.byteLength(raw) + '\0')).update(raw).digest('hex');
+    const f = fixture(snapshot(sha), false, {origin: 'https://nixhuang.github.io', failRules: true, raw,
+      intercept: (url, options) => url === './status.json' && options.cache === 'no-cache'
+        ? {ok: false, status: 304} : undefined});
+    f.win.MMRunStatus.init({getToken: () => 'github_pat_test'});
+    const before = f.calls.length;
+    await f.win.MMRunStatus.refresh();
+    const calls = f.calls.slice(before);
+    assert.equal(calls.filter(c => c.url === './status.json').length, 2);
+    assert.equal(f.els.ruleLightTxt.textContent, '已生效');
+    for (const call of calls) {
+      assert.equal(call.options.headers.Authorization,
+        call.url.startsWith('https://api.github.com/') ? 'Bearer github_pat_test' : undefined);
+    }
+    const preview = fixture(snapshot(), false, {origin: 'https://example.test'});
+    await preview.win.MMRunStatus.refresh(); await preview.win.MMRunStatus.startManual();
+    await preview.win.MMRunStatus.watchConfig({file: 'settings.json', blobSHA: C, commitSHA: D});
+    assert.equal(preview.urls.length, 0);
+    assert.equal(preview.els.btnCheckStatus.disabled, true);
+    assert.match(preview.els.ruleLightTxt.textContent, /本地预览/);
+  });
+  await check('集成复核：慢run和jobs核对不被8秒或10秒后台轮询中止', async () => {
+    for (const mode of ['rules', 'public']) for (const stage of ['run', 'jobs']) {
+      const f = fixture(); await f.win.MMRunStatus.refresh();
+      const staleTimer = f.timers.at(-1), gate = deferred();
+      if (mode === 'rules') f.data.sha = C;
+      else f.data.failPublic = true;
+      f.data.run = {id: 2, status: 'completed', conclusion: 'success'};
+      f.data.intercept = url => (stage === 'run' ? url.includes('/daily.yml/runs?') && /[?&]per_page=1(?:&|$)/.test(url)
+        : url.includes('/jobs')) ? gate.promise : undefined;
+      let finished = false;
+      const pending = f.els.btnCheckStatus.onclick().then(() => { finished = true; });
+      await flush();
+      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000).length, 0);
+      assert.equal(f.timers.filter(t => t.active && t.ms === 15000).length, 1);
+      const count = f.urls.length;
+      f.advance(11000); staleTimer.fn(); await flush();
+      assert.equal(finished, false);
+      assert.equal(f.els.btnCheckStatus.disabled, true);
+      assert.equal(f.urls.length, count);
+      assert.equal(f.calls.at(-1).options.signal.aborted, false);
+      gate.resolve(stage === 'run' ? response({workflow_runs: [f.data.run]}) : response({jobs: []}));
+      await pending;
+      assert.doesNotMatch(f.els.checkResult.textContent, /核对已中止/);
+      assert.match(f.els.checkResult.textContent, /最新任务：等待发布 · run 2/);
+      assert.equal(f.els.btnCheckStatus.textContent, '状态');
+      const polls = f.timers.filter(t => t.active);
+      assert.equal(polls.length, 1);
+      assert.equal(polls[0].ms, mode === 'rules' ? 8000 : 10000);
+      f.data.intercept = null; polls[0].fn(); await flush();
+      assert(f.urls.length > count);
+      assert.equal(f.timers.filter(t => t.active).length, 1);
+      assert.equal(f.data.posts || 0, 0);
+    }
+  });
+  await check('集成复核：run和jobs真正超时后恢复单轮查询且迟到结果不覆盖', async () => {
+    for (const stage of ['run', 'jobs']) {
+      const f = fixture(); await f.win.MMRunStatus.refresh();
+      const gate = deferred(); f.data.sha = C;
+      f.data.run = {id: 2, status: 'completed', conclusion: 'success'};
+      f.data.intercept = url => (stage === 'run' ? url.includes('/daily.yml/runs?') && /[?&]per_page=1(?:&|$)/.test(url)
+        : url.includes('/jobs')) ? gate.promise : undefined;
+      const pending = f.els.btnCheckStatus.onclick(); await flush();
+      const active = f.timers.filter(t => t.active);
+      assert.equal(active.length, 1); assert.equal(active[0].ms, 15000);
+      f.advance(15000); active[0].fn(); await pending;
+      assert.equal(f.els.btnCheckStatus.disabled, false);
+      assert.doesNotMatch(f.els.checkResult.textContent, /核对已中止|约 30 分钟后自动再试/);
+      if (stage === 'run') assert.match(f.els.checkResult.textContent, /网络请求超时/);
+      const text = f.els.checkResult.textContent, count = f.urls.length;
+      const polls = f.timers.filter(t => t.active);
+      assert.equal(polls.length, 1); assert.equal(polls[0].ms, 8000);
+      gate.resolve(stage === 'run' ? response({workflow_runs: [{id: 9, status: 'completed', conclusion: 'failure'}]})
+        : response({jobs: []}));
+      await flush();
+      assert.equal(f.els.checkResult.textContent, text);
+      assert.equal(f.urls.length, count);
+      assert.deepEqual(f.timers.filter(t => t.active), polls);
+    }
+  });
+  await check('集成复核：新目标和销毁仍中止核对，旧finally不抢新查询定时器', async () => {
+    for (const stop of [false, true]) for (const stage of ['run', 'jobs']) {
+      const f = fixture(); await f.win.MMRunStatus.refresh();
+      const gate = deferred(), rules = deferred();
+      f.data.run = {id: 2, status: 'completed', conclusion: 'success'};
+      f.data.intercept = url => (stage === 'run' ? url.includes('/daily.yml/runs?') && /[?&]per_page=1(?:&|$)/.test(url)
+        : url.includes('/jobs')) ? gate.promise : undefined;
+      const old = f.els.btnCheckStatus.onclick(); await flush();
+      const oldSignal = f.calls.at(-1).options.signal;
+      let next;
+      if (stop) f.win.MMRunStatus.destroy();
+      else {
+        f.data.delay = rules.promise;
+        next = f.win.MMRunStatus.watchConfig({file: 'settings.json', blobSHA: C, commitSHA: D});
+      }
+      await old; await flush();
+      assert.equal(oldSignal.aborted, true);
+      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000).length, 0);
+      const count = f.urls.length;
+      gate.resolve(stage === 'run' ? response({workflow_runs: [f.data.run]}) : response({jobs: []}));
+      await flush(); assert.equal(f.urls.length, count);
+      if (stop) assert.equal(f.timers.filter(t => t.active).length, 0);
+      else {
+        rules.resolve(response({sha: C})); await next;
+        assert.equal(f.timers.filter(t => t.active).length, 1);
+        assert.equal(f.timers.filter(t => t.active)[0].ms, 8000);
+        assert.match(f.els.checkResult.textContent, /核对已中止/);
+      }
+    }
+  });
+  await check('集成复核：新核对取代旧核对时旧finally不提前启动后台轮询', async () => {
+    const f = fixture(); await f.win.MMRunStatus.refresh(); f.data.sha = C;
+    const first = deferred(), second = deferred();
+    f.data.intercept = url => url.includes('/daily.yml/runs?') && /[?&]per_page=1(?:&|$)/.test(url) ? first.promise : undefined;
+    const old = f.els.btnCheckStatus.onclick(); await flush();
+    f.data.intercept = url => url.includes('/daily.yml/runs?') && /[?&]per_page=1(?:&|$)/.test(url) ? second.promise : undefined;
+    const next = f.els.btnCheckStatus.onclick(); await old; await flush();
+    assert.equal(f.els.btnCheckStatus.disabled, true);
+    assert.equal(f.timers.filter(t => t.active && t.ms !== 15000).length, 0);
+    first.resolve(response({workflow_runs: [{id: 9, status: 'completed', conclusion: 'failure'}]})); await flush();
+    assert.equal(f.els.btnCheckStatus.disabled, true);
+    second.resolve(response({workflow_runs: [f.data.run]})); await next;
+    assert.match(f.els.checkResult.textContent, /最新任务：运行中 · run 2/);
+    assert.doesNotMatch(f.els.checkResult.textContent, /run 9|核对已中止/);
+    assert.equal(f.timers.filter(t => t.active).length, 1);
+    assert.equal(f.timers.filter(t => t.active)[0].ms, 8000);
+  });
+  await check('集成复核：前后台切换不覆盖手动核对，隐藏完成后不启动后台请求', async () => {
+    const f = fixture(); await f.win.MMRunStatus.refresh();
+    const gate = deferred();
+    f.data.intercept = url => url.includes('/daily.yml/runs?') && /[?&]per_page=1(?:&|$)/.test(url) ? gate.promise : undefined;
+    const pending = f.els.btnCheckStatus.onclick(); await flush();
+    const count = f.urls.length, signal = f.calls.at(-1).options.signal;
+    for (const hidden of [true, false, true]) {
+      f.win.document.hidden = hidden; f.events.visibilitychange(); await flush();
+    }
+    assert.equal(f.urls.length, count); assert.equal(signal.aborted, false);
+    gate.resolve(response({workflow_runs: [f.data.run]})); await pending;
+    assert.doesNotMatch(f.els.checkResult.textContent, /核对已中止/);
+    assert.equal(f.timers.filter(t => t.active).length, 0);
+    f.win.document.hidden = false; f.events.visibilitychange(); await flush();
+    assert(f.urls.length > count);
+    assert.equal(f.timers.filter(t => t.active).length, 1);
+  });
+  await check('集成复核：真实workflow重试步骤契约兼容旧名称且仅成功派发才承诺重试', async () => {
+    const currentName = workflowRetryStepName();
+    for (const name of [currentName, '当日日线未就绪：约 30 分钟后自动再试']) {
+      for (const conclusion of ['success', 'failure', 'skipped', 'cancelled', null, 'missing']) {
+        const f = fixture();
+        f.data.run = {id: 2, status: 'completed', conclusion: 'success', run_started_at: '2026-10-21T00:46:21Z'};
+        f.data.jobs = [{steps: [{name: '抓数据并生成页面', conclusion: 'success'},
+          {name: '校验最新输入并提交更新', conclusion: 'skipped'},
+          ...(conclusion === 'missing' ? [] : [{name, conclusion}])]}];
+        await f.els.btnCheckStatus.onclick();
+        assert.match(f.els.checkResult.textContent, /最新任务：本轮未发布/);
+        assert.equal(f.els.checkResult.textContent.includes('约 30 分钟后自动再试'), conclusion === 'success',
+          name + ' / ' + conclusion);
+        assert.equal(f.data.posts || 0, 0);
+      }
+    }
+    for (const [gen, commit, started] of [['failure', 'skipped', '2026-10-21T00:46:21Z'],
+      ['success', 'success', '2026-10-21T00:46:21Z'], ['success', 'skipped', '2026-10-21T04:15:21Z'],
+      ['success', 'skipped', '']]) {
+      const f = fixture();
+      f.data.run = {id: 2, status: 'completed', conclusion: 'success', run_started_at: started};
+      f.data.jobs = [{steps: [{name: '抓数据并生成页面', conclusion: gen},
+        {name: '校验最新输入并提交更新', conclusion: commit}, {name: currentName, conclusion: 'success'}]}];
+      await f.els.btnCheckStatus.onclick();
+      assert.doesNotMatch(f.els.checkResult.textContent, /约 30 分钟后自动再试/);
+    }
+  });
+  if (!checked) throw new Error('未匹配任何用例：' + filter);
+  completed = true;
+  console.log(filter ? '定向通过 ' + checked + ' 项' : '全部通过');
 })().catch(error => { console.error(error); process.exitCode = 1; });

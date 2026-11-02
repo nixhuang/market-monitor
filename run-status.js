@@ -50,7 +50,8 @@
   const SHA = /^[a-f0-9]{40,64}$/i;
   const FILES = ['holdings.json', 'settings.json'];
   const terminal = new Set(['published', 'failed', 'expired']);
-  let options = {}, initialized = false, timer = null, controller = null, version = 0;
+  let options = {}, initialized = false, destroyed = false, timer = null, controller = null, version = 0;
+  let checkController = null, dispatchController = null;
   let targets = {}, receiptVersion = 0, configSince = 0, configRun = null, manual = null;
   let latestStatus = null, verifiedSnapshot = null, actionsError = '';
   let configState = {phase: 'idle', message: '尚无本页提交待验证'};
@@ -110,17 +111,21 @@
   // 而不是 no-store 的每次全量重传。语义不变——拿到的仍是线上当前内容，只是未变更时不传 body。
   async function request(url, opts = {}) {
     const {method = 'GET', body, github = false, signal, text = false, revalidate = false} = opts;
+    const cancelled = () => Object.assign(new Error('请求已取消'), {name: 'AbortError'});
+    if (destroyed || signal && signal.aborted) throw cancelled();
     if (github && Date.now() < apiBlockedUntil) {
       const error = new Error(authMessage(429, '', '0', '', apiBlockedUntil, !!getToken()).text);
       error.status = 429; error.kind = 'rate_limit'; error.retryAt = apiBlockedUntil;
       throw error;
     }
     const local = new AbortController();
-    const abort = () => local.abort();
-    if (signal) {
-      if (signal.aborted) local.abort();
-      else signal.addEventListener('abort', abort, {once: true});
-    }
+    let rejectAbort;
+    const aborted = new Promise((_, reject) => { rejectAbort = reject; });
+    const abort = () => { local.abort(); rejectAbort(cancelled()); };
+    if (signal) signal.addEventListener('abort', abort, {once: true});
+    const ensureActive = () => {
+      if (destroyed || local.signal.aborted) throw cancelled();
+    };
     const headers = {};
     if (github) {
       headers.Accept = 'application/vnd.github+json';
@@ -136,15 +141,16 @@
       }, options.timeoutMs);
     });
     try {
-      return await Promise.race([expired, (async () => {
+      return await Promise.race([expired, aborted, (async () => {
         const response = await window.fetch(url, {
           method, headers, cache: revalidate ? 'no-cache' : 'no-store', signal: local.signal,
           ...(body !== undefined ? {body: JSON.stringify(body)} : {})
         });
+        ensureActive();
         // 304 只在浏览器缓存里已有该 URL 副本时才会被 fetch 折成可用响应；冷缓存（例如首次进入
         // 且页面未入缓存）会原样抛回 304，这时退回一次全量读取，保证拿到的仍是线上真实内容。
         if (revalidate && response.status === 304) {
-          return await request(url, {...opts, revalidate: false});
+          return await request(url, {...opts, signal: local.signal, revalidate: false});
         }
         if (!response.ok) {
           let diagnostic = {kind: 'http', text: response.status === 404
@@ -153,6 +159,7 @@
           if (github) {
             let payload = {};
             try { payload = await response.json(); } catch (_) {}
+            ensureActive();
             const header = name => response.headers && response.headers.get ? response.headers.get(name) : null;
             const remaining = header('x-ratelimit-remaining');
             const retry = Number(header('retry-after'));
@@ -173,7 +180,9 @@
           throw error;
         }
         if (response.status === 204) return null;
-        return text ? await response.text() : await response.json();
+        const value = text ? await response.text() : await response.json();
+        ensureActive();
+        return value;
       })()]);
     } finally {
       window.clearTimeout(timeout);
@@ -210,6 +219,26 @@
     timer = null;
     if (controller) controller.abort();
     controller = null;
+  }
+  function cancelCheck() {
+    if (checkController) checkController.abort();
+    checkController = null;
+  }
+  function destroy() {
+    destroyed = true;
+    cancelCheck();
+    cancelPoll();
+    checkRequest++;
+    if (dispatchController) dispatchController.abort();
+    dispatchController = null;
+    ['btnRunNow', 'btnCheckStatus'].forEach(id => {
+      const button = el(id);
+      if (button) {
+        button.onclick = null;
+        button.disabled = false;
+        if (id === 'btnCheckStatus' && checkLabel !== null) button.textContent = checkLabel;
+      }
+    });
   }
   function state() {
     const primary = activeManual() ? manualState :
@@ -409,24 +438,29 @@
       const remote = latestRules.files[file];
       const awaitingReceipt = receipt && configState.phase !== 'published' &&
         remote !== receipt.blobSHA && remote === (pageSnapshot() || verifiedSnapshot)?.config_files[file];
-      return [file, receipt && (receipt.savedAt >= latestRules.checkedAt || awaitingReceipt)
-        ? receipt.blobSHA : remote];
+      return [file, receipt && configState.phase !== 'published' &&
+        (receipt.savedAt >= latestRules.checkedAt || awaitingReceipt) ? receipt.blobSHA : remote];
     }));
   }
   function sameConfig(value, expected) {
     return schema(value) && expected && FILES.every(file => value.config_files[file] === expected[file]);
   }
-  function reloadCurrent(force = false) {
-    if (!force) return false; // 配置发布后仅提示手动刷新，不自动替换当前页。
-    if (!verifiedSnapshot || publication.phase !== 'published' || rulesError ||
-        !sameConfig(verifiedSnapshot, expectedConfig())) return false;
-    if (Object.keys(targets).length && configState.phase !== 'published') return false;
-    if (!window.location || typeof window.location.replace !== 'function') return false;
-    const url = new URL(window.location.href);
-    if (reloadStarted) return false;
+  function reloadBlockedReason() {
+    if (destroyed) return '状态组件已关闭，请重新打开页面';
+    if (reloadStarted) return '正在刷新，请稍候';
+    if (!verifiedSnapshot || publication.phase !== 'published') return '本次发布核验未完成，请稍后查运行状态';
+    if (rulesError || !expectedConfig()) return '最新规则尚未核验，请稍后查运行状态';
+    if (!sameConfig(verifiedSnapshot, expectedConfig())) return '最新规则已变化，正在等待对应版本发布';
+    if (Object.keys(targets).length && configState.phase !== 'published') return '本次保存尚未验证发布';
+    if (!window.location || typeof window.location.replace !== 'function') return '当前环境不支持刷新';
     try {
-      if (options.canReload && !options.canReload()) return false;
-    } catch (_) { return false; }
+      if (options.canReload && !options.canReload()) return '当前编辑状态不允许刷新，请先保存或退出编辑';
+    } catch (_) { return '当前编辑状态无法核对，请先保存或退出编辑'; }
+    return '';
+  }
+  function reloadCurrent(force = false) {
+    if (!force || reloadBlockedReason()) return false; // 配置发布后仅提示手动刷新，不自动替换当前页。
+    const url = new URL(window.location.href);
     reloadStarted = true;
     url.hash = '';
     url.searchParams.delete('focus');
@@ -437,13 +471,28 @@
     window.location.replace(url.href);
     return true;
   }
+  function refreshLink(box, style) {
+    const link = window.document.createElement('a');
+    link.textContent = '刷新当前看板';
+    link.href = '#';
+    link.onclick = event => {
+      event.preventDefault();
+      const reason = reloadBlockedReason();
+      if (!reason && reloadCurrent(true)) return;
+      link.textContent = '暂不能刷新：' + (reason || '请稍后重试');
+      link.setAttribute('aria-live', 'polite');
+    };
+    link.style.cssText = style;
+    box.appendChild(link);
+  }
   function ruleState() {
     const snap = el('snapshotData') ? pageSnapshot() : verifiedSnapshot;
     const expected = expectedConfig();
     const tracked = Object.keys(targets).length > 0 && expected &&
       Object.entries(targets).every(([file, receipt]) => expected[file] === receipt.blobSHA);
     const receiptPending = tracked && (!snap || !configMatches(snap, targets));
-    if (rulesError || !expected) return {phase: 'idle', text: '暂无法核验'};
+    if (rulesError) return {phase: 'idle', text: '暂无法核验'};
+    if (!expected) return {phase: 'busy', text: '正在核验'};
     // 清单、分组和规则均一致，且保存回执的本次生成证据已确认，才可显示绿灯。
     if (sameConfig(snap, expected) && !receiptPending) return {phase: 'ok', text: '已生效'};
     if (sameConfig(verifiedSnapshot, expected) && (!tracked || configState.phase === 'published')) {
@@ -537,6 +586,7 @@
   }
   function render() {
     const s = state();
+    if (destroyed) return s;
     let message = s.message;
     const embedded = el('snapshotData');
     if (s.phase === 'published' && embedded && verifiedSnapshot) {
@@ -570,24 +620,14 @@
       }
       if (checkFeedback && publication.phase === 'published' && verifiedSnapshot &&
           pageSnapshot() && !samePublication(pageSnapshot(), verifiedSnapshot)) {
-        const link = window.document.createElement('a');
-        link.textContent = '刷新当前看板';
-        link.href = '#';
-        link.onclick = event => { event.preventDefault(); reloadCurrent(true); };
-        link.style.cssText = 'display:block;margin-top:6px;color:#6ba3f0';
-        el('checkResult').appendChild(link);
+        refreshLink(el('checkResult'), 'display:block;margin-top:6px;color:#6ba3f0');
       }
     }
     const light = lightState();
     if (el('runLight')) el('runLight').dataset.phase = light.phase;
     put('runLightTxt', light.text, light.phase);
     if (light.reload && el('runLightTxt')) {
-      const link = window.document.createElement('a');
-      link.textContent = '刷新当前看板';
-      link.href = '#';
-      link.onclick = event => { event.preventDefault(); reloadCurrent(true); };
-      link.style.cssText = 'display:inline-block;margin-left:8px;color:#6ba3f0';
-      el('runLightTxt').appendChild(link);
+      refreshLink(el('runLightTxt'), 'display:inline-block;margin-left:8px;color:#6ba3f0');
     }
     const rule = ruleState();
     if (el('ruleLight')) el('ruleLight').dataset.phase = rule.phase;
@@ -656,6 +696,10 @@
     return null;
   }
   function schedule() {
+    window.clearTimeout(timer);
+    timer = null;
+    // 显式核对还会继续读最新 run/jobs；由它的 finally 恢复唯一一轮后台轮询。
+    if (destroyed || checkController) return;
     const ruleWaiting = ruleSince > 0 && Date.now() - ruleSince < MAX_WAIT && ruleState().text !== '需要刷新';
     const tracking = activeConfig() || activeManual() || retryPending || ruleWaiting;
     const boardWatching = !!(el('ruleLight') && el('snapshotData'));
@@ -664,9 +708,13 @@
       ruleWaiting ? ruleSince : Infinity);
     const delay = Math.max(apiBlockedUntil - Date.now(), tracking ? (Date.now() - since < 120000 ? 8000 : 20000)
       : publicRetry >= PUBLIC_RETRY_MAX ? 60000 : (publicRetry === 0 ? 4000 : 10000));
-    timer = window.setTimeout(() => { void tick(); }, delay);
+    const epoch = version;
+    timer = window.setTimeout(() => {
+      if (!destroyed && !checkController && epoch === version) void tick();
+    }, delay);
   }
   async function tick() {
+    if (destroyed || checkController) return state();
     cancelPoll();
     const epoch = version;
     retryPending = retrySince > 0 && Date.now() - retrySince < RETRY_WAIT;
@@ -695,13 +743,13 @@
     })();
     const actionTask = (async () => {
       try {
-        if (manualTarget && !manualTarget.rejected) {
+        if (manualTarget && !manualTarget.rejected && manualState.phase !== 'published') {
           nextManualRun = manualTarget.run_id
             ? await request(apiURL('/actions/runs/' + encodeURIComponent(manualTarget.run_id)), {github: true, signal})
             : await findRun('&event=workflow_dispatch', run =>
               run.event === 'workflow_dispatch' && (run.display_title || '').includes(manualTarget.request_id), signal);
         }
-        if (Object.keys(expected).length) {
+        if (Object.keys(expected).length && configState.phase !== 'published') {
           const newest = Object.values(expected).reduce((a, b) => a.revision > b.revision ? a : b);
           nextConfigRun = configRun
             ? await request(apiURL('/actions/runs/' + encodeURIComponent(configRun.id)), {github: true, signal})
@@ -710,6 +758,22 @@
       } catch (error) { actionError = networkMessage(error); }
     })();
     let nextRules = null, nextRulesError = '';
+    const applyRules = () => {
+      if (epoch !== version || destroyed) return;
+      if (nextRules) {
+        if (!latestRules || FILES.some(file => nextRules.files[file] !== latestRules.files[file])) ruleSince = 0;
+        latestRules = {...nextRules};
+        const current = el('snapshotData') ? pageSnapshot() : (snapshot || verifiedSnapshot);
+        const receiptPending = Object.keys(expected).length > 0 &&
+          Object.entries(expected).every(([file, receipt]) => nextRules.files[file] === receipt.blobSHA) &&
+          (!current || !configMatches(current, expected));
+        if (!sameConfig(current, nextRules.files) || receiptPending) {
+          if (!ruleSince) ruleSince = Date.now();
+        } else ruleSince = 0;
+      }
+      rulesError = nextRulesError;
+      render();
+    };
     const rulesTask = (async () => {
       const checkedAt = Date.now();
       const readSHA = async (file, ref = options.branch) => {
@@ -719,6 +783,7 @@
           if (!SHA.test(value && value.sha || '')) throw new Error('配置缺少有效 blob SHA');
           return value.sha;
         } catch (error) {
+          if (signal.aborted || destroyed) throw error;
           // 公开原文按 Git blob 哈希核验，两类配置采用同一口径；令牌不发送给 raw 主机。
           const raw = await request(bust('https://raw.githubusercontent.com/' +
             encodeURIComponent(options.owner) + '/' + encodeURIComponent(options.repo) + '/' +
@@ -736,7 +801,10 @@
         const hashes = await Promise.all(FILES.map(file => readSHA(file)));
         nextRules = {files: Object.fromEntries(FILES.map((file, i) => [file, hashes[i]])),
           checkedAt, run: null, commitSHA: null, runError: ''};
-      } catch (error) { nextRulesError = networkMessage(error); return; }
+      } catch (error) { nextRulesError = networkMessage(error); applyRules(); return; }
+      if (epoch !== version || destroyed) return;
+      // 两份规则 SHA 一齐完成就渲染；发布和运行查询不能阻塞规则灯。
+      applyRules();
       const current = el('snapshotData') ? pageSnapshot() : verifiedSnapshot;
       const pending = Object.entries(expected).some(([file, receipt]) =>
         nextRules.files[file] === receipt.blobSHA && (!current || !configMatches(current, expected)));
@@ -760,21 +828,10 @@
           if (nextRules.run) break;
         }
       } catch (error) { nextRules.runError = networkMessage(error); }
+      applyRules();
     })();
     await Promise.all([publicTask, actionTask, rulesTask]);
-    if (epoch !== version) return state();
-    if (nextRules) {
-      if (!latestRules || FILES.some(file => nextRules.files[file] !== latestRules.files[file])) ruleSince = 0;
-      latestRules = nextRules;
-      const current = el('snapshotData') ? pageSnapshot() : (snapshot || verifiedSnapshot);
-      const receiptPending = Object.keys(expected).length > 0 &&
-        Object.entries(expected).every(([file, receipt]) => nextRules.files[file] === receipt.blobSHA) &&
-        (!current || !configMatches(current, expected));
-      if (!sameConfig(current, nextRules.files) || receiptPending) {
-        if (!ruleSince) ruleSince = Date.now();
-      } else ruleSince = 0;
-    }
-    rulesError = nextRulesError;
+    if (epoch !== version || destroyed) return state();
     actionsError = actionError;
     // 网络失败时保留上次成功读到的状态：状态灯不该因为一次断网就从绿灯跳黄。
     if (schema(status)) latestStatus = status;
@@ -789,7 +846,8 @@
     if (Object.keys(expected).length) {
       if (snapshot && configMatches(status, expected) && configMatches(snapshot, expected)) {
         configState = {phase: 'published', message: '本页保存的清单与规则均已发布生效。'};
-      } else {
+      } else if (configState.phase !== 'published') {
+        // 发布证据属于这组保存回执；查询失败不能撤销，新保存由 watchConfig 重置。
         configState = phaseForRun(nextConfigRun);
         if (configState.phase !== 'failed' && status && configMatches(status, expected)) {
           configState = {phase: 'generated', message: '配置生成完成，等待发布'};
@@ -799,7 +857,8 @@
         } else if (publicError) configState.message += '\n' + publicError;
       }
     }
-    if (manualTarget && !manualTarget.rejected) {
+    if (manualTarget && !manualTarget.rejected && manualState.phase !== 'published' &&
+        (!dispatchController || nextManualRun || manualMatches(status, manualTarget))) {
       if (nextManualRun) manual.run_id = String(nextManualRun.id);
       else if (!manual.run_id && manualMatches(status, manual)) manual.run_id = status.run_id;
       const runPhase = phaseForRun(nextManualRun);
@@ -826,17 +885,21 @@
     return state();
   }
   function refresh() {
-    if (!initialized) init();
+    if (destroyed) return Promise.resolve(state());
+    if (!initialized) init({}, false);
+    cancelCheck();
     publicRetry = 0;
     if (configState.phase === 'expired') { configSince = Date.now(); configState.phase = 'waiting'; }
     if (manual && manualState.phase === 'expired') { manual.since = Date.now(); manualState.phase = 'waiting'; }
     return tick();
   }
   function watchConfig({file, blobSHA, commitSHA}) {
-    if (!initialized) init();
+    if (destroyed) return Promise.resolve(state());
+    if (!initialized) init({}, false);
     if (!FILES.includes(file) || !SHA.test(blobSHA || '') || !SHA.test(commitSHA || '')) {
       throw new Error('watchConfig 需要 holdings.json/settings.json 及提交回执中的有效 blobSHA、commitSHA');
     }
+    cancelCheck();
     cancelPoll();
     targets[file] = {blobSHA, commitSHA, savedAt: Date.now(), revision: ++receiptVersion};
     configSince = Date.now();
@@ -856,8 +919,9 @@
     return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
   }
   async function startManual() {
-    if (!initialized) init();
-    if (activeManual()) return state();
+    if (destroyed) return state();
+    if (!initialized) init({}, false);
+    if (dispatchController || activeManual()) return state();
     if (!getToken()) {
       // 首页没有令牌输入框：先问一次，贴了就当场存下并继续运行，不用跳去编辑页
       const asked = window.prompt(
@@ -883,17 +947,25 @@
     }
     authNotice = '';
     checkFeedback = '';
+    cancelCheck();
     cancelPoll();
     retrySince = Date.now();
     manual = {request_id: uuid(), run_id: null, since: Date.now()};
     manualState = {phase: 'dispatching', message: '正在提交运行请求…'};
+    const target = manual;
+    const dispatch = new AbortController();
+    dispatchController = dispatch;
+    const current = () => !destroyed && !dispatch.signal.aborted && manual === target;
     render();
     try {
       await request(apiURL('/actions/workflows/daily.yml/dispatches'), {
-        method: 'POST', github: true, body: {ref: options.branch, inputs: {request_id: manual.request_id}}
+        method: 'POST', github: true, signal: dispatch.signal,
+        body: {ref: options.branch, inputs: {request_id: target.request_id}}
       });
+      if (!current() || manualState.phase !== 'dispatching') return state();
       manualState = {phase: 'queued', message: '请求已接受，等待定位运行'};
     } catch (error) {
+      if (!current() || manualState.phase !== 'dispatching') return state();
       if (!error.status) {
         // POST 超时可能已被接受：继续查同一 UUID，不自动重复派发。
         manualState = {phase: 'queued', message: '请求是否接受尚未确认：' + error.message + '；继续跟踪，不重复发送'};
@@ -905,6 +977,8 @@
         schedule();
         return state();
       }
+    } finally {
+      if (dispatchController === dispatch) dispatchController = null;
     }
     render();
     return tick();
@@ -917,14 +991,14 @@
     return p.month + '/' + p.day + ' ' + p.hour + ':' + p.minute;
   }
   // 成功结束但没发布：生成步骤成功、提交步骤被跳过＝当日日线不齐主动不发布。读不到就当未知，不猜。
-  async function publishSkip(runId, startedAt) {
+  async function publishSkip(runId, startedAt, signal) {
     try {
-      const data = await request(bust(apiURL('/actions/runs/' + encodeURIComponent(runId) + '/jobs')), {github: true});
+      const data = await request(bust(apiURL('/actions/runs/' + encodeURIComponent(runId) + '/jobs')), {github: true, signal});
       const steps = (data && Array.isArray(data.jobs) ? data.jobs : []).flatMap(j => Array.isArray(j.steps) ? j.steps : []);
       const step = name => steps.find(s => s && s.name === name);
       const gen = step('抓数据并生成页面'), commit = step('校验最新输入并提交更新');
       if (!gen || gen.conclusion !== 'success' || !commit || commit.conclusion !== 'skipped') return null;
-      const retry = step('当日日线未就绪：约 30 分钟后自动再试');
+      const retry = step('可恢复失败或缺数：30 分钟后同日有界重试') || step('当日日线未就绪：约 30 分钟后自动再试');
       // 重试步骤只在美东 20–23 点派发；到零点由保险任务的窗口检查终止。
       // hourCycle:'h23' 而不是 hour12:false —— 后者在部分 ICU 下把零点渲染成「24」，
       // h >= 20 && h < 24 会误判成「不在重试窗口」。
@@ -934,6 +1008,7 @@
   }
   // 「查运行状态」点了要有反馈：否则状态没变化时页面文字不动，看着像按钮坏了。
   async function manualCheck() {
+    if (destroyed) return;
     const sequence = ++checkRequest;
     checkDismissed = false;
     const b = el('btnCheckStatus');
@@ -943,24 +1018,31 @@
     checkPhase = 'busy';
     render();
     let recentRun = null, recentError = '';
+    const refreshed = refresh();
+    const epoch = version;
+    const check = new AbortController();
+    checkController = check;
+    const current = () => !destroyed && !check.signal.aborted && epoch === version && sequence === checkRequest;
     try {
-      await refresh();
+      await refreshed;
+      if (!current()) return;
       if ((!manual || manual.rejected) && !Object.keys(targets).length) {
         try {
           const data = await request(bust(apiURL('/actions/workflows/daily.yml/runs?branch=' +
-            encodeURIComponent(options.branch) + '&per_page=1')), {github: true});
+            encodeURIComponent(options.branch) + '&per_page=1')), {github: true, signal: check.signal});
           recentRun = data && data.workflow_runs && data.workflow_runs[0] || null;
         } catch (error) { recentError = networkMessage(error); }
       }
+      if (!current()) return;
       const published = publication.phase === 'published' && verifiedSnapshot;
-      checkPhase = published ? 'ok' : 'busy';
+      let nextCheckPhase = published ? 'ok' : 'busy';
       const lines = [];
       let task = null, action = '', reason = '';
       if (manual && manual.rejected) {
         lines.push('最新任务：未启动（手动）');
         reason = manualState.message.replace(/^未启动：运行请求被拒绝。/, '');
         action = '处理拒绝原因后再点立即运行；查状态不会重新派发。';
-        checkPhase = 'bad';
+        nextCheckPhase = 'bad';
       } else if (manual) {
         task = {state: manualState, id: manual.run_id, origin: '手动'};
       } else if (Object.keys(targets).length) {
@@ -970,7 +1052,8 @@
         const samePublished = published && String(recentRun.id) === verifiedSnapshot.run_id;
         // 生成成功不等于发布；仅在提交步骤确实跳过时说明本轮未发布。
         const skip = phase.phase === 'generated' && !samePublished
-          ? await publishSkip(recentRun.id, recentRun.run_started_at || recentRun.created_at) : null;
+          ? await publishSkip(recentRun.id, recentRun.run_started_at || recentRun.created_at, check.signal) : null;
+        if (!current()) return;
         task = {state: samePublished && phase.phase === 'generated' ? {phase: 'published'} : phase,
           id: recentRun.id, at: runTime(recentRun.run_started_at || recentRun.created_at),
           conclusion: recentRun.conclusion, skip};
@@ -988,14 +1071,14 @@
         lines.push('最新任务：' + label + (task.origin ? '（' + task.origin + '）' : '') +
           (task.id ? ' · run ' + task.id : '') + (task.at ? '（' + task.at + ' 北京时间）' : ''));
         if (phase === 'failed') {
-          checkPhase = task.state.cancelled ? 'busy' : 'bad';
+          nextCheckPhase = task.state.cancelled ? 'busy' : 'bad';
           action = task.state.cancelled ? '不是抓取失败；继续使用上一版。'
             : '本轮未发布，继续使用上一版；请查看运行记录。';
           if (!task.state.cancelled && !task.conclusion) {
             reason = task.state.message.replace(/^run \S+ 未成功：/, '');
           }
         } else if (phase !== 'published') {
-          checkPhase = 'busy';
+          nextCheckPhase = 'busy';
           action = task.skip ? '当日日线未就绪，保留上一版。' +
             (task.skip.retry ? '约 30 分钟后自动再试。' : '')
             : phase === 'expired' ? '尚不能确认运行结果，请稍后查运行状态。'
@@ -1024,37 +1107,53 @@
       if (reason) lines.push('原因：' + reason);
       if (actionsError) lines.push('运行记录：暂无法核对；' + actionsError);
       if (action) lines.push(action);
-      if (recentError || actionsError) checkPhase = 'bad';
-      if (sequence === checkRequest && !checkDismissed) {
+      if (recentError || actionsError) nextCheckPhase = 'bad';
+      if (current() && !checkDismissed) {
+        checkPhase = nextCheckPhase;
         checkFeedback = lines.join('\n');
         render();
       }
     } finally {
-      if (b) { b.disabled = false; if (checkLabel !== null) b.textContent = checkLabel; }
+      if (checkController === check) {
+        checkController = null;
+        if (current()) schedule();
+      }
+      if (!destroyed && sequence === checkRequest) {
+        if (b) {
+          b.disabled = false;
+          if (checkLabel !== null) b.textContent = checkLabel;
+        }
+        if (!current() && !checkDismissed && checkFeedback) {
+          checkFeedback = '核对已中止；请再次查运行状态';
+          checkPhase = 'idle';
+          render();
+        }
+      }
     }
   }
 
-  function init(opts = {}) {
-    if (initialized && !Object.keys(opts).length) return window.MMRunStatus;
+  function init(opts = {}, start = true) {
+    if (destroyed || initialized && !Object.keys(opts).length) return window.MMRunStatus;
+    cancelCheck();
     cancelPoll();
     options = {owner: 'nixhuang', repo: 'market-monitor', branch: 'main', timeoutMs: 15000, ...options, ...opts};
     initialized = true;
     if (el('btnRunNow')) el('btnRunNow').onclick = () => { void startManual(); };
     if (el('btnCheckStatus')) el('btnCheckStatus').onclick = () => manualCheck();
     render(); // 不等网络请求，先保留本页生成数据并折叠旧版摘要。
-    void refresh();
+    if (start) void refresh();
     return window.MMRunStatus;
   }
-  window.MMRunStatus = {refresh, watchConfig, startManual, init};
+  window.MMRunStatus = {refresh, watchConfig, startManual, init, destroy};
   window.document.addEventListener('visibilitychange', () => {
-    if (!initialized) return;
+    if (!initialized || destroyed || checkController) return;
     if (window.document.hidden) cancelPoll();
     else void refresh();
   });
   // 首页这轮改版后已经没有 runState / runMsg / runSummary 了，只看这三个会导致
   // 首页根本不 init —— 按钮没绑 onclick，点了就是「没反应」。改成任一控件存在即初始化。
   function autoInit() {
-    if (initialized) return;
+    if (initialized || destroyed) return;
     const ids = ['runMsg', 'runSummary', 'runLight', 'runLightTxt',
                  'ruleLight', 'ruleLightTxt', 'btnRunNow', 'btnCheckStatus', 'appliedState'];
     if (ids.some(id => el(id))) init();

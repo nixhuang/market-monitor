@@ -129,7 +129,7 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 <h4>名词解释与计算</h4>
 <h5 id="glossary-ack">可点红灯与已读</h5>
 <p>加仓价、减仓价、成本浮亏：点✓已读，再点撤销。已读显示白字删除线，统计由对应红列转白列。</p>
-<p>条件消失即清除已读，再次触发重新提醒。浮亏10%／20%分档记录、每只只计一次；升降档切换提醒，低于10%清除浮亏已读。</p>
+<p>条件消失后不再显示该条已读；只有规则一致且行情时点明确晚于确认依据时，才自动同步清除，防止旧页面撤销其他设备的新确认。同日先后无法核实或旧记录缺少版本信息时保留，可再次点击主动撤销。浮亏10%／20%分档记录、每只只计一次；升降档切换提醒，低于10%不显示浮亏已读。</p>
 <h5 id="glossary-chg">涨跌幅 · 计算与阈值</h5>
 <p>涨跌幅＝（现价÷昨收−1）×100%；报灯取绝对值。</p>
 <p>两项共用历史日波动档：&lt;${vol_low_sigma}%低档，&gt;${vol_high_sigma}%高档，其余中档；不足${vol_min_returns}个有效日收益取中档。不是按今天的涨跌选档。</p>
@@ -154,7 +154,7 @@ ${amp_threshold_table}
 <p>高中低仅为历史量比波动的示意，不是固定三档。假设m＝0、低／中／高的s分别为0.15／0.30／0.50：</p>
 ${vol_example_table}
 <p>表中倍数为假设示例；实际门槛随每只标的自身分布连续变化。k不是均量倍数；有效自适应未命中，不再用固定倍数补灯。</p>
-<p>盘中量比＝（当日累计量÷已开盘分钟）÷（${vol_ratio_base}日均量÷全日分钟）。开盘成交偏快、折算值偏高，故盘中门槛按已开盘进度放宽：不足 45／60／90／120 分钟约 1.69／1.45／1.30／1.13 倍，之后回到固定门槛（红≥${vol_ratio_red}×、黄≥${vol_ratio}×）；放宽的是门槛，显示仍是原始折算值。</p>
+<p>盘中量比＝（当日累计量÷已开盘分钟）÷（${vol_ratio_base}日均量÷全日分钟）。开盘成交偏快、折算值偏高，故盘中门槛按常规交易日等效分钟（已开盘分钟÷当日全日分钟×390）放宽：不足 45／60／90／120 等效分钟约 1.69／1.45／1.30／1.13 倍；半日市按当日实际交易时长折算，之后回到固定门槛（红≥${vol_ratio_red}×、黄≥${vol_ratio}×）；放宽的是门槛，显示仍是原始折算值。</p>
 <p>开盘不足${intraday_vol_quiet_min}分钟、非交易时段或盘中值无效时退回最近完整日；收盘分布无效或自适应关闭用固定门槛，完整日量比缺失则不判。</p>
 <h5 id="glossary-ma">均线确认 · 短均线／长均线</h5>
 <p>短均线（${ma_short_status}）：确认幅度＝历史日波动×0.5，限${ma_confirm_min}%～${ma_confirm_max}%；波动无效取${ma_confirm_default}%。检查近${ma_confirm_lookback}日另一侧记录，历史不足只判简单穿越。</p>
@@ -439,9 +439,9 @@ def asset_url(base, filename):
 
 def script_asset(base, filename, attrs=""):
     # attrs 可传 "async" 等：2026-10-31 起首页 run-status.js 用 async —— 它是外链脚本，
-    # 同步加载会挡住后面内联的 cost_panel.js（仓位栏目是 JS 插入的），弱网下要等 1~3 秒才出现。
+    # 同步加载会挡住后面的内联脚本；仓位骨架现已服务端输出，填值/绑定也不应等此请求。
     # 它内部自己处理 DOMContentLoaded，且首页内联脚本不引用 window.MMRunStatus，延后执行安全。
-    # 用 async 而不是 defer：defer 会把 DOMContentLoaded 一起推迟，栏目该晚还是晚。
+    # 保持 async，不让状态请求延迟 DOMContentLoaded。
     return ('<script src="' + html.escape(asset_url(base, filename), quote=True) + '"'
             + (" " + attrs if attrs else "") + '></script>')
 
@@ -530,12 +530,10 @@ PAGE_CSS = """:root{
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--text);
   font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
-  /* 右侧页面距比左侧多 2px（2026-11-01 用户要求）：上 安全区 / 右 16 / 下 40 / 左 14。
-     注意 .wrap 是 max-width:720px + margin:0 auto 居中的，所以视口宽于 748px 时
-     这 2px 表现为「整块内容比正中位置左移 1px」，不是肉眼可见的右边距；
-     视口在 601～748px 之间（wrap 还没到 720 上限）才真的是右边多 2px。 */
-  padding:env(safe-area-inset-top) 16px 40px 14px}
-.wrap{max-width:720px;margin:0 auto}
+  /* 2026-11-01：整页左右各加 1px，保留右侧比左侧多 2px。
+     桌面左 14→15 / 右 16→17；wrap 上限 720→718，宽屏居中后两侧也各多留 1px。 */
+  padding:env(safe-area-inset-top) 17px 40px 15px}
+.wrap{max-width:718px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 /* 站名：用「上涨绿」--up，与涨跌箭头同色系；只这一处，其它标题颜色不动 */
 h1.brand{color:var(--up)}
@@ -845,10 +843,9 @@ td.px{text-align:center}
 .px-price,.px-chg{display:block}
 .px-chg{font-size:13.5px}
 @media (max-width:600px){
-  /* 手机：整页左 4px / 右 6px（右侧比左侧多 2px，2026-11-01 用户要求）——
-     原来左右都是 4px，外框基本贴住屏幕边、卡片里的内容可用宽度最大。
-     只覆盖左右，上（安全区）下（40px）沿用 body 原值。 */
-  body{padding-left:4px;padding-right:6px}
+  /* 手机：原左 4px / 右 6px 各加 1px，现左 5px / 右 7px。
+     上（安全区）下（40px）沿用 body 原值。 */
+  body{padding-left:5px;padding-right:7px}
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
   .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
   .stk td{padding:8px 5px}
@@ -967,14 +964,12 @@ tr.gray td{color:var(--dim)}
 .group-stats{margin-left:auto;color:var(--dim);font-size:14px;font-weight:400}
 .group-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
 .group-card>summary .rs-spy{margin-left:auto}
-/* 持仓里的「长持仓」区：可折叠，默认展开；下方就是短持仓主体，所以底部要留出间距。
-   框左右各外扩 2px、内部补 2px 内边距 —— 内容（含主行左侧红黄绿灯条）位置一像素不动，
-   框正好落在「持仓卡片边框」与「灯条」的正中间，不再压住灯条。 */
-.zone-card{margin:10px -2px 12px;padding-left:2px;padding-right:2px;
+/* 长持仓子框仍左右外扩 2px；内部留白 2→4px，与普通 .card 的左右内边距一致。
+   红黄绿灯条是首格内侧阴影，表格到框内缘的空隙由此控制，不能只改文字 padding。 */
+.zone-card{margin:10px -2px 12px;padding-left:4px;padding-right:4px;
   border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}
-/* 区内那条 ▲ 收起条：原来是按「贴外层卡片」的 -4px 拉宽的，套上子框后会溢出边框 3px，
-   底色看着和框错位。改成只抵消本区的 2px 内边距，底色左右正好贴到子框内侧，底部也不再溢出。 */
-.zone-card .group-bottom{margin:0 -2px 0}
+/* 区内 ▲ 收起条抵消本区 4px 内边距，仍贴合子框内侧、不溢出边框。 */
+.zone-card .group-bottom{margin:0 -4px 0}
 .zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;
   list-style:none;touch-action:manipulation}
 .zone-card>summary::-webkit-details-marker{display:none}
@@ -1033,7 +1028,7 @@ tr.gray td{color:var(--dim)}
 .stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
   box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-radius:999px;
   border:1.5px solid var(--dim);background:transparent;
-  /* 字号跟同一行右侧的「20日对.SPX -5.3%」(.group-stats) 完全一致：桌面 14px、手机 14.5px；
+  /* 字号跟同一行右侧的「20日对.SPX -5.3%」(.group-stats) 完全一致：桌面 14px、手机 16px；
      **不加粗**（2026-10-31）：原来 12.5px/700 在这一行里又小又跳，现在跟旁边数字同号同重。 */
   font-size:14px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums;color:#fff;
   position:relative;top:2px}   /* 与分组名文字底部对齐（圆底原本比文字底高 2px） */
@@ -1083,7 +1078,7 @@ tr.gray td{color:var(--dim)}
 .oil-rise{color:var(--up)} .oil-fall{color:var(--down)}
 #macroCard td:nth-child(3) .unit{white-space:nowrap}
 @media(max-width:600px){.oil-reference-row td{padding:8px 6px}#macroCard td:nth-child(3) .unit{font-size:9px}}
-/* ===== 手机（iOS Chrome）文字加大：只加字号，外框上下高度一像素不动 =====
+/* ===== 手机（iOS Chrome）最终覆盖：文字字号与顶级折叠栏高度 =====
    这一段必须放在 PAGE_CSS 的**最后**：里面几条选择器和上面的基础规则同权重
    （.group-card>summary.grp、.stat-badge…），写在前面会被后面的基础规则盖掉。 */
 @media (max-width:600px){
@@ -1102,8 +1097,9 @@ tr.gray td{color:var(--dim)}
      行，占 0.39）明显偏大，而且在 360/320 窄屏上会把「科技」这类灯多的标题行撑到 52px
      （别的分组是 47），折叠栏比别人高一截。
      现在改成**跟桌面同尺寸 17px**，数字 14px（仍比桌面 12.5px 大一圈，手机可读性保住）：
-     一位数 17×17、两位数「13」24×17，窄屏标题行回落到 47，卡片高度重新齐平，零横向溢出。 */
-  .stat-badge{min-width:17px;height:17px;padding:0 3px;font-size:14.5px}
+     一位数 17×17、两位数「13」24×17，窄屏标题行回落到 47，卡片高度重新齐平，零横向溢出。
+     本次仅将数字 14.5 → 16px；17px 外径与 padding 均不变。 */
+  .stat-badge{min-width:17px;height:17px;padding:0 3px;font-size:16px}
   /* 顶栏左右对称留白：页面本身左右各留 4px，这里再给 .runbar 各加 16px，
      于是最左边的「运行」按钮和最右边的「定投：N」距屏幕边缘都是 20px（2026-10-30 二次加大）。
      原来只给「定投」加 margin-right:10px，是单边的，左边三个按钮仍贴着屏幕边。 */
@@ -1149,29 +1145,25 @@ tr.gray td{color:var(--dim)}
     border:1px solid #333a47;border-radius:8px;padding:7px 15px;margin:0}
   /* 页底「自动计划：…」12 → 14px（2026-10-30）。 */
   .autoplan{font-size:14px}
-  /* ===== 手机分组框高度：62 → 53 → **57**（2026-10-31 全体加高 4px）=====
-     只动「卡片上内边距 + 标题行高度」。用 min-height 而不是 height —— 320 这种窄屏上标题行
-     会折成两行（实测 76~80px），硬锁高度会把第二行裁掉；min-height 单行时生效、多行时自动让高。
-     顶部链路两态统一（卡片 padding-top 2px + 标题行居中），展开／收起标题文字位置仍一致；
-     底部跟桌面同款：收起 2px、展开 6px（内容不贴底边）。
-     **所有分组（含「仓位」）同一个 51px**（内容高 29.6px 的「编辑」按钮塞得下）：
-     10/30 曾为凑「减 15%」把仓位单独降到 47（53），用户看到的是旧的 57 那档、觉得其它栏目偏矮，
-     于是 10/31 反过来**把其它栏目加高到 57**、与仓位那档对齐——现在全体 57，不再有单独特例。
-     长持仓（卡中卡）42.5 → 36 → **40**，比外层矮一档是层级，保留。 */
+  /* 手机 440px：全部顶级分组折叠高度现为 63px（此前 60px）。
+     卡片用 min-height:63px；标题56 + 上下padding4 + 最大边框3 = 63。
+     边框随设备像素比取整为更小值时，由卡片最小高度补齐，避免亚像素舍入造成高度漂移。
+     展开与收起共用标题高度，防止文字跳动；不用硬height，仍允许长标题多行。
+     长持仓子框维持独立49px层级，不属于顶级分组。 */
   .group-card,.macro-card,#costManage.cost-manage{padding-top:2px}
   .group-card:not([open]),.macro-card:not([open]),#costManage.cost-manage:not([open]){
-    padding-bottom:2px}
+    padding-bottom:2px;min-height:63px}
   .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
-    box-sizing:border-box;min-height:51px;padding-top:0;padding-bottom:0}
+    box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0}
   /* 长持仓 38 → 47：折叠后整条 = 47 + 上下 1px 边框 = 49px，与「当日盈亏贡献」收起后的
      整条（实测 49px：内容行 28 + 上下 padding 4/6 + summary 自带 margin 5/4 + 边框 2）同高。
      （盈亏比 / 金额改回上下两排后那条从 45 涨到 49，这里同步跟。）
      手机用 min-height 不用 height：320 窄屏标题行会折两行，硬锁会裁。 */
   .zone-card>summary{box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0}
-  /* 标题文字各减 0.5px：分类名 17 → 16.5px，右侧「20日对.SPX -5.3%」等 15 → 14.5px。
-     行高仍是写死的 24px，所以标题行的行盒高度不变（2026-10-30）。 */
-  .group-card>summary.grp,.macro-card>summary.grp{font-size:16.5px}
-  .group-card>summary .group-stats,.macro-card>summary .group-stats{font-size:14.5px}
+  /* 标题文字本次加大：分类名 16.5 → 18px，右侧「20日对.SPX -5.3%」等 14.5 → 16px。
+     行高仍写死 24px，不随字号变化。 */
+  .group-card>summary.grp,.macro-card>summary.grp{font-size:18px}
+  .group-card>summary .group-stats,.macro-card>summary .group-stats{font-size:16px}
   /* 标题行右侧那一串（灯圈 + 「20日对.SPX …」）间距 8 → 6px：360/320 窄屏上灯多的分组
      会被挤成两行（标题行 49~56 → 卡片 55~62），比单行的 57 高一截。收窄后能单行，
      所有分组栏高度一致；320 极窄屏个别超长标题仍会折行（见下一条兜底）。 */
@@ -1273,6 +1265,14 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 """
 PAGE_CSS = PAGE_CSS.replace('__TARGET_DASH_BORDER__', TARGET_DASH_BORDER)
 PAGE_CSS += RULES_CSS
+
+# 仓位骨架直接随首屏 HTML 输出；不能等页尾 JS 下载、解析完才插卡。
+# 仅放结构，不复制计算或云端逻辑；编辑按钮等初始化完成才启用。
+COST_PANEL_HTML = r'''<details class="card group-card cost-manage" id="costManage">
+<summary class="grp"><span class="grp-name">仓位</span><span class="group-stats"><span class="cost-state" id="costState"></span><span class="cost-sum"></span></span><button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false" aria-label="就地编辑成本价与数量" disabled>编辑</button></summary>
+<div class="cost-body"><div class="cost-acts" id="costActs" hidden><span class="cost-notice" id="costNotice" role="status" hidden></span><button type="button" class="primary" id="costSave">保存并上传</button><button type="button" id="costCancel">取消</button></div><div class="signal-members-panel" id="costMembers"></div><input type="file" id="costFile" accept=".json" hidden><div class="cost-foot" id="costFoot"></div></div>
+<div class="group-bottom"><button type="button" class="collapse-group" aria-controls="costManage" aria-label="收起仓位"><span class="collapse-icon" aria-hidden="true">▲</span></button></div>
+</details>'''
 
 # 单独导出供 monitor 替换旧锚点处理器；PAGE_INTERACTION_JS 已含此块，勿重复追加。
 RULES_INTERACTION_JS = ""  # 保留导出兼容；规则跳转、hash监听和高亮计时器已删除。

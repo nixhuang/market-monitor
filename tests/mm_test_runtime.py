@@ -743,6 +743,76 @@ class MainTests(TemporaryBase):
         self.assertEqual(self.read("status.json"), self.old_status)
         self.assertEqual((self.base / "index.html").read_bytes(), b"old page")
 
+    def test_audit_holdings_read_failures_preserve_artifacts_and_cache(self):
+        self.save_cache(self.cache('earnings', {'data': {'AAA': {'status': 'ok'}}}))
+        cache_bytes = (self.base / '.cache/market-monitor.json').read_bytes()
+        for exc in (FileNotFoundError('合成清单缺失'), PermissionError('合成权限不足'),
+                    UnicodeDecodeError('utf-8', b'\xff', 0, 1, '合成编码损坏')):
+            with self.subTest(error=type(exc).__name__), patch('builtins.open', side_effect=exc):
+                with self.assertRaisesRegex(ValueError, 'holdings.json 读取失败'):
+                    m.main([])
+            self.assert_old_artifacts()
+            self.assertEqual((self.base / '.cache/market-monitor.json').read_bytes(), cache_bytes)
+            receipt = self.read('run-receipt.json')
+            self.assertEqual(receipt['result'], 'failed')
+            self.assertIn('holdings.json', receipt['reason'])
+            self.assertIn(type(exc).__name__, receipt['reason'])
+            self.assertIn(str(exc), receipt['reason'])
+        for name in ('grouped_universe', 'build_macro', 'collect_quotes', 'render', 'push_serverchan'):
+            self.mocks[name].assert_not_called()
+
+    def test_audit_holdings_invalid_json_and_shapes_fail_with_specific_reason(self):
+        cases = ((b'{broken', 'JSONDecodeError'), (b'null', '顶层必须是对象'),
+                 (b'[]', '顶层必须是对象'), (b'{"positions":[]}', 'positions 必须是对象'),
+                 (b'{"positions":{"AAA":null}}', "'AAA' 必须是非空代码和配置对象"))
+        for raw, reason in cases:
+            with self.subTest(raw=raw):
+                rt.atomic_write_bytes(self.base / 'holdings.json', raw)
+                with self.assertRaisesRegex(ValueError, 'holdings.json'):
+                    m.main([])
+                self.assert_old_artifacts()
+                self.assertIn(reason, self.read('run-receipt.json')['reason'])
+        self.mocks['build_macro'].assert_not_called()
+        self.mocks['push_serverchan'].assert_not_called()
+
+    def test_audit_valid_empty_holdings_remains_an_intentional_empty_run(self):
+        rt.atomic_write_json(self.base / 'holdings.json', {})
+        self.mocks['grouped_universe'].return_value = ([], {}, 0)
+        self.assertEqual(m.main([]), 0)
+        self.assertEqual(self.read('run-receipt.json')['result'], 'generated')
+        self.mocks['collect_quotes'].assert_not_called()
+        self.mocks['build_macro'].assert_called_once()
+
+    def test_audit_symbol_failure_isolated_in_initial_and_consensus_refresh_passes(self):
+        universe = [('AAA', {}, 'position'), ('BBB', {}, 'position')]
+        counts_by_group = {g['key']: 2 if g['key'] == 'positions' else 0 for g in m.GROUPS}
+        self.mocks['grouped_universe'].return_value = (universe, counts_by_group, 0)
+        self.mocks['collect_quotes'].return_value = {symbol: {'source': 'fixture'} for symbol, _, _ in universe}
+        self.mocks['build_snapshot'].return_value['summary'].update(today_prices=80, prior_prices=20)
+        for phase in ('initial', 'refresh'):
+            with self.subTest(phase=phase):
+                counts = {}
+                def analyze(symbol, cfg, data, group):
+                    counts[symbol] = counts.get(symbol, 0) + 1
+                    if symbol == 'AAA' and (phase == 'initial' or counts[symbol] == 2):
+                        raise ZeroDivisionError('合成单标的异常')
+                    detail = {'symbol': symbol, 'group': group, 'price': 100, 'data_date': TARGET,
+                              'level': 'green', 'signals': [], 'signal_marks': []}
+                    return 'green', [], detail
+                consensus = {'AAA': {'s': 'ok', 'avg': 120}, 'BBB': {'s': 'ok', 'avg': 130}} if phase == 'refresh' else {}
+                self.mocks['update_consensus'].return_value = (consensus, {})
+                rt.atomic_write_json(self.base / 'status.json', self.old_status)
+                with patch.object(m, 'analyze_symbol', side_effect=analyze):
+                    self.assertEqual(m.main([]), 0)
+                items = self.mocks['build_snapshot'].call_args.args[1]
+                bad, good = items
+                self.assertEqual((bad['symbol'], bad['level'], bad['price'], bad['data_date']), ('AAA', 'gray', None, ''))
+                self.assertIn('ZeroDivisionError', bad['signals'][0])
+                self.assertIn('合成单标的异常', bad['signals'][0])
+                self.assertEqual((good['symbol'], good['level'], good['price']), ('BBB', 'green', 100))
+                self.assertEqual(counts, {'AAA': 2, 'BBB': 2} if phase == 'refresh' else {'AAA': 1, 'BBB': 1})
+                self.assertEqual(self.read('run-receipt.json')['result'], 'generated')
+
     def test_stale_skip_saves_all_auxiliary_sections_and_receipt(self):
         self.assertEqual(m.main([]), 0)
         self.assert_old_artifacts()
@@ -888,13 +958,50 @@ class IdentityAndEnsureTests(TemporaryBase):
         response = Mock(status_code=200)
         response.json.return_value = {"code": 0}
         with patch.dict(os.environ, {"SERVERCHAN_KEY": "test-key"}), patch.object(m.requests, "post", return_value=response) as post:
-            m.push_serverchan({}, [{"symbol": "AAA", "level": "red", "price": 12}],
+            m.push_serverchan({}, [{"symbol": "AAA", "level": "red", "price": 12, "data_date": TARGET}],
                              snapshot={**IDENTITY, "target_trade_date": TARGET})
         data = post.call_args.kwargs["data"]
         self.assertIn("已生成待发布", data["title"])
         for value in ("本轮已生成待发布", IDENTITY["build_id"], TARGET, "可能仍为上一版"):
             self.assertIn(value, data["desp"])
         self.assertNotIn("已发布", data["desp"])
+
+    def test_audit_push_only_includes_fresh_dated_valid_quotes(self):
+        items = [
+            {'symbol': 'FRESHRED', 'level': 'red', 'price': 12, 'data_date': TARGET, 'signals': ['本轮红灯']},
+            {'symbol': 'FRESHYELLOW', 'level': 'yellow', 'price': 13, 'data_date': TARGET},
+            {'symbol': 'OLDRED', 'level': 'red', 'price': 12, 'data_date': '2026-10-16', 'signals': ['旧日布林突破']},
+            {'symbol': 'OLDYELLOW', 'level': 'yellow', 'price': 12, 'data_date': '2026-10-16'},
+            {'symbol': 'UNDATED', 'level': 'red', 'price': 12},
+            {'symbol': 'FUTURE', 'level': 'red', 'price': 12, 'data_date': '2026-10-20'},
+            {'symbol': 'INVALID', 'level': 'red', 'price': float('nan'), 'data_date': TARGET},
+            {'symbol': 'REFERENCE', 'level': 'yellow', 'price': 12, 'data_date': TARGET, 'reference_only': True},
+        ]
+        original = copy.deepcopy(items)
+        response = Mock(status_code=200)
+        response.json.return_value = {'code': 0}
+        with patch.dict(os.environ, {'SERVERCHAN_KEY': 'fixture'}), \
+                patch.object(m, 'TARGET_DATE', '2026-10-20'), \
+                patch.object(m.requests, 'post', return_value=response) as post:
+            m.push_serverchan({}, items, snapshot={**IDENTITY, 'target_trade_date': TARGET})
+        post.assert_called_once()
+        text = post.call_args.kwargs['data']['desp']
+        self.assertIn('**FRESHRED**', text)
+        self.assertIn('**FRESHYELLOW**', text)
+        self.assertIn('目标交易日：' + TARGET, text)
+        for item in items[2:]:
+            self.assertNotIn('**' + item['symbol'] + '**', text)
+        self.assertNotIn('旧日布林突破', text)
+        self.assertEqual(items, original)
+
+    def test_audit_stale_or_undated_alerts_alone_never_send_today_push(self):
+        for target, day in ((TARGET, '2026-10-16'), (TARGET, None), ('', TARGET), ('invalid', TARGET)):
+            with self.subTest(target=target, day=day), patch.dict(os.environ, {'SERVERCHAN_KEY': 'fixture'}), \
+                    patch.object(m.requests, 'post') as post:
+                items = [{'symbol': 'OLD', 'price': 12, 'level': level, 'data_date': day}
+                         for level in ('red', 'yellow')]
+                m.push_serverchan({}, items, snapshot={'target_trade_date': target})
+                post.assert_not_called()
 
     def ensure_mocks(self, minute=30, hour=0, runs=None):
         instant = datetime(2026, 10, 20, hour, minute, tzinfo=timezone.utc)

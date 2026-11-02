@@ -273,6 +273,90 @@ class HistorySourceTests(unittest.TestCase):
                 live.assert_not_called()
                 closing.assert_not_called()
 
+    def test_audit_missing_previous_session_switches_source_in_both_modes(self):
+        broken = history('2026-10-20')
+        for key in ('dates', 'closes', 'highs', 'lows', 'volumes'):
+            del broken[key][-2]
+        self.assertTrue(monitor.valid_history(broken))  # 结构合法不代表可把倒数第二根当昨收。
+        for closed, bad, good in ((True, 'nasdaq', 'yahoo'), (False, 'yahoo', 'stooq')):
+            with self.subTest(closed=closed), patch.object(monitor, 'nasdaq_realtime', return_value=None):
+                result, calls = self.fetch({bad: broken, good: history('2026-10-20')}, closed=closed)
+            self.assertEqual([name for name, _ in calls], [bad, good])
+            self.assertEqual(result['dates'][-2:], ['2026-10-19', '2026-10-20'])
+            self.assertEqual(result['source'], good)
+        with patch.object(monitor, 'nasdaq_closing_quote') as closing:
+            result, calls = self.fetch({name: broken for name in ('nasdaq', 'yahoo', 'stooq')})
+        self.assertIsNone(result)
+        self.assertEqual([name for name, _ in calls], ['nasdaq', 'yahoo', 'stooq'])
+        closing.assert_not_called()
+
+    def test_audit_previous_session_validation_runs_after_historical_trim(self):
+        raw = history('2026-10-21')
+        for key in ('dates', 'closes', 'highs', 'lows', 'volumes'):
+            del raw[key][-3]  # 21日有20日昨收，但裁到20日后恰好缺19日。
+        self.assertTrue(monitor._daily_previous_matches(raw, 'AAPL'))
+        result, calls = self.fetch({'nasdaq': raw, 'yahoo': history('2026-10-20')})
+        self.assertEqual([name for name, _ in calls], ['nasdaq', 'yahoo'])
+        self.assertEqual(result['source'], 'yahoo')
+
+    def test_audit_weekends_holidays_and_half_days_are_contiguous(self):
+        for day, previous in (('2026-10-19', '2026-10-16'),
+                              ('2026-11-27', '2026-11-25'),
+                              ('2026-11-30', '2026-11-27'),
+                              ('2026-07-06', '2026-07-02')):
+            with self.subTest(day=day):
+                data = history(day)
+                result, calls = self.fetch({'nasdaq': data}, day=day)
+                self.assertEqual(calls, [('nasdaq', 'AAPL')])
+                self.assertEqual(result['dates'][-2:], [previous, day])
+                self.assertEqual(result['prev_close'], data['closes'][-2])
+
+    def test_audit_yahoo_null_previous_close_is_rejected_after_real_parser(self):
+        data = history('2026-10-20')
+        quote = {name: list(data[key]) for name, key in
+                 (('close', 'closes'), ('high', 'highs'), ('low', 'lows'), ('volume', 'volumes'))}
+        quote['close'][-2] = None
+        ticks = [int(at(day + 'T16:00:00-04:00').timestamp()) for day in data['dates']]
+        response = MagicMock(status_code=200)
+        response.json.return_value = {'chart': {'result': [{'timestamp': ticks,
+            'indicators': {'quote': [quote]}, 'meta': {'currency': 'USD'}}]}}
+        with patch.object(monitor.requests, 'get', return_value=response), \
+                patch.object(monitor, 'YAHOO_GATE', monitor.SourceGate()), \
+                patch.object(monitor, 'CLOSED_ONLY', False):
+            parsed = monitor.yahoo_history('AAPL')
+        self.assertEqual(parsed['dates'][-2:], ['2026-10-16', '2026-10-20'])
+        with patch.object(monitor, 'nasdaq_realtime', return_value=None):
+            result, calls = self.fetch({'yahoo': parsed, 'stooq': data}, closed=False)
+        self.assertEqual([name for name, _ in calls], ['yahoo', 'stooq'])
+        self.assertEqual(result['source'], 'stooq')
+
+    def test_audit_calendar_unavailable_fails_closed_without_guessing_weekdays(self):
+        with patch.object(ms.xcals, 'get_calendar', side_effect=ValueError('日历超出范围')):
+            self.assertFalse(monitor._daily_previous_matches({'dates': ['2026-10-19', '2026-10-20']}, 'AAPL'))
+        for symbol, calendar_name in (('00700-HK', 'XHKG'), ('600519-SH', 'XSHG'),
+                                       ('000001-SZ', 'XSHG'), ('ESMAIN', 'CMES')):
+            with self.subTest(symbol=symbol):
+                calendar = ms.xcals.get_calendar(calendar_name)
+                day = '2026-10-20'
+                previous = calendar.previous_session(day).date().isoformat()
+                self.assertTrue(monitor._daily_previous_matches({'dates': [previous, day]}, symbol))
+
+    def test_audit_intraday_regular_session_merge_survives_continuity_check(self):
+        for moment in ('2026-10-20T11:00:00-04:00', '2026-12-09T11:00:00-05:00',
+                       '2026-11-27T12:30:00-05:00'):
+            day = moment[:10]
+            with self.subTest(moment=moment), patch.object(monitor, 'nasdaq_realtime',
+                    return_value={'price': 102, 'volume': 1200, 'ts': moment}):
+                result, calls = self.fetch({'yahoo': history(day)}, closed=False, day=day, when=at(moment))
+            self.assertEqual(calls, [('yahoo', 'AAPL')])
+            self.assertTrue(result['realtime'])
+            self.assertEqual((result['price'], result['prev_close']), (102, 100))
+        with patch.object(monitor, 'nasdaq_realtime') as realtime:
+            result, _ = self.fetch({'yahoo': history('2026-11-27')}, closed=False,
+                                   day='2026-11-27', when=at('2026-11-27T13:00:00-05:00'))
+        realtime.assert_not_called()
+        self.assertFalse(result.get('realtime', False))
+
     def test_rule_constants_report_the_actual_engine_orders(self):
         constants = monitor._rule_constants()
         self.assertEqual(constants['quote_closed_sources'], 'Nasdaq → Yahoo → stooq')

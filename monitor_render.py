@@ -8,6 +8,7 @@ import os
 import re
 from datetime import timedelta
 from monitor_rules import _ARROW_RSI_UP, _ARROW_RSI_DOWN
+from page_assets import COST_PANEL_HTML
 
 # 「强制刷新」按钮：清掉 Cache Storage / Service Worker，再带时间戳参数重新加载，绕开浏览器和 CDN 缓存
 HARD_REFRESH_JS = (
@@ -789,8 +790,8 @@ class PageRenderer:
         note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
         lv_html = self._context.level_note(d.get("trigger"), d.get("reduce"))
         tg_html = self._context.target_tag(d.get("target") or {})
-        # 持仓内部分长短：长持仓屏蔽上轨普通过热，页面上标出来，不然看不出区别
-        hold_html = ('<span class="unit" title="长持仓：不看一般过热，RSI 三条全超卖才提醒">长</span>'
+        # 长短表示持有周期；判灯口径只由规则表定义，不在提示中硬编码另一套规则。
+        hold_html = ('<span class="unit" title="长持仓：持有周期分类；技术预警按《预警规则》执行">长</span>'
                      if d.get("group") == "position" and str(d.get("hold") or "") == "long" else "")
         return (
             f'<tr class="{html_lib.escape(cls, quote=True)}" id="{self._context._stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
@@ -1669,15 +1670,16 @@ class PageRenderer:
         # 「在册：…」一整行按 2026-10-15 要求删除，不再在首页展示分组在册数与去重说明。
 
         cost_css, cost_js = self._context._cost_panel_assets(items)
+        # 和客户端原有挂载条件一致；骨架先于统计/行情出现，不含仓位数据副本。
+        cost_panel = COST_PANEL_HTML if cost_js and (signal_card or any(
+            d.get("group") == "position" and d.get("price") for d in items)) else ""
         current_rules = self._context.rules_template(self._context.S, self._context._rule_constants())
         # 三块说明（预警规则／名词解释和抓取／综合判断与宏观细则）只在设置页展示；
         # 首页只留 inert 模板，供设置页按最近一次构建的原样内容读取，不另起一份措辞。
         notes_tpl = '<template id="notesTpl">' + self._context._page_notes(snapshot) + '</template>'
         # 离线/回放可把 BASE 指向仅含配置的数据目录；静态脚本仍来自实际源码目录。
         asset_base = self._context.BASE if os.path.isfile(os.path.join(self._context.BASE, "run-status.js")) else os.path.dirname(__file__)
-        # async：不阻塞 HTML 解析，也不推迟 DOMContentLoaded —— 仓位栏目由后面内联的
-        # cost_panel.js 在 DOMContentLoaded 插入，若这个外链同步加载，弱网下要等它下载完
-        # （实测 2.7s）才轮到内联脚本，栏目就会晚好几秒才出现。
+        # 外链状态脚本不阻塞 HTML；仓位骨架已服务端输出，页尾 JS 只负责填值与绑定。
         run_js = self._context.script_asset(asset_base, "run-status.js", "async")
 
         return _strip_css_comments(f"""<!DOCTYPE html>
@@ -1719,6 +1721,7 @@ class PageRenderer:
 
 {('<div class="warn">本轮标的均未取得可用报价；可能是接口故障、异常行情或抓取时间预算不足，请查看个股原因。宏观数据另行展示。</div>' if data_down else "")}
 
+{cost_panel if signal_card else ""}
 {signal_card}
 <details class="card macro-card" id="macroCard">
 <summary class="grp"><span class="grp-name">市场风险</span><span class="group-stats">{macro_stats}</span></summary>
@@ -1731,6 +1734,7 @@ class PageRenderer:
 {self._context._collapse_button("macroCard", "市场风险")}
 </details>
 
+{cost_panel if not signal_card else ""}
 {group_cards}
 
 <div class="acts">

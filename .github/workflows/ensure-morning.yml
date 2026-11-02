@@ -10,7 +10,15 @@ on:
   workflow_dispatch:
     inputs:
       delay_minutes:
-        description: '内部使用：先等待 N 分钟再检查（当日日线未就绪时的延迟重试）'
+        description: '内部使用：延迟重试固定等待30分钟'
+        required: false
+        type: string
+      retry_attempt:
+        description: '内部使用：自动重试轮数，0–7'
+        required: false
+        type: string
+      retry_day:
+        description: '内部使用：保险链的美东日期，不允许跨日续跑'
         required: false
         type: string
 
@@ -36,13 +44,15 @@ jobs:
         env:
           DELAY: ${{ inputs.delay_minutes }}
         run: |
-          case "$DELAY" in *[!0-9]*) echo "delay_minutes 非整数，忽略"; exit 0;; esac
-          if [ "$DELAY" -gt 35 ]; then DELAY=35; fi
+          if [ "$DELAY" != 30 ]; then echo "延迟重试只接受30分钟"; exit 1; fi
           echo "等待 ${DELAY} 分钟后再检查当日日线"
           sleep $((DELAY * 60))
 
       - name: 拉取仓库
         uses: actions/checkout@v4
+        with:
+          # 等待期间 main 可能已更新，不能读取触发本工作流时的旧 SHA。
+          ref: main
 
       - name: 准备 Python
         uses: actions/setup-python@v5
@@ -50,8 +60,21 @@ jobs:
           python-version: '3.11'
           cache: pip
 
+      - name: 验证同日窗口与重试轮数
+        id: retry-context
+        env:
+          MM_RETRY_ATTEMPT: ${{ inputs.retry_attempt }}
+          MM_RETRY_DAY: ${{ inputs.retry_day }}
+          MM_RETRY_DELAY: ${{ inputs.delay_minutes }}
+        run: python build_support.py retry-context >> "$GITHUB_OUTPUT"
+
       - name: 安装依赖
+        if: ${{ steps.retry-context.outputs.allowed == 'true' }}
         run: python -m pip install -r requirements.txt
 
       - name: 检查并按需补跑
+        if: ${{ steps.retry-context.outputs.allowed == 'true' }}
+        env:
+          MM_RETRY_ATTEMPT: ${{ steps.retry-context.outputs.retry_attempt }}
+          MM_RETRY_DAY: ${{ steps.retry-context.outputs.retry_day }}
         run: python monitor.py --ensure-schedule-run

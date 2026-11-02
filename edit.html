@@ -36,6 +36,7 @@ h2 span{color:#5f6672;font-weight:400}
 input,select{padding:8px 10px;font-size:16px;background:#0e1014;color:var(--text);
   border:1px solid var(--line);border-radius:7px;outline:none;font-family:inherit}
 input:focus,select:focus{border-color:#3d6ec4}
+input[aria-invalid="true"]{border-color:var(--red)}
 input::placeholder{color:#5f6672}
 button{padding:9px 16px;font-size:14px;color:var(--text);background:#232833;
   border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
@@ -410,8 +411,8 @@ details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:c
 </div>
 </div>
 
-<script src="./run-status.js?v=2ccbc8f549f23ef1"></script>
-<script src="./list-import.js?v=ed47203227cd9f6f"></script>
+<script src="./run-status.js?v=91336bfadb1931b5"></script>
+<script src="./list-import.js?v=d2bf213fe06a1385"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
@@ -471,6 +472,39 @@ let SHA='';
 let data={};
 let extra={};
 let changed=false;
+let holdingsBaseline=null, holdingsConflict=false, holdingsSaving=false;
+const listDraftErrors=new Map();
+const PRICE_LABELS={trigger:'加仓价',reduce:'减仓价',target:'目标价',cost:'成本价'};
+const draftKey=(kind,symbol,field)=>JSON.stringify([kind,symbol,field]);
+function priceError(field,raw){
+  const value=String(raw).trim();
+  return value!==''&&(!Number.isFinite(Number(value))||(field!=='trigger'&&Number(value)<=0));
+}
+function editListField(kind,symbol,field,raw,input){
+  const value=raw.trim(),record=data[kind][symbol],key=draftKey(kind,symbol,field);
+  if(PRICE_LABELS[field]&&priceError(field,raw))listDraftErrors.set(key,{kind,symbol,field,raw});
+  else{
+    listDraftErrors.delete(key);
+    if(value)record[field]=PRICE_LABELS[field]?Number(value):value;
+    else delete record[field];
+    if(field==='target'){if(value)record.target_at=monthNow();else delete record.target_at;}
+  }
+  if(input)input.setAttribute('aria-invalid',String(listDraftErrors.has(key)));
+  touch();
+}
+function validateListDraft(kind){
+  const error=[...listDraftErrors.values()].find(item=>!kind||item.kind===kind);
+  if(!error)return true;
+  pageState[error.kind]=Math.floor(orderedKeys(error.kind).indexOf(error.symbol)/PAGE_SIZE);
+  render();$('fold_'+error.kind).open=true;
+  const rows=$('list_'+error.kind).querySelectorAll('.row');
+  const row=[...rows].find(row=>row.dataset.s===error.symbol);
+  const input=row&&row.querySelector('[data-f="'+error.field+'"]');
+  if(input){input.focus();input.scrollIntoView({block:'center'});}
+  setMsg('清单未保存：「'+KIND_LABEL[error.kind]+'」'+error.symbol+' 的'+PRICE_LABELS[error.field]+
+    (error.field==='trigger'?'应填写有限数字或留空':'应填写大于 0 的有限数字或留空')+'；无效文本已保留','err');
+  return false;
+}
 let pending=null, loadRevision=0, loaded=false;
 function loadingControls(loading){
   $('groupEditor').disabled=loading;
@@ -538,21 +572,12 @@ const NOISE=new Set(['','-','--','n/a','na','cash','cash & money market','total'
 const Import=window.MMListImport;
 function isTicker(v){return !NOISE.has(String(v||'').trim().toLowerCase())&&Import.valid(v);}
 function normTicker(v){return Import.normalize(v);}
-function splitLine(line,d){
-  const out=[];let cur='';let q=false;
-  for(let i=0;i<line.length;i++){
-    const c=line[i];
-    if(c==='"'){if(q&&line[i+1]==='"'){cur+='"';i++;}else q=!q;}
-    else if(c===d&&!q){out.push(cur);cur='';}
-    else cur+=c;
-  }
-  out.push(cur);return out;
-}
 function parseCsv(text){
-  const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(l=>l.trim());
-  if(!lines.length)return {symbols:[],names:{},ignored:[],rejected:[],how:'文件是空的'};
-  const d=(lines[0].split(',').length>=lines[0].split('\t').length)?',':'\t';
-  const rows=lines.map(l=>splitLine(l,d));
+  let rows;
+  try{rows=Import.csvRecords(text);}catch(error){
+    return {symbols:[],names:{},ignored:[],rejected:[],format:'CSV',error:error.message};
+  }
+  if(!rows.length)return {symbols:[],names:{},ignored:[],rejected:[],format:'CSV',how:'文件是空的'};
   const hints=['symbol','ticker','代码','证券代码','股票代码','标的','sym'];
   let col=null,hi=-1;
   for(let i=0;i<Math.min(10,rows.length);i++){
@@ -589,8 +614,64 @@ function parseCsv(text){
   return {symbols:out,names,ignored,rejected,format:'CSV',how:how};
 }
 
+// 以读入/已提交版本为共同基线；只有明确确认后才采用冲突项的本地值。
+function mergeDraft(base,local,remote){
+  const conflicts=[];
+  const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+  function merge(b,l,r,path){
+    if(equal(l,b))return r;
+    if(equal(r,b)||equal(l,r))return l;
+    if(object(l)&&object(r)&&(object(b)||b===undefined)){
+      return Object.fromEntries([...new Set([...Object.keys(b||{}),...Object.keys(l),...Object.keys(r)])]
+        .map(key=>[key,merge(b?.[key],l[key],r[key],[...path,key])]).filter(([,value])=>value!==undefined));
+    }
+    conflicts.push(path.join(' / ')+'\n本地：'+(JSON.stringify(l)??'（删除）')+'\n远端：'+(JSON.stringify(r)??'（删除）'));return l;
+  }
+  return {value:merge(base,local,remote,[]),conflicts};
+}
+function confirmMerge(conflicts){
+  return !conflicts.length||confirm('以下字段在远端和本地都已修改：\n'+conflicts.join('\n')+
+    '\n确定：这些字段采用本地草稿，其余字段保留远端更新。取消：不合并、不写入，继续保留当前草稿。合并后仍需再次点击保存。');
+}
+function applyHoldings(config){
+  if(!config||typeof config!=='object'||Array.isArray(config))throw new Error('清单顶层不是对象');
+  const nextData=Object.fromEntries(GROUPS.map(g=>{
+    const group=config[g.key]??{};
+    if(typeof group!=='object'||Array.isArray(group))throw new Error(g.label+' 分组格式无效');
+    return [g.key,Object.fromEntries(Object.entries(group).map(([symbol,record])=>{
+      if(!record||typeof record!=='object'||Array.isArray(record))throw new Error(g.label+' / '+symbol+' 记录格式无效');
+      return [symbol,{...record,...(!record.note&&NAMES[normTicker(symbol)]?{note:NAMES[normTicker(symbol)]}:{})}];
+    }))];
+  }));
+  data=nextData;
+  monitoring=config.group_monitoring&&typeof config.group_monitoring==='object'&&!Array.isArray(config.group_monitoring)
+    ?{...config.group_monitoring}:{};
+  extra=Object.fromEntries(Object.entries(config).filter(([key])=>!KIND_LABEL[key]&&key!=='watch'));
+}
+async function recoverHoldings(){
+  if(holdingsSaving||!validateListDraft())return;
+  if(!confirm('保留清单草稿后读取最新版？不会直接覆盖远端；同字段冲突会再次询问，合并后需检查并再次保存。'))return;
+  holdingsSaving=true;loadingControls(true);const revision=++loadRevision,text=configText();
+  try{
+    const r=await gh('GET','/contents/holdings.json?ref='+BRANCH);
+    if(revision!==loadRevision||configText()!==text){setMsg('清单已变化，恢复已停止；草稿仍保留，请重试','err');return;}
+    if(!r.ok||!r.data.content||!r.data.sha){setMsg('最新版读取失败；草稿保留：'+whyFail(r.status,r.data.message),'err');return;}
+    const remote=JSON.parse(b64dec(r.data.content));
+    if(!remote||typeof remote!=='object'||Array.isArray(remote))throw new Error('清单格式无效');
+    const merged=mergeDraft(holdingsBaseline,JSON.parse(text),remote);
+    if(!confirmMerge(merged.conflicts)){setMsg('已取消合并，原清单草稿保留；再次保存可重新读取最新版','err');return;}
+    const baseline=JSON.parse(JSON.stringify(remote));
+    applyHoldings(merged.value);SHA=r.data.sha;holdingsBaseline=baseline;holdingsConflict=false;
+    pending=null;csvRevision++;$('btnApply').classList.add('hide');render();touch();
+    setMsg('已读取最新版并合并清单草稿，尚未写入；请核对后再次点击「保存清单与分组」','ok');
+  }catch(error){setMsg('清单恢复失败；草稿保留：'+error.message,'err');}
+  finally{holdingsSaving=false;loadingControls(false);}
+}
+
 /* ---------- 载入 ---------- */
 async function load(){
+  if(holdingsSaving)return;
   const revision=++loadRevision;
   loadingControls(true);pending=null;$('btnApply').classList.add('hide');csvRevision++;
   setMsg('正在读取清单…','busy');
@@ -606,14 +687,9 @@ async function load(){
     const c=JSON.parse(b64dec(r.data.content));
     let config=c;
     if(LOCAL_PREVIEW){try{const saved=localStorage.getItem(DRAFT_KEY);if(saved)config=JSON.parse(saved);}catch(e){}}
-    data=Object.fromEntries(GROUPS.map(g=>[g.key,config[g.key]||{}]));
-    monitoring=config.group_monitoring&&typeof config.group_monitoring==='object'&&!Array.isArray(config.group_monitoring)
-      ?{...config.group_monitoring}:{};
-    extra={};
-    Object.keys(config).forEach(k=>{if(!KIND_LABEL[k]&&k!=='watch')extra[k]=config[k];});
-    GROUPS.forEach(g=>Object.entries(data[g.key]).forEach(([s,c])=>{if(!c.note&&NAMES[normTicker(s)])c.note=NAMES[normTicker(s)];}));
-    SHA=r.data.sha||'';
-    changed=false;
+    applyHoldings(config);
+    SHA=r.data.sha||'';holdingsBaseline=JSON.parse(configText());holdingsConflict=false;
+    listDraftErrors.clear();changed=false;$('dirty').textContent='';
     render();
     setMsg(LOCAL_PREVIEW?'本地预览：保存仅存本机草稿，不提交 GitHub':TOKEN?'':'手动模式：改完点保存，复制 JSON 到 GitHub',TOKEN?'':'ok');
     loaded=true;loadingControls(false);loadRun();loadSettings();
@@ -688,6 +764,9 @@ function addSymbol(kind){
   render();touch();setMsg('已添加 '+symbol+' 到「'+targetLabel(t)+'」','ok');
 }
 function moveSymbol(from,to,symbol){
+  if([...listDraftErrors.values()].some(draft=>draft.kind===from&&draft.symbol===symbol)){
+    validateListDraft(from);return;
+  }
   const t=parseTarget(to);
   if(!KIND_LABEL[t.group])return;
   const curZone=zoneOf(from,data[from][symbol]);
@@ -708,6 +787,15 @@ function moveSymbol(from,to,symbol){
 $('btnExpandGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=true);
 $('btnCollapseGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=false);
 
+function orderedKeys(kind){
+  let keys=Object.keys(data[kind]||{});
+  if(kind==='positions'){
+    const long=keys.filter(s=>isLongHeld(data[kind][s])),short=keys.filter(s=>!isLongHeld(data[kind][s]));
+    return [...long.filter(s=>!isEtf(s)),...long.filter(isEtf),...short.filter(s=>!isEtf(s)),...short.filter(isEtf)];
+  }
+  keys=keys.sort(bySym);
+  return keys.filter(s=>!isEtf(s)).concat(keys.filter(isEtf));
+}
 function render(){
   KINDS.forEach(K=>{
     $(K.cnt).textContent='('+Object.keys(data[K.k]||{}).length+')';
@@ -715,16 +803,7 @@ function render(){
     const toggle=alwaysMonitored(K.k)?null:$('monitor_'+K.k);
     if(toggle){toggle.textContent=enabled?'监测开启':'监测关闭';toggle.setAttribute('aria-checked',String(enabled));}
     const box=$(K.list),pager=$(K.pager);
-    let keys=Object.keys(data[K.k]||{});
-    if(K.sort)keys=keys.slice().sort(bySym);
-    // 个股在前、ETF 在后，各自保持原有顺序（持仓不重排，只分区）
-    if(K.k==='positions'){
-      // 长持仓区整块在前，短持仓区在后；区内再各自「个股 → ETF」
-      const L=keys.filter(s=>isLongHeld(data[K.k][s])),S=keys.filter(s=>!isLongHeld(data[K.k][s]));
-      keys=[...L.filter(s=>!isEtf(s)),...L.filter(isEtf),...S.filter(s=>!isEtf(s)),...S.filter(isEtf)];
-    }else{
-      keys=keys.filter(s=>!isEtf(s)).concat(keys.filter(isEtf));
-    }
+    const keys=orderedKeys(K.k);
     let page=pageState[K.k];
     const pages=Math.max(1,Math.ceil(keys.length/PAGE_SIZE));
     if(page>=pages)page=pages-1;
@@ -781,31 +860,18 @@ function render(){
     }
     box.querySelectorAll('.row').forEach(row=>{
       row.querySelectorAll('input').forEach(inp=>{
-        inp.oninput=()=>{
-          const k=row.dataset.k,s=row.dataset.s,f=inp.dataset.f;
-          const v=inp.value.trim();
-          const o=data[k][s]||(data[k][s]={});
-          if(f==='trigger'){ if(v==='')delete o.trigger; else {const n=Number(v); if(!isNaN(n))o.trigger=n;} }
-          else if(f==='reduce'){
-            if(v==='')delete o.reduce;
-            else{const n=Number(v); if(Number.isFinite(n)&&n>0)o.reduce=n;}
-          }
-          else if(f==='cost'){
-            if(v==='')delete o.cost;
-            else{const n=Number(v); if(Number.isFinite(n)&&n>0)o.cost=n;}
-          }
-          else if(f==='target'){
-            if(v===''){delete o.target;delete o.target_at;}
-            else{const n=Number(v); if(Number.isFinite(n)&&n>0){o.target=n;o.target_at=monthNow();}}
-          }
-          else { if(v)o[f]=v; else delete o[f]; }
-          touch();
-        };
+        const {k,s}=row.dataset,f=inp.dataset.f;
+        const draft=listDraftErrors.get(draftKey(k,s,f));
+        if(draft)inp.value=draft.raw;
+        inp.setAttribute('aria-invalid',String(!!draft));
+        inp.oninput=()=>editListField(k,s,f,inp.value,inp);
       });
       row.querySelector('.del').onclick=()=>{
         const k=row.dataset.k,s=row.dataset.s;
         if(!confirm('从「'+KIND_LABEL[k]+'」里删除 '+s+' ？'))return;
-        delete data[k][s];render();touch();setMsg('已删 '+s+'，点保存才生效','ok');
+        delete data[k][s];
+        for(const [key,draft] of listDraftErrors)if(draft.kind===k&&draft.symbol===s)listDraftErrors.delete(key);
+        render();touch();setMsg('已删 '+s+'，点保存才生效','ok');
       };
       const moveSel=row.querySelector('.move');
       if(moveSel)moveSel.onchange=e=>moveSymbol(row.dataset.k,e.target.value,row.dataset.s);
@@ -818,7 +884,10 @@ function touch(){changed=true;$('dirty').textContent='有未保存的改动';}
 
 /* ---------- 保存 ---------- */
 $('btnSave').onclick=async e=>{
+  if(holdingsSaving)return;
   if(!loaded||$('groupEditor').disabled){setMsg('清单尚未载入完成，不能保存','err');return;}
+  if(!validateListDraft())return;
+  if(holdingsConflict)return recoverHoldings();
   const text=configText();
   if(LOCAL_PREVIEW){
     try{localStorage.setItem(DRAFT_KEY,text);changed=false;$('dirty').textContent='本机草稿已保存';
@@ -836,24 +905,31 @@ $('btnSave').onclick=async e=>{
     $('manualCard').scrollIntoView({behavior:'smooth',block:'center'});
     return;
   }
-  e.target.disabled=true;setMsg('正在写入 GitHub…','busy');
+  holdingsSaving=true;e.target.disabled=true;setMsg('正在写入 GitHub…','busy');
   const body={message:'更新自选清单',content:b64enc(text),branch:BRANCH};
   if(SHA)body.sha=SHA;
   const r=await gh('PUT','/contents/holdings.json',body);
   if(r.ok){
     SHA=(r.data.content&&r.data.content.sha)||SHA;
     const currentText=configText();
-    changed=currentText!==text;
+    holdingsBaseline=JSON.parse(text);
+    changed=currentText!==text||listDraftErrors.size>0;
     $('dirty').textContent=changed?'有未保存的改动（提交期间又修改了清单）':'清单已提交，等待发布验证';
     trackReceipt('holdings.json',r.data);
   }else{
+    if(r.status===409)holdingsConflict=true;
     setMsg('保存失败：'+whyFail(r.status,r.data.message)+
-      (r.status===409?'（和线上版本冲突，点「重新载入」再改一次）':''),'err');
+      (r.status===409?'；草稿已保留，再点保存或重新读取可「保留草稿后读取最新版」，合并确认后再保存':''),'err');
   }
-  e.target.disabled=false;
+  holdingsSaving=false;e.target.disabled=false;
 };
 
-$('btnReload').onclick=()=>{if(changed&&!confirm('有未保存的改动，确定丢弃重新载入？'))return;load();};
+$('btnReload').onclick=()=>{
+  if(holdingsSaving)return;
+  if(holdingsConflict)return recoverHoldings();
+  if(changed&&!confirm('有未保存的改动，确定丢弃重新载入？'))return;
+  return load();
+};
 
 /* ---------- 规则阈值（settings.json） ---------- */
 /* MM_SCHEMA_BEGIN：由 page_assets 生成，不手改 */
@@ -888,7 +964,7 @@ function settingsError(){
   return '';
 }
 let SET=Object.assign({},SET_DEFS), SET_SHA='', settingsRevision=0;
-let settingsBaseline=null, settingsSaving=false, settingsDirty=false;
+let settingsBaseline=null, settingsSaving=false, settingsDirty=false, settingsConflict=false;
 const SETTINGS_SAVE_BUTTONS=['btnSaveRules','btnSaveDca','btnClearDca'];
 function settingsInputs(){
   return JSON.stringify(SET_KEYS.map(k=>{const el=$('set_'+k);return el?String(el.value):null;}));
@@ -903,14 +979,14 @@ SET_KEYS.forEach(k=>{
   el.oninput=el.onchange=()=>{settingsRevision++;updateSettingsDirty();};
 });
 
+function settingInputValue(values,key){
+  if(key==='use_realtime')return String(values[key]||0);
+  if(key==='signal_single_open')return String(values[key]?1:0);
+  if(key==='dca_every')return values[key]?String(values[key]):'';
+  return String(values[key]);
+}
 function renderSettings(){
-  SET_KEYS.forEach(k=>{
-    const el=$('set_'+k);if(!el)return;
-    if(k==='use_realtime')el.value=String(SET[k]||0);
-    else if(k==='signal_single_open')el.value=String(SET[k]?1:0);
-    else if(k==='dca_every')el.value=SET[k]?String(SET[k]):'';
-    else el.value=SET[k];
-  });
+  SET_KEYS.forEach(k=>{const el=$('set_'+k);if(el)el.value=settingInputValue(SET,k);});
 }
 function collectSettings(){
   SET_KEYS.forEach(k=>{
@@ -969,8 +1045,33 @@ function normalizeSettings(raw){
   delete values.hy_yellow;
   return {values,warnings};
 }
+async function recoverSettings(){
+  if(settingsSaving)return;
+  if(!confirm('保留规则／定投草稿后读取最新版？未修改的字段采用远端更新，同字段冲突会再次询问；合并后需检查并再次保存。'))return;
+  settingsSaving=true;SETTINGS_SAVE_BUTTONS.forEach(id=>$(id).disabled=true);
+  const revision=++settingsRevision,inputs=settingsInputs();
+  try{
+    const r=await gh('GET','/contents/settings.json?ref='+BRANCH);
+    if(revision!==settingsRevision||inputs!==settingsInputs()){
+      setMsg('读取期间又修改了规则；已停止合并，草稿保留，请再次保存以重读最新版','err');return;
+    }
+    if(!r.ok||!r.data.content||!r.data.sha){setMsg('最新版读取失败；规则草稿保留：'+whyFail(r.status,r.data.message),'err');return;}
+    const normalized=normalizeSettings(JSON.parse(b64dec(r.data.content)));
+    const remoteInputs=SET_KEYS.map(k=>$('set_'+k)?settingInputValue(normalized.values,k):null);
+    const asFields=values=>Object.fromEntries(SET_KEYS.map((key,i)=>[key,values[i]]));
+    const merged=mergeDraft(settingsBaseline===null?undefined:asFields(JSON.parse(settingsBaseline)),
+      asFields(JSON.parse(inputs)),asFields(remoteInputs));
+    if(!confirmMerge(merged.conflicts)){setMsg('已取消合并，原规则草稿保留；再次保存可重新读取最新版','err');return;}
+    SET=normalized.values;SET_SHA=r.data.sha;settingsBaseline=JSON.stringify(remoteInputs);
+    SET_KEYS.forEach(key=>{const el=$('set_'+key);if(el)el.value=merged.value[key];});
+    settingsConflict=false;updateSettingsDirty();
+    setMsg('已读取最新版并合并规则／定投草稿，尚未写入；请核对后再次点击保存'+
+      (normalized.warnings.length?'；规则参数警告：'+normalized.warnings.join('；'):''),normalized.warnings.length?'err':'ok');
+  }catch(error){setMsg('规则恢复失败；草稿保留：'+error.message,'err');}
+  finally{settingsSaving=false;SETTINGS_SAVE_BUTTONS.forEach(id=>$(id).disabled=false);}
+}
 async function loadSettings(){
-  if(settingsSaving||settingsDirty||(settingsBaseline!==null&&settingsInputs()!==settingsBaseline))return;
+  if(settingsSaving||settingsConflict||settingsDirty||(settingsBaseline!==null&&settingsInputs()!==settingsBaseline))return;
   const revision=++settingsRevision, inputs=settingsInputs();
   const r=await gh('GET','/contents/settings.json?ref='+BRANCH);
   if(revision!==settingsRevision||inputs!==settingsInputs())return;
@@ -986,6 +1087,7 @@ async function loadSettings(){
 }
 async function saveRules(btn){
   if(settingsSaving)return;
+  if(settingsConflict)return recoverSettings();
   const error=settingsError();
   if(error){setMsg('规则未保存：'+error,'err');return;}
   settingsRevision++;
@@ -1017,7 +1119,9 @@ async function saveRules(btn){
         if(dirty)setMsg('settings.json 本次快照已提交；提交期间新增的规则／定投改动尚未保存，请再次保存','ok');
       }
     }else{
-      setMsg('保存失败：'+whyFail(r.status,r.data.message),'err');
+      if(r.status===409)settingsConflict=true;
+      setMsg('保存失败：'+whyFail(r.status,r.data.message)+
+        (r.status===409?'；草稿已保留，再点「保存规则」可「保留草稿后读取最新版」，合并确认后再保存':''),'err');
     }
   }finally{
     settingsSaving=false;SETTINGS_SAVE_BUTTONS.forEach(id=>$(id).disabled=false);
@@ -1098,6 +1202,7 @@ $('csvKind').onchange=()=>{
 $('btnApply').onclick=()=>{
   if(!pending)return;
   const {kind,symbols,names,baseline,text,filename}=pending,old=data[kind];
+  if(!validateListDraft(kind))return;
   if(JSON.stringify(old)!==baseline){previewCsv(text,kind,filename);setMsg('目标清单已变化，已重新预览，请再次确认','err');return;}
   const oldNorm=Object.fromEntries(Object.keys(old).map(s=>[normTicker(s),s]));
   const next=kind==='positions'?{}:{...old};
@@ -1159,6 +1264,7 @@ $('btnBack').onclick=()=>{
   setMsg('');
 };
 $('btnCopy').onclick=async ()=>{
+  if(!validateListDraft())return;
   const ta=$('jsonOut');ta.select();
   let ok=false;
   try{await navigator.clipboard.writeText(ta.value);ok=true;}catch(e){}

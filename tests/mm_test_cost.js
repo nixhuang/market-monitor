@@ -7,6 +7,8 @@ const vm = require('node:vm');
 const { performance } = require('node:perf_hooks');
 const SOURCE = fs.readFileSync(path.join(__dirname, '..', 'cost_panel.js'), 'utf8');
 const CSS = fs.readFileSync(path.join(__dirname, '..', 'cost_panel.css'), 'utf8');
+const ASSETS = fs.readFileSync(path.join(__dirname, '..', 'page_assets.py'), 'utf8');
+const COST_PANEL_HTML = ASSETS.match(/COST_PANEL_HTML = r'''([\s\S]*?)'''/)[1];
 const LOCAL = 'mm_position_costs_local_v1';
 const CLOUD = 'mm_position_costs_cloud_v1';
 const TOKEN = 'mm_gh_token_v1';
@@ -142,11 +144,12 @@ function makeDocument(opts={}){
   doc.addEventListener=(k,f)=>(doc.events[k]||=[]).push(f);
   doc.dispatchEvent=Element.prototype.dispatchEvent;
   doc.fire=(k,e={})=>doc.dispatchEvent(Object.assign(new MockCustomEvent(k),e));
-  doc.body.innerHTML='<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><table></table></details><div id="signalCounts"></div>';
+  doc.body.innerHTML=COST_PANEL_HTML+'<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><table></table></details><div id="signalCounts"></div>';
   const table=doc.querySelector('table');table.className='stk';
   for(const sym of opts.symbols||['AAA','BBB']){
     const tr=new Element('tr',doc);tr.id=fixtureAnchor(sym);tr.className='green';
     if(!opts.legacySymbols)tr.setAttribute('data-symbol',sym);
+    if(opts.quoteDate!==null)tr.setAttribute('data-quote-date',opts.quoteDate||'2026-10-20');
     tr.innerHTML='<td class="sym">'+sym+'<span class="note">测试名称</span></td><td><span class="px-price">100.00</span><span class="px-chg">+1.00%</span></td><td class="sig"><span class="lvtag add">加 95</span><span class="lvtag cut">减 104</span></td>';
     table.appendChild(tr);
     const rail=new Element('tr',doc);rail.className='range52-row';rail.innerHTML='<td><span class="range52-rail" aria-label="50.00低，本轮价 100.00 位于区间 50%，本轮高 150.00"><span class="range52-track"></span></span></td>';table.appendChild(rail);
@@ -230,7 +233,8 @@ async function finishPush(b,status=200){
 }
 const tests=[];function test(name,fn){tests.push({name,fn});}
 const meta = (data,sha='remote-sha') => ({sha,content:Buffer.from(JSON.stringify(data)).toString('base64')});
-const staleAck = () => ({...copy(SEED),acks:{'AAA|loss10':'2026-10-19T00:00:00Z'}});
+const staleAck = () => ({...copy(SEED),acks:{'AAA|loss10':'2026-10-19T00:00:00Z'},
+  ack_contexts:{'AAA|loss10':{at:'2026-10-19T00:00:00Z',quote_date:'2026-10-18',rule_version:'["cost-ack-v1","loss10",10,null]'}}});
 const freshRemote = () => {let d=staleAck();d.cash=9876;d.items.AAA.qty=50;return d;};
 async function beginPut(b){await b.enter();b.edit();await b.save();b.respond(b.requests.at(-1),meta(SEED,'base-sha'));await settle();return b.puts().at(-1);}
 function pendingBody(b,request,status=200){
@@ -694,8 +698,8 @@ test('导入与新版本正常保存不再带出退役fund键',async()=>{
 test('ACK撤销写tombstone，旧云端并集不能复活',async()=>{let b=await boot();let key='AAA|add|95';b.ack(key);b.ack(key);assert.ok(b.local().ack_tombstones[key]);assert.equal(b.state().DATA.acks[key],undefined);let old=copy(SEED);old.acks={[key]:'2026-10-19T00:00:00Z'};b.mergeCloud(old);assert.equal(b.state().DATA.acks[key],undefined);});
 test('clean拉取也保留较新的ACK撤销记录',async()=>{let key='AAA|loss10';let d={...SEED,ack_tombstones:{[key]:'2026-10-20T00:00:00Z'}};let b=await boot({local:d});b.mergeCloud({...SEED,acks:{[key]:'2026-10-19T00:00:00Z'}});assert.equal(b.state().DATA.acks[key],undefined);assert.ok(b.state().DATA.ack_tombstones[key]);assert.equal(b.state().dirty,true);});
 test('较新的明确ACK可以再次确认',async()=>{let key='AAA|loss20';let b=await boot({local:{...SEED,ack_tombstones:{[key]:'2026-10-20T00:00:00Z'}}});let d=copy(SEED);d.items.AAA.cost=200;d.acks={[key]:'2026-10-20T01:00:00Z'};b.mergeCloud(d);assert.ok(b.state().DATA.acks[key]);});
-test('初始ACK过期候选仅等待云端，不按旧本地数字构造撤销',async()=>{
-  let b=await boot({local:{...SEED,acks:{'AAA|loss10':'2026-10-19T00:00:00Z'}},token:false});
+test('审核边界：初始ACK过期候选仅等待云端，不按旧本地数字构造撤销',async()=>{
+  let b=await boot({local:staleAck(),token:false});
   assert.ok(b.local().acks['AAA|loss10']);assert.equal(b.local().ack_tombstones['AAA|loss10'],undefined);
   assert.equal(b.state().dirty,false);assert.equal(b.local()._local.maintenancePending,true);
   assert.equal(b.local()._local.maintenanceOnly,true);assert.equal(b.state().revision,0);
@@ -789,6 +793,11 @@ test('云端校验失败仅在顶部操作行提示，无备份或重试上传�
   assert.equal(b.doc.getElementById('costCancel').hidden,false);
   b.exitEdit(true);assert.equal(b.doc.getElementById('costSave').hidden,true);
   assert.equal(notice.hidden,false);assert.equal(b.puts().length,0);
+  assert.equal(notice.textContent,'云端数据校验失败：updated_at 必须是有效日期');
+  // 草稿错误只覆盖当前展示，取消后仍应看到尚未解决的云端校验错误。
+  await b.enter();b.edit('AAA','cost','bad');await b.save();assert.match(notice.textContent,/无效输入/);
+  b.exitEdit(true);assert.equal(notice.hidden,false);
+  assert.equal(notice.textContent,'云端数据校验失败：updated_at 必须是有效日期');assert.equal(b.puts().length,0);
   assert.match(CSS,/\.cost-acts \.cost-notice\{[^}]*min-width:0[^}]*overflow-wrap:anywhere/);
   await b.dispose();
 });
@@ -933,21 +942,22 @@ test('移回持仓沿用保留旧值但不自动抹成本或增加现金',async(
   assert.equal(b.state().DATA.items.AAA.qty,7);assert.equal(b.state().DATA.cash,30);await b.enter();assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,'123');
   assert.doesNotMatch(b.doc.getElementById('costFoot').textContent,/移回后沿用旧值/);
 });
-test('移出再移回后的亏损及减仓重新生效，仅保留仍有效的加仓ACK',async()=>{
+test('审核边界：移组不以同日旧行情撤销远端旧格式ACK，灰统计仅计有效条件',async()=>{
   let d=copy(SEED);d.items.AAA.cost=200;d.acks={'AAA|loss20':'2026-10-19T00:00:00Z','AAA|add|95':'2026-10-19T00:00:00Z','AAA|cut|104':'2026-10-19T00:00:00Z'};
   let b=await boot({local:d,rules:{trigger_gap_pct:6,reduce_gap_pct:4},token:false});
   b.respond(b.requests[0],d);await settle();b.move('AAA','focus');
-  assert.equal(b.state().DATA.acks['AAA|loss20'],undefined);assert.ok(b.state().DATA.ack_tombstones['AAA|loss20']);
-  assert.ok(b.state().DATA.acks['AAA|add|95']);assert.equal(b.state().DATA.acks['AAA|cut|104'],undefined);
-  assert.ok(b.state().DATA.ack_tombstones['AAA|cut|104']);b.move('AAA','positions');
-  assert.equal(b.rows[0].lossLv,2);assert.equal(b.rows[0].lossAcked,false);assert.equal(b.rows[0].tr.className,'red');
+  for(const key of Object.keys(d.acks)){assert.ok(b.state().DATA.acks[key]);assert.equal(b.state().DATA.ack_tombstones[key],undefined);}
+  assert.equal(b.rows[0].lossLv,0);assert.deepEqual(copy(b.ackStatEntries('reduce_price')),[]);
+  b.move('AAA','positions');assert.equal(b.rows[0].lossLv,2);assert.equal(b.rows[0].lossAcked,true);
+  b.ack('AAA|loss20');assert.equal(b.rows[0].lossAcked,false);assert.equal(b.rows[0].tr.className,'red');
 });
-test('非持仓重点组只保留加仓提醒，残留减仓胶囊隐藏且不计灰',async()=>{
+test('审核边界：非持仓重点组只保留加仓提醒，残留减仓胶囊隐藏且不计灰',async()=>{
   let b=await boot({groups:{AAA:'focus'},rules:{trigger_gap_pct:6,reduce_gap_pct:4}});
   b.respond(b.requests[0],meta(SEED));await settle();let r=b.rows.find(r=>r.sym==='AAA');
   assert.equal(r.warnAdd.style.display,'inline');assert.equal(r.warnCut.style.display,'none');assert.equal(r.warn.style.display,'none');
   assert.equal(r.cutCap.style.display,'none');b.ack('AAA|add|95');assert.equal(r.tr.className,'green');
-  b.ack('AAA|cut|104');assert.equal(r.tr.className,'green');assert.equal(b.state().DATA.acks['AAA|cut|104'],undefined);
+  b.ack('AAA|cut|104');assert.equal(r.tr.className,'green');assert.ok(b.state().DATA.acks['AAA|cut|104']);
+  b.ack('AAA|cut|104');assert.equal(b.state().DATA.acks['AAA|cut|104'],undefined);
   assert.deepEqual(copy(b.ackStatEntries('reduce_price')),[]);
   assert.ok(b.doc.getElementById('s-aaa'));assert.equal(b.state().DATA.items.AAA.cost,100);
 });
@@ -1558,7 +1568,10 @@ function ackCurrentLoss(b,sym='AAA'){
 }
 function setLossPrice(b,sym,price){
   // 行情在启动时被真实脚本扫描为行对象；模拟下一轮价格，不复制浮亏判断公式。
-  for(const row of b.rows.filter(r=>r.sym===sym)){row.price=price;row.tr.querySelector('.px-price').textContent=String(price);}
+  for(const row of b.rows.filter(r=>r.sym===sym)){
+    row.price=price;row.tr.querySelector('.px-price').textContent=String(price);
+    row.quoteDate=new Date(Date.parse(row.quoteDate+'T00:00:00Z')+86400000).toISOString().slice(0,10);
+  }
   b.paint();
 }
 function lossGrayDocument(doc,symbols,count=symbols?.length??0){
@@ -1955,16 +1968,18 @@ test('成本浮亏20%降到10%不能沿用20%已读，离开10%后整行隐藏�
   const panels=b.doc.querySelectorAll('.signal-members-panel').filter(p=>p.id==='signal-members-acked-cost_loss');
   assert.equal(panels.length,1,'降档重新确认时不能遗留同ID灰名单');
 });
-for(const field of ['qty','cost'])test('成本浮亏'+field+'归零清空统计和已读，恢复后重新报红',async()=>{
+for(const field of ['qty','cost'])test('审核边界：成本浮亏'+field+'草稿归零只隐藏，明确保存及更新行情后再失效',async()=>{
   const b=await bootLoss({prices:{AAA:80}});ackCurrentLoss(b);await b.enter();
   b.edit('AAA',field,'0');await b.tick(16);assertLossStats(b,0,0,[]);assertLossBadges(b,0,0);
-  assert.equal(b.rows[0].lossLv,0);assert.equal(b.state().DATA.acks['AAA|loss20'],undefined);assert.equal(b.rows[0].warn.style.display,'none');
-  b.edit('AAA',field,field==='qty'?'5':'100');await b.tick(16);assertLossStats(b,1,0,['AAA']);assertLossBadges(b,1,0);
+  assert.equal(b.rows[0].lossLv,0);assert.ok(b.state().DATA.acks['AAA|loss20']);assert.equal(b.rows[0].warn.style.display,'none');
+  await b.save();setLossPrice(b,'AAA',80);assert.equal(b.state().DATA.acks['AAA|loss20'],undefined);
+  await b.enter();b.edit('AAA',field,field==='qty'?'5':'100');await b.tick(16);assertLossStats(b,1,0,['AAA']);assertLossBadges(b,1,0);
   assert.equal(b.rows[0].lossAcked,false);assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
 });
-test('成本浮亏移组隐藏、移回恢复，短长归属按当前DOM刷新',async()=>{
+test('审核边界：成本浮亏移组隐藏，更新行情后失效，短长归属按当前DOM刷新',async()=>{
   const b=await bootLoss();ackCurrentLoss(b);lossToggle(b).setAttribute('aria-pressed','true');
   b.move('AAA','focus');assertLossStats(b,0,0,[]);assertLossBadges(b,0,0);
+  assert.ok(b.state().DATA.acks['AAA|loss10']);setLossPrice(b,'AAA',90);
   assert.equal(lossToggle(b).getAttribute('aria-pressed'),'false');assert.equal(b.state().DATA.acks['AAA|loss10'],undefined);
   b.move('AAA','positions');assertLossStats(b,1,0,['AAA']);assertLossBadges(b,1,0);
   assert.equal(lossFilter(b).cost_loss.members[0].g,'短持仓');
@@ -2405,14 +2420,15 @@ test('只读旧ACK不清理时加减灰统计仍排除错价、失效、非持�
   setLossPrice(b,'AAA',104);assert.deepEqual(copy(b.ackStatEntries('add_price')),[]);assertLossGrayBadge(b,1);
   b.move('AAA',null);assertLossGrayBadge(b,0);assert.equal(Object.keys(b.state().DATA.acks).length,5);
 });
-test('加减条件消失、价位变更及移除清ACK写撤销，恢复后重新提醒',async()=>{
+test('审核边界：新行情清加减ACK，价位版本不符保留旧ACK，移除待新行情',async()=>{
   const b=await bootLoss({prices:{AAA:100},prepareDocument:doc=>signalCaps(doc)}),r=b.rows[0];
   b.ack('AAA|add|100');b.ack('AAA|cut|100');setLossPrice(b,'AAA',104);
   assert.equal(b.state().DATA.acks['AAA|add|100'],undefined);assert.ok(b.state().DATA.ack_tombstones['AAA|add|100']);
   setLossPrice(b,'AAA',96);assert.equal(b.state().DATA.acks['AAA|cut|100'],undefined);assert.ok(b.state().DATA.ack_tombstones['AAA|cut|100']);
   setLossPrice(b,'AAA',100);assert.equal(r.warnAdd.querySelector('.ack-btn').getAttribute('aria-label'),'标记已读');
-  b.ack('AAA|add|100');r.trig=101;b.paint();assert.equal(b.state().DATA.acks['AAA|add|100'],undefined);
-  b.ack('AAA|add|101');b.move('AAA',null);assert.equal(b.state().DATA.acks['AAA|add|101'],undefined);assertLossGrayBadge(b,0);
+  b.ack('AAA|add|100');r.trig=101;b.paint();assert.ok(b.state().DATA.acks['AAA|add|100']);
+  b.ack('AAA|add|101');b.move('AAA',null);assert.ok(b.state().DATA.acks['AAA|add|101']);
+  setLossPrice(b,'AAA',100);assert.equal(b.state().DATA.acks['AAA|add|101'],undefined);assertLossGrayBadge(b,0);
 });
 // 折叠口径仅来自生成位置或明确 data-quiet-keep；不从胶囊、class猜主表保留资格。
 function quietDocument(doc,{quietSymbols=['AAA'],keep,level='green',onlyQuiet=false}={}){
@@ -2597,11 +2613,12 @@ test('tbody真实层级移行后range52相邻，创建表不重复表头',async(
   assert.equal(b.doc.querySelector('.quiet-list').querySelectorAll('.mh').length,1);
 });
 
-test('加减价撤掉后胶囊提醒ACK同步清空，恢复价位重新亮灯',async()=>{
+test('审核边界：加减价撤掉仅隐藏，规则版本不符不自动删除，主动取消仍恢复提醒',async()=>{
   const b=await bootLoss({prices:{AAA:100},prepareDocument:doc=>signalCaps(doc)}),r=b.rows.find(row=>row.sym==='AAA');
-  b.ack('AAA|add|100');b.ack('AAA|cut|100');r.trig=0;r.cut=0;b.paint();
+  b.ack('AAA|add|100');b.ack('AAA|cut|100');r.trig=0;r.cut=0;setLossPrice(b,'AAA',100);
   assert.equal(r.warnAdd.style.display,'none');assert.equal(r.warnCut.style.display,'none');assert.equal(r.cap.style.display,'none');
-  assert.equal(b.state().DATA.acks['AAA|add|100'],undefined);assert.equal(b.state().DATA.acks['AAA|cut|100'],undefined);assertLossGrayBadge(b,0);
+  assert.ok(b.state().DATA.acks['AAA|add|100']);assert.ok(b.state().DATA.acks['AAA|cut|100']);assertLossGrayBadge(b,0);
+  b.ack('AAA|add|100');b.ack('AAA|cut|100');
   r.trig=100;r.cut=100;b.paint();assert.equal(r.cap.style.display,'');assert.equal(r.warnAdd.style.display,'inline');assert.equal(r.warnCut.style.display,'inline');
   assert.equal(r.tr.className,'red');assert.equal(r.warnAdd.querySelector('.ack-btn').getAttribute('aria-label'),'标记已读');
 });
@@ -2843,6 +2860,267 @@ test('网络分类回归：403限流允许退避，普通权限拒绝不反复�
     if(limited){b.respond(b.requests.at(-1),meta(SEED));await settle();assert.equal(b.state().NOTICE,'');}
     assert.equal(b.puts().length,0);await b.dispose();
   }
+});
+
+test('刷新首屏：未执行脚本就有完整仓位骨架，编辑在绑定前禁用',async()=>{
+  const doc=makeDocument(),panel=doc.getElementById('costManage');
+  assert.ok(panel);assert.equal(panel.open,false);
+  assert.equal(panel.querySelector('.grp-name').textContent,'仓位');
+  assert.notEqual(panel.querySelector('#costEditBtn').getAttribute('disabled'),null);
+  for(const id of ['costState','costMembers','costNotice','costSave','costCancel','costFile','costFoot'])
+    assert.equal(panel.querySelectorAll('#'+id).length,1);
+});
+test('刷新首屏：原地接管骨架，云端延迟三秒也不删卡、不重建标题、不上传',async()=>{
+  let original,summary,button,writes;
+  const b=await boot({prepareDocument:doc=>{
+    original=doc.getElementById('costManage');summary=original.querySelector('summary');
+    button=original.querySelector('#costEditBtn');writes=original.htmlWrites||0;original.open=true;
+  }});
+  for(const elapsed of [0,3000]){
+    await b.tick(elapsed);
+    assert.equal(b.doc.querySelectorAll('#costManage').length,1);
+    assert.equal(b.doc.getElementById('costManage'),original);
+    assert.equal(original.querySelector('summary'),summary);assert.equal(original.open,true);
+    assert.equal(original.htmlWrites||0,writes);assert.equal(button.getAttribute('disabled'),null);
+    assert.ok(original.querySelector('.cost-sum').textContent.includes('$'));
+    assert.equal(b.state().SYNC,'pulling');assert.equal(b.puts().length,0);
+  }
+  b.respond(b.requests[0],meta({...copy(SEED),cash:99}));await settle();
+  assert.equal(b.doc.getElementById('costManage'),original);assert.equal(b.state().DATA.cash,99);
+  assert.equal(original.querySelector('summary'),summary);assert.equal(b.puts().length,0);
+});
+test('刷新首屏：无初始统计时补统计必须放在仓位之后',async()=>{
+  const b=await boot({prepareDocument:doc=>doc.getElementById('signalCounts').remove()});
+  assert.equal(b.doc.getElementById('costManage').nextElementSibling.id,'signalCounts');
+  assert.equal(b.doc.querySelectorAll('#costManage').length,1);assert.equal(b.puts().length,0);
+});
+
+// 审核边界用例只运行内存 DOM、存储及 fetch mock。
+for(const [sym,field,raw] of [
+  ['AAA','qty','2oops'],['AAA','cost','-1'],['USD','cash','0.00001'],
+  ['USD','cash_extra','1e309'],['BOND','fixed','NaN'],['BOND','fixed_cost','-2'],
+  ['USD','cash','9'.repeat(305)]
+])test('审核边界：跨格重绘保留完整无效草稿 '+sym+'/'+field+'/'+(raw.length>100?'溢出':raw),async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
+  const before=cloudNumbers(b.state().DATA);b.edit(sym,field,raw);b.edit('BBB','qty','3.0000');await b.tick(16);
+  const selector='input[data-sym="'+sym+'"][data-f="'+field+'"]';
+  let input=b.doc.querySelector(selector);assert.equal(input.value,raw);assert.ok(input.validationMessage);
+  assert.equal(b.doc.querySelector('input[data-sym="BBB"][data-f="qty"]').value,'3.0000');
+  assert.equal(b.local()._local.editDraft[sym+'|'+field].raw,raw);assert.ok(b.local()._local.editDraft[sym+'|'+field].error);
+  assert.equal(b.state().draftPending,true);assert.equal(b.state().positionsAuthorized,false);
+  // 即使 DOM 校验状态被清空，保存仍核对独立草稿，不提交上次有效值。
+  input.setCustomValidity('');await b.save();
+  assert.equal(b.state().editing,true);assert.equal(b.puts().length,0);assert.equal(b.requests.length,1);
+  assert.equal(b.state().positionsAuthorized,false);assert.match(b.doc.getElementById('costNotice').textContent,/无效输入/);
+  b.edit(sym,field,'1');await b.save();b.respond(b.requests.at(-1),meta(SEED));await settle();
+  const put=b.puts()[0];assert.ok(put);const payload=b.payload(put);
+  assert.equal(payload.items.BBB.qty,3);assert.equal(payload._local,undefined);
+  if(field==='cost'||field==='qty')assert.equal(payload.items[sym][field],1);
+  else if(field==='cash')assert.equal(payload.cash,1);
+  else if(field==='cash_extra'){assert.equal(payload.cash_extra,1);assert.equal(payload.cash,before.cash+1);}
+  else assert.equal(payload[field],1);
+  assert.deepEqual(b.local()._local.editDraft,{});b.respond(put,{});await settle();await b.dispose();
+});
+test('审核边界：多格错误逐个修正，折叠重进和取消不吞草稿',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
+  b.edit('AAA','qty','bad');b.edit('USD','cash_extra','-3');b.edit('BBB','qty','4');await b.tick(16);
+  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');await b.tick(60000);
+  assert.equal(b.puts().length,0);await b.enter();
+  assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'bad');
+  b.edit('AAA','qty','6');await b.save();assert.equal(b.state().editing,true);assert.equal(b.puts().length,0);
+  b.doc.getElementById('costCancel').click();await b.enter();
+  assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'bad');
+  assert.equal(b.doc.querySelector('input[data-f="cash_extra"]').value,'-3');
+  b.edit('AAA','qty','6');b.edit('USD','cash_extra','2');await b.save();
+  const put=await finishPush(b);assert.equal(b.payload(put).items.AAA.qty,6);assert.equal(b.payload(put).cash_extra,2);
+  await b.dispose();
+});
+test('审核边界：只有非法输入也标脏，取消恢复干净且不上传',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','bad');
+  assert.equal(b.state().dirty,true);assert.equal(b.local().items.AAA.qty,5);
+  b.doc.getElementById('costCancel').click();assert.equal(b.state().dirty,false);assert.deepEqual(b.local()._local.editDraft,{});
+  await b.enter();assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'5');
+  assert.equal(b.doc.querySelector('input:invalid'),null);assert.equal(b.puts().length,0);await b.dispose();
+});
+test('审核边界：隔离刷新恢复错误草稿，正式新页远端仍覆盖dirty草稿',async()=>{
+  const b=await boot({noLocks:true,forbidRequests:true});await b.enter();b.edit('AAA','qty','bad');await b.dispose();
+  const c=await boot({noLocks:true,forbidRequests:true,store:b.store,session:b.session});await c.enter();
+  assert.equal(c.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'bad');await c.save();
+  assert.equal(c.state().editing,true);assert.equal(c.requests.length,0);assert.equal(c.store.writes.length,0);await c.dispose();
+  const d=await boot({local:{...copy(SEED),_local:{dirty:true,revision:9,editDraft:{'AAA|qty':{raw:'bad',error:'旧错误'}}}}});
+  const remote={...copy(SEED),cash:999,items:{AAA:{cost:0,qty:3}}};d.respond(d.requests[0],meta(remote));await settle();
+  assert.deepEqual(cloudNumbers(d.local()),cloudNumbers(d.normalize(remote)));assert.deepEqual(d.local()._local.editDraft,{});
+  assert.equal(d.state().dirty,false);await d.tick(60000);assert.equal(d.puts().length,0);await d.dispose();
+});
+test('审核边界：输入错误期间ACK仅同步远端仓位，不携带数值草稿和错误',async()=>{
+  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
+  b.edit('AAA','qty','bad');b.edit('BBB','qty','77');b.exitEdit(false);b.ack('AAA|add|95');await b.tick(1200);
+  const remote={...copy(SEED),cash:999};b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];
+  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));assert.equal(b.payload(put)._local,undefined);
+  b.respond(put,{});await settle();assert.equal(b.local()._local.editDraft['AAA|qty'].raw,'bad');assert.equal(b.state().dirty,true);
+  await b.enter();await b.save();assert.equal(b.state().editing,true);assert.equal(b.puts().length,1);await b.dispose();
+});
+test('审核边界：零成本正数量计入市值仓位当日贡献，现金SGOV及固收不变',async()=>{
+  const local={schema_version:2,items:{AAA:{cost:0,qty:5},BBB:{cost:90,qty:2},SGOV:{cost:1,qty:999}},cash:30,fixed:20,fixed_cost:15};
+  const b=await boot({local,symbols:['AAA','BBB','SGOV'],groups:{SGOV:'focus'},noLocks:true,forbidRequests:true,
+    prepareDocument:doc=>doc.getElementById('s-aaa').setAttribute('data-prev-close','80')});
+  const r=b.rows[0],li=b.doc.querySelector('#costMembers li[data-sym="AAA"]');
+  assert.equal(r.has,true);assert.equal(r.costKnown,true);assert.equal(r.mv,500);assert.equal(r.pnlAmt,500);assert.equal(r.pnlPct,null);
+  assert.equal(r.lossLv,0);assert.equal(r.costInline.textContent,'0');assert.ok(li);assert.equal(li.querySelector('.pct').textContent,'—');
+  assert.equal(li.querySelector('.amt').textContent,'+$500.0');assert.equal(li.querySelector('.wt').textContent,'66.7%');
+  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·+$520.0（+288.9%）');
+  assert.equal(b.doc.querySelector('.blk-cash .t-mv').textContent,'$30');assert.equal(b.doc.querySelector('.blk-bond .t-pnl').textContent,'');
+  assert.equal(b.doc.querySelector('#costMembers li[data-sym="SGOV"]'),null);assert.equal(r.dayAmt,100);
+  assert.match(b.doc.querySelector('.cost-contrib').textContent,/AAA/);assert.doesNotMatch(b.doc.querySelector('.cost-contrib').textContent,/SGOV/);
+  assert.doesNotMatch(b.doc.getElementById('costMembers').textContent,/NaN|Infinity/);await b.dispose();
+});
+for(const missing of [true,false])test('审核边界：'+(missing?'未知':'零')+'成本独立于数量，零分母不伪造收益率',async()=>{
+  const local={schema_version:2,items:{AAA:missing?{qty:5}:{cost:0,qty:5}},cash:0,fixed:0,fixed_cost:0};
+  const b=await boot({local,noLocks:true,forbidRequests:true}),r=b.rows[0];
+  assert.equal(r.has,true);assert.equal(r.costKnown,!missing);assert.equal(r.mv,500);assert.equal(r.pnlPct,null);
+  assert.equal(r.pnlAmt,missing?null:500);assert.equal(b.doc.querySelector('.cost-sum').textContent,missing?'$500·—（—）':'$500·+$500.0（—）');
+  const li=b.doc.querySelector('#costMembers li[data-sym="AAA"]');assert.equal(li.querySelectorAll('.cost-cell')[0].textContent,missing?'—':'0');
+  assert.equal(li.querySelector('.wt').textContent,'100.0%');await b.enter();b.edit('AAA','qty','6');await b.save();
+  assert.equal(Object.hasOwn(b.sessionLocal().items.AAA,'cost'),!missing);assert.equal(b.sessionLocal().items.AAA.qty,6);
+  b.exportData();const exported=JSON.parse(await b.blobs.at(-1).text());assert.equal(Object.hasOwn(exported.items.AAA,'cost'),!missing);
+  assert.doesNotMatch(b.doc.getElementById('costMembers').textContent,/NaN|Infinity/);await b.dispose();
+});
+test('审核边界：未知成本与已知成本混合不冒充完整合计，明确录入零后可计算',async()=>{
+  const b=await boot({local:{...copy(SEED),schema_version:2,items:{AAA:{qty:5},BBB:{cost:90,qty:2}}},noLocks:true,forbidRequests:true});
+  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·—（—）');assert.match(b.doc.querySelector('.cost-sum').getAttribute('title'),/成本未知/);
+  assert.equal(b.doc.querySelector('.blk-short .t-pnl').textContent,'— —');
+  await b.enter();b.edit('AAA','cost','0');await b.save();assert.equal(b.sessionLocal().items.AAA.cost,0);
+  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·+$520.0（+288.9%）');await b.dispose();
+});
+async function recentAckFixture(key,opts={}){
+  const d={...copy(SEED),items:{AAA:{cost:200,qty:5},BBB:{cost:90,qty:2}}};
+  const b=await boot({local:d,noLocks:true,forbidRequests:true,quoteDate:'2026-10-22',now:Date.parse('2026-10-23T12:00:00Z'),
+    rules:{trigger_gap_pct:6,reduce_gap_pct:4},...opts});
+  b.ack(key);const remote=copy(b.state().DATA);assert.ok(remote.acks[key]);await b.dispose();return remote;
+}
+function ackOffQuote(doc,key){
+  const row=doc.getElementById('s-aaa'),price=key.includes('|add|')?110:key.includes('|cut|')?90:190;
+  row.setAttribute('data-price',String(price));row.querySelector('.px-price').textContent=String(price);
+}
+for(const key of ['AAA|add|95','AAA|cut|104','AAA|loss20'])for(const pageDay of ['2026-10-20','2026-10-22',null])
+  test('审核边界：旧页或未知行情不撤销另一设备新ACK '+key+'/'+pageDay,async()=>{
+    const remote=await recentAckFixture(key),b=await boot({quoteDate:pageDay,rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>ackOffQuote(doc,key)});
+    b.respond(b.requests[0],meta(remote));await settle();for(let i=0;i<3;i++)b.paint();await b.tick(180000);
+    assert.equal(b.local().acks[key],remote.acks[key]);assert.equal(b.local().ack_tombstones[key],undefined);
+    assert.equal(b.state().dirty,false);assert.equal(b.state().maintenancePending,false);assert.equal(b.puts().length,0);assert.equal(b.requests.length,1);
+    await b.dispose();
+  });
+for(const key of ['AAA|add|95','AAA|cut|104','AAA|loss20'])test('审核边界：更新行情但旧规则版本不得撤销新ACK '+key,async()=>{
+  const remote=await recentAckFixture(key);
+  if(key.includes('|loss'))remote.ack_contexts[key].rule_version='["cost-ack-v2","loss20",20,null]';
+  const b=await boot({quoteDate:'2026-10-24',rules:{trigger_gap_pct:0,reduce_gap_pct:0},prepareDocument:doc=>ackOffQuote(doc,key)});
+  b.respond(b.requests[0],meta(remote));await settle();await b.tick(180000);
+  assert.ok(b.local().acks[key]);assert.equal(b.local().ack_tombstones[key],undefined);assert.equal(b.puts().length,0);
+  // 用户明确撤销不受旧行情、旧规则或另一设备时间戳的限制。
+  b.ack(key);await b.tick(1200);b.respond(b.requests.at(-1),meta({...remote,cash:999}));await settle();const put=b.puts()[0];
+  assert.ok(put);assert.equal(b.payload(put).acks[key],undefined);assert.ok(b.payload(put).ack_tombstones[key]);
+  assert.equal(b.payload(put).ack_invalidations[key],undefined);assert.equal(b.payload(put).cash,999);
+  b.respond(put,{});await settle();await b.dispose();
+});
+for(const key of ['AAA|add|95','AAA|cut|104','AAA|loss20'])test('审核边界：新行情同规则自动撤销仅维护远端仓位 '+key,async()=>{
+  const remote=await recentAckFixture(key),b=await boot({quoteDate:'2026-10-24',rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>ackOffQuote(doc,key)});
+  b.respond(b.requests[0],meta(remote));await settle();assert.equal(b.local().acks[key],undefined);assert.equal(b.state().positionsAuthorized,false);
+  await b.tick(1200);const newest={...remote,cash:999,items:{AAA:{cost:200,qty:8},BBB:{cost:90,qty:2}}};
+  b.respond(b.requests.at(-1),meta(newest,'latest'));await settle();const put=b.puts()[0];assert.ok(put);
+  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(newest)));assert.equal(b.payload(put).acks[key],undefined);
+  assert.equal(b.payload(put).ack_invalidations[key].ack_at,remote.acks[key]);assert.equal(JSON.parse(put.init.body).sha,'latest');
+  b.respond(put,{});await settle();await b.tick(180000);assert.equal(b.puts().length,1);assert.equal(b.state().dirty,false);await b.dispose();
+});
+test('审核边界：旧ACK缺少元数据保守保留，更新行情也不自动维护',async()=>{
+  const remote={...copy(SEED),acks:{'AAA|add|95':'2020-01-01','AAA|loss10':'2020-01-01'}};
+  const b=await boot({quoteDate:'2026-10-24'});b.respond(b.requests[0],meta(remote));await settle();await b.tick(180000);
+  assert.deepEqual(b.local().acks,remote.acks);assert.deepEqual(b.local().ack_tombstones,{});assert.equal(b.puts().length,0);
+  assert.equal(b.state().dirty,false);b.ack('AAA|loss10');assert.equal(b.local().acks['AAA|loss10'],undefined);await b.dispose();
+});
+test('审核边界：ACK确认晚于页面行情，即使引用旧报价也不能自动撤销',async()=>{
+  const remote=await recentAckFixture('AAA|loss20',{quoteDate:'2026-10-18'});
+  const b=await boot({quoteDate:'2026-10-20',prepareDocument:doc=>ackOffQuote(doc,'AAA|loss20')});
+  b.respond(b.requests[0],meta(remote));await settle();await b.tick(180000);
+  assert.ok(b.local().acks['AAA|loss20']);assert.equal(b.puts().length,0);await b.dispose();
+});
+test('审核边界：自动撤销GET期间遇到更新ACK，设备快钟也不能删除新确认',async()=>{
+  const original=staleAck(),key='AAA|loss10';
+  const b=await boot({local:original,now:Date.parse('2026-10-25T12:00:00Z')});
+  b.respond(b.requests[0],meta(original));await settle();assert.equal(b.local().acks[key],undefined);await b.tick(1200);
+  const newer={...copy(SEED),cash:12345,acks:{[key]:'2026-10-21T12:00:00Z'},ack_contexts:{[key]:{
+    at:'2026-10-21T12:00:00Z',quote_date:'2026-10-21',rule_version:'["cost-ack-v1","loss10",10,null]'}}};
+  b.respond(b.requests.at(-1),meta(newer,'new-ack'));await settle();const put=b.puts()[0];assert.ok(put);
+  assert.equal(b.payload(put).acks[key],newer.acks[key]);assert.deepEqual(b.payload(put).ack_contexts[key],newer.ack_contexts[key]);
+  assert.equal(b.payload(put).cash,12345);assert.ok(Date.parse(b.payload(put).ack_tombstones[key])>Date.parse(newer.acks[key]));
+  const normalized=b.normalize(b.payload(put));assert.equal(normalized.acks[key],newer.acks[key]);
+  b.respond(put,{});await settle();await b.tick(180000);assert.equal(b.puts().length,1);assert.equal(b.local().acks[key],newer.acks[key]);
+  await b.dispose();
+});
+test('审核边界：真实snapshotData行情日期绑定价格，不借完成时间或仓位asof',async()=>{
+  for(const price of [100,101]){
+    const b=await boot({quoteDate:null,noLocks:true,forbidRequests:true,seed:{...copy(SEED),asof:'2099-01-01'},prepareDocument(doc){
+      const node=doc.createElement('script');node.id='snapshotData';node.textContent=JSON.stringify({finished_at:'2099-01-01T00:00:00Z',
+        items:[{symbol:'AAA',price,data_date:'2026-10-18'}]});doc.body.appendChild(node);
+    }});
+    b.ack('AAA|add|95');assert.equal(b.rows[0].quoteDate,price===100?'2026-10-18':'');
+    assert.equal(!!b.state().DATA.ack_contexts['AAA|add|95'],price===100);await b.dispose();
+  }
+});
+test('审核边界：ACK元数据导入导出规范化等值，错误元数据不覆盖当前数据',async()=>{
+  const remote=await recentAckFixture('AAA|loss20'),b=await boot({noLocks:true,forbidRequests:true,quoteDate:null});
+  b.importData(remote);b.exportData();const exported=JSON.parse(await b.blobs.at(-1).text());
+  assert.deepEqual(exported.ack_contexts,remote.ack_contexts);assert.equal(b.canonical(b.normalize(exported)),b.canonical(b.state().DATA));
+  const before=b.canonical(b.state().DATA),bad=copy(remote);bad.ack_contexts['AAA|loss20'].quote_date='2026-02-30';
+  assert.throws(()=>b.importData(bad));assert.equal(b.canonical(b.state().DATA),before);await b.dispose();
+});
+
+for(const known of [true,false])for(const blank of ['', '  '])test('成本空白修复：'+(known?'清空旧成本':'原未知成本')+'/'+(blank?'空格':'空串')+'不当零且保存刷新不复活',async()=>{
+  const remote={...copy(SEED),schema_version:2,items:{AAA:known?{cost:100,qty:5}:{qty:5},BBB:{cost:90,qty:2}}};
+  const b=await boot({local:remote});b.respond(b.requests[0],meta(remote));await settle();await b.enter();
+  b.edit('AAA','cost','bad');await b.save();assert.equal(b.state().editing,true);assert.equal(b.puts().length,0);
+  const input=b.edit('AAA','cost',blank);assert.equal(input.validationMessage,'');
+  assert.equal(Object.hasOwn(b.local().items.AAA,'cost'),false,'input即时落盘应删除成本字段');
+  b.edit('BBB','qty','3');await b.tick(16);const row=b.rows.find(r=>r.sym==='AAA');
+  assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,blank);
+  assert.equal(row.has,true);assert.equal(row.costKnown,false);assert.equal(row.mv,500);assert.equal(row.pnlAmt,null);assert.equal(row.pnlPct,null);
+  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$850·—（—）');
+  assert.equal(b.doc.getElementById('costNotice').hidden,true);assert.equal(b.puts().length,0);
+  await b.save();b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
+  const payload=b.payload(put);assert.equal(Object.hasOwn(payload.items.AAA,'cost'),false,'checkedDraft保存不得把空白转成0');
+  assert.equal(payload.items.AAA.qty,5);assert.equal(payload.items.BBB.qty,3);assert.equal(payload._local,undefined);
+  b.respond(put,{});await settle();assert.equal(b.state().dirty,false);await b.dispose();
+  const c=await boot({store:b.store,seed:{...copy(SEED),items:{AAA:{cost:999,qty:5},BBB:{cost:90,qty:2}}}});
+  assert.equal(Object.hasOwn(c.local().items.AAA,'cost'),false,'normalize(j,REAL)不能复活用户清空的成本');
+  c.respond(c.requests[0],meta(payload));await settle();assert.equal(Object.hasOwn(c.state().DATA.items.AAA,'cost'),false);
+  await c.enter();assert.equal(c.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,'');
+  assert.equal(c.rows.find(r=>r.sym==='AAA').pnlAmt,null);assert.equal(c.puts().length,0);await c.dispose();
+});
+test('成本空白修复：明确0仍是零成本且计市值，payload与刷新保留0',async()=>{
+  const remote={...copy(SEED),schema_version:2,items:{AAA:{qty:5},BBB:{cost:90,qty:2}}};
+  const b=await boot({local:remote});b.respond(b.requests[0],meta(remote));await settle();await b.enter();
+  b.edit('AAA','cost','bad');b.edit('AAA','cost','');b.edit('AAA','cost','0');await b.tick(16);
+  const row=b.rows.find(r=>r.sym==='AAA');assert.equal(row.costKnown,true);assert.equal(row.mv,500);assert.equal(row.pnlAmt,500);
+  assert.equal(row.pnlPct,null);assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·+$520.0（+288.9%）');
+  await b.save();b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
+  assert.equal(b.payload(put).items.AAA.cost,0);b.respond(put,{});await settle();await b.dispose();
+  const c=await boot({store:b.store});assert.equal(c.local().items.AAA.cost,0);assert.equal(c.rows[0].mv,500);await c.dispose();
+});
+for(const version of [1,2])test('成本空白修复：v'+version+'缺失成本不从REAL回填，明确0不受影响',async()=>{
+  const b=await boot({local:{schema_version:version,items:{AAA:{qty:5},BBB:{cost:0,qty:2}},cash:0,fixed:0,fixed_cost:0},noLocks:true,forbidRequests:true});
+  assert.equal(Object.hasOwn(b.state().DATA.items.AAA,'cost'),false);assert.equal(b.state().DATA.items.BBB.cost,0);
+  const normalized=b.normalize({schema_version:version,items:{AAA:{qty:5},BBB:{cost:0,qty:2}}},SEED);
+  assert.equal(Object.hasOwn(normalized.items.AAA,'cost'),false);assert.equal(normalized.items.BBB.cost,0);
+  await b.dispose();
+});
+test('成本空白修复：现金数量空白继续为0，成本清空取消恢复原值',async()=>{
+  const b=await boot({local:{...copy(SEED),cash:40,cash_extra:10},noLocks:true,forbidRequests:true});
+  await b.enter();b.edit('AAA','cost','');assert.equal(Object.hasOwn(b.sessionLocal().items.AAA,'cost'),false);
+  b.doc.getElementById('costCancel').click();assert.equal(b.sessionLocal().items.AAA.cost,100);
+  await b.enter();b.edit('AAA','cost','bad');await b.save();b.doc.getElementById('costCancel').click();
+  assert.equal(b.doc.getElementById('costNotice').hidden,true,'取消无效草稿不得残留输入错误提示');
+  await b.enter();b.edit('AAA','qty',' ');b.edit('USD','cash','');b.edit('USD','cash_extra',' ');await b.save();
+  assert.equal(b.sessionLocal().items.AAA.qty,0);assert.equal(b.sessionLocal().items.AAA.cost,100);
+  assert.equal(b.sessionLocal().cash,0);assert.equal(b.sessionLocal().cash_extra,0);assert.equal(b.requests.length,0);await b.dispose();
 });
 
 const selectedTests=process.env.MM_COST_TEST_FILTER?tests.filter(t=>t.name.includes(process.env.MM_COST_TEST_FILTER)):tests;

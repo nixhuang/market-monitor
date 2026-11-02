@@ -50,5 +50,40 @@
     const lines = String(text).replace(/^\uFEFF/, '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
     return lines.length > 0 && lines.every(line => /^(?:31#|74#|BD#|[01]\d{6}$|2USDCNY$|2XAUUSD$)/i.test(line));
   }
-  return {normalize, ignoredReason, valid, parseEbk, looksLikeEbk};
+  // 按完整记录扫描；引号内的换行、分隔符和双引号均属于字段内容。
+  function csvRecords(text) {
+    const source = String(text).replace(/^\uFEFF/, '');
+    function scan(delimiter) {
+      const rows = []; let row = [], field = '', quoted = false, closed = false, started = false;
+      const pushField = () => { row.push(field); field = ''; closed = false; started = false; };
+      const pushRow = () => { pushField(); if (row.some(value => value.trim()) || row.length > 1) rows.push(row); row = []; };
+      for (let i = 0; i < source.length; i++) {
+        const c = source[i];
+        if (quoted) {
+          if (c === '"') {
+            if (source[i + 1] === '"') { field += '"'; i++; }
+            else { quoted = false; closed = true; }
+          } else field += c;
+        } else if (c === delimiter) pushField();
+        else if (c === '\r' || c === '\n') {
+          pushRow(); if (c === '\r' && source[i + 1] === '\n') i++;
+        } else if (c === '"' && !started && !closed) { quoted = true; started = true; }
+        else {
+          if (closed || c === '"') throw new Error('CSV 引号格式错误：双引号应包住整个字段，字段内双引号需写成两个双引号');
+          field += c; started = true;
+        }
+      }
+      if (quoted) throw new Error('CSV 引号未闭合，请检查跨行字段');
+      if (row.length || started || closed || field) pushRow();
+      return rows;
+    }
+    // 两种分隔符分别验证，避免把引号内的逗号数量当成分隔符证据。
+    const candidates = [], errors = [];
+    for (const delimiter of [',', '\t']) {
+      try { candidates.push(scan(delimiter)); } catch (error) { errors.push(error); }
+    }
+    if (!candidates.length) throw errors[0];
+    return candidates.sort((a, b) => (b[0]?.length || 0) - (a[0]?.length || 0))[0];
+  }
+  return {normalize, ignoredReason, valid, parseEbk, looksLikeEbk, csvRecords};
 });

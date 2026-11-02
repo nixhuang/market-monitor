@@ -6729,11 +6729,11 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page)
         self.assertIn(monitor.PAGE_INTERACTION_JS, page)
         controls = re.findall(r'<button type="button" class="collapse-group" aria-controls="([^"]+)"', page)
-        self.assertEqual(controls, ['signalCounts', 'macroCard'] + [f'group_{g["key"]}' for g in monitor._display_groups()])
-        self.assertEqual(len(controls), 16)
-        # 只看真正的 HTML：仓位面板的收起条是运行时 JS 建的，不能把 <script> 源码里的同一串也算进去
+        self.assertEqual(controls, ['costManage', 'signalCounts', 'macroCard'] + [f'group_{g["key"]}' for g in monitor._display_groups()])
+        self.assertEqual(len(controls), 17)
+        # 仓位已随首屏HTML输出，与统计、市场风险同样只有一个底部收起条。
         self.assertEqual(re.sub(r"<script.*?</script>", "", page, flags=re.S)
-                         .count('<span class="collapse-icon" aria-hidden="true">▲</span>'), 16)
+                         .count('<span class="collapse-icon" aria-hidden="true">▲</span>'), 17)
 
     def test_market_risk_has_local_bottom_button_after_reference_content(self):
         page = monitor.render({}, [], 0, snapshot={})
@@ -8900,6 +8900,9 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                         expected, removed = re.subn(r'(<td class="sym">)'
                             r'(?:<span class="signal-dot [^"]+"[^>]*></span>)+', r'\1', old)
                         self.assertEqual(removed, head_lamp_calls)
+                        # 只归一已批准的旧说明修正；其它结构、样式仍完整与HEAD对照。
+                        expected = expected.replace('长持仓：不看一般过热，RSI 三条全超卖才提醒',
+                                                    '长持仓：持有周期分类；技术预警按《预警规则》执行')
                         with patch.object(monitor, '_signal_lamps', side_effect=AssertionError('主表不能调用旧灯接口')) as lamps:
                             current = monitor._stock_row(row, {}, '2026-10-20')
                         lamps.assert_not_called()

@@ -19,7 +19,7 @@
        <100万   k 缩写  +$123.5k    52 / 47px
        ≥100万   M 缩写  +$1.23M     50 / 46px
      降档只影响金额本身，比例（+5.5%）始终是 toFixed(1)。 */
-  function money(n){ var r=Math.round(num(n)*10)/10, a=Math.abs(r), s=(r<0?'-':'+');
+  function money(n){ if(n===null) return '—'; var r=Math.round(num(n)*10)/10, a=Math.abs(r), s=(r<0?'-':'+');
     // 999,999 这类贴边的数：k 档会算成「1000.0k」（10 字符，反而更长）→ 直接进位到 M
     if(a>=1e6||a>=999950) return s+'$'+(a/1e6).toFixed(2)+'M';
     if(a>=1e5) return s+'$'+(a/1e3).toFixed(1)+'k';
@@ -49,7 +49,7 @@
     // 负号位置沿用原口径：跟在 $ 后面（'$-1,234,567'），不改成 '- $…'
     if(a>=1e6) return '$'+(r<0?'-':'')+(a/1e6).toFixed(2)+'M';
     return '$'+r.toLocaleString('en-US'); }
-  function pct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
+  function pct(n){ return typeof n==='number' && isFinite(n)?(n>=0?'+':'')+n.toFixed(1)+'%':'—'; }
   /* 价格（成本价 / 加仓价 / 减仓价）：整数位越多、小数位越少，显示上限恒为 6 字符。
      录入仍允许 0.0001 这种精度，全程按精确值计算，只是不把「12345.6789」铺进 34～42px 的窄列
      （2026-10-30：窄屏成本列内容区只有 34～42px，4 位小数会顶出格子压到相邻列）。
@@ -159,6 +159,24 @@
   var RULES=window.__MM_RULES__||{};
   var GAP_TRIGGER=own(RULES,'trigger_gap_pct')?RULES.trigger_gap_pct:3;
   var GAP_REDUCE=own(RULES,'reduce_gap_pct')?RULES.reduce_gap_pct:3;
+  function quoteDay(value){
+    if(typeof value!=='string' || !/^\d{4}-\d\d-\d\d$/.test(value)) return '';
+    try{ return stamp(value,'行情日期'); }catch(e){ return ''; }
+  }
+  // 行情日期来自同一页面快照，不能用打开页面/构建完成/仓位更新的时间冒充。
+  var quoteSnapshot={};
+  try{
+    var quoteNode=document.getElementById('snapshotData');
+    var quoteData=quoteNode?JSON.parse(quoteNode.textContent):null;
+    (quoteData && Array.isArray(quoteData.items)?quoteData.items:[]).forEach(function(item){
+      if(item && !item.reference_only && typeof item.symbol==='string') quoteSnapshot[item.symbol.toUpperCase()]=item;
+    });
+  }catch(e){}
+  function ackRuleVersion(k,r){
+    var kind=k.split('|')[1];
+    return JSON.stringify(['cost-ack-v1',kind,kind==='add'?GAP_TRIGGER:kind==='cut'?GAP_REDUCE:kind==='loss20'?20:10,
+      kind==='add'?r.trig:kind==='cut'?r.cut:null]);
+  }
   // 清仓通过移组完成，不能按代码硬删除行；移回 positions 时沿用保留的成本/数量供用户复核。
   Array.prototype.forEach.call(document.querySelectorAll('tr[id^="s-"]'), function(tr){
     // 数据键与导航锚点分离；旧页面从代码单元格的直接文本恢复，不反推有损 id。
@@ -276,7 +294,10 @@
     warnCut.setAttribute('data-signal-kind','reduce_price');
     warn.setAttribute('data-signal-kind','cost_loss');
     var quietBox=tr.closest('details.quiet-list');
-    ROWS.push({sym:sym,note:note,isLong:isLong,isEtf:isEtf,lv:lv,price:price,prevClose:prevClose,chg:chg,low:low,high:high,
+    var quote=quoteSnapshot[sym];
+    var quoteDate=quoteDay(tr.getAttribute('data-quote-date')) ||
+      (quote && quote.price===price?quoteDay(quote.data_date):'');
+    ROWS.push({sym:sym,note:note,isLong:isLong,isEtf:isEtf,lv:lv,price:price,quoteDate:quoteDate,prevClose:prevClose,chg:chg,low:low,high:high,
                rail:rail,lab0:lab,lowTxt:m?m[1]:'',highTxt:m?m[4]:'',tr:tr,origCls:tr.className||'',
                baseLv:tr.getAttribute('data-base-level'),
                rangeTr:railTr && railTr.className.split(/\s+/).indexOf('range52-row')>=0?railTr:null,
@@ -488,6 +509,43 @@
   // 新页旧 dirty/事务没有仓位上传权限；只有本页明确保存或导入才授予。
   var cloudFirstPending=true, positionsAuthorized=false, draftPending=false, ackChanges={};
   var positionSave=null, positionGeneration=0, ackRevision=0;
+  // 原始输入与有效数值分开保存；重绘、失焦和折叠都不能吞掉错误草稿。
+  var editDraft={}, snapshotDraft=null;
+  function draftError(raw){
+    var text=raw.trim(), value=text===''?0:Number(text);
+    return /^(?:\d+(?:\.\d{0,4})?|\.\d{1,4})?$/.test(text) && isFinite(value) && value>=0
+      ?'':'请输入非负数，最多四位小数';
+  }
+  function checkedDraft(){
+    var next=clone(DATA), invalid=false, first=cashFirst(DATA), second=DATA.cash_extra;
+    Object.keys(editDraft).forEach(function(k){
+      var entry=editDraft[k], parts=k.split('|'), f=parts[1];
+      entry.error=draftError(entry.raw);
+      if(entry.error){ invalid=true; return; }
+      var value=entry.raw.trim()===''?0:Number(entry.raw);
+      if(f==='cash') first=value;
+      else if(f==='cash_extra') second=value;
+      else if(f==='fixed'||f==='fixed_cost') next[f]=value;
+      else {
+        if(!next.items[parts[0]]) next.items[parts[0]]={qty:0};
+        if(f==='cost' && entry.raw.trim()==='') delete next.items[parts[0]].cost;
+        else next.items[parts[0]][f]=value;
+      }
+    });
+    if(own(editDraft,'USD|cash') || own(editDraft,'USD|cash_extra')){
+      var total=(Math.round(first*10000)+Math.round(second*10000))/10000;
+      if(!isFinite(total)){
+        ['USD|cash','USD|cash_extra'].forEach(function(k){ if(editDraft[k]) editDraft[k].error='现金合计过大'; });
+        invalid=true;
+      }
+      next.cash=total; next.cash_extra=second;
+    }
+    return invalid?null:next;
+  }
+  function draftNotice(){
+    return Object.keys(editDraft).some(function(k){ return !!editDraft[k].error; })
+      ?'存在无效输入，请修正后保存':'';
+  }
   function authorizePositions(){
     positionSave={generation:++positionGeneration,payload:clone(DATA)};
     positionsAuthorized=true;
@@ -708,7 +766,7 @@
     cloudFirstPending=false;
     var next=clone(remote); reconcileAcks(next,DATA); mergeAckChanges(next,DATA,ackChanges);
     var different=canonical(next)!==canonical(DATA);
-    DATA=next;
+    DATA=next; editDraft={};
     if(different) revision++;
     maintenancePending=canonical(next)!==canonical(remote);
     maintenanceOnly=maintenancePending;
@@ -761,6 +819,7 @@
     if(!uncertain && positionSave){
       // 仓位数字只来自明确保存时冻结的快照；ACK 不另授整仓上传权。
       sent.payload.acks=clone(DATA.acks); sent.payload.ack_tombstones=clone(DATA.ack_tombstones);
+      sent.payload.ack_contexts=clone(DATA.ack_contexts); sent.payload.ack_invalidations=clone(DATA.ack_invalidations);
     }
     inFlight=sent; queued=false; pullGeneration++;
     SYNC='loading'; paint();
@@ -838,13 +897,15 @@
       updated_at:own(j,'updated_at')?stamp(j.updated_at,'updated_at'):new Date().toISOString(),
       cash:amount(j,'cash',num(base.cash)),cash_extra:amount(j,'cash_extra',0),
       fixed:amount(j,'fixed',num(base.fixed)),
-      fixed_cost:amount(j,'fixed_cost',num(base.fixed_cost)),items:{},acks:{},ack_tombstones:{}};
+      fixed_cost:amount(j,'fixed_cost',num(base.fixed_cost)),items:{},acks:{},ack_tombstones:{},ack_contexts:{},ack_invalidations:{}};
     // cash 始终是合计；旧数据只落第一框，第二框不能从种子或旧分解再次加回。
     if(d.cash_extra>d.cash) throw new Error('第二笔现金不能大于现金合计');
     Object.keys(j.items).forEach(function(k){
       if(!/^[A-Z0-9.^=_-]{1,32}$/.test(k) || !object(j.items[k])) throw new Error('非法标的或持仓对象：'+k);
       var b=(base.items&&base.items[k])||{};
-      d.items[k]={cost:amount(j.items[k],'cost',num(b.cost)),qty:amount(j.items[k],'qty',num(b.qty))};
+      d.items[k]={qty:amount(j.items[k],'qty',num(b.qty))};
+      // 缺失成本保持未知，不从种子补回；只有明确的数值 0 才表示零成本。
+      if(own(j.items[k],'cost')) d.items[k].cost=amount(j.items[k],'cost');
     });
     ['acks','ack_tombstones'].forEach(function(f){
       if(own(j,f) && !object(j[f])) throw new Error(f+' 必须是对象');
@@ -855,23 +916,51 @@
         d[f][k]=stamp(j[f][k],f);
       });
     });
+    ['ack_contexts','ack_invalidations'].forEach(function(f){
+      if(own(j,f) && !object(j[f])) throw new Error(f+' 必须是对象');
+      Object.keys(j[f]||{}).forEach(function(k){
+        if(/\|fund\|/.test(k)) return;
+        var entry=j[f][k], invalidation=f==='ack_invalidations';
+        if(!validAckKey(k) || !object(entry)) throw new Error('非法 ACK 元数据');
+        var at=stamp(entry.at,f);
+        if(invalidation){
+          d[f][k]={at:at,ack_at:stamp(entry.ack_at,f)};
+        }else{
+          if(!quoteDay(entry.quote_date) || typeof entry.rule_version!=='string' || !entry.rule_version)
+            throw new Error('ACK 行情日期或规则版本无效');
+          if(d.acks[k]===at) d[f][k]={at:at,quote_date:entry.quote_date,rule_version:entry.rule_version};
+        }
+        if(invalidation && d.ack_tombstones[k]!==at) throw new Error('ACK 自动撤销版本不一致');
+      });
+    });
     reconcileAcks(d,d);
     return d;
   }
   function reconcileAcks(target,other){
     Object.keys(other.ack_tombstones||{}).forEach(function(k){
       var t=other.ack_tombstones[k], old=target.ack_tombstones[k];
-      if(!old || Date.parse(t)>Date.parse(old)) target.ack_tombstones[k]=t;
+      if(!old || Date.parse(t)>Date.parse(old)){
+        target.ack_tombstones[k]=t;
+        if(other.ack_invalidations && other.ack_invalidations[k]) target.ack_invalidations[k]=clone(other.ack_invalidations[k]);
+        else delete target.ack_invalidations[k];
+      }
     });
     Object.keys(target.acks).forEach(function(k){
-      var t=target.ack_tombstones[k];
-      if(t && Date.parse(t)>=Date.parse(target.acks[k])) delete target.acks[k];
+      var t=target.ack_tombstones[k], invalidation=target.ack_invalidations[k];
+      // 自动撤销只针对检查过的那个 ACK，不能借设备快钟撤销 GET 期间另一设备的新确认。
+      if(t && Date.parse(t)>=Date.parse(target.acks[k]) && (!invalidation || invalidation.ack_at===target.acks[k])){
+        delete target.acks[k]; delete target.ack_contexts[k];
+      }
     });
   }
   function mergeAckChanges(target,source,keys){
     Object.keys(keys).forEach(function(k){
       var at=source.acks[k], old=target.acks[k];
-      if(at && (!old || Date.parse(at)>Date.parse(old))) target.acks[k]=at;
+      if(at && (!old || Date.parse(at)>Date.parse(old))){
+        target.acks[k]=at;
+        if(source.ack_contexts[k]) target.ack_contexts[k]=clone(source.ack_contexts[k]);
+        else delete target.ack_contexts[k];
+      }
     });
     reconcileAcks(target,target);
   }
@@ -881,7 +970,7 @@
       var o={}; Object.keys(v).sort().forEach(function(k){ o[k]=sorted(v[k]); }); return o;
     }
     return JSON.stringify(sorted({items:d.items,cash:d.cash,cash_extra:d.cash_extra||0,fixed:d.fixed,fixed_cost:d.fixed_cost,
-      acks:d.acks||{},ack_tombstones:d.ack_tombstones||{}}));
+      acks:d.acks||{},ack_tombstones:d.ack_tombstones||{},ack_contexts:d.ack_contexts||{},ack_invalidations:d.ack_invalidations||{}}));
   }
   var local=read(LS_LOCAL), cloud=read(LS_CLOUD);
   var hadOwn=!!(local&&object(local.items));
@@ -892,12 +981,19 @@
   function loadLocal(){
     // 新生命周期先撤销旧运行时授权，即使缓存损坏，也不能复活 bfCache 里的待传仓位。
     uncertain=null; cloudFirstPending=true; positionSave=null; positionsAuthorized=false;
-    draftPending=false; ackChanges={}; ackRevision=0; CLOUD=null; cloudVerified=false;
+    draftPending=false; editDraft={}; snapshotDraft=null; ackChanges={}; ackRevision=0; CLOUD=null; cloudVerified=false;
     clearSaveTimers(); _retryN=0;
     var j=read(LS_LOCAL);
     try{
       if(j){ DATA=normalize(j,REAL); hadOwn=true; }
       else DATA=normalize(cloud||REAL||{items:{}});
+      var savedDraft=j&&j._local&&j._local.editDraft;
+      if(object(savedDraft)) Object.keys(savedDraft).forEach(function(k){
+        var entry=savedDraft[k];
+        if(/^(?:[A-Z0-9.^=_-]{1,32}\|(?:cost|qty)|USD\|cash(?:_extra)?|BOND\|fixed(?:_cost)?)$/.test(k)
+          && object(entry) && typeof entry.raw==='string') editDraft[k]={raw:entry.raw,error:draftError(entry.raw)};
+      });
+      checkedDraft();
       revision=j&&j._local&&Number.isSafeInteger(j._local.revision)?j._local.revision:0;
       dirty=!!(j&&j._local?j._local.dirty:read(LS_PENDING)===1);
       maintenancePending=!!(j&&j._local&&j._local.maintenancePending);
@@ -923,7 +1019,7 @@
     if(!writer) return false;
     // 数据、revision、dirty 同一原子写入，避免两个 localStorage key 之间刷新产生分裂状态。
     var saved=clone(DATA); saved._local={revision:revision,dirty:dirty,
-      maintenancePending:maintenancePending,maintenanceOnly:maintenanceOnly,uncertain:uncertain};
+      maintenancePending:maintenancePending,maintenanceOnly:maintenanceOnly,uncertain:uncertain,editDraft:editDraft};
     return write(LS_LOCAL,saved);
   }
   function setPending(v){
@@ -937,21 +1033,38 @@
     revision++; pullGeneration++; DATA.updated_at=new Date().toISOString(); dirty=true;
     SYNC='local'; SYNC_MSG=''; persist();
   }
-  function setAck(k,on){
+  function setAck(k,on,automatic){
     if(!validAckKey(k)) return;
-    var at=Math.max(Date.now(),Date.parse(DATA.acks[k]||'')+1||0,
-      Date.parse(DATA.ack_tombstones[k]||'')+1||0);
-    if(on) DATA.acks[k]=new Date(at).toISOString();
-    else { delete DATA.acks[k]; DATA.ack_tombstones[k]=new Date(at).toISOString(); }
+    var previous=DATA.acks[k];
+    var at=new Date(Math.max(Date.now(),Date.parse(previous||'')+1||0,
+      Date.parse(DATA.ack_tombstones[k]||'')+1||0)).toISOString();
+    if(on){
+      DATA.acks[k]=at;
+      var r=rowBySym(k.split('|')[0]);
+      delete DATA.ack_contexts[k];
+      if(r && quoteDay(r.quoteDate)) DATA.ack_contexts[k]={at:at,quote_date:r.quoteDate,rule_version:ackRuleVersion(k,r)};
+    }else {
+      delete DATA.acks[k]; delete DATA.ack_contexts[k]; DATA.ack_tombstones[k]=at;
+      if(automatic) DATA.ack_invalidations[k]={at:at,ack_at:previous};
+      else delete DATA.ack_invalidations[k];
+    }
     ackChanges[k]=true; ackRevision++;
   }
   function pruneAck(k){
     if(!writer || !DATA.acks[k]) return;
+    var context=DATA.ack_contexts[k], r=rowBySym(k.split('|')[0]);
+    // 日线只提供交易日，同日快照无法证明先后；无元数据的旧 ACK 保守保留。
+    // 主动取消走 setAck，不受行情/规则版本门槛限制。
+    if(!context || context.at!==DATA.acks[k] || !r || !quoteDay(r.quoteDate)
+      || r.quoteDate<=context.quote_date || r.quoteDate<=new Date(context.at).toISOString().slice(0,10)
+      || ackRuleVersion(k,r)!==context.rule_version) return;
     if(!isolated && cloudFirstPending && !positionsAuthorized){
       // 初始本地缓存只供暂显；不能用其旧成本/数量判断远端 ACK 已过期。
       maintenancePending=true; maintenanceOnly=true; ACK_PRUNED=true; return;
     }
-    setAck(k,false); ACK_PRUNED=true;
+    // 未保存的仓位草稿不是可同步的失效依据，避免取消编辑后远端 ACK 已被撤销。
+    if(/\|loss(?:10|20)$/.test(k) && (editing || draftPending)) return;
+    setAck(k,false,true); ACK_PRUNED=true;
   }
   // 统计层兼容旧均线键；事实明细合并，交集只认真实身份，不触碰判灯规则。
   function signalIdentity(symbol){
@@ -1454,42 +1567,15 @@
       +'<span class="stat-badge red">0</span><span class="stat-badge yellow">0</span></span></summary>'
       +'<div class="group-bottom"><button type="button" class="collapse-group" data-target="signalCounts" aria-label="收起统计">▲</button></div>';
     var first=document.querySelector('details.group-card')||document.getElementById('group_positions');
-    if(first) first.parentNode.insertBefore(sc,first); else document.body.appendChild(sc);
+    var shell=document.getElementById('costManage');
+    if(shell) shell.parentNode.insertBefore(sc,shell.nextSibling);
+    else if(first) first.parentNode.insertBefore(sc,first); else document.body.appendChild(sc);
   }
   if(!sc) return;
   var PID='costMembers', membersNode=null, membersHtml=null;
-  var panel=document.createElement('details');
-  // 跟统计 / 持仓 / 市场风险完全同级：card + group-card，底部一条整宽收起条
-  panel.className='card group-card cost-manage';
-  panel.id='costManage';
-  // 跟其它分组一致：默认折叠（全站只有「统计」默认展开）
-  panel.innerHTML='<summary class="grp">'
-    +'<span class="grp-name">仓位</span>'
-    // 顺序：仓位管理 → 已同步/未同步 → 总资产·盈亏
-    // （「20日对.SPX」不放这里，改挂到「持仓」卡标题右侧，跟其他板块同一位置）
-    +'<span class="group-stats">'
-    +'<span class="cost-state" id="costState"></span>'
-    +'<span class="cost-sum"></span>'
-    +'</span>'
-    // 「编辑」放在表头（标题行）最右侧：跟 10-19 定的标题行口径一致
-    // （仓位管理 → 已同步/未同步 → 总资产·盈亏 → 最右「编辑」）
-    +'<button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false"'
-    +' aria-label="就地编辑成本价与数量">编辑</button></summary>'
-    +'<div class="cost-body">'
-    +'<div class="cost-acts" id="costActs" hidden>'
-    +'<span class="cost-notice" id="costNotice" role="status" hidden></span>'
-    +'<button type="button" class="primary" id="costSave">保存并上传</button>'
-    +'<button type="button" id="costCancel">取消</button>'
-    +'</div>'
-    +'<div class="signal-members-panel" id="'+PID+'"></div>'
-    // 文件选择框放在 acts 外面：没进编辑态也要能用「导入备份」救急
-    +'<input type="file" id="costFile" accept=".json" hidden>'
-    +'<div class="cost-foot" id="costFoot"></div>'
-    +'</div>'
-    +'<div class="group-bottom"><button type="button" class="collapse-group"'
-    +' aria-controls="costManage" aria-label="收起仓位">'
-    +'<span class="collapse-icon" aria-hidden="true">▲</span></button></div>';
-  sc.parentNode.insertBefore(panel, sc);
+  // 骨架随首屏 HTML 到达，原地接管；禁止重新插卡或重写整个面板导致闪空。
+  var panel=document.getElementById('costManage');
+  if(!panel) return;
   var stateEl=panel.querySelector('#costState');
   /* 手机（≤600px）：「已同步 / 未同步」和「总资产·盈亏 + 编辑」挤在一行太满，
      把它搬到「数据时间 …」那一排的最右侧（2026-10-29）。桌面档原地不动。
@@ -1572,7 +1658,7 @@
   var _paintFrame=null;
   function syncCostNotice(){
     var text=Object.keys(storageErrors).map(function(k){ return storageErrors[k]; }).join('；')
-      ||NOTICE||(SYNC==='error'?SYNC_MSG:'');
+      ||draftNotice()||NOTICE||(SYNC==='error'?SYNC_MSG:'');
     /* 2026-11-01：这三个按钮／提示条由面板骨架提供，理论上恒在；但 syncCostNotice 是 paint()
        的收尾步骤，一旦其中任何一个缺失就会抛异常、整个面板停在半渲染状态。
        这里统一降级为「跳过」，不让单点缺失拖垮整块渲染。 */
@@ -1598,7 +1684,7 @@
     takeOwnership(function(ok){
       if(!ok){ paint(); return; }
       clearSaveTimers(); pullGeneration++; editGeneration++;
-      snapshot=clone(DATA); prevDirty=dirty;
+      snapshot=clone(DATA); snapshotDraft=clone(editDraft); prevDirty=dirty;
       prevMaintenanceOnly=maintenanceOnly; prevMaintenancePending=maintenancePending;
       prevDraftPending=draftPending;
       editOrder={};
@@ -1622,7 +1708,12 @@
         dirty=prevDirty; maintenanceOnly=prevMaintenanceOnly; maintenancePending=prevMaintenancePending; persist();
       }
     }
-    if(restore) draftPending=prevDraftPending;
+    if(restore){
+      editDraft=snapshotDraft||{}; draftPending=prevDraftPending;
+      if(!inFlight && !uncertain){ dirty=prevDirty; maintenanceOnly=prevMaintenanceOnly; maintenancePending=prevMaintenancePending; }
+      persist();
+    }
+    snapshotDraft=null;
     if(!positionsAuthorized && maintenancePending) maintenanceOnly=true;
     if(restore && !positionsAuthorized && !draftPending && !inFlight && sameAsCloud()) setPending(false);
     editing=false; snapshot=null; savePaused=false; syncEditUI(); paint();
@@ -1634,8 +1725,10 @@
     if(editing) exitEdit(true); else enterEdit();
   });
   panel.querySelector('#costSave').addEventListener('click', function(){
-    if(!writer || disposed) return;
-    if(panel.querySelector('input:invalid')){ NOTICE='存在无效输入，请修正后保存'; showNotice(NOTICE); return; }
+    if(!writer || disposed || !editing) return;
+    var next=checkedDraft();
+    if(!next){ persist(); paint(); showNotice(draftNotice()); return; }
+    DATA=next; editDraft={}; snapshotDraft=null; NOTICE='';
     // 保存立即结束本轮编辑；异步回执绝不关闭后来开始的编辑会话。
     editing=false; snapshot=null; savePaused=false; editGeneration++; pullGeneration++;
     if(draftPending || !maintenanceOnly){
@@ -1699,7 +1792,7 @@
     var next=normalize(j);
     if(!writer || disposed) throw new Error('本页只读，请先点击编辑接管');
     clearSaveTimers(); pullGeneration++; editGeneration++;
-    DATA=next; draftPending=false; cloudFirstPending=false; changed(); authorizePositions(); hadOwn=true;
+    DATA=next; editDraft={}; snapshotDraft=null; draftPending=false; cloudFirstPending=false; changed(); authorizePositions(); hadOwn=true;
     editing=false; snapshot=null; savePaused=false; syncEditUI();
     NOTICE=storageErrors[LS_LOCAL]?'导入尚未持久化，请立即导出备份':
       (isolated?'导入已保存到当前标签页会话；隔离预览不上传云端':
@@ -1731,12 +1824,11 @@
       var ir=rowBySym(sym);
       if(!ir || !isPosition(ir)) return;
     }
-    var raw=el.value.trim(), value=raw===''?0:Number(raw);
-    if(!/^(?:\d+(?:\.\d{0,4})?|\.\d{1,4})?$/.test(raw) || !isFinite(value) || value<0){
-      el.setCustomValidity('请输入非负数，最多四位小数');
-      NOTICE='输入无效，保留上一次有效数值；请输入非负数，最多四位小数';
-      showNotice(NOTICE);
-      return;
+    var raw=el.value.trim(), value=raw===''?0:Number(raw), key=sym+'|'+f;
+    editDraft[key]={raw:el.value,error:draftError(el.value)};
+    draftPending=true;
+    if(editDraft[key].error){
+      el.setCustomValidity(editDraft[key].error); changed(); syncCostNotice(); showNotice(draftNotice()); return;
     }
     el.setCustomValidity(''); NOTICE='';
     if(f==='cash'||f==='cash_extra'){
@@ -1744,13 +1836,17 @@
       var second=f==='cash_extra'?value:num(DATA.cash_extra);
       var total=(Math.round(first*10000)+Math.round(second*10000))/10000;
       if(!isFinite(total)){
-        el.setCustomValidity('现金合计过大'); NOTICE='现金合计过大，保留上一次有效数值';
-        showNotice(NOTICE); return;
+        editDraft[key].error='现金合计过大'; el.setCustomValidity(editDraft[key].error);
+        changed(); syncCostNotice(); showNotice(draftNotice()); return;
       }
       DATA.cash=total; DATA.cash_extra=second;
     }else if(f==='fixed'||f==='fixed_cost') DATA[f]=value;
-    else { if(!DATA.items[sym]) DATA.items[sym]={cost:0,qty:0}; DATA.items[sym][f]=value; }
-    draftPending=true; changed();
+    else {
+      if(!DATA.items[sym]) DATA.items[sym]={qty:0};
+      if(f==='cost' && raw==='') delete DATA.items[sym].cost;
+      else DATA.items[sym][f]=value;
+    }
+    checkedDraft(); changed();
     if(!_paintFrame) _paintFrame=requestAnimationFrame(function(){ _paintFrame=null; paint(); });
   });
 
@@ -1758,11 +1854,12 @@
      价格降档只作用于展示，不能把用户录入的 12.3456 在编辑框里截成 12.346 再存回去。 */
   function vt(v){ return trim4(num(v)); }
   function inp(sym, f, val, ph){
+    var entry=editDraft[sym+'|'+f]; if(entry) val=entry.raw;
     return '<input data-sym="'+esc(sym)+'" data-f="'+f+'" inputmode="decimal" step="0.0001"'
       +' value="'+esc(val)+'" placeholder="'+ph+'" aria-label="'+esc(sym)+' '+ph+'">';
   }
   function row(it, totalAsset){
-    var c=it.pnlPct>=0?'up':'down';
+    var c=it.pnlAmt===null?'dim':it.pnlAmt>=0?'up':'down';
     var wv=it.has&&totalAsset>0?it.mv/totalAsset*100:0;
     var w=it.has&&totalAsset>0?wv.toFixed(1)+'%':'—';
     /* 浮亏 10%／20% 只走报灯与统计（行级红灯、成本浮亏计数），名称下不再挂小字标签 */
@@ -1776,7 +1873,7 @@
       :'<a class="signal-member-jump" href="#'+esc(rowAnchor(it.sym))+'" style="min-width:0">'+name+'</a>';
     return '<li class="lv-'+(it.lv||'green')+'" data-sym="'+esc(it.sym)+'"><span class="cost-grid">'
       +nameCell
-      +'<span class="cost-cell">'+(editing?inp(it.sym,'cost',vt(it.cost),'成本价'):trim(it.cost))+'</span>'
+      +'<span class="cost-cell">'+(editing?inp(it.sym,'cost',it.costKnown?vt(it.cost):'','成本价'):(it.costKnown?trim(it.cost):'—'))+'</span>'
       +'<span class="cost-cell">'+(editing?inp(it.sym,'qty',vt(it.qty),'数量'):qtyInt(it.qty))+'</span>'
       +'<span class="cost-cell'+(it.has?'':' dim')+'">'+(it.has?plain(it.mv):'—')+'</span>'
       +'<span class="cost-cell '+(it.has?c:'dim')+'">'
@@ -1814,15 +1911,15 @@
   /* 框标题＝合计行：只数 · 持仓市值 · 盈亏 · 仓位，各自压在对应的列上，绿涨红跌 */
   function block(name, arr, totalAsset, head, cls, extra){
     var mv=sumOf(arr,function(x){ return x.mv; });
-    var pnl=sumOf(arr,function(x){ return x.pnlAmt; });
+    var pnl=arr.some(function(x){ return x.has && !x.costKnown; })?null:sumOf(arr,function(x){ return x.pnlAmt; });
     var cst=sumOf(arr,function(x){ return x.cost*x.qty; });
-    var pnlCls=pnl>=0?'up':'down';
+    var pnlCls=pnl===null?'dim':pnl>=0?'up':'down';
     var wt=totalAsset>0?(mv/totalAsset*100).toFixed(1)+'%':'0.0%';
     /* 合计行的仓位不变黄：>10% 变黄是「单只过度集中」的提示，
        长／短合计、现金、固定收益都不是单只，黄了没有可执行的动作 */
     var title=titleRow(name, arr.length+' 只', plain(mv),
       // 顺序跟列表的盈亏列一致：先比例、再金额
-      '<b class="'+pnlCls+'"><span class="pct">'+pct(cst>0?pnl/cst*100:0)+'</span> '
+      '<b class="'+pnlCls+'"><span class="pct">'+pct(pnl===null?null:cst>0?pnl/cst*100:mv>0?null:0)+'</span> '
         +'<span class="amt">'+money(pnl)+'</span></b>', wt, '');
     return blockHtml(title, arr.map(function(r){ return row(r,totalAsset); }).join(''), head, cls, extra);
   }
@@ -1899,13 +1996,13 @@
     var fixedCost=num(DATA.fixed_cost);
     // 固收只参与资产与仓位；其市值、成本保留，不参与股票/ETF盈亏计算。
     var longs=[], shorts=[];
-    var totalMv=0, totalPnl=0, totalCost=0;
+    var totalMv=0, totalPnl=0, totalCost=0, unknownCost=false;
     ROWS.forEach(function(r){
-      var it=DATA.items[r.sym]||{cost:0,qty:0};
+      var it=DATA.items[r.sym]||{qty:0};
       var cost=num(it.cost), qty=num(it.qty);
       r.isLong=!!r.tr.closest('#group_positions_long');
-      var held=isPosition(r), has=held&&cost>0&&qty>0;
-      r.has=has; r.cost=cost; r.qty=qty;
+      var held=isPosition(r), has=held&&qty>0;
+      r.has=has; r.costKnown=own(it,'cost'); r.cost=cost; r.qty=qty;
       if(!has){
         r.lossLv=0; r.lossAcked=false;
         pruneAck(r.sym+'|loss10'); pruneAck(r.sym+'|loss20');
@@ -1920,15 +2017,18 @@
       var mv=r.price*qty;
       /* 长/短都是多头持有：短持仓只是持有周期短，不是做空，
          盈亏一律 (现价−成本)×数量，绿涨红跌 */
-      var pnlPct=(r.price-cost)/cost*100;
-      var pnlAmt=(r.price-cost)*qty;
+      var pnlPct=r.costKnown && cost>0?(r.price-cost)/cost*100:null;
+      var pnlAmt=r.costKnown?(r.price-cost)*qty:null;
       r.cost=cost; r.qty=qty; r.mv=mv; r.pnlPct=pnlPct; r.pnlAmt=pnlAmt;
-      totalMv+=mv; totalPnl+=pnlAmt; totalCost+=cost*qty;
+      totalMv+=mv; totalPnl+=pnlAmt===null?0:pnlAmt; totalCost+=cost*qty;
+      if(!r.costKnown) unknownCost=true;
       (r.isLong?longs:shorts).push(r);
 
       /* 成本价在区间外就整条贴到端点并加朝外箭头（区分「成本＝最高/最低价」），
          区间内才按实际位置画 */
-      if(!r.rail || !(r.high>r.low)){ r.tick.style.display='none'; return; }
+      if(!r.costKnown || !r.rail || !(r.high>r.low)){
+        r.tick.style.display='none'; if(r.rail) r.rail.setAttribute('aria-label',r.lab0); return;
+      }
       var pos=(cost-r.low)/(r.high-r.low)*100;
       var outside=pos<0?'out-lo':(pos>100?'out-hi':'');
       r.tick.style.display='';
@@ -1958,7 +2058,7 @@
       var cls=r.pnlPct>=0?'up':'down';
       /* 成本价已经写到「代码 + 备注名」下面那一排（r.costInline），这一排第一组改成「数 N」——
          跟仓位面板同一档：数量显示整数，精确值仍参与计算 */
-      setCostInline(r,r.cost>0?trim(r.cost):'');
+      setCostInline(r,r.costKnown?trim(r.cost):'');
       /* 2026-10-31：个股下面「数 N · ±x% · ±$x · 市值 x · 仓位 x%」这一整排**去掉** ——
          数量／盈亏／市值／仓位在表格各自的列里都有，这排是重复信息，且手机上要多占一行。
          「仓位 >10% 黄字」的提示随这一排一起走，列里的 wt 列本来就有同样的加重。 */
@@ -1983,8 +2083,9 @@
     applyLights();
     sortDescriptions();
     syncQuietRows();
-    var tcls=totalPnl>=0?'up':'down';
-    var tPct=totalCost>0?totalPnl/totalCost*100:0;
+    if(unknownCost) totalPnl=null;
+    var tcls=totalPnl===null?'dim':totalPnl>=0?'up':'down';
+    var tPct=unknownCost?null:totalCost>0?totalPnl/totalCost*100:totalMv>0?null:0;
     var tWt=totalAsset>0?(totalMv/totalAsset*100).toFixed(1)+'%':'—';
     /* 卡片表头保持总资产＋盈亏布局；盈亏金额和成本分母均只取股票/ETF持仓。
        现金（含归入现金的货币市场ETF）、固收仍计入总资产，不计其盈亏与成本。 */
@@ -1993,7 +2094,8 @@
       sumEl.innerHTML='<b>'+plain(totalAsset)+'</b>'
         +'<span class="sep">·</span><b class="'+tcls+'">'
         +money(totalPnl)+'（'+pct(tPct)+'）</b>';
-      sumEl.setAttribute('title','总资产含现金及固收；盈亏仅股票/ETF持仓，不含现金项及固收');
+      sumEl.setAttribute('title','总资产含现金及固收；盈亏仅股票/ETF持仓，不含现金项及固收'
+        +(unknownCost?'；部分持仓成本未知，合计盈亏暂不计算':totalMv>0 && totalCost===0?'；零成本持仓不计算收益率':''));
       sumEl.setAttribute('aria-label','总资产 '+plain(totalAsset)+'；股票/ETF持仓盈亏 '+money(totalPnl)+'，'+pct(tPct));
     }
     renderRs();
@@ -2010,7 +2112,7 @@
     } else {
       cmp=(sortKey==='wt')
         ? function(a,b){ return b.mv-a.mv; }
-        : function(a,b){ return b.pnlPct-a.pnlPct; };
+        : function(a,b){ return (b.pnlPct===null?-Infinity:b.pnlPct)-(a.pnlPct===null?-Infinity:a.pnlPct); };
     }
     longs.sort(cmp); shorts.sort(cmp);
     var html='';
@@ -2127,10 +2229,16 @@
     refreshLossStats();
     // 自动失效只记录维护 tombstone；初次核验前不冒充用户整份编辑，也不失效 pull。
     if(ACK_PRUNED) persistMaintenance();
+    if(editing) Array.prototype.forEach.call(panel.querySelectorAll('input[data-f]'),function(input){
+      var entry=editDraft[input.getAttribute('data-sym')+'|'+input.getAttribute('data-f')];
+      if(entry){ input.value=entry.raw; input.setCustomValidity(entry.error); }
+    });
     if(focus && editing){
       var again=panel.querySelector('input[data-sym="'+focus.sym+'"][data-f="'+focus.field+'"]');
       if(again){
-        again.value=focus.value; again.setCustomValidity(focus.error||''); again.focus();
+        var draftEntry=editDraft[focus.sym+'|'+focus.field];
+        again.value=focus.value;
+        again.setCustomValidity(draftEntry?draftEntry.error:focus.error||''); again.focus();
         try{ again.setSelectionRange(focus.start,focus.end,focus.direction); }catch(e){}
       }
     }
@@ -2195,6 +2303,7 @@
   });
   paint();
   syncEditUI();
+  editBtn.removeAttribute('disabled');
   takeOwnership(function(){ paint(); });
 
   /* 默认展开的只有「统计」（monitor.py 生成时就带 open），持仓 / 重点 / 市场风险 / 仓位管理

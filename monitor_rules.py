@@ -564,9 +564,9 @@ class RuleEngine:
         streak = self._context.boll_streak(x.closes, int(self._context.S["boll_n"]), float(self._context.S["boll_k"]), near,
                              highs=x.data.get("highs"), lows=x.data.get("lows"))
         hits = []
-        if x.boll_up is not None:
+        if _pos_num(x.boll_up) is not None:
             gap_up = (x.boll_up - x.touch_up) / x.boll_up * 100
-            if gap_up <= near:
+            if math.isfinite(gap_up) and gap_up <= near:
                 if gap_up < 0:
                     action = "突破" if x.price >= x.boll_up else "盘中突破"
                     text = f"{action}布林{self._context.boll_side_text('上轨')}"
@@ -575,9 +575,9 @@ class RuleEngine:
                 else:
                     text = f"逼近布林{self._context.boll_side_text('上轨')} 还差{gap_up:.2f}%"
                 hits.append((gap_up, text + self._context._touch_note(x.price, x.touch_up) + self._context.streak_tail(streak["up"], "上轨")))
-        if x.boll_dn is not None:
+        if _pos_num(x.boll_dn) is not None:
             gap_dn = (x.touch_dn - x.boll_dn) / x.boll_dn * 100
-            if gap_dn <= near:
+            if math.isfinite(gap_dn) and gap_dn <= near:
                 text = (f"跌破布林{self._context.boll_side_text('下轨')}" if gap_dn < 0
                         else f"触及布林{self._context.boll_side_text('下轨')}" if gap_dn == 0
                         else f"逼近布林{self._context.boll_side_text('下轨')} 还差{gap_dn:.2f}%")

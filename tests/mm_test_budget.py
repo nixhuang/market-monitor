@@ -191,6 +191,177 @@ class BudgetTests(unittest.TestCase):
             session.close.assert_called_once()
         self.assertIs(m.NOW, now)
 
+    def test_audit_sa_gate_is_enabled_bounded_and_reset_in_real_earnings_batch(self):
+        symbols = ['TEST' + chr(65 + i) for i in range(12)]
+        for failure in (403, 429, 503, m.requests.Timeout('合成超时')):
+            with self.subTest(failure=failure), ExitStack() as stack:
+                sa_gate = m.SourceGate(threshold=3, cooldown=1800)
+                yahoo_gate = m.SourceGate(threshold=3, cooldown=90)
+                stack.enter_context(patch.object(m, 'SA_EARN_GATE', sa_gate))
+                stack.enter_context(patch.object(m, 'YAHOO_EARN_GATE', yahoo_gate))
+                stack.enter_context(patch.object(m, 'verified_earnings_events', return_value={}))
+                stack.enter_context(patch.object(m, 'nasdaq_earnings', return_value={
+                    'status': 'ok', 'date': '2026-11-10', 'kind': 'expected'}))
+                fallback = stack.enter_context(patch.object(m, 'yahoo_earnings'))
+                session = Mock()
+                def get(*args, **kwargs):
+                    self.assertTrue(sa_gate.enabled)
+                    self.assertTrue(yahoo_gate.enabled)
+                    if isinstance(failure, Exception):
+                        raise failure
+                    return SimpleNamespace(status_code=failure)
+                session.get.side_effect = get
+                stack.enter_context(patch.object(m, '_sa_earn_session', return_value=session))
+                for batch in (1, 2):
+                    items = [{'symbol': symbol, 'group': 'position'} for symbol in symbols]
+                    stat = m.attach_earnings(items, today='2026-10-27')
+                    self.assertEqual(session.get.call_count, batch * 3)
+                    self.assertEqual(stat['dated'], len(symbols))
+                    self.assertEqual(stat['fetched'], len(symbols))
+                    self.assertFalse(sa_gate.enabled)
+                    self.assertFalse(yahoo_gate.enabled)
+                fallback.assert_not_called()
+
+    def test_audit_yahoo_earnings_does_not_share_quote_gate_or_sa_gate(self):
+        with ExitStack() as stack:
+            quote_gate = m.SourceGate(threshold=1)
+            quote_gate.reset(True)
+            quote_gate.fail()
+            stack.enter_context(patch.object(m, 'YAHOO_GATE', quote_gate))
+            stack.enter_context(patch.object(m, 'SA_EARN_GATE', m.SourceGate()))
+            stack.enter_context(patch.object(m, 'YAHOO_EARN_GATE', m.SourceGate()))
+            stack.enter_context(patch.object(m, 'verified_earnings_events', return_value={}))
+            nd = stack.enter_context(patch.object(m, 'nasdaq_earnings', return_value={'status': 'error'}))
+            sa, yahoo = Mock(), Mock()
+            sa.get.return_value = SimpleNamespace(status_code=429)
+            yahoo.get.return_value = SimpleNamespace(status_code=404)
+            stack.enter_context(patch.object(m, '_sa_earn_session', return_value=sa))
+            stack.enter_context(patch.object(m, '_yahoo_crumb_session', return_value=(yahoo, 'fixture')))
+            items = [{'symbol': 'TEST' + chr(65 + i), 'group': 'position'} for i in range(10)]
+            stat = m.attach_earnings(items, today='2026-10-27')
+            self.assertEqual((sa.get.call_count, nd.call_count, yahoo.get.call_count), (3, 10, 10))
+            self.assertTrue(all(entry['status'] == 'na' for entry in stat['data'].values()))
+            self.assertFalse(quote_gate.allow())
+            self.assertTrue(quote_gate.enabled)
+
+    def test_audit_yahoo_crumb_failures_close_sessions_and_leave_quotes_available(self):
+        with ExitStack() as stack:
+            quote_gate = m.SourceGate()
+            quote_gate.reset(True)
+            stack.enter_context(patch.object(m, 'YAHOO_GATE', quote_gate))
+            stack.enter_context(patch.object(m, 'YAHOO_EARN_GATE', m.SourceGate()))
+            stack.enter_context(patch.object(m, 'verified_earnings_events', return_value={}))
+            stack.enter_context(patch.object(m, 'stockanalysis_earnings', return_value={'status': 'error'}))
+            stack.enter_context(patch.object(m, 'nasdaq_earnings', return_value={'status': 'error'}))
+            stack.enter_context(patch.dict(m._YAHOO_CRUMB, {'crumb': None, 'session': None, 't': 0}, clear=True))
+            sessions = []
+            def make_session():
+                session = Mock()
+                session.get.side_effect = [SimpleNamespace(status_code=404),
+                                           SimpleNamespace(status_code=429, text='限流')]
+                sessions.append(session)
+                return session
+            factory = stack.enter_context(patch.object(m.requests, 'Session', side_effect=make_session))
+            items = [{'symbol': 'TEST' + chr(65 + i), 'group': 'position'} for i in range(10)]
+            m.attach_earnings(items, today='2026-10-27')
+            self.assertEqual(factory.call_count, 3)
+            for session in sessions:
+                self.assertEqual(session.get.call_count, 2)
+                session.close.assert_called_once()
+            self.assertTrue(quote_gate.allow())
+            self.assertEqual(quote_gate.fails, 0)
+            self.assertIsNone(m._YAHOO_CRUMB['session'])
+            self.assertFalse(m.YAHOO_EARN_GATE.enabled)
+
+    def test_earnings_http200_parse_failures_accumulate_before_gate_reset(self):
+        for source, cache, gate_name, parser in (
+                ('stockanalysis_earnings', '_SA_EARN_CACHE', 'SA_EARN_GATE', 'parse_stockanalysis_earnings'),
+                ('yahoo_earnings', '_YAHOO_EARN_CACHE', 'YAHOO_EARN_GATE', 'parse_yahoo_earnings')):
+            for failure in ('decode', 'parse', 'error-result'):
+                with self.subTest(source=source, failure=failure), ExitStack() as stack:
+                    gate = m.SourceGate(threshold=3, cooldown=1800)
+                    gate.reset(True)
+                    stack.enter_context(patch.object(m, gate_name, gate))
+                    stack.enter_context(patch.dict(getattr(m, cache), {}, clear=True))
+                    session, response = Mock(), Mock(status_code=200, text='fixture')
+                    session.get.return_value = response
+                    response.json.return_value = {}
+                    if failure == 'decode' and source == 'yahoo_earnings':
+                        response.json.side_effect = ValueError('合成损坏JSON')
+                    elif failure in ('decode', 'parse'):
+                        stack.enter_context(patch.object(m, parser, side_effect=ValueError('合成解析异常')))
+                    else:
+                        stack.enter_context(patch.object(m, parser, return_value={'status': 'error'}))
+                    if source == 'stockanalysis_earnings':
+                        stack.enter_context(patch.object(m, '_sa_earn_session', return_value=session))
+                    else:
+                        stack.enter_context(patch.object(m, '_yahoo_crumb_session', return_value=(session, 'fixture')))
+                    for i in range(6):
+                        result = getattr(m, source)('TEST' + chr(65 + i))
+                        self.assertEqual(result['status'], 'error')
+                    self.assertEqual(session.get.call_count, 3)
+                    self.assertFalse(gate.allow())
+
+    def test_audit_source_locks_serialize_sessions_and_deduplicate_success(self):
+        for source, cache, lock, gate in (
+                ('stockanalysis_earnings', '_SA_EARN_CACHE', '_SA_EARN_LOCK', 'SA_EARN_GATE'),
+                ('yahoo_earnings', '_YAHOO_EARN_CACHE', '_YAHOO_CRUMB_LOCK', 'YAHOO_EARN_GATE')):
+            with self.subTest(source=source), ExitStack() as stack:
+                stack.enter_context(patch.dict(getattr(m, cache), {}, clear=True))
+                own_gate = m.SourceGate()
+                own_gate.reset(True)
+                stack.enter_context(patch.object(m, gate, own_gate))
+                session = Mock()
+                session.get.return_value = SimpleNamespace(status_code=404)
+                if source == 'stockanalysis_earnings':
+                    stack.enter_context(patch.object(m, '_sa_earn_session', return_value=session))
+                else:
+                    stack.enter_context(patch.object(m, '_yahoo_crumb_session', return_value=(session, 'fixture')))
+                def probe_lock():
+                    acquired = getattr(m, lock).acquire(blocking=False)
+                    if acquired:
+                        getattr(m, lock).release()
+                    return acquired
+                with m.ThreadPoolExecutor(max_workers=1) as probe:
+                    def get(*args, **kwargs):
+                        self.assertFalse(probe.submit(probe_lock).result(timeout=3))
+                        return SimpleNamespace(status_code=404)
+                    session.get.side_effect = get
+                    with m.ThreadPoolExecutor(max_workers=4) as pool:
+                        results = list(pool.map(getattr(m, source), ['TESTA'] * 12))
+                self.assertEqual(results, [{'status': 'na', 'reason': 'http404'}] * 12)
+                self.assertEqual(session.get.call_count, 1)
+                self.assertEqual(own_gate.fails, 0)
+
+    def test_audit_earnings_batch_resets_gates_on_worker_exception_and_budget_exit(self):
+        for side_effect in (RuntimeError('合成工作线程异常'), None):
+            with self.subTest(side_effect=side_effect), ExitStack() as stack:
+                sa, yahoo = m.SourceGate(), m.SourceGate()
+                stack.enter_context(patch.object(m, 'SA_EARN_GATE', sa))
+                stack.enter_context(patch.object(m, 'YAHOO_EARN_GATE', yahoo))
+                stack.enter_context(patch.object(m, 'verified_earnings_events', return_value={}))
+                resolver = stack.enter_context(patch.object(m, 'resolve_earnings', side_effect=side_effect))
+                kwargs = {} if side_effect else {'deadline': 0, 'clock': Clock()}
+                m.attach_earnings([{'symbol': 'TESTA'}], today='2026-10-27', **kwargs)
+                self.assertFalse(sa.enabled)
+                self.assertFalse(yahoo.enabled)
+                if side_effect is None:
+                    resolver.assert_not_called()
+
+    def test_audit_earnings_expired_budget_does_not_count_source_failure(self):
+        for name in ('SA_EARN_GATE', 'YAHOO_EARN_GATE'):
+            gate = m.SourceGate()
+            gate.reset(True)
+            self.stack.enter_context(patch.object(m, name, gate))
+        with m.request_budget(0, Clock()), patch.object(m, '_sa_earn_session') as sa, \
+                patch.object(m, '_yahoo_crumb_session') as yahoo:
+            self.assertEqual(m.stockanalysis_earnings('TESTA'), {'status': 'error'})
+            self.assertEqual(m.yahoo_earnings('TESTA'), {'status': 'error'})
+        sa.assert_not_called()
+        yahoo.assert_not_called()
+        self.assertEqual(m.SA_EARN_GATE.fails, 0)
+        self.assertEqual(m.YAHOO_EARN_GATE.fails, 0)
+
     def test_main_shared_deadline_preserves_render_reserve_and_allows_clean_rerun(self):
         clock = Clock(100)
         target = "2026-10-27"

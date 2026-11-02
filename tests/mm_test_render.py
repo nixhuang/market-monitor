@@ -775,6 +775,26 @@ with _patch.object(monitor, 'global_dca', return_value=None):
     _description_snapshot_before = _copy.deepcopy(_description_snapshot)
     _description_page = monitor.render({}, _description_rows, len(_description_rows), snapshot=_description_snapshot)
 
+_long_hint = monitor._stock_row({**item('LONGHINT', 'position', 'green'), 'hold': 'long'}, {})
+check('技术预警按《预警规则》执行' in _long_hint and '不看一般过热' not in _long_hint,
+      '长持仓提示只解释持有周期，不再宣称屏蔽普通过热')
+check('常规交易日等效分钟（已开盘分钟÷当日全日分钟×390）' in _description_page
+      and '半日市按当日实际交易时长折算' in _description_page,
+      '量比说明区分实际分钟与半日市等效分钟')
+
+# 刷新首屏必须已有真仓位骨架，不依赖页尾脚本和云端请求。
+from page_assets import COST_PANEL_HTML as _cost_shell
+check(_description_page.count(_cost_shell) == 1
+      and _description_page.index(_cost_shell) < _description_page.index('id="signalCounts"')
+      and _description_page.index(_cost_shell) < _description_page.index('var REAL='),
+      '刷新首屏仓位骨架在统计和页尾脚本之前，且只输出一次')
+check(' disabled>编辑</button>' in _cost_shell and '<span class="cost-sum"></span>' in _cost_shell
+      and ' open' not in _cost_shell.split('>', 1)[0],
+      '首屏骨架默认折叠且无伪造金额，编辑完成绑定前禁用')
+with _patch.object(monitor, '_cost_panel_assets', return_value=('', '')):
+    _no_cost_page = monitor.render({}, _description_rows, len(_description_rows), snapshot=_description_snapshot)
+check('id="costManage"' not in _no_cost_page, '资源缺失不留下无法使用的仓位空壳')
+
 for _row in _description_rows:
     _body = re.search(r'<tr\b[^>]*\bid="' + re.escape(monitor._stock_anchor_id(_row['symbol']))
                       + r'"[^>]*>(.*?)</tr>', _description_page, re.S)[1]
