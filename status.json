@@ -9,21 +9,21 @@
     "next_in": 9,
     "next_date": "2026-11-12"
   },
-  "run_id": "41442289004",
+  "run_id": "41456883771",
   "request_id": "",
-  "source_sha": "46f52932784ddce3e0487e4ae6d3f82d98978fd4",
-  "input_hash": "b9c5767f12473b61181e373e084cd89a9aad72b1002b5f546656468036ee9893",
-  "build_id": "41442289004-1",
-  "started_at": "2026-11-02T12:08:42+00:00",
-  "started_at_bj": "2026-11-02T20:08:42+08:00",
-  "finished_at": "2026-11-02T20:11:20.473315+08:00",
-  "finished_at_bj": "2026-11-02T20:11:20+08:00",
+  "source_sha": "7251c9e31b74ead750633ea0d36b241aad969dd0",
+  "input_hash": "69702e7e9754dda817d507c09d0819905e601ddd2374e2f1b85857c3269e39fe",
+  "build_id": "41456883771-1",
+  "started_at": "2026-11-02T13:53:25+00:00",
+  "started_at_bj": "2026-11-02T21:53:25+08:00",
+  "finished_at": "2026-11-02T21:56:18.054877+08:00",
+  "finished_at_bj": "2026-11-02T21:56:18+08:00",
   "event": "push",
   "target_trade_date": "2026-10-30",
   "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
-    "holdings.json": "d9073c355205172e44c714fc932516c421b23e36",
+    "holdings.json": "99099cb53c811d7d6dba170d0e907baca4b3614d",
     "settings.json": "1386a699b2039959ee8c8731166194d1f75a847e"
   },
   "effective_settings": {
@@ -162,7 +162,7 @@
     "positions": 18,
     "focus": 8,
     "index_funds": 1,
-    "technology": 37,
+    "technology": 38,
     "healthcare": 8,
     "financials": 13,
     "energy": 2,
@@ -178,7 +178,7 @@
     "positions": 18,
     "focus": 8,
     "index_funds": 1,
-    "technology": 27,
+    "technology": 28,
     "healthcare": 6,
     "financials": 10,
     "energy": 2,
@@ -194,25 +194,25 @@
     "dca": 1
   },
   "summary": {
-    "red": 12,
+    "red": 13,
     "yellow": 48,
     "green": 37,
     "gray": 0,
     "purple": 33,
-    "total": 97,
+    "total": 98,
     "macro_ok": 7,
     "stale_symbols": [],
     "missing_symbols": [],
     "unsupported_symbols": [],
     "reference_dates": {},
-    "today_prices": 97,
+    "today_prices": 98,
     "prior_prices": 0,
     "missing_prices": 0
   },
   "signal_counts": {
     "chg": {
       "label": "涨跌幅",
-      "red": 5,
+      "red": 6,
       "yellow": 22,
       "purple": 0
     },
@@ -225,7 +225,7 @@
     "vol_ratio": {
       "label": "量比",
       "red": 4,
-      "yellow": 31,
+      "yellow": 32,
       "purple": 0
     },
     "rsi": {
@@ -294,6 +294,21 @@
             }
           ],
           "metric": "涨跌幅 -4.89%"
+        },
+        {
+          "symbol": "SOXX",
+          "note": "半导体行业",
+          "group": "technology",
+          "hold": "short",
+          "level": "red",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-30股价下跌8.24%"
+            }
+          ],
+          "metric": "涨跌幅 -8.24%"
         },
         {
           "symbol": "SNDK",
@@ -954,6 +969,21 @@
             }
           ],
           "metric": "量比 2.2×（2026-10-30）"
+        },
+        {
+          "symbol": "SOXX",
+          "note": "半导体行业",
+          "group": "technology",
+          "hold": "short",
+          "level": "red",
+          "indicators": [
+            {
+              "shape": "▼",
+              "tone": "white",
+              "label": "2026-10-30股价下跌8.24%"
+            }
+          ],
+          "metric": "量比 2.1×（2026-10-30）"
         },
         {
           "symbol": "SNOW",
@@ -3348,7 +3378,7 @@
     "checked_at": "2026-10-28T10:35:01.267878-04:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-11-02T12:10:29.708863+00:00"
+    "asof": "2026-11-02T13:55:28.248798+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
@@ -4192,7 +4222,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-11-02T12:11:20.327631+00:00",
+    "asof": "2026-11-02T13:56:17.842358+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -4206,7 +4236,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4223,7 +4253,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -4274,7 +4304,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -4342,7 +4372,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -4359,7 +4389,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -4444,7 +4474,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -4461,7 +4491,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -4495,7 +4525,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -4512,7 +4542,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -4563,7 +4593,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -4597,7 +4627,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4614,7 +4644,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -4631,7 +4661,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -4665,7 +4695,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -4733,7 +4763,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -4869,7 +4899,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "3ab1dd1df2994e85b2a5605788e0537c6440ea5fd9762e98445e57c4308b3fd2"
         }
@@ -4903,7 +4933,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -4937,7 +4967,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -4954,7 +4984,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -4971,7 +5001,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "1ffef9318e623e19ec19c8be4793ccf2948522c884ed3ec29e26c3cac8264cc1"
         }
@@ -4988,7 +5018,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5005,7 +5035,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -5022,7 +5052,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -5056,7 +5086,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5073,7 +5103,7 @@
           "digest": "c9e1489a17b133cae42aaddd9ef2b946f5cb571016bceed56dbd17c3a6a380f9"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "45d062dd2d8b7a4bb67cd2ec479ce7e0063d5bd5ca4214b2a800d39bd44a87de"
         }
@@ -5090,7 +5120,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "f5d1d33e1698acc72ad72c53020f33ef22d34de8bcf1527536018696a89f195b"
         }
@@ -5107,7 +5137,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -5158,7 +5188,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -5175,7 +5205,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -5209,7 +5239,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "d950462b69fbadb5117bc1791218968f86c1ae42863f65dcf4969a039e9e1cda"
         }
@@ -5260,7 +5290,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -5277,7 +5307,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5294,7 +5324,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -5328,7 +5358,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -5362,7 +5392,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5396,7 +5426,7 @@
           "digest": "5fdfd1d8e972efd3a6e85173983b78d3d0e2ec90f8bfb58a83d652d3eb5981d5"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -5413,7 +5443,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -5447,7 +5477,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -5464,7 +5494,7 @@
           "digest": "6bf4a9a87a55bda3c00f66a2371b5d7dfc39707a0cc67bac08058c612f73f72a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -5498,7 +5528,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -5532,7 +5562,7 @@
           "digest": "663477ded604db0143296ac274fa83dbe367143c0888d1813d5ddcb0805cf54a"
         },
         "events": {
-          "asof": "2026-11-02T12:11:20.327631+00:00",
+          "asof": "2026-11-02T13:56:17.842358+00:00",
           "at": null,
           "digest": "8918e3dd9cffb8beb948fb26f2ff7605e628ebfa0bebe62227b37b48a9f1c96a"
         }
@@ -6285,7 +6315,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-11-02T12:11:20.305461+00:00",
+    "asof": "2026-11-02T13:56:17.811098+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -7708,18 +7738,18 @@
       "incomplete": false,
       "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-11-02T20:10:28.207639+08:00",
+    "assessed_at": "2026-11-02T21:55:26.793482+08:00",
     "schema_version": 2,
-    "asof": "2026-11-02T12:10:30.193125+00:00"
+    "asof": "2026-11-02T13:55:28.708436+00:00"
   },
   "data_lag": {
     "target": "2026-10-30",
     "fresh": true,
-    "today": 97,
-    "expected": 97,
+    "today": 98,
+    "expected": 98,
     "by_source": {
       "nasdaq": {
-        "2026-10-30": 97
+        "2026-10-30": 98
       }
     }
   }
