@@ -803,6 +803,7 @@ table.stk tr>td{border-top-color:#39424f}
    这里从 33px 收到 26px，把那段空白整个回收掉，同时保证三角不会碰到上一行文字。 */
 .range52-rail{position:relative;display:flex;align-items:flex-end;gap:7px;height:26px;padding-bottom:13px;
   font-variant-numeric:tabular-nums}
+/* 两端价格与其下方涨跌空间：桌面保持 10px，手机在下方 ≤600px 档统一提到 11px。 */
 .range52-lo,.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
 .range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
 /* 两端第二行＝从本轮价到低／高点的涨跌空间，以本轮价为基数；全组生效，灰字仅文字层级。
@@ -848,18 +849,21 @@ td.px{text-align:center}
   body{padding-left:5px;padding-right:7px}
   /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
   .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
-  .stk td{padding:8px 5px}
+  /* 主表个股主行上下留白 8 → 6px，左右仍 5px；52 周位置行保留下面的独立紧凑 padding。 */
+  .stk td{padding:6px 5px}
   .stk tr.range52-row td{padding:0 8px 4px 12px}
   table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
   .stk th{padding:7px 5px;font-size:12px}
   .stk th.h-earn,.earn-cell{text-align:left}
   .stk td.sym{font-size:14px}
   .stk td.sym .note{font-size:11.5px;line-height:1.35}
-  /* 财报列：美东时间跟「指标描述」同字号（12.5px），下面的北京时间跟原来美东时间同字号（11.5px） */
+  /* 财报列是描述正文统一的例外：美东时间保持 12.5px，北京时间保持 11.5px，不随信号描述调整。 */
   .stk .earn{font-size:12.5px;line-height:1.4}
   .stk .earn .unit{font-size:11.5px;line-height:1.35}
   .stk .px-price{font-size:14px}
-  .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:10.5px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
+  /* 紫灯框数字文字 10.5 → 11px；52 周两端价格及下方涨跌空间 10 → 11px，桌面不变。 */
+  .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:11px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
+  .range52-lo,.range52-hi,.range52-gap{font-size:11px}
   .stk td.sig{font-size:12.5px;line-height:1.45}
   .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
 }
@@ -1123,6 +1127,15 @@ tr.gray td{color:var(--dim)}
   /* 代码后面的「ETF」小标签跟**仓位板块**同款：仓位 .cost-name .tag 在 ≤560 档是
      10px / 内边距 0 4px / 行高 1.3，主表原来 11px / 1px 5px 明显大一圈（2026-10-30）。 */
   .stk td.sym .tag{font-size:10px;padding:0 4px;line-height:1.3}
+  /* 描述正文统一 13.5px：主表信号、统计展开名单的描述数值、多选组合条件、
+     财报展开的日期/时段/来源，以及紫灯展开的目标空间/达到描述。
+     股票代码/名称、指标胶囊、标题与分组归属等辅助元信息不在此规则内；
+     主表财报继续沿用上方手机档的美东 12.5px / 北京 11.5px。 */
+  .stk td.sig,
+  #signalCounts .signal-member-metric,
+  #signalCounts .signal-filter-detail,
+  #signalCounts .earnings-week-meta,
+  #signalCounts .signal-member-direction{font-size:13.5px}
   /* ===== 统计面板：所有胶囊的**框**一像素不动，只放大框里的文字与数字（2026-10-30） =====
      指标名称胶囊（74×38）：13 → 14.5px。最紧的「布林+RSI」「52周低位」墨宽 53px
        → 59.1px，可用 64px，仍是单行不折行（再大一档 15px 就只剩 2px 余量，容易在别的字体下折行）。

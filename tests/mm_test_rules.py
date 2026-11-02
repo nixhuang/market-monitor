@@ -321,6 +321,40 @@ class RulesRegression(unittest.TestCase):
         # 桌面档只认 ≥601，手机档只认 ≤600，两边不能有重叠或空档
         self.assertIn('@media(min-width:601px){', css)
 
+    def test_mobile_stock_numbers_are_11px_and_main_row_padding_is_compact(self):
+        css = page_assets.PAGE_CSS
+        mobile = css.split('@media (max-width:600px){', 1)[1].split('\n}', 1)[0]
+        # 仅手机放大三处辅助数字；桌面 52 周两端价格与涨跌空间仍保持 10px。
+        self.assertIn('.stk .tgs .lvtag{padding:1px 3px;font-size:11px;', mobile)
+        self.assertIn('.range52-lo,.range52-hi,.range52-gap{font-size:11px}', mobile)
+        self.assertIn('.range52-lo,.range52-hi{position:relative;flex:none;font-size:10px;', css)
+        self.assertIn('.range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;', css)
+        # 主行上下 8 → 6px、左右仍 5px；位置条行及带位置条主行的独立紧凑规则不改。
+        self.assertIn('.stk td{padding:6px 5px}', mobile)
+        self.assertIn('.stk tr.range52-row td{padding:0 8px 4px 12px}', mobile)
+        self.assertIn('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}', css)
+
+    def test_mobile_descriptions_are_13_5px_and_stock_earnings_are_unchanged(self):
+        css = page_assets.PAGE_CSS
+        final_override = css.split('/* ===== 手机（iOS Chrome）最终覆盖', 1)[1]
+        media = re.search(r'@media \(max-width:600px\)\{(.*?)\n\}', final_override, re.S)
+        self.assertIsNotNone(media)
+        mobile = media[1]
+        # 五类统计/主表描述只在手机最终覆盖块统一为 13.5px；桌面基础规则不变。
+        self.assertIn('  .stk td.sig,\n'
+                      '  #signalCounts .signal-member-metric,\n'
+                      '  #signalCounts .signal-filter-detail,\n'
+                      '  #signalCounts .earnings-week-meta,\n'
+                      '  #signalCounts .signal-member-direction{font-size:13.5px}', mobile)
+        self.assertIn('#signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}', css)
+        self.assertIn('#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;font-size:13px}', css)
+        self.assertIn('#signalCounts .earnings-week-meta{color:var(--dim);font-size:12px}', css)
+        self.assertIn('#signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}', css)
+        # 主表个股财报是明确例外：手机美东 12.5px、北京 11.5px 均不在最终覆盖块改写。
+        self.assertIn('  .stk .earn{font-size:12.5px;line-height:1.4}', css)
+        self.assertIn('  .stk .earn .unit{font-size:11.5px;line-height:1.35}', css)
+        self.assertNotRegex(strip_css_comments(mobile), r'\.stk \.earn[^{]*\{[^}]*font-size')
+
     def test_statistics_table_has_no_signal_red_yellow_white_header_row(self):
         """统计表不再有「信号 / 红 / 黄 / 白」表头排。"""
         page = monitor.render({}, [], 0, snapshot={'signal_counts': {'ma': {'label': '均线', 'red': 1, 'yellow': 0}},
