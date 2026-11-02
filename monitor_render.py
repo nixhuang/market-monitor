@@ -1707,6 +1707,7 @@ class PageRenderer:
   <button class="primary" id="btnRunNow">运行</button>
   <button id="btnCheckStatus">状态</button>
   <button id="btnHardRefresh">刷新</button>
+  <button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false" aria-label="就地编辑成本价与数量" disabled>编辑</button>
   {dca_title}
   <script>{self._context.HARD_REFRESH_JS}</script>
 </div>

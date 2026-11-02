@@ -788,9 +788,13 @@ check(_description_page.count(_cost_shell) == 1
       and _description_page.index(_cost_shell) < _description_page.index('id="signalCounts"')
       and _description_page.index(_cost_shell) < _description_page.index('var REAL='),
       '刷新首屏仓位骨架在统计和页尾脚本之前，且只输出一次')
-check(' disabled>编辑</button>' in _cost_shell and '<span class="cost-sum"></span>' in _cost_shell
-      and ' open' not in _cost_shell.split('>', 1)[0],
-      '首屏骨架默认折叠且无伪造金额，编辑完成绑定前禁用')
+# 2026-11-02：「编辑」(#costEditBtn) 从骨架搬到顶栏 .runbar（monitor 输出，「刷新」右边），
+# 骨架本身不再含这颗按钮；页面里它仍必须是「绑定前禁用」。
+check('id="costEditBtn"' not in _cost_shell and '<span class="cost-sum"></span>' in _cost_shell
+      and ' open' not in _cost_shell.split('>', 1)[0]
+      and ' disabled>编辑</button>' in _description_page
+      and _description_page.index('btnHardRefresh') < _description_page.index('costEditBtn'),
+      '首屏骨架默认折叠且无伪造金额；「编辑」在顶栏刷新右边且绑定前禁用')
 with _patch.object(monitor, '_cost_panel_assets', return_value=('', '')):
     _no_cost_page = monitor.render({}, _description_rows, len(_description_rows), snapshot=_description_snapshot)
 check('id="costManage"' not in _no_cost_page, '资源缺失不留下无法使用的仓位空壳')
@@ -2055,19 +2059,28 @@ const deadline = setTimeout(() => {
             markerInTrack:marker.left>=track.left-5&&marker.right<=track.right+5};
         });
       })()`);
+      /* 2026-11-02：「编辑」从仓位卡标题行搬到顶栏 .runbar —— 排在「刷新」右边、同排同高，
+         保留自己那套 7px 小圆角蓝边（桌面 13px / 手机 16px），不被顶栏通用按钮皮肤盖掉。
+         仓位标题行剩下的「总资产·盈亏」顶到最右，仍与标题同一行、不撑高卡片。 */
       const edit=await evaluate(`(() => {
         const card=document.getElementById('costManage'),btn=document.getElementById('costEditBtn');
         const name=card&&card.querySelector('.grp-name');
         if(!card||!btn||!name)return {exists:false};
-        const cb=card.getBoundingClientRect(),b=btn.getBoundingClientRect(),nb=name.getBoundingClientRect();
+        const bar=document.querySelector('.runbar'),refresh=document.getElementById('btnHardRefresh');
+        const b=btn.getBoundingClientRect(),rb=refresh&&refresh.getBoundingClientRect();
+        const nb=name.getBoundingClientRect(),cb=card.getBoundingClientRect();
         const sum=card.querySelector('.cost-sum'),sb=sum&&sum.getBoundingClientRect();
         const grp=card.querySelector('summary.grp');
-        return {exists:true,sameRow:Math.abs((b.top+b.bottom)/2-(nb.top+nb.bottom)/2)<=8,
-          rightGap:+(cb.right-b.right).toFixed(1),height:+b.height.toFixed(1),
-          // 2026-10-27：标题行必须排成一行（跟其它分组卡一样高），
-          // 总资产·盈亏不能掉到第二行把卡片撑高；按钮也不许掉行
+        return {exists:true,
+          inRunbar:!!(bar&&bar.contains(btn)),
+          afterRefresh:!!(refresh&&(refresh.compareDocumentPosition(btn)&Node.DOCUMENT_POSITION_FOLLOWING)),
+          sameRowAsRefresh:!!rb&&Math.abs((b.top+b.bottom)/2-(rb.top+rb.bottom)/2)<=2,
+          gapToRefresh:rb?+(b.left-rb.right).toFixed(1):null,
+          height:+b.height.toFixed(1),
+          // 2026-10-27：标题行必须排成一行（跟其它分组卡一样高），总资产·盈亏不能掉到第二行
           headH:+grp.getBoundingClientRect().height.toFixed(1),
           sumSameRow:!!sb&&Math.abs((sb.top+sb.bottom)/2-(nb.top+nb.bottom)/2)<=10,
+          sumRightGap:sb?+(cb.right-sb.right).toFixed(1):null,
           fontSize:getComputedStyle(btn).fontSize,radius:getComputedStyle(btn).borderTopLeftRadius,
           overflow:document.documentElement.scrollWidth>innerWidth+1};
       })()`);
@@ -2076,10 +2089,11 @@ const deadline = setTimeout(() => {
           // 只收底宽、高度不变（9px）→ 顶角约 50°，比原来的 60° 更尖锐
           && b.markerHeight>=8.6 && Math.round(b.height)===26)   // 三角之上不再写百分比，整条从 33px 回收到 26px
           && bars.some(b=>b.text==='-33.3% / +33.3%') && bars.some(b=>b.text==='-39.0% / +0.6%')
-          && edit.exists && edit.sameRow && edit.sumSameRow && edit.headH<=56
-          && edit.rightGap<=6 && edit.height>=24 && !edit.overflow
-          && edit.radius==='7px',
-        name:width+'px52周条两端第二行为到低/高点、三角底收窄高度不变；仓位管理标题行单行、编辑按钮保持原圆角且贴右不错行',actual:{bars,edit}});
+          && edit.exists && edit.inRunbar && edit.afterRefresh && edit.sameRowAsRefresh
+          && edit.gapToRefresh>=8 && edit.gapToRefresh<=12 && edit.height>=24 && !edit.overflow
+          && edit.radius==='7px' && edit.fontSize===(width<=600?'16px':'13px')
+          && edit.sumSameRow && edit.headH<=56 && edit.sumRightGap<=30,
+        name:width+'px52周条两端第二行为到低/高点、三角底收窄高度不变；编辑按钮在顶栏刷新右边且保持原圆角字号；仓位标题行单行、金额靠右',actual:{bars,edit}});
     }
     const injectionTree=await cdp('Page.getFrameTree');
     const injectionHTML=input.injectionPage.replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')

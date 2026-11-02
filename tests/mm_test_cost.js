@@ -10,6 +10,17 @@ const CSS = fs.readFileSync(path.join(__dirname, '..', 'cost_panel.css'), 'utf8'
 const ASSETS = fs.readFileSync(path.join(__dirname, '..', 'page_assets.py'), 'utf8');
 const COST_PANEL_HTML = ASSETS.match(/COST_PANEL_HTML = r'''([\s\S]*?)'''/)[1];
 const LOCAL = 'mm_position_costs_local_v1';
+
+// 取出 CSS 里「不在任何 @media 块内」的选择器（两档共用的基础规则），用来守跨端一致性
+function topLevel(css) {
+  const out = []; let depth = 0, buf = '';
+  for (const ch of css) {
+    if (ch === '{') { if (depth === 0) out.push(buf); buf = ''; depth++; continue; }
+    if (ch === '}') { depth = Math.max(0, depth - 1); buf = ''; continue; }
+    if (depth === 0) buf += ch;
+  }
+  return out.join('\n');
+}
 const CLOUD = 'mm_position_costs_cloud_v1';
 const TOKEN = 'mm_gh_token_v1';
 const PUSH_AT = 'mm_position_last_push_v2';
@@ -144,7 +155,13 @@ function makeDocument(opts={}){
   doc.addEventListener=(k,f)=>(doc.events[k]||=[]).push(f);
   doc.dispatchEvent=Element.prototype.dispatchEvent;
   doc.fire=(k,e={})=>doc.dispatchEvent(Object.assign(new MockCustomEvent(k),e));
-  doc.body.innerHTML=COST_PANEL_HTML+'<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><table></table></details><div id="signalCounts"></div>';
+  /* 2026-11-02 起「编辑」(#costEditBtn) 由 monitor 服务端输出在顶栏 .runbar 里（「刷新」右边），
+     不再是仓位卡的一部分 —— 夹具照真实页面结构补出这一排，否则 JS 按 document 找不到按钮，
+     编辑态那条链路在测试里会退化成「无按钮」分支（真实页面恒有，见 mm_test_amp 的顺序断言）。 */
+  doc.body.innerHTML='<div class="runbar"><button class="primary" id="btnRunNow">运行</button>'
+    +'<button id="btnCheckStatus">状态</button><button id="btnHardRefresh">刷新</button>'
+    +'<button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false" disabled>编辑</button></div>'
+    +COST_PANEL_HTML+'<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><table></table></details><div id="signalCounts"></div>';
   const table=doc.querySelector('table');table.className='stk';
   for(const sym of opts.symbols||['AAA','BBB']){
     const tr=new Element('tr',doc);tr.id=fixtureAnchor(sym);tr.className='green';
@@ -1277,6 +1294,29 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
     (CSS.match(/@media[^{]*max-width:600px/g)||[]).length, '手机档只允许 ≤600 一个断点');
   // 标题行极端兜底：金额长到顶按钮时截省略号，而不是压到「编辑」上
   assert.match(CSS,/\.cost-manage>summary \.cost-sum\{min-width:0;overflow:hidden;text-overflow:ellipsis\}/);
+  // 2026-11-02：「编辑」搬到顶栏后，标题行只剩「总资产·盈亏」→ 顶到最右，不留一截空白；
+  // 顶栏那条 .runbar button 必须排除 .cost-edit-btn，否则会盖掉这颗的小圆角蓝边与字号
+  assert.match(CSS,/\.cost-manage>summary \.group-stats\{justify-content:flex-end\}/);
+  assert.match(ASSETS,/\.runbar button:not\(\.cost-edit-btn\)\{padding:6px 12px/);
+  // 手机档那条同理：不排除会把同排三个按钮从 18px 压回 15px（特指度 0,2,1 > 0,1,1）。
+  // 2026-11-02 定档 66×43：字号 16.5 → 18px、上下内距 7 → 8px（左右仍 14px）。
+  assert.match(ASSETS,/\.runbar button:not\(\.cost-edit-btn\)\{padding:8px 14px;font-size:18px\}/);
+  // 2026-11-02：「编辑」改成**固定高度 + 垂直居中**（手机 40 / 桌面 34），不再用 stretch
+  // 撑满整行——同排三个按钮加到 43px 后，编辑要矮 3px 且居中，不是跟着一起变高。
+  assert.match(CSS,/\.runbar \.cost-edit-btn\{align-self:center;box-sizing:border-box;height:34px\}/);
+  assert.match(CSS,/\.cost-edit-btn\{padding:8px 13px;font-size:16px;line-height:1\.08\}/);
+  assert.match(CSS,/\.runbar \.cost-edit-btn\{height:40px\}/);
+  // 手机档按钮间距 10 → 12px（上限按「定投：999」三位数实测，富余 15px 不会换行）
+  assert.match(ASSETS,/\.runbar\{padding-left:16px;padding-right:16px;gap:12px\}/);
+  // 搬走后不再留「卡片内的编辑按钮」死规则
+  assert.doesNotMatch(CSS,/\.cost-manage>summary \.cost-edit-btn/);
+  assert.match(CSS,/\.cost-edit-btn\[hidden\]\{display:none\}/);
+  // 「已同步 / 未同步」2026-11-02 起手机与桌面同一套：都搬到「数据时间 …」那排的最右侧，
+  // 标题行只剩「总资产·盈亏 + 编辑」。JS 里不许再按 max-width 分档，CSS 规则必须两档共用（不在 @media 内）。
+  const syncFn = SOURCE.slice(SOURCE.indexOf('function syncMirrorEl'), SOURCE.indexOf('function showNotice'));
+  assert.ok(syncFn.length > 0 && !/max-width:600px/.test(syncFn), '同步状态胶囊不应再按手机档分支');
+  assert.match(CSS,/\.sub \.cost-state\{margin-left:auto;flex:none;font-size:13px\}/);
+  assert.ok(topLevel(CSS).includes('.sub .cost-state'), '.sub .cost-state 必须两档共用（不在手机 @media 内）');
   // 五个数值列的数字：11.5 → 13px（2026-11-01），跟「当日盈亏贡献」列表的数字同号；
   // 行高写死线上实测的 17.25px（＝线上 11.5px×1.5）——只加大字号、不加行距，整行仍是 42.5px
   assert.match(CSS,/\.cost-cell\{font-size:13px;line-height:17\.25px\}/);
@@ -2875,7 +2915,8 @@ test('刷新首屏：未执行脚本就有完整仓位骨架，编辑在绑定�
   const doc=makeDocument(),panel=doc.getElementById('costManage');
   assert.ok(panel);assert.equal(panel.open,false);
   assert.equal(panel.querySelector('.grp-name').textContent,'仓位');
-  assert.notEqual(panel.querySelector('#costEditBtn').getAttribute('disabled'),null);
+  // 「编辑」在顶栏（服务端输出，先于脚本执行），绑定前必须是禁用的
+  assert.notEqual(doc.getElementById('costEditBtn').getAttribute('disabled'),null);
   for(const id of ['costState','costMembers','costNotice','costSave','costCancel','costFile','costFoot'])
     assert.equal(panel.querySelectorAll('#'+id).length,1);
 });
@@ -2883,7 +2924,7 @@ test('刷新首屏：原地接管骨架，云端延迟三秒也不删卡、不�
   let original,summary,button,writes;
   const b=await boot({prepareDocument:doc=>{
     original=doc.getElementById('costManage');summary=original.querySelector('summary');
-    button=original.querySelector('#costEditBtn');writes=original.htmlWrites||0;original.open=true;
+    button=doc.getElementById('costEditBtn');writes=original.htmlWrites||0;original.open=true;
   }});
   for(const elapsed of [0,3000]){
     await b.tick(elapsed);

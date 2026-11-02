@@ -135,7 +135,13 @@ if m:
     check('id="btnRunNow"' in bar and 'btnHardRefresh' in bar
           and bar.index('btnRunNow') < bar.index('btnCheckStatus') < bar.index('btnHardRefresh'),
           "第三排顺序：立即运行 → 查运行状态 → 强制刷新")
-    check('btnlink' not in bar, "「设置」已从顶栏搬走（顶栏只留三个按钮 + 定投）")
+    # 2026-11-02：「编辑」从仓位卡标题行搬到顶栏，紧跟「刷新」右边；脚本接管前必须是禁用的
+    _edit_btn = re.search(r'<button[^>]*id="costEditBtn"[^>]*>', bar)
+    check(bool(_edit_btn) and 'disabled' in _edit_btn.group(0)
+          and bar.index('btnHardRefresh') < bar.index('costEditBtn')
+          and 'cost-edit-btn' in _edit_btn.group(0),
+          "「编辑」在顶栏「刷新」右边，保留原按钮类且绑定前禁用")
+    check('btnlink' not in bar, "「设置」已从顶栏搬走（顶栏只留四个按钮 + 定投）")
     check('id="runLight"' in row and 'id="runLightTxt"' in row, "第四排：状态灯 + 文案")
     check('runLight' not in bar, "灯已从第三排移走")
 # 「设置」与「返回看板」同在页底 .acts 一排，顺序：返回看板 → 设置（2026-10-29）
@@ -149,6 +155,13 @@ check(monitor.PAGE_CSS == page_assets.PAGE_CSS and '.statusrow{' in page_assets.
       and strip_css_comments(page_assets.PAGE_CSS.removesuffix(page_assets.RULES_CSS)) in styles
       and styles.count(strip_css_comments(page_assets.RULES_CSS)) == 1, "statusrow 共用样式完整嵌入且规则样式只一份")
 check('改自选清单' not in page, "旧的「改自选清单」已删除")
+# 2026-11-02：市场风险栏的「绿灯 综合：平稳」靠右排，与其它栏目右侧的「20日对.SPX …」同一条右端线
+check(strip_css_comments('.macro-card>summary .group-stats{margin-left:auto') in strip_css_comments(styles)
+      and 'justify-content:flex-end' in styles,
+      "市场风险标题行读数靠右，与其它栏目右侧读数对齐")
+# PC 顶栏整体往中间收「一些」（不是居中）：左右各内缩 --head-inset，改一个数即可调幅度
+check('--head-inset:64px' in styles and 'padding-left:var(--head-inset,64px)' in styles,
+      "PC 顶栏内缩变量与内缩规则存在")
 # 脚本内容 hash 代替手工日期版本号；独立计算期望值，避免只验证同一个 helper 自洽。
 content = (Path(ROOT) / 'run-status.js').read_bytes().replace(b'\r\n', b'\n')
 expected_url = './run-status.js?v=' + hashlib.sha256(content).hexdigest()[:16]

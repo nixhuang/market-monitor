@@ -1577,17 +1577,14 @@
   var panel=document.getElementById('costManage');
   if(!panel) return;
   var stateEl=panel.querySelector('#costState');
-  /* 手机（≤600px）：「已同步 / 未同步」和「总资产·盈亏 + 编辑」挤在一行太满，
-     把它搬到「数据时间 …」那一排的最右侧（2026-10-29）。桌面档原地不动。
+  /* 「已同步 / 未同步」和「总资产·盈亏 + 编辑」挤在一行太满，
+     把它搬到「数据时间 …」那一排的最右侧（2026-10-29）。
+     2026-11-02 起手机与桌面同一套：两档都搬出标题行，不再分档。
      只有一份交互入口：点外面那个＝点标题行里那个（填 / 改 GitHub token）。 */
   var syncMirror=null;
   function syncMirrorEl(){
-    var mobile=window.matchMedia?window.matchMedia('(max-width:600px)').matches:false;
-    if(!mobile){
-      if(syncMirror&&syncMirror.parentNode) syncMirror.parentNode.removeChild(syncMirror);
-      syncMirror=null; return null;
-    }
     if(syncMirror) return syncMirror;
+    // 没有「数据时间」那一排（沙箱 / 嵌入场景）就退回标题行，状态字不能丢
     var row=document.querySelector('.sub');
     if(!row) return null;
     syncMirror=document.createElement('span');
@@ -1604,7 +1601,10 @@
   function showNotice(t){ if(stateEl) stateEl.textContent=t; if(syncMirror) syncMirror.innerHTML=''; }
   var footEl=panel.querySelector('#costFoot');
   var actsEl=panel.querySelector('#costActs');
-  var editBtn=panel.querySelector('#costEditBtn');
+  /* 2026-11-02：「编辑」这颗按钮搬到顶栏（monitor 输出的 .runbar 里「刷新」右边），
+     不再属于这张卡 —— 先按 id 全局找（顶栏那颗），找不到再退回卡内（老页面／嵌入场景）。
+     两处都找不到时按「没有按钮」降级：一颗按钮不能把整块面板拖到半渲染。 */
+  var editBtn=document.getElementById('costEditBtn')||panel.querySelector('#costEditBtn');
 
   /* 排序：只能按「盈亏」或「仓位」排，固定降序，点一次切换，选择存在本机、下次打开自动保持 */
   var LS_SORT='mm_position_sort_v1';
@@ -1670,11 +1670,14 @@
     var cancelBtn=panel.querySelector('#costCancel'); if(cancelBtn) cancelBtn.hidden=!editing;
   }
   function syncEditUI(){
-    editBtn.textContent=editing?'编辑中':'编辑';
-    editBtn.setAttribute('aria-pressed', editing?'true':'false');
-    if(editing) editBtn.className='cost-edit-btn on'; else editBtn.className='cost-edit-btn';
-    // 编辑中由下面的「保存并上传／取消」接管，表头这颗收起来，免得出现两个「退出」入口
-    editBtn.hidden=editing;
+    if(editBtn){
+      editBtn.textContent=editing?'编辑中':'编辑';
+      editBtn.setAttribute('aria-pressed', editing?'true':'false');
+      if(editing) editBtn.className='cost-edit-btn on'; else editBtn.className='cost-edit-btn';
+      /* 2026-11-02：这颗现在在顶栏，编辑中**不再收起** —— 顶栏少一颗会整排重排、看着像坏了；
+         留在原位当状态灯（编辑中＝蓝边），点它＝取消编辑（下面 click 里 exitEdit(true)）。
+         面板内的「保存并上传／取消」照旧。 */
+    }
     syncCostNotice();
     // 合成DEMO仅统一按钮外观；隔离存储及禁止上传仍由isolated独立控制。
     panel.querySelector('#costSave').textContent=isolated && !demoPreview?'保存到本标签页':'保存并上传';
@@ -1720,7 +1723,7 @@
     if(cloudFirstPending && !draftPending && !positionsAuthorized || maintenanceOnly && !cloudVerified) startPull();
     if(dirty || uncertain) requestSave(0,false);
   }
-  editBtn.addEventListener('click', function(e){
+  if(editBtn) editBtn.addEventListener('click', function(e){
     e.preventDefault(); e.stopPropagation();   // 别让点击冒泡上去把整张卡折叠掉
     if(editing) exitEdit(true); else enterEdit();
   });
@@ -2264,7 +2267,7 @@
       : maintenancePending && !cloudVerified ? '<span class="warn">ACK 维护待云端核验</span>'
       : dirty || !sameAsCloud() ? '<span class="warn">未同步'+(tk?'':' · 未填 token')+'</span>'
       : '<span class="ok" aria-label="'+okTip+'">已同步</span>';
-    // 手机：状态胶囊搬到状态行，标题行留空（只剩「总资产·盈亏 + 编辑」）
+    // 状态胶囊搬到「数据时间」那一排，标题行留空（只剩「总资产·盈亏 + 编辑」）
     var mirror=syncMirrorEl();
     if(mirror){ mirror.innerHTML=syncChip; stateEl.innerHTML=''; }
     else stateEl.innerHTML=syncChip;
@@ -2303,7 +2306,7 @@
   });
   paint();
   syncEditUI();
-  editBtn.removeAttribute('disabled');
+  if(editBtn) editBtn.removeAttribute('disabled');
   takeOwnership(function(){ paint(); });
 
   /* 默认展开的只有「统计」（monitor.py 生成时就带 open），持仓 / 重点 / 市场风险 / 仓位管理

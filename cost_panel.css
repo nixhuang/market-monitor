@@ -91,6 +91,11 @@
 .cost-manage .t-wt,.cost-manage .cost-cell.wt{color:var(--text);font-weight:400}
 .cost-manage .t-wt .k{color:var(--dim);font-weight:400}
 .cost-state{font-size:11px;white-space:nowrap;color:var(--dim)}
+/* 2026-11-02 起「已同步 / 未同步」两档都搬到「数据时间 …」那排的最右侧（见 cost_panel.js 的
+   syncMirrorEl）：那里比标题行宽裕，字号提到 13px，不再用标题行里 11px 的小字。
+   margin-left:auto 顶到右端，与左边的日期同一行、两端对齐。 */
+.sub .cost-state{margin-left:auto;flex:none;font-size:13px}
+.sub .cost-state .warn,.sub .cost-state .ok,.sub .cost-state .dim{font-size:13px}
 .cost-manage .cost-sum,.cost-manage .cost-legend b,.cost-subhead .cnt b{text-align:center}
 .cost-notice{margin-top:6px;color:var(--lamp-yellow,#f0c674);white-space:normal}
 .cost-notice button{margin-left:6px;background:#1b2434;border:1px solid #33415a;
@@ -115,17 +120,25 @@
 .cost-nocloud button:hover{border-color:var(--head-blue-on,#8fb8f0);color:#dfeaff}
 /* 「编辑」只是加大一点点：字号 12.5→13、内距 4/10→6/13。**形状不动**——仍是原来的
     7px 圆角小圆角矩形（原「胶囊」观感），不改成 99px 的全圆形。
-    加大后仍必须留在标题行最右侧，不能被挤到下一行（见下面 summary 的 nowrap）。 */
+    2026-11-02：这颗从仓位卡标题行搬到**顶栏**（monitor 输出的 .runbar 里「刷新」右边），
+    样式原样保留（桌面 13px / 手机 16px，见本文件手机档那条）。
+    page_assets.py 里 .runbar button 加了 :not(.cost-edit-btn)，顶栏皮肤不会盖掉这里的值。 */
 .cost-edit-btn{flex:none;background:#1b2434;border:1px solid #33415a;
   color:#cfd8e6;border-radius:7px;padding:6px 13px;font-size:13px;line-height:1.2;cursor:pointer}
 .cost-edit-btn:hover{border-color:var(--head-blue-on,#8fb8f0);color:#dfeaff}
 .cost-edit-btn.on{background:#22314c;border-color:var(--head-blue-on,#8fb8f0);color:#dfeaff}
-/* 「编辑」在标题行最右侧：group-stats 已经是 flex:1 1 auto，按钮再加 margin-left:auto 顶到底；
-   编辑态由下面的「保存并上传／取消」接管，这颗收起来（两个退出入口会打架）。
-   右外边距 -4px：与卡片边框的间距从约 17px（12+4+1）压到约 5px（约 0.3 倍），
-   只把这颗按钮往右推，不动标题行背景、不动其他卡片。 */
-.cost-manage>summary .cost-edit-btn{margin-left:auto;margin-right:-4px}
-.cost-manage>summary .cost-edit-btn[hidden]{display:none}
+/* 「编辑」搬到顶栏后，标题行只剩「总资产·盈亏」(.cost-sum)：把它推到最右，
+   占住原来按钮的位置，不在标题与金额之间留一截空白（group-stats 本来就是 flex:1 1 auto）。 */
+.cost-manage>summary .group-stats{justify-content:flex-end}
+/* 顶栏那一排里「编辑」字号比同排按钮小一号（桌面 13 / 手机 16 vs 15 / 16.5），
+   但**高度必须跟同排一致**，否则同一排里出现一个矮一截的按钮、看着像坏了：
+   align-self:stretch 让它撑满整行高度（= 最高的那颗），字仍垂直居中。
+   颜色与 7px 圆角保持它自己的一套，不被顶栏皮肤同化。 */
+/* 2026-11-02 起编辑比同排矮 3px（手机 40 vs 43、桌面 34 vs 34），所以不再用 stretch
+   撑满整行，改成**固定高度 + 垂直居中**：同排最高的那颗决定行高，编辑居中对齐，
+   文字靠 button 自身的内容居中，视觉上仍在同一排。 */
+.runbar .cost-edit-btn{align-self:center;box-sizing:border-box;height:34px}
+.cost-edit-btn[hidden]{display:none}
 /* 展开内框左右贴外框内沿：抵消 card 的 4px 横向 padding；框内文字仍留安全边距。
    只拓宽仓位管理内容，不移动标题或改其他卡片。 */
 .cost-manage>.cost-body{margin-left:-4px;margin-right:-4px}
@@ -441,11 +454,12 @@
      高度 = 6+6+上下边框 2 + 16×1.08 ≈ 31px，仍远低于手机标题行 63px，卡片高度不变；
      标题行是 nowrap、.cost-sum 有 ellipsis 兜底，按钮变宽也不会把金额挤到第二行。
      形状不动：仍是 7px 圆角小圆角矩形，不得改成 99px 全圆。 */
-  .cost-edit-btn{padding:6px 18px;font-size:16px;line-height:1.08}
-  /* 手机上「已同步 / 未同步」搬到「数据时间 …」那一排的右侧（见 cost_panel.js 的 syncMirrorEl）：
-     字号跟那一排同一档（13px），别再用标题行里 11px 的小字。 */
-  .sub .cost-state{margin-left:auto;font-size:13px}
-  .sub .cost-state .warn,.sub .cost-state .ok,.sub .cost-state .dim{font-size:13px}
+  /* 2026-11-02 定档：手机档「编辑」60×40（原 70×39），字号仍是 16px 不变。
+     左右内距 18 → 13px（60 = 13 + 文字32 + 13 + 边框2），上下 6 → 8px；
+     高度不再靠 stretch（那会跟同排一起变 43），由上面 .runbar .cost-edit-btn 的
+     height:34px 在这里覆盖成 40px，同排 43px 里垂直居中。 */
+  .cost-edit-btn{padding:8px 13px;font-size:16px;line-height:1.08}
+  .runbar .cost-edit-btn{height:40px}
 }
 .cost-warn.acked{color:var(--text)}
 .cost-warn.acked .w{text-decoration:line-through;text-decoration-color:#5a6478}

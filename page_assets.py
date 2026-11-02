@@ -526,6 +526,10 @@ PAGE_CSS = """:root{
   --frame-green:#2c8f3e;
   /* 统计名单方向三角尺寸；指标描述使用自身条件文字颜色 */
   --lamp-size:14px;
+  /* 顶栏内缩量（2026-11-02）：PC 上「数据时间 / 按钮行 / 状态灯 / 核验结果」整体往中间收多少。
+     用户明确要「往中间靠一些，不是完全居中」—— 所以是左右各内缩一个固定值、内容仍左起，
+     不是 justify-content:center。调幅度只改这一个数。 */
+  --head-inset:64px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;background:var(--bg);color:var(--text);
@@ -537,7 +541,10 @@ body{margin:0;background:var(--bg);color:var(--text);
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 /* 站名：用「上涨绿」--up，与涨跌箭头同色系；只这一处，其它标题颜色不动 */
 h1.brand{color:var(--up)}
-.sub{color:var(--dim);font-size:12px;margin-bottom:16px}
+/* 「数据时间 …」这一排做成 flex：仓位面板的「已同步 / 未同步」胶囊（见 cost_panel.js 的
+   syncMirrorEl）靠 margin-left:auto 顶到这一排最右侧，与左边的日期同一行（2026-10-29）。
+   2026-11-02 起手机与桌面都搬到这里，不再分档；胶囊自身的字号/颜色在 cost_panel.css 里。 */
+.sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:12px;margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:6px 4px;margin-bottom:14px;overflow:hidden}
 /* 持仓卡：2026-10-31 起**整块去掉绿叠层**（原来 2% 绿盖在 --card 上），跟其它分组一样是纯卡片底色；
@@ -956,7 +963,10 @@ tr.gray td{color:var(--dim)}
 #runMsg.ok{color:var(--green)}
 #runMsg.err{color:var(--red)}
 .runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-.runbar button{padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
+/* 「编辑」2026-11-02 从仓位卡标题行搬到这一排（「刷新」右边），按钮本体由 monitor 服务端输出。
+   它保留自己那套小圆角蓝边样式（cost_panel.css 的 .cost-edit-btn：桌面 13px / 手机 16px），
+   所以顶栏的通用按钮皮肤要把它排除在外；:disabled 与 .primary 两条仍照旧生效。 */
+.runbar button:not(.cost-edit-btn){padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
   border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
 .runbar button:disabled{opacity:.5;cursor:not-allowed}
 .runbar button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
@@ -1044,6 +1054,11 @@ tr.gray td{color:var(--dim)}
      与仓位面板「当日盈亏贡献」收起后的整条（实测 49px）同高，全站折叠栏目条一个高度。
      两态同一套顶部链路是硬要求——只锁高不统一 padding，点标题展开时标题行会跳。 */
   .zone-card>summary{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}
+  /* PC 顶栏整体往中间收（2026-11-02）：站名下面那几排——数据时间、按钮行、状态灯、
+     核验结果——左右各内缩 --head-inset。内容仍左起，只是不再贴着卡片左边缘；
+     不是居中对齐（用户明确说「不是完全居中」）。手机 ≤600px 不进这条，保持原样。 */
+  .sub,.runbar,.statusrow,.check-result{
+    padding-left:var(--head-inset,64px);padding-right:var(--head-inset,64px)}
 }
 /* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
 .stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
@@ -1070,7 +1085,11 @@ tr.gray td{color:var(--dim)}
 .market-risk-badge[data-level="red"]{color:var(--red)}
 .market-risk-badge[data-level="yellow"]{color:var(--yellow)}
 .market-risk-badge[data-level="green"]{color:var(--green)}
-.macro-card>summary .group-stats{margin-left:0;text-align:left}
+/* 市场风险的「绿灯 综合：平稳」2026-11-02 起靠右排：与其它栏目标题行右侧的
+   「20日对.SPX +0.3%」(.rs-spy，margin-left:auto) 同一条右端线，整页右侧读数对齐。
+   底色／字号不变，只是从紧贴标题改成顶到最右。 */
+.macro-card>summary .group-stats{margin-left:auto;display:inline-flex;align-items:center;
+  justify-content:flex-end;text-align:right}
 /* 「无异动 N 只」自己就是一个可点开的条目（不再写「点击查看」）：上下各一条细横线，
    把「这一整块点下去会展开」的范围圈出来；清单内部股票行之间的线照旧，两者不混。 */
 .quiet-list{margin:8px 0;border-top:1px solid #46525f;border-bottom:1px solid #46525f}
@@ -1124,14 +1143,15 @@ tr.gray td{color:var(--dim)}
   /* 顶栏左右对称留白：页面本身左右各留 4px，这里再给 .runbar 各加 16px，
      于是最左边的「运行」按钮和最右边的「定投：N」距屏幕边缘都是 20px（2026-10-30 二次加大）。
      原来只给「定投」加 margin-right:10px，是单边的，左边三个按钮仍贴着屏幕边。 */
-  .runbar{padding-left:16px;padding-right:16px}
+  /* 按钮间距 10 → 12px（2026-11-02）：四个按钮加大后同排更挤，放宽一点。
+     上限按「定投：999」三位数实测（Chrome 真机量）：3×66 + 编辑60 + 4×12 间距 + 徽章75 = 381，
+     内容宽 396，富余 15px；间距放宽到 14 时合计 389、富余只剩 7px，换字体渲染容易顶到换行。 */
+  .runbar{padding-left:16px;padding-right:16px;gap:12px}
   /* 字号 14 → 16px（2026-10-29）；贴右仍靠 margin-left:auto，间距改由 .runbar 的右内边距给。 */
   .runbar .dca-badge{font-size:16px;margin-left:auto}
-  /* 「数据时间 …」那一排改成 flex：手机上的「已同步 / 未同步」胶囊（见 cost_panel.js 的
-     syncMirrorEl）用 margin-left:auto 顶到这一排最右侧，与左边的日期同一行（2026-10-29）。
-     左右各 10px 内边距 + 页面 4px → 日期距左边 14px、「已同步」距右边 14px，与顶栏对齐。
-     胶囊本身的字号/颜色在 cost_panel.css 的手机档里（跟其他 .cost-state 规则放一起）。 */
-  .sub{display:flex;align-items:center;gap:8px;padding-left:16px;padding-right:16px}
+  /* 手机档给「数据时间 …」这一排左右各 10px 内边距 + 页面 4px → 日期距左边 14px、
+     「已同步」距右边 14px，与顶栏对齐（2026-10-29）；flex 已在基础规则里两档共用。 */
+  .sub{padding-left:16px;padding-right:16px}
   /* 页底那一排现在是「返回看板」+「设置」两枚：间隔拉开（2026-10-29「设置」从顶栏搬下来）。 */
   .acts{gap:26px}
   /* 主表各组的个股代码 + 备注名（「ZS」/「云安全」）：代码 14 → 15.5px、
@@ -1163,8 +1183,13 @@ tr.gray td{color:var(--dim)}
   #signalCounts td .signal-filter-toggle{font-size:14.5px;line-height:1.1}
   #signalCounts .signal-extra-row>.signal-filter-toggle{font-size:14.5px}
   #signalCounts .signal-count-toggle{font-size:16px}
-  /* 顶栏三个按钮加大一点：15 → 16.5px，内边距 6/12 → 7/14（2026-10-30）。 */
-  .runbar button{padding:7px 14px;font-size:16.5px}
+  /* 顶栏三个按钮加大一点：15 → 16.5px，内边距 6/12 → 7/14（2026-10-30）。
+     2026-11-02：「编辑」搬进这一排后要跟着一起排除——它保留自己那套字号
+     （cost_panel.css 手机档 16px / 桌面 13px），不被顶栏皮肤带着变大。
+     注意这里也必须写 :not()，否则上面基础那条（特指度更高）会把这三个按钮压回 15px。 */
+  /* 2026-11-02 定档：手机档三个按钮 66×43（原 64×39）——字号 16.5 → 18px、
+     上下内距 7 → 8px（左右仍 14px，故宽度只随字号涨 2px）。 */
+  .runbar button:not(.cost-edit-btn){padding:8px 14px;font-size:18px}
   /* 「数据时间 …」那一排与下方按钮的行距拉近：下外边距 16 → 8px（2026-10-30）。 */
   .sub{margin-bottom:8px}
   /* 状态排（「成功 ·…（北京）」+「已生效」）：上下留白收紧（上 -4 → -6px、下 14 → 8px），
@@ -1299,9 +1324,11 @@ PAGE_CSS = PAGE_CSS.replace('__TARGET_DASH_BORDER__', TARGET_DASH_BORDER)
 PAGE_CSS += RULES_CSS
 
 # 仓位骨架直接随首屏 HTML 输出；不能等页尾 JS 下载、解析完才插卡。
-# 仅放结构，不复制计算或云端逻辑；编辑按钮等初始化完成才启用。
+# 仅放结构，不复制计算或云端逻辑。
+# 「编辑」按钮 2026-11-02 从这行搬到顶栏（monitor 输出的 .runbar 里「刷新」右边），
+# id 仍是 costEditBtn、仍由 cost_panel.js 绑定，只是不再属于这张卡 —— JS 改按 document 查找。
 COST_PANEL_HTML = r'''<details class="card group-card cost-manage" id="costManage">
-<summary class="grp"><span class="grp-name">仓位</span><span class="group-stats"><span class="cost-state" id="costState"></span><span class="cost-sum"></span></span><button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false" aria-label="就地编辑成本价与数量" disabled>编辑</button></summary>
+<summary class="grp"><span class="grp-name">仓位</span><span class="group-stats"><span class="cost-state" id="costState"></span><span class="cost-sum"></span></span></summary>
 <div class="cost-body"><div class="cost-acts" id="costActs" hidden><span class="cost-notice" id="costNotice" role="status" hidden></span><button type="button" class="primary" id="costSave">保存并上传</button><button type="button" id="costCancel">取消</button></div><div class="signal-members-panel" id="costMembers"></div><input type="file" id="costFile" accept=".json" hidden><div class="cost-foot" id="costFoot"></div></div>
 <div class="group-bottom"><button type="button" class="collapse-group" aria-controls="costManage" aria-label="收起仓位"><span class="collapse-icon" aria-hidden="true">▲</span></button></div>
 </details>'''
