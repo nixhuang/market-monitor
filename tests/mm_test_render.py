@@ -271,7 +271,7 @@ check('box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-rad
       and 'border:1.5px solid var(--dim);background:transparent' in html
       and '.stat-badge.red{border-color:var(--red)}' in html,
       "灯圈改成空心描边圆 17px，数字白色、字号仍是 12.5px")
-check('id="group_technology"' in html and 'IT软硬Ai (5)' in html, "IT 分类展示计数")
+check('id="group_technology"' in html and 'IT · AI (5)' in html, "IT 分类展示计数")
 check('其他关注' not in html, "旧其他关注分类已移除")
 check("<h2>个股</h2>" not in html and "<h2>ETF 基金</h2>" not in html, "个股与 ETF 不再分区")
 check(all('<thead' not in table and '<th>名称</th>' not in table and 'class="h-earn"' not in table

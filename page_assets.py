@@ -627,6 +627,10 @@ tr:first-child td{border-top:none}
 #signalCounts td{padding:6.3px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
 #signalCounts td.num{text-align:center}   /* 计数列居中：破折号与展开按钮对齐 */
 #signalCounts td:first-child{width:26%}
+/* 左列是指标名称（布林+RSI／单独RSI／…／财报／空间 等筛选按钮），2026-11-02 起加粗 600：
+   右列是计数胶囊与名单，保持常规字重，靠加粗把"看什么指标"和"多少只"分开。
+   名单行是 colspan=4 的整行单元格，用 :not([colspan]) 排除，不能把整个名单一起加粗。 */
+#signalCounts td:first-child:not([colspan]){font-weight:600}
 /* 数字胶囊 44px 写死：宽度不跟着位数变。数字右对齐到「个位正好压在胶囊中线」的位置 ——
    个位右缘固定在 x=26（= 中线 22 + 半个字宽 4），两位数时十位向左长、个位仍停在中线上。
    右边 17px 内边距就是给三角预留的位置；white-space:nowrap 保证任何情况下都不折行。 */
@@ -709,9 +713,14 @@ tr:first-child td{border-top:none}
 /* 2026-10-28：紫灯／财报这两行的胶囊宽度改成和「信号」列胶囊完全一致（74px），
    手机上不再比上面那几颗窄一截；summary 的让位内边距跟着 --chip-w 走，文字仍单行。 */
 #signalCounts .signal-extra-row{--chip-w:74px;position:relative;display:block;padding:8px 12px 8px 5px;border-top:1px solid #465e87}
-#signalCounts .signal-extra-row>.signal-filter-toggle{position:absolute;top:8px;left:5px;width:var(--chip-w);padding:0;justify-content:center;text-align:center}
+/* 附加行左侧的「财报」「空间 / 达到」按钮跟表格左列指标名同级，2026-11-02 起同样加粗 600
+   （通用 .signal-filter-toggle 里有 font:inherit 会把字重拉回继承值，必须在这条更具体的规则上写）。 */
+#signalCounts .signal-extra-row>.signal-filter-toggle{position:absolute;top:8px;left:5px;width:var(--chip-w);padding:0;justify-content:center;text-align:center;font-weight:600}
 #signalCounts .signal-extra-row>.text-only,#signalCounts .signal-extra-row>.earnings-week{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
-#signalCounts .signal-extra-row>.text-only>summary,#signalCounts .signal-extra-row>.earnings-week>summary{box-sizing:border-box;min-height:38px;padding:8px 0 8px calc(var(--chip-w) + 12px);line-height:22px;font-size:13.5px;font-weight:600}
+/* 这两排（「未来15天财报 · N 只」「空间N只　达到N只」）2026-11-02 由 13.5px 提到 16px：
+   与手机端灯圈/右侧计数（16px）同级，加粗 600 保留；16px 字在 line-height 22px 内不换行，
+   min-height 38px 与内距不动，卡片高度不变。 */
+#signalCounts .signal-extra-row>.text-only>summary,#signalCounts .signal-extra-row>.earnings-week>summary{box-sizing:border-box;min-height:38px;padding:8px 0 8px calc(var(--chip-w) + 12px);line-height:22px;font-size:16px;font-weight:400}
 #signalCounts .signal-extra-row>.text-only[open]>summary{border-bottom:0}
 #signalCounts .purple-extra .text-only>summary{color:var(--purple)}
 #signalCounts .purple-extra .text-only .signal-member-list{margin:0;padding:0 0 8.1px 18px}
@@ -748,7 +757,7 @@ tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out
 #signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;color:var(--text)}
 /* 折叠态绝对不占高度：个别移动内核在父面板隐藏期间改 open 后不重排，这里用 CSS 兜底 */
 #signalCounts .earnings-week:not([open])>*:not(summary){display:none}
-#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:13.5px;font-weight:600;cursor:pointer;touch-action:manipulation}
+#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:16px;font-weight:400;cursor:pointer;touch-action:manipulation}
 #signalCounts .earnings-week summary:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:2px}
 #signalCounts .earnings-week ul{list-style:none;margin:0;padding:0 0 8.1px 2px}
 #signalCounts .earnings-week li{font-size:13px;padding:3.6px 0;overflow-wrap:anywhere}
@@ -1050,7 +1059,7 @@ tr.gray td{color:var(--dim)}
 .stat-badge.missing{border-color:var(--dim);border-style:dashed}
 .stat-badge.purple{border-color:var(--purple)}
 .stat-badge.green{border-color:var(--green)}
-/* 分组标题：名称不参与挤压，避免手机上「IT软硬Ai (27)」被拆成两行 */
+/* 分组标题：名称不参与挤压，避免手机上「IT · AI (27)」被拆成两行 */
 .group-card>summary .grp-name,.macro-card>summary .grp-name{white-space:nowrap;flex:none}
 .rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
 .rs-spy.up{color:var(--up)} .rs-spy.down{color:var(--down)}

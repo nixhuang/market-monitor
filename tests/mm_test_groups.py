@@ -230,8 +230,8 @@ class TestGroups(unittest.TestCase):
         self.assertFalse(monitor._official_earnings_valid({**e, 'source_url': 'javascript:alert(1)'}, 'COST', '2030-10-11'))
 
     def test_definitions_and_initial_config(self):
-        labels = ['持仓', '重点', '指数基', 'IT软硬Ai', '医疗保健', '金融', '能源',
-                  '工航防建机', '化材金纸', '公水电气', '必需消费品', '通信娱乐', '可选消费', '房地产']
+        labels = ['持仓', '重点', '指数基', 'IT · AI', '医疗保健', '金融', '能源',
+                  '工航防建', '化材金纸', '公水电气', '必须消费', '通信娱乐', '可选消费', '房地产']
         self.assertEqual([g['label'] for g in monitor.GROUPS], labels)
         with open(os.path.join(ROOT, 'holdings.json'), encoding='utf-8') as f:
             cfg = json.load(f)
@@ -1584,7 +1584,7 @@ class TestGroups(unittest.TestCase):
         snap = monitor.build_snapshot({}, items, cfg)
         page = monitor.render({}, items, 3, snapshot=snap)
         self.assertEqual(snap['registered_counts']['technology'], 3)       # 登记 3，AAPL 去重落在持仓
-        self.assertIn('IT软硬Ai (2)', page)
+        self.assertIn('IT · AI (2)', page)
         self.assertIn('持仓 (1)', page)
 
     def _reduce_signals(self, cfg, group='position', price=100):
@@ -2563,7 +2563,7 @@ class TestGroups(unittest.TestCase):
                    signals=[], level='green', source='test', group='technology')
         page = monitor.render({}, [row], 1)
         self.assertEqual(page.count('class="card group-card"'), 14)
-        self.assertIn('IT软硬Ai (1)', page)
+        self.assertIn('IT · AI (1)', page)
         self.assertIn('房地产 (0)', page)
         self.assertIn('&lt;公司 &amp; 名称&gt;', page)
         self.assertIn('无异动 1 只', page)
@@ -7387,10 +7387,10 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             # 跟其它名单同一套：名字可点跳转 + 分组写在括号里 + 灰色小字说明，不再有加粗蓝色分组
             self.assertIn('<li class="lamp-green"><a class="signal-member-jump" href="#s-aapl">'
                           '<span class="signal-member-symbol">AAPL</span></a>'
-                          '<span class="signal-member-belong">（IT软硬Ai）</span> ', panel)
-            self.assertIn('10/14 盘后 · 预计</span><span class="lamp-text">（绿灯）</span>', panel)
+                          '<span class="signal-member-belong">（IT · AI）</span> ', panel)
+            self.assertIn('10/14 盘后</span><span class="lamp-text">（绿灯）</span>', panel)
             self.assertIn('<span class="signal-member-belong">（短持仓）</span> '
-                          '<span class="earnings-week-meta is-yellow">美东 10/20 盘后 · 官方活动日期</span>'
+                          '<span class="earnings-week-meta is-yellow">美东 10/20 盘后</span>'
                           '<span class="lamp-text">（绿灯）</span>', panel)
             self.assertNotIn('earnings-week-group', panel)
             self.assertNotIn('<strong>', panel.split('earnings-week', 1)[1])
@@ -7441,13 +7441,13 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     self.assertEqual(monitor.earnings_week_members([duplicate, row], '2026-10-20'),
                                      [member])
                     panel = monitor._signal_counts_card(snap)
-                    self.assertIn(f'美东 10/30 {label} · ', panel)
+                    self.assertIn(f'美东 10/30 {label}</span>', panel)
                     self.assertEqual(monitor._earnings_week_panel(snap, count_only=True), 1)
                     data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', panel).group(1)))
                     self.assertTrue(data['earnings_week']['ok'])
                     filtered, = data['earnings_week']['members']
                     self.assertEqual(filtered['d'][0]['l'], 'gray')   # 10/30 距基准 10 天：不红不黄，跟财报名单同为灰字
-                    self.assertIn(f'财报 {date} {label} · ', filtered['d'][0]['t'])
+                    self.assertEqual(filtered['d'][0]['t'], f'财报 {date} {label}')
                     position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
                     self.assertIn('无异动 1 只', position)
                     folded = position.split('<details class="quiet-list">', 1)[1]
@@ -8226,7 +8226,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertEqual(output.count('class="signal-count-toggle"'), 4)  # 3 条灰灯 + LIT 黄灯
         self.assertIn('signal-member-jump', output)
         self.assertNotIn('(持仓)', output)
-        self.assertNotIn('(IT软硬Ai)', output)
+        self.assertNotIn('(IT · AI)', output)
 
     def test_statistics_header_orders_red_yellow_gray_purple_then_earnings(self):
         rows = [self.member_row('RED', 'position', 'red', ('chg', 'red')),
@@ -8578,7 +8578,7 @@ class TestTargetOverlays(unittest.TestCase):
         self.assertNotIn('>▼</span>', target)
         self.assertEqual(target.count('href="#s-both"'), 2)
         self.assertIn('href="#s-high"', target)
-        self.assertIn('（IT软硬Ai）', target)
+        self.assertIn('（IT · AI）', target)
         self.assertIn('测试备注', target)
         data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', output)[1]))
         union = data['target_purple']

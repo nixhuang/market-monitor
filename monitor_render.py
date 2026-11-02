@@ -1037,8 +1037,8 @@ class PageRenderer:
                     or not self._context.earnings_within_list({"status": "ok", "date": entry.get("date")}, asof)):
                 return pending
             date = entry["date"]
+            # 财报名单只写美东日期与时段，不解释日期来源（官方／预计／估算）——2026-11-02 按用户要求去掉
             timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(entry.get("timing"), "时段待定")
-            kind = {"official": "官方活动日期", "expected": "预计", "estimated": "估算"}.get(entry.get("kind"), "来源待确认")
             note = f'<span class="note">{esc(entry["note"])}</span>' if entry.get("note") else ""
             belong = self._context._member_belong(entry)   # 跟其它名单一样：分组写在代码后面的括号里，持仓分长/短
             level = entry.get("level")
@@ -1054,7 +1054,7 @@ class PageRenderer:
             lines.append(f'<li{lamp_cls}><a class="signal-member-jump" href="#{anchor}">'
                          f'<span class="signal-member-symbol">{esc(entry["symbol"])}</span>{note}</a>'
                          f'<span class="signal-member-belong">（{esc(belong)}）</span> '
-                         f'<span class="earnings-week-meta{urg_cls}">美东 {esc(date[5:].replace("-", "/"))} {timing} · {kind}</span>'
+                         f'<span class="earnings-week-meta{urg_cls}">美东 {esc(date[5:].replace("-", "/"))} {timing}</span>'
                          f'{lamp_text}</li>')
         if count_only:
             return len(lines)
@@ -1254,17 +1254,16 @@ class PageRenderer:
                                      for d in earn_members)
             if valid_earnings and earn_members:
                 timing_labels = {"pre": "盘前", "post": "盘后", "during": "盘中"}
-                kind_labels = {"official": "官方日期", "expected": "预计", "estimated": "估算"}
                 def earn_level(d):
                     """财报的字色＝财报名单同一套：近 3 日红、7 日内黄、其余灰。"""
                     urg = self._context.earnings_urgency(
                         {"status": "ok", "date": d.get("date"), "timing": d.get("timing")}, asof)
                     return urg if urg in ("red", "yellow") else "gray"
 
+                # 同样不解释来源：筛选结果里只写「财报 日期 时段」
                 add_overlay_filter("earnings_week", "未来15天财报", earn_members, len(earn_members),
                                    lambda d: f"财报 {d.get('date', '')} "
-                                   f"{timing_labels.get(d.get('timing'), '时段待定')} · "
-                                   f"{kind_labels.get(d.get('kind'), '来源待确认')}",
+                                   f"{timing_labels.get(d.get('timing'), '时段待定')}",
                                    earn_level)
 
         filter_data = {kind: {"label": f["label"], "ok": f["ok"],
