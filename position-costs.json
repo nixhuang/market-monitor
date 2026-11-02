@@ -8,83 +8,86 @@
  "fixed_cost": 16916.97,
  "items": {
   "BRK-B": {
-   "cost": 505,
-   "qty": 1
+   "qty": 1,
+   "cost": 505
   },
   "HII": {
-   "cost": 272,
-   "qty": 2
+   "qty": 2,
+   "cost": 272
   },
   "APH": {
-   "cost": 78.94,
-   "qty": 30
+   "qty": 30,
+   "cost": 78.94
   },
   "AVGO": {
-   "cost": 364.92,
-   "qty": 4
+   "qty": 4,
+   "cost": 364.92
   },
   "CRSP": {
-   "cost": 46.92,
-   "qty": 12
+   "qty": 12,
+   "cost": 46.92
   },
   "GOOGL": {
-   "cost": 328.12,
-   "qty": 10
+   "qty": 10,
+   "cost": 328.12
   },
   "LMT": {
-   "cost": 513,
-   "qty": 3
+   "qty": 3,
+   "cost": 513
   },
   "NTNX": {
-   "cost": 58.27,
-   "qty": 23
+   "qty": 23,
+   "cost": 58.27
   },
   "UNH": {
-   "cost": 387.6,
-   "qty": 6
+   "qty": 6,
+   "cost": 387.6
   },
   "UBER": {
-   "cost": 69.36,
-   "qty": 5
+   "qty": 5,
+   "cost": 69.36
   },
   "DRAM": {
-   "cost": 49.58,
-   "qty": 16
+   "qty": 16,
+   "cost": 49.58
   },
   "SPYM": {
-   "cost": 88.77,
-   "qty": 25.0188
+   "qty": 25.0188,
+   "cost": 88.77
   },
   "SCHD": {
-   "cost": 32.88,
-   "qty": 46.0903
+   "qty": 46.0903,
+   "cost": 32.88
   },
   "QQQM": {
-   "cost": 296.8,
-   "qty": 7.0022
+   "qty": 7.0022,
+   "cost": 296.8
   },
   "XLI": {
-   "cost": 167.9,
-   "qty": 2
+   "qty": 2,
+   "cost": 167.9
   },
   "VRT": {
-   "cost": 208.98,
-   "qty": 4
+   "qty": 4,
+   "cost": 208.98
   },
   "NXPI": {
-   "cost": 220,
-   "qty": 2
+   "qty": 2,
+   "cost": 220
   },
   "PDD": {
-   "cost": 79,
-   "qty": 10
+   "qty": 10,
+   "cost": 79
   }
  },
  "acks": {
-  "GOOGL|loss10": "2026-10-30T04:24:52.178Z"
+  "GOOGL|loss10": "2026-10-30T04:24:52.178Z",
+  "AVGO|loss10": "2026-11-02T03:53:55.746Z"
  },
  "ack_tombstones": {
   "AVGO|loss10": "2026-10-27T00:45:44.678Z",
   "GOOGL|loss10": "2026-10-30T04:24:44.062Z"
- }
+ },
+ "ack_contexts": {},
+ "ack_invalidations": {}
 }
