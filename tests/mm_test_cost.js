@@ -1233,8 +1233,8 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   // 手机档（2026-10-29）：名单文字 10.5 → 11.5px，右侧比例图相应缩短
   // （名称 : 图 = 1.15:1 → 1.3:0.85），数值列各让出 2px
   assert.match(CSS,/grid-template-columns:minmax\(0,1\.16fr\) 66px 66px minmax\(0,0\.66fr\);gap:0 6px;\s*font-size:13px;line-height:15\.75px\}/);
-  // 中文备注名（.cncn）跟仓位面板 .cost-name .cn 同号 11.5px；代码单独 .cnsym 加粗（2026-10-30）
-  assert.match(CSS,/\.cost-contrib \.cncn\{font-size:11\.5px\}/);
+  // 中文备注名（.cncn）跟仓位面板 .cost-name .cn 同号 12px；代码单独 .cnsym 加粗。
+  assert.match(CSS,/\.cost-contrib \.cncn\{font-size:12px\}/);
   assert.match(CSS,/\.cost-contrib li>\.cn-name,\.cost-contrib li>\.cv,\.cost-contrib li>\.ca\{height:15\.75px\}/);
   // 手机档只剩 ≤600 一档（2026-11-01 删掉 400/365/340/320 细分，只按 440 定稿）：
   // 比例图 0.66fr，名称列在 440 上约 182px，最长一行「LMT 洛克希德马丁」墨宽 113px 不会被截
@@ -1255,9 +1255,9 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(CSS,/minmax\(84px,1\.5fr\)/);assert.match(CSS,/minmax\(84px,1\.45fr\)/);
   assert.ok(!/max-width:3[0-9][0-9]px|max-width:400px|max-width:365px/.test(CSS),
     '手机档不应再保留比 440 更窄的细分断点');
-  // 持仓代码 12.5 → 13px（跟统计面板名单同号），中文备注名仍 11.5px 不动（2026-10-30）
+  // 持仓代码 13px（跟统计面板名单同号），手机中文备注名 12px。
   assert.match(CSS,/\.cost-name \.sy\{font-size:13px;font-weight:600/);
-  assert.match(CSS,/\.cost-name \.sy\{font-size:13px\} \.cost-name \.cn\{font-size:11\.5px\}/);
+  assert.match(CSS,/\.cost-name \.sy\{font-size:13px\} \.cost-name \.cn\{font-size:12px\}/);
   assert.ok(!/\.cost-name \.sy\{font-size:12\.5px/.test(CSS),'仓位代码不应再是 12.5px');
   const iName=SOURCE.indexOf('\'<span class="cn-name">'), iCv=SOURCE.indexOf('\'<span class="cv '),
         iCa=SOURCE.indexOf('\'<span class="ca '), iBar=SOURCE.indexOf('\'<span class="cbar">');
@@ -1280,6 +1280,15 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   // 五个数值列的数字：11.5 → 13px（2026-11-01），跟「当日盈亏贡献」列表的数字同号；
   // 行高写死线上实测的 17.25px（＝线上 11.5px×1.5）——只加大字号、不加行距，整行仍是 42.5px
   assert.match(CSS,/\.cost-cell\{font-size:13px;line-height:17\.25px\}/);
+  // 手机仓位指定辅助文字统一 12px；不改变桌面基础字号。
+  for(const rule of [
+    '.cost-colhead{font-size:12px;padding-left:12px}',
+    '.cost-cell input{font-size:12px;padding:2px 3px}',
+    '.cost-legend{font-size:12px;gap:3px 10px}',
+    '.cost-mini .t-name .cnt{font-size:12px}',
+    '.cash-inputs label>span,.cash-total{font-size:12px}',
+    '.cost-foot{font-size:12px}'
+  ]) assert.ok(CSS.includes(rule),rule);
   // 手机档「总持仓/长持仓/短持仓」：行高 15.5px + 上下 3/4px 内边距 = 38px，与线上一致
   // （11-01 早些时候压成 28px 那版被用户判定「变矮了」已还原，这里盯住别再改回去）
   assert.match(CSS,/\.cost-block-title\{font-size:13px;padding:3px 0 4px 12px;min-height:var\(--cost-head-h\);line-height:15\.5px\}/);

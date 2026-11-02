@@ -321,11 +321,11 @@ class RulesRegression(unittest.TestCase):
         # 桌面档只认 ≥601，手机档只认 ≤600，两边不能有重叠或空档
         self.assertIn('@media(min-width:601px){', css)
 
-    def test_mobile_stock_numbers_are_11px_and_main_row_padding_is_compact(self):
+    def test_mobile_stock_numbers_and_main_row_padding_are_compact(self):
         css = page_assets.PAGE_CSS
         mobile = css.split('@media (max-width:600px){', 1)[1].split('\n}', 1)[0]
-        # 仅手机放大三处辅助数字；桌面 52 周两端价格与涨跌空间仍保持 10px。
-        self.assertIn('.stk .tgs .lvtag{padding:1px 3px;font-size:11px;', mobile)
+        # 手机紫灯／加减仓价 12px，52 周两端价格与涨跌空间仍 11px；桌面 52 周保持 10px。
+        self.assertIn('.stk .tgs .lvtag{padding:1px 3px;font-size:12px;', mobile)
         self.assertIn('.range52-lo,.range52-hi,.range52-gap{font-size:11px}', mobile)
         self.assertIn('.range52-lo,.range52-hi{position:relative;flex:none;font-size:10px;', css)
         self.assertIn('.range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;', css)
@@ -333,6 +333,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('.stk td{padding:6px 5px}', mobile)
         self.assertIn('.stk tr.range52-row td{padding:0 8px 4px 12px}', mobile)
         self.assertIn('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}', css)
+        final_override = css.split('/* ===== 手机（iOS Chrome）最终覆盖', 1)[1]
+        self.assertIn('  .lvtag.add-ck,.lvtag.add-ck .ck,.ack-btn{font-size:12px}', final_override)
 
     def test_mobile_descriptions_are_13_5px_and_stock_earnings_are_unchanged(self):
         css = page_assets.PAGE_CSS

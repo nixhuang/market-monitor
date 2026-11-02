@@ -437,9 +437,11 @@
      顶上「编辑」按钮，宁可把尾部百分比截成省略号，也不让文字压到按钮上（2026-10-29）。 */
   .cost-manage>summary .cost-sum{min-width:0;overflow:hidden;text-overflow:ellipsis}
   .cost-manage>summary .cost-sum .sep{margin:0 9px}
-  /* 「编辑」按钮加大：字 13 → 14px、左右内边距 10 → 14px（手机上更好点），
-     行高 1.15 → 1.08 把加字号吃掉的高度还回去 —— 按钮仍是 25px，标题行与卡片高度不变。 */
-  .cost-edit-btn{padding:4px 14px;font-size:14px;line-height:1.08}
+  /* 「编辑」按钮再加大一档：字 14 → 16px、内距 4×14 → 6×18（2026-11-02）。
+     高度 = 6+6+上下边框 2 + 16×1.08 ≈ 31px，仍远低于手机标题行 63px，卡片高度不变；
+     标题行是 nowrap、.cost-sum 有 ellipsis 兜底，按钮变宽也不会把金额挤到第二行。
+     形状不动：仍是 7px 圆角小圆角矩形，不得改成 99px 全圆。 */
+  .cost-edit-btn{padding:6px 18px;font-size:16px;line-height:1.08}
   /* 手机上「已同步 / 未同步」搬到「数据时间 …」那一排的右侧（见 cost_panel.js 的 syncMirrorEl）：
      字号跟那一排同一档（13px），别再用标题行里 11px 的小字。 */
   .sub .cost-state{margin-left:auto;font-size:13px}
@@ -506,7 +508,7 @@
   .cost-block-title .t-mv,.cost-block-title .t-pnl,.cost-block-title .t-wt,
   .cost-manage .signal-member-list li>.cost-grid>:nth-child(n+2){
     border-left-color:rgba(255,255,255,.18);padding-left:3px}
-  .cost-colhead{font-size:10.5px;padding-left:12px}
+  .cost-colhead{font-size:12px;padding-left:12px}
   /* 「总持仓 N 只 / 长持仓 N 只 / 短持仓 N 只」：文字 11.5 → 13px（2026-10-30 再加大一档）。
      盈亏比 / 金额**上下两排**（2026-11-01 用户要求，中途短暂改过横排现在改回来）。
      2026-11-01 晚：**行高与整排高度都按线上实测值还原**（行高 15.5px + 上下内边距 3/4px = 38px）——
@@ -525,14 +527,11 @@
      字号由 11.5 → 13 后若沿用 1.5 倍行高会是 19.5px，盈亏列上下两排 39px，整行 42.5 → 47px，
      用户判定「行距不该加大」。写死 17.25px 后两排仍是 34.5px、整行 42.5px，与线上一像素不差。 */
   .cost-cell{font-size:13px;line-height:17.25px}
-  .cost-cell input{font-size:11px;padding:2px 3px}
+  .cost-cell input{font-size:12px;padding:2px 3px}
   .cost-cell .pct,.cost-cell .amt{display:block}
-  /* 代码 / 中文备注名：13 + 11.5px（代码 2026-10-30 从 12.5 提到 13，跟统计面板名单
-     的 .signal-member-symbol 同号；中文不动），行高从 1.3 收到 1.2 ——
-     名称那一格上下占的高度和原来一样（13×1.2 + 1 + 11.5×1.2×2 ≈ 43px，改前约 43px），
-     ETF 胶囊跟着加半档，并压行高到 1.3，保证它不超过代码行、不把格子顶高。 */
+  /* 代码 13px、中文备注名 12px；行高保持 1.2，ETF 胶囊仍 10px。 */
   .cost-name{line-height:1.2}
-  .cost-name .sy{font-size:13px} .cost-name .cn{font-size:11.5px}
+  .cost-name .sy{font-size:13px} .cost-name .cn{font-size:12px}
   .cost-name .tag{font-size:10px;line-height:1.3}
   /* 「编辑」在手机上比桌面略收一点（4/10 + 12.5px），仍比改版前的 3/5 + 12px 大；
      防错行由标题行 nowrap 负责（见文件前部 .cost-manage>summary），不靠把按钮压小。
@@ -549,7 +548,7 @@
   .cost-mini .t-name{overflow:hidden}
   .cost-mini .cnt{display:none}
   .cost-mini .c-cost,.cost-mini .t-mv,.cost-mini .t-pnl,.cost-mini .t-wt{font-size:13px}
-  .cost-legend{font-size:10.5px;gap:3px 10px}
+  .cost-legend{font-size:12px;gap:3px 10px}
   /* 「当日盈亏贡献」标题：11.5 → 12.5 → **14.5px**；右边的「今日净 ±N ±N%」10.5 → 12 → **13.5px**。
      行高按线上实测值**写死 18px**：标题 14.5px 与「今日净」13.5px 两个字号混排后行盒 = 19px，
      加上 summary 自身 3+2px 内边距正好是原来的 24px。字号再涨，这一排和
@@ -570,10 +569,8 @@
      金额列左缘仍是 263.7px（440 视口实测）不动，两列墨迹间距 23.5 → 34.5 → **44px**。 */
   .cost-contrib li{grid-template-columns:minmax(0,1.16fr) 66px 66px minmax(0,0.66fr);gap:0 6px;
     font-size:13px;line-height:15.75px}
-  /* 中文备注名跟**仓位面板持仓名称**同一档：那里是 .cost-name .cn = 11.5px（代码 .sy 12.5px），
-     这里也定 11.5px，「代码 13px ＞ 中文 11.5px」的层级与那边完全一致（2026-10-30）。
-     注意不是主表 .stk td.sym .note 那档 13.5px —— 主表是另一块，字号本来就更大一档。 */
-  .cost-contrib .cncn{font-size:11.5px}
+  /* 中文备注名与仓位持仓名称同为 12px；固定行高不变。 */
+  .cost-contrib .cncn{font-size:12px}
   /* 混排副作用：代码 13px + 中文 11.5px 放在同一个格子里，行盒会被撑到 16.75px
      （整块 18 行 × 1px = +18px）。给三个文本格**固定 15.75px**（＝线上实测行高），
      文字靠 align-items:center 垂直居中，整块高度一像素不动（2026-10-30）。 */
@@ -587,6 +584,10 @@
      （加大后的「LMT 洛克希德马丁」约 113px 墨宽）宽 35px，不出省略号；
      两列之间的相对间距（gap 6px）不变。 */
   .cost-contrib .cbar{height:6px}
+  /* 用户指定的仓位辅助文字统一 12px；现金／固收副标题在手机上虽隐藏，仍同步口径。 */
+  .cost-mini .t-name .cnt{font-size:12px}
+  .cash-inputs label>span,.cash-total{font-size:12px}
+  .cost-foot{font-size:12px}
 }
 /* 窄屏细分档（400 / 365 / 340 / 320）已整段删除 —— 2026-11-01 用户定：只适配
    iPhone 18 Pro Max 竖屏 440px（CSS 视口），更窄的屏不再支持。

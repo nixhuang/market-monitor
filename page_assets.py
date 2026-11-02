@@ -617,7 +617,9 @@ tr:first-child td{border-top:none}
    外框四边同宽 1.5px，左侧蓝条随之取消（手机上外框左右各留 4px 贴着屏幕边）。 */
 #signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}
 #signalCounts .collapse-group{color:#fff}
-#signalCounts>summary{color:var(--head-blue,#bfd5ff)}
+/* 统计标题不再单独钉成浅蓝：原来 #signalCounts>summary 写死 --head-blue，收起/展开两态同色，
+   和「其它板块收起白、展开蓝」的状态提示对不上（2026-11-02 用户要求统一）。
+   现在收起跟随 summary 默认字色，展开交给下面 .group-card[open]>summary .grp-name 那条通用蓝。 */
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
 #signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-earn{color:var(--text)}
@@ -861,8 +863,8 @@ td.px{text-align:center}
   .stk .earn{font-size:12.5px;line-height:1.4}
   .stk .earn .unit{font-size:11.5px;line-height:1.35}
   .stk .px-price{font-size:14px}
-  /* 紫灯框数字文字 10.5 → 11px；52 周两端价格及下方涨跌空间 10 → 11px，桌面不变。 */
-  .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:11px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
+  /* 紫灯框与加／减仓价数字文字 11 → 12px；52 周两端价格及下方涨跌空间仍 11px，桌面不变。 */
+  .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:12px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
   .range52-lo,.range52-hi,.range52-gap{font-size:11px}
   .stk td.sig{font-size:12.5px;line-height:1.45}
   .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
@@ -904,6 +906,10 @@ tr.gray td{color:var(--dim)}
 /* 指标列仍左对齐，当前／变化／状态三列居中（.num 默认右对齐，这里按列覆盖） */
 #macroCard td:nth-child(2),#macroCard td:nth-child(3),#macroCard td:nth-child(4){text-align:center}
 #macroCard tr.mh td{padding:5px 10px;font-size:12.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
+/* 「变化」列（第 3 列）的数字跟「当前」列同号（14px）：单元格上挂的 .dim 会连字号一起压到 13px，
+   两列并排看着像刻意弱化，其实两列主数同等重要。只补字号，灰色仍由 .dim 给出（次要感靠颜色，不靠缩小）。
+   WTI 原油参考行整行本来就是 13px（.oil-reference-row 自己的规则），排除在外，否则它反而比「当前」列大。 */
+#macroCard tr:not(.oil-reference-row) td.num.dim{font-size:14px}
 /* ===== 市场风险表：极致压缩每行的上下留白（2026-10-30） =====
    原来 td 上下各 9px，叠上 .unit 小字行（11px × 1.5 行高 ≈ 16.5px）后：
    两行小字的行 56.5px、三行的上涨参与度 73px、手机上 WTI 那行 117px，文字离分隔线太远。
@@ -997,9 +1003,11 @@ tr.gray td{color:var(--dim)}
    而且点完失焦就消失，看着像「闪一下」。键盘 Tab 过去的 :focus-visible 照旧显示。 */
 .group-card>summary:focus:not(:focus-visible),.macro-card>summary:focus:not(:focus-visible),
 .zone-card>summary:focus:not(:focus-visible){outline:none}
-.group-card[open]:not(#signalCounts)>summary .grp-name,.macro-card[open]>summary .grp-name,
+/* 展开态的蓝标题与蓝三角对统计面板同样生效（去掉 :not(#signalCounts)）——统计与其它板块
+   共用一套「收起默认白 → 展开 --head-blue」的状态提示（2026-11-02）。 */
+.group-card[open]>summary .grp-name,.macro-card[open]>summary .grp-name,
 .zone-card[open]>summary .zone-name{color:var(--head-blue,#bfd5ff)}
-.group-card[open]:not(#signalCounts)>summary::before,.macro-card[open]>summary::before,
+.group-card[open]>summary::before,.macro-card[open]>summary::before,
 .zone-card[open]>summary::before{color:var(--head-blue-on,#8fb8f0)}
 /* 子区自己的收起条和外层「持仓」卡底部收起条之间拉开距离，两条 ▲ 挨太近会误点 */
 .zone-card + .group-bottom,.zone-card + .quiet + .group-bottom{margin-top:22px}
@@ -1136,6 +1144,8 @@ tr.gray td{color:var(--dim)}
   #signalCounts .signal-filter-detail,
   #signalCounts .earnings-week-meta,
   #signalCounts .signal-member-direction{font-size:13.5px}
+  /* 主表成本提醒与已读文字／符号统一 12px；ETF 标签和 52 周数字不纳入。 */
+  .lvtag.add-ck,.lvtag.add-ck .ck,.ack-btn{font-size:12px}
   /* ===== 统计面板：所有胶囊的**框**一像素不动，只放大框里的文字与数字（2026-10-30） =====
      指标名称胶囊（74×38）：13 → 14.5px。最紧的「布林+RSI」「52周低位」墨宽 53px
        → 59.1px，可用 64px，仍是单行不折行（再大一档 15px 就只剩 2px 余量，容易在别的字体下折行）。
