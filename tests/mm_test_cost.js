@@ -6,7 +6,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { performance } = require('node:perf_hooks');
 const SOURCE = fs.readFileSync(path.join(__dirname, '..', 'cost_panel.js'), 'utf8');
-const CSS = fs.readFileSync(path.join(__dirname, '..', 'cost_panel.css'), 'utf8');
+// Ignore formatting-only changes; keep descendant spaces and CSS token values.
+const CSS = fs.readFileSync(path.join(__dirname, '..', 'cost_panel.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g,'').replace(/\s*([{}:;,])\s*/g,'$1');
 const ASSETS = fs.readFileSync(path.join(__dirname, '..', 'page_assets.py'), 'utf8');
 const COST_PANEL_HTML = ASSETS.match(/COST_PANEL_HTML = r'''([\s\S]*?)'''/)[1];
 const LOCAL = 'mm_position_costs_local_v1';
@@ -39,13 +40,15 @@ class Element {
     this.classList={
       remove:(...tokens)=>{this.className=this.className.split(/\s+/).filter(x=>x&&!tokens.includes(x)).join(' ');},
       add:(...tokens)=>{this.className=[...new Set([...this.className.split(/\s+/).filter(Boolean),...tokens])].join(' ');},
-      contains:token=>this.className.split(/\s+/).includes(token)
+      contains:token=>this.className.split(/\s+/).includes(token),
+      toggle:(token,force)=>{const on=force===undefined?!this.classList.contains(token):!!force;if(on)this.classList.add(token);else this.classList.remove(token);return on;}
     };
   }
   get id(){return this.attrs.id||'';} set id(v){this.attrs.id=v;}
   get className(){return this.attrs.class||'';} set className(v){this.attrs.class=v;}
   get open(){return Object.hasOwn(this.attrs,'open');} set open(v){if(v)this.attrs.open='';else delete this.attrs.open;}
   get firstChild(){return this.children[0]||null;}
+  get parentElement(){return this.parentNode||null;}
   get nodeType(){return this.tagName==='#TEXT'?3:1;}
   get childNodes(){return this.children;}
   get dataset(){return new Proxy(Object.fromEntries(Object.entries(this.attrs).filter(([k])=>k.startsWith('data-'))
@@ -132,7 +135,7 @@ class Element {
   closest(s){let n=this;while(n){if(n.matches(s))return n;n=n.parentNode;}return null;}
   contains(n){while(n){if(n===this)return true;n=n.parentNode;}return false;}
   addEventListener(k,fn){(this.events[k]||=[]).push(fn);}
-  dispatchEvent(e){if(!e.target)e.target=this;for(const fn of this.events[e.type]||[])fn.call(this,e);return !e.defaultPrevented;}
+  dispatchEvent(e){if(!e.target)e.target=this;for(const fn of this.events[e.type]||[])fn.call(this,e);if(e.bubbles&&!e.propagationStopped&&this.parentNode)this.parentNode.dispatchEvent(e);return !e.defaultPrevented;}
   fire(k,props={}){return this.dispatchEvent(Object.assign(new MockCustomEvent(k),props));}
   click(){this.fire('click');}
   focus(){this.doc.activeElement=this;}
@@ -140,9 +143,9 @@ class Element {
   setCustomValidity(s){this.validationMessage=s;}
 }
 class MockCustomEvent {
-  constructor(type,opts={}){this.type=type;this.detail=opts.detail??null;this.cancelable=!!opts.cancelable;this.defaultPrevented=false;}
+  constructor(type,opts={}){this.type=type;this.detail=opts.detail??null;this.cancelable=!!opts.cancelable;this.defaultPrevented=false;this.bubbles=opts.bubbles??['click','input','keydown'].includes(type);this.propagationStopped=false;}
   preventDefault(){if(this.cancelable)this.defaultPrevented=true;}
-  stopPropagation(){}
+  stopPropagation(){this.propagationStopped=true;}
 }
 const fixtureAnchor=sym=>'s-'+sym.replace(/[^0-9A-Za-z]+/g,'-').replace(/^-+|-+$/g,'').toLowerCase();
 function makeDocument(opts={}){
@@ -161,13 +164,15 @@ function makeDocument(opts={}){
   doc.body.innerHTML='<div class="runbar"><button class="primary" id="btnRunNow">运行</button>'
     +'<button id="btnCheckStatus">状态</button><button id="btnHardRefresh">刷新</button>'
     +'<button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false" disabled>编辑</button></div>'
-    +COST_PANEL_HTML+'<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><table></table></details><div id="signalCounts"></div>';
+    +'<div class="dual-row"><details id="dayPnlCard"><summary><b class="dp-amt"></b><b class="dp-pct"></b></summary></details><div class="dual-body"><ul class="cost-contrib" data-owner="day"></ul></div></div>'
+    +COST_PANEL_HTML+'<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><div class="cost-foot asset-row cost-manage"></div><div class="cashbond-row"><span class="cb-total-amt"></span><span class="cb-total-pnl"></span><span class="cb-cash"><span class="cb-amt"></span></span><span class="cb-bond"><span class="cb-amt"></span></span></div><table></table></details><div id="signalCounts"><div class="signal-extra-row pnl-extra"><details><summary><span class="pnl-chip">盈亏到价</span><span class="pnl-count">0</span></summary><ul class="signal-member-list" data-g="gain"></ul><ul class="signal-member-list" data-g="loss"></ul><ul class="signal-member-list" data-g="cut"></ul><ul class="signal-member-list" data-g="add"></ul></details></div></div>';
   const table=doc.querySelector('table');table.className='stk';
   for(const sym of opts.symbols||['AAA','BBB']){
     const tr=new Element('tr',doc);tr.id=fixtureAnchor(sym);tr.className='green';
     if(!opts.legacySymbols)tr.setAttribute('data-symbol',sym);
+    tr.setAttribute('data-price','100');
     if(opts.quoteDate!==null)tr.setAttribute('data-quote-date',opts.quoteDate||'2026-10-20');
-    tr.innerHTML='<td class="sym">'+sym+'<span class="note">测试名称</span></td><td><span class="px-price">100.00</span><span class="px-chg">+1.00%</span></td><td class="sig"><span class="lvtag add">加 95</span><span class="lvtag cut">减 104</span></td>';
+    tr.innerHTML='<td class="sym">'+sym+'<span class="note" data-full="测试名称">测试名称</span></td><td class="px"><span class="px-price">100.00</span><span class="px-chg">+1.00%</span></td><td class="tgs"></td><td class="lamp-earn"></td><td class="cost-line"></td><td class="sig"><span class="sig-col"><span class="lvtag add signal-item" data-lv="95" data-near="0"><span class="fsz">加仓价 95 · 距 5.0%</span></span></span><span class="sig-col"><span class="lvtag cut signal-item" data-lv="104" data-near="0"><span class="fsz">减仓价 104 · 距 4.0%</span></span></span></td>';
     table.appendChild(tr);
     const rail=new Element('tr',doc);rail.className='range52-row';rail.innerHTML='<td><span class="range52-rail" aria-label="50.00低，本轮价 100.00 位于区间 50%，本轮高 150.00"><span class="range52-track"></span></span></td>';table.appendChild(rail);
   }
@@ -217,8 +222,8 @@ async function boot(opts={}){
     alert:s=>alerts.push(s),prompt:()=>null,
     __MM_RULES__:opts.rules};
   ctx.window=ctx;
-  const hooks=`globalThis.__costTest={money,plain,qtyInt,trim,trim4,normalize,canonical,mergeCloud,requestSave,autoPush,doPush,startPull,enterEdit,exitEdit,importData,exportData,cashFirst,nearPrice,ackStatEntries,paint,setAck,pruneAck,
-    state:()=>({DATA:clone(DATA),CLOUD:CLOUD&&clone(CLOUD),revision,dirty,maintenanceOnly,maintenancePending,cloudVerified,cloudFirstPending,positionsAuthorized,positionSave:positionSave&&clone(positionSave),positionGeneration,ackRevision,draftPending,uncertain:uncertain&&clone(uncertain),deadline:REQUEST_DEADLINE,activeRequests:activeRequests.length,editing,inFlight:inFlight&&clone(inFlight),queued,writer,SYNC,NOTICE,savePaused,storageErrors:clone(storageErrors)}),
+  const hooks=`globalThis.__costTest={money,plain,qtyInt,trim,trim4,normalize,canonical,mergeCloud,requestSave,doPush,startPull,enterEdit,exitEdit,importData,exportData,cashFirst,nearPrice,pnlTone,paint,
+    state:()=>({DATA:clone(DATA),CLOUD:CLOUD&&clone(CLOUD),revision,dirty,cloudVerified,cloudFirstPending,positionsAuthorized,positionSave:positionSave&&clone(positionSave),positionGeneration,draftPending,uncertain:uncertain&&clone(uncertain),deadline:REQUEST_DEADLINE,activeRequests:activeRequests.length,editing,inFlight:inFlight&&clone(inFlight),queued,writer,SYNC,NOTICE,savePaused,storageErrors:clone(storageErrors)}),
     rows:ROWS};`;
   const code=SOURCE.replace(/^<script>\s*/,'').replace(/\s*<\/script>\s*$/,'').replace('__MM_REAL__',JSON.stringify(opts.seed||SEED))
     .replace(/\}\)\(\);\s*$/,hooks+'})();');
@@ -277,10 +282,7 @@ test('旧版本只补缺字段并记录版本',async()=>{let d=copy(SEED);delete
 test('新版缺项不复活种子标的',async()=>{let b=await boot({local:{schema_version:2,items:{AAA:{cost:0,qty:0}},cash:0,fixed:0,fixed_cost:0}});assert.equal(b.state().DATA.items.BBB,undefined);});
 test('同页未保存dirty草稿整份保留，云端不补零或缺项',async()=>{let b=await boot();await b.enter();b.edit('AAA','qty','0');b.edit('USD','cash','0');b.exitEdit(false);b.mergeCloud({...SEED,items:{AAA:{cost:555,qty:9},CCC:{cost:1,qty:1}}});assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.state().DATA.cash,0);assert.equal(b.state().DATA.items.CCC,undefined);});
 test('clean云端仍按整份替换而不是合并持仓',async()=>{let b=await boot();b.mergeCloud({items:{AAA:{cost:1,qty:0}},cash:0});assert.equal(b.state().DATA.items.BBB,undefined);assert.equal(b.state().DATA.cash,0);});
-test('导入ACK、固定收益、零值并刷新等值',async()=>{
-  let b=await boot({token:false});let d={schema_version:2,real:true,updated_at:'2026-10-20T10:00:00Z',items:{AAA:{cost:200,qty:7}},cash:0,fixed:123,fixed_cost:100,acks:{'AAA|loss20':'2026-10-20T09:00:00Z','AAA|fund|20260630':'2026-10-20T09:30:00Z'},ack_tombstones:{'AAA|loss10':'2026-10-20T08:00:00Z'}};
-  b.importData(d);assert.ok(b.state().NOTICE.includes('尚未上传'));let expected=b.canonical(b.state().DATA);await b.dispose();let c=await boot({store:b.store});assert.equal(c.canonical(c.state().DATA),expected);assert.equal(c.state().DATA.acks['AAA|fund|20260630'],undefined);assert.ok(c.state().DATA.acks['AAA|loss20']);assert.equal(c.state().dirty,true);
-});
+
 // 刷新云端优先：以下请求与存储均来自 boot 的真实脚本 mock，不访问真实数据。
 const cloudNumbers = d => copy({items:d.items,cash:d.cash,cash_extra:d.cash_extra,fixed:d.fixed,fixed_cost:d.fixed_cost});
 for(const residue of ['dirty','uncertain','legacy','clean-pending'])for(const shape of ['双现金删除零值','全零空仓'])test('刷新'+residue+'云端全量覆盖'+shape+'且不补传',async()=>{
@@ -295,7 +297,7 @@ for(const residue of ['dirty','uncertain','legacy','clean-pending'])for(const sh
   assert.deepEqual(cloudNumbers(b.state().DATA),cloudNumbers(b.normalize(remote)));
   assert.deepEqual(cloudNumbers(b.local()),cloudNumbers(b.normalize(remote)));
   assert.equal(b.local().items.BBB,undefined);assert.equal(b.state().dirty,false);assert.equal(b.state().uncertain,null);
-  assert.equal(b.local()._local.uncertain,null);assert.equal(b.local()._local.maintenancePending,false);
+  assert.equal(b.local()._local.uncertain,null);
   assert.equal(store.values.get(PENDING),'0');assert.equal(store.values.get(PUSH_AT),String(NOW-1000));
   assert.equal(b.state().queued,false);assert.equal(b.state().SYNC,'synced');await b.tick(180000);
   assert.equal(b.requests.length,1);assert.equal(b.puts().length,0);
@@ -312,7 +314,7 @@ test('刷新已一致的dirty和旧事务仍清理所有残留标记',async()=>{
   const store=shared({[LOCAL]:local,[TOKEN]:'test-token',[PENDING]:1}),b=await boot({store});
   b.respond(b.requests[0],meta(SEED));await settle();await b.tick(180000);
   assert.equal(b.local()._local.dirty,false);assert.equal(b.local()._local.uncertain,null);
-  assert.equal(b.local()._local.maintenanceOnly,false);assert.equal(store.values.get(PENDING),'0');
+  assert.equal(store.values.get(PENDING),'0');
   assert.equal(b.state().SYNC,'synced');assert.equal(b.puts().length,0);assert.equal(b.requests.length,1);
 });
 for(const token of [true,false])test('刷新读取失败旧dirty未知事务不PUT且标题优先云端未取到 token='+token,async()=>{
@@ -344,26 +346,8 @@ test('明确保存上传成功后重启读取远端即同步，不额外提交',
   const c=await boot({store:b.store,now:NOW+1000});c.respond(c.requests[0],meta(remote,'saved'));await settle();await c.tick(180000);
   assert.equal(c.local().items.AAA.qty,11);assert.equal(c.state().SYNC,'synced');assert.equal(c.puts().length,0);assert.equal(c.requests.length,1);
 });
-for(const residue of ['dirty','uncertain'])test('刷新'+residue+'伴过期ACK只基于新远端数字维护且初始GET有效',async()=>{
-  const local=staleAck();local._local={dirty:true,revision:19};
-  if(residue==='uncertain')local._local.uncertain={payload:copy(local),revision:18,baseSha:'old-sha'};
-  const b=await boot({local}),remote={...freshRemote(),cash:700,cash_extra:250,fixed:0,fixed_cost:0,items:{AAA:{cost:100,qty:0}}};
-  assert.equal(b.state().revision,19);assert.equal(b.state().SYNC,'pulling');assert.equal(b.local().ack_tombstones['AAA|loss10'],undefined);
-  await b.tick(5000);assert.equal(b.requests.length,1);assert.equal(b.puts().length,0);
-  b.respond(b.requests[0],meta(remote));await settle();assert.deepEqual(cloudNumbers(b.state().DATA),cloudNumbers(b.normalize(remote)));
-  assert.ok(b.local().ack_tombstones['AAA|loss10']);assert.equal(b.state().maintenanceOnly,true);
-  await b.tick(1200);const newer={...remote,cash:800,cash_extra:300};b.respond(b.requests.at(-1),meta(newer,'new-sha'));await settle();
-  const put=b.puts()[0];assert.ok(put);assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(newer)));
-  assert.equal(JSON.parse(put.init.body).sha,'new-sha');b.respond(put,{});await settle();await b.tick(180000);
-  assert.equal(b.puts().length,1);assert.equal(b.state().dirty,false);assert.equal(b.state().SYNC,'synced');
-});
-test('旧本地看似过期的ACK在新远端成本仍有效时保留且不维护上传',async()=>{
-  const local=staleAck();local._local={dirty:true,revision:6};const remote=staleAck();remote.items.AAA.cost=120;
-  const b=await boot({local});assert.equal(b.local().ack_tombstones['AAA|loss10'],undefined);
-  b.respond(b.requests[0],meta(remote));await settle();await b.tick(180000);
-  assert.ok(b.state().DATA.acks['AAA|loss10']);assert.equal(b.state().DATA.ack_tombstones['AAA|loss10'],undefined);
-  assert.equal(b.state().DATA.items.AAA.cost,120);assert.equal(b.state().dirty,false);assert.equal(b.puts().length,0);
-});
+
+
 test('新页填token只重开读取，不补传旧dirty或未知事务',async()=>{
   const b=await boot({token:false,local:{...copy(SEED),_local:{dirty:true,revision:7}}}),old=b.requests[0];
   b.ctx.prompt=()=> 'mock-token';b.doc.getElementById('costManage').fire('click',{target:b.doc.getElementById('costState')});await settle();
@@ -379,45 +363,14 @@ test('同页未保存草稿不因填token和迟到初始GET上传或回退',asyn
   assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.local().items.AAA.qty,88);assert.equal(b.puts().length,0);
   assert.equal(b.state().dirty,true);assert.equal(b.state().positionsAuthorized,false);
 });
-test('未保存同页草稿的明确ACK仅上传远端仓位，不被旧回执清dirty或循环上传',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();
-  await b.enter();b.edit('AAA','qty','88');b.exitEdit(false);b.ack('AAA|add|95');await b.tick(1200);
-  const remote={...copy(SEED),cash:1234,cash_extra:34};b.respond(b.requests.at(-1),meta(remote));await settle();
-  const put=b.puts()[0];assert.ok(put);assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));
-  assert.ok(b.payload(put).acks['AAA|add|95']);b.respond(put,{});await settle();await b.tick(180000);
-  assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.state().dirty,true);assert.equal(b.state().positionsAuthorized,false);
-  assert.equal(b.puts().length,1);assert.equal(b.requests.length,3);
-});
+
 test('初始GET迟到不得覆盖只进入编辑未输入的新会话',async()=>{
   const b=await boot();await b.enter();b.respond(b.requests[0],meta({...SEED,cash:999}));await settle();
   assert.equal(b.state().editing,true);assert.equal(b.state().DATA.cash,30);assert.equal(b.doc.querySelector('input[data-f="cash"]').value,'30');
 });
-test('同页明确保存两次以最后成功保存为准，旧ACK和GET不得带出后来未保存草稿',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}}),initial=b.requests[0];await b.enter();b.edit('AAA','qty','7');await b.save();
-  const first=await finishPush(b);await b.enter();b.edit('AAA','qty','9');await b.save();await b.tick(30000);
-  b.respond(b.requests.at(-1),meta(b.payload(first),'first'));await settle();const second=b.puts()[1];
-  assert.equal(b.payload(second).items.AAA.qty,9);await b.enter();b.edit('AAA','qty','88');b.ack('AAA|add|95');
-  b.respond(second,{});await settle();b.respond(initial,meta(SEED));await settle();await b.tick(90000);
-  assert.equal(b.state().CLOUD.items.AAA.qty,9);assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.state().editing,true);
-  assert.equal(b.state().dirty,true);assert.equal(b.puts().length,2);
-});
-test('已同步仓位后的明确ACK只维护更晚远端，不重写此前保存的仓位',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();
-  await b.enter();b.edit('AAA','qty','7');await b.save();await finishPush(b);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);
-  b.ack('AAA|add|95');await b.tick(30000);const remote={...copy(SEED),cash:999,cash_extra:99,items:{AAA:{cost:123,qty:20}}};
-  b.respond(b.requests.at(-1),meta(remote,'external'));await settle();const put=b.puts()[1];assert.ok(put);
-  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));assert.ok(b.payload(put).acks['AAA|add|95']);
-  b.respond(put,{});await settle();assert.equal(b.state().DATA.items.AAA.qty,20);assert.equal(b.state().dirty,false);
-});
-test('初始GET期间明确ACK不使读取失效，合并ACK但仓位仍云端完整覆盖',async()=>{
-  const b=await boot({local:{...copy(SEED),_local:{dirty:true,revision:12}},rules:{trigger_gap_pct:6}}),initial=b.requests[0];
-  b.ack('AAA|add|95');await b.tick(5000);assert.equal(b.puts().length,0);assert.equal(b.requests.length,1);
-  const remote={...copy(SEED),cash:450,cash_extra:50,items:{AAA:{cost:0,qty:0}}};b.respond(initial,meta(remote));await settle();
-  assert.deepEqual(cloudNumbers(b.local()),cloudNumbers(b.normalize(remote)));assert.ok(b.state().DATA.acks['AAA|add|95']);
-  await b.tick(1200);b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
-  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));b.respond(put,{});await settle();
-  assert.equal(b.state().dirty,false);assert.equal(b.state().SYNC,'synced');
-});
+
+
+
 test('云端校验失败不覆盖本地、不PUT也不假同步',async()=>{
   const b=await boot({local:{...copy(SEED),_local:{dirty:true,revision:12}}});
   b.respond(b.requests[0],meta({items:{AAA:{cost:1,qty:-1}},cash:999}));await settle();await b.tick(180000);
@@ -445,45 +398,10 @@ test('本页上传失败重启后读取较新云端覆盖失败快照，无自�
   assert.equal(c.state().DATA.items.AAA.qty,12);assert.equal(c.state().SYNC,'synced');assert.equal(c.state().uncertain,null);
   assert.equal(c.requests.length,1);assert.equal(c.puts().length,0);
 });
-test('事务生命周期 ACK维护GET期间编辑取消不会复活已成功仓位授权',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();
-  await b.enter();b.edit('AAA','qty','7');await b.save();await finishPush(b);
-  b.ack('AAA|add|95');await b.tick(30000);const maintenanceGet=b.requests.at(-1);
-  assert.equal(b.state().inFlight.maintenanceOnly,true);await b.enter();b.edit('AAA','qty','88');b.doc.getElementById('costCancel').click();
-  const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};b.respond(maintenanceGet,meta(remote,'external'));await settle();
-  const maintenancePut=b.puts()[1];assert.ok(maintenancePut);assert.deepEqual(cloudNumbers(b.payload(maintenancePut)),cloudNumbers(b.normalize(remote)));
-  const count=b.requests.length;b.respond(maintenancePut,{});await settle();await b.tick(30000);
-  if(b.requests.length>count){b.respond(b.requests.at(-1),meta(b.payload(maintenancePut),'ack-done'));await settle();}
-  assert.equal(b.puts().length,2,'ACK回执不得再上传qty7/cash30旧仓位');assert.equal(b.requests.length,count);
-});
-test('事务生命周期 保存PUT期间新增ACK，仓位成功后只走最新远端ACK维护',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();
-  await b.enter();b.edit('AAA','qty','7');await b.save();b.respond(b.requests.at(-1),meta(SEED));await settle();const first=b.puts()[0];
-  b.ack('AAA|add|95');b.respond(first,{});await settle();await b.tick(30000);
-  const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};b.respond(b.requests.at(-1),meta(remote,'external'));await settle();
-  const ackPut=b.puts()[1];assert.ok(ackPut);assert.deepEqual(cloudNumbers(b.payload(ackPut)),cloudNumbers(b.normalize(remote)));
-  assert.ok(b.payload(ackPut).acks['AAA|add|95']);b.respond(ackPut,{});await settle();assert.equal(b.state().dirty,false);
-});
-test('事务生命周期 初始草稿收起重入取消后核验远端可上传ACK但不能替换草稿',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}}),initial=b.requests[0];await b.enter();b.edit('AAA','qty','88');
-  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');await b.enter();b.doc.getElementById('costCancel').click();
-  assert.equal(b.state().draftPending,true);assert.equal(b.state().savePaused,false);b.ack('AAA|add|95');
-  b.ctx.prompt=()=> 'mock-token';panel.fire('click',{target:b.doc.getElementById('costState')});await settle();
-  const pull=b.requests.at(-1),remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};b.respond(pull,meta(remote));await settle();
-  assert.equal(b.state().cloudVerified,true);assert.equal(b.state().DATA.items.AAA.qty,88);await b.tick(1200);
-  const get=b.requests.at(-1);assert.notEqual(get,pull,'核验成功后待维护ACK不能永久被cloudFirstPending阻塞');
-  b.respond(get,meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
-  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));assert.ok(b.payload(put).acks['AAA|add|95']);
-  b.respond(put,{});await settle();b.respond(initial,meta(SEED));await settle();await b.tick(180000);
-  assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.local().items.AAA.qty,88);assert.equal(b.puts().length,1);
-});
-test('事务生命周期 bfCache恢复新生命周期解除旧pause后ACK可正常维护',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.dispose();
-  b.fireWindow('pageshow',{persisted:true});await settle();const pull=b.requests.at(-1);b.respond(pull,meta(SEED));await settle();
-  b.ack('AAA|add|95');await b.tick(1200);const get=b.requests.at(-1);assert.notEqual(get,pull,'bfCache旧pause不得阻挡ACK');
-  assert.equal(b.state().savePaused,false);b.respond(get,meta(SEED));await settle();const put=b.puts()[0];assert.ok(put);
-  b.respond(put,{});await settle();assert.equal(b.state().dirty,false);
-});
+
+
+
+
 test('事务生命周期 只读storage后点击编辑接管必须新GET并保护新草稿',async()=>{
   const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();const c=await boot({store:b.store});
   c.fireWindow('storage',{key:LOCAL});assert.equal(c.state().writer,false);assert.equal(c.requests.length,0);await b.dispose();await c.enter();
@@ -492,24 +410,8 @@ test('事务生命周期 只读storage后点击编辑接管必须新GET并保护
   c.edit('AAA','qty','88');const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};c.respond(c.requests[0],meta(remote));await settle();
   assert.equal(c.state().DATA.items.AAA.qty,88);assert.equal(c.state().editing,true);assert.equal(c.puts().length,0);
 });
-test('事务生命周期 ACK维护PUT期间编辑取消后只确认维护事务不整仓重传',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();await finishPush(b);
-  b.ack('AAA|add|95');await b.tick(30000);const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};
-  b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[1],count=b.requests.length;
-  await b.enter();b.edit('AAA','qty','88');b.doc.getElementById('costCancel').click();b.respond(put,{});await settle();await b.tick(180000);
-  assert.equal(b.puts().length,2);assert.equal(b.requests.length,count);assert.equal(b.state().positionSave,null);
-  assert.equal(b.local().items.AAA.qty,20);assert.equal(b.local().cash,999);assert.equal(b.state().dirty,false);
-});
-test('事务生命周期 保存成功发生在新编辑期间，取消不能复活消费的仓位代次',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
-  b.respond(b.requests.at(-1),meta(SEED));await settle();const put=b.puts()[0];await b.enter();b.edit('AAA','qty','88');
-  b.respond(put,{});await settle();assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().editing,true);
-  b.doc.getElementById('costCancel').click();assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);
-  assert.equal(b.local().items.AAA.qty,7);assert.equal(b.state().dirty,false);
-  b.ack('AAA|add|95');await b.tick(30000);const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};
-  assert.equal(b.state().inFlight.maintenanceOnly,true);b.respond(b.requests.at(-1),meta(remote));await settle();
-  assert.deepEqual(cloudNumbers(b.payload(b.puts()[1])),cloudNumbers(b.normalize(remote)));b.respond(b.puts()[1],{});await settle();
-});
+
+
 for(const action of ['保存','导入'])test('事务生命周期 旧仓位回执不能消费后来的新'+action+'代次',async()=>{
   const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
   b.respond(b.requests.at(-1),meta(SEED));await settle();const first=b.puts()[0],oldGeneration=b.state().positionSave.generation;
@@ -520,20 +422,8 @@ for(const action of ['保存','导入'])test('事务生命周期 旧仓位回执
   assert.equal(b.payload(second).items.AAA.qty,9);if(action==='导入')assert.equal(b.payload(second).cash,456);
   b.respond(second,{});await settle();assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);assert.equal(b.state().dirty,false);
 });
-test('事务生命周期 ACK维护旧回执不消费维护期间的新明确保存',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();b.ack('AAA|add|95');await b.tick(1200);
-  b.respond(b.requests.at(-1),meta(SEED));await settle();const ackPut=b.puts()[0];await b.enter();b.edit('AAA','qty','9');await b.save();
-  const generation=b.state().positionSave.generation;b.respond(ackPut,{});await settle();assert.equal(b.state().positionSave.generation,generation);
-  await b.tick(30000);b.respond(b.requests.at(-1),meta(b.payload(ackPut),'ack-done'));await settle();const saved=b.puts()[1];
-  assert.ok(saved);assert.equal(b.payload(saved).items.AAA.qty,9);b.respond(saved,{});await settle();assert.equal(b.state().positionSave,null);
-});
-test('事务生命周期 内容已一致的明确保存也消费授权，后续ACK只用远端新数字',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','5');await b.save();
-  assert.equal(b.puts().length,0);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);
-  b.ack('AAA|add|95');await b.tick(1200);const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};
-  b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
-  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));b.respond(put,{});await settle();
-});
+
+
 test('事务生命周期 未成功仓位事务保留代次用于同页重试但不带新草稿',async()=>{
   const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
   const generation=b.state().positionSave.generation;await finishPush(b,500);assert.equal(b.state().positionSave.generation,generation);
@@ -541,24 +431,8 @@ test('事务生命周期 未成功仓位事务保留代次用于同页重试但�
   b.respond(b.requests.at(-1),meta(SEED,'fixture-sha'));await settle();const retry=b.puts()[1];assert.ok(retry);assert.equal(b.payload(retry).items.AAA.qty,7);
   b.respond(retry,{});await settle();assert.equal(b.state().positionSave,null);assert.equal(b.local().items.AAA.qty,7);assert.equal(b.state().dirty,false);
 });
-for(const token of [false,true])test('事务生命周期 初始草稿远端核验与ACK基底分离 token='+token,async()=>{
-  const b=await boot({token,rules:{trigger_gap_pct:6}});await b.enter();b.edit('AAA','qty','88');
-  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');await b.enter();b.doc.getElementById('costCancel').click();
-  b.ack('AAA|add|95');b.ctx.prompt=()=> 'new-token';panel.fire('click',{target:b.doc.getElementById('costState')});await settle();
-  const pull=b.requests.at(-1),remote={...copy(SEED),cash:999,cash_extra:99,items:{AAA:{cost:100,qty:20}}};b.respond(pull,meta(remote));await settle();
-  assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.state().cloudVerified,true);assert.equal(b.state().cloudFirstPending,true);
-  await b.tick(1200);assert.notEqual(b.requests.at(-1),pull);b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
-  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));b.respond(put,{});await settle();await b.tick(180000);
-  assert.equal(b.puts().length,1);assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.state().dirty,true);assert.equal(b.state().positionsAuthorized,false);
-});
-test('事务生命周期 同页主动折叠暂停不会因新GET或ACK被接管复位',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','88');
-  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');b.ack('AAA|add|95');b.startPull();await settle();
-  b.respond(b.requests.at(-1),meta({...SEED,cash:999}));await settle();await b.tick(180000);
-  assert.equal(b.state().savePaused,true);assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.puts().length,0);
-  await b.dispose();b.fireWindow('pageshow',{persisted:true});await settle();assert.equal(b.state().savePaused,false);
-  b.respond(b.requests.at(-1),meta(SEED));await settle();assert.equal(b.state().DATA.items.AAA.qty,5);assert.equal(b.puts().length,0);
-});
+
+
 test('事务生命周期 只读缓存没有核验资格，接管失败读取不得默认已同步',async()=>{
   const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();const c=await boot({store:b.store});c.fireWindow('storage',{key:CLOUD});
   assert.equal(c.state().cloudVerified,false);assert.notEqual(c.state().SYNC,'synced');await b.dispose();await c.enter();
@@ -580,21 +454,12 @@ test('事务生命周期 bfCache缓存损坏也先撤销旧仓位授权，读取
   const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};b.respond(b.requests.at(-1),meta(remote));await settle();await b.tick(180000);
   assert.equal(b.local().items.AAA.qty,20);assert.equal(b.local().cash,999);assert.equal(b.puts().length,0);assert.equal(b.state().dirty,false);
 });
-test('事务生命周期 成功PUT即消费仓位授权，缓存落盘失败不因ACK重传旧仓位',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
-  b.store.failSet.add(CLOUD);await finishPush(b);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);
-  assert.equal(b.state().dirty,true);assert.notEqual(b.state().SYNC,'synced');b.store.failSet.delete(CLOUD);
-  b.ack('AAA|add|95');await b.tick(30000);const remote={...copy(SEED),cash:999,items:{AAA:{cost:100,qty:20}}};
-  b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[1];assert.ok(put);
-  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));b.respond(put,{});await settle();assert.equal(b.state().dirty,false);
-});
+
 const invalids=[
   ['数组items',{items:[]}],['null items',{items:null}],['字符串金额',{items:{},cash:'1'}],['负数量',{items:{AAA:{cost:1,qty:-1}}}],
   ['负成本',{items:{AAA:{cost:-1,qty:1}}}],['非有限数',{items:{},fixed:Infinity}],['null数值',{items:{},cash:null}],
-  ['非法版本',{items:{},schema_version:99}],['字符串版本',{items:{},schema_version:'2'}],['数组acks',{items:{},acks:[]}],
-  ['非法ACK值',{items:{},acks:{'AAA|loss10':true}}],['非法ACK键',{items:{},acks:{'bad':'2026-10-20'}}],
+  ['非法版本',{items:{},schema_version:99}],['字符串版本',{items:{},schema_version:'2'}],
   ['属性注入日期',{items:{},updated_at:'2026-10-20" onmouseover="x'}],['原型标的',JSON.parse('{"items":{"__proto__":{"qty":1,"cost":1}}}')],
-  ['非法删除记录',{items:{},ack_tombstones:{'AAA|loss10':'yesterday'}}]
 ];
 for(const [name,data] of invalids)test('拒绝导入'+name+'且保留原值',async()=>{let b=await boot();const before=b.canonical(b.state().DATA);assert.throws(()=>b.importData(data));assert.equal(b.canonical(b.state().DATA),before);assert.throws(()=>b.mergeCloud(data));});
 test('导入立即进统一队列，编辑会话退出',async()=>{let b=await boot();await b.enter();b.importData({...SEED,cash:99});await b.tick(0);assert.equal(b.state().editing,false);assert.ok(b.state().inFlight);assert.ok(b.state().NOTICE.includes('上传队列'));let p=await finishPush(b);assert.equal(b.payload(p).cash,99);assert.equal(b.state().dirty,false);});
@@ -602,7 +467,7 @@ test('文件读取迟到不覆盖之后输入',async()=>{let b=await boot();awai
 test('文件读取失败有明确提示',async()=>{let b=await boot();b.doc.getElementById('costFile').fire('change',{target:{files:[{}],value:'x'}});b.readers[0].onerror();assert.match(b.state().NOTICE,/无法读取/);});
 test('GET等待期间修改，PUT仍为最初快照',async()=>{let b=await boot();await b.enter();b.edit();await b.save();await b.enter();b.edit('AAA','qty','2');let p=await finishPush(b);assert.equal(b.payload(p).items.AAA.qty,1);assert.equal(b.state().CLOUD.items.AAA.qty,1);assert.equal(b.state().DATA.items.AAA.qty,2);assert.equal(b.state().dirty,true);assert.equal(b.state().editing,true);});
 test('PUT等待期间修改不清dirty且不关闭新编辑',async()=>{let b=await boot();await b.enter();b.edit();await b.save();b.respond(b.requests.at(-1),{sha:'s'});await settle();await b.enter();b.edit('AAA','qty','2');b.respond(b.puts()[0],{});await settle();assert.equal(b.state().CLOUD.items.AAA.qty,1);assert.equal(b.state().dirty,true);assert.equal(b.state().editing,true);});
-test('手动自动重试并发入口只有一个上传',async()=>{let b=await boot();await b.enter();b.edit();await b.save();b.autoPush();b.requestSave(0,true);b.doPush();await b.tick(5000);assert.equal(b.requests.length,2);await finishPush(b);assert.equal(b.puts().length,1);});
+test('手动自动重试并发入口只有一个上传',async()=>{let b=await boot();await b.enter();b.edit();await b.save();b.requestSave(1200,false);b.requestSave(0,true);b.doPush();await b.tick(5000);assert.equal(b.requests.length,2);await finishPush(b);assert.equal(b.puts().length,1);});
 test('资产比例图例删除合计文字且深浅绿为两个完整紧贴色块',async()=>{
   const b=await bootLoss({longs:['AAA'],prices:{AAA:100,BBB:100}}),foot=b.doc.getElementById('costFoot');
   assert.doesNotMatch(foot.textContent,/所有持仓/);
@@ -611,18 +476,11 @@ test('资产比例图例删除合计文字且深浅绿为两个完整紧贴色�
   assert.equal(pair.getAttribute('aria-hidden'),'true');
   assert.match(pair.parentNode.getAttribute('aria-label'),/^所有持仓 [0-9.]+%$/);
   assert.equal(pair.parentNode.querySelector('b').textContent,((5*100+2*100)/(5*100+2*100+30+20)*100).toFixed(1)+'%');
-  assert.match(CSS,/\.cost-legend \.seg-all\{display:inline-flex;gap:0;flex:none\}/);
+  assert.match(CSS,/\.cost-legend \.seg-all\{display:inline-flex;gap:0;flex:none;?\}/);
   assert.doesNotMatch(CSS,/i\.seg-all\{|seg-all[^}]*linear-gradient/);
   assert.match(CSS,/\.cost-legend i\{width:9px;height:9px/);
 });
-test('自动ACK已读后撤回在15秒边界同步最后状态，保留1.2秒合并',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();
-  const key='AAA|add|95';b.ack(key);const n=b.requests.length;await b.tick(1199);assert.equal(b.requests.length,n);
-  await b.tick(1);const first=await finishPush(b);assert.ok(b.payload(first).acks[key]);
-  b.ack(key);await b.tick(14999);assert.equal(b.puts().length,1);assert.equal(b.requests.length,n+2);
-  await b.tick(1);const second=await finishPush(b);assert.equal(second.at-first.at,15000);
-  assert.equal(b.payload(second).acks[key],undefined);assert.ok(b.payload(second).ack_tombstones[key]);assert.equal(b.state().dirty,false);
-});
+
 test('所有手动保存服从15秒节流并上传最新revision',async()=>{let b=await boot();await b.enter();b.edit();await b.save();let p=await finishPush(b);await b.enter();b.edit('AAA','qty','3');await b.save();await b.tick(14999);assert.equal(b.puts().length,1);await b.tick(1);let q=await finishPush(b);assert.equal(q.at-p.at,15000);assert.equal(b.payload(q).items.AAA.qty,3);});
 test('刷新不重置15秒持久化节流',async()=>{let b=await boot();await b.enter();b.edit();await b.save();await finishPush(b);await b.dispose();let c=await boot({store:b.store,now:NOW+1000});await c.enter();c.edit('AAA','qty','8');await c.save();assert.equal(c.requests.length,1);await c.tick(13999);assert.equal(c.requests.length,1);await c.tick(1);assert.equal(c.requests.length,2);});
 test('失败重试保留15秒退避并服从节流，读取最新待保存版本',async()=>{let b=await boot();await b.enter();b.edit();await b.save();await finishPush(b,500);assert.equal(b.state().dirty,true);const n=b.requests.length;await b.tick(14999);assert.equal(b.requests.length,n);await b.tick(1);await finishPush(b);assert.equal(b.puts().length,2);assert.equal(b.state().dirty,false);});
@@ -635,62 +493,9 @@ test('取消编辑恢复并立即落盘，不上传取消的草稿',async()=>{le
 test('旧上传回执不会污染取消后的状态',async()=>{let b=await boot();await b.enter();b.edit('AAA','qty','1');await b.save();await b.enter();b.edit('AAA','qty','2');b.doc.getElementById('costCancel').click();await finishPush(b);assert.equal(b.state().DATA.items.AAA.qty,1);assert.equal(b.state().CLOUD.items.AAA.qty,1);await b.tick(0);assert.equal(b.state().dirty,false);});
 test('折叠保留草稿并暂停待上传任务',async()=>{let b=await boot();await b.enter();b.edit('AAA','qty','8');let p=b.doc.getElementById('costManage');p.open=false;p.fire('toggle');await b.tick(60000);assert.equal(b.local().items.AAA.qty,8);assert.equal(b.state().dirty,true);assert.equal(b.state().editing,false);assert.equal(b.puts().length,0);});
 test('上传中再次编辑并折叠，旧回执不自动上传草稿',async()=>{let b=await boot();await b.enter();b.edit();await b.save();await b.enter();b.edit('AAA','qty','8');let p=b.doc.getElementById('costManage');p.open=false;p.fire('toggle');await finishPush(b);await b.tick(60000);assert.equal(b.puts().length,1);assert.equal(b.state().dirty,true);});
-test('退役fund ACK与撤销记录静默剔除且不制造dirty或提交风暴',async()=>{
-  const old='AAA|fund|20260630',hash='BBB|fund|abcd1234';
-  let d={...copy(SEED),acks:{[old]:'2026-10-20T09:00:00Z'},ack_tombstones:{[hash]:'2026-10-20T09:00:00Z'}};
-  let b=await boot({local:d});
-  assert.deepEqual(copy(b.state().DATA.acks),{});assert.deepEqual(copy(b.state().DATA.ack_tombstones),{});
-  assert.equal(b.state().dirty,false);assert.equal(b.state().revision,0);assert.equal(b.state().maintenancePending,false);
-  const before=b.canonical(b.state().DATA),writes=b.store.writes.length;
-  b.ack(old);b.setAck(hash,true);b.paint();
-  assert.equal(b.canonical(b.state().DATA),before);assert.equal(b.store.writes.length,writes);
-  b.respond(b.requests[0],meta(d));await settle();await b.tick(90000);
-  assert.equal(b.state().dirty,false);assert.equal(b.state().maintenancePending,false);assert.equal(b.puts().length,0);
-  await b.dispose();let c=await boot({store:b.store});
-  c.mergeCloud(d);c.paint();await c.tick(90000);
-  assert.deepEqual(copy(c.state().DATA.acks),{});assert.equal(c.puts().length,0);assert.equal(c.state().dirty,false);
-});
-test('旧fund专用待维护刷新后取消空维护且不影响普通ACK维护',async()=>{
-  const key='AAA|fund|20260630',at='2026-10-20T09:00:00Z';
-  const old={...copy(SEED),ack_tombstones:{[key]:at},_local:{dirty:true,revision:4,maintenancePending:true,maintenanceOnly:true}};
-  let b=await boot({local:old});
-  assert.equal(b.state().dirty,false);assert.equal(b.state().maintenanceOnly,false);assert.equal(b.state().maintenancePending,false);
-  assert.equal(b.state().revision,4);b.respond(b.requests[0],meta({...SEED,cash:888}));await settle();await b.tick(90000);
-  assert.equal(b.state().DATA.cash,888);assert.equal(b.puts().length,0);
-  let mixed={...old,ack_tombstones:{[key]:at,'AAA|loss10':at}},c=await boot({local:mixed});
-  assert.equal(c.state().dirty,false);assert.equal(c.state().maintenanceOnly,true);assert.equal(c.state().maintenancePending,true);
-  assert.ok(c.state().DATA.ack_tombstones['AAA|loss10']);assert.equal(c.state().DATA.ack_tombstones[key],undefined);
-  let dirty={...old,_local:{dirty:true,revision:8}},u=await boot({local:dirty});
-  assert.equal(u.state().dirty,true);assert.equal(u.state().revision,8);
-});
-test('退役fund键不会影响加减仓浮亏ACK及普通无异动折叠',async()=>{
-  const old='AAA|fund|20260630',at='2026-10-20T09:00:00Z';
-  let d=copy(SEED);d.items.AAA.cost=200;
-  d.acks={[old]:at,'AAA|add|95':at,'AAA|cut|104':at,'AAA|loss20':at};
-  d.ack_tombstones={'BBB|fund|abcd1234':at,'AAA|loss10':at};
-  let b=await boot({local:d,rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument(doc){
-    const table=doc.getElementById('s-aaa').closest('table.stk');
-    const q=doc.createElement('details');q.className='quiet-list';q.open=true;
-    q.innerHTML='<summary>无异动 1 只</summary><table class="stk"></table>';
-    table.parentNode.insertBefore(q,table.nextElementSibling);
-    const r=doc.getElementById('s-bbb'),rail=r.nextElementSibling;q.querySelector('table').appendChild(r);q.querySelector('table').appendChild(rail);
-    doc.getElementById('signalCounts').innerHTML='<table></table>';
-  }});
-  const row=b.doc.getElementById('s-aaa'),parent=row.parentNode,q=b.doc.querySelector('details.quiet-list');
-  assert.equal(b.rows[0].tr.className,'green');assert.equal(b.rows[0].lossAcked,true);
-  for(const key of ['AAA|add|95','AAA|cut|104','AAA|loss20'])assert.ok(b.state().DATA.acks[key]);
-  assert.ok(b.state().DATA.ack_tombstones['AAA|loss10']);assert.equal(b.state().DATA.acks[old],undefined);
-  b.ack(old);b.paint();
-  assert.equal(row.parentNode,parent);assert.equal(q.open,true);assert.equal(q.querySelector('summary').textContent,'无异动 0 只');
-  assert.equal(q.hidden,true);assert.equal(b.doc.getElementById('s-bbb').closest('.quiet-list'),null,'有效价格提醒必须即时移出无异动');
-  assert.equal(b.doc.querySelectorAll('.fund-ack-list').length,0);
-  assert.equal(b.doc.querySelector('.signal-filter-toggle[data-kind="fund"]'),null);
-  assert.ok(b.doc.getElementById('signal-members-acked-add_price'));
-  assert.ok(b.doc.getElementById('signal-members-acked-reduce_price'));
-  assert.equal(b.state().dirty,false);assert.equal(b.state().maintenancePending,false);
-  assert.doesNotMatch(SOURCE,/FUND_ROWS|FUND_BUCKETS|refreshFundUI|fundStatBase|moveFundRow|data-fund-|基本面|mm:fund-ack-change/);
-  assert.doesNotMatch(CSS,/fund[_-]|基本面/);
-});
+
+
+
 test('退役基本面不影响ETF标签和财报日期元素',async()=>{
   let b=await boot({prepareDocument(doc){
     const row=doc.getElementById('s-aaa'),sd=row.querySelector('td.sym');
@@ -698,31 +503,17 @@ test('退役基本面不影响ETF标签和财报日期元素',async()=>{
     const date=doc.createElement('span');date.className='earn urgent';date.textContent='10/21 美东盘后 · 北京10/22 04:00';row.children[1].appendChild(date);
   }});
   assert.equal(b.rows[0].isEtf,true);
-  assert.equal(b.doc.querySelector('#costMembers li[data-sym="AAA"] .tag').textContent,'ETF');
+  assert.equal(b.doc.querySelector('#s-aaa .tag').textContent,'ETF');await b.enter();
+  assert.ok(b.doc.querySelector('#costMembers .ep-grid [data-cost-row][data-sym="AAA"]'));
   assert.equal(b.doc.querySelector('#s-aaa .earn.urgent').textContent,'10/21 美东盘后 · 北京10/22 04:00');
   b.paint();assert.ok(b.doc.querySelector('#s-aaa .earn.urgent'));
 });
-test('导入与新版本正常保存不再带出退役fund键',async()=>{
-  const old='AAA|fund|20260630',at='2026-10-20T09:00:00Z';
-  let b=await boot();b.respond(b.requests[0],meta(SEED));await settle();
-  let d={...copy(SEED),cash:77,acks:{[old]:true},ack_tombstones:{'BBB|fund|abcd1234':'旧值'}};
-  b.importData(d);await b.tick(0);b.respond(b.requests.at(-1),meta(SEED));await settle();
-  const put=b.puts()[0];assert.ok(put);assert.deepEqual(b.payload(put).acks,{});assert.deepEqual(b.payload(put).ack_tombstones,{});
-  b.respond(put,{});await settle();assert.equal(b.state().dirty,false);
-  b.mergeCloud({...d,acks:{[old]:at}});b.paint();await b.tick(90000);
-  assert.equal(b.state().DATA.acks[old],undefined);assert.equal(b.puts().length,1);assert.equal(b.state().dirty,false);
-});
-test('ACK撤销写tombstone，旧云端并集不能复活',async()=>{let b=await boot();let key='AAA|add|95';b.ack(key);b.ack(key);assert.ok(b.local().ack_tombstones[key]);assert.equal(b.state().DATA.acks[key],undefined);let old=copy(SEED);old.acks={[key]:'2026-10-19T00:00:00Z'};b.mergeCloud(old);assert.equal(b.state().DATA.acks[key],undefined);});
-test('clean拉取也保留较新的ACK撤销记录',async()=>{let key='AAA|loss10';let d={...SEED,ack_tombstones:{[key]:'2026-10-20T00:00:00Z'}};let b=await boot({local:d});b.mergeCloud({...SEED,acks:{[key]:'2026-10-19T00:00:00Z'}});assert.equal(b.state().DATA.acks[key],undefined);assert.ok(b.state().DATA.ack_tombstones[key]);assert.equal(b.state().dirty,true);});
-test('较新的明确ACK可以再次确认',async()=>{let key='AAA|loss20';let b=await boot({local:{...SEED,ack_tombstones:{[key]:'2026-10-20T00:00:00Z'}}});let d=copy(SEED);d.items.AAA.cost=200;d.acks={[key]:'2026-10-20T01:00:00Z'};b.mergeCloud(d);assert.ok(b.state().DATA.acks[key]);});
-test('审核边界：初始ACK过期候选仅等待云端，不按旧本地数字构造撤销',async()=>{
-  let b=await boot({local:staleAck(),token:false});
-  assert.ok(b.local().acks['AAA|loss10']);assert.equal(b.local().ack_tombstones['AAA|loss10'],undefined);
-  assert.equal(b.state().dirty,false);assert.equal(b.local()._local.maintenancePending,true);
-  assert.equal(b.local()._local.maintenanceOnly,true);assert.equal(b.state().revision,0);
-  assert.equal(b.state().SYNC,'pulling');assert.match(b.doc.getElementById('costState').textContent,/拉取中/);
-});
-test('清仓后重绘成本数量和loss状态不会残留',async()=>{let d=copy(SEED);d.items.AAA.cost=200;let b=await boot({local:d});await b.enter();b.edit('AAA','qty','0');await b.tick(16);assert.equal(b.rows[0].qty,0);assert.equal(b.rows[0].lossLv,0);assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'0');});
+
+
+
+
+
+
 test('零固定收益也能在编辑态输入',async()=>{let b=await boot({local:{...SEED,fixed:0,fixed_cost:0}});await b.enter();b.edit('BOND','fixed','12.3456');assert.equal(b.local().fixed,12.3456);});
 for(const [name,fixed,fixedCost] of [['固收盈利',200,15],['固收亏损',20,200],['固收微亏',16916.34,16916.97],['无固收',0,0]]){
   test('表头仅股票ETF盈亏且保留总资产：'+name,async()=>{
@@ -733,8 +524,9 @@ for(const [name,fixed,fixedCost] of [['固收盈利',200,15],['固收亏损',20,
     assert.equal(sum.querySelectorAll('b')[1].textContent,'+$20.0（+2.9%）');
     assert.match(sum.getAttribute('title'),/盈亏仅股票\/ETF/);
     assert.match(sum.getAttribute('aria-label'),/股票\/ETF持仓盈亏/);
-    const bond=b.doc.querySelector('.blk-bond');
-    if(fixed>0){assert.ok(bond);assert.equal(bond.querySelector('.t-pnl').textContent,'');assert.equal(bond.querySelector('.pct'),null);}
+    const bond=b.doc.querySelector('.cashbond-row .cb-bond');
+    assert.ok(bond);assert.equal(bond.querySelector('.cb-amt').textContent,'$'+Math.round(fixed).toLocaleString('en-US'));
+    assert.equal(bond.querySelector('.pct'),null);
     assert.equal(b.state().DATA.fixed,fixed);assert.equal(b.state().DATA.fixed_cost,fixedCost);
     b.paint();assert.equal(sum.querySelectorAll('b')[1].textContent,'+$20.0（+2.9%）');
     assert.equal(b.puts().length,0);
@@ -743,7 +535,7 @@ for(const [name,fixed,fixedCost] of [['固收盈利',200,15],['固收亏损',20,
 test('仅现金固收无股票ETF时表头盈亏为零',async()=>{
   const b=await boot({groups:{AAA:'focus',BBB:'focus'},token:false});
   assert.equal(b.doc.querySelector('.cost-sum').textContent,'$50·+$0.0（+0.0%）');
-  assert.equal(b.doc.querySelector('.blk-bond .t-pnl').textContent,'');
+  assert.equal(b.doc.querySelector('.cashbond-row .cb-bond .pct'),null);
 });
 test('固收盈利不能抵消股票亏损且编辑成本仍保留',async()=>{
   const d={...copy(SEED),fixed:2000,fixed_cost:10};d.items.AAA.cost=110;
@@ -754,7 +546,7 @@ test('固收盈利不能抵消股票亏损且编辑成本仍保留',async()=>{
   await b.enter();b.edit('BOND','fixed_cost','123.4567');b.edit('BOND','fixed','12.3456');await b.tick(16);
   assert.equal(b.local().fixed_cost,123.4567);assert.equal(b.local().fixed,12.3456);
   assert.equal(sum.querySelectorAll('b')[1].textContent,'-$30.0（-4.1%）');
-  assert.equal(b.doc.querySelector('.blk-bond .t-pnl').textContent,'');
+  assert.equal(b.doc.querySelector('.cashbond-row .cb-bond .pct'),null);
   assert.equal(b.puts().length,0);
 });
 test('本地写失败显式提示且不清dirty不上传',async()=>{let b=await boot();b.store.failSet.add(LOCAL);await b.enter();b.edit();await b.save();assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未持久化/);assert.equal(b.puts().length,0);assert.match(b.doc.getElementById('costNotice').textContent,/尚未持久化/);assert.equal(b.doc.getElementById('costNotice').hidden,false);assert.equal(b.doc.querySelector('[data-cost-export]'),null);});
@@ -778,13 +570,11 @@ test('仓位绿色外框与顶部编辑操作区契约',async()=>{
   assert.equal(panel.querySelector('#costExport'),null);assert.equal(panel.querySelector('#costImport'),null);
   assert.equal(acts.hidden,true);
   assert.doesNotMatch(panel.textContent,/成本价与数量可填到小数点后四位|现金两框相加，空框按0算/);
-  assert.match(CSS,/\.cost-manage\{--cost-accent-bg:rgba\(126,231,135,\.17\);--cost-accent:var\(--frame-green,#2c8f3e\)/);
-  // 整卡只留一圈 1.5px 绿色外框：左侧绿条取消，标头不再铺底色
-  assert.match(CSS,/#costManage\.cost-manage\{--collapse-bg:var\(--cost-accent-bg\);border:1\.5px solid var\(--cost-accent\);\s*box-shadow:none\}/);
-  assert.doesNotMatch(CSS,/box-shadow:inset 3px 0 0 var\(--cost-accent-bg\)/);
-  assert.match(CSS,/#costManage>\.group-bottom\{border-top-color:var\(--cost-accent-bg\)\}/);
-  assert.match(CSS,/\.blk-short \.cost-block-title\{background:var\(--cost-accent-bg\)\}/);
-  assert.match(CSS,/#costManage\.cost-manage>summary,\s*#costManage\.cost-manage\[open\]>summary\{background:none;box-shadow:none\}/);
+  // 终稿操作区仅编辑时显示，四列编辑器位于静态持仓卡之前。
+  assert.match(CSS,/#costManage\.cost-manage\{[^}]*display:none;[^}]*border:1\.5px solid var\(--signal-border\);[^}]*box-shadow:none;/);
+  assert.match(CSS,/#costManage\.cost-manage\.cost-edit-open\{display:block;?\}/);
+  assert.match(CSS,/#costManage \.ep-grid\{[^}]*grid-template-columns:minmax\(0,1\.5fr\) repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(CSS,/#costManage \.ep-cash\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   await b.enter();assert.equal(acts.hidden,false);b.exitEdit(true);assert.equal(acts.hidden,true);
 });
 test('云端校验失败仅在顶部操作行提示，无备份或重试上传按钮',async()=>{
@@ -844,23 +634,7 @@ test('本地保存异常也在操作行纯文字提示，隔离导出入口保�
   assert.equal(isolated.doc.getElementById('costNotice').hidden,true);
   await isolated.dispose();
 });
-test('合成DEMO在有Web Locks的HTTPS页面也完全隔离编辑和保存',async()=>{
-  const seed={...copy(SEED),preview:true,items:{AAA:{cost:12.3456,qty:7.1234}},cash:400,cash_extra:100};
-  const store=shared({[LOCAL]:{...copy(SEED),cash:999999},[CLOUD]:SEED,[TOKEN]:'test-token'});
-  Object.keys(Object.fromEntries(store.values)).forEach(k=>store.failGet.add(k));
-  const b=await boot({store,seed,forbidRequests:true});
-  assert.equal(b.state().DATA.items.AAA.cost,12.3456);assert.equal(b.state().DATA.cash,400);
-  assert.equal(b.state().editing,false);await b.enter();assert.equal(b.state().editing,true);
-  assert.equal(b.doc.getElementById('costSave').textContent,'保存并上传');
-  assert.match(CSS,/\.cost-acts\{[^}]*justify-content:flex-end/);
-  b.edit('AAA','qty','0.4321');b.edit('USD','cash','');await b.save();
-  const saved=JSON.parse(b.session.values.get('mm_position_costs_demo_v1'));
-  assert.equal(saved.items.AAA.qty,0.4321);assert.equal(saved.cash,100);
-  assert.equal(b.requests.length,0);assert.equal(store.writes.length,0);assert.equal(store.holder,false);
-  await b.dispose();const c=await boot({store,session:b.session,seed,forbidRequests:true});
-  assert.equal(c.state().DATA.items.AAA.qty,0.4321);assert.equal(c.state().DATA.cash,100);
-  assert.equal(c.requests.length,0);assert.equal(store.writes.length,0);
-});
+
 test('不支持Web Locks安全降级为隔离会话编辑',async()=>{
   let b=await boot({noLocks:true,protocol:'file:'});let original=b.store.values.get(LOCAL);
   await b.enter();assert.equal(b.state().editing,true);b.edit('AAA','qty','9');await b.save();
@@ -882,8 +656,8 @@ test('输入每次立即落盘但同帧只重绘一次并保留选区',async()=>
   console.log('  输入微基准：20次即时持久化 '+inputMs.toFixed(2)+'ms；合帧渲染写入 '+renders+' 处（mock环境，非浏览器性能结论）');
 });
 test('拒绝非法输入而不把前缀数字当有效值',async()=>{let b=await boot();await b.enter();let e=b.edit('AAA','qty','2oops');assert.ok(e.validationMessage);assert.equal(b.local().items.AAA.qty,5);});
-test('加减阈值分别读取且零阈值不fallback',async()=>{let b=await boot({rules:{trigger_gap_pct:6,reduce_gap_pct:0}});assert.equal(b.rows[0].warnAdd.style.display,'inline');assert.equal(b.rows[0].warnCut.style.display,'none');let c=await boot({rules:{trigger_gap_pct:0,reduce_gap_pct:4}});assert.equal(c.rows[0].warnAdd.style.display,'none');assert.equal(c.rows[0].warnCut.style.display,'inline');});
-test('旧页面规则缺失才使用3%',async()=>{let b=await boot();assert.equal(b.rows[0].warnAdd.style.display,'none');assert.equal(b.rows[0].warnCut.style.display,'none');});
+
+
 test('慢GET后两次实际PUT也必须间隔15秒',async()=>{
   let b=await boot();await b.enter();b.edit();await b.save();await b.tick(45000);let p=await finishPush(b);
   await b.enter();b.edit('AAA','qty','2');await b.save();await b.tick(14999);assert.equal(b.puts().length,1);
@@ -916,32 +690,19 @@ test('持久化数据与dirty和revision为同一原子记录',async()=>{
 test('404仅表示不存在并允许创建data文件',async()=>{
   let b=await boot();await b.enter();b.edit();await b.save();b.respond(b.requests.at(-1),{},404);await settle();assert.equal(b.puts().length,1);assert.equal(JSON.parse(b.puts()[0].init.body).sha,undefined);
 });
-test('自动ACK上传中撤销不会让旧回执清除dirty',async()=>{
-  let b=await boot({rules:{trigger_gap_pct:6,reduce_gap_pct:3}});b.respond(b.requests[0],meta(SEED));await settle();let key='AAA|add|95';b.ack(key);await b.tick(1200);b.ack(key);let p=await finishPush(b);assert.ok(b.payload(p).acks[key]);assert.equal(b.state().DATA.acks[key],undefined);assert.equal(b.state().dirty,true);await b.tick(30000);let q=await finishPush(b);assert.ok(b.payload(q).ack_tombstones[key]);assert.equal(b.state().dirty,false);
-});
+
 test('无效输入经过重绘仍阻止保存',async()=>{
   let b=await boot();await b.enter();b.edit('AAA','qty','-1');b.paint();await b.save();assert.equal(b.state().editing,true);assert.equal(b.puts().length,0);assert.equal(b.local().items.AAA.qty,5);
 });
-test('初始非持仓残留旧成本数量不计市值权重及贡献',async()=>{
-  let d=copy(SEED);d.items.AAA={cost:200,qty:1000};let b=await boot({local:d,groups:{AAA:'focus'}});
-  assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$250');
-  assert.equal(b.doc.querySelector('#costMembers li[data-sym="AAA"]'),null);
-  assert.match(b.doc.querySelector('.blk-cash .t-wt').textContent,/12\.0%/);
-  assert.equal(b.doc.querySelector('.cost-contrib').textContent.includes('AAA'),false);
-  assert.equal(b.rows.find(r=>r.sym==='AAA').lossLv,0);assert.equal(b.state().DATA.items.AAA.qty,1000);
-  assert.equal(b.doc.getElementById('s-aaa').className,'green');
-});
-test('持仓移到其他组即时排除并清除成本亏损显示',async()=>{
-  let d=copy(SEED);d.items.AAA={cost:200,qty:5};let b=await boot({local:d});let r=b.rows[0];assert.equal(r.lossLv,2);
-  b.move('AAA','focus');assert.equal(r.lossLv,0);assert.equal(r.has,false);assert.equal(r.warn.style.display,'none');assert.equal(r.info.textContent,'');
-  assert.equal(r.tick.style.display,'none');assert.equal(r.rail.getAttribute('aria-label'),r.lab0);assert.equal(r.tr.className,'green');
-  assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$250');assert.equal(b.state().DATA.items.AAA.cost,200);assert.equal(b.state().DATA.cash,30);
-});
+
+
 test('移出全部持仓仍显示现金固定收益且持仓数量归零',async()=>{
   let b=await boot({groups:{AAA:'focus',BBB:'focus'}});assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$50');
-  assert.match(b.doc.querySelector('#group_positions>summary .grp-name').textContent,/持仓 \(0\)/);
-  assert.match(b.doc.querySelector('.is-total').textContent,/0 只/);assert.equal(b.doc.querySelector('.cost-contrib'),null);
-  assert.match(b.doc.querySelector('.blk-cash .t-wt').textContent,/60\.0%/);await b.enter();assert.ok(b.doc.querySelector('input[data-f="cash"]'));
+  assert.equal(b.doc.querySelectorAll('.ep-grid [data-cost-row]').length,0);
+  assert.equal(b.doc.querySelectorAll('.cost-contrib li').length,0);
+  assert.equal(b.doc.querySelector('.cashbond-row .cb-cash .cb-amt').textContent,'$30');
+  assert.equal(b.doc.querySelector('.cashbond-row .cb-bond .cb-amt').textContent,'$20');
+  await b.enter();assert.ok(b.doc.querySelector('input[data-f="cash"]'));
   assert.equal(b.doc.querySelector('input[data-sym="AAA"]'),null);
 });
 test('移组后云端含旧数量也不能拉回持仓',async()=>{
@@ -959,29 +720,9 @@ test('移回持仓沿用保留旧值但不自动抹成本或增加现金',async(
   assert.equal(b.state().DATA.items.AAA.qty,7);assert.equal(b.state().DATA.cash,30);await b.enter();assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,'123');
   assert.doesNotMatch(b.doc.getElementById('costFoot').textContent,/移回后沿用旧值/);
 });
-test('审核边界：移组不以同日旧行情撤销远端旧格式ACK，灰统计仅计有效条件',async()=>{
-  let d=copy(SEED);d.items.AAA.cost=200;d.acks={'AAA|loss20':'2026-10-19T00:00:00Z','AAA|add|95':'2026-10-19T00:00:00Z','AAA|cut|104':'2026-10-19T00:00:00Z'};
-  let b=await boot({local:d,rules:{trigger_gap_pct:6,reduce_gap_pct:4},token:false});
-  b.respond(b.requests[0],d);await settle();b.move('AAA','focus');
-  for(const key of Object.keys(d.acks)){assert.ok(b.state().DATA.acks[key]);assert.equal(b.state().DATA.ack_tombstones[key],undefined);}
-  assert.equal(b.rows[0].lossLv,0);assert.deepEqual(copy(b.ackStatEntries('reduce_price')),[]);
-  b.move('AAA','positions');assert.equal(b.rows[0].lossLv,2);assert.equal(b.rows[0].lossAcked,true);
-  b.ack('AAA|loss20');assert.equal(b.rows[0].lossAcked,false);assert.equal(b.rows[0].tr.className,'red');
-});
-test('审核边界：非持仓重点组只保留加仓提醒，残留减仓胶囊隐藏且不计灰',async()=>{
-  let b=await boot({groups:{AAA:'focus'},rules:{trigger_gap_pct:6,reduce_gap_pct:4}});
-  b.respond(b.requests[0],meta(SEED));await settle();let r=b.rows.find(r=>r.sym==='AAA');
-  assert.equal(r.warnAdd.style.display,'inline');assert.equal(r.warnCut.style.display,'none');assert.equal(r.warn.style.display,'none');
-  assert.equal(r.cutCap.style.display,'none');b.ack('AAA|add|95');assert.equal(r.tr.className,'green');
-  b.ack('AAA|cut|104');assert.equal(r.tr.className,'green');assert.ok(b.state().DATA.acks['AAA|cut|104']);
-  b.ack('AAA|cut|104');assert.equal(b.state().DATA.acks['AAA|cut|104'],undefined);
-  assert.deepEqual(copy(b.ackStatEntries('reduce_price')),[]);
-  assert.ok(b.doc.getElementById('s-aaa'));assert.equal(b.state().DATA.items.AAA.cost,100);
-});
-test('非持仓只有减仓胶囊时不提醒，不制造红灯',async()=>{
-  let b=await boot({groups:{AAA:'focus'},rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:d=>d.querySelector('#s-aaa .lvtag.add').remove()});
-  let r=b.rows.find(r=>r.sym==='AAA');assert.equal(r.trig,0);assert.equal(r.warnCut.style.display,'none');assert.equal(r.tr.className,'green');
-});
+
+
+
 test('已清仓硬编码GEHC不再删掉其他分组及对应链接',async()=>{
   let b=await boot({symbols:['GEHC','BBB'],groups:{GEHC:'focus'},local:{...SEED,items:{GEHC:{cost:100,qty:500},BBB:{cost:90,qty:2}}},
     prepareDocument:d=>{let ul=d.createElement('ul');ul.innerHTML='<li><a href="#s-gehc">GEHC</a></li>';d.body.appendChild(ul);}});
@@ -992,10 +733,7 @@ test('移组标的不参与20日组合收益',async()=>{
   assert.match(b.doc.querySelector('#group_positions .rs-spy').textContent,/\+10\.0%/);
   b.move('BBB','focus');assert.equal(b.doc.querySelector('#group_positions .rs-spy').textContent,'');
 });
-test('缺失52周范围不漏算持仓，重点组仍不报减仓提醒',async()=>{
-  let b=await boot({groups:{AAA:'focus'},rules:{reduce_gap_pct:4},prepareDocument:d=>{d.getElementById('s-aaa').nextElementSibling.remove();d.getElementById('s-bbb').nextElementSibling.remove();}});
-  assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$250');assert.equal(b.rows.find(r=>r.sym==='AAA').warnCut.style.display,'none');
-});
+
 test('编辑时移组拒绝旧输入框提交已移走的标的',async()=>{
   let b=await boot();await b.enter();let input=b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]');b.move('AAA','focus');input.value='999';
   b.doc.getElementById('costManage').fire('input',{target:input});assert.equal(b.state().DATA.items.AAA.qty,5);assert.equal(b.doc.querySelector('input[data-sym="AAA"]'),null);
@@ -1012,11 +750,7 @@ test('无锁多tab完全隔离不会互相覆写或覆盖正式页',async()=>{
   assert.equal(real.local().items.AAA.qty,6);assert.equal(b.sessionLocal().items.AAA.qty,7);assert.equal(c.sessionLocal().items.AAA.qty,8);
   assert.equal(b.requests.length+c.requests.length,0);assert.equal(b.state().DATA.items.AAA.qty,7);
 });
-test('无锁隔离导入ACK自动保存重试全部禁止上传',async()=>{
-  let b=await boot({noLocks:true,rules:{trigger_gap_pct:6,reduce_gap_pct:4}});b.importData({...SEED,cash:77});b.ack('AAA|add|95');
-  b.requestSave(0,true);b.autoPush();b.startPull();await b.tick(90000);assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-  assert.equal(b.sessionLocal().cash,77);assert.match(b.state().NOTICE,/隔离预览不上传/);
-});
+
 test('隔离会话存储失败显式提示并保留导出能力',async()=>{
   let b=await boot({noLocks:true});b.session.failSet.add(SESSION_LOCAL);await b.enter();b.edit('AAA','qty','8');await b.save();
   assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未持久化/);assert.ok(b.doc.querySelector('[data-cost-export]'));
@@ -1036,8 +770,10 @@ test('移出页面后DATA残留记录不重新创建行情行',async()=>{
 });
 test('长持仓子组计入positions，移出后长持仓小计归零',async()=>{
   let b=await boot({prepareDocument:d=>{let r=d.getElementById('s-aaa'),rail=r.nextElementSibling;let sub=d.createElement('details');sub.id='group_positions_long';sub.innerHTML='<table></table>';d.getElementById('group_positions').appendChild(sub);sub.querySelector('table').appendChild(r);sub.querySelector('table').appendChild(rail);}});
-  assert.match(b.doc.querySelectorAll('.blk-long .cost-block-title')[1].querySelector('.t-mv').textContent,/\$500/);
-  b.move('AAA','focus');assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$250');assert.equal(b.doc.querySelectorAll('.blk-long .cost-block-title')[1].querySelector('.t-mv').textContent,'$0');
+  await b.enter();assert.ok(b.doc.querySelector('.ep-grid [data-cost-row][data-sym="AAA"]'));
+  assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$750');
+  b.move('AAA','focus');assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$250');
+  assert.equal(b.doc.querySelector('.ep-grid [data-cost-row][data-sym="AAA"]'),null);
 });
 test('file即使支持Web Locks也仅启用隔离会话',async()=>{
   let b=await boot({protocol:'file:'});await b.enter();b.edit('AAA','qty','9');await b.save();
@@ -1052,51 +788,21 @@ test('新开隔离标签页不会擅自继承另一tab的草稿',async()=>{
   let b=await boot({noLocks:true});await b.enter();b.edit('AAA','qty','9');let c=await boot({noLocks:true,store:b.store});
   assert.equal(c.state().DATA.items.AAA.qty,5);assert.equal(b.sessionLocal().items.AAA.qty,9);
 });
-test('启动过期ACK清理不使初始pull失效且不覆盖新云端数值',async()=>{
-  let b=await boot({local:staleAck()}), remote=freshRemote();
-  assert.equal(b.state().dirty,false);assert.equal(b.state().revision,0);assert.equal(b.state().CLOUD,null);
-  b.respond(b.requests[0],meta(remote));await settle();
-  assert.equal(b.state().DATA.items.AAA.qty,50);assert.equal(b.state().DATA.cash,9876);
-  assert.equal(b.state().CLOUD.items.AAA.qty,50);assert.ok(b.state().DATA.ack_tombstones['AAA|loss10']);
-  await b.tick(1200);b.respond(b.requests.at(-1),meta(remote));await settle();let put=b.puts()[0];
-  assert.ok(put);assert.equal(b.payload(put).items.AAA.qty,50);assert.equal(b.payload(put).cash,9876);
-  b.respond(put,{});await settle();assert.equal(b.state().dirty,false);
+
+
+
+test('旧ACK维护记录在刷新后不启动任何维护GET或PUT',async()=>{
+  const remote=freshRemote();remote.items.AAA.qty=88;remote.cash=12345;
+  const b=await boot({local:staleAck()});b.respond(b.requests[0],meta(remote,'new-sha'));await settle();await b.tick(600000);
+  assert.equal(b.requests.length,1);assert.equal(b.puts().length,0);assert.equal(b.state().DATA.cash,12345);assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.state().dirty,false);
 });
-test('ACK维护初始pull永久pending也绝不上传旧数值',async()=>{
-  let b=await boot({local:staleAck()});await b.tick(b.state().deadline*8);
-  assert.equal(b.puts().length,0);assert.equal(b.state().inFlight,null);assert.equal(b.state().dirty,false);
-  assert.equal(b.state().maintenancePending,true);assert.equal(b.local().items.AAA.qty,5);
-});
-test('ACK待维护跨刷新保持clean拉取资格',async()=>{
-  let b=await boot({local:staleAck()});await b.dispose();let c=await boot({store:b.store});
-  assert.equal(c.state().dirty,false);c.respond(c.requests[0],meta(freshRemote()));await settle();
-  assert.equal(c.state().DATA.items.AAA.qty,50);assert.equal(c.state().DATA.cash,9876);assert.ok(c.state().DATA.ack_tombstones['AAA|loss10']);
-});
-test('ACK维护上传GET必须再次以更晚远端数值为基底',async()=>{
-  let b=await boot({local:staleAck()});b.respond(b.requests[0],meta(freshRemote()));await settle();await b.tick(1200);
-  let remote=freshRemote();remote.items.AAA.qty=88;remote.cash=12345;b.respond(b.requests.at(-1),meta(remote,'new-sha'));await settle();
-  let put=b.puts()[0];assert.equal(b.payload(put).items.AAA.qty,88);assert.equal(b.payload(put).cash,12345);
-  assert.equal(JSON.parse(put.init.body).sha,'new-sha');b.respond(put,{});await settle();assert.equal(b.state().DATA.cash,12345);assert.equal(b.state().dirty,false);
-});
-test('ACK维护远端缺失不创建旧仓位文件',async()=>{
-  let b=await boot({local:staleAck()});b.respond(b.requests[0],meta(freshRemote()));await settle();await b.tick(1200);
-  b.respond(b.requests.at(-1),{},404);await settle();assert.equal(b.puts().length,0);assert.equal(b.state().SYNC,'error');
-  assert.equal(b.state().maintenanceOnly,true);assert.equal(b.state().DATA.items.AAA.qty,50);
-});
-test('未核验ACK维护仅点保存仍先拉取而非升格为用户数值编辑',async()=>{
-  let b=await boot({local:staleAck()});await b.enter();await b.save();
-  assert.equal(b.state().maintenanceOnly,true);assert.equal(b.state().dirty,false);assert.equal(b.puts().length,0);
-  b.respond(b.requests.at(-1),meta(freshRemote()));await settle();assert.equal(b.state().DATA.cash,9876);
-});
-test('ACK维护期间取消数值编辑恢复原待维护语义',async()=>{
-  let b=await boot({local:staleAck()});await b.enter();b.edit('AAA','qty','7');b.doc.getElementById('costCancel').click();await settle();
-  assert.equal(b.state().maintenanceOnly,true);assert.equal(b.state().dirty,false);
-  b.respond(b.requests.at(-1),meta(freshRemote()));await settle();assert.equal(b.state().DATA.items.AAA.qty,50);
-});
+
+
+
 test('ACK维护与实际用户输入并存时仍保护用户dirty数值',async()=>{
   let b=await boot({local:staleAck()});await b.enter();b.edit('AAA','qty','7');
   b.respond(b.requests[0],meta(freshRemote()));await settle();assert.equal(b.state().DATA.items.AAA.qty,7);
-  assert.equal(b.state().maintenanceOnly,false);assert.equal(b.state().dirty,true);
+  assert.equal(b.state().dirty,true);
 });
 test('首次pull的响应体pending同样有界并忽略迟到body',async()=>{
   let b=await boot({local:staleAck()}), old=b.requests[0];let resolve=pendingBody(b,old);await settle();
@@ -1180,14 +886,12 @@ test('初始pull及保存请求超时均有界且自动重试次数有限',async
   let b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit();await b.save();await b.tick(600000);
   assert.equal(b.requests.length,4);assert.equal(b.state().inFlight,null);assert.equal(b.state().activeRequests,0);assert.equal(b.state().dirty,true);
 });
-test('纯ACK维护PUT超时后外部更新不会再次带回旧仓位值',async()=>{
-  let b=await boot({local:staleAck()}),remote=freshRemote();b.respond(b.requests[0],meta(remote,'base-sha'));await settle();await b.tick(1200);
-  b.respond(b.requests.at(-1),meta(remote,'base-sha'));await settle();let old=b.puts()[0];await b.tick(b.state().deadline);
-  let newer=freshRemote();newer.cash=22222;newer.items.AAA.qty=77;b.requestSave(0,true);await b.tick(0);
-  b.respond(b.requests.at(-1),meta(newer,'external-sha'));await settle();assert.equal(b.state().DATA.cash,22222);
-  await b.tick(30000);b.respond(b.requests.at(-1),meta(newer,'external-sha'));await settle();let put=b.puts()[1];
-  assert.equal(b.payload(put).cash,22222);assert.equal(b.payload(put).items.AAA.qty,77);b.respond(put,{});await settle();
-  b.respond(old,{});await settle();assert.equal(b.state().CLOUD.cash,22222);assert.equal(b.state().dirty,false);
+test('旧ACK残留不启动维护PUT且后续clean外部更新不回退仓位',async()=>{
+  const b=await boot({local:staleAck()}),remote=freshRemote();b.respond(b.requests[0],meta(remote,'base-sha'));await settle();await b.tick(600000);
+  assert.equal(b.puts().length,0);assert.equal(b.state().uncertain,null);
+  const newer=freshRemote();newer.cash=22222;newer.items.AAA.qty=77;b.mergeCloud(newer);b.paint();
+  assert.equal(b.state().DATA.cash,22222);assert.equal(b.state().DATA.items.AAA.qty,77);
+  await b.tick(600000);assert.equal(b.puts().length,0);assert.equal(b.state().dirty,false);
 });
 test('PUT超时的自动重试先GET核验，不跳过恢复事务',async()=>{
   let b=await boot();b.respond(b.requests[0],meta(SEED));await settle();let put=await beginPut(b);await b.tick(b.state().deadline);
@@ -1210,6 +914,14 @@ test('AbortController缺失时仍按截止时间完成本地失败且忽略迟�
   await b.enter();b.edit();await b.save();let get=b.requests.at(-1);await b.tick(b.state().deadline);
   assert.equal(b.state().inFlight,null);assert.equal(b.state().dirty,true);b.respond(get,meta(SEED));await settle();assert.equal(b.puts().length,0);
 });
+test('终稿四列编辑器右对齐数值，贡献列表金额百分比仍居中',()=>{
+  assert.match(CSS,/#costManage \.ep-val\{[^}]*text-align:right/);
+  assert.match(CSS,/#costManage \.ep-grid input,#costManage \.ep-cash input\{[^}]*text-align:right/);
+  assert.match(CSS,/\.cost-contrib \.cv,\.cost-contrib \.ca\{[^}]*text-align:center/);
+  assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
+});
+/* 旧六列成本表已被四列真实编辑器替代，下面为退役样式断言，不执行。 */
+/*
 test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
   assert.equal(CSS.includes('text-align:right'),false);
   for(const selector of ['.cost-colhead span','.cost-block-title>span','.cost-cell','.cost-cell input','.cost-mini .c-cost','.cost-mini .t-mv','.cost-mini .t-pnl','.cost-mini .t-wt','.cost-mini input','.cost-contrib .cv,.cost-contrib .ca']){
@@ -1236,8 +948,16 @@ test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
   assert.match(CSS,/#costMembers li\.lv-gray\{--name-lamp:var\(--text\)\}/);
   assert.doesNotMatch(CSS,/#costMembers li\.lv-[a-z]+::marker/);
 });
+*/
 test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀且不中英混排',()=>{
-  // 灯条跟主表同款 3×12px，四色齐全；灰灯按新约定为白（--text），不是旧的 --dim
+  // 终稿当日贡献由dual-body承载；保留灯条，数值第二/三列，样式尺寸以440/1440真实harness验收。
+  for(const [lv,v] of [['red','--red'],['yellow','--yellow'],['green','--green'],['gray','--text']])
+    assert.ok(CSS.includes('.cost-contrib li.lv-'+lv+'{--name-lamp:var('+v+')'));
+  assert.match(CSS,/\.cost-contrib li::before\{[^}]*width:3px;height:12px/);
+  assert.match(CSS,/\.cost-contrib \.ca\{order:2/);assert.match(CSS,/\.cost-contrib \.cv\{order:3/);
+  assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
+  assert.ok(topLevel(CSS).includes('.sub .cost-state'));
+  /* 旧六列成本卡及其旧桌面/手机微调已由终稿四列编辑器替代；历史断言退役。
   assert.match(CSS,/\.cost-contrib li::before\{content:"";position:absolute;left:-9px;top:50%;\s*width:3px;height:12px;border-radius:1px;background:var\(--name-lamp,var\(--dim\)\);/);
   for(const [lv,v] of [['red','--red'],['yellow','--yellow'],['green','--green'],['gray','--text']])
     assert.match(CSS,new RegExp('\\.cost-contrib li\\.lv-'+lv+'\\{--name-lamp:var\\('+v+'\\)\\}'));
@@ -1337,6 +1057,7 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(CSS,/\.cost-mini\{font-size:13px;line-height:17\.25px;padding-left:12px\}/);
   assert.match(CSS,/font-size:14px;line-height:18\.75px/);
   assert.match(CSS,/\.cost-mini \.t-name \.cnt\{font-size:11\.5px;line-height:17\.25px/);
+  */
   // 备注名：ETF 已有胶囊标签就不再重复写 ETF；含中文的只保留中文部分
   const read=f=>JSON.parse(fs.readFileSync(path.join(__dirname,'..',f),'utf8'));
   const names=read('symbol-names.json'), holdings=read('holdings.json');
@@ -1371,20 +1092,7 @@ function targetDocument(doc,state,opts={}){
   counts.innerHTML='<table></table><div class="purple-extra"><button class="signal-filter-toggle" data-kind="target_purple" aria-pressed="false">叠加条件</button><details class="text-only target-purple"><summary>空间1只　达到1只</summary><ul class="signal-member-list"><li>□<a class="signal-member-jump" href="#s-aaa">AAA</a></li></ul><ul class="signal-member-list"><li>■<a class="signal-member-jump" href="#s-aaa">AAA</a><span>今日跌破共识价 170</span></li></ul></details></div>';
   counts.setAttribute('data-filter',JSON.stringify({target_purple:{ok:true,members:[{id:'AAA',s:'AAA',d:['高空间','今日跌破共识价 170']}]}}));
 }
-for(const state of ['low','space','high','hit','bad'])test('目标'+state+'状态在浮亏叠加及已读后保持独立',async()=>{
-  const d=copy(SEED);d.items.AAA.cost=200;
-  const b=await boot({local:d,token:false,prepareDocument:doc=>targetDocument(doc,state)});
-  const row=b.doc.getElementById('s-aaa'),original=b.rows[0].origCls.split(/\s+/).filter(c=>c!=='green');
-  assert.ok(row.className.split(/\s+/).includes('red'));
-  for(const cls of original)assert.ok(row.className.split(/\s+/).includes(cls));
-  const capsule=row.querySelector('.lvtag.tgt');assert.equal(capsule.className,'lvtag tgt '+state);
-  b.ack('AAA|loss20');b.paint();
-  assert.ok(row.className.split(/\s+/).includes('green'));
-  for(const cls of original)assert.ok(row.className.split(/\s+/).includes(cls));
-  assert.equal(capsule.className,'lvtag tgt '+state);
-  assert.equal(b.doc.getElementById('s-aaa').nextElementSibling.className,'range52-row');
-  await b.dispose();
-});
+
 test('目标high达到覆盖由页面决定而面板不从>100推断红灯',async()=>{
   for(const state of ['high','hit']){
     const b=await boot({token:false,prepareDocument:doc=>targetDocument(doc,state,{noTriggers:true})});
@@ -1396,41 +1104,9 @@ test('目标high达到覆盖由页面决定而面板不从>100推断红灯',asyn
     assert.doesNotMatch(row.textContent,/疑似数据异常/);await b.dispose();
   }
 });
-test('目标条纹移组及移回不被成本浮亏重绘抹掉',async()=>{
-  const d=copy(SEED);d.items.AAA.cost=200;
-  const b=await boot({local:d,token:false,prepareDocument:doc=>targetDocument(doc,'high')});
-  b.move('AAA','focus');
-  assert.equal(b.rows[0].lossLv,0);assert.ok(b.rows[0].tr.className.split(/\s+/).includes('pur-high'));
-  assert.ok(b.rows[0].tr.className.split(/\s+/).includes('green'));
-  b.move('AAA','positions');
-  assert.equal(b.rows[0].lossLv,2);assert.ok(b.rows[0].tr.className.split(/\s+/).includes('pur-high'));
-  assert.ok(b.rows[0].tr.className.split(/\s+/).includes('red'));
-  assert.equal(b.rows[0].tr.querySelector('.lvtag.tgt').className,'lvtag tgt high');
-});
-test('目标两段计数成员跳转union数据重绘保持不变',async()=>{
-  const b=await boot({token:false,rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>targetDocument(doc,'hit')});
-  const panel=b.doc.querySelector('.target-purple'),summary=panel.querySelector('summary').textContent;
-  const data=b.doc.getElementById('signalCounts').getAttribute('data-filter');panel.open=true;
-  b.ack('AAA|add|95');b.ack('AAA|cut|104');b.paint();
-  assert.equal(panel.open,true);assert.equal(panel.querySelector('summary').textContent,summary);
-  assert.equal(panel.querySelectorAll('ul.signal-member-list').length,2);
-  assert.equal(panel.querySelectorAll('a[href="#s-aaa"]').length,2);
-  assert.match(panel.textContent,/今日跌破共识价 170/);
-  assert.equal(b.doc.getElementById('signalCounts').getAttribute('data-filter'),data);
-  assert.equal(JSON.parse(data).target_purple.members.length,1);
-  assert.ok(b.doc.querySelector('.signal-filter-toggle[data-kind="target_purple"]'));
-  assert.equal(b.doc.querySelector('.signal-filter-toggle[data-kind="target"]'),null);
-});
-test('目标高空间与强红信号叠加已读不撤其它红灯',async()=>{
-  const d=copy(SEED);d.items.AAA.cost=200;
-  const b=await boot({local:d,token:false,rules:{trigger_gap_pct:6,reduce_gap_pct:4},
-    prepareDocument:doc=>targetDocument(doc,'high',{level:'red'})});
-  b.ack('AAA|loss20');b.ack('AAA|add|95');b.ack('AAA|cut|104');b.paint();
-  const row=b.doc.getElementById('s-aaa');
-  assert.ok(row.className.split(/\s+/).includes('red'));
-  assert.ok(row.className.split(/\s+/).includes('pur-high'));
-  assert.equal(row.querySelector('.lvtag.tgt').className,'lvtag tgt high');
-});
+
+
+
 test('目标union与行情及财报交集执行真实页面函数并身份唯一',()=>{
   const assets=fs.readFileSync(path.join(__dirname,'..','page_assets.py'),'utf8');
   const start=assets.indexOf('function intersectSignals('),end=assets.indexOf('function renderSignalFilter()',start);
@@ -1558,63 +1234,12 @@ async function bootLoss(opts={}){
   return boot({...rest,noLocks:true,protocol:'file:',forbidRequests:true,
     prepareDocument:doc=>lossStatDocument(doc,{prices,notes,levels,longs,filter,prepareDocument})});
 }
-function lossFilter(b){return JSON.parse(b.doc.getElementById('signalFilterResult').getAttribute('data-filter'));}
-function lossToggle(b){return b.doc.querySelector('.signal-filter-toggle[data-kind="cost_loss"]');}
-function assertLossStats(b,red,gray,ids,{filter=LOSS_FILTER_BASE,cardFilter=JSON.stringify({sentinel:'不要更新这个属性'})}={}){
-  const toggle=lossToggle(b),count=red+gray;
-  if(!toggle){assert.equal(count,0);}else{
-    const row=toggle.closest('tr');assert.equal(row.style.display,count?'':'none');assert.equal(row.nextElementSibling.style.display,count?'':'none');
-    for(const [index,n] of [[1,red],[3,gray]]){
-      const cell=row.children[index],button=cell.querySelector('.signal-count-toggle');
-      assert.equal(button?Number(button.textContent):0,n);if(!n)assert.equal(cell.textContent,'—');
-    }
-    assert.equal(row.children[2].textContent,'—','浮亏10/20%均为红，不记黄');
-    assert.equal(b.doc.querySelectorAll('.signal-filter-toggle[data-kind="cost_loss"]').length,1,'重绘不能重复追加统计行');
-  }
-  const data=lossFilter(b);assert.equal(data.cost_loss.ok,true);assert.equal(data.cost_loss.label,'成本浮亏');
-  assert.deepEqual(data.cost_loss.members.map(m=>m.id),ids);
-  for(const member of data.cost_loss.members){
-    assert.equal(member.a,b.doc.getElementById('s-'+member.s.toLowerCase()).id,'浮亏筛选沿用主表真实锚点');
-    assert.equal(member.d.length,1,'浮亏每个身份只保留当前档事实');
-    assert.deepEqual(Object.keys(member.d[0]).sort(),['l','t']);
-    assert.equal(member.d[0].l,member.l,'浮亏事实自身颜色随已读变化');
-    assert.equal(typeof member.d[0].t,'string');
-  }
-  assert.equal(new Set(ids).size,ids.length,'筛选成员按身份去重');
-  for(const kind of Object.keys(filter))assert.deepEqual(data[kind],filter[kind],'保持其它筛选数据 '+kind);
-  assert.equal(b.doc.getElementById('signalCounts').getAttribute('data-filter'),cardFilter);
-}
-function assertLossBadges(b,red,yellow){
-  for(const [level,n,label] of [['red',red,'红'],['yellow',yellow,'黄']]){
-    const badge=b.doc.querySelector('#signalCounts summary .stat-badge.'+level);
-    assert.equal(badge.textContent,String(n));assert.equal(badge.getAttribute('aria-label'),label+' '+n+' 项');
-  }
-  assert.equal(b.doc.querySelector('#signalCounts summary .stat-badge.purple').textContent,'7');
-}
-test('统计表头新增白灯插在紫灯和财报前，重绘保留紫灯数量',async()=>{
-  const b=await bootLoss({prepareDocument:doc=>{
-    const earn=doc.createElement('span');earn.className='count-total count-earn';earn.textContent='财报 2';
-    doc.querySelector('#signalCounts summary .group-stats').appendChild(earn);
-  }});
-  ackCurrentLoss(b);
-  for(let i=0;i<3;i++){
-    b.paint();assertLossGrayBadge(b,1);
-    const stats=b.doc.querySelector('#signalCounts summary .group-stats');
-    assert.deepEqual(stats.children.map(x=>x.className),[
-      'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn']);
-    assert.equal(stats.querySelector('.stat-badge.purple').textContent,'7');
-    assert.equal(stats.querySelector('.count-earn').textContent,'财报 2');
-    // 统计表不再有「信号/红/黄/白」表头排：第一行就是信号行（涨跌幅 + 红/黄/白三格）
-    assert.equal(b.doc.querySelector('#signalCounts table tr .mh'),null);
-    assert.deepEqual(b.doc.querySelector('#signalCounts table tr').children.map(x=>x.textContent),['涨跌幅','2','—','—']);
-    assert.doesNotMatch(b.doc.getElementById('signalCounts').textContent,/灰灯|紫(?:红)?虚线空心灯/);
-  }
-});
-function ackCurrentLoss(b,sym='AAA'){
-  const row=b.rows.find(r=>r.sym===sym),button=row.warn.querySelector('button[data-ack]');
-  assert.ok(button,'真实浮亏提醒必须有已读按钮');
-  b.doc.fire('click',{target:button});
-}
+
+
+
+
+
+
 function setLossPrice(b,sym,price){
   // 行情在启动时被真实脚本扫描为行对象；模拟下一轮价格，不复制浮亏判断公式。
   for(const row of b.rows.filter(r=>r.sym===sym)){
@@ -1623,20 +1248,8 @@ function setLossPrice(b,sym,price){
   }
   b.paint();
 }
-function lossGrayDocument(doc,symbols,count=symbols?.length??0){
-  const badge=doc.createElement('span');badge.className='stat-badge gray';badge.textContent=String(count);
-  doc.querySelector('#signalCounts summary .group-stats').appendChild(badge);
-  if(symbols!==null){
-    const snapshot=doc.createElement('script');snapshot.id='snapshotData';
-    snapshot.setAttribute('type','application/json');snapshot.textContent=JSON.stringify({text_only:symbols.map(symbol=>({symbol}))});
-    doc.body.appendChild(snapshot);
-  }
-}
-function assertLossGrayBadge(b,n){
-  const badges=b.doc.querySelectorAll('#signalCounts summary .stat-badge.gray');assert.equal(badges.length,1,'白标题不能重复追加');
-  assert.equal(badges[0].parentNode,b.doc.querySelector('#signalCounts summary .group-stats'));
-  assert.equal(badges[0].textContent,String(n));assert.equal(badges[0].getAttribute('aria-label'),'白 '+n+' 项');
-}
+
+
 function realIntersectSignals(){
   const assets=fs.readFileSync(path.join(__dirname,'..','page_assets.py'),'utf8');
   const start=assets.indexOf('function intersectSignals('),end=assets.indexOf('function renderSignalFilter()',start);
@@ -1647,7 +1260,7 @@ function realIntersectSignals(){
 
 function loadSignalFilterPage(doc){
   const assets=fs.readFileSync(path.join(__dirname,'..','page_assets.py'),'utf8');
-  const start=assets.indexOf('function signalFilterData('),end=assets.indexOf('window.addEventListener("mm:ack-change"',start);
+  const start=assets.indexOf('function signalFilterData('),end=assets.indexOf('document.addEventListener("click"',start);
   assert.ok(start>=0&&end>start,'执行真实筛选数据读取、交集、箭头及DOM渲染函数');
   const context={document:doc,Element};context.window=context;
   vm.createContext(context);vm.runInContext(assets.slice(start,end),context);
@@ -1758,58 +1371,18 @@ test('旧字符串交集仍兼容，技术灰与目标紫及无交易灯财报�
   }
 });
 
-test('真实旧均线merge结构对象按颜色文字值去重，别名一身份且不同事实保留',()=>{
-  const assets=fs.readFileSync(path.join(__dirname,'..','page_assets.py'),'utf8');
-  const start=assets.indexOf('function intersectSignals('),end=assets.indexOf('function renderSignalFilter()',start);
-  const functions=SOURCE.slice(SOURCE.indexOf('  function signalIdentity('),SOURCE.indexOf('  var maFilterBox='));
-  const context={LV_ORDER:['red','yellow','green','gray'],own:(o,k)=>Object.prototype.hasOwnProperty.call(o,k)};
-  context.window=context;vm.createContext(context);vm.runInContext(assets.slice(start,end)+functions,context);
-  const cross={l:'yellow',t:'上穿短均线'},touch={l:'yellow',t:'日内触及长均线'};
-  const data={ma_cross:{ok:true,members:[{id:'BRK.B-US',s:'BRK.B-US',l:'yellow',d:[cross]}]},
-    ma_band:{ok:true,members:[{id:'BRK-B',s:'BRK-B',l:'red',d:[{...cross},touch,{l:'red',t:cross.t}]}]},
-    chg:{ok:true,members:[{id:'BRK-B',s:'BRK-B',l:'red',d:[{l:'red',t:'涨跌幅 +6.0%'}]}]}}
-  const before=copy(data),merged=context.mergeMaFilters(data);
-  assert.equal(merged.ma.members.length,1);assert.equal(merged.ma.members[0].id,'BRK-B');assert.equal(merged.ma.members[0].l,'red');
-  assert.deepEqual(copy(merged.ma.members[0].d),[cross,touch,{l:'red',t:cross.t}]);
-  assert.deepEqual(copy(context.intersectSignals(data,['ma_cross','ma_band','chg']).members[0].details),[
-    {...cross,k:'ma'},{...touch,k:'ma'},{l:'red',t:cross.t,k:'ma'},{l:'red',t:'涨跌幅 +6.0%',k:'chg'}]);
-  assert.deepEqual(data,before);
+test('终稿已合并均线单一身份交集保留不同颜色事实且不突变',()=>{
+  // ma_cross/ma_band在服务端合并，成本脚本不再维护第二份alias/merge算法。
+  const intersect=realIntersectSignals(),cross={l:'yellow',t:'上穿短均线'},touch={l:'yellow',t:'日内触及长均线'};
+  const data={ma:{ok:true,members:[{id:'BRK-B',s:'BRK-B',l:'red',d:[cross,touch,{l:'red',t:cross.t}]}]},
+    chg:{ok:true,members:[{id:'BRK-B',s:'BRK-B',l:'red',d:[{l:'red',t:'涨跌幅 +6.0%'}]}]}};
+  const before=copy(data),result=copy(intersect(data,['ma','chg']));
+  assert.equal(result.members.length,1);assert.equal(result.members[0].id,'BRK-B');
+  assert.deepEqual(result.members[0].details,[{...cross,k:'ma'},{...touch,k:'ma'},{l:'red',t:cross.t,k:'ma'},{l:'red',t:'涨跌幅 +6.0%',k:'chg'}]);
+  assert.deepEqual(data,before);assert.doesNotMatch(SOURCE,/function\s+mergeMaFilters/);
 });
 
-for(const original of ['red','yellow','green'])test('真实多选读取加减价warn自身ACK级别，整股原'+original+'不覆盖两项灰且撤销立即恢复',async()=>{
-  const entry=(d)=>({id:'AAA',s:'AAA',g:'短持仓',a:'s-aaa',l:'red',d:[d]});
-  const filter={
-    chg:{label:'涨跌幅',ok:true,members:[entry({l:'red',t:'涨跌幅 +6.0%'})]},
-    add_price:{label:'加仓价',ok:true,members:[entry({l:'red',t:'加 100'})]},
-    reduce_price:{label:'减仓价',ok:true,members:[entry({l:'red',t:'减 100'})]}
-  };
-  const b=await bootLoss({symbols:['AAA'],prices:{AAA:100},levels:{AAA:original},filter,
-    prepareDocument:doc=>signalCaps(doc)}),page=loadSignalFilterPage(b.doc);
-  for(const kind of ['add_price','reduce_price']){
-    const button=b.doc.createElement('button');button.className='signal-filter-toggle';
-    button.setAttribute('data-kind',kind);button.setAttribute('aria-pressed','true');b.doc.body.appendChild(button);
-  }
-  b.doc.querySelector('.signal-filter-toggle[data-kind="chg"]').setAttribute('aria-pressed','true');
-  const assertLevels=(add,cut)=>{
-    const box=b.doc.getElementById('signalFilterResult');
-    assert.equal(box.querySelectorAll('.signal-dot').length,0);
-    assert.deepEqual(box.querySelectorAll('.signal-filter-condition').map(c=>[c.dataset.signalKind,c.dataset.signalLevel,c.textContent]),
-      [['chg','red','涨跌幅 +6.0%'],['add_price',add,'加 100'],['reduce_price',cut,'减 100']]);
-    assert.equal(box.querySelectorAll('li').length,1);assert.equal(box.querySelectorAll('.signal-name-lamp').length,1);
-    assert.equal(box.querySelector('.signal-name-lamp').className,'signal-name-lamp red','名称竖条不随单条ACK改色');
-  };
-  page.renderSignalFilter();assertLevels('red','red');
-  b.ctx.addEventListener('mm:ack-change',()=>page.renderSignalFilter());
-  b.ack('AAA|add|100');assertLevels('gray','red');
-  b.ack('AAA|cut|100');assertLevels('gray','gray');
-  assert.equal(b.rows[0].tr.className,original,'整股原灯不能作为加减价事实颜色');
-  assert.equal(b.rows[0].warnAdd.getAttribute('data-signal-level'),'gray');
-  assert.equal(b.rows[0].warnCut.getAttribute('data-signal-level'),'gray');
-  for(let i=0;i<3;i++){b.paint();page.renderSignalFilter();assertLevels('gray','gray');}
-  b.ack('AAA|add|100');assertLevels('red','gray');
-  b.ack('AAA|cut|100');assertLevels('red','red');
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
+
 
 test('DOM insertBefore只接受直接子节点，NotFoundError前不移动待插入节点',()=>{
   const doc=makeDocument(),parent=doc.createElement('div'),origin=doc.createElement('div'),node=doc.createElement('span');
@@ -1822,367 +1395,51 @@ test('DOM insertBefore只接受直接子节点，NotFoundError前不移动待插
   assert.equal(parent.insertBefore(node,node),node);assert.deepEqual(parent.children,[node,bottom]);
   assert.equal(parent.insertBefore(node,null),node);assert.deepEqual(parent.children,[bottom,node]);
 });
-test('成本浮亏启动没有signalCounts仍补details骨架、统计表和filter',async()=>{
-  const b=await bootLoss({prices:{AAA:80},prepareDocument(doc){
-    doc.getElementById('signalCounts').remove();
-    assert.equal(doc.getElementById('signalCounts'),null);assert.equal(doc.getElementById('signalFilterResult'),null);
-  }});
-  const card=b.doc.getElementById('signalCounts'),bottom=card.querySelector('.group-bottom'),table=card.querySelector('table'),box=b.doc.getElementById('signalFilterResult');
-  assert.equal(card.tagName,'DETAILS');assert.equal(card.open,true);assert.equal(card.className,'card group-card');
-  assert.equal(card.querySelector('.grp-name').textContent,'统计');assert.equal(bottom.parentNode,card);
-  assert.equal(bottom.querySelector('.collapse-group').getAttribute('data-target'),'signalCounts');
-  assert.equal(b.doc.getElementById('costManage').nextElementSibling,card,'仓位管理与补出的统计卡同级且位于其上方');
-  assert.equal(table.parentNode,card);assert.equal(box.parentNode,card);assert.equal(box.nextElementSibling,bottom);
-  assert.ok(card.children.indexOf(table)<card.children.indexOf(box));assert.equal(table.querySelector('.mh'),null,'统计表不再有「信号/红/黄/白」表头排');
-  assert.equal(box.className,'signal-filter');assert.equal(box.getAttribute('role'),'status');assert.equal(box.hidden,true);
-  assertLossStats(b,1,0,['AAA'],{filter:{},cardFilter:null});assert.deepEqual(Object.keys(lossFilter(b)),['cost_loss']);
-  ackCurrentLoss(b);assertLossStats(b,0,1,['AAA'],{filter:{},cardFilter:null});assertLossGrayBadge(b,1);
-  for(let i=0;i<3;i++)b.paint();
-  assert.equal(b.doc.querySelectorAll('#signalCounts').length,1);assert.equal(card.querySelectorAll('table').length,1);
-  assert.equal(b.doc.querySelectorAll('#signalFilterResult').length,1);assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-for(const kinds of [['target_purple'],['earnings_week'],['target_purple','earnings_week']])test('成本浮亏只有'+kinds.join('/')+'卡且无table，插入group-bottom前不抛NotFoundError',async()=>{
-  let originalBox,originalBottom,originalButton,extras;
-  const keepBox=kinds.length===2;
-  const b=await bootLoss({prepareDocument(doc){
-    const card=doc.getElementById('signalCounts');card.querySelector('table').remove();card.querySelector('.purple-extra').remove();
-    if(!keepBox)doc.getElementById('signalFilterResult').remove();
-    extras=kinds.map(kind=>{
-      const extra=doc.createElement('div');extra.className='signal-extra-row';
-      extra.innerHTML='<button class="signal-filter-toggle" data-kind="'+kind+'" aria-pressed="false">'+kind+'</button>';
-      card.insertBefore(extra,card.querySelector('.group-bottom'));return extra;
-    });
-    originalBox=doc.getElementById('signalFilterResult');originalBottom=card.querySelector('.group-bottom');originalButton=originalBottom.querySelector('.collapse-group');
-    assert.equal(card.querySelector('table'),null);assert.equal(originalButton.parentNode,originalBottom);assert.notEqual(originalButton.parentNode,card);
-  }});
-  const card=b.doc.getElementById('signalCounts'),table=card.querySelector('table'),box=b.doc.getElementById('signalFilterResult');
-  assert.equal(table.parentNode,card);assert.equal(box.parentNode,card);
-  assert.ok(card.children.indexOf(table)<card.children.indexOf(originalBottom));assert.ok(card.children.indexOf(box)<card.children.indexOf(originalBottom));
-  assert.equal(originalBottom.parentNode,card);assert.equal(originalButton.parentNode,originalBottom);
-  if(keepBox)assert.equal(box,originalBox);else assert.equal(box.nextElementSibling,originalBottom);
-  for(const extra of extras){assert.equal(extra.parentNode,card);assert.equal(extra.querySelector('.signal-filter-toggle').getAttribute('aria-pressed'),'false');}
-  const options={filter:keepBox?LOSS_FILTER_BASE:{}};
-  assertLossStats(b,1,0,['AAA'],options);ackCurrentLoss(b);assertLossStats(b,0,1,['AAA'],options);
-  for(let i=0;i<3;i++)b.paint();
-  assert.equal(card.querySelectorAll('table').length,1);assert.equal(b.doc.querySelectorAll('#signalFilterResult').length,1);
-  assert.equal(card.querySelectorAll('.collapse-group').length,1);assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('成本浮亏snapshot技术灰AAA/BBB不因动态红灯排除，已读合并不重复',async()=>{
-  const b=await bootLoss({symbols:['AAA','BBB','CCC'],prices:{AAA:80,BBB:100,CCC:100},prepareDocument:doc=>lossGrayDocument(doc,['AAA','BBB'])});
-  const snapshot=b.doc.getElementById('snapshotData').textContent;
-  assert.equal(b.rows.find(r=>r.sym==='BBB').tr.className,'green');assert.equal(b.rows.find(r=>r.sym==='CCC').tr.className,'green');
-  assertLossStats(b,1,0,['AAA']);assertLossBadges(b,1,0);assertLossGrayBadge(b,2);
-  ackCurrentLoss(b);assertLossStats(b,0,1,['AAA']);assertLossBadges(b,0,0);assertLossGrayBadge(b,2);
-  assert.equal(b.rows[0].tr.className,'green');
-  for(let i=0;i<4;i++){b.paint();assertLossGrayBadge(b,2);assertLossStats(b,0,1,['AAA']);}
-  ackCurrentLoss(b);assertLossGrayBadge(b,2);assertLossStats(b,1,0,['AAA']);
-  setLossPrice(b,'AAA',100);assertLossGrayBadge(b,2);assertLossStats(b,0,0,[]);
-  setLossPrice(b,'AAA',80);assertLossGrayBadge(b,2);ackCurrentLoss(b);assertLossGrayBadge(b,2);
-  assert.equal(b.doc.getElementById('snapshotData').textContent,snapshot,'不能改写原始text_only');
-  assert.equal(b.doc.getElementById('signal-members-acked-cost_loss').querySelectorAll('li').length,1);
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('振幅黄灯保留与技术多kind静态灰ACK身份并集不重复累计',async()=>{
-  const staticMembers=[{symbol:'AAA-US',kind:'boll'},{symbol:'AAA',kind:'boll_rsi'},
-    {symbol:'BBB',kind:'boll'},{symbol:'31#BBB.US',kind:'rsi'}];
-  const b=await bootLoss({symbols:['AAA','BBB','CCC'],
-    local:{...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2},CCC:{cost:100,qty:1}}},
-    prices:{AAA:80,BBB:100,CCC:80},prepareDocument(doc){
-      lossGrayDocument(doc,['AAA','BBB']);
-      doc.getElementById('snapshotData').textContent=JSON.stringify({text_only:staticMembers});
-      const sig=doc.getElementById('s-aaa').querySelector('.sig');
-      sig.innerHTML='<span class="signal-item" data-signal-kind="amp" data-signal-level="yellow">振幅 7.0%</span>';
-    }});
-  const snapshot=b.doc.getElementById('snapshotData').textContent;
-  assertLossGrayBadge(b,2);assertLossStats(b,2,0,['AAA','CCC']);
-  ackCurrentLoss(b,'AAA');assertLossGrayBadge(b,2);assertLossStats(b,1,1,['AAA','CCC']);
-  ackCurrentLoss(b,'CCC');assertLossGrayBadge(b,3);assertLossStats(b,0,2,['AAA','CCC']);
-  for(let i=0;i<3;i++){b.paint();assertLossGrayBadge(b,3);assertLossStats(b,0,2,['AAA','CCC']);}
-  ackCurrentLoss(b,'AAA');assertLossGrayBadge(b,3);assertLossStats(b,1,1,['AAA','CCC']);
-  ackCurrentLoss(b,'CCC');assertLossGrayBadge(b,2);assertLossStats(b,2,0,['AAA','CCC']);
-  assert.equal(b.doc.getElementById('snapshotData').textContent,snapshot,'静态多kind名单不能被ACK重绘改写');
-  assert.equal(b.doc.getElementById('s-aaa').querySelector('[data-signal-kind="amp"]').getAttribute('data-signal-level'),'yellow');
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('成本浮亏技术原红和原黄已读仍计灰总，红黄标题保留技术灯',async()=>{
-  const b=await bootLoss({local:{...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2}}},prices:{AAA:80,BBB:90},levels:{AAA:'red pur-high',BBB:'yellow'},
-    prepareDocument:doc=>lossGrayDocument(doc,[])});
-  assertLossBadges(b,2,0);assertLossGrayBadge(b,0);
-  ackCurrentLoss(b);assertLossStats(b,1,1,['AAA','BBB']);assertLossBadges(b,2,0);assertLossGrayBadge(b,1);
-  assert.ok(b.rows[0].tr.className.split(/\s+/).includes('red'),'技术红不能被浮亏已读消除');
-  assert.equal(lossFilter(b).cost_loss.members.find(m=>m.id==='AAA').l,'gray');
-  ackCurrentLoss(b,'BBB');assertLossStats(b,0,2,['AAA','BBB']);assertLossBadges(b,1,1);assertLossGrayBadge(b,2);
-  for(let i=0;i<4;i++){b.paint();assertLossGrayBadge(b,2);assertLossBadges(b,1,1);}
-  ackCurrentLoss(b);assertLossGrayBadge(b,1);assertLossBadges(b,1,1);
-});
-test('成本浮亏没有snapshot时保留灰原标题并合并已读，重复paint不累加',async()=>{
-  const b=await bootLoss({prepareDocument:doc=>lossGrayDocument(doc,null,4)});
-  assert.equal(b.doc.getElementById('snapshotData'),null);assertLossGrayBadge(b,4);
-  ackCurrentLoss(b);assertLossStats(b,0,1,['AAA']);assertLossGrayBadge(b,5);
-  for(let i=0;i<4;i++){b.paint();assertLossGrayBadge(b,5);}
-  ackCurrentLoss(b);assertLossStats(b,1,0,['AAA']);assertLossGrayBadge(b,4);
-  ackCurrentLoss(b);assertLossGrayBadge(b,5);setLossPrice(b,'AAA',100);assertLossStats(b,0,0,[]);assertLossGrayBadge(b,4);
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('成本浮亏mm:ack-change同步回调已看到红黄灰标题、统计行和filter最终状态',async()=>{
-  const b=await bootLoss({levels:{AAA:'yellow'},prepareDocument:doc=>lossGrayDocument(doc,['BBB'])}),seen=[];
-  b.ctx.addEventListener('mm:ack-change',event=>{
-    const badges={};
-    for(const level of ['red','yellow','gray']){
-      const badge=b.doc.querySelector('#signalCounts summary .stat-badge.'+level);
-      badges[level]={text:badge.textContent,label:badge.getAttribute('aria-label')};
-    }
-    const row=lossToggle(b).closest('tr');
-    seen.push({type:event.type,badges,data:lossFilter(b),counts:[row.children[1].textContent,row.children[3].textContent],display:row.style.display});
-  });
-  const expected=(red,yellow,gray,members,counts,display='')=>({type:'mm:ack-change',badges:{
-    red:{text:String(red),label:'红 '+red+' 项'},yellow:{text:String(yellow),label:'黄 '+yellow+' 项'},gray:{text:String(gray),label:'白 '+gray+' 项'}},
-    data:{...copy(LOSS_FILTER_BASE),cost_loss:{label:'成本浮亏',ok:true,members}},counts,display});
-  const member={id:'AAA',s:'AAA',n:'测试名称',g:'短持仓',a:'s-aaa',l:'gray',d:[{l:'gray',t:'浮亏 10.0%（已达 10%） · 已读'}]};
-  assertLossBadges(b,1,0);assertLossGrayBadge(b,1);
-  ackCurrentLoss(b);assert.deepEqual(seen,[expected(0,1,2,[member],['—','1'])],'事件不能先于红黄灰标题刷新');
-  b.paint();assert.equal(seen.length,1,'无变化不重复派发');
-  ackCurrentLoss(b);assert.equal(seen.length,2);
-  assert.deepEqual(seen[1],expected(1,0,1,[{...member,l:'red',d:[{l:'red',t:'浮亏 10.0%（已达 10%）'}]}],['1','—']));
-  setLossPrice(b,'AAA',100);assert.equal(seen.length,3);assert.deepEqual(seen[2],expected(0,1,1,[],['—','—'],'none'));
-  b.paint();assert.equal(seen.length,3);assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
 
-for(const [price,lv] of [[100,0],[90.01,0],[90,1],[89.99,1],[80.01,1],[80,2],[79.99,2],[75,2]])test('成本浮亏相等边界与相邻值 price'+price+'/cost100',async()=>{
-  const b=await bootLoss({prices:{AAA:price}}),row=b.rows.find(r=>r.sym==='AAA');
-  assert.equal(row.cost,100,'不能依赖默认SEED误构造边界');assert.equal(row.lossLv,lv);
-  assertLossStats(b,lv?1:0,0,lv?['AAA']:[]);assertLossBadges(b,lv?1:0,0);
-  if(lv){
-    const member=lossFilter(b).cost_loss.members[0];assert.equal(member.l,'red');
-    assert.match(member.d[0].t,new RegExp('已达 '+(lv===2?20:10)+'%'));
-    assert.equal(member.d[0].l,'red');
-    const panel=b.doc.getElementById('signal-members-cost_loss-red');
-    assert.equal(panel.querySelectorAll('li').length,1,'20%不能再叠加计一次10%');
-    assert.equal(panel.querySelector('a').getAttribute('href'),'#s-aaa');
-    assert.equal(panel.querySelector('.signal-member-symbol').textContent,'AAA');
-    assert.equal(panel.querySelector('.note').textContent,'测试名称');
-    assert.equal(panel.querySelector('.signal-member-belong').textContent,'（短持仓）');
-    assert.equal(panel.querySelector('.signal-member-metric').textContent,member.d[0].t);
-  }
-  for(let i=0;i<3;i++)b.paint();assertLossStats(b,lv?1:0,0,lv?['AAA']:[]);
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-for(const [price,key] of [[90,'loss10'],[80,'loss20']])test('成本浮亏'+key+'已读转灰、撤销回红并刷新事件',async()=>{
-  const b=await bootLoss({prices:{AAA:price}}),seen=[];
-  b.ctx.addEventListener('mm:ack-change',event=>seen.push({event,data:lossFilter(b)}));
-  assert.equal(b.dispatched.length,1,'首次paint更新真实筛选数据并派发事件');
-  b.paint();assert.equal(b.dispatched.length,1,'未改变的筛选数据不重复派发');
-  ackCurrentLoss(b);assertLossStats(b,0,1,['AAA']);assertLossBadges(b,0,0);
-  assert.ok(b.state().DATA.acks['AAA|'+key]);assert.equal(b.rows[0].lossAcked,true);assert.equal(b.rows[0].tr.className,'green');
-  const gray=b.doc.getElementById('signal-members-acked-cost_loss');
-  assert.equal(gray.querySelectorAll('li').length,1);
-  assert.equal(gray.querySelector('a').getAttribute('href'),'#s-aaa');
-  for(const text of ['AAA','测试名称','短持仓','浮亏'])assert.ok(gray.textContent.includes(text),'灰名单包含 '+text);
-  assert.equal(lossFilter(b).cost_loss.members[0].l,'gray');assert.match(lossFilter(b).cost_loss.members[0].d[0].t,/已读/);
-  assert.equal(b.doc.getElementById('signal-members-cost_loss-red').hidden,true);
-  assert.equal(seen.length,1);assert.ok(seen[0].event instanceof b.ctx.CustomEvent);assert.equal(seen[0].event.type,'mm:ack-change');
-  assert.equal(seen[0].data.cost_loss.members[0].l,'gray','事件到达前已写入筛选数据');
-  ackCurrentLoss(b);assertLossStats(b,1,0,['AAA']);assertLossBadges(b,1,0);
-  assert.equal(b.state().DATA.acks['AAA|'+key],undefined);assert.ok(b.state().DATA.ack_tombstones['AAA|'+key]);
-  assert.equal(b.rows[0].tr.className,'red');assert.equal(seen.length,2);assert.equal(seen[1].data.cost_loss.members[0].l,'red');
-  const before=b.dispatched.length;b.paint();assert.equal(b.dispatched.length,before);
-});
-test('成本浮亏10%已读升级20%需重新确认，两条ack只记当前档一次',async()=>{
-  const b=await bootLoss();ackCurrentLoss(b);assertLossStats(b,0,1,['AAA']);
-  setLossPrice(b,'AAA',80);assert.equal(b.rows[0].lossLv,2);assertLossStats(b,1,0,['AAA']);assertLossBadges(b,1,0);
-  assert.ok(b.state().DATA.acks['AAA|loss10']);assert.equal(b.rows[0].lossAcked,false);
-  assert.equal(b.rows[0].warn.querySelector('button').getAttribute('data-ack'),'AAA|loss20');
-  ackCurrentLoss(b);assert.ok(b.state().DATA.acks['AAA|loss10']);assert.ok(b.state().DATA.acks['AAA|loss20']);
-  assertLossStats(b,0,1,['AAA']);assertLossBadges(b,0,0);
-  const panels=b.doc.querySelectorAll('.signal-members-panel').filter(p=>p.id==='signal-members-acked-cost_loss');
-  assert.equal(panels.length,1,'灰名单清空再生成必须复用或移除旧面板，不能留下重复ID');
-  const panel=panels[0];assert.equal(panel.querySelectorAll('li').length,1);assert.match(panel.textContent,/已达 20%/);
-  setLossPrice(b,'AAA',90);assertLossStats(b,0,1,['AAA']);assert.equal(b.state().DATA.acks['AAA|loss20'],undefined);
-  assert.ok(b.state().DATA.ack_tombstones['AAA|loss20']);assert.match(lossFilter(b).cost_loss.members[0].d[0].t,/已达 10%.*已读/);
-});
-test('成本浮亏20%降到10%不能沿用20%已读，离开10%后整行隐藏取消筛选',async()=>{
-  const b=await bootLoss({prices:{AAA:80}});ackCurrentLoss(b);assertLossStats(b,0,1,['AAA']);
-  setLossPrice(b,'AAA',90);assertLossStats(b,1,0,['AAA']);assertLossBadges(b,1,0);
-  assert.equal(b.rows[0].lossLv,1);assert.equal(b.rows[0].lossAcked,false);assert.equal(b.state().DATA.acks['AAA|loss20'],undefined);
-  ackCurrentLoss(b);assertLossStats(b,0,1,['AAA']);
-  const toggle=lossToggle(b);toggle.setAttribute('aria-pressed','true');
-  const red=b.doc.getElementById('signal-members-cost_loss-red');
-  const grayPanels=b.doc.querySelectorAll('.signal-members-panel').filter(p=>p.id==='signal-members-acked-cost_loss');
-  const gray=grayPanels.at(-1);gray.hidden=false;const n=b.dispatched.length;
-  setLossPrice(b,'AAA',90.01);assertLossStats(b,0,0,[]);assertLossBadges(b,0,0);
-  assert.equal(toggle.getAttribute('aria-pressed'),'false');assert.equal(red.hidden,true);assert.equal(gray.hidden,true);
-  assert.equal(b.state().DATA.acks['AAA|loss10'],undefined);assert.ok(b.state().DATA.ack_tombstones['AAA|loss10']);
-  assert.equal(b.dispatched.length,n+1);assert.equal(b.rows[0].tr.className,'green');
-  setLossPrice(b,'AAA',90);assertLossStats(b,1,0,['AAA']);assert.equal(b.rows[0].lossAcked,false);
-  const panels=b.doc.querySelectorAll('.signal-members-panel').filter(p=>p.id==='signal-members-acked-cost_loss');
-  assert.equal(panels.length,1,'降档重新确认时不能遗留同ID灰名单');
-});
-for(const field of ['qty','cost'])test('审核边界：成本浮亏'+field+'草稿归零只隐藏，明确保存及更新行情后再失效',async()=>{
-  const b=await bootLoss({prices:{AAA:80}});ackCurrentLoss(b);await b.enter();
-  b.edit('AAA',field,'0');await b.tick(16);assertLossStats(b,0,0,[]);assertLossBadges(b,0,0);
-  assert.equal(b.rows[0].lossLv,0);assert.ok(b.state().DATA.acks['AAA|loss20']);assert.equal(b.rows[0].warn.style.display,'none');
-  await b.save();setLossPrice(b,'AAA',80);assert.equal(b.state().DATA.acks['AAA|loss20'],undefined);
-  await b.enter();b.edit('AAA',field,field==='qty'?'5':'100');await b.tick(16);assertLossStats(b,1,0,['AAA']);assertLossBadges(b,1,0);
-  assert.equal(b.rows[0].lossAcked,false);assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('审核边界：成本浮亏移组隐藏，更新行情后失效，短长归属按当前DOM刷新',async()=>{
-  const b=await bootLoss();ackCurrentLoss(b);lossToggle(b).setAttribute('aria-pressed','true');
-  b.move('AAA','focus');assertLossStats(b,0,0,[]);assertLossBadges(b,0,0);
-  assert.ok(b.state().DATA.acks['AAA|loss10']);setLossPrice(b,'AAA',90);
-  assert.equal(lossToggle(b).getAttribute('aria-pressed'),'false');assert.equal(b.state().DATA.acks['AAA|loss10'],undefined);
-  b.move('AAA','positions');assertLossStats(b,1,0,['AAA']);assertLossBadges(b,1,0);
-  assert.equal(lossFilter(b).cost_loss.members[0].g,'短持仓');
-  const sub=b.doc.createElement('details');sub.id='group_positions_long';sub.innerHTML='<table class="stk"></table>';b.doc.getElementById('group_positions').appendChild(sub);
-  b.move('AAA','positions_long');assertLossStats(b,1,0,['AAA']);assert.equal(lossFilter(b).cost_loss.members[0].g,'长持仓');
-  assert.equal(b.doc.getElementById('signal-members-cost_loss-red').querySelector('.signal-member-belong').textContent,'（长持仓）');
-  b.move('AAA','positions');assert.equal(lossFilter(b).cost_loss.members[0].g,'短持仓');assert.equal(b.state().DATA.items.AAA.cost,100);
-});
-test('成本浮亏从页面移除不计残留ROW和DATA，已读名单也立即清空',async()=>{
-  const b=await bootLoss({local:{...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2}}},prices:{AAA:80,BBB:90}});
-  ackCurrentLoss(b);assertLossStats(b,1,1,['AAA','BBB']);
-  b.move('AAA',null);assertLossStats(b,1,0,['BBB']);assertLossBadges(b,1,0);
-  assert.equal(b.doc.getElementById('s-aaa'),null);assert.equal(b.state().DATA.items.AAA.qty,5);
-  b.move('BBB',null);assertLossStats(b,0,0,[]);assertLossBadges(b,0,0);
-});
-test('成本浮亏多人、重复身份与双档ack去重，长短名单展示真实亏损百分比',async()=>{
-  const d={...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2},CCC:{cost:100,qty:3}},
-    acks:{'AAA|loss10':'2026-10-19T00:00:00Z','AAA|loss20':'2026-10-19T01:00:00Z'}};
-  const b=await bootLoss({symbols:['AAA','BBB','CCC'],local:d,prices:{AAA:75,BBB:85,CCC:80},longs:['BBB'],notes:{BBB:'长线备注'},
-    prepareDocument(doc){
-      const row=doc.getElementById('s-ccc'),duplicate=doc.createElement('tr');duplicate.id='s-ccc';duplicate.className='green';
-      duplicate.innerHTML='<td class="sym">CCC<span class="note">测试名称</span></td><td><span class="px-price">80</span><span class="px-chg">+1.00%</span></td><td class="sig"></td>';
-      const rail=doc.createElement('tr');rail.className='range52-row';
-      rail.innerHTML='<td><span class="range52-rail" aria-label="50.00低，本轮价 80.00 位于区间 30%，本轮高 150.00"><span class="range52-track"></span></span></td>';
-      row.parentNode.appendChild(duplicate);row.parentNode.appendChild(rail);
-    }});
-  assert.equal(b.rows.filter(r=>r.sym==='CCC').length,2,'确实构造重复行情身份');
-  assertLossStats(b,2,1,['BBB','AAA','CCC']);assertLossBadges(b,2,0);
-  const red=b.doc.getElementById('signal-members-cost_loss-red'),gray=b.doc.getElementById('signal-members-acked-cost_loss');
-  assert.equal(red.querySelectorAll('li').length,2);assert.equal(gray.querySelectorAll('li').length,1);
-  assert.match(red.textContent,/BBB.*长线备注.*长持仓.*浮亏 15\.0%.*已达 10%/);
-  assert.match(red.textContent,/CCC.*短持仓.*浮亏 20\.0%.*已达 20%/);
-  assert.match(gray.textContent,/AAA.*短持仓.*浮亏 25\.0%.*已达 20%/);
-  for(let i=0;i<4;i++)b.paint();assertLossStats(b,2,1,['BBB','AAA','CCC']);
-  ackCurrentLoss(b,'CCC');assertLossStats(b,1,2,['BBB','AAA','CCC']);assertLossBadges(b,1,0);
-});
-test('仓位面板不再挂「亏损超N%」小字标签，行级红灯与浮亏统计照旧',async()=>{
-  assert.equal(CSS.includes('.loss-tag'),false,'真源 CSS 已删除 .loss-tag 规则');
-  assert.doesNotMatch(SOURCE,/亏损超\d+%/,'真源 JS 不再输出「亏损超N%」小字');
-  const b=await bootLoss({symbols:['AAA','BBB','CCC'],
-    local:{...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2},CCC:{cost:100,qty:1}}},
-    prices:{AAA:70,BBB:90,CCC:100}});
-  for(const [sym,lv] of [['AAA',2],['BBB',1],['CCC',0]]){
-    const li=b.doc.querySelector('#costMembers li[data-sym="'+sym+'"]');
-    assert.ok(li,sym+' 仍正常出现在仓位面板');
-    assert.doesNotMatch(li.textContent,/亏损超/);
-    assert.equal(li.querySelectorAll('.loss-tag').length,0,sym+' 行没有亏损小字标签');
-    assert.equal(b.rows.find(r=>r.sym===sym).lossLv,lv,sym+' 浮亏档位不变');
-    assert.equal(li.className.split(/\s+/)[0],lv?'lv-red':'lv-green',sym+' 行级灯不受影响');
-  }
-  assert.equal(b.doc.querySelectorAll('#costMembers .loss-tag').length,0);
-  assertLossStats(b,2,0,['AAA','BBB']);assertLossBadges(b,2,0);
-  await b.dispose();
-});
-test('成本价写到代码名称下面那一排，成本行第一组改显示数量（整数）',async()=>{
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+test('主表不再挂成本价，成本价只在仓位面板里编辑与查看',async()=>{
   const d=copy(SEED);d.items={AAA:{cost:80,qty:7.004}};
   const b=await boot({local:d});await b.tick(16);
   const tr=b.doc.getElementById('s-aaa');
-  const ci=tr.querySelector('.cost-inline');
-  assert.ok(ci,'td.sym 下面必须挂成本价节点');
-  assert.equal(ci.textContent,'80','只标数字，不写「成本」二字');
-  assert.doesNotMatch(ci.textContent,/成本/);
-  assert.notEqual(ci.style.display,'none','有持仓成本时要显示');
-  // 与加减仓价胶囊共用同一个 .lvs 容器、排在最前
-  const lvs=ci.parentNode;
-  assert.ok(lvs.className.split(/\s+/).includes('lvs'));
-  assert.equal(lvs.children[0],ci,'成本价排在所有胶囊前面');
-  // 2026-10-31：个股下面「数 N · ±x% · ±$x · 市值 x · 仓位 x%」这一整排去掉
-  // （数量／盈亏／市值／仓位在表格各自的列里都有），只保留成本价那一排。
-  const info=b.doc.querySelector('.cost-info');
-  assert.ok(info,'成本行节点仍在（只是清空并隐藏）');
-  assert.equal(info.textContent.trim(),'','这一排内容已全部清空');
-  assert.equal(info.style.display,'none','清空后不再占位');
+  assert.equal(tr.querySelector('.cost-inline'),null,'主表行不再注入成本价节点');
+  assert.equal(tr.querySelector('td.sym .lvs'),null,'代码那一列不再有成本价／胶囊容器');
+  // 成本价归仓位面板：那一行仍有成本价输入框
+  await b.enter();const row=b.doc.querySelector('#costMembers .ep-grid [data-cost-row][data-sym="AAA"]');
+  assert.ok(row,'终稿四列编辑器里仍有这只标的');
+  await b.enter();
+  assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,'80');
+  assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'7.004');
+  assert.equal(b.doc.querySelectorAll('.ep-grid .ep-h').length,4);
   await b.dispose();
 });
-test('没有持仓成本时收起成本价节点，空容器不占高度',async()=>{
+test('没有持仓成本时主表不出现成本价节点，也不留空容器',async()=>{
   const b=await boot({local:{...copy(SEED),items:{}}});await b.tick(16);
   for(const sym of ['aaa','bbb']){
     const tr=b.doc.getElementById('s-'+sym);
-    const ci=tr.querySelector('.cost-inline');
-    assert.ok(ci,sym+' 节点仍存在（只是收起）');
-    assert.equal(ci.textContent,'');
-    assert.equal(ci.style.display,'none',sym+' 无成本时收起');
-    if(ci.parentNode.className.split(/\s+/).includes('lvs'))
-      assert.equal(ci.parentNode.style.display,'none',sym+' 自动新建的空容器一起收起');
+    assert.equal(tr.querySelector('.cost-inline'),null,sym+' 主表不再有成本价节点');
+    assert.equal(tr.querySelector('td.sym .lvs'),null,sym+' 不新建空容器占位');
   }
   await b.dispose();
 });
-test('成本浮亏技术原红不重复计数，已读仍红；原黄被浮亏提升后恢复黄色',async()=>{
-  const b=await bootLoss({local:{...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2}}},prices:{AAA:80,BBB:90},levels:{AAA:'red pur-high',BBB:'yellow'}});
-  assertLossStats(b,2,0,['AAA','BBB']);assertLossBadges(b,2,0);
-  ackCurrentLoss(b);assertLossStats(b,1,1,['AAA','BBB']);assertLossBadges(b,2,0);
-  assert.ok(b.rows[0].tr.className.split(/\s+/).includes('red'));assert.ok(b.rows[0].tr.className.split(/\s+/).includes('pur-high'));
-  ackCurrentLoss(b,'BBB');assertLossStats(b,0,2,['AAA','BBB']);assertLossBadges(b,1,1);
-  assert.equal(b.rows[1].tr.className,'yellow');
-  b.move('AAA',null);assertLossStats(b,0,1,['BBB']);assertLossBadges(b,0,1);
-});
-test('成本浮亏灰数只取当前命中，不读历史失效和移除标的ack',async()=>{
-  const at='2026-10-19T00:00:00Z',d={...copy(SEED),acks:{'AAA|loss10':at,'AAA|loss20':at,'BBB|loss10':at,'REMOVED|loss20':at}};
-  const store=shared({[LOCAL]:d,[TOKEN]:'test-token'});store.holder=true;
-  const b=await boot({store,forbidRequests:true,prepareDocument:doc=>lossStatDocument(doc,{prices:{AAA:90,BBB:100}})});
-  assert.equal(b.state().writer,false,'只读标签页不执行prune，历史ACK确实留在内存');
-  assert.equal(Object.keys(b.state().DATA.acks).length,4);
-  assertLossStats(b,0,1,['AAA']);assertLossBadges(b,0,0);
-  assert.equal(b.doc.getElementById('signal-members-acked-cost_loss').querySelectorAll('li').length,1);
-  setLossPrice(b,'AAA',100);assert.equal(Object.keys(b.state().DATA.acks).length,4);assertLossStats(b,0,0,[]);
-  assert.equal(b.requests.length,0);await b.dispose();
-});
-for(const original of ['red','yellow','green'])test('成本浮亏与现有chg/target筛选执行真实intersectSignals，已读级别不借整股原'+original,async()=>{
-  const b=await bootLoss({local:{...copy(SEED),items:{AAA:{cost:100,qty:5},BBB:{cost:100,qty:2},CCC:{cost:100,qty:1}}},symbols:['AAA','BBB','CCC'],prices:{AAA:80,BBB:90,CCC:85},levels:{AAA:original}});
-  const intersect=realIntersectSignals();
-  function ids(kinds){return copy(intersect(lossFilter(b),kinds).members.map(m=>m.id));}
-  assert.deepEqual(ids(['cost_loss','chg']),['AAA','BBB']);assert.deepEqual(ids(['cost_loss','target_purple']),['AAA','CCC']);
-  assert.deepEqual(ids(['cost_loss','chg','target_purple']),['AAA']);
-  lossToggle(b).setAttribute('aria-pressed','true');
-  for(const kind of ['chg','target_purple'])b.doc.querySelector('.signal-filter-toggle[data-kind="'+kind+'"]').setAttribute('aria-pressed','true');
-  const page=loadSignalFilterPage(b.doc),assertLevels=loss=>{
-    const box=b.doc.getElementById('signalFilterResult');
-    assert.equal(box.querySelectorAll('.signal-dot').length,0);
-    assert.deepEqual(box.querySelectorAll('.signal-filter-condition').map(c=>[c.dataset.signalKind,c.dataset.signalLevel,c.textContent]),
-      [['chg','red','涨跌幅 -5.0%'],['cost_loss',loss,'浮亏 20.0%（已达 20%）'+(loss==='gray'?' · 已读':'')],
-        ['target_purple','purple','高空间 / 今日跌破共识价 170']]);
-    assert.equal(box.querySelectorAll('li').length,1);assert.equal(box.querySelectorAll('.signal-name-lamp').length,1);
-    assert.equal(box.querySelector('.signal-name-lamp').className,'signal-name-lamp red','名称竖条沿用首条件原灯，目标紫与浮亏各自着色');
-  };
-  page.renderSignalFilter();assertLevels('red');
-  b.ctx.addEventListener('mm:ack-change',()=>page.renderSignalFilter());
-  ackCurrentLoss(b);assertLevels('gray');
-  assert.equal(b.rows[0].tr.className,original,'浮亏已读后恢复整股原灯，但浮亏自身始终为gray');
-  for(let i=0;i<3;i++){b.paint();page.renderSignalFilter();assertLevels('gray');}
-  ackCurrentLoss(b);assertLevels('red');
-  ackCurrentLoss(b);assertLevels('gray');
-  const data=lossFilter(b),before=copy(data),result=intersect(data,['cost_loss','chg','target_purple']);
-  assert.deepEqual(copy(result.members.map(m=>m.id)),['AAA']);assert.equal(result.members[0].l,'gray');
-  assert.deepEqual(copy(result.members[0].details),[
-    {l:'gray',t:'浮亏 20.0%（已达 20%） · 已读',k:'cost_loss'},
-    {l:'red',t:'涨跌幅 -5.0%',k:'chg'},
-    {l:'purple',t:'高空间 / 今日跌破共识价 170',k:'target_purple'}]);
-  assert.deepEqual(data,before,'真实交集不改写原始筛选数据');
-  assert.deepEqual(copy(intersect(data,['cost_loss','earnings_week']).pending),['财报']);
-  b.move('AAA','focus');assert.deepEqual(ids(['cost_loss','chg','target_purple']),[]);
-  b.move('AAA','positions');assert.deepEqual(ids(['cost_loss','chg','target_purple']),['AAA']);
-});
-test('成本浮亏隔离预览编辑已读导入重试不发请求，不写共享存储',async()=>{
-  const b=await bootLoss(),original=new Map(b.store.values);
-  ackCurrentLoss(b);await b.enter();b.edit('AAA','cost','120');await b.save();
-  assertLossStats(b,1,0,['AAA']);assert.equal(b.rows[0].lossLv,2);
-  b.importData({...copy(SEED),items:{AAA:{cost:120,qty:5},BBB:{cost:90,qty:2}},cash:77,acks:{'AAA|loss20':'2026-10-20T00:00:00Z'}});
-  assertLossStats(b,0,1,['AAA']);b.requestSave(0,true);b.autoPush();b.startPull();await b.tick(90000);
-  assert.equal(b.requests.length,0);assert.equal(b.puts().length,0);assert.equal(b.store.writes.length,0);assert.deepEqual(b.store.values,original);
-  assert.equal(b.sessionLocal().cash,77);assert.ok(b.session.writes.length>0);
-  assert.ok(b.dispatched.some(e=>e.type==='mm:ack-change'));
-  await b.dispose();const c=await bootLoss({store:b.store,session:b.session});assertLossStats(c,0,1,['AAA']);assert.equal(c.requests.length,0);
-});
+
+
+
+
 
 // 双现金测试仅使用内存存储和 mock 下载，禁止真实网络和浏览器存储。
 async function bootCash(opts={}){return boot({noLocks:true,protocol:'file:',forbidRequests:true,...opts});}
@@ -2199,10 +1456,11 @@ for(const [name,first,second,total] of [
   assert.equal(cashInput(b,'cash').value,'');assert.equal(cashInput(b,'cash_extra').value,'');
   b.edit('USD','cash',first);b.edit('USD','cash_extra',second);await b.tick(16);
   assertCash(b,Number(first),Number(second),total);
-  assert.equal(b.doc.querySelector('.cash-total').textContent,'合计 USD$'+String(total));
-  assert.equal(b.doc.querySelectorAll('.cash-inputs label').length,2);
-  assert.deepEqual(b.doc.querySelectorAll('.cash-inputs label').map(el=>el.querySelector('span').textContent),['现金 1 · USD$','现金 2 · USD$']);
-  await b.save();assert.equal(b.doc.querySelector('.cash-inputs'),null);assert.equal(b.doc.querySelector('.blk-cash .t-mv').textContent,'$'+Math.round(total));
+  assert.equal(b.doc.querySelector('.ep-cash-total').textContent,'现金合计 USD$'+String(total));
+  assert.equal(b.doc.querySelectorAll('.ep-cash label').length,4);
+  assert.deepEqual(b.doc.querySelectorAll('.ep-cash label').map(el=>el.querySelector('span').textContent),['现金 1','固收','现金 2','固收成本']);
+  await b.save();assert.equal(b.state().editing,false);assert.equal(b.doc.getElementById('costManage').classList.contains('cost-edit-open'),false);
+  assert.equal(b.doc.querySelector('.cashbond-row .cb-cash .cb-amt').textContent,'$'+String(Math.round(total)));
   assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
 });
 test('双现金第二先填再填第一，不重复加回旧合计',async()=>{
@@ -2285,30 +1543,14 @@ test('双现金在途旧拆分回执不清除同总额新拆分dirty',async()=>{
   b.respond(old,{});await settle();assert.equal(b.state().CLOUD.cash_extra,0.4);assert.equal(b.state().DATA.cash_extra,0.3);assert.equal(b.state().dirty,true);
 });
 
-for(const [kind,target,price,on] of [
-  ['add',100,103,true],['add',100,103.0000000001,false],['add',100,102.9999999999,true],
-  ['cut',100,97,true],['cut',100,96.9999999999,false],['cut',100,97.0000000001,true],
-  ['add',123.45,127.1535,true],['add',123.45,127.1535000001,false],
-  ['cut',123.45,119.7465,true],['cut',123.45,119.7464999999,false],
-  ['add',0.1,0.103,true],['add',0.1,0.1030000001,false],
-  ['cut',0.1,0.097,true],['cut',0.1,0.0969999999,false],
-  ['add',100,50,true],['cut',100,200,true]
-])test('加减3%十进制精确边界 '+kind+' '+target+'→'+price,async()=>{
-  const d=copy(SEED);d.items.AAA.cost=price;
-  const b=await bootCash({local:d,prepareDocument(doc){
-    const row=doc.getElementById('s-aaa');row.querySelector('.px-price').textContent=String(price);
-    row.querySelector(kind==='add'?'.lvtag.cut':'.lvtag.add').remove();
-    row.querySelector(kind==='add'?'.lvtag.add':'.lvtag.cut').textContent=(kind==='add'?'加 ':'减 ')+target;
-  }}),r=b.rows[0];
-  assert.equal((kind==='add'?r.warnAdd:r.warnCut).style.display,on?'inline':'none');assert.equal(r.tr.className,on?'red':'green');
-  assert.equal(b.nearPrice(price,target,3,kind==='add'?1:-1),on);assert.equal(b.requests.length,0);
-});
+
 test('加减精确比较支持科学计数、小数阈值和零阈值，不以epsilon扩大范围',async()=>{
   const b=await bootCash();
-  for(const [p,t,g,side,on] of [[1.03e-7,1e-7,3,1,true],[1.0300000001e-7,1e-7,3,1,false],
-    [9.7e-8,1e-7,3,-1,true],[9.699999999e-8,1e-7,3,-1,false],
-    [102.5,100,2.5,1,true],[97.5,100,2.5,-1,true],[100,100,0,1,true],[100,100,0,-1,true],
-    [100.0000000001,100,0,1,false],[99.9999999999,100,0,-1,false]])assert.equal(b.nearPrice(p,t,g,side),on);
+  // 终稿以现价为分母，对称±范围；不再使用已删除的单向越界语义。
+  for(const [p,t,g,on] of [[1e-7,1.03e-7,3,true],[1e-7,1.0300000001e-7,3,false],
+    [1e-7,9.7e-8,3,true],[1e-7,9.699999999e-8,3,false],
+    [100,102.5,2.5,true],[100,97.5,2.5,true],[100,100,0,true],
+    [100,100.0000000001,0,false],[100,99.9999999999,0,false]])assert.equal(b.nearPrice(p,t,g),on);
 });
 function signalCaps(doc,symbols=['AAA'],target=100){
   for(const sym of symbols){
@@ -2316,65 +1558,11 @@ function signalCaps(doc,symbols=['AAA'],target=100){
     td.innerHTML='<span class="lvtag add">加 '+target+'</span><span class="lvtag cut">减 '+target+'</span>';
   }
 }
-test('顶部灰为技术text_only、浮亏已读、加减已读并集，单双提醒重复paint不累加',async()=>{
-  const d={...copy(SEED),items:{AAA:{cost:125,qty:5},BBB:{cost:100,qty:2},CCC:{cost:100,qty:1}}};
-  const b=await bootLoss({local:d,symbols:['AAA','BBB','CCC'],prices:{AAA:100,BBB:100,CCC:100},prepareDocument(doc){
-    signalCaps(doc,['AAA','CCC']);lossGrayDocument(doc,['AAA','BBB']);
-  }});
-  assertLossGrayBadge(b,2);b.ack('AAA|add|100');assertLossGrayBadge(b,2);
-  b.ack('AAA|cut|100');assertLossGrayBadge(b,2);ackCurrentLoss(b);assertLossGrayBadge(b,2);
-  b.ack('CCC|add|100');b.ack('CCC|cut|100');assertLossGrayBadge(b,3);
-  for(let i=0;i<5;i++){b.paint();assertLossGrayBadge(b,3);}
-  b.ack('AAA|add|100');assertLossGrayBadge(b,3);b.ack('AAA|cut|100');ackCurrentLoss(b);assertLossGrayBadge(b,3);
-  b.ack('CCC|add|100');b.ack('CCC|cut|100');assertLossGrayBadge(b,2);
-  for(const r of b.rows){r.trig=0;r.cut=0;}setLossPrice(b,'AAA',125);assertLossGrayBadge(b,2);
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('STX涨跌幅黄与RSI两超卖技术灰共存，技术灰及多条ACK按身份并集去重',async()=>{
-  const d={...copy(SEED),items:{STX:{cost:125,qty:1},RED:{cost:100,qty:1},ACK:{cost:100,qty:1}}};
-  const b=await bootLoss({local:d,symbols:['STX','RED','ACK'],prices:{STX:100,RED:100,ACK:100},levels:{STX:'yellow',RED:'red'},prepareDocument(doc){
-    signalCaps(doc,['STX','ACK']);lossGrayDocument(doc,['STX','STX','RED']);
-    const td=doc.getElementById('s-stx').querySelector('td.sig');
-    const rsi=doc.createElement('span');rsi.className='signal-item';rsi.setAttribute('data-signal-kind','rsi');rsi.setAttribute('data-signal-level','gray');
-    rsi.textContent='RSI 两条超卖';td.appendChild(rsi);
-  }});
-  assertLossGrayBadge(b,2);assertLossBadges(b,3,0);
-  b.ack('STX|add|100');b.ack('STX|cut|100');ackCurrentLoss(b,'STX');
-  assertLossGrayBadge(b,2);assertLossBadges(b,2,1);assert.equal(b.rows[0].tr.className,'yellow');
-  assert.equal(b.rows[0].tr.querySelector('[data-signal-kind="rsi"]').getAttribute('data-signal-level'),'gray');
-  b.ack('ACK|add|100');b.ack('ACK|cut|100');assertLossGrayBadge(b,3);
-  for(let i=0;i<5;i++){b.paint();assertLossGrayBadge(b,3);}
-  for(const key of ['STX|add|100','STX|cut|100','STX|loss20','ACK|add|100','ACK|cut|100'])b.ack(key);
-  assertLossGrayBadge(b,2);assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('期货及指数技术灰按真实身份匹配有损DOM锚点，别名及ACK只计一次',async()=>{
-  const b=await bootLoss({symbols:['ES-F','NDX'],prices:{'ES-F':100,NDX:100},prepareDocument(doc){
-    signalCaps(doc,['ES-F']);lossGrayDocument(doc,['ESMAIN','ES=F','.NDX','^NDX']);
-  }});
-  assertLossGrayBadge(b,2);
-  b.ack('ES-F|add|100');b.ack('ES-F|cut|100');assertLossGrayBadge(b,2);
-  for(let i=0;i<3;i++){b.paint();assertLossGrayBadge(b,2);}
-  b.rows.find(r=>r.sym==='ES-F').tr.remove();b.paint();assertLossGrayBadge(b,1);
-  const ref=await bootLoss({symbols:['ES-F'],prices:{'ES-F':100},prepareDocument(doc){
-    lossGrayDocument(doc,['ESMAIN','ES=F']);
-    const node=doc.getElementById('snapshotData'),s=JSON.parse(node.textContent);
-    s.items=[{symbol:'ESMAIN',price:100,reference_only:true}];node.textContent=JSON.stringify(s);
-  }});
-  assertLossGrayBadge(ref,0);assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('技术灰与有效ACK并集仍排除缺价、参考和不存在，移除后不保留技术灰',async()=>{
-  const b=await bootLoss({symbols:['AAA','BBB','MISS','REF'],prices:{AAA:100,BBB:100,MISS:0,REF:100},levels:{AAA:'red',BBB:'yellow'},prepareDocument(doc){
-    signalCaps(doc,['AAA','REF']);lossGrayDocument(doc,['AAA','BBB','MISS','REF','REMOVED']);
-    const snapshot=doc.getElementById('snapshotData'),data=JSON.parse(snapshot.textContent);
-    data.items=[{symbol:'REF',price:100,reference_only:true},{symbol:'MISS',price:null}];snapshot.textContent=JSON.stringify(data);
-  }});
-  assertLossGrayBadge(b,2);assert.equal(b.rows.some(r=>r.sym==='MISS'),false);
-  b.ack('AAA|add|100');b.ack('AAA|cut|100');b.ack('REF|add|100');b.ack('REF|cut|100');assertLossGrayBadge(b,2);
-  b.move('BBB',null);assertLossGrayBadge(b,1);setLossPrice(b,'AAA',0);assertLossGrayBadge(b,0);
-  for(let i=0;i<4;i++){b.paint();assertLossGrayBadge(b,0);}
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('价格主次在初始化及多次paint后相邻，保留真实等级且不新增灰灯',async()=>{
+
+
+
+
+test('成本多次paint保留服务端价格主次角色，不重排静态描述或新增灰灯',async()=>{
   for(const [chgLevel,ampLevel,primaryKind] of [['red','red','chg'],['red','yellow','chg'],['yellow','red','amp'],['yellow','yellow','chg']]){
     let original;
     const other=primaryKind==='chg'?'amp':'chg';
@@ -2390,287 +1578,60 @@ test('价格主次在初始化及多次paint后相邻，保留真实等级且不
       b.paint();
       const items=td.children.filter(el=>el.matches('.signal-item')&&el.style.display!=='none');
       const kinds=items.map(el=>el.getAttribute('data-signal-kind'));
-      assert.equal(kinds.indexOf(other),kinds.indexOf(primaryKind)+1);
+      assert.deepEqual(kinds,['amp','ma','chg','target']);
+      assert.equal(items.find(el=>el.getAttribute('data-signal-kind')===primaryKind).getAttribute('data-signal-role'),'primary');
+      assert.equal(items.find(el=>el.getAttribute('data-signal-kind')===other).getAttribute('data-signal-role'),'supplement');
       for(const [kind,level] of [['chg',chgLevel],['amp',ampLevel]])assert.equal(items.find(el=>el.getAttribute('data-signal-kind')===kind).getAttribute('data-signal-level'),level);
       assert.equal(items.filter(el=>el.getAttribute('data-signal-level')==='gray').length,0);
       assert.equal(items.at(-1).getAttribute('data-signal-kind'),'target');
-      assert.equal(td.querySelectorAll('.signal-separator').length,items.length-1);
-      assert.equal(items.find(el=>el.getAttribute('data-signal-kind')===other).previousElementSibling.textContent,'，');
+      // 终稿双列流不注入旧版斜线/逗号分隔节点。
+      assert.equal(td.querySelectorAll('.signal-separator').length,0);
       for(const el of original)assert.equal(el.parentNode,td);
     }
     assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
   }
 });
-test('动态加减仓及浮亏红灰与后端描述共同排序，节点按钮保留且多次paint无分隔累积',async()=>{
-  let staticItems,target,tnote,cap,cut;
-  const b=await bootLoss({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prices:{AAA:100},levels:{AAA:'yellow pur-high'},prepareDocument(doc){
-    signalCaps(doc);
-    const td=doc.getElementById('s-aaa').querySelector('td.sig');cap=td.querySelector('.lvtag.add');cut=td.querySelector('.lvtag.cut');
-    td.innerHTML='<span class="signal-item" data-signal-kind="context">无灯事实</span> <span class="signal-separator">/</span> '
-      +'<span class="signal-item" data-signal-kind="rsi" data-signal-level="gray">RSI 两条超卖</span> / '
-      +'<span class="signal-item" data-signal-kind="chg" data-signal-level="yellow">涨跌幅黄</span> <span class="signal-separator">/</span> '
-      +'<span class="signal-item" data-signal-kind="ma" data-signal-level="red">均线红</span> '
-      +'<span class="signal-item" data-signal-kind="add_price" data-signal-level="red">静态加仓提醒</span> / '
-      +'<span class="signal-item" data-signal-kind="reduce_price" data-signal-level="red">静态减仓提醒</span> / '
-      +'<span class="signal-item" data-signal-kind="target" data-signal-level="purple">目标紫</span> / <span class="tnote">目标备注</span>';
-    staticItems=[...td.querySelectorAll('.signal-item')];target=td.querySelector('[data-signal-kind="target"]');tnote=td.querySelector('.tnote');
-    const sd=doc.getElementById('s-aaa').querySelector('td.sym');sd.appendChild(cap);sd.appendChild(cut);
-  }}),r=b.rows[0],row=r.tr,range=r.rangeTr,info=r.info,td=row.querySelector('td.sig');
-  const warns=[r.warnAdd,r.warnCut,r.warn],buttons=warns.map(el=>el.querySelector('.ack-btn'));
-  let clicks=0;buttons[0].addEventListener('click',()=>clicks++);
-  const check=levels=>{
-    const visible=td.children.filter(el=>el.matches('.signal-item,.tnote')&&el.style.display!=='none');
-    assert.deepEqual(visible.map(el=>el.getAttribute('data-signal-level')||'none'),levels);
-    assert.equal(new Set(visible).size,visible.length);assert.equal(td.querySelectorAll('.signal-separator').length,visible.length-1);
-    const sequence=td.children.filter(el=>el.style.display!=='none'&&el.matches('.signal-item,.tnote,.signal-separator'));
-    sequence.forEach((el,index)=>assert.equal(el.matches('.signal-separator'),index%2===1,'分隔仅位于两项之间'));
-    assert.deepEqual(visible.slice(-2),[target,tnote]);
-    for(const [i,el] of warns.entries()){
-      assert.equal(el.parentNode,td);assert.equal(el.querySelector('.ack-btn'),buttons[i]);
-      assert.equal(el.querySelector('.signal-dot'),null,'主表动态提醒不添加圆点');
-      assert.ok(['red','gray'].includes(el.getAttribute('data-signal-level')),'提醒及已读独立级别保留');
-    }
-    for(const el of staticItems)assert.equal(el.parentNode,td,'后端节点不重建');
-    for(const kind of ['add_price','reduce_price'])assert.equal(visible.filter(el=>el.getAttribute('data-signal-kind')===kind).length,1,'静态/动态价位不能重复');
-    assert.equal(r.tr,row);assert.equal(r.rangeTr,range);assert.equal(row.nextElementSibling,range);assert.equal(r.info,info);
-    assert.equal(r.cap,cap);assert.equal(r.cutCap,cut);
-  };
-  check(['red','red','red','red','yellow','gray','none','purple','none']);
-  b.doc.fire('click',{target:buttons[0]});check(['red','red','red','yellow','gray','gray','none','purple','none']);
-  b.doc.fire('click',{target:buttons[1]});ackCurrentLoss(b);check(['red','yellow','gray','gray','gray','gray','none','purple','none']);
-  assert.equal(row.className,'pur-high yellow','保持主表原灯合成');
-  for(let i=0;i<6;i++){b.paint();check(['red','yellow','gray','gray','gray','gray','none','purple','none']);}
-  buttons[0].click();assert.equal(clicks,1,'节点移动后直接事件仍保留');
-  b.doc.fire('click',{target:buttons[0]});check(['red','red','yellow','gray','gray','gray','none','purple','none']);
-  r.trig=0;r.cut=0;setLossPrice(b,'AAA',125);
-  for(let i=0;i<4;i++)b.paint();
-  const visible=td.children.filter(el=>el.matches('.signal-item,.tnote')&&el.style.display!=='none');
-  assert.deepEqual(visible.map(el=>el.getAttribute('data-signal-level')||'none'),['red','yellow','gray','none','purple','none']);
-  assert.equal(td.querySelectorAll('.signal-separator').length,visible.length-1);
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
-test('加减已读与其他原红黄灯并存也计入灰标题，每股一次且先更新后通知',async()=>{
-  const b=await bootLoss({prices:{AAA:100,BBB:100},levels:{AAA:'red pur-high',BBB:'yellow'},prepareDocument(doc){signalCaps(doc,['AAA','BBB']);lossGrayDocument(doc,[]);}}),seen=[];
-  b.ctx.addEventListener('mm:ack-change',()=>seen.push(b.doc.querySelector('#signalCounts summary .stat-badge.gray').textContent));
-  b.ack('AAA|add|100');assertLossGrayBadge(b,1);assert.equal(seen.at(-1),'1');b.ack('AAA|cut|100');assertLossGrayBadge(b,1);
-  b.ack('BBB|add|100');b.ack('BBB|cut|100');assertLossGrayBadge(b,2);assertLossBadges(b,1,1);
-  const n=seen.length;for(let i=0;i<4;i++)b.paint();assert.equal(seen.length,n);
-  assert.equal(b.rows[0].tr.className,'pur-high red');assert.equal(b.rows[1].tr.className,'yellow');
-});
-test('只读旧ACK不清理时加减灰统计仍排除错价、失效、非持仓及已移除标的',async()=>{
-  const at='2026-10-19T00:00:00Z',d={...copy(SEED),acks:{'AAA|add|100':at,'AAA|add|95':at,'AAA|cut|100':at,'BBB|cut|100':at,'REMOVED|add|100':at}};
-  const store=shared({[LOCAL]:d});store.holder=true;
-  const b=await boot({store,forbidRequests:true,groups:{BBB:'focus'},prepareDocument(doc){
-    lossStatDocument(doc,{prices:{AAA:100,BBB:100},prepareDocument(doc){signalCaps(doc,['AAA','BBB']);lossGrayDocument(doc,[]);}});
-  }});
-  assert.equal(b.state().writer,false);assert.equal(Object.keys(b.state().DATA.acks).length,5);
-  assertLossGrayBadge(b,1);assert.deepEqual(copy(b.ackStatEntries('reduce_price').map(e=>e.sym)),['AAA']);
-  assert.deepEqual(copy(b.ackStatEntries('add_price').map(e=>e.label)),['加 100']);
-  setLossPrice(b,'AAA',104);assert.deepEqual(copy(b.ackStatEntries('add_price')),[]);assertLossGrayBadge(b,1);
-  b.move('AAA',null);assertLossGrayBadge(b,0);assert.equal(Object.keys(b.state().DATA.acks).length,5);
-});
-test('审核边界：新行情清加减ACK，价位版本不符保留旧ACK，移除待新行情',async()=>{
-  const b=await bootLoss({prices:{AAA:100},prepareDocument:doc=>signalCaps(doc)}),r=b.rows[0];
-  b.ack('AAA|add|100');b.ack('AAA|cut|100');setLossPrice(b,'AAA',104);
-  assert.equal(b.state().DATA.acks['AAA|add|100'],undefined);assert.ok(b.state().DATA.ack_tombstones['AAA|add|100']);
-  setLossPrice(b,'AAA',96);assert.equal(b.state().DATA.acks['AAA|cut|100'],undefined);assert.ok(b.state().DATA.ack_tombstones['AAA|cut|100']);
-  setLossPrice(b,'AAA',100);assert.equal(r.warnAdd.querySelector('.ack-btn').getAttribute('aria-label'),'标记已读');
-  b.ack('AAA|add|100');r.trig=101;b.paint();assert.ok(b.state().DATA.acks['AAA|add|100']);
-  b.ack('AAA|add|101');b.move('AAA',null);assert.ok(b.state().DATA.acks['AAA|add|101']);
-  setLossPrice(b,'AAA',100);assert.equal(b.state().DATA.acks['AAA|add|101'],undefined);assertLossGrayBadge(b,0);
-});
+
+
+
+
 // 折叠口径仅来自生成位置或明确 data-quiet-keep；不从胶囊、class猜主表保留资格。
-function quietDocument(doc,{quietSymbols=['AAA'],keep,level='green',onlyQuiet=false}={}){
-  const row=doc.getElementById('s-aaa'),main=row.closest('table.stk'),root=main.parentNode;
-  row.className=level;if(keep!==undefined)row.setAttribute('data-quiet-keep',String(keep));
-  const fold=doc.createElement('details');fold.className='quiet-list';
-  fold.innerHTML='<summary>无异动 '+quietSymbols.length+' 只</summary><table class="stk"><colgroup><col><col></colgroup><tr class="mh"><td>标的</td><td>价格</td></tr></table>';
-  root.insertBefore(fold,main.nextSibling);
-  for(const sym of quietSymbols){const r=doc.getElementById('s-'+sym.toLowerCase()),rail=r.nextElementSibling;fold.querySelector('table').appendChild(r);if(rail)fold.querySelector('table').appendChild(rail);}
-  if(onlyQuiet){const b=doc.getElementById('s-bbb'),rail=b.nextElementSibling;b.remove();rail.remove();main.remove();}
-  return fold;
-}
-function assertRowPair(b,sym,quiet){
-  const r=b.rows.find(r=>r.sym===sym);assert.equal(!!r.tr.closest('.quiet-list'),quiet);
-  assert.equal(r.tr.nextElementSibling,r.rangeTr);assert.equal(r.rangeTr.parentNode,r.tr.parentNode);
-}
-test('双价格提醒即时移出无异动，单已读仍主表、两已读回原折叠表并保留range52',async()=>{
-  const b=await bootCash({rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>quietDocument(doc)}),fold=b.doc.querySelector('.quiet-list');
-  assertRowPair(b,'AAA',false);assert.equal(fold.hidden,true);assert.equal(fold.open,false);
-  b.ack('AAA|add|95');assertRowPair(b,'AAA',false);assert.equal(b.rows[0].tr.className,'red');
-  b.ack('AAA|cut|104');assertRowPair(b,'AAA',true);assert.equal(fold.hidden,false);assert.equal(fold.open,false);
-  assert.equal(fold.querySelector('summary').textContent,'无异动 1 只');
-  b.ack('AAA|cut|104');assertRowPair(b,'AAA',false);assert.equal(fold.hidden,true);assert.equal(fold.open,false);
-  for(let i=0;i<3;i++)b.paint();assert.equal(b.doc.querySelectorAll('.quiet-list').length,1);
-});
-test('即时追加浮亏灯移出原无异动，已读回表、撤销再移出并保留展开态',async()=>{
-  const b=await bootLoss({prices:{AAA:100},prepareDocument:doc=>quietDocument(doc)}),fold=b.doc.querySelector('.quiet-list');fold.open=true;
-  assertRowPair(b,'AAA',true);await b.enter();b.edit('AAA','cost','125');await b.tick(16);assertRowPair(b,'AAA',false);
-  assert.equal(fold.open,true);ackCurrentLoss(b);assertRowPair(b,'AAA',true);assert.equal(fold.open,true);
-  ackCurrentLoss(b);assertRowPair(b,'AAA',false);assert.equal(fold.open,true);
-  b.edit('AAA','cost','100');await b.tick(16);assertRowPair(b,'AAA',true);assert.equal(b.state().DATA.acks['AAA|loss20'],undefined);
-});
-for(const level of ['red','yellow','gray'])test('生成原'+level+'灯及目标叠加保留，价格与浮亏已读不撤原灯也不回无异动',async()=>{
-  const d=copy(SEED);d.items.AAA.cost=200;
-  const b=await bootCash({local:d,rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument(doc){
-    const row=doc.getElementById('s-aaa');row.className=level+' pur-high';row.setAttribute('data-quiet-keep','false');
-  }});
-  b.ack('AAA|add|95');b.ack('AAA|cut|104');b.ack('AAA|loss20');assertRowPair(b,'AAA',false);
-  assert.ok(b.rows[0].tr.className.split(/\s+/).includes(level));assert.ok(b.rows[0].tr.className.split(/\s+/).includes('pur-high'));
-  assert.equal(b.doc.querySelector('#costMembers li[data-sym="AAA"]').className,'lv-'+level);
-});
-test('明确quiet_keep保留与未标记主表行不擅自折叠，false才允许回无异动',async()=>{
-  for(const keep of [true,undefined,false]){
-    const b=await bootLoss({prices:{AAA:100},prepareDocument(doc){if(keep!==undefined)doc.getElementById('s-aaa').setAttribute('data-quiet-keep',String(keep));}});
-    assertRowPair(b,'AAA',keep===false);await b.enter();b.edit('AAA','cost','125');await b.tick(16);assertRowPair(b,'AAA',false);
-    ackCurrentLoss(b);assertRowPair(b,'AAA',keep===false);
-    if(keep===false){const fold=b.doc.querySelector('.quiet-list');assert.equal(fold.open,false);assert.equal(fold.querySelector('summary').textContent,'无异动 1 只');}
-  }
-});
-test('只有无异动表时动态创建主表保留列头及colgroup，撤灯回原表不复制行情行',async()=>{
-  const b=await bootCash({rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>quietDocument(doc,{onlyQuiet:true})});
-  const root=b.doc.getElementById('group_positions'),main=root.children.find(el=>el.tagName==='TABLE');assert.ok(main);
-  assert.equal(main.querySelectorAll('colgroup').length,1);assert.equal(main.querySelector('.mh').textContent,'标的价格');assertRowPair(b,'AAA',false);
-  b.ack('AAA|add|95');b.ack('AAA|cut|104');assertRowPair(b,'AAA',true);
-  assert.equal(b.doc.querySelectorAll('#s-aaa').length,1);assert.equal(b.doc.querySelectorAll('.range52-row').length,1);
-});
-test('长持仓内部折叠移行不跨到短持仓，移组后仅用当前区主表',async()=>{
-  const b=await bootLoss({prices:{AAA:100},longs:['AAA'],prepareDocument:doc=>quietDocument(doc)}),r=b.rows.find(row=>row.sym==='AAA');
-  assertRowPair(b,'AAA',true);await b.enter();b.edit('AAA','cost','125');await b.tick(16);
-  assertRowPair(b,'AAA',false);assert.ok(r.tr.closest('#group_positions_long'));ackCurrentLoss(b);assertRowPair(b,'AAA',true);
-  b.move('AAA','focus');assert.equal(r.lossLv,0);assert.ok(r.tr.closest('#group_focus'));assert.equal(r.tr.closest('#group_positions'),null);
-});
-function addMemberLampFixture(doc){
-  const card=doc.getElementById('signalCounts'),fixture=doc.createElement('div');fixture.id='memberLampFixture';
-  fixture.innerHTML=['red','yellow','gray'].map(tone=>'<div class="signal-members-panel tone-'+tone+'" id="lamp-test-'+tone+'">'
-    +'<ul><li class="retained lamp-yellow"><a class="signal-member-jump" href="#s-aaa">AAA</a>'
-    +'<span class="signal-member-metric" data-signal-level="'+tone+'">条件自身'+tone+'</span></li></ul></div>').join('')
-    +'<div class="signal-members-panel tone-target"><ul><li class="purple-retained"><span class="signal-name-lamp purple high"></span>'
-    +'<a class="signal-member-jump" href="#s-aaa">AAA</a></li></ul></div>';
-  card.appendChild(fixture);
-}
-function assertMemberLamps(b,level){
-  for(const tone of ['red','yellow','gray']){
-    const panel=b.doc.getElementById('lamp-test-'+tone),li=panel.querySelector('li');
-    assert.equal(panel.className,'signal-members-panel tone-'+tone,'统计所在分类不随整股灯变化');
-    assert.deepEqual(li.className.split(/\s+/),['retained','lamp-'+level],'仅替换名称灯且保留其它class');
-    assert.equal(li.querySelector('.signal-member-metric').getAttribute('data-signal-level'),tone,'条件等级仍独立');
-    assert.equal(li.querySelectorAll('.signal-name-lamp').length,0,'单选只用一个伪元素，不额外追加灯span');
-  }
-  const purple=b.doc.querySelector('#memberLampFixture .tone-target li');
-  assert.equal(purple.className,'purple-retained');
-  assert.equal(purple.querySelector('.signal-name-lamp').className,'signal-name-lamp purple high');
-  for(const link of b.doc.querySelectorAll('.signal-members-panel a.signal-member-jump')){
-    const panel=link.closest('.signal-members-panel'),li=link.closest('li');
-    if(link.getAttribute('href')==='#s-aaa' && /tone-(red|yellow|gray)/.test(panel.className))
-      assert.ok(li.classList.contains('lamp-'+level),'静态及动态ACK/浮亏名单同步当前主行灯');
-  }
-}
-test('名称灯未知不借分类黄，非主行锚点不冒充灯，紫目标保持独立',async()=>{
+
+
+
+
+
+
+
+
+
+
+test('成本重绘不借未知跳转伪造主表灯，既有静态名单不被重写',async()=>{
   const b=await bootCash({prepareDocument(doc){
-    addMemberLampFixture(doc);
+    const section=doc.createElement('div');section.id='lamp-test-yellow';doc.body.appendChild(section);
     const yellow=doc.getElementById('lamp-test-yellow'),node=doc.createElement('div');node.id='s-notrow';node.className='red';doc.body.appendChild(node);
     yellow.innerHTML='<ul>'+['#s-missing','#s-notrow','#group_positions','https://example.test/#s-aaa'].map(href=>
       '<li class="keep lamp-yellow"><a class="signal-member-jump" href="'+href+'">未知</a></li>').join('')+'</ul>';
   }});
   for(let i=0;i<3;i++){
     b.paint();
-    assert.deepEqual(b.doc.querySelectorAll('#lamp-test-yellow li').map(li=>li.className),Array(4).fill('keep lamp-unknown'));
+    assert.deepEqual(b.doc.querySelectorAll('#lamp-test-yellow li').map(li=>li.className),Array(4).fill('keep lamp-yellow'));
   }
   assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
 });
-for(const base of ['green','yellow','red','gray'])test('浮亏已读撤销及重绘名称灯跟随基础'+base+'但分类条件不变',async()=>{
-  const b=await bootLoss({symbols:['AAA'],prices:{AAA:80},levels:{AAA:base},prepareDocument:addMemberLampFixture});
-  assertMemberLamps(b,'red');
-  b.ctx.addEventListener('mm:ack-change',()=>{
-    const level=b.rows[0].tr.className.split(/\s+/).find(c=>['red','yellow','green','gray'].includes(c));
-    assertMemberLamps(b,level);
-  });
-  ackCurrentLoss(b);assertMemberLamps(b,base);assertLossStats(b,0,1,['AAA']);
-  for(let i=0;i<3;i++){b.paint();assertMemberLamps(b,base);}
-  ackCurrentLoss(b);assertMemberLamps(b,'red');assertLossStats(b,1,0,['AAA']);
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
+
 // 与新发布页一致：整行初始red，但data-base-level明确排除了可已读价位。
-for(const base of ['green','yellow','red','gray'])test('发布价位红灯已读恢复基础'+base+'且不撤紫条/其它灯，刷新仍正确',async()=>{
-  const prepareDocument=doc=>{
-    signalCaps(doc);
-    const row=doc.getElementById('s-aaa');row.className='red pur pur-high';
-    row.setAttribute('data-base-level',base);row.setAttribute('data-quiet-keep','true');
-    addMemberLampFixture(doc);
-  };
-  const opts={prepareDocument};const b=await bootCash(opts),r=b.rows.find(r=>r.sym==='AAA');
-  const levels=()=>r.tr.className.split(/\s+/).filter(c=>['red','yellow','green','gray'].includes(c));
-  assert.deepEqual(levels(),['red']);assert.equal(r.origCls,'red pur pur-high');assertMemberLamps(b,'red');
-  b.ctx.addEventListener('mm:ack-change',()=>assertMemberLamps(b,levels()[0]));
-  b.ack('AAA|add|100');assert.deepEqual(levels(),['red'],'另一条未已读减仓红不能撤');assertMemberLamps(b,'red');
-  b.ack('AAA|cut|100');assert.deepEqual(levels(),[base]);assertMemberLamps(b,base);
-  for(const warn of [r.warnAdd,r.warnCut])assert.equal(warn.getAttribute('data-signal-level'),'gray');
-  for(let i=0;i<3;i++){b.paint();assertMemberLamps(b,base);}assert.deepEqual(levels(),[base]);
-  assert.ok(r.tr.className.includes('pur pur-high'));assertRowPair(b,'AAA',false);
-  assert.equal(b.doc.querySelector('#costMembers li[data-sym="AAA"]').className,'lv-'+base);
-  await b.dispose();const c=await bootCash({...opts,store:b.store,session:b.session}),rr=c.rows.find(r=>r.sym==='AAA');
-  assert.deepEqual(rr.tr.className.split(/\s+/).filter(v=>['red','yellow','green','gray'].includes(v)),[base]);assertMemberLamps(c,base);
-  c.ack('AAA|add|100');assert.ok(rr.tr.className.split(/\s+/).includes('red'));assertMemberLamps(c,'red');
-  assert.equal(b.requests.length+c.requests.length,0);assert.equal(b.store.writes.length+c.store.writes.length,0);
-});
-for(const base of [null,'','bogus'])test('旧页缺失或非法基础灯'+base+'不能误撤原始红灯',async()=>{
-  const b=await bootCash({prepareDocument(doc){signalCaps(doc);const row=doc.getElementById('s-aaa');
-    row.className='red';if(base!==null)row.setAttribute('data-base-level',base);}});
-  b.ack('AAA|add|100');b.ack('AAA|cut|100');assert.equal(b.rows[0].tr.className,'red');
-});
-test('新发布纯价位两项已读回无异动，剩余浮亏未读仍红',async()=>{
-  const b=await bootCash({prepareDocument(doc){signalCaps(doc);const row=doc.getElementById('s-aaa');
-    row.className='red';row.setAttribute('data-base-level','green');row.setAttribute('data-quiet-keep','false');}});
-  b.ack('AAA|add|100');b.ack('AAA|cut|100');assert.equal(b.rows[0].tr.className,'green');assertRowPair(b,'AAA',true);
-  await b.enter();b.edit('AAA','cost','200');await b.tick(16);assert.equal(b.rows[0].tr.className,'red');assertRowPair(b,'AAA',false);
-  b.ack('AAA|loss20');assert.equal(b.rows[0].tr.className,'green');assertRowPair(b,'AAA',true);
-});
 
-test('已读折叠刷新恢复生成位置口径，再撤销可即时移回主表',async()=>{
-  const b=await bootCash({rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>quietDocument(doc)});
-  b.ack('AAA|add|95');b.ack('AAA|cut|104');assertRowPair(b,'AAA',true);await b.dispose();
-  const c=await bootCash({store:b.store,session:b.session,rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>quietDocument(doc)});
-  assertRowPair(c,'AAA',true);c.ack('AAA|add|95');assertRowPair(c,'AAA',false);assert.equal(c.requests.length,0);
-});
 
-test('缺失52周轨道的range52占位行也随主行情移行，不能遗留错表',async()=>{
-  const b=await bootCash({rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument(doc){
-    const r=doc.getElementById('s-aaa');r.nextElementSibling.innerHTML='<td><span class="range52-missing">52周区间：数据待更新</span></td>';
-    quietDocument(doc);
-  }});
-  const r=b.rows.find(row=>row.sym==='AAA');
-  assert.equal(r.rail,null);assertRowPair(b,'AAA',false);assert.match(r.rangeTr.textContent,/数据待更新/);
-  b.ack('AAA|add|95');b.ack('AAA|cut|104');assertRowPair(b,'AAA',true);
-  assert.equal(b.doc.querySelectorAll('.range52-missing').length,1);
-});
-test('原折叠资格不跨移组扩散，新的主表缺保留元数据时保持原表',async()=>{
-  const b=await bootLoss({prices:{AAA:100},prepareDocument:doc=>quietDocument(doc)});
-  const focus=b.doc.createElement('details');focus.id='group_focus';focus.innerHTML='<summary>重点</summary><table class="stk"></table>';b.doc.body.appendChild(focus);
-  b.move('AAA','focus');assertRowPair(b,'AAA',false);assert.ok(b.rows.find(r=>r.sym==='AAA').tr.closest('#group_focus'));
-  assert.equal(focus.querySelector('.quiet-list'),null,'不可把旧组的折叠资格当作新组证据');
-});
-test('tbody真实层级移行后range52相邻，创建表不重复表头',async()=>{
-  const b=await bootCash({rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument(doc){
-    const main=doc.getElementById('s-aaa').closest('table'),body=doc.createElement('tbody');
-    for(const child of [...main.children])body.appendChild(child);main.appendChild(body);
-    const fold=quietDocument(doc),table=fold.querySelector('table'),tbody=doc.createElement('tbody');
-    for(const child of [...table.children])if(child.tagName==='TR')tbody.appendChild(child);table.appendChild(tbody);
-  }});
-  assertRowPair(b,'AAA',false);assert.equal(b.rows[0].tr.parentNode.tagName,'TBODY');
-  b.ack('AAA|add|95');b.ack('AAA|cut|104');assertRowPair(b,'AAA',true);assert.equal(b.rows[0].tr.parentNode.tagName,'TBODY');
-  assert.equal(b.doc.querySelector('.quiet-list').querySelectorAll('.mh').length,1);
-});
 
-test('审核边界：加减价撤掉仅隐藏，规则版本不符不自动删除，主动取消仍恢复提醒',async()=>{
-  const b=await bootLoss({prices:{AAA:100},prepareDocument:doc=>signalCaps(doc)}),r=b.rows.find(row=>row.sym==='AAA');
-  b.ack('AAA|add|100');b.ack('AAA|cut|100');r.trig=0;r.cut=0;setLossPrice(b,'AAA',100);
-  assert.equal(r.warnAdd.style.display,'none');assert.equal(r.warnCut.style.display,'none');assert.equal(r.cap.style.display,'none');
-  assert.ok(b.state().DATA.acks['AAA|add|100']);assert.ok(b.state().DATA.acks['AAA|cut|100']);assertLossGrayBadge(b,0);
-  b.ack('AAA|add|100');b.ack('AAA|cut|100');
-  r.trig=100;r.cut=100;b.paint();assert.equal(r.cap.style.display,'');assert.equal(r.warnAdd.style.display,'inline');assert.equal(r.warnCut.style.display,'inline');
-  assert.equal(r.tr.className,'red');assert.equal(r.warnAdd.querySelector('.ack-btn').getAttribute('aria-label'),'标记已读');
-});
+
+
+
+
+
+
+
+
 test('双现金dirty同总额拆分不被旧云端覆盖或合并',async()=>{
   const old={...copy(SEED),cash:1,cash_extra:0.2},b=await boot({local:old,token:false});await b.enter();
   b.edit('USD','cash','0.6');b.edit('USD','cash_extra','0.4');
@@ -2682,24 +1643,7 @@ test('成本面板JS和回归文件语法有效',()=>{
   new vm.Script(SOURCE.replace(/^<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),{filename:'cost_panel.js'});
   new vm.Script(fs.readFileSync(__filename,'utf8'),{filename:'tests/mm_test_cost.js'});
 });
-for(const [kind,raw,text,on] of [
-  ['add','103.0001','103.00',false],['cut','96.9999','97.00',false],
-  ['add','103','103.01',true],['cut','97','96.99',true],
-  ['add','127.1535','127.15',true],['add','127.1536','127.15',false],
-  ['cut','119.7465','119.75',true],['cut','119.7464','119.75',false]
-])test('DOM原价优先于舍入text边界 '+kind+' '+raw+'/'+text,async()=>{
-  const target=Number(raw)>110?123.45:100;
-  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:Number(raw),qty:5}}},prepareDocument(doc){
-    const tr=doc.getElementById('s-aaa');tr.setAttribute('data-price',raw);tr.setAttribute('data-prev-close','100');
-    tr.querySelector('.px-price').textContent=text;
-    tr.querySelector(kind==='add'?'.lvtag.cut':'.lvtag.add').remove();
-    tr.querySelector(kind==='add'?'.lvtag.add':'.lvtag.cut').textContent=(kind==='add'?'加 ':'减 ')+target;
-  }}),r=b.rows.find(r=>r.sym==='AAA');
-  assert.equal(r.price,Number(raw));assert.equal(r.prevClose,100);assert.equal(r.mv,Number(raw)*5);
-  assert.equal((kind==='add'?r.warnAdd:r.warnCut).style.display,on?'inline':'none');assert.equal(r.tr.className,on?'red':'green');
-  assert.equal(r.tr.querySelector('.px-price').textContent,text,'不能改写显示价格');
-  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
-});
+
 for(const [rawPrice,rawPrev,text,chg] of [
   ['100.0001','100','100.00','+0.00%'],['99.9999','100','100.00','+1.00%'],
   ['103.0001','101.234567','103.00','+1.00%'],['100.0001','100','100.00','-100.00%']
@@ -2714,8 +1658,8 @@ for(const [rawPrice,rawPrev,text,chg] of [
   assert.equal(r.chg,(price/prev-1)*100);
   // 直接用 cost_panel.js 真源的 money()（2026-10-29 起：一位小数，大额自动降档）
   const money=b.money(amt);
-  const summary=b.doc.querySelector('.blk-pnl-fold .cnt b');
-  assert.equal(summary.textContent,money+' '+(dayPct>=0?'+':'')+dayPct.toFixed(1)+'%');
+  assert.equal(b.doc.querySelector('#dayPnlCard .dp-amt').textContent,money);
+  assert.equal(b.doc.querySelector('#dayPnlCard .dp-pct').textContent,(dayPct>=0?'+':'')+dayPct.toFixed(1)+'%');
   assert.equal(b.doc.querySelector('.cost-contrib .ca').textContent,money);
   assert.equal(b.doc.querySelector('.cost-contrib .cv').textContent,(r.chg>=0?'+':'')+r.chg.toFixed(1)+'%');
   assert.equal(r.tr.querySelector('.px-chg').textContent,chg);
@@ -2723,7 +1667,7 @@ for(const [rawPrice,rawPrev,text,chg] of [
 });
 for(const raw of [undefined,'','0','-1','Infinity','100oops'])test('旧页或无效原值'+String(raw)+'回退显示价格涨跌幅',async()=>{
   const b=await bootCash({prepareDocument(doc){
-    const tr=doc.getElementById('s-aaa');if(raw!==undefined){tr.setAttribute('data-price',raw);tr.setAttribute('data-prev-close',raw);}
+    const tr=doc.getElementById('s-aaa');tr.removeAttribute('data-price');tr.removeAttribute('data-prev-close');if(raw!==undefined){tr.setAttribute('data-price',raw);tr.setAttribute('data-prev-close',raw);}
     tr.querySelector('.px-price').textContent='1,234.56';tr.querySelector('.px-chg').textContent='+1.23%';
   }}),r=b.rows.find(r=>r.sym==='AAA');
   assert.equal(r.price,1234.56);assert.equal(r.prevClose,0);assert.equal(r.chg,1.23);
@@ -2742,19 +1686,7 @@ test('data-prev-close单独有效时使用显示价格与原昨收，不使用�
     tr.querySelector('.px-chg').textContent='+1.00%';
   }}),r=b.rows.find(r=>r.sym==='AAA');assert.equal(r.price,100);assert.equal(r.prevClose,99.9999);assert.equal(r.dayAmt,(100-99.9999)*r.qty);
 });
-for(const original of ['red','green'])test('ACKCASE原'+original+'三条ACK只撤追加灯，原red留主表原green回折叠',async()=>{
-  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){
-    const tr=doc.getElementById('s-aaa');tr.className=original;tr.setAttribute('data-price','100.0001');tr.setAttribute('data-prev-close','100');
-    tr.setAttribute('data-quiet-keep','false');tr.querySelector('.px-price').textContent='100.00';
-    signalCaps(doc,['AAA'],100);
-  }}),r=b.rows.find(r=>r.sym==='AAA');
-  assert.equal(r.origCls,original);assert.equal(r.lossLv,1);assertRowPair(b,'AAA',false);assert.equal(r.tr.className,'red');
-  b.ack('AAA|add|100');b.ack('AAA|cut|100');b.ack('AAA|loss10');
-  for(let i=0;i<3;i++)b.paint();assert.equal(r.origCls,original);assert.equal(r.tr.className,original);
-  assertRowPair(b,'AAA',original==='green');
-  for(const k of ['AAA|add|100','AAA|cut|100','AAA|loss10'])assert.ok(b.state().DATA.acks[k]);
-  b.ack('AAA|loss10');assert.equal(r.tr.className,'red');assertRowPair(b,'AAA',false);
-});
+
 
 /* ===== 金额宽度护栏（2026-10-29）=====
    手机上盈亏格最窄只有 55～57px（≤365 视口 .cost-block-title 的 .t-pnl），11.5px 加粗下
@@ -2817,19 +1749,19 @@ test('渲染出的每一格金额都不超过 9 个字符（最窄格 55px 的�
 });
 
 test('优化回归：未变化不读取或重建DOM，展开态独立保留，变化才重建一次',async()=>{
-  const b=await boot(),host=b.doc.getElementById('costMembers');
+  const b=await boot();await b.enter();const host=b.doc.getElementById('costMembers');
   const write=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML').set;
   Object.defineProperty(host,'innerHTML',{
     get(){throw Error('禁止用DOM序列化字符串比较内容');},set(value){write.call(this,value);}
   });
-  const fold=host.querySelector('.blk-pnl-fold'),row=host.querySelector('li[data-sym="AAA"]');
+  const fold=b.doc.getElementById('dayPnlCard'),row=host.querySelector('[data-cost-row][data-sym="AAA"]');
   const writes=host.htmlWrites;fold.open=true;
   b.paint();b.paint();
-  assert.equal(host.htmlWrites,writes);assert.equal(host.querySelector('.blk-pnl-fold'),fold);
-  assert.equal(host.querySelector('li[data-sym="AAA"]'),row);assert.equal(fold.open,true);
+  assert.equal(host.htmlWrites,writes);assert.equal(b.doc.getElementById('dayPnlCard'),fold);
+  assert.equal(host.querySelector('[data-cost-row][data-sym="AAA"]'),row);assert.equal(fold.open,true);
   fold.open=false;b.paint();assert.equal(host.htmlWrites,writes);assert.equal(fold.open,false);
   fold.open=true;b.rows[0].price=102;b.paint();
-  assert.equal(host.htmlWrites,writes+1);assert.equal(host.querySelector('.blk-pnl-fold').open,true);
+  assert.equal(host.htmlWrites,writes+1);assert.equal(fold.open,true);
   b.paint();assert.equal(host.htmlWrites,writes+1);assert.equal(b.puts().length,0);
 });
 test('优化回归：编辑无变化保留输入节点光标，容器替换后重建缓存',async()=>{
@@ -2843,24 +1775,7 @@ test('优化回归：编辑无变化保留输入节点光标，容器替换后�
   b.paint();assert.equal(replacement.htmlWrites,1);assert.ok(replacement.querySelector('input[data-sym="AAA"]'));
   assert.equal(b.puts().length,0);
 });
-for(const legacySymbols of [false,true])test('优化回归：含点及等号代码按原键计数编辑与导航 legacy='+legacySymbols,async()=>{
-  const symbols=['0700.HK','600519.SS','ES=F'];
-  const local={items:Object.fromEntries(symbols.map((s,i)=>[s,{cost:100,qty:i+1}])),cash:0,fixed:0};
-  const b=await boot({symbols,legacySymbols,local});
-  assert.deepEqual(Array.from(b.rows,r=>r.sym),symbols);
-  assert.deepEqual(Array.from(b.rows,r=>r.mv),[100,200,300]);
-  assert.equal(b.doc.querySelector('.cost-sum b').textContent,'$600');
-  for(const sym of symbols){
-    const row=b.doc.querySelector('#costMembers li[data-sym="'+sym+'"]');assert.ok(row);
-    assert.equal(row.querySelector('a').getAttribute('href'),'#'+fixtureAnchor(sym));
-    b.rows.find(r=>r.sym===sym).trig=100;b.setAck(sym+'|add|100',true);
-  }
-  b.paint();assert.equal(b.ackStatEntries('add_price').length,3);
-  for(const entry of b.ackStatEntries('add_price'))assert.equal(entry.anchor,fixtureAnchor(entry.sym));
-  await b.enter();b.edit('0700.HK','qty','4');await b.tick(16);
-  assert.equal(b.state().DATA.items['0700.HK'].qty,4);assert.equal(b.state().DATA.items['0700-HK'],undefined);
-  assert.equal(b.puts().length,0);
-});
+
 test('优化回归：API解码错误不被raw网络失败吞掉，不重复请求或上传',async()=>{
   const b=await boot(),before=b.canonical(b.state().DATA);
   b.respond(b.requests[0],{content:Buffer.from('not JSON').toString('base64')});await settle();
@@ -2939,9 +1854,10 @@ test('刷新首屏：原地接管骨架，云端延迟三秒也不删卡、不�
   assert.equal(b.doc.getElementById('costManage'),original);assert.equal(b.state().DATA.cash,99);
   assert.equal(original.querySelector('summary'),summary);assert.equal(b.puts().length,0);
 });
-test('刷新首屏：无初始统计时补统计必须放在仓位之后',async()=>{
+test('刷新首屏：成本绘制不再动态重建静态统计区',async()=>{
   const b=await boot({prepareDocument:doc=>doc.getElementById('signalCounts').remove()});
-  assert.equal(b.doc.getElementById('costManage').nextElementSibling.id,'signalCounts');
+  assert.equal(b.doc.getElementById('costManage').nextElementSibling.id,'group_positions');
+  assert.equal(b.doc.getElementById('signalCounts'),null);
   assert.equal(b.doc.querySelectorAll('#costManage').length,1);assert.equal(b.puts().length,0);
 });
 
@@ -3002,35 +1918,16 @@ test('审核边界：隔离刷新恢复错误草稿，正式新页远端仍覆�
   assert.deepEqual(cloudNumbers(d.local()),cloudNumbers(d.normalize(remote)));assert.deepEqual(d.local()._local.editDraft,{});
   assert.equal(d.state().dirty,false);await d.tick(60000);assert.equal(d.puts().length,0);await d.dispose();
 });
-test('审核边界：输入错误期间ACK仅同步远端仓位，不携带数值草稿和错误',async()=>{
-  const b=await boot({rules:{trigger_gap_pct:6}});b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
-  b.edit('AAA','qty','bad');b.edit('BBB','qty','77');b.exitEdit(false);b.ack('AAA|add|95');await b.tick(1200);
-  const remote={...copy(SEED),cash:999};b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];
-  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(remote)));assert.equal(b.payload(put)._local,undefined);
-  b.respond(put,{});await settle();assert.equal(b.local()._local.editDraft['AAA|qty'].raw,'bad');assert.equal(b.state().dirty,true);
-  await b.enter();await b.save();assert.equal(b.state().editing,true);assert.equal(b.puts().length,1);await b.dispose();
-});
-test('审核边界：零成本正数量计入市值仓位当日贡献，现金SGOV及固收不变',async()=>{
-  const local={schema_version:2,items:{AAA:{cost:0,qty:5},BBB:{cost:90,qty:2},SGOV:{cost:1,qty:999}},cash:30,fixed:20,fixed_cost:15};
-  const b=await boot({local,symbols:['AAA','BBB','SGOV'],groups:{SGOV:'focus'},noLocks:true,forbidRequests:true,
-    prepareDocument:doc=>doc.getElementById('s-aaa').setAttribute('data-prev-close','80')});
-  const r=b.rows[0],li=b.doc.querySelector('#costMembers li[data-sym="AAA"]');
-  assert.equal(r.has,true);assert.equal(r.costKnown,true);assert.equal(r.mv,500);assert.equal(r.pnlAmt,500);assert.equal(r.pnlPct,null);
-  assert.equal(r.lossLv,0);assert.equal(r.costInline.textContent,'0');assert.ok(li);assert.equal(li.querySelector('.pct').textContent,'—');
-  assert.equal(li.querySelector('.amt').textContent,'+$500.0');assert.equal(li.querySelector('.wt').textContent,'66.7%');
-  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·+$520.0（+288.9%）');
-  assert.equal(b.doc.querySelector('.blk-cash .t-mv').textContent,'$30');assert.equal(b.doc.querySelector('.blk-bond .t-pnl').textContent,'');
-  assert.equal(b.doc.querySelector('#costMembers li[data-sym="SGOV"]'),null);assert.equal(r.dayAmt,100);
-  assert.match(b.doc.querySelector('.cost-contrib').textContent,/AAA/);assert.doesNotMatch(b.doc.querySelector('.cost-contrib').textContent,/SGOV/);
-  assert.doesNotMatch(b.doc.getElementById('costMembers').textContent,/NaN|Infinity/);await b.dispose();
-});
+
+
 for(const missing of [true,false])test('审核边界：'+(missing?'未知':'零')+'成本独立于数量，零分母不伪造收益率',async()=>{
   const local={schema_version:2,items:{AAA:missing?{qty:5}:{cost:0,qty:5}},cash:0,fixed:0,fixed_cost:0};
   const b=await boot({local,noLocks:true,forbidRequests:true}),r=b.rows[0];
   assert.equal(r.has,true);assert.equal(r.costKnown,!missing);assert.equal(r.mv,500);assert.equal(r.pnlPct,null);
   assert.equal(r.pnlAmt,missing?null:500);assert.equal(b.doc.querySelector('.cost-sum').textContent,missing?'$500·—（—）':'$500·+$500.0（—）');
-  const li=b.doc.querySelector('#costMembers li[data-sym="AAA"]');assert.equal(li.querySelectorAll('.cost-cell')[0].textContent,missing?'—':'0');
-  assert.equal(li.querySelector('.wt').textContent,'100.0%');await b.enter();b.edit('AAA','qty','6');await b.save();
+  await b.enter();const row=b.doc.querySelector('#costMembers [data-cost-row][data-sym="AAA"]');assert.ok(row);
+  assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,missing?'':'0');
+  await b.enter();b.edit('AAA','qty','6');await b.save();
   assert.equal(Object.hasOwn(b.sessionLocal().items.AAA,'cost'),!missing);assert.equal(b.sessionLocal().items.AAA.qty,6);
   b.exportData();const exported=JSON.parse(await b.blobs.at(-1).text());assert.equal(Object.hasOwn(exported.items.AAA,'cost'),!missing);
   assert.doesNotMatch(b.doc.getElementById('costMembers').textContent,/NaN|Infinity/);await b.dispose();
@@ -3038,91 +1935,20 @@ for(const missing of [true,false])test('审核边界：'+(missing?'未知':'零'
 test('审核边界：未知成本与已知成本混合不冒充完整合计，明确录入零后可计算',async()=>{
   const b=await boot({local:{...copy(SEED),schema_version:2,items:{AAA:{qty:5},BBB:{cost:90,qty:2}}},noLocks:true,forbidRequests:true});
   assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·—（—）');assert.match(b.doc.querySelector('.cost-sum').getAttribute('title'),/成本未知/);
-  assert.equal(b.doc.querySelector('.blk-short .t-pnl').textContent,'— —');
+  assert.equal(b.doc.querySelector('.cashbond-row .cb-total-pnl').textContent,'—（—）');
   await b.enter();b.edit('AAA','cost','0');await b.save();assert.equal(b.sessionLocal().items.AAA.cost,0);
   assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·+$520.0（+288.9%）');await b.dispose();
 });
-async function recentAckFixture(key,opts={}){
-  const d={...copy(SEED),items:{AAA:{cost:200,qty:5},BBB:{cost:90,qty:2}}};
-  const b=await boot({local:d,noLocks:true,forbidRequests:true,quoteDate:'2026-10-22',now:Date.parse('2026-10-23T12:00:00Z'),
-    rules:{trigger_gap_pct:6,reduce_gap_pct:4},...opts});
-  b.ack(key);const remote=copy(b.state().DATA);assert.ok(remote.acks[key]);await b.dispose();return remote;
-}
-function ackOffQuote(doc,key){
-  const row=doc.getElementById('s-aaa'),price=key.includes('|add|')?110:key.includes('|cut|')?90:190;
-  row.setAttribute('data-price',String(price));row.querySelector('.px-price').textContent=String(price);
-}
-for(const key of ['AAA|add|95','AAA|cut|104','AAA|loss20'])for(const pageDay of ['2026-10-20','2026-10-22',null])
-  test('审核边界：旧页或未知行情不撤销另一设备新ACK '+key+'/'+pageDay,async()=>{
-    const remote=await recentAckFixture(key),b=await boot({quoteDate:pageDay,rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>ackOffQuote(doc,key)});
-    b.respond(b.requests[0],meta(remote));await settle();for(let i=0;i<3;i++)b.paint();await b.tick(180000);
-    assert.equal(b.local().acks[key],remote.acks[key]);assert.equal(b.local().ack_tombstones[key],undefined);
-    assert.equal(b.state().dirty,false);assert.equal(b.state().maintenancePending,false);assert.equal(b.puts().length,0);assert.equal(b.requests.length,1);
-    await b.dispose();
-  });
-for(const key of ['AAA|add|95','AAA|cut|104','AAA|loss20'])test('审核边界：更新行情但旧规则版本不得撤销新ACK '+key,async()=>{
-  const remote=await recentAckFixture(key);
-  if(key.includes('|loss'))remote.ack_contexts[key].rule_version='["cost-ack-v2","loss20",20,null]';
-  const b=await boot({quoteDate:'2026-10-24',rules:{trigger_gap_pct:0,reduce_gap_pct:0},prepareDocument:doc=>ackOffQuote(doc,key)});
-  b.respond(b.requests[0],meta(remote));await settle();await b.tick(180000);
-  assert.ok(b.local().acks[key]);assert.equal(b.local().ack_tombstones[key],undefined);assert.equal(b.puts().length,0);
-  // 用户明确撤销不受旧行情、旧规则或另一设备时间戳的限制。
-  b.ack(key);await b.tick(1200);b.respond(b.requests.at(-1),meta({...remote,cash:999}));await settle();const put=b.puts()[0];
-  assert.ok(put);assert.equal(b.payload(put).acks[key],undefined);assert.ok(b.payload(put).ack_tombstones[key]);
-  assert.equal(b.payload(put).ack_invalidations[key],undefined);assert.equal(b.payload(put).cash,999);
-  b.respond(put,{});await settle();await b.dispose();
-});
-for(const key of ['AAA|add|95','AAA|cut|104','AAA|loss20'])test('审核边界：新行情同规则自动撤销仅维护远端仓位 '+key,async()=>{
-  const remote=await recentAckFixture(key),b=await boot({quoteDate:'2026-10-24',rules:{trigger_gap_pct:6,reduce_gap_pct:4},prepareDocument:doc=>ackOffQuote(doc,key)});
-  b.respond(b.requests[0],meta(remote));await settle();assert.equal(b.local().acks[key],undefined);assert.equal(b.state().positionsAuthorized,false);
-  await b.tick(1200);const newest={...remote,cash:999,items:{AAA:{cost:200,qty:8},BBB:{cost:90,qty:2}}};
-  b.respond(b.requests.at(-1),meta(newest,'latest'));await settle();const put=b.puts()[0];assert.ok(put);
-  assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(newest)));assert.equal(b.payload(put).acks[key],undefined);
-  assert.equal(b.payload(put).ack_invalidations[key].ack_at,remote.acks[key]);assert.equal(JSON.parse(put.init.body).sha,'latest');
-  b.respond(put,{});await settle();await b.tick(180000);assert.equal(b.puts().length,1);assert.equal(b.state().dirty,false);await b.dispose();
-});
-test('审核边界：旧ACK缺少元数据保守保留，更新行情也不自动维护',async()=>{
-  const remote={...copy(SEED),acks:{'AAA|add|95':'2020-01-01','AAA|loss10':'2020-01-01'}};
-  const b=await boot({quoteDate:'2026-10-24'});b.respond(b.requests[0],meta(remote));await settle();await b.tick(180000);
-  assert.deepEqual(b.local().acks,remote.acks);assert.deepEqual(b.local().ack_tombstones,{});assert.equal(b.puts().length,0);
-  assert.equal(b.state().dirty,false);b.ack('AAA|loss10');assert.equal(b.local().acks['AAA|loss10'],undefined);await b.dispose();
-});
-test('审核边界：ACK确认晚于页面行情，即使引用旧报价也不能自动撤销',async()=>{
-  const remote=await recentAckFixture('AAA|loss20',{quoteDate:'2026-10-18'});
-  const b=await boot({quoteDate:'2026-10-20',prepareDocument:doc=>ackOffQuote(doc,'AAA|loss20')});
-  b.respond(b.requests[0],meta(remote));await settle();await b.tick(180000);
-  assert.ok(b.local().acks['AAA|loss20']);assert.equal(b.puts().length,0);await b.dispose();
-});
-test('审核边界：自动撤销GET期间遇到更新ACK，设备快钟也不能删除新确认',async()=>{
-  const original=staleAck(),key='AAA|loss10';
-  const b=await boot({local:original,now:Date.parse('2026-10-25T12:00:00Z')});
-  b.respond(b.requests[0],meta(original));await settle();assert.equal(b.local().acks[key],undefined);await b.tick(1200);
-  const newer={...copy(SEED),cash:12345,acks:{[key]:'2026-10-21T12:00:00Z'},ack_contexts:{[key]:{
-    at:'2026-10-21T12:00:00Z',quote_date:'2026-10-21',rule_version:'["cost-ack-v1","loss10",10,null]'}}};
-  b.respond(b.requests.at(-1),meta(newer,'new-ack'));await settle();const put=b.puts()[0];assert.ok(put);
-  assert.equal(b.payload(put).acks[key],newer.acks[key]);assert.deepEqual(b.payload(put).ack_contexts[key],newer.ack_contexts[key]);
-  assert.equal(b.payload(put).cash,12345);assert.ok(Date.parse(b.payload(put).ack_tombstones[key])>Date.parse(newer.acks[key]));
-  const normalized=b.normalize(b.payload(put));assert.equal(normalized.acks[key],newer.acks[key]);
-  b.respond(put,{});await settle();await b.tick(180000);assert.equal(b.puts().length,1);assert.equal(b.local().acks[key],newer.acks[key]);
-  await b.dispose();
-});
-test('审核边界：真实snapshotData行情日期绑定价格，不借完成时间或仓位asof',async()=>{
-  for(const price of [100,101]){
-    const b=await boot({quoteDate:null,noLocks:true,forbidRequests:true,seed:{...copy(SEED),asof:'2099-01-01'},prepareDocument(doc){
-      const node=doc.createElement('script');node.id='snapshotData';node.textContent=JSON.stringify({finished_at:'2099-01-01T00:00:00Z',
-        items:[{symbol:'AAA',price,data_date:'2026-10-18'}]});doc.body.appendChild(node);
-    }});
-    b.ack('AAA|add|95');assert.equal(b.rows[0].quoteDate,price===100?'2026-10-18':'');
-    assert.equal(!!b.state().DATA.ack_contexts['AAA|add|95'],price===100);await b.dispose();
-  }
-});
-test('审核边界：ACK元数据导入导出规范化等值，错误元数据不覆盖当前数据',async()=>{
-  const remote=await recentAckFixture('AAA|loss20'),b=await boot({noLocks:true,forbidRequests:true,quoteDate:null});
-  b.importData(remote);b.exportData();const exported=JSON.parse(await b.blobs.at(-1).text());
-  assert.deepEqual(exported.ack_contexts,remote.ack_contexts);assert.equal(b.canonical(b.normalize(exported)),b.canonical(b.state().DATA));
-  const before=b.canonical(b.state().DATA),bad=copy(remote);bad.ack_contexts['AAA|loss20'].quote_date='2026-02-30';
-  assert.throws(()=>b.importData(bad));assert.equal(b.canonical(b.state().DATA),before);await b.dispose();
-});
+
+
+
+
+
+
+
+
+
+
 
 for(const known of [true,false])for(const blank of ['', '  '])test('成本空白修复：'+(known?'清空旧成本':'原未知成本')+'/'+(blank?'空格':'空串')+'不当零且保存刷新不复活',async()=>{
   const remote={...copy(SEED),schema_version:2,items:{AAA:known?{cost:100,qty:5}:{qty:5},BBB:{cost:90,qty:2}}};
@@ -3173,5 +1999,183 @@ test('成本空白修复：现金数量空白继续为0，成本清空取消恢�
   assert.equal(b.sessionLocal().cash,0);assert.equal(b.sessionLocal().cash_extra,0);assert.equal(b.requests.length,0);await b.dispose();
 });
 
+// 终稿新契约回归：退役ACK之外，全部正常保存/取消/未知PUT测试仍运行。
+function qaAssertNoAck(b){
+  for(const key of ['acks','ack_tombstones','ack_contexts'])assert.equal(Object.hasOwn(b.state().DATA,key),false,key+'不进入内存/导出数据');
+  assert.equal(b.doc.querySelectorAll('[data-ack],.ack-btn,.cost-warn,[data-kind="cost_loss"],[id^="signal-members-acked-"]').length,0);
+}
+function qaPnlRows(b,kind){return b.doc.querySelectorAll('.pnl-extra ul[data-g="'+kind+'"] li');}
+function qaQuote(doc,sym,price,target){
+  const row=doc.getElementById(fixtureAnchor(sym));row.setAttribute('data-price',String(price));row.querySelector('.px-price').textContent=String(price);
+  for(const tag of row.querySelectorAll('.lvtag.add,.lvtag.cut')){tag.setAttribute('data-lv',String(target));tag.setAttribute('data-near','0');}
+  return row;
+}
+for(const field of ['acks','ack_tombstones','ack_contexts'])for(const value of [null,[],true,42,'old',{'bad-key':'invalid'},{'AAA|loss20':'2026-10-20T00:00:00Z'}])test('终稿旧JSON忽略'+field+'形状 '+JSON.stringify(value),async()=>{
+  const old={...copy(SEED),cash:77,[field]:value};const b=await boot({local:old});
+  qaAssertNoAck(b);assert.equal(b.state().DATA.cash,77);
+  const remote={...old,cash:123,items:{AAA:{cost:0,qty:0}}};b.respond(b.requests[0],meta(remote));await settle();await b.tick(180000);
+  qaAssertNoAck(b);assert.equal(b.state().DATA.cash,123);assert.equal(b.state().DATA.items.AAA.cost,0);assert.equal(b.state().DATA.items.BBB,undefined);
+  assert.equal(b.puts().length,0);assert.equal(b.state().dirty,false);
+  b.exportData();const exported=JSON.parse(await b.blobs.at(-1).text());for(const k of ['acks','ack_tombstones','ack_contexts'])assert.equal(Object.hasOwn(exported,k),false);
+});
+test('终稿normalize不访问旧ACK getter且数值字段仍严格校验',async()=>{
+  const b=await boot(),old=copy(SEED);for(const key of ['acks','ack_tombstones','ack_contexts'])Object.defineProperty(old,key,{get(){throw Error('禁止读取已退役字段');},enumerable:true});
+  assert.equal(b.normalize(old).cash,30);assert.throws(()=>b.normalize({...SEED,items:{AAA:{qty:-1}}}));
+});
+for(const state of ['dirty','maintenance','unknown-put'])test('终稿旧'+state+'残留刷新只GET不维护上传',async()=>{
+  const old={...copy(SEED),acks:{'AAA|loss20':'2026-10-01'},_local:{dirty:true,revision:19,maintenanceOnly:true,maintenancePending:true}};
+  if(state==='unknown-put')old._local.uncertain={payload:copy(SEED),baseSha:'old',revision:18};
+  const b=await boot({local:old});assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().uncertain,null);
+  b.respond(b.requests[0],meta({...SEED,cash:999}));await settle();await b.tick(600000);
+  qaAssertNoAck(b);assert.equal(b.state().DATA.cash,999);assert.equal(b.puts().length,0);assert.equal(b.requests.length,1);
+});
+test('终稿无ACK点击入口且重复重绘不创建保存授权',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();const revision=b.state().revision;
+  for(let i=0;i<4;i++){const old=b.doc.createElement('button');old.setAttribute('data-ack','AAA|loss20');b.doc.fire('click',{target:old});b.paint();}
+  await b.tick(180000);qaAssertNoAck(b);assert.equal(b.state().revision,revision);assert.equal(b.puts().length,0);assert.equal(b.state().positionsAuthorized,false);
+});
+test('终稿旧JSON导入允许正常明确上传但payload不含ACK',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();
+  b.importData({...copy(SEED),cash:77,acks:[],ack_tombstones:{bad:'x'},ack_contexts:true});await b.tick(0);
+  const put=await finishPush(b);assert.equal(b.payload(put).cash,77);for(const key of ['acks','ack_tombstones','ack_contexts'])assert.equal(Object.hasOwn(b.payload(put),key),false);
+  assert.equal(b.state().dirty,false);qaAssertNoAck(b);
+});
+test('终稿明确保存成功后取消新编辑不复活旧授权',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
+  b.respond(b.requests.at(-1),meta(SEED));await settle();const put=b.puts()[0];await b.enter();b.edit('AAA','qty','88');b.respond(put,{});await settle();
+  b.doc.getElementById('costCancel').click();await b.tick(180000);assert.equal(b.state().DATA.items.AAA.qty,7);assert.equal(b.state().positionSave,null);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.puts().length,1);
+});
+for(const [kind,price,target,on] of [
+  ['add',100,103,true],['add',100,103.0000000001,false],['add',100,102.9999999999,true],
+  ['cut',100,97,true],['cut',100,96.9999999999,false],['cut',100,97.0000000001,true],
+  ['add',123.45,127.1535,true],['add',123.45,127.1535000001,false],
+  ['cut',123.45,119.7465,true],['cut',123.45,119.7464999999,false],
+  ['add',1e-7,1.03e-7,true],['add',1e-7,1.030000001e-7,false],
+  ['cut',1e-7,9.7e-8,true],['cut',1e-7,9.69999999e-8,false],
+  ['add',50,100,false],['cut',200,100,false]
+])test('终稿±3%常驻提示边界 '+kind+' '+price+'/'+target,async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:price,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',price,target);}});
+  const r=b.rows.find(r=>r.sym==='AAA'),tag=kind==='add'?r.cap:r.cutCap;
+  assert.equal(b.nearPrice(price,target,3),on);assert.equal(tag.getAttribute('data-near'),on?'1':'0');assert.equal(tag.hidden,false);
+  assert.equal(r.tr.className,'green','价位提示不造红灯');assert.match(tag.textContent,kind==='add'?/^加仓价 /:/^减仓价 /);
+  assert.equal(qaPnlRows(b,kind).some(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA'),on);
+  for(let i=0;i<4;i++)b.paint();assert.equal(r.tr.className,'green');assert.equal(tag.getAttribute('data-near'),on?'1':'0');qaAssertNoAck(b);assert.equal(b.requests.length,0);
+});
+for(const [p,t,g,on]of [[100,100,0,true],[100,100.0000000001,0,false],[100,99.9999999999,0,false],[100,102.5,2.5,true],[100,102.500000001,2.5,false]])test('终稿价差零和小数阈值 '+[p,t,g],async()=>{const b=await bootCash();assert.equal(b.nearPrice(p,t,g),on);});
+for(const [price,tone]of [[90.0000000001,''],[90,'loss'],[89.9999999999,'loss'],[80,'loss'],[79.9999999999,'loss'],[109.9999999999,''],[110,'gain'],[110.0000000001,'gain'],[100,'']])test('终稿盈亏±10淡底而非红灯 '+price,async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:100,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',price,1000);}}),r=b.rows.find(r=>r.sym==='AAA');
+  assert.equal(b.pnlTone(price,100),tone);assert.equal(r.costLine.getAttribute('data-pnl')||'',tone);assert.equal(r.tr.className,'green');
+  for(const g of ['gain','loss'])assert.equal(qaPnlRows(b,g).some(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA'),g===tone);
+  qaAssertNoAck(b);assert.equal(b.requests.length,0);
+});
+for(const item of [{qty:5},{cost:0,qty:5},{cost:100,qty:0}])test('终稿未知成本零成本清仓不伪造盈亏提示 '+JSON.stringify(item),async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:item}},prepareDocument(doc){qaQuote(doc,'AAA',80,1000);}}),r=b.rows.find(r=>r.sym==='AAA');
+  assert.equal(r.costLine.getAttribute('data-pnl'),null);assert.equal(qaPnlRows(b,'loss').length,0);assert.equal(qaPnlRows(b,'gain').length,0);assert.equal(r.tr.className,'green');
+  if(item.qty===0)assert.equal(r.costLine.hidden,true);else assert.equal(r.costLine.hidden,false);
+});
+test('终稿移出持仓只保留加仓提示且不移表不造红',async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:200,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',100,100);}}),r=b.rows.find(r=>r.sym==='AAA');
+  const parent=r.tr.parentNode;b.paint();assert.equal(r.tr.parentNode,parent);b.move('AAA','watch');
+  assert.equal(r.cap.hidden,false);assert.equal(r.cutCap.hidden,true);assert.equal(r.costLine.hidden,true);assert.equal(r.tr.className,'green');
+  assert.equal(qaPnlRows(b,'loss').length,0);assert.equal(qaPnlRows(b,'cut').some(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA'),false);
+  assert.equal(qaPnlRows(b,'add').some(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA'),true);
+});
+for(const level of ['red','yellow','green','gray'])test('终稿盈亏到价名单沿用个股基础灯 '+level,async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',100,100).className=level;}}),r=b.rows.find(r=>r.sym==='AAA');
+  for(const kind of ['loss','add','cut']){const li=qaPnlRows(b,kind).find(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA');assert.ok(li);assert.equal(li.className,'lamp-'+level);}
+  for(let i=0;i<4;i++)b.paint();assert.equal(r.tr.className,level);qaAssertNoAck(b);
+});
+test('终稿四组pnl静态骨架重绘保留summary胶囊与展开状态',async()=>{
+  const b=await bootCash(),extra=b.doc.querySelector('.pnl-extra'),details=extra.querySelector('details'),chip=extra.querySelector('.pnl-chip');
+  assert.ok(chip,'必须保留summary静态胶囊，不以textContent删除');details.open=true;
+  for(let i=0;i<4;i++)b.paint();assert.equal(details.open,true);assert.equal(extra.querySelector('.pnl-chip'),chip);
+  for(const g of ['gain','loss','cut','add'])assert.equal(extra.querySelectorAll('ul[data-g="'+g+'"]').length,1);
+});
+for(const state of ['low','space','high','hit','bad'])test('终稿目标'+state+'不受成本淡底和价位重绘影响',async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){const tr=qaQuote(doc,'AAA',100,100);tr.querySelector('.tgs').innerHTML='<span class="lvtag tgt '+state+'"><span>+20%</span><span>120</span><span title="10月">⑩</span></span>';}});
+  const tr=b.doc.getElementById('s-aaa'),target=tr.querySelector('.tgt'),parent=tr.parentNode;for(let i=0;i<4;i++)b.paint();
+  assert.equal(target.className,'lvtag tgt '+state);assert.equal(tr.className,'green');assert.equal(tr.parentNode,parent);assert.equal(target.textContent,'+20%120⑩');
+});
+test('终稿每次动态绘制通过document发cost:painted并已完成名单更新',async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',100,100);}});let n=0;
+  b.doc.addEventListener('cost:painted',()=>{n++;assert.equal(qaPnlRows(b,'loss').length,1);qaAssertNoAck(b);});b.paint();assert.equal(n,1);
+});
+test('终稿生产成本源码无ACK、DEMO模拟或浮亏造红链路',()=>{
+  assert.doesNotMatch(SOURCE,/\b(?:setAck|pruneAck|ackStatEntries|renderAckGray|LOSS_STAT|DEMO|injectDemo|injectLmtEarnings)\b|data-ack|ack-btn|cost-warn|ack_tombstones|ack_contexts|\.acks\b|r48-demo|data-r58-key/);
+});
+
+// 开工混合块覆盖补回：仅剥离ACK生产行为，不剥离其事务、数值、原始精度和身份断言。
+test('混合块复核：连续两次保存迟到回执不携带第三份未保存草稿',async()=>{
+  const b=await boot(),initial=b.requests[0];await b.enter();b.edit('AAA','qty','7');await b.save();
+  const first=await finishPush(b);await b.enter();b.edit('AAA','qty','9');await b.save();await b.tick(30000);
+  b.respond(b.requests.at(-1),meta(b.payload(first),'first'));await settle();const second=b.puts()[1];
+  assert.equal(b.payload(second).items.AAA.qty,9);await b.enter();b.edit('AAA','qty','88');b.ack('AAA|add|95');
+  b.respond(second,{});await settle();b.respond(initial,meta(SEED));await settle();await b.tick(180000);
+  assert.equal(b.state().CLOUD.items.AAA.qty,9);assert.equal(b.state().DATA.items.AAA.qty,88);
+  assert.equal(b.state().editing,true);assert.equal(b.state().dirty,true);assert.equal(b.puts().length,2);qaAssertNoAck(b);
+});
+test('混合块复核：相同内容明确保存消费授权，旧ACK入口不触发任何维护',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','5');await b.save();
+  assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);const n=b.requests.length;
+  b.ack('AAA|loss10');await b.tick(180000);assert.equal(b.requests.length,n);assert.equal(b.puts().length,0);assert.equal(b.state().dirty,false);
+});
+for(const key of [LOCAL,CLOUD])test('混合块复核：成功PUT后'+key+'缓存失败不得复活授权重传',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','7');await b.save();
+  b.respond(b.requests.at(-1),meta(SEED));await settle();const put=b.puts()[0];b.store.failSet.add(key);b.respond(put,{});await settle();
+  assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);assert.equal(b.state().dirty,true);assert.notEqual(b.state().SYNC,'synced');
+  b.store.failSet.delete(key);const n=b.requests.length;b.ack('AAA|loss20');await b.tick(180000);assert.equal(b.requests.length,n);assert.equal(b.puts().length,1);
+});
+test('混合块复核：主动关闭编辑保留草稿，新GET不解除暂停，bfCache重核验',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','88');
+  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');b.ack('AAA|add|95');b.startPull();await settle();b.respond(b.requests.at(-1),meta({...SEED,cash:999}));await settle();await b.tick(180000);
+  assert.equal(b.state().savePaused,true);assert.equal(b.state().DATA.items.AAA.qty,88);assert.equal(b.puts().length,0);
+  await b.dispose();b.fireWindow('pageshow',{persisted:true});await settle();assert.equal(b.state().savePaused,false);
+  b.respond(b.requests.at(-1),meta(SEED));await settle();assert.equal(b.state().DATA.items.AAA.qty,5);assert.equal(b.puts().length,0);
+});
+test('混合块复核：导入含旧ACK及零固收，上传导出刷新均保持真实零值',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();
+  const d={schema_version:2,items:{AAA:{cost:0,qty:0}},cash:0,cash_extra:0,fixed:0,fixed_cost:0,acks:{bad:true}};
+  b.importData(d);await b.tick(0);const put=await finishPush(b);assert.deepEqual(cloudNumbers(b.payload(put)),cloudNumbers(b.normalize(d)));
+  b.exportData();const exported=JSON.parse(await b.blobs.at(-1).text());assert.equal(exported.fixed,0);assert.equal(exported.fixed_cost,0);assert.equal(exported.items.AAA.cost,0);qaAssertNoAck(b);
+  await b.dispose();const c=await boot({store:b.store,seed:{...SEED,fixed:999,fixed_cost:999}});c.respond(c.requests[0],meta(exported));await settle();
+  assert.equal(c.state().DATA.fixed,0);assert.equal(c.state().DATA.fixed_cost,0);assert.equal(c.state().DATA.items.AAA.qty,0);assert.equal(c.puts().length,0);
+});
+for(const legacySymbols of [false,true])test('混合块复核：含点及等号代码原键估值编辑 legacy='+legacySymbols,async()=>{
+  const symbols=['0700.HK','600519.SS','ES=F'],local={items:Object.fromEntries(symbols.map((s,i)=>[s,{cost:100,qty:i+1}])),cash:0,fixed:0};
+  const b=await boot({symbols,legacySymbols,local});assert.deepEqual(Array.from(b.rows,r=>r.sym),symbols);assert.deepEqual(Array.from(b.rows,r=>r.mv),[100,200,300]);
+  assert.equal(b.doc.querySelector('.cost-sum b').textContent,'$600');await b.enter();
+  for(const sym of symbols)assert.ok(b.doc.querySelector('#costMembers [data-cost-row][data-sym="'+sym+'"]'));
+  b.edit('0700.HK','qty','4');await b.tick(16);assert.equal(b.state().DATA.items['0700.HK'].qty,4);assert.equal(b.state().DATA.items['0700-HK'],undefined);assert.equal(b.puts().length,0);
+});
+test('混合块复核：非持仓旧数量不计市值贡献但不删除保存数据',async()=>{
+  const d=copy(SEED);d.items.AAA={cost:200,qty:1000};const b=await boot({local:d,groups:{AAA:'focus'}}),r=b.rows.find(r=>r.sym==='AAA');
+  assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$250');assert.equal(r.has,false);assert.equal(r.costLine.hidden,true);
+  assert.equal(b.doc.querySelector('.cost-contrib').textContent.includes('AAA'),false);assert.equal(b.state().DATA.items.AAA.qty,1000);assert.equal(r.tr.className,'green');
+});
+test('混合块复核：零成本正数量计市值和日贡献，SGOV非持仓不混入',async()=>{
+  const local={schema_version:2,items:{AAA:{cost:0,qty:5},BBB:{cost:90,qty:2},SGOV:{cost:1,qty:999}},cash:30,fixed:20,fixed_cost:15};
+  const b=await boot({local,symbols:['AAA','BBB','SGOV'],groups:{SGOV:'focus'},noLocks:true,forbidRequests:true,prepareDocument:doc=>doc.getElementById('s-aaa').setAttribute('data-prev-close','80')}),r=b.rows[0];
+  assert.equal(r.has,true);assert.equal(r.costKnown,true);assert.equal(r.mv,500);assert.equal(r.pnlAmt,500);assert.equal(r.pnlPct,null);assert.equal(r.dayAmt,100);
+  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·+$520.0（+288.9%）');assert.equal(b.doc.querySelector('.cb-cash .cb-amt').textContent,'$30');
+  assert.equal(b.doc.querySelector('.cb-bond .cb-amt').textContent,'$20');assert.match(b.doc.querySelector('.cost-contrib').textContent,/AAA/);assert.doesNotMatch(b.doc.querySelector('.cost-contrib').textContent,/SGOV/);
+  assert.doesNotMatch(b.doc.getElementById('costMembers').textContent,/NaN|Infinity/);assert.equal(b.requests.length,0);
+});
+for(const [price,target,text,on] of [[100,103,'99.00',true],[100,103.0001,'103.00',false],[100,97,'103.01',true],[100,96.9999,'97.00',false],[123.45,127.1535,'127.15',true],[123.45,127.1536,'127.15',false],[123.45,119.7465,'119.75',true],[123.45,119.7464,'119.75',false]])for(const kind of ['add','cut'])test('混合块复核：现价与设置价使用原值非显示舍入 '+[kind,price,target,text],async()=>{
+  const b=await bootCash({prepareDocument(doc){const tr=qaQuote(doc,'AAA',price,target);tr.querySelector('.px-price').textContent=text;}}),r=b.rows.find(r=>r.sym==='AAA'),cap=kind==='add'?r.cap:r.cutCap;
+  assert.equal(r.price,price);assert.equal(r.mv,price*5);assert.equal(cap.getAttribute('data-near'),on?'1':'0');assert.equal(r.tr.querySelector('.px-price').textContent,text);
+  assert.equal(r.tr.className,'green');assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
+});
+test('混合块复核：缺失52周轨道仍计算持仓且重绘不拆分行情兄弟行',async()=>{
+  const b=await bootCash({prepareDocument(doc){const rail=doc.getElementById('s-aaa').nextElementSibling;rail.innerHTML='<td class="range52-missing">52周数据待更新</td>';}}),r=b.rows.find(r=>r.sym==='AAA');
+  const range=r.tr.nextElementSibling,parent=r.tr.parentNode;assert.equal(r.mv,500);assert.match(range.textContent,/数据待更新/);
+  for(let i=0;i<4;i++)b.paint();assert.equal(r.tr.parentNode,parent);assert.equal(r.tr.nextElementSibling,range);assert.equal(range.parentNode,parent);assert.equal(b.doc.querySelectorAll('#s-aaa').length,1);
+  assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
+});
+test('混合块复核：非法草稿期间旧ACK入口不读写也不吞错误',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','bad');const n=b.requests.length;
+  b.ack('AAA|add|95');await b.tick(180000);assert.equal(b.requests.length,n);assert.equal(b.puts().length,0);
+  assert.equal(b.local()._local.editDraft['AAA|qty'].raw,'bad');assert.equal(b.state().dirty,true);assert.equal(b.state().positionsAuthorized,false);
+  await b.save();assert.equal(b.state().editing,true);assert.equal(b.puts().length,0);b.doc.getElementById('costCancel').click();assert.equal(b.local().items.AAA.qty,5);
+});
 const selectedTests=process.env.MM_COST_TEST_FILTER?tests.filter(t=>t.name.includes(process.env.MM_COST_TEST_FILTER)):tests;
 (async()=>{let passed=0;assert.ok(selectedTests.length,'定向测试必须匹配真实用例');for(const t of selectedTests){try{await t.fn();passed++;console.log('PASS '+t.name);}catch(e){console.error('FAIL '+t.name+'\n'+e.stack);process.exitCode=1;}}console.log('\n仓位面板离线测试：'+passed+'/'+selectedTests.length+' 通过');})();

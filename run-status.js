@@ -580,6 +580,15 @@
     const box = el(id);
     if (!box) return;
     box.textContent = text;
+    if (id === 'runLightTxt') {
+      const match = String(text).match(/^(.*?)(\d{4}-\d{2}-\d{2} \d{2}:\d{2})([\s\S]*)$/);
+      if (match) {
+        const timestamp = document.createElement('span');
+        timestamp.className = 'run-timestamp';
+        timestamp.textContent = match[2];
+        box.replaceChildren(document.createTextNode(match[1]), timestamp, document.createTextNode(match[3]));
+      }
+    }
     box.style.whiteSpace = 'pre-wrap';
     box.dataset.phase = phase;
     box.setAttribute('aria-live', 'polite');

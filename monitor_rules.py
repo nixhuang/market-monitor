@@ -92,8 +92,9 @@ def target_label(t):
 def _consensus_description(text, target):
     """只识别自动共识描述；手填目标及原技术文字不按关键字误删。"""
     return (isinstance(target, dict) and target.get("kind") == "consensus" and isinstance(text, str)
-            and text.startswith(("共识价", "旧共识价", "共识获取失败",
-                                 "今日上穿共识价", "今日跌破共识价", "在共识价")))
+            and (text == target.get("reached_detail")
+                 or text.startswith(("共识价", "旧共识价", "共识获取失败",
+                                     "今日上穿共识价", "今日跌破共识价", "在共识价"))))
 
 
 def _rule_chg_red(al, x):
@@ -273,14 +274,16 @@ class RuleEngine:
         if self._context._pos_num(price) is None or self._context._pos_num(target) is None:
             return []
         tstr = self._context._price_text(target)
-        if self._context._pos_num(prev) is not None and prev < target <= price:
-            return [f"今日上穿{label} {tstr}"]
-        if self._context._pos_num(prev) is not None and prev > target >= price:
-            return [f"今日跌破{label} {tstr}"]
         p, t = Decimal(str(price)), Decimal(str(target))
-        dev = (p / t - 1) * 100
+        space = (t / p - 1) * 100
+        # 达到仍按旧 near_target 的目标价分母；文案幅度独立采用目标价/现价。
+        suffix = "（±3% 内）" if abs(space) <= 3 else ""
+        if self._context._pos_num(prev) is not None and prev < target <= price:
+            return [f"上穿 {tstr} {space:+.1f}%{suffix}"]
+        if self._context._pos_num(prev) is not None and prev > target >= price:
+            return [f"跌破 {tstr} {space:+.1f}%{suffix}"]
         if abs(p - t) * 100 <= Decimal(str(gap_pct)) * t:
-            return [f"在{label} {tstr} ±{gap_pct:g}% 内（偏离 {dev:+.1f}%）"]
+            return [f"现价{'超' if space < 0 else '低'}{tstr} {space:+.1f}%{suffix}"]
         return []
 
 
@@ -351,6 +354,10 @@ class RuleEngine:
                             closes=closes, price=price, prev=prev)
         x.hold = str((cfg or {}).get("hold") or "short").lower()
         x.cost = self._context.cost_rule(cfg or {})   # 成本价：只在位置条上画黄竖线，不参与报灯
+        # 加减价属于常驻描述，不再创建技术信号或红灯；保留真实配置与输出字段。
+        trigger = cfg.get("trigger")
+        x.trig = trigger if _pos_num(trigger) is not None else None
+        x.reduce = self._context.reduce_rule(cfg) if group == "position" else None
         x.chg = (price / prev - 1) * 100 if prev else None
         x.rsi = {period: self._context.calc_rsi(closes, period) for period in self._context.RSI_PERIODS}
         x.dates = data.get("dates") or []
@@ -498,39 +505,6 @@ class RuleEngine:
             al.add("low52", "触及52周新低", "red")
         else:
             al.add("low52", f"仍在52周低位（距低点 +{x.dist_low:.1f}%）", "yellow")
-
-
-    def _rule_add_price(self, al, x):
-        """距加仓触发价。"""
-        trig = x.cfg.get("trigger")
-        x.trig = trig
-        if not trig:
-            return
-        price, target = Decimal(str(x.price)), Decimal(str(trig))
-        distance = price - target
-        tstr = f"{trig:,.2f}"
-        if distance <= 0:
-            al.add("add_price", f"已跌破加仓价 {tstr}", "red")
-        elif distance * 100 <= Decimal(str(self._context.S["trigger_gap_pct"])) * target:
-            gap = distance * 100 / target
-            al.add("add_price", f"距加仓价 {tstr} 还差 {gap:.1f}%", "red")
-
-
-    def _rule_reduce_price(self, al, x):
-        """减仓价：只对「持仓」分组生效，和加仓价对称：
-    现价已涨到减仓价以上（不管高出多少）→ 红；还没到但距离不足 x%（按减仓价算）→ 红。"""
-        x.reduce = self._context.reduce_rule(x.cfg) if x.group == "position" else None
-        if not x.reduce:
-            return
-        price, target = Decimal(str(x.price)), Decimal(str(x.reduce))
-        distance = target - price
-        rstr = f"{x.reduce:,.2f}"
-        if distance <= 0:
-            rgap = -distance * 100 / target
-            al.add("reduce_price", f"已涨到减仓价 {rstr}（高出 {rgap:.1f}%）", "red")
-        elif distance * 100 <= Decimal(str(self._context.S["reduce_gap_pct"])) * target:
-            gap = distance * 100 / target
-            al.add("reduce_price", f"距减仓价 {rstr} 还差 {gap:.1f}%", "red")
 
 
     def _rule_target(self, al, x):
@@ -775,7 +749,7 @@ class RuleEngine:
 
     def analyze_symbol(self, sym, cfg, data, group="technology"):
         """返回等级、信号和详情，分组定义见 groups.json。
-    规则按「红 → 加减仓价/目标价 → 布林 → 黄」的顺序依次跑，顺序也是页面上警示文字的顺序。"""
+    规则按「红 → 目标价 → 布林 → 黄」依次执行；加减价只作常驻描述，不参与灯级。"""
         x = self._context._analysis_context(sym, cfg, data, group)
         al = self._context._Alerts()
         self._context._apply_vol_tier(x)
@@ -784,8 +758,6 @@ class RuleEngine:
         self._context._rule_chg_red(al, x)
         self._context._rule_rsi(al, x)
         self._context._rule_52w_low(al, x)
-        self._context._rule_add_price(al, x)
-        self._context._rule_reduce_price(al, x)
         self._context._rule_target(al, x)
         self._context._rule_boll(al, x)
         self._context._rule_chg_yellow(al, x)

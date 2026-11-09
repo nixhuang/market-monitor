@@ -21,6 +21,38 @@ def _row_signals(row):
     """主表只输出各指标描述，级别通过 data-signal-level 表达，不添加圆点。"""
     return monitor._signals_html(row)
 
+# 终稿将组合分到两列；语义断言读真实节点，不以HTML属性排列或列遍历次序代表事实顺序。
+from html.parser import HTMLParser
+class _SignalParser(HTMLParser):
+    def __init__(self):
+        super().__init__(); self.parts = []; self.active = None; self.depth = 0
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if self.active is not None:
+            self.depth += 1
+        elif 'signal-item' in attrs.get('class', '').split() and 'data-signal-kind' in attrs:
+            self.active = {'attrs': attrs, 'text': ''}; self.depth = 1
+    def handle_endtag(self, tag):
+        if self.active is not None:
+            self.depth -= 1
+            if self.depth == 0:
+                self.parts.append(self.active); self.active = None
+    def handle_data(self, text):
+        if self.active is not None: self.active['text'] += text
+
+def _signal_parts(markup):
+    parser = _SignalParser(); parser.feed(markup); return parser.parts
+
+def _signal_pairs(markup):
+    return {(p['attrs']['data-signal-kind'], p['attrs'].get('data-signal-level', '')) for p in _signal_parts(markup)}
+
+def _signal_text(markup):
+    parts = _signal_parts(markup)
+    combo = [p['text'] for p in parts if p['attrs']['data-signal-kind'] == 'boll_rsi']
+    rest = [p for p in parts if p['attrs']['data-signal-kind'] != 'boll_rsi']
+    rest.sort(key=lambda p: int(p['attrs'].get('data-signal-order', '-1')))
+    return ' / '.join(([' · '.join(combo)] if combo else []) + [p['text'] for p in rest])
+
 # 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
 monitor.S.clear()
 monitor.S.update(monitor.DEFAULT_SETTINGS)
@@ -79,8 +111,9 @@ def check(cond, msg):
     if not cond:
         fail.append(msg)
 
-check('--collapse-bg:rgba(102,134,198,.6)' in re.search(r'#signalCounts\{([^}]+)\}', html)[1]
-      and '#signalCounts .collapse-group{color:#fff}' in html
+check('--collapse-bg:var(--signal-collapse)' in re.search(r'#signalCounts\{([^}]+)\}', html)[1]
+      and '--signal-collapse:rgba(102,134,198,.6)' in html
+      and '#signalCounts .collapse-group{color:var(--white)}' in html
       and 'opacity:' not in re.search(r'\.collapse-group\{([^}]+)\}', html)[1],
       '统计收起背景40%透明，白箭头不使用整体opacity淡化')
 
@@ -98,21 +131,24 @@ check("h1.brand{color:var(--up)}" in html, "站名用上涨绿 --up，不写死�
 check("市场自检" not in html, "旧标题已移除")
 check("数据时间 2026-10-06 收盘（美东交易日）" in html and "本页数据更新" not in html,
       "休市顶部显示行情收盘日，不重复抓取完成时间")
-check("成功 ·2026-10-07 20:40（北京）" in html, "静态成功灯只报「成功 ·日期 时:分」，不带秒")
+check("成功 ·2026-10-07 20:40（北京）" in re.sub(r'<[^>]+>', '', html), "静态成功灯只报「成功 ·日期 时:分」，不带秒")
 check("自动计划：美东周一至五 20:15（北京 " in html, "第二排自动计划")
 check(("夏令时次日 08:15" in html) != ("冬令时次日 09:15" in html), "冬夏令时只出现一个")
 check('id="btnRunNow"' in html and 'id="btnCheckStatus"' in html, "第三排两个按钮都在")
-check('<table class="stk"><colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>' in html
-      and 'class="px-price"' in html and 'class="earn-cell"' in html, "个股表用固定列宽 colgroup，价格/涨跌幅同列，财报独立一栏")
+check('<table class="stk"><colgroup><col class="c-sym"><col class="c-px"><col class="c-target"><col class="c-earn"><col class="c-sig"></colgroup>' in html
+      and 'class="px-price"' in html and 'class="lamp-rule"' not in html
+      and '<td class="earn-cell">' not in html, "个股表用固定列宽 colgroup，价格/涨跌幅同列；第一排＝描边框＋灯色横线（财报独立一栏已撤）")
 _near = item("NTNX", "position", "red", chg=5.2); _near["earnings"] = {"status": "ok", "date": "2026-10-09", "timing": "post", "kind": "expected"}
 _far = item("TEM", "focus", "red", chg=8.0); _far["earnings"] = {"status": "ok", "date": "2026-12-20", "timing": "pre", "kind": "expected"}
 from unittest.mock import patch as _patch
 with _patch.object(monitor, "_bj_today", return_value="2026-10-07"):   # 财报颜色按北京时间日算，固定「今天」
     _html_e = monitor.render(macro, [_near, _far] + [d for d in items if d["symbol"] not in ("NTNX", "TEM")], 10, snapshot=snapshot, dup_hidden=2)
 check('<span class="earn soon"' in _html_e and _html_e.count('<span class="earn soon"') == 1
-      and '<span class="earn">' in _html_e, "D 距北京今天 2 天的财报标黄（earn soon），更远的保持蓝色")
+      and '<span class="earn" data-main=' in _html_e
+      and '<td class="lamp-earn"><span class="earn soon"' in _html_e,
+      "D 距北京今天 2 天的财报标黄（earn soon），更远的保持蓝色；财报包在 .lamp-earn 里叠在灯色横线上方")
 check(' title="' not in _html_e and " title='" not in _html_e, "首页不含任何 title 悬停提示（手机/iPad 无法悬停）")
-check(".earn.soon{color:var(--lamp-yellow,#f0c674)" in _html_e, "财报标黄样式存在")
+check(".earn.soon{color:var(--lamp-yellow)" in _html_e, "财报标黄样式存在")
 # 整页验证冬夏令时北京午夜：同一 D 的时段文字仍不同，但红黄窗口必须完全一致。
 from datetime import date as _date, datetime as _datetime, timedelta as _timedelta
 for _d in ('2026-01-15', '2026-07-15', '2026-10-11', '2027-01-01'):
@@ -129,7 +165,7 @@ for _d in ('2026-01-15', '2026-07-15', '2026-10-11', '2027-01-01'):
                 _page = monitor.render({}, _rows, len(_rows), snapshot={})
             _card = _page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
             _css = {'red': ' urgent', 'yellow': ' soon', '': ''}[_urgency]
-            check(_card.count(f'<span class="earn{_css}">') == 5
+            check(_card.count(f'<span class="earn{_css}" ') == 5
                   and ('无异动 5 只' not in _card if _urgency else '无异动 5 只' in _card)
                   and _card.count('<tr class="green"') == 5
                   and all(_row['level'] == 'green' for _row in _rows),
@@ -145,36 +181,26 @@ for _label, _fragment in (
           _label + ' 不含行灯、两日、美东今天或14天黄旧口径')
     _window_in_rules = all(term in _plain for term in ('前一日', '当日', '后一日', '北京'))
     _window_in_glossary = (_label == '名词解释模板' and all(term in _plain
-                           for term in ('北京今天', '盘前／盘后不平移', '另留昨天红字')))
+                           for term in ('快照北京运行日', '盘前／盘后不平移', '另留前一日红字')))
     check(_window_in_rules or _window_in_glossary,
           _label + ' 保留北京日历窗口正文且不依赖已删除跳转')
 
 _visible_html = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', '', _html_e, flags=re.S | re.I)
 check('行灯' not in _unescape(re.sub(r'<[^>]+>', '', _visible_html)), '全部用户可见说明统一使用报灯，不残留行灯')
 
-_mobile_start = _html_e.index('@media (max-width:600px){') + len('@media (max-width:600px){')
-_mobile_depth = 1
-_mobile_end = _mobile_start
-while _mobile_depth:
-    _char = _html_e[_mobile_end]
-    _mobile_depth += (_char == '{') - (_char == '}')
-    _mobile_end += 1
-_mob_css = _html_e[_mobile_start:_mobile_end - 1]
-check('display:grid' not in _mob_css and 'grid-column' not in _mob_css and 'tr:not(:has' not in _mob_css,
-      "手机端不再把个股行拆成上下三层 grid，保持四栏各自换行")
-check('.stk thead{display:none}' not in _mob_css and '.stk colgroup' not in _mob_css and 'table-layout:auto' not in _mob_css,
-      "手机端保留表头和固定列宽")
-_desktop_css = _html_e.split('@media (max-width:600px){', 1)[0]
-for _label, _css, _widths in (("电脑", _desktop_css, (18, 22, 13, 47)),
-                              ("手机", _mob_css, (21, 19, 19, 41))):
-    check(all('.c-' + col + '{width:' + str(width) + '%}' in _css
-              for col, width in zip(('sym', 'earn', 'px', 'sig'), _widths)),
-          _label + "端列宽固定，左侧40%，价格宽度不变，警示栏加宽")
-    check(sum(_widths) == 100, _label + "端四栏宽度合计100%")
+# 终稿两端共用四区网格，成本和描述独立整行；不再沿用旧四列百分比表格。
+check('grid-template-areas:"sym px tgs earn" "cost cost cost cost" "sig sig sig sig"' in _html_e,
+      '主行四区及成本/描述两整行网格齐全')
+check('grid-template-columns:max-content max-content max-content minmax(0,1fr)' in _html_e,
+      '四区按真实内容分配空间，财报获得剩余宽度')
+check('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))' in _html_e,
+      '两端均保留双列描述网格')
+check('data-layout="tight"' in _html_e and 'max-width:600px' in _html_e,
+      '手机断点与真实量测紧凑状态存在')
 _macro_u = dict(macro, ust10=dict(macro["ust10"], value=4.55, delta_week=0.12, month_ago=4.0, delta_month=0.55))
 _html_u = monitor.render(_macro_u, items, 10, snapshot=snapshot, dup_hidden=2)
-check('id="ust10Ref"' in _html_u and "急升 +55 bp" in _html_u and '<span class="unit">参考</span>' in _html_u and "不计入综合灯" not in _html_u
-      and '<td class="num dim">+12<span class="unit">周变化 bp</span></td>' in _html_u, "10Y美债参考行：一个月急升标黄，周变化按 bp 显示")
+check('id="ust10Ref"' in _html_u and "急升 +55 bp" in _html_u and '<span class="unit">参考</span>' not in _html_u and "不计入综合灯" not in _html_u
+      and '<td class="num dim">+12<span class="unit">周 bp</span></td>' in _html_u, "10Y美债参考行：一个月急升标黄，周变化按 bp 显示")
 check('id="ust10Ref"' in html and "无数据或已过期" in html.split('id="ust10Ref"')[1].split("</tr>")[0],
       "10Y美债缺一个月数据时显示无数据")
 _macro_b = dict(macro, breadth={"ok": True, "name": "上涨参与度", "date": "2026-10-06", "value": 47.0,
@@ -188,11 +214,16 @@ check("47.0%<span class=\"unit\">长均线</span>" in _html_b
       "上涨参与度短长命名（去掉「上宏观」前缀），沿用固定宏观口径及原数据值")
 # ===== 2026-10-30 市场风险表：极致压缩 + 文案删减 + 新增纳斯达克指数参考行 =====
 _mcard = lambda h: h.split('id="macroCard"', 1)[1].split('</table>', 1)[0]
-check('#macroCard td{padding:2px 8px;line-height:1.35}' in monitor.PAGE_CSS
-      and '#macroCard tr.mh td{padding:2px 8px}' in monitor.PAGE_CSS
-      and '#macroCard td .unit{line-height:1.15}' in monitor.PAGE_CSS
-      and '@media(max-width:600px){#macroCard td,#macroCard tr.mh td{padding:2px 6px}}' in monitor.PAGE_CSS,
-      "市场风险表上下留白压到 2px（正文行高 1.35、小字 1.15）")
+check(':is(#macroCard, .macro-scope) td{' in monitor.PAGE_CSS
+      and 'padding-top:3px;padding-bottom:3px' in monitor.PAGE_CSS
+      and ':is(#macroCard, .macro-scope) td .unit{font-size:var(--macro-aux);line-height:1.15}' in monitor.PAGE_CSS,
+      "市场风险展开体macro-scope采用终稿统一字号及留白")
+# 第十三轮：td.sig 重排成「首排容器 + 两个独立列容器」的守门断言（检查 CSS/JS 真源，不依赖 Temp/outputs）
+check('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))' in monitor.PAGE_CSS
+      and 'data-signal-flow' in monitor.PAGE_INTERACTION_JS
+      and "document.addEventListener('cost:painted'" in monitor.PAGE_INTERACTION_JS
+      and 'data-reflowed' not in monitor.PAGE_INTERACTION_JS,
+      "终稿双列使用静态sig-cols和唯一cost:painted调度，不留旧后处理状态")
 check('截至' not in _mcard(html) and '较近一年高点' not in _mcard(html) and '上宏观' not in _mcard(html)
       and 'CLmain' not in _mcard(html) and 'oil-explanation' not in _mcard(html),
       "市场风险表删掉「截至／较近一年高点／上宏观／CLmain · 参考／原油解释句」")
@@ -203,9 +234,10 @@ _macro_n = dict(macro, nasdaq={"ok": True, "name": "纳斯达克指数", "value"
                                "source": "Yahoo ^IXIC"})
 _html_n = monitor.render(_macro_n, items, 10, snapshot=snapshot, dup_hidden=2)
 check('<tr class="green" id="nasdaqRef">' in _html_n and '23,918.44' in _html_n
-      and '<td class="num dim">+312<span class="unit">周变化 +1.3%</span></td>' in _html_n
+      and '<td class="num dim">+312<span class="unit">周 <span class="chg-num">+1.3%</span></span></td>' in _html_n
       and '<td>一周平稳</td>' in _html_n
-      and '纳斯达克指数<span class="unit">参考</span>' in _html_n,
+      and '纳斯达克指数<span class="unit">2026-10-06</span>' in _html_n
+      and '<span class="unit">参考</span>' not in _html_n,
       "纳斯达克指数参考行：点位两位小数、周变化＝点差＋百分比小字、上涨给「一周平稳」")
 # 一周下跌分档：>=2% 黄「一周走弱」、>=4% 红「一周急跌」；上涨不出警
 _nrow = lambda nd: re.search(r'<tr class="(\w+)" id="nasdaqRef".*?</tr>',
@@ -227,8 +259,8 @@ check(monitor.macro_status("nasdaq", {"ok": True, "value": 23918.44, "delta_week
 _macro_s = {k: (dict(v) if isinstance(v, dict) else v) for k, v in macro.items()}
 _macro_s["sp500"] = dict(macro["sp500"], value=6800.0, week_ago=6700.0, delta_week=100.0)
 _html_s = monitor.render(_macro_s, items, 10, snapshot=snapshot, dup_hidden=2)
-check('<td class="num dim">+100<span class="unit">周变化 +1.5%</span></td>' in _html_s
-      and '<td class="num dim">—<span class="unit">周变化</span></td>' in _html_s,
+check('<td class="num dim">+100<span class="unit">周 <span class="chg-num">+1.5%</span></span></td>' in _html_s
+      and '<td class="num dim">—<span class="unit">周</span></td>' in _html_s,
       "标普500 显示一周点差＋百分比；VIX／参与度等不看周变化的仍留「—」")
 # 参考行不能影响综合灯与「有效指标 N/5」：它不在 RISK_INDICATORS 里
 _vc = lambda h: re.search(r'有效指标 (\d+)/5', h).group(1)
@@ -243,7 +275,7 @@ for _bad in ({"ok": True, "name": "纳斯达克指数", "value": float("nan"), "
 # 2026-10-19：顶栏不再重复念灯级计数（统计卡里已有一份），只保留时间＋数据量；「缺失 N」是告警要留
 # 2026-10-19：一切正常时只报完成时间；「N 项数据已更新」只在有缺失/不支持代码时才写
 check("红2 黄2 绿4" not in html and "10 项数据已更新" not in html
-      and "成功 ·2026-10-07 20:40（北京） · 缺失 2" in html,
+      and "成功 ·2026-10-07 20:40（北京） · 缺失 2" in re.sub(r'<[^>]+>', '', html),
       "运行灯只报完成时间与缺失，正常时不写数据量与灯级计数")
 check('id="runLight" data-phase="ok"' in html, "运行灯初始为绿")
 check('id="ruleLight" data-phase="idle"' in html and 'id="ruleLightTxt"' in html,
@@ -255,7 +287,7 @@ check('id="checkResult"' in html and html.index('id="checkResult"')<html.index('
       "核对结果面板位于按钮附近，不在页尾")
 
 # 分组
-check(html.count('class="card group-card"') == 14, "十四个分类均可折叠")
+check(len(re.findall(r'<details[^>]*class="[^"]*group-card[^"]*"[^>]*id="group_', html)) == 14, "十四个分类均可折叠")
 check('id="group_positions">' in html and 'id="group_focus">' in html and ' open>' not in html.split('id="macroCard"', 1)[1][:2], "持仓、重点、市场风险默认折叠")
 pos_title = html.split('id="group_positions"', 1)[1].split('</summary>', 1)[0]
 check('class="stat-badge red"' in pos_title and 'class="stat-badge missing"' in pos_title and
@@ -267,10 +299,10 @@ check('.group-card>summary .group-stats{margin-left:0' in html and
 check('window.MM_SETTINGS={"signal_single_open":1}' in html and
       'window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0' in html,
       "设置里的「灯详情只留一个打开」注入页面，默认开")
-check('box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-radius:999px' in html
+check('box-sizing:border-box;width:24px;min-width:24px;height:18px;padding:0 1px;border-radius:999px' in html
       and 'border:1.5px solid var(--dim);background:transparent' in html
       and '.stat-badge.red{border-color:var(--red)}' in html,
-      "灯圈改成空心描边圆 17px，数字白色、字号仍是 12.5px")
+      "终稿空心灯圈双端24×18px，保留1.5px语义描边和白色数字")
 check('id="group_technology"' in html and 'IT · AI (5)' in html, "IT 分类展示计数")
 check('其他关注' not in html, "旧其他关注分类已移除")
 check("<h2>个股</h2>" not in html and "<h2>ETF 基金</h2>" not in html, "个股与 ETF 不再分区")
@@ -301,7 +333,7 @@ snap_live = dict(snap2, actual_dates={"min":"2026-10-07", "max":"2026-10-07"})
 check("数据时间 2026-10-07 23:19:00（盘中，北京）" in monitor.render(macro, items, 10, snapshot=snap_live),
       "当前交易日盘中数据才显示时间点")
 snap_utc = dict(snapshot, finished_at_bj="", finished_at="2026-10-07T12:40:28Z")
-check("成功 ·2026-10-07 20:40（北京）" in monitor.render(macro, items, 10, snapshot=snap_utc),
+check("成功 ·2026-10-07 20:40（北京）" in re.sub(r'<[^>]+>', '', monitor.render(macro, items, 10, snapshot=snap_utc)),
       "UTC抓取完成时间正确转为北京时间（只到分钟），行情时间仍为收盘日")
 snap_no_finish = {k:v for k,v in snapshot.items() if k not in ('finished_at', 'finished_at_bj')}
 check("成功 ·未记录（北京）" in monitor.render(macro, items, 10, snapshot=snap_no_finish),
@@ -370,10 +402,10 @@ _bad = [n for n in _os.listdir(_icons_dir) if n.endswith('.png') and _png_color_
 check(not _bad, "所有图标都必须是无 alpha 的真彩 PNG，调色板/透明 PNG 会让 iOS 主屏图标退回字母：" + ",".join(_bad))
 check(sum(_os.path.getsize(_os.path.join(_root, 'icons', n)) for n in _os.listdir(_os.path.join(_root, 'icons'))) < 400 * 1024, "图标总体积小于 400KB")
 _cost_css = open(_os.path.join(_root, 'cost_panel.css'), encoding='utf-8').read()
-check('.quiet-list{margin:8px 0;border-top:1px solid #46525f;border-bottom:1px solid #46525f}' in monitor.PAGE_CSS,
+check('.quiet-list{margin:8px 0;border-top:1px solid var(--quiet-rule);border-bottom:1px solid var(--quiet-rule)}' in monitor.PAGE_CSS,
       "「无异动 N 只」整体作为可点开的条目，上下各有一条细横线")
-check('.cost-manage .blk-pnl-fold{border-top-color:rgba(143,184,240,.6);border-bottom-color:rgba(143,184,240,.6)}' in _cost_css,
-      "「当日盈亏贡献」作为可点开的条目，上下边框提亮为明确的横线")
+check('id="dayPnlCard"' in html and 'class="dual-body macro-scope"' in html and 'data-owner="day"' in html,
+      "当日盈亏卡与展开清单使用终稿静态dualRow骨架")
 check('.quiet-list .stk tr[id^="s-"]' not in _cost_css and 'margin-bottom:-1px' not in _cost_css,
       "细框不再加在清单内部的股票行／盈亏贡献的每一行上（那是条目内部，不是可展开范围）")
 check('<div class="foot">' not in html5 and 'href="#marketRiskRules"' not in html5
@@ -586,8 +618,8 @@ for _side in ('add', 'cut', 'both'):
         _x = monitor.SimpleNamespace(cfg={'trigger': 100 if _side != 'cut' else None,
                                          'reduce': 100 if _side != 'add' else None},
                                      price=100, group='position')
-        monitor._rule_add_price(_al, _x)
-        monitor._rule_reduce_price(_al, _x)
+        # 终稿价位常驻描述不再调用或生成加减价技术灯。
+        _x.trig, _x.reduce = _x.cfg['trigger'], _x.cfg['reduce']
         if _extra:
             _al.add('vol_ratio', '量比 5.0×（2026-10-26）', _extra)
         _row = item('BASE' + _side.upper() + str(_extra), 'position', _al.level, chg=0)
@@ -596,16 +628,16 @@ for _side in ('add', 'cut', 'both'):
         _before = _copy.deepcopy(_row)
         _fragment = monitor._stock_row(_row, {})
         _attrs = _fragment.split('><td', 1)[0]
-        check('data-base-level="' + (_extra or 'green') + '"' in _attrs
-              and 'class="red pur pur-hit"' in _attrs,
-              _side + str(_extra) + '发布仍红，基础灯独立且紫状态保留')
+        check('data-base-level=' not in _attrs
+              and 'class="' + (_extra or 'green') + ' pur pur-hit"' in _attrs,
+              _side + str(_extra) + '价位不造红，技术灯独立且紫状态保留')
         check(_row == _before, _side + str(_extra) + '渲染不改判灯/marks/目标事实')
 for _level, _marks in (('red', []), ('red', [('add_price', 'yellow')]),
                        ('yellow', []), ('green', [('boll', 'gray')]), ('gray', [('add_price', 'red')])):
     _row = item('BASELEGACY', 'position', _level, chg=0)
     _row.update(signal_marks=_marks, signals=[], trigger=100)
-    check('data-base-level="' + _level + '"' in monitor._stock_row(_row, {}),
-          _level + repr(_marks) + '无来源旧灯和缺失灰不能凭已读猜测降绿')
+    check('class="' + _level + '"' in monitor._stock_row(_row, {}),
+          _level + repr(_marks) + '无来源旧灯和缺失灰不能凭价位猜测降绿')
 
 # 目标/共识40/90：状态与主表折叠分别验证，旧基本面及财报三日回归保持不动。
 _target_cases = []
@@ -670,7 +702,7 @@ check(bool(re.search(r'空间\s*5\s*只[\s　]*达到\s*2\s*只', _target_panel)
       and not re.search(r'紫灯\s*\d+\s*只', _target_panel), '空间/达到双计数标题替代旧紫灯标题')
 check(_target_panel.count('<ul') == 2 and _target_panel.count('class="signal-name-lamp ') == 7
       and 'signal-member-icon' not in _target_panel
-      and '今日跌破共识价 190' in _target_panel and _target_panel.count('href="#s-tboth"') == 2,
+      and '跌破 190' in _target_panel and _target_panel.count('href="#s-tboth"') == 2,
       '展开两段竖条名单保留原紫色/紫红、具体达到方向及重叠跳转')
 check('data-kind="target_purple"' in _target_page and '>目标价</button>' not in _target_page
       and '>共识价</button>' not in _target_page, '底部union按钮保留而目标红黄表行移除')
@@ -682,42 +714,52 @@ for _state in ('space', 'high', 'hit'):
           and '--pstripe' not in monitor.PAGE_CSS,
           _state + '主行及52周续行均不再绘制右紫条')
 # 2026-10-30：红灯条宽度跟黄灯条对齐（6 → 4px），左内边距保持 14px 不动（文字左缘不变）。
+# 终稿：主表左灯条固定双端几何，不和墨迹测量分区线共用变量，也不延伸至52周行；
+# 统计面板名单仍用全局 tr.red/yellow/green td:first-child 的 inset 灯条。
 for _level, _width in (('red', 4), ('yellow', 4), ('green', 2)):
-    check('tr.' + _level + ' td:first-child{box-shadow:inset ' + str(_width) + 'px 0 0 var(--' + _level in monitor.PAGE_CSS
-          and 'tr.' + _level + '+tr.range52-row>td{--lc:var(--' + _level + ');--lw:' + str(_width) + 'px}' in monitor.PAGE_CSS,
-          _level + '左条及52周续接原宽度保持' + str(_width) + 'px')
+    check('table.stk tr.' + _level + '[data-symbol]{--lamp-line:var(--' + _level + ')}' in monitor.PAGE_CSS
+          and 'tr.' + _level + '+tr.range52-row>td{--lc' not in monitor.PAGE_CSS
+          and 'table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:9.5px;width:2px;height:41.7px;' in monitor.PAGE_CSS
+          and 'table.stk tr[data-symbol]::before{top:7px;height:42.7px}' in monitor.PAGE_CSS
+          and 'top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line)' in monitor.PAGE_CSS,
+          _level + '主表左灯条保留固定双端几何，与分区线独立且不延伸52周行')
 # 2026-10-30：成本价搬到「代码 + 备注名」下面那一排，跟加／减仓价胶囊共用 .lvs 容器，
 # 只出文字不做胶囊 —— 规则里不能出现 border / border-radius，否则又变成一颗胶囊。
 _cost_inline = re.search(r'\.cost-inline\{([^}]*)\}', monitor.PAGE_CSS)
-check(_cost_inline is not None and 'border' not in _cost_inline[1]
-      and 'font-size:11.5px' in _cost_inline[1] and 'line-height:17px' in _cost_inline[1],
-      '成本价在代码名称下面那一排且不做胶囊（纯文字、比胶囊大0.5px、同行高17px）')
-check(_cost_inline is not None and 'color:var(--text)' in _cost_inline[1]
-      and 'text-decoration:underline' in _cost_inline[1]
-      and 'var(--dim)' not in _cost_inline[1],
-      '成本价是正文白色 + 下划线（不再用 dim 灰）')
+check(_cost_inline is None and '.ep-grid' in _cost_css,
+      '成本价只在终稿四列编辑器维护，不恢复主表旧cost-inline')
+check('table.stk tr[data-symbol]>td.cost-line{' in monitor.PAGE_CSS
+      and '[data-pnl="loss"]{background:var(--pnl-loss-bg)}' in monitor.PAGE_CSS
+      and '[data-pnl="gain"]{background:var(--pnl-gain-bg)}' in monitor.PAGE_CSS,
+      '主表盈亏淡底使用独立cost-line，不改变基础灯级')
 from urllib.parse import unquote as _unquote
 import xml.etree.ElementTree as _ET
-_target_dash_rule = re.search(r'\.lvtag\.tgt\.low::after,\.lvtag\.tgt\.bad::after\{([^}]*)\}', monitor.PAGE_CSS)
+# 2026-11-03：low（未达到任何紫灯标准）只留紫字、不画虚线外框，虚线只留给 bad（获取失败）。
+_target_dash_rule = re.search(r'\.lvtag\.tgt\.bad::after\{([^}]*)\}', monitor.PAGE_CSS)
 _target_dash_url = re.search(r'url\("(data:image/svg\+xml,[^"]+)"\)', _target_dash_rule[1]) if _target_dash_rule else None
 _target_dash_rect = (_ET.fromstring(_unquote(_target_dash_url[1].split(',', 1)[1]))
                      .find('{http://www.w3.org/2000/svg}rect')) if _target_dash_url else None
 check(_target_dash_rect is not None and all(_target_dash_rect.get(key) == value for key, value in (
           ('stroke', '#8b93a1'), ('stroke-width', '1'), ('stroke-dasharray', '3 5'), ('rx', '4'), ('fill', 'none')))
       and 'inset:-1px' in _target_dash_rule[1] and 'pointer-events:none' in _target_dash_rule[1],
-      'low/bad共用1px灰色SVG短线3px间隔5px的4px圆角边框')
-check(all('border:1px solid transparent' in re.search(r'\.lvtag\.tgt\.' + state + r'\{([^}]*)\}', monitor.PAGE_CSS)[1]
-          for state in ('low', 'bad'))
-      and not re.search(r'\.lvtag\.tgt\.bad::after[^}]*content:none', monitor.PAGE_CSS)
-      and '.lvtag.tgt.hit::after{content:none}' in monitor.PAGE_CSS,
-      '灰胶囊保留1px占位且SVG虚线不改变达到胶囊')
+      "bad（获取失败）保留1px灰色SVG短线3px间隔5px的4px圆角边框；low 已改为无框（见下条）",)
+_target_base = re.search(r'\.lvtag\.tgt\{([^}]*)\}', monitor.PAGE_CSS)
+_bad_after = re.search(r'\.lvtag\.tgt\.bad::after\{([^}]*)\}', monitor.PAGE_CSS)
+check(_target_base is not None and 'border:0' in _target_base[1]
+      and 'background:transparent' in _target_base[1] and 'var(--purple)' in _target_base[1]
+      and not re.search(r'\.tgt\.low::after\{[^}]*background:url', monitor.PAGE_CSS),
+      '终稿low继承无框紫字，不再需要历史覆盖规则')
+check(_bad_after is not None and 'background:url(' in _bad_after[1]
+      and 'pointer-events:none' in _bad_after[1]
+      and 'td.tgs:has(.tgt.hit)::before' in monitor.PAGE_CSS,
+      '终稿只有失败目标用SVG虚线，达到目标由独立整区伪元素绘制')
 
 # 共识只在描述列隐藏；完整信号、空间/达到统计与原胶囊仍保留。
 for _row in _target_rows:
     _body = re.search(r'<tr\b[^>]*\bid="' + re.escape(monitor._stock_anchor_id(_row['symbol']))
                       + r'"[^>]*>(.*?)</tr>', _target_page, re.S)[1]
-    check('<td class="sig">—</td>' in _body,
-          _row['symbol'] + '仅自动共识时描述列保留破折号占位')
+    check('<td class="sig"></td>' in _body and 'data-signal-kind=' not in _body,
+          _row['symbol'] + '仅自动共识时描述列保留静态空列，不伪造信号')
 _description_rows = _copy.deepcopy(_target_rows)
 _technical_texts = ['触及布林下轨▼ → 黄', 'RSI 三条超卖', '贴近200日均线']
 for _row in _description_rows:
@@ -748,7 +790,8 @@ _legacy_consensus.update(target={'kind': 'consensus', 'price': 250, 'failed': Tr
 _legacy_before = _copy.deepcopy(_legacy_consensus)
 _legacy_html = monitor._stock_row(_legacy_consensus, {})
 check(re.search(r'<td class="sig">(.*?)</td>', _legacy_html, re.S)[1] == _expected_sig
-      and re.search(r'<td class="sym">(.*?)</td>', _legacy_html, re.S)[1].startswith('TFAILOLD')
+      and re.search(r'<td class="sym">(?:<span class="sym-box \w+">)?(.*?)</td>', _legacy_html, re.S)[1]
+      .startswith('TFAILOLD')
       and 'signal-dot' not in _legacy_html and monitor._signal_lamps(_legacy_consensus) == ''
       and 'lvtag tgt bad' in _legacy_html and 'pur-high' not in _legacy_html
       and 'pur-hit' not in _legacy_html,
@@ -776,8 +819,8 @@ with _patch.object(monitor, 'global_dca', return_value=None):
     _description_page = monitor.render({}, _description_rows, len(_description_rows), snapshot=_description_snapshot)
 
 _long_hint = monitor._stock_row({**item('LONGHINT', 'position', 'green'), 'hold': 'long'}, {})
-check('技术预警按《预警规则》执行' in _long_hint and '不看一般过热' not in _long_hint,
-      '长持仓提示只解释持有周期，不再宣称屏蔽普通过热')
+check('data-symbol="LONGHINT"' in _long_hint and '不看一般过热' not in _long_hint and '测试信号' in _long_hint,
+      '长持仓行保留真实信号，不恢复已删除的周期提示或屏蔽普通过热声明')
 check('常规交易日等效分钟（已开盘分钟÷当日全日分钟×390）' in _description_page
       and '半日市按当日实际交易时长折算' in _description_page,
       '量比说明区分实际分钟与半日市等效分钟')
@@ -786,7 +829,7 @@ check('常规交易日等效分钟（已开盘分钟÷当日全日分钟×390）
 from page_assets import COST_PANEL_HTML as _cost_shell
 check(_description_page.count(_cost_shell) == 1
       and _description_page.index(_cost_shell) < _description_page.index('id="signalCounts"')
-      and _description_page.index(_cost_shell) < _description_page.index('var REAL='),
+      and _description_page.index(_cost_shell) < re.search(r'var\s+REAL\s*=', _description_page).start(),
       '刷新首屏仓位骨架在统计和页尾脚本之前，且只输出一次')
 # 2026-11-02：「编辑」(#costEditBtn) 从骨架搬到顶栏 .runbar（monitor 输出，「刷新」右边），
 # 骨架本身不再含这颗按钮；页面里它仍必须是「绑定前禁用」。
@@ -826,8 +869,10 @@ check({r['symbol'] for r in _description_snapshot['target_overlays']['space']}
       '隐藏描述后空间6、达到3名单与重叠精确保持')
 _description_panel = _description_page.split('class="text-only target-purple"', 1)[1].split('</details>', 1)[0]
 check(bool(re.search(r'空间\s*6\s*只[\s　]*达到\s*3\s*只', _description_panel))
-      and '共识价 250，空间 +150.0%' in _description_panel
-      and '今日跌破共识价 190' in _description_panel
+      and '250，+150.0%' in re.sub(r'<[^>]+>', '', _description_panel)
+      and '<span class="percent-change pos">+150.0%</span>' in _description_panel
+      and '共识价 250，空间' not in re.sub(r'<[^>]+>', '', _description_panel)
+      and '跌破 190' in _description_panel
       and _description_panel.count('href="#s-tboth"') == 2,
       '统计区共识详情与两段重叠跳转不丢失')
 _both = next(row for row in _description_rows if row['symbol'] == 'TBOTH')
@@ -926,8 +971,7 @@ for _row, _side in _oversold_rows:
     if _color == 'yellow':
         _sig = re.search(r'<td class="sig">(.*?)</td>', _fragment, re.S)[1]
         _sig_plain = _unescape(re.sub(r'<[^>]+>', '', _sig))
-        check(re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', _sig)
-              == [('boll_rsi', 'yellow')]
+        check(_signal_pairs(_sig) == {('boll_rsi', 'yellow')}
               and all(term in _sig_plain for term in ('布林上轨▲', 'RSI 3条 ↓超卖'))
               and '布林 + RSI → 黄' in _row['signals']
               and '布林 + RSI → 红' not in _row['signals'],
@@ -971,7 +1015,7 @@ check('signal-dot' not in monitor.PAGE_CSS and 'signal-dot' not in monitor.PAGE_
       and '--lamp-size:14px' in monitor.PAGE_CSS
       and 'display:inline list-item' not in monitor.PAGE_CSS,
       '多选删除全部圆点CSS与创建节点逻辑，其他灯共用字号和Safari兼容性不变')
-_filter_palette = {'red': 'var(--lamp-red,#ff8580)', 'yellow': 'var(--lamp-yellow,#f0c674)', 'gray': 'var(--text)',
+_filter_palette = {'red': 'var(--lamp-red)', 'yellow': 'var(--lamp-yellow)', 'gray': 'var(--text)',
                    'purple': 'var(--purple)', 'green': 'var(--green)'}
 for _level, _color in _filter_palette.items():
     _selector = f'#signalCounts .signal-filter-condition[data-signal-level="{_level}"]'
@@ -999,14 +1043,13 @@ check((_coexist_snap['summary']['red'], _coexist_snap['summary']['yellow']) == (
 for _row, _color, _kind in zip(_coexist_rows, ('yellow', 'red', 'yellow'), ('rsi', 'rsi', 'boll_rsi')):
     _classes, _body = rendered_stock_row(_coexist_page, _row, not _row.get('foldable', True))
     _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
-    _sym = re.search(r'<td class="sym">(.*?)</td>', _body, re.S)[1]
+    _sym = re.search(r'<td class="sym">(?:<span class="sym-box \w+">)?(.*?)</td>', _body, re.S)[1]
     check(_classes == [_color] and 'signal-dot' not in _body
           and _sym.startswith(_row['symbol'])
           and re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', _sig)
           == [('chg', _color)] + ([(_kind, 'gray')] if _row['symbol'] == 'STXR' else [])
-          and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                         r'(?: data-signal-level="([^"]*)")?>', _sig)
-          == [('chg', _color), (_kind, 'gray' if _row['symbol'] == 'STXR' else '')],
+          and _signal_pairs(_sig)
+          == {('chg', _color), (_kind, 'gray' if _row['symbol'] == 'STXR' else '')},
           _row['symbol'] + '主表独立红黄保留，合法技术灰白字，无灯技术仅文字')
     check([m['l'] for m in _coexist_data.get(_kind, {}).get('members', []) if m['s'] == _row['symbol']]
           == ([_color] if _row['symbol'] == 'STXR' else [])
@@ -1031,10 +1074,9 @@ for _level, _rsi in ((None, None), ('yellow', 'RSI 2条 ↓超卖（≤35）'),
     check(_technical['kind'] == ('boll_rsi' if _rsi else 'boll')
           and _technical['level'] == (_level or 'gray')
           and _plain + '，' + _tail in _technical['texts']
-          and 'signal-dot' not in _html_tail and _html_tail.count('signal-separator') == 1
-          and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                         r'(?: data-signal-level="([^"]*)")?>', _html_tail)
-          == [('boll_rsi' if _rsi else 'boll', _level or 'gray'), ('vol_ratio', '')]
+          and 'signal-dot' not in _html_tail and _html_tail.count('signal-separator') == 0
+          and _signal_pairs(_html_tail)
+          == {('boll_rsi' if _rsi else 'boll', _level or 'gray'), ('vol_ratio', '')}
           and _groups_tail[-1]['kind'] == 'vol_ratio' and _groups_tail[-1]['level'] is None,
           str(_level) + '连续天数留同一指标一次级别，斜线后独立量比无灯灰字')
     check(_tail_row == _before_tail, '尾句恢复不改原始signals/marks')
@@ -1066,10 +1108,25 @@ for _kind, _signals, _marks, _expected in (
     _copy_row.update(signals=_signals, signal_marks=_marks, ma_settings={'ma_short': 60, 'ma_long': 120})
     _copy_before = _copy.deepcopy(_copy_row)
     _copy_html = _row_signals(_copy_row)
-    _copy_plain = _unescape(re.sub(r'<[^>]+>', '', _copy_html))
-    check(_copy_plain == _expected and f'data-signal-kind="{_kind}"' in _copy_html,
+    _copy_plain = _signal_text(_copy_html)
+    check(_copy_plain == _expected.replace('连续第', '第').replace('（其中', '（') and f'data-signal-kind="{_kind}"' in _copy_html,
           _kind + '个股描述直接展示完整事实，不自动添加指标名称')
     check(_copy_row == _copy_before, _kind + '去标签不修改原始事实、判灯及配置')
+
+# 2026-11-04 晚：布林+RSI 拆成左（布林）／右（RSI）两个独立换行的区域，
+# 但外层条目数、data-signal-kind/level、以及去标签后的事实文本必须逐字不变。
+_zone_row = item('ZONESPLIT', 'technology', 'yellow')
+_zone_row.update(signals=['跌破布林下轨▼（盘中触及 66.33）', '连续第4日贴近下轨（其中2日穿越）',
+                          'RSI 1条 ↓超卖（≤35）'], signal_marks=[])
+_zone_html = _row_signals(_zone_row)
+check(_zone_html.count('class="signal-item"') == 2
+      and 'class="sig-zone" data-side="boll"' in _zone_html
+      and 'class="sig-zone" data-side="rsi"' in _zone_html
+      and 'class="sig-sep"' not in _zone_html
+      and 'data-signal-kind="boll_rsi"' in _zone_html
+      and _signal_text(_zone_html)
+      == '盘中跌破布林下轨▼后收回，第4日贴近下轨（2日穿越） · RSI 1条 ↓超卖',
+      '组合条件分左右两区，事实文本与外层条目契约不变')
 
 # 描述红黄灰无紫稳定排序并安全转义，均线只投影展示，原数字事实与marks保留。
 _order_row = item('ORDERESCAPE', 'technology', 'red')
@@ -1093,13 +1150,13 @@ with _patch.dict(monitor.S, {'ma_short': 120, 'ma_long': 60}), \
     _order_page = monitor.render({}, [_order_row, _order_no_gray], 2, snapshot=_order_snap)
 _order_body = re.search(r'<tr\b[^>]*\bid="s-orderescape"[^>]*>(.*?)</tr>', _order_page, re.S)[1]
 _order_sig = re.search(r'<td class="sig">(.*?)</td>', _order_body, re.S)[1]
-check(re.findall(r'data-signal-kind="([^"]*)"', _order_sig)
-      == ['chg', 'amp', 'add_price', 'ma', 'vol_ratio', 'rsi', '', '']
+check(_signal_pairs(_order_sig) == {('chg', 'red'), ('amp', 'yellow'), ('ma', 'yellow'),
+          ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', '')}
       and 'signal-dot' not in _order_body
-      and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                     r'(?: data-signal-level="([^"]*)")?(?: data-signal-role="[^"]*")?>', _order_sig)
-      == [('chg', 'red'), ('amp', 'yellow'), ('add_price', 'red'), ('ma', 'yellow'),
-          ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', ''), ('', '')]
+      and 'class="lvtag add signal-item" data-lv="90" data-near="0"' in _order_sig
+      and _order_sig.count('data-signal-kind="ma"') == 1
+      and 'data-signal-role="primary" data-signal-flow="auto" data-signal-order="0"' in _order_sig
+      and 'data-signal-role="supplement" data-signal-flow="auto" data-signal-order="1"' in _order_sig
       and 'data-signal-kind="amp" data-signal-level="yellow" data-signal-role="supplement"' in _order_sig,
       '全页零圆点，价格补充紧跟主要提醒，其余描述稳定排序且均线合并一次级别')
 check(all(text in _order_sig for text in ('&lt;img onerror=x&gt;', '&amp; 保留'))
@@ -1133,10 +1190,9 @@ check(_order_row == _order_before and _order_snap == _order_snap_before
 _order_control_classes, _order_control_body = rendered_stock_row(_order_page, _order_no_gray, True)
 _order_control_sig = re.search(r'<td class="sig">(.*?)</td>', _order_control_body, re.S)[1]
 check(_order_control_classes[0] == 'red'
-      and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                     r'(?: data-signal-level="([^"]*)")?(?: data-signal-role="[^"]*")?>', _order_control_sig)
-      == [('chg', 'red'), ('amp', 'yellow'), ('add_price', 'red'), ('ma', 'yellow'),
-          ('vol_ratio', 'yellow'), ('', ''), ('rsi', ''), ('', '')]
+      and _signal_pairs(_order_control_sig)
+      == {('chg', 'red'), ('amp', 'yellow'), ('ma', 'yellow'),
+          ('vol_ratio', 'yellow'), ('', ''), ('rsi', '')}
       and 'RSI 2条' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig))
       and '↑超买' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig)),
       '原排序2high控制仅文字，独立红黄紫灯及无灯首次出现排序不变')
@@ -1173,8 +1229,7 @@ for _row, _direction in _focus_text_rows:
     _focus_only = _row['group'] == 'focus'
     _expected_levels = ([('chg', 'red')] if _row['chg'] else []) + [('boll_rsi', 'gray' if _row['group'] == 'position' else '')]
     check(_classes == ['red' if _row['chg'] else 'green'] and _row['foldable'] == (not _keep)
-          and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                         r'(?: data-signal-level="([^"]*)")?>', _sig) == _expected_levels
+      and _signal_pairs(_sig) == set(_expected_levels)
           and '布林上轨▲' in _unescape(re.sub(r'<[^>]+>', '', _sig))
           and 'RSI 1条 ' + _direction in _unescape(re.sub(r'<[^>]+>', '', _sig)),
           _row['symbol'] + '原方向事实保留，持仓技术灰白字、重点/其他仅文字灰字且不继承涨跌红')
@@ -1274,20 +1329,20 @@ with _patch.object(monitor, 'global_dca', return_value=None):
     _four_page = monitor.render({}, _four_items, len(_four_items), snapshot=_four_snap)
 _four_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _four_page)[1]))
 _four_gray = {row['symbol'] for row, _, level, _, _ in _four_cases if level == 'gray'}
-_four_quiet_tables = re.findall(r'<details class="quiet-list">.*?<table class="stk">(.*?)</table>', _four_page, re.S)
+_four_quiet_tables = re.findall(r'<details class="quiet-list"(?: open)?>.*?<table class="stk">(.*?)</table>', _four_page, re.S)
 _four_quiet_html = ''.join(_four_quiet_tables)
 for _row, _kind, _technical_level, _foldable, _overall in _four_cases:
     _classes, _body = rendered_stock_row(_four_page, _row, not _foldable)
     _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
     _levels = re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                        r'(?: data-signal-level="([^"]*)")?>', _sig)
+                        r'(?: data-signal-level="([^"]*)")?[^>]*>', _sig)
     # 合成输入为0/3/6%，重算后有浮点误差；同色黄灯保留先出现的技术描述，涨跌红优先。
     # 其他组零条上轨是无提示，不应生成空级布林描述；有RSI事实的无灯组合仍留文字。
     _expected = [] if _kind == 'boll' and not _technical_level else [(_kind, _technical_level)]
     _expected += [('chg', 'red' if round(_row['chg']) == 6 else 'yellow')] if _row['chg'] else []
     _expected.sort(key=lambda pair: ({'red': 0, 'yellow': 1, 'gray': 2, '': 3}[pair[1]],
                                      0 if pair == ('chg', 'red') else 1))
-    check(_classes == [_overall] and _row['foldable'] == _foldable and _levels == _expected,
+    check(_classes == [_overall] and _row['foldable'] == _foldable and set(_levels) == set(_expected) and all(_levels.count(pair) <= (2 if pair[0] == 'boll_rsi' else 1) for pair in _levels),
           _row['symbol'] + '技术灰白字、仅文字灰字、独立红黄和主行竖条各自保留')
     _anchor = 'id="' + monitor._stock_anchor_id(_row['symbol']) + '"'
     check((_anchor in _four_quiet_html) == (_foldable and _overall == 'green'),
@@ -1399,7 +1454,7 @@ for _row, _amp_level in zip(_amp_rows, ('yellow', 'yellow', None, 'red', None, '
         check(_record is None, _row['symbol'] + '未达黄线不进入振幅筛选')
 check(_amp_rows[2]['amp'] == 0 and _amp_rows[2]['foldable'] and _amp_rows[2]['signals'] == []
       and monitor._stock_anchor_id('AMPZERO') in ''.join(re.findall(
-          r'<details class="quiet-list">.*?<table class="stk">(.*?)</table>', _amp_page, re.S)),
+          r'<details class="quiet-list"(?: open)?>.*?<table class="stk">(.*?)</table>', _amp_page, re.S)),
       '合法0保存数值，静默且可进入无异动，不强制不折叠')
 check('data-signal-kind="rsi" data-signal-level="gray"' in monitor._signals_html(_amp_rows[3])
       and 'data-signal-kind="amp" data-signal-level="red"' in monitor._signals_html(_amp_rows[3]),
@@ -1410,7 +1465,7 @@ _amp_control_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', 
 check(_amp_control_classes == ['red'] and _amp_no_gray_row['foldable']
       and _amp_no_gray_row['signal_marks'] == [('amp', 'red')]
       and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                     r'(?: data-signal-level="([^"]*)")?>', _amp_control_sig)
+                     r'(?: data-signal-level="([^"]*)")?[^>]*>', _amp_control_sig)
       == [('amp', 'red'), ('rsi', '')]
       and '↑超买' in _unescape(re.sub(r'<[^>]+>', '', _amp_control_sig)),
       '原振幅2high控制保留无灯技术文字、独立振幅红与既有可折叠资格')
@@ -1426,7 +1481,7 @@ check('data-signal-kind="boll_rsi" data-signal-level="red"' in monitor._signals_
       and _amp_snap['signal_counts']['boll_rsi']['red'] == 1
       and all(_amp_snap['signal_counts'][k][c] == 0 for k in ('boll', 'rsi') for c in ('red', 'yellow')),
       '组合红时低振幅静默，不重复单独布林RSI或技术灰')
-check(all((kind, 'red') in _amp_rows[-1]['signal_marks'] for kind in ('chg', 'add_price', 'vol_ratio', 'amp'))
+check(all((kind, 'red') in _amp_rows[-1]['signal_marks'] for kind in ('chg', 'vol_ratio', 'amp'))
       and _amp_rows[-1]['purple'] and not _amp_rows[-1]['foldable']
       and [m['kind'] for m in monitor.text_only_members([_amp_rows[-1]])] == ['boll_rsi'],
       '振幅红+技术灰+涨跌/加仓/量比红+目标紫独立，技术不折叠资格不变')
@@ -1444,9 +1499,8 @@ for _row, _side in _oversold_rows:
     _arrow_sig = re.search(r'<td class="sig">(.*?)</td>', _arrow_fragment, re.S)[1]
     _arrow_expected = [('arrow-rsi-down', '↓')] + ([('arrow-band-up', '▲')] if _side == '上轨' else
                                                     [('arrow-band-down', '▼')] if _side == '下轨' else [])
-    check(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                     r'(?: data-signal-level="([^"]*)")?>', _arrow_sig) == [(_arrow_kind, _arrow_level)]
-          and re.findall(r'<span class="(arrow-[a-z-]+)">([▲▼↑↓])</span>', _arrow_sig) == _arrow_expected
+    check(_signal_pairs(_arrow_sig) == {(_arrow_kind, _arrow_level)}
+          and sorted(re.findall(r'<span class="(arrow-[a-z-]+)">([▲▼↑↓])</span>', _arrow_sig)) == sorted(_arrow_expected)
           and _row == _arrow_before,
           _row['symbol'] + '主表红黄灰正文层级不变，轨道和RSI箭头有独立方向wrapper且不改事实')
 _rsi_yellow = next(row for row in _business_rows if row['symbol'] == 'RSIYELLOW')
@@ -1466,7 +1520,7 @@ for _direction in ('up', 'down'):
                         if '.arrow-' in selectors and f'color:var(--{_direction})' in body]
     check(_direction_rules == [(_expected_selectors, f'color:var(--{_direction})')],
           _direction + '四类箭头涨跌色仅限主表描述与统计卡，未添加全局颜色覆盖')
-for _level, _body_color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
+for _level, _body_color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-yellow)'), ('gray', 'var(--text)')):
     check(f'.signal-item[data-signal-level="{_level}"]{{color:{_body_color}}}' in _arrow_css,
           _level + '主表条件正文继续使用原色，与箭头涨跌色独立')
 check('.signal-item{color:var(--dim)}' in _arrow_css
@@ -1482,7 +1536,7 @@ check(all(f'<span class="{cls}">{symbol}</span>' in _rules_arrow_table
       '规则表四箭头仍使用独立ar-* wrapper，不套主表或统计方向类')
 _white_rule_selectors = ','.join(f'#rules-lamp-table tbody td:first-of-type .{cls}'
                                for cls in ('ar-band-up', 'ar-band-down', 'ar-rsi-up', 'ar-rsi-down'))
-check(_white_rule_selectors + '{color:#fff}' in re.sub(r'\s+', ' ', _arrow_css).replace(', ', ',')
+check(_white_rule_selectors + '{color:var(--white)}' in re.sub(r'\s+', ' ', _arrow_css).replace(', ', ',')
       and '.card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}' in _arrow_css,
       '规则表条件列四白箭头与反向灰字仍原样保留，不受涨跌色覆盖')
 
@@ -1504,14 +1558,13 @@ _projection_filters = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', 
 _projection_page = monitor.render({}, [_projection_row], 1, snapshot=_projection_snapshot)
 _, _projection_stock = rendered_stock_row(_projection_page, _projection_row, False)
 _projection_sig = re.search(r'<td class="sig">(.*?)</td>', _projection_stock, re.S)[1]
-check(_unescape(re.sub(r'<[^>]+>', '', _projection_sig)) ==
-      '跌破布林下轨▼，下轨外，连续第4日贴近下轨（其中2日穿越） · RSI 3条 ↓超卖 / '
+check(_signal_text(_projection_sig) ==
+      '跌破布林下轨▼，下轨外，第4日贴近下轨（2日穿越） · RSI 3条 ↓超卖 / '
       '触及52周新低（距低点 +2.6%）（低点价：1,230.13） / '
       '触及长均线 ±1%区间（均线价：1,234.57）',
       '完整主表仅投影阈值、触及价、下轨状态、真实均线价与52周低点')
-check(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                 r'(?: data-signal-level="([^"]*)")?>', _projection_sig) ==
-      [('boll_rsi', 'red'), ('low52', 'red'), ('ma', 'yellow')]
+check(_signal_pairs(_projection_sig) ==
+      {('boll_rsi', 'red'), ('low52', 'red'), ('ma', 'yellow')}
       and re.findall(r'<span class="(arrow-[a-z-]+)">([▲▼↑↓])</span>', _projection_sig) ==
       [('arrow-band-down', '▼'), ('arrow-rsi-down', '↓')]
       and 'signal-dot' not in _projection_stock,
@@ -1533,8 +1586,8 @@ for _projection_price, _projection_state in (
         (None, '跌破布林下轨▼'), (0, '跌破布林下轨▼'), (float('nan'), '跌破布林下轨▼')):
     _projection_control = dict(_projection_row, price=_projection_price,
         signals=_projection_row['signals'][:3], signal_marks=[('boll_rsi', 'red')])
-    check(_unescape(re.sub(r'<[^>]+>', '', monitor._signals_html(_projection_control))) ==
-          _projection_state + '，连续第4日贴近下轨（其中2日穿越） · RSI 3条 ↓超卖',
+    check(_signal_text(monitor._signals_html(_projection_control)) ==
+          _projection_state + '，第4日贴近下轨（2日穿越） · RSI 3条 ↓超卖',
           repr(_projection_price) + '下轨严格高低/等于收回，缺失或无效不猜状态')
 for _upper_price, _upper_state in (
         (1300.000000001, '突破布林上轨▲，上轨外'),
@@ -1548,7 +1601,7 @@ for _upper_price, _upper_state in (
         signal_marks=[('boll_rsi', 'yellow')])
     _upper_before = _copy.deepcopy(_upper_row)
     _upper_html = monitor._signals_html(_upper_row)
-    check(_unescape(re.sub(r'<[^>]+>', '', _upper_html)) == _upper_state + ' · RSI 2条 ↑超买'
+    check(_signal_text(_upper_html) == _upper_state + ' · RSI 2条 ↑超买'
           and _upper_html.count('<span class="arrow-band-up">▲</span>') == 1
           and 'data-signal-level="yellow"' in _upper_html and _upper_row == _upper_before,
           repr(_upper_price) + '上轨外不加括号/等于及回落统一后收回，原事实和箭头级别不变')
@@ -1556,7 +1609,7 @@ for _projection_values, _projection_ma_label in (({'120': 1234.567}, '1,234.57')
         ({}, '—'), ({'120': 0}, '—'), ({'120': float('nan')}, '—')):
     _projection_control = dict(_projection_row, ma_values=_projection_values,
         signals=[_projection_row['signals'][3]], signal_marks=[('ma_band', 'yellow')])
-    check(_unescape(re.sub(r'<[^>]+>', '', monitor._signals_html(_projection_control))) ==
+    check(_signal_text(monitor._signals_html(_projection_control)) ==
           '触及长均线 ±1%区间（均线价：' + _projection_ma_label + '）',
           repr(_projection_values) + '主表均线用真实值，缺失/0/NaN留—且不从现价或偏离反推')
 check(not hasattr(monitor, '_main_description_text'), '主表投影helper不新增monitor导出')
@@ -1863,10 +1916,15 @@ const deadline = setTimeout(() => {
               ['yellow', 4, 'rgb(210, 153, 34)'], ['green', 2, 'rgb(63, 185, 80)']]) {
             row.className = originalClass.replace(/\\b(red|yellow|green|gray)\\b/, level);
             const sig = style(row.querySelector('td.sig'));
+            // 灯条 2026-11-03 起画在整行的 ::before 上（卡片版式里 td.sym 只有头部行那一格高，
+            // 且格子边框会把行背景切成两段，只有绝对定位的伪元素能一条到底）
+            const bar = getComputedStyle(row, '::before');
             const left = style(row.firstElementChild);
             const continuation = style(row.nextElementSibling.firstElementChild);
             stripes.push({state, level, width, color, sigImage: sig.backgroundImage,
-              sigShadow: sig.boxShadow, leftImage: left.backgroundImage, leftSize: left.backgroundSize,
+              sigShadow: sig.boxShadow, rowColor: bar.backgroundColor, rowWidth: bar.width,
+              rowContent: bar.content,
+              leftImage: left.backgroundImage, leftShadow: left.boxShadow,
               rangeImage: continuation.backgroundImage, rangeSize: continuation.backgroundSize,
               rangePosition: continuation.backgroundPosition});
           }
@@ -1911,11 +1969,10 @@ const deadline = setTimeout(() => {
           sig: actual.sig, manual: actual.manual, runbarRuleLinks: actual.runbarRuleLinks}});
       assertions.push({ok: actual.stripes.length === 9 && actual.stripes.every(s =>
         s.sigImage === 'none' && s.sigShadow === 'none'
-        && s.leftImage === 'linear-gradient(' + s.color + ', ' + s.color + ')'
-        && s.leftSize.startsWith(s.width + 'px ')
-        && s.rangeImage === s.leftImage && s.rangeSize === s.width + 'px 14px'   // 位置条收矮后，左侧灯条续接同步收短
-        && s.rangePosition === '0% 0%'),
-        name: width + 'px普通/高/达到目标均无右紫条，红黄绿左条及52周续接保留', actual: actual.stripes});
+        && s.rowContent === 'none'                      // 主行不再画左侧竖灯条（::before 已撤）
+        && s.leftImage === 'none' && s.leftShadow === 'none'   // 首格也不再画 inset 灯条
+        && s.rangeImage === 'none' && s.rangeSize === 'auto'),  // 52周位置行不再续接
+        name: width + 'px普通/高/达到目标均无右紫条，主表左侧无竖灯条', actual: actual.stripes});
       assertions.push({ok: actual.sparseBorders.length === 2 && actual.sparseBorders.every((s, i) =>
         s.color === (i === 0 ? 'rgb(176, 132, 255)' : 'rgb(139, 147, 161)')
         && s.border === 'rgba(0, 0, 0, 0)' && s.width === '1px' && s.radius === '4px'
@@ -2011,8 +2068,9 @@ const deadline = setTimeout(() => {
           .flatMap(panel=>[...panel.querySelectorAll('a.signal-member-jump')].map(link=>{
             const li=link.closest('li'),row=document.getElementById(link.getAttribute('href').slice(1));
             const level=levels.find(c=>row && row.classList.contains(c)),before=getComputedStyle(li,'::before');
-            const rowStyle=row?getComputedStyle(row.querySelector('td.sym')):null;
-            const rowLamp=rowStyle?rowStyle.backgroundImage+' '+rowStyle.boxShadow:'';
+            // 主表灯条 2026-11-03 起画在整行的 ::before 上（卡片版式里 td.sym 只占头部行一格）
+            const rowStyle=row?getComputedStyle(row,'::before'):null;
+            const rowLamp=rowStyle?rowStyle.backgroundColor:'';
             return {id:row?row.id:'',tone:['red','yellow','gray'].find(c=>panel.classList.contains('tone-'+c)),level,
               color:before.backgroundColor,expected:expected[level],width:before.width,height:before.height,
               gap:before.marginRight,content:before.content,spans:li.querySelectorAll('.signal-name-lamp').length,

@@ -2080,8 +2080,27 @@ STK_COLS = monitor_render.STK_COLS
 STK_HEAD = monitor_render.STK_HEAD
 
 
-def earnings_label(e):
-    """返回 (页面文字, 说明) 或 None。时间只写数据源真实提供的：盘前/盘后/盘中，不编造钟点。"""
+def _earnings_gap(e, today=None):
+    """展示倒计时：盘后取北京次日；其它时段取事件日。紧迫度规则另算，不受此影响。"""
+    if not isinstance(e, dict) or e.get("status") != "ok":
+        return None
+    try:
+        base = datetime.strptime(today or _bj_today(), "%Y-%m-%d").date()
+        event = datetime.strptime(e.get("date", ""), "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+    return (event - base).days + (1 if e.get("timing") == "post" else 0)
+
+
+def earnings_countdown(e, today=None):
+    gap = _earnings_gap(e, today)
+    if gap is None or gap < -1:
+        return ""
+    return {1: "（明）", 0: "（今）", -1: "（昨）"}.get(gap, f"（{gap}）")
+
+
+def earnings_label(e, today=None):
+    """返回 (页面文字, 北京说明) 或 None；只展示源提供的时段，不编造钟点。"""
     if not e or e.get("status") in (None, "na"):
         return None
     status = e["status"]
@@ -2089,20 +2108,34 @@ def earnings_label(e):
         return "日期待确认", "未取得"
     if status == "error":
         return "日期暂未取得", "本轮读取失败，不代表没有财报"
+    if not _iso_date(e.get("date")):
+        return "日期待确认", "未取得"
     year, month, day = e["date"].split("-")
-    this_year = datetime.now(US_TZ).year
+    this_year = int((today if _iso_date(today) else _bj_today())[:4])
     date_txt = f"{month}/{day}" if int(year) == this_year else f"{year}/{month}/{day}"
-    timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(e.get("timing"), "具体时段待定")
+    # 2026-11-03：无时段只写「时段待定」（原「具体时段待定」，少两个字）。
+    # 注意只改这一截——北京时间那行是独立信息，不能跟着一起删。
+    timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(e.get("timing"), "时段待定")
     nxt = (datetime(int(year), int(month), int(day)) + timedelta(days=1)).strftime("%m/%d")
     # 财报列只写时间，不展示来源性质；真实时段缺失时不从会议钟点推断。
     note = {"pre": f"北京 {month}/{day} 晚间", "post": f"北京 {nxt} 凌晨",
             "during": f"北京 {month}/{day} 夜–{nxt} 凌晨"}.get(e.get("timing"), "北京 待定")
+    # 附加状态用列表拼：不留下「 · 」开头的空分隔符
+    extra = []
     if e.get("kind") == "official" and e.get("official_error"):
-        note += " · 待复核"
+        extra.append("待复核")
     if e.get("kind") != "official" and e.get("cross") == "conflict" and _iso_date(e.get("alt_date")):
+        # 2026-11-03 晚改措辞：原「日期待核实（11/13）」读起来像在说页面上那个 11/09 待核实、
+        # 而 11/13 才是真日期，正好把意思说反了。实际是两源报的不一致（取较早的展示），
+        # 所以直写「另源 11/13」——两个日期并列，看的人自己知道要核实，也少四个字。
         alt = e["alt_date"][5:].replace("-", "/")
-        note += f" · 日期待核实（{alt}）"
-    return f"美东 {date_txt} {timing}", note
+        extra.append(f"另源 {alt}")
+    gap = _earnings_gap(e, today)
+    if gap is not None and (gap <= 0 if e.get("timing") == "post" else gap < 0):
+        note = "北京 " + ("今出" if gap == 0 else "昨出" if gap == -1 else "已出")
+    if extra:
+        note += "·" + "·".join(extra)
+    return f"美 {date_txt} {timing}", note
 
 
 EARN_SOON_DAYS = 7    # 美东财报日期 D 的前 7 天；以北京日历比较，红字优先于黄字
@@ -3075,12 +3108,6 @@ _fresh_52w_low = _rule_engine._fresh_52w_low
 
 
 _rule_52w_low = _rule_engine._rule_52w_low
-
-
-_rule_add_price = _rule_engine._rule_add_price
-
-
-_rule_reduce_price = _rule_engine._rule_reduce_price
 
 
 _rule_target = _rule_engine._rule_target

@@ -14,9 +14,149 @@ sys.path.insert(0, ROOT)
 import monitor
 
 
+# 固定摘录自 2026-11-09 开工备份的两个方法，仅供旧行事实对照。
+# 随测试入库，不读 outputs、本机目录或 Git 历史，也不从当前生产方法生成预期。
+# 其余 helper 沿用原测试的 PageRenderer(monitor) 上下文，比较边界不变。
+_OPENING_BASELINE_ROW_SOURCE = r'''class PageRenderer:
+    def _signal_lamps(self, d):
+        """保留旧调用接口；主表不再添加圆点，独立指标级别由描述字色表达。"""
+        return ""
+
+    def _stock_row(self, d, snapshot, earnings_week=None):
+        if d.get("target") or d.get("purple") or any(kind == "target" for kind, _ in d.get("signal_marks") or []):
+            d = self._context._apply_target(d)
+        earnings_week = earnings_week or (snapshot.get("earnings_week") or {}).get("asof") or self._context._bj_today()
+        quiet_keep = "true" if self._context._quiet_keep(d, earnings_week) else "false"
+        state = self._context.target_display_state(d.get("target"))
+        stripe = {"reached": "pur-hit", "space": "pur-space", "high": "pur-high"}.get(state)
+        cls = d["level"] + (" pur " + stripe if self._context._target_active(d) and stripe else "")
+        base_level = d["level"]
+        marks = d.get("signal_marks") or []
+        if base_level in ("red", "yellow") and any(
+                kind in ("add_price", "reduce_price") and level == base_level for kind, level in marks):
+            remaining = {level for kind, level in marks if kind not in ("add_price", "reduce_price")}
+            base_level = "red" if "red" in remaining else "yellow" if "yellow" in remaining else "green"
+        chg_cls = "up" if (d["chg"] or 0) > 0 else (
+            "down" if (d["chg"] or 0) < 0 else "")
+        chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
+        note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
+        lv_html = self._context.level_note(d.get("trigger"), d.get("reduce"))
+        tg_html = self._context.target_tag(d.get("target") or {})
+        lamp_cls = html_lib.escape(d["level"], quote=True)
+        hold_html = ('<span class="unit" title="长持仓：持有周期分类；技术预警按《预警规则》执行">长</span>'
+                     if d.get("group") == "position" and str(d.get("hold") or "") == "long" else "")
+        earn_html = self._context._earnings_html(d)
+        earn_cell = f'<span class="lamp-earn">{earn_html}</span>' if earn_html else ""
+        return (
+            f'<tr class="{html_lib.escape(cls, quote=True)}" id="{self._context._stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
+            f'data-symbol="{html_lib.escape(self._context.normalize_symbol(d["symbol"]), quote=True)}" '
+            f'data-base-level="{html_lib.escape(base_level, quote=True)}" '
+            f'data-price="{html_lib.escape(str(d.get("price") or ""), quote=True)}" '
+            f'data-prev-close="{html_lib.escape(str(d.get("prev_close") or ""), quote=True)}"><td class="sym">'
+            f'<span class="sym-box {lamp_cls}">'
+            f'{html_lib.escape(self._context.normalize_symbol(d["symbol"]))}{note}{hold_html}'
+            f'{self._context._row_tags(d, snapshot)}</span>'
+            f'<span class="lamp-rule"></span>{earn_cell}</td>'
+            f'<td class="num px"><span class="px-main">'
+            f'<span class="px-price">{self._context.fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
+            f'<span class="px-chg {chg_cls}">{chg_txt}</span>{lv_html}</span>{tg_html}</td>'
+            f'<td class="sig">{self._context._signals_html(d)}</td></tr>'
+            + self._context._range52_row(d)
+        )
+'''
+
+
 def _row_signals(row):
     """主表只输出各指标描述，级别通过 data-signal-level 表达，不添加圆点。"""
     return monitor._signals_html(row)
+
+
+def _logical_signal_text(markup):
+    """Read real split-column nodes; compare facts independently from physical column traversal."""
+    from html.parser import HTMLParser
+    class Parts(HTMLParser):
+        def __init__(self):
+            super().__init__(); self.parts=[]; self.active=None; self.depth=0
+        def handle_starttag(self, tag, attrs):
+            a=dict(attrs)
+            if self.active is not None: self.depth+=1
+            elif 'signal-item' in a.get('class','').split() and 'data-signal-kind' in a:
+                self.active={'a':a,'t':''}; self.depth=1
+        def handle_endtag(self, tag):
+            if self.active is not None:
+                self.depth-=1
+                if not self.depth: self.parts.append(self.active); self.active=None
+        def handle_data(self, text):
+            if self.active is not None: self.active['t']+=text
+    p=Parts(); p.feed(markup)
+    combo=[x['t'] for x in p.parts if x['a']['data-signal-kind']=='boll_rsi']
+    rest=[x for x in p.parts if x['a']['data-signal-kind']!='boll_rsi']
+    rest.sort(key=lambda x:int(x['a'].get('data-signal-order','-1')))
+    return ' / '.join(([' · '.join(combo)] if combo else [])+[x['t'] for x in rest])
+
+
+def _migrate_row_layout(row_html):
+    """把 HEAD 版主表行的结构迁移成 2026-11-03 的两区卡片版式（用于旧→新结构对照）。
+
+    加／减仓价胶囊（.lvs）从代码列搬到价格区，价格与涨跌外面补一层 .px-main；
+    左侧竖灯条撤掉后，整股灯级改画在「代码＋中文名」**外面**那一圈框（.sym-box）上。
+    已迁移过的行（含 .px-main）原样返回，保证幂等。
+    """
+    if '.px-main' in row_html:
+        return row_html
+    # 灯色外框：等级不在 class 首位——渲染器写的是 `level + " pur " + stripe`（如 "pur pur-space red"）
+    _classes = (re.search(r'<tr class="([^"]+)"', row_html) or [None, ''])[1].split()
+    level = next((c for c in _classes if c in ('red', 'yellow', 'green', 'gray')), '')
+    sym = re.search(r'<td class="sym">(.*?)</td>', row_html, re.S)
+    lvs_html = ''
+    if sym:
+        # .lvs 里还套着 .lvtag，非贪婪正则会提前收尾，这里按 <span> 深度数到真正的闭合
+        at = sym.group(1).find('<span class="lvs">')
+        if at >= 0:
+            depth, i = 0, at
+            while i < len(sym.group(1)):
+                if sym.group(1).startswith('<span', i):
+                    depth += 1
+                    i += 5
+                elif sym.group(1).startswith('</span>', i):
+                    depth -= 1
+                    i += 7
+                else:
+                    i += 1
+                if depth == 0:
+                    break
+            lvs_html = sym.group(1)[at:i]
+    if lvs_html:
+        row_html = row_html.replace(sym.group(1), sym.group(1).replace(lvs_html, ''), 1)
+    # 灯色描边框（2026-11-03 第三次改版）：框一直包到 </td> 之前——
+    # 代码／中文名／「长」／ETF 角标现在全在框内，不再有留在框外的角标。
+    if level:
+        _m = re.search(r'<td class="sym">', row_html)
+        if _m:
+            _start = _m.end()
+            _end = row_html.find('</td>', _start)
+            row_html = (row_html[:_start] + '<span class="sym-box %s">' % level
+                        + row_html[_start:_end] + '</span>' + row_html[_end:])
+    # 财报格整个撤掉：财报改写成 .lamp-earn 落在 sym 格里、灯色横线 .lamp-rule 紧跟描边框
+    _e = re.search(r'<td class="earn-cell">(.*?)</td>', row_html, re.S)
+    if _e:
+        inner = _e.group(1)
+        side = '<span class="lamp-rule"></span>' + (
+            '<span class="lamp-earn">%s</span>' % inner if inner.strip() else '')
+        row_html = row_html[:_e.start()] + row_html[_e.end():]
+        # 横线与财报都落在 sym 格里（插在 sym 格闭合之前，不是补在它后面）
+        _m = re.search(r'<td class="sym">', row_html)
+        if _m:
+            _end = row_html.find('</td>', _m.end())
+            row_html = row_html[:_end] + side + row_html[_end:]
+
+    def wrap(m):
+        return (m.group(1) + '<span class="px-main">' + m.group(2) + lvs_html + '</span>'
+                + (m.group(3) or ''))
+
+    return re.sub(r'(<td class="num px">)'
+                  r'(<span class="px-price">.*?</span><span class="px-chg [^"]*">.*?</span>)'
+                  r'(<span class="tgs">.*?</span>)?(?=</td>)', wrap, row_html, flags=re.S)
 
 
 def plain_text(html):
@@ -33,54 +173,46 @@ monitor.EARN_SA_PRIMARY = False     # 主源（stockanalysis）
 
 
 class TestPriceDecimalBoundaries(unittest.TestCase):
-    def check_price(self, kind, target, price, threshold, expected):
-        from types import SimpleNamespace
-        field = 'trigger' if kind == 'add_price' else 'reduce'
-        setting = 'trigger_gap_pct' if kind == 'add_price' else 'reduce_gap_pct'
-        rule = monitor._rule_add_price if kind == 'add_price' else monitor._rule_reduce_price
-        alerts = monitor._Alerts()
-        context = SimpleNamespace(cfg={field: target}, price=price, group='position')
-        with patch.dict(monitor.S, {setting: threshold}):
-            rule(alerts, context)
-        self.assertEqual(alerts.marks, [(kind, 'red')] if expected else [])
-        self.assertEqual(alerts.level, 'red' if expected else 'green')
+    def check_price(self, kind, target, price, expected):
+        # 预期独立列举，不在测试内重算生产公式；双向边界均以现价为分母。
+        output = monitor.level_note(target if kind == 'add_price' else None,
+                                    target if kind == 'reduce_price' else None, price)
+        self.assertIn(f'data-near="{int(expected)}"', output)
+        self.assertIn(f'data-lv="{target}"', output)
+        self.assertNotIn('data-ack', output)
+        self.assertFalse(hasattr(monitor, '_rule_add_price'))
+        self.assertFalse(hasattr(monitor, '_rule_reduce_price'))
 
     def test_three_percent_exact_boundary_and_adjacent_values(self):
-        for kind, cases in (
-            ('add_price', ((102.999999999999, True), (103, True), (103.000000000001, False))),
-            ('reduce_price', ((97.000000000001, True), (97, True), (96.999999999999, False))),
-        ):
-            for price, expected in cases:
-                with self.subTest(kind=kind, price=price):
-                    self.check_price(kind, 100, price, 3, expected)
+        cases = ((102.999999999999, True), (103, True), (103.000000000001, False),
+                 (97.000000000001, True), (97, True), (96.999999999999, False))
+        for kind in ('add_price', 'reduce_price'):
+            for target, expected in cases:
+                with self.subTest(kind=kind, target=target):
+                    self.check_price(kind, target, 100, expected)
 
     def test_noninteger_price_target_and_threshold_boundaries(self):
-        for kind, cases in (
-            ('add_price', ((12.658749999999, True), (12.65875, True), (12.658750000001, False))),
-            ('reduce_price', ((12.041250000001, True), (12.04125, True), (12.041249999999, False))),
-        ):
-            for price, expected in cases:
-                with self.subTest(kind=kind, price=price):
-                    self.check_price(kind, 12.35, price, 2.5, expected)
+        cases = ((127.1534, True), (127.1535, True), (127.1536, False),
+                 (119.7466, True), (119.7465, True), (119.7464, False))
+        for kind in ('add_price', 'reduce_price'):
+            for target, expected in cases:
+                with self.subTest(kind=kind, target=target):
+                    self.check_price(kind, target, 123.45, expected)
 
-    def test_zero_threshold_only_accepts_equal_or_crossed_prices(self):
-        for target, below, above in ((100, 99.999999999999, 100.000000000001),
-                                     (12.35, 12.349999999999, 12.350000000001),
-                                     (1e-7, 0.999999999999e-7, 1.000000000001e-7)):
+    def test_legacy_zero_threshold_cannot_disable_fixed_symmetric_hint(self):
+        with patch.object(monitor, 'S', dict(monitor.S, trigger_gap_pct=0, reduce_gap_pct=0)):
             for kind in ('add_price', 'reduce_price'):
-                for price in (below, target, above):
-                    with self.subTest(kind=kind, target=target, price=price):
-                        self.check_price(kind, target, price, 0,
-                                         price <= target if kind == 'add_price' else price >= target)
+                for target, expected in ((100, True), (97, True), (103, True), (96.9, False), (103.1, False)):
+                    with self.subTest(kind=kind, target=target):
+                        self.check_price(kind, target, 100, expected)
 
-    def test_small_decimal_threshold_and_scientific_notation_do_not_expand(self):
-        for kind, cases in (
-            ('add_price', ((1.000099999999e-7, True), (1.0001e-7, True), (1.000100000001e-7, False))),
-            ('reduce_price', ((0.999900000001e-7, True), (0.9999e-7, True), (0.999899999999e-7, False))),
-        ):
-            for price, expected in cases:
-                with self.subTest(kind=kind, price=price):
-                    self.check_price(kind, 1e-7, price, 0.01, expected)
+    def test_scientific_notation_boundaries_do_not_expand(self):
+        cases = ((1.029999999999e-7, True), (1.03e-7, True), (1.030000000001e-7, False),
+                 (0.970000000001e-7, True), (0.97e-7, True), (0.969999999999e-7, False))
+        for kind in ('add_price', 'reduce_price'):
+            for target, expected in cases:
+                with self.subTest(kind=kind, target=target):
+                    self.check_price(kind, target, 1e-7, expected)
 
     def test_analysis_includes_only_the_expected_price_mark_at_boundary(self):
         for field, price in (('trigger', 103), ('reduce', 97)):
@@ -95,9 +227,10 @@ class TestPriceDecimalBoundaries(unittest.TestCase):
                         patch.object(monitor, 'boll', return_value=(None, None, None)):
                     row = monitor.analyze_symbol('TEST', {field: 100, 'hold': hold}, data, 'position')[2]
                 kind = 'add_price' if field == 'trigger' else 'reduce_price'
-                self.assertIn((kind, 'red'), row['signal_marks'])
+                self.assertNotIn((kind, 'red'), row['signal_marks'])
+                self.assertEqual(row['trigger' if field == 'trigger' else 'reduce'], 100)
                 self.assertTrue(row['foldable'])
-                self.assertIn('data-quiet-keep="false"', monitor._stock_row(row, {}))
+                self.assertRegex(monitor._stock_row(row, {}), r'data-lv="100(?:\.0+)?"')
 
 
 class TestGroups(unittest.TestCase):
@@ -128,7 +261,7 @@ class TestGroups(unittest.TestCase):
             with self.subTest(text=text):
                 e = es.parse_official_event(text, url, '2030-10-11', 'COST')
                 self.assertEqual((e['status'], e['date'], e['kind'], e['timing']), ('ok', date, 'official', ''))
-                self.assertIn('具体时段待定', monitor.earnings_label(e)[0])
+                self.assertIn('时段待定', monitor.earnings_label(e)[0])
                 self.assertNotRegex(monitor._earnings_html({'earnings': e}), r'盘前|盘后|盘中|\d{1,2}:\d{2}')
         for text in ('<h1>Annual Shareholders Meeting</h1><time>December 10, 2030</time>',
                      '<h1>Monthly Sales Results</h1><time>December 10, 2030</time>',
@@ -169,7 +302,8 @@ class TestGroups(unittest.TestCase):
         # 财报列不写来源，未知时段与复查状态仍如实保留。
         self.assertNotIn('官方来源', html)
         self.assertNotIn('<a ', html)
-        self.assertIn('北京 待定 · 待复核', html)
+        self.assertIn('北京 待定', html)
+        self.assertIn('北京 待定·待复核', html)  # 核验状态保留，分隔符紧凑
         self.assertNotIn('官方', html)
         self.assertNotIn('核实于', html)
         self.assertNotIn('发布钟点', html)
@@ -335,8 +469,8 @@ class TestGroups(unittest.TestCase):
         # 2026-10-30：纳斯达克补评语（持平/上涨＝绿「一周平稳」），标普500 补一周点差＋百分比
         self.assertIn('<tr class="green" id="nasdaqRef"', risk)
         self.assertIn('<td>一周平稳</td>', risk)
-        self.assertIn('周变化 +0.0%', risk)
-        self.assertIn('<td class="num dim">+0<span class="unit">周变化 +0.0%</span></td>', risk)
+        self.assertIn('周 <span class="chg-num">+0.0%</span>', risk)
+        self.assertIn('<td class="num dim">+0<span class="unit">周 <span class="chg-num">+0.0%</span></span></td>', risk)
         self.assertNotIn('Cboe VIX 官方日线', risk)   # 2026-10-15：指标行不再逐条展示数据来源
         self.assertNotIn('.VIX</td>', page)
         self.assertNotIn('.SPX</td>', page)
@@ -1141,26 +1275,27 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(monitor.earnings_label({'status': 'na'}), None)
         self.assertEqual(monitor.earnings_label({'status': 'unknown'})[0], '日期待确认')
         self.assertIn('不代表没有财报', monitor.earnings_label({'status': 'error'})[1])
-        text, note = monitor.earnings_label(dict(ok, date='2026-10-30'))
-        self.assertIn('美东 10/30 盘后', text)
+        text, note = monitor.earnings_label(dict(ok, date='2026-10-30'), '2026-10-20')
+        self.assertIn('美 10/30 盘后', text)
         self.assertNotIn('财报', text)   # 「财报」二字只写在表头
         self.assertIn('北京 10/31 凌晨', note)   # 2026-10-15 精简：北京时间说明去掉「约」与冗余字
         self.assertNotIn('不含具体钟点', note)
         self.assertNotIn('数据源只给', note)
-        self.assertIn('具体时段待定', monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'})[0])
+        # 2026-11-03：无时段写「时段待定」（原「具体时段待定」）；北京时间那行照旧保留
+        self.assertIn('时段待定', monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'}, '2026-10-20')[0])
+        self.assertEqual(monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'}, '2026-10-20')[1], '北京 待定')
 
     def test_earnings_labels_preserve_known_timing_without_source_notes(self):
         date = '2026-10-30'
-        year = monitor.datetime.now(monitor.US_TZ).year
-        date_txt = '10/30' if year == 2026 else '2026/10/30'
+        date_txt = '10/30'  # 使用冻结运行日，不让测试随真实日期漂移。
         for kind in ('official', 'expected', 'estimated'):
             for timing, label, bj in (
                     ('pre', '盘前', '北京 10/30 晚间'),
                     ('post', '盘后', '北京 10/31 凌晨'),
                     ('during', '盘中', '北京 10/30 夜–10/31 凌晨'),
-                    ('', '具体时段待定', '北京 待定'),
-                    (None, '具体时段待定', '北京 待定'),
-                    ('unknown', '具体时段待定', '北京 待定')):
+                    ('', '时段待定', '北京 待定'),
+                    (None, '时段待定', '北京 待定'),
+                    ('unknown', '时段待定', '北京 待定')):
                 for error in ('', 'http_429'):
                     with self.subTest(kind=kind, timing=timing, error=error):
                         e = dict(self.official_fixture(), date=date, kind=kind,
@@ -1168,12 +1303,14 @@ class TestGroups(unittest.TestCase):
                         before = dict(e)
                         note = bj
                         if kind == 'official' and error:
-                            note += ' · 待复核'
-                        main = f'美东 {date_txt} {label}'
-                        self.assertEqual(monitor.earnings_label(e), (main, note))
-                        with patch.object(monitor, '_bj_today', return_value='2026-10-20'):
-                            self.assertEqual(monitor._earnings_html({'earnings': e}),
-                                             f'<span class="earn">{main}<span class="unit">{note}</span></span>')
+                            note += '·待复核'
+                        main = f'美 {date_txt} {label}'
+                        self.assertEqual(monitor.earnings_label(e, '2026-10-20'), (main, note))
+                        markup = monitor._earnings_html({'earnings': e}, '2026-10-20')
+                        self.assertIn(f'data-main="{main}" data-mode="full"', markup)
+                        self.assertIn(f'data-unit-full="{note}" data-timing="">{note}</span>', markup)
+                        self.assertIn('（11）' if timing == 'post' else '（10）', markup)
+                        self.assertNotIn('美东', markup)
                         self.assertEqual(e, before)
 
     def test_earnings_beijing_note_is_separate_from_fund_cache_warning(self):
@@ -1195,7 +1332,10 @@ class TestGroups(unittest.TestCase):
              'cross': 'conflict', 'alt_date': '2026-10-31'}
         main, note = monitor.earnings_label(e)
         self.assertIn('盘后', main)
-        self.assertIn('日期待核实（10/31）', note)
+        # 2026-11-03 晚：措辞从「日期待核实（10/31）」改成「另源 10/31」——
+        # 旧写法读起来像在说主日期待核实、括号里才是真日期，把意思说反了。
+        self.assertIn('另源 10/31', note)
+        self.assertNotIn('待核实', note)
         self.assertNotIn('来源', note)
         self.assertNotIn('估算', note)
 
@@ -1228,9 +1368,9 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(cc({'status': 'error'}, yh, today)['source2'], 'yahoo')
         self.assertEqual(cc(est, {'status': 'error'}, today), est)
         self.assertEqual(cc(est, dict(yh, date='2026-10-01'), today), est)
-        # 冲突在标签里提示待核实
+        # 冲突在标签里用「另源」并列写出第二个日期（不再写「待核实」，避免读反）
         text, note = monitor.earnings_label(dict(est, date='2026-10-20', cross='conflict', alt_date='2026-11-03'))
-        self.assertIn('待核实', note)
+        self.assertIn('另源 11/03', note)
         self.assertIn('11/03', note)
         # 门控：确认日期不再多请求；估算才问第二来源；开关关闭时原样返回
         with patch.object(monitor, 'EARN_CROSS_CHECK', True), \
@@ -1423,7 +1563,7 @@ class TestGroups(unittest.TestCase):
         position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
         self.assertIn('无异动 1 只', position)
         folded = position.split('无异动 1 只', 1)[1]
-        self.assertIn('美东 10/30 盘后', folded)
+        self.assertIn('美 10/30 盘后', folded)
         self.assertNotIn('财报 美东', folded)
 
     def test_etf_and_stocks_share_one_table_sorted_red_yellow_green(self):
@@ -1440,7 +1580,9 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('<h2>', position)
         self.assertEqual(position.count('<table'), 1)          # 个股和 ETF 同一张表
         # 持仓组：红(NVDA 个股在 XLK ETF 前) → 黄(AAPL 个股在 QQQ ETF 前)；同级 ETF 排最后
-        order = [position.index(f'<td class="sym">{s}') for s in ('NVDA', 'XLK', 'AAPL', 'QQQ')]
+        # 2026-11-03：代码＋中文名外面多了一层灯色框 <span class="sym-box LEVEL">
+        order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, position).start()
+                 for s in ('NVDA', 'XLK', 'AAPL', 'QQQ')]
         self.assertEqual(order, sorted(order))
 
     def test_position_etf_last_per_level_and_sector_etf_first_only_when_alerting(self):
@@ -1457,13 +1599,14 @@ class TestGroups(unittest.TestCase):
             snap = monitor.build_snapshot({}, items, {'positions': {'SPYM': {}, 'AAPL': {}, 'QQQM': {}, 'NVDA': {}}})
         page = monitor.render({}, items, 8, snapshot=snap)
         pos = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
-        order = [pos.index(f'<td class="sym">{s}') for s in ('NVDA', 'QQQM', 'AAPL', 'SPYM')]
+        order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, pos).start()
+                 for s in ('NVDA', 'QQQM', 'AAPL', 'SPYM')]
         self.assertEqual(order, sorted(order))      # 红：个股 NVDA 在 ETF QQQM 前；黄：AAPL 在 SPYM 前
         tech = page.split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
         main, quiet = tech.split('<details class=\"quiet-list\">', 1)
         # 板块 ETF 绿灯无警示：不在主表，照常折叠
-        self.assertNotIn('<td class=\"sym\">XLK', main)
-        self.assertIn('<td class=\"sym\">XLK', quiet)
+        self.assertNotRegex(main, r'<td class="sym"><span class="sym-box \w+">XLK')
+        self.assertRegex(quiet, r'<td class="sym"><span class="sym-box \w+">XLK')
         self.assertIn('无异动 2 只', tech)
         # 板块 ETF 有警示时：排在同一预警级别第一位（红里 XLK 在 MU 前，不越过更高级别）
         items2 = [mk('XLK', 'red', 1.0, 'technology'), mk('MU', 'red', 5.0, 'technology'),
@@ -1471,13 +1614,15 @@ class TestGroups(unittest.TestCase):
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
             snap2 = monitor.build_snapshot({}, items2, {'positions': {}})
         tech2 = monitor.render({}, items2, 4, snapshot=snap2).split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
-        order = [tech2.index(f'<td class=\"sym\">{s}') for s in ('XLK', 'MU', 'NVDA2', 'AMD')]
+        order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, tech2).start()
+                 for s in ('XLK', 'MU', 'NVDA2', 'AMD')]
         self.assertEqual(order, sorted(order))
         items3 = [mk('XLK', 'yellow', 0.5, 'technology'), mk('MU', 'red', 5.0, 'technology'), mk('AMD', 'yellow', 7.0, 'technology')]
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
             snap3 = monitor.build_snapshot({}, items3, {'positions': {}})
         tech3 = monitor.render({}, items3, 3, snapshot=snap3).split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
-        order = [tech3.index(f'<td class=\"sym\">{s}') for s in ('MU', 'XLK', 'AMD')]
+        order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, tech3).start()
+                 for s in ('MU', 'XLK', 'AMD')]
         self.assertEqual(order, sorted(order))      # 黄档 XLK 排黄档第一，仍在红档 MU 之后
         self.assertNotIn('财报 "', page)             # 手机端不再用 CSS 给每行补「财报」
 
@@ -1606,29 +1751,29 @@ class TestGroups(unittest.TestCase):
                              (103, '距减仓价 103.00 还差 2.9%')]:
             with self.subTest(reduce=reduce):
                 level, hit, detail = self._reduce_signals({'reduce': reduce})
-                self.assertEqual(level, 'red')
-                self.assertEqual(hit, [text])
+                self.assertEqual(level, self._reduce_signals({})[0])
+                self.assertEqual(hit, [])
+                self.assertNotIn(('reduce_price', 'red'), detail['signal_marks'])
                 self.assertEqual(detail['reduce'], reduce)
+                tag = monitor.level_note(None, reduce, 100)
+                self.assertIn('data-near="' + ('1' if abs(100-reduce)<=3 else '0') + '"', tag)
         for reduce in (104, 120, 200):                                      # 还差超过 3%：不报
             with self.subTest(far=reduce):
                 _, hit, detail = self._reduce_signals({'reduce': reduce})
                 self.assertEqual(hit, [])
                 self.assertEqual(detail['reduce'], reduce)
         # 旧版遗留的 reduce_dir 不再起作用
-        self.assertEqual(self._reduce_signals({'reduce': 99, 'reduce_dir': 'down'})[0], 'red')
+        self.assertEqual(self._reduce_signals({'reduce': 99, 'reduce_dir': 'down'})[0], self._reduce_signals({})[0])
         self.assertEqual(self._reduce_signals({'reduce': 120, 'reduce_dir': 'up'})[1], [])
         self.assertNotIn('reduce_dir', self._reduce_signals({'reduce': 99})[2])
 
     def test_reduce_price_threshold_setting_and_boundary(self):
-        with patch.dict(monitor.S, {'reduce_gap_pct': 3.0}):
-            self.assertEqual(self._reduce_signals({'reduce': 103.1})[1], [])            # 100/103.1-1 = -3.01%
-            self.assertEqual(len(self._reduce_signals({'reduce': 103})[1]), 1)
-        with patch.dict(monitor.S, {'reduce_gap_pct': 5.0}):
-            self.assertEqual(self._reduce_signals({'reduce': 104.5})[1], ['距减仓价 104.50 还差 4.3%'])
-        with patch.dict(monitor.S, {'reduce_gap_pct': 0.0}):
-            self.assertEqual(self._reduce_signals({'reduce': 101})[1], [])              # 没越过且阈值 0：不报
-            self.assertEqual(len(self._reduce_signals({'reduce': 100})[1]), 1)          # 已到：照报
-            self.assertEqual(len(self._reduce_signals({'reduce': 90})[1]), 1)
+        # 已批准：价位提示固定现价分母±3%，不再由旧红灯阈值制造技术信号。
+        for old_limit in (0,3,5):
+            with patch.dict(monitor.S, {'reduce_gap_pct': old_limit}):
+                for target, near in ((96.999999999,False),(97,True),(100,True),(103,True),(103.000000001,False),(50,False)):
+                    self.assertEqual(self._reduce_signals({'reduce': target})[1], [])
+                    self.assertIn('data-near="'+str(int(near))+'"', monitor.level_note(None,target,100))
         self.assertEqual(monitor.DEFAULT_SETTINGS['reduce_gap_pct'], 3.0)
         self.assertEqual(monitor.SETTING_LIMITS['reduce_gap_pct'], (0, 100))
 
@@ -1642,17 +1787,20 @@ class TestGroups(unittest.TestCase):
                 with patch.dict(monitor.S, {'trigger_gap_pct': 5.0}):
                     _, sigs, _ = monitor.analyze_symbol('TEST', {'trigger': trigger}, data, group='position')
             return [x for x in sigs if '加仓价' in x]
-        self.assertEqual(hit(104), ['已跌破加仓价 104.00'])      # 现价低于加仓价 3.8%
-        self.assertEqual(hit(100), ['已跌破加仓价 100.00'])      # 刚好到
-        self.assertEqual(hit(110), ['已跌破加仓价 110.00'])      # 跌破很多
-        self.assertEqual(hit(97), ['距加仓价 97.00 还差 3.1%'])  # 上方 5% 内
-        self.assertEqual(hit(90), [])                            # 还差 11%：不报
+        for target, near in ((104,False),(100,True),(110,False),(97,True),(90,False)):
+            self.assertEqual(hit(target), [])
+            self.assertIn('data-near="'+str(int(near))+'"',monitor.level_note(target,None,100))
 
     def test_level_note_under_symbol_only_when_set(self):
-        self.assertEqual(monitor.level_note(325, None), '<span class="lvs"><span class="lvtag add">加 325</span></span>')
-        self.assertEqual(monitor.level_note(None, 400.5), '<span class="lvs"><span class="lvtag cut">减 400.5</span></span>')
-        self.assertEqual(monitor.level_note(325, 400), '<span class="lvs"><span class="lvtag add">加 325</span><span class="lvtag cut">减 400</span></span>')
-        self.assertEqual(monitor.level_note(12.3456, None), '<span class="lvs"><span class="lvtag add">加 12.3456</span></span>')
+        for trigger, reduce, count in ((325,None,1),(None,400.5,1),(325,400,2),(12.3456,None,1)):
+            output = monitor.level_note(trigger,reduce)
+            self.assertEqual(output.count('class="lvtag '), count)
+            self.assertEqual(output.count('data-near="0"'), count)
+            for label,value in (('加仓价',trigger),('减仓价',reduce)):
+                if value is not None:
+                    self.assertIn(f'data-lv="{value}"',output)
+                    self.assertIn(f'{label} {value} · 距 —',output)
+            self.assertNotIn('class="lvs"',output)
         for bad in (None, '', 0, -1, 'abc', True, float('nan'), float('inf')):
             self.assertEqual(monitor.level_note(bad, bad), '')
 
@@ -1664,7 +1812,15 @@ class TestGroups(unittest.TestCase):
             return monitor.render({}, [d], 1, snapshot=snap)
         with patch.object(monitor, 'global_dca', return_value=None):
             both = page_for(325, 400)
-            self.assertIn('AAPL<span class="note">苹果</span><span class="lvs"><span class="lvtag add">加 325</span><span class="lvtag cut">减 400</span></span>', both)
+            # 加／减仓价胶囊随价格区（px-main 内），代码那一列只剩代码、中文名与仓位跳转
+            sym_td = both.split('<td class="sym">', 1)[1].split('</td>', 1)[0]
+            px_td = both.split('<td class="num px">', 1)[1].split('</td>', 1)[0]
+            self.assertIn('<span class="px-main">', px_td)
+            sig_td = both.split('<td class="sig">',1)[1].split('</td>',1)[0]
+            self.assertIn('加仓价 325', sig_td)
+            self.assertIn('减仓价 400', sig_td)
+            self.assertNotIn('lvtag', sym_td)
+            self.assertIn('AAPL<span class="note" data-full="苹果">苹果</span>', sym_td)
             cleared = page_for(None, None)                                  # 设置页清空后：不再显示
             self.assertNotIn('class="lvs"', cleared)
             self.assertNotIn('class="lvtag', cleared)
@@ -1730,8 +1886,10 @@ class TestGroups(unittest.TestCase):
     def test_us_style_colors_green_up_red_down_but_risk_lights_unchanged(self):
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
             page = monitor.render({}, [], 0, snapshot=monitor.build_snapshot({}, [], {}))
-        self.assertIn('--up:#3fb950; --down:#f85149;', page)
-        self.assertIn('--green:#3fb950; --yellow:#d29922; --red:#f85149;', page)
+        self.assertIn('--up:#3fb950;', page)
+        self.assertIn('--down:#f85149;', page)
+        for token in ('--green:#3fb950;', '--yellow:#d29922;', '--red:#f85149;'):
+            self.assertIn(token, page)
 
     def test_daily_source_validation_and_intraday_fallback(self):
         from datetime import datetime, timedelta
@@ -2351,14 +2509,16 @@ class TestGroups(unittest.TestCase):
         for name in ('美元指数','收益率曲线'):
             self.assertNotIn(name, risk)
         self.assertEqual(risk.count('id="ust10Ref"'), 1)
-        self.assertIn('<span class="unit">参考</span>', risk)
+        self.assertNotIn('<span class="unit">参考</span>', risk)
+        self.assertIn('10Y美债', risk)  # 终稿省略冗余「参考」标签，独立参考行和评分隔离不变。
         self.assertNotIn('不计入综合灯', risk)
         self.assertNotIn('市场参考（独立指标，不属于清单标的）', page)
         self.assertNotIn('index-reference', page)
         self.assertNotIn('原指数基成员及监测开关保持不变', index)
         self.assertEqual(list(cfg['index_funds']), ['HYG'])
         self.assertIn('id="marketRiskLight" data-level="yellow"', risk)
-        self.assertIn('综合：数据不足', risk)
+        self.assertIn('data-level="yellow"', risk)
+        self.assertIn('数据不足', risk)
 
     def test_five_indicator_summary_requires_cross_category_confirmation(self):
         import copy
@@ -2495,7 +2655,7 @@ class TestGroups(unittest.TestCase):
     def test_macro_collapses_and_shows_only_existing_alert_counts(self):
         quiet = monitor.render({}, [], 0)
         summary = quiet.split('id="macroCard"', 1)[1].split('</summary>', 1)[0]
-        self.assertIn('<span class="grp-name">市场风险</span>', summary)
+        self.assertIn('<span class="grp-name">风险</span>', summary)
         self.assertNotIn('open', summary)
         self.assertNotIn('红', summary)
         self.assertNotIn('黄', summary)
@@ -2506,7 +2666,7 @@ class TestGroups(unittest.TestCase):
         page = monitor.render(macro, [], 0, snapshot={'target_trade_date': '2026-10-09'})
         summary = page.split('id="macroCard"', 1)[1].split('</summary>', 1)[0]
         self.assertIn('id="marketRiskLight" data-level="red"', summary)
-        self.assertIn('综合：升高', summary)
+        self.assertIn('升高', summary)
         self.assertNotIn('红1 · 黄1', summary)
         self.assertIn('走弱，压力同步升高', page)
         self.assertIn('<span class="unit">2026-10-02</span>', page)  # 2026-10-30：指标行不再写「截至」
@@ -2611,13 +2771,14 @@ class TestTargets(unittest.TestCase):
     def _tg(self, cfg, **kw):
         level, signals, detail = self._run(cfg, **kw)
         base = self._run({}, **kw)[0]
-        return level, base, [x for x in signals if '目标价' in x or '共识价' in x], detail
+        return level, base, [x for x in signals if '目标价' in x or '共识价' in x
+                             or re.match(r'^(?:上穿 |跌破 |现价[超低])\d', x)], detail
 
     # ---- 警示规则（手填目标价和共识价共用一套）
     def test_within_gap_is_purple_and_does_not_change_level(self):
-        for target, text in [(101, '在目标价 101 ±3% 内（偏离 -1.0%）'),
-                             (97.5, '在目标价 97.5 ±3% 内（偏离 +2.6%）'),   # 已超过目标价但还在带内：也报
-                             (103, '在目标价 103 ±3% 内（偏离 -2.9%）')]:
+        for target, text in [(101, '现价低101 +1.0%（±3% 内）'),
+                             (97.5, '现价超97.5 -2.5%（±3% 内）'),   # 已超过目标价但还在带内：也报
+                             (103, '现价低103 +3.0%（±3% 内）')]:
             with self.subTest(target=target):
                 level, base, hit, detail = self._tg({'target': target})
                 self.assertEqual(hit, [text])
@@ -2634,13 +2795,13 @@ class TestTargets(unittest.TestCase):
 
     def test_same_day_cross_is_purple_even_when_jump_is_big(self):
         _, _, hit, d = self._tg({'target': 100.5}, price=101, prev=100)
-        self.assertEqual(hit, ['今日上穿目标价 100.5'])
+        self.assertEqual(hit, ['上穿 100.5 -0.5%（±3% 内）'])
         _, _, hit, d = self._tg({'target': 100.5}, price=100, prev=101)
-        self.assertEqual(hit, ['今日跌破目标价 100.5'])
+        self.assertEqual(hit, ['跌破 100.5 +0.5%（±3% 内）'])
         self.assertTrue(d['purple'])
         # 跳空一次越过 ±3% 的带：只要跨越就报
         _, _, hit, _ = self._tg({'target': 100}, price=108, prev=95)
-        self.assertEqual(hit, ['今日上穿目标价 100'])
+        self.assertEqual(hit, ['上穿 100 -7.4%'])
         # 跨越之后第二天：还在带内照报（带内一律报），出了带就不报
         self.assertEqual(len(self._tg({'target': 100}, price=102, prev=101)[2]), 1)
         self.assertEqual(self._tg({'target': 100}, price=110, prev=108)[2], [])
@@ -2708,7 +2869,7 @@ class TestTargets(unittest.TestCase):
         _, _, hit, d = self._tg({'target': 101, 'target_at': '2026-09'}, cons=cons)
         self.assertEqual(d['target']['kind'], 'manual')
         self.assertEqual(d['target']['month'], 9)
-        self.assertEqual(hit, ['在目标价 101 ±3% 内（偏离 -1.0%）'])          # 用手填的 101，不是共识的 160
+        self.assertEqual(hit, ['现价低101 +1.0%（±3% 内）'])          # 用手填的 101，不是共识的 160
         _, _, hit, d = self._tg({}, cons=cons)
         self.assertEqual(d['target']['kind'], 'consensus')
         self.assertTrue(any('共识价 160' in text and '空间' in text for text in hit))
@@ -2742,15 +2903,17 @@ class TestTargets(unittest.TestCase):
                 with self.subTest(kind=kind, css=css):
                     target = {'kind': kind, 'price': 429.47, 'month': 10, 'failed': False,
                               'space': space, 'band': band, 'space_hit': space >= 40, 'hit': hit}
-                    self.assertEqual(tag(target), '<span class="tgs"><span class="lvtag tgt ' + css
-                                     + '"><span>+' + str(space) + '%</span> <span>429.47</span> '
-                                     + '<span>· 10月</span></span></span>')
+                    state = 'reached' if hit else css
+                    self.assertEqual(tag(target), f'<td class="tgs {css}" data-target-state="{state}"><span class="lvtag tgt {css}">'
+                                     + '<span class="target-space" data-sign="pos">+' + str(space) + '%</span> '
+                                     + '<span class="target-price">429.47</span> '
+                                     + '<span class="target-month" title="10月">⑩</span></span></td>')
                     self.assertNotIn('共识', tag(target))
                     self.assertNotIn('目标', tag(target))
         failed = tag({'kind': 'consensus', 'price': 429.0, 'month': 8, 'failed': True,
                       'space': 150, 'band': 'high', 'hit': True, 'space_hit': True})
         self.assertIn('lvtag tgt bad', failed)
-        self.assertIn('<span>429</span>', failed)
+        self.assertIn('<span class="target-price">429</span>', failed)
         self.assertIn('<span>获取失败</span>', failed)
         self.assertNotIn('月', failed)
         self.assertNotIn('月', tag({'kind': 'consensus', 'price': None, 'month': 10, 'failed': True}))
@@ -2806,7 +2969,7 @@ class TestTargets(unittest.TestCase):
         target = detail['target']
         self.assertEqual((target['hit'], target['space_hit'], target['band']), (True, True, 'high'))
         self.assertEqual(monitor.target_display_state(target), 'reached')
-        self.assertIn('今日跌破目标价 190', texts)
+        self.assertIn('跌破 190 +90.0%', texts)
         self.assertIn('lvtag tgt hit', monitor.target_tag(target))
         self.assertEqual(level, base)
         self.assertTrue(detail['purple'])
@@ -3093,8 +3256,8 @@ class TestTargets(unittest.TestCase):
                 for name, value in (('data-quiet-keep', 'true'), ('data-price', '100.0'),
                                     ('data-prev-close', '99.0')):
                     self.assertEqual(re.findall(r'\b' + name + r'="([^"]*)"', attrs), [value])
-                self.assertTrue(body.startswith('<td class="sym">' + symbol))
-        self.assertIn('<td class="sym">DDD', page)
+                self.assertRegex(body, r'<td class="sym"><span class="sym-box \w+">' + symbol)
+        self.assertRegex(page, r'<td class="sym"><span class="sym-box \w+">DDD')
         shown, folded = page.split('无异动 1 只', 1)
         self.assertIn('>AAA', shown)                      # 紫色的绿灯行不折叠
         self.assertNotIn('>DDD', shown)                   # 普通绿灯行仍然折叠
@@ -3127,7 +3290,7 @@ class TestTargets(unittest.TestCase):
         self.assertNotIn('data-signal-kind="target"', sig)
         self.assertNotIn('<span class="tnote">', page)
         # 手填目标价胶囊同样不写「目标」，开头是距现价的空间百分比（2026-10-15 改）
-        self.assertIn('<span>+8%</span> <span>108</span> <span>· 10月</span>', page)
+        self.assertIn('<span class="target-space" data-sign="pos">+8%</span> <span class="target-price">108</span> <span class="target-month" title="10月">⑩</span>', page)
         self.assertNotIn('<span>目标</span>', page)
         self.assertNotIn('共识价来源', page)               # 只有手填：不显示共识来源
 
@@ -3136,7 +3299,12 @@ class TestTargets(unittest.TestCase):
              'space': 1.0, 'space_hit': False, 'band': 'low'}
         page = self._page([self._row('PUR', 'green', True, t, ['在共识价 101 ±3% 内（偏离 -1.0%）', '异动 +2.1%', 'RSI 超买'])])
         # 仅从个股描述隐藏共识；技术提醒与紫色达到状态保持不变。
-        self.assertIn('异动 +2.1%</span> <span class="signal-separator">/</span> <span class="signal-item" data-signal-kind="rsi">RSI 超买', page)
+        body = re.search(r'<tr\b[^>]*\bid="s-pur"[^>]*>(.*?)</tr>', page, re.S)[1]
+        sig = re.search(r'<td class="sig">(.*?)</td>', body, re.S)[1]
+        self.assertIn('异动 +2.1%', plain_text(sig))
+        self.assertIn('RSI 超买', plain_text(sig))
+        self.assertNotIn('data-signal-kind="target"', sig)
+        self.assertEqual(sig.count('class="sig-col"'), 2)
         self.assertNotIn('<span class="tp">在共识价 101 ±3% 内（偏离 -1.0%）</span>', page)
         css = page.split('<style>')[1]
         # 红黄绿左条仍为4/4/2px（红灯条已与黄灯条等宽）；主行和52周续行不再绘制右侧紫条。
@@ -3147,14 +3315,21 @@ class TestTargets(unittest.TestCase):
         self.assertNotIn('--pstripe', css)
         self.assertNotIn('tr.pur td:first-child', css)
 
-    def test_target_states_keep_lamps_and_range52_left_stripes_without_right_bar(self):
+    def test_target_states_and_range52_rows_have_no_left_lamp_stripe(self):
         css = monitor.PAGE_CSS
-        # 2026-10-30：红灯条与黄灯条等宽（6 → 4px）。
+        # 终稿：主表左灯条固定双端几何，与三处分区竖线的墨迹测量分离；
+        # 52 周位置行不续接灯条；统计面板名单的 inset 灯条照旧。
         for level, width in (('red', 4), ('yellow', 4), ('green', 2)):
-            self.assertIn('tr.' + level + ':has(+tr.range52-row)>td:first-child{--lc:var(--'
-                          + level + ');--lw:' + str(width) + 'px}', css)
-            self.assertIn('tr.' + level + '+tr.range52-row>td{--lc:var(--'
-                          + level + ');--lw:' + str(width) + 'px}', css)
+            self.assertNotIn('.stk tr.' + level + '[data-symbol]{--lc', css)
+            self.assertNotIn('tr.' + level + '+tr.range52-row>td{--lc', css)
+            self.assertIn('tr.' + level + ' td:first-child{box-shadow:inset ' + str(width)
+                          + 'px 0 0 var(--' + level + ')', css)
+        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:9.5px;width:2px;height:41.7px;', css)
+        self.assertIn('table.stk tr[data-symbol]::before{top:7px;height:42.7px}', css)
+        self.assertIn('top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line)', css)
+        self.assertNotIn('linear-gradient(var(--lc),var(--lc))', css)
+        self.assertIn('table.stk tr[data-symbol]>td{border:0;box-shadow:none', css)
+        for level in ('red', 'yellow', 'green'):
             for target_price, state in ((150, 'space'), (200, 'high'), (101, 'hit')):
                 with self.subTest(level=level, state=state):
                     row = self._row('NOPUR', level, True,
@@ -3164,24 +3339,24 @@ class TestTargets(unittest.TestCase):
                                       'from': '2025-10-20', 'to': '2026-10-20'}
                     rendered = monitor._stock_row(row, {})
                     self.assertIn('class="' + level + ' pur pur-' + state + '"', rendered)
-                    self.assertIn('data-base-level="' + level + '"', rendered)
+                    self.assertNotIn('data-base-level=', rendered)
+                    self.assertIn('<tr class="' + level + ' pur pur-' + state + '"', rendered)
                     self.assertIn('lvtag tgt ' + state, rendered)
                     self.assertIn('class="range52-row"', rendered)
                     self.assertNotRegex(rendered, r'\bstyle="[^"]*(?:--pstripe|background-image)')
         self.assertNotRegex(css, r'tr\.pur(?:-(?:space|high|hit))?(?::has\([^}]*\))?\s*(?:td\.sig|\+tr\.range52-row>td)\{')
         self.assertNotIn('--pstripe', css)
-        continuation = re.search(r'\.stk tr\.range52-row>td\{([^}]*)\}', css)[1]
-        self.assertIn('background-image:linear-gradient(var(--lc),var(--lc))', continuation)
-        self.assertIn('background-size:var(--lw) 14px', continuation)
-        self.assertIn('background-position:left top', continuation)
-        self.assertNotIn('right', continuation)
+        range_style = re.search(r'\.stk tr\.range52-row>td\{([^}]*)\}', css)[1]
+        self.assertNotRegex(range_style, r'--lamp-line|--pstripe|background-image|box-shadow')
 
     def test_low_and_failed_target_capsules_use_sparse_gray_svg_border(self):
         from urllib.parse import unquote
         import xml.etree.ElementTree as ET
 
         css = monitor.PAGE_CSS
-        overlay = re.search(r'\.lvtag\.tgt\.low::after,\.lvtag\.tgt\.bad::after\{([^}]*)\}', css)[1]
+        # 2026-11-03：low（未达到任何紫灯标准）只留紫字、**不画虚线外框**，虚线只留给 bad（获取失败）。
+        self.assertNotRegex(css, r'\.tgt\.low(?:\)|::)[^{]*\{[^}]*border:')
+        overlay = re.search(r'\.lvtag\.tgt\.bad::after\{([^}]*)\}', css)[1]
         encoded = re.search(r'url\("(data:image/svg\+xml,[^"]+)"\)', overlay)[1]
         rect = ET.fromstring(unquote(encoded.split(',', 1)[1])).find('{http://www.w3.org/2000/svg}rect')
         self.assertIsNotNone(rect)
@@ -3197,12 +3372,11 @@ class TestTargets(unittest.TestCase):
         self.assertIn('--purple:#b084ff', css)
         for dead in ('#a371f7', '#c4a3ff'):
             self.assertNotIn(dead, css)
-        self.assertIn('padding:1px 5px;border-radius:4px;line-height:1.35', css)
-        for state in ('low', 'bad'):
-            rule = re.search(r'\.lvtag\.tgt\.' + state + r'\{([^}]*)\}', css)[1]
-            self.assertIn('border:1px solid transparent', rule)
-            self.assertNotIn('dashed', rule)
-            self.assertNotIn('padding:', rule)
+        base = re.search(r'\.lvtag\.tgt\{([^}]*)\}', css)[1]
+        self.assertIn('grid-template-rows:var(--row-height) var(--row-height)', base)
+        self.assertIn('border:0', base)
+        self.assertIn('padding:0 1px', base)
+        self.assertNotIn('dashed', base)
         self.assertIn('color:var(--dim)', re.search(r'\.lvtag\.tgt\.bad\{([^}]*)\}', css)[1])
         self.assertNotRegex(css, r'\.lvtag\.tgt\.bad::after[^}]*content:none')
 
@@ -4631,8 +4805,8 @@ class TestBollRsiRules(unittest.TestCase):
                                     ([50, 50, 50], (100, 110, 90), False)):
             with self.subTest(values=values, bands=bands):
                 row = self.analyze(values, 'technology', bands=bands, cfg={'trigger': 100})
-                self.assertEqual(row['level'], 'red')
-                self.assertIn(('add_price', 'red'), row['signal_marks'])
+                self.assertEqual(row['level'], self.analyze(values, 'technology', bands=bands)['level'])
+                self.assertNotIn(('add_price', 'red'), row['signal_marks'])
                 self.assertEqual(row['foldable'], not keep)
                 self.assertIn(f'data-quiet-keep="{str(keep).lower()}"', monitor._stock_row(row, {}))
 
@@ -4644,7 +4818,7 @@ class TestBollRsiRules(unittest.TestCase):
                 self.analyze([50, 50, 50], 'technology', bands=(100, 110, 99), symbol='PLAIN'),
                 self.analyze([35, 35, 50], 'technology', symbol='RSIONLY')]
         body = monitor._group_body(rows, group, {}, {}, True, 'group_technology', group['label'])
-        shown, quiet = body.split('<details class="quiet-list">', 1)
+        shown, quiet = body.split('<details class="quiet-list"', 1)
         for symbol in ('DOWNONE',):
             self.assertIn(f'id="s-{symbol.lower()}"', shown)
             self.assertNotIn(f'id="s-{symbol.lower()}"', quiet)
@@ -4905,8 +5079,10 @@ class TestBollRsiRules(unittest.TestCase):
                     self.assertEqual((counts[kind]['red'], counts[kind]['yellow']), (0, 0))
                 output = _row_signals(row)
                 self.assertNotIn('signal-dot', output)
-                self.assertEqual(re.findall(r'data-signal-level="([^"]+)"', output), [color])
-                self.assertEqual(output.count('data-signal-kind="boll_rsi"'), 1)
+                self.assertEqual(re.findall(r'data-signal-level="([^"]+)"', output), [color, color])
+                self.assertEqual(output.count('data-signal-kind="boll_rsi"'), 2)
+                self.assertEqual(output.count('data-side="boll"'), 1)
+                self.assertEqual(output.count('data-side="rsi"'), 1)
                 self.assertNotIn('data-signal-kind="rsi"', output)
                 self.assertNotIn('data-signal-kind="boll"', output)
                 self.assertNotIn('data-signal-level="gray"', output)
@@ -5044,11 +5220,14 @@ class TestTechnicalFacts(unittest.TestCase):
                                 self.assertEqual([(g['kind'], g['level']) for g in descriptions if g['kind'] == 'chg'],
                                                  [('chg', independent)] if independent != 'green' else [])
                                 rendered = re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                                                      r'(?: data-signal-level="([^"]*)")?>', _row_signals(item))
-                                self.assertEqual([(k, level) for k, level in rendered
-                                                  if k in ('rsi', 'boll', 'boll_rsi')],
+                                                      r'(?: data-signal-level="([^"]*)")?[^>]*>', _row_signals(item))
+                                projected = [(k, level) for k, level in rendered
+                                             if k in ('rsi', 'boll', 'boll_rsi')]
+                                # 终稿组合分左右两块，仍只有同一技术身份/等级，不重复统计。
+                                self.assertEqual(list(dict.fromkeys(projected)),
                                                  [(kind, '' if expected_level == 'green' else expected_level)]
                                                  if has_description else [])
+                                self.assertLessEqual(len(projected), 2 if kind == 'boll_rsi' else 1)
                                 self.assertEqual(item, before)
         self.assertEqual(checked, 20 * len(groups))
         self.assertEqual(projections, 20 * len(groups) * 6)
@@ -5071,7 +5250,7 @@ class TestTechnicalFacts(unittest.TestCase):
                             row = self.analyzer.analyze(values, group, bands=bands, chg=chg,
                                                         cfg={'trigger': trigger}, symbol='THREECHANGE')
                             before = copy.deepcopy(row)
-                            overall = 'red' if trigger or chg == 6 else 'yellow' if chg else 'green'
+                            overall = 'red' if chg == 6 else 'yellow' if chg else 'green'
                             self.assertEqual((row['level'], row['foldable']), (overall, facts['foldable']))
                             technical_marks = [m for m in row['signal_marks'] if m[0] in ('rsi', 'boll', 'boll_rsi')]
                             self.assertEqual(technical_marks, [])
@@ -5096,7 +5275,7 @@ class TestTechnicalFacts(unittest.TestCase):
                                                     for color in ('red', 'yellow', 'purple')))
                             self.assertEqual(snapshot['signal_counts']['chg']['red'], int(chg == 6))
                             self.assertEqual(snapshot['signal_counts']['chg']['yellow'], int(chg == 3))
-                            self.assertEqual(snapshot['signal_counts']['add_price']['red'], int(trigger is not None))
+                            self.assertNotIn('add_price', snapshot['signal_counts'])
                             self.assertEqual((snapshot['summary']['red'], snapshot['summary']['yellow']),
                                              (int(overall == 'red'), int(overall == 'yellow')))
                             technical = [g for g in monitor._signal_description_groups(row)
@@ -5161,7 +5340,7 @@ class TestTechnicalFacts(unittest.TestCase):
                         row = self.analyzer.analyze(values, group, bands=bands, chg=chg,
                                                     cfg={'trigger': trigger}, symbol='FOURCHANGE')
                         original = copy.deepcopy(row)
-                        overall = 'red' if trigger is not None or chg == 6 else 'yellow' if chg else 'green'
+                        overall = 'red' if chg == 6 else 'yellow' if chg else 'green'
                         self.assertEqual((row['level'], row['foldable']), (overall, foldable))
                         self.assertEqual([mark for mark in row['signal_marks'] if mark[0] in ('rsi', 'boll', 'boll_rsi')], [])
                         gray = monitor.text_only_members([row])
@@ -5180,7 +5359,7 @@ class TestTechnicalFacts(unittest.TestCase):
                                          (int(overall == 'red'), int(overall == 'yellow')))
                         self.assertEqual(snap['signal_counts']['chg']['red'], int(chg == 6))
                         self.assertEqual(snap['signal_counts']['chg']['yellow'], int(chg == 3))
-                        self.assertEqual(snap['signal_counts']['add_price']['red'], int(trigger is not None))
+                        self.assertNotIn('add_price', snap['signal_counts'])
                         groups = monitor._signal_description_groups(row)
                         technical = [g for g in groups if g['kind'] in ('rsi', 'boll', 'boll_rsi')]
                         self.assertEqual([(g['kind'], g['level']) for g in technical],
@@ -5480,14 +5659,14 @@ class TestAmplitudeChain(unittest.TestCase):
                 row = self.analyze(values=values, bands=bands, high=106, low=94, prev=100 / 1.06,
                                    cfg={'trigger': 100, 'target': 190}, ratio=3)
                 marks = row['signal_marks']
-                for mark in (('chg', 'red'), ('add_price', 'red'), ('vol_ratio', 'red'),
+                for mark in (('chg', 'red'), ('vol_ratio', 'red'),
                              ('amp', 'red'), ('ma_band', 'yellow')):
                     self.assertIn(mark, marks)
                 self.assertEqual((row['level'], row['foldable'], row['purple']),
                                  ('red', values != (70, 50, 50), True))
                 self.assertEqual([m['kind'] for m in monitor.text_only_members([row])], technical)
                 snap = monitor.build_snapshot({}, [row], {}, group_counts={})
-                for kind, level in (('chg', 'red'), ('add_price', 'red'), ('vol_ratio', 'red'),
+                for kind, level in (('chg', 'red'), ('vol_ratio', 'red'),
                                     ('amp', 'red'), ('ma', 'yellow'), ('target', 'purple')):
                     self.assertEqual(snap['signal_counts'][kind][level], 1)
                 combo_red = values == (35, 35, 35)
@@ -6316,9 +6495,8 @@ class TestMaMergedStatistics(unittest.TestCase):
         import subprocess
         node = shutil.which('node')
         self.assertIsNotNone(node, '专项必须实际运行 Node，不跳过前端证明')
-        with open(os.path.join(ROOT, 'cost_panel.js'), encoding='utf-8') as stream:
-            source = stream.read()
-        functions = source[source.index('  function signalIdentity('):source.index('  var maFilterBox=')]
+        # 归并回统计层正式函数，不再读取成本面板运行时包装器。
+        functions = ''
         interaction = monitor.PAGE_INTERACTION_JS
         intersect = interaction[interaction.index('function intersectSignals('):interaction.index('function renderSignalFilter(')]
         _, row = self.rule_row()
@@ -6429,11 +6607,11 @@ class Test52wRangeBar(unittest.TestCase):
         # 2026-10-20：现价标记从「压在轨道中间的紫方块」改成「尖角朝下、顶在灰轨上沿的倒三角」
         self.assertIn('.range52-marker{position:absolute;bottom:100%;width:0;height:0;', monitor.PAGE_CSS)
         # 2026-10-27：三角只收底宽（10.4 → 8.4px），高度仍 9px 不变 → 顶角 60° 变约 50°（更尖锐）
-        self.assertIn('border-top:9px solid #efd9ff;', monitor.PAGE_CSS)
-        self.assertIn('border-top:7px solid #713caf', monitor.PAGE_CSS)   # 内层高度不跟着缩
+        self.assertIn('border-top:9px solid var(--range-marker-border);', monitor.PAGE_CSS)
+        self.assertIn('border-top:7px solid var(--range-marker-fill)', monitor.PAGE_CSS)   # 内层高度不跟着缩
         self.assertIn('.range52-marker::before{', monitor.PAGE_CSS)
         self.assertNotIn('width:8.4px;height:8.4px;border-radius:2px;background:#713caf', monitor.PAGE_CSS)
-        self.assertIn('height:2.1px;background:#9fa3aa;border-radius:99px}', monitor.PAGE_CSS)
+        self.assertIn('height:2.1px;background:var(--range-track);border-radius:99px}', monitor.PAGE_CSS)
         visible = re.sub(r' aria-label="[^"]*"', '', row)
         for text in ('52周低 100.00', '52周高 200.00', '区间位置 50.0%',
                      '本轮价 150.00', '日线盘中高低价', '未满52周'):
@@ -6505,7 +6683,7 @@ class Test52wRangeBar(unittest.TestCase):
         plain = monitor._range52_row(base)
         self.assertNotIn('range52-cost', plain)
         self.assertIn('.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;', monitor.PAGE_CSS)
-        self.assertIn('background:var(--lamp-yellow,#f0c674)', monitor.PAGE_CSS)
+        self.assertIn('background:var(--lamp-yellow)', monitor.PAGE_CSS)
 
     def test_short_history_and_missing_or_filled_range_do_not_claim_52_weeks(self):
         data = self.history()
@@ -6541,11 +6719,32 @@ class Test52wRangeBar(unittest.TestCase):
         output = monitor._stock_row(row, {})
         self.assertIn('HII', output)
         self.assertEqual(output.count('class="range52-row"'), 1)
-        self.assertIn('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}', monitor.PAGE_CSS)  # 位置条贴近本股
-        self.assertIn('.stk tr.range52-row td{padding:0 12px 4px 18px;', monitor.PAGE_CSS)  # 位置条下方只留 4px
-        self.assertIn('.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:4px}', monitor.PAGE_CSS)  # 灯条延伸到本股位置条（与黄灯等宽）
-        self.assertIn('background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom', monitor.PAGE_CSS)  # 灯条顶部下移
-        self.assertIn('</tr><tr class="range52-row"><td colspan="4">', output)
+        css = monitor.PAGE_CSS
+        # 四区双排取代旧两区搬家补丁；区间条独占完整后续行，手机/桌面各自内边距。
+        self.assertIn('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 12px 10px;border:0;box-shadow:none}', css)
+        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}', css)
+        self.assertIn('grid-template-areas:"sym px tgs earn" "cost cost cost cost" "sig sig sig sig"', css)
+        self.assertIn('td.px .px-main{display:grid;grid-template-rows:var(--row-height) var(--row-height)', css)
+        self.assertIn('td.tgs .target-space{grid-area:1/1/2/3}', css)
+        self.assertIn('td.tgs .target-price{grid-area:2/1/3/2}', css)
+        self.assertIn('td.tgs .target-month{grid-area:2/2/3/3;margin-left:3px}', css)
+        self.assertIn('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}', css)
+        self.assertIn('.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}', css)
+        self.assertIn('--sig-col-gap:30px;--sig-row-gap:7px', css)
+        self.assertIn('td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}', css)
+        self.assertIn('width:3px;height:10px;margin-right:5px;border-radius:1px;', css)
+        self.assertIn('function balanceDescriptions(row)', monitor.PAGE_INTERACTION_JS)
+        for dead in ('cost-warn', 'ack-btn', 'sig-lead', 'data-reflowed'):
+            self.assertNotIn(dead, css)
+        # 旧仓位快捷跳转不借主表代码冒充编辑按钮；真正编辑入口由成本套覆盖。
+        self.assertIn('cursor:default', css)
+        self.assertNotIn('.stk tr.red+tr.range52-row>td{--lc:', css)
+        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:9.5px;width:2px;height:41.7px;', css)
+        self.assertIn('table.stk tr[data-symbol]::before{top:7px;height:42.7px}', css)
+        self.assertIn('top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line)', css)
+        for level in ('red', 'yellow', 'green'):
+            self.assertIn(f'table.stk tr.{level}[data-symbol]{{--lamp-line:var(--{level})}}', css)
+        self.assertIn('</tr><tr class="range52-row"><td colspan="5">', output)
         self.assertEqual(monitor.signal_counts([row])['low52']['red'], 0)
 
 
@@ -6641,6 +6840,11 @@ class TestDisplayInteractions(unittest.TestCase):
                 with patch.object(monitor, '_collapse_button', wraps=monitor._collapse_button) as helper:
                     output = monitor._group_card(group, [], {}, {})
                 card_id = f'group_{group["key"]}'
+                if group['key'] == 'positions':
+                    helper.assert_called_once_with('group_positions_short', '短持仓')
+                    self.assertIn('aria-controls="group_positions_short"', output)
+                    self.assertNotIn('aria-controls="group_positions"', output)
+                    continue
                 helper.assert_called_once_with(card_id, group['label'])
                 buttons = re.findall(r'<button\b([^>]*)>(.*?)</button>', output, re.S)
                 self.assertEqual(len(buttons), 1)
@@ -6695,14 +6899,16 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('line-height:0', strip_rule.group(1))
         self.assertIn('.collapse-group:hover{color:var(--text);background:var(--collapse-bg)}', monitor.PAGE_CSS)
         counts_rule = re.search(r'#signalCounts\{([^}]+)\}', monitor.PAGE_CSS)[1]
-        self.assertIn('--collapse-bg:rgba(102,134,198,.6)', counts_rule)
+        self.assertIn('--collapse-bg:var(--signal-collapse)', counts_rule)
+        self.assertIn('--signal-collapse:rgba(102,134,198,.6)', monitor.PAGE_CSS)
         self.assertNotIn('opacity:', counts_rule)
-        self.assertIn('#signalCounts .collapse-group{color:#fff}', monitor.PAGE_CSS)
+        self.assertIn('#signalCounts .collapse-group{color:var(--white)}', monitor.PAGE_CSS)
         self.assertNotIn('opacity:', button_rule.group(1))
         self.assertIn('--collapse-bg:var(--signal-bg)', monitor.PAGE_CSS)
         pos_rule = re.search(r'#group_positions\{([^}]+)\}', monitor.PAGE_CSS)[1]
-        self.assertIn('--collapse-bg:rgba(46,160,67,.15)', pos_rule)
-        self.assertIn('--signal-border:var(--frame-green,#2c8f3e)', pos_rule)
+        self.assertIn('--collapse-bg:var(--positions-collapse)', pos_rule)
+        self.assertIn('--positions-collapse:rgba(46,160,67,.15)', monitor.PAGE_CSS)
+        self.assertIn('--signal-border:var(--frame-green)', pos_rule)
         # 收起态不常亮：没有 id 级 border-color，绿只由展开态的 --signal-border 带出来
         self.assertNotIn('border-color:', pos_rule)
 
@@ -6716,7 +6922,8 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('tr.stk-flash+tr.range52-row>td', monitor.PAGE_CSS)
         frames = re.search(r'@keyframes stkflash\{(.*?)\}\s', monitor.PAGE_CSS + ' ', re.S)
         self.assertIsNotNone(frames)
-        self.assertIn('background-color:#2b3f63', frames.group(1))
+        self.assertIn('background-color:var(--stock-flash)', frames.group(1))
+        self.assertIn('--stock-flash:#2b3f63', monitor.PAGE_CSS)
         self.assertIn('background-color:transparent', frames.group(1))
         for bad in ('background:#2b3f63', 'background:transparent'):   # 简写会清掉灯条的 background-image
             self.assertNotIn(bad, frames.group(1))
@@ -6725,25 +6932,28 @@ class TestDisplayInteractions(unittest.TestCase):
         snap = {'signal_counts': {'ma_band': {'label': '长均线触及', 'red': 0,
                  'yellow': 5, 'purple': 0}}, 'summary': {'yellow': 5}}
         page = monitor.render({}, [], 0, snapshot=snap)
-        self.assertLess(page.index('id="signalCounts"'), page.index('id="macroCard"'))
-        self.assertIn('#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page)
+        self.assertLess(page.index('id="costManage"'), page.index('id="dualRow"'))
+        self.assertLess(page.index('id="macroCard"'), page.index('id="signalCounts"'))
+        self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page)
         self.assertIn(monitor.PAGE_INTERACTION_JS, page)
         controls = re.findall(r'<button type="button" class="collapse-group" aria-controls="([^"]+)"', page)
-        self.assertEqual(controls, ['costManage', 'signalCounts', 'macroCard'] + [f'group_{g["key"]}' for g in monitor._display_groups()])
-        self.assertEqual(len(controls), 17)
-        # 仓位已随首屏HTML输出，与统计、市场风险同样只有一个底部收起条。
+        self.assertEqual(controls, ['costManage', 'signalCounts'] + ['group_positions_short' if g['key'] == 'positions' else f'group_{g["key"]}' for g in monitor._display_groups()])
+        self.assertEqual(len(controls), 16)
+        # 双栏用自身summary切换；外层持仓不重复收起，空长区不占位。
         self.assertEqual(re.sub(r"<script.*?</script>", "", page, flags=re.S)
-                         .count('<span class="collapse-icon" aria-hidden="true">▲</span>'), 17)
+                         .count('<span class="collapse-icon" aria-hidden="true">▲</span>'), 16)
 
     def test_market_risk_has_local_bottom_button_after_reference_content(self):
         page = monitor.render({}, [], 0, snapshot={})
         macro = page.split('id="macroCard"', 1)[1].split('<details class="card group-card"', 1)[0]
-        button = monitor._collapse_button('macroCard', '市场风险')
-        self.assertEqual(macro.count('class="collapse-group"'), 1)
-        self.assertIn(button + '\n</details>', macro)
-        self.assertGreater(macro.index(button), macro.index('</table>'))
-        self.assertIn('aria-label="收起市场风险"', button)
-        self.assertNotIn('title=', button)
+        self.assertEqual(macro.count('class="collapse-group"'), 0)
+        self.assertIn('<summary class="grp">', macro)
+        self.assertIn('<div class="dual-body macro-scope" data-owner="" hidden>', macro)
+        self.assertIn('<table data-owner="macro" hidden>', macro)
+        self.assertGreater(macro.index('</table>'), macro.index('marketRiskReason'))
+        self.assertIn('function bindDualCards()', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('body.dataset.owner = owner', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('child.hidden = child.dataset.owner !== owner', monitor.PAGE_INTERACTION_JS)
 
 
 class TestQuietKeep(unittest.TestCase):
@@ -6771,7 +6981,7 @@ class TestQuietKeep(unittest.TestCase):
                                   earnings={'status': 'ok', 'kind': 'official', 'date': '2030-10-21'})]
                 with self.subTest(group=group, level=level):
                     output = self.body(rows, group)
-                    shown, _, quiet = output.partition('<details class="quiet-list">')
+                    shown, _, quiet = output.partition('<details class="quiet-list"')
                     for row in rows:
                         keep = row['symbol'] != 'NORMAL'
                         marker = f'id="{monitor._stock_anchor_id(row["symbol"])}" data-quiet-keep="{str(keep).lower()}"'
@@ -6789,7 +6999,7 @@ class TestQuietKeep(unittest.TestCase):
                 output = self.body([row], container)
                 marker = f'id="s-test" data-quiet-keep="{str(keep).lower()}"'
                 self.assertIn(marker, output)
-                self.assertEqual('<details class="quiet-list">' in output, not keep)
+                self.assertEqual('<details class="quiet-list"' in output, not keep)
                 self.assertEqual(json.dumps(row, sort_keys=True), before)
 
     def test_explicit_earnings_window_is_used_in_both_classification_and_row(self):
@@ -6798,10 +7008,10 @@ class TestQuietKeep(unittest.TestCase):
         with patch.object(monitor, '_bj_today', return_value='2031-01-01'):
             output = self.body([row], asof='2030-10-20', snapshot=snapshot)
             self.assertIn('data-quiet-keep="true"', output)
-            self.assertNotIn('<details class="quiet-list">', output)
+            self.assertNotIn('<details class="quiet-list"', output)
             output = self.body([row], asof='2030-12-01', snapshot=snapshot)
             self.assertIn('data-quiet-keep="false"', output)
-            self.assertIn('<details class="quiet-list">', output)
+            self.assertIn('<details class="quiet-list"', output)
             direct = monitor._stock_row(row, {'earnings_week': {'asof': '2030-10-20'}})
             self.assertIn('data-quiet-keep="true"', direct)
 
@@ -6812,7 +7022,7 @@ class TestQuietKeep(unittest.TestCase):
             with self.subTest(level=level):
                 self.assertIn('data-quiet-keep="false"', monitor._stock_row(row, {}))
                 output = self.body([row])
-                self.assertEqual('<details class="quiet-list">' in output, level == 'green')
+                self.assertEqual('<details class="quiet-list"' in output, level == 'green')
 
     def test_target_below_medium_and_etf_target_do_not_force_keep(self):
         for row in (self.item(target=monitor.evaluate_target(100, 100,
@@ -6821,7 +7031,7 @@ class TestQuietKeep(unittest.TestCase):
                              {'kind': 'manual', 'price': 150}, 'position', 3))):
             output = self.body([row])
             self.assertIn('data-quiet-keep="false"', output)
-            self.assertIn('<details class="quiet-list">', output)
+            self.assertIn('<details class="quiet-list"', output)
 
     def test_long_and_short_zones_share_the_same_keep_and_earnings_window(self):
         rows = [self.item('LONGRED', level='red', hold='long'),
@@ -6858,40 +7068,37 @@ class TestPositionZones(unittest.TestCase):
     def card(self, items):
         return monitor._group_card(self.positions_group(), items, {}, {})
 
-    def test_only_the_long_zone_is_a_sub_section(self):
-        """用户 2026-10-16 定稿：短持仓不再单包一层，展开「持仓」直接就是短持仓的表，
-        上方只多一条可展开的「长持仓」。"""
+    def test_long_and_short_zones_have_independent_totals_and_collapse(self):
+        """11-09终稿：双子区常驻，各自收起；外层不再重复一条收起按钮。"""
         out = self.card([self.item('AAA', 'green', 'long'),
-                         self.item('BBB', 'red', 'short'),
-                         self.item('CCC', 'yellow')])
+                         self.item('BBB', 'red', 'short'), self.item('CCC', 'yellow')])
         self.assertEqual(re.findall(r'<details class="zone-card" id="([^"]+)" open>', out),
-                         ['group_positions_long'])
-        self.assertEqual(re.findall(r'<span class="zone-name">([^<]+)</span>', out), ['长持仓 (1)'])
-        self.assertNotIn('短持仓 (', out)
-        self.assertNotIn('group_positions_short', out)
-        # 长持仓区一条收起条 + 外层「持仓」卡一条
+                         ['group_positions_long', 'group_positions_short'])
+        self.assertEqual(re.findall(r'<span class="zone-name">([^<]+)</span>', out),
+                         ['长持仓 (1)', '短持仓 (2)'])
+        self.assertEqual(out.count('class="zone-num"'), 6)
         self.assertEqual(re.findall(r'aria-controls="([^"]+)"', out),
-                         ['group_positions_long', 'group_positions'])
-        long_part = out.split('</details>', 1)[0] if False else out.split('<details class="zone-card"', 1)[1]
-        long_zone = long_part.split('</details>', 1)[0]
+                         ['group_positions_long', 'group_positions_short'])
+        long_zone, short_zone = out.split('id="group_positions_short"', 1)
         self.assertIn('AAA', long_zone)
         self.assertNotIn('BBB', long_zone)
-        # 短持仓在长持仓区之后、直接作为卡片主体
-        self.assertIn('BBB', out.split('</details>', 1)[1])
-        self.assertTrue(out.rstrip().endswith(monitor._collapse_button('group_positions', '持仓')
-                                              + '</details>'))
+        self.assertIn('BBB', short_zone)
+        self.assertNotIn('AAA', short_zone)
+        self.assertIn('class="cashbond-row"', out)
+        self.assertIn('class="cost-foot asset-row cost-manage"', out)
 
-    def test_empty_zone_is_not_rendered(self):
+    def test_empty_long_zone_is_not_rendered(self):
         out = self.card([self.item('BBB', 'red', 'short')])
         self.assertNotIn('group_positions_long', out)
-        self.assertNotIn('zone-card', out)
+        self.assertEqual(out.count('class="zone-card"'), 1)
+        self.assertIn('id="group_positions_short"', out)
 
     def test_unmarked_positions_count_as_short(self):
-        # 没标 hold 的算短持仓，因此不会出现长持仓区，标的落在卡片主体表里
+        # 没标 hold 的仍算短持仓，不能漏入总额或落到长持仓。
         out = self.card([self.item('CCC', 'green')])
         self.assertNotIn('长持仓 (', out)
-        self.assertNotIn('zone-card', out)
-        self.assertIn('CCC', out)
+        self.assertIn('短持仓 (1)', out)
+        self.assertIn('CCC', out.split('id="group_positions_short"', 1)[1])
 
     def test_long_zone_does_not_repeat_the_rule_text(self):
         # 用户 2026-10-16 定稿：首页长持仓区不再挂那段规则说明（规则只在设置页和页底折叠里讲一次）
@@ -6899,24 +7106,24 @@ class TestPositionZones(unittest.TestCase):
         self.assertNotIn('长持仓不看一般过热', out)
         self.assertNotIn('class="quiet"', out.split('zone-card', 1)[-1].split('<table', 1)[0])
 
-    def test_quiet_list_starts_collapsed_and_resets_when_the_zone_closes(self):
-        # 用户 2026-10-16 定稿：区里的「无异动 N 只」默认折叠；关掉区再打开时不该还留着上次的展开态。
+    def test_position_quiet_lists_stay_open_but_other_groups_reset(self):
         out = self.card([self.item('AAA', 'red', 'long'),
-                         self.item('BBB', 'green', 'long'),
-                         self.item('CCC', 'green', 'short')])
-        # 渲染时不带 open 属性 —— 第一次进来就是折叠的
-        self.assertNotIn('<details class="quiet-list" open>', out)
-        self.assertIn('<details class="quiet-list"><summary>无异动 1 只</summary>', out)
-        # 收起卡片时把内部已展开的无异动清单一并复位（浏览器不会自己忘掉 details 的 open）
+                         self.item('BBB', 'green', 'long'), self.item('CCC', 'green', 'short')])
+        self.assertEqual(out.count('<details class="quiet-list" open>'), 2)
         js = monitor.PAGE_INTERACTION_JS
         self.assertIn('function resetQuietLists(card) {', js)
         self.assertIn('card.querySelectorAll("details.quiet-list[open]")', js)
-        self.assertIn('if (!card.querySelector("details.quiet-list[open]")) return;', js)
+        self.assertIn("if (sub.closest('#group_positions')) return;", js)
+        self.assertIn('sub.open = false;', js)
         self.assertIn('resetQuietLists(card);', js)
+        group = next(g for g in monitor.GROUPS if g['key'] == 'focus')
+        other = monitor._group_card(group, [dict(self.item('OTHER', 'green'), group='focus')], {}, {})
+        self.assertIn('<details class="quiet-list">', other)
+        self.assertNotIn('<details class="quiet-list" open>', other)
 
-    def test_zone_collapse_bar_is_spaced_from_the_outer_one(self):
-        # 子区收起条紧贴外层「持仓」卡收起条时会误点，两条之间必须有间距
-        self.assertIn('.zone-card + .group-bottom,.zone-card + .quiet + .group-bottom{margin-top:22px}',
+    def test_short_zone_bottom_gap_uses_final_three_pixel_contract(self):
+        self.assertIn('#group_positions[open]{padding-bottom:2px}', monitor.PAGE_CSS)
+        self.assertIn('#group_positions_short.zone-card{background:none;border:1px solid var(--frame-green);margin:9px -2px 0}',
                       monitor.PAGE_CSS)
 
     def test_other_groups_keep_one_body(self):
@@ -7193,12 +7400,12 @@ class TestSignalCounts(unittest.TestCase):
         self.assertIn('--lamp-size:14px', css)
         self.assertNotIn('signal-dot', css)
         self.assertNotIn('display:inline list-item', css)
-        self.assertIn('#signalCounts .signal-members-panel li:not(.signal-member-split)::before,', css)
+        self.assertIn('#signalCounts .signal-members-panel li:not(.signal-member-split)::before{', css)
         self.assertIn('width:3px;height:12px;border-radius:1px;', css)
         self.assertIn('margin-right:6px;vertical-align:-1px', css)
         self.assertNotIn('#signalCounts .signal-members-panel li::marker', css)
         self.assertNotIn('.signal-filter .stat-dot', css)
-        for level, color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
+        for level, color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-yellow)'), ('gray', 'var(--text)')):
             self.assertIn(f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
                           '{color:' + color + '}', css)
         self.assertNotIn('condition.append(dot', monitor.PAGE_INTERACTION_JS)
@@ -7269,7 +7476,7 @@ assert.equal(renders, 20);
         self.assertRegex(seg, r'appendRsiArrows\([^;]*\.t\)')
         self.assertNotIn('signal-dot', seg)
         self.assertIn('signal-filter-condition', seg)
-        self.assertIn('condition.dataset.signalLevel = level;', seg)
+        self.assertIn('condition.dataset.signalLevel = part.l;', seg)
         self.assertIn('signal-name-lamp ', seg)
         self.assertIn(' / ', seg)
         self.assertNotIn('m.details.join(" · ")', seg)
@@ -7315,7 +7522,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
 
     def test_earnings_is_not_added_to_signal_kinds_counts_or_members(self):
         expected = ['chg', 'amp', 'vol_ratio', 'rsi', 'boll', 'boll_rsi',
-                    'ma', 'low52', 'add_price', 'reduce_price', 'target']
+                    'ma', 'low52', 'target']
         self.assertEqual([kind for kind, _ in monitor.SIGNAL_KINDS], expected)
         rows = [self.member_row('AAA', 'position', 'red', *((kind, 'red') for kind in expected)),
                 self.member_row('BBB', 'focus', 'yellow', ('earnings', 'yellow'))]
@@ -7360,6 +7567,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], ['AAPL', 'BRK-B', 'D15'])
             self.assertEqual(snap['signal_counts']['chg']['red'], 0)
             self.assertEqual(snap['summary']['green'], 6)  # 同身份按优先分组去重，财报仍不改绿灯
+            snap['finished_at_bj'] = '2026-10-14T00:00:00+08:00'
             panel = monitor._signal_counts_card(snap)
             self.assertIn('<details class="earnings-week"><summary>未来15天财报 · 3 只</summary>', panel)
             self.assertNotIn('<details class="earnings-week" open>', panel)
@@ -7388,9 +7596,10 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             self.assertIn('<li class="lamp-green"><a class="signal-member-jump" href="#s-aapl">'
                           '<span class="signal-member-symbol">AAPL</span></a>'
                           '<span class="signal-member-belong">（IT · AI）</span> ', panel)
-            self.assertIn('10/14 盘后</span><span class="lamp-text">（绿灯）</span>', panel)
+            self.assertIn('美 10/14 盘后<span class="earnings-week-bj">·北京 10/15 凌晨</span></span><span class="lamp-text">（绿灯）</span>', panel)
             self.assertIn('<span class="signal-member-belong">（短持仓）</span> '
-                          '<span class="earnings-week-meta is-yellow">美东 10/20 盘后</span>'
+                          '<span class="earnings-week-meta is-yellow"><span class="cd">（7）</span>美 10/20 盘后'
+                          '<span class="earnings-week-bj">·北京 10/21 凌晨</span></span>'
                           '<span class="lamp-text">（绿灯）</span>', panel)
             self.assertNotIn('earnings-week-group', panel)
             self.assertNotIn('<strong>', panel.split('earnings-week', 1)[1])
@@ -7409,10 +7618,12 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             technology = page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
             self.assertTrue(technology.startswith('>'))  # 近期财报不自动展开分类，用户点开后才看到
             self.assertEqual(re.findall(r'<details class="card[^"]*" id="(\w+)" open>', page), ['signalCounts'])  # 只默认展开统计
-            self.assertIn('<td class="sym">AAPL', technology.split('<details class="quiet-list">')[0])
+            self.assertRegex(technology.split('<details class="quiet-list"')[0],
+                                r'<td class="sym"><span class="sym-box \w+">AAPL')
             self.assertIn('无异动 1 只', technology)
             position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
-            self.assertIn('<td class="sym">BRK-B', position.split('<details class="quiet-list">')[0])
+            self.assertRegex(position.split('<details class="quiet-list"')[0],
+                                r'<td class="sym"><span class="sym-box \w+">BRK-B')
 
     def test_earnings_row_and_statistics_use_the_same_source_timing(self):
         import html as H
@@ -7432,6 +7643,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                             patch.object(monitor, 'TARGET_DATE', '2026-10-20'), \
                             patch.object(monitor, 'global_dca', return_value=None):
                         snap = monitor.build_snapshot({}, [row], {'positions': {'AAPL': {}}})
+                        snap['finished_at_bj'] = '2026-10-20T00:00:00+08:00'
                         page = monitor.render({}, [row], 1, snapshot=snap)
                     member, = snap['earnings_week']['members']
                     self.assertEqual((member['date'], member['timing'], member['kind']),
@@ -7441,7 +7653,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     self.assertEqual(monitor.earnings_week_members([duplicate, row], '2026-10-20'),
                                      [member])
                     panel = monitor._signal_counts_card(snap)
-                    self.assertIn(f'美东 10/30 {label}</span>', panel)
+                    self.assertIn(f'美 10/30 {label}<span class="earnings-week-bj">', panel)
                     self.assertEqual(monitor._earnings_week_panel(snap, count_only=True), 1)
                     data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', panel).group(1)))
                     self.assertTrue(data['earnings_week']['ok'])
@@ -7450,10 +7662,12 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     self.assertEqual(filtered['d'][0]['t'], f'财报 {date} {label}')
                     position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
                     self.assertIn('无异动 1 只', position)
-                    folded = position.split('<details class="quiet-list">', 1)[1]
-                    main, note = monitor.earnings_label(e)
+                    folded = position.split('<details class="quiet-list"', 1)[1]
+                    main, note = monitor.earnings_label(e, '2026-10-20')
                     self.assertIn(label, main)
-                    self.assertIn(f'{main}<span class="unit">{note}</span>', folded)
+                    self.assertIn(f'data-main="{main}"', folded)
+                    self.assertIn(f'data-unit-full="{note}"', folded)
+                    self.assertIn('（11）' if timing == 'post' else '（10）', folded)
                     self.assertEqual(snap['summary']['green'], 1)
                     self.assertTrue(all(c['red'] == c['yellow'] == 0 for c in snap['signal_counts'].values()))
                     for today, urgency in (('2026-10-28', 'yellow'), ('2026-10-29', 'red'), ('2026-10-30', 'red'),
@@ -7491,6 +7705,8 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], expected)
                     self.assertEqual(snap['summary']['green'], len(rows))
                     self.assertTrue(all(c['red'] == c['yellow'] == 0 for c in snap['signal_counts'].values()))
+                    # 渲染以快照完成日为准，不能只冻分析用NOW而留下真实finished_at。
+                    snap['finished_at_bj'] = bj_day + 'T00:00:00+08:00'
                     panel = monitor._signal_counts_card(snap)
                     self.assertIn('未来15天财报 · 7 只', panel)
                     self.assertEqual(panel.count('earnings-week-meta is-red'), 3)
@@ -7500,7 +7716,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     self.assertTrue(filtered['earnings_week']['ok'])
                     self.assertEqual([m['id'] for m in filtered['earnings_week']['members']], sorted(expected))
                     body = monitor._group_body(rows, {'item_group': 'technology'}, snap, bj_day, True, 'group_technology', '科技')
-                    main, folded = body.split('<details class="quiet-list">', 1)
+                    main, folded = body.split('<details class="quiet-list"', 1)
                     self.assertIn('无异动 6 只', folded)
                     for symbol in expected[:5]:
                         self.assertIn(f'id="s-{symbol.lower()}"', main)
@@ -7677,21 +7893,24 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
 
 
     def test_add_and_reduce_price_members_print_the_price(self):
-        """统计面板的加仓价/减仓价名单里补上价位，写法跟个股行胶囊一致（加 325 / 减 400）。"""
-        rows = [self.member_row('AAA', 'position', 'red', ('add_price', 'red')),
-                self.member_row('BBB', 'position', 'red', ('reduce_price', 'red')),
-                self.member_row('CCC', 'position', 'red', ('add_price', 'red'))]
-        rows[0].update(trigger=325)
-        rows[1].update(reduce=400.5)
-        rows[2].update(trigger='写坏了')      # 无效价不占位，也不写空标签
+        """终稿价位常驻主表，不再伪装红灯统计；无效价不占位。"""
+        rows = [self.member_row('AAA', 'position', 'green', ('add_price', 'red')),
+                self.member_row('BBB', 'position', 'green', ('reduce_price', 'red')),
+                self.member_row('CCC', 'position', 'green', ('add_price', 'red'))]
+        rows[0].update(trigger=325, price=325)
+        rows[1].update(reduce=400.5, price=400.5)
+        rows[2].update(trigger='写坏了', price=100)
         members = monitor.signal_count_members(rows)
-        output = monitor._signal_counts_card({'signal_counts': monitor.signal_counts(rows),
-                                              'signal_members': members})
-        add_panel = self.panel(output, 'add_price', 'red')
-        self.assertIn('>加 325</span>', add_panel)
-        self.assertNotIn('加仓价 325', add_panel)      # 不在统计里另写长名
-        self.assertIn('>减 400.5</span>', self.panel(output, 'reduce_price', 'red'))
-        self.assertNotIn('待下次更新', add_panel)
+        counts = monitor.signal_counts(rows)
+        for kind in ('add_price', 'reduce_price'):
+            self.assertNotIn(kind, members)
+            self.assertNotIn(kind, counts)
+        output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
+        self.assertNotIn('加仓价', output)
+        self.assertNotIn('减仓价', output)
+        self.assertIn('加仓价 325 · 距 0.0%', monitor._signals_html(rows[0]))
+        self.assertIn('减仓价 400.5 · 距 0.0%', monitor._signals_html(rows[1]))
+        self.assertNotIn('lvtag add', monitor._signals_html(rows[2]))
 
     def test_low52_members_print_the_52_week_low_price(self):
         """52周低位那一栏把低点价本身写出来：只说「距低点 +2.6%」看不见价格。"""
@@ -7710,22 +7929,21 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertNotIn('52周低', old_panel)
 
     def test_add_and_reduce_price_stay_two_rows_so_buy_and_sell_never_mix(self):
-        """加仓价（该买）与减仓价（该卖）动作相反，统计面板各占一行、各带自己的价位。
-
-        曾试过合并成「加/减仓价」一行：计数从标的数变成命中次数，同一只票两端都命中时
-        表头会多算一只，而且「同时满足」筛选项也没法再单独挑减仓价，故改回两行。"""
-        rows = [self.member_row('AAA', 'position', 'red', ('add_price', 'red'), ('reduce_price', 'red'))]
-        rows[0].update(trigger=325, reduce=400.5)
-        counts = monitor.signal_counts(rows)
-        output = monitor._signal_counts_card({'signal_counts': counts,
-                                              'signal_members': monitor.signal_count_members(rows)})
-        self.assertIn('>加仓价</button>', output)
-        self.assertIn('>减仓价</button>', output)
-        self.assertEqual(counts['add_price']['red'], 1)
-        self.assertEqual(counts['reduce_price']['red'], 1)
-        self.assertIn('>加 325</span>', self.panel(output, 'add_price', 'red'))
-        self.assertIn('>减 400.5</span>', self.panel(output, 'reduce_price', 'red'))
-        self.assertEqual(output.count('class="signal-member-block"'), 0)   # 这两栏不分框
+        """终稿加仓固定左末、减仓固定右末，两端同时接近也不新增统计或交易灯。"""
+        import copy
+        row = self.member_row('AAA', 'position', 'green', ('add_price', 'red'), ('reduce_price', 'red'))
+        row.update(trigger=97, reduce=103, price=100)
+        before = copy.deepcopy(row)
+        output = monitor._signals_html(row)
+        left, right = output.split('<div class="sig-col">')[1:]
+        self.assertIn('加仓价 97 · 距 3.0%', left)
+        self.assertNotIn('减仓价', left)
+        self.assertIn('减仓价 103 · 距 3.0%', right)
+        self.assertNotIn('加仓价', right)
+        self.assertEqual(output.count('data-near="1"'), 2)
+        self.assertNotIn('data-signal-level="red"', output)
+        self.assertTrue(all(c['red'] == c['yellow'] == 0 for c in monitor.signal_counts([row]).values()))
+        self.assertEqual(row, before)
 
 
     def test_member_panels_are_toned_so_bullets_follow_the_light(self):
@@ -7749,8 +7967,10 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         for level, color in (('red', 'var(--red)'), ('yellow', 'var(--yellow)'),
                              ('green', 'var(--green)'), ('gray', 'var(--text)'), ('unknown', 'var(--dim)')):
             self.assertIn(f'#signalCounts .signal-members-panel li.lamp-{level}{{--name-lamp:{color}}}', monitor.PAGE_CSS)
-        self.assertIn('#signalCounts .signal-members-panel.tone-red,#signalCounts .signal-name-lamp.red,', monitor.PAGE_CSS)
-        self.assertIn('#signalCounts .text-only .signal-member-list,#signalCounts .signal-name-lamp.gray{--name-lamp:#9fa3aa}', monitor.PAGE_CSS)
+        for selector in ('#signalCounts .signal-members-panel.tone-red', '#signalCounts .signal-name-lamp.red'):
+            self.assertIn(selector + '{--name-lamp:var(--red)}', monitor.PAGE_CSS)
+        for selector in ('#signalCounts .text-only .signal-member-list', '#signalCounts .signal-name-lamp.gray'):
+            self.assertIn(selector + '{--name-lamp:var(--range-track)}', monitor.PAGE_CSS)
 
     def test_expanding_a_count_lights_only_that_count_capsule(self):
         """点开哪一格，就只亮那一格的数字胶囊（认 aria-expanded），不整行高亮。"""
@@ -7853,8 +8073,9 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertEqual(target.count('class="signal-name-lamp green"'), 2)
         self.assertNotIn('class="signal-name-lamp tone-purple"', target)
         self.assertNotIn('signal-member-icon', target)
-        self.assertIn('今日上穿共识价 200', target)
-        self.assertIn('今日跌破目标价 90', target)
+        self.assertIn('上穿 200 -1.0%', plain_text(target))
+        self.assertIn('跌破 90 ', plain_text(target))
+        self.assertRegex(target, r'跌破 90 <span class="percent-change (?:pos|neg)">[+-]\d+\.\d+%</span>')
         self.assertNotIn('>▲</span>', target)
         self.assertNotIn('>▼</span>', target)
         self.assertNotIn('▲ 上穿 · ▼ 跌破 · ■ 附近 · □ 空间达标', target)
@@ -8007,7 +8228,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertNotIn('class="signal-name-lamp tone-target-high"', output)
         self.assertIn('class="target-space-high"', output)
         self.assertNotIn('signal-member-icon', output)
-        self.assertIn('今日跌破目标价 190', output)
+        self.assertIn('跌破 190 +90.0%', plain_text(output))
         self.assertNotIn('title=', output)
         self.assertEqual(output.count('href="#s-both"'), 2)
 
@@ -8570,9 +8791,9 @@ class TestTargetOverlays(unittest.TestCase):
         self.assertEqual(target.count('class="signal-name-lamp '), 5)
         self.assertNotIn('signal-member-icon', target)
         self.assertRegex(target, r'(?:tone-target-high|target-space-high)')
-        self.assertIn('今日跌破共识价 190', target)
-        self.assertIn('今日上穿共识价 100', target)
-        self.assertIn('共识价 250，空间 +150.0%', target)
+        self.assertIn('跌破 190 +90.0%', plain_text(target))
+        self.assertIn('上穿 100 +0.0%（±3% 内）', plain_text(target))
+        self.assertIn('250，+150.0%', plain_text(target))
         self.assertNotRegex(target, r'高空间|中空间|普通空间|模拟')
         self.assertNotIn('>▲</span>', target)
         self.assertNotIn('>▼</span>', target)
@@ -8605,7 +8826,7 @@ class TestTargetOverlays(unittest.TestCase):
         snap = self.snapshot(rows)
         before = copy.deepcopy(snap)
         panel = monitor._target_purple_panel(snap)
-        spaces, reached = panel.split('<h5>空间</h5>', 1)[1].split('<h5>达到</h5>', 1)
+        reached, spaces = panel.split('<h5>达到</h5>', 1)[1].split('<h5>空间</h5>', 1)
         symbols = lambda text: re.findall(r'class="signal-member-symbol">([^<]+)</span>', text)
         expected = ['HIGHEST', 'FOCUSMID', 'HOLDLOW', 'MEDHIGH',
                     'PRECZ', 'PRECA', 'TIEA', 'TIEZ', 'MEDLOW']
@@ -8618,7 +8839,7 @@ class TestTargetOverlays(unittest.TestCase):
         self.assertEqual(symbols(reached), ['ZREACHED', 'AREACHED'])
         self.assertEqual(snap, before)
         card = monitor._signal_counts_card(snap)
-        self.assertEqual(symbols(card.split('<h5>空间</h5>', 1)[1].split('<h5>达到</h5>', 1)[0]), expected)
+        self.assertEqual(symbols(card.split('<h5>空间</h5>', 1)[1].split('</details>', 1)[0]), expected)
         # 反转输入不能改变清单排序、成员或计数。
         reversed_snap = self.snapshot(list(reversed(rows)))
         self.assertEqual(monitor._target_purple_panel(reversed_snap), panel)
@@ -8700,20 +8921,39 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                                 f'RSI 3条 <span class="{rsi_class}">{symbol}</span>{direction}'
                                 + ('（反）' if reverse else ''))
                         attr = f' data-signal-level="{level}"'
-                        expected = f'<span class="signal-item" data-signal-kind="boll_rsi"{attr}>{body}</span>'
+                        # 2026-11-04 晚：布林+RSI 拆成左（布林）／右（RSI）两个区域，
+                        # 但箭头 wrapper、" · "、事实文本与外层条目契约逐字不变。
+                        boll_zone = f'触及布林{side}<span class="{band_class}">{triangle}</span>'
+                        rsi_zone = (f'RSI 3条 <span class="{rsi_class}">{symbol}</span>{direction}'
+                                    + ('（反）' if reverse else ''))
+                        zoned = (f'<span class="sig-zone" data-side="boll" style="--sig-row:1">{boll_zone}</span>'
+                                 f'<span class="sig-sep"> · </span>'
+                                 f'<span class="sig-zone" data-side="rsi" style="--sig-row:1">{rsi_zone}</span>')
+                        expected = f'<span class="signal-item" data-signal-kind="boll_rsi"{attr}>{zoned}</span>'
                         output = monitor._signals_html(row)
-                        self.assertEqual(output, expected)
-                        self.assertIn('<td class="sig">' + expected + '</td>', monitor._stock_row(row, {}))
+                        expected_text = _logical_signal_text(expected).replace('连续第', '第').replace('（其中', '（')
+                        self.assertEqual(_logical_signal_text(output), expected_text)
+                        self.assertEqual(output.count('class="sig-col"'), 2)
+                        self.assertEqual(plain_text(expected), plain_text(body))
+                        self.assertIn('<td class="sig">' + output + '</td>', monitor._stock_row(row, {}))
+                        left, right = output.split('<div class="sig-col">')[1:]
+                        self.assertIn(boll_zone, left)
+                        self.assertNotIn(rsi_zone, left)
+                        self.assertIn(rsi_zone, right)
+                        self.assertNotIn(boll_zone, right)
+                        self.assertEqual(output.count('data-signal-kind="boll_rsi"' + attr), 2)
                         self.assertEqual(row, before)
                         row['level'] = 'yellow'
                         self.assertEqual(monitor._signals_html(row), output)
         unlit = {'signals': ['无灯说明 ▲↑▼↓'], 'signal_marks': [], 'level': 'red'}
         self.assertEqual(monitor._signals_html(unlit),
-                         '<span class="signal-item" data-signal-kind="">无灯说明 '
+                         '<div class="sig-cols"><div class="sig-col">'
+                         '<span class="signal-item" data-signal-kind="" data-signal-flow="auto" data-signal-order="0">无灯说明 '
                          '<span class="arrow-band-up">▲</span><span class="arrow-rsi-up">↑</span>'
-                         '<span class="arrow-band-down">▼</span><span class="arrow-rsi-down">↓</span></span>')
+                         '<span class="arrow-band-down">▼</span><span class="arrow-rsi-down">↓</span></span>'
+                         '</div><div class="sig-col"></div></div>')
         self.assertEqual(unlit, {'signals': ['无灯说明 ▲↑▼↓'], 'signal_marks': [], 'level': 'red'})
-        for level, color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
+        for level, color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-yellow)'), ('gray', 'var(--text)')):
             self.assertIn(f'.signal-item[data-signal-level="{level}"]{{color:{color}}}', monitor.PAGE_CSS)
         self.assertIn('.signal-item{color:var(--dim)}', monitor.PAGE_CSS)
 
@@ -8812,8 +9052,8 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                     before = copy.deepcopy(row)
                     output = monitor._signals_html(row)
                     self.assertEqual(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                                               r'(?: data-signal-level="([^"]*)")?>', output),
-                                     [('boll_rsi', 'gray' if group == 'position' else '')])
+                                               r'(?: data-signal-level="([^"]*)")?[^>]*>', output),
+                                     [('boll_rsi', 'gray' if group == 'position' else '')] * 2)
                     self.assertIn('布林上轨▲', plain_text(output))
                     self.assertIn('RSI 1条 ' + direction, plain_text(output))
                     self.assertNotIn('signal-dot', monitor._stock_row(row, {}))
@@ -8824,7 +9064,8 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         css = monitor.PAGE_CSS
         self.assertIn('.signal-item{color:var(--dim)}', css)
         self.assertIn('.signal-item[data-signal-level="gray"]{color:var(--text)}', css)
-        self.assertIn('--text:#e6e8ec; --dim:#8b93a1', css)
+        self.assertIn('--text:#e6e8ec;', css)
+        self.assertIn('--dim:#8b93a1', css)
         self.assertNotIn('.signal-item[data-signal-level="gray"]{color:var(--dim)}', css)
 
     def test_same_stock_red_yellow_gray_and_unlit_descriptions_are_independent_and_safe(self):
@@ -8837,18 +9078,20 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         before = copy.deepcopy(row)
         output = monitor._signals_html(row)
         self.assertEqual(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                                   r'(?: data-signal-level="([^"]*)")?>', output),
+                                   r'(?: data-signal-level="([^"]*)")?[^>]*>', output),
                          [('chg', 'red'), ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', '')])
-        self.assertEqual(output.count('signal-separator'), 3)
+        self.assertEqual(output.count('signal-separator'), 0)
+        self.assertEqual(output.count('data-signal-flow="auto"'), 3)
+        self.assertIn('data-signal-kind="rsi" data-signal-level="gray"', output)
         self.assertIn(monitor.html_lib.escape(row['signals'][0]), output)
         self.assertEqual(monitor.html_lib.unescape(plain_text(output)),
-                         '异动 -6% / 量比 2.8x / RSI 2条 ↓超卖 / ' + row['signals'][0])
+                         '异动 -6%量比 2.8xRSI 2条 ↓超卖' + row['signals'][0])
         stock = monitor._stock_row(row, {})
         self.assertNotIn('signal-dot', stock)
         self.assertNotRegex(stock, r'<img\b|<b\b|<[^>]+\sonerror\s*=')
         self.assertIn('&lt;b&gt;不可执行&lt;/b&gt;', stock)
         self.assertIn('<td class="sig">' + output + '</td>', stock)
-        for level, color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
+        for level, color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-yellow)'), ('gray', 'var(--text)')):
             self.assertIn('.signal-item[data-signal-level="' + level + '"]{color:' + color + '}',
                           monitor.PAGE_CSS)
         row['level'] = 'yellow'
@@ -8856,15 +9099,12 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         row['level'] = before['level']
         self.assertEqual(row, before)
 
-    def test_stock_row_matches_head_except_removed_name_dots_and_keeps_stripes(self):
+    def test_stock_row_matches_opening_baseline_facts_and_keeps_stripes(self):
         import ast
         import copy
-        import subprocess
         from monitor_render import PageRenderer
 
-        source = subprocess.run(['git', '-C', ROOT, 'show', 'HEAD:monitor_render.py'],
-                                check=True, capture_output=True, text=True, encoding='utf-8').stdout
-        cls = next(node for node in ast.parse(source).body
+        cls = next(node for node in ast.parse(_OPENING_BASELINE_ROW_SOURCE).body
                    if isinstance(node, ast.ClassDef) and node.name == 'PageRenderer')
         methods = [node for node in cls.body if isinstance(node, ast.FunctionDef)
                    and node.name in ('_stock_row', '_signal_lamps')]
@@ -8874,7 +9114,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                               and node.func.attr == '_signal_lamps' for node in ast.walk(head_row))
         self.assertIn(head_lamp_calls, (0, 1))
         namespace = {'html_lib': monitor.html_lib}
-        exec(compile(ast.Module(body=methods, type_ignores=[]), 'HEAD:monitor_render.py', 'exec'), namespace)
+        exec(compile(ast.Module(body=methods, type_ignores=[]), 'opening-baseline:monitor_render.py', 'exec'), namespace)
         renderer = PageRenderer(monitor)
         for level in ('red', 'yellow', 'green', 'gray'):
             for foldable in (True, False):
@@ -8895,32 +9135,42 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                         with patch.object(monitor, '_signal_lamps',
                                           side_effect=lambda d: namespace['_signal_lamps'](renderer, d)):
                             old = namespace['_stock_row'](renderer, row, {}, '2026-10-20')
-                        # HEAD 尚未迁移时只剥掉名称前圆点；迁移提交后同一对照仍可运行。
+                        # 只剥掉固定开工基准的名称前圆点；不随当前分支或提交变更预期。
                         self.assertEqual('signal-dot red' in old, bool(head_lamp_calls))
                         expected, removed = re.subn(r'(<td class="sym">)'
                             r'(?:<span class="signal-dot [^"]+"[^>]*></span>)+', r'\1', old)
                         self.assertEqual(removed, head_lamp_calls)
-                        # 只归一已批准的旧说明修正；其它结构、样式仍完整与HEAD对照。
+                        # 只归一已批准的旧说明修正；其它事实仍与固定开工基准对照。
                         expected = expected.replace('长持仓：不看一般过热，RSI 三条全超卖才提醒',
                                                     '长持仓：持有周期分类；技术预警按《预警规则》执行')
+                        # 已批准的结构修正（2026-11-03）：主表行改两区卡片，加／减仓价胶囊
+                        # 从代码那一列搬到价格区，价格与涨跌外面补一层 .px-main。
+                        expected = _migrate_row_layout(expected)
                         with patch.object(monitor, '_signal_lamps', side_effect=AssertionError('主表不能调用旧灯接口')) as lamps:
                             current = monitor._stock_row(row, {}, '2026-10-20')
                         lamps.assert_not_called()
                         self.assertNotIn('signal-dot', current)
                         # 新发布页新增基础灯元数据，布局对照单独剥离并精确验值。
-                        self.assertIn('data-base-level="' + level + '"', current)
-                        self.assertEqual(re.sub(r' data-base-level="[^"]*"', '', current),
-                                         re.sub(r' data-base-level="[^"]*"', '', expected))
+                        self.assertNotIn('data-base-level=', current)  # ACK恢复元数据退役
+                        for attr in ('data-symbol', 'data-price', 'data-prev-close'):
+                            self.assertEqual(re.search(attr + r'="([^"]*)"', current)[1], re.search(attr + r'="([^"]*)"', expected)[1])
+                        self.assertIn('备注 &lt;b&gt;安全&lt;/b&gt;', current)
+                        self.assertIn('<td class="sig"><div class="sig-cols">', current)
+                        self.assertIn('data-main="美 10/22 盘后"', current)
+                        self.assertIn('data-mode="full"', current)
                         self.assertIn('<tr class="' + level, current)
                         self.assertIn('class="range52-row"', current)
                         self.assertEqual(row, before)
         for rule in ('tr.red td:first-child{box-shadow:inset 4px 0 0 var(--red);padding-left:14px}',
                      'tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}',
                      'tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}',
-                     '.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:4px}',
-                     '.stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}',
-                     '.stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px}'):
+                     'table.stk tr[data-symbol]>td{border:0;box-shadow:none'):
             self.assertIn(rule, monitor.PAGE_CSS)
+        for rule in ('.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:4px}',
+                     '.stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}',
+                     '.stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px}',
+                     '.stk tr.red[data-symbol]{--lc:var(--red);--lw:4px}'):
+            self.assertNotIn(rule, monitor.PAGE_CSS)
 
     def test_combo_description_has_facts_without_statistics_prefix(self):
         import copy
@@ -8938,11 +9188,18 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                     result = monitor._signals_html(row)
                     arrow_class = 'arrow-band-up' if side == '上轨' else 'arrow-band-down'
                     boll_html = f'{state}布林{side}<span class="{arrow_class}">{arrow}</span>'
-                    self.assertIn(boll_html + ' · RSI 3条 ', result)
+                    # 2026-11-04 晚：拆左右两区后箭头 wrapper 不再与 " · " 相邻，
+                    # 改成分别查 HTML 结构与去标签后的事实文本（" · " 仍在隐藏的 .sig-sep 里）。
+                    self.assertIn(boll_html, result)
+                    left, right = result.split('<div class="sig-col">')[1:]
+                    self.assertIn(boll, plain_text(left))
+                    self.assertIn('RSI 3条 ', plain_text(right))
+                    self.assertEqual(result.count('data-side="boll"'), 1)
+                    self.assertEqual(result.count('data-side="rsi"'), 1)
                     self.assertNotIn(boll + '，RSI', plain_text(result))
                     self.assertNotIn('布林+RSI', result)
-                    self.assertEqual(result.count('data-signal-kind="boll_rsi"'), 1)
-                    self.assertEqual(result.count('signal-separator'), 1)
+                    self.assertEqual(result.count('data-signal-kind="boll_rsi"'), 2)
+                    self.assertEqual(result.count('signal-separator'), 0)
                     self.assertEqual(row, original)
                     self.assertIn('布林+RSI', dict(monitor.SIGNAL_KINDS).values())
 
@@ -8954,11 +9211,14 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                'signal_marks': [('boll_rsi', 'yellow'), ('vol_ratio', 'yellow')]}
         before = copy.deepcopy(row)
         result = monitor._signals_html(row)
-        self.assertIn('触及布林下轨<span class="arrow-band-down">▼</span>，连续第2日贴近下轨 · RSI 2条 ', result)
+        self.assertIn('触及布林下轨<span class="arrow-band-down">▼</span>，第2日贴近下轨', result)
+        left, right = result.split('<div class="sig-col">')[1:]
+        self.assertIn('第2日贴近下轨', plain_text(left))
+        self.assertIn('RSI 2条 ', plain_text(right))
         self.assertIn('<span class="arrow-rsi-down">↓</span>超卖', result)
         self.assertNotIn('（≤35）', result)
-        self.assertEqual(result.count(' · '), 1)
-        self.assertEqual(result.count('signal-separator'), 1)
+        self.assertEqual(result.count(' · '), 0)
+        self.assertEqual(result.count('signal-separator'), 0)
         self.assertEqual(row, before)
 
     def test_combo_groups_all_facts_under_one_true_lamp(self):
@@ -8971,20 +9231,25 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         result = _row_signals(row)
         self.assertNotIn('signal-dot', result)
         self.assertEqual(re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', result),
-                         [('boll_rsi', 'red'), ('vol_ratio', 'yellow'), ('ma', 'yellow')])
-        self.assertEqual(result.count('data-signal-kind="boll_rsi"'), 1)
+                         [('boll_rsi', 'red'), ('vol_ratio', 'yellow'), ('boll_rsi', 'red'), ('ma', 'yellow')])
+        self.assertEqual(result.count('data-signal-kind="boll_rsi"'), 2)
         self.assertNotIn('data-signal-kind="rsi"', result)
         self.assertNotIn('data-signal-kind="boll"', result)
-        self.assertIn('RSI 3条 <span class="arrow-rsi-down">↓</span>超卖 · '
-                      '逼近布林下轨<span class="arrow-band-down">▼</span> 还差0.29%', result)
+        self.assertIn('RSI 3条 <span class="arrow-rsi-down">↓</span>超卖', result)
+        self.assertIn('逼近布林下轨<span class="arrow-band-down">▼</span> 还差0.29%', result)
+        left, right = result.split('<div class="sig-col">')[1:]
+        self.assertIn('逼近布林下轨▼ 还差0.29%', plain_text(left))
+        self.assertIn('RSI 3条 ↓超卖', plain_text(right))
+        self.assertIn('data-side="boll"', result)
+        self.assertIn('data-side="rsi"', result)
         self.assertNotIn('（≤35）', result)
         self.assertNotIn('盘中触及', result)
         self.assertNotIn('布林+RSI', monitor._signals_html(row))
         self.assertEqual(monitor._signal_lamps(row), '')
         self.assertIn('data-signal-kind="boll_rsi" data-signal-level="red"', result)
         self.assertNotIn('→', result)
-        self.assertEqual(result.count(' · '), 1)
-        self.assertEqual(result.count('signal-separator'), 2)
+        self.assertEqual(result.count(' · '), 0)
+        self.assertEqual(result.count('signal-separator'), 0)
         self.assertEqual(row, original)
 
     def test_white_volume_text_gets_its_own_yellow_not_other_red(self):
@@ -8996,7 +9261,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         self.assertIn('data-signal-kind="vol_ratio" data-signal-level="yellow"', _row_signals(row))
         self.assertNotIn('signal-dot', _row_signals(row))
         row['signal_marks'] = [('chg', 'red')]
-        self.assertIn('<span class="signal-item" data-signal-kind="vol_ratio">量比 2.8x</span>', _row_signals(row))
+        self.assertIn('<span class="signal-item" data-signal-kind="vol_ratio" data-signal-flow="auto" data-signal-order="1">量比 2.8x</span>', _row_signals(row))
         self.assertNotIn('data-signal-level="yellow"', _row_signals(row))
 
     def test_gray_is_only_true_technical_gray_and_context_has_no_lamp(self):
@@ -9022,18 +9287,20 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         before = copy.deepcopy(row)
         groups = monitor._signal_description_groups(row)
         self.assertEqual([(g['kind'], g['level']) for g in groups],
-                         [('chg', 'red'), ('add_price', 'red'), ('ma', 'yellow'),
-                          ('amp', 'yellow'), ('vol_ratio', 'yellow'), ('rsi', 'gray'),
-                          ('', None), ('', None), ('target', 'purple')])
+                         [('chg', 'red'), ('ma', 'yellow'), ('amp', 'yellow'),
+                          ('vol_ratio', 'yellow'), ('rsi', 'gray'),
+                          ('', None), ('', None), ('', None), ('target', 'purple')])
         output = _row_signals(row)
         self.assertEqual(re.findall(r'data-signal-kind="([^"]*)"', output),
-                         ['chg', 'amp', 'add_price', 'ma', 'vol_ratio', 'rsi', '', ''])
+                         ['chg', 'amp', 'vol_ratio', '', 'rsi', 'ma', '', ''])
         self.assertNotIn('signal-dot', output)
         self.assertEqual(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                                   r'(?: data-signal-level="([^"]*)")?(?: data-signal-role="[^"]*")?>', output),
-                         [('chg', 'red'), ('amp', 'yellow'), ('add_price', 'red'), ('ma', 'yellow'),
-                          ('vol_ratio', 'yellow'), ('rsi', 'gray'),
-                          ('', ''), ('', '')])
+                                   r'(?: data-signal-level="([^"]*)")?[^>]*>', output),
+                         [('chg', 'red'), ('amp', 'yellow'), ('vol_ratio', 'yellow'), ('', ''),
+                          ('rsi', 'gray'), ('ma', 'yellow'), ('', ''), ('', '')])
+        # 自动流排序稳定；RSI固定右列，不再让已退休加仓红灯混入技术等级。
+        self.assertEqual(sorted(map(int, re.findall(r'data-signal-order="(\d+)"', output))), [0, 1, 2, 3, 5, 6, 7])
+        self.assertNotIn('data-signal-kind="add_price"', output)
         self.assertIn('data-signal-kind="amp" data-signal-level="yellow" data-signal-role="supplement"', output)
         self.assertEqual(monitor._signal_description_groups(row), groups)
         self.assertEqual(output.count('触及长均线±1%'), 1)
@@ -9065,7 +9332,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         result = _row_signals(row)
         self.assertNotIn('signal-dot', result)
         self.assertEqual(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                                   r'(?: data-signal-level="([^"]*)")?>', result),
+                                   r'(?: data-signal-level="([^"]*)")?[^>]*>', result),
                          [('ma', 'yellow'), ('', '')])
         self.assertIn('上穿长均线，触及长均线±1%', result)
         self.assertIn('&lt;img onerror=x&gt;，说明', result)
@@ -9087,7 +9354,7 @@ class TestMainOnlyDescriptionProjection(unittest.TestCase):
         card = monitor._signal_counts_card(snapshot)
         filters = TestMaMergedStatistics.filters(card) if 'data-filter=' in card else {}
         output = monitor._signals_html(row)
-        self.assertEqual(monitor.html_lib.unescape(plain_text(output)), expected)
+        self.assertEqual(_logical_signal_text(output), expected.replace(' ， ', ' / ').replace('连续第', '第').replace('（其中', '（'))
         self.assertEqual(monitor._signals_html(row), output)
         self.assertEqual(monitor._signal_description_groups(row), groups)
         self.assertEqual(monitor.signal_counts([row]), counts)
@@ -9124,7 +9391,7 @@ class TestMainOnlyDescriptionProjection(unittest.TestCase):
                     self.assertEqual(output.count('data-signal-role="supplement"'), 1)
                     self.assertNotIn('data-signal-level="gray"', output)
         self.assertNotRegex(monitor.PAGE_CSS, r'\.signal-item\[data-signal-role=[^\]]+\]\{[^}]*color\s*:')
-        for level, color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--text)')):
+        for level, color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-yellow)'), ('gray', 'var(--text)')):
             self.assertIn(f'.signal-item[data-signal-level="{level}"]{{color:{color}}}', monitor.PAGE_CSS)
         self.assertIn('.signal-item{color:var(--dim)}', monitor.PAGE_CSS)
 
@@ -9147,7 +9414,7 @@ class TestMainOnlyDescriptionProjection(unittest.TestCase):
         from monitor_render import PageRenderer
         self.assertIn('_main_description_text', PageRenderer.__dict__)
         self.assertFalse(hasattr(monitor, '_main_description_text'))
-        self.assertEqual(monitor._signals_html({'signals': [], 'signal_marks': []}), '—')
+        self.assertEqual(monitor._signals_html({'signals': [], 'signal_marks': []}), '')
 
     def test_default_and_custom_rsi_thresholds_only_removed_from_main(self):
         for threshold, arrow, tag, wrapper in (
@@ -9359,6 +9626,89 @@ class TestMainOnlyDescriptionProjection(unittest.TestCase):
         self.assert_main_only(row, row['signals'][0])
         row['signals'] = ['触及52周新低（低点价：12.35）']
         self.assert_main_only(row, row['signals'][0])
+
+
+class TestFinalSourceContract(unittest.TestCase):
+    """终稿新增边界：只冻结离线输入，不抓取或改写 index/status/云仓位。"""
+
+    def test_countdown_and_released_boundaries_across_year(self):
+        from datetime import date
+        for today in ('2026-11-03', '2026-12-31', '2027-01-01'):
+            for timing in ('pre', 'post', 'during', '', 'unknown'):
+                for raw_gap in (-3, -2, -1, 0, 1, 2):
+                    event_day = date.fromisoformat(today) + timedelta(days=raw_gap)
+                    event = {'status': 'ok', 'date': event_day.isoformat(), 'timing': timing}
+                    gap = raw_gap + (timing == 'post')
+                    expected_cd = '' if gap < -1 else {1: '（明）', 0: '（今）', -1: '（昨）'}.get(gap, f'（{gap}）')
+                    with self.subTest(today=today, timing=timing, gap=raw_gap):
+                        self.assertEqual(monitor.earnings_countdown(event, today), expected_cd)
+                        main, note = monitor.earnings_label(event, today)
+                        self.assertTrue(main.startswith('美 '))
+                        released = gap <= 0 if timing == 'post' else gap < 0
+                        if released:
+                            self.assertEqual(note, '北京 ' + ('今出' if gap == 0 else '昨出' if gap == -1 else '已出'))
+                        else:
+                            self.assertNotRegex(note, '今出|昨出|已出')
+                        markup = monitor._earnings_html({'earnings': event}, today)
+                        self.assertIn('data-main=', markup)
+                        self.assertIn('data-unit-full=', markup)
+                        self.assertEqual(len(re.findall(r'class="cd(?: tbd)?"', markup)), int(bool(expected_cd)))
+                        if expected_cd:
+                            self.assertIn('class="cd' + (' tbd' if timing not in ('pre', 'post', 'during') else '') + '"', markup)
+
+    def test_invalid_earnings_never_fabricate_countdown(self):
+        for event in (None, {}, [], 'broken', {'status': 'na'}, {'status': 'unknown'},
+                      {'status': 'ok', 'date': '2026-02-30'}, {'status': 'ok', 'date': None}):
+            with self.subTest(event=event):
+                self.assertEqual(monitor.earnings_countdown(event, '2026-11-03'), '')
+
+    def test_target_wording_uses_current_price_denominator_but_trigger_does_not(self):
+        from decimal import Decimal
+        for price, target, prev, expected_hit in (
+                (103, 100, 103, True), (103.0000000001, 100, 103, False),
+                (97, 100, 97, True), (96.9999999999, 100, 97, False),
+                (108, 100, 95, True), (92, 100, 105, True)):
+            with self.subTest(price=price, target=target, prev=prev):
+                alerts = monitor.target_alerts(price, prev, target, '共识价', 3)
+                self.assertEqual(bool(alerts), expected_hit)
+                if alerts:
+                    space = (Decimal(str(target)) / Decimal(str(price)) - 1) * 100
+                    self.assertIn(f'{space:+.1f}%', alerts[0])
+                    self.assertEqual('（±3% 内）' in alerts[0], abs(space) <= 3)
+                    if prev < target <= price:
+                        self.assertTrue(alerts[0].startswith('上穿 '))
+                    elif prev > target >= price:
+                        self.assertTrue(alerts[0].startswith('跌破 '))
+        for price, target in ((0, 100), (100, 0), (None, 100), (float('nan'), 100)):
+            self.assertEqual(monitor.target_alerts(price, 100, target, '共识价', 3), [])
+
+    def test_generated_four_zones_are_legal_direct_table_cells(self):
+        from html.parser import HTMLParser
+        class Cells(HTMLParser):
+            def __init__(self):
+                super().__init__(); self.stack = []; self.direct = []
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if self.stack and self.stack[-1] == 'tr':
+                    self.direct.append((tag, attrs.get('class', '')))
+                if tag not in ('br', 'input', 'img', 'col', 'hr', 'meta', 'link'):
+                    self.stack.append(tag)
+            def handle_endtag(self, tag):
+                if tag in self.stack:
+                    self.stack = self.stack[:len(self.stack)-1-self.stack[::-1].index(tag)]
+        row = {'symbol': 'AAPL', 'note': '苹果公司', 'group': 'position', 'price': 100,
+               'chg': 1, 'level': 'green', 'signals': [], 'signal_marks': [],
+               'target': {'kind': 'manual', 'price': 150, 'month': 10, 'failed': False},
+               'earnings': {'status': 'ok', 'date': '2026-11-03', 'timing': 'post'}}
+        rendered = monitor._stock_row(row, {'finished_at_bj': '2026-11-03T09:18:00+08:00'})
+        parser = Cells(); parser.feed(rendered)
+        for cls in ('sym', 'px', 'tgs', 'lamp-earn'):
+            self.assertTrue(any(tag == 'td' and cls in classes.split()
+                                for tag, classes in parser.direct), (cls, parser.direct))
+        self.assertTrue(all(tag in ('td', 'th') for tag, _ in parser.direct))
+        self.assertIn('class="target-month" title="10月">⑩</span>', rendered)
+        self.assertIn('class="target-space" data-sign="pos"', rendered)
+        self.assertNotRegex(rendered, r'data-ack|ack-btn|cost-warn|r48-demo|data-r58-key')
 
 
 if __name__ == '__main__':

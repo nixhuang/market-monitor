@@ -27,10 +27,11 @@ function snapshot(sha = B, run = '1') {
     summary: {red: 44, yellow: 20, green: 65, total: 129, stale_symbols: [], missing_symbols: []}};
 }
 function element() {
-  return {_text: '', get textContent() { return this._text; },
+  return {_text: '', get textContent() { return this._text + this.children.map(child => child.textContent || '').join(''); },
     set textContent(value) { this._text = value; this.children = []; },
     style: {}, dataset: {}, children: [], disabled: false,
     setAttribute(name, value) { this[name] = value; }, appendChild(child) { this.children.push(child); },
+    replaceChildren(...children) { this._text = ''; this.children = children; },
     classList: {contains() { return false; }}};
 }
 function fixture(page = snapshot(), onlyRule = false, initial = {}) {
@@ -46,7 +47,7 @@ function fixture(page = snapshot(), onlyRule = false, initial = {}) {
   let now = Date.parse('2026-10-08T02:00:00Z');
   class Clock extends Date { static now() { return now; } }
   const win = {document: {readyState: 'complete', getElementById: id => els[id] || null,
-      createElement: element, addEventListener(name, fn) { events[name] = fn; }},
+      createElement: element, createTextNode: text => ({textContent: String(text)}), addEventListener(name, fn) { events[name] = fn; }},
     addEventListener(name, fn) { events[name] = fn; },
     localStorage: {getItem() { return null; }, setItem() {}},
     setTimeout(fn, ms) { timers.push({fn, ms, active: true}); return timers.length; },
@@ -502,7 +503,7 @@ async function check(name, fn) {
       assert.deepEqual(f.els.checkResult.textContent.split('\n'),[
         '最新任务：'+label+' · run 2（10/08 10:00 北京时间）',
         '当前发布：run 1，当前页面与线上版本一致。',
-        '数据更新时间：2026-10-08 09:05（北京时间）',action]);
+        '数据更新时间：2026-10-08 09:05（北京时间）',action+'关闭']);
       assert.equal(f.els.checkResult.dataset.phase,phase);
       assert.doesNotMatch(f.els.checkResult.textContent,/看板与状态文件一致|暂无页面更新|blob SHA|request_id/);
       assert.equal(f.data.reloads.length,0);assert.equal(f.data.posts||0,0);

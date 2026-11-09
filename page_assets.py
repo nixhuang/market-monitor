@@ -17,18 +17,12 @@ GLOSSARY_SUMMARY = "名词解释和抓取"
 RULE_SECTIONS = (
     ("rule-lamps", r"""line-0||h4|一、报灯规则
 lamp-table||table|${lamp_table}
-line-34|rule-clickable|h5|可点红灯 可点✓ 标记已读
 line-35|rule-prices|h5|加仓价／减仓价 须设置有效价位
-line-36||p|加仓价 · 所有分组：现价≤设置价×${add_factor} → 可点红灯。
-line-37||p|加仓价提醒标记已读 → 白灯。
-line-38||p|减仓价 · 持仓分组：现价≥设置价×${reduce_factor} → 可点红灯。
-line-39||p|减仓价提醒标记已读 → 白灯。
+line-36||p|加仓价 · 所有分组：主表描述区常驻显示「加仓价 N · 距 X%」，平时灰字；现价与设置价相差≤3% → 点亮橙色，并列入统计面板「盈亏到价」。
+line-38||p|减仓价 · 持仓分组：主表描述区常驻显示「减仓价 N · 距 X%」，平时灰字；现价与设置价相差≤3% → 点亮青色，并列入统计面板「盈亏到价」。
 line-40||p|减仓价：重点、其他分组不适用。
-line-41|rule-cost-loss|h5|成本浮亏 持仓分组
-line-42||p|浮亏≥10% → 可点红灯；
-line-43||p|浮亏≥20%加重文字 → 可点红灯。
-line-44||p|浮亏提醒标记已读 → 白灯。
-line-45||p|浮亏10%／20%每只标的只计一次。
+line-41|rule-cost-loss|h5|持仓盈亏 持仓分组
+line-42||p|浮盈或浮亏达到 ±10% → 成本行加淡底色（盈绿、亏红），并列入统计面板「盈亏到价」；只作提示，不再出红灯。
 line-46||p|重点、其他分组不适用。
 line-47|rule-target-space|h5|目标空间 所有分组
 line-48||p|有效空间≥${target_space_pct}% → 紫空心灯；
@@ -127,9 +121,6 @@ LAMP_RULE_TABLE = (
 GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 <section id="glossary-calculation">
 <h4>名词解释与计算</h4>
-<h5 id="glossary-ack">可点红灯与已读</h5>
-<p>加仓价、减仓价、成本浮亏：点✓已读，再点撤销。已读显示白字删除线，统计由对应红列转白列。</p>
-<p>条件消失后不再显示该条已读；只有规则一致且行情时点明确晚于确认依据时，才自动同步清除，防止旧页面撤销其他设备的新确认。同日先后无法核实或旧记录缺少版本信息时保留，可再次点击主动撤销。浮亏10%／20%分档记录、每只只计一次；升降档切换提醒，低于10%不显示浮亏已读。</p>
 <h5 id="glossary-chg">涨跌幅 · 计算与阈值</h5>
 <p>涨跌幅＝（现价÷昨收−1）×100%；报灯取绝对值。</p>
 <p>两项共用历史日波动档：&lt;${vol_low_sigma}%低档，&gt;${vol_high_sigma}%高档，其余中档；不足${vol_min_returns}个有效日收益取中档。不是按今天的涨跌选档。</p>
@@ -168,9 +159,9 @@ ${vol_example_table}
 <p>达到按昨收与现价判断，不用日内高低曾触及代替。失败旧共识不参与，有效手填价不受影响。</p>
 <p>空间／达到各自去重、允许重叠；总数取并集，不直接相加。</p>
 <h5 id="glossary-earnings">财报与显示</h5>
-<p>用美东财报日期对比北京今天，盘前／盘后不平移。名单含今天至+${earn_list_days}天，另留昨天红字；红字保留期结束后才检查下一次。</p>
+<p>报灯与名单窗口沿用美东财报日期对比快照北京运行日，盘前／盘后不平移。名单含运行日至+${earn_list_days}天，另留前一日红字；红字保留期结束后才检查下一次。</p>
 <p>失败时沿用有效旧日期；“待公布”仅表示本站未取得日期。</p>
-<p>已知时段显示盘前／盘后／盘中及北京落点，未知不猜钟点。</p>
+<p>显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。已知时段按北京落点计算，盘后顺延一日；时段待定按美东日期计算并用蓝字，未知不猜钟点。显示换算不改变报灯窗口。</p>
 <h5 id="glossary-dedup">标的去重与显示优先级</h5>
 <p>显示与报警优先级：市场风险／持仓 → 重点 → 其他。同一实质标的只显示最高级，清单记录不删。</p>
 <p>VIX与标普指数仅在市场风险显示。</p>
@@ -240,6 +231,7 @@ def _text(value):
 COLORS = {"紫红空心灯": "tone-target-high", "紫空心灯": "lamp-purple",
           "实心紫灯": "lamp-purple", "红灯": "lamp-red", "黄灯": "lamp-yellow",
           "白灯": "nav-gray", "红字": "lamp-red", "黄字": "lamp-yellow",
+          "橙色": "nav-orange", "青色": "nav-cyan",
           "持仓分组": "rule-group", "所有分组": "rule-group",
           "其他分组": "rule-group", "重点": "rule-group"}
 
@@ -277,7 +269,7 @@ def _rules_markup(body):
         "rule-target-space": "space", "rule-target-reached": "reached",
         "rule-earnings": "earnings", "rule-quotes": "missing", "rule-rsi": "single",
         "glossary-calculation": "terms", "glossary-fetch": "fetch",
-        "glossary-ack": "read-terms", "glossary-chg": "change-terms",
+        "glossary-chg": "change-terms",
         "glossary-amp": "amplitude-terms", "glossary-boll": "boll-terms",
         "glossary-rsi": "rsi-terms", "glossary-vol": "volume-terms",
         "glossary-ma": "ma-terms", "glossary-target": "target-terms",
@@ -334,8 +326,6 @@ def _rule_values(settings, constants):
     for period in ("short", "long"):
         n = values["ma_" + period]
         values[f"ma_{period}_status"] = "启用" if n else "关闭"
-    values["add_factor"] = round(1 + values["trigger_gap_pct"] / 100, 6)
-    values["reduce_factor"] = round(1 - values["reduce_gap_pct"] / 100, 6)
     values["earn_far_start"] = values["earn_soon_days"] + 1
     factor = values["boll_near_band_pct"] / 100 * 4 * values["boll_sigma_factor"]
     values["boll_near_factor"] = round(factor, 6)
@@ -472,7 +462,7 @@ def sync_edit_html(source, base, constants):
     # 设置页展示规则说明，样式取自同一份 RULES_CSS，不在 edit.html 里另抄一份。
     pattern = r"/\* MM_RULECSS_BEGIN[^\n]*\*/.*?/\* MM_RULECSS_END \*/"
     generated = ("/* MM_RULECSS_BEGIN：由 page_assets 生成，不手改 */\n"
-                 + RULES_CSS.rstrip("\n") + "\n/* MM_RULECSS_END */").replace("\n", newline)
+                 + PAGE_PALETTE + RULES_CSS.rstrip("\n") + "\n/* MM_RULECSS_END */").replace("\n", newline)
     result, count = re.subn(pattern, lambda _: generated, result, flags=re.S)
     if count != 1:
         raise ValueError("edit.html 必须有且仅有一个规则样式生成区块")
@@ -512,60 +502,105 @@ TARGET_DASH_BORDER = 'data:image/svg+xml,' + quote(
     'rx="4" fill="none" stroke="#8b93a1" stroke-width="1" stroke-dasharray="3 5"/>'
     '</svg>', safe='')
 
-# 页面 CSS 与纯展示交互从 monitor 原样迁移，公开名称由 monitor 重导出。
-PAGE_CSS = """:root{
-  --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
-  --green:#3fb950; --yellow:#d29922; --red:#f85149; --up:#3fb950; --down:#f85149;
-  --blue:#2f6bd8; --purple:#b084ff; --target-high:#dc62b8;
-  --signal-bg:#182131; --collapse-bg:var(--signal-bg);
-  /* 统计面板与「展开的分组卡」共用的外框色：两边同色同宽，不再各写一份 */
-  --signal-border:#6686c6; --frame-w:1.5px;
-/* 2026-11-01：整页统一色板 —— 以前这五个色值在两百多处写死，改一个要全文 grep。
-   每处都带 fallback，变量没定义时自动回落到原色值，不会出现「没颜色」。 */
-  --head-blue:#bfd5ff; --head-blue-on:#8fb8f0; --lamp-red:#ff8580; --lamp-yellow:#f0c674;
+# 两档正式页面资源；公共色板也随规则CSS同步至设置页。
+PAGE_PALETTE = """:root{
+  --bg:#0f1115;
+  --card:#171a21;
+  --line:#252a33;
+  --text:#e6e8ec;
+  --dim:#8b93a1;
+  --green:#3fb950;
+  --yellow:#d29922;
+  --red:#f85149;
+  --up:#3fb950;
+  --down:#f85149;
+  --blue:#2f6bd8;
+  --purple:#b084ff;
+  --target-high:#dc62b8;
+  --signal-bg:#182131;
+  --collapse-bg:var(--signal-bg);
+  --signal-border:#6686c6;
+  --frame-w:1.5px;
+  --head-blue:#bfd5ff;
+  --head-blue-on:#8fb8f0;
+  --lamp-red:#ff8580;
+  --lamp-yellow:#f0c674;
   --frame-green:#2c8f3e;
-  /* 统计名单方向三角尺寸；指标描述使用自身条件文字颜色 */
   --lamp-size:14px;
-  /* 顶栏内缩量（2026-11-02）：PC 上「数据时间 / 按钮行 / 状态灯 / 核验结果」整体往中间收多少。
-     用户明确要「往中间靠一些，不是完全居中」—— 所以是左右各内缩一个固定值、内容仍左起，
-     不是 justify-content:center。调幅度只改这一个数。 */
   --head-inset:64px;
+  --row-height:21px;
+  --section-line:rgba(139,147,161,.32);
+  --tgt-solid:#5a4797;
+  --tgt-pos:#4dd0e1;
+  --tgt-neg:#ff5c8d;
+  --tgt-pos-on:#c2f6ff;
+  --tgt-neg-on:#ffd0de;
+  --orange:#ffa94d;
+  --cyan:#4dd0e1;
+  --positions-collapse:rgba(46,160,67,.15);
+  --tag-bg:rgba(107,163,240,.14);
+  --tag-border:rgba(107,163,240,.32);
+  --quote-bg:rgba(139,147,161,.1);
+  --signal-magenta:#ef8de4;
+  --signal-collapse:rgba(102,134,198,.6);
+  --white:#fff;
+  --button-border:#4c6591;
+  --list-border:#465e87;
+  --range-track:#9fa3aa;
+  --count-active:#2f4f86;
+  --count-red-border:rgba(255,133,128,.45);
+  --count-yellow-border:rgba(240,198,116,.45);
+  --count-red-bg:rgba(255,133,128,.16);
+  --count-yellow-bg:rgba(240,198,116,.16);
+  --count-gray-bg:rgba(201,209,217,.14);
+  --count-gray-border:rgba(201,209,217,.45);
+  --quiet-border:#2b3546;
+  --quiet-bg:#12161f;
+  --range-marker-border:#efd9ff;
+  --range-marker-fill:#713caf;
+  --link-blue:#6ba3f0;
+  --footer-link:#8ab4f8;
+  --warning-bg:rgba(210,153,34,.12);
+  --warning-border:rgba(210,153,34,.35);
+  --button-bg:#232833;
+  --control-border:#333a47;
+  --zone-bg:rgba(255,255,255,.022);
+  --quiet-rule:#46525f;
+  --status-idle:#4b5563;
+  --status-busy-halo:rgba(210,153,34,.18);
+  --status-ok-halo:rgba(63,185,80,.18);
+  --status-bad-halo:rgba(248,81,73,.18);
+  --stock-divider:#414b5a;
+  --cost-row-bg:rgba(143,184,240,.07);
+  --pnl-loss-bg:rgba(248,81,73,.12);
+  --pnl-gain-bg:rgba(63,185,80,.12);
+  --rules-border:#6b7689;
+  --rules-cell-border:#5a6478;
+  --rules-group-border:#6f7b91;
+  --rules-category-bg:rgba(143,184,240,.04);
+  --rsi-up:#3ec9d6;
+  --rsi-down:#e061c9;
+  --rules-red-bg:rgba(248,81,73,.16);
+  --rules-yellow-bg:rgba(210,153,34,.16);
+  --rules-gray-bg:rgba(173,181,194,.24);
+  --rules-fold-bg:rgba(173,181,194,.09);
+  --rules-strong:#e6edf3;
+  --rules-copy:#dce1e9;
+  --rules-muted:#adb5c2;
+  --stock-flash:#2b3f63
 }
+"""
+
+PAGE_CSS = PAGE_PALETTE + """
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;background:var(--bg);color:var(--text);
-  font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;
-  /* 2026-11-01：整页左右各加 1px，保留右侧比左侧多 2px。
-     桌面左 14→15 / 右 16→17；wrap 上限 720→718，宽屏居中后两侧也各多留 1px。 */
-  padding:env(safe-area-inset-top) 17px 40px 15px}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;padding:env(safe-area-inset-top) 17px 40px 15px}
 .wrap{max-width:718px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
-/* 站名：用「上涨绿」--up，与涨跌箭头同色系；只这一处，其它标题颜色不动 */
 h1.brand{color:var(--up)}
-/* 「数据时间 …」这一排做成 flex：仓位面板的「已同步 / 未同步」胶囊（见 cost_panel.js 的
-   syncMirrorEl）靠 margin-left:auto 顶到这一排最右侧，与左边的日期同一行（2026-10-29）。
-   2026-11-02 起手机与桌面都搬到这里，不再分档；胶囊自身的字号/颜色在 cost_panel.css 里。 */
 .sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:12px;margin-bottom:16px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:6px 4px;margin-bottom:14px;overflow:hidden}
-/* 持仓卡：2026-10-31 起**整块去掉绿叠层**（原来 2% 绿盖在 --card 上），跟其它分组一样是纯卡片底色；
-   --collapse-bg 只留给底部 ▲ 收起条，不动。
-   长持仓（卡中卡）**底色也全部去掉**（连 .zone-card 自带的那层 2.2% 白提亮一并清掉），
-   层级改由**外框**表达：绿框 #2c8f3e，与「仓位」外框同色（--cost-accent）。
-   折起／展开都是这一圈绿框 —— 原来折起是 --line 灰（在深色卡片上几乎看不见，等于没有框）、
-   展开是 --signal-border 蓝，两态色不一致。这里 id 选择器优先级高于 .zone-card[open]，一次写死两态。 */
-/* 2026-11-01：持仓板块**外框也改绿**，跟长持仓子框、仓位面板（--cost-accent #2c8f3e）同一套绿，
-   不再跟其它分组一样是蓝框（--signal-border）。
-   子框上下留白最终定 **9 / 9**（同一天改过两次：先 10/12 → 12/14「让两圈绿框不贴在一起」，
-   又改回 9/9）—— 依据是**与仓位面板「当日盈亏贡献」那条对齐**：那条上留白 9px、下留白 8px
-   （下方 8px 就是底部的长/短占比条）。两条同样高（都是 49px），但长持仓 12/14 的留白更大、
-   显得更孤立，肉眼会误判成「盈亏贡献比长持仓高」。留白拉平到 9/9 后两者观感一致。 */
-/* 绿只在**展开态**亮（2026-11-01 改）：收起时跟其它分组一样是 .card 的默认灰框，不抢视线；
-   展开后才是绿框，和长持仓子框、仓位面板同一套绿。
-   绿靠变量传下去：下面 .group-card[open] 那条外框规则的特指度（带两个 :not(#id)）比单 id 高，
-   只能改它的 --signal-border；这里**不写** id 级 border-color（写了就会收起态也常亮）。 */
-#group_positions{background:var(--card);--collapse-bg:rgba(46,160,67,.15);
-  --signal-border:var(--frame-green,#2c8f3e)}
-#group_positions_long.zone-card{background:none;border:1px solid var(--frame-green,#2c8f3e);margin:9px -2px 9px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
+#group_positions{background:var(--card);--collapse-bg:var(--positions-collapse);--signal-border:var(--frame-green)}
+#group_positions_long.zone-card{background:none;border:1px solid var(--frame-green);margin:9px -2px 9px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
@@ -574,104 +609,59 @@ tr:first-child td{border-top:none}
 .dim{color:var(--dim);font-size:13px}
 .sym{font-weight:600}
 .note{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
-.tag{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;
-  font-size:11px;font-weight:600;letter-spacing:.3px;vertical-align:1px;
-  color:var(--head-blue-on,#8fb8f0);background:rgba(107,163,240,.14);border:1px solid rgba(107,163,240,.32)}
-.tag.quote-note{color:var(--dim);background:rgba(139,147,161,.1);border-color:var(--line);font-weight:400}
-.lvs{display:block;margin:4px 0 0;line-height:1.5}
-/* 成本价：跟加／减仓价胶囊共用同一排、排在所有胶囊最前面，只出文字、**不做胶囊**
-   （跟胶囊只差一个描边框和圆角）。2026-10-30 起字色改成正文白 + 下划线：它是成本基准、
-   要一眼看见，不能跟 dim 灰的辅助信息一个待遇；比胶囊大 0.5px 但同为 17px 行高，不会撑高行盒。 */
-.cost-inline{display:inline-block;margin:0 6px 2px 0;font-size:11.5px;font-weight:400;
-  line-height:17px;white-space:nowrap;color:var(--text);font-variant-numeric:tabular-nums;
-  text-decoration:underline;text-underline-offset:2px}
-.lvtag{display:inline-block;margin:0 4px 2px 0;padding:0 7px;border-radius:999px;border:1px solid;
-  background:transparent;font-size:11px;font-weight:400;line-height:17px;white-space:nowrap;font-variant-numeric:tabular-nums}
-.lvtag.add{color:#ffa94d;border-color:rgba(255,169,77,.6)}
-.lvtag.cut{color:#4dd0e1;border-color:rgba(77,208,225,.6)}
-.tgs{display:block;margin:3px 0 0;line-height:1.4;white-space:normal}
-.tgs .lvtag{margin:0;padding:1px 5px;border-radius:4px;line-height:1.35;white-space:normal;text-align:center}
-.tgs .lvtag span{display:inline-block;white-space:nowrap}
-.lvtag.tgt{position:relative;color:var(--purple);border-color:var(--dim)}
-.lvtag.tgt.low{border:1px solid transparent;background:transparent}
-.lvtag.tgt.low::after,.lvtag.tgt.bad::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:url("__TARGET_DASH_BORDER__") center/100% 100% no-repeat}
-/* 描边绘在原1px边框内部，文字等宽视觉加粗：分档不增加尺寸、不移动文字。 */
-.lvtag.tgt.space,.lvtag.tgt.high{border-color:transparent;background:transparent}
-.lvtag.tgt.space::after,.lvtag.tgt.high::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none}
-.lvtag.tgt.space::after{border:1.5px solid var(--purple)}
-.lvtag.tgt.high{color:var(--target-high);text-shadow:.2px 0 currentColor,-.2px 0 currentColor}
-.lvtag.tgt.high::after{border:1.5px solid var(--target-high)}
-.lvtag.tgt.bad{color:var(--dim);background:transparent;border:1px solid transparent;text-shadow:none}
-.lvtag.tgt.hit::after{content:none}
-.lvtag.tgt.hit{color:#fff;background:#8957e5;border:1px solid #8957e5;text-shadow:none}
-.tnote,.sig .tp{color:var(--purple)}
-.sig{font-size:13.5px;color:var(--text);overflow-wrap:anywhere}
-.signal-magenta{color:#ef8de4} .signal-red{color:var(--lamp-red,#ff8580)} .signal-yellow{color:var(--lamp-yellow,#f0c674)} .signal-cyan{color:#4dd0e1}
+.tag{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.3px;vertical-align:1px;color:var(--head-blue-on);background:var(--tag-bg);border:1px solid var(--tag-border)}
+.tag.quote-note{color:var(--dim);background:var(--quote-bg);border-color:var(--line);font-weight:400}
+.tnote{color:var(--purple)}
+.signal-magenta{color:var(--signal-magenta)}
+.signal-red{color:var(--lamp-red)}
+.signal-yellow{color:var(--lamp-yellow)}
+.signal-cyan{color:var(--tgt-pos)}
 .signal-item{color:var(--dim)}
-.signal-item[data-signal-level="red"]{color:var(--lamp-red,#ff8580)}
-.signal-item[data-signal-level="yellow"]{color:var(--lamp-yellow,#f0c674)}
+.signal-item[data-signal-level="red"]{color:var(--lamp-red)}
+.signal-item[data-signal-level="yellow"]{color:var(--lamp-yellow)}
 .signal-item[data-signal-level="gray"]{color:var(--text)}
 .signal-item[data-signal-level="purple"]{color:var(--purple)}
 .signal-separator{color:var(--dim);margin:0 2px}
 .group-bottom{padding:0;margin:0 -4px -6px;border-top:1px solid var(--line);text-align:center;line-height:0}
-.collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);
-  display:flex;align-items:center;justify-content:center;box-sizing:border-box;
-  background:var(--collapse-bg);border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
+.collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);display:flex;align-items:center;justify-content:center;box-sizing:border-box;background:var(--collapse-bg);border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
 .collapse-group .collapse-icon{font-size:16px;line-height:1}
 .collapse-group:hover{color:var(--text);background:var(--collapse-bg)}
-.collapse-group:focus-visible,.signal-count-toggle:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:2px}
-/* 统计面板：只剩一圈外框，不再铺底色（卡片底、名单展开面板底、紫灯/财报行底全部去掉）。
-   外框四边同宽 1.5px，左侧蓝条随之取消（手机上外框左右各留 4px 贴着屏幕边）。 */
-#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}
-#signalCounts .collapse-group{color:#fff}
-/* 统计标题不再单独钉成浅蓝：原来 #signalCounts>summary 写死 --head-blue，收起/展开两态同色，
-   和「其它板块收起白、展开蓝」的状态提示对不上（2026-11-02 用户要求统一）。
-   现在收起跟随 summary 默认字色，展开交给下面 .group-card[open]>summary .grp-name 那条通用蓝。 */
+.collapse-group:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
+.signal-count-toggle:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
+#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}
+#signalCounts .collapse-group{color:var(--white)}
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
-#signalCounts .count-red{color:var(--red)} #signalCounts .count-yellow{color:var(--yellow)}
+#signalCounts .count-red{color:var(--red)}
+#signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-earn{color:var(--text)}
 #signalCounts table{table-layout:fixed}
 #signalCounts td{padding:6.3px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
-#signalCounts td.num{text-align:center}   /* 计数列居中：破折号与展开按钮对齐 */
+#signalCounts td.num{text-align:center}
 #signalCounts td:first-child{width:26%}
-/* 左列是指标名称（布林+RSI／单独RSI／…／财报／空间 等筛选按钮），2026-11-02 起加粗 600：
-   右列是计数胶囊与名单，保持常规字重，靠加粗把"看什么指标"和"多少只"分开。
-   名单行是 colspan=4 的整行单元格，用 :not([colspan]) 排除，不能把整个名单一起加粗。 */
 #signalCounts td:first-child:not([colspan]){font-weight:600}
-/* 数字胶囊 44px 写死：宽度不跟着位数变。数字右对齐到「个位正好压在胶囊中线」的位置 ——
-   个位右缘固定在 x=26（= 中线 22 + 半个字宽 4），两位数时十位向左长、个位仍停在中线上。
-   右边 17px 内边距就是给三角预留的位置；white-space:nowrap 保证任何情况下都不折行。 */
-#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;max-width:100%;
-  position:relative;padding:0 17px 0 4px;
-  color:var(--head-blue,#bfd5ff);font:inherit;font-size:14px;line-height:1;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;
-  white-space:nowrap;display:inline-flex;align-items:center;justify-content:flex-end;touch-action:manipulation}
-/* 三角字号仍是 16px（不放大也不缩小），只从「跟在数字后面」改成绝对定位贴到胶囊右侧
-   （距右边框 2px）：数字回到中线，三角去右边，左右留白都被用上，胶囊仍是 44px。 */
-#signalCounts .signal-count-toggle::after{content:"▾";font-size:16px;line-height:1;
-  position:absolute;right:2px;top:50%;transform:translateY(-50%)}
+#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;max-width:100%;position:relative;padding:0 17px 0 4px;color:var(--head-blue);font:inherit;font-size:14px;line-height:1;background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;justify-content:flex-end;touch-action:manipulation}
+#signalCounts .signal-count-toggle::after{content:"▾";font-size:16px;line-height:1;position:absolute;right:2px;top:50%;transform:translateY(-50%)}
 #signalCounts .signal-count-toggle[aria-expanded="true"]::after{content:"▴"}
 #signalCounts .signal-members-row>td{padding:0;width:auto;border-top:0}
-#signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid #465e87;text-align:left}
+#signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid var(--list-border);text-align:left}
 #signalCounts .signal-members-panel[hidden]{display:none}
 #signalCounts .signal-members-panel ul{list-style:none;margin:0;padding-left:2px}
-/* 名单行距：红/黄/白与各灯分框的清单**没有分隔线**，原来上下各 5px（个股之间 5px）
-   挤在一起，2026-10-30 起上下各加到 8px（个股之间 10px）。
-   财报（.earnings-week li+li）与多选筛选（.signal-filter li+li）自带 1px 分隔线，
-   行距按用户要求保持原样不动。 */
 #signalCounts .signal-members-panel li{margin:8px 0;overflow-wrap:anywhere}
-/* 统计面板名单里的股票代码（红/黄/白、财报名单共用这个 span）跟主表 .sym、仓位 .sy 一样加粗，
-   只改字重不改字号（2026-10-30）——原来只有它是 400，看起来比别处的代码细一截。 */
 #signalCounts .signal-member-symbol{font-weight:600}
-/* 名称前竖条共用尺寸与6px间距；单条件用伪元素，多选与紫灯用同样的span。 */
-#signalCounts .signal-name-lamp,
-#signalCounts .signal-members-panel li:not(.signal-member-split)::before,
+#signalCounts .signal-name-lamp{content:"";display:inline-block;width:3px;height:12px;border-radius:1px;background:var(--name-lamp,var(--dim));margin-right:6px;vertical-align:-1px}
+#signalCounts .signal-members-panel li:not(.signal-member-split)::before{content:"";display:inline-block;width:3px;height:12px;border-radius:1px;background:var(--name-lamp,var(--dim));margin-right:6px;vertical-align:-1px}
 #signalCounts .earnings-week li::before{content:"";display:inline-block;width:3px;height:12px;border-radius:1px;background:var(--name-lamp,var(--dim));margin-right:6px;vertical-align:-1px}
-#signalCounts .signal-members-panel.tone-red,#signalCounts .signal-name-lamp.red,#signalCounts .earnings-week li.lamp-red{--name-lamp:var(--red)}
-#signalCounts .signal-members-panel.tone-yellow,#signalCounts .signal-name-lamp.yellow,#signalCounts .earnings-week li.lamp-yellow{--name-lamp:var(--yellow)}
-#signalCounts .signal-name-lamp.green,#signalCounts .earnings-week li.lamp-green{--name-lamp:var(--green)}
-#signalCounts .text-only .signal-member-list,#signalCounts .signal-name-lamp.gray{--name-lamp:#9fa3aa}
+#signalCounts .signal-members-panel.tone-red{--name-lamp:var(--red)}
+#signalCounts .signal-name-lamp.red{--name-lamp:var(--red)}
+#signalCounts .earnings-week li.lamp-red{--name-lamp:var(--red)}
+#signalCounts .signal-members-panel.tone-yellow{--name-lamp:var(--yellow)}
+#signalCounts .signal-name-lamp.yellow{--name-lamp:var(--yellow)}
+#signalCounts .earnings-week li.lamp-yellow{--name-lamp:var(--yellow)}
+#signalCounts .signal-name-lamp.green{--name-lamp:var(--green)}
+#signalCounts .earnings-week li.lamp-green{--name-lamp:var(--green)}
+#signalCounts .text-only .signal-member-list{--name-lamp:var(--range-track)}
+#signalCounts .signal-name-lamp.gray{--name-lamp:var(--range-track)}
 #signalCounts .signal-name-lamp.unknown{--name-lamp:var(--dim)}
-/* 单选名单标的竖条跟随主表整股灯，不继承所在红/黄/白分类；原尺寸与面板底色不变。 */
 #signalCounts .signal-members-panel li.lamp-red{--name-lamp:var(--red)}
 #signalCounts .signal-members-panel li.lamp-yellow{--name-lamp:var(--yellow)}
 #signalCounts .signal-members-panel li.lamp-green{--name-lamp:var(--green)}
@@ -681,601 +671,579 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-name-lamp.tone-purple{--name-lamp:var(--purple)}
 #signalCounts .signal-name-lamp.tone-target-high{--name-lamp:var(--target-high)}
 #signalCounts .signal-members-panel .note{display:inline;margin-left:6px}
-#signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}
-#signalCounts .signal-member-split{list-style:none;height:0;margin:9px 0;border-top:1px solid #465e87}
+#signalCounts .signal-member-direction{color:var(--dim);font-size:12px}
+#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}
+#signalCounts .signal-member-split{list-style:none;height:0;margin:9px 0;border-top:1px solid var(--list-border)}
 #signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}
-/* 名单里的描述性数值跟着「这一条条件」的等级走，和主表描述同一套配色：
-   红名单红字 #ff8580、黄名单黄字 #f0c674、白名单（灰灯）仍白字；
-   ▲▼ 三角自带涨跌色，不跟着条件等级变，和主表保持一致。 */
-#signalCounts .signal-members-panel.tone-red .signal-member-metric{color:var(--lamp-red,#ff8580)}
-#signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:var(--lamp-yellow,#f0c674)}
+#signalCounts .signal-members-panel.tone-red .signal-member-metric{color:var(--lamp-red)}
+#signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:var(--lamp-yellow)}
 #signalCounts .signal-members-panel.tone-gray .signal-member-metric{color:var(--text)}
-/* 分框展示：方向写在框标题上（「▲ 上涨」/「上轨▲ · RSI 3条 ↑超买」），名单里不再逐条画三角 */
 #signalCounts .signal-member-block{margin:0 0 10px}
 #signalCounts .signal-member-block:last-child{margin-bottom:0}
-#signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--head-blue,#bfd5ff)}
+#signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--head-blue)}
 #signalCounts .signal-member-block h5:first-letter{letter-spacing:0}
 #signalCounts .signal-member-block ul{padding-left:2px}
 #signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:var(--lamp-size);font-weight:700;line-height:1;vertical-align:baseline}
-#signalCounts .tone-white{color:var(--text)} #signalCounts .tone-yellow{color:var(--lamp-yellow,#f0c674)} #signalCounts .tone-red{color:var(--lamp-red,#ff8580)}
-#signalCounts .tone-cyan{color:#4dd0e1} #signalCounts .tone-purple{color:var(--purple)}
+#signalCounts .tone-white{color:var(--text)}
+#signalCounts .tone-yellow{color:var(--lamp-yellow)}
+#signalCounts .tone-red{color:var(--lamp-red)}
+#signalCounts .tone-cyan{color:var(--tgt-pos)}
+#signalCounts .tone-purple{color:var(--purple)}
 #signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}
-/* 点开的是哪个数字胶囊，就亮哪个胶囊本身（不整行高亮） */
-#signalCounts .signal-count-toggle[aria-expanded="true"]{background:#2f4f86;border-color:var(--head-blue-on,#8fb8f0);color:#fff}
-#signalCounts .signal-count-toggle[data-target$="-red"]{border-color:rgba(255,133,128,.45)}
-#signalCounts .signal-count-toggle[data-target$="-yellow"]{border-color:rgba(240,198,116,.45)}
-#signalCounts .signal-count-toggle[data-target$="-red"][aria-expanded="true"]{background:rgba(255,133,128,.16)}
-#signalCounts .signal-count-toggle[data-target$="-yellow"][aria-expanded="true"]{background:rgba(240,198,116,.16)}
-#signalCounts .signal-count-toggle[data-target^="signal-members-gray-"][aria-expanded="true"]{background:rgba(201,209,217,.14);border-color:rgba(201,209,217,.45)}
-#signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted #465e87}
-#signalCounts .signal-member-jump:hover,.signal-member-jump:focus-visible{color:var(--head-blue,#bfd5ff);border-bottom-color:var(--head-blue,#bfd5ff)}
-#signalCounts .text-only{margin:8px 0 0;border:1px solid #2b3546;border-radius:8px;background:#12161f;text-align:left}
+#signalCounts .signal-count-toggle[aria-expanded="true"]{background:var(--count-active);border-color:var(--head-blue-on);color:var(--white)}
+#signalCounts .signal-count-toggle[data-target$="-red"]{border-color:var(--count-red-border)}
+#signalCounts .signal-count-toggle[data-target$="-yellow"]{border-color:var(--count-yellow-border)}
+#signalCounts .signal-count-toggle[data-target$="-red"][aria-expanded="true"]{background:var(--count-red-bg)}
+#signalCounts .signal-count-toggle[data-target$="-yellow"][aria-expanded="true"]{background:var(--count-yellow-bg)}
+#signalCounts .signal-count-toggle[data-target^="signal-members-gray-"][aria-expanded="true"]{background:var(--count-gray-bg);border-color:var(--count-gray-border)}
+#signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--list-border)}
+#signalCounts .signal-member-jump:hover{color:var(--head-blue);border-bottom-color:var(--head-blue)}
+.signal-member-jump:focus-visible{color:var(--head-blue);border-bottom-color:var(--head-blue)}
+#signalCounts .text-only{margin:8px 0 0;border:1px solid var(--quiet-border);border-radius:8px;background:var(--quiet-bg);text-align:left}
 #signalCounts .text-only>summary{cursor:pointer;padding:8px 12px;color:var(--text);font-size:13px}
-#signalCounts .text-only[open]>summary{border-bottom:1px solid #2b3546}
+#signalCounts .text-only[open]>summary{border-bottom:1px solid var(--quiet-border)}
 #signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
 #signalCounts .text-only li{margin:8px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
-/* 紫灯 / 财报两块（紫灯在上、财报在下）：胶囊永远钉在第一排左侧不动，
-   标题(summary)始终在胶囊右边同一排，点开后名单只向下展开、占满整行宽度。
-   胶囊绝对定位在行内，summary 用左内边距给它让位，所以名单区域不受胶囊影响。 */
-/* 2026-10-28：紫灯／财报这两行的胶囊宽度改成和「信号」列胶囊完全一致（74px），
-   手机上不再比上面那几颗窄一截；summary 的让位内边距跟着 --chip-w 走，文字仍单行。 */
-#signalCounts .signal-extra-row{--chip-w:74px;position:relative;display:block;padding:8px 12px 8px 5px;border-top:1px solid #465e87}
-/* 附加行左侧的「财报」「空间 / 达到」按钮跟表格左列指标名同级，2026-11-02 起同样加粗 600
-   （通用 .signal-filter-toggle 里有 font:inherit 会把字重拉回继承值，必须在这条更具体的规则上写）。 */
 #signalCounts .signal-extra-row>.signal-filter-toggle{position:absolute;top:8px;left:5px;width:var(--chip-w);padding:0;justify-content:center;text-align:center;font-weight:600}
-#signalCounts .signal-extra-row>.text-only,#signalCounts .signal-extra-row>.earnings-week{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
-/* 这两排（「未来15天财报 · N 只」「空间N只　达到N只」）2026-11-02 由 13.5px 提到 16px：
-   与手机端灯圈/右侧计数（16px）同级，加粗 600 保留；16px 字在 line-height 22px 内不换行，
-   min-height 38px 与内距不动，卡片高度不变。 */
-#signalCounts .signal-extra-row>.text-only>summary,#signalCounts .signal-extra-row>.earnings-week>summary{box-sizing:border-box;min-height:38px;padding:8px 0 8px calc(var(--chip-w) + 12px);line-height:22px;font-size:16px;font-weight:400}
+#signalCounts .signal-extra-row>.text-only{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
+#signalCounts .signal-extra-row>.earnings-week{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
 #signalCounts .signal-extra-row>.text-only[open]>summary{border-bottom:0}
 #signalCounts .purple-extra .text-only>summary{color:var(--purple)}
-#signalCounts .purple-extra .text-only .signal-member-list{margin:0;padding:0 0 8.1px 18px}
 #signalCounts .purple-extra .text-only li{margin:8px 0;list-style:none}
-#signalCounts .purple-extra .text-only .signal-member-list{padding-left:2px}
-/* 空间/达到只用紧凑段落间距，覆盖浏览器 h5 的默认大外边距。 */
+#signalCounts .purple-extra .text-only .signal-member-list{margin:0;padding:0 0 8.1px 18px;padding-left:2px}
 #signalCounts .purple-extra .target-purple>h5{margin:6px 0 3px;font-size:13px;line-height:1.5}
 #signalCounts .purple-extra .target-purple .signal-member-list{padding-bottom:0}
-/* 目标空间/达到也没有分隔线，跟其它无分隔线清单统一到上下 8px（原 2px 太挤）。 */
 #signalCounts .purple-extra .target-purple li{margin:8px 0}
 #signalCounts .target-purple .note{display:inline;margin-left:6px}
 #signalCounts .target-purple .signal-member-direction{color:var(--purple)}
-#signalCounts .target-purple .target-space-high .signal-member-direction,
-.group-card tr.pur-high .sig .tp{color:var(--target-high)}
+#signalCounts .target-purple .target-space-high .signal-member-direction{color:var(--target-high)}
 .tone-target-high{color:var(--target-high)}
-#signalCounts .tone-target-high,
-#signalCounts .purple-extra .text-only .text-only-kind.tone-target-high,
-#signalCounts .purple-extra .text-only .text-only-kind.target-space-high,
-#signalCounts .purple-extra .text-only>summary.tone-target-high,
-#signalCounts .purple-extra .text-only>summary.target-space-high,
-#signalCounts .signal-member-block h5.tone-target-high,
-#signalCounts .signal-member-block h5.target-space-high,
-#signalCounts .signal-member-block.tone-target-high h5,
+#signalCounts .tone-target-high{color:var(--target-high)}
+#signalCounts .purple-extra .text-only .text-only-kind.tone-target-high{color:var(--target-high)}
+#signalCounts .purple-extra .text-only .text-only-kind.target-space-high{color:var(--target-high)}
+#signalCounts .purple-extra .text-only>summary.tone-target-high{color:var(--target-high)}
+#signalCounts .purple-extra .text-only>summary.target-space-high{color:var(--target-high)}
+#signalCounts .signal-member-block h5.tone-target-high{color:var(--target-high)}
+#signalCounts .signal-member-block h5.target-space-high{color:var(--target-high)}
+#signalCounts .signal-member-block.tone-target-high h5{color:var(--target-high)}
 #signalCounts .signal-member-block.target-space-high h5{color:var(--target-high)}
-/* 手机：统计面板里每个「指标名称」胶囊的**框**（74px 宽 × 38px 高）一个像素不动，
-   只把框里的文字从 12px 提到 13px（「布林+RSI」「52周低位」在 74px 里仍是单行）。 */
-@media(max-width:600px){#signalCounts .signal-extra-row{--chip-w:74px;padding:8px 8px 8px 5px}#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:13px}#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:13px;line-height:1.1}}
 tr[id^="s-"]{scroll-margin-top:64px}
-/* 闪烁只改 background-color：带 52 周条的行，灯条是用 background-image 画的，
-   用 background 简写做动画会把灯条一起清掉（看起来就是高亮盖住了灯）。
-   位置条是主行的下一个兄弟行，一起闪才不会断成两截。 */
-tr.stk-flash>td, tr.stk-flash+tr.range52-row>td{animation:stkflash 1.6s ease-out 1}
-@keyframes stkflash{0%,55%{background-color:#2b3f63}100%{background-color:transparent}}
-#signalCounts .earnings-week{padding:0 12px;border-top:1px solid #465e87;color:var(--text)}
-/* 折叠态绝对不占高度：个别移动内核在父面板隐藏期间改 open 后不重排，这里用 CSS 兜底 */
+#signalCounts .earnings-week{padding:0 12px;border-top:1px solid var(--list-border);color:var(--text)}
 #signalCounts .earnings-week:not([open])>*:not(summary){display:none}
 #signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text);font-size:16px;font-weight:400;cursor:pointer;touch-action:manipulation}
-#signalCounts .earnings-week summary:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:2px}
+#signalCounts .earnings-week summary:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
 #signalCounts .earnings-week ul{list-style:none;margin:0;padding:0 0 8.1px 2px}
 #signalCounts .earnings-week li{font-size:13px;padding:3.6px 0;overflow-wrap:anywhere}
 #signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
-/* 财报名称前竖条复用统计名单样式，颜色仍来自该股原灯级。 */
-#signalCounts .earnings-week .lamp-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;
-  overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-#signalCounts .earnings-week-meta{color:var(--dim);font-size:12px}
-#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red,#ff8580);font-weight:400}
-#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow,#f0c674);font-weight:400}
+#signalCounts .earnings-week .lamp-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red);font-weight:400}
+#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow);font-weight:400}
 #signalCounts .earnings-week .note{display:inline;margin-left:6px}
-#signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;line-height:1;color:var(--text);
-  display:inline-flex;align-items:center;justify-content:center;white-space:normal;background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer;text-align:center;line-height:1.15;touch-action:manipulation}
-/* 「信号」列的所有胶囊按钮同宽（＝最宽的「布林+RSI」这一档，取 74px 让「52周低位」也不折行），
-   文字／内容居中；紫灯、财报两行的胶囊是另一套定位（--chip-w），不受这条影响。 */
+#signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;color:var(--text);display:inline-flex;align-items:center;justify-content:center;white-space:normal;background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:pointer;text-align:center;line-height:1.15;touch-action:manipulation}
 #signalCounts td .signal-filter-toggle{width:74px;padding:0 4px}
-#signalCounts .signal-filter-toggle[aria-pressed="true"]{background:#2f6bd8;border-color:#2f6bd8;color:#fff}
-#signalCounts .signal-filter-toggle:focus-visible,#signalCounts .signal-filter-clear:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:2px}
-#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;font-size:13px}
+#signalCounts .signal-filter-toggle[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);color:var(--white)}
+#signalCounts .signal-filter-toggle:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
+#signalCounts .signal-filter-clear:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
+#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid var(--list-border);font-size:13px}
 #signalCounts .signal-filter[hidden]{display:none}
-#signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:var(--head-blue,#bfd5ff);font-weight:600}
-#signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:38px;padding:0 10px;font:inherit;font-weight:400;color:var(--text);
-  background:transparent;border:1px solid #4c6591;border-radius:6px;cursor:pointer}
+#signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:var(--head-blue);font-weight:600}
+#signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:38px;padding:0 10px;font:inherit;font-weight:400;color:var(--text);background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:pointer}
 #signalCounts .signal-filter p{margin:6px 0 0;color:var(--dim)}
 #signalCounts .signal-filter ul{list-style:none;margin:6px 0 0;padding:0}
 #signalCounts .signal-filter li{padding:4.5px 0;overflow-wrap:anywhere}
-#signalCounts .signal-filter li+li{border-top:1px solid var(--line)}
+#signalCounts .signal-filter li.has-separator{border-top:1px solid var(--line)}
 #signalCounts .signal-filter .note{margin-left:5px}
-/* 仅多选组合描述按每条条件着色；不借用名称灯色，不影响单选名单。 */
 #signalCounts .signal-filter-detail{display:block;margin-top:2px;color:var(--text)}
-#signalCounts .signal-filter-condition[data-signal-level="red"]{color:var(--lamp-red,#ff8580)}
-#signalCounts .signal-filter-condition[data-signal-level="yellow"]{color:var(--lamp-yellow,#f0c674)}
+#signalCounts .signal-filter-condition[data-signal-level="red"]{color:var(--lamp-red)}
+#signalCounts .signal-filter-condition[data-signal-level="yellow"]{color:var(--lamp-yellow)}
 #signalCounts .signal-filter-condition[data-signal-level="gray"]{color:var(--text)}
 #signalCounts .signal-filter-condition[data-signal-level="purple"]{color:var(--purple)}
 #signalCounts .signal-filter-condition[data-signal-level="green"]{color:var(--green)}
-/* 财报不是交易灯：字色跟统计「未来15天财报」名单一致，红＝近3日、黄＝7日内、灰＝其余。 */
-#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="red"]{color:var(--lamp-red,#ff8580)}
-#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="yellow"]{color:var(--lamp-yellow,#f0c674)}
+#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="red"]{color:var(--lamp-red)}
+#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="yellow"]{color:var(--lamp-yellow)}
 #signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="gray"]{color:var(--dim)}
-.earn{display:block;margin:0;color:var(--head-blue-on,#8fb8f0);font-size:12.5px;font-weight:400;line-height:1.5}
-.earn .unit{display:block;color:var(--dim);font-size:12px}
-.earn.soon{color:var(--lamp-yellow,#f0c674);font-weight:400}
-.earn.urgent{color:var(--lamp-red,#ff8580);font-weight:400}
-table.stk{table-layout:fixed}
-.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}  /* 股票行下边距让给位置条，条靠近本股、远离下一只 */
-/* 位置条下方只留 4px 就把位置条交给下一行（成本/市值行或下一只股票）；
-   条本身的高度由 .range52-rail 控制，三角之上不再写百分比后已把那段空白回收 */
-.stk tr.range52-row td{padding:0 12px 4px 18px;border-top:0;box-shadow:none}
-/* 个股之间的横线原来是继承全局 td 的 --line(#252a33)，太淡；股票表这里提亮一档（2026-10-20） */
-table.stk tr>td{border-top-color:#39424f}
-/* 位置条：左端写区间最低价、右端写最高价，中间是灰轨；百分比浮在轨道上方跟随紫方块 */
-/* 高度 26px = 上 13px 放现价三角（三角 9px + 灰轨 2.1px，顶上再留约 1.9px 不顶到上一只股票）
-   + 下 13px 放两端「到低点／到高点」两行。三角上方原来那行百分比删掉后，
-   这里从 33px 收到 26px，把那段空白整个回收掉，同时保证三角不会碰到上一行文字。 */
-.range52-rail{position:relative;display:flex;align-items:flex-end;gap:7px;height:26px;padding-bottom:13px;
-  font-variant-numeric:tabular-nums}
-/* 两端价格与其下方涨跌空间：桌面保持 10px，手机在下方 ≤600px 档统一提到 11px。 */
-.range52-lo,.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
-.range52-track{position:relative;flex:1 1 auto;height:2.1px;background:#9fa3aa;border-radius:99px}
-/* 两端第二行＝从本轮价到低／高点的涨跌空间，以本轮价为基数；全组生效，灰字仅文字层级。
-   轨道仍对齐第一行价格，第二行占下面 13px，不与三角或灰轨重叠。 */
+.range52-rail{position:relative;display:flex;align-items:flex-end;gap:11px;height:26px;padding-bottom:13px;font-variant-numeric:tabular-nums}
+.range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
+.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
+.range52-track{position:relative;flex:1 1 auto;height:2.1px;background:var(--range-track);border-radius:99px}
 .range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;color:var(--dim)}
 .range52-hi .range52-gap{left:auto;right:0}
-/* 现价标记：倒三角，尖角朝下**顶在灰轨上沿**；三角之上不再写百分比——位置由三角本身表达，
-   涨跌空间改到两端价格下方。左右收窄 = 只收底的宽度（10.4 → 8.4px），**高度仍 9px 不变**，
-   于是顶角从 60° 变成约 50°（更尖锐）；内层维持四周 1px 的描边厚度，高度仍是原来的 7px，不跟着缩。
-   外层浅紫描边 + 内层深紫实心。 */
-.range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;
-  border-left:4.2px solid transparent;border-right:4.2px solid transparent;
-  border-top:9px solid #efd9ff;transform:translateX(-50%);z-index:1}
-.range52-marker::before{content:"";position:absolute;left:-3.2px;top:-8px;width:0;height:0;
-  border-left:3.2px solid transparent;border-right:3.2px solid transparent;border-top:7px solid #713caf}
-/* 成本价：黄色竖线，横跨灰轨（2026-10-19 改；原来是条下方的白三角）。
-   高度 10.5px 上下各露约 4px；z-index 高于现价标记，成本≈现价时黄压紫，成本价优先可见 */
-.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;background:var(--lamp-yellow,#f0c674);transform:translate(-50%,-50%);z-index:2}
-/* 成本价落在 52 周区间之外（比低点还低 / 比高点还高）：竖线贴到对应端点并稍淡，
-   端点外侧补一个朝外的小箭头，避免被当成「成本刚好等于最高价／最低价」 */
+.range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;border-left:4.2px solid transparent;border-right:4.2px solid transparent;border-top:9px solid var(--range-marker-border);transform:translateX(-50%);z-index:1}
+.range52-marker::before{content:"";position:absolute;left:-3.2px;top:-8px;width:0;height:0;border-left:3.2px solid transparent;border-right:3.2px solid transparent;border-top:7px solid var(--range-marker-fill)}
+.range52-cost{position:absolute;top:50%;width:2.2px;height:10.5px;border-radius:1px;background:var(--lamp-yellow);transform:translate(-50%,-50%);z-index:2}
 .range52-cost.out-lo{left:0;opacity:.85}
 .range52-cost.out-hi{left:100%;opacity:.85}
-.range52-cost.out-lo::after,.range52-cost.out-hi::after{content:"";position:absolute;top:50%;
-  transform:translateY(-50%);border-top:3.2px solid transparent;border-bottom:3.2px solid transparent}
-.range52-cost.out-lo::after{right:calc(100% + 1px);border-right:4px solid var(--lamp-yellow,#f0c674)}
-.range52-cost.out-hi::after{left:calc(100% + 1px);border-left:4px solid var(--lamp-yellow,#f0c674)}
+.range52-cost.out-lo::after{content:"";position:absolute;top:50%;transform:translateY(-50%);border-top:3.2px solid transparent;border-bottom:3.2px solid transparent;right:calc(100% + 1px);border-right:4px solid var(--lamp-yellow)}
+.range52-cost.out-hi::after{content:"";position:absolute;top:50%;transform:translateY(-50%);border-top:3.2px solid transparent;border-bottom:3.2px solid transparent;left:calc(100% + 1px);border-left:4px solid var(--lamp-yellow)}
 .range52-missing{display:block;color:var(--dim);font-size:11px;line-height:15px}
-.c-sym{width:18%} .c-earn{width:22%} .c-px{width:13%} .c-sig{width:47%}
-.earn-cell{vertical-align:middle;overflow-wrap:anywhere}
-table.stk tr td:first-child{padding-left:14px}
-.stk td.sym{overflow-wrap:anywhere}
-.stk th{font-size:13px;color:var(--dim);font-weight:600;letter-spacing:.3px;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
-.stk th:first-child{padding-left:14px}
-.stk th.h-earn,.earn-cell{text-align:center}
-.px{white-space:nowrap}
-/* 价格列改为居中显示（与共识价胶囊一致），不再靠右 */
-td.px{text-align:center}
-.px-price,.px-chg{display:block}
-.px-chg{font-size:13.5px}
-@media (max-width:600px){
-  /* 手机：原左 4px / 右 6px 各加 1px，现左 5px / 右 7px。
-     上（安全区）下（40px）沿用 body 原值。 */
-  body{padding-left:5px;padding-right:7px}
-  /* 手机：保持电脑端同样的四栏（名称｜财报｜价格涨跌幅｜警示），每栏在自己的区域内换行，不再拆成上下三层 */
-  .c-sym{width:21%} .c-earn{width:19%} .c-px{width:19%} .c-sig{width:41%}
-  /* 主表个股主行上下留白 8 → 6px，左右仍 5px；52 周位置行保留下面的独立紧凑 padding。 */
-  .stk td{padding:6px 5px}
-  .stk tr.range52-row td{padding:0 8px 4px 12px}
-  table.stk tr td:first-child,.stk th:first-child{padding-left:11px}
-  .stk th{padding:7px 5px;font-size:12px}
-  .stk th.h-earn,.earn-cell{text-align:left}
-  .stk td.sym{font-size:14px}
-  .stk td.sym .note{font-size:11.5px;line-height:1.35}
-  /* 财报列是描述正文统一的例外：美东时间保持 12.5px，北京时间保持 11.5px，不随信号描述调整。 */
-  .stk .earn{font-size:12.5px;line-height:1.4}
-  .stk .earn .unit{font-size:11.5px;line-height:1.35}
-  .stk .px-price{font-size:14px}
-  /* 紫灯框与加／减仓价数字文字 11 → 12px；52 周两端价格及下方涨跌空间仍 11px，桌面不变。 */
-  .stk .px-chg{font-size:12.5px} .stk .tgs .lvtag{padding:1px 3px;font-size:12px;max-width:100%;box-sizing:border-box} .stk .tgs .lvtag span{white-space:normal;overflow-wrap:anywhere}
-  .range52-lo,.range52-hi,.range52-gap{font-size:11px}
-  .stk td.sig{font-size:12.5px;line-height:1.45}
-  .group-card>summary .group-stats,.macro-card>summary .group-stats{gap:6px}
-}
-.up{color:var(--up)} .down{color:var(--down)}
-/* 2026-10-30：红灯条宽度跟黄灯条对齐（6px → 4px）。左内边距**保持 14px 不动**——
-   主表 `table.stk tr td:first-child` 把首列内边距定成 14px，红黄两档的文字左缘必须同为 14px
-   （灯条画在内边距区里，宽度变窄只是灯条与文字的间距从 8px 变成 10px，两档仍然一致）。 */
+.up{color:var(--up)}
+.down{color:var(--down)}
 tr.red td:first-child{box-shadow:inset 4px 0 0 var(--red);padding-left:14px}
 tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}
 tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}
 tr.gray td{color:var(--dim)}
 .group-card tr.red td:first-child{box-shadow:inset 4px 0 0 var(--red);padding-left:14px}
-/* 目标状态只由胶囊和统计展示；主表描述右侧不再绘制紫色灯条。 */
-/* 有52周条的股票：左侧灯条顶部再减去整只股票高度（主行+位置条）的约15%（85%-6.1px，位置条行约22px），延伸覆盖自己的位置条、在条下方4px处结束，与上下股票留出空隙 */
-.stk tr:has(+tr.range52-row)>td{--lc:transparent;--lw:0px}
-.stk tr.red:has(+tr.range52-row)>td:first-child{--lc:var(--red);--lw:4px}
-.stk tr.yellow:has(+tr.range52-row)>td:first-child{--lc:var(--yellow);--lw:4px}
-.stk tr.green:has(+tr.range52-row)>td:first-child{--lc:var(--green);--lw:2px}
-.stk tr:has(+tr.range52-row)>td:first-child{box-shadow:none;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) calc(85% - 2.1px);background-position:left bottom;background-repeat:no-repeat}
-/* 52周位置行只延续原左侧红黄绿灯条，不再延续右侧紫条。 */
-.stk tr.range52-row>td{--lc:transparent;--lw:0px;background-image:linear-gradient(var(--lc),var(--lc));background-size:var(--lw) 14px;background-position:left top;background-repeat:no-repeat}
-.stk tr.red+tr.range52-row>td{--lc:var(--red);--lw:4px} .stk tr.yellow+tr.range52-row>td{--lc:var(--yellow);--lw:4px}
-.stk tr.green+tr.range52-row>td{--lc:var(--green);--lw:2px}
-/* 市场风险表改固定列宽：WTI 参考行最后一列原本是一大段说明，自动列宽会按「整段不换行有多宽」
-   去分列，结果状态列被撑到 138.6px（短文案「平静」后面空掉一大截），指标列被挤到 65.8px
-   （「垃圾债利差」逐字折成三行）。文案精简后自动列宽虽已回到 98/130/59/88，但仍按内容多少
-   天天变，所以固定按比例分配，四列空余均匀、结果可预期。
-   四列不换行所需（含左右各 10px 内边距）实测 126/159/90/114。
-   宽屏（表宽 710）26/33/18/23 → 184.6/234.3/127.8/163.3，四列空余各 40～60px；
-   ≤600px（表宽 375）30/34/15/21 → 112.5/127.5/56.3/78.8，行高合计 574 → 487，
-   且 360/600/768/1280 各视口均无横向溢出、无单元格内溢出。 */
-#macroCard table{table-layout:fixed}
-#macroCard td:first-child{width:26%} #macroCard td:nth-child(2){width:33%}
-#macroCard td:nth-child(3){width:18%} #macroCard td:nth-child(4){width:23%}
-#macroCard td{overflow-wrap:anywhere}
-@media(max-width:600px){#macroCard td:first-child{width:30%} #macroCard td:nth-child(2){width:34%}
-  #macroCard td:nth-child(3){width:15%} #macroCard td:nth-child(4){width:21%}}
-/* 指标列仍左对齐，当前／变化／状态三列居中（.num 默认右对齐，这里按列覆盖） */
-#macroCard td:nth-child(2),#macroCard td:nth-child(3),#macroCard td:nth-child(4){text-align:center}
-#macroCard tr.mh td{padding:5px 10px;font-size:12.5px;white-space:nowrap} #macroCard tr.mh td:nth-child(3){padding-left:2px}
-/* 「变化」列（第 3 列）的数字跟「当前」列同号（14px）：单元格上挂的 .dim 会连字号一起压到 13px，
-   两列并排看着像刻意弱化，其实两列主数同等重要。只补字号，灰色仍由 .dim 给出（次要感靠颜色，不靠缩小）。
-   WTI 原油参考行整行本来就是 13px（.oil-reference-row 自己的规则），排除在外，否则它反而比「当前」列大。 */
-#macroCard tr:not(.oil-reference-row) td.num.dim{font-size:14px}
-/* ===== 市场风险表：极致压缩每行的上下留白（2026-10-30） =====
-   原来 td 上下各 9px，叠上 .unit 小字行（11px × 1.5 行高 ≈ 16.5px）后：
-   两行小字的行 56.5px、三行的上涨参与度 73px、手机上 WTI 那行 117px，文字离分隔线太远。
-   现在：上下内边距 9 → 2px、表头行 5 → 2px、.unit 行高 1.5 → 1.3（11px → 14.3px）、
-   横向内边距 10 → 8px（手机 6px，四列文字不贴表格边）。
-   实测 1400 视口：56.5 → 36.5、73 → 53、WTI 80.3 → 43.6；整表 481.5 → 约 320。
-   只动 #macroCard 内的 td，主表（.stk）与其它表格一像素不受影响。 */
-#macroCard td{padding:2px 8px;line-height:1.35}
-#macroCard tr.mh td{padding:2px 8px}
-#macroCard td .unit{line-height:1.15}
-@media(max-width:600px){#macroCard td,#macroCard tr.mh td{padding:2px 6px}}
 .macro-help{margin:8px 12px;color:var(--dim);font-size:13px;line-height:1.7}
-.macro-help>summary{cursor:pointer;color:var(--head-blue-on,#8fb8f0);padding:8px 0;touch-action:manipulation}
+.macro-help>summary{cursor:pointer;color:var(--head-blue-on);padding:8px 0;touch-action:manipulation}
 .macro-help p{margin:6px 0}
-.macro-help>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
+.macro-help>summary:focus-visible{outline:2px solid var(--link-blue);outline-offset:2px}
 .page-notes{margin-top:18px}
 .page-notes .macro-help{overflow-wrap:anywhere}
-/* 页底综合细则标头与预警规则同高同色，正文及其他宏观折叠保持原样。 */
 #pageNotes>#marketRiskRules{margin-top:0;margin-bottom:0}
-#pageNotes>#marketRiskRules>summary{padding:9px 0;line-height:1.5;color:var(--head-blue,#bfd5ff);font-size:13px;font-weight:600}
-.page-notes a{color:var(--head-blue-on,#8fb8f0)}
+#pageNotes>#marketRiskRules>summary{padding:9px 0;line-height:1.5;color:var(--head-blue);font-size:13px;font-weight:600}
+.page-notes a{color:var(--head-blue-on)}
 .page-notes .macro-help+ .macro-help{border-top:1px solid var(--line);padding-top:4px}
 .unit{display:block;font-size:11px;color:var(--dim);font-weight:400}
 .foot{color:var(--dim);font-size:12.5px;text-align:center;margin-top:22px;line-height:1.7}
-.foot a{color:#8ab4f8;text-decoration:none}
-.foot a:hover,.foot a:focus-visible{text-decoration:underline}
+.foot a{color:var(--footer-link);text-decoration:none}
+.foot a:hover{text-decoration:underline}
+.foot a:focus-visible{text-decoration:underline}
 .quiet{color:var(--dim);font-size:13px;padding:8px 12px 12px}
-.warn{background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.35);
-  color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:14px}
+.warn{background:var(--warning-bg);border:1px solid var(--warning-border);color:var(--yellow);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:14px}
 .acts{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:16px}
-.acts .board-return{display:inline-block;margin:8px;color:#6ba3f0}
-/* 自动计划从第二排数据时间挪到页底返回看板下方；与原 sub 行同一档灰字，不再挤在头部。 */
+.acts .board-return{display:inline-block;margin:8px;color:var(--link-blue)}
 .autoplan{color:var(--dim);font-size:12px;text-align:center;line-height:1.7;margin:2px 0 0}
 #runMsg{font-size:13px;color:var(--dim);flex:1;min-width:180px;line-height:1.5;overflow-wrap:anywhere}
 #runMsg.ok{color:var(--green)}
 #runMsg.err{color:var(--red)}
 .runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-/* 「编辑」2026-11-02 从仓位卡标题行搬到这一排（「刷新」右边），按钮本体由 monitor 服务端输出。
-   它保留自己那套小圆角蓝边样式（cost_panel.css 的 .cost-edit-btn：桌面 13px / 手机 16px），
-   所以顶栏的通用按钮皮肤要把它排除在外；:disabled 与 .primary 两条仍照旧生效。 */
-.runbar button:not(.cost-edit-btn){padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
-  border:1px solid #333a47;border-radius:8px;cursor:pointer;font-family:inherit}
+.runbar button:not(.cost-edit-btn){padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;cursor:pointer;font-family:inherit}
 .runbar button:disabled{opacity:.5;cursor:not-allowed}
-.runbar button.primary{background:var(--blue);border-color:var(--blue);color:#fff}
-/* 「设置」2026-10-29 从顶栏搬到页底 .acts（与「返回看板」同排），选择器必须一起带上 .acts，
-   否则搬到 .acts 后这条不再命中，「设置」会退化成浏览器默认的蓝色下划线链接。 */
-.runbar a.btnlink,.acts a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:#232833;
-  border:1px solid #333a47;border-radius:8px;text-decoration:none;display:inline-block}
-.statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-  margin:-4px 0 14px;font-size:13.5px;line-height:1.5}
-.check-result{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;
-  font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
+.runbar button.primary{background:var(--blue);border-color:var(--blue);color:var(--white)}
+.runbar a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
+.acts a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
+.statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;font-size:13.5px;line-height:1.5}
+.check-result{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
 .check-result[data-phase="bad"]{border-color:var(--red)}
 .check-result[data-phase="busy"]{border-color:var(--yellow)}
 .check-result[hidden]{display:none}
-.group-card>summary.grp,.macro-card>summary.grp{display:flex;align-items:center;gap:6px;cursor:pointer;
-  /* 2026-10-20：左内边距 12px → 4px —— 展开箭头和分类名整体往左挪，贴着卡片左边缘 */
-  padding:12px 12px 12px 4px;font-size:16px;font-weight:600;list-style:none;touch-action:manipulation}
-.group-card>summary::-webkit-details-marker,.macro-card>summary::-webkit-details-marker{display:none}
-/* 箭头给固定宽度并居中：左内边距收到 4px 后，展开状态旋转 90° 的「›」会贴到卡片边缘被裁掉 */
-.group-card>summary::before,.macro-card>summary::before{content:"›";display:inline-block;width:10px;
-  text-align:center;flex:none;color:var(--dim);font-size:20px;line-height:1}
-.group-card[open]>summary::before,.macro-card[open]>summary::before{transform:rotate(90deg)}
-.group-card[open]>summary,.macro-card[open]>summary{border-bottom:1px solid var(--line)}
+.group-card>summary.grp{display:flex;align-items:center;gap:6px;cursor:pointer;padding:12px 12px 12px 4px;font-size:16px;font-weight:600;list-style:none;touch-action:manipulation}
+.macro-card>summary.grp{display:flex;align-items:center;gap:6px;cursor:pointer;padding:12px 12px 12px 4px;font-size:16px;font-weight:600;list-style:none;touch-action:manipulation}
+.group-card>summary::-webkit-details-marker{display:none}
+.macro-card>summary::-webkit-details-marker{display:none}
+.group-card>summary::before{content:"›";display:inline-block;width:10px;text-align:center;flex:none;color:var(--dim);font-size:20px;line-height:1}
+.macro-card>summary::before{content:"›";display:inline-block;width:10px;text-align:center;flex:none;color:var(--dim);font-size:20px;line-height:1}
+.group-card[open]>summary{border-bottom:1px solid var(--line)}
+.macro-card[open]>summary{border-bottom:1px solid var(--line)}
 .group-stats{margin-left:auto;color:var(--dim);font-size:14px;font-weight:400}
 .group-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
 .group-card>summary .rs-spy{margin-left:auto}
-/* 长持仓子框仍左右外扩 2px；内部留白 2→4px，与普通 .card 的左右内边距一致。
-   红黄绿灯条是首格内侧阴影，表格到框内缘的空隙由此控制，不能只改文字 padding。 */
-.zone-card{margin:10px -2px 12px;padding-left:4px;padding-right:4px;
-  border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}
-/* 区内 ▲ 收起条抵消本区 4px 内边距，仍贴合子框内侧、不溢出边框。 */
+.zone-card{margin:10px -2px 12px;padding-left:4px;padding-right:4px;border:1px solid var(--line);border-radius:9px;background:var(--zone-bg)}
 .zone-card .group-bottom{margin:0 -4px 0}
-.zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;
-  list-style:none;touch-action:manipulation}
+.zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;list-style:none;touch-action:manipulation}
 .zone-card>summary::-webkit-details-marker{display:none}
 .zone-card>summary::before{content:"›";color:var(--dim);font-size:18px;line-height:1}
-.zone-card[open]>summary::before{transform:rotate(90deg)}
 .zone-card[open]>summary{border-bottom:1px solid var(--line)}
 .zone-card>summary .zone-name{color:var(--text);font-size:15px;font-weight:600;white-space:nowrap;flex:none}
-.zone-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;
-  justify-content:flex-start;text-align:left;flex:1 1 auto}
-.zone-card>summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
+.zone-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
+.zone-card>summary:focus-visible{outline:2px solid var(--link-blue);outline-offset:-2px}
 .zone-card .quiet{font-size:12px;color:var(--dim);padding:8px 10px 0;line-height:1.6}
-/* 展开的那一组：整张卡片套上与统计面板同色（#6686c6）同宽（2px）的外框，
-   标题不再铺底色、不再画左侧蓝条 —— 一眼就能看出「持仓」和里面的「长持仓」有没有打开。
-   折叠后没有 [open]，卡片自动回到默认灰框，不显示外框色。
-   统计面板自己恒带外框、仓位管理用自己的绿色外框，两者都不进这条（:not 里排除）。
-   持仓内的「长持仓」是卡中卡，单独再细一档（1px），见下一条。 */
-.group-card[open]:not(#signalCounts):not(#costManage),.macro-card[open]{
-  border:var(--frame-w) solid var(--signal-border)}
+.group-card[open]:where(:not(#signalCounts,#costManage)){border:var(--frame-w) solid var(--signal-border)}
+.macro-card[open]{border:var(--frame-w) solid var(--signal-border)}
 .zone-card[open]{border:1px solid var(--signal-border)}
-/* 鼠标／触摸点标题时不要再套一圈蓝描边：那条 2px 线会被误当成高亮，
-   而且点完失焦就消失，看着像「闪一下」。键盘 Tab 过去的 :focus-visible 照旧显示。 */
-.group-card>summary:focus:not(:focus-visible),.macro-card>summary:focus:not(:focus-visible),
+.group-card>summary:focus:not(:focus-visible){outline:none}
+.macro-card>summary:focus:not(:focus-visible){outline:none}
 .zone-card>summary:focus:not(:focus-visible){outline:none}
-/* 展开态的蓝标题与蓝三角对统计面板同样生效（去掉 :not(#signalCounts)）——统计与其它板块
-   共用一套「收起默认白 → 展开 --head-blue」的状态提示（2026-11-02）。 */
-.group-card[open]>summary .grp-name,.macro-card[open]>summary .grp-name,
-.zone-card[open]>summary .zone-name{color:var(--head-blue,#bfd5ff)}
-.group-card[open]>summary::before,.macro-card[open]>summary::before,
-.zone-card[open]>summary::before{color:var(--head-blue-on,#8fb8f0)}
-/* 子区自己的收起条和外层「持仓」卡底部收起条之间拉开距离，两条 ▲ 挨太近会误点 */
-.zone-card + .group-bottom,.zone-card + .quiet + .group-bottom{margin-top:22px}
-/* ===== 电脑端（>600px）：折叠起来的板块框压矮约 20%（62 → 50），字号／行高／编辑按钮一像素不动 =====
-   折叠高度 = 卡片上下边框 2px + 卡片上下内边距 + 标题行高。原来是 2 + 12 + 48 = 62：
-   卡片内边距 6 → 2、标题行锁死 44px（box-sizing 包住内边距，内容靠 align-items 垂直居中），
-   得到 2 + 4 + 44 = 50。「仓位」那行因为「编辑」按钮高 29.6px，标题行被撑到 53.6px、
-   整框 67.6px，锁 44px 后与其它板块完全等高（按钮本身 54×29.6 不变）。
-   卡中卡「长持仓」跟着压一档（40.5 → 34），仍比外层矮、保留层级。
-   只对 :not([open]) 生效——展开态一像素不变；手机（≤600px）不进这条，维持原来的触摸高度。 */
-@media(min-width:601px){
-  /* 顶部链路两态统一 —— 这是「展开时标题文字往下跳」的根治办法：
-     卡片上内边距两态都 2px + 标题行两态都锁 44px（内容垂直居中），
-     文字距卡片顶恒 = 边框 1px + 2px + (44 − 内容高)/2，展开／收起同一位置。
-     原来只有 :not([open]) 生效，展开态走的是「卡片 6px + summary padding-top 12px 顶部对齐」，
-     顶部差 6px，所以一点开就下跳。底部保持原样：收起态 2px（保住压矮 20%），
-     展开态 6px（内容不贴底边）。「统计」#signalCounts 也一起统一（它收起态本来就在压矮范围内，
-     只统一顶部就不会再跳；底部仍按各自原样）。 */
-  .group-card,.macro-card,#costManage.cost-manage{padding-top:2px}
-  .group-card:not([open]),.macro-card:not([open]),#costManage.cost-manage:not([open]){
-    padding-bottom:2px}
-  .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
-    box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
-  /* 长持仓（卡中卡）两态统一锁 47px（36 → 47）：折叠后整条 = 47 + 上下 1px 边框 = 49px，
-     与仓位面板「当日盈亏贡献」收起后的整条（实测 49px）同高，全站折叠栏目条一个高度。
-     两态同一套顶部链路是硬要求——只锁高不统一 padding，点标题展开时标题行会跳。 */
-  .zone-card>summary{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}
-  /* PC 顶栏整体往中间收（2026-11-02）：站名下面那几排——数据时间、按钮行、状态灯、
-     核验结果——左右各内缩 --head-inset。内容仍左起，只是不再贴着卡片左边缘；
-     不是居中对齐（用户明确说「不是完全居中」）。手机 ≤600px 不进这条，保持原样。 */
-  .sub,.runbar,.statusrow,.check-result{
-    padding-left:var(--head-inset,64px);padding-right:var(--head-inset,64px)}
-}
-/* 灯级计数徽章：空心圈刚好套住数字，圈用灯色描边，数字固定白色（底色是深色页） */
-.stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;
-  box-sizing:border-box;min-width:17px;height:17px;padding:0 3px;border-radius:999px;
-  border:1.5px solid var(--dim);background:transparent;
-  /* 字号跟同一行右侧的「20日对.SPX -5.3%」(.group-stats) 完全一致：桌面 14px、手机 16px；
-     **不加粗**（2026-10-31）：原来 12.5px/700 在这一行里又小又跳，现在跟旁边数字同号同重。 */
-  font-size:14px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums;color:#fff;
-  position:relative;top:2px}   /* 与分组名文字底部对齐（圆底原本比文字底高 2px） */
+.group-card[open]>summary .grp-name{color:var(--head-blue)}
+.macro-card[open]>summary .grp-name{color:var(--head-blue)}
+.zone-card[open]>summary .zone-name{color:var(--head-blue)}
+.group-card[open]>summary::before{transform:rotate(90deg);color:var(--head-blue-on)}
+.macro-card[open]>summary::before{transform:rotate(90deg);color:var(--head-blue-on)}
+.zone-card[open]>summary::before{transform:rotate(90deg);color:var(--head-blue-on)}
+.zone-card + .group-bottom{margin-top:22px}
+.zone-card + .quiet + .group-bottom{margin-top:22px}
+.stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;width:24px;min-width:24px;height:18px;padding:0 1px;border-radius:999px;border:1.5px solid var(--dim);background:transparent;font-size:14px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums;color:var(--white);position:relative;top:2px}
 .stat-badge.red{border-color:var(--red)}
 .stat-badge.yellow{border-color:var(--yellow)}
 .stat-badge.gray{border-color:var(--dim)}
 .stat-badge.missing{border-color:var(--dim);border-style:dashed}
 .stat-badge.purple{border-color:var(--purple)}
 .stat-badge.green{border-color:var(--green)}
-/* 分组标题：名称不参与挤压，避免手机上「IT · AI (27)」被拆成两行 */
-.group-card>summary .grp-name,.macro-card>summary .grp-name{white-space:nowrap;flex:none}
+.group-card>summary .grp-name{white-space:nowrap;flex:none}
+.macro-card>summary .grp-name{white-space:nowrap;flex:none}
 .rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
-.rs-spy.up{color:var(--up)} .rs-spy.down{color:var(--down)}
+.rs-spy.up{color:var(--up)}
+.rs-spy.down{color:var(--down)}
 .stat-dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
-.stat-dot.red{background:var(--red)} .stat-dot.yellow{background:var(--yellow)}
-.stat-dot.gray{background:var(--dim)} .stat-dot.green{background:var(--green)} .stat-dot.purple{background:var(--purple)}
+.stat-dot.red{background:var(--red)}
+.stat-dot.yellow{background:var(--yellow)}
+.stat-dot.gray{background:var(--dim)}
+.stat-dot.green{background:var(--green)}
+.stat-dot.purple{background:var(--purple)}
+.macro-card>summary .stat-badge{top:0;margin-right:2px}
 .market-risk-badge{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
-.market-risk-badge[data-level="red"]{color:var(--red)}
-.market-risk-badge[data-level="yellow"]{color:var(--yellow)}
 .market-risk-badge[data-level="green"]{color:var(--green)}
-/* 市场风险的「绿灯 综合：平稳」2026-11-02 起靠右排：与其它栏目标题行右侧的
-   「20日对.SPX +0.3%」(.rs-spy，margin-left:auto) 同一条右端线，整页右侧读数对齐。
-   底色／字号不变，只是从紧贴标题改成顶到最右。 */
-.macro-card>summary .group-stats{margin-left:auto;display:inline-flex;align-items:center;
-  justify-content:flex-end;text-align:right}
-/* 「无异动 N 只」自己就是一个可点开的条目（不再写「点击查看」）：上下各一条细横线，
-   把「这一整块点下去会展开」的范围圈出来；清单内部股票行之间的线照旧，两者不混。 */
-.quiet-list{margin:8px 0;border-top:1px solid #46525f;border-bottom:1px solid #46525f}
+.macro-card>summary .group-stats{margin-left:auto;display:inline-flex;align-items:center;justify-content:flex-end;text-align:right;gap:0;flex:0 1 auto}
+#group_positions_long.zone-card>summary .zone-stats,#group_positions_short.zone-card>summary .zone-stats{margin-left:auto;justify-content:flex-end;margin-right:-1px}
+.quiet-list{margin:8px 0;border-top:1px solid var(--quiet-rule);border-bottom:1px solid var(--quiet-rule)}
 .quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:13px;cursor:pointer}
-.sym .note{display:block;margin:3px 0 0;overflow-wrap:anywhere}
-.group-card summary:focus-visible,.macro-card summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:-2px}
+.quiet-list[open]>summary{background:none;box-shadow:none;color:var(--head-blue)}
+.group-card summary:focus-visible{outline:2px solid var(--link-blue);outline-offset:-2px}
+.macro-card summary:focus-visible{outline:2px solid var(--link-blue);outline-offset:-2px}
 .runlight{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--dim);line-height:1.4}
-.runlight .dot{width:9px;height:9px;border-radius:50%;background:#4b5563;flex:none}
-.runlight[data-phase="busy"],.runlight[data-phase="partial"]{color:var(--yellow)}
-.runlight[data-phase="busy"] .dot,.runlight[data-phase="partial"] .dot{background:var(--yellow);box-shadow:0 0 0 3px rgba(210,153,34,.18)}
+.runlight .dot{width:9px;height:9px;border-radius:50%;background:var(--status-idle);flex:none}
+.runlight[data-phase="busy"]{color:var(--yellow)}
+.runlight[data-phase="partial"]{color:var(--yellow)}
+.runlight[data-phase="busy"] .dot{background:var(--yellow);box-shadow:0 0 0 3px var(--status-busy-halo)}
+.runlight[data-phase="partial"] .dot{background:var(--yellow);box-shadow:0 0 0 3px var(--status-busy-halo)}
 .runlight[data-phase="ok"]{color:var(--green)}
-.runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px rgba(63,185,80,.18)}
+.runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px var(--status-ok-halo)}
 .runlight[data-phase="bad"]{color:var(--red)}
-.runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px rgba(248,81,73,.18)}
+.runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px var(--status-bad-halo)}
 .dca-badge{margin-left:auto;white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
 .dca-badge.on{color:var(--yellow)}
-/* 定投提醒挂在顶栏最右侧，字号跟顶栏按钮对齐 */
 .runbar .dca-badge{font-size:14px;margin-left:auto}
 .oil-reference-row td{font-size:13px;overflow-wrap:anywhere}
 .oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
 .oil-state{font-size:12px;font-weight:600}
 .oil-explanation{margin-top:3px;font-size:12.5px;line-height:1.55}
-.oil-reference-row.red .oil-state{color:var(--red)}
-.oil-reference-row.yellow .oil-state{color:var(--yellow)}
 .oil-reference-row.green .oil-state{color:var(--green)}
-.oil-rise{color:var(--up)} .oil-fall{color:var(--down)}
-#macroCard td:nth-child(3) .unit{white-space:nowrap}
-@media(max-width:600px){.oil-reference-row td{padding:8px 6px}#macroCard td:nth-child(3) .unit{font-size:9px}}
-/* ===== 手机（iOS Chrome）最终覆盖：文字字号与顶级折叠栏高度 =====
-   这一段必须放在 PAGE_CSS 的**最后**：里面几条选择器和上面的基础规则同权重
-   （.group-card>summary.grp、.stat-badge…），写在前面会被后面的基础规则盖掉。 */
-@media (max-width:600px){
-  /* 分块折叠栏标题（统计 / 仓位 / 持仓 / 市场风险）：16 → 17px，
-     行高写死 24px（＝原来 16px×1.5 的行盒）→ 标题行与卡片外框上下高度完全不变 */
-  .group-card>summary.grp,.macro-card>summary.grp{font-size:17px;line-height:24px}
-  /* 标题行右侧的统计数字、灯级计数、财报 N：14 → 15px（行盒仍 24px） */
-  .group-card>summary .group-stats,.macro-card>summary .group-stats{font-size:15px;line-height:24px}
-  #signalCounts>summary .count-total{font-size:15px}
-  /* 持仓里的「长持仓 / 短持仓」子框：15 → 16px，行高压回原来的 22.5px */
-  .zone-card>summary{line-height:22.5px}
-  .zone-card>summary .zone-name{font-size:16px}
-  .zone-card>summary .group-stats{font-size:14px;line-height:22.5px}
-  /* 数字灯圈：2026-10-30 二轮加大到「圈 20px / 数字 15px」，2026-10-30 晚间又收回——
-     分组框压掉 15%（62 → 53）后，20px 的圈在 47px 的标题行里占 0.43，比桌面（17px / 44px
-     行，占 0.39）明显偏大，而且在 360/320 窄屏上会把「科技」这类灯多的标题行撑到 52px
-     （别的分组是 47），折叠栏比别人高一截。
-     现在改成**跟桌面同尺寸 17px**，数字 14px（仍比桌面 12.5px 大一圈，手机可读性保住）：
-     一位数 17×17、两位数「13」24×17，窄屏标题行回落到 47，卡片高度重新齐平，零横向溢出。
-     本次仅将数字 14.5 → 16px；17px 外径与 padding 均不变。 */
-  .stat-badge{min-width:17px;height:17px;padding:0 3px;font-size:16px}
-  /* 顶栏左右对称留白：页面本身左右各留 4px，这里再给 .runbar 各加 16px，
-     于是最左边的「运行」按钮和最右边的「定投：N」距屏幕边缘都是 20px（2026-10-30 二次加大）。
-     原来只给「定投」加 margin-right:10px，是单边的，左边三个按钮仍贴着屏幕边。 */
-  /* 按钮间距 10 → 12px（2026-11-02）：四个按钮加大后同排更挤，放宽一点。
-     上限按「定投：999」三位数实测（Chrome 真机量）：3×66 + 编辑60 + 4×12 间距 + 徽章75 = 381，
-     内容宽 396，富余 15px；间距放宽到 14 时合计 389、富余只剩 7px，换字体渲染容易顶到换行。 */
-  .runbar{padding-left:16px;padding-right:16px;gap:12px}
-  /* 字号 14 → 16px（2026-10-29）；贴右仍靠 margin-left:auto，间距改由 .runbar 的右内边距给。 */
-  .runbar .dca-badge{font-size:16px;margin-left:auto}
-  /* 手机档给「数据时间 …」这一排左右各 10px 内边距 + 页面 4px → 日期距左边 14px、
-     「已同步」距右边 14px，与顶栏对齐（2026-10-29）；flex 已在基础规则里两档共用。 */
-  .sub{padding-left:16px;padding-right:16px}
-  /* 页底那一排现在是「返回看板」+「设置」两枚：间隔拉开（2026-10-29「设置」从顶栏搬下来）。 */
-  .acts{gap:26px}
-  /* 主表各组的个股代码 + 备注名（「ZS」/「云安全」）：代码 14 → 15.5px、
-     备注名 11.5 → 13px。**行高写死成原来的 21px / 15.5px**，跟 td 里并排的
-     「长/短」角标、灯级角标同处一行，行的上下高度一像素不变（2026-10-29）。 */
-  .stk td.sym{font-size:16px;line-height:21px}
-  /* 中文备注名 13.5 → **12.5px**，跟同一行右边的财报描述（.stk .earn 12.5px）同号；
-     代码仍是 16px 不动。行高继续写死 15.5px，行的上下高度一像素不变（2026-10-30）。 */
-  .stk td.sym .note{font-size:12.5px;line-height:15.5px}
-  /* 代码后面的「ETF」小标签跟**仓位板块**同款：仓位 .cost-name .tag 在 ≤560 档是
-     10px / 内边距 0 4px / 行高 1.3，主表原来 11px / 1px 5px 明显大一圈（2026-10-30）。 */
-  .stk td.sym .tag{font-size:10px;padding:0 4px;line-height:1.3}
-  /* 描述正文统一 13.5px：主表信号、统计展开名单的描述数值、多选组合条件、
-     财报展开的日期/时段/来源，以及紫灯展开的目标空间/达到描述。
-     股票代码/名称、指标胶囊、标题与分组归属等辅助元信息不在此规则内；
-     主表财报继续沿用上方手机档的美东 12.5px / 北京 11.5px。 */
-  .stk td.sig,
-  #signalCounts .signal-member-metric,
-  #signalCounts .signal-filter-detail,
-  #signalCounts .earnings-week-meta,
-  #signalCounts .signal-member-direction{font-size:13.5px}
-  /* 主表成本提醒与已读文字／符号统一 12px；ETF 标签和 52 周数字不纳入。 */
-  .lvtag.add-ck,.lvtag.add-ck .ck,.ack-btn{font-size:12px}
-  /* ===== 统计面板：所有胶囊的**框**一像素不动，只放大框里的文字与数字（2026-10-30） =====
-     指标名称胶囊（74×38）：13 → 14.5px。最紧的「布林+RSI」「52周低位」墨宽 53px
-       → 59.1px，可用 64px，仍是单行不折行（再大一档 15px 就只剩 2px 余量，容易在别的字体下折行）。
-     数字胶囊（44×38）：14 → 16px。最紧的「12」墨宽 16 → 18.3px，可用 21px。
-     紫灯／财报两行的胶囊（--chip-w 74px）跟指标名称胶囊同字号，不再比上面那几颗小一截。 */
-  #signalCounts td .signal-filter-toggle{font-size:14.5px;line-height:1.1}
-  #signalCounts .signal-extra-row>.signal-filter-toggle{font-size:14.5px}
-  #signalCounts .signal-count-toggle{font-size:16px}
-  /* 顶栏三个按钮加大一点：15 → 16.5px，内边距 6/12 → 7/14（2026-10-30）。
-     2026-11-02：「编辑」搬进这一排后要跟着一起排除——它保留自己那套字号
-     （cost_panel.css 手机档 16px / 桌面 13px），不被顶栏皮肤带着变大。
-     注意这里也必须写 :not()，否则上面基础那条（特指度更高）会把这三个按钮压回 15px。 */
-  /* 2026-11-02 定档：手机档三个按钮 66×43（原 64×39）——字号 16.5 → 18px、
-     上下内距 7 → 8px（左右仍 14px，故宽度只随字号涨 2px）。 */
-  .runbar button:not(.cost-edit-btn){padding:8px 14px;font-size:18px}
-  /* 「数据时间 …」那一排与下方按钮的行距拉近：下外边距 16 → 8px（2026-10-30）。 */
-  .sub{margin-bottom:8px}
-  /* 状态排（「成功 ·…（北京）」+「已生效」）：上下留白收紧（上 -4 → -6px、下 14 → 8px），
-     两枚灯之间 8 → 4px、行盒 1.4 → 1.25；左右各 16px，跟上面两排对齐（页面 4 + 16 = 20px）。 */
-  .statusrow{margin:-6px 0 8px;gap:4px;padding-left:16px;padding-right:16px}
-  .statusrow .runlight{line-height:1.25}
-  /* 页底「返回看板」+「设置」：15 → 16px，两枚做成**同款胶囊框**（描边 + 8px 圆角），
-     「设置」的文字颜色跟「返回看板」统一成 #6ba3f0（2026-10-30）。 */
-  .acts .board-return,.acts a.btnlink{font-size:16px;color:#6ba3f0;background:transparent;
-    border:1px solid #333a47;border-radius:8px;padding:7px 15px;margin:0}
-  /* 页底「自动计划：…」12 → 14px（2026-10-30）。 */
-  .autoplan{font-size:14px}
-  /* 手机 440px：全部顶级分组折叠高度现为 63px（此前 60px）。
-     卡片用 min-height:63px；标题56 + 上下padding4 + 最大边框3 = 63。
-     边框随设备像素比取整为更小值时，由卡片最小高度补齐，避免亚像素舍入造成高度漂移。
-     展开与收起共用标题高度，防止文字跳动；不用硬height，仍允许长标题多行。
-     长持仓子框维持独立49px层级，不属于顶级分组。 */
-  .group-card,.macro-card,#costManage.cost-manage{padding-top:2px}
-  .group-card:not([open]),.macro-card:not([open]),#costManage.cost-manage:not([open]){
-    padding-bottom:2px;min-height:63px}
-  .group-card>summary.grp,.macro-card>summary.grp,#costManage.cost-manage>summary.grp{
-    box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0}
-  /* 长持仓 38 → 47：折叠后整条 = 47 + 上下 1px 边框 = 49px，与「当日盈亏贡献」收起后的
-     整条（实测 49px：内容行 28 + 上下 padding 4/6 + summary 自带 margin 5/4 + 边框 2）同高。
-     （盈亏比 / 金额改回上下两排后那条从 45 涨到 49，这里同步跟。）
-     手机用 min-height 不用 height：320 窄屏标题行会折两行，硬锁会裁。 */
-  .zone-card>summary{box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0}
-  /* 标题文字本次加大：分类名 16.5 → 18px，右侧「20日对.SPX -5.3%」等 14.5 → 16px。
-     行高仍写死 24px，不随字号变化。 */
-  .group-card>summary.grp,.macro-card>summary.grp{font-size:18px}
-  .group-card>summary .group-stats,.macro-card>summary .group-stats{font-size:16px}
-  /* 标题行右侧那一串（灯圈 + 「20日对.SPX …」）间距 8 → 6px：360/320 窄屏上灯多的分组
-     会被挤成两行（标题行 49~56 → 卡片 55~62），比单行的 57 高一截。收窄后能单行，
-     所有分组栏高度一致；320 极窄屏个别超长标题仍会折行（见下一条兜底）。 */
-  .group-card>summary .group-stats,.macro-card>summary .group-stats,
-  .zone-card>summary .group-stats{gap:6px}
+.oil-rise{color:var(--up)}
+.oil-fall{color:var(--down)}
+:is(#macroCard, .macro-scope){--macro-head:14px;--macro-body:15px;--macro-aux:12px;--macro-chg:14px}
+:is(#macroCard, .macro-scope) td *{font-size:var(--macro-body)}
+:is(#macroCard, .macro-scope) tr.mh td *{font-size:var(--macro-head)}
+:is(#macroCard, .macro-scope) td.num.dim .unit{font-size:var(--macro-aux)}
+:is(#macroCard, .macro-scope) td.num.dim .chg-num{font-size:var(--macro-chg)}
+:is(#macroCard, .macro-scope) .oil-explanation{font-size:var(--macro-aux)}
+#marketRiskReason{font-size:var(--macro-aux)}
+:is(#macroCard, .macro-scope) table{table-layout:fixed}
+:is(#macroCard, .macro-scope) td:first-child{width:26%}
+:is(#macroCard, .macro-scope) td:nth-child(2){width:33%;text-align:center}
+:is(#macroCard, .macro-scope) td:nth-child(3){width:18%;text-align:center}
+:is(#macroCard, .macro-scope) td:nth-child(4){width:23%;text-align:center}
+:is(#macroCard, .macro-scope) tr.mh td:nth-child(3){padding-left:2px}
+:is(#macroCard, .macro-scope) td.num.dim{font-size:var(--macro-chg)}
+:is(#macroCard, .macro-scope) tr.mh td{font-size:var(--macro-head);white-space:nowrap;padding:3px 8px}
+:is(#macroCard, .macro-scope) td .unit{font-size:var(--macro-aux);line-height:1.15}
+:is(#macroCard, .macro-scope) td:nth-child(3) .unit{white-space:nowrap;font-size:var(--macro-aux)}
+.dual-row > .dual-body{grid-column:1/-1;grid-row:2;min-width:0;margin:0;padding:0;border:0;background:transparent}
+.dual-row > .dual-body[hidden]{display:none}
+.day-pnl-card > summary.dp-head{display:flex;align-items:center;gap:8px;padding:0 12px 0 4px;list-style:none;cursor:pointer;box-sizing:border-box}
+.dp-head::-webkit-details-marker{display:none}
+.dp-nums{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;line-height:1.2}
+.dp-amt{font-size:15px;font-weight:600}
+.dp-pct{font-size:13px;font-weight:400}
+.dp-nums .up{color:var(--up)}
+.dp-nums .down{color:var(--down)}
+.dual-row .group-bottom{display:none}
+.dual-row tr.mh{display:none}
+.dual-row > details{grid-row:1;min-width:0;margin:0;box-sizing:border-box;position:relative;z-index:2}
+.dual-row > details[open]{padding-bottom:2px;min-height:63px;border-top:var(--frame-w) solid var(--signal-border);border-left:var(--frame-w) solid var(--signal-border);border-right:var(--frame-w) solid var(--signal-border);border-bottom:0;border-radius:12px 12px 0 0}
+.dual-row > .dual-body:not([hidden]){outline-offset:0;position:relative;z-index:1;box-sizing:border-box;padding:0;border:var(--frame-w) solid var(--signal-border);border-top:0;border-radius:0 0 12px 12px;background:var(--card);outline:0}
+.dual-row > .dual-body:not([hidden])::before{content:'';position:absolute;top:0;left:0;right:0;z-index:2;height:var(--frame-w);pointer-events:none;background:linear-gradient(to right,
+    transparent calc(50% - 4px),
+    var(--signal-border) calc(50% - 4px),
+    var(--signal-border) calc(50% + 4px),
+    transparent calc(50% + 4px))}
+.dual-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:start;margin:0 0 14px;row-gap:8px;column-gap:8px}
+.dual-row:has(> details[open]) > details:not([open]){border-bottom:1px solid var(--line);border-bottom-left-radius:12px;border-bottom-right-radius:12px}
+.dual-row > details[open]::after{content:'';position:absolute;left:-1.5px;right:-1.5px;bottom:-8px;height:8px;box-sizing:border-box;z-index:3;pointer-events:none;background:var(--card);border-left:var(--frame-w) solid var(--signal-border);border-right:var(--frame-w) solid var(--signal-border)}
+.dual-row:has(> #dayPnlCard[open]) > .dual-body:not([hidden])::before{background:linear-gradient(to right,
+    transparent calc(50% - 4px),
+    var(--signal-border) calc(50% - 4px))}
+.dual-row:has(> :is(#macroCard, .macro-scope)[open]) > .dual-body:not([hidden])::before{background:linear-gradient(to right,
+    var(--signal-border) calc(50% + 4px),
+    transparent calc(50% + 4px))}
+.dual-body > [data-owner][hidden]{display:none}
+.dp-head .dp-nums{margin-left:auto;display:flex;flex-direction:row;align-items:baseline;gap:6px;line-height:1.2;white-space:nowrap}
+:is(#macroCard, .macro-scope) td{font-size:var(--macro-body);overflow-wrap:anywhere;padding:4px 8px;line-height:1.25;padding-top:3px;padding-bottom:3px}
+:is(#macroCard, .macro-scope) tr:is(.red,.yellow,.green) td:first-child{box-shadow:none;position:relative;padding-left:14px}
+:is(#macroCard, .macro-scope) tr:is(.red,.yellow,.green) td:first-child::before{content:'';position:absolute;left:6px;top:3px;bottom:3px;width:1.5px;border-radius:1px;background:var(--text);pointer-events:none;z-index:1}
+:is(#macroCard, .macro-scope) tr.red td:first-child::before{background:var(--red);width:1.5px}
+:is(#macroCard, .macro-scope) tr.yellow td:first-child::before{background:var(--yellow);width:1.5px}
+:is(#macroCard, .macro-scope) tr.green td:first-child::before{background:var(--green);width:1px}
+.oil-reference-row.red .oil-state{color:var(--lamp-red)}
+.oil-reference-row.yellow .oil-state{color:var(--lamp-yellow)}
+.market-risk-badge[data-level="red"]{color:var(--lamp-red)}
+.market-risk-badge[data-level="yellow"]{color:var(--lamp-yellow)}
+.dp-head .dp-amt{font-size:17px}
+.dp-head .dp-pct{font-size:17px}
+#signalCounts .signal-extra-row.pnl-extra>.pnl-chip{position:absolute;top:8px;left:5px;width:var(--chip-w);box-sizing:border-box;height:38px;max-width:100%;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;text-align:center;font:inherit;font-size:14px;font-weight:600;line-height:1.15;color:var(--text);background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:default;white-space:normal}
+#signalCounts .pnl-extra .text-only ul.signal-member-list{margin:0 0 10px;padding-left:2px;list-style:none}
+#signalCounts .pnl-extra .text-only ul.signal-member-list>li{list-style:none}
+#signalCounts .pnl-extra .text-only ul.signal-member-list>li::before{content:"";display:inline-block;width:3px;height:12px;border-radius:1px;background:var(--name-lamp,var(--dim));margin-right:6px;vertical-align:-1px}
+#signalCounts .pnl-extra li.lamp-red{--name-lamp:var(--red)}
+#signalCounts .pnl-extra li.lamp-yellow{--name-lamp:var(--yellow)}
+#signalCounts .pnl-extra li.lamp-green{--name-lamp:var(--green)}
+#signalCounts .pnl-extra li.lamp-gray{--name-lamp:var(--text)}
+#signalCounts .pnl-extra .signal-member-metric.up{color:var(--up)}
+#signalCounts .pnl-extra .signal-member-metric.down{color:var(--down)}
+#signalCounts .pnl-extra .signal-member-metric.add{color:var(--orange)}
+#signalCounts .pnl-extra .signal-member-metric.cut{color:var(--cyan)}
+#signalCounts .earnings-week-bj{color:var(--dim);font-size:inherit;font-weight:400}
+table.stk{display:block;width:100%;table-layout:fixed}
+table.stk tbody{display:block;width:100%;table-layout:fixed}
+table.stk thead{display:block;width:100%;table-layout:fixed}
+table.stk tr[data-symbol]{position:relative;display:grid;grid-template-columns:max-content max-content max-content minmax(0,1fr);grid-template-areas:"sym px tgs earn" "cost cost cost cost" "sig sig sig sig";align-items:stretch;width:100%;border-top:1px solid var(--stock-divider);--lamp-line:var(--line)}
+table.stk tr[data-symbol]:first-child{border-top:0}
+table.stk tr[data-symbol]>td{border:0;box-shadow:none;min-width:0;margin:0}
+table.stk tr.red[data-symbol]{--lamp-line:var(--red)}
+table.stk tr.yellow[data-symbol]{--lamp-line:var(--yellow)}
+table.stk tr.green[data-symbol]{--lamp-line:var(--green)}
+table.stk tr.gray[data-symbol]{--lamp-line:var(--text)}
+table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:9.5px;width:2px;height:41.7px;background:var(--lamp-line);pointer-events:none;z-index:2}
+table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:4px 8px;font-size:14px;line-height:var(--row-height)}
+table.stk tr[data-layout="tight"]>td.sym{padding-right:2px}
+table.stk tr[data-symbol]>td.sym>.sym-box{display:grid;grid-template-rows:var(--row-height) var(--row-height);align-items:center;width:max-content;max-width:100%;margin:0;padding:0;border:0;background:none;color:var(--text);line-height:var(--row-height);cursor:default}
+table.stk tr[data-symbol]>td.sym>.sym-box:has(.tag){color:var(--head-blue-on)}
+table.stk tr[data-symbol]>td.sym>.sym-box .tag{display:none}
+table.stk tr[data-symbol]>td.sym>.sym-box .note{display:block;margin:0;font-size:11.5px;line-height:var(--row-height);white-space:nowrap}
+table.stk tr[data-symbol]>td.sym>.sym-box .unit{display:inline-block;margin-left:4px}
+table.stk tr[data-symbol]>td.sym::after{content:"";position:absolute;left:var(--vl-x);top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
+table.stk tr[data-symbol]>td.px{grid-area:px;position:relative;display:block;padding:4px 6px;text-align:left;white-space:nowrap}
+table.stk tr[data-layout="tight"]>td.px{padding-left:3px;padding-right:3px}
+table.stk tr[data-symbol]>td.px .px-main{display:grid;grid-template-rows:var(--row-height) var(--row-height);align-items:center;margin:0;padding:0 6px 0 0;min-width:0}
+table.stk tr[data-symbol]>td.px .px-price{display:block;margin:0;height:var(--row-height);line-height:var(--row-height)}
+table.stk tr[data-symbol]>td.px .px-chg{display:block;margin:0;height:var(--row-height);line-height:var(--row-height)}
+.px-price{font-size:15px}
+.px-chg{font-size:14.5px}
+table.stk tr[data-symbol]>td.px::after{content:"";position:absolute;right:0;top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
+table.stk tr[data-symbol]>td.tgs::after{content:"";position:absolute;right:0;top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
+table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:4px 3px 4px 2px;line-height:0;text-align:center;width:auto;max-width:none}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt{display:grid;grid-template-columns:auto 1fr;grid-template-rows:var(--row-height) var(--row-height);height:auto;min-height:0;margin:0;padding:0 1px;border:0;background:transparent;column-gap:0;row-gap:0;align-items:center;justify-items:start;line-height:var(--row-height);white-space:nowrap;font-size:13px;font-weight:400;color:var(--purple);font-variant-numeric:tabular-nums}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt>span{height:var(--row-height);line-height:var(--row-height);white-space:nowrap}
+table.stk tr[data-symbol]>td.tgs .target-space{grid-area:1/1/2/3}
+table.stk tr[data-symbol]>td.tgs .target-price{grid-area:2/1/3/2}
+table.stk tr[data-symbol]>td.tgs .target-month{grid-area:2/2/3/3;margin-left:3px}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.high{color:var(--target-high);text-shadow:.2px 0 currentColor,-.2px 0 currentColor}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad{position:relative;color:var(--dim);border-radius:4px}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:url("__TARGET_DASH_BORDER__") center/100% 100% no-repeat}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad .target-price{grid-area:1/1/2/3}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad>span:not(.target-price){grid-area:2/1/3/3}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad:not(:has(.target-price))>span{grid-area:1/1/2/3}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.hit{color:var(--white)}
+table.stk tr[data-symbol]>td.tgs:has(.tgt.space)::after{display:none}
+table.stk tr[data-symbol]>td.tgs:has(.tgt.high)::after{display:none}
+table.stk tr[data-symbol]>td.tgs:has(.tgt.hit)::after{display:none}
+table.stk tr[data-symbol]>td.tgs:has(.tgt.space)::before{content:"";position:absolute;top:2px;right:0;bottom:2px;left:-1px;z-index:-1;pointer-events:none;background:var(--card);border:1px solid var(--purple);border-radius:3px}
+table.stk tr[data-symbol]>td.tgs:has(.tgt.high)::before{content:"";position:absolute;top:2px;right:0;bottom:2px;left:-1px;z-index:-1;pointer-events:none;background:var(--card);border:1px solid var(--purple);border-radius:3px;border-color:var(--target-high)}
+table.stk tr[data-symbol]>td.tgs:has(.tgt.hit)::before{content:"";position:absolute;top:2px;right:0;bottom:2px;left:-1px;z-index:-1;pointer-events:none;background:var(--tgt-solid);border-radius:0}
+table.stk tr[data-symbol]>td.tgs [data-sign="pos"]{color:var(--tgt-pos)}
+#signalCounts .target-purple .percent-change.pos{color:var(--tgt-pos)}
+table.stk tr[data-symbol]>td.tgs [data-sign="neg"]{color:var(--tgt-neg)}
+#signalCounts .target-purple .percent-change.neg{color:var(--tgt-neg)}
+table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="pos"]{color:var(--tgt-pos-on)}
+table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="neg"]{color:var(--tgt-neg-on)}
+table.stk tr[data-symbol]>td.lamp-earn{grid-area:earn;position:static;display:block;width:auto;max-width:100%;white-space:nowrap;text-align:right;padding:4px 0;align-self:stretch}
+.earn{display:block;margin:0;font-size:15px;font-weight:400;line-height:var(--row-height);white-space:nowrap;color:var(--head-blue-on);overflow:hidden;text-overflow:ellipsis;--timing-color:var(--head-blue-on)}
+.earn.soon{color:var(--lamp-yellow);--timing-color:var(--lamp-yellow)}
+.earn.urgent{color:var(--lamp-red);--timing-color:var(--lamp-red)}
+.earn>.unit{display:block;margin-left:0;height:var(--row-height);line-height:var(--row-height);white-space:nowrap;letter-spacing:0;font-size:15px;color:var(--dim)}
+.earn>.unit::before{content:attr(data-timing);color:var(--timing-color)}
+.earn>.cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--dim);margin-right:-.5em}
+#signalCounts .earnings-week-meta .cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--dim);margin-right:-.5em}
+.earn>.cd.tbd{color:var(--head-blue-on)}
+#signalCounts .earnings-week-meta .cd.tbd{color:var(--head-blue-on)}
+table.stk tr[data-symbol]>td.cost-line{grid-area:cost;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 8px;margin:5px 0 0;background:var(--cost-row-bg);border-radius:3px;color:var(--text);white-space:nowrap;font-size:15px;line-height:22.5px;font-variant-numeric:tabular-nums}
+table.stk tr[data-symbol]>td.cost-line[hidden]{display:none}
+table.stk tr[data-symbol]>td.cost-line>span{font-size:inherit}
+table.stk tr[data-symbol]>td.cost-line[data-pnl="loss"]{background:var(--pnl-loss-bg)}
+table.stk tr[data-symbol]>td.cost-line[data-pnl="gain"]{background:var(--pnl-gain-bg)}
+table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:10.25px 10px 7px;font-size:14.5px;line-height:21.75px;--sig-col-gap:30px;--sig-row-gap:7px}
+.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}
+.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}
+/* 仅校正加号墨迹中心到首排布林/RSI文字；不移动两列或改变字号/颜色。 */
+.sig-cols[data-combo="1"]{position:relative;--combo-scale:1.43;--combo-dy:-2px;--combo-color:var(--dim)}
+.sig-cols[data-combo="1"]::after{content:"+";position:absolute;left:50%;top:0;transform:translate(-50%,var(--combo-dy)) scale(var(--combo-scale));transform-origin:center;width:16px;height:21.75px;display:flex;align-items:center;justify-content:center;font-size:inherit;line-height:1;font-weight:500;color:var(--combo-color);pointer-events:none}
+.sig-cols[data-combo-level="red"]{--combo-color:var(--lamp-red)}
+.sig-cols[data-combo-level="yellow"]{--combo-color:var(--lamp-yellow)}
+.sig-cols[data-combo-level="gray"]{--combo-color:var(--text)}
+
+.stk td.sig .signal-item{display:block;min-width:0;overflow-wrap:anywhere;padding-left:8px;text-indent:-8px}
+.stk td.sig .signal-item::before{content:"";display:inline-block;width:3px;height:10px;margin-right:5px;border-radius:1px;background:currentColor;vertical-align:middle}
+.stk td.sig .signal-item:has(.sig-zone){padding-left:0;text-indent:0}
+.stk td.sig .signal-item:has(.sig-zone)::before{display:none}
+.stk td.sig .sig-zone{display:block;min-width:0;overflow-wrap:anywhere;padding-left:8px;text-indent:-8px}
+.stk td.sig .sig-zone::before{content:"";display:inline-block;width:3px;height:10px;margin-right:5px;border-radius:1px;background:currentColor;vertical-align:middle}
+.stk td.sig .sig-sep{display:none}
+.stk td.sig .signal-separator{display:none}
+.stk td.sig .signal-item[data-signal-level="green"]{color:var(--green)}
+.stk td.sig .lvtag.add{height:auto;min-height:0;margin:0;border:0;border-radius:0;background:transparent;white-space:normal;color:var(--dim);font:inherit}
+.stk td.sig .lvtag.cut{height:auto;min-height:0;margin:0;border:0;border-radius:0;background:transparent;white-space:normal;color:var(--dim);font:inherit}
+.stk td.sig .lvtag:not([data-near="1"])::before{background:transparent}
+.stk td.sig .lvtag.add[data-near="1"]{color:var(--orange)}
+.stk td.sig .lvtag.cut[data-near="1"]{color:var(--cyan)}
+.stk tr.range52-row{display:block;width:100%}
+.stk tr.gray:not([data-symbol]){display:block;width:100%}
+.stk tr.range52-row>td{display:block;width:100%}
+.stk tr.gray:not([data-symbol])>td{display:block;width:100%}
+table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 12px 10px;border:0;box-shadow:none}
+/* 保留终稿非持仓范围条下5px留白，不恢复旧空cost-info节点。 */
+table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>td:first-child{padding-bottom:17px}
+.stk th{font-size:13px;color:var(--dim);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
+#group_positions[open]{padding-bottom:2px}
+#group_positions>.group-bottom{display:none}
+#group_positions details.quiet-list>summary{display:none}
+#group_positions_short.zone-card{background:none;border:1px solid var(--frame-green);margin:9px -2px 0}
+#runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
+#signalCounts .signal-extra-row{--chip-w:74px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
+#signalCounts .signal-extra-row>.text-only>summary{position:relative;box-sizing:border-box;min-height:54px;padding:16px var(--xr) 16px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
+#signalCounts .signal-extra-row>.earnings-week>summary{position:relative;box-sizing:border-box;min-height:54px;padding:16px var(--xr) 16px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
+#signalCounts .signal-extra-row>.text-only[open]>summary::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--list-border);pointer-events:none}
+#signalCounts .signal-extra-row>.earnings-week[open]>summary::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--list-border);pointer-events:none}
+#signalCounts .signal-extra-row>.text-only>summary~*{margin-left:5px;margin-right:var(--xr)}
+#signalCounts .signal-extra-row>.earnings-week>summary~*{margin-left:5px;margin-right:var(--xr)}
+#signalCounts .signal-extra-row>.text-only>summary+*{margin-top:11px}
+#signalCounts .signal-extra-row>.earnings-week>summary+*{margin-top:11px}
+#signalCounts .signal-extra-row>.text-only[open]{padding-bottom:8px}
+#signalCounts .signal-extra-row>.earnings-week[open]{padding-bottom:8px}
+#signalCounts .earnings-week-meta{display:block;margin:1px 0 0 9px;color:var(--dim);font-size:12px}
+#signalCounts .signal-filter .signal-member-block h5{margin:6px 0 4px;color:var(--head-blue);font-size:13px;font-weight:600}
+#signalCounts .signal-filter .signal-member-block+.signal-member-block{margin-top:10px}
+#signalCounts .signal-filter .signal-member-block ul{margin:0}
+#signalCounts .signal-filter .signal-member-belong:empty{display:none}
+@media(max-width:600px){
+.stk td.sig .sig-zone{letter-spacing:-.6px}
+.sig-cols[data-combo="1"]{--combo-scale:1.57}
+.sig-cols[data-combo="1"]::after{height:19.575px}
+.stk td.sig .signal-item[data-signal-kind="amp"]{white-space:nowrap;overflow-wrap:normal;letter-spacing:-.4px}
+body{padding-left:5px;padding-right:5px}
+.oil-reference-row td{padding:8px 6px}
+.runbar{padding-left:16px;padding-right:16px;gap:12px}
+.acts{gap:26px}
+.statusrow{margin:-6px 0 8px;gap:4px;padding-left:16px;padding-right:16px}
+.statusrow .runlight{line-height:16.88px}
+.group-card{padding-top:2px}
+.macro-card{padding-top:2px}
+.group-card:not([open]){padding-bottom:2px;min-height:63px}
+.macro-card:not([open]){padding-bottom:2px;min-height:63px}
+.zone-card>summary{line-height:22.5px;box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0}
+.group-card>summary.grp{line-height:24px;box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0;font-size:18px}
+.macro-card>summary.grp{line-height:24px;box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0;font-size:18px}
+.group-card>summary .group-stats{line-height:24px;font-size:16px;gap:6px}
+.macro-card>summary .group-stats{line-height:24px;font-size:16px;gap:6px}
+.zone-card>summary .group-stats{font-size:14px;line-height:22.5px;gap:6px}
+:is(#macroCard, .macro-scope) td:first-child{width:29%}
+:is(#macroCard, .macro-scope) td:nth-child(2){width:32%}
+:is(#macroCard, .macro-scope) td:nth-child(3){width:18%}
+:is(#macroCard, .macro-scope) td:nth-child(4){width:21%}
+:is(#macroCard, .macro-scope) td{padding:3px 6px}
+:is(#macroCard, .macro-scope) tr.mh td{padding:3px 6px}
+:is(#macroCard, .macro-scope) td:nth-child(3) .unit{white-space:normal}
+:is(#macroCard, .macro-scope) .oil-reference-row td{padding-top:6px;padding-bottom:6px}
+:is(#macroCard, .macro-scope) .oil-reference-row td:last-child{line-height:20.25px}
+:is(#macroCard, .macro-scope) .oil-reference-row td:first-child::before{top:6px;bottom:6px}
+table.stk tr[data-symbol]>td.sym{font-size:17px}
+table.stk tr[data-symbol]>td.sym>.sym-box{line-height:20.8px}
+table.stk tr[data-symbol]>td.sym>.sym-box .note{font-size:14.5px}
+table.stk tr[data-symbol]>td.px .px-price{font-size:16px}
+table.stk tr[data-symbol]>td.px .px-chg{font-size:16px}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt{font-size:15px}
+table.stk tr[data-symbol]>td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}
+table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}
+table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>td:first-child{padding-bottom:19px}
+table.stk tr[data-symbol]::before{top:7px;height:42.7px}
+.stk th{padding:7px 5px;font-size:12px}
+#signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}
+.grp-name{font-size:20px;line-height:24px}
+.runbar button:not(.cost-edit-btn){padding:8px 14px;font-size:20px;line-height:21.6px}
+.sub{padding-left:16px;padding-right:16px;margin-bottom:8px;font-size:13px;line-height:18px}
+.runlight{font-size:14.5px;line-height:16.88px}
+.stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}
+#signalCounts .signal-count-toggle{font-size:17px;line-height:16px}
+.rs-spy{font-size:16px;line-height:24px}
+.zone-card>summary .zone-name{font-size:16px;line-height:22.5px}
+.zone-card>summary .zone-num{font-size:16px;line-height:22.5px}
+.dual-body>.cost-contrib .cnsym{font-size:15px;line-height:15.75px}
+.dual-body>.cost-contrib .cncn{font-size:14px;line-height:15.75px}
+.dual-body>.cost-contrib .ca,.dual-body>.cost-contrib .cv{font-size:14px;line-height:15.75px}
+#group_positions>.asset-row .cost-legend b{font-size:13px;line-height:19.2px}
+#signalCounts .signal-member-symbol{font-size:15px;line-height:19.5px}
+#signalCounts .signal-member-jump .note{font-size:14px;line-height:18px}
+#signalCounts .signal-member-list .signal-member-symbol{line-height:16.25px}
+#signalCounts .signal-member-list .note{line-height:15px}
+#signalCounts .signal-member-belong{font-size:14px;line-height:18px}
+#signalCounts .signal-member-list .signal-member-belong{line-height:15px}
+#signalCounts .target-purple .signal-member-symbol{line-height:19.5px}
+#signalCounts .target-purple .note,#signalCounts .target-purple .signal-member-belong{line-height:18px}
+#signalCounts .signal-member-metric{font-size:14.5px;line-height:16.88px}
+#signalCounts .signal-filter-detail{font-size:14.5px;line-height:20.25px}
+#signalCounts .signal-filter-condition{font-size:14.5px;line-height:20.25px}
+#signalCounts .earnings-week-meta{font-size:14.5px;line-height:20.25px}
+#signalCounts .signal-member-direction{font-size:14.5px;line-height:20.25px}
+#signalCounts .signal-filter-head>span{font-size:13px;line-height:19.5px}
+#signalCounts .signal-filter-clear{font-size:13px;line-height:19.5px}
+#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:15px;line-height:15.95px}
+#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:15px;line-height:16.68px}
+#signalCounts .signal-extra-row>details>summary{font-size:16px;line-height:22px}
+#signalCounts .signal-member-block h5{font-size:15px;line-height:16.25px}
+#signalCounts .target-purple>h5{font-size:15px;line-height:16.25px}
+#signalCounts .pnl-extra h5{font-size:15px;line-height:16.25px}
+#signalCounts>summary .count-total{font-size:16px;line-height:24px}
+.market-risk-badge{font-size:16px;line-height:24px}
+.monitor-note{font-size:16px;line-height:24px}
+.runbar .dca-badge{margin-left:auto;font-size:16px;line-height:24px}
+.range52-hi{font-size:13px;line-height:11px}
+.range52-lo{font-size:13px;line-height:11px}
+.range52-gap{font-size:13px;line-height:11px}
+.quiet-list>summary{font-size:15px;line-height:19.5px}
+.acts .board-return{color:var(--link-blue);background:transparent;border:1px solid var(--control-border);border-radius:8px;padding:7px 15px;margin:0;font-size:16px;line-height:24px}
+.acts a.btnlink{color:var(--link-blue);background:transparent;border:1px solid var(--control-border);border-radius:8px;padding:7px 15px;margin:0;font-size:16px;line-height:24px}
+.autoplan{font-size:16px;line-height:23.8px}
 }
-/* 窄屏细分档（400 / 340）已整段删除 —— 2026-11-01 用户定：只适配 iPhone 18 Pro Max 竖屏
-   440px（CSS 视口）／iPad mini 744·1133／PC，更窄的屏不再支持。 */
-/* 注：345 这类极窄屏整行会比线上高 6.24px —— A/B 实测过，元凶是上一轮把财报列
-   「美东/北京」加大（.stk .earn），**不是**代码/备注名：把 sym 压回 14/11.5px 高度纹丝不动，
-   把 .earn 一起压回才降到 96.27px。375 及以上视口不受影响，行的高度与线上完全一致。 */
+@media(min-width:601px){
+.group-card{padding-top:2px}
+.macro-card{padding-top:2px}
+.group-card:not([open]){padding-bottom:2px}
+.macro-card:not([open]){padding-bottom:2px}
+.group-card>summary.grp{box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
+.macro-card>summary.grp{box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
+.zone-card>summary{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}
+.sub{padding-left:var(--head-inset);padding-right:var(--head-inset)}
+.runbar{padding-left:var(--head-inset);padding-right:var(--head-inset)}
+.statusrow{padding-left:var(--head-inset);padding-right:var(--head-inset)}
+.check-result{padding-left:var(--head-inset);padding-right:var(--head-inset)}
+.dual-row > details[open]{min-height:50px}
+.dual-body>.cost-contrib li{grid-template-columns:minmax(84px,.5fr) 66px 62px minmax(0,1fr);column-gap:10px;padding-right:32px}
+.dual-body>.cost-contrib li>.ca{text-align:left}
+.dual-body>.cost-contrib .cbar{margin-left:31px;max-width:300px}
+#signalCounts .target-purple h5,#signalCounts .pnl-extra h5{font-size:14px;line-height:17.5px}
+#signalCounts .target-purple .signal-member-direction{font-size:13px;line-height:16.25px}
+#signalCounts .pnl-extra .signal-member-metric{font-size:13px;line-height:16.25px}
+.stk td.sig .lvtag.add,.stk td.sig .lvtag.cut{line-height:17px}
+}
+tr.stk-flash>td,tr.stk-flash+tr.range52-row>td{animation:stkflash 1.8s ease-out}
+@keyframes stkflash{0%,55%{background-color:var(--stock-flash)}100%{background-color:transparent}}
 """
 
 # 主页面将此块放在现有 rules/cost CSS 之后，避免旧规则样式覆盖紧凑版。
-RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:var(--head-blue,#bfd5ff);font-size:13px;font-weight:600;touch-action:manipulation}
+RULES_CSS = """.nav-orange{color:var(--orange)}
+.nav-cyan{color:var(--cyan)}
+#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:var(--head-blue);font-size:13px;font-weight:600;touch-action:manipulation}
 #fedRules[open]>summary,#fedGlossary[open]>summary,details.card[open]:has(>.rules-body)>summary{border-bottom:1px solid var(--line)}
-#fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:-2px}
+#fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:-2px}
 .card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:12px;line-height:1.65;overflow-wrap:anywhere}
 .card .rules-body section+section{margin-top:16px;padding-top:4px;border-top:1px solid var(--line)}
-.card .rules-body h4{margin:6px 0 8px;color:var(--head-blue,#bfd5ff);font-size:12.5px;font-weight:600}
+.card .rules-body h4{margin:6px 0 8px;color:var(--head-blue);font-size:12.5px;font-weight:600}
 .card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}
 .card .rules-body p{margin:4px 0;color:var(--dim);font-size:12px;line-height:1.65}
-.card .rules-body .rule-group{color:var(--head-blue-on,#8fb8f0)}
-.card .rules-body a{color:var(--head-blue-on,#8fb8f0);text-underline-offset:3px}
-.card .rules-body a:focus-visible{outline:2px solid var(--head-blue-on,#8fb8f0);outline-offset:2px}
-.card .rules-body .lamp-red{color:var(--lamp-red,#ff8580);font-weight:600}
-.card .rules-body .lamp-yellow{color:var(--lamp-yellow,#f0c674);font-weight:600}
+.card .rules-body .rule-group{color:var(--head-blue-on)}
+.card .rules-body a{color:var(--head-blue-on);text-underline-offset:3px}
+.card .rules-body a:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
+.card .rules-body .lamp-red{color:var(--lamp-red);font-weight:600}
+.card .rules-body .lamp-yellow{color:var(--lamp-yellow);font-weight:600}
 .card .rules-body .lamp-purple{color:var(--purple);font-weight:600}
 .card .rules-body .tone-target-high{color:var(--target-high);font-weight:600}
-.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid #6b7689;font-size:12px;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid #5a6478;text-align:left;vertical-align:top;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
-.card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:rgba(143,184,240,.07);border-bottom:1px solid #6b7689}
-/* 报灯总表左右撑满卡片：抵消 .card(4px) 与 .rules-body(12px) 的内边距。 */
+.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid var(--rules-border);font-size:12px;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:var(--cost-row-bg);border-bottom:1px solid var(--rules-border)}
 #rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border-left:0;border-right:0}
 .card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center}
 .card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}
-/* 分类列四块之间的三条边界加粗；条件、灯级列与组内分隔线不变。 */
-#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid #6f7b91}
-/* 最左分类列：竖排、固定 18px 单字宽（不用 em，避免手机端字号缩放把列撑宽）。
-   overflow:hidden 兜底：万一竖排不生效，横排文字被裁掉也不会把列顶宽。 */
+#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid var(--rules-group-border)}
 .card .rules-body .rule-table col.cat-col{width:18px}
 .card .rules-body .rule-table col.col-cond{width:40%}
-.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:1.1;font-size:12px;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:rgba(143,184,240,.04);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
-.card .rules-body .ar-band-up{color:#3fb950}
-.card .rules-body .ar-band-down{color:#f85149}
-.card .rules-body .ar-rsi-up{color:#3ec9d6}
-.card .rules-body .ar-rsi-down{color:#e061c9}
-/* 仅报灯总表条件列的四种方向符号统一白色；其它区块配色与反向灰字不变。 */
+.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:1.1;font-size:12px;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
+.card .rules-body .ar-band-up{color:var(--green)}
+.card .rules-body .ar-band-down{color:var(--red)}
+.card .rules-body .ar-rsi-up{color:var(--rsi-up)}
+.card .rules-body .ar-rsi-down{color:var(--rsi-down)}
 #rules-lamp-table tbody td:first-of-type .ar-band-up,
 #rules-lamp-table tbody td:first-of-type .ar-band-down,
 #rules-lamp-table tbody td:first-of-type .ar-rsi-up,
-#rules-lamp-table tbody td:first-of-type .ar-rsi-down{color:#fff}
-/* 保留 RSI ↑↓ 的原字号；目标区域的方向颜色由下方限域规则覆盖继承色。 */
+#rules-lamp-table tbody td:first-of-type .ar-rsi-down{color:var(--white)}
 .arrow-rsi-up,.arrow-rsi-down{color:inherit;font-size:1.15em;line-height:1}
-/* 保留方向符号的原字号/粗细；仅主表描述与统计面板独立使用涨跌数值色。 */
 .grp-arrow{font-weight:700}
 .stk .sig .arrow-band-up,.stk .sig .arrow-rsi-up,
 #signalCounts .arrow-band-up,#signalCounts .arrow-rsi-up{color:var(--up)}
@@ -1283,41 +1251,34 @@ RULES_CSS = """#fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-b
 #signalCounts .arrow-band-down,#signalCounts .arrow-rsi-down{color:var(--down)}
 .card .rules-body .rule-table .ar-band-up,.card .rules-body .rule-table .ar-band-down,
 .card .rules-body .rule-table .ar-rsi-up,.card .rules-body .rule-table .ar-rsi-down{font-weight:700}
-/* 同向／反向两行为一组，组间用更亮的横线分开。 */
-.card .rules-body .rule-table tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid #6f7b91}
-/* 同一灯级覆盖多个分组：居中并带灯色底色；混合灯与非灯级不加底色。白灯（折）比白灯更淡。 */
-.card .rules-body .rule-table td.cell-red{background:rgba(248,81,73,.16);text-align:center}
-.card .rules-body .rule-table td.cell-yellow{background:rgba(210,153,34,.16);text-align:center}
-.card .rules-body .rule-table td.cell-gray{background:rgba(173,181,194,.24);text-align:center}
-.card .rules-body .rule-table td.cell-gray-fold{background:rgba(173,181,194,.09);text-align:center}
-/* 条件列：表头与条件文字用白字，便于与右侧灯级列区分。 */
-.card .rules-body #rules-lamp-table thead th.col-cond{color:#fff}
-.card .rules-body #rules-lamp-table tbody td:first-of-type{color:#e6edf3}
-.card .rules-body .signal-term{display:inline-block;white-space:nowrap;overflow-wrap:normal}
-.card .rules-body .dir-arrow{display:inline-block;vertical-align:-4px;margin-left:2px;overflow:visible}
+.card .rules-body .rule-table tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid var(--rules-group-border)}
+.card .rules-body .rule-table td.cell-red{background:var(--rules-red-bg);text-align:center}
+.card .rules-body .rule-table td.cell-yellow{background:var(--rules-yellow-bg);text-align:center}
+.card .rules-body .rule-table td.cell-gray{background:var(--rules-gray-bg);text-align:center}
+.card .rules-body .rule-table td.cell-gray-fold{background:var(--rules-fold-bg);text-align:center}
+.card .rules-body #rules-lamp-table thead th.col-cond{color:var(--white)}
+.card .rules-body #rules-lamp-table tbody td:first-of-type{color:var(--rules-strong)}
 .card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
 .card .rules-body .rule-anchor{display:block;height:0}
 @media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{font-size:11px}}
 #signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
 #signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
-#signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:#dce1e9}
+#signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
 #signalRulesBody h5.rule-original,#signalRulesBody .rule-layout-heading,#glossaryRulesBody h5{margin:14px 0 4px}
-#signalRulesBody .rule-layout-scope{margin:1px 0;line-height:1.5;color:#dce1e9}
+#signalRulesBody .rule-layout-scope{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
 #signalRulesBody h4.rule-original{margin:18px 0 7px}
-.card .rules-body .signal-term{display:inline-flex;align-items:center;vertical-align:baseline;white-space:nowrap;gap:1px}
-.card .rules-body .dir-arrow{display:inline-block;flex:none;width:auto;height:18px;vertical-align:middle}
-#signalRulesBody .nav-gray{color:#adb5c2}
-/* 名词解释／抓取规则：两个分区标题页面居中；指标名（h5）统一用站内强调蓝，
-   与页底链接、分组词同色，覆盖上面 .card .rules-body h5 的白字（只在这两块生效）。 */
+.card .rules-body .signal-term{display:inline-flex;align-items:center;vertical-align:baseline;white-space:nowrap;overflow-wrap:normal;gap:1px}
+.card .rules-body .dir-arrow{display:inline-block;flex:none;width:auto;height:18px;vertical-align:middle;margin-left:2px;overflow:visible}
+#signalRulesBody .nav-gray{color:var(--rules-muted)}
 #glossaryRulesBody h4{text-align:center}
-#glossaryRulesBody h5{color:var(--head-blue-on,#8fb8f0)}
-#glossaryRulesBody p{margin:2px 0;line-height:1.5;color:#dce1e9}
+#glossaryRulesBody h5{color:var(--head-blue-on)}
+#glossaryRulesBody p{margin:2px 0;line-height:1.5;color:var(--rules-copy)}
 #glossaryRulesBody .rule-table{margin:6px 0 8px}
 #glossaryRulesBody .rule-table th,#glossaryRulesBody .rule-table td{line-height:1.5}
-#glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:var(--lamp-yellow,#f0c674)}
-#glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:var(--lamp-red,#ff8580)}
-#glossary-vol-table thead th:nth-child(2){color:var(--lamp-red,#ff8580)}
-#glossary-vol-table thead th:nth-child(3){color:var(--lamp-yellow,#f0c674)}
+#glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:var(--lamp-yellow)}
+#glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:var(--lamp-red)}
+#glossary-vol-table thead th:nth-child(2){color:var(--lamp-red)}
+#glossary-vol-table thead th:nth-child(3){color:var(--lamp-yellow)}
 #glossary-chg-table td,#glossary-amp-table td,#glossary-vol-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
 """
 PAGE_CSS = PAGE_CSS.replace('__TARGET_DASH_BORDER__', TARGET_DASH_BORDER)
@@ -1327,7 +1288,7 @@ PAGE_CSS += RULES_CSS
 # 仅放结构，不复制计算或云端逻辑。
 # 「编辑」按钮 2026-11-02 从这行搬到顶栏（monitor 输出的 .runbar 里「刷新」右边），
 # id 仍是 costEditBtn、仍由 cost_panel.js 绑定，只是不再属于这张卡 —— JS 改按 document 查找。
-COST_PANEL_HTML = r'''<details class="card group-card cost-manage" id="costManage">
+COST_PANEL_HTML = r'''<details class="edit-panel cost-manage" id="costManage">
 <summary class="grp"><span class="grp-name">仓位</span><span class="group-stats"><span class="cost-state" id="costState"></span><span class="cost-sum"></span></span></summary>
 <div class="cost-body"><div class="cost-acts" id="costActs" hidden><span class="cost-notice" id="costNotice" role="status" hidden></span><button type="button" class="primary" id="costSave">保存并上传</button><button type="button" id="costCancel">取消</button></div><div class="signal-members-panel" id="costMembers"></div><input type="file" id="costFile" accept=".json" hidden><div class="cost-foot" id="costFoot"></div></div>
 <div class="group-bottom"><button type="button" class="collapse-group" aria-controls="costManage" aria-label="收起仓位"><span class="collapse-icon" aria-hidden="true">▲</span></button></div>
@@ -1336,6 +1297,184 @@ COST_PANEL_HTML = r'''<details class="card group-card cost-manage" id="costManag
 # 单独导出供 monitor 替换旧锚点处理器；PAGE_INTERACTION_JS 已含此块，勿重复追加。
 RULES_INTERACTION_JS = ""  # 保留导出兼容；规则跳转、hash监听和高亮计时器已删除。
 PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
+// 当日/风险共用一处常驻详情区；只切换hidden，不移动内容或重算数据。
+(function bindDualCards() {
+  document.querySelectorAll('.dual-row').forEach(function(row) {
+    const day = row.querySelector(':scope > #dayPnlCard');
+    const macro = row.querySelector(':scope > #macroCard');
+    const body = row.querySelector(':scope > .dual-body');
+    if (!day || !macro || !body) return;
+    function sync(preferred) {
+      if (preferred && preferred.open) (preferred === day ? macro : day).open = false;
+      const owner = day.open ? 'day' : macro.open ? 'macro' : '';
+      body.hidden = !owner;
+      body.dataset.owner = owner;
+      Array.from(body.children).forEach(function(child) {
+        if (child.dataset.owner) child.hidden = child.dataset.owner !== owner;
+      });
+    }
+    row.addEventListener('click', function(event) {
+      const summary = event.target.closest && event.target.closest('summary');
+      const card = summary && summary.parentElement;
+      if (card !== day && card !== macro) return;
+      event.preventDefault();
+      card.open = !card.open;
+      sync(card);
+    });
+    row.addEventListener('toggle', function(event) {
+      if (event.target === day || event.target === macro) sync(event.target);
+    }, true);
+    sync(day.open ? day : macro);
+  });
+})();
+
+// 仅测量实际字体与列宽：静态文案、灯级和用户仓位不在这里重新计算。
+(function installTableLayout() {
+  const rows = Array.from(document.querySelectorAll('table.stk tr[data-symbol]'));
+  let frame = 0;
+  const dirty = new Set();
+  function note(row, tight) {
+    const node = row.querySelector('td.sym .note[data-full]');
+    if (!node) return;
+    const full = node.dataset.full, chars = Array.from(full);
+    const cut = tight && chars.length > 4;
+    const text = cut ? chars.slice(0, 4).join('') + '…' : full;
+    if (node.textContent !== text) node.textContent = text;
+    if (cut) node.title = full;
+    else node.removeAttribute('title');
+  }
+  function layoutEarn(earn, cell) {
+    const unit = earn.querySelector(':scope > .unit');
+    const countdown = earn.querySelector(':scope > .cd');
+    const text = Array.from(earn.childNodes).find(function(n) {
+      return n.nodeType === Node.TEXT_NODE && n.textContent.trim();
+    });
+    if (!unit || !text || !cell.clientWidth) return 'loose';
+    const main = earn.dataset.main;
+    const matched = main.match(/^(.*?)\s*(时段待定|盘前|盘后|盘中)\s*$/);
+    const base = matched ? matched[1].trimEnd() : main;
+    const timing = matched ? matched[2] : '';
+    const cd = countdown ? countdown.textContent : '';
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;left:0;top:0;letter-spacing:0';
+    earn.appendChild(probe);
+    const width = function(value) { probe.textContent = value; return probe.getBoundingClientRect().width; };
+    const available = cell.clientWidth - (parseFloat(getComputedStyle(cell).paddingLeft) || 0) - .5;
+    const adjust = countdown ? parseFloat(getComputedStyle(countdown).marginRight) || 0 : 0;
+    let fullWidth = width(cd + main) + adjust;
+    const baseWidth = width(cd + base) + adjust;
+    const unitWidth = width(unit.textContent);
+    const movedWidth = width(timing ? timing + '·' + unit.textContent : unit.textContent);
+    probe.remove();
+    let compressed = false;
+    if (fullWidth > available && unitWidth <= available && fullWidth - .25 * main.length <= available) {
+      compressed = true;
+      fullWidth -= .25 * main.length;
+    }
+    const mode = fullWidth <= available && unitWidth <= available ? 'full'
+      : timing && baseWidth <= available && movedWidth <= available ? 'move' : 'drop';
+    earn.style.letterSpacing = mode === 'full' && compressed ? '-.25px' : '';
+    text.textContent = mode === 'full' ? main : base;
+    unit.dataset.timing = mode === 'move' ? timing + '·' : '';
+    earn.dataset.mode = mode;
+    return mode === 'full' && !compressed ? 'loose' : 'tight';
+  }
+  function balanceDescriptions(row) {
+    const cols = row.querySelector('td.sig > .sig-cols');
+    if (!cols) return;
+    const columns = Array.from(cols.children).filter(function(n) { return n.classList.contains('sig-col'); });
+    if (columns.length !== 2) return;
+    const automatic = Array.from(cols.querySelectorAll('.signal-item[data-signal-flow="auto"]'))
+      .sort(function(a, b) { return Number(a.dataset.signalOrder) - Number(b.dataset.signalOrder); });
+    if (!automatic.length) return;
+    const caps = columns.map(function(c) { return Array.from(c.children).filter(function(n) { return n.matches('.lvtag.add,.lvtag.cut'); }); });
+    const planned = columns.map(function(c) { return Array.from(c.children).filter(function(n) {
+      return !n.matches('[data-signal-flow="auto"],.lvtag.add,.lvtag.cut');
+    }); });
+    // 终稿 reflowSignalColumns 在父 td.sig 仍为双列 grid、fontPatch 尚未执行时
+    // 按列高分配：测量宽度=(最终内容宽度-列间距)/2，13.5px，手机1.45/桌面1.5。
+    // 只在不可见副本复现这一测量坐标系；不使真实描述闪回窄列或重引演示补丁。
+    const probe = cols.cloneNode(false);
+    probe.removeAttribute('data-combo');
+    const gap = parseFloat(getComputedStyle(cols).columnGap) || 0;
+    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;font-size:13.5px;line-height:'
+      + (matchMedia('(max-width:600px)').matches ? '1.45' : '1.5')
+      + ';width:' + Math.max(0, (cols.getBoundingClientRect().width - gap) / 2) + 'px';
+    const measured = columns.map(function() { const c = document.createElement('div'); c.className = 'sig-col'; probe.appendChild(c); return c; });
+    planned.forEach(function(nodes, side) { nodes.forEach(function(n) { measured[side].appendChild(n.cloneNode(true)); }); });
+    cols.parentElement.appendChild(probe);
+    try {
+      automatic.forEach(function(n) {
+        const side = measured[0].getBoundingClientRect().height <= measured[1].getBoundingClientRect().height ? 0 : 1;
+        measured[side].appendChild(n.cloneNode(true));
+        planned[side].push(n);
+      });
+    } finally { probe.remove(); }
+    columns.forEach(function(c, index) {
+      planned[index].concat(caps[index]).forEach(function(n, position) {
+        if (c.children[position] !== n) c.insertBefore(n, c.children[position] || null);
+      });
+    });
+  }
+  function verticalLines(row) {
+    const cell = row.querySelector('td.sym'), box = cell && cell.querySelector('.sym-box');
+    if (!box) return;
+    const code = Array.from(box.childNodes).find(function(n) { return n.nodeType === Node.TEXT_NODE && n.textContent.trim(); });
+    const name = box.querySelector('.note');
+    if (!code || !name) return;
+    const ink = function(n) { const range = document.createRange(); range.selectNodeContents(n); return range.getBoundingClientRect(); };
+    const a = ink(code), b = ink(name), root = row.getBoundingClientRect(), rect = cell.getBoundingClientRect();
+    if (!a.height || !b.height) return;
+    const top = Math.min(a.top, b.top) - rect.top;
+    row.style.setProperty('--vl-x', (rect.right - root.left).toFixed(2) + 'px');
+    row.style.setProperty('--vl-top', top.toFixed(2) + 'px');
+    row.style.setProperty('--vl-h', (Math.max(a.bottom, b.bottom) - Math.min(a.top, b.top)).toFixed(2) + 'px');
+  }
+  function layout(row) {
+    if (!row.getBoundingClientRect().width) return; // 折叠行展开后才测量。
+    row.dataset.layout = 'loose';
+    note(row, false);
+    const cell = row.querySelector(':scope > td.lamp-earn');
+    const earn = cell && cell.querySelector('.earn[data-main]');
+    if (earn && layoutEarn(earn, cell) === 'tight') {
+      row.dataset.layout = 'tight';
+      note(row, true);
+      layoutEarn(earn, cell);
+    }
+    balanceDescriptions(row);
+    verticalLines(row);
+  }
+  function schedule(scope) {
+    rows.forEach(function(row) { if (!scope || scope === row || scope.contains(row)) dirty.add(row); });
+    if (!dirty.size || frame) return;
+    frame = requestAnimationFrame(function() {
+      frame = 0;
+      const pending = Array.from(dirty); dirty.clear();
+      pending.forEach(layout);
+    });
+  }
+  if (window.ResizeObserver) {
+    const widths = new WeakMap();
+    const observer = new ResizeObserver(function(entries) {
+      entries.forEach(function(entry) {
+        const width = entry.contentRect.width;
+        if (widths.get(entry.target) !== width) {
+          widths.set(entry.target, width);
+          schedule(entry.target);
+        }
+      });
+    });
+    document.querySelectorAll('table.stk').forEach(function(table) { observer.observe(table); });
+  }
+  window.addEventListener('resize', function() { schedule(); });
+  window.addEventListener('pageshow', function() { schedule(); });
+  document.addEventListener('toggle', function(event) {
+    if (event.target instanceof HTMLDetailsElement && event.target.open) schedule(event.target);
+  }, true);
+  document.addEventListener('cost:painted', function() { schedule(); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function() { schedule(); });
+  schedule();
+})();
 // 仅页面内明确刷新复位；普通股票定位和之后的往返缓存不改变用户展开状态。
 (function resetBoardOnRefresh() {
   var url;
@@ -1453,6 +1592,7 @@ window.addEventListener("pageshow", function() {
 // 下次再展开（长/短持仓区尤其明显：关掉区再打开）刚点开的那份清单还是开着的。
 function resetQuietLists(card) {
   card.querySelectorAll("details.quiet-list[open]").forEach(function(sub) {
+    if (sub.closest('#group_positions')) return; // 持仓静态常开，只有外层长/短区可折叠。
     sub.open = false;
     // 同统计面板的处理：父容器不可见期间改 open，部分移动端内核不重算高度，会留一块空白
     sub.style.display = "none";
@@ -1474,6 +1614,8 @@ function signalFilterData() {
   try { return JSON.parse(node.dataset.filter); } catch (error) { return null; }
 }
 function intersectSignals(data, kinds) {
+  data = mergeMaFilters(data);
+  kinds = Array.from(new Set(kinds.map(k => k === 'ma_cross' || k === 'ma_band' ? 'ma' : k)));
   // 返回 {pending: [信号名...]} 或 {members: [...]}；任一条件名单缺失就不拼残缺结果
   const pending = kinds.filter(function(kind) { return !data[kind] || !data[kind].ok; })
     .map(function(kind) { return data[kind] ? data[kind].label : kind; });
@@ -1513,6 +1655,44 @@ function intersectSignals(data, kinds) {
   });
   return {members: members};
 }
+// 兼容旧快照的均线别名，归并属于统计层，不依赖成本面板或已读链路。
+function signalIdentity(symbol) {
+  let s = String(symbol || '').trim().toUpperCase().replace(/^31#/, '');
+  if (s === 'BRK.B') s = 'BRK-B';
+  const markets = {US:null, HK:'.HK', SH:'.SS', SS:'.SS', SZ:'.SZ'};
+  ['-', '.'].some(sep => {
+    const at = s.lastIndexOf(sep), code = s.slice(0, at), market = s.slice(at + 1);
+    if (at <= 0 || !Object.prototype.hasOwnProperty.call(markets, market)) return false;
+    s = market === 'US' ? code.replace(/\./g, '-') : market === 'HK' ?
+      (code.replace(/^0+/, '') || '0').padStart(4, '0') + '.HK' : code + markets[market];
+    return true;
+  });
+  const aliases = {'.SPX':'^GSPC', '^SPX':'^GSPC', '.VIX':'^VIX', '.NDX':'^NDX',
+    '.VXN':'^VXN', '.SOX':'^SOX', 'BD#US10Y':'^TNX', '.TNX':'^TNX', 'ESMAIN':'ES=F', 'CLMAIN':'CL=F'};
+  return (aliases[s] || s).replace(/\//g, '-');
+}
+function mergeMaFilters(data) {
+  const out = Object.assign({}, data), order = ['red','yellow','green','gray'];
+  const keys = ['ma','ma_cross','ma_band'].filter(k => Object.prototype.hasOwnProperty.call(out, k));
+  if (!keys.length) return out;
+  const members = new Map(); let ok = true;
+  keys.forEach(k => {
+    const source = out[k];
+    if (!source || !source.ok || !Array.isArray(source.members)) { ok = false; return; }
+    source.members.forEach(m => {
+      const id = signalIdentity(m.s || m.id), previous = members.get(id);
+      let details = (Array.isArray(m.d) ? m.d : []).slice();
+      if (previous) {
+        details = previous.d.concat(details.filter(t => !previous.d.some(old => JSON.stringify(old) === JSON.stringify(t))));
+        if (order.indexOf(m.l) < 0 || order.indexOf(previous.l) >= 0 && order.indexOf(previous.l) <= order.indexOf(m.l)) m = previous;
+      }
+      members.set(id, Object.assign({}, m, {id:id, d:details}));
+    });
+  });
+  keys.forEach(k => delete out[k]);
+  out.ma = {label:'均线', ok:ok, members:ok ? Array.from(members.values()) : []};
+  return out;
+}
 // 多选条件的四种方向符号与主表/单选统计共用配色，正文灯色不变。
 // 保留原函数名兼容旧调用；逐字符生成安全文本节点，不解析数据中的 HTML。
 function appendRsiArrows(parent, text) {
@@ -1534,6 +1714,22 @@ function appendRsiArrows(parent, text) {
   }
   flush();
 }
+
+// 多选清单按持仓/重点/其他分组，使用真实条件数据排序，不读取或重写已生成的展示节点。
+function signalMemberKey(member) {
+  const weights = {red:5, yellow:4, gray:3, white:3, purple:2, green:1};
+  const order = member.o == null ? 9 : Number(member.o);
+  const bucket = order === 0 && ['长持仓', '短持仓'].includes(member.g) ? 0 : order === 1 ? 1 : 2;
+  let red = 0, score = 0, count = 0, amplitude = 0;
+  member.details.forEach(function(part) {
+    red += part.l === 'red' ? 1 : 0;
+    score += weights[part.l] || 0;
+    for (const match of part.t.matchAll(/(\d+)\s*条/g)) count = Math.max(count, Number(match[1]));
+    for (const match of part.t.matchAll(/(-?\d+(?:\.\d+)?)\s*[%×]/g)) amplitude = Math.max(amplitude, Math.abs(Number(match[1])));
+  });
+  return [bucket, -(weights[member.l] || 0), -red, -score, -count, -amplitude, order, member.s];
+}
+
 function renderSignalFilter() {
   const box = document.getElementById("signalFilterResult");
   if (!box) return;
@@ -1572,8 +1768,25 @@ function renderSignalFilter() {
     box.append(p);
     return;
   }
-  const list = document.createElement("ul");
-  result.members.forEach(function(m) {
+  const groups = [[], [], []];
+  result.members.map(function(member, index) {
+    return {member: member, key: signalMemberKey(member), first: index === 0};
+  }).sort(function(a, b) {
+    for (let i = 0; i < a.key.length; i++) {
+      if (a.key[i] < b.key[i]) return -1;
+      if (a.key[i] > b.key[i]) return 1;
+    }
+    return 0;
+  }).forEach(function(record) { groups[record.key[0]].push(record); });
+  groups.forEach(function(records, bucket) {
+    if (!records.length) return;
+    const block = document.createElement("div");
+    block.className = "signal-member-block";
+    const heading = document.createElement("h5");
+    heading.textContent = ["持仓", "重点", "其他"][bucket];
+    const list = document.createElement("ul");
+    records.forEach(function(record) {
+    const m = record.member;
     const li = document.createElement("li");
     // 多选名称前保留对应原灯色竖条；描述内每条条件只用自身文字颜色。
     if (["red", "yellow", "green", "gray", "purple"].indexOf(m.l) >= 0) {
@@ -1608,23 +1821,19 @@ function renderSignalFilter() {
       const condition = document.createElement("span");
       condition.className = "signal-filter-condition";
       condition.dataset.signalKind = part.k;
-      let level = part.l;
-      // 加减仓价已读只改变这条条件的字色，不借用标的其它红黄灯。
-      if (["add_price", "reduce_price"].includes(part.k)) {
-        const row = document.getElementById(m.a);
-        const warning = row && row.querySelector('.cost-warn[data-signal-kind="' + part.k + '"]');
-        if (warning && warning.style.display !== "none") level = warning.dataset.signalLevel || level;
-      }
-      condition.dataset.signalLevel = level;
+      condition.dataset.signalLevel = part.l;
       appendRsiArrows(condition, part.t);
       detail.appendChild(condition);
     });
     li.append(detail);
+    // 保留扁平清单原有的分隔线；拆组后不靠DOM重排回补computed样式。
+    if (!record.first) li.classList.add("has-separator");
     list.append(li);
+    });
+    block.append(heading, list);
+    box.append(block);
   });
-  box.append(list);
 }
-window.addEventListener("mm:ack-change", renderSignalFilter);
 document.addEventListener("click", function(event) {
   if (!(event.target instanceof Element)) return;
   const closeButton = event.target.closest(".collapse-group");

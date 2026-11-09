@@ -1005,7 +1005,7 @@ class RulesTemplateTests(unittest.TestCase):
         self.assertTrue(all(link.startswith('https://') for link in source_links))
         self.assertIn('History of Market', self.plain(glossary))
         for alias in ('alerts', 'display', 'quiet', 'prices', 'loss', 'space', 'reached',
-                      'earnings', 'missing', 'terms', 'fetch', 'read-terms',
+                      'earnings', 'missing', 'terms', 'fetch',
                       'change-terms', 'amplitude-terms', 'boll-terms', 'rsi-terms',
                       'volume-terms', 'ma-terms', 'target-terms', 'earnings-terms',
                       'fetch-consensus', 'fetch-after-earnings', 'fetch-earnings-cache',
@@ -1016,16 +1016,16 @@ class RulesTemplateTests(unittest.TestCase):
         rules = assets.rules_body({}, {})
         text = self.plain(rules)
         for term in ('RSI 3条 ↓超卖红灯', 'RSI 3条 ↑超买黄灯白灯白灯（折）',
-                     '加仓价提醒标记已读 → 白灯。',
-                     '减仓价提醒标记已读 → 白灯。', '浮亏提醒标记已读 → 白灯。',
-                     '浮亏10%／20%每只标的只计一次。',
+                     '加仓价 · 所有分组', '减仓价 · 持仓分组',
+                     '点亮橙色', '点亮青色', '持仓盈亏 持仓分组',
+                     '浮盈或浮亏达到 ±10%', '只作提示，不再出红灯。',
                      '两者只保留在主表，不进入“无异动”，不计入统计面板',
                      '布林下轨▼ + RSI 0条白灯白灯（折）',
                      'RSI 2条 ↓超卖白灯',
                      '布林上轨▲ + RSI 1条 ↑超买白灯仅文字无提示',
                      '布林上轨▲ + RSI 1条 ↓超卖（反）白灯仅文字无提示', '短均线', '长均线'):
             self.assertIn(term, text)
-        for deleted in ('进入下轨报警区（逼近自适应）', '排除指数、期货', '行灯取最严重',
+        for deleted in ('已读', '可点红灯', '浮亏≥20%', '进入下轨报警区（逼近自适应）', '排除指数、期货', '行灯取最严重',
                         '单独RSI 3条向上超买 → 文字。', '基本面黄灯'):
             self.assertNotIn(deleted, text)
         second = rules.split('<section id="rule-text">')[1].split('</section>')[0]
@@ -1034,7 +1034,7 @@ class RulesTemplateTests(unittest.TestCase):
         third = rules.split('<section id="rule-folded">')[1]
         headings = re.findall(r'<h5 class="rule-layout-heading">(.*?)</h5>', third)
         self.assertEqual(headings, ['目标／共识价', '财报'])
-        self.assertEqual(rules.count('class="nav-gray"'), 19)  # 涨跌幅、振幅全组红黄后移除两处旧灰说明。
+        self.assertEqual(rules.count('class="nav-gray"'), 16)  # 整体下线加仓、减仓、浮亏三处已读转白说明。
 
     def test_threshold_tables_are_only_in_glossary_and_follow_settings_and_constants(self):
         settings = {'chg_yellow': 7, 'chg_red': 11, 'amp_yellow': 13, 'amp_red': 17,
@@ -1066,7 +1066,7 @@ class RulesTemplateTests(unittest.TestCase):
         combined = self.plain(rules + glossary)
         for dynamic in ('短均线（启用）', '长均线（启用）', '布林为30日、±2.7倍', '×0.6（当前10%设置）',
                         '≤约0.6%', '≤约1.2%', '≤约1.8%', '固定0.9%', '周期5／10／21日',
-                        '≥82超买', '≤24超卖', '距低点≤2.2%', '设置价×1.07', '设置价×0.91',
+                        '≥82超买', '≤24超卖', '距低点≤2.2%', '相差≤3% → 点亮橙色', '相差≤3% → 点亮青色',
                         '红k＝4.2', '黄k＝2.1', '红F＝4.4×', '黄F＝2.2×',
                         '红≥4.4×、黄≥2.2×', '新门槛＝√(T×F)', '固定±1.7%',
                         '限0.75%～1.25%', '检查近8日', '此前22日', '不足19分钟',
@@ -1146,11 +1146,11 @@ class RulesTemplateTests(unittest.TestCase):
             names = {selector.strip() for selector in selectors.split(',')}
             if names & expected:
                 self.assertEqual(names, expected)
-                self.assertEqual(declarations, 'color:#fff')
+                self.assertEqual(declarations, 'color:var(--white)')
                 scoped.append(names)
         self.assertEqual(len(scoped), 1)
-        for name, color in (('ar-band-up', '#3fb950'), ('ar-band-down', '#f85149'),
-                            ('ar-rsi-up', '#3ec9d6'), ('ar-rsi-down', '#e061c9')):
+        for name, color in (('ar-band-up', 'var(--green)'), ('ar-band-down', 'var(--red)'),
+                            ('ar-rsi-up', 'var(--rsi-up)'), ('ar-rsi-down', 'var(--rsi-down)')):
             self.assertIn(f'.card .rules-body .{name}{{color:{color}}}', css)
         rules = assets.rules_body({}, {})
         note = re.search(r'<div\b[^>]*id="nav-earnings-list-note"[^>]*>\s*<p\b[^>]*>(.*?)</p>', rules, re.S)
@@ -1173,23 +1173,23 @@ class RulesTemplateTests(unittest.TestCase):
             self.assertIn(retained, glossary)
 
     def test_category_column_section_borders_only(self):
-        self.assertIn('#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid #6f7b91}', assets.RULES_CSS)
+        self.assertIn('#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid var(--rules-group-border)}', assets.RULES_CSS)
         rows = re.findall(r'<tr\b[^>]*>.*?</tr>', assets.LAMP_RULE_TABLE, re.S)
         sections = [row for row in rows if 'class="cat-col" rowspan=' in row]
         self.assertEqual(len(sections), 4)
         self.assertEqual([self.plain(re.search(r'<th\b[^>]*>(.*?)</th>', row)[1]) for row in sections],
                          ['布林+RSI', '单独RSI', '单独布林', '价格与量能'])
-        self.assertIn('tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid #6f7b91}', assets.RULES_CSS)
+        self.assertIn('tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid var(--rules-group-border)}', assets.RULES_CSS)
 
     def test_lamp_table_horizontal_center_is_scoped_and_keeps_other_layout(self):
         css = assets.RULES_CSS
-        for name, background in (('cell-red', 'rgba(248,81,73,.16)'),
-                                 ('cell-yellow', 'rgba(210,153,34,.16)'),
-                                 ('cell-gray', 'rgba(173,181,194,.24)'),
-                                 ('cell-gray-fold', 'rgba(173,181,194,.09)')):
+        for name, background in (('cell-red', 'var(--rules-red-bg)'),
+                                 ('cell-yellow', 'var(--rules-yellow-bg)'),
+                                 ('cell-gray', 'var(--rules-gray-bg)'),
+                                 ('cell-gray-fold', 'var(--rules-fold-bg)')):
             self.assertIn('.card .rules-body .rule-table td.' + name
                           + '{background:' + background + ';text-align:center}', css)
-        self.assertIn('#signalRulesBody .nav-gray{color:#adb5c2}', css)
+        self.assertIn('#signalRulesBody .nav-gray{color:var(--rules-muted)}', css)
         self.assertIn('tr.gray td{color:var(--dim)}', assets.PAGE_CSS)
         self.assertIn('.stat-badge.gray{border-color:var(--dim)}', assets.PAGE_CSS)
         blocks = re.findall(r'([^{}]+)\{([^{}]*)\}', css)
@@ -1205,7 +1205,7 @@ class RulesTemplateTests(unittest.TestCase):
         self.assertEqual(centered, {'th', 'td'}, '分类、表头、条件及全部灯级单元格均需居中')
         common = re.search(r'\.card \.rules-body \.rule-table th,\.card \.rules-body \.rule-table td\{([^}]*)\}', css)[1]
         for unchanged in ('text-align:left', 'vertical-align:top', 'padding:6px 7px',
-                          'font-size:12px', 'line-height:1.65', 'border:1px solid #5a6478'):
+                          'font-size:12px', 'line-height:1.65', 'border:1px solid var(--rules-cell-border)'):
             self.assertIn(unchanged, common)
         category = re.search(r'\.card \.rules-body \.rule-table th\.cat-col\{([^}]*)\}', css)[1]
         for unchanged in ('vertical-align:middle', 'writing-mode:vertical-rl', 'padding:6px 0', 'width:18px'):
@@ -1276,8 +1276,8 @@ class RulesTemplateTests(unittest.TestCase):
                     self.assertIn(prefix + str(values[key]), volume)
                 self.assertNotRegex(volume, r'≥[\d.]+σ|σ 或|两条σ阈值')
                 self.assertEqual((settings, constants), before)
-        self.assertIn('#glossary-vol-table thead th:nth-child(2){color:var(--lamp-red,#ff8580)}', assets.RULES_CSS)
-        self.assertIn('#glossary-vol-table thead th:nth-child(3){color:var(--lamp-yellow,#f0c674)}', assets.RULES_CSS)
+        self.assertIn('#glossary-vol-table thead th:nth-child(2){color:var(--lamp-red)}', assets.RULES_CSS)
+        self.assertIn('#glossary-vol-table thead th:nth-child(3){color:var(--lamp-yellow)}', assets.RULES_CSS)
 
     def test_disabled_and_equal_moving_averages_and_adaptive_settings_keep_rules(self):
         for short, long in ((0, 0), (0, 250), (50, 50), (25, 180)):
@@ -1297,7 +1297,8 @@ class RulesTemplateTests(unittest.TestCase):
 
     def test_unique_tables_and_dual_track_sentence_remain(self):
         glossary = assets.glossary_body({}, {})
-        self.assertEqual(glossary.count('class="glossary-entry"'), 16)
+        self.assertEqual(glossary.count('class="glossary-entry"'), 15)
+        self.assertNotIn('可点红灯与已读', glossary)
         for unique in ('穿越确认幅度', '连续失败', '正常缓存＋已记录财报事件',
                        '来源日期仍早于财报', '供应商确认', '官方核验', '估算日期',
                        'BAMLH0A0HYM2', 'Cboe官方VIX日线优先', 'History of Market',

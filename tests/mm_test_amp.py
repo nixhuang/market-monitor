@@ -160,7 +160,7 @@ check(strip_css_comments('.macro-card>summary .group-stats{margin-left:auto') in
       and 'justify-content:flex-end' in styles,
       "市场风险标题行读数靠右，与其它栏目右侧读数对齐")
 # PC 顶栏整体往中间收「一些」（不是居中）：左右各内缩 --head-inset，改一个数即可调幅度
-check('--head-inset:64px' in styles and 'padding-left:var(--head-inset,64px)' in styles,
+check('--head-inset:64px' in styles and 'padding-left:var(--head-inset)' in styles,
       "PC 顶栏内缩变量与内缩规则存在")
 # 脚本内容 hash 代替手工日期版本号；独立计算期望值，避免只验证同一个 helper 自洽。
 content = (Path(ROOT) / 'run-status.js').read_bytes().replace(b'\r\n', b'\n')

@@ -264,8 +264,10 @@ class TestRSI(unittest.TestCase):
         for cfg, prev in [({}, 100 / (1 + (monitor.S['chg_red'] + 0.5) / 100)), ({'trigger': 100}, 100)]:
             data = neutral_data()
             data['prev_close'] = prev
-            level, signals, _ = self.analyze([50, 50, 50], cfg=cfg, data=data, bands=(100, 101, 90))
-            self.assertEqual(level, 'red')
+            level, signals, detail = self.analyze([50, 50, 50], cfg=cfg, data=data, bands=(100, 101, 90))
+            # 真实涨跌幅红灯仍独立；加仓价已退役为常驻描述，不再制造红灯。
+            self.assertEqual(level, 'green' if cfg.get('trigger') else 'red')
+            self.assertNotIn(('add_price', 'red'), detail['signal_marks'])
             self.assertFalse(any('布林 + RSI' in s for s in signals))
 
     def test_other_red_not_downgraded(self):

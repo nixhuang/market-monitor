@@ -113,12 +113,14 @@ class RulesRegression(unittest.TestCase):
         css = page_assets.PAGE_CSS
         def declarations(selector):
             return re.search(r'(?:^|\n)' + re.escape(selector) + r'\{([^}]*)\}', css)[1]
-        base = declarations('.lvtag')
-        for stable in ('margin:0 4px 2px 0', 'padding:0 7px', 'font-size:11px', 'line-height:17px'):
+        prefix = 'table.stk tr[data-symbol]>td.tgs'
+        base = declarations(prefix + ' .lvtag.tgt')
+        for stable in ('display:grid', 'grid-template-rows:var(--row-height) var(--row-height)',
+                       'border:0', 'background:transparent', 'color:var(--purple)'):
             self.assertIn(stable, base)
-        self.assertIn('padding:1px 5px', declarations('.tgs .lvtag'))
-        self.assertIn('border:1px solid transparent', declarations('.lvtag.tgt.low'))
-        overlay = declarations('.lvtag.tgt.low::after,.lvtag.tgt.bad::after')
+        # 终稿空间/高位框在TD画，失败框仍在标签画；低空间不得新增框。
+        self.assertNotIn(':has(.tgt.low)::before', css)
+        overlay = declarations(prefix + ' .lvtag.tgt.bad::after')
         self.assertIn('inset:-1px', overlay)
         self.assertIn('border-radius:inherit', overlay)
         from urllib.parse import unquote
@@ -126,26 +128,26 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('stroke="#8b93a1"', svg)
         self.assertIn('stroke-width="1" stroke-dasharray="3 5"', svg)
         self.assertIn('url("' + page_assets.TARGET_DASH_BORDER + '")', overlay)
-        self.assertIn('border:1.5px solid var(--purple)', declarations('.lvtag.tgt.space::after'))
-        self.assertIn('border:1.5px solid var(--target-high)', declarations('.lvtag.tgt.high::after'))
-        self.assertIn('text-shadow:.2px 0 currentColor,-.2px 0 currentColor', declarations('.lvtag.tgt.high'))
-        self.assertNotIn('font-weight', declarations('.lvtag.tgt.high'))
-        self.assertIn('text-shadow:none', declarations('.lvtag.tgt.hit'))
-        self.assertIn('border:1px solid transparent', declarations('.lvtag.tgt.bad'))
-        self.assertIn('color:var(--dim)', declarations('.lvtag.tgt.bad'))
-        self.assertIn('inset:-1px', declarations('.lvtag.tgt.space::after,.lvtag.tgt.high::after'))
-        self.assertIn('color:#fff;background:#8957e5', declarations('.lvtag.tgt.hit'))
-        self.assertGreater(css.index('.lvtag.tgt.hit{'), css.index('.lvtag.tgt.bad{'))
-        self.assertNotRegex(css, r'\.lvtag\.tgt\.[^{]+\{[^}]*font-size')
-        # 2026-10-27：现价三角只收底宽（10.4 → 8.4px），高度仍 9px 不变 → 顶角 60° 变约 50°（更尖锐）；
-        # 内层维持 1px 描边，高度仍是原来的 7px，不跟着缩。
-        self.assertIn('border-top:9px solid #efd9ff', declarations('.range52-marker'))
-        self.assertIn('border-top:7px solid #713caf', declarations('.range52-marker::before'))
-        self.assertIn('background:var(--lamp-yellow,#f0c674)', declarations('.range52-cost'))
-        self.assertIn('.up{color:var(--up)} .down{color:var(--down)}', css)
-        # 2026-10-30：红灯条与黄灯条等宽（6 → 4px），只有颜色不同。
-        for lamp, width in (("red", 4), ("yellow", 4), ("green", 2)):
-            self.assertIn(f'--lc:var(--{lamp});--lw:{width}px', css)
+        for state in ('space', 'high', 'hit'):
+            frame = declarations(prefix + ':has(.tgt.' + state + ')::before')
+            for geometry in ('left:-1px', 'right:0', 'top:2px', 'bottom:2px'):
+                self.assertIn(geometry, frame)
+            self.assertEqual(declarations(prefix + ':has(.tgt.' + state + ')::after'), 'display:none')
+        self.assertIn('border:1px solid var(--purple)', declarations(prefix + ':has(.tgt.space)::before'))
+        self.assertIn('border-color:var(--target-high)', declarations(prefix + ':has(.tgt.high)::before'))
+        hit = declarations(prefix + ':has(.tgt.hit)::before')
+        self.assertIn('background:var(--tgt-solid)', hit)
+        self.assertIn('border-radius:0', hit)
+        self.assertNotIn('border:', hit)
+        self.assertIn('--tgt-solid:#5a4797', css)
+        self.assertIn('color:var(--white)', declarations(prefix + ' .lvtag.tgt.hit'))
+        self.assertIn('color:var(--dim)', declarations(prefix + ' .lvtag.tgt.bad'))
+        self.assertIn('border-top:9px solid var(--range-marker-border)', declarations('.range52-marker'))
+        self.assertIn('border-top:7px solid var(--range-marker-fill)', declarations('.range52-marker::before'))
+        self.assertIn('background:var(--lamp-yellow)', declarations('.range52-cost'))
+        for lamp in ('red', 'yellow', 'green'):
+            self.assertIn(f'table.stk tr.{lamp}[data-symbol]{{--lamp-line:var(--{lamp})}}', css)
+        self.assertIn('width:2px', declarations('table.stk tr[data-symbol]::before'))
         self.assertIn('#signalCounts .signal-name-lamp.tone-target-high{--name-lamp:var(--target-high)}', css)
         for alias in ('tone-target-high', 'target-space-high'):
             self.assertIn(f'#signalCounts .signal-member-block h5.{alias}', css)
@@ -154,10 +156,10 @@ class RulesRegression(unittest.TestCase):
     def test_earnings_text_is_never_bold_and_uses_description_red(self):
         css = page_assets.PAGE_CSS
         # 财报不是涨跌方向：红字跟个股描述红 #ff8580 同色，不能用上涨红 var(--red)。
-        self.assertIn('#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red,#ff8580);font-weight:400}', css)
-        self.assertIn('#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow,#f0c674);font-weight:400}', css)
-        self.assertIn('.earn.urgent{color:var(--lamp-red,#ff8580);font-weight:400}', css)
-        self.assertIn('.earn.soon{color:var(--lamp-yellow,#f0c674);font-weight:400}', css)
+        self.assertIn('#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red);font-weight:400}', css)
+        self.assertIn('#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow);font-weight:400}', css)
+        self.assertIn('.earn.urgent{color:var(--lamp-red);--timing-color:var(--lamp-red)}', css)
+        self.assertIn('.earn.soon{color:var(--lamp-yellow);--timing-color:var(--lamp-yellow)}', css)
         # 所有位置的财报文字都不加粗（名单 meta、主表财报单元、多选组合条件）。
         for selector, body in re.findall(r'([^{}]*(?:earnings-week-meta|\.earn)[^{}]*)\{([^{}]*)\}', css):
             if 'summary' in selector:  # 「未来15天财报」这类区块标题照旧加粗
@@ -171,19 +173,23 @@ class RulesRegression(unittest.TestCase):
         css = page_assets.PAGE_CSS
         # 名词解释与抓取规则：两个分区标题页面居中；指标名（h5）统一站内强调蓝。
         self.assertIn('#glossaryRulesBody h4{text-align:center}', css)
-        self.assertIn('#glossaryRulesBody h5{color:var(--head-blue-on,#8fb8f0)}', css)
+        self.assertIn('#glossaryRulesBody h5{color:var(--head-blue-on)}', css)
         # 只在这两块生效：报灯规则的小标题仍是白字。
         self.assertIn('.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}', css)
         # 蓝色规则必须写在通用 h5 规则之后（同文件内顺序即层叠顺序），否则会被白字覆盖。
         self.assertLess(css.index('.card .rules-body h5{'), css.index('#glossaryRulesBody h5{'))
-        # 成本面板隔离页同步：名词解释块的分区标题也居中，不动报灯规则 h4。
+        # 成本隔离样式已格式化；设置页仍从唯一规则模板派生。
         cost_css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
-        self.assertIn('#glossaryRulesBody h4{text-align:center}', cost_css)
-        self.assertIn('.rules-body h5{margin:8px 0 3px;font-size:12px;color:var(--head-blue-on,#8fb8f0);font-weight:600}', cost_css)
+        self.assertIn('#glossaryRulesBody h4 { text-align: center; }', cost_css)
+        self.assertIn('.rules-body h5 { margin: 8px 0 3px; font-size: 12px; color: var(--head-blue-on); font-weight: 600; }', cost_css)
+        source = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        self.assertIn('#glossaryRulesBody h4{text-align:center}', source)
+        self.assertIn('#glossaryRulesBody h5{color:var(--head-blue-on)}', source)
         # 两块分区标题就是「名词解释与计算」「抓取规则」，指标名全部是 h5。
         glossary = page_assets.GLOSSARY_BODY
         self.assertEqual(re.findall(r'<h4>(.*?)</h4>', glossary), ['名词解释与计算', '抓取规则'])
-        self.assertEqual(len(re.findall(r'<h5 id="(?:glossary|fetch)-', glossary)), 16)
+        self.assertEqual(len(re.findall(r'<h5 id="(?:glossary|fetch)-', glossary)), 15)
+        self.assertNotIn('可点红灯与已读', glossary)
 
     def test_purple_ring_and_capsule_share_one_variable(self):
         """分组标题紫灯圈与主表紫色胶囊必须同一个紫：都走 --purple，不允许任何一处写死十六进制紫。"""
@@ -196,10 +202,12 @@ class RulesRegression(unittest.TestCase):
         # 灯圈（计数徽章）与胶囊（共识价标签）本体、描边圈同源。
         self.assertIn('.stat-badge.purple{border-color:var(--purple)}', css)
         self.assertIn('.stat-dot.purple{background:var(--purple)}', css)
-        self.assertIn('.lvtag.tgt{position:relative;color:var(--purple);border-color:var(--dim)}', css)
-        self.assertIn('.lvtag.tgt.space::after{border:1.5px solid var(--purple)}', css)
+        target_rule = re.search(r'td\.tgs \.lvtag\.tgt\{([^}]*)\}', css)[1]
+        self.assertIn('color:var(--purple)', target_rule)
+        frame = re.search(r'td\.tgs:has\(\.tgt\.space\)::before\{([^}]*)\}', css)[1]
+        self.assertIn('border:1px solid var(--purple)', frame)
         # 紫红（空间≥90%）与实心紫（达到）是另外两档，允许独立取值；其余紫规则只能是 var(--purple)。
-        allowed = {'var(--purple)', 'var(--target-high)', '#8957e5'}
+        allowed = {'var(--purple)', 'var(--target-high)', 'var(--tgt-pos)', 'var(--tgt-neg)'}
         bad = []
         for selector, body in re.findall(r'([^{}]*purple[^{}]*)\{([^{}]*)\}', css):
             for decl in re.findall(r'(?:^|;)(?:color|--name-lamp|--lamp|background|background-color|border-color)\s*:\s*([^;{}]+)', body):
@@ -211,7 +219,8 @@ class RulesRegression(unittest.TestCase):
         cost_css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
         for dead in ('#a371f7', '#c4a3ff', '163,113,247', '196,163,255', '176,132,255'):
             self.assertNotIn(dead, cost_css)
-        self.assertIn('.rules-body .lamp-purple{color:var(--purple);font-weight:600}', cost_css)
+        self.assertIn('.rules-body .lamp-purple { color: var(--purple); font-weight: 600; }', cost_css)
+        self.assertIn('.card .rules-body .lamp-purple{color:var(--purple);font-weight:600}', css)
 
     def test_settings_page_hosts_the_three_rule_blocks_without_recomputing(self):
         """三块说明搬进设置页：首页只留 inert 模板，设置页读取最近一次构建的同名模板。"""
@@ -225,7 +234,7 @@ class RulesRegression(unittest.TestCase):
         # 样式由 page_assets 生成块注入，设置页不另抄一份 CSS。
         block = re.search(r'/\* MM_RULECSS_BEGIN[^\n]*\*/(.*?)/\* MM_RULECSS_END \*/', source, re.S)
         self.assertIsNotNone(block)
-        self.assertEqual(block.group(1).strip(), page_assets.RULES_CSS.strip())
+        self.assertEqual(block.group(1).strip(), (page_assets.PAGE_PALETTE + page_assets.RULES_CSS).strip())
         generated = page_assets.sync_edit_html(source, ROOT, monitor._rule_constants())
         self.assertEqual(generated, source)
         # 首页：三块都是模板，且不再挂载成可见区块。
@@ -240,74 +249,157 @@ class RulesRegression(unittest.TestCase):
         css = page_assets.PAGE_CSS
         cost = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
         # 外框色与宽度只有 :root 一处来源，避免又冒出第二套框线
-        self.assertIn('--signal-border:#6686c6; --frame-w:1.5px;', css)
+        self.assertIn('--signal-border:#6686c6;', css)
+        self.assertIn('--frame-w:1.5px;', css)
         self.assertEqual(css.count('--signal-border:#6686c6'), 1)
         # 统计面板：只剩外框，卡底 / 名单面板底 / 紫灯财报行底全部去掉，左侧蓝条取消
         self.assertIn('border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
-        self.assertIn('#signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid #465e87;text-align:left}', css)
+        self.assertIn('#signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid var(--list-border);text-align:left}', css)
+        self.assertIn('--list-border:#465e87', css)
         self.assertNotIn('background:#121a27', css)
-        self.assertIn('--chip-w:74px;position:relative;display:block;padding:8px 12px 8px 5px;border-top:1px solid #465e87}', css)
-        # 手机上紫灯／财报胶囊也同宽 74px，不再比信号列那几颗窄一截
-        self.assertIn('@media(max-width:600px){#signalCounts .signal-extra-row{--chip-w:74px;', css)
+        self.assertIn('#signalCounts .signal-extra-row{--chip-w:74px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}', css)
+        # 两档均74px；三条统计行统一54px内容+1px分隔，展开不改变标题高度。
+        mobile = css.split('@media(max-width:600px){', 1)[1].split('@media(min-width:601px){', 1)[0]
+        self.assertIn('#signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}', mobile)
+        for kind in ('text-only', 'earnings-week'):
+            self.assertIn(f'#signalCounts .signal-extra-row>.{kind}>summary{{position:relative;box-sizing:border-box;min-height:54px;', css)
         self.assertNotIn('background:#182130', css)
         # 展开的分组卡：整卡套外框，标题不再铺底色、不再画左条
-        self.assertIn('.group-card[open]:not(#signalCounts):not(#costManage),.macro-card[open]{\n'
-                      '  border:var(--frame-w) solid var(--signal-border)}', css)
+        for selector in ('.group-card[open]:where(:not(#signalCounts,#costManage))', '.macro-card[open]'):
+            self.assertIn(selector + '{border:var(--frame-w) solid var(--signal-border)}', css)
         # 卡中卡「长持仓」单独再细一档，不跟着整卡 1.5px
         self.assertIn('.zone-card[open]{border:1px solid var(--signal-border)}', css)
         # 长持仓框左右外扩 2px，内部4px与普通分组一致；收起条抵消同样内边距
-        self.assertIn('.zone-card{margin:10px -2px 12px;padding-left:4px;padding-right:4px;\n'
-                      '  border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.022)}', css)
+        self.assertIn('.zone-card{margin:10px -2px 12px;padding-left:4px;padding-right:4px;'
+                      'border:1px solid var(--line);border-radius:9px;background:var(--zone-bg)}', css)
         self.assertIn('.zone-card .group-bottom{margin:0 -4px 0}', css)
         # 数字胶囊：个位压在胶囊中线（右边 17px 内边距给三角留位），两位数时十位向左长，不折行；
         # 胶囊仍是 44px。三角维持线上版：16px 的 ▾/▴ 字形，绝对定位贴到胶囊右侧（距右边框 2px）。
         self.assertIn('#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;'
-                      'max-width:100%;\n  position:relative;padding:0 17px 0 4px;', css)
+                      'max-width:100%;position:relative;padding:0 17px 0 4px;', css)
         self.assertIn('white-space:nowrap;display:inline-flex;align-items:center;justify-content:flex-end;'
                       'touch-action:manipulation}', css)
         self.assertIn('#signalCounts .signal-count-toggle::after{content:"\u25be";font-size:16px;'
-                      'line-height:1;\n  position:absolute;right:2px;top:50%;transform:translateY(-50%)}', css)
+                      'line-height:1;position:absolute;right:2px;top:50%;transform:translateY(-50%)}', css)
         self.assertIn('#signalCounts .signal-count-toggle[aria-expanded="true"]::after{content:"\u25b4"}', css)
         # 市场风险表：固定列宽，不再让 WTI 参考行那一大段说明把状态列撑到 138.6px
         # （短文案「平静」后面空一大截），也不再把指标列挤到 65.8px（「垃圾债利差」逐字折三行）。
         # 四列不换行所需（含左右各 10px 内边距）实测 126/159/90/114：
         # 宽屏 26/33/18/23 → 184.6/234.3/127.8/163.3；≤600px 30/34/15/21 → 112.5/127.5/56.3/78.8。
         # 指标列仍左对齐，其余三列居中；原油「依据与来源」整块删除，不再留 .reference-detail。
-        self.assertIn('#macroCard table{table-layout:fixed}', css)
-        self.assertIn('#macroCard td:first-child{width:26%} #macroCard td:nth-child(2){width:33%}\n'
-                      '#macroCard td:nth-child(3){width:18%} #macroCard td:nth-child(4){width:23%}\n'
-                      '#macroCard td{overflow-wrap:anywhere}\n'
-                      '@media(max-width:600px){#macroCard td:first-child{width:30%} '
-                      '#macroCard td:nth-child(2){width:34%}\n'
-                      '  #macroCard td:nth-child(3){width:15%} '
-                      '#macroCard td:nth-child(4){width:21%}}', css)
-        self.assertIn('#macroCard td:nth-child(2),#macroCard td:nth-child(3),'
-                      '#macroCard td:nth-child(4){text-align:center}', css)
+        scope = ':is(#macroCard, .macro-scope)'
+        self.assertIn(scope + ' table{table-layout:fixed}', css)
+        for col, width in (('first-child',26), ('nth-child(2)',33), ('nth-child(3)',18), ('nth-child(4)',23)):
+            self.assertIn(scope + f' td:{col}{{width:{width}%', css)
+        for col, width in (('first-child',29), ('nth-child(2)',32), ('nth-child(3)',18), ('nth-child(4)',21)):
+            self.assertIn(scope + f' td:{col}{{width:{width}%}}', mobile)
+        for col, width in ((2,33), (3,18), (4,23)):
+            self.assertIn(scope + f' td:nth-child({col}){{width:{width}%;text-align:center}}', css)
+        self.assertIn(scope + ' td{font-size:var(--macro-body);overflow-wrap:anywhere;', css)
         self.assertNotIn('.reference-detail{', css)
         # 整页左右各加1px；宽屏同步收窄wrap保证实际边距也各增加1px
-        media = re.search(r'@media \(max-width:600px\)\{(.*?)\n\}', css, re.S)
-        self.assertIsNotNone(media)
-        self.assertIn('body{padding-left:5px;padding-right:7px}', media[1])
+        # 终稿手机左右各5px，与桌面不共用padding。
+        self.assertIn('body{padding-left:5px;padding-right:5px}', mobile)
         self.assertIn('padding:env(safe-area-inset-top) 17px 40px 15px}', css)
         self.assertIn('.wrap{max-width:718px;margin:0 auto}', css)
         self.assertIn('padding-bottom:2px;min-height:63px}', css)
         self.assertIn('box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0', css)
-        self.assertIn('.group-card>summary.grp,.macro-card>summary.grp{font-size:18px}', css)
-        self.assertIn('.group-card>summary .group-stats,.macro-card>summary .group-stats{font-size:16px}', css)
-        self.assertIn('.stat-badge{min-width:17px;height:17px;padding:0 3px;font-size:16px}', css)
+        for card in ('group-card','macro-card'):
+            self.assertIn(f'.{card}>summary.grp{{line-height:24px;box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0;font-size:18px}}', mobile)
+            self.assertIn(f'.{card}>summary .group-stats{{line-height:24px;font-size:16px;gap:6px}}', mobile)
+        self.assertIn('.stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}', mobile)
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.20)', css)
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
         # 「信号」列所有胶囊同宽且文字居中
         self.assertIn('#signalCounts td .signal-filter-toggle{width:74px;padding:0 4px}', css)
-        # 仓位管理：整卡绿色外框 1.5px，标头不再铺底色
-        self.assertIn('--cost-accent:var(--frame-green,#2c8f3e)', cost)
-        self.assertIn('#costManage.cost-manage{--collapse-bg:var(--cost-accent-bg);border:1.5px solid var(--cost-accent);\n'
-                      '  box-shadow:none}', cost)
-        self.assertIn('#costManage.cost-manage>summary,\n#costManage.cost-manage[open]>summary{background:none;box-shadow:none}', cost)
+        # 仓位编辑改为真实四列的蓝框面板，绿色只用于持仓外框；不再复制隐藏标题。
+        editor = re.search(r'#costManage\.cost-manage\s*\{([^}]*)\}', cost)[1]
+        for decl in ('display: none', 'border: 1.5px solid var(--signal-border)', 'box-shadow: none', 'background: var(--card)'):
+            self.assertIn(decl, editor)
+        self.assertIn('#costManage.cost-manage.cost-edit-open { display: block; }', cost)
+        self.assertIn('#costManage > summary, #costManage > .group-bottom { display: none; }', cost)
+        self.assertIn('grid-template-columns: minmax(0,1.5fr) repeat(3,minmax(0,1fr));', cost)
         self.assertNotIn('inset 3px 0 0 var(--cost-accent-bg)', cost)
-        # 「无异动」展开条跟分组标题同一口径：不铺底色、不画左条，只提亮文字
-        self.assertIn('.quiet-list[open]>summary{background:none;box-shadow:none;color:var(--head-blue,#bfd5ff)}', cost)
+        # quiet-list归页面资源统一管理，持仓summary隐藏但静态open另由分组用例保证。
+        self.assertIn('.quiet-list[open]>summary{background:none;box-shadow:none;color:var(--head-blue)}', css)
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.18)', cost)
+
+    def test_main_row_signal_area_is_two_columns_on_both_breakpoints(self):
+        """11-09终稿：四区双排，信号静态双列；退休单列/搬家/ACK补丁不保留。"""
+        css = page_assets.PAGE_CSS
+        self.assertIn('grid-template-areas:"sym px tgs earn" "cost cost cost cost" "sig sig sig sig"', css)
+        self.assertEqual(css.count('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));'), 1)
+        self.assertIn('column-gap:var(--sig-col-gap);align-items:start;min-width:0', css)
+        self.assertIn('.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}', css)
+        self.assertIn('table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;', css)
+        for level in ('red', 'yellow', 'green'):
+            self.assertIn(f'table.stk tr.{level}[data-symbol]{{--lamp-line:var(--{level})}}', css)
+        self.assertIn('top:9.5px;width:2px;height:41.7px;background:var(--lamp-line)', css)
+        self.assertIn('table.stk tr[data-symbol]::before{top:7px;height:42.7px}', css)
+        self.assertIn('top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line)', css)
+        self.assertIn('font-size:14.5px;line-height:21.75px', css)
+        self.assertIn('width:3px;height:10px;', css)
+        for dead in ('cost-warn', 'ack-btn', 'pos-jump', '.lamp-frame', '.sig-lead', 'r58patch'):
+            self.assertNotIn(dead, css)
+        # 功能事实分左右列，但不能跨列借整股最高灯色，也不能改变输入。
+        row = {'symbol':'COLS', 'group':'position', 'price':100, 'chg':0, 'level':'red',
+               'signals':['触及布林下轨▼', 'RSI 3条 ↓超卖', '量比 2.8x'],
+               'signal_marks':[('boll_rsi','red'), ('vol_ratio','yellow')], 'trigger':97, 'reduce':103}
+        before = json.dumps(row, sort_keys=True)
+        out = monitor._signals_html(row)
+        self.assertEqual(out.count('class="sig-col"'), 2)
+        left, right = out.split('<div class="sig-col">')[1:]
+        self.assertIn('data-side="boll"', left)
+        self.assertIn('data-side="rsi"', right)
+        self.assertIn('class="lvtag add signal-item"', left)
+        self.assertIn('class="lvtag cut signal-item"', right)
+        self.assertEqual(out.count('data-signal-kind="boll_rsi" data-signal-level="red"'), 2)
+        self.assertEqual(out.count('data-signal-kind="vol_ratio" data-signal-level="yellow"'), 1)
+        self.assertEqual(json.dumps(row, sort_keys=True), before)
+        js = page_assets.PAGE_INTERACTION_JS
+        self.assertIn('function balanceDescriptions(row)', js)
+        self.assertIn('data-signal-flow="auto"', js)
+        self.assertIn("n.matches('[data-signal-flow=\"auto\"],.lvtag.add,.lvtag.cut')", js)
+
+    def test_signal_allocation_uses_final_demo_measurement_without_visible_narrowing(self):
+        """冻结终稿的分列测量口径；只在隐藏副本测量，固定侧/加减仓价不参与搬移。"""
+        js = page_assets.PAGE_INTERACTION_JS.split('function balanceDescriptions(row)', 1)[1].split('function verticalLines(row)', 1)[0]
+        self.assertIn('Number(a.dataset.signalOrder) - Number(b.dataset.signalOrder)', js)
+        self.assertIn('const probe = cols.cloneNode(false)', js)
+        self.assertIn('visibility:hidden;pointer-events:none', js)
+        self.assertIn('font-size:13.5px;line-height:', js)
+        self.assertIn("matchMedia('(max-width:600px)').matches ? '1.45' : '1.5'", js)
+        self.assertIn('(cols.getBoundingClientRect().width - gap) / 2', js)
+        self.assertIn('measured[0].getBoundingClientRect().height <= measured[1].getBoundingClientRect().height', js)
+        self.assertIn('measured[side].appendChild(n.cloneNode(true))', js)
+        self.assertIn('finally { probe.remove(); }', js)
+        self.assertIn('planned[index].concat(caps[index])', js)
+        self.assertNotIn('cols.style', js)
+        self.assertNotIn('row.dataset.symbol', js)
+        self.assertNotIn('innerHTML', js)
+
+    def test_combo_only_adjusts_ink_vertical_offset_preserving_shape_and_gap_center(self):
+        css = page_assets.PAGE_CSS
+        self.assertIn('--combo-scale:1.43;--combo-dy:-2px;', css)
+        self.assertIn('.sig-cols[data-combo="1"]{--combo-scale:1.57}', css)
+        self.assertEqual(css.count('--combo-dy:'), 1)
+        self.assertIn('left:50%;top:0;transform:translate(-50%,var(--combo-dy)) scale(var(--combo-scale))', css)
+        self.assertIn('width:16px;height:21.75px;', css)
+        self.assertIn('.sig-cols[data-combo="1"]::after{height:19.575px}', css)
+        self.assertIn('font-size:inherit;line-height:1;font-weight:500;color:var(--combo-color)', css)
+        self.assertIn('--sig-col-gap:30px;--sig-row-gap:7px', css)
+        self.assertIn('gap:11px;height:26px;padding-bottom:13px', css)
+
+    def test_main_row_price_and_target_use_the_same_two_rows(self):
+        css = page_assets.PAGE_CSS
+        prefix = 'table.stk tr[data-symbol]>'
+        self.assertIn(prefix + 'td.px .px-main{display:grid;grid-template-rows:var(--row-height) var(--row-height)', css)
+        for cls in ('px-price', 'px-chg'):
+            self.assertIn(prefix + f'td.px .{cls}{{display:block;margin:0;height:var(--row-height);line-height:var(--row-height)}}', css)
+        for cls, area in (('target-space','1/1/2/3'), ('target-price','2/1/3/2'), ('target-month','2/2/3/3')):
+            self.assertIn(prefix + f'td.tgs .{cls}{{grid-area:{area}', css)
+        self.assertIn('target-month{grid-area:2/2/3/3;margin-left:3px}', css)
+        self.assertNotIn('.stk td.px .tgs{', css)
 
     def test_only_two_breakpoints_phone_600_and_desktop_601(self):
         """只适配三台设备（2026-11-01 定）：手机档 ≤600（按 iPhone 18 Pro Max 竖屏 440 定稿）、
@@ -320,42 +412,30 @@ class RulesRegression(unittest.TestCase):
             self.assertEqual(bad, [], f'{name} 出现了 600/601 之外的断点：{bad}')
         # 桌面档只认 ≥601，手机档只认 ≤600，两边不能有重叠或空档
         self.assertIn('@media(min-width:601px){', css)
+        # 第十三轮只把 .lvtag>span 规则加进已有的 601 块，不新增重复媒体块/第三档断点
+        self.assertEqual(css.count('@media(min-width:601px){'), 1)
 
     def test_mobile_stock_numbers_and_main_row_padding_are_compact(self):
         css = page_assets.PAGE_CSS
-        mobile = css.split('@media (max-width:600px){', 1)[1].split('\n}', 1)[0]
-        # 手机紫灯／加减仓价 12px，52 周两端价格与涨跌空间仍 11px；桌面 52 周保持 10px。
-        self.assertIn('.stk .tgs .lvtag{padding:1px 3px;font-size:12px;', mobile)
-        self.assertIn('.range52-lo,.range52-hi,.range52-gap{font-size:11px}', mobile)
-        self.assertIn('.range52-lo,.range52-hi{position:relative;flex:none;font-size:10px;', css)
-        self.assertIn('.range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;', css)
-        # 主行上下 8 → 6px、左右仍 5px；位置条行及带位置条主行的独立紧凑规则不改。
-        self.assertIn('.stk td{padding:6px 5px}', mobile)
-        self.assertIn('.stk tr.range52-row td{padding:0 8px 4px 12px}', mobile)
-        self.assertIn('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}', css)
-        final_override = css.split('/* ===== 手机（iOS Chrome）最终覆盖', 1)[1]
-        self.assertIn('  .lvtag.add-ck,.lvtag.add-ck .ck,.ack-btn{font-size:12px}', final_override)
+        mobile = css.split('@media(max-width:600px){', 1)[1].split('@media(min-width:601px){', 1)[0]
+        for cls, size in (('sym',17), ('px .px-price',16), ('px .px-chg',16), ('tgs .lvtag.tgt',15)):
+            self.assertIn(f'table.stk tr[data-symbol]>td.{cls}{{font-size:{size}px}}', mobile)
+        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}', mobile)
+        self.assertIn('table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:4px 8px;', css)
+        self.assertIn('table.stk tr[data-layout="tight"]>td.px{padding-left:3px;padding-right:3px}', css)
+        self.assertNotRegex(css, r'add-ck|ack-btn|手机（iOS Chrome）最终覆盖')
 
-    def test_mobile_descriptions_are_13_5px_and_stock_earnings_are_unchanged(self):
+    def test_mobile_descriptions_14_5px_and_earnings_two_rows(self):
         css = page_assets.PAGE_CSS
-        final_override = css.split('/* ===== 手机（iOS Chrome）最终覆盖', 1)[1]
-        media = re.search(r'@media \(max-width:600px\)\{(.*?)\n\}', final_override, re.S)
-        self.assertIsNotNone(media)
-        mobile = media[1]
-        # 五类统计/主表描述只在手机最终覆盖块统一为 13.5px；桌面基础规则不变。
-        self.assertIn('  .stk td.sig,\n'
-                      '  #signalCounts .signal-member-metric,\n'
-                      '  #signalCounts .signal-filter-detail,\n'
-                      '  #signalCounts .earnings-week-meta,\n'
-                      '  #signalCounts .signal-member-direction{font-size:13.5px}', mobile)
-        self.assertIn('#signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}', css)
-        self.assertIn('#signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid #465e87;font-size:13px}', css)
-        self.assertIn('#signalCounts .earnings-week-meta{color:var(--dim);font-size:12px}', css)
-        self.assertIn('#signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}', css)
-        # 主表个股财报是明确例外：手机美东 12.5px、北京 11.5px 均不在最终覆盖块改写。
-        self.assertIn('  .stk .earn{font-size:12.5px;line-height:1.4}', css)
-        self.assertIn('  .stk .earn .unit{font-size:11.5px;line-height:1.35}', css)
-        self.assertNotRegex(strip_css_comments(mobile), r'\.stk \.earn[^{]*\{[^}]*font-size')
+        self.assertIn('table.stk tr[data-symbol]>td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}', css)
+        self.assertIn('.earn{display:block;margin:0;font-size:15px;font-weight:400;line-height:var(--row-height)', css)
+        self.assertIn('.earn>.unit{display:block;margin-left:0;height:var(--row-height);line-height:var(--row-height)', css)
+        self.assertIn('.earn>.unit::before{content:attr(data-timing);color:var(--timing-color)}', css)
+        self.assertIn('.earn>.cd.tbd{color:var(--head-blue-on)}', css)
+        for cls in ('add', 'cut'):
+            body = re.search(r'\.stk td\.sig \.lvtag\.' + cls + r'\{([^}]*)\}', css)[1]
+            self.assertIn('font:inherit', body)
+            self.assertNotIn('font-size:', body)
 
     def test_statistics_table_has_no_signal_red_yellow_white_header_row(self):
         """统计表不再有「信号 / 红 / 黄 / 白」表头排。"""
@@ -376,11 +456,9 @@ class RulesRegression(unittest.TestCase):
         self.assertNotIn('.stk tr.pur:has(+tr.range52-row)>td.sig{', css)
         self.assertNotIn('--pstripe', css)
         self.assertNotIn('--pw:', css)
-        tail = re.search(r'(?:^|\n)\.stk tr\.range52-row>td\{([^}]*)\}', css)[1]
-        self.assertIn('background-image:linear-gradient(var(--lc),var(--lc))', tail)
-        self.assertIn('background-size:var(--lw) 14px', tail)
-        self.assertIn('background-position:left top', tail)
-        self.assertNotIn('right', tail)
+        # 主表左侧竖灯条已撤（2026-11-03 按图），52 周位置行随之不再有 --lc 续接规则
+        self.assertEqual(re.search(r'(?:^|\n)\.stk tr\.range52-row>td\{([^}]*)\}', css)[1], 'display:block;width:100%')
+        self.assertNotIn('linear-gradient(var(--lc),var(--lc))', css)
         self.assertNotIn('to top,var(--pc) 0 10px,transparent 10px 18px', css)
         self.assertIn('--target-high:#dc62b8', css)
         self.assertIn('.target-purple>h5{margin:6px 0 3px', css)
@@ -392,7 +470,7 @@ class RulesRegression(unittest.TestCase):
         # 有分隔线的财报/多选筛选清单：行距不动（财报仍无 margin，靠 li+li 的 1px 线分隔）
         self.assertIn('#signalCounts .earnings-week li{font-size:13px;padding:3.6px 0', css)
         self.assertIn('#signalCounts .earnings-week li+li{border-top:1px solid var(--line)}', css)
-        self.assertIn('#signalCounts .signal-filter li+li{border-top:1px solid var(--line)}', css)
+        self.assertIn('#signalCounts .signal-filter li.has-separator{border-top:1px solid var(--line)}', css)
         self.assertIn('.target-purple .target-space-high .signal-member-direction', css)
         self.assertIn('.target-purple .note{display:inline;margin-left:6px}', css)
         self.assertIn('.target-purple .signal-member-direction{color:var(--purple)}', css)
@@ -402,27 +480,31 @@ class RulesRegression(unittest.TestCase):
         self.assertNotIn('.target-purple .target-space-high .signal-member-belong', css)
         self.assertNotIn('.tone-target-high,.target-space-high{', css)
         self.assertNotIn('#signalCounts .tone-target-high,#signalCounts .target-space-high,', css)
-        self.assertIn('.group-card tr.pur-high .sig .tp{color:var(--target-high)}', css)
-        # 删除右条后不再存在跨行虚线相位；原左侧灯条续行高度仍为18px。
-        self.assertIn('background-size:var(--lw) 14px', tail)
-        self.assertNotIn('var(--pw)', tail)
+        self.assertIn('td.tgs .lvtag.tgt.high{color:var(--target-high);', css)
+        self.assertNotIn('.sig .tp{', css)
+        # 删除右条后不再存在跨行虚线相位；左竖条与它的续行也一并撤掉（2026-11-03）
+        self.assertNotIn('var(--lw)', css)
+        self.assertNotIn('var(--pw)', css)
 
     def test_positions_green_tints_and_shared_collapse_background(self):
         css = page_assets.PAGE_CSS
-        self.assertIn('--signal-bg:#182131; --collapse-bg:var(--signal-bg)', css)
+        self.assertIn('--signal-bg:#182131;', css)
+        self.assertIn('--collapse-bg:var(--signal-bg);', css)
         # 持仓卡：绿框**只在展开态亮**——靠 --signal-border 传给 .group-card[open]:not(...)
         # （那条特指度更高，只能靠变量改色）；这里**不能**写 id 级 border-color，
         # 写了收起态也会常亮，跟其它分组的灰框不一致（2026-11-01 定）。
         pos = re.search(r'#group_positions\{([^}]+)\}', css)[1]
-        self.assertIn('--collapse-bg:rgba(46,160,67,.15)', pos)
-        self.assertIn('--signal-border:var(--frame-green,#2c8f3e)', pos)
+        self.assertIn('--collapse-bg:var(--positions-collapse)', pos)
+        self.assertIn('--positions-collapse:rgba(46,160,67,.15)', css)
+        self.assertIn('--signal-border:var(--frame-green)', pos)
+        self.assertIn('--frame-green:#2c8f3e', css)
         self.assertNotIn('border-color:', pos)
         lng = re.search(r'#group_positions_long\.zone-card\{([^}]+)\}', css)[1]
-        self.assertIn('background:none;border:1px solid var(--frame-green,#2c8f3e)', lng)
+        self.assertIn('background:none;border:1px solid var(--frame-green)', lng)
         # 2026-11-01 二次调整：12/14 → 9/9，与仓位面板「当日盈亏贡献」条的上下留白（上 9 / 下 8）对齐，
         # 消除「两条同样 49px 高、但长持仓留白更大显得更孤立，肉眼看像盈亏贡献更高」的错觉。
         self.assertIn('margin:9px -2px 9px', lng)
-        self.assertIn('#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
+        self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
         button = re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1]
         self.assertIn('background:var(--collapse-bg)', button)
         self.assertIn('.collapse-group:hover{color:var(--text);background:var(--collapse-bg)}', css)
@@ -479,11 +561,12 @@ class RulesRegression(unittest.TestCase):
         match = re.search(r"window\.__MM_RULES__=(.*?);</script>", page)
         self.assertIsNotNone(match)
         self.assertEqual(json.loads(match[1]), monitor.S)
-        self.assertLess(match.start(), page.index("var RULES=window.__MM_RULES__"))
+        self.assertLess(match.start(), page.index('function nearPrice('))
         self.assertEqual(page.count("window.__MM_RULES__="), 1)
         rules = re.search(r'<template id="rulesTpl">(.*?)</template>', page, re.S)[1]
-        self.assertIn("现价≤设置价×1.0725 → 可点红灯", plain_text(rules))
-        self.assertIn("现价≥设置价×0.9825 → 可点红灯", plain_text(rules))
+        self.assertIn("相差≤3% → 点亮橙色", plain_text(rules))
+        self.assertIn("相差≤3% → 点亮青色", plain_text(rules))
+        self.assertNotIn('可点红灯', plain_text(rules))
         self.assertNotIn("fund_", match[1])
         self.assertIn('window.MM_SETTINGS={"signal_single_open":0}', page)
 
@@ -496,33 +579,29 @@ class RulesRegression(unittest.TestCase):
         self.assertNotIn("过期模板不能进入页面", second)
         rules = re.search(r'<template id="rulesTpl">(.*?)</template>', second, re.S)[1]
         glossary = re.search(r'<template id="glossaryTpl">(.*?)</template>', second, re.S)[1]
-        self.assertIn("现价≤设置价×1.09 → 可点红灯", plain_text(rules))
-        self.assertIn("现价≥设置价×1 → 可点红灯", plain_text(rules))
+        self.assertIn("相差≤3% → 点亮橙色", plain_text(rules))
+        self.assertIn("相差≤3% → 点亮青色", plain_text(rules))
         self.assertIn("≥82超买，≤28超卖", plain_text(glossary))
         self.assertNotIn("≥70超买，≤35超卖", plain_text(glossary))
 
-    def test_add_and_reduce_rules_keep_actual_scope_and_distinct_thresholds(self):
+    def test_add_and_reduce_are_resident_notes_not_trade_lamps(self):
+        # 终稿统一现价分母±3%；旧配置保留读兼容，但不再绑定已读/红灯功能。
         monitor.S.update(trigger_gap_pct=7, reduce_gap_pct=2)
-        for group in ("position", "focus", "technology"):
-            x = SimpleNamespace(cfg={"trigger": 100, "reduce": 110}, price=106, group=group)
-            add, reduce = monitor._Alerts(), monitor._Alerts()
-            monitor._rule_add_price(add, x)
-            monitor._rule_reduce_price(reduce, x)
-            self.assertEqual(add.level, "red")
-            self.assertEqual(reduce.level, "green")
-            x.price = 109
-            monitor._rule_reduce_price(reduce, x)
-            self.assertEqual(reduce.level, "red" if group == "position" else "green")
-            x.price = 500
-            monitor._rule_reduce_price(reduce, x)
-            self.assertEqual(reduce.level, "red" if group == "position" else "green")
-        text = page_assets.rules_body(monitor.S, monitor._rule_constants())
-        text = plain_text(text)
-        self.assertIn("加仓价 · 所有分组：现价≤设置价×1.07 → 可点红灯", text)
-        self.assertIn("减仓价 · 持仓分组：现价≥设置价×0.98 → 可点红灯", text)
-        self.assertIn("减仓价：重点、其他分组不适用", text)
-        self.assertIn("加仓价提醒标记已读 → 白灯", text)
-        self.assertIn("减仓价提醒标记已读 → 白灯", text)
+        for group in ('position', 'focus', 'technology'):
+            row = {'symbol':'PRICE', 'group':group, 'price':100, 'chg':0,
+                   'level':'green', 'trigger':97, 'reduce':103, 'signals':[], 'signal_marks':[]}
+            out = monitor._signals_html(row)
+            self.assertIn('class="lvtag add signal-item" data-lv="97" data-near="1"', out)
+            self.assertEqual('class="lvtag cut signal-item"' in out, group == 'position')
+            self.assertNotIn('data-signal-level="red"', out)
+            self.assertEqual(row['level'], 'green')
+        for value, near in ((96.999, '0'), (97, '1'), (103, '1'), (103.001, '0')):
+            self.assertIn(f'data-near="{near}"', monitor.level_note(value, None, 100))
+        text = plain_text(page_assets.rules_body(monitor.S, monitor._rule_constants()))
+        for term in ('加仓价 · 所有分组', '减仓价 · 持仓分组', '相差≤3% → 点亮橙色',
+                     '相差≤3% → 点亮青色', '减仓价：重点、其他分组不适用'):
+            self.assertIn(term, text)
+        self.assertNotRegex(text, '已读|可点红灯')
 
     def test_current_three_rule_cells_reach_dynamic_and_rendered_templates(self):
         for settings in ({}, {'rsi_low': 28, 'rsi_high': 82}):
@@ -689,7 +768,7 @@ class RulesRegression(unittest.TestCase):
         self.assertEqual([(attrs, plain_text(text)) for attrs, text in cells[1:]],
                          [(' class="cell-yellow"', '黄灯'), (' class="cell-yellow"', '黄灯'),
                           (' class="cell-gray-fold"', '白灯（折）')])
-        self.assertIn('.signal-item[data-signal-level="yellow"]{color:var(--lamp-yellow,#f0c674)}', page_assets.PAGE_CSS)
+        self.assertIn('.signal-item[data-signal-level="yellow"]{color:var(--lamp-yellow)}', page_assets.PAGE_CSS)
         for index, group in enumerate(('position', 'focus'), 1):
             facts = monitor.classify_technical_facts(group, 0, 3, '上轨')
             self.assertEqual(facts, dict(kind='boll_rsi', level='yellow', foldable=True))
@@ -733,7 +812,7 @@ class RulesRegression(unittest.TestCase):
         text = H.unescape(re.sub(r'<[^>]+>', '', markup))
         for phrase in (
             '双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。',
-            '浮亏10%／20%分档记录、每只只计一次',
+            '显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。',
             '例：已记录美东20日财报，正常缓存未到期，22日起可提前刷新。',
         ):
             self.assertEqual(text.count(phrase), 1)
@@ -757,8 +836,8 @@ class RulesRegression(unittest.TestCase):
         self.assertRegex(rules_text, r'RSI 3条 ↓超卖\s*红灯')
         self.assertIn('重点、其他分组不适用', rules_text)
         self.assertNotIn('只撤页面追加的该项红灯，不撤生成红灯或其他原因的灯', glossary_text)
-        for explanation in ('统计由对应红列转白列', '白字删除线',
-                            '双轨命中时，只选带符号距离较小的一轨', '越轨距离为负，相等选', '标的去重'):
+        self.assertNotRegex(rules_text + glossary_text, '统计由对应红列转白列|白字删除线|浮亏10%／20%分档|可点红灯与已读')
+        for explanation in ('双轨命中时，只选带符号距离较小的一轨', '越轨距离为负，相等选', '标的去重'):
             self.assertIn(explanation, glossary_text)
             self.assertNotIn(explanation, rules_text)
         self.assertEqual(len(re.findall(r'<h4\b', text)), 3)
@@ -800,15 +879,15 @@ class RulesRegression(unittest.TestCase):
                 self.assertNotRegex(text, r'(?:未来\s*)?(?:8\s*[～~至–-]\s*)?14\s*天[^。；\n]*黄|黄[^。；\n]*14\s*天')
                 terms = ('前一日／当日／后一日 → 红字', '财报前2～7天 → 黄字', '北京时间')
                 if label == '名词解释模板':
-                    terms = ('北京今天', '盘前／盘后不平移', '另留昨天红字')
+                    terms = ('快照北京运行日', '盘前／盘后不平移', '另留前一日红字')
                 for term in terms:
                     self.assertIn(term, text)
         plain_glossary = plain_text(glossary[1])
-        for term in ('用美东财报日期对比北京今天', '红字保留期结束后才检查下一次',
-                     '失败时沿用有效旧日期', '名单含今天至+15天', '待公布', '未知不猜钟点'):
+        for term in ('沿用美东财报日期对比快照北京运行日', '红字保留期结束后才检查下一次',
+                     '失败时沿用有效旧日期', '名单含运行日至+15天', '待公布', '未知不猜钟点'):
             self.assertIn(term, plain_glossary)
         self.assertNotIn('href="#rule-earnings"', glossary[1])
-        self.assertIn('用美东财报日期对比北京今天', plain_glossary)
+        self.assertIn('沿用美东财报日期对比快照北京运行日', plain_glossary)
         self.assertIn('财报前2～7天', H.unescape(re.sub(r'<[^>]+>', '', body)))
         self.assertNotIn('财报日期：', monitor._page_notes({}))
         visible = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', '', page, flags=re.S | re.I)
@@ -881,9 +960,10 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('红k＝3.6、黄k＝2', plain_text(page_assets.glossary_body(current, monitor._rule_constants())))
 
     def test_statistics_collapse_bar_shares_border_color_only_in_statistics(self):
-        self.assertIn('#signalCounts{--collapse-bg:rgba(102,134,198,.6);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page_assets.PAGE_CSS)
-        self.assertIn('#signalCounts .collapse-group{color:#fff}', page_assets.PAGE_CSS)
-        self.assertIn('--collapse-bg:rgba(46,160,67,.15)', page_assets.PAGE_CSS)
+        self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page_assets.PAGE_CSS)
+        self.assertIn('#signalCounts .collapse-group{color:var(--white)}', page_assets.PAGE_CSS)
+        self.assertIn('--collapse-bg:var(--positions-collapse)', page_assets.PAGE_CSS)
+        self.assertIn('--positions-collapse:rgba(46,160,67,.15)', page_assets.PAGE_CSS)
         self.assertNotIn('bar.appendChild(shortcut)', page_assets.RULES_INTERACTION_JS)
 
     def test_volume_adaptive_off_on_and_fixed_fallback(self):
@@ -954,7 +1034,7 @@ class RulesRegression(unittest.TestCase):
                      page_assets.PAGE_CSS, page_assets.PAGE_INTERACTION_JS):
             self.assertNotRegex(text, r"基本面|fund[_-]|FUND_")
         self.assertIn("resetQuietLists", page_assets.PAGE_INTERACTION_JS)
-        self.assertIn('mm:ack-change', page_assets.PAGE_INTERACTION_JS)
+        self.assertNotIn('mm:ack-change', page_assets.PAGE_INTERACTION_JS)
         self.assertIn("北京时间", page_assets.rules_body(got, monitor._rule_constants()))
         source = (ROOT / "edit.html").read_text(encoding="utf-8")
         self.assertNotIn('set_fund_', source)
@@ -974,7 +1054,7 @@ const context={HTMLDetailsElement:Details,Node,
   addEventListener:(k,f)=>(events[k]||=[]).push(f)},
   window:{location:{hash:''},addEventListener:(k,f)=>(windowEvents[k]||=[]).push(f)}};
 vm.createContext(context);vm.runInContext(fs.readFileSync(0,'utf8'),context);
-const sub={open:true,style:{display:''},offsetHeight:1};
+const sub={open:true,style:{display:''},offsetHeight:1,closest:()=>null};
 const card=new Details();card.open=false;card.offsetHeight=1;
 card.querySelector=()=>sub.open?sub:null;
 card.querySelectorAll=()=>sub.open?[sub]:[];
@@ -1113,23 +1193,24 @@ assert.equal(scrolledBy,-400);     // 锚点被上拽 400，反向补回原位
                         'signal-dot'):
             self.assertNotIn(retired, css)
         for active in ('.oil-state{', '.oil-reference-row', '.dca-badge',
-                       '.runbar button', '.signal-filter-condition[data-signal-level=', '.signal-name-lamp,', '.grp-arrow',
+                       '.runbar button', '.signal-filter-condition[data-signal-level=', '.signal-name-lamp{', '.grp-arrow',
                        '.arrow-rsi-up,.arrow-rsi-down', '.rule-table th.cat-col'):
             self.assertIn(active, css)
-        self.assertEqual(css.count('.stk tr:has(+tr.range52-row)>td{padding-top:5px;padding-bottom:2px}'), 1)
+        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 12px 10px;border:0;box-shadow:none}'), 1)
+        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}'), 1)
         for phase in ('busy', 'partial', 'ok', 'bad'):
             self.assertIn(f'.runlight[data-phase="{phase}"]', css)
 
     def test_multi_condition_colors_are_scoped_and_keep_single_text_and_name_lamps(self):
         css = page_assets.PAGE_CSS
-        palette = {'red': 'var(--lamp-red,#ff8580)', 'yellow': 'var(--lamp-yellow,#f0c674)', 'gray': 'var(--text)',
+        palette = {'red': 'var(--lamp-red)', 'yellow': 'var(--lamp-yellow)', 'gray': 'var(--text)',
                    'purple': 'var(--purple)', 'green': 'var(--green)'}
         for level, color in palette.items():
             selector = f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
             with self.subTest(level=level):
                 self.assertEqual(css.count(selector + '{color:' + color + '}'), 1)
         # 财报条件不是交易灯：红/黄/灰跟统计「未来15天财报」名单同一套，不能整条白字。
-        for level, color in (('red', 'var(--lamp-red,#ff8580)'), ('yellow', 'var(--lamp-yellow,#f0c674)'), ('gray', 'var(--dim)')):
+        for level, color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-yellow)'), ('gray', 'var(--dim)')):
             selector = ('#signalCounts .signal-filter-condition'
                         f'[data-signal-kind="earnings_week"][data-signal-level="{level}"]')
             with self.subTest(level=level):
@@ -1155,24 +1236,28 @@ assert.equal(scrolledBy,-400);     // 锚点被上拽 400，反向补回原位
                             for level in ('red', 'yellow', 'gray')})
         for single in (
                 '#signalCounts .signal-members-panel .note{display:inline;margin-left:6px}',
-                '#signalCounts .signal-member-direction,#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}',
+                '#signalCounts .signal-member-direction{color:var(--dim);font-size:12px}',
+                '#signalCounts .signal-member-belong{color:var(--dim);font-size:12px}',
                 '#signalCounts .signal-member-metric{margin-left:5px;color:var(--text);font-size:13px}',
                 # 名单里的描述性数值跟着这一条条件的等级走（红红字／黄黄字／白仍白字），与主表描述同一套配色
-                '#signalCounts .signal-members-panel.tone-red .signal-member-metric{color:var(--lamp-red,#ff8580)}',
-                '#signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:var(--lamp-yellow,#f0c674)}',
+                '#signalCounts .signal-members-panel.tone-red .signal-member-metric{color:var(--lamp-red)}',
+                '#signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:var(--lamp-yellow)}',
                 '#signalCounts .signal-members-panel.tone-gray .signal-member-metric{color:var(--text)}',
-                '#signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted #465e87}',
+                '#signalCounts .signal-member-jump{color:var(--text);text-decoration:none;border-bottom:1px dotted var(--list-border)}',
                 '#signalCounts .signal-members-panel p{margin:4px 0;color:var(--text)}'):
             self.assertIn(single, css, '单选文字原有颜色、字号与间距不随多选改动')
-        self.assertIn('#signalCounts .signal-name-lamp,\n'
-                      '#signalCounts .signal-members-panel li:not(.signal-member-split)::before,\n'
-                      '#signalCounts .earnings-week li::before{content:"";display:inline-block;'
+        self.assertIn('#signalCounts .signal-name-lamp{content:"";display:inline-block;'
                       'width:3px;height:12px;border-radius:1px;background:var(--name-lamp,var(--dim));'
                       'margin-right:6px;vertical-align:-1px}', css)
+        for selector in ('#signalCounts .signal-members-panel li:not(.signal-member-split)::before',
+                         '#signalCounts .earnings-week li::before'):
+            self.assertIn(selector + '{content:"";display:inline-block;width:3px;height:12px;border-radius:1px;'
+                          'background:var(--name-lamp,var(--dim));margin-right:6px;vertical-align:-1px}', css)
         for level in ('red', 'yellow', 'green', 'purple'):
             self.assertRegex(css, re.escape(f'#signalCounts .signal-name-lamp.{level}')
                              + r'[^{}]*\{--name-lamp:var\(--' + level + r'\)\}')
-        self.assertIn('#signalCounts .text-only .signal-member-list,#signalCounts .signal-name-lamp.gray{--name-lamp:#9fa3aa}', css)
+        self.assertIn('#signalCounts .signal-name-lamp.gray{--name-lamp:var(--range-track)}', css)
+        self.assertIn('--range-track:#9fa3aa', css)
 
     def test_content_hash_changes_even_with_same_size_and_mtime(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1265,8 +1350,8 @@ const result=vm.runInContext(`(()=>{
  return {normalized,errors,saved};
 })()`,context);
 const cost=fs.readFileSync('cost_panel.js','utf8');
-const bindings=cost.slice(cost.indexOf('var RULES=window.__MM_RULES__'),cost.indexOf('// 清仓通过移组完成'));
-result.bindings=input.settings.map(s=>{const c=vm.createContext({window:{__MM_RULES__:s},own:(o,k)=>Object.prototype.hasOwnProperty.call(o,k)});vm.runInContext(bindings,c);return [c.GAP_TRIGGER,c.GAP_REDUCE];});
+result.retiredBindings=!/GAP_TRIGGER|GAP_REDUCE|var RULES=window.__MM_RULES__/.test(cost);
+result.fixedNear=/nearPrice\(r\.price, lv, 3\)/.test(cost);
 process.stdout.write(JSON.stringify(result));
 '''
         result = subprocess.run([sys.executable, "-B", str(ROOT / "tests/run_all.py"), "--offline-node", "-e", script],
@@ -1278,7 +1363,8 @@ process.stdout.write(JSON.stringify(result));
         self.assertIn('布林上轨▲ + RSI 3条 ↑超买红灯红灯白灯',
                       plain_text(page_assets.rules_body(settings[0], monitor._rule_constants())))
         self.assertEqual(got["errors"], [""] * len(settings))
-        self.assertEqual(got["bindings"], [[s["trigger_gap_pct"], s["reduce_gap_pct"]] for s in settings])
+        self.assertTrue(got['retiredBindings'])
+        self.assertTrue(got['fixedNear'])
         self.assertFalse(any(key.startswith("fund_") for key in got["saved"]))
         self.assertEqual(got["saved"]["trigger_gap_pct"], 8)
         for raw, actual in zip(overrides, got["normalized"]):

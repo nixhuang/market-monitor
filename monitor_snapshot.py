@@ -8,8 +8,7 @@ import re
 SIGNAL_KINDS = (
     ("chg", "涨跌幅"), ("amp", "振幅"), ("vol_ratio", "量比"),
     ("rsi", "RSI"), ("boll", "布林"), ("boll_rsi", "布林+RSI"),
-    ("ma", "均线"), ("low52", "52周低位"),
-    ("add_price", "加仓价"), ("reduce_price", "减仓价"), ("target", "共识价"),
+    ("ma", "均线"), ("low52", "52周低位"), ("target", "共识价"),
 )
 
 
@@ -19,7 +18,12 @@ _TEXT_RSI_RE = re.compile(r"^RSI [123]条\s*[↑↓]?(超买|超卖)")
 _TEXT_BOLL_PREFIX = ("逼近布林", "触及布林", "跌破布林", "突破布林", "盘中突破布林")
 
 
-_RETIRED_SNAPSHOT_KEYS = frozenset({
+# 仅用于读入历史缓存时丢弃退役信号；不再注册分类、计数或生成新信号。
+_RETIRED_PRICE_SIGNALS = frozenset({"add_price", "reduce_price", "cost_loss"})
+_RETIRED_PRICE_TEXT = re.compile(r"^(?:(?:已跌破|距)加仓价|(?:已涨到|距)减仓价|成本浮亏)")
+
+
+_RETIRED_SNAPSHOT_KEYS = _RETIRED_PRICE_SIGNALS | frozenset({
     "fund", "fundamental", "fund_cache_note", "fund_hits", "fund_period",
     "fund_enable", "fund_rev_red", "fund_rev_yellow", "fund_om_drop", "fund_gm_drop",
     "fund_de_rise", "fund_cr_drop", "fund_roe_drop", "fund_pm_abnormal", "fund_report_grace_days",
@@ -519,12 +523,6 @@ class SnapshotBuilder:
                 for level in levels:
                     if any(k == kind and m == level for k, m in marks):
                         entry = dict(member)
-                        # 加减仓价：名单里把价位本身写出来，光看代码不知道挂在哪一档。
-                        # 用「加 325」这套跟个股行胶囊一致的缩写，不再写「加仓价」长名。
-                        if kind in ("add_price", "reduce_price"):
-                            price = self._context._level_num(d.get("trigger" if kind == "add_price" else "reduce"))
-                            if price:
-                                entry["level_price"] = ("加" if kind == "add_price" else "减") + f" {price}"
                         # 组合信号现在红黄两档都有，方向说明不能只给红
                         if kind == "boll_rsi" and level in ("red", "yellow") and d.get("boll_rsi_direction"):
                             entry["direction"] = d["boll_rsi_direction"]
@@ -568,9 +566,18 @@ class SnapshotBuilder:
             if facts is None and (out.get("signals") or out.get("signal_marks")):
                 out["technical_pending"] = True
         if "signals" in out:
-            out["signals"] = _signal_texts(out["signals"])
+            out["signals"] = [text for text in _signal_texts(out["signals"]) if not _RETIRED_PRICE_TEXT.match(text)]
         if "signal_marks" in out:
-            out["signal_marks"] = [mark for mark in _signal_marks(out["signal_marks"]) if mark[0] != "fund"]
+            marks = _signal_marks(out["signal_marks"])
+            retired_light = any(kind in _RETIRED_PRICE_SIGNALS and level == out.get("level")
+                                for kind, level in marks)
+            out["signal_marks"] = [mark for mark in marks if mark[0] != "fund" and mark[0] not in _RETIRED_PRICE_SIGNALS]
+            if retired_light and out.get("level") in ("red", "yellow"):
+                remaining = {level for _, level in out["signal_marks"]}
+                if remaining & {"red", "yellow"}:
+                    out["level"] = "red" if "red" in remaining else "yellow"
+                elif not out.get("technical_pending"):
+                    out["level"] = "green"
             retired_amp = any(kind == "amp" and level == "gray" for kind, level in out["signal_marks"])
             if retired_amp:
                 out["signal_marks"] = [mark for mark in out["signal_marks"] if mark != ("amp", "gray") and mark != ["amp", "gray"]]
@@ -663,13 +670,14 @@ class SnapshotBuilder:
                 kind: {level: [self._context._snapshot_ma_member(entry, kind, out.get("effective_settings") or {})
                                for entry in entries] if isinstance(entries, list) else entries
                        for level, entries in members.items()} if isinstance(members, dict) else members
-                for kind, members in out["signal_members"].items() if kind != "fund"
+                for kind, members in out["signal_members"].items() if kind != "fund" and kind not in _RETIRED_PRICE_SIGNALS
             }
         for field in ("items", "stocks", "text_only"):
             if isinstance(out.get(field), list):
                 out[field] = [self._context._sanitize_snapshot_fields(item) if isinstance(item, dict) else item
                               for item in out[field]
-                              if not (field == "text_only" and isinstance(item, dict) and item.get("kind") == "amp")]
+                              if not (field == "text_only" and isinstance(item, dict)
+                                      and item.get("kind") in _RETIRED_PRICE_SIGNALS | {"amp"})]
                 if field in ("items", "stocks"):
                     out[field] = [{**item, "ma_settings": item.get("ma_settings")
                                    if isinstance(item.get("ma_settings"), dict) else

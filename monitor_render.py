@@ -7,6 +7,7 @@ import math
 import os
 import re
 from datetime import timedelta
+from decimal import Decimal
 from monitor_rules import _ARROW_RSI_UP, _ARROW_RSI_DOWN
 from page_assets import COST_PANEL_HTML
 
@@ -59,7 +60,9 @@ def slim_snapshot(snapshot):
 
 
 # 个股/ETF 表统一用固定列宽，三张表（警示 / ETF / 折叠的无异动）栏位才能上下对齐
-STK_COLS = ('<colgroup><col class="c-sym"><col class="c-earn"><col class="c-px"><col class="c-sig"></colgroup>')
+STK_COLS = ('<colgroup><col class="c-sym"><col class="c-px"><col class="c-target"><col class="c-earn"><col class="c-sig"></colgroup>')
+# 持仓名单按 BASE 缓存（渲染器实例只允许持有 _context，不能把缓存挂到 self 上）
+_POSITION_SYMBOLS = {}
 
 
 # 表头已于 2026-10-15 按用户要求整行删除：各行自己写「美东 10/22 盘后」，不需要「名称｜财报」提示
@@ -89,16 +92,14 @@ _ARROW_CLASSES = (("▲", "arrow-band-up"), ("▼", "arrow-band-down"),
 # 描述分类只用于排版，灯色只认对应指标 marks，不从整行灯色或文案猜灯。
 _SIGNAL_DESCRIPTION_RULES = (
     ("rsi", re.compile(r"^RSI\b")),
-    ("boll", re.compile(r"^(?:盘中突破|突破|跌破|触及|逼近)布林[上下]轨")),
+    ("boll", re.compile(r"^(?:盘中突破|盘中跌破|突破|跌破|触及|逼近)布林[上下]轨")),
     ("boll_rsi", re.compile(r"^布林\s*\+\s*RSI")),
     ("chg", re.compile(r"^(?:异动|波动)\s*[+-]?\d")),
     ("amp", re.compile(r"^(?:日内)?振幅")),
     ("vol_ratio", re.compile(r"^(?:盘中|最近完整日)?量比")),
     ("ma", re.compile(r"^(?:日内触及|现价贴近|贴近|触及|上穿|跌破)\d+日(?:弱)?均线")),
     ("low52", re.compile(r"^(?:触及52周新低|仍在52周低位|距52周低点)")),
-    ("add_price", re.compile(r"^(?:已跌破|距)加仓价")),
-    ("reduce_price", re.compile(r"^(?:已涨到|距)减仓价")),
-    ("target", re.compile(r"^(?:距目标价|目标价|手填目标价|今日上穿目标价|今日跌破目标价|在目标价)")),
+    ("target", re.compile(r"^(?:距目标价|目标价|手填目标价|今日上穿目标价|今日跌破目标价|在目标价|现价[超低]\d|(?:上穿|跌破)\s+\d[\d.,]*\s+[+-]\d)")),
 )
 
 
@@ -161,6 +162,9 @@ def _run_light(snapshot, finished_txt):
     """首页状态灯（第三排）：个股行情失败、市场风险部分缺失、空清单或完整成功。"""
     summary = snapshot.get("summary", {})
     registered = snapshot.get("registered_counts", {})
+    finished_txt = html_lib.escape(str(finished_txt), quote=True)
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", finished_txt):
+        finished_txt = f'<span class="rt78">{finished_txt}</span>'
     # 无数据状态改叫「缺失」，避免和统计面板里「只出文字不报灯」的白灯撞名
     # （具体文案在下面按「有没有异常」拼，不再单独拼一段）
     bad = list(dict.fromkeys(summary.get("stale_symbols", []) + summary.get("missing_symbols", [])))
@@ -233,18 +237,23 @@ class PageRenderer:
                 f'aria-label="{html_lib.escape(detail, quote=True)}">定投：{n}</span>')
 
 
-    def level_note(self, trigger, reduce):
-        """标的名称下面的小标签：加仓价 = 橙色「加 325」，减仓价 = 青色「减 400」，都有就并排；都没有返回空串。
-    样式是空心胶囊，和 ETF 的实心蓝色小方标签区分开。"""
+    def level_note(self, trigger, reduce, price=None):
+        """常驻加减价描述；data-lv保留数值精度，只在现价分母的±3%内点亮，不参与判灯。"""
         parts = []
-        t, r = self._context._level_num(trigger), self._context._level_num(reduce)
-        if t:
-            parts.append(f'<span class="lvtag add">加 {t}</span>')
-        if r:
-            parts.append(f'<span class="lvtag cut">减 {r}</span>')
-        if not parts:
-            return ""
-        return f'<span class="lvs">{"".join(parts)}</span>'
+        valid_price = self._context._pos_num(price)
+        for kind, label, value in (("add", "加仓价", trigger), ("cut", "减仓价", reduce)):
+            text = self._context._level_num(value)
+            if text is None:
+                continue
+            near, distance = "0", "—"
+            if valid_price is not None:
+                p, level = Decimal(str(price)), Decimal(str(value))
+                gap = abs(p - level) * 100 / p
+                near = "1" if abs(p - level) * 100 <= p * 3 else "0"
+                distance = f"{gap:.1f}%"
+            parts.append(f'<span class="lvtag {kind} signal-item" data-lv="{value}" data-near="{near}">'
+                         f'{label} {text} · 距 {distance}</span>')
+        return "".join(parts)
 
 
     def target_tag(self, t):
@@ -252,21 +261,21 @@ class PageRenderer:
         if not t:
             return ""
         state = self._context.target_display_state(t)
-        cls = "tgt " + {"failed": "bad", "reached": "hit", "high": "high",
-                        "space": "space", "low": "low"}[state]
+        cls = {"failed": "bad", "reached": "hit", "high": "high", "space": "space", "low": "low"}[state]
         parts = []
         if state != "failed":
-            # 30/70边界附近保留小数，避免69.9%被四舍五入显示为高档70%。
             space_text = f'{t["space"]:+.1f}'.rstrip('0').rstrip('.')
-            parts.append(f'<span>{space_text}%</span>')
+            sign = "neg" if t["space"] < 0 else "pos"
+            parts.append(f'<span class="target-space" data-sign="{sign}">{space_text}%</span>')
         if self._context._pos_num(t.get("price")) is not None:
-            parts.append(f'<span>{self._context._price_text(t["price"])}</span>')
-        if state != "failed" and t.get("month"):
-            parts.append(f'<span>· {html_lib.escape(str(t["month"]))}月</span>')
+            parts.append(f'<span class="target-price">{self._context._price_text(t["price"])}</span>')
+        month = t.get("month")
+        if state != "failed" and type(month) is int and 1 <= month <= 12:
+            parts.append(f'<span class="target-month" title="{month}月">{chr(0x2460 + month - 1)}</span>')
         if state == "failed":
             parts.append('<span>获取失败</span>')
-        body = " ".join(parts)
-        return f'<span class="tgs"><span class="lvtag {cls}">{body}</span></span>'
+        return (f'<td class="tgs {cls}" data-target-state="{state}">'
+                f'<span class="lvtag tgt {cls}">{" ".join(parts)}</span></td>')
 
 
     def _grp_arrow(self, shape):
@@ -409,8 +418,6 @@ class PageRenderer:
             # 52周低位把低点价本身写出来：只说「距低点 +2.6%」看不见价格
             price = d.get("low52_price")
             return f"52周低 {price}" if price else ""
-        if kind in ("add_price", "reduce_price"):
-            return d.get("level_price") or ""
         return ""
 
 
@@ -453,7 +460,7 @@ class PageRenderer:
                 dw_txt, dw_pct = f'{dw:+.0f}', ""
             elif key == "sp500" and dw is not None:
                 dw_txt = f'{dw:+.0f}'
-                dw_pct = f' {dw / base * 100:+.1f}%' if base else ""
+                dw_pct = f' <span class="chg-num">{dw / base * 100:+.1f}%</span>' if base else ""
             else:
                 dw_txt, dw_pct = "—", ""
             label = html_lib.escape(str(it.get("name") or self._context.RISK_LABELS[key]))
@@ -462,7 +469,7 @@ class PageRenderer:
             # 数据来源（FRED / Cboe / Yahoo …）按 2026-10-15 要求不再在指标行里展示，页底仍保留整体来源说明
             rows_macro.append(
                 f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
-                f'<td class="num dim">{dw_txt}<span class="unit">周变化{dw_pct}</span></td><td>{txt}</td></tr>'
+                f'<td class="num dim">{dw_txt}<span class="unit">周{dw_pct}</span></td><td>{txt}</td></tr>'
             )
 
         # 参考行：10Y 美债一个月变化。只看利率冲击，不进 RISK_INDICATORS，不影响综合灯和有效指标数
@@ -472,17 +479,16 @@ class PageRenderer:
             uw = ut.get("delta_week")
             uw_txt = f'{uw * 100:+.0f}' if uw is not None else "—"
             ulabel = (f'{html_lib.escape(str(ut.get("name") or "10Y美债"))}'
-                      f'<span class="unit">参考</span>'
                       f'<span class="unit">{html_lib.escape(ut["date"])}</span>')
             rows_macro.append(
                 f'<tr class="{ulv}" id="ust10Ref"><td>{ulabel}</td><td class="num">{ut["value"]:.2f}%</td>'
-                f'<td class="num dim">{uw_txt}<span class="unit">周变化 bp</span></td><td>{utxt}</td></tr>')
+                f'<td class="num dim">{uw_txt}<span class="unit">周 bp</span></td><td>{utxt}</td></tr>')
         else:
-            rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债<span class="unit">参考</span></td>'
+            rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债</td>'
                               '<td colspan="3">无数据或已过期</td></tr>')
         # 纳斯达克指数参考行（2026-10-30）：展示点位与周变化，并按一周涨跌给评语（只提示下跌）。
         # 灯级只作用于本行显示，仍不进 RISK_INDICATORS、不计入综合灯与有效指标数。
-        # 指标格沿用 10Y美债的写法：「纳斯达克指数 + 参考 + 日期」三行小字。
+        # 终稿仅保留名称与日期两行；参考属性仍由行id和页底口径说明保留，不参与评分。
         nd = macro.get("nasdaq") or {}
         nd_val = self._context._pos_num(nd.get("value"))
         nd_week = nd.get("delta_week")
@@ -492,15 +498,15 @@ class PageRenderer:
             nd_lv, nd_txt = self._context.macro_status("nasdaq", nd)
             ndw_txt = f'{nd_week:+,.0f}' if nd_week is not None else "—"
             nd_base = self._context._pos_num(nd.get("week_ago"))
-            nd_pct = f' {nd_week / nd_base * 100:+.1f}%' if (nd_week is not None and nd_base) else ""
+            nd_pct = f' <span class="chg-num">{nd_week / nd_base * 100:+.1f}%</span>' if (nd_week is not None and nd_base) else ""
             rows_macro.append(
-                f'<tr class="{nd_lv}" id="nasdaqRef"><td>纳斯达克指数<span class="unit">参考</span>'
+                f'<tr class="{nd_lv}" id="nasdaqRef"><td>纳斯达克指数'
                 f'<span class="unit">{html_lib.escape(str(nd.get("date") or ""))}</span></td>'
                 f'<td class="num">{nd_val:,.2f}</td>'
-                f'<td class="num dim">{ndw_txt}<span class="unit">周变化{nd_pct}</span></td>'
+                f'<td class="num dim">{ndw_txt}<span class="unit">周{nd_pct}</span></td>'
                 f'<td>{nd_txt}</td></tr>')
         else:
-            rows_macro.append('<tr class="gray" id="nasdaqRef"><td>纳斯达克指数<span class="unit">参考</span></td>'
+            rows_macro.append('<tr class="gray" id="nasdaqRef"><td>纳斯达克指数</td>'
                               '<td colspan="3">无数据或已过期</td></tr>')
         return "".join(rows_macro)
 
@@ -541,17 +547,31 @@ class PageRenderer:
         return tag
 
 
-    def _earnings_html(self, d):
-        """财报列只写美东日期/时段与北京时间，不混入来源说明。"""
-        earn = self._context.earnings_label(d.get("earnings"))
+    def _render_day(self, snapshot):
+        """与状态灯共用最近一次运行的北京日期；离线回放不受打开页面当天影响。"""
+        finished = self._context.beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
+        asof = (snapshot.get("earnings_week") or {}).get("asof")
+        return finished[:10] if finished else asof if self._context._iso_date(asof) else self._context._bj_today()
+
+
+    def _countdown_html(self, event, today):
+        mark = self._context.earnings_countdown(event, today)
+        tbd = " tbd" if (event or {}).get("timing") not in ("pre", "post", "during") else ""
+        return f'<span class="cd{tbd}">{mark}</span>' if mark else ""
+
+
+    def _earnings_html(self, d, today=None):
+        """静态两排财报；只由前端物理量测决定是否将时段搬到第二排。"""
+        event = d.get("earnings")
+        earn = self._context.earnings_label(event, today)
         if not earn:
             return ""
-        urgency = self._context.earnings_urgency(d.get("earnings"))
+        urgency = self._context.earnings_urgency(event, today)
         soon = {"red": " urgent", "yellow": " soon"}.get(urgency, "")
-        main = html_lib.escape(earn[0])
-        sub = html_lib.escape(earn[1])
-        unit = f'<span class="unit">{sub}</span>' if sub else ""
-        return f'<span class="earn{soon}">{main}{unit}</span>'
+        main, sub = (html_lib.escape(text, quote=True) for text in earn)
+        unit = f'<span class="unit" data-unit-full="{sub}" data-timing="">{sub}</span>' if sub else ""
+        return (f'<span class="earn{soon}" data-main="{main}" data-mode="full">'
+                f'{self._countdown_html(event, today)}{main}{unit}</span>')
 
 
     def _signal_text_html(self, text):
@@ -635,16 +655,17 @@ class PageRenderer:
         if kind in ("rsi", "boll_rsi"):
             text = re.sub(r"（[≤≥][+-]?\d+(?:\.\d+)?）", "", text)
         if kind in ("boll", "boll_rsi"):
+            text = text.replace("连续第", "第").replace("（其中", "（")
             text = re.sub(r"（盘中触及\s+[^）]+）", "", text)
             price, upper, lower = d.get("price"), d.get("boll_up"), d.get("boll_dn")
             if "突破布林上轨▲" in text and valid_price(price) and valid_price(upper):
                 state = ("突破布林上轨▲，上轨外" if price > upper
                          else "盘中突破布林上轨▲后收回")
-                text = re.sub(r"(?:盘中)?突破布林上轨▲", lambda _: state, text)
+                text = re.sub(r"(?:盘中)?突破布林上轨▲(?:后收回|，上轨外)?", lambda _: state, text)
             if "跌破布林下轨▼" in text and valid_price(price) and valid_price(lower):
                 state = ("跌破布林下轨▼，下轨外" if price < lower
                          else "盘中跌破布林下轨▼后收回")
-                text = re.sub(r"(?:盘中)?跌破布林下轨▼", lambda _: state, text)
+                text = re.sub(r"(?:盘中)?跌破布林下轨▼(?:后收回|，下轨外)?", lambda _: state, text)
         if kind == "ma" and "触及" in text and "均线" in text:
             settings = d.get("ma_settings") or {}
             period = settings.get("ma_long") if "长均线" in text else settings.get("ma_short") if "短均线" in text else None
@@ -678,24 +699,47 @@ class PageRenderer:
             # 只重排主表副本，补充事实紧跟主要提醒，不改共享分组及原marks。
             groups.remove(prices[supplement])
             groups.insert(groups.index(prices[primary]) + 1, prices[supplement])
-        parts = []
-        for group in groups:
+        columns, flowing = [[], []], []
+        combo_level = ""
+        for index, group in enumerate(groups):
             kind, level, texts = group["kind"], group["level"], group["texts"]
-            # 个股描述直接展示事实，不额外前置指标名称；统计分类标签保持原样。
-            separator = " · " if kind == "boll_rsi" else "，"
-            display = separator.join(self._main_description_text(text, kind, d) for text in texts)
+            display = [self._main_description_text(text, kind, d) for text in texts]
             if kind == "boll_rsi":
                 selected = str(d.get("boll_alert_text") or next((text for text in texts if "布林" in text), ""))
                 side = "上轨" if "上轨" in selected else "下轨" if "下轨" in selected else ""
-                display = _reverse_rsi_description(display, side)
-            body = self._context.arrow_html(html_lib.escape(display))
+                display = [_reverse_rsi_description(text, side) for text in display]
             role = "primary" if kind == primary else "supplement" if kind == supplement else None
-            if parts:
-                parts.append(' <span class="signal-separator">' + ('，' if role == "supplement" else '/') + '</span> ')
-            parts.append(f'<span class="signal-item" data-signal-kind="{kind}"'
-                         + (f' data-signal-level="{level}"' if level else "")
-                         + (f' data-signal-role="{role}"' if role else "") + f'>{body}</span>')
-        return ''.join(parts) if parts else "—"
+            attrs = (f' data-signal-kind="{kind}"'
+                     + (f' data-signal-level="{level}"' if level else "")
+                     + (f' data-signal-role="{role}"' if role else ""))
+            if kind == "boll_rsi" and len(display) > 1:
+                zones = [[], []]
+                for text in display:
+                    zones[1 if re.match(r"^\s*RSI\b", text) else 0].append(text)
+                for col, zone in enumerate(zones):
+                    if zone:
+                        body = self._context.arrow_html(html_lib.escape(" · ".join(zone)))
+                        columns[col].append(f'<span class="signal-item"{attrs}>'
+                                            f'<span class="sig-zone" data-side="{("boll", "rsi")[col]}">{body}</span></span>')
+                if all(zones):
+                    combo_level = level or "gray"
+            else:
+                body = self._context.arrow_html(html_lib.escape("，".join(display)))
+                if kind in ("boll", "rsi"):
+                    columns[kind == "rsi"].append(f'<span class="signal-item"{attrs}>{body}</span>')
+                else:
+                    flowing.append(f'<span class="signal-item"{attrs} data-signal-flow="auto" '
+                                   f'data-signal-order="{index}">{body}</span>')
+        # 静态首屏保持确定性；前端只按实际列高重排auto描述，不重建文本或业务状态。
+        for item in flowing:
+            columns[0 if len(columns[0]) <= len(columns[1]) else 1].append(item)
+        columns[0].append(self._context.level_note(d.get("trigger"), None, d.get("price")))
+        columns[1].append(self._context.level_note(None, d.get("reduce") if d.get("group") == "position" else None, d.get("price")))
+        if not any(any(col) for col in columns):
+            return ""
+        combo = f' data-combo="1" data-combo-level="{combo_level}"' if combo_level else ""
+        return (f'<div class="sig-cols"{combo}>'
+                + "".join(f'<div class="sig-col">{"".join(col)}</div>' for col in columns) + '</div>')
 
 
     def _range52_row(self, d):
@@ -706,7 +750,7 @@ class PageRenderer:
         price = d.get("price")
         valid = lambda n: isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) and n > 0
         if not isinstance(value, dict):
-            return '<tr class="range52-row"><td colspan="4"><span class="range52-missing">52周区间：数据待更新</span></td></tr>'
+            return '<tr class="range52-row"><td colspan="5"><span class="range52-missing">52周区间：数据待更新</span></td></tr>'
         low, high = value.get("low"), value.get("high")
         if (not all(valid(n) for n in (price, low, high)) or not low < high or not low <= price <= high
                 or value.get("scope") not in ("52周", "可用历史")
@@ -715,7 +759,7 @@ class PageRenderer:
                 or value["from"] > value["to"] or value["to"] != d.get("data_date")
                 or value.get("position") is None or type(value["position"]) not in (int, float)
                 or not math.isfinite(value["position"])):
-            return '<tr class="range52-row"><td colspan="4"><span class="range52-missing">52周区间：数据待更新</span></td></tr>'
+            return '<tr class="range52-row"><td colspan="5"><span class="range52-missing">52周区间：数据待更新</span></td></tr>'
         pos = (price - low) / (high - low) * 100
         scope = value["scope"]
         caption = (f'{scope}低 {self._context.fmt(low)}，本轮价 {self._context.fmt(price)} 位于区间 {pos:.1f}%，'
@@ -746,7 +790,7 @@ class PageRenderer:
         high_gap_html = f'<span class="range52-gap">{high_text}</span>'
         caption += f'；从本轮价到低点 {low_text}、到高点 {high_text}（均以本轮价为基数）'
         # 现价三角之上不再写百分比：位置由三角在灰轨上的位置表达，端点下方两行给出涨跌空间。
-        return (f'<tr class="range52-row"><td colspan="4">'
+        return (f'<tr class="range52-row"><td colspan="5">'
                 f'<div class="range52-rail" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
                 f'<span class="range52-lo" aria-hidden="true">{self._context.fmt(low)}{low_gap_html}</span>'
                 f'<div class="range52-track">'
@@ -763,7 +807,7 @@ class PageRenderer:
 
 
     def _quiet_keep(self, d, earnings_week):
-        """独立于红黄灯的主表保留原因；已读降绿后仍适用。"""
+        """独立于红黄灯的主表保留原因。"""
         return bool(d.get("reference_only") or not d.get("foldable", True)
                     or self._context._target_active(d) or self._context.earnings_soon(d.get("earnings"), earnings_week))
 
@@ -776,42 +820,41 @@ class PageRenderer:
         state = self._context.target_display_state(d.get("target"))
         stripe = {"reached": "pur-hit", "space": "pur-space", "high": "pur-high"}.get(state)
         cls = d["level"] + (" pur " + stripe if self._context._target_active(d) and stripe else "")
-        # 已读只撤加/减仓价的贡献；基础灯来自结构化marks，不能从描述或紫灯反推。
-        # 旧快照的无来源红黄/缺失灰保持原样，避免把不明信号误降绿。
-        base_level = d["level"]
-        marks = d.get("signal_marks") or []
-        if base_level in ("red", "yellow") and any(
-                kind in ("add_price", "reduce_price") and level == base_level for kind, level in marks):
-            remaining = {level for kind, level in marks if kind not in ("add_price", "reduce_price")}
-            base_level = "red" if "red" in remaining else "yellow" if "yellow" in remaining else "green"
         chg_cls = "up" if (d["chg"] or 0) > 0 else (
             "down" if (d["chg"] or 0) < 0 else "")
         chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
-        note = f'<span class="note">{html_lib.escape(str(d["note"]))}</span>' if d["note"] else ""
-        lv_html = self._context.level_note(d.get("trigger"), d.get("reduce"))
+        full_note = html_lib.escape(str(d.get("note") or ""), quote=True)
+        note = f'<span class="note" data-full="{full_note}">{full_note}</span>' if full_note else ""
         tg_html = self._context.target_tag(d.get("target") or {})
+        # 灯色外框（2026-11-03）：左侧竖灯条撤掉后，整股灯级改由「代码＋中文名」**外面**
+        # 那一圈灯色框表达（红／黄／绿／白＝缺失）——不是名称后面再加一枚写着灯名的胶囊。
+        # 框色走 --lamp-line（已在 tr 上按等级定义），这里只挂等级 class 兜底。
+        lamp_cls = html_lib.escape(d["level"], quote=True)
         # 长短表示持有周期；判灯口径只由规则表定义，不在提示中硬编码另一套规则。
-        hold_html = ('<span class="unit" title="长持仓：持有周期分类；技术预警按《预警规则》执行">长</span>'
-                     if d.get("group") == "position" and str(d.get("hold") or "") == "long" else "")
+        # 长短归属已由独立分区标题表达，主行不重复加“长”字。
+        hold_html = ""
+        cost_cell = '<td class="cost-line" colspan="5" hidden></td>' if d.get("group") == "position" else ""
+        earn_html = self._context._earnings_html(d, self._render_day(snapshot))
+        earn_cell = f'<td class="lamp-earn">{earn_html}</td>' if earn_html else ""
         return (
             f'<tr class="{html_lib.escape(cls, quote=True)}" id="{self._context._stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
             f'data-symbol="{html_lib.escape(self._context.normalize_symbol(d["symbol"]), quote=True)}" '
-            f'data-base-level="{html_lib.escape(base_level, quote=True)}" '
             f'data-price="{html_lib.escape(str(d.get("price") or ""), quote=True)}" '
             f'data-prev-close="{html_lib.escape(str(d.get("prev_close") or ""), quote=True)}"><td class="sym">'
+            f'<span class="sym-box {lamp_cls}">'
             f'{html_lib.escape(self._context.normalize_symbol(d["symbol"]))}{note}{hold_html}'
-            f'{lv_html}{self._context._row_tags(d, snapshot)}</td>'
-            f'<td class="earn-cell">{self._context._earnings_html(d)}</td>'
-            f'<td class="num px"><span class="px-price">{self._context.fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
-            f'<span class="px-chg {chg_cls}">{chg_txt}</span>{tg_html}</td>'
-            f'<td class="sig">{self._context._signals_html(d)}</td></tr>'
+            f'{self._context._row_tags(d, snapshot)}</span>'
+            f'</td><td class="num px"><span class="px-main">'
+            f'<span class="px-price">{self._context.fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
+            f'<span class="px-chg {chg_cls}">{chg_txt}</span></span></td>'
+            f'{cost_cell}<td class="sig">{self._context._signals_html(d)}</td>{tg_html}{earn_cell}</tr>'
             + self._context._range52_row(d)
         )
 
 
     def _stock_rows(self, lst, snapshot, earnings_week=None):
         out = "".join(self._context._stock_row(d, snapshot, earnings_week) for d in lst)
-        return out or '<tr class="gray"><td colspan="4">今晚无异动，不用盯</td></tr>'
+        return out or '<tr class="gray"><td colspan="5">今晚无异动，不用盯</td></tr>'
 
 
     def _group_stats_html(self, g, group, items_by_symbol, enabled):
@@ -875,27 +918,25 @@ class PageRenderer:
         if shown:
             parts.append(f'<table class="stk">{self._context.STK_COLS}{self._context.STK_HEAD}{self._context._stock_rows(shown, snapshot, earnings_week)}</table>')
         if quiet:
-            parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只</summary>'
+            opened = ' open' if group['item_group'] == 'position' else ''
+            parts.append(f'<details class="quiet-list"{opened}><summary>无异动 {len(quiet)} 只</summary>'
                          f'<table class="stk">{self._context.STK_COLS}{self._context.STK_HEAD}{self._context._stock_rows(quiet, snapshot, earnings_week)}</table></details>')
         parts.append(self._context._collapse_button(collapse_id, collapse_label))
         return "\n".join(parts)
 
 
     def _position_long_zone_card(self, g, group, items_by_symbol, snapshot, earnings_week, enabled):
-        """持仓里只有「长持仓」单独成一块可折叠区；没有长持仓就不占位。
-
-    短持仓不再单包一层——展开「持仓」直接就是短持仓的表，少一次多余折叠。
-    """
+        """生成长持仓子区；短持仓由_group_card生成，空长持仓不占位。"""
         zlabel = dict(self._context.POSITION_ZONES)["long"]
         zg = [d for d in g if self._context._position_zone(d) == "long"]
         if not zg:
             return ""
         zid = "group_positions_long"
         zbody = self._context._group_body(zg, group, snapshot, earnings_week, enabled, zid, zlabel)
-        zstats = self._context._group_stats_html(zg, group, items_by_symbol, enabled)
+        zstats = '<span class="zone-num">—</span>' * 3
         return (f'<details class="zone-card" id="{zid}" open>'
                 f'<summary><span class="zone-name">{zlabel} ({len(zg)})</span>'
-                f'<span class="group-stats">{zstats}</span></summary>{zbody}</details>')
+                f'<span class="group-stats zone-stats">{zstats}</span></summary>{zbody}</details>')
 
 
     def _group_card(self, group, g, items_by_symbol, snapshot):
@@ -911,11 +952,20 @@ class PageRenderer:
             empty_note = ('本组标的已在优先分组展示，避免重复信号' if registered.get(group["key"], 0)
                           else '暂无标的，去设置页录入或导入 CSV / EBK')
         if group["key"] == "positions":
-            # 上方是「长持仓」可折叠区（没有就不出现），下方主体就是短持仓，不再多包一层
             parts.append(self._context._position_long_zone_card(g, group, items_by_symbol, snapshot, earnings_week, enabled))
             short_g = [d for d in g if self._context._position_zone(d) == "short"]
-            parts.append(self._context._group_body(short_g, group, snapshot, earnings_week, enabled,
-                                     f'group_{group["key"]}', group["label"], empty_note))
+            short_body = self._context._group_body(short_g, group, snapshot, earnings_week, enabled,
+                                                   'group_positions_short', '短持仓', empty_note)
+            nums = '<span class="zone-num">—</span>' * 3
+            parts.append(f'<details class="zone-card" id="group_positions_short" open>'
+                         f'<summary><span class="zone-name">短持仓 ({len(short_g)})</span>'
+                         f'<span class="group-stats zone-stats">{nums}</span></summary>{short_body}</details>')
+            parts.insert(0, '<div class="cashbond-row"><span class="cb-total">'
+                         '<span class="cb-total-amt">—</span><span class="cb-sep">·</span>'
+                         '<span class="cb-total-pnl">—</span></span>'
+                         '<span class="cb-item cb-cash"><span class="cb-name">现金</span><span class="cb-amt">—</span></span>'
+                         '<span class="cb-item cb-bond"><span class="cb-name">固收</span><span class="cb-amt">—</span></span></div>')
+            parts.insert(0, '<div class="cost-foot asset-row cost-manage"></div>')
         else:
             parts.append(self._context._group_body(g, group, snapshot, earnings_week, enabled,
                                      f'group_{group["key"]}', group["label"], empty_note))
@@ -1030,6 +1080,8 @@ class PageRenderer:
         except ValueError:
             return pending
         esc = lambda value: html_lib.escape(str(value), quote=True)
+        today = self._render_day(snapshot)
+        saved = (snapshot.get("earnings") or {}).get("data") or {}
         lines = []
         for entry in members:
             if (not isinstance(entry, dict) or not isinstance(entry.get("symbol"), str)
@@ -1037,8 +1089,11 @@ class PageRenderer:
                     or not self._context.earnings_within_list({"status": "ok", "date": entry.get("date")}, asof)):
                 return pending
             date = entry["date"]
-            # 财报名单只写美东日期与时段，不解释日期来源（官方／预计／估算）——2026-11-02 按用户要求去掉
-            timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(entry.get("timing"), "时段待定")
+            event = saved.get(self._context.normalize_symbol(entry["symbol"]))
+            event = dict(event) if isinstance(event, dict) and event.get("date") == date else {}
+            event.update(status="ok", date=date, timing=entry.get("timing"))
+            main, sub = self._context.earnings_label(event, today)
+            countdown = self._countdown_html(event, today)
             note = f'<span class="note">{esc(entry["note"])}</span>' if entry.get("note") else ""
             belong = self._context._member_belong(entry)   # 跟其它名单一样：分组写在代码后面的括号里，持仓分长/短
             level = entry.get("level")
@@ -1049,12 +1104,13 @@ class PageRenderer:
             lamp_text = f'<span class="lamp-text">（{lamp_name}）</span>' if lamp_name else ""
             # 名字（含中文备注）整体可点：跳到首页该股所在行，和其它灯的名单同一套 signal-member-jump
             anchor = self._context._stock_anchor_id(entry["symbol"])
-            urg = self._context.earnings_urgency({"status": "ok", "date": date, "timing": entry.get("timing")}, asof)
+            urg = self._context.earnings_urgency(event, today)
             urg_cls = {"red": " is-red", "yellow": " is-yellow"}.get(urg, "")
             lines.append(f'<li{lamp_cls}><a class="signal-member-jump" href="#{anchor}">'
                          f'<span class="signal-member-symbol">{esc(entry["symbol"])}</span>{note}</a>'
                          f'<span class="signal-member-belong">（{esc(belong)}）</span> '
-                         f'<span class="earnings-week-meta{urg_cls}">美东 {esc(date[5:].replace("-", "/"))} {timing}</span>'
+                         f'<span class="earnings-week-meta{urg_cls}">{countdown}{esc(main)}'
+                         f'<span class="earnings-week-bj">·{esc(sub)}</span></span>'
                          f'{lamp_text}</li>')
         if count_only:
             return len(lines)
@@ -1068,7 +1124,7 @@ class PageRenderer:
                 f'<ul>{"".join(lines)}</ul></details></div>')
 
 
-    def _signal_counts_card(self, snapshot):
+    def _signal_counts_card(self, snapshot, pnl_available=False):
         """各信号计数及分组明细；空计数不显示，缺失或不一致的成员等待下次更新。"""
         snapshot = self._context._merge_ma_snapshot(snapshot)
         counts = snapshot.get("signal_counts") or {}
@@ -1196,7 +1252,7 @@ class PageRenderer:
                      f'<tr class="signal-members-row"><td colspan="4">{"".join(panels)}</td></tr>')
         earnings_panel = self._context._earnings_week_panel(snapshot)
         purple_panel = self._context._target_purple_panel(snapshot)
-        if not rows and not earnings_panel and not purple_panel and (
+        if not pnl_available and not rows and not earnings_panel and not purple_panel and (
                 "target_overlays" in snapshot or not any(
                     type((snapshot.get("summary") or {}).get(level)) is int
                     and snapshot["summary"][level] > 0 for level in ("red", "yellow"))):
@@ -1273,7 +1329,7 @@ class PageRenderer:
                        for kind, f in filters.items()}
         filter_json = json.dumps(filter_data, ensure_ascii=False, separators=(",", ":"))
         filter_html = (f'<div class="signal-filter" id="signalFilterResult" role="status" '
-                       f'data-filter="{esc(filter_json)}" hidden></div>') if filter_data else ""
+                       f'data-filter="{esc(filter_json)}" hidden></div>')
         summary = snapshot.get("summary") or {}
         whole = lambda n: n if type(n) is int and n >= 0 else None
         gray_count = len({self._context.instrument_identity(m["symbol"])
@@ -1285,10 +1341,17 @@ class PageRenderer:
             (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple")
              else f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>')
             for key, name, n in totals)
+        pnl_blocks = "".join(
+            f'<div class="signal-member-block"><h5>{label}</h5>'
+            f'<ul class="signal-member-list" data-g="{key}"></ul></div>'
+            for key, label in (("gain", "浮盈"), ("loss", "浮亏"), ("cut", "减仓价"), ("add", "加仓价")))
+        pnl_panel = ('<div class="signal-extra-row pnl-extra"><span class="pnl-chip">盈亏到价</span>'
+                     '<details class="text-only pnl-detail"><summary>盈亏到价 · 0 只</summary>'
+                     f'{pnl_blocks}</details></div>')
         return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'
                 f'<span class="group-stats">{stats}</span></summary>'
                 f'{f"<table>{rows}</table>" if rows else ""}{purple_panel}'
-                f'{earnings_panel}{filter_html}'
+                f'{earnings_panel}{pnl_panel}{filter_html}'
                 f'{self._context._collapse_button("signalCounts", "统计")}</details>\n')
 
 
@@ -1362,6 +1425,25 @@ class PageRenderer:
         return cell, panel, ok
 
 
+    def _target_detail_html(self, entry, section):
+        """渲染旧快照的达到文案；只改投影，不重判旧阈值或覆盖保存事实。"""
+        text = entry["detail"]
+        space, price = entry.get("space"), entry.get("price")
+        if (section == "reached" and type(space) in (int, float) and math.isfinite(space)
+                and self._context._pos_num(price) is not None):
+            prefix = ("上穿 " if text.startswith("今日上穿") else "跌破 " if text.startswith("今日跌破")
+                      else ("现价超" if space < 0 else "现价低") if text.startswith("在") else "")
+            if prefix:
+                text = f"{prefix}{self._context._price_text(price)} {space:+.1f}%" + ("（±3% 内）" if abs(space) <= 3 else "")
+        if (section == "space" and type(space) in (int, float) and math.isfinite(space)
+                and self._context._pos_num(price) is not None):
+            text = f"{self._context._price_text(price)}，{space:+.1f}%"
+        escaped = self._context.arrow_html(html_lib.escape(text))
+        return re.sub(r"([+-]\d+(?:\.\d+)?%)",
+                      lambda match: f'<span class="percent-change {"neg" if match[0].startswith("-") else "pos"}">{match[0]}</span>',
+                      escaped, count=1)
+
+
     def _target_purple_panel(self, snapshot):
         """展开空间/达到两段；高空间紫红空心优先，达到一律紫色实心并写具体事件。"""
         overlays = snapshot.get("target_overlays")
@@ -1385,7 +1467,7 @@ class PageRenderer:
                 descending = -value if type(value) in (int, float) and math.isfinite(value) else math.inf
                 return (0 if d.get("band") == "high" else 1, descending, d["symbol"])
 
-            for section, entries, label in (("space", space, "空间"), ("reached", reached, "达到")):
+            for section, entries, label in (("reached", reached, "达到"), ("space", space, "空间")):
                 lines = []
                 ordered = sorted(entries, key=space_key if section == "space" else
                                  lambda d: (order.get(d.get("group"), len(order)), d["symbol"]))
@@ -1399,8 +1481,9 @@ class PageRenderer:
                     lines.append(f'<li{high_class}>{lead}<a class="signal-member-jump" href="#{self._context._stock_anchor_id(symbol)}">'
                                  f'<span class="signal-member-symbol">{esc(symbol)}</span>{note}</a>'
                                  f'<span class="signal-member-belong">（{esc(self._context._member_belong(d))}）</span>'
-                                 f' <span class="signal-member-direction">{self._context.arrow_html(esc(d["detail"]))}</span></li>')
-                parts.append(f'<h5>{label}</h5><ul class="signal-member-list">{"".join(lines)}</ul>')
+                                 f' <span class="signal-member-direction">{self._target_detail_html(d, section)}</span></li>')
+                parts.append(f'<div class="signal-member-block"><h5>{label}</h5>'
+                             f'<ul class="signal-member-list">{"".join(lines)}</ul></div>')
             content = "".join(parts)
         else:
             content = '<p>明细待下次更新：当前快照名单无效或有重复标的，暂不展示。</p>'
@@ -1512,15 +1595,21 @@ class PageRenderer:
 
 
     def _position_symbols(self):
-        """持仓标的符号（holdings.json 的 positions 键）。抓数时据此给持仓个股也算 20 日收益率。"""
-        try:
-            import io as _io
-            import json as _json
-            with _io.open(os.path.join(self._context.BASE, "holdings.json"), encoding="utf-8") as stream:
-                h = _json.load(stream)
-            return [str(s) for s in (h.get("positions") or {}).keys()]
-        except Exception:
-            return []
+        """持仓标的符号（holdings.json 的 positions 键）。抓数时据此给持仓个股也算 20 日收益率。
+    按 BASE 缓存成 frozenset：主表逐行都要判断「是不是持仓」，不能每行都读一次文件。"""
+        base = self._context.BASE
+        cached = _POSITION_SYMBOLS.get(base)
+        if cached is None:
+            try:
+                import io as _io
+                import json as _json
+                with _io.open(os.path.join(base, "holdings.json"), encoding="utf-8") as stream:
+                    h = _json.load(stream)
+                cached = frozenset(str(s) for s in (h.get("positions") or {}).keys())
+            except Exception:
+                cached = frozenset()
+            _POSITION_SYMBOLS[base] = cached
+        return cached
 
 
     def _cost_seed_json(self, fetched=None):
@@ -1614,10 +1703,7 @@ class PageRenderer:
 
 
     def render(self, macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
-        legacy_target_light = (any(kind == "target" and level in ("red", "yellow")
-                                   for d in items for kind, level in d.get("signal_marks") or [])
-                               or any(isinstance(d.get("target"), dict) and d["target"].get("anomaly")
-                                      for d in items))
+        original_levels = [item.get("level") for item in items]
         snapshot = self._context._sanitize_snapshot(snapshot or {})
         items = [self._context._sanitize_snapshot_fields(item) for item in items]
         overlays = self._context.target_overlay_members(items)
@@ -1628,14 +1714,21 @@ class PageRenderer:
         snapshot["signal_members"] = {**(snapshot.get("signal_members") or {}),
             "target": {"red": [], "yellow": [], "purple": union}}
         snapshot["summary"] = {**(snapshot.get("summary") or {}), "purple": len(union)}
-        if legacy_target_light:
+        if original_levels != [item.get("level") for item in items]:
             snapshot["summary"].update({level: sum(d.get("level") == level for d in items)
                                         for level in ("red", "yellow", "green", "gray")})
         risk = self._context.market_risk_summary(macro, snapshot.get("target_trade_date"))
         rows_macro = self._context._macro_rows(macro, risk)
 
         items = self._context._dedupe_items(items)
-        signal_card = self._context._signal_counts_card(snapshot)
+        # 渲染副本从同行真实事件补齐财报名单的北京/另源文案，不扩展持久化快照契约。
+        earnings = dict(snapshot.get("earnings") or {})
+        earnings["data"] = {**(earnings.get("data") or {}),
+                            **{self._context.normalize_symbol(d["symbol"]): d["earnings"]
+                               for d in items if isinstance(d.get("earnings"), dict)}}
+        snapshot["earnings"] = earnings
+        pnl_available = any(d.get("group") == "position" or d.get("trigger") for d in items)
+        signal_card = self._context._signal_counts_card(snapshot, pnl_available=pnl_available)
         items_by_group = {g["item_group"]: [] for g in self._context.GROUPS}
         for item in items:
             if item.get("group") in items_by_group:
@@ -1647,10 +1740,19 @@ class PageRenderer:
 
         # 来源与抓取间隔集中到独立名词／抓取区块；页脚只保留导航入口。
         risk_title = html_lib.escape(f"综合判断：{risk['label']} · 有效指标 {risk['valid_count']}/5")
-        macro_stats = (f'<span class="market-risk-badge" id="marketRiskLight" data-level="{risk["level"]}" '
+        # 标题灯圈统计表内指标及参考行；参考行仍不参与综合风险评分或有效指标数。
+        displayed_levels = re.findall(r'<tr class="(red|yellow)"', rows_macro)
+        _lv_count = {lv: displayed_levels.count(lv) for lv in ("red", "yellow")}
+        risk_lamps = "".join(
+            f'<span class="stat-badge {lv}" aria-label="{name}灯 {n} 项">{n}</span>'
+            for lv, name in (("red", "红"), ("yellow", "黄"))
+            if (n := _lv_count[lv])
+        )
+        macro_stats = (risk_lamps
+                       + f'<span class="market-risk-badge" id="marketRiskLight" data-level="{risk["level"]}" '
                        f'role="status" aria-label="{risk_title}">'
                        f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
-                       f'综合：{html_lib.escape(risk["label"])}</span>')
+                       f'{html_lib.escape(risk["label"])}</span>')
         dca_title = self._context.dca_badge(snapshot.get("dca_reminder"))  # 顶栏最右侧（2026-10-19：从市场风险标题挪过来）
         # 只把前端会读的字段内联进页面（见 slim_snapshot 的说明）：页面体积 −131KB，
         # 状态核验用到的 run_id / request_id / config_files / source_sha 全部保留。
@@ -1660,6 +1762,9 @@ class PageRenderer:
         finished_txt = finished_iso[:16].replace("T", " ") if finished_iso else "未记录"
         # 一行摘要升级为状态灯文案（首页第三排）
         init_light_phase, init_light = self._context._run_light(snapshot, finished_txt)
+        # SSR 与状态脚本共享时间字号协议；首次加载不依赖异步状态请求补样式。
+        init_light = re.sub(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}",
+                            lambda m: '<span class="run-timestamp">' + m[0] + '</span>', init_light)
         # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
         ny_now = self._context.datetime.now(self._context.US_TZ)
         bj_auto = "夏令时次日 08:15" if ny_now.dst() != timedelta(0) else "冬令时次日 09:15"
@@ -1721,20 +1826,25 @@ class PageRenderer:
 
 {('<div class="warn">本轮标的均未取得可用报价；可能是接口故障、异常行情或抓取时间预算不足，请查看个股原因。宏观数据另行展示。</div>' if data_down else "")}
 
-{cost_panel if signal_card else ""}
-{signal_card}
-<details class="card macro-card" id="macroCard">
-<summary class="grp"><span class="grp-name">市场风险</span><span class="group-stats">{macro_stats}</span></summary>
-<p class="macro-help" id="marketRiskReason">{html_lib.escape(risk['text'])} · 有效指标 {risk['valid_count']}/5</p>
-<table>
+{cost_panel}
+<div class="dual-row" id="dualRow">
+<details class="card group-card day-pnl-card cost-manage" id="dayPnlCard">
+<summary class="grp dp-head"><span class="grp-name">当日</span><span class="dp-nums"><b class="dp-amt">—</b><b class="dp-pct">—</b></span></summary>
+</details>
+<details class="card group-card macro-card" id="macroCard">
+<summary class="grp"><span class="grp-name">风险</span><span class="group-stats">{macro_stats}</span></summary>
+</details>
+<div class="dual-body macro-scope" data-owner="" hidden>
+<ul class="cost-contrib" data-owner="day" hidden></ul>
+<p class="macro-help" id="marketRiskReason" data-owner="macro" hidden>{html_lib.escape(risk['text'])} · 有效指标 {risk['valid_count']}/5</p>
+<table data-owner="macro" hidden>
 <tr class="gray mh"><td style="color:var(--dim)">指标</td><td class="num" style="color:var(--dim)">当前</td><td class="num" style="color:var(--dim)">变化</td><td style="color:var(--dim)">状态</td></tr>
 {rows_macro}
 {self._context._oil_reference_row(snapshot)}
 </table>
-{self._context._collapse_button("macroCard", "市场风险")}
-</details>
+</div></div>
 
-{cost_panel if not signal_card else ""}
+{signal_card}
 {group_cards}
 
 <div class="acts">
