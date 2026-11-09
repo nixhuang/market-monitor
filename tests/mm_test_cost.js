@@ -177,6 +177,7 @@ function makeDocument(opts={}){
     const rail=new Element('tr',doc);rail.className='range52-row';rail.innerHTML='<td><span class="range52-rail" aria-label="50.00低，本轮价 100.00 位于区间 50%，本轮高 150.00"><span class="range52-track"></span></span></td>';table.appendChild(rail);
   }
   for(const [sym,group] of Object.entries(opts.groups||{}))moveRow(doc,sym,group);
+  if(opts.withSub){const sub=doc.createElement('div');sub.className='sub';doc.body.insertBefore(sub,doc.body.firstChild);}
   if(opts.prepareDocument)opts.prepareDocument(doc);
   return doc;
 }
@@ -254,6 +255,58 @@ async function finishPush(b,status=200){
   const put=b.puts().at(-1);assert.ok(put);b.respond(put,status===200?{}:{message:'模拟失败'},status);await settle();return put;
 }
 const tests=[];function test(name,fn){tests.push({name,fn});}
+function assertReadOnlySmall(b){
+  const panel=b.doc.getElementById('costManage');
+  assert.equal(b.doc.getElementById('costSyncState').textContent,'本页只读');
+  assert.equal(panel.classList.contains('cost-edit-open'),false);
+  assert.equal(b.doc.getElementById('costActs').hidden,true);
+  assert.equal(b.doc.getElementById('costNotice').hidden,true);
+  assert.equal(b.doc.getElementById('costEditBtn').getAttribute('aria-pressed'),'false');
+  assert.equal(b.state().editing,false);assert.equal(b.state().writer,false);
+  assert.equal(b.state().positionsAuthorized,false);assert.equal(b.puts().length,0);
+}
+test('锁只读仅顶部小状态无框，原接管/取消路径读取最新仓位且无PUT',async()=>{
+  assert.match(CSS,/\.cost-state \.warn,\.cost-state \.ok,\.cost-state \.dim\{background:none;border:0;padding:0;margin:0;border-radius:0/);
+  const owner=await boot({withSub:true});owner.respond(owner.requests[0],meta(SEED));await settle();
+  const b=await boot({store:owner.store,withSub:true});assertReadOnlySmall(b);
+  for(let i=0;i<4;i++){await b.enter();b.fireWindow('focus');b.doc.fire('visibilitychange');}
+  assertReadOnlySmall(b);assert.equal(b.requests.length,0);
+  await owner.dispose();assert.equal(b.state().writer,false);assert.equal(b.requests.length,0,'不新增后台waiter或自动接管');
+  await b.enter();assert.equal(b.state().writer,true);assert.equal(b.state().editing,true);assert.equal(b.requests.length,1);
+  b.doc.getElementById('costCancel').click();await settle();assert.equal(b.state().editing,false);
+  const remote={...copy(SEED),cash:333,items:{AAA:{qty:20,cost:12}}};b.respond(b.requests.at(-1),meta(remote));await settle();
+  assert.equal(b.state().DATA.cash,333);assert.equal(b.state().DATA.items.AAA.qty,20);assert.equal(b.state().DATA.items.BBB,undefined);
+  assert.equal(b.state().positionSave,null);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().queued,false);
+  await b.tick(180000);assert.equal(b.puts().length,0);
+  assert.equal(b.doc.getElementById('costSyncState').textContent,'已同步');
+  await b.enter();b.edit('AAA','qty','88');b.doc.getElementById('costCancel').click();
+  assert.equal(b.state().DATA.items.AAA.qty,20);assert.equal(b.doc.getElementById('costManage').classList.contains('cost-edit-open'),false);
+  await b.enter();assert.equal(b.state().editing,true);assert.equal(b.state().positionsAuthorized,false);await b.dispose();
+});
+test('锁request拒绝也仅顶部本页只读无框，数据读取错误仍可见且无请求授权',async()=>{
+  for(const message of ['SecurityError','AbortError','无法保持跨标签页写锁']){
+    const store=shared({[LOCAL]:SEED});store.locks.request=()=>Promise.reject(Error(message));
+    const b=await boot({store,withSub:true});assertReadOnlySmall(b);
+    assert.equal(b.state().NOTICE,'本页只读');assert.equal(b.requests.length,0);
+    await b.enter();assertReadOnlySmall(b);assert.equal(b.requests.length,0);
+    store.failGet.add(LOCAL);b.fireWindow('storage',{key:LOCAL});
+    assert.match(b.doc.getElementById('costNotice').textContent,/本地数据读取失败/);
+    assert.equal(b.doc.getElementById('costNotice').hidden,false);assert.equal(b.state().editing,false);
+    store.failGet.clear();b.fireWindow('storage',{key:LOCAL});assertReadOnlySmall(b);
+    await b.dispose();assert.equal(b.state().writer,false);assert.equal(b.puts().length,0);
+  }
+});
+test('只读真正存储和GET校验错误仍可见，不能当普通锁提示丢弃',async()=>{
+  const owner=await boot(),b=await boot({store:owner.store,withSub:true});assertReadOnlySmall(b);
+  owner.store.failGet.add(LOCAL);b.fireWindow('storage',{key:LOCAL});
+  assert.match(b.doc.getElementById('costNotice').textContent,/本地数据读取失败/);
+  assert.equal(b.doc.getElementById('costNotice').hidden,false);assert.equal(b.doc.getElementById('costActs').hidden,false);
+  assert.equal(b.state().editing,false);owner.store.failGet.clear();b.fireWindow('storage',{key:LOCAL});assertReadOnlySmall(b);
+  await owner.dispose();await b.enter();b.doc.getElementById('costCancel').click();await settle();
+  b.respond(b.requests.at(-1),meta({items:{AAA:{qty:-1}}}));await settle();
+  assert.match(b.doc.getElementById('costNotice').textContent,/云端数据校验失败/);
+  assert.equal(b.doc.getElementById('costNotice').hidden,false);assert.equal(b.puts().length,0);await b.dispose();
+});
 const meta = (data,sha='remote-sha') => ({sha,content:Buffer.from(JSON.stringify(data)).toString('base64')});
 const staleAck = () => ({...copy(SEED),acks:{'AAA|loss10':'2026-10-19T00:00:00Z'},
   ack_contexts:{'AAA|loss10':{at:'2026-10-19T00:00:00Z',quote_date:'2026-10-18',rule_version:'["cost-ack-v1","loss10",10,null]'}}});

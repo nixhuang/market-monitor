@@ -934,7 +934,7 @@ class PageRenderer:
         zid = "group_positions_long"
         zbody = self._context._group_body(zg, group, snapshot, earnings_week, enabled, zid, zlabel)
         zstats = '<span class="zone-num">—</span>' * 3
-        return (f'<details class="zone-card" id="{zid}" open>'
+        return (f'<details class="zone-card" id="{zid}">'
                 f'<summary><span class="zone-name">{zlabel} ({len(zg)})</span>'
                 f'<span class="group-stats zone-stats">{zstats}</span></summary>{zbody}</details>')
 
@@ -957,7 +957,7 @@ class PageRenderer:
             short_body = self._context._group_body(short_g, group, snapshot, earnings_week, enabled,
                                                    'group_positions_short', '短持仓', empty_note)
             nums = '<span class="zone-num">—</span>' * 3
-            parts.append(f'<details class="zone-card" id="group_positions_short" open>'
+            parts.append(f'<details class="zone-card" id="group_positions_short">'
                          f'<summary><span class="zone-name">短持仓 ({len(short_g)})</span>'
                          f'<span class="group-stats zone-stats">{nums}</span></summary>{short_body}</details>')
             parts.insert(0, '<div class="cashbond-row"><span class="cb-total">'
@@ -971,8 +971,9 @@ class PageRenderer:
                                      f'group_{group["key"]}', group["label"], empty_note))
         body = "\n".join(parts)
         stats = self._context._group_stats_html(g, group, items_by_symbol, enabled)
-        # 打开网页时只展开「统计」；所有分组（含持仓、重点）默认折叠。持仓点开后长/短两区默认展开。
-        return (f'<details class="card group-card" id="group_{html_lib.escape(str(group["key"]), quote=True)}">'
+        # 终稿初载：统计与持仓父组展开，长/短子区折叠；无异动持仓列表静态open。
+        initial_open = ' open' if group['key'] == 'positions' else ''
+        return (f'<details class="card group-card" id="group_{html_lib.escape(str(group["key"]), quote=True)}"{initial_open}>'
                 f'<summary class="grp"><span class="grp-name">{html_lib.escape(str(group["label"]))} ({len(g)})</span>'
                 f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
 

@@ -9,6 +9,7 @@
     var LS_TOKEN = 'mm_gh_token_v1',
       LS_SORT = 'mm_position_sort_v1',
       LOCK_NAME = 'mm-position-writer-v2';
+    var READ_ONLY_NOTICE = '本页只读';
     var SCHEMA_VERSION = 2,
       SESSION_LOCAL = 'mm_position_costs_preview_v2';
     var isolated = location.protocol === 'file:' || !(navigator.locks && navigator.locks.request);
@@ -963,7 +964,7 @@
         .request(LOCK_NAME, { mode: 'exclusive', ifAvailable: true }, function (lock) {
           acquiring = false;
           if (!lock || disposed) {
-            NOTICE = '另一标签页正在管理仓位，本页只读；关闭该页后点击编辑接管';
+            NOTICE = READ_ONLY_NOTICE;
             cb(false);
             return;
           }
@@ -991,7 +992,7 @@
           acquiring = false;
           writer = false;
           releaseWriter = null;
-          NOTICE = '无法保持跨标签页写锁，本页只读';
+          NOTICE = READ_ONLY_NOTICE;
           cb(false);
         });
     }
@@ -1091,14 +1092,14 @@
           })
           .join('；') ||
         draftNotice() ||
-        NOTICE ||
+        (NOTICE === READ_ONLY_NOTICE ? '' : NOTICE) ||
         (SYNC === 'error' ? SYNC_MSG : '');
       var notice = panel.querySelector('#costNotice');
       if (notice) {
         notice.textContent = text;
         notice.hidden = !text;
       }
-      // 真实校验、离线和持久化错误不能随非编辑面板一起隐藏。
+      // 锁占用或锁异常只读仅用顶部小状态；真实校验、离线及持久化错误仍须可见。
       panel.classList.toggle('cost-edit-open', editing || !!text);
       if (text && !panel.open) panel.open = true;
       if (actsEl) actsEl.hidden = !editing && !text;
@@ -1948,7 +1949,7 @@
           : isolated
             ? '<span class="warn">隔离预览 · 不上传</span>'
             : !writer
-              ? '<span class="warn">只读标签页</span>'
+              ? '<span class="dim">本页只读</span>'
               : SYNC === 'pulling'
                 ? '<span class="warn">拉取中…</span>'
                 : SYNC === 'loading'

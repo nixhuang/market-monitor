@@ -7069,11 +7069,14 @@ class TestPositionZones(unittest.TestCase):
         return monitor._group_card(self.positions_group(), items, {}, {})
 
     def test_long_and_short_zones_have_independent_totals_and_collapse(self):
-        """11-09终稿：双子区常驻，各自收起；外层不再重复一条收起按钮。"""
+        """终稿r36：双子区常驻且默认折叠，独立数字和收起按钮保留。"""
         out = self.card([self.item('AAA', 'green', 'long'),
                          self.item('BBB', 'red', 'short'), self.item('CCC', 'yellow')])
-        self.assertEqual(re.findall(r'<details class="zone-card" id="([^"]+)" open>', out),
+        self.assertEqual(re.findall(r'<details class="zone-card" id="([^"]+)">', out),
                          ['group_positions_long', 'group_positions_short'])
+        self.assertNotRegex(out, r'<details class="zone-card"[^>]*\bopen\b')
+        self.assertIn('<details class="card group-card" id="group_positions" open>', out)
+        self.assertIn('<details class="quiet-list" open>', out)
         self.assertEqual(re.findall(r'<span class="zone-name">([^<]+)</span>', out),
                          ['长持仓 (1)', '短持仓 (2)'])
         self.assertEqual(out.count('class="zone-num"'), 6)
@@ -7617,7 +7620,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             page = monitor.render({}, rows, len(rows), snapshot=snap)
             technology = page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
             self.assertTrue(technology.startswith('>'))  # 近期财报不自动展开分类，用户点开后才看到
-            self.assertEqual(re.findall(r'<details class="card[^"]*" id="(\w+)" open>', page), ['signalCounts'])  # 只默认展开统计
+            self.assertEqual(re.findall(r'<details class="card[^"]*" id="(\w+)" open>', page), ['signalCounts', 'group_positions'])  # 终稿初载统计与持仓父组展开，其他分类仍折叠
             self.assertRegex(technology.split('<details class="quiet-list"')[0],
                                 r'<td class="sym"><span class="sym-box \w+">AAPL')
             self.assertIn('无异动 1 只', technology)

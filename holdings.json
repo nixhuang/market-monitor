@@ -64,7 +64,7 @@
     "NTNX": {
       "note": "混合云",
       "hold": "short",
-      "cost": 58.27
+      "cost": 63.23
     },
     "UNH": {
       "note": "联合健康",
@@ -84,7 +84,7 @@
     "SPYM": {
       "note": "标普500指数",
       "hold": "long",
-      "cost": 88.77
+      "cost": 88.78
     },
     "SCHD": {
       "note": "嘉信红利",
@@ -115,6 +115,10 @@
       "note": "拼多多",
       "hold": "short",
       "cost": 79
+    },
+    "AAPL": {
+      "note": "苹果",
+      "cost": 325.03
     }
   },
   "focus": {
