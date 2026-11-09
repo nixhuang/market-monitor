@@ -1723,23 +1723,47 @@ if '--chrome' in sys.argv:
                           range52={'low': _low, 'high': _high, 'scope': '52周', 'from': '2025-10-27',
                                    'to': '2026-10-26', 'position': (_price - _low) / (_high - _low) * 100})
         _range_rows.append(_range_row)
-    with _patch.object(monitor, 'global_dca', return_value=None):
-        _range_snapshot = monitor.build_snapshot({}, _range_rows, {}, group_counts={})
-        _range_page = monitor.render({}, _range_rows, len(_range_rows), snapshot=_range_snapshot)
-    # 52周页顺带带上成本面板：给两行合成持仓（成本/数量都是假数），
-    # 这样同一页还能验「编辑」胶囊加大、贴右、手机上不错行；仍是纯合成数据，不碰本机或云端。
+    # 通过正式渲染入口注入两行合成持仓，不对JS源码的空白/换行做替换。
     _range_seed = {"asof": "2026-10-26", "cash": 0, "cash_extra": 0, "fixed": 0, "fixed_cost": 0,
                    "items": {"RANGENORM": {"cost": 125.0, "qty": 10}, "RANGEHI": {"cost": 600.0, "qty": 5}},
                    "rs20": None}
-    _range_page = re.sub(r'var REAL=.*?;\n',
-                         lambda m: 'var REAL=' + monitor.json_script(_range_seed) + ';\n', _range_page, count=1)
-    if 'var REAL=' + monitor.json_script(_range_seed) + ';' not in _range_page:
-        raise AssertionError('52周页缺少合成成本种子，拒绝启动浏览器')
-    _expected_browser_seed = monitor.json_script(
-        {"asof": "", "cash": 0, "cash_extra": 0, "fixed": 0, "fixed_cost": 0, "items": {}, "rs20": None})
-    if 'var REAL=' + _expected_browser_seed + ';' not in _description_page:
-        raise AssertionError('浏览器输入缺少合成仓位种子，拒绝启动')
-    check(True, '浏览器输入只包含空合成仓位种子，不嵌入本机或云端仓位')
+    with _patch.object(monitor, 'global_dca', return_value=None), \
+            _patch.object(monitor, '_cost_seed_json', return_value=monitor.json_script(_range_seed)):
+        _range_snapshot = monitor.build_snapshot({}, _range_rows, {}, group_counts={})
+        _range_page = monitor.render({}, _range_rows, len(_range_rows), snapshot=_range_snapshot)
+    _expected_browser_seed = {
+        "asof": "", "cash": 0, "cash_extra": 0, "fixed": 0, "fixed_cost": 0, "items": {}, "rs20": None}
+
+    def _assert_browser_seed(page, expected, label):
+        declarations = list(re.finditer(r'\bvar\s+REAL\s*=\s*', page))
+        if len(declarations) != 1:
+            raise AssertionError(label + '必须且只能包含一个合成成本种子，拒绝启动浏览器')
+        tail = page[declarations[0].end():]
+        seed, end = _json.JSONDecoder().raw_decode(tail)
+        if not tail[end:].lstrip().startswith(';') or seed != expected:
+            raise AssertionError(label + '成本种子不是预期合成JSON，拒绝启动浏览器')
+
+    for _seed_declaration in ('var REAL=', '    var REAL = ', 'var\tREAL\n=\n'):
+        _assert_browser_seed(_seed_declaration + monitor.json_script(_expected_browser_seed) + ' ;',
+                             _expected_browser_seed, '合法空白回归')
+    check(True, '种子验证兼容合法缩进、空格及换行，不依赖源码格式')
+    for _invalid_seed_source in ('', 'var REAL={};', 'var REAL={} var next=1;',
+                                 'var REAL={};var REAL={};'):
+        try:
+            _assert_browser_seed(_invalid_seed_source, _expected_browser_seed, '拒绝回归')
+        except (AssertionError, ValueError):
+            pass
+        else:
+            raise AssertionError('种子缺失/不匹配/重复或缺少分号未被拒绝')
+    check(True, '种子缺失、不匹配、重复及非法声明仍严格拒绝')
+
+    for _browser_page, _browser_seed, _browser_label in (
+            (_description_page, _expected_browser_seed, '目标/刷新页'),
+            (_color_page, _expected_browser_seed, '颜色页'),
+            (_range_page, _range_seed, '52周页'),
+            (_unsafe_page, _json.loads(_seed_text), '注入安全页')):
+        _assert_browser_seed(_browser_page, _browser_seed, _browser_label)
+        check(True, _browser_label + '成本种子JSON与预期合成输入完全一致，不嵌入真实仓位')
     import subprocess as _subprocess
     import tempfile as _tempfile
     _chrome = os.environ.get('MM_TEST_CHROME', 'C:/Program Files/Google/Chrome/Application/chrome.exe')
@@ -1747,6 +1771,19 @@ if '--chrome' in sys.argv:
 const fs = require('node:fs');
 const {spawn} = require('node:child_process');
 const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+// 使用正式无Web Locks隔离分支，而非已退役的REAL.preview。每份文档独立内存存储，
+// 不包装fetch：任何意外云请求仍由CDP拦截并使末尾网络门禁失败。
+const isolateScript = `<script>(()=>{
+  const memory=()=>{const m=new Map();return {getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),clear:()=>m.clear(),key:i=>[...m.keys()][i]||null,get length(){return m.size;}};};
+  Object.defineProperty(window,'localStorage',{configurable:true,value:memory()});
+  Object.defineProperty(window,'sessionStorage',{configurable:true,value:memory()});
+  Object.defineProperty(navigator,'locks',{configurable:true,value:undefined});
+  window.__testCostPainted=0;
+  document.addEventListener('cost:painted',()=>window.__testCostPainted++);
+})();</script>`;
+const syntheticPage = html => html.replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
+  .replace(/<link\b[^>]*>/gi,'').replace(/<head\b[^>]*>/i, match=>match+isolateScript)
+  .replace('</head>','<link rel="icon" href="data:,"></head>');
 // 四组浏览器回归共享手机/平板横竖屏及桌面视口，禁止各自维护宽度。
 const VIEWPORTS = Object.freeze([
   [440, 956], [956, 440], [744, 1133], [1133, 744], [1440, 1000], [1920, 1080]
@@ -1831,19 +1868,35 @@ const deadline = setTimeout(() => {
     await cdp('Network.emulateNetworkConditions', {offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0});
     await cdp('Fetch.enable', {patterns: [{urlPattern: '*'}]});
     const tree = await cdp('Page.getFrameTree');
-    await cdp('Page.setDocumentContent', {frameId: tree.frameTree.frame.id, html: input.html});
+    await cdp('Page.setDocumentContent', {frameId: tree.frameTree.frame.id, html: syntheticPage(input.html)});
     const evaluate = async expression => {
       const result = await cdp('Runtime.evaluate', {expression, returnByValue: true, awaitPromise: true});
       if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
       return result.result.value;
     };
+    const settled = () => evaluate(`(async () => {
+      await document.fonts.ready;
+      const start=performance.now();let previous='',since=start;
+      while(performance.now()-start<5000){
+        await new Promise(resolve=>requestAnimationFrame(resolve));
+        const current=JSON.stringify([...document.querySelectorAll('table.stk tr[data-symbol],.range52-rail,.cashbond-row')].map(e=>{
+          const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height,e.textContent];}));
+        if(current!==previous){previous=current;since=performance.now();}
+        if(window.__testCostPainted>0&&performance.now()-since>=100)return;
+      }
+      throw Error('cost:painted/字体/布局未在5秒内稳定');
+    })()`);
+    await settled();
     const isolation = await evaluate(`(async () => {
       let blocked = false;
       try { await fetch('http://127.0.0.1:65530/offline-probe'); } catch (_) { blocked = true; }
-      return {href: location.href, origin: location.origin, blocked};
+      return {href: location.href, origin: location.origin, blocked,
+        isolated:!(navigator.locks&&navigator.locks.request),painted:window.__testCostPainted,
+        tokenPresent:localStorage.getItem('mm_gh_token_v1')!==null};
     })()`);
     isolation.requestFailures = failedRequests;
     assertions.push({ok: isolation.href === 'about:blank' && isolation.origin === 'null' && isolation.blocked
+      && isolation.isolated && isolation.painted>0 && !isolation.tokenPresent
       && failedRequests.includes('net::ERR_INTERNET_DISCONNECTED'),
       name: '独立Chrome内存页与请求阻断', actual: isolation});
     const clickSummary = async () => {
@@ -1859,6 +1912,7 @@ const deadline = setTimeout(() => {
     };
     for (const [width, height] of VIEWPORTS) {
       await cdp('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
+      await settled();
       const openedBefore = await evaluate(`document.getElementById('signalCounts').open`);
       const openedAfterClick = await clickSummary();
       const openedAfterSecondClick = await clickSummary();
@@ -1878,8 +1932,9 @@ const deadline = setTimeout(() => {
         'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn'])
         && header.count === String(header.expected) && header.border === 'rgb(176, 132, 255)' && !header.overflow,
         name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
+      await evaluate(`document.querySelectorAll('details.group-card,details.quiet-list').forEach(el => el.open = true)`);
+      await settled();
       const actual = await evaluate(`(() => {
-        document.querySelectorAll('details.group-card,details.quiet-list').forEach(el => el.open = true);
         const high = document.querySelector('#s-thigh .lvtag.tgt.high');
         const space = document.querySelector('#s-tspace .lvtag.tgt.space');
         const hit = document.querySelector('#s-tboth .lvtag.tgt.hit');
@@ -1912,8 +1967,8 @@ const deadline = setTimeout(() => {
         for (const [state, capsule] of [['space', space], ['high', high], ['hit', hit]]) {
           const row = capsule.closest('tr');
           const originalClass = row.className;
-          for (const [level, width, color] of [['red', 4, 'rgb(248, 81, 73)'],   // 红灯条已与黄灯条等宽
-              ['yellow', 4, 'rgb(210, 153, 34)'], ['green', 2, 'rgb(63, 185, 80)']]) {
+          for (const [level, width, color] of [['red', 2, 'rgb(248, 81, 73)'],
+              ['yellow', 2, 'rgb(210, 153, 34)'], ['green', 2, 'rgb(63, 185, 80)']]) {
             row.className = originalClass.replace(/\\b(red|yellow|green|gray)\\b/, level);
             const sig = style(row.querySelector('td.sig'));
             // 灯条 2026-11-03 起画在整行的 ::before 上（卡片版式里 td.sym 只有头部行那一格高，
@@ -1923,7 +1978,7 @@ const deadline = setTimeout(() => {
             const continuation = style(row.nextElementSibling.firstElementChild);
             stripes.push({state, level, width, color, sigImage: sig.backgroundImage,
               sigShadow: sig.boxShadow, rowColor: bar.backgroundColor, rowWidth: bar.width,
-              rowContent: bar.content,
+              rowContent: bar.content, rowTop:bar.top, rowHeight:bar.height,
               leftImage: left.backgroundImage, leftShadow: left.boxShadow,
               rangeImage: continuation.backgroundImage, rangeSize: continuation.backgroundSize,
               rangePosition: continuation.backgroundPosition});
@@ -1933,13 +1988,17 @@ const deadline = setTimeout(() => {
         return {
           stripes, sparseBorders: [sparseBorder(low), sparseBorder(bad)],
           highColor: style(high).color,
-          highNumbers: [...high.querySelectorAll('span')].map(el => style(el).color),
-          highBorder: getComputedStyle(high, '::after').borderTopColor,
-          highBorderWidth: getComputedStyle(high, '::after').borderTopWidth,
+          highNumbers: [...high.querySelectorAll('.target-price,.target-month')].map(el => style(el).color),
+          highPercent:style(high.querySelector('.target-space')).color,
+          highSign:high.querySelector('.target-space').dataset.sign,
+          highBorder: getComputedStyle(high.closest('td.tgs'), '::before').borderTopColor,
+          highBorderWidth: getComputedStyle(high.closest('td.tgs'), '::before').borderTopWidth,
+          highFrame:{inset:['top','right','bottom','left'].map(k=>getComputedStyle(high.closest('td.tgs'),'::before')[k]),radius:getComputedStyle(high.closest('td.tgs'),'::before').borderTopLeftRadius},
           highShadow: style(high).textShadow,
           originalSize, priorSize,
-          spaceColor: style(space).color, spaceBorder: getComputedStyle(space, '::after').borderTopColor,
-          hitColor: style(hit).color, hitBackground: style(hit).backgroundColor,
+          spaceColor: style(space).color, spaceBorder: getComputedStyle(space.closest('td.tgs'), '::before').borderTopColor,
+          hitColor: style(hit).color, hitBackground: getComputedStyle(hit.closest('td.tgs'), '::before').backgroundColor,
+          hitFrame: {border:getComputedStyle(hit.closest('td.tgs'),'::before').borderTopWidth,radius:getComputedStyle(hit.closest('td.tgs'),'::before').borderTopLeftRadius},
           hitAfter: getComputedStyle(hit, '::after').content,
           hitClass: hit.closest('tr').className,
           badColor: style(bad).color, badBorderStyle: style(bad).borderTopStyle,
@@ -1951,16 +2010,20 @@ const deadline = setTimeout(() => {
       })()`);
       const pink = 'rgb(220, 98, 184)';
       assertions.push({ok: actual.highColor === pink && actual.highBorder === pink
-        && actual.highNumbers.length >= 2 && actual.highNumbers.every(color => color === pink)
-        && actual.highShadow.includes(pink) && parseFloat(actual.highBorderWidth) > 0,
-        name: width + 'px真实CSS高空间外框、数字及等宽加重同色#dc62b8', actual});
+        && actual.highNumbers.length >= 1 && actual.highNumbers.every(color => color === pink)
+        && actual.highSign === 'pos' && actual.highPercent === 'rgb(77, 208, 225)'
+        && actual.highShadow.includes(pink) && actual.highBorderWidth === '1px'
+        && JSON.stringify(actual.highFrame.inset) === JSON.stringify(['2px','0px','2px','-1px'])
+        && actual.highFrame.radius === '3px',
+        name: width + 'px终稿高空间框位于tgs、目标价格粉色加重、正空间百分比青色', actual});
       assertions.push({ok: actual.originalSize[0] > 0 && actual.originalSize[1] > 0
         && JSON.stringify(actual.originalSize) === JSON.stringify(actual.priorSize)
         && actual.spaceColor === 'rgb(176, 132, 255)' && actual.spaceBorder === 'rgb(176, 132, 255)'
-        && actual.hitColor === 'rgb(255, 255, 255)' && actual.hitBackground === 'rgb(137, 87, 229)'
+        && actual.hitColor === 'rgb(255, 255, 255)' && actual.hitBackground === 'rgb(90, 71, 151)'
+        && actual.hitFrame.border === '0px' && actual.hitFrame.radius === '0px'
         && actual.hitAfter === 'none' && actual.hitClass.includes('pur-hit') && !actual.hitClass.includes('pur-high')
-        && actual.badColor === 'rgb(139, 147, 161)' && actual.badBorderStyle === 'solid'
-        && actual.lowBorder === 'rgba(0, 0, 0, 0)'
+        && actual.badColor === 'rgb(139, 147, 161)' && actual.badBorderStyle === 'none'
+        && actual.sparseBorders[0].width === '0px' && actual.sparseBorders[0].afterContent === 'none'
         && !actual.sig.includes('共识') && !actual.manual.includes('目标价') && !actual.manual.includes('共识价')
         && actual.runbarRuleLinks === 0,
         name: width + 'px尺寸不变、达到优先、失败灰虚线及描述过滤', actual: {
@@ -1969,25 +2032,24 @@ const deadline = setTimeout(() => {
           sig: actual.sig, manual: actual.manual, runbarRuleLinks: actual.runbarRuleLinks}});
       assertions.push({ok: actual.stripes.length === 9 && actual.stripes.every(s =>
         s.sigImage === 'none' && s.sigShadow === 'none'
-        && s.rowContent === 'none'                      // 主行不再画左侧竖灯条（::before 已撤）
-        && s.leftImage === 'none' && s.leftShadow === 'none'   // 首格也不再画 inset 灯条
-        && s.rangeImage === 'none' && s.rangeSize === 'auto'),  // 52周位置行不再续接
-        name: width + 'px普通/高/达到目标均无右紫条，主表左侧无竖灯条', actual: actual.stripes});
+        && s.rowContent === '""' && s.rowWidth === '2px' && s.rowColor === s.color
+        && Math.abs(parseFloat(s.rowTop)-(width<=600?7:9.5))<0.02
+        && Math.abs(parseFloat(s.rowHeight)-(width<=600?42.7:41.7))<0.02
+        && s.leftImage === 'none' && s.leftShadow === 'none'
+        && s.rangeImage === 'none' && s.rangeSize === 'auto'),
+        name: width + 'px终稿目标状态保留2px固定左灯条、首格无重复灯条且52周不续接', actual: actual.stripes});
       assertions.push({ok: actual.sparseBorders.length === 2 && actual.sparseBorders.every((s, i) =>
-        s.color === (i === 0 ? 'rgb(176, 132, 255)' : 'rgb(139, 147, 161)')
-        && s.border === 'rgba(0, 0, 0, 0)' && s.width === '1px' && s.radius === '4px'
-        && s.afterContent !== 'none' && s.afterInset.every(value => value === '-1px')
-        && s.pointerEvents === 'none' && s.backgroundSize === '100% 100%'
-        && s.stroke === '#8b93a1' && s.strokeWidth === '1' && s.dash === '3 5' && s.rx === '4'
+        s.color === (i === 0 ? 'rgb(176, 132, 255)' : 'rgb(139, 147, 161)') && s.width === '0px'
+        && (i === 0 ? s.afterContent === 'none' && s.radius === '0px'
+          : s.radius === '4px' && s.afterContent !== 'none' && s.afterInset.every(value => value === '-1px')
+            && s.pointerEvents === 'none' && s.backgroundSize === '100% 100%'
+            && s.stroke === '#8b93a1' && s.strokeWidth === '1' && s.dash === '3 5' && s.rx === '4')
         && s.original[0] > 0 && s.original[1] > 0
         && JSON.stringify(s.original) === JSON.stringify(s.nativeSize)),
-        name: width + 'pxlow/bad实际CSS为稀疏灰SVG虚线且尺寸、字色、4px圆角不变', actual: actual.sparseBorders});
+        name: width + 'px终稿low无边框、bad独有稀疏灰SVG虚线，尺寸与独立字色保留', actual: actual.sparseBorders});
     }
     // 真实导航/刷新仅由 CDP 提供合成文档；其他请求仍全部拦截，绝不读取云端仓位。
-    refreshDocument = input.html.replace(/var REAL=(.*?);/, (match,json) => {
-      const seed=JSON.parse(json);seed.preview=true;return 'var REAL='+JSON.stringify(seed)+';';
-    }).replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
-      .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
+    refreshDocument = syntheticPage(input.html);
     await cdp('Network.emulateNetworkConditions', {offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
     const waitLoad = () => new Promise(resolve => {
       const onLoad = event => {
@@ -2017,12 +2079,13 @@ const deadline = setTimeout(() => {
         const u=new URL(location.href);
         return {hash:u.hash,focus:u.searchParams.has('focus'),edit:u.searchParams.has('edit'),
           marker:u.searchParams.has('_mm_reset_view'),keep:u.searchParams.get('keep'),token:u.searchParams.get('token'),
-          open:[...document.querySelectorAll('details.card,details.cost-manage')].filter(d=>d.open).map(d=>d.id),
+          open:[...document.querySelectorAll('details.card,details.cost-manage')].filter(d=>d.open&&getComputedStyle(d).display!=='none').map(d=>d.id),
+          editorHidden:getComputedStyle(document.getElementById('costManage')).display==='none',
           y:scrollY,restoration:history.scrollRestoration};
       })()`);
       assertions.push({ok:before.hash==='#s-thigh' && before.open && after.hash==='' && !after.focus && !after.edit
         && !after.marker && after.keep==='1' && after.token==='synthetic'
-        && JSON.stringify(after.open)===JSON.stringify(['signalCounts']) && after.y===0,
+        && JSON.stringify(after.open)===JSON.stringify(['signalCounts']) && after.editorHidden && after.y===0,
         name:width+'px真实股票跳转后刷新清旧定位、分组折叠/统计打开及回顶部',actual:{before,after}});
       const jumpAfter=await evaluate(`(() => {
         document.querySelector('a.signal-member-jump[href="#s-thigh"]').click();
@@ -2036,11 +2099,7 @@ const deadline = setTimeout(() => {
     refreshDocument=null;
     await cdp('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
     const colorTree=await cdp('Page.getFrameTree');
-    // 前面的合成导航已建立HTTPS origin；显式preview防止空种子走正式仓位读取路径。
-    const colorHTML=input.colorPage.replace(/var REAL=(.*?);/, (match,json) => {
-      const seed=JSON.parse(json);seed.preview=true;return 'var REAL='+JSON.stringify(seed)+';';
-    }).replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
-      .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
+    const colorHTML=syntheticPage(input.colorPage);
     await cdp('Page.setDocumentContent', {frameId: colorTree.frameTree.frame.id, html: colorHTML});
     for (const [width, height] of VIEWPORTS) {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
@@ -2084,13 +2143,12 @@ const deadline = setTimeout(() => {
         name:width+'px红黄白分类不变，名单唯一3px竖条与主表灯同色，黄白名单中的红主行仍红',actual:lamps});
     }
     const rangeTree=await cdp('Page.getFrameTree');
-    const rangeHTML=input.rangePage.replace(/var REAL=(.*?);/, (match,json) => {
-      const seed=JSON.parse(json);seed.preview=true;return 'var REAL='+JSON.stringify(seed)+';';
-    }).replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
-      .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
+    const rangeHTML=syntheticPage(input.rangePage);
     await cdp('Page.setDocumentContent', {frameId: rangeTree.frameTree.frame.id, html: rangeHTML});
     for (const [width, height] of VIEWPORTS) {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      await evaluate(`document.querySelectorAll('details.group-card,details.zone-card,details.quiet-list').forEach(el=>el.open=true)`);
+      await settled();
       const bars=await evaluate(`(() => {
         const rows=[...document.querySelectorAll('tr[id^="s-range"]')];
         return rows.map(row=>{
@@ -2117,28 +2175,32 @@ const deadline = setTimeout(() => {
             markerInTrack:marker.left>=track.left-5&&marker.right<=track.right+5};
         });
       })()`);
-      /* 2026-11-02：「编辑」从仓位卡标题行搬到顶栏 .runbar —— 排在「刷新」右边、同排同高，
-         保留自己那套 7px 小圆角蓝边（桌面 13px / 手机 16px），不被顶栏通用按钮皮肤盖掉。
-         仓位标题行剩下的「总资产·盈亏」顶到最右，仍与标题同一行、不撑高卡片。 */
+      // 终稿编辑入口仍位于刷新右侧；资产金额移到真实cashbond行，成本卡仅作为隐藏编辑器。
+      // 继续验证按钮几何、资产金额同源、总额/现金/固收单行顺序，并打开四列编辑器后取消。
       const edit=await evaluate(`(() => {
         const card=document.getElementById('costManage'),btn=document.getElementById('costEditBtn');
-        const name=card&&card.querySelector('.grp-name');
-        if(!card||!btn||!name)return {exists:false};
+        const cashbond=document.querySelector('#group_positions>.cashbond-row');
+        const asset=document.querySelector('#group_positions>.asset-row');
+        if(!card||!btn||!cashbond||!asset)return {exists:false};
         const bar=document.querySelector('.runbar'),refresh=document.getElementById('btnHardRefresh');
         const b=btn.getBoundingClientRect(),rb=refresh&&refresh.getBoundingClientRect();
-        const nb=name.getBoundingClientRect(),cb=card.getBoundingClientRect();
-        const sum=card.querySelector('.cost-sum'),sb=sum&&sum.getBoundingClientRect();
-        const grp=card.querySelector('summary.grp');
+        const cb=cashbond.getBoundingClientRect();
+        const sum=cashbond.querySelector('.cb-total'),sb=sum.getBoundingClientRect();
+        const members=[...cashbond.children].map(e=>e.getBoundingClientRect());
         return {exists:true,
           inRunbar:!!(bar&&bar.contains(btn)),
           afterRefresh:!!(refresh&&(refresh.compareDocumentPosition(btn)&Node.DOCUMENT_POSITION_FOLLOWING)),
           sameRowAsRefresh:!!rb&&Math.abs((b.top+b.bottom)/2-(rb.top+rb.bottom)/2)<=2,
           gapToRefresh:rb?+(b.left-rb.right).toFixed(1):null,
           height:+b.height.toFixed(1),
-          // 2026-10-27：标题行必须排成一行（跟其它分组卡一样高），总资产·盈亏不能掉到第二行
-          headH:+grp.getBoundingClientRect().height.toFixed(1),
-          sumSameRow:!!sb&&Math.abs((sb.top+sb.bottom)/2-(nb.top+nb.bottom)/2)<=10,
-          sumRightGap:sb?+(cb.right-sb.right).toFixed(1):null,
+          headH:+cb.height.toFixed(1),
+          sumSameRow:members.every(r=>Math.abs((r.top+r.bottom)/2-(sb.top+sb.bottom)/2)<=2),
+          sumLeftGap:+(sb.left-cb.left).toFixed(1),
+          bondRightGap:+(cb.right-cashbond.querySelector('.cb-bond').getBoundingClientRect().right).toFixed(1),
+          order:[...cashbond.children].map(e=>e.className),
+          total:cashbond.querySelector('.cb-total-amt').textContent,
+          editorHidden:getComputedStyle(card).display==='none',
+          assetVisible:asset.getBoundingClientRect().height>0,
           fontSize:getComputedStyle(btn).fontSize,radius:getComputedStyle(btn).borderTopLeftRadius,
           overflow:document.documentElement.scrollWidth>innerWidth+1};
       })()`);
@@ -2150,12 +2212,26 @@ const deadline = setTimeout(() => {
           && edit.exists && edit.inRunbar && edit.afterRefresh && edit.sameRowAsRefresh
           && edit.gapToRefresh>=8 && edit.gapToRefresh<=12 && edit.height>=24 && !edit.overflow
           && edit.radius==='7px' && edit.fontSize===(width<=600?'16px':'13px')
-          && edit.sumSameRow && edit.headH<=56 && edit.sumRightGap<=30,
-        name:width+'px52周条两端第二行为到低/高点、三角底收窄高度不变；编辑按钮在顶栏刷新右边且保持原圆角字号；仓位标题行单行、金额靠右',actual:{bars,edit}});
+          && edit.sumSameRow && edit.headH<=56 && edit.sumLeftGap===8 && edit.bondRightGap===8
+          && JSON.stringify(edit.order)===JSON.stringify(['cb-total','cb-item cb-cash','cb-item cb-bond'])
+          && edit.total.replace(/[^0-9]/g,'')==='4940' && edit.editorHidden && edit.assetVisible,
+        name:width+'px52周条几何和数值不变；顶栏编辑按钮、真实资产4940及总额/现金/固收顺序',actual:{bars,edit}});
+      const editor=await evaluate(`(() => {
+        document.getElementById('costEditBtn').click();
+        const panel=document.getElementById('costManage'),grid=panel.querySelector('.ep-grid');
+        const result={visible:getComputedStyle(panel).display!=='none',columns:getComputedStyle(grid).gridTemplateColumns.split(/\\s+/).length,
+          symbols:[...grid.querySelectorAll('[data-cost-row][data-sym]')].map(e=>e.dataset.sym).sort(),
+          cost:panel.querySelector('input[data-sym="RANGENORM"][data-f="cost"]').value,
+          qty:panel.querySelector('input[data-sym="RANGEHI"][data-f="qty"]').value};
+        document.getElementById('costCancel').click();result.cancelHidden=getComputedStyle(panel).display==='none';
+        return result;
+      })()`);
+      assertions.push({ok:editor.visible&&editor.columns===4&&editor.cancelHidden
+        && JSON.stringify(editor.symbols)===JSON.stringify(['RANGEHI','RANGENORM'])&&editor.cost==='125'&&editor.qty==='5',
+        name:width+'px真实四列编辑器只含两只合成仓位、数值准确并可取消',actual:editor});
     }
     const injectionTree=await cdp('Page.getFrameTree');
-    const injectionHTML=input.injectionPage.replace(/<script\b[^>]*\bsrc=[^>]*>[\s\S]*?<\/script>/gi,'')
-      .replace(/<link\b[^>]*>/gi,'').replace('</head>','<link rel="icon" href="data:,"></head>');
+    const injectionHTML=syntheticPage(input.injectionPage);
     await cdp('Page.setDocumentContent', {frameId: injectionTree.frameTree.frame.id, html: injectionHTML});
     const escaped = await evaluate(`(() => {
       const snapshot = JSON.parse(document.getElementById('snapshotData').textContent);

@@ -978,6 +978,8 @@ table.stk thead{display:block;width:100%;table-layout:fixed}
 table.stk tr[data-symbol]{position:relative;display:grid;grid-template-columns:max-content max-content max-content minmax(0,1fr);grid-template-areas:"sym px tgs earn" "cost cost cost cost" "sig sig sig sig";align-items:stretch;width:100%;border-top:1px solid var(--stock-divider);--lamp-line:var(--line)}
 table.stk tr[data-symbol]:first-child{border-top:0}
 table.stk tr[data-symbol]>td{border:0;box-shadow:none;min-width:0;margin:0}
+/* 终稿首格清影：保留:first-child特异性，压过旧红行inset而不改变行伪元素灯条。 */
+table.stk tr[data-symbol]>td:first-child{box-shadow:none}
 table.stk tr.red[data-symbol]{--lamp-line:var(--red)}
 table.stk tr.yellow[data-symbol]{--lamp-line:var(--yellow)}
 table.stk tr.green[data-symbol]{--lamp-line:var(--green)}
