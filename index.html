@@ -96,7 +96,8 @@
   --rules-strong:#e6edf3;
   --rules-copy:#dce1e9;
   --rules-muted:#adb5c2;
-  --stock-flash:#2b3f63
+  --stock-flash:#2b3f63;
+  --status-font-size:13.5px
 }
 
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -104,7 +105,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system
 .wrap{max-width:718px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 h1.brand{color:var(--up)}
-.sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:12px;margin-bottom:16px}
+.sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
 #group_positions{background:var(--card);--collapse-bg:var(--positions-collapse);--signal-border:var(--frame-green)}
 #group_positions_long.zone-card{background:none;border:1px solid var(--frame-green);margin:9px -2px 9px}
@@ -387,7 +388,7 @@ tr.gray td{color:var(--dim)}
 .quiet-list[open]>summary{background:none;box-shadow:none;color:var(--head-blue)}
 .group-card summary:focus-visible{outline:2px solid var(--link-blue);outline-offset:-2px}
 .macro-card summary:focus-visible{outline:2px solid var(--link-blue);outline-offset:-2px}
-.runlight{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--dim);line-height:1.4}
+.runlight{display:flex;align-items:center;gap:7px;font-size:var(--status-font-size);color:var(--dim);line-height:1.4}
 .runlight .dot{width:9px;height:9px;border-radius:50%;background:var(--status-idle);flex:none}
 .runlight[data-phase="busy"]{color:var(--yellow)}
 .runlight[data-phase="partial"]{color:var(--yellow)}
@@ -399,7 +400,7 @@ tr.gray td{color:var(--dim)}
 .runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px var(--status-bad-halo)}
 .dca-badge{margin-left:auto;white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
 .dca-badge.on{color:var(--yellow)}
-.runbar .dca-badge{font-size:14px;margin-left:auto}
+.runbar .dca-badge{font-size:16px;margin-left:auto}
 .oil-reference-row td{font-size:13px;overflow-wrap:anywhere}
 .oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
 .oil-state{font-size:12px;font-weight:600}
@@ -603,6 +604,7 @@ table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>
 #signalCounts .signal-filter .signal-member-block ul{margin:0}
 #signalCounts .signal-filter .signal-member-belong:empty{display:none}
 @media(max-width:600px){
+:root{--status-font-size:14.5px}
 .stk td.sig .sig-zone{letter-spacing:-.6px}
 .sig-cols[data-combo="1"]{--combo-scale:1.57}
 .sig-cols[data-combo="1"]::after{height:19.575px}
@@ -647,8 +649,8 @@ table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 #signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}
 .grp-name{font-size:20px;line-height:24px}
 .runbar button:not(.cost-edit-btn){padding:8px 14px;font-size:20px;line-height:21.6px}
-.sub{padding-left:16px;padding-right:16px;margin-bottom:8px;font-size:13px;line-height:18px}
-.runlight{font-size:14.5px;line-height:16.88px}
+.sub{padding-left:16px;padding-right:16px;margin-bottom:8px;line-height:18px}
+.runlight{line-height:16.88px}
 .stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}
 #signalCounts .signal-count-toggle{font-size:17px;line-height:16px}
 .rs-spy{font-size:16px;line-height:24px}
@@ -682,7 +684,7 @@ table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 #signalCounts>summary .count-total{font-size:16px;line-height:24px}
 .market-risk-badge{font-size:16px;line-height:24px}
 .monitor-note{font-size:16px;line-height:24px}
-.runbar .dca-badge{margin-left:auto;font-size:16px;line-height:24px}
+.runbar .dca-badge{margin-left:auto;font-size:18px;line-height:24px}
 .range52-hi{font-size:13px;line-height:11px}
 .range52-lo{font-size:13px;line-height:11px}
 .range52-gap{font-size:13px;line-height:11px}
@@ -830,8 +832,8 @@ tr.stk-flash>td,tr.stk-flash+tr.range52-row>td{animation:stkflash 1.8s ease-out}
 #costFoot { order: 3; }
 #costFoot .cost-bar, #costFoot .cost-footrow { display: none; }
 .cost-state { font-size: 11px; white-space: nowrap; color: var(--dim); }
-.sub .cost-state { margin-left: auto; flex: none; font-size: 13px; }
-.sub .cost-state .warn, .sub .cost-state .ok, .sub .cost-state .dim { font-size: 13px; }
+.sub .cost-state { margin-left: auto; flex: none; font-size: inherit; }
+.sub .cost-state .warn, .sub .cost-state .ok, .sub .cost-state .dim { font-size: inherit; }
 .cost-state .warn, .cost-state .ok, .cost-state .dim {
   background: none;
   border: 0;
@@ -1322,12 +1324,12 @@ tr.stk-flash>td,tr.stk-flash+tr.range52-row>td{animation:stkflash 1.8s ease-out}
   <script>(function(){var b=document.getElementById('btnHardRefresh');if(!b)return;b.onclick=async function(){b.disabled=true;b.textContent='刷新中…';try{if(window.caches){var ks=await caches.keys();await Promise.all(ks.map(function(k){return caches.delete(k);}));}if(navigator.serviceWorker){var rs=await navigator.serviceWorker.getRegistrations();await Promise.all(rs.map(function(r){return r.unregister();}));}}catch(e){}var u=new URL(location.href);u.hash='';u.searchParams.delete('focus');u.searchParams.delete('edit');u.searchParams.set('_mm_reset_view','1');u.searchParams.set('_r',String(Date.now()));location.replace(u.toString());};})();</script>
 </div>
 <div class="statusrow">
-  <div class="runlight" id="runLight" data-phase="ok"><i class="dot"></i><span id="runLightTxt">成功 ·<span class="rt78"><span class="run-timestamp">2026-11-09 21:48</span></span>（北京）</span></div>
+  <div class="runlight" id="runLight" data-phase="ok"><i class="dot"></i><span id="runLightTxt">成功 ·<span class="rt78"><span class="run-timestamp">2026-11-09 22:28</span></span>（北京）</span></div>
   <div class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">暂无法核验</span></div>
 </div>
 <div id="checkResult" class="check-result" role="status" hidden></div>
 
-<div class="script-data" hidden><script id="snapshotData" type="application/json">{"dca_reminder":{"every":20,"start":"2026-10-15","count":17,"date":"2026-11-06","times":1,"due":false,"next_in":4,"next_date":"2026-11-12"},"run_id":"42628275760","request_id":"","source_sha":"f954c3fe29b662ac00722b27651f180836885a1a","input_hash":"dcbc9ba744fbbeddc88fb4d74790b78b844ebad1b64d6748b2f91ddeab130bda","build_id":"42628275760-1","started_at":"2026-11-09T13:45:32+00:00","started_at_bj":"2026-11-09T21:45:32+08:00","finished_at":"2026-11-09T21:48:10.683526+08:00","finished_at_bj":"2026-11-09T21:48:10+08:00","event":"push","target_trade_date":"2026-11-06","mode":"closed","schedule":"美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15","config_files":{"holdings.json":"f6c410fab2f66b748d5cb158017e11a51d9de5a7","settings.json":"1386a699b2039959ee8c8731166194d1f75a847e"},"effective_settings":{"boll_n":20,"boll_k":2,"boll_near_pct":0.5,"boll_near_band_pct":15,"chg_red":8,"chg_yellow":5,"rsi_high":70,"rsi_low":35,"near_52w_low_pct":3,"trigger_gap_pct":3,"reduce_gap_pct":3,"target_space_pct":40,"target_high_space_pct":90,"target_gap_pct":3,"vol_ratio":1.5,"vol_ratio_red":3,"vol_ratio_z":2,"vol_ratio_red_z":3.6,"amp_yellow":6,"amp_red":10,"ma_short":0,"ma_long":250,"hy_green":350,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":20,"dca_start":"2026-10-15","signal_single_open":1},"groups":[{"key":"positions","label":"持仓","item_group":"position"},{"key":"focus","label":"重点","item_group":"focus"},{"key":"index_funds","label":"指数基","item_group":"index_funds"},{"key":"technology","label":"IT · AI","item_group":"technology","sector_etf":"XLK"},{"key":"healthcare","label":"医疗保健","item_group":"healthcare","sector_etf":"XLV"},{"key":"financials","label":"金融","item_group":"financials","sector_etf":"XLF"},{"key":"energy","label":"能源","item_group":"energy","sector_etf":"XLE"},{"key":"industrials","label":"工航防建","item_group":"industrials","sector_etf":"XLI"},{"key":"materials","label":"化材金纸","item_group":"materials","sector_etf":"XLB"},{"key":"utilities","label":"公水电气","item_group":"utilities","sector_etf":"XLU"},{"key":"consumer_staples","label":"必须消费","item_group":"consumer_staples","sector_etf":"XLP"},{"key":"communications","label":"通信娱乐","item_group":"communications","sector_etf":"XLC"},{"key":"consumer_discretionary","label":"可选消费","item_group":"consumer_discretionary","sector_etf":"XLY"},{"key":"real_estate","label":"房地产","item_group":"real_estate","sector_etf":"XLRE"}],"group_monitoring":{"positions":true,"focus":true,"index_funds":true,"technology":true,"healthcare":true,"financials":true,"energy":true,"industrials":true,"materials":true,"utilities":true,"consumer_staples":true,"communications":true,"consumer_discretionary":true,"real_estate":false},"registered_counts":{"positions":19,"focus":8,"index_funds":1,"technology":38,"healthcare":8,"financials":13,"energy":2,"industrials":10,"materials":2,"utilities":3,"consumer_staples":5,"communications":4,"consumer_discretionary":6,"real_estate":1},"list_counts":{"positions":19,"focus":7,"index_funds":1,"technology":28,"healthcare":6,"financials":10,"energy":2,"industrials":6,"materials":2,"utilities":3,"consumer_staples":4,"communications":4,"consumer_discretionary":5,"real_estate":1,"triggers":0,"reduces":0,"dca":1},"summary":{"red":17,"yellow":32,"green":49,"gray":0,"purple":35,"total":98,"macro_ok":7,"stale_symbols":[],"missing_symbols":[],"unsupported_symbols":[],"reference_dates":{},"today_prices":98,"prior_prices":0,"missing_prices":0},"signal_counts":{"chg":{"label":"涨跌幅","red":2,"yellow":8,"purple":0},"amp":{"label":"振幅","red":0,"yellow":10,"purple":0},"vol_ratio":{"label":"量比","red":1,"yellow":8,"purple":0},"rsi":{"label":"RSI","red":5,"yellow":0,"purple":0},"boll":{"label":"布林","red":0,"yellow":0,"purple":0},"boll_rsi":{"label":"布林+RSI","red":9,"yellow":21,"purple":0},"ma":{"label":"均线","red":0,"yellow":14,"purple":0},"low52":{"label":"52周低位","red":3,"yellow":0,"purple":0},"target":{"label":"共识价","red":0,"yellow":0,"purple":35}},"text_only":[{"symbol":"CRSP","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差1.43%","group":"position","level":"green","hold":"short","note":"基因编辑"},{"symbol":"XLI","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"跌破布林下轨▼ · RSI 1条 ↓超卖","group":"position","level":"green","hold":"long","note":"工业行业"},{"symbol":"VRT","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"逼近布林下轨▼ 还差1.74% · RSI 1条 ↓超卖","group":"position","level":"green","hold":"short","note":"维谛技术"},{"symbol":"PDD","kind":"boll","shape":"▲","side":"上轨","rsi_n":0,"rsi_side":"","detail":"盘中突破布林上轨▲","group":"position","level":"green","hold":"short","note":"拼多多"},{"symbol":"AAPL","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差0.84%","group":"position","level":"green","hold":"short","note":"苹果"},{"symbol":"TSM","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"跌破布林下轨▼ · RSI 1条 ↓超卖","group":"focus","level":"yellow","hold":"short","note":"台积电"},{"symbol":"IBIT","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"跌破布林下轨▼ · RSI 1条 ↓超卖","group":"index_funds","level":"yellow","hold":"short","note":"比特币"},{"symbol":"SKHY","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"逼近布林下轨▼ 还差1.01% · RSI 1条 ↓超卖","group":"technology","level":"green","hold":"short","note":"海力士"},{"symbol":"NOW","kind":"rsi","shape":"▼","side":"","rsi_n":2,"rsi_side":"超卖","detail":"RSI 2条 ↓超卖","group":"technology","level":"green","hold":"short","note":"工作流软件"},{"symbol":"QCOM","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差0.25%","group":"technology","level":"yellow","hold":"short","note":"高通"},{"symbol":"SPCX","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差1.09%","group":"technology","level":"yellow","hold":"short","note":"商业航天"},{"symbol":"TMO","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差0.12%","group":"healthcare","level":"green","hold":"short","note":"赛默飞世尔科技"},{"symbol":"GS","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差0.73%","group":"financials","level":"green","hold":"short","note":"高盛"},{"symbol":"XOM","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"跌破布林下轨▼ · RSI 1条 ↓超卖","group":"energy","level":"green","hold":"short","note":"埃克森美孚"},{"symbol":"TSLA","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"逼近布林下轨▼ 还差1.01% · RSI 1条 ↓超卖","group":"consumer_discretionary","level":"green","hold":"short","note":"特斯拉"}],"actual_dates":{"min":"2026-11-06","max":"2026-11-06"},"macro_dates":{"hy_oas":"2026-11-05","vix":"2026-11-06","sp500":"2026-11-06","ust10":"2026-11-06","nfci":"2026-10-30","breadth":"2026-11-06","nasdaq":"2026-11-06"},"treasury_reference":{"ok":true,"value":4.859000205993652,"date":"2026-11-06","source":"Yahoo ^TNX","unit":"%","lagging":false,"reason":null,"quote_name":null,"observed_date":null,"observed_value":null,"delta_month":-0.4179997444152832},"coverage":"数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。","data_time_text":"2026-11-06 收盘（美东交易日）","market_risk":{"level":"green","label":"平稳","text":"轻微提示：VIX；风险得分 1/8","score":1,"levels":{"hy_oas":"green","vix":"yellow","sp500":"green","breadth":"green","nfci":"green"},"valid_count":5,"missing":[]},"risk_quotes":{"vix":{"ok":true,"value":25.64,"date":"2026-11-06","source":"Cboe VIX 官方日线","drawdown":null},"sp500":{"ok":true,"value":7376.85986328125,"date":"2026-11-06","source":"Yahoo ^GSPC","drawdown":-5.653846530939632}},"nfci_cache":{"rows":[["2026-09-11",-0.532],["2026-09-18",-0.522],["2026-09-25",-0.51],["2026-10-02",-0.498],["2026-10-09",-0.487],["2026-10-16",-0.477],["2026-10-23",-0.467],["2026-10-30",-0.459]],"source":"NFCI周度数据（FRED同步备用）","checked_at":"2026-11-04T20:17:43.278402-05:00","result":"ok","schema_version":2,"asof":"2026-11-09T13:47:21.655195+00:00"},"data_lag":{"target":"2026-11-06","fresh":true,"today":98,"expected":98,"by_source":{"nasdaq":{"2026-11-06":98}}}}</script></div>
+<div class="script-data" hidden><script id="snapshotData" type="application/json">{"dca_reminder":{"every":20,"start":"2026-10-15","count":17,"date":"2026-11-06","times":1,"due":false,"next_in":4,"next_date":"2026-11-12"},"run_id":"42634632679","request_id":"","source_sha":"3359bcef13004c382ac657e44e52a30a838016ba","input_hash":"8cd69ee95f6783f5bbf8cbc6dc38fdc30b875d4065f2aa9a091d7ea0b88b3e9f","build_id":"42634632679-1","started_at":"2026-11-09T14:26:04+00:00","started_at_bj":"2026-11-09T22:26:04+08:00","finished_at":"2026-11-09T22:28:31.817605+08:00","finished_at_bj":"2026-11-09T22:28:31+08:00","event":"push","target_trade_date":"2026-11-06","mode":"closed","schedule":"美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15","config_files":{"holdings.json":"f6c410fab2f66b748d5cb158017e11a51d9de5a7","settings.json":"1386a699b2039959ee8c8731166194d1f75a847e"},"effective_settings":{"boll_n":20,"boll_k":2,"boll_near_pct":0.5,"boll_near_band_pct":15,"chg_red":8,"chg_yellow":5,"rsi_high":70,"rsi_low":35,"near_52w_low_pct":3,"trigger_gap_pct":3,"reduce_gap_pct":3,"target_space_pct":40,"target_high_space_pct":90,"target_gap_pct":3,"vol_ratio":1.5,"vol_ratio_red":3,"vol_ratio_z":2,"vol_ratio_red_z":3.6,"amp_yellow":6,"amp_red":10,"ma_short":0,"ma_long":250,"hy_green":350,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":20,"dca_start":"2026-10-15","signal_single_open":1},"groups":[{"key":"positions","label":"持仓","item_group":"position"},{"key":"focus","label":"重点","item_group":"focus"},{"key":"index_funds","label":"指数基","item_group":"index_funds"},{"key":"technology","label":"IT · AI","item_group":"technology","sector_etf":"XLK"},{"key":"healthcare","label":"医疗保健","item_group":"healthcare","sector_etf":"XLV"},{"key":"financials","label":"金融","item_group":"financials","sector_etf":"XLF"},{"key":"energy","label":"能源","item_group":"energy","sector_etf":"XLE"},{"key":"industrials","label":"工航防建","item_group":"industrials","sector_etf":"XLI"},{"key":"materials","label":"化材金纸","item_group":"materials","sector_etf":"XLB"},{"key":"utilities","label":"公水电气","item_group":"utilities","sector_etf":"XLU"},{"key":"consumer_staples","label":"必须消费","item_group":"consumer_staples","sector_etf":"XLP"},{"key":"communications","label":"通信娱乐","item_group":"communications","sector_etf":"XLC"},{"key":"consumer_discretionary","label":"可选消费","item_group":"consumer_discretionary","sector_etf":"XLY"},{"key":"real_estate","label":"房地产","item_group":"real_estate","sector_etf":"XLRE"}],"group_monitoring":{"positions":true,"focus":true,"index_funds":true,"technology":true,"healthcare":true,"financials":true,"energy":true,"industrials":true,"materials":true,"utilities":true,"consumer_staples":true,"communications":true,"consumer_discretionary":true,"real_estate":false},"registered_counts":{"positions":19,"focus":8,"index_funds":1,"technology":38,"healthcare":8,"financials":13,"energy":2,"industrials":10,"materials":2,"utilities":3,"consumer_staples":5,"communications":4,"consumer_discretionary":6,"real_estate":1},"list_counts":{"positions":19,"focus":7,"index_funds":1,"technology":28,"healthcare":6,"financials":10,"energy":2,"industrials":6,"materials":2,"utilities":3,"consumer_staples":4,"communications":4,"consumer_discretionary":5,"real_estate":1,"triggers":0,"reduces":0,"dca":1},"summary":{"red":17,"yellow":32,"green":49,"gray":0,"purple":35,"total":98,"macro_ok":7,"stale_symbols":[],"missing_symbols":[],"unsupported_symbols":[],"reference_dates":{},"today_prices":98,"prior_prices":0,"missing_prices":0},"signal_counts":{"chg":{"label":"涨跌幅","red":2,"yellow":8,"purple":0},"amp":{"label":"振幅","red":0,"yellow":10,"purple":0},"vol_ratio":{"label":"量比","red":1,"yellow":8,"purple":0},"rsi":{"label":"RSI","red":5,"yellow":0,"purple":0},"boll":{"label":"布林","red":0,"yellow":0,"purple":0},"boll_rsi":{"label":"布林+RSI","red":9,"yellow":21,"purple":0},"ma":{"label":"均线","red":0,"yellow":14,"purple":0},"low52":{"label":"52周低位","red":3,"yellow":0,"purple":0},"target":{"label":"共识价","red":0,"yellow":0,"purple":35}},"text_only":[{"symbol":"CRSP","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差1.43%","group":"position","level":"green","hold":"short","note":"基因编辑"},{"symbol":"XLI","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"跌破布林下轨▼ · RSI 1条 ↓超卖","group":"position","level":"green","hold":"long","note":"工业行业"},{"symbol":"VRT","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"逼近布林下轨▼ 还差1.74% · RSI 1条 ↓超卖","group":"position","level":"green","hold":"short","note":"维谛技术"},{"symbol":"PDD","kind":"boll","shape":"▲","side":"上轨","rsi_n":0,"rsi_side":"","detail":"盘中突破布林上轨▲","group":"position","level":"green","hold":"short","note":"拼多多"},{"symbol":"AAPL","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差0.84%","group":"position","level":"green","hold":"short","note":"苹果"},{"symbol":"TSM","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"跌破布林下轨▼ · RSI 1条 ↓超卖","group":"focus","level":"yellow","hold":"short","note":"台积电"},{"symbol":"IBIT","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"跌破布林下轨▼ · RSI 1条 ↓超卖","group":"index_funds","level":"yellow","hold":"short","note":"比特币"},{"symbol":"SKHY","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"逼近布林下轨▼ 还差1.01% · RSI 1条 ↓超卖","group":"technology","level":"green","hold":"short","note":"海力士"},{"symbol":"NOW","kind":"rsi","shape":"▼","side":"","rsi_n":2,"rsi_side":"超卖","detail":"RSI 2条 ↓超卖","group":"technology","level":"green","hold":"short","note":"工作流软件"},{"symbol":"QCOM","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差0.25%","group":"technology","level":"yellow","hold":"short","note":"高通"},{"symbol":"SPCX","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差1.09%","group":"technology","level":"yellow","hold":"short","note":"商业航天"},{"symbol":"TMO","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差0.12%","group":"healthcare","level":"green","hold":"short","note":"赛默飞世尔科技"},{"symbol":"GS","kind":"boll","shape":"▼","side":"下轨","rsi_n":0,"rsi_side":"","detail":"逼近布林下轨▼ 还差0.73%","group":"financials","level":"green","hold":"short","note":"高盛"},{"symbol":"XOM","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"跌破布林下轨▼ · RSI 1条 ↓超卖","group":"energy","level":"green","hold":"short","note":"埃克森美孚"},{"symbol":"TSLA","kind":"boll_rsi","shape":"▼","side":"下轨","rsi_n":1,"rsi_side":"超卖","detail":"逼近布林下轨▼ 还差1.01% · RSI 1条 ↓超卖","group":"consumer_discretionary","level":"green","hold":"short","note":"特斯拉"}],"actual_dates":{"min":"2026-11-06","max":"2026-11-06"},"macro_dates":{"hy_oas":"2026-11-05","vix":"2026-11-06","sp500":"2026-11-06","ust10":"2026-11-06","nfci":"2026-10-30","breadth":"2026-11-06","nasdaq":"2026-11-06"},"treasury_reference":{"ok":true,"value":4.859000205993652,"date":"2026-11-06","source":"Yahoo ^TNX","unit":"%","lagging":false,"reason":null,"quote_name":null,"observed_date":null,"observed_value":null,"delta_month":-0.4179997444152832},"coverage":"数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。","data_time_text":"2026-11-06 收盘（美东交易日）","market_risk":{"level":"green","label":"平稳","text":"轻微提示：VIX；风险得分 1/8","score":1,"levels":{"hy_oas":"green","vix":"yellow","sp500":"green","breadth":"green","nfci":"green"},"valid_count":5,"missing":[]},"risk_quotes":{"vix":{"ok":true,"value":25.64,"date":"2026-11-06","source":"Cboe VIX 官方日线","drawdown":null},"sp500":{"ok":true,"value":7376.85986328125,"date":"2026-11-06","source":"Yahoo ^GSPC","drawdown":-5.653846530939632}},"nfci_cache":{"rows":[["2026-09-11",-0.532],["2026-09-18",-0.522],["2026-09-25",-0.51],["2026-10-02",-0.498],["2026-10-09",-0.487],["2026-10-16",-0.477],["2026-10-23",-0.467],["2026-10-30",-0.459]],"source":"NFCI周度数据（FRED同步备用）","checked_at":"2026-11-04T20:17:43.278402-05:00","result":"ok","schema_version":2,"asof":"2026-11-09T14:27:42.642082+00:00"},"data_lag":{"target":"2026-11-06","fresh":true,"today":98,"expected":98,"by_source":{"nasdaq":{"2026-11-06":98}}}}</script></div>
 
 
 
@@ -1418,7 +1420,7 @@ tr.stk-flash>td,tr.stk-flash+tr.range52-row>td{animation:stkflash 1.8s ease-out}
 <p>10年美债收益率：相对约30个自然日前可用观测，上行至少50 bp为参考黄，至少30但不足50 bp只提示、仍绿；缺历史则不判断。</p>
 </details>
 </section></template>
-<script src="./run-status.js?v=b580e49a28bb39a8" async></script>
+<script src="./run-status.js?v=534c1cf55912ff8d" async></script>
 <script>window.MM_SETTINGS={"signal_single_open":1};</script>
 <script>
 // 当日/风险共用一处常驻详情区；只切换hidden，不移动内容或重算数据。
@@ -1611,7 +1613,11 @@ tr.stk-flash>td,tr.stk-flash+tr.range52-row>td{animation:stkflash 1.8s ease-out}
   } catch (_) {}
   function resetView() {
     document.querySelectorAll('details.card,details.cost-manage').forEach(function(card) {
-      card.open = card.id === 'signalCounts';
+      card.open = card.id === 'signalCounts' || card.id === 'group_positions';
+    });
+    // 明确刷新与初载同版面：持仓父组展开，长/短子区折叠；不碰无异动列表。
+    document.querySelectorAll('#group_positions_long,#group_positions_short').forEach(function(card) {
+      card.open = false;
     });
     var stats = document.getElementById('signalCounts');
     if (stats) normalizeSignalCard(stats);
@@ -4023,11 +4029,11 @@ document.addEventListener("click", function(event) {
                         ? '<span class="warn">上传结果待核验</span>'
                         : dirty || !sameAsCloud()
                           ? '<span class="warn">未同步' + (tk ? '' : ' · 未填 token') + '</span>'
-                          : '<span class="ok" aria-label="已同步' +
+                          : '<span class="ok" aria-label="仓位已同步' +
                             (CLOUD && CLOUD.updated_at
                               ? '：云端数据 ' + esc(String(CLOUD.updated_at).slice(0, 16))
                               : '') +
-                            '">已同步</span>';
+                            '">仓位已同步</span>';
       var mirror = syncMirrorEl();
       if (mirror) {
         mirror.innerHTML = syncChip;
