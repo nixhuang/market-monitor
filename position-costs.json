@@ -1,84 +1,31 @@
 {
  "schema_version": 2,
  "real": true,
- "updated_at": "2026-10-29T15:32:18.717Z",
- "cash": 23110.72,
- "cash_extra": 23039.14,
- "fixed": 16878.66,
+ "updated_at": "2026-11-09T13:42:33.805Z",
+ "cash": 21433.10,
+ "cash_extra": 20648.16,
+ "fixed": 16916.97,
  "fixed_cost": 16916.97,
  "items": {
-  "BRK-B": {
-   "qty": 1,
-   "cost": 505
-  },
-  "HII": {
-   "qty": 2,
-   "cost": 272
-  },
-  "APH": {
-   "qty": 30,
-   "cost": 78.94
-  },
-  "AVGO": {
-   "qty": 4,
-   "cost": 364.92
-  },
-  "CRSP": {
-   "qty": 12,
-   "cost": 46.92
-  },
-  "GOOGL": {
-   "qty": 10,
-   "cost": 328.12
-  },
-  "LMT": {
-   "qty": 3,
-   "cost": 513
-  },
-  "NTNX": {
-   "qty": 23,
-   "cost": 58.27
-  },
-  "UNH": {
-   "qty": 6,
-   "cost": 387.6
-  },
-  "UBER": {
-   "qty": 5,
-   "cost": 69.36
-  },
-  "DRAM": {
-   "qty": 16,
-   "cost": 49.58
-  },
-  "SPYM": {
-   "qty": 25.0188,
-   "cost": 88.77
-  },
-  "SCHD": {
-   "qty": 46.0903,
-   "cost": 32.88
-  },
-  "QQQM": {
-   "qty": 7.0022,
-   "cost": 296.8
-  },
-  "XLI": {
-   "qty": 2,
-   "cost": 167.9
-  },
-  "VRT": {
-   "qty": 4,
-   "cost": 208.98
-  },
-  "NXPI": {
-   "qty": 2,
-   "cost": 220
-  },
-  "PDD": {
-   "qty": 10,
-   "cost": 79
-  }
+  "BRK-B": {"qty": 1, "cost": 505},
+  "HII": {"qty": 2, "cost": 272},
+  "APH": {"qty": 30, "cost": 78.94},
+  "AVGO": {"qty": 4, "cost": 364.92},
+  "CRSP": {"qty": 12, "cost": 46.92},
+  "GOOGL": {"qty": 10, "cost": 328.12},
+  "LMT": {"qty": 3, "cost": 513},
+  "NTNX": {"qty": 13, "cost": 63.23},
+  "UNH": {"qty": 6, "cost": 387.60},
+  "UBER": {"qty": 5, "cost": 69.36},
+  "DRAM": {"qty": 16, "cost": 49.58},
+  "SPYM": {"qty": 30.0188, "cost": 88.78},
+  "SCHD": {"qty": 46.0903, "cost": 32.88},
+  "QQQM": {"qty": 7.0022, "cost": 296.80},
+  "XLI": {"qty": 2, "cost": 167.90},
+  "VRT": {"qty": 4, "cost": 208.98},
+  "NXPI": {"qty": 2, "cost": 220},
+  "PDD": {"qty": 10, "cost": 79},
+  "AAPL": {"qty": 6, "cost": 325.03}
  },
  "acks": {
   "GOOGL|loss10": "2026-10-30T04:24:52.178Z",
