@@ -587,7 +587,8 @@ PAGE_PALETTE = """:root{
   --rules-strong:#e6edf3;
   --rules-copy:#dce1e9;
   --rules-muted:#adb5c2;
-  --stock-flash:#2b3f63
+  --stock-flash:#2b3f63;
+  --status-font-size:13.5px
 }
 """
 
@@ -597,7 +598,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system
 .wrap{max-width:718px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 h1.brand{color:var(--up)}
-.sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:12px;margin-bottom:16px}
+.sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
 #group_positions{background:var(--card);--collapse-bg:var(--positions-collapse);--signal-border:var(--frame-green)}
 #group_positions_long.zone-card{background:none;border:1px solid var(--frame-green);margin:9px -2px 9px}
@@ -880,7 +881,7 @@ tr.gray td{color:var(--dim)}
 .quiet-list[open]>summary{background:none;box-shadow:none;color:var(--head-blue)}
 .group-card summary:focus-visible{outline:2px solid var(--link-blue);outline-offset:-2px}
 .macro-card summary:focus-visible{outline:2px solid var(--link-blue);outline-offset:-2px}
-.runlight{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--dim);line-height:1.4}
+.runlight{display:flex;align-items:center;gap:7px;font-size:var(--status-font-size);color:var(--dim);line-height:1.4}
 .runlight .dot{width:9px;height:9px;border-radius:50%;background:var(--status-idle);flex:none}
 .runlight[data-phase="busy"]{color:var(--yellow)}
 .runlight[data-phase="partial"]{color:var(--yellow)}
@@ -892,7 +893,7 @@ tr.gray td{color:var(--dim)}
 .runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px var(--status-bad-halo)}
 .dca-badge{margin-left:auto;white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
 .dca-badge.on{color:var(--yellow)}
-.runbar .dca-badge{font-size:14px;margin-left:auto}
+.runbar .dca-badge{font-size:16px;margin-left:auto}
 .oil-reference-row td{font-size:13px;overflow-wrap:anywhere}
 .oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
 .oil-state{font-size:12px;font-weight:600}
@@ -1096,6 +1097,7 @@ table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>
 #signalCounts .signal-filter .signal-member-block ul{margin:0}
 #signalCounts .signal-filter .signal-member-belong:empty{display:none}
 @media(max-width:600px){
+:root{--status-font-size:14.5px}
 .stk td.sig .sig-zone{letter-spacing:-.6px}
 .sig-cols[data-combo="1"]{--combo-scale:1.57}
 .sig-cols[data-combo="1"]::after{height:19.575px}
@@ -1140,8 +1142,8 @@ table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 #signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}
 .grp-name{font-size:20px;line-height:24px}
 .runbar button:not(.cost-edit-btn){padding:8px 14px;font-size:20px;line-height:21.6px}
-.sub{padding-left:16px;padding-right:16px;margin-bottom:8px;font-size:13px;line-height:18px}
-.runlight{font-size:14.5px;line-height:16.88px}
+.sub{padding-left:16px;padding-right:16px;margin-bottom:8px;line-height:18px}
+.runlight{line-height:16.88px}
 .stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}
 #signalCounts .signal-count-toggle{font-size:17px;line-height:16px}
 .rs-spy{font-size:16px;line-height:24px}
@@ -1175,7 +1177,7 @@ table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 #signalCounts>summary .count-total{font-size:16px;line-height:24px}
 .market-risk-badge{font-size:16px;line-height:24px}
 .monitor-note{font-size:16px;line-height:24px}
-.runbar .dca-badge{margin-left:auto;font-size:16px;line-height:24px}
+.runbar .dca-badge{margin-left:auto;font-size:18px;line-height:24px}
 .range52-hi{font-size:13px;line-height:11px}
 .range52-lo{font-size:13px;line-height:11px}
 .range52-gap{font-size:13px;line-height:11px}
@@ -1489,7 +1491,11 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
   } catch (_) {}
   function resetView() {
     document.querySelectorAll('details.card,details.cost-manage').forEach(function(card) {
-      card.open = card.id === 'signalCounts';
+      card.open = card.id === 'signalCounts' || card.id === 'group_positions';
+    });
+    // 明确刷新与初载同版面：持仓父组展开，长/短子区折叠；不碰无异动列表。
+    document.querySelectorAll('#group_positions_long,#group_positions_short').forEach(function(card) {
+      card.open = false;
     });
     var stats = document.getElementById('signalCounts');
     if (stats) normalizeSignalCard(stats);

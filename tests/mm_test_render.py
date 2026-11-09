@@ -2065,10 +2065,30 @@ const deadline = setTimeout(() => {
       let loaded=waitLoad();
       await cdp('Page.navigate',{url:refreshBase+'?keep=1&token=synthetic'}); await loaded;
       await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
+      const header=await evaluate(`(() => {
+        const sub=document.querySelector('.sub'),mirror=document.getElementById('costSyncState');
+        sub.firstChild.textContent='数据时间 2026-11-06 收盘（美东交易日）';
+        const rule=document.getElementById('ruleLightTxt');rule.textContent='规则已生效';
+        const font=el=>getComputedStyle(el).fontSize;
+        let dca=document.querySelector('.runbar .dca-badge');
+        if(!dca){dca=document.createElement('span');dca.className='dca-badge';document.querySelector('.runbar').appendChild(dca);}
+        dca.textContent='定投：9';
+        const states=['本页只读','仓位已同步'].map(text=>{
+          mirror.innerHTML='<span class="dim"></span>';mirror.firstElementChild.textContent=text;
+          return {text,font:font(mirror.firstElementChild),mirrorFont:font(mirror),overflow:sub.scrollWidth>sub.clientWidth+1};
+        });
+        return {sub:font(sub),rule:font(rule),dca:font(dca),states,overflow:document.documentElement.scrollWidth>innerWidth+1};
+      })()`);
+      assertions.push({ok:header.sub===(width<=600?'14.5px':'13.5px') && header.sub===header.rule
+        && header.states.every(s=>s.font===header.rule && s.mirrorFont===header.rule && !s.overflow)
+        && header.dca===(width<=600?'18px':'16px') && !header.overflow,
+        name:width+'px数据时间/只读/同步与规则同字号、定投加2px且无横向溢出',actual:header});
       const before = await evaluate(`(() => {
         const link=document.querySelector('a.signal-member-jump[href="#s-thigh"]');
         if(!link) throw Error('missing synthetic stock jump');
         link.click();
+        document.querySelectorAll('#group_positions_long,#group_positions_short').forEach(card=>card.open=true);
+        document.getElementById('group_positions').open=false;
         const u=new URL(location.href);u.searchParams.set('focus','pos');u.searchParams.set('edit','1');
         history.replaceState(null,'',u.href);
         return {hash:location.hash,open:document.getElementById('s-thigh').closest('details.group-card').open};
@@ -2079,14 +2099,16 @@ const deadline = setTimeout(() => {
         const u=new URL(location.href);
         return {hash:u.hash,focus:u.searchParams.has('focus'),edit:u.searchParams.has('edit'),
           marker:u.searchParams.has('_mm_reset_view'),keep:u.searchParams.get('keep'),token:u.searchParams.get('token'),
+          zones:[...document.querySelectorAll('#group_positions_long,#group_positions_short')].map(card=>card.open),
           open:[...document.querySelectorAll('details.card,details.cost-manage')].filter(d=>d.open&&getComputedStyle(d).display!=='none').map(d=>d.id),
           editorHidden:getComputedStyle(document.getElementById('costManage')).display==='none',
           y:scrollY,restoration:history.scrollRestoration};
       })()`);
       assertions.push({ok:before.hash==='#s-thigh' && before.open && after.hash==='' && !after.focus && !after.edit
         && !after.marker && after.keep==='1' && after.token==='synthetic'
-        && JSON.stringify(after.open)===JSON.stringify(['signalCounts']) && after.editorHidden && after.y===0,
-        name:width+'px真实股票跳转后刷新清旧定位、分组折叠/统计打开及回顶部',actual:{before,after}});
+        && JSON.stringify(after.open)===JSON.stringify(['signalCounts','group_positions'])
+        && after.zones.length>0 && after.zones.every(open=>!open) && after.editorHidden && after.y===0,
+        name:width+'px真实刷新清旧定位、统计与持仓父组展开/子区折叠及回顶部',actual:{before,after}});
       const jumpAfter=await evaluate(`(() => {
         document.querySelector('a.signal-member-jump[href="#s-thigh"]').click();
         window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));
@@ -2262,7 +2284,11 @@ const deadline = setTimeout(() => {
 })();
 '''
     with _tempfile.TemporaryDirectory(prefix='mm-target-chrome-') as _profile:
-        _browser_result = _subprocess.run(['node', '-e', _browser_script],
+        # 脚本增长后会超过 Windows 命令行长度上限；只在独立测试目录落地执行。
+        _browser_file = os.path.join(_profile, 'browser-regression.cjs')
+        with open(_browser_file, 'w', encoding='utf-8') as _stream:
+            _stream.write(_browser_script)
+        _browser_result = _subprocess.run(['node', _browser_file],
             input=_json.dumps({'chrome': _chrome, 'profile': _profile, 'html': _description_page,
                               'colorPage': _color_page, 'rangePage': _range_page,
                               'ciNoSandbox': sys.platform == 'linux' and os.environ.get('GITHUB_ACTIONS') == 'true'

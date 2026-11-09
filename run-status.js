@@ -411,7 +411,7 @@
     }
     if (Object.keys(targets).length) {
       const phase = configState.phase;
-      if (phase === 'published') return '已生效：看板已按你保存的设置更新' + (when ? '（' + when + '）' : '');
+      if (phase === 'published') return '规则已生效：看板已按你保存的设置更新' + (when ? '（' + when + '）' : '');
       if (phase === 'failed') return configState.cancelled
         ? '保存已提交，但对应运行被取消（通常被更新的等待任务替换），请稍后查运行状态' + keptData()
         : '保存未生效：本次运行失败，请查看运行记录' + keptData();
@@ -494,9 +494,9 @@
     if (rulesError) return {phase: 'idle', text: '暂无法核验'};
     if (!expected) return {phase: 'busy', text: '正在核验'};
     // 清单、分组和规则均一致，且保存回执的本次生成证据已确认，才可显示绿灯。
-    if (sameConfig(snap, expected) && !receiptPending) return {phase: 'ok', text: '已生效'};
+    if (sameConfig(snap, expected) && !receiptPending) return {phase: 'ok', text: '规则已生效'};
     if (sameConfig(verifiedSnapshot, expected) && (!tracked || configState.phase === 'published')) {
-      return el('snapshotData') ? {phase: 'busy', text: '需要刷新'} : {phase: 'ok', text: '已生效'};
+      return el('snapshotData') ? {phase: 'busy', text: '需要刷新'} : {phase: 'ok', text: '规则已生效'};
     }
     const associated = tracked && (configRun && configRun.head_sha === latestRules.commitSHA ||
       Object.values(targets).some(receipt => receipt.savedAt >= latestRules.checkedAt));

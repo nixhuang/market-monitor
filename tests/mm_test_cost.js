@@ -278,7 +278,7 @@ test('锁只读仅顶部小状态无框，原接管/取消路径读取最新仓�
   assert.equal(b.state().DATA.cash,333);assert.equal(b.state().DATA.items.AAA.qty,20);assert.equal(b.state().DATA.items.BBB,undefined);
   assert.equal(b.state().positionSave,null);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().queued,false);
   await b.tick(180000);assert.equal(b.puts().length,0);
-  assert.equal(b.doc.getElementById('costSyncState').textContent,'已同步');
+  assert.equal(b.doc.getElementById('costSyncState').textContent,'仓位已同步');
   await b.enter();b.edit('AAA','qty','88');b.doc.getElementById('costCancel').click();
   assert.equal(b.state().DATA.items.AAA.qty,20);assert.equal(b.doc.getElementById('costManage').classList.contains('cost-edit-open'),false);
   await b.enter();assert.equal(b.state().editing,true);assert.equal(b.state().positionsAuthorized,false);await b.dispose();
@@ -1002,6 +1002,16 @@ test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
   assert.doesNotMatch(CSS,/#costMembers li\.lv-[a-z]+::marker/);
 });
 */
+test('数据时间和只读/同步状态跟随规则字号，定投在手机和桌面各加2px',()=>{
+  assert.match(ASSETS,/--status-font-size:13\.5px/);
+  assert.match(ASSETS,/:root\{--status-font-size:14\.5px\}/);
+  assert.match(ASSETS,/\.sub\{[^}]*font-size:var\(--status-font-size\)/);
+  assert.match(ASSETS,/\.runlight\{[^}]*font-size:var\(--status-font-size\)/);
+  assert.match(CSS,/\.sub \.cost-state\{margin-left:auto;flex:none;font-size:inherit;?\}/);
+  assert.match(CSS,/\.sub \.cost-state \.warn,\.sub \.cost-state \.ok,\.sub \.cost-state \.dim\{font-size:inherit;?\}/);
+  assert.match(ASSETS,/\.runbar \.dca-badge\{font-size:16px;margin-left:auto\}/);
+  assert.match(ASSETS,/\.runbar \.dca-badge\{margin-left:auto;font-size:18px;line-height:24px\}/);
+});
 test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀且不中英混排',()=>{
   // 终稿当日贡献由dual-body承载；保留灯条，数值第二/三列，样式尺寸以440/1440真实harness验收。
   for(const [lv,v] of [['red','--red'],['yellow','--yellow'],['green','--green'],['gray','--text']])
@@ -1195,26 +1205,30 @@ test('页面内强制刷新清旧定位但保留凭据与无关参数，缓存�
     assert.ok(url.searchParams.get('_r'));assert.equal(removed,fail?0:1);assert.equal(unregistered,fail?0:1);
   }
 });
-test('刷新一次性复位顶层卡片和统计并回顶部，不改长持仓默认或普通定位',()=>{
+test('明确刷新恢复统计和持仓父组展开、长短子区折叠，普通定位不复位',()=>{
   const source=fs.readFileSync(path.join(__dirname,'..','page_assets.py'),'utf8');
   const start=source.indexOf('(function resetBoardOnRefresh()'),end=source.indexOf('\n})();',start)+6;
   const code=source.slice(start,end);assert.ok(start>=0&&end>start);
   for(const requested of [false,true]){
-    const stats={id:'signalCounts',open:false},group={id:'group_positions',open:true};
-    const macro={id:'macroCard',open:true},cost={id:'costManage',open:true},long={open:true};
+    const stats={id:'signalCounts',open:false},group={id:'group_positions',open:false};
+    const macro={id:'macroCard',open:true},cost={id:'costManage',open:true},long={open:true},short={open:true};
     const events=[],frames=[],scrolls=[],normalizations=[],replaced=[];
     const href='https://example.test/index.html?keep=1&mm_refreshed_run=2'+(requested?'&_mm_reset_view=1':'')+'#s-aaa';
     const history={state:{saved:true},scrollRestoration:'auto',replaceState:(state,unused,url)=>replaced.push({state,url})};
-    const context={URL,history,document:{querySelectorAll:()=>[stats,group,macro,cost],getElementById:id=>id==='signalCounts'?stats:null},
+    const context={URL,history,document:{querySelectorAll:selector=>{
+      if(selector==='details.card,details.cost-manage')return [stats,group,macro,cost];
+      assert.equal(selector,'#group_positions_long,#group_positions_short');return [long,short];
+    },getElementById:id=>id==='signalCounts'?stats:null},
       normalizeSignalCard:card=>normalizations.push(card),requestAnimationFrame:fn=>frames.push(fn),
       window:{location:{href},scrollTo:(x,y)=>scrolls.push([x,y]),addEventListener:(name,fn,options)=>events.push({name,fn,options})}};
     vm.runInNewContext(code,context);
-    if(!requested){assert.equal(group.open,true);assert.equal(events.length,0);assert.equal(scrolls.length,0);continue;}
-    assert.equal(stats.open,true);assert.equal(group.open,false);assert.equal(macro.open,false);assert.equal(cost.open,false);
-    assert.equal(long.open,true);assert.equal(history.scrollRestoration,'manual');
+    if(!requested){assert.equal(group.open,false);assert.equal(long.open,true);assert.equal(short.open,true);assert.equal(events.length,0);assert.equal(scrolls.length,0);continue;}
+    assert.equal(stats.open,true);assert.equal(group.open,true);assert.equal(macro.open,false);assert.equal(cost.open,false);
+    assert.equal(long.open,false);assert.equal(short.open,false);assert.equal(history.scrollRestoration,'manual');
     assert.equal(events[0].name,'pageshow');assert.equal(events[0].options.once,true);
-    group.open=true;stats.open=false;events[0].fn();frames[0]();
-    assert.equal(group.open,false);assert.equal(stats.open,true);assert.equal(history.scrollRestoration,'auto');
+    group.open=false;stats.open=false;long.open=true;short.open=true;events[0].fn();frames[0]();
+    assert.equal(group.open,true);assert.equal(stats.open,true);assert.equal(long.open,false);assert.equal(short.open,false);
+    assert.equal(history.scrollRestoration,'auto');
     const url=new URL(replaced[0].url);assert.equal(url.searchParams.has('_mm_reset_view'),false);
     assert.equal(url.searchParams.get('keep'),'1');assert.equal(url.searchParams.get('mm_refreshed_run'),'2');
     assert.deepEqual(replaced[0].state,{saved:true});assert.ok(scrolls.every(p=>p[0]===0&&p[1]===0));

@@ -118,7 +118,7 @@ async function check(name, fn) {
   await check('相同 settings blob 规则绿灯；运行灯不再声明规则生效', async () => {
     const f = fixture(); await f.win.MMRunStatus.refresh();
     assert.equal(f.els.ruleLight.dataset.phase, 'ok');
-    assert.match(f.els.ruleLightTxt.textContent, /^已生效$/);
+    assert.match(f.els.ruleLightTxt.textContent, /^规则已生效$/);
     // 2026-10-20：运行灯不再重复念灯级计数，也不报「N 项数据已更新」，只报完成时间
     assert.match(f.els.runLightTxt.textContent, /^成功 ·(?:未记录|\d{4}-\d{2}-\d{2} \d{2}:\d{2})（北京）/);
     assert.doesNotMatch(f.els.runLightTxt.textContent, /红44 黄20 绿65/);
@@ -164,7 +164,7 @@ async function check(name, fn) {
     const f = fixture(); delete f.els.runMsg;
     await f.win.MMRunStatus.refresh();
     assert.equal(f.els.ruleLight.dataset.phase, 'ok');
-    assert.match(f.els.ruleLightTxt.textContent, /^已生效$/);
+    assert.match(f.els.ruleLightTxt.textContent, /^规则已生效$/);
     assert.equal(typeof f.els.btnReturnBoard.onclick, 'function');
     assert.equal(new URL(f.els.btnReturnBoard.href).searchParams.get('mm_run'), '1');
     const editor = fixture(); delete editor.els.btnReturnBoard;
@@ -270,7 +270,7 @@ async function check(name, fn) {
     assert.equal(f.els.ruleLight.dataset.phase,'busy');assert.equal(f.data.reloads.length,0);
     assert.equal(JSON.parse(f.els.snapshotData.textContent).config_files['holdings.json'],A);
     f.els.snapshotData.textContent=JSON.stringify(fresh);await f.win.MMRunStatus.refresh();
-    assert.equal(f.els.ruleLightTxt.textContent,'已生效');assert.equal(f.els.ruleLight.dataset.phase,'ok');
+    assert.equal(f.els.ruleLightTxt.textContent,'规则已生效');assert.equal(f.els.ruleLight.dataset.phase,'ok');
     assert(f.urls.some(url=>url.includes('/commits?path=holdings.json')));
   });
   await check('无法定位运行先等待、对应失败红灯、取消仍等待', async () => {
@@ -326,7 +326,7 @@ async function check(name, fn) {
     const page=snapshot();page.config_files['holdings.json']=sha;
     const f=fixture(page);f.data.status=page;f.data.published=page;
     f.data.failHoldings=true;f.data.holdingsRaw=raw;
-    await f.win.MMRunStatus.refresh();assert.equal(f.els.ruleLightTxt.textContent,'已生效');
+    await f.win.MMRunStatus.refresh();assert.equal(f.els.ruleLightTxt.textContent,'规则已生效');
     assert.equal(f.els.ruleLight.dataset.phase,'ok');
   });
   await check('保存恢复相同blob仍核对本次回执生成证据，旧结果不误绿', async () => {
@@ -728,7 +728,7 @@ async function check(name, fn) {
     const pending = f.win.MMRunStatus.refresh().then(value => { finished = true; return value; });
     rules.resolve(response({sha: B})); await flush();
     assert.equal(finished, false);
-    assert.equal(f.els.ruleLightTxt.textContent, '已生效');
+    assert.equal(f.els.ruleLightTxt.textContent, '规则已生效');
     pub.resolve(response(snapshot())); await pending;
     assert.equal(f.timers.filter(t => t.active).length, 1);
     assert.equal(f.data.posts || 0, 0);
@@ -1000,7 +1000,7 @@ async function check(name, fn) {
     await f.win.MMRunStatus.refresh();
     const calls = f.calls.slice(before);
     assert.equal(calls.filter(c => c.url === './status.json').length, 2);
-    assert.equal(f.els.ruleLightTxt.textContent, '已生效');
+    assert.equal(f.els.ruleLightTxt.textContent, '规则已生效');
     for (const call of calls) {
       assert.equal(call.options.headers.Authorization,
         call.url.startsWith('https://api.github.com/') ? 'Bearer github_pat_test' : undefined);

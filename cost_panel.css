@@ -113,8 +113,8 @@
 #costFoot { order: 3; }
 #costFoot .cost-bar, #costFoot .cost-footrow { display: none; }
 .cost-state { font-size: 11px; white-space: nowrap; color: var(--dim); }
-.sub .cost-state { margin-left: auto; flex: none; font-size: 13px; }
-.sub .cost-state .warn, .sub .cost-state .ok, .sub .cost-state .dim { font-size: 13px; }
+.sub .cost-state { margin-left: auto; flex: none; font-size: inherit; }
+.sub .cost-state .warn, .sub .cost-state .ok, .sub .cost-state .dim { font-size: inherit; }
 .cost-state .warn, .cost-state .ok, .cost-state .dim {
   background: none;
   border: 0;

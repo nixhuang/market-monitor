@@ -1964,11 +1964,11 @@
                         ? '<span class="warn">上传结果待核验</span>'
                         : dirty || !sameAsCloud()
                           ? '<span class="warn">未同步' + (tk ? '' : ' · 未填 token') + '</span>'
-                          : '<span class="ok" aria-label="已同步' +
+                          : '<span class="ok" aria-label="仓位已同步' +
                             (CLOUD && CLOUD.updated_at
                               ? '：云端数据 ' + esc(String(CLOUD.updated_at).slice(0, 16))
                               : '') +
-                            '">已同步</span>';
+                            '">仓位已同步</span>';
       var mirror = syncMirrorEl();
       if (mirror) {
         mirror.innerHTML = syncChip;
