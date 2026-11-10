@@ -1909,8 +1909,18 @@ const chrome = spawn(input.chrome, [
   '--disable-features=MediaRouter,OptimizationHints,AutofillServerCommunication', 'about:blank'
 ], {stdio: ['ignore', 'ignore', 'pipe']});
 let ws, call, session, diagnostic = '';
+const started = performance.now();
+const pending = new Map();
+let phase = '启动浏览器';
+const stage = name => {
+  phase = name;
+  process.stderr.write(`[Chrome ${((performance.now()-started)/1000).toFixed(2)}s] ${name}；已完成断言 ${assertions.length}\n`);
+};
 const deadline = setTimeout(() => {
-  process.stderr.write('Chromium 合成测试超过60秒，终止独立实例\n' + diagnostic);
+  const waiting = [...pending.values()].map(job => ({method:job.method,
+    seconds:+((performance.now()-job.started)/1000).toFixed(2)}));
+  process.stderr.write('Chromium 合成测试超过60秒，终止独立实例\n'
+    + JSON.stringify({phase, assertions:assertions.length, waiting}) + '\n' + diagnostic);
   chrome.kill(); process.exit(2);
 }, 60000);
 (async () => {
@@ -1924,19 +1934,22 @@ const deadline = setTimeout(() => {
         if (match) resolve(match[1]);
       });
     });
+    stage('DevTools入口就绪，连接WebSocket');
     ws = new WebSocket(endpoint);
     await new Promise((resolve, reject) => {
       ws.addEventListener('open', resolve, {once: true});
       ws.addEventListener('error', reject, {once: true});
     });
+    stage('WebSocket就绪，初始化CDP');
     let seq = 0;
-    const pending = new Map();
     let refreshDocument = null;
     const refreshBase = 'https://mm-refresh.test/market-monitor/index.html';
     call = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
       const id = ++seq;
-      pending.set(id, {resolve, reject});
-      ws.send(JSON.stringify({id, method, params, ...(sessionId ? {sessionId} : {})}));
+      pending.set(id, {resolve, reject, method, started:performance.now()});
+      try {
+        ws.send(JSON.stringify({id, method, params, ...(sessionId ? {sessionId} : {})}));
+      } catch (error) { pending.delete(id); reject(error); }
     });
     ws.addEventListener('message', event => {
       const msg = JSON.parse(event.data);
@@ -1968,6 +1981,10 @@ const deadline = setTimeout(() => {
         failedRequests.push(msg.params.errorText);
       }
     });
+    ws.addEventListener('close', () => {
+      for (const job of pending.values()) job.reject(new Error('CDP连接提前关闭：'+job.method));
+      pending.clear();
+    });
     const target = await call('Target.createTarget', {url: 'about:blank'});
     session = (await call('Target.attachToTarget', {targetId: target.targetId, flatten: true})).sessionId;
     const cdp = (method, params) => call(method, params, session);
@@ -1996,7 +2013,9 @@ const deadline = setTimeout(() => {
       }
       throw Error('cost:painted/字体/布局未在5秒内稳定');
     })()`);
+    stage('首份合成页已注入，等待字体与布局');
     await settled();
+    stage('字体与布局就绪，验证网络隔离');
     const isolation = await evaluate(`(async () => {
       let blocked = false;
       try { await fetch('http://127.0.0.1:65530/offline-probe'); } catch (_) { blocked = true; }
@@ -2262,6 +2281,7 @@ const deadline = setTimeout(() => {
     refreshDocument=null;
     await cdp('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
     const colorTree=await cdp('Page.getFrameTree');
+    stage('颜色与标题交互');
     const colorHTML=syntheticPage(input.colorPage);
     await cdp('Page.setDocumentContent', {frameId: colorTree.frameTree.frame.id, html: colorHTML});
     for (const [width, height] of VIEWPORTS) {
@@ -2394,6 +2414,7 @@ const deadline = setTimeout(() => {
         name:width+'px实际设置页规则字号对齐宏观15px，保留表格padding与原行距且无横向溢出',actual:rules});
     }
     const rangeTree=await cdp('Page.getFrameTree');
+    stage('52周条几何与交互');
     const rangeHTML=syntheticPage(input.rangePage);
     await cdp('Page.setDocumentContent', {frameId: rangeTree.frameTree.frame.id, html: rangeHTML});
     for (const [width, height] of VIEWPORTS) {
@@ -2606,6 +2627,7 @@ const deadline = setTimeout(() => {
       const tree=await cdp('Page.getFrameTree');scriptErrors.length=0;
       await cdp('Page.setDocumentContent',{frameId:tree.frameTree.frame.id,html:syntheticPage(html)});await settled();
     };
+    stage('六档五列交易及持仓终稿');
     const productionLayouts=[];
     const readLayout=()=>evaluate(`(async()=>{
       const parent=document.getElementById('group_positions'),head=parent.querySelector(':scope>summary');
@@ -2739,6 +2761,7 @@ const deadline = setTimeout(() => {
     }
     await cdp('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
     // 仅本地--final-demo执行：读取用户指定唯一DEMO，替换合成种子；页面自己的补丁不复制进生产。
+    stage('保存权限与零负成本已核验');
     if(input.finalDemo){
       for(const [width,height] of VIEWPORTS){
         await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await freshPage(input.finalDemo);
@@ -2770,6 +2793,7 @@ const deadline = setTimeout(() => {
       url === 'http://127.0.0.1:65530/offline-probe' || url.startsWith('data:') || url === 'about:blank'
       || url.split(/[?#]/)[0] === refreshBase || safetyReads.has(url)),
       name:'合成页面不尝试任何云端仓位或外网读写', actual:{requestUrls:[...requestUrls]}});
+    stage('全部合成页面断言完成');
     process.stdout.write(JSON.stringify(assertions));
   } catch (error) {
     process.stderr.write(String(error.stack || error));
@@ -2800,6 +2824,7 @@ const deadline = setTimeout(() => {
     check(_browser_result.returncode == 0,
           '独立Chrome样式验证执行成功' + (('：' + _browser_result.stderr) if _browser_result.returncode else ''))
     if _browser_result.returncode == 0:
+        print(_browser_result.stderr, end='')
         for _assertion in _json.loads(_browser_result.stdout):
             check(_assertion['ok'], _assertion['name'] + '：'
                   + _json.dumps(_assertion['actual'], ensure_ascii=False, separators=(',', ':')))

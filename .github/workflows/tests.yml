@@ -102,9 +102,10 @@ jobs:
       - name: 定位镜像预装浏览器
         id: find-chrome
         run: |
-          # 优先 hosted runner 已有 Chromium/Chrome 内核，无 npm/浏览器下载，无用户 profile。
+          # 优先原生 Google Chrome，避免先选中 Ubuntu 的 Chromium/Snap 启动包装器。
+          # 本次日志证实 Chromium 启动已消耗大量60秒预算；仍保留原预算及全部页面门槛。
           p=""
-          for c in chromium chromium-browser google-chrome google-chrome-stable chrome; do
+          for c in google-chrome google-chrome-stable chrome chromium chromium-browser; do
             if command -v "$c" >/dev/null 2>&1; then p="$(command -v "$c")"; break; fi
           done
           if [ -z "$p" ]; then
@@ -137,4 +138,6 @@ jobs:
             exit 1
           fi
           echo "使用浏览器：$MM_TEST_CHROME"
+          echo "实际入口：$(readlink -f "$MM_TEST_CHROME")"
+          "$MM_TEST_CHROME" --version
           python tests/run_all.py --offline-python tests/mm_test_render.py --chrome
