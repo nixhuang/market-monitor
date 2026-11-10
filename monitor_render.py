@@ -569,7 +569,9 @@ class PageRenderer:
         urgency = self._context.earnings_urgency(event, today)
         soon = {"red": " urgent", "yellow": " soon"}.get(urgency, "")
         main, sub = (html_lib.escape(text, quote=True) for text in earn)
-        unit = f'<span class="unit" data-unit-full="{sub}" data-timing="">{sub}</span>' if sub else ""
+        relative = (event or {}).get("timing") in ("pre", "post", "during") and re.match(r"北京 (?:今出|昨出|已出)", sub)
+        unit_cls = "unit is-countdown" if relative else "unit"
+        unit = f'<span class="{unit_cls}" data-unit-full="{sub}" data-timing="">{sub}</span>' if sub else ""
         return (f'<span class="earn{soon}" data-main="{main}" data-mode="full">'
                 f'{self._countdown_html(event, today)}{main}{unit}</span>')
 
@@ -1107,11 +1109,13 @@ class PageRenderer:
             anchor = self._context._stock_anchor_id(entry["symbol"])
             urg = self._context.earnings_urgency(event, today)
             urg_cls = {"red": " is-red", "yellow": " is-yellow"}.get(urg, "")
+            relative = event.get("timing") in ("pre", "post", "during") and re.match(r"北京 (?:今出|昨出|已出)", sub)
+            bj_cls = "earnings-week-bj is-countdown" if relative else "earnings-week-bj"
             lines.append(f'<li{lamp_cls}><a class="signal-member-jump" href="#{anchor}">'
                          f'<span class="signal-member-symbol">{esc(entry["symbol"])}</span>{note}</a>'
                          f'<span class="signal-member-belong">（{esc(belong)}）</span> '
                          f'<span class="earnings-week-meta{urg_cls}">{countdown}{esc(main)}'
-                         f'<span class="earnings-week-bj">·{esc(sub)}</span></span>'
+                         f'<span class="{bj_cls}">·{esc(sub)}</span></span>'
                          f'{lamp_text}</li>')
         if count_only:
             return len(lines)
@@ -1281,7 +1285,7 @@ class PageRenderer:
                         "o": group_order.get(group, len(self._context.GROUPS)),
                         "l": d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "",
                         # 逐条条件的字色只跟着这条条件自身的等级：紫灯紫字；
-                        # 财报跟财报名单同一套红/黄/灰，不再整条白字。
+                        # 财报日期沿用名单预警级别，倒计时与北京说明另带显示元数据。
                         "d": [{"l": "purple" if kind == "target_purple"
                                else (level_fn(d) if level_fn else ""), "t": detail_fn(d)}],
                     }
@@ -1312,7 +1316,7 @@ class PageRenderer:
             if valid_earnings and earn_members:
                 timing_labels = {"pre": "盘前", "post": "盘后", "during": "盘中"}
                 def earn_level(d):
-                    """财报的字色＝财报名单同一套：近 3 日红、7 日内黄、其余灰。"""
+                    """沿用原财报预警级别；gray表示无预警，显示用美东蓝。"""
                     urg = self._context.earnings_urgency(
                         {"status": "ok", "date": d.get("date"), "timing": d.get("timing")}, asof)
                     return urg if urg in ("red", "yellow") else "gray"
@@ -1322,6 +1326,22 @@ class PageRenderer:
                                    lambda d: f"财报 {d.get('date', '')} "
                                    f"{timing_labels.get(d.get('timing'), '时段待定')}",
                                    earn_level)
+                # 动态交集只使用服务端冻结的展示信息，不在打开页面时重算时间。
+                today = self._render_day(snapshot)
+                saved = (snapshot.get("earnings") or {}).get("data") or {}
+                for d in earn_members:
+                    symbol = self._context.normalize_symbol(d["symbol"])
+                    event = saved.get(symbol)
+                    event = dict(event) if isinstance(event, dict) and event.get("date") == d["date"] else {}
+                    event.update(status="ok", date=d["date"], timing=d.get("timing"))
+                    _, sub = self._context.earnings_label(event, today)
+                    tbd = event.get("timing") not in ("pre", "post", "during")
+                    rec = filters["earnings_week"]["members"].get(self._context.instrument_identity(symbol))
+                    if rec:
+                        rec["d"][0]["e"] = {
+                            "c": self._context.earnings_countdown(event, today), "b": sub, "tbd": tbd,
+                            "relative": bool(not tbd and re.match(r"北京 (?:今出|昨出|已出)", sub)),
+                        }
 
         filter_data = {kind: {"label": f["label"], "ok": f["ok"],
                               "members": sorted(({"id": key, "a": self._context._stock_anchor_id(rec["s"]), **rec}
@@ -1343,7 +1363,7 @@ class PageRenderer:
              else f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>')
             for key, name, n in totals)
         pnl_blocks = "".join(
-            f'<div class="signal-member-block"><h5>{label}</h5>'
+            f'<div class="signal-member-block" hidden><h5>{label}</h5>'
             f'<ul class="signal-member-list" data-g="{key}"></ul></div>'
             for key, label in (("gain", "浮盈"), ("loss", "浮亏"), ("cut", "减仓价"), ("add", "加仓价")))
         pnl_panel = ('<div class="signal-extra-row pnl-extra"><span class="pnl-chip">盈亏到价</span>'

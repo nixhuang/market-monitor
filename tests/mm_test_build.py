@@ -1205,8 +1205,12 @@ class RulesTemplateTests(unittest.TestCase):
         self.assertEqual(centered, {'th', 'td'}, '分类、表头、条件及全部灯级单元格均需居中')
         common = re.search(r'\.card \.rules-body \.rule-table th,\.card \.rules-body \.rule-table td\{([^}]*)\}', css)[1]
         for unchanged in ('text-align:left', 'vertical-align:top', 'padding:6px 7px',
-                          'font-size:12px', 'line-height:1.65', 'border:1px solid var(--rules-cell-border)'):
+                          'border:1px solid var(--rules-cell-border)'):
             self.assertIn(unchanged, common)
+        # 正文放大到宏观说明15px；像素行距保留原12px×1.65，避免字号同时扩大行距。
+        self.assertIn('font-size:inherit', common)
+        self.assertIn('line-height:19.8px', common)
+        self.assertIn('.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:15px;', css)
         category = re.search(r'\.card \.rules-body \.rule-table th\.cat-col\{([^}]*)\}', css)[1]
         for unchanged in ('vertical-align:middle', 'writing-mode:vertical-rl', 'padding:6px 0', 'width:18px'):
             self.assertIn(unchanged, category)

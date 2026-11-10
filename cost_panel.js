@@ -8,7 +8,8 @@
       LS_PUSH_AT = 'mm_position_last_push_v2';
     var LS_TOKEN = 'mm_gh_token_v1',
       LS_SORT = 'mm_position_sort_v1',
-      LOCK_NAME = 'mm-position-writer-v2';
+      LOCK_NAME = 'mm-position-writer-v2',
+      LS_CLEAR = 'mm_position_clear_v1';
     var READ_ONLY_NOTICE = '本页只读';
     var SCHEMA_VERSION = 2,
       SESSION_LOCAL = 'mm_position_costs_preview_v2';
@@ -310,7 +311,11 @@
       positionGeneration = 0,
       draftPending = false,
       editDraft = {},
-      snapshotDraft = null;
+      snapshotDraft = null,
+      clearDraft = {},
+      addDraft = {},
+      addedPositions = {},
+      editBaseline = null;
     var DATA,
       revision = 0,
       dirty = false,
@@ -397,7 +402,13 @@
       _retryTimer = null;
       queued = false;
     }
+    function pruneAddedPositions() {
+      Object.keys(addedPositions).forEach(function (sym) {
+        if (isPosition(rowBySym(sym)) || !(DATA.items[sym] && DATA.items[sym].qty > 0)) delete addedPositions[sym];
+      });
+    }
     function loadLocal() {
+      reloadClearRecord();
       // 每个生命周期撤销上传授权；刷新、bfCache、接管均不得复活旧保存事务。
       uncertain = null;
       cloudFirstPending = true;
@@ -425,7 +436,26 @@
             )
               editDraft[k] = { raw: e.raw, error: draftError(e.raw) };
           });
+        clearDraft = {};
+        var marks = j && j._local && j._local.clearDraft;
+        if (object(marks)) Object.keys(marks).forEach(function (sym) {
+          if (/^[A-Z0-9.^=_-]{1,32}$/.test(sym) && ['default', 'focus'].indexOf(marks[sym]) >= 0)
+            clearDraft[sym] = marks[sym];
+        });
+        addDraft = {}; addedPositions = {};
+        ['addDraft', 'addedPositions'].forEach(function (key) {
+          var entries = j && j._local && j._local[key];
+          if (object(entries)) Object.keys(entries).forEach(function (sym) {
+            if (/^[A-Z0-9.^=_-]{1,32}$/.test(sym) && object(entries[sym]) && ['long', 'short'].indexOf(entries[sym].hold) >= 0)
+              (key === 'addDraft' ? addDraft : addedPositions)[sym] = clone(entries[sym]);
+          });
+        });
+        editBaseline = null;
+        if ((Object.keys(clearDraft).length || Object.keys(addDraft).length || (clearRecord && clearRecord.step !== 'done')) && j && j._local && j._local.editBaseline)
+          editBaseline = normalize(j._local.editBaseline);
+        draftPending = Object.keys(clearDraft).length + Object.keys(addDraft).length > 0;
         checkedDraft();
+        pruneAddedPositions();
         revision = j && j._local && Number.isSafeInteger(j._local.revision) ? j._local.revision : 0;
         dirty = !!(j && j._local ? j._local.dirty : read(LS_PENDING) === 1);
         CLOUD = cloud ? normalize(cloud) : null;
@@ -445,7 +475,8 @@
     function persist() {
       if (!writer) return false;
       var saved = clone(DATA);
-      saved._local = { revision: revision, dirty: dirty, uncertain: uncertain, editDraft: editDraft };
+      saved._local = { revision: revision, dirty: dirty, uncertain: uncertain, editDraft: editDraft,
+        clearDraft: clearDraft, addDraft: addDraft, addedPositions: addedPositions, editBaseline: editBaseline };
       return write(LS_LOCAL, saved);
     }
     function setPending(v) {
@@ -465,8 +496,9 @@
       SYNC_MSG = '';
       persist();
     }
-    function authorizePositions() {
+    function authorizePositions(fixedBaseline) {
       positionSave = { generation: ++positionGeneration, payload: clone(DATA) };
+      if (fixedBaseline) positionSave.fixedBaseline = fixedBaseline;
       positionsAuthorized = true;
     }
     function consumePositions(g) {
@@ -681,7 +713,7 @@
       CLOUD = remote;
       cloudVerified = true;
       var cached = write(LS_CLOUD, remote);
-      if (editing || draftPending) return false;
+      if (editing || draftPending || Object.keys(addDraft).length || (clearRecord && clearRecord.step !== 'done')) return false;
       if (cloudWins) {
         if (positionsAuthorized) return false;
         clearSaveTimers();
@@ -694,13 +726,14 @@
       var different = canonical(remote) !== canonical(DATA);
       DATA = clone(remote);
       editDraft = {};
+      pruneAddedPositions();
       if (different) revision++;
       dirty = !cached;
       if (!persist()) dirty = true;
       return different;
     }
     function startPull() {
-      if (isolated || !writer || disposed) return;
+      if (isolated || !writer || disposed || clearBusy) return;
       if (_pullTimer) {
         clearTimeout(_pullTimer);
         _pullTimer = null;
@@ -767,6 +800,12 @@
             cb(true, '内容已一致', remote);
             return null;
           }
+          if (sent.fixedBaseline && remote && ['fixed', 'fixed_cost'].some(function (f) {
+            return remote[f] !== sent.fixedBaseline[f];
+          })) {
+            cb(false, '固收同字段已被其它设备修改，请核对后重新编辑保存', remote, 'fixed-conflict');
+            return null;
+          }
           if (meta && !meta.sha) throw new Error('缺少远端 SHA，禁止覆盖');
           uncertain = {
             payload: clone(sent.payload),
@@ -794,6 +833,7 @@
         });
     }
     function requestSave(delay, resetRetry) {
+      if (clearBusy) return;
       if (!writer || disposed) return;
       if (isolated) {
         persist();
@@ -837,6 +877,7 @@
         !writer ||
         disposed ||
         editing ||
+        clearBusy ||
         savePaused ||
         inFlight ||
         !queued ||
@@ -889,6 +930,7 @@
             payload: clone(positionSave.payload),
             revision: revision,
             positionGeneration: positionSave.generation,
+            fixedBaseline: positionSave.fixedBaseline || null,
           };
       inFlight = sent;
       queued = false;
@@ -906,7 +948,13 @@
           }
           return;
         }
-        if (outcome === 'superseded') {
+        if (outcome === 'fixed-conflict') {
+          consumePositions(sent.positionGeneration);
+          CLOUD = verifiedRemote; cloudVerified = true;
+          write(LS_CLOUD, CLOUD);
+          dirty = true; persist();
+          SYNC = 'error'; SYNC_MSG = msg;
+        } else if (outcome === 'superseded') {
           uncertain = null;
           cloudVerified = false;
           dirty = true;
@@ -1055,6 +1103,504 @@
     var footEl = panel.querySelector('#costFoot'),
       actsEl = panel.querySelector('#costActs'),
       editBtn = document.getElementById('costEditBtn');
+    // 红叉只标记草稿；面板保存冻结本次明确字段，data 批量提交后再 main 批量移组。
+    // 恢复记录只供面板保存核验，不恢复上传授权。
+    var clearBusy = false, clearDialog = null, clearChoice = null;
+    var clearRecord = null;
+    function reloadClearRecord() {
+      var record = isolated ? null : read(LS_CLEAR);
+      if (record === null) { clearRecord = null; return; }
+      if (!object(record) || ['quantity', 'move', 'done'].indexOf(record.step) < 0) {
+        storageErrors[LS_CLEAR] = '清仓事务记录无效，请保留备份并核对，禁止覆盖'; clearRecord = null; return;
+      }
+      if (record.version === 2 && Array.isArray(record.targets) && (record.targets.length || (Array.isArray(record.additions) && record.additions.length)) &&
+          (!own(record, 'additions') || (Array.isArray(record.additions) && record.additions.every(function (t) {
+            return object(t) && /^[A-Z0-9.^=_-]{1,32}$/.test(t.sym || '') && ['long', 'short'].indexOf(t.hold) >= 0;
+          }))) &&
+          record.targets.every(function (t) { return object(t) && /^[A-Z0-9.^=_-]{1,32}$/.test(t.sym || '') && ['default', 'focus'].indexOf(t.choice) >= 0; }))
+        clearRecord = record;
+      else if (/^[A-Z0-9.^=_-]{1,32}$/.test(record.sym || '') && ['default', 'focus'].indexOf(record.choice) >= 0)
+        clearRecord = Object.assign({}, record, { version: 2, legacy: true, targets: [{ sym: record.sym, choice: record.choice,
+          source: record.source, destination: record.destination }], payload: record.zero });
+      else { storageErrors[LS_CLEAR] = '清仓事务记录无效，请保留备份并核对，禁止覆盖'; clearRecord = null; }
+    }
+    reloadClearRecord();
+    function clearMessage(text) {
+      NOTICE = text;
+      if (clearDialog) clearDialog.querySelector('[data-clear-message]').textContent = text;
+      paint();
+    }
+    function clearGuard() {
+      reloadClearRecord();
+      if (disposed || !writer) throw new Error('本页只读，请先点击编辑接管');
+      if (isolated) throw new Error('隔离预览不执行真实清仓');
+      if (!ghToken()) throw new Error('未填 token，不能保存清仓和分组');
+      if (Object.keys(storageErrors).length) throw new Error('本地数据未持久化，暂停清仓');
+      if (inFlight || uncertain || positionsAuthorized) throw new Error('有保存事务尚未完成，请先等待核验');
+      if (clearRecord && clearRecord.conflict && !clearRecord.evidenceCommit) throw new Error('旧清仓事务存在冲突，禁止重传旧数量；请点面板取消并确认读取远端，安全结束旧事务');
+    }
+    function saveClearRecord(record) {
+      if (!write(LS_CLEAR, record)) throw new Error('清仓进度尚未持久化，未继续写入');
+      clearRecord = record;
+    }
+    function clearConflict(message) {
+      saveClearRecord(Object.assign({}, clearRecord, { conflict: true }));
+      throw new Error(message + '；可点面板取消，确认读取远端并结束旧事务；已保存数值不回滚');
+    }
+    function clearActive() {
+      if (disposed || !writer || !clearBusy) throw new Error('清仓会话已结束，请重新核验');
+    }
+    var CONFIG_API = 'https://api.github.com/repos/' + GH.owner + '/' + GH.repo + '/contents/';
+    async function clearRead(file, branch) {
+      clearActive();
+      var r = await requestJson(CONFIG_API + file + '?ref=' + branch + '&t=' + Date.now(),
+        { headers: ghHead(), cache: 'no-store' });
+      clearActive();
+      if (!r.ok || !r.data || !r.data.content || !/^[a-f0-9]{40,64}$/i.test(r.data.sha || ''))
+        throw new Error(file + ' 版本读取失败：HTTP ' + r.status + '；未覆盖远端');
+      return { sha: r.data.sha, value: parseCloud(r.data.content, file) };
+    }
+    function clearDestination(config, groups, sym, choice) {
+      if (!object(config) || !object(config.positions) || !object(config.focus) || !Array.isArray(groups))
+        throw new Error('分组配置无效，未修改');
+      var ordinary = groups.filter(function (g) {
+        return object(g) && /^[a-z_]+$/.test(g.key || '') && ['positions', 'focus'].indexOf(g.key) < 0;
+      });
+      var key = choice === 'focus' ? 'focus' :
+        (ordinary.find(function (g) { return object(config[g.key]) && own(config[g.key], sym); }) || {}).key;
+      // 用户明确：三只宽基/红利ETF没有旧分类时，默认回指数基。
+      if (!key && ['SPYM', 'QQQM', 'SCHD'].indexOf(sym) >= 0) key = 'index_funds';
+      if (!key) key = (ordinary.find(function (g) { return g.sector_etf === sym; }) || {}).key;
+      var group = groups.find(function (g) { return g.key === key; });
+      if (!group || !object(config[key])) throw new Error('该股没有有效默认分组，请选择重点');
+      return { key: key, label: group.label || key };
+    }
+    function clearConfig(config, destination, sym) {
+      var next = clone(config), source = next.positions[sym];
+      if (!object(source) && !object(next[destination.key][sym]))
+        throw new Error('该股持仓配置已变化，请核对后重试');
+      var rec = clone(next[destination.key][sym] || source);
+      delete rec.cost; delete rec.reduce; delete rec.hold;
+      if (destination.key !== 'focus') { delete rec.target; delete rec.target_at; }
+      next[destination.key][sym] = rec;
+      delete next.positions[sym];
+      // 选择回默认分组就是退出重点；其它板块记录原样保留，不覆盖其备注/触发价。
+      if (destination.key !== 'focus') delete next.focus[sym];
+      return next;
+    }
+    async function clearPut(file, branch, meta, value) {
+      clearActive();
+      var r = await requestJson(CONFIG_API + file, { method: 'PUT', headers: ghHead(true),
+        body: JSON.stringify({ branch: branch, sha: meta.sha,
+          message: '持仓统一保存 ' + new Date().toISOString(),
+          content: b64(JSON.stringify(value, null, 2)) }) });
+      clearActive();
+      if (r.status !== 200 && r.status !== 201) {
+        if ([400, 401, 403, 404, 409, 422].indexOf(r.status) >= 0) {
+          clearRecord[file === GH.path ? 'quantityRejected' : 'moveRejected'] = true;
+          saveClearRecord(clearRecord);
+        }
+        throw new Error(file + ' 写入未成功：HTTP ' + r.status + '；重试会先读取远端，不盲目覆盖');
+      }
+      return r.data || {};
+    }
+    function clearTrack(receipt) {
+      if (receipt && /^[a-f0-9]{40,64}$/i.test(receipt.blobSHA || '') &&
+          /^[a-f0-9]{40,64}$/i.test(receipt.commitSHA || '') && window.MMRunStatus && window.MMRunStatus.watchConfig)
+        Promise.resolve(window.MMRunStatus.watchConfig(receipt)).catch(function () {
+          if (!disposed) clearMessage('清仓已写入，规则更新跟踪未完成；请点状态核验');
+        });
+    }
+    function clearField(d, key) {
+      var p = key.split('|'), f = p[1];
+      if (f === 'cash') return cashFirst(d);
+      if (f === 'cash_extra' || f === 'fixed' || f === 'fixed_cost') return d[f];
+      return d.items[p[0]] && own(d.items[p[0]], f) ? d.items[p[0]][f] : null;
+    }
+    function clearMerge(remote) {
+      var rec = clearRecord, next = clone(remote), first = cashFirst(remote), second = remote.cash_extra;
+      rec.targets.concat(rec.additions || []).forEach(function (t) {
+        if (JSON.stringify(remote.items[t.sym] || null) !== JSON.stringify(rec.baseline.items[t.sym] || null))
+          clearConflict(t.sym + ' 仓位已变化，停止旧清仓事务');
+      });
+      Object.keys(rec.fields).forEach(function (key) {
+        if (clearField(remote, key) !== clearField(rec.baseline, key))
+          clearConflict(key + ' 同字段已被其它设备修改，停止旧清仓事务');
+        var p = key.split('|'), f = p[1], value = rec.fields[key];
+        if (f === 'cash') first = value;
+        else if (f === 'cash_extra') second = value;
+        else if (f === 'fixed' || f === 'fixed_cost') next[f] = value;
+        else {
+          if (!next.items[p[0]]) next.items[p[0]] = { qty: 0 };
+          if (value === null) delete next.items[p[0]][f]; else next.items[p[0]][f] = value;
+        }
+      });
+      next.cash = (Math.round(first * 10000) + Math.round(second * 10000)) / 10000;
+      next.cash_extra = second;
+      rec.targets.forEach(function (t) { if (!next.items[t.sym]) next.items[t.sym] = { qty: 0 }; next.items[t.sym].qty = 0; });
+      next.updated_at = new Date().toISOString();
+      return normalize(next);
+    }
+    function clearRule(config, groups, t) {
+      var dest = clearDestination(config, groups, t.sym, t.choice);
+      return { dest: dest, signature: JSON.stringify({ source: config.positions[t.sym] || null,
+        destination: config[dest.key][t.sym] || null, focus: config.focus[t.sym] || null,
+        group: groups.find(function (g) { return g.key === dest.key; }) }) };
+    }
+    function additionRule(config, groups, t) {
+      if (!object(config.positions) || !Array.isArray(groups)) throw new Error('持仓分组配置无效');
+      if (own(config.positions, t.sym)) clearConflict(t.sym + ' 远端已有持仓，禁止重复新增');
+      if (t.sym.charAt(0) === '^' || ['SGOV', 'USD', 'BOND'].indexOf(t.sym) >= 0)
+        throw new Error(t.sym + ' 是指数、固收或现金，请使用既有专属口径');
+      var records = {}, source = null;
+      groups.forEach(function (g) {
+        if (object(config[g.key]) && object(config[g.key][t.sym])) {
+          records[g.key] = config[g.key][t.sym];
+          if (!source) source = config[g.key][t.sym];
+        }
+      });
+      var record = clone(source || {}); record.hold = t.hold;
+      return { record: record, signature: JSON.stringify(records) };
+    }
+    function clearAccept(remote) {
+      (clearRecord.additions || []).forEach(function (t) { addedPositions[t.sym] = { hold: t.hold }; });
+      DATA = clone(remote); CLOUD = clone(remote); cloudVerified = true;
+      dirty = false; draftPending = false; editDraft = {}; cloudFirstPending = false;
+      editBaseline = clone(remote);
+      if (editing) { snapshot = clone(remote); snapshotDraft = {}; prevDirty = false; prevDraftPending = false; }
+      if (!write(LS_CLOUD, CLOUD) || !persist()) throw new Error('数值已保存，本地缓存未持久化；暂停移组');
+      SYNC = 'synced';
+    }
+    function completeClear(receipt) {
+      saveClearRecord(Object.assign({}, clearRecord, { step: 'done', receipt: receipt }));
+      clearDraft = {}; addDraft = {}; editDraft = {}; editBaseline = null; draftPending = false;
+      clearRecord.targets.forEach(function (t) { delete addedPositions[t.sym]; });
+      persist(); clearTrack(receipt);
+      clearMessage('本次数值已保存，持仓分组已统一更新，等待规则更新；现金仅按明确编辑保存');
+      clearRecord.targets.forEach(function (t) {
+        document.dispatchEvent(new CustomEvent('cost:cleared', { detail: { symbol: t.sym, group: t.destination } }));
+      });
+      editing = false; snapshot = null; snapshotDraft = null; syncEditUI();
+    }
+    function markClear(sym, choice) {
+      if (!editing || disposed || !writer || clearBusy || !isPosition(rowBySym(sym))) return;
+      if (clearRecord && clearRecord.step !== 'done') { clearMessage('有已保存事务未完成，请点击面板保存重试核验；不能重选或撤销已提交目标'); return; }
+      if (choice === 'undo') delete clearDraft[sym]; else clearDraft[sym] = choice;
+      draftPending = true;
+      changed();
+      if (clearDialog) clearDialog.close();
+      clearMessage('');
+    }
+    function freezeClear(next) {
+      var baseline = clone(editBaseline || CLOUD || snapshot || DATA), fields = {};
+      Object.keys(editDraft).forEach(function (key) { fields[key] = clearField(next, key); });
+      // 含此前尚未上传的有效草稿，但不把未触及字段当成整份覆盖授权。
+      ['USD|cash', 'USD|cash_extra', 'BOND|fixed', 'BOND|fixed_cost'].concat(
+        Object.keys(next.items).flatMap(function (sym) { return [sym + '|qty', sym + '|cost']; })
+      ).forEach(function (key) { if (clearField(next, key) !== clearField(baseline, key)) fields[key] = clearField(next, key); });
+      var targets = Object.keys(clearDraft).map(function (sym) { return { sym: sym, choice: clearDraft[sym] }; });
+      var additions = Object.keys(addDraft).map(function (sym) { return { sym: sym, hold: addDraft[sym].hold }; });
+      saveClearRecord({ version: 2, targets: targets, additions: additions, step: 'quantity', baseline: baseline, fields: fields });
+    }
+    async function executeClear(sym, choice) {
+      if (clearBusy) return;
+      try {
+        // 内部兼容入口同样代表面板明确保存；确认框不调用此接口。
+        if (sym && (!clearRecord || clearRecord.step === 'done')) markClear(sym, choice);
+        clearGuard();
+        var nextDraft = checkedDraft();
+        if (!nextDraft) throw new Error(draftNotice());
+        if (!clearRecord || clearRecord.step === 'done') {
+          if (!Object.keys(clearDraft).length && !Object.keys(addDraft).length) return;
+          freezeClear(nextDraft);
+        }
+        // 冻结事务由面板保存继续；原草稿不创建第二个上传授权。
+        clearBusy = true;
+        pullGeneration++; clearSaveTimers(); clearDialogControls();
+        clearMessage('正在核对本次数值和清仓分组…');
+        if (clearRecord.evidenceCommit) {
+          var evidence = await clearRead('holdings.json', clearRecord.evidenceCommit);
+          if (JSON.stringify(evidence.value) !== JSON.stringify(clearRecord.movePayload))
+            throw new Error('固定提交内容与移组不一致，停止取证；请核对');
+          completeClear({ file: 'holdings.json', blobSHA: evidence.sha, commitSHA: clearRecord.evidenceCommit });
+          return;
+        }
+        var groups = (await clearRead('groups.json', 'main')).value;
+        var config = await clearRead('holdings.json', 'main');
+        var pos = await clearRead(GH.path, GH.branch), remote = normalize(pos.value);
+        var alreadyMoved = clearRecord.moveSubmitted && JSON.stringify(config.value) === JSON.stringify(clearRecord.movePayload);
+        clearRecord.targets.forEach(function (t) {
+          if (alreadyMoved) return;
+          var rule = clearRule(config.value, groups, t);
+          clearConfig(config.value, rule.dest, t.sym);
+          if (t.rule && t.rule !== rule.signature) clearConflict(t.sym + ' 同股分组规则已被修改，停止旧清仓事务');
+          if (t.source && JSON.stringify(config.value.positions[t.sym] || null) !== t.source)
+            clearConflict(t.sym + ' 持仓规则已被修改，停止旧清仓事务');
+          t.rule = rule.signature; t.destination = rule.dest.key; t.label = rule.dest.label;
+        });
+        (clearRecord.additions || []).forEach(function (t) {
+          if (alreadyMoved) return;
+          var rule = additionRule(config.value, groups, t);
+          if (t.rule && t.rule !== rule.signature) clearConflict(t.sym + ' 同股新增规则已被修改，停止旧事务');
+          t.rule = rule.signature; t.record = rule.record;
+        });
+        saveClearRecord(clearRecord);
+        if (clearRecord.step === 'quantity') {
+          if (clearRecord.legacy && !clearRecord.baseline && !clearRecord.submitted)
+            clearConflict('旧单股清仓缺少编辑基线，禁止恢复上传；请核对备份');
+          if (clearRecord.submitted && (!clearRecord.payload ||
+              (canonical(remote) !== canonical(clearRecord.payload) && pos.sha !== clearRecord.baseSHA)))
+            clearConflict('上次写入后远端已有新版本，停止旧清仓事务；不会清掉重新建仓的数量');
+          var payload = clearRecord.submitted ? clearRecord.payload : clearMerge(remote);
+          if (canonical(remote) !== canonical(payload)) {
+            var last = read(LS_PUSH_AT), wait = typeof last === 'number' ? Math.max(0, 15000 - (Date.now() - last)) : 0;
+            if (storageErrors[LS_PUSH_AT]) throw new Error('保存间隔读取失败，暂停提交');
+            if (wait) { clearMessage('等待仓位保存间隔…'); await new Promise(function (resolve) { setTimeout(resolve, wait); }); }
+            clearActive();
+            pos = await clearRead(GH.path, GH.branch); remote = normalize(pos.value);
+            if (clearRecord.submitted) {
+              if (canonical(remote) !== canonical(payload) && pos.sha !== clearRecord.baseSHA)
+                clearConflict('等待期间远端版本变化，停止旧清仓事务');
+            } else payload = clearMerge(remote);
+            if (canonical(remote) !== canonical(payload)) {
+              saveClearRecord(Object.assign({}, clearRecord, { submitted: true, quantityRejected: false, baseSHA: pos.sha, payload: payload }));
+              if (!write(LS_PUSH_AT, Date.now())) throw new Error('保存间隔未持久化，暂停提交');
+              clearMessage('正在统一保存数值和清仓数量…');
+              await clearPut(GH.path, GH.branch, pos, payload);
+              // 已收到数值成功回执，后续GET/移组失败也不能由取消恢复旧数值。
+              clearRecord.quantityAccepted = true;
+              clearAccept(payload);
+              saveClearRecord(clearRecord);
+              remote = normalize((await clearRead(GH.path, GH.branch)).value);
+              if (canonical(remote) !== canonical(payload)) throw new Error('数值写入结果尚未完整核验，未继续移组');
+            }
+          }
+          saveClearRecord(Object.assign({}, clearRecord, { step: 'move', payload: payload }));
+        }
+        clearRecord.targets.forEach(function (t) {
+          if ((remote.items[t.sym] && remote.items[t.sym].qty > 0) ||
+              (clearRecord.payload && JSON.stringify(remote.items[t.sym] || null) !== JSON.stringify(clearRecord.payload.items[t.sym] || null)))
+            clearConflict(t.sym + ' 已重新建仓或仓位变化，停止移组');
+        });
+        (clearRecord.additions || []).forEach(function (t) {
+          if (JSON.stringify(remote.items[t.sym] || null) !== JSON.stringify(clearRecord.payload.items[t.sym] || null))
+            clearConflict(t.sym + ' 新增仓位被远端修改，停止规则提交');
+          addedPositions[t.sym] = { hold: t.hold };
+        });
+        clearAccept(remote);
+        clearMessage('数值已保存，正在批量更新持仓分组…');
+        config = await clearRead('holdings.json', 'main');
+        var latest = normalize((await clearRead(GH.path, GH.branch)).value);
+        clearRecord.targets.forEach(function (t) {
+          if (JSON.stringify(latest.items[t.sym] || null) !== JSON.stringify(remote.items[t.sym] || null))
+            clearConflict(t.sym + ' 移组前已重新建仓或仓位变化，停止移组');
+        });
+        (clearRecord.additions || []).forEach(function (t) {
+          if (JSON.stringify(latest.items[t.sym] || null) !== JSON.stringify(remote.items[t.sym] || null))
+            clearConflict(t.sym + ' 规则提交前仓位被修改，停止旧事务');
+        });
+        var movePayload;
+        if (clearRecord.moveSubmitted) {
+          movePayload = clearRecord.movePayload;
+          if (JSON.stringify(config.value) !== JSON.stringify(movePayload) && config.sha !== clearRecord.moveBaseSHA)
+            clearConflict('未知移组PUT后远端规则已有新版本，停止旧清仓事务');
+        } else {
+          movePayload = clone(config.value);
+          clearRecord.targets.forEach(function (t) {
+            var rule = clearRule(config.value, groups, t);
+            if (t.rule && rule.signature !== t.rule) clearConflict(t.sym + ' 同股分组规则已被修改，停止移组');
+            if (t.source && JSON.stringify(config.value.positions[t.sym] || null) !== t.source)
+              clearConflict(t.sym + ' 持仓规则已被修改，停止移组');
+            movePayload = clearConfig(movePayload, rule.dest, t.sym);
+          });
+          (clearRecord.additions || []).forEach(function (t) {
+            var rule = additionRule(config.value, groups, t);
+            if (rule.signature !== t.rule) clearConflict(t.sym + ' 同股新增规则已被修改，停止规则提交');
+            movePayload.positions[t.sym] = clone(rule.record);
+          });
+        }
+        if (JSON.stringify(config.value) !== JSON.stringify(movePayload)) {
+          saveClearRecord(Object.assign({}, clearRecord, { moveSubmitted: true, moveRejected: false, moveBaseSHA: config.sha, movePayload: movePayload }));
+          var response = await clearPut('holdings.json', 'main', config, movePayload);
+          if (response.content && response.commit && /^[a-f0-9]{40,64}$/i.test(response.content.sha || '') &&
+              /^[a-f0-9]{40,64}$/i.test(response.commit.sha || ''))
+            saveClearRecord(Object.assign({}, clearRecord, { receipt: {
+              file: 'holdings.json', blobSHA: response.content.sha, commitSHA: response.commit.sha } }));
+          var verified = await clearRead('holdings.json', 'main');
+          if (JSON.stringify(verified.value) !== JSON.stringify(movePayload))
+            throw new Error('分组写入结果尚未核验；数值不回滚，请点击面板保存重试核验');
+        }
+        var receipt = clearRecord.receipt;
+        if (!receipt) {
+          // 回执缺失只读固定提交取证；一旦固定，重试不能换成更新的 main 提交。
+          var commit = clearRecord.evidenceCommit;
+          if (!commit) {
+            var head = await requestJson('https://api.github.com/repos/' + GH.owner + '/' + GH.repo + '/git/ref/heads/main',
+              { headers: ghHead(), cache: 'no-store' });
+            clearActive();
+            commit = head.ok && head.data && head.data.object && head.data.object.sha;
+            if (!/^[a-f0-9]{40,64}$/i.test(commit || '')) throw new Error('移组内容已核验，但提交证据未取得；请点击面板保存重试核验');
+            saveClearRecord(Object.assign({}, clearRecord, { evidenceCommit: commit }));
+          }
+          var committed = await clearRead('holdings.json', commit);
+          if (JSON.stringify(committed.value) !== JSON.stringify(movePayload)) throw new Error('固定提交内容与移组不一致，停止取证；请核对');
+          receipt = { file: 'holdings.json', blobSHA: committed.sha, commitSHA: commit };
+        }
+        completeClear(receipt);
+      } catch (e) {
+        if (!disposed && clearRecord && clearRecord.step === 'quantity' && !clearRecord.submitted &&
+            !clearRecord.moveSubmitted && !clearRecord.quantityAccepted) {
+          // 预检未写入远端，释放冻结但保留草稿，允许改选目的地或修正后重存。
+          clearRecord.targets.forEach(function (t) { clearDraft[t.sym] = t.choice; });
+          (clearRecord.additions || []).forEach(function (t) {
+            if (!addDraft[t.sym]) addDraft[t.sym] = { hold: t.hold, before: (clearRecord.baseline && clearRecord.baseline.items[t.sym]) || null };
+          });
+          if (write(LS_CLEAR, null)) clearRecord = null;
+          draftPending = true; persist();
+        }
+        if (!disposed) clearMessage((clearRecord && (clearRecord.step === 'move' || clearRecord.quantityAccepted) ? '数值已保存，移组未完成：' : '统一保存未完成：') + e.message);
+      } finally {
+        clearBusy = false;
+        if (!disposed) { clearDialogControls(); paint(); }
+      }
+    }
+    async function abandonClear() {
+      if (clearBusy || !clearRecord || !clearRecord.conflict || disposed || !writer) return;
+      if (!window.confirm('结束旧保存事务？\n将先只读核验远端仓位和分组，采用最新远端数值作为新基线，不回滚任何已保存数值、不继续PUT。\n结果仍未知或读取失败时保留事务保护；完成后需重新编辑并确认清仓/新增。')) return;
+      try {
+        if (isolated || !ghToken()) throw new Error('请在真实可写页面填入token后核验，尚未结束旧事务');
+        if (Object.keys(storageErrors).length || inFlight || uncertain || positionsAuthorized)
+          throw new Error('其它保存或持久化异常尚未解决，保留旧事务保护');
+        clearBusy = true; pullGeneration++; clearSaveTimers(); clearDialogControls();
+        clearMessage('正在只读核验远端，尚未结束旧事务…');
+        var pos = await clearRead(GH.path, GH.branch), remote = normalize(pos.value);
+        var config = await clearRead('holdings.json', 'main');
+        var quantityMatch = clearRecord.payload && canonical(remote) === canonical(clearRecord.payload);
+        var moveMatch = clearRecord.movePayload && JSON.stringify(config.value) === JSON.stringify(clearRecord.movePayload);
+        if (clearRecord.submitted && !quantityMatch && pos.sha === clearRecord.baseSHA &&
+            !clearRecord.quantityAccepted && !clearRecord.quantityRejected)
+          throw new Error('数量PUT仍未知且远端仍是原版本，不能安全放弃；保留事务，可再次点面板取消只读核验');
+        if (clearRecord.moveSubmitted && !moveMatch && config.sha === clearRecord.moveBaseSHA &&
+            !clearRecord.moveRejected && !clearRecord.receipt && !clearRecord.evidenceCommit)
+          throw new Error('分组PUT仍未知且远端仍是原版本，不能安全放弃；保留事务，可再次点面板取消只读核验');
+        // 仅采用已读取的远端值，绝不恢复进入编辑时的旧本地快照。
+        clearAccept(remote);
+        (clearRecord.additions || []).forEach(function (t) {
+          if (!(remote.items[t.sym] && remote.items[t.sym].qty > 0) && !(config.value.positions && own(config.value.positions, t.sym)))
+            delete addedPositions[t.sym];
+        });
+        saveClearRecord(Object.assign({}, clearRecord, { step: 'done', abandoned: true, conflict: false,
+          quantityResult: quantityMatch ? 'verified' : 'remote-version', moveResult: moveMatch ? 'verified' : 'remote-version' }));
+        clearDraft = {}; addDraft = {}; editDraft = {}; editBaseline = null; draftPending = false;
+        if (!persist()) throw new Error('核验值尚未持久化，请保留备份并重试');
+        NOTICE = ''; SYNC_MSG = ''; editing = false; snapshot = null; snapshotDraft = null; savePaused = false;
+        syncEditUI();
+      } catch (e) {
+        if (!disposed) clearMessage('旧事务尚未安全结束：' + e.message);
+      } finally {
+        clearBusy = false;
+        if (!disposed) { clearDialogControls(); paint(); }
+      }
+    }
+    function clearDialogControls() {
+      var pending = !!(clearRecord && clearRecord.step !== 'done');
+      if (clearDialog) {
+        all('input', clearDialog).forEach(function (input) { input.disabled = clearBusy || pending; });
+        clearDialog.querySelector('[data-clear-confirm]').disabled = clearBusy || pending;
+        clearDialog.querySelector('[data-clear-cancel]').disabled = clearBusy;
+        clearDialog.querySelector('[data-clear-undo]').disabled = clearBusy || pending || !own(clearDraft, clearChoice);
+      }
+      all('.ep-clear,#costSave,#costCancel', panel).forEach(function (button) { button.disabled = clearBusy; });
+      var add = panel.querySelector('[data-cost-add]');
+      if (add) add.disabled = clearBusy || pending;
+      all('input[data-f]', panel).forEach(function (input) { input.disabled = clearBusy || pending; });
+      if (editBtn) editBtn.disabled = clearBusy;
+    }
+    function openClear(sym) {
+      if (!editing || !isPosition(rowBySym(sym)) || clearBusy) return;
+      reloadClearRecord();
+      if (!clearDialog) {
+        clearDialog = document.createElement('dialog');
+        clearDialog.className = 'cost-clear-dialog';
+        clearDialog.innerHTML = '<h3></h3><div class="cost-clear-choice"><label><input type="radio" name="clearDestination" value="default" checked>回默认分组</label>' +
+          '<label><input type="radio" name="clearDestination" value="focus">进重点</label></div>' +
+          '<p data-clear-message role="status"></p><div class="cost-acts"><button type="button" data-clear-cancel>取消</button>' +
+          '<button type="button" data-clear-undo>撤销标记</button><button type="button" class="primary" data-clear-confirm>确认清仓</button></div>';
+        panel.appendChild(clearDialog);
+        clearDialog.addEventListener('cancel', function (e) { if (clearBusy) e.preventDefault(); });
+        clearDialog.addEventListener('click', function (e) {
+          if (e.target.closest('[data-clear-cancel]')) { if (!clearBusy) clearDialog.close(); }
+          else if (e.target.closest('[data-clear-undo]')) markClear(clearChoice, 'undo');
+          else if (e.target.closest('[data-clear-confirm]')) {
+            var selected = clearDialog.querySelector('input:checked');
+            if (selected) markClear(clearChoice, selected.value);
+          }
+        });
+      }
+      clearChoice = sym;
+      clearDialog.querySelector('h3').textContent = '清仓 ' + sym + '？';
+      all('input', clearDialog).forEach(function (input) {
+        input.checked = input.value === (clearDraft[sym] || 'default');
+      });
+      clearDialog.querySelector('[data-clear-message]').textContent = clearRecord && clearRecord.step !== 'done' ?
+        '上次保存未完成；请点击面板保存核验，不自动重传' : '';
+      clearDialogControls(); clearDialog.showModal();
+    }
+    var addDialog = null;
+    function addPosition(sym, hold, qty, cost) {
+      if (!editing || !writer || disposed || clearBusy) return;
+      if (clearRecord && clearRecord.step !== 'done') throw new Error('请先完成面板保存事务核验，再新增仓位');
+      sym = String(sym || '').trim().toUpperCase();
+      if (!/^[A-Z0-9.^=_-]{1,32}$/.test(sym)) throw new Error('请输入有效代码：仅字母、数字、点、横线等，最多32字符');
+      if (sym.charAt(0) === '^' || ['SGOV', 'USD', 'BOND'].indexOf(sym) >= 0)
+        throw new Error('指数代码、固收和现金不通过仓位新增；普通ETF可新增');
+      if (isPosition(rowBySym(sym)) || own(addDraft, sym) ||
+          (own(addedPositions, sym) && DATA.items[sym] && DATA.items[sym].qty > 0) ||
+          (DATA.items[sym] && DATA.items[sym].qty > 0)) throw new Error('该代码已有持仓，不能重复新增');
+      if (['long', 'short'].indexOf(hold) < 0) throw new Error('请选择长持仓或短持仓');
+      qty = String(qty || '').trim(); cost = String(cost || '').trim();
+      if (draftError(qty) || draftError(cost) || !(Number(qty) > 0)) throw new Error('数量必须大于0；数量与成本最多四位小数，成本可留空');
+      if (!checkedDraft()) { persist(); paint(); throw new Error('已有无效输入，请先修正后新增仓位'); }
+      addDraft[sym] = { hold: hold, before: DATA.items[sym] ? clone(DATA.items[sym]) : null };
+      editDraft[sym + '|qty'] = { raw: qty, error: '' };
+      editDraft[sym + '|cost'] = { raw: cost, error: '' };
+      DATA = checkedDraft(); draftPending = true; changed();
+      if (addDialog) addDialog.close();
+      clearMessage('');
+    }
+    function removeAdded(sym) {
+      if (!own(addDraft, sym) || clearBusy || (clearRecord && clearRecord.step !== 'done')) return;
+      var before = addDraft[sym].before;
+      if (before) DATA.items[sym] = clone(before); else delete DATA.items[sym];
+      delete addDraft[sym]; delete editDraft[sym + '|qty']; delete editDraft[sym + '|cost'];
+      draftPending = true; changed(); paint();
+    }
+    function openAdd() {
+      if (!editing || !writer || disposed || clearBusy) return;
+      if (!addDialog) {
+        addDialog = document.createElement('dialog'); addDialog.className = 'cost-clear-dialog cost-add-dialog';
+        addDialog.innerHTML = '<h3>新增仓位</h3><label>代码 <input data-add-symbol maxlength="32" aria-label="新仓位代码"></label>' +
+          '<div class="cost-add-hold"><label><input type="radio" name="addHold" data-add-hold value="long" checked>长持仓</label>' +
+          '<label><input type="radio" name="addHold" data-add-hold value="short">短持仓</label></div>' +
+          '<label>数量 <input data-add-qty inputmode="decimal" aria-label="新仓位数量"></label>' +
+          '<label>成本 <input data-add-cost inputmode="decimal" aria-label="新仓位成本"></label>' +
+          '<p data-add-message role="status"></p>' +
+          '<div class="cost-acts"><button type="button" data-add-cancel>取消</button><button type="button" class="primary" data-add-confirm>加入草稿</button></div>';
+        panel.appendChild(addDialog);
+        addDialog.addEventListener('click', function (e) {
+          if (e.target.closest('[data-add-cancel]')) addDialog.close();
+          else if (e.target.closest('[data-add-confirm]')) {
+            try { addPosition(addDialog.querySelector('[data-add-symbol]').value,
+              addDialog.querySelector('[data-add-hold]:checked').value,
+              addDialog.querySelector('[data-add-qty]').value, addDialog.querySelector('[data-add-cost]').value); }
+            catch (err) { addDialog.querySelector('[data-add-message]').textContent = err.message; }
+          }
+        });
+      }
+      addDialog.querySelector('[data-add-message]').textContent = '';
+      all('[data-add-hold]', addDialog).forEach(function (input) { input.checked = input.value === 'long'; });
+      addDialog.showModal(); addDialog.querySelector('[data-add-symbol]').focus();
+    }
     var sortKey = read(LS_SORT) === 'wt' ? 'wt' : 'pnl';
     function syncMirrorEl() {
       if (syncMirror) return syncMirror;
@@ -1107,6 +1653,8 @@
         cancel = panel.querySelector('#costCancel');
       if (save) save.hidden = !editing;
       if (cancel) cancel.hidden = !editing;
+      var add = panel.querySelector('[data-cost-add]');
+      if (add) add.hidden = !editing;
     }
     function syncEditUI() {
       if (editBtn) {
@@ -1129,6 +1677,7 @@
         pullGeneration++;
         editGeneration++;
         snapshot = clone(DATA);
+        if (!editBaseline) editBaseline = clone(CLOUD || DATA);
         snapshotDraft = clone(editDraft);
         prevDirty = dirty;
         prevDraftPending = draftPending;
@@ -1153,6 +1702,8 @@
       });
     }
     function exitEdit(restore) {
+      if (clearBusy) return;
+      if (restore && clearRecord && clearRecord.step !== 'done' && clearRecord.conflict) { void abandonClear(); return; }
       clearSaveTimers();
       editGeneration++;
       pullGeneration++;
@@ -1160,9 +1711,18 @@
         DATA = clone(snapshot);
         changed();
       }
+      var canceledTransaction = false;
+      if (restore && clearRecord && clearRecord.step === 'quantity' && !clearRecord.submitted && !clearRecord.quantityAccepted) {
+        if (write(LS_CLEAR, null)) { clearRecord = null; canceledTransaction = true; }
+      }
       if (restore) {
-        editDraft = snapshotDraft || {};
-        draftPending = prevDraftPending;
+        if (!(clearRecord && clearRecord.step !== 'done') &&
+            (canceledTransaction || /^(?:待清仓标记仅|已撤销清仓标记$|新增仓位仅)/.test(NOTICE))) NOTICE = '';
+        if (clearRecord && (clearRecord.step === 'move' || clearRecord.quantityAccepted) && clearRecord.payload) DATA = clone(clearRecord.payload);
+        Object.keys(addDraft).forEach(function (sym) { if (!addedPositions[sym] && (!editBaseline || !editBaseline.items[sym])) delete DATA.items[sym]; });
+        clearDraft = {}; addDraft = {};
+        editDraft = clearRecord && clearRecord.step !== 'done' ? {} : snapshotDraft || {};
+        draftPending = clearRecord && clearRecord.step !== 'done' ? false : prevDraftPending;
         if (!inFlight && !uncertain) dirty = prevDirty;
         persist();
       }
@@ -1173,8 +1733,9 @@
       savePaused = false;
       syncEditUI();
       paint();
-      if (cloudFirstPending && !draftPending && !positionsAuthorized) startPull();
-      if (dirty || uncertain) requestSave(0, false);
+      if ((cloudFirstPending || canceledTransaction) && !draftPending && !positionsAuthorized) startPull();
+      if (!(clearRecord && clearRecord.step !== 'done') && (dirty || uncertain)) requestSave(0, false);
+      if (!(clearRecord && clearRecord.step !== 'done')) editBaseline = null;
     }
     function exportData() {
       var blob = new Blob([JSON.stringify(DATA, null, 1)], { type: 'application/json' }),
@@ -1188,6 +1749,7 @@
       }, 0);
     }
     function importData(j) {
+      if (clearBusy || (clearRecord && clearRecord.step !== 'done')) throw new Error('请先完成清仓核验，再导入');
       var next = normalize(j);
       if (!writer || disposed) throw new Error('本页只读，请先点击编辑接管');
       clearSaveTimers();
@@ -1226,12 +1788,16 @@
       var t =
         e.target && e.target.closest
           ? e.target.closest(
-              '#costRetry,#costImportBak,#costSave,#costCancel,#costState,[data-cost-export]',
+              '#costRetry,#costImportBak,#costSave,#costCancel,#costState,[data-cost-export],[data-cost-clear],[data-cost-add],[data-cost-remove-added]',
             )
           : null;
       if (!t) return;
       e.preventDefault();
       e.stopPropagation();
+      if (clearBusy && !t.hasAttribute('data-cost-export')) return;
+      if (t.hasAttribute('data-cost-clear')) { openClear(t.getAttribute('data-cost-clear')); return; }
+      if (t.hasAttribute('data-cost-add')) { openAdd(); return; }
+      if (t.hasAttribute('data-cost-remove-added')) { removeAdded(t.getAttribute('data-cost-remove-added')); return; }
       if (t.hasAttribute('data-cost-export')) {
         exportData();
         return;
@@ -1254,6 +1820,10 @@
       }
       if (t.id === 'costSave') {
         if (!writer || disposed || !editing) return;
+        reloadClearRecord();
+        if ((clearRecord && clearRecord.step !== 'done') || Object.keys(clearDraft).length || Object.keys(addDraft).length) {
+          void executeClear(); return;
+        }
         var next = checkedDraft();
         if (!next) {
           persist();
@@ -1262,6 +1832,10 @@
           return;
         }
         DATA = next;
+        var fixedBaseline = own(editDraft, 'BOND|fixed_cost') ? {
+          fixed: (editBaseline || CLOUD || snapshot).fixed,
+          fixed_cost: (editBaseline || CLOUD || snapshot).fixed_cost,
+        } : null;
         editDraft = {};
         snapshotDraft = null;
         NOTICE = '';
@@ -1273,7 +1847,8 @@
         draftPending = false;
         cloudFirstPending = false;
         if (!dirty && !sameAsCloud()) changed();
-        authorizePositions();
+        authorizePositions(fixedBaseline);
+        editBaseline = null;
         persist();
         syncEditUI();
         requestSave(0, true);
@@ -1367,13 +1942,16 @@
       });
     panel.addEventListener('input', function (e) {
       var el = e.target;
-      if (!writer || !editing || disposed || !el || !el.getAttribute) return;
+      if (!writer || !editing || disposed || clearBusy || !el || !el.getAttribute) return;
       var f = el.getAttribute('data-f'),
         sym = el.getAttribute('data-sym');
       if (['cash', 'cash_extra', 'fixed', 'fixed_cost', 'cost', 'qty'].indexOf(f) < 0) return;
-      if ((f === 'cost' || f === 'qty') && !isPosition(rowBySym(sym))) return;
+      if ((f === 'cost' || f === 'qty') && !isPosition(rowBySym(sym)) && !own(addDraft, sym) && !own(addedPositions, sym)) return;
+      if (clearBusy || (clearRecord && clearRecord.step !== 'done')) return;
       var key = sym + '|' + f;
       editDraft[key] = { raw: el.value, error: draftError(el.value) };
+      // 单一固收成本框的明确编辑同时授权固收资产与成本；未编辑时保留旧值。
+      if (f === 'fixed_cost') editDraft['BOND|fixed'] = { raw: el.value, error: editDraft[key].error };
       draftPending = true;
       var next = checkedDraft();
       el.setCustomValidity(editDraft[key].error);
@@ -1414,7 +1992,7 @@
     function vt(v) {
       return trim4(num(v));
     }
-    function editorHtml(rows, cash, fixed, fixedCost) {
+    function editorHtml(rows, cash, fixedCost) {
       var heading = ['标的', '成本价', '数量', '持仓市值']
         .map(function (label) {
           return '<span class="ep-h">' + label + '</span>';
@@ -1425,9 +2003,12 @@
           return (
             '<span class="ep-sym" data-cost-row data-sym="' +
             esc(r.sym) +
-            '">' +
-            esc(r.sym) +
-            (r.note ? ' ' + esc(r.note) : '') +
+            '"><button type="button" class="ep-clear" data-cost-clear="' +
+            esc(r.sym) + '" aria-label="清仓 ' + esc(r.sym) + '"' +
+            (clearBusy ? ' disabled' : '') + '>×</button>' +
+            '<span class="ep-name">' + esc(r.sym) +
+            (r.note ? ' ' + esc(r.note) : '') + '</span>' +
+            (clearDraft[r.sym] ? '<small class="ep-clear-mark">待清仓 → ' + (clearDraft[r.sym] === 'focus' ? '重点' : '默认分组') + '</small>' : '') +
             '</span>' +
             inp(r.sym, 'cost', r.costKnown ? vt(r.cost) : '', '成本价') +
             inp(r.sym, 'qty', vt(r.qty), '数量') +
@@ -1439,7 +2020,6 @@
         .join('');
       var fields = [
         ['现金 1', 'USD', 'cash', cashFirst(DATA)],
-        ['固收', 'BOND', 'fixed', fixed],
         ['现金 2', 'USD', 'cash_extra', DATA.cash_extra],
         ['固收成本', 'BOND', 'fixed_cost', fixedCost],
       ]
@@ -1451,6 +2031,14 @@
         '<div class="ep-grid">' +
         heading +
         stocks +
+        Object.keys(Object.assign({}, addedPositions, addDraft)).filter(function (sym) { return !isPosition(rowBySym(sym)); }).map(function (sym) {
+          var addition = addDraft[sym] || addedPositions[sym], item = DATA.items[sym] || { qty: 0 };
+          return '<span class="ep-sym" data-cost-row data-sym="' + esc(sym) + '">' +
+            (addDraft[sym] ? '<button type="button" class="ep-clear" data-cost-remove-added="' + esc(sym) + '" aria-label="撤销新增 ' + esc(sym) + '">×</button>' : '') +
+            '<span class="ep-name">' + esc(sym) + '</span><small class="ep-clear-mark">' + (addition.hold === 'long' ? '长持仓' : '短持仓') +
+            (addDraft[sym] ? ' · 待新增' : ' · 已保存，等规则更新/行情') + '</small></span>' +
+            inp(sym, 'cost', own(item, 'cost') ? vt(item.cost) : '', '成本价') + inp(sym, 'qty', vt(item.qty), '数量') + '<span class="ep-val">—</span>';
+        }).join('') +
         '</div><div class="ep-cash">' +
         fields +
         '</div>' +
@@ -1552,7 +2140,7 @@
           if (tone)
             groups[tone].push({
               r: r,
-              value: pct(r.pnlPct),
+              value: pct(r.pnlPct) + ' · ' + money(r.pnlAmt),
               sort: -Math.abs(r.pnlPct),
               cls: tone === 'gain' ? 'up' : 'down',
             });
@@ -1590,6 +2178,8 @@
         total += groups[kind].length;
         var ul = extra.querySelector('ul[data-g="' + kind + '"]');
         if (!ul) return;
+        var block = ul.closest('.signal-member-block');
+        if (block) block.hidden = groups[kind].length === 0;
         var html = groups[kind]
           .map(function (x) {
             var r = x.r,
@@ -1842,7 +2432,7 @@
             };
       longs.sort(cmp);
       shorts.sort(cmp);
-      var html = editing ? editorHtml(longs.concat(shorts), cash, fixed, fixedCost) : '';
+      var html = editing ? editorHtml(longs.concat(shorts), cash, fixedCost) : '';
       var cl = [],
         prevMv = 0;
       ROWS.forEach(function (r) {
@@ -2025,6 +2615,7 @@
         asset.innerHTML = footHtml;
         asset._rendered = footHtml;
       }
+      clearDialogControls();
       syncCostNotice();
       document.dispatchEvent(new CustomEvent('cost:painted'));
     }

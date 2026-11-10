@@ -47,6 +47,8 @@ class Element {
   get id(){return this.attrs.id||'';} set id(v){this.attrs.id=v;}
   get className(){return this.attrs.class||'';} set className(v){this.attrs.class=v;}
   get open(){return Object.hasOwn(this.attrs,'open');} set open(v){if(v)this.attrs.open='';else delete this.attrs.open;}
+  showModal(){this.open=true;}
+  close(){this.open=false;}
   get firstChild(){return this.children[0]||null;}
   get parentElement(){return this.parentNode||null;}
   get nodeType(){return this.tagName==='#TEXT'?3:1;}
@@ -82,7 +84,7 @@ class Element {
   hasAttribute(k){return Object.hasOwn(this.attrs,k);}
   removeAttribute(k){delete this.attrs[k];}
   get textContent(){return this.tagName==='#TEXT'?this.text:this.children.map(c=>c.textContent).join('');}
-  set textContent(v){for(const n of this.children)n.parentNode=null;this.children=[];if(String(v)){let n=new Element('#text',this.doc);n.text=String(v);this.appendChild(n);}}
+  set textContent(v){if(this.tagName==='#TEXT'){this.text=String(v);return;}for(const n of this.children)n.parentNode=null;this.children=[];if(String(v)){let n=new Element('#text',this.doc);n.text=String(v);this.appendChild(n);}}
   get innerHTML(){return this._html||'';}
   set innerHTML(html){
     this._html=html;for(const n of this.children)n.parentNode=null;this.children=[];this.doc.renders++;
@@ -105,6 +107,7 @@ class Element {
       s=s.trim();let invalid=false;
       if(s.endsWith(':invalid')){invalid=true;s=s.slice(0,-8);}
       if(invalid&&!this.validationMessage)return false;
+      if(s.endsWith(':checked')){if(!this.checked)return false;s=s.slice(0,-8);}
       const attrs=[...s.matchAll(/\[([\w-]+)(\^?=)?(?:["']([^"']*)["'])?\]/g)];
       s=s.replace(/\[[^\]]+\]/g,'');
       for(const a of attrs){let v=this.getAttribute(a[1]);if(v===null)return false;if(a[2]==='='&&v!==a[3])return false;if(a[2]==='^='&&!v.startsWith(a[3]))return false;}
@@ -165,7 +168,7 @@ function makeDocument(opts={}){
     +'<button id="btnCheckStatus">状态</button><button id="btnHardRefresh">刷新</button>'
     +'<button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false" disabled>编辑</button></div>'
     +'<div class="dual-row"><details id="dayPnlCard"><summary><b class="dp-amt"></b><b class="dp-pct"></b></summary></details><div class="dual-body"><ul class="cost-contrib" data-owner="day"></ul></div></div>'
-    +COST_PANEL_HTML+'<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><div class="cost-foot asset-row cost-manage"></div><div class="cashbond-row"><span class="cb-total-amt"></span><span class="cb-total-pnl"></span><span class="cb-cash"><span class="cb-amt"></span></span><span class="cb-bond"><span class="cb-amt"></span></span></div><table></table></details><div id="signalCounts"><div class="signal-extra-row pnl-extra"><details><summary><span class="pnl-chip">盈亏到价</span><span class="pnl-count">0</span></summary><ul class="signal-member-list" data-g="gain"></ul><ul class="signal-member-list" data-g="loss"></ul><ul class="signal-member-list" data-g="cut"></ul><ul class="signal-member-list" data-g="add"></ul></details></div></div>';
+    +COST_PANEL_HTML+'<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><div class="cost-foot asset-row cost-manage"></div><div class="cashbond-row"><span class="cb-total-amt"></span><span class="cb-total-pnl"></span><span class="cb-cash"><span class="cb-amt"></span></span><span class="cb-bond"><span class="cb-amt"></span></span></div><table></table></details><div id="signalCounts"><div class="signal-extra-row pnl-extra"><details><summary><span class="pnl-chip">盈亏到价</span><span class="pnl-count">0</span></summary><div class="signal-member-block" hidden><h5>浮盈</h5><ul class="signal-member-list" data-g="gain"></ul></div><div class="signal-member-block" hidden><h5>浮亏</h5><ul class="signal-member-list" data-g="loss"></ul></div><div class="signal-member-block" hidden><h5>减仓价</h5><ul class="signal-member-list" data-g="cut"></ul></div><div class="signal-member-block" hidden><h5>加仓价</h5><ul class="signal-member-list" data-g="add"></ul></div></details></div></div>';
   const table=doc.querySelector('table');table.className='stk';
   for(const sym of opts.symbols||['AAA','BBB']){
     const tr=new Element('tr',doc);tr.id=fixtureAnchor(sym);tr.className='green';
@@ -220,10 +223,11 @@ async function boot(opts={}){
     CustomEvent:MockCustomEvent,
     addEventListener:(k,f)=>(events[k]||=[]).push(f),
     dispatchEvent:e=>{dispatched.push(e);if(!e.target)e.target=ctx;for(const f of events[e.type]||[])f.call(ctx,e);return !e.defaultPrevented;},
-    alert:s=>alerts.push(s),prompt:()=>null,
+    alert:s=>alerts.push(s),prompt:()=>null,confirm:s=>{alerts.push(s);return opts.confirm===true;},
     __MM_RULES__:opts.rules};
   ctx.window=ctx;
-  const hooks=`globalThis.__costTest={money,plain,qtyInt,trim,trim4,normalize,canonical,mergeCloud,requestSave,doPush,startPull,enterEdit,exitEdit,importData,exportData,cashFirst,nearPrice,pnlTone,paint,
+  const hooks=`globalThis.__costTest={money,plain,qtyInt,trim,trim4,normalize,canonical,mergeCloud,requestSave,doPush,startPull,enterEdit,exitEdit,importData,exportData,cashFirst,nearPrice,pnlTone,paint,openClear,markClear,executeClear,openAdd,addPosition,removeAdded,clearDestination,clearConfig,
+    clearState:()=>({record:clearRecord&&clone(clearRecord),busy:clearBusy,draft:clone(clearDraft),additions:clone(addDraft),added:clone(addedPositions)}),
     state:()=>({DATA:clone(DATA),CLOUD:CLOUD&&clone(CLOUD),revision,dirty,cloudVerified,cloudFirstPending,positionsAuthorized,positionSave:positionSave&&clone(positionSave),positionGeneration,draftPending,uncertain:uncertain&&clone(uncertain),deadline:REQUEST_DEADLINE,activeRequests:activeRequests.length,editing,inFlight:inFlight&&clone(inFlight),queued,writer,SYNC,NOTICE,savePaused,storageErrors:clone(storageErrors)}),
     rows:ROWS};`;
   const code=SOURCE.replace(/^<script>\s*/,'').replace(/\s*<\/script>\s*$/,'').replace('__MM_REAL__',JSON.stringify(opts.seed||SEED))
@@ -236,7 +240,7 @@ async function boot(opts={}){
     const panel=doc.getElementById('costManage');const el=panel.querySelector('input[data-sym="'+sym+'"][data-f="'+field+'"]');
     assert.ok(el,'必须存在真实渲染输入框 '+sym+'/'+field);el.value=value;el.focus();el.setSelectionRange(value.length,value.length,'none');panel.fire('input',{target:el});return el;
   }
-  const api={...t,doc,ctx,store,session,requests,readers,alerts,blobs,tick,respond,edit,events,dispatched,
+  const api={...t,clearState:()=>copy(t.clearState()),doc,ctx,store,session,requests,readers,alerts,blobs,tick,respond,edit,events,dispatched,
     move:(sym,group)=>{moveRow(doc,sym,group);t.paint();},
     sessionLocal:()=>JSON.parse(session.values.get(SESSION_LOCAL)),
     fireWindow:(k,e={})=>{for(const f of events[k]||[])f(e);},
@@ -567,7 +571,7 @@ test('退役基本面不影响ETF标签和财报日期元素',async()=>{
 
 
 
-test('零固定收益也能在编辑态输入',async()=>{let b=await boot({local:{...SEED,fixed:0,fixed_cost:0}});await b.enter();b.edit('BOND','fixed','12.3456');assert.equal(b.local().fixed,12.3456);});
+test('零固定收益通过单一固收成本框同步资产与成本',async()=>{let b=await boot({local:{...SEED,fixed:0,fixed_cost:0}});await b.enter();b.edit('BOND','fixed_cost','12.3456');assert.equal(b.local().fixed,12.3456);assert.equal(b.local().fixed_cost,12.3456);});
 for(const [name,fixed,fixedCost] of [['固收盈利',200,15],['固收亏损',20,200],['固收微亏',16916.34,16916.97],['无固收',0,0]]){
   test('表头仅股票ETF盈亏且保留总资产：'+name,async()=>{
     const b=await boot({local:{...copy(SEED),fixed,fixed_cost:fixedCost},token:false});
@@ -596,8 +600,8 @@ test('固收盈利不能抵消股票亏损且编辑成本仍保留',async()=>{
   const sum=b.doc.querySelector('.cost-sum');
   assert.equal(sum.querySelectorAll('b')[1].textContent,'-$30.0（-4.1%）');
   assert.equal(sum.querySelectorAll('b')[1].className,'down');
-  await b.enter();b.edit('BOND','fixed_cost','123.4567');b.edit('BOND','fixed','12.3456');await b.tick(16);
-  assert.equal(b.local().fixed_cost,123.4567);assert.equal(b.local().fixed,12.3456);
+  await b.enter();b.edit('BOND','fixed_cost','123.4567');await b.tick(16);
+  assert.equal(b.local().fixed_cost,123.4567);assert.equal(b.local().fixed,123.4567);
   assert.equal(sum.querySelectorAll('b')[1].textContent,'-$30.0（-4.1%）');
   assert.equal(b.doc.querySelector('.cashbond-row .cb-bond .pct'),null);
   assert.equal(b.puts().length,0);
@@ -619,7 +623,8 @@ test('仓位绿色外框与顶部编辑操作区契约',async()=>{
   const panel=b.doc.getElementById('costManage'), acts=b.doc.getElementById('costActs');
   assert.equal(panel.querySelector('.cost-body').firstChild,acts);
   assert.equal(acts.nextElementSibling.id,'costMembers');
-  assert.deepEqual(acts.querySelectorAll('button').map(n=>n.id),['costSave','costCancel']);
+  assert.deepEqual(acts.querySelectorAll('button').map(n=>n.hasAttribute('data-cost-add')?'costAdd':n.id),['costAdd','costSave','costCancel']);
+  assert.equal(acts.querySelector('[data-cost-add]').hidden,true);
   assert.equal(panel.querySelector('#costExport'),null);assert.equal(panel.querySelector('#costImport'),null);
   assert.equal(acts.hidden,true);
   assert.doesNotMatch(panel.textContent,/成本价与数量可填到小数点后四位|现金两框相加，空框按0算/);
@@ -1524,8 +1529,8 @@ for(const [name,first,second,total] of [
   b.edit('USD','cash',first);b.edit('USD','cash_extra',second);await b.tick(16);
   assertCash(b,Number(first),Number(second),total);
   assert.equal(b.doc.querySelector('.ep-cash-total').textContent,'现金合计 USD$'+String(total));
-  assert.equal(b.doc.querySelectorAll('.ep-cash label').length,4);
-  assert.deepEqual(b.doc.querySelectorAll('.ep-cash label').map(el=>el.querySelector('span').textContent),['现金 1','固收','现金 2','固收成本']);
+  assert.equal(b.doc.querySelectorAll('.ep-cash label').length,3);
+  assert.deepEqual(b.doc.querySelectorAll('.ep-cash label').map(el=>el.querySelector('span').textContent),['现金 1','现金 2','固收成本']);
   await b.save();assert.equal(b.state().editing,false);assert.equal(b.doc.getElementById('costManage').classList.contains('cost-edit-open'),false);
   assert.equal(b.doc.querySelector('.cashbond-row .cb-cash .cb-amt').textContent,'$'+String(Math.round(total)));
   assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
@@ -1931,7 +1936,7 @@ test('刷新首屏：成本绘制不再动态重建静态统计区',async()=>{
 // 审核边界用例只运行内存 DOM、存储及 fetch mock。
 for(const [sym,field,raw] of [
   ['AAA','qty','2oops'],['AAA','cost','-1'],['USD','cash','0.00001'],
-  ['USD','cash_extra','1e309'],['BOND','fixed','NaN'],['BOND','fixed_cost','-2'],
+  ['USD','cash_extra','1e309'],['BOND','fixed_cost','NaN'],['BOND','fixed_cost','-2'],
   ['USD','cash','9'.repeat(305)]
 ])test('审核边界：跨格重绘保留完整无效草稿 '+sym+'/'+field+'/'+(raw.length>100?'溢出':raw),async()=>{
   const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
@@ -2152,6 +2157,30 @@ for(const level of ['red','yellow','green','gray'])test('终稿盈亏到价名�
   for(const kind of ['loss','add','cut']){const li=qaPnlRows(b,kind).find(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA');assert.ok(li);assert.equal(li.className,'lamp-'+level);}
   for(let i=0;i<4;i++)b.paint();assert.equal(r.tr.className,level);qaAssertNoAck(b);
 });
+for(const kind of ['gain','loss','cut','add'])test('统计空分类 '+kind+' 空→有→空保留标题骨架且重绘不复位',async()=>{
+  const empty={...copy(SEED),items:{AAA:{cost:100,qty:5}}};
+  const b=await boot({local:empty,prepareDocument(doc){qaQuote(doc,'AAA',100,1000);doc.querySelector('.pnl-count').setAttribute('data-pnl-count','');}});
+  b.respond(b.requests[0],meta(empty));await settle();
+  const extra=b.doc.querySelector('.pnl-extra'),details=extra.querySelector('details'),summary=extra.querySelector('summary'),chip=extra.querySelector('.pnl-chip');
+  const lists=new Map(['gain','loss','cut','add'].map(g=>[g,extra.querySelector('ul[data-g="'+g+'"]')]));
+  const r=b.rows.find(row=>row.sym==='AAA');details.open=true;
+  const checkGroups=active=>{for(const [g,ul]of lists){assert.equal(extra.querySelector('ul[data-g="'+g+'"]'),ul);assert.equal(ul.closest('.signal-member-block').hidden,g!==active);assert.equal(ul.querySelectorAll('li').length,g===active?1:0);}
+    assert.equal(details.open,true);assert.equal(extra.querySelector('summary'),summary);assert.equal(extra.querySelector('.pnl-chip'),chip);assert.equal(summary.querySelector('[data-pnl-count]').textContent,active?'1':'0');};
+  checkGroups('');
+  if(kind==='gain'||kind==='loss')b.mergeCloud({...empty,items:{AAA:{cost:kind==='gain'?80:125,qty:5}}});
+  else if(kind==='add')r.trig=100;else r.cut=100;
+  for(let i=0;i<4;i++){b.paint();checkGroups(kind);}
+  b.mergeCloud(empty);r.trig=1000;r.cut=1000;
+  for(let i=0;i<4;i++){b.paint();checkGroups('');}
+  assert.equal(b.requests.length,1);assert.equal(b.puts().length,0);qaAssertNoAck(b);await b.dispose();
+});
+for(const [kind,cost,expected]of [['gain',80,'+25.0% · +$50.0'],['loss',125,'-20.0% · -$62.5']])test('统计 '+kind+' 真实百分比和金额采用原始价格成本及小数数量',async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost,qty:2.5}}},prepareDocument(doc){qaQuote(doc,'AAA',100,1000);}});
+  const r=b.rows.find(row=>row.sym==='AAA'),ul=b.doc.querySelector('.pnl-extra ul[data-g="'+kind+'"]');
+  assert.equal(r.pnlAmt,(100-cost)*2.5);assert.equal(r.pnlPct,(100-cost)/cost*100);
+  for(let i=0;i<4;i++){b.paint();assert.equal(ul.querySelector('.signal-member-metric').textContent,expected);assert.equal(ul.closest('.signal-member-block').hidden,false);assert.equal(r.tr.className,'green');}
+  assert.equal(b.requests.length,0);await b.dispose();
+});
 test('终稿四组pnl静态骨架重绘保留summary胶囊与展开状态',async()=>{
   const b=await bootCash(),extra=b.doc.querySelector('.pnl-extra'),details=extra.querySelector('details'),chip=extra.querySelector('.pnl-chip');
   assert.ok(chip,'必须保留summary静态胶囊，不以textContent删除');details.open=true;
@@ -2169,6 +2198,442 @@ test('终稿每次动态绘制通过document发cost:painted并已完成名单更
 });
 test('终稿生产成本源码无ACK、DEMO模拟或浮亏造红链路',()=>{
   assert.doesNotMatch(SOURCE,/\b(?:setAck|pruneAck|ackStatEntries|renderAckGray|LOSS_STAT|DEMO|injectDemo|injectLmtEarnings)\b|data-ack|ack-btn|cost-warn|ack_tombstones|ack_contexts|\.acks\b|r48-demo|data-r58-key/);
+});
+
+// 红叉清仓：全部网络由内存请求夹具接管，绝不发真实GET/PUT。
+const CLEAR_KEY='mm_position_clear_v1';
+const CLEAR_GROUPS=[{key:'positions',label:'持仓'},{key:'focus',label:'重点'},
+  {key:'technology',label:'IT · AI',sector_etf:'XLK'},{key:'index_funds',label:'指数基'}];
+const CLEAR_CONFIG={_说明:['保留原配置'],group_monitoring:{technology:true},
+  positions:{AAA:{note:'测试',cost:100,hold:'short',reduce:120,target:150,target_at:'2026-10'},BBB:{note:'另一只',cost:90}},
+  focus:{AAA:{note:'已有重点',trigger:95}},technology:{AAA:{note:'已有板块',trigger:80}},index_funds:{}};
+const clearMeta=v=>({sha:'a'.repeat(40),content:Buffer.from(JSON.stringify(v)).toString('base64')});
+async function bootClear(opts={}){
+  const b=await boot(opts);if(b.requests[0])b.respond(b.requests[0],meta(opts.local||SEED));await settle();await b.enter();
+  b.ctx.MMRunStatus={watchConfig:async receipt=>{b.clearReceipts.push(receipt);}};b.clearReceipts=[];b.openClear('AAA');return b;
+}
+async function clearReply(b,file,value,method='GET',status=200){
+  await settle();const req=b.requests.at(-1);assert.ok(req.url.includes('/'+file),req.url+' 应为 '+file);
+  assert.equal(req.init.method||'GET',method);assert.equal(req._answered,undefined,'不得误响应旧请求');req._answered=true;
+  b.respond(req,method==='GET'?clearMeta(value):value,status);await settle();return req;
+}
+async function clearToQuantity(b,config=CLEAR_CONFIG){
+  await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',config);await clearReply(b,'position-costs.json',b.state().CLOUD);
+  await clearReply(b,'position-costs.json',b.state().CLOUD);
+  const put=b.requests.at(-1);assert.equal(put.init.method,'PUT');return put;
+}
+async function finishClear(b,op,put,config=CLEAR_CONFIG,status=200){
+  const zero=b.payload(put);await clearReply(b,'position-costs.json',{},'PUT');await clearReply(b,'position-costs.json',zero);
+  await clearReply(b,'holdings.json',config);await clearReply(b,'position-costs.json',zero);
+  const move=b.requests.at(-1),next=b.payload(move);
+  await clearReply(b,'holdings.json',{content:{sha:'b'.repeat(40)},commit:{sha:'c'.repeat(40)}},'PUT',status);
+  if(status===200)await clearReply(b,'holdings.json',next);await op;return {zero,move,next};
+}
+for(const choice of ['default','focus'])test('红叉清仓 '+choice+' 只归零目标、现金不变、远端移组且取消不复活数量',async()=>{
+  const b=await bootClear();const buttons=b.doc.querySelectorAll('[data-cost-clear]');assert.equal(buttons.length,2);
+  assert.equal(buttons[0].textContent,'×');assert.equal(b.doc.querySelector('.cost-clear-dialog').querySelectorAll('input').length,2);
+  const op=b.executeClear('AAA',choice),put=await clearToQuantity(b);
+  const sent=b.payload(put);assert.equal(sent.items.AAA.qty,0);assert.deepEqual(sent.items.BBB,SEED.items.BBB);
+  for(const k of ['cash','cash_extra','fixed','fixed_cost'])assert.equal(sent[k],b.state().CLOUD[k]);
+  b.edit('BBB','qty','999');assert.equal(b.state().DATA.items.BBB.qty,2,'清仓处理中不接受其它编辑');
+  const {next}=await finishClear(b,op,put);
+  assert.equal(next.positions.AAA,undefined);assert.deepEqual(next.positions.BBB,CLEAR_CONFIG.positions.BBB);
+  assert.deepEqual(next._说明,CLEAR_CONFIG._说明);assert.deepEqual(next.group_monitoring,CLEAR_CONFIG.group_monitoring);
+  const target=choice==='focus'?'focus':'technology';assert.equal(next[target].AAA.note,choice==='focus'?'已有重点':'已有板块');
+  assert.equal(next[target].AAA.trigger,choice==='focus'?95:80);for(const k of ['hold','reduce','cost'])assert.equal(next[target].AAA[k],undefined);
+  if(choice==='default')assert.equal(next.focus.AAA,undefined);
+  assert.equal(b.clearState().record.step,'done');assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.clearReceipts.length,1);
+  b.exitEdit(true);assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.puts().length,2);
+  await b.enter();b.openClear('AAA');const count=b.requests.length;
+  b.doc.querySelector('[data-clear-confirm]').click();await settle();
+  assert.equal(b.requests.length,count,'红叉确认仅恢复草稿，不得直接执行或重复写入');await b.dispose();
+});
+for(const mode of ['no-token','isolated','readonly','storage','cloud-changed'])test('统一保存拒绝 '+mode+' 不越权或覆盖冲突',async()=>{
+  const b=await bootClear(mode==='isolated'?{noLocks:true}:mode==='no-token'?{token:false}:{});
+  if(mode==='draft')b.edit('BBB','qty','999');
+  if(mode==='readonly')await b.dispose();
+  if(mode==='storage'){b.store.failSet.add(CLEAR_KEY);b.store.failSet.add(LOCAL);b.edit('BBB','qty','3');}
+  const count=b.requests.length,op=b.executeClear('AAA','default');
+  if(mode==='cloud-changed'){
+    await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);
+    await clearReply(b,'position-costs.json',{...SEED,items:{...SEED.items,AAA:{qty:9,cost:100}}});
+  }
+  await op;assert.equal(b.puts().length,0);assert.equal(b.state().DATA.items.AAA.qty,5);
+  if(mode!=='cloud-changed')assert.equal(b.requests.length,count);if(mode==='draft')assert.equal(b.state().DATA.items.BBB.qty,999);
+});
+test('红叉清仓移组失败后只重试移组、不重复归零，刷新不自动上传',async()=>{
+  const b=await bootClear(),op=b.executeClear('AAA','default'),put=await clearToQuantity(b);
+  const {zero}=await finishClear(b,op,put,CLEAR_CONFIG,409);assert.equal(b.clearState().record.step,'move');
+  assert.equal(b.state().DATA.items.AAA.qty,0);assert.match(b.state().NOTICE,/数值已保存.*移组未完成/);
+  b.exitEdit(true);assert.equal(b.state().DATA.items.AAA.qty,0);await b.dispose();
+  const c=await boot({store:b.store});assert.equal(c.puts().length,0);c.respond(c.requests[0],meta(zero));await settle();await c.enter();c.openClear('AAA');
+  const retry=c.executeClear('AAA','default');await clearReply(c,'groups.json',CLEAR_GROUPS);await clearReply(c,'holdings.json',CLEAR_CONFIG);
+  await clearReply(c,'position-costs.json',zero);await clearReply(c,'holdings.json',CLEAR_CONFIG);await clearReply(c,'position-costs.json',zero);
+  const move=c.requests.at(-1),next=c.payload(move);assert.equal(move.init.method,'PUT');assert.ok(move.url.endsWith('/holdings.json'));
+  await clearReply(c,'holdings.json',{content:{sha:'b'.repeat(40)},commit:{sha:'c'.repeat(40)}},'PUT');await clearReply(c,'holdings.json',next);await retry;
+  assert.equal(c.puts().length,1);assert.equal(c.clearState().record.step,'done');await c.dispose();
+});
+test('红叉数量PUT超时结果未知，用户重试先GET核验已归零后移组',async()=>{
+  const b=await bootClear(),op=b.executeClear('AAA','default'),put=await clearToQuantity(b),zero=b.payload(put);
+  put.reject(Error('网络中断'));await op;assert.equal(b.clearState().record.step,'quantity');assert.equal(b.puts().length,1);
+  const retry=b.executeClear('AAA','default');await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);
+  await clearReply(b,'position-costs.json',zero);await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',zero);
+  const next=b.payload(b.requests.at(-1));
+  await clearReply(b,'holdings.json',{content:{sha:'b'.repeat(40)},commit:{sha:'c'.repeat(40)}},'PUT');await clearReply(b,'holdings.json',next);await retry;
+  assert.equal(b.puts().filter(r=>r.url.endsWith('/position-costs.json')).length,1);assert.equal(b.state().DATA.items.AAA.qty,0);
+});
+for(const sym of ['SPYM','QQQM','SCHD'])test('红叉默认归属 '+sym+' 清仓后回指数基',async()=>{
+  const b=await bootCash(),config=copy(CLEAR_CONFIG);config.positions[sym]={cost:100,hold:'long',note:'基金'};
+  const dest=b.clearDestination(config,CLEAR_GROUPS,sym,'default');assert.equal(dest.key,'index_funds');
+  const next=b.clearConfig(config,dest,sym);assert.deepEqual(JSON.parse(JSON.stringify(next.index_funds[sym])),{note:'基金'});assert.equal(next.positions[sym],undefined);
+});
+test('红叉等待15秒期间远端新字段保留，不把旧整份payload强行覆盖',async()=>{
+  const b=await bootClear();b.store.values.set(PUSH_AT,JSON.stringify(NOW));const op=b.executeClear('AAA','default');
+  await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',SEED);
+  assert.equal(b.puts().length,0);await b.tick(15000);const newer={...copy(SEED),cash:222,items:{AAA:{cost:100,qty:5},BBB:{cost:88,qty:9}}};
+  await clearReply(b,'position-costs.json',newer);const put=b.requests.at(-1),sent=b.payload(put);
+  assert.equal(sent.cash,222);assert.deepEqual(sent.items.BBB,newer.items.BBB);assert.equal(sent.items.AAA.qty,0);
+  await finishClear(b,op,put);assert.equal(b.state().DATA.cash,222);
+});
+test('红叉未知PUT后目标重新建仓和版本变化，不再次归零',async()=>{
+  const b=await bootClear(),op=b.executeClear('AAA','default'),put=await clearToQuantity(b);
+  put.reject(Error('回执丢失'));await op;
+  const retry=b.executeClear('AAA','default');await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);
+  await settle();const r=b.requests.at(-1),newer={...copy(SEED),items:{AAA:{cost:100,qty:9},BBB:SEED.items.BBB}};
+  b.respond(r,{...clearMeta(newer),sha:'d'.repeat(40)});await retry;
+  assert.equal(b.puts().length,1);assert.match(b.state().NOTICE,/停止旧清仓事务/);
+});
+test('红叉15秒期间目标数量改变，不清掉新数量',async()=>{
+  const b=await bootClear();b.store.values.set(PUSH_AT,JSON.stringify(NOW));const op=b.executeClear('AAA','default');
+  await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',SEED);
+  await b.tick(15000);await clearReply(b,'position-costs.json',{...copy(SEED),items:{AAA:{cost:100,qty:9},BBB:SEED.items.BBB}});await op;
+  assert.equal(b.puts().length,0);assert.match(b.state().NOTICE,/仓位已变化/);
+});
+test('红叉归零后移组前重新建仓，停止规则PUT',async()=>{
+  const b=await bootClear(),op=b.executeClear('AAA','default'),put=await clearToQuantity(b),zero=b.payload(put);
+  await clearReply(b,'position-costs.json',{},'PUT');await clearReply(b,'position-costs.json',zero);
+  await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',{...zero,items:{...zero.items,AAA:{cost:100,qty:9}}});await op;
+  assert.equal(b.puts().length,1);assert.match(b.state().NOTICE,/已重新建仓/);
+});
+test('红叉旧done在新持仓里允许新确认，不能永久禁用清仓',async()=>{
+  const old={sym:'AAA',choice:'default',step:'done',receipt:{file:'holdings.json',blobSHA:'b'.repeat(40),commitSHA:'c'.repeat(40)}};
+  const b=await bootClear({store:shared({[LOCAL]:SEED,[TOKEN]:'test-token',[CLEAR_KEY]:old})});
+  assert.equal(b.doc.querySelector('[data-clear-confirm]').disabled,false);
+  const op=b.executeClear('AAA','focus'),put=await clearToQuantity(b);await finishClear(b,op,put);assert.equal(b.clearState().record.targets[0].choice,'focus');
+});
+test('红叉200回执缺失先取提交证据、不重复移组PUT',async()=>{
+  const b=await bootClear(),op=b.executeClear('AAA','default'),put=await clearToQuantity(b),zero=b.payload(put);
+  await clearReply(b,'position-costs.json',{},'PUT');await clearReply(b,'position-costs.json',zero);
+  await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',zero);
+  const move=b.requests.at(-1),next=b.payload(move);await clearReply(b,'holdings.json',{},'PUT');await clearReply(b,'holdings.json',next);
+  const head=b.requests.at(-1);assert.ok(head.url.endsWith('/git/ref/heads/main'));b.respond(head,{object:{sha:'c'.repeat(40)}});await settle();
+  await clearReply(b,'holdings.json',next);await op;assert.equal(b.puts().length,2);assert.equal(b.clearState().record.step,'done');assert.equal(b.clearReceipts.length,1);
+});
+test('红叉移组前退出页面不继续PUT、不释放后后台接管',async()=>{
+  const b=await bootClear(),op=b.executeClear('AAA','default');await clearReply(b,'groups.json',CLEAR_GROUPS);
+  const req=b.requests.at(-1);await b.dispose();b.respond(req,clearMeta(CLEAR_CONFIG));await op;assert.equal(b.puts().length,0);
+});
+
+// 统一保存新契约：确认只改草稿，面板保存才创建批量事务。
+function confirmMark(b,sym='AAA',choice='default'){
+  b.openClear(sym);const dialog=b.doc.querySelector('.cost-clear-dialog');
+  for(const input of dialog.querySelectorAll('input'))input.checked=input.value===choice;
+  dialog.querySelector('[data-clear-confirm]').click();
+}
+async function beginBatch(b,config=CLEAR_CONFIG,remote=b.state().CLOUD){
+  await b.save();await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',config);
+  await clearReply(b,'position-costs.json',remote);await clearReply(b,'position-costs.json',remote);
+  const put=b.requests.at(-1);assert.equal(put.init.method,'PUT');return put;
+}
+async function finishBatch(b,put,config=CLEAR_CONFIG,status=200){
+  const result=await finishClear(b,Promise.resolve(),put,config,status);await settle();return result;
+}
+test('确认红叉0请求，可继续改数值、重选清仓去向、撤销且面板取消全撤销',async()=>{
+  const b=await bootClear(),n=b.requests.length;confirmMark(b);
+  assert.equal(b.requests.length,n);assert.equal(b.state().DATA.items.AAA.qty,5);
+  assert.deepEqual(b.clearState().draft,{AAA:'default'});assert.equal(b.state().positionsAuthorized,false);
+  assert.match(b.doc.querySelector('[data-cost-row][data-sym="AAA"]').textContent,/待清仓.*默认/);
+  assert.doesNotMatch(b.doc.querySelector('.cost-clear-dialog').textContent,/点击面板保存后生效|不在券商卖出|不自动增加现金/);
+  assert.equal(b.state().NOTICE,'');
+  b.edit('BBB','qty','9');b.edit('USD','cash','77');confirmMark(b,'AAA','focus');
+  assert.equal(b.clearState().draft.AAA,'focus');assert.equal(b.requests.length,n);
+  b.openClear('AAA');b.doc.querySelector('[data-clear-undo]').click();assert.deepEqual(b.clearState().draft,{});
+  confirmMark(b);b.doc.getElementById('costCancel').click();await settle();
+  assert.deepEqual(b.clearState().draft,{});assert.equal(b.state().DATA.items.BBB.qty,2);assert.equal(b.state().DATA.cash,30);
+  assert.equal(b.puts().length,0);await b.dispose();
+});
+test('多股清仓加其它数值只一次data与一次main提交，明确现金而非自动回款',async()=>{
+  const b=await bootClear();confirmMark(b);confirmMark(b,'BBB','focus');b.edit('AAA','cost','101');b.edit('USD','cash','31');
+  const put=await beginBatch(b),sent=b.payload(put);assert.equal(sent.items.AAA.qty,0);assert.equal(sent.items.BBB.qty,0);
+  assert.equal(sent.items.AAA.cost,101);assert.equal(sent.cash,31);const {next}=await finishBatch(b,put);
+  assert.deepEqual(next.positions,{});assert.equal(next.focus.BBB.note,'另一只');assert.equal(next.technology.AAA.trigger,80);
+  assert.equal(b.puts().length,2);assert.equal(b.clearState().record.step,'done');assert.equal(b.clearState().busy,false);await b.dispose();
+});
+test('清仓加非法数值保存0请求，无授权且保留错误供修正',async()=>{
+  const b=await bootClear();confirmMark(b);b.edit('BBB','qty','2oops');const n=b.requests.length;await b.save();
+  assert.equal(b.requests.length,n);assert.equal(b.puts().length,0);assert.equal(b.clearState().record,null);
+  assert.equal(b.state().editing,true);assert.match(b.state().NOTICE,/无效输入/);await b.dispose();
+});
+for(const field of ['qty','cost'])test('清仓加其它标的同字段'+field+'冲突停止，不写旧值',async()=>{
+  const b=await bootClear();confirmMark(b);b.edit('BBB',field,'7');await b.save();
+  await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);
+  const remote=copy(SEED);remote.items.BBB[field]=8;await clearReply(b,'position-costs.json',remote);
+  assert.equal(b.puts().length,0);assert.match(b.state().NOTICE,/同字段.*停止/);
+  b.doc.getElementById('costCancel').click();await settle();assert.equal(b.clearState().record,null);await b.dispose();
+});
+test('只编辑第一笔现金合并其它设备第二笔与其它股票成本，不能整份旧DATA覆盖',async()=>{
+  const initial={...copy(SEED),cash:40,cash_extra:10},b=await bootClear({local:initial});
+  confirmMark(b);b.edit('USD','cash','33');b.edit('BBB','qty','3');
+  const remote={...copy(initial),cash:50,cash_extra:20,items:{...initial.items,BBB:{qty:2,cost:88}}};
+  const put=await beginBatch(b,CLEAR_CONFIG,remote),sent=b.payload(put);
+  assert.equal(sent.cash,53);assert.equal(sent.cash_extra,20);assert.deepEqual(sent.items.BBB,{qty:3,cost:88});
+  await finishBatch(b,put);await b.dispose();
+});
+test('未提交清仓与数值刷新恢复草稿不恢复上传授权，用户面板保存才提交',async()=>{
+  const b=await bootClear();confirmMark(b,'AAA','focus');b.edit('BBB','cost','91');await b.dispose();
+  const c=await boot({store:b.store});c.respond(c.requests[0],meta(SEED));await settle();await c.tick(180000);
+  assert.equal(c.puts().length,0);assert.equal(c.state().positionsAuthorized,false);assert.equal(c.state().DATA.items.BBB.cost,91);
+  assert.deepEqual(c.clearState().draft,{AAA:'focus'});await c.enter();const put=await beginBatch(c);await finishBatch(c,put);await c.dispose();
+});
+test('数值PUT失败未移组；未知数量跨刷新仅核验已提交payload，不盲写',async()=>{
+  const b=await bootClear();confirmMark(b);b.edit('BBB','qty','6');const put=await beginBatch(b),zero=b.payload(put);
+  put.reject(Error('未知PUT'));await settle();assert.equal(b.clearState().record.step,'quantity');assert.equal(b.puts().length,1);await b.dispose();
+  const c=await boot({store:b.store});c.respond(c.requests[0],meta(zero));await settle();await c.tick(180000);assert.equal(c.puts().length,0);
+  await c.enter();await c.save();await clearReply(c,'groups.json',CLEAR_GROUPS);await clearReply(c,'holdings.json',CLEAR_CONFIG);
+  await clearReply(c,'position-costs.json',zero);await clearReply(c,'holdings.json',CLEAR_CONFIG);await clearReply(c,'position-costs.json',zero);
+  const move=c.requests.at(-1),next=c.payload(move);await clearReply(c,'holdings.json',{content:{sha:'b'.repeat(40)},commit:{sha:'c'.repeat(40)}},'PUT');
+  await clearReply(c,'holdings.json',next);assert.equal(c.puts().length,1);assert.equal(c.state().DATA.items.BBB.qty,6);await c.dispose();
+});
+test('quantity已成功move失败，取消不回滚其它数值，刷新只续main',async()=>{
+  const b=await bootClear();confirmMark(b);b.edit('BBB','qty','6');b.edit('USD','cash','99');const put=await beginBatch(b);
+  const {zero}=await finishBatch(b,put,CLEAR_CONFIG,500);b.doc.getElementById('costCancel').click();await settle();
+  assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.state().DATA.items.BBB.qty,6);assert.equal(b.state().DATA.cash,99);
+  assert.equal(b.clearState().record.step,'move');assert.deepEqual(b.clearState().draft,{});await b.dispose();
+  const c=await boot({store:b.store});c.respond(c.requests[0],meta(zero));await settle();await c.enter();await c.save();
+  await clearReply(c,'groups.json',CLEAR_GROUPS);await clearReply(c,'holdings.json',CLEAR_CONFIG);await clearReply(c,'position-costs.json',zero);
+  await clearReply(c,'holdings.json',CLEAR_CONFIG);await clearReply(c,'position-costs.json',zero);
+  const move=c.requests.at(-1),next=c.payload(move);await clearReply(c,'holdings.json',{content:{sha:'b'.repeat(40)},commit:{sha:'c'.repeat(40)}},'PUT');
+  await clearReply(c,'holdings.json',next);assert.equal(c.puts().length,1);await c.dispose();
+});
+test('未知move PUT已成功，重试GET核验后只读取证，不重复main PUT',async()=>{
+  const b=await bootClear();confirmMark(b);const put=await beginBatch(b),zero=b.payload(put);
+  await clearReply(b,'position-costs.json',{},'PUT');await clearReply(b,'position-costs.json',zero);
+  await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',zero);
+  const move=b.requests.at(-1),next=b.payload(move);move.reject(Error('main回执丢失'));await settle();
+  await b.save();await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',next);
+  await clearReply(b,'position-costs.json',zero);await clearReply(b,'holdings.json',next);await clearReply(b,'position-costs.json',zero);
+  const head=b.requests.at(-1);assert.ok(head.url.endsWith('/git/ref/heads/main'));b.respond(head,{object:{sha:'c'.repeat(40)}});await settle();
+  await clearReply(b,'holdings.json',next);assert.equal(b.puts().length,2);assert.equal(b.clearState().record.step,'done');await b.dispose();
+});
+test('同股规则变动停止移组且不清掉已保存数值',async()=>{
+  const b=await bootClear();confirmMark(b);const put=await beginBatch(b),zero=b.payload(put);
+  await clearReply(b,'position-costs.json',{},'PUT');await clearReply(b,'position-costs.json',zero);
+  const changed=copy(CLEAR_CONFIG);changed.technology.AAA.trigger=81;
+  await clearReply(b,'holdings.json',changed);await clearReply(b,'position-costs.json',zero);
+  assert.equal(b.puts().length,1);assert.match(b.state().NOTICE,/同股分组规则/);assert.equal(b.state().DATA.items.AAA.qty,0);await b.dispose();
+});
+test('固定提交取证失败跨刷新继续仅读同一commit，绝不转查新main或PUT',async()=>{
+  const b=await bootClear();confirmMark(b);const put=await beginBatch(b),zero=b.payload(put);
+  await clearReply(b,'position-costs.json',{},'PUT');await clearReply(b,'position-costs.json',zero);
+  await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',zero);
+  const next=b.payload(b.requests.at(-1));await clearReply(b,'holdings.json',{},'PUT');await clearReply(b,'holdings.json',next);
+  b.respond(b.requests.at(-1),{object:{sha:'c'.repeat(40)}});await settle();b.requests.at(-1).reject(Error('固定提交读取失败'));await settle();
+  assert.equal(b.clearState().record.evidenceCommit,'c'.repeat(40));await b.dispose();
+  const c=await boot({store:b.store});c.respond(c.requests[0],meta(zero));await settle();await c.enter();const n=c.requests.length;await c.save();
+  assert.equal(c.requests.length,n+1);assert.ok(c.requests.at(-1).url.includes('ref='+'c'.repeat(40)));
+  await clearReply(c,'holdings.json',next);assert.equal(c.puts().length,0);assert.equal(c.clearState().record.step,'done');await c.dispose();
+});
+test('旧单股未完成LS_CLEAR安全迁移，面板保存恢复quantity核验而非红叉独立执行',async()=>{
+  const zero={...copy(SEED),items:{...SEED.items,AAA:{qty:0,cost:100}}};
+  const old={sym:'AAA',choice:'default',step:'quantity',started:true,submitted:true,baseSHA:'a'.repeat(40),zero,
+    source:JSON.stringify(CLEAR_CONFIG.positions.AAA),destination:'technology'};
+  const b=await bootClear({store:shared({[LOCAL]:SEED,[TOKEN]:'test-token',[CLEAR_KEY]:old})});
+  assert.equal(b.clearState().record.legacy,true);assert.equal(b.puts().length,0);await b.save();
+  await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',zero);
+  await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',zero);
+  const next=b.payload(b.requests.at(-1));await clearReply(b,'holdings.json',{content:{sha:'b'.repeat(40)},commit:{sha:'c'.repeat(40)}},'PUT');
+  await clearReply(b,'holdings.json',next);assert.equal(b.puts().length,1);assert.equal(b.clearState().record.step,'done');await b.dispose();
+});
+test('新增入口真实dialog仅加草稿，代码规范化，无行情不捏造市值，允许继续编辑和撤销',async()=>{
+  const b=await bootClear(),n=b.requests.length;b.doc.querySelector('[data-cost-add]').click();const dialog=b.doc.querySelector('.cost-add-dialog');
+  dialog.querySelector('[data-add-symbol]').value='  xyz.a  ';dialog.querySelector('[data-add-qty]').value='1.2345';
+  dialog.querySelector('[data-add-cost]').value='2.3456';dialog.querySelector('[data-add-confirm]').click();
+  assert.equal(b.requests.length,n);assert.equal(dialog.open,false);assert.ok(b.clearState().additions['XYZ.A']);
+  assert.equal(b.state().DATA.items['XYZ.A'].qty,1.2345);assert.match(b.doc.querySelector('[data-cost-row][data-sym="XYZ.A"]').textContent,/待新增/);
+  assert.equal(b.doc.querySelectorAll('.ep-val').at(-1).textContent,'—');b.edit('XYZ.A','qty','2.3456');assert.equal(b.state().DATA.items['XYZ.A'].qty,2.3456);
+  b.doc.querySelector('[data-cost-remove-added="XYZ.A"]').click();assert.equal(b.state().DATA.items['XYZ.A'],undefined);
+  assert.equal(b.puts().length,0);await b.dispose();
+});
+for(const [sym,hold,qty,cost] of [['AAA','long','1','2'],['SGOV','long','1','2'],['USD','long','1','2'],['BOND','long','1','2'],['^GSPC','long','1','2'],
+  ['bad code','long','1','2'],['CCC','bad','1','2'],['CCC','long','0','2'],['CCC','short','1e2','2'],['CCC','long','1','-2']])
+test('新增拒绝非法/重复/专属口径 '+[sym,hold,qty,cost].join('/'),async()=>{
+  const b=await bootClear();assert.throws(()=>b.addPosition(sym,hold,qty,cost));assert.deepEqual(b.clearState().additions,{});assert.equal(b.puts().length,0);await b.dispose();
+});
+test('新增only一次data一次main且记录hold，既有普通监控配置备注trigger不丢',async()=>{
+  const b=await bootClear(),config=copy(CLEAR_CONFIG);config.technology.CCC={note:'已有代码',trigger:12,target:20};
+  b.addPosition('ccc','short','3','11');const put=await beginBatch(b,config),sent=b.payload(put);
+  assert.deepEqual(sent.items.CCC,{qty:3,cost:11});assert.deepEqual(sent.items.AAA,SEED.items.AAA);
+  const {next}=await finishBatch(b,put,config);assert.deepEqual(next.positions.CCC,{note:'已有代码',trigger:12,target:20,hold:'short'});
+  assert.deepEqual(next.technology.CCC,config.technology.CCC);assert.equal(b.puts().length,2);assert.equal(b.state().DATA.cash,30);
+  await b.enter();assert.match(b.doc.querySelector('[data-cost-row][data-sym="CCC"]').textContent,/已保存.*行情/);await b.dispose();
+});
+test('新增清仓数值同批两次PUT且取消未保存全部撤销',async()=>{
+  const b=await bootClear();b.addPosition('CCC','long','4','');confirmMark(b);b.edit('BBB','cost','92');
+  const put=await beginBatch(b),sent=b.payload(put);assert.deepEqual(sent.items.CCC,{qty:4});assert.equal(sent.items.AAA.qty,0);assert.equal(sent.items.BBB.cost,92);
+  const {next}=await finishBatch(b,put);assert.equal(next.positions.CCC.hold,'long');assert.equal(next.positions.AAA,undefined);assert.equal(b.puts().length,2);
+  await b.enter();b.addPosition('DDD','short','1','2');confirmMark(b,'BBB','focus');b.edit('USD','cash','88');b.doc.getElementById('costCancel').click();
+  assert.equal(b.state().DATA.items.DDD,undefined);assert.deepEqual(b.clearState().additions,{});assert.deepEqual(b.clearState().draft,{});
+  assert.equal(b.state().DATA.cash,30);assert.equal(b.state().DATA.items.CCC.qty,4);await b.dispose();
+});
+test('新增草稿刷新保留行和数值，0自动PUT，取消删除新股不清仓远端',async()=>{
+  const b=await bootClear();b.addPosition('CCC','long','1.1234','9');await b.dispose();
+  const c=await boot({store:b.store});c.respond(c.requests[0],meta(SEED));await settle();await c.tick(180000);assert.equal(c.puts().length,0);await c.enter();
+  assert.ok(c.doc.querySelector('[data-cost-row][data-sym="CCC"]'));assert.equal(c.state().DATA.items.CCC.qty,1.1234);
+  c.doc.getElementById('costCancel').click();assert.equal(c.state().DATA.items.CCC,undefined);assert.deepEqual(c.clearState().additions,{});assert.equal(c.puts().length,0);await c.dispose();
+});
+test('新增远端已持仓拒绝，data0PUT，不覆盖另一设备新增配置',async()=>{
+  const b=await bootClear();b.addPosition('CCC','long','1','2');await b.save();await clearReply(b,'groups.json',CLEAR_GROUPS);
+  const config=copy(CLEAR_CONFIG);config.positions.CCC={hold:'short',note:'远端新仓'};await clearReply(b,'holdings.json',config);
+  await clearReply(b,'position-costs.json',SEED);assert.equal(b.puts().length,0);assert.match(b.state().NOTICE,/远端已有持仓/);await b.dispose();
+});
+test('新增数值已保存后普通监控同股规则变化，停止main写且取消不删除新数量',async()=>{
+  const b=await bootClear(),config=copy(CLEAR_CONFIG);config.technology.CCC={note:'原备注',trigger:3};b.addPosition('CCC','long','1','2');
+  const put=await beginBatch(b,config),sent=b.payload(put);await clearReply(b,'position-costs.json',{},'PUT');await clearReply(b,'position-costs.json',sent);
+  const changed=copy(config);changed.technology.CCC.trigger=4;await clearReply(b,'holdings.json',changed);await clearReply(b,'position-costs.json',sent);
+  assert.equal(b.puts().length,1);assert.match(b.state().NOTICE,/同股新增规则/);b.doc.getElementById('costCancel').click();
+  assert.equal(b.state().DATA.items.CCC.qty,1);assert.ok(b.clearState().added.CCC);await b.dispose();
+});
+
+test('数值已收到200但后续GET失败，取消不恢复旧数值或删除已保存新增仓位',async()=>{
+  const b=await bootClear();confirmMark(b);b.addPosition('CCC','long','2','7');b.edit('BBB','cost','91');const put=await beginBatch(b);
+  await clearReply(b,'position-costs.json',{},'PUT');b.requests.at(-1).reject(Error('数值核验GET失败'));await settle();
+  assert.equal(b.clearState().record.quantityAccepted,true);assert.equal(b.clearState().record.step,'quantity');
+  b.doc.getElementById('costCancel').click();assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.state().DATA.items.BBB.cost,91);
+  assert.equal(b.state().DATA.items.CCC.qty,2);assert.ok(b.clearState().added.CCC);assert.equal(b.puts().length,1);await b.dispose();
+});
+test('未知quantity同baseSHA仅重发原冻结payload，不带失败后本地草稿',async()=>{
+  const b=await bootClear();confirmMark(b);b.edit('BBB','qty','6');const first=await beginBatch(b),sent=b.payload(first);
+  first.reject(Error('quantity结果未知'));await settle();b.edit('BBB','qty','999');assert.equal(b.state().DATA.items.BBB.qty,6);
+  await b.tick(15000);await b.save();await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);
+  await clearReply(b,'position-costs.json',SEED);await clearReply(b,'position-costs.json',SEED);
+  const second=b.requests.at(-1);assert.equal(second.init.method,'PUT');assert.deepEqual(b.payload(second),sent);
+  await finishBatch(b,second);assert.equal(b.puts().filter(r=>r.url.endsWith('/position-costs.json')).length,2);await b.dispose();
+});
+test('未知move结果后远端main新版本不得重发旧movePayload',async()=>{
+  const b=await bootClear();confirmMark(b);const put=await beginBatch(b),zero=b.payload(put);
+  await clearReply(b,'position-costs.json',{},'PUT');await clearReply(b,'position-costs.json',zero);
+  await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',zero);b.requests.at(-1).reject(Error('main结果未知'));await settle();
+  await b.save();await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',zero);
+  const changed=copy(CLEAR_CONFIG);changed.group_monitoring.technology=false;
+  await settle();b.respond(b.requests.at(-1),{...clearMeta(changed),sha:'d'.repeat(40)});await settle();await clearReply(b,'position-costs.json',zero);
+  assert.equal(b.puts().length,2);assert.match(b.state().NOTICE,/未知移组PUT.*新版本/);await b.dispose();
+});
+for(const mode of ['no-token','isolated','storage','readonly'])test('新增only保存边界 '+mode+' 禁止越权或存储失败提交',async()=>{
+  const b=await bootClear(mode==='no-token'?{token:false}:mode==='isolated'?{noLocks:true}:{});b.addPosition('CCC','short','2','3');
+  if(mode==='storage')b.store.failSet.add(CLEAR_KEY);if(mode==='readonly')await b.dispose();const n=b.requests.length;await b.save();
+  assert.equal(b.requests.length,n);assert.equal(b.puts().length,0);await b.dispose();
+});
+test('新增行非法数量阻断整批保存，保留新增草稿与可见错误',async()=>{
+  const b=await bootClear();b.addPosition('CCC','long','1','2');confirmMark(b);b.edit('CCC','qty','1oops');const n=b.requests.length;await b.save();
+  assert.equal(b.requests.length,n);assert.equal(b.clearState().record,null);assert.ok(b.clearState().additions.CCC);
+  assert.ok(b.doc.querySelector('input[data-sym="CCC"][data-f="qty"]').validationMessage);await b.dispose();
+});
+
+// 最后四项闭环：取消提示、ETF重建仓、非法草稿新增、预检及冲突恢复。
+test('取消仅草稿清仓和新增后清空瞬态NOTICE，面板与操作按钮均隐藏',async()=>{
+  const b=await bootClear();confirmMark(b);b.addPosition('CCC','long','1','2');b.edit('BBB','qty','3');
+  b.doc.getElementById('costCancel').click();await settle();
+  assert.equal(b.state().NOTICE,'');assert.equal(b.state().editing,false);
+  assert.equal(b.doc.getElementById('costManage').classList.contains('cost-edit-open'),false);
+  assert.equal(b.doc.getElementById('costNotice').hidden,true);assert.equal(b.doc.getElementById('costSave').hidden,true);
+  assert.equal(b.doc.getElementById('costCancel').hidden,true);assert.equal(b.puts().length,0);await b.dispose();
+});
+for(const sym of ['SPYM','QQQM','SCHD','VTI'])test('指数基分组普通ETF '+sym+' 清仓后允许新增重建仓且保留备注',async()=>{
+  const local={...copy(SEED),items:{...SEED.items,[sym]:{qty:0,cost:10}}},config=copy(CLEAR_CONFIG);
+  config.index_funds[sym]={note:'已有ETF',trigger:9};
+  const b=await bootClear({local,symbols:['AAA','BBB',sym],groups:{[sym]:'index_funds'}});
+  b.addPosition(sym.toLowerCase(),'long','2','11');const put=await beginBatch(b,config),sent=b.payload(put);
+  assert.deepEqual(sent.items[sym],{qty:2,cost:11});const {next}=await finishBatch(b,put,config);
+  assert.deepEqual(next.positions[sym],{note:'已有ETF',trigger:9,hold:'long'});assert.deepEqual(next.index_funds[sym],config.index_funds[sym]);
+  assert.equal(b.puts().length,2);await b.dispose();
+});
+test('已有其它非法输入时新增明确拒绝，直接接口和真实dialog均不把DATA置null',async()=>{
+  const b=await bootClear();b.edit('BBB','qty','bad');const before=b.canonical(b.state().DATA),n=b.requests.length;
+  assert.throws(()=>b.addPosition('CCC','long','1','2'),/已有无效输入/);
+  assert.equal(b.canonical(b.state().DATA),before);assert.deepEqual(b.clearState().additions,{});
+  b.doc.querySelector('[data-cost-add]').click();const dialog=b.doc.querySelector('.cost-add-dialog');
+  dialog.querySelector('[data-add-symbol]').value='CCC';dialog.querySelector('[data-add-qty]').value='1';dialog.querySelector('[data-add-cost]').value='2';
+  dialog.querySelector('[data-add-confirm]').click();assert.equal(dialog.open,true);assert.match(dialog.querySelector('[data-add-message]').textContent,/已有无效输入/);
+  assert.equal(b.canonical(b.state().DATA),before);assert.equal(b.local()._local.editDraft['BBB|qty'].raw,'bad');
+  assert.ok(b.doc.querySelector('input[data-sym="BBB"][data-f="qty"]').validationMessage);
+  assert.equal(b.requests.length,n);assert.equal(b.puts().length,0);b.edit('BBB','qty','3');dialog.querySelector('[data-add-confirm]').click();
+  assert.equal(dialog.open,false);assert.equal(b.state().DATA.items.CCC.qty,1);assert.equal(b.state().DATA.items.BBB.qty,3);await b.dispose();
+});
+test('默认无归属预检失败释放冻结保留全部草稿，允许改选focus后统一重存',async()=>{
+  const b=await bootClear();confirmMark(b,'BBB','default');b.addPosition('CCC','long','1','2');b.edit('AAA','cost','101');await b.save();
+  await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',SEED);
+  assert.equal(b.puts().length,0);assert.equal(b.clearState().record,null);assert.equal(b.clearState().draft.BBB,'default');
+  assert.ok(b.clearState().additions.CCC);assert.equal(b.state().DATA.items.AAA.cost,101);
+  assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').disabled,false);
+  confirmMark(b,'BBB','focus');assert.equal(b.clearState().draft.BBB,'focus');
+  const put=await beginBatch(b),sent=b.payload(put);assert.equal(sent.items.BBB.qty,0);assert.equal(sent.items.AAA.cost,101);assert.equal(sent.items.CCC.qty,1);
+  const {next}=await finishBatch(b,put);assert.ok(next.focus.BBB);assert.ok(next.positions.CCC);assert.equal(b.puts().length,2);await b.dispose();
+});
+test('已提交冲突面板取消先明确确认并只读核验，采用远端新仓后允许重新编辑',async()=>{
+  const b=await bootClear({confirm:true});confirmMark(b);const put=await beginBatch(b);put.reject(Error('数量PUT结果未知'));await settle();
+  await b.save();await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);
+  const remote={...copy(SEED),items:{...SEED.items,AAA:{qty:9,cost:101}}};b.respond(b.requests.at(-1),{...clearMeta(remote),sha:'d'.repeat(40)});await settle();
+  assert.equal(b.clearState().record.conflict,true);const n=b.requests.length;b.ctx.confirm=()=>false;b.doc.getElementById('costCancel').click();await settle();
+  assert.equal(b.requests.length,n);assert.equal(b.clearState().record.conflict,true);
+  b.ctx.confirm=text=>{assert.match(text,/先只读核验/);return true;};b.doc.getElementById('costCancel').click();await settle();
+  b.respond(b.requests.at(-1),{...clearMeta(remote),sha:'d'.repeat(40)});await settle();await clearReply(b,'holdings.json',CLEAR_CONFIG);
+  assert.equal(b.puts().length,1);assert.equal(b.clearState().record.abandoned,true);assert.equal(b.clearState().record.step,'done');
+  assert.equal(b.state().DATA.items.AAA.qty,9);assert.equal(b.state().DATA.items.AAA.cost,101);assert.equal(b.state().NOTICE,'');
+  assert.equal(b.doc.getElementById('costManage').classList.contains('cost-edit-open'),false);await b.enter();confirmMark(b,'AAA','focus');
+  assert.equal(b.clearState().draft.AAA,'focus');assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').disabled,false);await b.dispose();
+});
+test('已成功数值后的规则冲突可核验结束，取消不回滚已归零和其它保存值',async()=>{
+  const b=await bootClear({confirm:true});confirmMark(b);b.edit('BBB','qty','6');b.edit('USD','cash','99');const put=await beginBatch(b),zero=b.payload(put);
+  await clearReply(b,'position-costs.json',{},'PUT');await clearReply(b,'position-costs.json',zero);
+  const changed=copy(CLEAR_CONFIG);changed.technology.AAA.trigger=81;await clearReply(b,'holdings.json',changed);await clearReply(b,'position-costs.json',zero);
+  assert.equal(b.clearState().record.conflict,true);b.doc.getElementById('costCancel').click();await settle();
+  await clearReply(b,'position-costs.json',zero);await clearReply(b,'holdings.json',changed);
+  assert.equal(b.puts().length,1);assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.state().DATA.items.BBB.qty,6);
+  assert.equal(b.state().DATA.cash,99);assert.equal(b.clearState().record.abandoned,true);assert.equal(b.state().positionsAuthorized,false);await b.dispose();
+});
+test('未知quantity仍同base版本时取消不盲丢，后来GET匹配提交payload才允许结束',async()=>{
+  const b=await bootClear({confirm:true});confirmMark(b);const put=await beginBatch(b),zero=b.payload(put);put.reject(Error('未知PUT'));await settle();
+  const changed=copy(CLEAR_CONFIG);changed.technology.AAA.trigger=81;await b.save();await clearReply(b,'groups.json',CLEAR_GROUPS);
+  await clearReply(b,'holdings.json',changed);await clearReply(b,'position-costs.json',SEED);assert.equal(b.clearState().record.conflict,true);
+  b.doc.getElementById('costCancel').click();await settle();await clearReply(b,'position-costs.json',SEED);await clearReply(b,'holdings.json',changed);
+  assert.equal(b.clearState().record.step,'quantity');assert.equal(b.clearState().record.conflict,true);assert.match(b.state().NOTICE,/仍未知.*不能安全放弃/);
+  assert.equal(b.puts().length,1);b.doc.getElementById('costCancel').click();await settle();await clearReply(b,'position-costs.json',zero);await clearReply(b,'holdings.json',changed);
+  assert.equal(b.clearState().record.abandoned,true);assert.equal(b.state().DATA.items.AAA.qty,0);assert.equal(b.puts().length,1);await b.dispose();
+});
+test('冲突取消核验GET失败仍保留记录与真实错误，不解除保护或PUT',async()=>{
+  const b=await bootClear({confirm:true});confirmMark(b);const put=await beginBatch(b);put.reject(Error('未知PUT'));await settle();
+  const changed=copy(CLEAR_CONFIG);changed.technology.AAA.trigger=81;await b.save();await clearReply(b,'groups.json',CLEAR_GROUPS);
+  await clearReply(b,'holdings.json',changed);await clearReply(b,'position-costs.json',SEED);const before=b.clearState().record;
+  b.doc.getElementById('costCancel').click();await settle();b.requests.at(-1).reject(Error('核验GET失败'));await settle();
+  assert.deepEqual(b.clearState().record,before);assert.match(b.state().NOTICE,/核验GET失败/);assert.equal(b.state().editing,true);
+  assert.equal(b.puts().length,1);assert.equal(b.doc.getElementById('costNotice').hidden,false);await b.dispose();
+});
+
+test('新增成功到持仓产物后清占位，清仓成功再回普通板块允许重新建仓',async()=>{
+  const config=copy(CLEAR_CONFIG);config.technology.CCC={note:'可重复建仓',trigger:3};
+  const b=await bootClear({symbols:['AAA','BBB','CCC'],groups:{CCC:'technology'}});b.addPosition('CCC','long','1','2');
+  const first=await beginBatch(b,config),added=b.payload(first),{next:holding}=await finishBatch(b,first,config);
+  assert.ok(b.clearState().added.CCC);await b.dispose();
+  const c=await bootClear({store:b.store,local:added,symbols:['AAA','BBB','CCC']});
+  assert.equal(c.clearState().added.CCC,undefined,'新持仓DOM到位只清旧占位，不删真实数据');assert.equal(c.state().DATA.items.CCC.qty,1);
+  await c.tick(15000);confirmMark(c,'CCC','default');const clearPut=await beginBatch(c,holding);
+  const {next:ordinary}=await finishBatch(c,clearPut,holding);assert.equal(c.state().DATA.items.CCC.qty,0);
+  assert.equal(c.clearState().added.CCC,undefined);assert.equal(c.local()._local.addedPositions.CCC,undefined);
+  c.move('CCC','technology');await c.enter();assert.equal(c.doc.querySelector('[data-cost-row][data-sym="CCC"]'),null,'退持仓后没有零数量等行情幽灵行');
+  c.addPosition('CCC','short','2','3');assert.ok(c.clearState().additions.CCC);await c.tick(15000);
+  const rebuilt=await beginBatch(c,ordinary),{next:again}=await finishBatch(c,rebuilt,ordinary);
+  assert.deepEqual(c.payload(rebuilt).items.CCC,{qty:2,cost:3});assert.equal(again.positions.CCC.hold,'short');
+  assert.equal(again.positions.CCC.note,'可重复建仓');assert.equal(c.puts().length,4);await c.dispose();
 });
 
 // 开工混合块覆盖补回：仅剥离ACK生产行为，不剥离其事务、数值、原始精度和身份断言。
@@ -2244,5 +2709,133 @@ test('混合块复核：非法草稿期间旧ACK入口不读写也不吞错误',
   assert.equal(b.local()._local.editDraft['AAA|qty'].raw,'bad');assert.equal(b.state().dirty,true);assert.equal(b.state().positionsAuthorized,false);
   await b.save();assert.equal(b.state().editing,true);assert.equal(b.puts().length,0);b.doc.getElementById('costCancel').click();assert.equal(b.local().items.AAA.qty,5);
 });
+// 单框固收：实际输入事件驱动双字段，保存仍使用现有普通与批量链路。
+test('固收单框DOM仅三项，打开和未编辑保存不改变旧云两字段',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
+  const labels=b.doc.querySelectorAll('.ep-cash label');
+  assert.deepEqual(labels.map(el=>el.querySelector('span').textContent),['现金 1','现金 2','固收成本']);
+  assert.equal(b.doc.querySelectorAll('input[data-sym="BOND"]').length,1);
+  assert.equal(b.doc.querySelector('input[data-f="fixed"]'),null);
+  assert.equal(b.doc.querySelector('input[data-f="fixed_cost"]').value,'15');
+  b.paint();await b.save();assert.equal(b.state().DATA.fixed,20);assert.equal(b.state().DATA.fixed_cost,15);
+  assert.equal(b.puts().length,0);await b.dispose();
+});
+for(const raw of ['12.3456','20','15','0',''])test('固收单框普通保存双字段同步 '+(raw||'空框'),async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
+  b.edit('BOND','fixed_cost',raw);await b.tick(16);
+  const value=Number(raw);assert.equal(b.state().DATA.fixed,value);assert.equal(b.state().DATA.fixed_cost,value);
+  for(const f of ['fixed','fixed_cost'])assert.equal(b.local()._local.editDraft['BOND|'+f].raw,raw);
+  assert.equal(b.state().positionsAuthorized,false);assert.equal(b.puts().length,0);
+  await b.save();b.respond(b.requests.at(-1),meta(SEED));await settle();const put=b.puts()[0];assert.ok(put);
+  assert.equal(b.payload(put).fixed,value);assert.equal(b.payload(put).fixed_cost,value);
+  b.respond(put,{});await settle();assert.equal(b.state().CLOUD.fixed,value);assert.equal(b.state().CLOUD.fixed_cost,value);
+  assert.equal(b.state().positionsAuthorized,false);await b.dispose();
+});
+test('固收单框普通其它字段保存保留旧固收差额',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('BBB','qty','3');
+  await b.save();const put=await finishPush(b);assert.equal(b.payload(put).fixed,20);assert.equal(b.payload(put).fixed_cost,15);await b.dispose();
+});
+for(const batch of [false,true])test('固收单框取消恢复差异旧值与全部草稿 batch='+batch,async()=>{
+  const b=await bootClear();if(batch)confirmMark(b);b.edit('BOND','fixed_cost','77.1234');
+  b.doc.getElementById('costCancel').click();await settle();assert.equal(b.state().DATA.fixed,20);assert.equal(b.state().DATA.fixed_cost,15);
+  assert.equal(b.local()._local.editDraft['BOND|fixed'],undefined);assert.equal(b.local()._local.editDraft['BOND|fixed_cost'],undefined);
+  assert.deepEqual(b.clearState().draft,{});assert.equal(b.puts().length,0);await b.enter();
+  assert.equal(b.doc.querySelector('input[data-f="fixed_cost"]').value,'15');await b.dispose();
+});
+for(const raw of ['-1','1.23456','bad','1e309'])for(const batch of [false,true])test('固收单框非法值保留旧双字段并阻止保存 '+raw+' batch='+batch,async()=>{
+  const b=await bootClear();if(batch)confirmMark(b);const input=b.edit('BOND','fixed_cost',raw),n=b.requests.length;
+  assert.ok(input.validationMessage);assert.equal(b.state().DATA.fixed,20);assert.equal(b.state().DATA.fixed_cost,15);
+  await b.save();assert.equal(b.requests.length,n);assert.equal(b.puts().length,0);assert.equal(b.clearState().record,null);
+  assert.ok(b.doc.querySelector('input[data-f="fixed_cost"]').validationMessage);assert.match(b.doc.getElementById('costNotice').textContent,/无效输入/);
+  assert.equal(b.state().positionsAuthorized,false);await b.dispose();
+});
+for(const mode of ['清仓','新增'])for(const raw of ['20','15','0'])test('固收单框'+mode+'批量保存冻结两字段含未变化值 '+raw,async()=>{
+  const b=await bootClear();if(mode==='清仓')confirmMark(b);else b.addPosition('CCC','long','1','2');
+  b.edit('BOND','fixed_cost',raw);const put=await beginBatch(b),sent=b.payload(put),fields=b.clearState().record.fields;
+  for(const f of ['fixed','fixed_cost']){assert.equal(fields['BOND|'+f],Number(raw));assert.equal(sent[f],Number(raw));}
+  assert.equal(b.doc.querySelector('input[data-f="fixed_cost"]').disabled,true);
+  await finishBatch(b,put);assert.equal(b.puts().length,2);assert.equal(b.state().DATA.fixed,Number(raw));assert.equal(b.state().DATA.fixed_cost,Number(raw));await b.dispose();
+});
+test('固收未编辑批量保存合并远端不同两字段而不强制相等',async()=>{
+  const b=await bootClear();confirmMark(b);const remote={...copy(SEED),fixed:50,fixed_cost:22};
+  const put=await beginBatch(b,CLEAR_CONFIG,remote);assert.equal(b.payload(put).fixed,50);assert.equal(b.payload(put).fixed_cost,22);
+  assert.equal(b.clearState().record.fields['BOND|fixed'],undefined);assert.equal(b.clearState().record.fields['BOND|fixed_cost'],undefined);
+  await finishBatch(b,put);await b.dispose();
+});
+for(const field of ['fixed','fixed_cost'])for(const batch of [false,true])test('固收单框远端任一同步字段冲突禁止覆盖 '+field+' batch='+batch,async()=>{
+  const b=await bootClear();if(batch)confirmMark(b);b.edit('BOND','fixed_cost',field==='fixed'?'15':'20');await b.save();
+  if(batch){await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);}
+  const remote={...copy(SEED),[field]:SEED[field]+1};b.respond(b.requests.at(-1),batch?clearMeta(remote):meta(remote));await settle();
+  assert.equal(b.puts().length,0);assert.match(b.doc.getElementById('costNotice').textContent,/同字段/);
+  assert.equal(b.state().uncertain,null);await b.tick(180000);assert.equal(b.puts().length,0);
+  if(!batch){assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().positionSave,null);}
+  await b.dispose();
+});
+test('固收普通PUT已成功但回执超时先核验自己payload，不误判旧基线或重复写',async()=>{
+  const b=await bootClear();b.edit('BOND','fixed_cost','12.3456');await b.save();
+  b.respond(b.requests.at(-1),meta(SEED,'base-sha'));await settle();const put=b.puts()[0],sent=b.payload(put);
+  assert.deepEqual(copy(b.state().inFlight.fixedBaseline),{fixed:20,fixed_cost:15});
+  const resolve=pendingBody(b,put);await settle();await b.tick(b.state().deadline);
+  assert.equal(b.state().uncertain.baseSha,'base-sha');assert.equal(b.state().uncertain.payload.fixed,12.3456);
+  assert.equal(b.state().uncertain.payload.fixed_cost,12.3456);assert.equal(put.init.signal.aborted,true);
+  await b.tick(15000);const recovery=b.requests.at(-1);assert.notEqual(recovery.init.method,'PUT');
+  b.respond(recovery,meta(sent,'committed-sha'));await settle();
+  assert.equal(b.puts().length,1);assert.equal(b.state().uncertain,null);assert.equal(b.state().dirty,false);
+  assert.equal(b.state().positionsAuthorized,false);assert.equal(b.state().CLOUD.fixed,12.3456);assert.equal(b.state().CLOUD.fixed_cost,12.3456);
+  assert.doesNotMatch(b.doc.getElementById('costNotice').textContent,/同字段/);
+  resolve({});await settle();assert.equal(b.state().DATA.fixed,12.3456);assert.equal(b.state().DATA.fixed_cost,12.3456);
+  assert.equal(b.puts().length,1);await b.dispose();
+});
+test('固收普通冲突后只有重新明确编辑保存才使用新基线',async()=>{
+  const b=await bootClear();b.edit('BOND','fixed_cost','12');await b.save();
+  const remote={...copy(SEED),fixed:23};b.respond(b.requests.at(-1),meta(remote));await settle();assert.equal(b.puts().length,0);
+  await b.enter();b.edit('BOND','fixed_cost','13');await b.save();await b.tick(15000);b.respond(b.requests.at(-1),meta(remote));await settle();
+  const put=b.puts()[0];assert.ok(put);assert.equal(b.payload(put).fixed,13);assert.equal(b.payload(put).fixed_cost,13);b.respond(put,{});await settle();await b.dispose();
+});
+test('新增清仓dialog仅保留必要选项和真实错误，无常驻解释或重复NOTICE',async()=>{
+  const b=await bootClear(),clear=b.doc.querySelector('.cost-clear-dialog');
+  assert.equal(clear.querySelectorAll('p').length,1);assert.equal(clear.querySelector('p').hasAttribute('data-clear-message'),true);
+  assert.equal(clear.querySelector('[data-clear-undo]').textContent,'撤销标记');confirmMark(b);assert.equal(b.state().NOTICE,'');
+  b.doc.querySelector('[data-cost-add]').click();const add=b.doc.querySelector('.cost-add-dialog');
+  assert.equal(add.querySelectorAll('p').length,1);assert.equal(add.querySelector('p').hasAttribute('data-add-message'),true);
+  assert.equal(add.querySelector('.cost-add-hold').querySelectorAll('label').length,2);
+  add.querySelector('[data-add-symbol]').value='CCC';add.querySelector('[data-add-qty]').value='bad';add.querySelector('[data-add-confirm]').click();
+  assert.match(add.querySelector('[data-add-message]').textContent,/数量必须/);assert.equal(add.open,true);
+  add.querySelector('[data-add-qty]').value='1';add.querySelector('[data-add-confirm]').click();assert.equal(b.state().NOTICE,'');await b.dispose();
+});
+test('编辑字号与手机44像素红叉独立命中区，长代码限制在四列表格内',async()=>{
+  const sym='A'.repeat(32),b=await bootClear({symbols:[sym,'BBB'],local:{...copy(SEED),items:{[sym]:{qty:1,cost:2},BBB:SEED.items.BBB}}});
+  const row=b.doc.querySelector('[data-cost-row][data-sym="'+sym+'"]');
+  assert.equal(row.querySelector('.ep-name').textContent.startsWith(sym),true);assert.equal(row.querySelector('.ep-clear').parentElement,row);
+  assert.equal(row.nextElementSibling.getAttribute('data-f'),'cost');assert.equal(row.nextElementSibling.nextElementSibling.getAttribute('data-f'),'qty');
+  assert.match(CSS,/#costManage \.ep-sym\{[^}]*display:grid;[^}]*grid-template-columns:auto minmax\(0,1fr\);[^}]*min-width:0;[^}]*font-size:16px/);
+  assert.match(CSS,/#costManage \.ep-name\{[^}]*min-width:0;overflow:hidden;text-overflow:ellipsis/);
+  const mobile=CSS.slice(CSS.indexOf('@media(max-width:600px)'));
+  assert.match(mobile,/#costManage \.ep-clear\{width:44px;height:44px;font-size:24px/);assert.doesNotMatch(CSS,/position:absolute[^}]*44px/);
+  assert.match(CSS,/#costManage \.ep-h\{font-size:15px/);assert.match(CSS,/#costManage \.ep-val\{font-size:16px/);
+  assert.match(CSS,/#costManage \.ep-grid input,#costManage \.ep-cash input\{[^}]*font-size:16px/);
+  assert.match(CSS,/#costManage \.ep-cash label\{[^}]*font-size:16px/);assert.match(CSS,/\.cost-acts button\{font-size:16px/);
+  assert.match(CSS,/#costManage \[data-cost-add\]\{[^}]*margin:0 auto 0 0;[^}]*font-size:16px/);
+  assert.match(CSS,/#costManage \.cost-clear-dialog h3\{[^}]*font-size:18px/);assert.match(CSS,/#costManage \.cost-clear-dialog label\{display:block;[^}]*font-size:16px/);
+  assert.match(CSS,/#costManage \.cost-clear-dialog p\{[^}]*font-size:15px/);assert.match(CSS,/#costManage \.cost-add-dialog input:not\(\[type="radio"\]\)\{[^}]*font-size:16px/);
+  assert.match(CSS,/#costManage \.cost-add-hold,#costManage \.cost-clear-choice\{display:flex;[^}]*gap:16px/);assert.match(CSS,/#costManage \.cost-add-hold label,#costManage \.cost-clear-choice label\{display:inline-flex/);
+  assert.equal((CSS.match(/@media/g)||[]).length,1);assert.doesNotMatch(CSS,/@media\(max-width:(?!600)/);await b.dispose();
+});
+
+test('新增入口固定在保存操作栏左侧，关闭编辑或错误只读时隐藏且重绘不重复',async()=>{
+  const b=await bootClear(),panel=b.doc.getElementById('costManage'),add=panel.querySelector('[data-cost-add]');
+  assert.equal(add.parentElement,b.doc.getElementById('costActs'));assert.equal(add.hidden,false);
+  assert.equal(panel.querySelectorAll('[data-cost-add]').length,1);assert.equal(b.doc.querySelector('#costMembers [data-cost-add]'),null);
+  b.ctx.__costTest.paint();assert.equal(panel.querySelector('[data-cost-add]'),add);
+  b.doc.getElementById('costCancel').click();assert.equal(add.hidden,true);await b.enter();assert.equal(add.hidden,false);
+  assert.equal(panel.querySelectorAll('[data-cost-add]').length,1);await b.dispose();
+});
+test('清仓目的地使用独立横排容器且保留确认仅草稿',async()=>{
+  const b=await bootClear(),d=b.doc.querySelector('.cost-clear-dialog'),choice=d.querySelector('.cost-clear-choice');
+  assert.ok(choice);assert.equal(choice.querySelectorAll('label').length,2);
+  assert.equal(choice.querySelector('input[value="focus"]').parentElement.textContent,'进重点');
+  const n=b.requests.length;confirmMark(b,'focus');assert.equal(b.requests.length,n);await b.dispose();
+});
+
 const selectedTests=process.env.MM_COST_TEST_FILTER?tests.filter(t=>t.name.includes(process.env.MM_COST_TEST_FILTER)):tests;
 (async()=>{let passed=0;assert.ok(selectedTests.length,'定向测试必须匹配真实用例');for(const t of selectedTests){try{await t.fn();passed++;console.log('PASS '+t.name);}catch(e){console.error('FAIL '+t.name+'\n'+e.stack);process.exitCode=1;}}console.log('\n仓位面板离线测试：'+passed+'/'+selectedTests.length+' 通过');})();

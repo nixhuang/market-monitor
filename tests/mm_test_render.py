@@ -117,6 +117,19 @@ check('--collapse-bg:var(--signal-collapse)' in re.search(r'#signalCounts\{([^}]
       and 'opacity:' not in re.search(r'\.collapse-group\{([^}]+)\}', html)[1],
       '统计收起背景40%透明，白箭头不使用整体opacity淡化')
 
+# 空盈亏分组SSR即隐藏；长线共用统计标题选择器，不能局限于盈亏区。
+_pnl_blocks = re.findall(r'<div class="signal-member-block" hidden><h5>([^<]+)</h5>'
+                         r'<ul class="signal-member-list" data-g="([^"]+)"></ul></div>', html)
+check(_pnl_blocks == [('浮盈', 'gain'), ('浮亏', 'loss'), ('减仓价', 'cut'), ('加仓价', 'add')],
+      '盈亏到价四组保留静态骨架但空分类初始不显示标题')
+_stat_heading = re.search(r'#signalCounts \.signal-member-block h5\{([^}]+)\}', monitor.PAGE_CSS)[1]
+_stat_line = re.search(r'#signalCounts \.signal-member-block h5::after\{([^}]+)\}', monitor.PAGE_CSS)[1]
+check('display:flex' in _stat_heading and 'align-items:center' in _stat_heading
+      and all(v in _stat_line for v in ('content:""', 'flex:1 1 auto', 'height:1px', 'margin-left:8px',
+                                       'background:var(--stat-rule-soft,#3a4356)'))
+      and '--stat-rule-soft:#3a4356' in monitor.PAGE_CSS,
+      '全部统计分组标题恢复终稿右侧1px长线，颜色仅定义于统一色板')
+
 # 规则样式只输出一次，且仍在仓位CSS后保持最终覆盖优先级。
 check(html.count(strip_css_comments(monitor.RULES_CSS)) == 1, "规则CSS整块只输出一份")
 _cost_css, _cost_js = monitor._cost_panel_assets(items)
@@ -1022,8 +1035,8 @@ for _level, _color in _filter_palette.items():
     check(monitor.PAGE_CSS.count(_selector + '{color:' + _color + '}') == 1,
           '多选' + _level + '只按自身级别着色一次，不改单选或名称竖条')
 _filter_css = re.sub(r'/\*.*?\*/', '', monitor.PAGE_CSS, flags=re.S)
-_filter_rules = [(selector.strip(), body) for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', _filter_css)
-                 if '.signal-filter-condition' in selector]
+_filter_rules = [(selector.strip(), body) for selectors, body in re.findall(r'([^{}]+)\{([^{}]*)\}', _filter_css)
+                 for selector in selectors.split(',') if '.signal-filter-condition' in selector]
 check(len(_filter_rules) >= len(_filter_palette)
       and all(selector == '#signalCounts .signal-filter-condition'
               or selector in {f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
@@ -1031,6 +1044,8 @@ check(len(_filter_rules) >= len(_filter_palette)
               or selector in {'#signalCounts .signal-filter-condition'
                               f'[data-signal-kind="earnings_week"][data-signal-level="{level}"]'
                               for level in ('red', 'yellow', 'gray')}
+              or selector in {'#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd',
+                              '#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd'}
               for selector, _ in _filter_rules)
       and all(not re.search(r'(?:^|;)\s*color\s*:', body)
               or bool(re.search(r'(?:^|;)\s*color\s*:\s*inherit\s*(?:;|$)', body))
@@ -1526,6 +1541,9 @@ for _level, _body_color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-y
 check('.signal-item{color:var(--dim)}' in _arrow_css
       and '.arrow-rsi-up,.arrow-rsi-down{color:inherit;font-size:1.15em;line-height:1}' in _arrow_css,
       '无灯正文灰字与RSI继承色/字号基础规则均保持')
+check('.stk td.sig .signal-item{letter-spacing:-.6px}' in _arrow_css
+      and '.stk td.sig .sig-zone{letter-spacing:-.6px}' not in _arrow_css,
+      '手机端普通描述与组合布林描述统一使用SNDK的-0.6px字距')
 
 _rules_arrow_table = re.search(r'<table\b[^>]*id="rules-lamp-table"[^>]*>.*?</table>',
                               re.search(r'<template id="rulesTpl">(.*?)</template>', html, re.S)[1], re.S)[0]
@@ -1716,6 +1734,41 @@ if '--chrome' in sys.argv:
     with _patch.object(monitor, 'global_dca', return_value=None):
         _color_snapshot = monitor.build_snapshot({}, _color_rows, {}, group_counts={})
         _color_page = monitor.render({}, _color_rows, len(_color_rows), snapshot=_color_snapshot)
+    _filter_snapshot = _copy.deepcopy(_description_snapshot)
+    _filter_snapshot['target_trade_date'] = '2026-10-26'
+    _filter_snapshot['earnings_week'] = {'asof': '2026-10-26', 'members': [
+        {'symbol': 'TBOTH', 'note': '合成财报', 'date': '2026-10-27', 'timing': 'post', 'group': 'position', 'level': 'green'},
+        {'symbol': 'TSPACE', 'note': '合成财报', 'date': '2026-10-29', 'timing': 'pre', 'group': 'technology', 'level': 'green'}]}
+    with _patch.object(monitor, 'global_dca', return_value=None):
+        _filter_page = monitor.render({}, _description_rows, len(_description_rows), snapshot=_filter_snapshot)
+    # 固定北京运行日的财报显示样本，覆盖红/黄/无警及ET待定；不读真实财报或改变算法。
+    _time_cases = [('EPREV', '2026-10-25', 'pre'), ('ENOW', '2026-10-26', 'pre'),
+                   ('ERED', '2026-10-27', 'post'), ('EYELLOW', '2026-10-29', 'pre'),
+                   ('EFAR', '2026-11-05', 'post'), ('ETBD', '2026-11-06', 'unknown')]
+    _time_rows = []
+    for _sym, _date, _timing in _time_cases:
+        _row = item(_sym, 'technology', 'green')
+        _row.update(earnings={'status': 'ok', 'date': _date, 'timing': _timing, 'kind': 'expected'})
+        _time_rows.append(_row)
+    _time_snapshot = _copy.deepcopy(snapshot)
+    _time_snapshot.update(finished_at_bj='2026-10-26T20:00:00+08:00',
+                          finished_at='2026-10-26T12:00:00+00:00', target_trade_date='2026-10-26',
+                          earnings_week={'asof': '2026-10-26', 'members': [
+                              {'symbol': sym, 'date': date, 'timing': timing, 'group': 'technology', 'level': 'green'}
+                              for sym, date, timing in _time_cases]})
+    with _patch.object(monitor, 'global_dca', return_value=None):
+        _time_page = monitor.render({}, _time_rows, len(_time_rows), snapshot=_time_snapshot)
+    # 真实生成设置页CSS + 正式renderer说明模板；去脚本后本地挂载，绝不抓线上说明。
+    with open(os.path.join(ROOT, 'edit.html'), encoding='utf-8') as _stream:
+        _rules_page = re.sub(r'<script\b[^>]*>[\s\S]*?</script>', '', _stream.read(), flags=re.I)
+    _rules_markup = ''
+    for _tid, _host in (('rulesTpl', 'signalRules'), ('glossaryTpl', 'glossaryRules')):
+        _content = re.search(r'<template id="' + _tid + r'">([\s\S]*?)</template>', _description_page)[1]
+        _rules_markup += '<details class="card fold rule-card" id="' + _host + '" open>' + _content + '</details>'
+    _notes = re.search(r'<template id="notesTpl">([\s\S]*?)</template>', _description_page)[1]
+    _notes = re.sub(r'^\s*<section\b[^>]*>|</section>\s*$', '', _notes)
+    _rules_markup += _notes.replace('class="macro-help"', 'class="card fold"', 1)
+    _rules_page = _rules_page.replace('<div id="rulesHost">', '<div id="rulesHost">' + _rules_markup, 1)
     _range_rows = []
     for _sym, _low, _price, _high in (('RANGENORM', 100.0, 150.0, 200.0), ('RANGEHI', 420.0, 688.0, 692.0)):
         _range_row = item(_sym, 'position', 'green')
@@ -1760,6 +1813,8 @@ if '--chrome' in sys.argv:
     for _browser_page, _browser_seed, _browser_label in (
             (_description_page, _expected_browser_seed, '目标/刷新页'),
             (_color_page, _expected_browser_seed, '颜色页'),
+            (_filter_page, _expected_browser_seed, '紫灯财报多选页'),
+            (_time_page, _expected_browser_seed, '财报时间颜色页'),
             (_range_page, _range_seed, '52周页'),
             (_unsafe_page, _json.loads(_seed_text), '注入安全页')):
         _assert_browser_seed(_browser_page, _browser_seed, _browser_label)
@@ -1932,6 +1987,37 @@ const deadline = setTimeout(() => {
         'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn'])
         && header.count === String(header.expected) && header.border === 'rgb(176, 132, 255)' && !header.overflow,
         name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
+      const statLines = await evaluate(`(() => {
+        const card=document.getElementById('signalCounts'),extra=card.querySelector('.pnl-extra');
+        const empty=[...extra.querySelectorAll('.signal-member-block')].map(block=>({
+          hidden:block.hidden,display:getComputedStyle(block).display,count:block.querySelectorAll('li').length}));
+        const buttons=[...card.querySelectorAll('.signal-filter-toggle')],pressed=buttons.map(b=>b.getAttribute('aria-pressed'));
+        const data=signalFilterData(),keys=buttons.map(b=>b.dataset.kind);let pair=null;
+        for(let i=0;i<keys.length&&!pair;i++)for(let j=i+1;j<keys.length;j++){
+          const result=intersectSignals(data,[keys[i],keys[j]]);
+          if(!result.pending&&result.members.length){pair=[keys[i],keys[j]];break;}
+        }
+        buttons.forEach(b=>b.setAttribute('aria-pressed',pair&&pair.includes(b.dataset.kind)?'true':'false'));
+        renderSignalFilter();
+        const hidden=[...card.querySelectorAll('[hidden]')].map(el=>[el,el.hidden]);
+        const opened=[card,...card.querySelectorAll('details')].map(el=>[el,el.open]);
+        hidden.forEach(([el])=>el.hidden=false);opened.forEach(([el])=>el.open=true);
+        const headings=[...card.querySelectorAll('.signal-member-block h5')].map(h=>{
+          const s=getComputedStyle(h),line=getComputedStyle(h,'::after');
+          return {title:h.textContent,filter:!!h.closest('.signal-filter'),pnl:!!h.closest('.pnl-extra'),
+            display:s.display,align:s.alignItems,content:line.content,height:line.height,width:parseFloat(line.width),
+            gap:line.marginLeft,color:line.backgroundColor,headWidth:h.getBoundingClientRect().width};
+        });
+        hidden.forEach(([el,value])=>el.hidden=value);opened.forEach(([el,value])=>el.open=value);
+        buttons.forEach((b,i)=>pressed[i]===null?b.removeAttribute('aria-pressed'):b.setAttribute('aria-pressed',pressed[i]));
+        renderSignalFilter();
+        return {empty,headings,pair};
+      })()`);
+      assertions.push({ok:statLines.empty.length===4&&statLines.empty.every(b=>b.hidden&&b.display==='none'&&b.count===0)
+        &&statLines.pair&&statLines.headings.some(h=>h.filter)&&statLines.headings.filter(h=>h.pnl).length===4
+        &&statLines.headings.some(h=>!h.filter&&!h.pnl)&&statLines.headings.every(h=>h.display==='flex'&&h.align==='center'
+          &&h.content==='""'&&h.height==='1px'&&h.width>0&&h.width<h.headWidth&&h.gap==='8px'&&h.color==='rgb(58, 67, 86)'),
+        name:width+'px统计空盈亏分类不占位，静态名单及真实多选交集标题均有右侧淡长线',actual:statLines});
       await evaluate(`document.querySelectorAll('details.group-card,details.quiet-list').forEach(el => el.open = true)`);
       await settled();
       const actual = await evaluate(`(() => {
@@ -2164,6 +2250,94 @@ const deadline = setTimeout(() => {
           && ['yellow','gray'].every(tone=>lamps.some(m=>m.tone===tone && m.level==='red')),
         name:width+'px红黄白分类不变，名单唯一3px竖条与主表灯同色，黄白名单中的红主行仍红',actual:lamps});
     }
+    const filterTree=await cdp('Page.getFrameTree');
+    await cdp('Page.setDocumentContent',{frameId:filterTree.frameTree.frame.id,html:syntheticPage(input.filterPage)});
+    await settled();
+    for(const [width,height] of VIEWPORTS){
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      await evaluate(`document.getElementById('signalCounts').open=true;document.querySelectorAll('.signal-filter-toggle').forEach(b=>b.setAttribute('aria-pressed','false'));renderSignalFilter()`);
+      const clicks=[];
+      for(const kind of ['target_purple','earnings_week']){
+        const point=await evaluate(`(()=>{
+          const b=document.querySelector('.signal-filter-toggle[data-kind="${kind}"]');b.scrollIntoView({block:'center'});
+          const r=b.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
+          return {x,y,hit:document.elementFromPoint(x,y)===b,z:getComputedStyle(b).zIndex};
+        })()`);
+        await cdp('Input.dispatchMouseEvent',{type:'mousePressed',x:point.x,y:point.y,button:'left',clickCount:1});
+        await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x,y:point.y,button:'left',clickCount:1});
+        clicks.push({kind,...point});
+      }
+      const selected=await evaluate(`(()=>{
+        const kinds=[...document.querySelectorAll('.signal-filter-toggle[aria-pressed="true"]')].map(b=>b.dataset.kind);
+        const result=intersectSignals(signalFilterData(),kinds);
+        return {kinds,symbols:result.members.map(m=>m.s),text:document.getElementById('signalFilterResult').textContent,
+          pnlSelectable:!!document.querySelector('.pnl-extra .signal-filter-toggle'),
+          panelOpen:[...document.querySelectorAll('.purple-extra details,.earnings-extra details')].some(d=>d.open)};
+      })()`);
+      assertions.push({ok:clicks.every(p=>p.hit&&p.z==='1')&&JSON.stringify(selected.kinds)===JSON.stringify(['target_purple','earnings_week'])
+        &&JSON.stringify(selected.symbols.sort())===JSON.stringify(['TBOTH','TSPACE'])&&!selected.pnlSelectable&&!selected.panelOpen,
+        name:width+'px真实鼠标命中紫灯和财报按钮，二者参与交集且仅盈亏到价排除',actual:{clicks,selected}});
+      await evaluate(`document.querySelector('.signal-filter-toggle[data-kind="ma"]').click()`);
+      const triple=await evaluate(`(()=>{const kinds=[...document.querySelectorAll('.signal-filter-toggle[aria-pressed="true"]')].map(b=>b.dataset.kind);const r=intersectSignals(signalFilterData(),kinds);return {kinds,symbols:r.members.map(m=>m.s),text:document.getElementById('signalFilterResult').textContent};})()`);
+      assertions.push({ok:triple.kinds.length===3&&['target_purple','earnings_week','ma'].every(k=>triple.kinds.includes(k))
+        &&triple.symbols.length===2&&triple.text.includes('同时满足'),name:width+'px紫灯财报和技术条件三选交集保持',actual:triple});
+    }
+    const timeTree=await cdp('Page.getFrameTree');
+    await cdp('Page.setDocumentContent',{frameId:timeTree.frameTree.frame.id,html:syntheticPage(input.timePage)});
+    for(const [width,height] of VIEWPORTS){
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      const times=await evaluate(`(async()=>{
+        document.querySelectorAll('details').forEach(d=>d.open=true);await document.fonts.ready;
+        const symbols=['EPREV','ENOW','ERED','EYELLOW','EFAR','ETBD'];
+        const sample=(sym,where)=>{
+          const el=where==='main'?document.querySelector('#s-'+sym.toLowerCase()+' .earn'):
+            [...document.querySelectorAll('#signalCounts .earnings-week li')].find(li=>li.querySelector('.signal-member-symbol')?.textContent===sym)?.querySelector('.earnings-week-meta');
+          if(!el)return {sym,where,missing:true};const cd=el.querySelector('.cd'),bj=el.querySelector('.unit,.earnings-week-bj');
+          return {sym,where,color:getComputedStyle(el).color,cd:cd?getComputedStyle(cd).color:null,
+            tbd:!!cd?.classList.contains('tbd'),bj:bj?getComputedStyle(bj).color:null,relative:!!bj?.classList.contains('is-countdown')};
+        };
+        const list=symbols.flatMap(s=>[sample(s,'main'),sample(s,'list')]);
+        const box=document.getElementById('signalFilterResult'),data=signalFilterData();
+        // 第二项为同六股合成均线条件，只验证真实交集渲染，不伪造生产行情/时间字段。
+        data.ma={ok:true,label:'合成均线',members:data.earnings_week.members.map(m=>({...m,d:[{l:'yellow',t:'合成均线条件'}]}))};
+        box.dataset.filter=JSON.stringify(data);
+        if(!document.querySelector('.signal-filter-toggle[data-kind="ma"]')){
+          const button=document.createElement('button');button.className='signal-filter-toggle';button.dataset.kind='ma';
+          document.getElementById('signalCounts').append(button);
+        }
+        document.querySelectorAll('.signal-filter-toggle').forEach(b=>b.setAttribute('aria-pressed',['earnings_week','ma'].includes(b.dataset.kind)?'true':'false'));
+        renderSignalFilter();
+        const filtered=[...box.querySelectorAll('[data-signal-kind="earnings_week"]')].map(e=>{
+          const sym=e.closest('li').querySelector('.signal-member-symbol').textContent,cd=e.querySelector('.cd'),bj=e.querySelector('.earnings-week-bj');
+          return {sym,where:'filter',color:getComputedStyle(e).color,cd:cd?getComputedStyle(cd).color:null,
+            tbd:!!cd?.classList.contains('tbd'),bj:bj?getComputedStyle(bj).color:null,relative:!!bj?.classList.contains('is-countdown')};
+        });return {list,filtered};
+      })()`);
+      const expected={EPREV:'rgb(255, 133, 128)',ENOW:'rgb(255, 133, 128)',ERED:'rgb(255, 133, 128)',
+        EYELLOW:'rgb(240, 198, 116)',EFAR:'rgb(143, 184, 240)',ETBD:'rgb(143, 184, 240)'};
+      assertions.push({ok:times.list.length===12&&times.filtered.length===6&&times.list.concat(times.filtered).every(t=>
+        !t.missing&&t.color===expected[t.sym]&&t.cd===(t.tbd?'rgb(143, 184, 240)':'rgb(255, 255, 255)')
+        &&(!t.relative||t.bj==='rgb(255, 255, 255)')
+        &&(t.where==='main'||t.relative||t.bj===(['EFAR','ETBD'].includes(t.sym)?'rgb(139, 147, 161)':expected[t.sym]))),
+        name:width+'px主表、财报名单及多选交集保留红黄日期，无警ET蓝/BJ原色，北京倒计时白且ET待定蓝',actual:times});
+    }
+    const rulesTree=await cdp('Page.getFrameTree');
+    await cdp('Page.setDocumentContent',{frameId:rulesTree.frameTree.frame.id,html:syntheticPage(input.rulesPage)});
+    for(const [width,height] of VIEWPORTS){
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+      const rules=await evaluate(`(async()=>{
+        document.querySelectorAll('#rulesHost details').forEach(d=>d.open=true);await document.fonts.ready;
+        const base=getComputedStyle(document.querySelector('#marketRiskRules p')).fontSize;
+        const text=[...document.querySelectorAll('#signalRules .rules-body p,#signalRules .rules-body h4,#signalRules .rules-body h5,#glossaryRules .rules-body p,#glossaryRules .rules-body h4,#glossaryRules .rules-body h5,#rulesHost .rule-table th,#rulesHost .rule-table td')].map(e=>getComputedStyle(e).fontSize);
+        const table=document.querySelector('#rules-lamp-table'),s=getComputedStyle(table);
+        const cell=table.querySelector('td'),cs=getComputedStyle(cell),cat=getComputedStyle(table.querySelector('.cat-col'));
+        return {base,text,width:s.width,cellPadding:cs.padding,lineHeight:cs.lineHeight,catWidth:cat.width,
+          overflow:document.documentElement.scrollWidth>innerWidth};
+      })()`);
+      assertions.push({ok:rules.base==='15px'&&rules.text.length>20&&rules.text.every(f=>f===rules.base)
+        &&rules.cellPadding===(width<=600?'6px 4px':'6px 7px')&&rules.lineHeight==='19.8px'&&!rules.overflow,
+        name:width+'px实际设置页规则字号对齐宏观15px，保留表格padding与原行距且无横向溢出',actual:rules});
+    }
     const rangeTree=await cdp('Page.getFrameTree');
     const rangeHTML=syntheticPage(input.rangePage);
     await cdp('Page.setDocumentContent', {frameId: rangeTree.frameTree.frame.id, html: rangeHTML});
@@ -2245,12 +2419,119 @@ const deadline = setTimeout(() => {
           symbols:[...grid.querySelectorAll('[data-cost-row][data-sym]')].map(e=>e.dataset.sym).sort(),
           cost:panel.querySelector('input[data-sym="RANGENORM"][data-f="cost"]').value,
           qty:panel.querySelector('input[data-sym="RANGEHI"][data-f="qty"]').value};
+        const clear=grid.querySelector('[data-cost-clear="RANGENORM"]');
+        result.clearCount=grid.querySelectorAll('[data-cost-clear]').length;
+        result.clearColor=getComputedStyle(clear).color;result.clearText=clear.textContent;
+        const cr=clear.getBoundingClientRect();result.hitWidth=cr.width;result.hitHeight=cr.height;
+        result.fixedFields=panel.querySelectorAll('input[data-sym="BOND"]').length;
+        result.fixedCost=!!panel.querySelector('input[data-sym="BOND"][data-f="fixed_cost"]');
+        result.editorFont=getComputedStyle(panel.querySelector('.ep-sym')).fontSize;
+        result.inputFont=getComputedStyle(panel.querySelector('input[data-f="cost"]')).fontSize;
+        result.noOverflow=document.documentElement.scrollWidth<=innerWidth;
+        const add=panel.querySelector('[data-cost-add]'),cancel=document.getElementById('costCancel'),save=document.getElementById('costSave');
+        const ar=add.getBoundingClientRect(),xr=cancel.getBoundingClientRect(),sr=save.getBoundingClientRect();
+        result.addInActs=add.parentElement.id==='costActs'&&panel.querySelectorAll('[data-cost-add]').length===1;
+        result.actsSameRow=Math.abs(ar.top-xr.top)<1&&Math.abs(xr.top-sr.top)<1&&ar.right<xr.left&&xr.right<sr.left;
+        clear.click();const dialog=panel.querySelector('dialog');
+        result.dialogOpen=dialog.open;result.destinations=[...dialog.querySelectorAll('input')].map(i=>i.value);
+        result.dialogWidth=dialog.getBoundingClientRect().width;result.hasCash=!!dialog.querySelector('[data-f="cash"]');
+        result.noExplanation=[...dialog.querySelectorAll('p')].every(p=>p.hidden||!p.textContent.trim());
+        result.dialogFont=getComputedStyle(dialog.querySelector('h3')).fontSize;
+        result.labelFont=getComputedStyle(dialog.querySelector('label')).fontSize;
+        const choices=[...dialog.querySelectorAll('.cost-clear-choice label')].map(e=>e.getBoundingClientRect());
+        result.choicesSameRow=choices.length===2&&Math.abs(choices[0].top-choices[1].top)<1&&choices[0].right<choices[1].left;
+        dialog.querySelector('[data-clear-cancel]').click();result.dialogClosed=!dialog.open;
         document.getElementById('costCancel').click();result.cancelHidden=getComputedStyle(panel).display==='none';
         return result;
       })()`);
       assertions.push({ok:editor.visible&&editor.columns===4&&editor.cancelHidden
-        && JSON.stringify(editor.symbols)===JSON.stringify(['RANGEHI','RANGENORM'])&&editor.cost==='125'&&editor.qty==='5',
+        && JSON.stringify(editor.symbols)===JSON.stringify(['RANGEHI','RANGENORM'])&&editor.cost==='125'&&editor.qty==='5'
+        &&editor.clearCount===2&&editor.clearColor==='rgb(255, 133, 128)'&&editor.clearText==='×'
+        &&editor.dialogOpen&&editor.dialogClosed&&JSON.stringify(editor.destinations)===JSON.stringify(['default','focus'])
+        &&editor.dialogWidth>0&&editor.dialogWidth<=width-24&&!editor.hasCash
+        &&editor.fixedFields===1&&editor.fixedCost&&editor.editorFont==='16px'&&editor.inputFont==='16px'
+        &&editor.noOverflow&&editor.noExplanation&&editor.dialogFont==='18px'&&editor.labelFont==='16px'
+        &&editor.addInActs&&editor.actsSameRow&&editor.choicesSameRow
+        &&(width>600||(editor.hitWidth>=44&&editor.hitHeight>=44)),
         name:width+'px真实四列编辑器只含两只合成仓位、数值准确并可取消',actual:editor});
+      const clearPoint=await evaluate(`(()=>{
+        document.getElementById('costEditBtn').click();
+        const b=document.querySelector('[data-cost-clear="RANGENORM"]');b.scrollIntoView({block:'center'});
+        const r=b.getBoundingClientRect(),x=r.left+3,y=r.top+3;
+        const next=document.querySelector('input[data-sym="RANGENORM"][data-f="cost"]').getBoundingClientRect();
+        return {x,y,hit:document.elementFromPoint(x,y)===b,separate:r.right<=next.left+0.5};
+      })()`);
+      await cdp('Input.dispatchMouseEvent',{type:'mousePressed',x:clearPoint.x,y:clearPoint.y,button:'left',clickCount:1});
+      await cdp('Input.dispatchMouseEvent',{type:'mouseReleased',x:clearPoint.x,y:clearPoint.y,button:'left',clickCount:1});
+      const clearHit=await evaluate(`(()=>{
+        const d=document.querySelector('#costManage .cost-clear-dialog'),open=!!d&&d.open;
+        if(open)d.querySelector('[data-clear-cancel]').click();document.getElementById('costCancel').click();return open;
+      })()`);
+      assertions.push({ok:clearPoint.hit&&clearPoint.separate&&clearHit,
+        name:width+'px红叉命中区域边缘真实点击打开且不覆盖相邻成本输入',actual:{...clearPoint,open:clearHit}});
+      const clearDraft=await evaluate(`(async()=>{
+        document.getElementById('costEditBtn').click();
+        const panel=document.getElementById('costManage');
+        const field=(sym,f)=>panel.querySelector('input[data-sym="'+sym+'"][data-f="'+f+'"]');
+        const original={cost:field('RANGEHI','cost').value,qty:field('RANGENORM','qty').value};
+        const choose=(sym,value)=>{
+          panel.querySelector('[data-cost-clear="'+sym+'"]').click();
+          const d=panel.querySelector('dialog');
+          d.querySelector('input[value="'+value+'"]').checked=true;
+          d.querySelector('[data-clear-confirm]').click();
+          return !d.open;
+        };
+        const firstClosed=choose('RANGENORM','focus');
+        const input=field('RANGEHI','cost');input.value='123';input.dispatchEvent(new Event('input',{bubbles:true}));
+        await new Promise(r=>requestAnimationFrame(r));
+        const editable=field('RANGEHI','cost').value==='123'&&!field('RANGEHI','cost').disabled;
+        const secondClosed=choose('RANGEHI','default');
+        panel.querySelector('[data-cost-clear="RANGENORM"]').click();
+        const dialog=panel.querySelector('dialog');
+        const retained=dialog.querySelector('input[value="focus"]').checked;
+        const deferred=[...dialog.querySelectorAll('p')].every(p=>p.hidden||!p.textContent.trim())
+          &&field('RANGENORM','qty').value===original.qty;
+        dialog.querySelector('[data-clear-cancel]').click();
+        document.getElementById('costCancel').click();
+        document.getElementById('costEditBtn').click();
+        const restored=field('RANGEHI','cost').value===original.cost&&field('RANGENORM','qty').value===original.qty;
+        panel.querySelector('[data-cost-clear="RANGENORM"]').click();
+        const cancelled=dialog.querySelector('input[value="default"]').checked;
+        dialog.querySelector('[data-clear-cancel]').click();document.getElementById('costCancel').click();
+        return {firstClosed,secondClosed,editable,retained,deferred,restored,cancelled};
+      })()`);
+      assertions.push({ok:Object.values(clearDraft).every(Boolean),
+        name:width+'px清仓确认仅草稿、允许继续输入及多股标记、面板取消统一撤销',actual:clearDraft});
+      const addDraft=await evaluate(`(async()=>{
+        document.getElementById('costEditBtn').click();const panel=document.getElementById('costManage');
+        const add=panel.querySelector('[data-cost-add]');add.click();const d=panel.querySelector('.cost-add-dialog');
+        const initial=d.open&&[...d.querySelectorAll('p')].every(p=>p.hidden||!p.textContent.trim())&&!d.querySelector('[data-f="cash"]');
+        const widthOK=d.getBoundingClientRect().width<=innerWidth-24;
+        const holdRects=[...d.querySelectorAll('[data-add-hold]')].map(e=>e.closest('label').getBoundingClientRect());
+        const holdSameRow=holdRects.length===2&&Math.abs(holdRects[0].top-holdRects[1].top)<1&&holdRects[0].right<=holdRects[1].left;
+        const enlarged=getComputedStyle(d.querySelector('h3')).fontSize==='18px'
+          &&getComputedStyle(d.querySelector('label')).fontSize==='16px'
+          &&getComputedStyle(d.querySelector('[data-add-symbol]')).fontSize==='16px';
+        d.querySelector('[data-add-symbol]').value=' msft ';
+        d.querySelector('[data-add-hold][value="short"]').checked=true;
+        d.querySelector('[data-add-qty]').value='2';d.querySelector('[data-add-cost]').value='100';
+        d.querySelector('[data-add-confirm]').click();await new Promise(r=>requestAnimationFrame(r));
+        const row=()=>panel.querySelector('[data-cost-row][data-sym="MSFT"]');
+        const added=!d.open&&!!row()&&row().textContent.includes('短持仓');
+        const qty=panel.querySelector('input[data-sym="MSFT"][data-f="qty"]');
+        const editable=!!qty&&!qty.disabled&&qty.value==='2';
+        const noOverflow=document.documentElement.scrollWidth<=innerWidth;
+        const unknownValue=qty&&qty.nextElementSibling&&qty.nextElementSibling.textContent==='—';
+        panel.querySelector('[data-cost-remove-added="MSFT"]').click();await new Promise(r=>requestAnimationFrame(r));
+        const removed=!row();panel.querySelector('[data-cost-add]').click();d.querySelector('[data-add-symbol]').value='RANGEHI';
+        d.querySelector('[data-add-confirm]').click();const duplicate=d.open&&!!d.querySelector('[data-add-message]').textContent;
+        d.querySelector('[data-add-symbol]').value='MSFT';d.querySelector('[data-add-confirm]').click();
+        await new Promise(r=>requestAnimationFrame(r));document.getElementById('costCancel').click();document.getElementById('costEditBtn').click();
+        const cancelled=!row();document.getElementById('costCancel').click();
+        return {initial,widthOK,holdSameRow,enlarged,added,editable,noOverflow,unknownValue,removed,duplicate,cancelled};
+      })()`);
+      assertions.push({ok:Object.values(addDraft).every(Boolean),
+        name:width+'px新增仓位弹窗、代码规范化、可编辑撤销、重复拦截与统一取消',actual:addDraft});
     }
     const injectionTree=await cdp('Page.getFrameTree');
     const injectionHTML=syntheticPage(input.injectionPage);
@@ -2290,7 +2571,8 @@ const deadline = setTimeout(() => {
             _stream.write(_browser_script)
         _browser_result = _subprocess.run(['node', _browser_file],
             input=_json.dumps({'chrome': _chrome, 'profile': _profile, 'html': _description_page,
-                              'colorPage': _color_page, 'rangePage': _range_page,
+                              'colorPage': _color_page, 'rangePage': _range_page, 'filterPage': _filter_page,
+                              'timePage': _time_page, 'rulesPage': _rules_page,
                               'ciNoSandbox': sys.platform == 'linux' and os.environ.get('GITHUB_ACTIONS') == 'true'
                                   and os.environ.get('MM_TEST_CHROME_NO_SANDBOX') == '1',
                               'injectionPage': _unsafe_page, 'injectionProbe': _unsafe_snapshot['probe']}),

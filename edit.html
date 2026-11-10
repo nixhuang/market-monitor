@@ -117,6 +117,7 @@ button.danger{color:var(--red)}
   --white:#fff;
   --button-border:#4c6591;
   --list-border:#465e87;
+  --stat-rule-soft:#3a4356;
   --range-track:#9fa3aa;
   --count-active:#2f4f86;
   --count-red-border:rgba(255,133,128,.45);
@@ -166,11 +167,11 @@ button.danger{color:var(--red)}
 #fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:var(--head-blue);font-size:13px;font-weight:600;touch-action:manipulation}
 #fedRules[open]>summary,#fedGlossary[open]>summary,details.card[open]:has(>.rules-body)>summary{border-bottom:1px solid var(--line)}
 #fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:-2px}
-.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:15px;line-height:1.65;overflow-wrap:anywhere}
 .card .rules-body section+section{margin-top:16px;padding-top:4px;border-top:1px solid var(--line)}
-.card .rules-body h4{margin:6px 0 8px;color:var(--head-blue);font-size:12.5px;font-weight:600}
-.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}
-.card .rules-body p{margin:4px 0;color:var(--dim);font-size:12px;line-height:1.65}
+.card .rules-body h4{margin:6px 0 8px;color:var(--head-blue);font-size:inherit;font-weight:600}
+.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:inherit;font-weight:600}
+.card .rules-body p{margin:4px 0;color:var(--dim);font-size:inherit;line-height:1.65}
 .card .rules-body .rule-group{color:var(--head-blue-on)}
 .card .rules-body a{color:var(--head-blue-on);text-underline-offset:3px}
 .card .rules-body a:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
@@ -178,8 +179,9 @@ button.danger{color:var(--red)}
 .card .rules-body .lamp-yellow{color:var(--lamp-yellow);font-weight:600}
 .card .rules-body .lamp-purple{color:var(--purple);font-weight:600}
 .card .rules-body .tone-target-high{color:var(--target-high);font-weight:600}
-.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid var(--rules-border);font-size:12px;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid var(--rules-border);font-size:inherit;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* 预警表原行盒12px×1.65=19.8px；只放大字，不随字号放大行距。 */
+.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:inherit;line-height:19.8px;overflow-wrap:anywhere}
 .card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:var(--cost-row-bg);border-bottom:1px solid var(--rules-border)}
 #rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border-left:0;border-right:0}
 .card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center}
@@ -187,7 +189,7 @@ button.danger{color:var(--red)}
 #rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid var(--rules-group-border)}
 .card .rules-body .rule-table col.cat-col{width:18px}
 .card .rules-body .rule-table col.col-cond{width:40%}
-.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:1.1;font-size:12px;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
+.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:13.2px;font-size:inherit;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
 .card .rules-body .ar-band-up{color:var(--green)}
 .card .rules-body .ar-band-down{color:var(--red)}
 .card .rules-body .ar-rsi-up{color:var(--rsi-up)}
@@ -213,7 +215,7 @@ button.danger{color:var(--red)}
 .card .rules-body #rules-lamp-table tbody td:first-of-type{color:var(--rules-strong)}
 .card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
 .card .rules-body .rule-anchor{display:block;height:0}
-@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{font-size:11px}}
+@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
 #signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
 #signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
 #signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:var(--rules-copy)}

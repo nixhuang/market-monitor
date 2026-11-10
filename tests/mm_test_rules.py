@@ -156,8 +156,8 @@ class RulesRegression(unittest.TestCase):
     def test_earnings_text_is_never_bold_and_uses_description_red(self):
         css = page_assets.PAGE_CSS
         # 财报不是涨跌方向：红字跟个股描述红 #ff8580 同色，不能用上涨红 var(--red)。
-        self.assertIn('#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red);font-weight:400}', css)
-        self.assertIn('#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow);font-weight:400}', css)
+        self.assertIn('#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red);font-weight:400;--earn-bj-color:var(--lamp-red)}', css)
+        self.assertIn('#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow);font-weight:400;--earn-bj-color:var(--lamp-yellow)}', css)
         self.assertIn('.earn.urgent{color:var(--lamp-red);--timing-color:var(--lamp-red)}', css)
         self.assertIn('.earn.soon{color:var(--lamp-yellow);--timing-color:var(--lamp-yellow)}', css)
         # 所有位置的财报文字都不加粗（名单 meta、主表财报单元、多选组合条件）。
@@ -169,13 +169,89 @@ class RulesRegression(unittest.TestCase):
         # 紫灯条件清单的竖条跟个股自身灯级，未知灯级留灰。
         self.assertIn('#signalCounts .signal-name-lamp.unknown{--name-lamp:var(--dim)}', css)
 
+    def test_rule_body_font_matches_settings_macro_and_preserves_warning_table_geometry(self):
+        source = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        # 综合细则注入时移除macro-help，正文实际继承设置页body的15px，并非首页13px。
+        self.assertRegex(source, r'body\{[^}]*font:15px/1\.55')
+        self.assertIn("if(mr) mr.className='card fold';", source)
+        css = page_assets.RULES_CSS
+        for selector in ('.card .rules-body', '.card .rules-body p', '.card .rules-body h4',
+                         '.card .rules-body h5', '.card .rules-body .rule-table',
+                         '.card .rules-body .rule-table th,.card .rules-body .rule-table td',
+                         '.card .rules-body .rule-table th.cat-col'):
+            body = re.search(re.escape(selector) + r'\{([^}]*)\}', css)[1]
+            self.assertIn('font-size:' + ('15px' if selector == '.card .rules-body' else 'inherit'), body)
+        cells = re.search(r'\.rule-table td\{([^}]*)\}', css)[1]
+        self.assertIn('padding:6px 7px', cells)
+        self.assertIn('line-height:19.8px', cells)
+        self.assertIn('line-height:13.2px', re.search(re.escape('.card .rules-body .rule-table th.cat-col') + r'\{([^}]*)\}', css)[1])
+        self.assertIn('.card .rules-body .rule-table th.cat-col{line-height:12.1px}', css)
+        for stable in ('width:calc(100% + 32px)', 'margin-left:-16px;margin-right:-16px',
+                       'width:calc(100% + 24px)', 'margin-left:-12px;margin-right:-12px',
+                       'col.cat-col{width:18px}', 'col.col-cond{width:40%}', 'col.col-cond{width:38%}',
+                       '.rule-table td{padding:6px 4px}'):
+            self.assertIn(stable, css)
+
+    def test_earnings_date_palette_and_countdown_colors_share_all_display_paths(self):
+        css = page_assets.PAGE_CSS
+        self.assertIn('--head-blue-on:#8fb8f0', page_assets.PAGE_PALETTE)
+        self.assertIn('--dim:#8b93a1', page_assets.PAGE_PALETTE)
+        self.assertIn('#signalCounts .earnings-week-meta{display:block;margin:1px 0 0 9px;color:var(--head-blue-on)', css)
+        self.assertIn('#signalCounts .earnings-week-bj{color:var(--earn-bj-color,var(--dim))', css)
+        selectors = '.earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd'
+        declarations = re.search(re.escape(selectors) + r'\{([^}]*)\}', css)[1]
+        self.assertIn('color:var(--white)', declarations)
+        self.assertIn('.earn>.unit.is-countdown,#signalCounts .earnings-week-bj.is-countdown{color:var(--white)}', css)
+        self.assertIn('已知时段按北京落点计算并用白字', page_assets.GLOSSARY_BODY)
+        self.assertIn('时段待定按美东日期计算并用蓝字', page_assets.GLOSSARY_BODY)
+        self.assertIn('不随打开页面日期漂移', page_assets.GLOSSARY_BODY)
+
+    def test_earnings_relative_nodes_and_dynamic_filter_metadata_use_frozen_beijing_day(self):
+        today = '2026-11-10'
+        for timing, date, countdown, relative in (
+                ('post', '2026-11-20', '（11）', False), ('pre', '2026-11-12', '（2）', False),
+                ('post', '2026-11-10', '（明）', False), ('post', '2026-11-09', '（今）', True),
+                ('pre', '2026-11-09', '（昨）', True), (None, '2026-11-10', '（今）', False)):
+            with self.subTest(timing=timing, date=date):
+                event = {'status': 'ok', 'date': date, 'timing': timing}
+                entry = {'symbol': 'AAA', 'date': date, 'timing': timing, 'group': 'focus', 'level': 'green'}
+                snapshot = {'finished_at_bj': today + 'T18:00:00+08:00',
+                            'earnings_week': {'asof': today, 'members': [entry]}}
+                mark_cls = 'cd' if timing else 'cd tbd'
+                main = monitor._earnings_html({'earnings': event}, today)
+                panel = monitor._earnings_week_panel(snapshot)
+                for markup in (main, panel):
+                    self.assertIn(f'<span class="{mark_cls}">{countdown}</span>', markup)
+                self.assertEqual('class="unit is-countdown"' in main, relative)
+                self.assertEqual('class="earnings-week-bj is-countdown"' in panel, relative)
+                rendered = monitor._signal_counts_card(snapshot)
+                data = json.loads(html.unescape(re.search(r'data-filter="([^"]*)"', rendered)[1]))
+                part = data['earnings_week']['members'][0]['d'][0]
+                self.assertEqual(part['t'], f"财报 {date} " + ({'post': '盘后', 'pre': '盘前'}.get(timing, '时段待定')))
+                self.assertEqual(part['e'], {'c': countdown, 'b': monitor.earnings_label(event, today)[1],
+                                             'tbd': timing is None, 'relative': relative})
+        js = page_assets.PAGE_INTERACTION_JS
+        pure = js[js.index('function intersectSignals('):js.index('// 多选条件的四种方向符号')]
+        script = pure + '\n' + '''
+const e={c:'（今）',b:'北京 今出',tbd:false,relative:true};
+const member={id:'AAA',s:'AAA',d:[{l:'red',t:'财报 2026-11-09 盘后',e:e}]};
+const data={earnings_week:{ok:true,members:[member]},chg:{ok:true,members:[{id:'AAA',d:[{l:'yellow',t:'涨跌幅'}]}]}};
+const result=intersectSignals(data,['chg','earnings_week']);
+if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw new Error('冻结时间显示元数据丢失');
+'''
+        result = subprocess.run(['node', '-e', script], capture_output=True, text=True, encoding='utf-8', timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('cd.textContent = part.e.c;', js)
+        self.assertIn('bj.textContent = "·" + part.e.b;', js)
+        self.assertNotIn('new Date(', js[js.index('function renderSignalFilter('):js.index('document.addEventListener("click"', js.index('function renderSignalFilter('))])
+
     def test_glossary_headings_centered_and_metric_names_blue(self):
         css = page_assets.PAGE_CSS
         # 名词解释与抓取规则：两个分区标题页面居中；指标名（h5）统一站内强调蓝。
         self.assertIn('#glossaryRulesBody h4{text-align:center}', css)
         self.assertIn('#glossaryRulesBody h5{color:var(--head-blue-on)}', css)
         # 只在这两块生效：报灯规则的小标题仍是白字。
-        self.assertIn('.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}', css)
+        self.assertIn('.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:inherit;font-weight:600}', css)
         # 蓝色规则必须写在通用 h5 规则之后（同文件内顺序即层叠顺序），否则会被白字覆盖。
         self.assertLess(css.index('.card .rules-body h5{'), css.index('#glossaryRulesBody h5{'))
         # 成本隔离样式已格式化；设置页仍从唯一规则模板派生。
@@ -431,7 +507,7 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('.earn{display:block;margin:0;font-size:15px;font-weight:400;line-height:var(--row-height)', css)
         self.assertIn('.earn>.unit{display:block;margin-left:0;height:var(--row-height);line-height:var(--row-height)', css)
         self.assertIn('.earn>.unit::before{content:attr(data-timing);color:var(--timing-color)}', css)
-        self.assertIn('.earn>.cd.tbd{color:var(--head-blue-on)}', css)
+        self.assertIn('.earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd{color:var(--head-blue-on)}', css)
         for cls in ('add', 'cut'):
             body = re.search(r'\.stk td\.sig \.lvtag\.' + cls + r'\{([^}]*)\}', css)[1]
             self.assertIn('font:inherit', body)
@@ -1209,12 +1285,13 @@ assert.equal(scrolledBy,-400);     // 锚点被上拽 400，反向补回原位
             selector = f'#signalCounts .signal-filter-condition[data-signal-level="{level}"]'
             with self.subTest(level=level):
                 self.assertEqual(css.count(selector + '{color:' + color + '}'), 1)
-        # 财报条件不是交易灯：红/黄/灰跟统计「未来15天财报」名单同一套，不能整条白字。
-        for level, color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-yellow)'), ('gray', 'var(--dim)')):
+        # 财报日期不是交易灯：红黄继续，无预警恢复美东蓝；北京绝对日期跟随红黄或原灰。
+        for level, color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-yellow)'), ('gray', 'var(--head-blue-on)')):
             selector = ('#signalCounts .signal-filter-condition'
                         f'[data-signal-kind="earnings_week"][data-signal-level="{level}"]')
+            bj_color = ';--earn-bj-color:' + color if level in ('red', 'yellow') else ''
             with self.subTest(level=level):
-                self.assertEqual(css.count(selector + '{color:' + color + '}'), 1)
+                self.assertEqual(css.count(selector + '{color:' + color + bj_color + '}'), 1)
         self.assertNotIn('signal-dot', css)
         self.assertNotIn('signal-dot', page_assets.PAGE_INTERACTION_JS)
         clean_css = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
@@ -1233,7 +1310,9 @@ assert.equal(scrolledBy,-400);     // 锚点被上拽 400，反向补回原位
                             for level in palette} | {
                             '#signalCounts .signal-filter-condition'
                             f'[data-signal-kind="earnings_week"][data-signal-level="{level}"]'
-                            for level in ('red', 'yellow', 'gray')})
+                            for level in ('red', 'yellow', 'gray')} | {
+                            '#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd',
+                            '#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd'})
         for single in (
                 '#signalCounts .signal-members-panel .note{display:inline;margin-left:6px}',
                 '#signalCounts .signal-member-direction{color:var(--dim);font-size:12px}',

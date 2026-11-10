@@ -47,15 +47,49 @@
   gap: 4px 6px;
   align-items: center;
 }
-#costManage .ep-h { font-size: 13px; color: var(--dim); }
+#costManage .ep-h { font-size: 15px; color: var(--dim); }
 #costManage .ep-sym {
-  font-size: 14px;
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr);
+  align-items: center;
+  min-width: 0;
+  font-size: 16px;
   color: var(--text);
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
-#costManage .ep-val { font-size: 14px; color: var(--text); text-align: right; }
+#costManage .ep-name { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#costManage .ep-clear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 24px; margin: 0 3px 0 0; padding: 0;
+  vertical-align: middle; border: 0; background: none;
+  color: var(--lamp-red); font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+}
+#costManage .ep-clear:focus-visible { outline: 1px solid var(--head-blue-on); }
+#costManage .ep-clear:disabled { opacity: .45; cursor: default; }
+#costManage .ep-clear-mark { grid-column: 1 / -1; display: block; font-size: 13px; line-height: 1.4; color: var(--lamp-yellow); overflow: hidden; text-overflow: ellipsis; }
+#costManage .cost-clear-dialog {
+  box-sizing: border-box; width: min(360px,calc(100vw - 24px)); padding: 16px;
+  background: var(--card); color: var(--text); border: var(--frame-w) solid var(--signal-border); border-radius: 6px;
+}
+#costManage .cost-clear-dialog::backdrop { background: var(--cost-track); opacity: .65; }
+#costManage .cost-clear-dialog h3 { margin: 0 0 12px; font-size: 18px; }
+#costManage .cost-clear-dialog label { display: block; margin: 10px 0; font-size: 16px; }
+#costManage .cost-clear-dialog p { margin: 12px 0; font-size: 15px; line-height: 1.5; }
+#costManage .cost-add-hold, #costManage .cost-clear-choice { display: flex; align-items: center; gap: 16px; }
+#costManage .cost-add-hold label, #costManage .cost-clear-choice label { display: inline-flex; align-items: center; gap: 4px; }
+#costManage .cost-clear-dialog .cost-acts { margin: 12px 0 0; }
+#costManage [data-cost-add] {
+  align-self: center; margin: 0 auto 0 0; padding: 4px 12px; font-size: 16px;
+  border: 1px solid var(--cost-edit-border); border-radius: 4px;
+  background: var(--cost-edit-bg); color: var(--cost-edit-text); cursor: pointer;
+}
+#costManage .cost-add-dialog input:not([type="radio"]) {
+  box-sizing: border-box; width: calc(100% - 42px); padding: 4px 6px;
+  border: 1px solid var(--cost-input-border); border-radius: 3px;
+  background: var(--cost-input-bg); color: var(--text); font-size: 16px;
+}
+#costManage .ep-val { font-size: 16px; color: var(--text); text-align: right; }
 #costManage .ep-grid input, #costManage .ep-cash input {
   width: 100%;
   min-width: 0;
@@ -63,7 +97,7 @@
   background: var(--cost-input-bg);
   border: 1px solid var(--cost-input-border);
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
   padding: 2px 4px;
   border-radius: 3px;
   text-align: right;
@@ -84,11 +118,11 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--dim);
   white-space: nowrap;
 }
-#costManage .ep-cash-total { margin-top: 4px; font-size: 12px; color: var(--dim); }
+#costManage .ep-cash-total { margin-top: 4px; font-size: 14px; color: var(--dim); }
 .cost-acts {
   order: 2;
   display: flex;
@@ -99,7 +133,7 @@
 }
 .cost-acts .cost-notice { flex: 1 1 100%; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .cost-acts button {
-  font-size: 14px;
+  font-size: 16px;
   padding: 4px 12px;
   border-radius: 4px;
   border: 1px solid var(--line);
@@ -180,7 +214,7 @@
 }
 .cost-edit-btn.on { background: var(--cost-edit-on); border-color: var(--head-blue-on); color: var(--cost-edit-hover); }
 .runbar .cost-edit-btn { align-self: center; box-sizing: border-box; height: 34px; }
-.cost-edit-btn[hidden], .cost-acts[hidden], .cost-notice[hidden] { display: none; }
+.cost-edit-btn[hidden], .cost-acts[hidden], .cost-notice[hidden], #costManage [data-cost-add][hidden] { display: none; }
 /* 当日收益清单：金额在第二列、百分比第三列，灯色取主表等级。 */
 .cost-contrib { list-style: none; margin: 0; padding: 0 0 0 16px; }
 .cost-contrib li {
@@ -317,6 +351,7 @@
   }
   .cost-edit-btn { padding: 8px 13px; font-size: 16px; line-height: 1.08; }
   .runbar .cost-edit-btn { height: 40px; }
+  #costManage .ep-clear { width: 44px; height: 44px; font-size: 24px; }
   .cost-legend { font-size: 12px; gap: 3px 10px; }
   .cost-contrib { padding-left: 12px; }
   .cost-contrib li { font-size: 13px; line-height: 15.75px; }

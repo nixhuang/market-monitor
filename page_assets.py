@@ -161,7 +161,7 @@ ${vol_example_table}
 <h5 id="glossary-earnings">财报与显示</h5>
 <p>报灯与名单窗口沿用美东财报日期对比快照北京运行日，盘前／盘后不平移。名单含运行日至+${earn_list_days}天，另留前一日红字；红字保留期结束后才检查下一次。</p>
 <p>失败时沿用有效旧日期；“待公布”仅表示本站未取得日期。</p>
-<p>显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。已知时段按北京落点计算，盘后顺延一日；时段待定按美东日期计算并用蓝字，未知不猜钟点。显示换算不改变报灯窗口。</p>
+<p>显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。已知时段按北京落点计算并用白字，盘后顺延一日；时段待定按美东日期计算并用蓝字，未知不猜钟点。显示换算不改变报灯窗口。</p>
 <h5 id="glossary-dedup">标的去重与显示优先级</h5>
 <p>显示与报警优先级：市场风险／持仓 → 重点 → 其他。同一实质标的只显示最高级，清单记录不删。</p>
 <p>VIX与标普指数仅在市场风险显示。</p>
@@ -546,6 +546,7 @@ PAGE_PALETTE = """:root{
   --white:#fff;
   --button-border:#4c6591;
   --list-border:#465e87;
+  --stat-rule-soft:#3a4356;
   --range-track:#9fa3aa;
   --count-active:#2f4f86;
   --count-red-border:rgba(255,133,128,.45);
@@ -680,8 +681,11 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:var(--lamp-yellow)}
 #signalCounts .signal-members-panel.tone-gray .signal-member-metric{color:var(--text)}
 #signalCounts .signal-member-block{margin:0 0 10px}
+#signalCounts .signal-member-block[hidden]{display:none}
 #signalCounts .signal-member-block:last-child{margin-bottom:0}
-#signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--head-blue)}
+#signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--head-blue);display:flex;align-items:center}
+/* 终稿：所有统计清单共用分组标题右侧的淡长线，不只盈亏到价。 */
+#signalCounts .signal-member-block h5::after{content:"";flex:1 1 auto;height:1px;margin-left:8px;background:var(--stat-rule-soft,#3a4356)}
 #signalCounts .signal-member-block h5:first-letter{letter-spacing:0}
 #signalCounts .signal-member-block ul{padding-left:2px}
 #signalCounts .signal-member-icon{display:inline-block;margin-left:5px;font-size:var(--lamp-size);font-weight:700;line-height:1;vertical-align:baseline}
@@ -705,7 +709,8 @@ tr:first-child td{border-top:none}
 #signalCounts .text-only[open]>summary{border-bottom:1px solid var(--quiet-border)}
 #signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
 #signalCounts .text-only li{margin:8px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
-#signalCounts .signal-extra-row>.signal-filter-toggle{position:absolute;top:8px;left:5px;width:var(--chip-w);padding:0;justify-content:center;text-align:center;font-weight:600}
+/* 左侧紫灯/财报是多选按钮，必须盖过后绘制的整行 summary 命中区。 */
+#signalCounts .signal-extra-row>.signal-filter-toggle{position:absolute;z-index:1;top:8px;left:5px;width:var(--chip-w);padding:0;justify-content:center;text-align:center;font-weight:600}
 #signalCounts .signal-extra-row>.text-only{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
 #signalCounts .signal-extra-row>.earnings-week{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
 #signalCounts .signal-extra-row>.text-only[open]>summary{border-bottom:0}
@@ -737,8 +742,8 @@ tr[id^="s-"]{scroll-margin-top:64px}
 #signalCounts .earnings-week li{font-size:13px;padding:3.6px 0;overflow-wrap:anywhere}
 #signalCounts .earnings-week li+li{border-top:1px solid var(--line)}
 #signalCounts .earnings-week .lamp-text{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red);font-weight:400}
-#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow);font-weight:400}
+#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red);font-weight:400;--earn-bj-color:var(--lamp-red)}
+#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow);font-weight:400;--earn-bj-color:var(--lamp-yellow)}
 #signalCounts .earnings-week .note{display:inline;margin-left:6px}
 #signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;color:var(--text);display:inline-flex;align-items:center;justify-content:center;white-space:normal;background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:pointer;text-align:center;line-height:1.15;touch-action:manipulation}
 #signalCounts td .signal-filter-toggle{width:74px;padding:0 4px}
@@ -760,9 +765,9 @@ tr[id^="s-"]{scroll-margin-top:64px}
 #signalCounts .signal-filter-condition[data-signal-level="gray"]{color:var(--text)}
 #signalCounts .signal-filter-condition[data-signal-level="purple"]{color:var(--purple)}
 #signalCounts .signal-filter-condition[data-signal-level="green"]{color:var(--green)}
-#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="red"]{color:var(--lamp-red)}
-#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="yellow"]{color:var(--lamp-yellow)}
-#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="gray"]{color:var(--dim)}
+#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="red"]{color:var(--lamp-red);--earn-bj-color:var(--lamp-red)}
+#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="yellow"]{color:var(--lamp-yellow);--earn-bj-color:var(--lamp-yellow)}
+#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="gray"]{color:var(--head-blue-on)}
 .range52-rail{position:relative;display:flex;align-items:flex-end;gap:11px;height:26px;padding-bottom:13px;font-variant-numeric:tabular-nums}
 .range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
 .range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
@@ -972,7 +977,7 @@ tr.gray td{color:var(--dim)}
 #signalCounts .pnl-extra .signal-member-metric.down{color:var(--down)}
 #signalCounts .pnl-extra .signal-member-metric.add{color:var(--orange)}
 #signalCounts .pnl-extra .signal-member-metric.cut{color:var(--cyan)}
-#signalCounts .earnings-week-bj{color:var(--dim);font-size:inherit;font-weight:400}
+#signalCounts .earnings-week-bj{color:var(--earn-bj-color,var(--dim));font-size:inherit;font-weight:400}
 table.stk{display:block;width:100%;table-layout:fixed}
 table.stk tbody{display:block;width:100%;table-layout:fixed}
 table.stk thead{display:block;width:100%;table-layout:fixed}
@@ -1034,10 +1039,9 @@ table.stk tr[data-symbol]>td.lamp-earn{grid-area:earn;position:static;display:bl
 .earn.urgent{color:var(--lamp-red);--timing-color:var(--lamp-red)}
 .earn>.unit{display:block;margin-left:0;height:var(--row-height);line-height:var(--row-height);white-space:nowrap;letter-spacing:0;font-size:15px;color:var(--dim)}
 .earn>.unit::before{content:attr(data-timing);color:var(--timing-color)}
-.earn>.cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--dim);margin-right:-.5em}
-#signalCounts .earnings-week-meta .cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--dim);margin-right:-.5em}
-.earn>.cd.tbd{color:var(--head-blue-on)}
-#signalCounts .earnings-week-meta .cd.tbd{color:var(--head-blue-on)}
+.earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--white);margin-right:-.5em}
+.earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd{color:var(--head-blue-on)}
+.earn>.unit.is-countdown,#signalCounts .earnings-week-bj.is-countdown{color:var(--white)}
 table.stk tr[data-symbol]>td.cost-line{grid-area:cost;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 8px;margin:5px 0 0;background:var(--cost-row-bg);border-radius:3px;color:var(--text);white-space:nowrap;font-size:15px;line-height:22.5px;font-variant-numeric:tabular-nums}
 table.stk tr[data-symbol]>td.cost-line[hidden]{display:none}
 table.stk tr[data-symbol]>td.cost-line>span{font-size:inherit}
@@ -1091,14 +1095,14 @@ table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>
 #signalCounts .signal-extra-row>.earnings-week>summary+*{margin-top:11px}
 #signalCounts .signal-extra-row>.text-only[open]{padding-bottom:8px}
 #signalCounts .signal-extra-row>.earnings-week[open]{padding-bottom:8px}
-#signalCounts .earnings-week-meta{display:block;margin:1px 0 0 9px;color:var(--dim);font-size:12px}
+#signalCounts .earnings-week-meta{display:block;margin:1px 0 0 9px;color:var(--head-blue-on);font-size:12px}
 #signalCounts .signal-filter .signal-member-block h5{margin:6px 0 4px;color:var(--head-blue);font-size:13px;font-weight:600}
 #signalCounts .signal-filter .signal-member-block+.signal-member-block{margin-top:10px}
 #signalCounts .signal-filter .signal-member-block ul{margin:0}
 #signalCounts .signal-filter .signal-member-belong:empty{display:none}
 @media(max-width:600px){
 :root{--status-font-size:14.5px}
-.stk td.sig .sig-zone{letter-spacing:-.6px}
+.stk td.sig .signal-item{letter-spacing:-.6px}
 .sig-cols[data-combo="1"]{--combo-scale:1.57}
 .sig-cols[data-combo="1"]::after{height:19.575px}
 .stk td.sig .signal-item[data-signal-kind="amp"]{white-space:nowrap;overflow-wrap:normal;letter-spacing:-.4px}
@@ -1217,11 +1221,11 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 #fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:var(--head-blue);font-size:13px;font-weight:600;touch-action:manipulation}
 #fedRules[open]>summary,#fedGlossary[open]>summary,details.card[open]:has(>.rules-body)>summary{border-bottom:1px solid var(--line)}
 #fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:-2px}
-.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:15px;line-height:1.65;overflow-wrap:anywhere}
 .card .rules-body section+section{margin-top:16px;padding-top:4px;border-top:1px solid var(--line)}
-.card .rules-body h4{margin:6px 0 8px;color:var(--head-blue);font-size:12.5px;font-weight:600}
-.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:12px;font-weight:600}
-.card .rules-body p{margin:4px 0;color:var(--dim);font-size:12px;line-height:1.65}
+.card .rules-body h4{margin:6px 0 8px;color:var(--head-blue);font-size:inherit;font-weight:600}
+.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:inherit;font-weight:600}
+.card .rules-body p{margin:4px 0;color:var(--dim);font-size:inherit;line-height:1.65}
 .card .rules-body .rule-group{color:var(--head-blue-on)}
 .card .rules-body a{color:var(--head-blue-on);text-underline-offset:3px}
 .card .rules-body a:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
@@ -1229,8 +1233,9 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 .card .rules-body .lamp-yellow{color:var(--lamp-yellow);font-weight:600}
 .card .rules-body .lamp-purple{color:var(--purple);font-weight:600}
 .card .rules-body .tone-target-high{color:var(--target-high);font-weight:600}
-.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid var(--rules-border);font-size:12px;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:12px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid var(--rules-border);font-size:inherit;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* 预警表原行盒12px×1.65=19.8px；只放大字，不随字号放大行距。 */
+.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:inherit;line-height:19.8px;overflow-wrap:anywhere}
 .card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:var(--cost-row-bg);border-bottom:1px solid var(--rules-border)}
 #rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border-left:0;border-right:0}
 .card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center}
@@ -1238,7 +1243,7 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 #rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid var(--rules-group-border)}
 .card .rules-body .rule-table col.cat-col{width:18px}
 .card .rules-body .rule-table col.col-cond{width:40%}
-.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:1.1;font-size:12px;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
+.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:13.2px;font-size:inherit;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
 .card .rules-body .ar-band-up{color:var(--green)}
 .card .rules-body .ar-band-down{color:var(--red)}
 .card .rules-body .ar-rsi-up{color:var(--rsi-up)}
@@ -1264,7 +1269,7 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 .card .rules-body #rules-lamp-table tbody td:first-of-type{color:var(--rules-strong)}
 .card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
 .card .rules-body .rule-anchor{display:block;height:0}
-@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{font-size:11px}}
+@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
 #signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
 #signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
 #signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
@@ -1294,7 +1299,7 @@ PAGE_CSS += RULES_CSS
 # id 仍是 costEditBtn、仍由 cost_panel.js 绑定，只是不再属于这张卡 —— JS 改按 document 查找。
 COST_PANEL_HTML = r'''<details class="edit-panel cost-manage" id="costManage">
 <summary class="grp"><span class="grp-name">仓位</span><span class="group-stats"><span class="cost-state" id="costState"></span><span class="cost-sum"></span></span></summary>
-<div class="cost-body"><div class="cost-acts" id="costActs" hidden><span class="cost-notice" id="costNotice" role="status" hidden></span><button type="button" class="primary" id="costSave">保存并上传</button><button type="button" id="costCancel">取消</button></div><div class="signal-members-panel" id="costMembers"></div><input type="file" id="costFile" accept=".json" hidden><div class="cost-foot" id="costFoot"></div></div>
+<div class="cost-body"><div class="cost-acts" id="costActs" hidden><span class="cost-notice" id="costNotice" role="status" hidden></span><button type="button" data-cost-add hidden>＋新增仓位</button><button type="button" class="primary" id="costSave">保存并上传</button><button type="button" id="costCancel">取消</button></div><div class="signal-members-panel" id="costMembers"></div><input type="file" id="costFile" accept=".json" hidden><div class="cost-foot" id="costFoot"></div></div>
 <div class="group-bottom"><button type="button" class="collapse-group" aria-controls="costManage" aria-label="收起仓位"><span class="collapse-icon" aria-hidden="true">▲</span></button></div>
 </details>'''
 
@@ -1656,7 +1661,9 @@ function intersectSignals(data, kinds) {
           text = text.replace(/^布林\+RSI\s*/, "布林");
           if (kind === "boll_rsi" && /^(上轨|下轨)/.test(text)) text = "布林" + text;
         }
-        details.push({k:kind, l:level || "", t:text});
+        const detail = {k:kind, l:level || "", t:text};
+        if (kind === "earnings_week" && part.e) detail.e = part.e;
+        details.push(detail);
       });
     });
     return Object.assign({}, m, {details: details});
@@ -1830,7 +1837,23 @@ function renderSignalFilter() {
       condition.className = "signal-filter-condition";
       condition.dataset.signalKind = part.k;
       condition.dataset.signalLevel = part.l;
-      appendRsiArrows(condition, part.t);
+      if (part.k === "earnings_week" && part.e) {
+        if (part.e.c) {
+          const cd = document.createElement("span");
+          cd.className = part.e.tbd ? "cd tbd" : "cd";
+          cd.textContent = part.e.c;
+          condition.append(cd);
+        }
+        condition.appendChild(document.createTextNode(part.t));
+        if (part.e.b) {
+          const bj = document.createElement("span");
+          bj.className = part.e.relative ? "earnings-week-bj is-countdown" : "earnings-week-bj";
+          bj.textContent = "·" + part.e.b;
+          condition.append(bj);
+        }
+      } else {
+        appendRsiArrows(condition, part.t);
+      }
       detail.appendChild(condition);
     });
     li.append(detail);

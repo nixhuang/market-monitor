@@ -37,22 +37,22 @@
     "APH": {
       "note": "安费诺",
       "hold": "long",
-      "cost": 78.94
+      "cost": 77.008
     },
     "AVGO": {
       "note": "博通",
       "hold": "long",
-      "cost": 364.92
+      "cost": 364.9225
     },
     "CRSP": {
       "note": "基因编辑",
       "hold": "short",
-      "cost": 46.92
+      "cost": 46.91833333333333
     },
     "GOOGL": {
       "note": "谷歌",
       "hold": "long",
-      "cost": 328.12
+      "cost": 328.121
     },
     "LMT": {
       "note": "洛克希德马丁",
@@ -64,7 +64,7 @@
     "NTNX": {
       "note": "混合云",
       "hold": "short",
-      "cost": 63.23
+      "cost": 44.80846153846154
     },
     "UNH": {
       "note": "联合健康",
@@ -74,27 +74,27 @@
     "UBER": {
       "note": "优步",
       "hold": "short",
-      "cost": 69.36
+      "cost": 58.72
     },
     "DRAM": {
       "note": "存储芯片",
       "hold": "short",
-      "cost": 49.58
+      "cost": 49.6575
     },
     "SPYM": {
       "note": "标普500指数",
       "hold": "long",
-      "cost": 88.78
+      "cost": 88.77843458104785
     },
     "SCHD": {
       "note": "嘉信红利",
       "hold": "long",
-      "cost": 32.88
+      "cost": 32.88113999413386
     },
     "QQQM": {
       "note": "纳指",
       "hold": "long",
-      "cost": 296.8
+      "cost": 296.8030480020565
     },
     "XLI": {
       "note": "工业行业",
@@ -110,11 +110,6 @@
       "note": "恩智浦半导体",
       "hold": "short",
       "cost": 220
-    },
-    "PDD": {
-      "note": "拼多多",
-      "hold": "short",
-      "cost": 79
     },
     "AAPL": {
       "note": "苹果",
