@@ -107,7 +107,10 @@
           throw new Error('非法标的或持仓对象：' + k);
         var b = (base.items && base.items[k]) || {};
         d.items[k] = { qty: amount(j.items[k], 'qty', num(b.qty)) };
-        if (own(j.items[k], 'cost')) d.items[k].cost = amount(j.items[k], 'cost');
+        if (own(j.items[k], 'cost')) {
+          if (typeof j.items[k].cost !== 'number' || !isFinite(j.items[k].cost)) throw new Error('cost 必须是有限数值');
+          d.items[k].cost = j.items[k].cost;
+        }
       });
       return d;
     }
@@ -344,12 +347,21 @@
       local = read(LS_LOCAL),
       hadOwn = !!(local && object(local.items));
     var seedAsOf = REAL && REAL.asof ? String(REAL.asof).slice(0, 10) : '';
-    function draftError(raw) {
+    function draftError(raw, field) {
       var t = raw.trim(),
-        v = t === '' ? 0 : Number(t);
-      return /^(?:\d+(?:\.\d{0,4})?|\.\d{1,4})?$/.test(t) && isFinite(v) && v >= 0
+        v = t === '' ? 0 : Number(t),
+        decimal = field === 'cost' ? /^(?:-?(?:\d+(?:\.\d{0,4})?|\.\d{1,4}))?$/ : /^(?:\d+(?:\.\d{0,4})?|\.\d{1,4})?$/;
+      return decimal.test(t) && isFinite(v) && (field === 'cost' || v >= 0)
         ? ''
-        : '请输入非负数，最多四位小数';
+        : (field === 'cost' ? '请输入有效成本，最多四位小数' : '请输入非负数，最多四位小数');
+    }
+    function draftEntryError(entry, field) {
+      var error = draftError(entry.raw, field);
+      if (!error && own(entry, 'exact') &&
+          (field !== 'cost' || typeof entry.exact !== 'number' || !isFinite(entry.exact) ||
+           entry.raw.trim() === '' || entry.raw.trim() !== trim4(entry.exact)))
+        error = '自动成本草稿原值无效或与显示值不一致，请手填修正';
+      return error;
     }
     function checkedDraft() {
       var next = clone(DATA),
@@ -360,12 +372,12 @@
         var e = editDraft[k],
           p = k.split('|'),
           f = p[1];
-        e.error = draftError(e.raw);
+        e.error = draftEntryError(e, f);
         if (e.error) {
           invalid = true;
           return;
         }
-        var v = e.raw.trim() === '' ? 0 : Number(e.raw);
+        var v = own(e, 'exact') ? e.exact : e.raw.trim() === '' ? 0 : Number(e.raw);
         if (f === 'cash') first = v;
         else if (f === 'cash_extra') second = v;
         else if (f === 'fixed' || f === 'fixed_cost') next[f] = v;
@@ -433,8 +445,11 @@
               /^(?:[A-Z0-9.^=_-]{1,32}\|(?:cost|qty)|USD\|cash(?:_extra)?|BOND\|fixed(?:_cost)?)$/.test(k) &&
               object(e) &&
               typeof e.raw === 'string'
-            )
-              editDraft[k] = { raw: e.raw, error: draftError(e.raw) };
+            ) {
+              editDraft[k] = { raw: e.raw, error: '' };
+              if (own(e, 'exact')) editDraft[k].exact = e.exact;
+              editDraft[k].error = draftEntryError(editDraft[k], k.split('|')[1]);
+            }
           });
         clearDraft = {};
         var marks = j && j._local && j._local.clearDraft;
@@ -496,9 +511,10 @@
       SYNC_MSG = '';
       persist();
     }
-    function authorizePositions(fixedBaseline) {
+    function authorizePositions(fixedBaseline, fieldBaseline) {
       positionSave = { generation: ++positionGeneration, payload: clone(DATA) };
       if (fixedBaseline) positionSave.fixedBaseline = fixedBaseline;
+      if (fieldBaseline) positionSave.fieldBaseline = fieldBaseline;
       positionsAuthorized = true;
     }
     function consumePositions(g) {
@@ -806,12 +822,36 @@
             cb(false, '固收同字段已被其它设备修改，请核对后重新编辑保存', remote, 'fixed-conflict');
             return null;
           }
+          if (sent.fieldBaseline && remote && Object.keys(sent.fieldBaseline).some(function (key) {
+            return clearField(remote, key) !== sent.fieldBaseline[key];
+          })) {
+            cb(false, '同字段已被其它设备修改，请核对后重新编辑保存', remote, 'field-conflict');
+            return null;
+          }
           if (meta && !meta.sha) throw new Error('缺少远端 SHA，禁止覆盖');
+          if (sent.fieldBaseline && remote && !sent.recovery) {
+            var merged = clone(remote), first = cashFirst(remote), second = remote.cash_extra;
+            Object.keys(sent.fieldBaseline).forEach(function (key) {
+              var p = key.split('|'), f = p[1], value = clearField(sent.payload, key);
+              if (f === 'cash') first = value;
+              else if (f === 'cash_extra') second = value;
+              else if (f === 'fixed' || f === 'fixed_cost') merged[f] = value;
+              else {
+                if (!merged.items[p[0]]) merged.items[p[0]] = { qty: 0 };
+                if (value === null) delete merged.items[p[0]][f]; else merged.items[p[0]][f] = value;
+              }
+            });
+            merged.cash = (Math.round(first * 10000) + Math.round(second * 10000)) / 10000;
+            merged.cash_extra = second; merged.updated_at = new Date().toISOString();
+            sent.payload = normalize(merged);
+          }
           uncertain = {
             payload: clone(sent.payload),
             revision: sent.revision,
             baseSha: sent.recovery ? sent.baseSha : meta ? meta.sha : null,
             positionGeneration: sent.positionGeneration,
+            fieldBaseline: sent.fieldBaseline || null,
+            fixedBaseline: sent.fixedBaseline || null,
           };
           if (!persist()) throw new Error('上传事务尚未持久化，暂停上传');
           if (!write(LS_PUSH_AT, Date.now())) throw new Error('上传节流状态未持久化');
@@ -931,6 +971,7 @@
             revision: revision,
             positionGeneration: positionSave.generation,
             fixedBaseline: positionSave.fixedBaseline || null,
+            fieldBaseline: positionSave.fieldBaseline || null,
           };
       inFlight = sent;
       queued = false;
@@ -948,7 +989,7 @@
           }
           return;
         }
-        if (outcome === 'fixed-conflict') {
+        if (outcome === 'fixed-conflict' || outcome === 'field-conflict') {
           consumePositions(sent.positionGeneration);
           CLOUD = verifiedRemote; cloudVerified = true;
           write(LS_CLOUD, CLOUD);
@@ -964,6 +1005,33 @@
           requestSave(0, false);
         } else if (ok) {
           uncertain = null;
+          // 在途旧保存成功时，仅将新保存仍沿用的同字段基线推进到自己的已提交值。
+          if (positionSave && positionSave.generation !== sent.positionGeneration && positionSave.fieldBaseline && sent.fieldBaseline)
+            Object.keys(positionSave.fieldBaseline).forEach(function (key) {
+              if (own(sent.fieldBaseline, key) && positionSave.fieldBaseline[key] === sent.fieldBaseline[key])
+                positionSave.fieldBaseline[key] = clearField(verifiedRemote || sent.payload, key);
+            });
+          if (positionSave && positionSave.generation !== sent.positionGeneration && positionSave.fixedBaseline && sent.fixedBaseline)
+            ['fixed', 'fixed_cost'].forEach(function (field) {
+              if (positionSave.fixedBaseline[field] === sent.fixedBaseline[field])
+                positionSave.fixedBaseline[field] = (verifiedRemote || sent.payload)[field];
+            });
+          if (editing && editBaseline && sent.fieldBaseline) {
+            var rebased = clone(editBaseline), first = cashFirst(rebased), second = rebased.cash_extra;
+            Object.keys(sent.fieldBaseline).forEach(function (key) {
+              if (clearField(editBaseline, key) !== sent.fieldBaseline[key]) return;
+              var p = key.split('|'), f = p[1], value = clearField(verifiedRemote || sent.payload, key);
+              if (f === 'cash') first = value;
+              else if (f === 'cash_extra') second = value;
+              else if (f === 'fixed' || f === 'fixed_cost') rebased[f] = value;
+              else {
+                if (!rebased.items[p[0]]) rebased.items[p[0]] = { qty: 0 };
+                if (value === null) delete rebased.items[p[0]][f]; else rebased.items[p[0]][f] = value;
+              }
+            });
+            rebased.cash = (Math.round(first * 10000) + Math.round(second * 10000)) / 10000;
+            rebased.cash_extra = second; editBaseline = rebased;
+          }
           consumePositions(sent.positionGeneration);
           CLOUD = verifiedRemote || sent.payload;
           cloudVerified = true;
@@ -1510,10 +1578,11 @@
         clearDialog.querySelector('[data-clear-cancel]').disabled = clearBusy;
         clearDialog.querySelector('[data-clear-undo]').disabled = clearBusy || pending || !own(clearDraft, clearChoice);
       }
-      all('.ep-clear,#costSave,#costCancel', panel).forEach(function (button) { button.disabled = clearBusy; });
+      all('#costSave,#costCancel', panel).forEach(function (button) { button.disabled = clearBusy; });
       var add = panel.querySelector('[data-cost-add]');
       if (add) add.disabled = clearBusy || pending;
-      all('input[data-f]', panel).forEach(function (input) { input.disabled = clearBusy || pending; });
+      all('input[data-f],[data-trade-action]', panel).forEach(function (input) { input.disabled = clearBusy || pending; });
+      if (tradeDialog) all('input,[data-trade-confirm]', tradeDialog).forEach(function (input) { input.disabled = clearBusy || pending || !writer || !editing; });
       if (editBtn) editBtn.disabled = clearBusy;
     }
     function openClear(sym) {
@@ -1546,6 +1615,80 @@
         '上次保存未完成；请点击面板保存核验，不自动重传' : '';
       clearDialogControls(); clearDialog.showModal();
     }
+    var tradeDialog = null, tradeActive = null;
+    function tradeGuard(sym) {
+      if (!editing || disposed || !writer || clearBusy || (clearRecord && clearRecord.step !== 'done'))
+        throw new Error('编辑会话不可用，请先完成保存核验或重新接管');
+      if (!isPosition(rowBySym(sym)) && !own(addDraft, sym) && !own(addedPositions, sym))
+        throw new Error('当前标的已不在持仓中，请重新核对');
+    }
+    function applyTrade(sym, side, quantity, price, destination) {
+      tradeGuard(sym);
+      if (['buy', 'sell'].indexOf(side) < 0) throw new Error('无效交易方向');
+      var qraw = String(quantity).trim(), praw = String(price).trim();
+      if (draftError(qraw) || !(Number(qraw) > 0)) throw new Error('成交数量必须大于0，最多四位小数');
+      if (draftError(praw)) throw new Error('成交价必须是非负数，最多四位小数');
+      if (side === 'sell' && praw === '') throw new Error('卖出请输入成交价');
+      var next = checkedDraft();
+      if (!next) throw new Error('存在无效输入，请修正后交易');
+      var item = next.items[sym] || { qty: 0 }, oldQty = item.qty, known = own(item, 'cost'), oldCost = item.cost,
+        qty = Number(qraw), px = praw === '' ? null : Number(praw), quantities = scaled([oldQty, qty]);
+      if (side === 'sell' && quantities[1] > quantities[0]) throw new Error('卖出数量不能超过当前持仓');
+      if (oldQty > 0 && !known && px !== null && (side === 'buy' || quantities[0] !== quantities[1]))
+        throw new Error('现有成本为空，请先手填成本，或买入留空成交价只调整股数');
+      var sumQty = side === 'buy' ? oldQty + qty : oldQty - qty, nextCost = null;
+      if (!isFinite(sumQty * 10000)) throw new Error('交易后数量过大');
+      var nextQty = Number(trim4(sumQty));
+      if (nextQty === 0) nextCost = 0;
+      else if (known) nextCost = (oldQty * oldCost + (side === 'buy' ? (px === null ? 0 : qty * px) : -qty * px)) / nextQty;
+      else if (side === 'buy' && oldQty === 0 && px !== null) nextCost = px;
+      if (nextCost !== null && !isFinite(nextCost * 10000)) throw new Error('交易后成本过大');
+      var qtyText = trim4(nextQty), costText = nextCost === null ? '' : trim4(nextCost);
+      if (draftError(qtyText) || draftError(costText, 'cost')) throw new Error('交易结果超出四位小数输入范围');
+      if (side === 'sell' && nextQty === 0) {
+        if (own(addDraft, sym)) { removeAdded(sym); return; }
+        if (['default', 'focus'].indexOf(destination) < 0) throw new Error('请选择全卖后的清仓分组');
+        clearDraft[sym] = destination;
+      } else if (nextQty > 0) delete clearDraft[sym];
+      editDraft[sym + '|qty'] = { raw: qtyText, error: '' };
+      editDraft[sym + '|cost'] = { raw: costText, error: '' };
+      // 自动回算保存原始有限成本；四位仅用于展示，手填 input 重建条目以覆盖该原值。
+      if (nextCost !== null) editDraft[sym + '|cost'].exact = nextCost;
+      DATA = checkedDraft(); draftPending = true; NOTICE = ''; changed(); paint();
+    }
+    function openTrade(sym, side) {
+      try { tradeGuard(sym); } catch (err) { clearMessage(err.message); return; }
+      if (!tradeDialog) {
+        tradeDialog = document.createElement('dialog'); tradeDialog.className = 'cost-clear-dialog cost-trade-dialog';
+        tradeDialog.innerHTML = '<h3></h3><label>成交数量<input data-trade-qty inputmode="decimal" step="0.0001" autocomplete="off"></label>' +
+          '<label>成交价<input data-trade-price inputmode="decimal" step="0.0001" autocomplete="off"></label><p data-trade-note></p>' +
+          '<div class="cost-clear-choice" data-trade-destination><label><input type="radio" name="tradeDestination" value="default">全卖回默认</label>' +
+          '<label><input type="radio" name="tradeDestination" value="focus">全卖进重点</label></div><p data-trade-error role="status"></p>' +
+          '<div class="cost-acts"><button type="button" data-trade-cancel>取消</button><button type="button" class="primary" data-trade-confirm>加入草稿</button></div>';
+        panel.appendChild(tradeDialog);
+        tradeDialog.addEventListener('cancel', function () { tradeActive = null; });
+        tradeDialog.addEventListener('click', function (e) {
+          if (e.target.closest('[data-trade-cancel]')) { tradeDialog.close(); tradeActive = null; }
+          else if (e.target.closest('[data-trade-confirm]')) {
+            try {
+              if (!tradeActive || tradeActive.generation !== editGeneration) throw new Error('编辑会话已变化，请重新打开交易');
+              var choice = tradeDialog.querySelector('input[name="tradeDestination"]:checked');
+              applyTrade(tradeActive.sym, tradeActive.side, tradeDialog.querySelector('[data-trade-qty]').value,
+                tradeDialog.querySelector('[data-trade-price]').value, choice ? choice.value : 'default');
+              tradeDialog.close(); tradeActive = null;
+            } catch (err) { tradeDialog.querySelector('[data-trade-error]').textContent = err.message; }
+          }
+        });
+      }
+      tradeActive = { sym: sym, side: side, generation: editGeneration };
+      tradeDialog.querySelector('h3').textContent = (side === 'buy' ? '买入 ' : '卖出 ') + sym;
+      tradeDialog.querySelector('[data-trade-qty]').value = ''; tradeDialog.querySelector('[data-trade-price]').value = '';
+      tradeDialog.querySelector('[data-trade-error]').textContent = '';
+      tradeDialog.querySelector('[data-trade-note]').textContent = side === 'buy' ? '买入价可空用于拆股；不改现金，忽略费用。' : '卖出价必填；全卖在面板保存后归零移组，不改现金，忽略费用。';
+      tradeDialog.querySelector('[data-trade-destination]').hidden = side !== 'sell';
+      all('input[name="tradeDestination"]', tradeDialog).forEach(function (input) { input.checked = input.value === (clearDraft[sym] || 'default'); });
+      clearDialogControls(); tradeDialog.showModal(); tradeDialog.querySelector('[data-trade-qty]').focus();
+    }
     var addDialog = null;
     function addPosition(sym, hold, qty, cost) {
       if (!editing || !writer || disposed || clearBusy) return;
@@ -1559,7 +1702,7 @@
           (DATA.items[sym] && DATA.items[sym].qty > 0)) throw new Error('该代码已有持仓，不能重复新增');
       if (['long', 'short'].indexOf(hold) < 0) throw new Error('请选择长持仓或短持仓');
       qty = String(qty || '').trim(); cost = String(cost || '').trim();
-      if (draftError(qty) || draftError(cost) || !(Number(qty) > 0)) throw new Error('数量必须大于0；数量与成本最多四位小数，成本可留空');
+      if (draftError(qty) || draftError(cost, 'cost') || !(Number(qty) > 0)) throw new Error('数量必须大于0；数量与成本最多四位小数，成本可留空');
       if (!checkedDraft()) { persist(); paint(); throw new Error('已有无效输入，请先修正后新增仓位'); }
       addDraft[sym] = { hold: hold, before: DATA.items[sym] ? clone(DATA.items[sym]) : null };
       editDraft[sym + '|qty'] = { raw: qty, error: '' };
@@ -1703,6 +1846,8 @@
     }
     function exitEdit(restore) {
       if (clearBusy) return;
+      if (tradeDialog) tradeDialog.close();
+      tradeActive = null;
       if (restore && clearRecord && clearRecord.step !== 'done' && clearRecord.conflict) { void abandonClear(); return; }
       clearSaveTimers();
       editGeneration++;
@@ -1788,13 +1933,14 @@
       var t =
         e.target && e.target.closest
           ? e.target.closest(
-              '#costRetry,#costImportBak,#costSave,#costCancel,#costState,[data-cost-export],[data-cost-clear],[data-cost-add],[data-cost-remove-added]',
+              '#costRetry,#costImportBak,#costSave,#costCancel,#costState,[data-cost-export],[data-cost-clear],[data-cost-add],[data-cost-remove-added],[data-trade-action]',
             )
           : null;
       if (!t) return;
       e.preventDefault();
       e.stopPropagation();
       if (clearBusy && !t.hasAttribute('data-cost-export')) return;
+      if (t.hasAttribute('data-trade-action')) { openTrade(t.getAttribute('data-sym'), t.getAttribute('data-trade-action')); return; }
       if (t.hasAttribute('data-cost-clear')) { openClear(t.getAttribute('data-cost-clear')); return; }
       if (t.hasAttribute('data-cost-add')) { openAdd(); return; }
       if (t.hasAttribute('data-cost-remove-added')) { removeAdded(t.getAttribute('data-cost-remove-added')); return; }
@@ -1832,6 +1978,11 @@
           return;
         }
         DATA = next;
+        var baseline = editBaseline || CLOUD || snapshot, fieldBaseline = {};
+        Object.keys(editDraft).forEach(function (key) { fieldBaseline[key] = clearField(baseline, key); });
+        ['USD|cash', 'USD|cash_extra', 'BOND|fixed', 'BOND|fixed_cost'].concat(
+          Object.keys(next.items).flatMap(function (sym) { return [sym + '|qty', sym + '|cost']; })
+        ).forEach(function (key) { if (clearField(next, key) !== clearField(baseline, key)) fieldBaseline[key] = clearField(baseline, key); });
         var fixedBaseline = own(editDraft, 'BOND|fixed_cost') ? {
           fixed: (editBaseline || CLOUD || snapshot).fixed,
           fixed_cost: (editBaseline || CLOUD || snapshot).fixed_cost,
@@ -1847,7 +1998,7 @@
         draftPending = false;
         cloudFirstPending = false;
         if (!dirty && !sameAsCloud()) changed();
-        authorizePositions(fixedBaseline);
+        authorizePositions(fixedBaseline, fieldBaseline);
         editBaseline = null;
         persist();
         syncEditUI();
@@ -1902,6 +2053,8 @@
     });
     panel.addEventListener('toggle', function () {
       if (!panel.open && editing) {
+        if (tradeDialog) tradeDialog.close();
+        tradeActive = null;
         clearSaveTimers();
         editing = false;
         snapshot = null;
@@ -1949,7 +2102,7 @@
       if ((f === 'cost' || f === 'qty') && !isPosition(rowBySym(sym)) && !own(addDraft, sym) && !own(addedPositions, sym)) return;
       if (clearBusy || (clearRecord && clearRecord.step !== 'done')) return;
       var key = sym + '|' + f;
-      editDraft[key] = { raw: el.value, error: draftError(el.value) };
+      editDraft[key] = { raw: el.value, error: draftError(el.value, f) };
       // 单一固收成本框的明确编辑同时授权固收资产与成本；未编辑时保留旧值。
       if (f === 'fixed_cost') editDraft['BOND|fixed'] = { raw: el.value, error: editDraft[key].error };
       draftPending = true;
@@ -1992,32 +2145,20 @@
     function vt(v) {
       return trim4(num(v));
     }
+    function editorRow(sym, cost, qty) {
+      return '<div class="ep-editor-row" data-cost-row data-sym="' + esc(sym) + '">' +
+        '<span class="ep-code">' + esc(sym) + '</span>' +
+        ['buy', 'sell'].map(function (side) {
+          return '<button type="button" class="ep-trade" data-trade-action="' + side + '" data-sym="' + esc(sym) +
+            '" aria-label="' + (side === 'buy' ? '买入 ' : '卖出 ') + esc(sym) + '">' + side.toUpperCase() + '</button>';
+        }).join('') + inp(sym, 'cost', cost, '成本价') + inp(sym, 'qty', qty, '数量') + '</div>';
+    }
     function editorHtml(rows, cash, fixedCost) {
-      var heading = ['标的', '成本价', '数量', '持仓市值']
-        .map(function (label) {
-          return '<span class="ep-h">' + label + '</span>';
-        })
-        .join('');
-      var stocks = rows
-        .map(function (r) {
-          return (
-            '<span class="ep-sym" data-cost-row data-sym="' +
-            esc(r.sym) +
-            '"><button type="button" class="ep-clear" data-cost-clear="' +
-            esc(r.sym) + '" aria-label="清仓 ' + esc(r.sym) + '"' +
-            (clearBusy ? ' disabled' : '') + '>×</button>' +
-            '<span class="ep-name">' + esc(r.sym) +
-            (r.note ? ' ' + esc(r.note) : '') + '</span>' +
-            (clearDraft[r.sym] ? '<small class="ep-clear-mark">待清仓 → ' + (clearDraft[r.sym] === 'focus' ? '重点' : '默认分组') + '</small>' : '') +
-            '</span>' +
-            inp(r.sym, 'cost', r.costKnown ? vt(r.cost) : '', '成本价') +
-            inp(r.sym, 'qty', vt(r.qty), '数量') +
-            '<span class="ep-val">' +
-            (r.has ? plain(r.mv) : '—') +
-            '</span>'
-          );
-        })
-        .join('');
+      var heading = '<div class="ep-editor-head">' + ['代码', '买入', '卖出', '成本价', '数量']
+        .map(function (label) { return '<span class="ep-h">' + label + '</span>'; }).join('') + '</div>';
+      var stocks = rows.map(function (r) {
+        return editorRow(r.sym, r.costKnown ? vt(r.cost) : '', vt(r.qty));
+      }).join('');
       var fields = [
         ['现金 1', 'USD', 'cash', cashFirst(DATA)],
         ['现金 2', 'USD', 'cash_extra', DATA.cash_extra],
@@ -2032,12 +2173,8 @@
         heading +
         stocks +
         Object.keys(Object.assign({}, addedPositions, addDraft)).filter(function (sym) { return !isPosition(rowBySym(sym)); }).map(function (sym) {
-          var addition = addDraft[sym] || addedPositions[sym], item = DATA.items[sym] || { qty: 0 };
-          return '<span class="ep-sym" data-cost-row data-sym="' + esc(sym) + '">' +
-            (addDraft[sym] ? '<button type="button" class="ep-clear" data-cost-remove-added="' + esc(sym) + '" aria-label="撤销新增 ' + esc(sym) + '">×</button>' : '') +
-            '<span class="ep-name">' + esc(sym) + '</span><small class="ep-clear-mark">' + (addition.hold === 'long' ? '长持仓' : '短持仓') +
-            (addDraft[sym] ? ' · 待新增' : ' · 已保存，等规则更新/行情') + '</small></span>' +
-            inp(sym, 'cost', own(item, 'cost') ? vt(item.cost) : '', '成本价') + inp(sym, 'qty', vt(item.qty), '数量') + '<span class="ep-val">—</span>';
+          var item = DATA.items[sym] || { qty: 0 };
+          return editorRow(sym, own(item, 'cost') ? vt(item.cost) : '', vt(item.qty));
         }).join('') +
         '</div><div class="ep-cash">' +
         fields +

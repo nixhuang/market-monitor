@@ -345,10 +345,10 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
             self.assertIn(selector + '{border:var(--frame-w) solid var(--signal-border)}', css)
         # 卡中卡「长持仓」单独再细一档，不跟着整卡 1.5px
         self.assertIn('.zone-card[open]{border:1px solid var(--signal-border)}', css)
-        # 长持仓框左右外扩 2px，内部4px与普通分组一致；收起条抵消同样内边距
+        # 子框保留内部4px；终稿收起条向内留4px，不铺到9px圆角弧上。
         self.assertIn('.zone-card{margin:10px -2px 12px;padding-left:4px;padding-right:4px;'
                       'border:1px solid var(--line);border-radius:9px;background:var(--zone-bg)}', css)
-        self.assertIn('.zone-card .group-bottom{margin:0 -4px 0}', css)
+        self.assertIn('.zone-card .group-bottom{margin:0 4px 0}', css)
         # 数字胶囊：个位压在胶囊中线（右边 17px 内边距给三角留位），两位数时十位向左长，不折行；
         # 胶囊仍是 44px。三角维持线上版：16px 的 ▾/▴ 字形，绝对定位贴到胶囊右侧（距右边框 2px）。
         self.assertIn('#signalCounts .signal-count-toggle{box-sizing:border-box;height:38px;width:44px;'
@@ -388,13 +388,16 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
         # 「信号」列所有胶囊同宽且文字居中
         self.assertIn('#signalCounts td .signal-filter-toggle{width:74px;padding:0 4px}', css)
-        # 仓位编辑改为真实四列的蓝框面板，绿色只用于持仓外框；不再复制隐藏标题。
+        # 11-10真实五列编辑器：表头与行共用网格，不回退旧四列；不再复制隐藏标题。
         editor = re.search(r'#costManage\.cost-manage\s*\{([^}]*)\}', cost)[1]
         for decl in ('display: none', 'border: 1.5px solid var(--signal-border)', 'box-shadow: none', 'background: var(--card)'):
             self.assertIn(decl, editor)
         self.assertIn('#costManage.cost-manage.cost-edit-open { display: block; }', cost)
         self.assertIn('#costManage > summary, #costManage > .group-bottom { display: none; }', cost)
-        self.assertIn('grid-template-columns: minmax(0,1.5fr) repeat(3,minmax(0,1fr));', cost)
+        grids = re.findall(r'#costManage \.ep-editor-head, #costManage \.ep-editor-row\s*\{([^}]*)\}', cost)
+        self.assertEqual(len(grids), 2)
+        self.assertIn('grid-template-columns: 54px 58px 58px 92px 88px;', grids[0])
+        self.assertIn('grid-template-columns: 58px 58px 58px 112px 90px;', grids[1])
         self.assertNotIn('inset 3px 0 0 var(--cost-accent-bg)', cost)
         # quiet-list归页面资源统一管理，持仓summary隐藏但静态open另由分组用例保证。
         self.assertIn('.quiet-list[open]>summary{background:none;box-shadow:none;color:var(--head-blue)}', css)
@@ -566,20 +569,24 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         css = page_assets.PAGE_CSS
         self.assertIn('--signal-bg:#182131;', css)
         self.assertIn('--collapse-bg:var(--signal-bg);', css)
-        # 持仓卡：绿框**只在展开态亮**——靠 --signal-border 传给 .group-card[open]:not(...)
-        # （那条特指度更高，只能靠变量改色）；这里**不能**写 id 级 border-color，
-        # 写了收起态也会常亮，跟其它分组的灰框不一致（2026-11-01 定）。
+        # 11-10终稿：父去框但保卡片底和原标题位置；子框仍保持绿色。
         pos = re.search(r'#group_positions\{([^}]+)\}', css)[1]
-        self.assertIn('--collapse-bg:var(--positions-collapse)', pos)
-        self.assertIn('--positions-collapse:rgba(46,160,67,.15)', css)
+        self.assertIn('--collapse-bg:transparent', pos)
+        self.assertIn('background:var(--card)', pos)
+        self.assertIn('border:0;box-shadow:none;padding:3px 5px 2px;overflow:hidden', pos)
+        self.assertIn('#group_positions>summary{cursor:default}', css)
+        self.assertIn('#group_positions>summary::before{visibility:hidden}', css)
         self.assertIn('--signal-border:var(--frame-green)', pos)
         self.assertIn('--frame-green:#2c8f3e', css)
         self.assertNotIn('border-color:', pos)
         lng = re.search(r'#group_positions_long\.zone-card\{([^}]+)\}', css)[1]
         self.assertIn('background:none;border:1px solid var(--frame-green)', lng)
-        # 2026-11-01 二次调整：12/14 → 9/9，与仓位面板「当日盈亏贡献」条的上下留白（上 9 / 下 8）对齐，
-        # 消除「两条同样 49px 高、但长持仓留白更大显得更孤立，肉眼看像盈亏贡献更高」的错觉。
-        self.assertIn('margin:9px -2px 9px', lng)
+        self.assertIn('box-sizing:border-box;width:100%', lng)
+        self.assertIn('border-radius:9px;margin:9px 0 9px', lng)
+        short = re.search(r'#group_positions_short\.zone-card\{([^}]+)\}', css)[1]
+        self.assertIn('box-sizing:border-box;width:100%', short)
+        self.assertIn('border-radius:9px;margin:9px 0 0', short)
+        self.assertIn('height:26px;', re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1])
         self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
         button = re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1]
         self.assertIn('background:var(--collapse-bg)', button)
@@ -1038,8 +1045,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
     def test_statistics_collapse_bar_shares_border_color_only_in_statistics(self):
         self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page_assets.PAGE_CSS)
         self.assertIn('#signalCounts .collapse-group{color:var(--white)}', page_assets.PAGE_CSS)
-        self.assertIn('--collapse-bg:var(--positions-collapse)', page_assets.PAGE_CSS)
-        self.assertIn('--positions-collapse:rgba(46,160,67,.15)', page_assets.PAGE_CSS)
+        pos = re.search(r'#group_positions\{([^}]+)\}', page_assets.PAGE_CSS)[1]
+        self.assertIn('--collapse-bg:transparent', pos)
         self.assertNotIn('bar.appendChild(shortcut)', page_assets.RULES_INTERACTION_JS)
 
     def test_volume_adaptive_off_on_and_fixed_fallback(self):
@@ -1117,6 +1124,68 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('基本面', source)
         self.assertFalse(any(key.startswith("fund_") for key in
             json.loads((ROOT / "settings.json").read_text(encoding="utf-8"))))
+
+    def test_positions_parent_lock_and_cash_are_static_but_rs_remains_dynamic(self):
+        page = self.render()
+        class Elements(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.tags = {}
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if 'id' in attrs:
+                    self.tags[attrs['id']] = (tag, attrs)
+        elements = Elements()
+        elements.feed(page)
+        tag, parent = elements.tags['group_positions']
+        self.assertEqual(tag, 'details')
+        self.assertIn('open', parent)
+        self.assertEqual(parent['data-open-locked'], '1')
+        for ident, (_, attrs) in elements.tags.items():
+            if ident != 'group_positions':
+                self.assertNotIn('data-open-locked', attrs, ident)
+        self.assertNotIn('open', elements.tags['group_positions_short'][1])
+        self.assertIn('<span class="cb-name">Cash</span>', page)
+        self.assertNotIn('<span class="cb-name">现金</span>', page)
+        # 组合20日对SPX仍由真实rs20和仓位值计算；父标题改版不替换数据函数。
+        cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
+        self.assertIn("#group_positions>summary .group-stats .rs-spy", cost)
+        self.assertIn('REAL.rs20', cost)
+        self.assertNotIn('20日对.SPX -1.6%', page_assets.PAGE_INTERACTION_JS)
+
+    def test_positions_lock_blocks_parent_activation_not_child_collapse(self):
+        lock = re.search(r'\(function lockPositionsOpen\(\) \{.*?\n\}\)\(\);',
+                         page_assets.PAGE_INTERACTION_JS, re.S)
+        self.assertIsNotNone(lock)
+        script = r'''
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const events={},parentEvents={};
+const parent={open:false,querySelector:s=>s===':scope > summary'?summary:null,
+  addEventListener:(name,fn)=>{parentEvents[name]=fn;}};
+const summary={addEventListener:(name,fn)=>{events[name]=fn;}};
+const context={document:{querySelectorAll:s=>{
+  assert.equal(s,'#group_positions[data-open-locked="1"]');return [parent];
+}}};
+vm.createContext(context);vm.runInContext(fs.readFileSync(0,'utf8'),context);
+assert.equal(parent.open,true);
+for(const key of ['Enter',' ','Spacebar']){
+  parent.open=false;let blocked=false;
+  events.keydown({type:'keydown',key,preventDefault:()=>{blocked=true;}});
+  assert.equal(blocked,true);assert.equal(parent.open,true);
+}
+let blocked=false;
+events.keydown({type:'keydown',key:'ArrowDown',preventDefault:()=>{blocked=true;}});
+assert.equal(blocked,false);
+parent.open=false;
+events.click({type:'click',preventDefault:()=>{blocked=true;}});
+assert.equal(blocked,true);assert.equal(parent.open,true);
+parent.open=false;parentEvents.toggle({target:parent});assert.equal(parent.open,true);
+const child={open:false};parentEvents.toggle({target:child});assert.equal(child.open,false);
+'''
+        result = subprocess.run([sys.executable, '-B', str(ROOT / 'tests/run_all.py'),
+            '--offline-node', '-e', script], cwd=ROOT, input=lock[0],
+            capture_output=True, text=True, encoding='utf-8', timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_quiet_list_reset_and_regular_collapse_still_execute(self):
         script = r'''
@@ -1731,6 +1800,33 @@ class ModuleBoundaryRegression(unittest.TestCase):
 
 
 class CostSeedRegression(unittest.TestCase):
+    def test_stock_cost_seed_accepts_finite_zero_negative_and_rejects_invalid(self):
+        costs = {"ZERO_INT": 0, "ZERO_FLOAT": 0.0, "NEG_INT": -7,
+                 "NEG_FLOAT": -7.25, "POS_INT": 12, "POS_FLOAT": 12.5,
+                 "NAN": float("nan"), "INF": float("inf"),
+                 "NEG_INF": float("-inf"), "TRUE": True, "FALSE": False,
+                 "TEXT": "12.5", "UNKNOWN": None}
+        valid = {sym: cost for sym, cost in costs.items()
+                 if sym in ("ZERO_INT", "ZERO_FLOAT", "NEG_INT", "NEG_FLOAT",
+                            "POS_INT", "POS_FLOAT")}
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "holdings.json").write_text(json.dumps({"positions": {
+                sym: {"cost": cost} for sym, cost in costs.items()}}), encoding="utf-8")
+            with patch.object(monitor, "BASE", tmp):
+                data = json.loads(monitor._cost_seed_json(),
+                                  parse_constant=lambda value: self.fail("非有限成本泄漏：" + value))
+            self.assertEqual(data["items"], {sym: {"cost": cost, "qty": 0}
+                                             for sym, cost in valid.items()})
+            for qty, expected in ((10, 10), (2.5, 2.5), (0, 0), (-1, 0)):
+                seed = {"positions": {sym: qty for sym in costs}}
+                (base / "position-costs.seed.json").write_text(json.dumps(seed), encoding="utf-8")
+                with self.subTest(qty=qty), patch.object(monitor, "BASE", tmp):
+                    data = json.loads(monitor._cost_seed_json(),
+                                      parse_constant=lambda value: self.fail("非有限成本泄漏：" + value))
+                self.assertEqual(data["items"], {sym: {"cost": cost, "qty": expected}
+                                                 for sym, cost in valid.items()})
+
     def test_cash_split_is_preserved_and_legacy_cash_is_not_split_again(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

@@ -253,9 +253,9 @@ async function boot(opts={}){
     dispose:async()=>{api.fireWindow('pagehide');await settle();}};
   return api;
 }
-async function finishPush(b,status=200){
+async function finishPush(b,status=200,remote=SEED){
   const get=b.requests.filter(r=>r.init.method!=='PUT').at(-1);
-  b.respond(get,{sha:'fixture-sha',content:Buffer.from(JSON.stringify(SEED)).toString('base64')});await settle();
+  b.respond(get,{sha:'fixture-sha',content:Buffer.from(JSON.stringify(remote)).toString('base64')});await settle();
   const put=b.puts().at(-1);assert.ok(put);b.respond(put,status===200?{}:{message:'模拟失败'},status);await settle();return put;
 }
 const tests=[];function test(name,fn){tests.push({name,fn});}
@@ -514,7 +514,7 @@ test('事务生命周期 bfCache缓存损坏也先撤销旧仓位授权，读取
 
 const invalids=[
   ['数组items',{items:[]}],['null items',{items:null}],['字符串金额',{items:{},cash:'1'}],['负数量',{items:{AAA:{cost:1,qty:-1}}}],
-  ['负成本',{items:{AAA:{cost:-1,qty:1}}}],['非有限数',{items:{},fixed:Infinity}],['null数值',{items:{},cash:null}],
+  ['非有限成本',{items:{AAA:{cost:NaN,qty:1}}}],['非有限数',{items:{},fixed:Infinity}],['null数值',{items:{},cash:null}],
   ['非法版本',{items:{},schema_version:99}],['字符串版本',{items:{},schema_version:'2'}],
   ['属性注入日期',{items:{},updated_at:'2026-10-20" onmouseover="x'}],['原型标的',JSON.parse('{"items":{"__proto__":{"qty":1,"cost":1}}}')],
 ];
@@ -538,7 +538,7 @@ test('资产比例图例删除合计文字且深浅绿为两个完整紧贴色�
   assert.match(CSS,/\.cost-legend i\{width:9px;height:9px/);
 });
 
-test('所有手动保存服从15秒节流并上传最新revision',async()=>{let b=await boot();await b.enter();b.edit();await b.save();let p=await finishPush(b);await b.enter();b.edit('AAA','qty','3');await b.save();await b.tick(14999);assert.equal(b.puts().length,1);await b.tick(1);let q=await finishPush(b);assert.equal(q.at-p.at,15000);assert.equal(b.payload(q).items.AAA.qty,3);});
+test('所有手动保存服从15秒节流并上传最新revision',async()=>{let b=await boot();await b.enter();b.edit();await b.save();let p=await finishPush(b);await b.enter();b.edit('AAA','qty','3');await b.save();await b.tick(14999);assert.equal(b.puts().length,1);await b.tick(1);let q=await finishPush(b,200,b.state().CLOUD);assert.equal(q.at-p.at,15000);assert.equal(b.payload(q).items.AAA.qty,3);});
 test('刷新不重置15秒持久化节流',async()=>{let b=await boot();await b.enter();b.edit();await b.save();await finishPush(b);await b.dispose();let c=await boot({store:b.store,now:NOW+1000});await c.enter();c.edit('AAA','qty','8');await c.save();assert.equal(c.requests.length,1);await c.tick(13999);assert.equal(c.requests.length,1);await c.tick(1);assert.equal(c.requests.length,2);});
 test('失败重试保留15秒退避并服从节流，读取最新待保存版本',async()=>{let b=await boot();await b.enter();b.edit();await b.save();await finishPush(b,500);assert.equal(b.state().dirty,true);const n=b.requests.length;await b.tick(14999);assert.equal(b.requests.length,n);await b.tick(1);await finishPush(b);assert.equal(b.puts().length,2);assert.equal(b.state().dirty,false);});
 test('GET失败不得当成不存在并发送PUT',async()=>{let b=await boot();await b.enter();b.edit();await b.save();b.respond(b.requests.at(-1),{message:'forbidden'},403);await settle();assert.equal(b.puts().length,0);assert.equal(b.state().SYNC,'error');});
@@ -631,7 +631,7 @@ test('仓位绿色外框与顶部编辑操作区契约',async()=>{
   // 终稿操作区仅编辑时显示，四列编辑器位于静态持仓卡之前。
   assert.match(CSS,/#costManage\.cost-manage\{[^}]*display:none;[^}]*border:1\.5px solid var\(--signal-border\);[^}]*box-shadow:none;/);
   assert.match(CSS,/#costManage\.cost-manage\.cost-edit-open\{display:block;?\}/);
-  assert.match(CSS,/#costManage \.ep-grid\{[^}]*grid-template-columns:minmax\(0,1\.5fr\) repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(CSS,/#costManage \.ep-editor-head,#costManage \.ep-editor-row\{[^}]*grid-template-columns:54px 58px 58px 92px 88px/);
   assert.match(CSS,/#costManage \.ep-cash\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   await b.enter();assert.equal(acts.hidden,false);b.exitEdit(true);assert.equal(acts.hidden,true);
 });
@@ -724,7 +724,7 @@ test('拒绝非法输入而不把前缀数字当有效值',async()=>{let b=await
 test('慢GET后两次实际PUT也必须间隔15秒',async()=>{
   let b=await boot();await b.enter();b.edit();await b.save();await b.tick(45000);let p=await finishPush(b);
   await b.enter();b.edit('AAA','qty','2');await b.save();await b.tick(14999);assert.equal(b.puts().length,1);
-  await b.tick(1);let q=await finishPush(b);assert.equal(q.at-p.at,15000);
+  await b.tick(1);let q=await finishPush(b,200,b.state().CLOUD);assert.equal(q.at-p.at,15000);
 });
 test('旧cloud缓存未核验时不能直接清dirty',async()=>{
   let s=shared({[LOCAL]:{...SEED,_local:{dirty:true,revision:3}},[CLOUD]:SEED,[TOKEN]:'test-token'});
@@ -977,8 +977,8 @@ test('AbortController缺失时仍按截止时间完成本地失败且忽略迟�
   await b.enter();b.edit();await b.save();let get=b.requests.at(-1);await b.tick(b.state().deadline);
   assert.equal(b.state().inFlight,null);assert.equal(b.state().dirty,true);b.respond(get,meta(SEED));await settle();assert.equal(b.puts().length,0);
 });
-test('终稿四列编辑器右对齐数值，贡献列表金额百分比仍居中',()=>{
-  assert.match(CSS,/#costManage \.ep-val\{[^}]*text-align:right/);
+test('终稿五列编辑器右对齐数值，贡献列表金额百分比仍居中',()=>{
+  assert.doesNotMatch(CSS,/#costManage \.ep-val\{/);
   assert.match(CSS,/#costManage \.ep-grid input,#costManage \.ep-cash input\{[^}]*text-align:right/);
   assert.match(CSS,/\.cost-contrib \.cv,\.cost-contrib \.ca\{[^}]*text-align:center/);
   assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
@@ -1522,7 +1522,7 @@ test('主表不再挂成本价，成本价只在仓位面板里编辑与查看',
   await b.enter();
   assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,'80');
   assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'7.004');
-  assert.equal(b.doc.querySelectorAll('.ep-grid .ep-h').length,4);
+  assert.equal(b.doc.querySelectorAll('.ep-grid .ep-h').length,5);
   await b.dispose();
 });
 test('没有持仓成本时主表不出现成本价节点，也不留空容器',async()=>{
@@ -1739,6 +1739,185 @@ test('双现金dirty同总额拆分不被旧云端覆盖或合并',async()=>{
   assert.equal(b.state().dirty,true);assert.equal(b.cashFirst(b.state().DATA),0.6);
 });
 
+function trade(b,sym,side,qty,price=''){
+  b.doc.querySelector('[data-trade-action="'+side+'"][data-sym="'+sym+'"]').click();
+  const dialog=b.doc.querySelector('.cost-trade-dialog');assert.equal(dialog.open,true);
+  dialog.querySelector('[data-trade-qty]').value=qty;dialog.querySelector('[data-trade-price]').value=price;
+  dialog.querySelector('[data-trade-confirm]').click();return dialog;
+}
+test('生产五列原生交易行：代码独立完整，无备注红叉市值，新增复用同一结构',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
+  assert.deepEqual(b.doc.querySelectorAll('.ep-editor-head .ep-h').map(el=>el.textContent),['代码','买入','卖出','成本价','数量']);
+  const row=b.doc.querySelector('[data-cost-row][data-sym="AAA"]');
+  assert.deepEqual(row.children.map(el=>el.tagName),['SPAN','BUTTON','BUTTON','INPUT','INPUT']);
+  assert.equal(row.querySelector('.ep-code').textContent,'AAA');assert.equal(row.querySelector('[data-trade-action="buy"]').textContent,'BUY');
+  assert.equal(row.querySelector('[data-trade-action="sell"]').textContent,'SELL');assert.equal(row.querySelector('.ep-name,.ep-clear,.ep-val'),null);
+  b.addPosition('GOOGL','long','2','99');const added=b.doc.querySelector('[data-cost-row][data-sym="GOOGL"]');
+  assert.equal(added.querySelector('.ep-code').textContent,'GOOGL');assert.equal(added.children.length,5);await b.dispose();
+});
+test('生产交易净投入回算、拆股、手填最后覆盖、取消恢复且不自动改现金或上传',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();const n=b.requests.length;
+  trade(b,'AAA','buy','5','120');assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:10,cost:110});
+  trade(b,'AAA','sell','2','150');assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:8,cost:100});
+  trade(b,'AAA','buy','8');assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:16,cost:50});
+  b.edit('AAA','cost','40');trade(b,'AAA','buy','4','100');assert.equal(b.state().DATA.items.AAA.cost,52);
+  b.edit('AAA','cost','12.3456');assert.equal(b.state().DATA.items.AAA.cost,12.3456);
+  assert.equal(b.state().DATA.cash,30);assert.equal(b.state().positionsAuthorized,false);assert.equal(b.requests.length,n);
+  b.doc.getElementById('costCancel').click();assert.deepEqual(copy(b.state().DATA.items.AAA),SEED.items.AAA);assert.equal(b.puts().length,0);await b.dispose();
+});
+for(const [side,qty,price]of [['sell','5.0001','10'],['sell','1',''],['buy','0','10'],['buy','1.00001','10'],['buy','1','-1'],['buy','1','1e2']])test('生产交易拒绝非法数量成交价和超卖 '+[side,qty,price],async()=>{
+  const b=await boot({noLocks:true,forbidRequests:true});await b.enter();const before=b.canonical(b.state().DATA);
+  const d=trade(b,'AAA',side,qty,price);assert.equal(d.open,true);assert.ok(d.querySelector('[data-trade-error]').textContent);
+  assert.equal(b.canonical(b.state().DATA),before);d.querySelector('[data-trade-cancel]').click();assert.equal(d.open,false);await b.dispose();
+});
+test('生产交易盈利超过本金允许负成本，保存导出刷新保留负基数',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();trade(b,'AAA','sell','4','150');
+  assert.equal(b.state().DATA.items.AAA.cost,-100);assert.equal(b.state().DATA.items.AAA.qty,1);await b.save();
+  b.respond(b.requests.at(-1),meta(SEED));await settle();const put=b.puts()[0];assert.equal(b.payload(put).items.AAA.cost,-100);
+  b.respond(put,{});await settle();b.exportData();assert.equal(JSON.parse(await b.blobs.at(-1).text()).items.AAA.cost,-100);
+  await b.dispose();const c=await boot({store:b.store,noLocks:true,forbidRequests:true});assert.equal(c.state().DATA.items.AAA.cost,-100);
+  assert.equal(c.rows[0].pnlAmt,200);assert.equal(c.rows[0].pnlPct,null);await c.dispose();
+});
+test('生产全卖仅记清仓草稿，最终面板保存统一归零和移组',async()=>{
+  const b=await bootClear(),n=b.requests.length;trade(b,'AAA','sell','5','110');
+  assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:0,cost:0});assert.deepEqual(b.clearState().draft,{AAA:'default'});
+  assert.equal(b.requests.length,n);assert.equal(b.clearState().record,null);const put=await beginBatch(b);
+  assert.deepEqual(b.payload(put).items.AAA,{qty:0,cost:0});const {next}=await finishBatch(b,put);
+  assert.equal(next.positions.AAA,undefined);assert.equal(b.state().DATA.cash,30);assert.equal(b.puts().length,2);await b.dispose();
+});
+for(const field of ['qty','cost'])test('生产交易普通保存拒绝同股票字段远端冲突 '+field,async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();trade(b,'AAA','buy','1','100');await b.save();
+  const remote=copy(SEED);remote.items.AAA[field]+=2;b.respond(b.requests.at(-1),meta(remote));await settle();
+  assert.equal(b.puts().length,0);assert.match(b.state().SYNC,/error/);assert.equal(b.state().positionsAuthorized,false);await b.dispose();
+});
+test('生产交易四位小数及最大样例输入保持完整，取消交易不改持仓',async()=>{
+  const b=await boot({noLocks:true,forbidRequests:true});await b.enter();
+  b.doc.querySelector('[data-trade-action="buy"][data-sym="AAA"]').click();const d=b.doc.querySelector('.cost-trade-dialog');
+  d.querySelector('[data-trade-qty]').value='9999.9999';d.querySelector('[data-trade-price]').value='9999.9999';
+  const before=b.canonical(b.state().DATA);d.querySelector('[data-trade-cancel]').click();assert.equal(b.canonical(b.state().DATA),before);
+  b.edit('AAA','cost','9999.9999');b.edit('AAA','qty','9999.9999');await b.tick(16);
+  assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,'9999.9999');
+  assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]').value,'9999.9999');
+  trade(b,'AAA','buy','.0001','9999.9999');assert.deepEqual(copy(b.state().DATA.items.AAA),{cost:9999.9999,qty:10000});await b.dispose();
+});
+test('生产交易未知成本拆股保留未知，有价部分交易拒绝，全卖仍可入清仓草稿',async()=>{
+  const local={...copy(SEED),items:{AAA:{qty:5}}},b=await boot({local,noLocks:true,forbidRequests:true});await b.enter();
+  let d=trade(b,'AAA','buy','1','100');assert.equal(d.open,true);assert.match(d.querySelector('[data-trade-error]').textContent,/成本为空/);
+  d.querySelector('[data-trade-cancel]').click();trade(b,'AAA','buy','5');assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:10});
+  d=trade(b,'AAA','sell','1','100');assert.equal(d.open,true);d.querySelector('[data-trade-cancel]').click();
+  trade(b,'AAA','sell','10','100');assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:0,cost:0});
+  assert.deepEqual(b.clearState().draft,{AAA:'default'});b.doc.getElementById('costCancel').click();assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:5});await b.dispose();
+});
+test('生产交易全卖可选择重点，未保存又买入撤销清仓标记',async()=>{
+  const b=await bootClear();b.doc.querySelector('[data-trade-action="sell"][data-sym="AAA"]').click();
+  const d=b.doc.querySelector('.cost-trade-dialog');for(const input of d.querySelectorAll('input[name="tradeDestination"]'))input.checked=input.value==='focus';
+  d.querySelector('[data-trade-qty]').value='5';d.querySelector('[data-trade-price]').value='150';d.querySelector('[data-trade-confirm]').click();
+  assert.deepEqual(b.clearState().draft,{AAA:'focus'});trade(b,'AAA','buy','2','90');assert.deepEqual(b.clearState().draft,{});
+  assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:2,cost:90});assert.equal(b.puts().length,0);await b.dispose();
+});
+test('生产交易保存后手填负成本成为下一次交易基准',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();trade(b,'AAA','buy','5','120');await b.save();
+  const first=await finishPush(b);await b.enter();b.edit('AAA','cost','-10');await b.save();await b.tick(15000);
+  const second=await finishPush(b,200,b.payload(first));await b.enter();trade(b,'AAA','buy','10','20');
+  assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:20,cost:5});assert.equal(b.puts().length,2);assert.equal(b.payload(second).cash,30);await b.dispose();
+});
+test('生产交易普通保存保留未编辑远端现金和其它持仓，不自动回款',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();trade(b,'AAA','sell','1','150');await b.save();
+  const remote={...copy(SEED),cash:333,items:{...SEED.items,BBB:{qty:9,cost:88},CCC:{qty:1,cost:2}}};
+  b.respond(b.requests.at(-1),meta(remote));await settle();const put=b.puts()[0];assert.ok(put);
+  assert.equal(b.payload(put).cash,333);assert.deepEqual(b.payload(put).items.BBB,remote.items.BBB);assert.deepEqual(b.payload(put).items.CCC,remote.items.CCC);
+  assert.deepEqual(b.payload(put).items.AAA,{qty:4,cost:87.5});b.respond(put,{});await settle();assert.equal(b.state().DATA.cash,333);await b.dispose();
+});
+test('生产交易旧PUT丢回执先核验原payload，不误判自己的cost/qty冲突',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();trade(b,'AAA','sell','4','150');await b.save();
+  b.respond(b.requests.at(-1),meta(SEED,'base-sha'));await settle();const put=b.puts()[0],payload=b.payload(put);put.reject(Error('回执丢失'));await settle();
+  assert.equal(b.local()._local.uncertain.fieldBaseline['AAA|qty'],5);
+  assert.equal(b.local()._local.uncertain.fieldBaseline['AAA|cost'],100);
+  await b.tick(15000);b.respond(b.requests.at(-1),meta(payload,'committed'));await settle();
+  assert.equal(b.puts().length,1);assert.equal(b.state().uncertain,null);assert.equal(b.state().dirty,false);assert.equal(b.state().DATA.items.AAA.cost,-100);await b.dispose();
+});
+test('生产交易旧保存回执到达新草稿期间推进自己的基线，新草稿保存不误冲突',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();trade(b,'AAA','buy','1','100');await b.save();
+  b.respond(b.requests.at(-1),meta(SEED));await settle();const first=b.puts()[0];await b.enter();trade(b,'AAA','buy','1','120');
+  b.respond(first,{});await settle();assert.equal(b.state().DATA.items.AAA.qty,7);await b.save();await b.tick(15000);
+  const second=await finishPush(b,200,b.payload(first));assert.equal(b.payload(second).items.AAA.qty,7);assert.equal(b.state().dirty,false);await b.dispose();
+});
+test('生产交易全卖未知数量PUT保留原冻结payload，重试先核验再移组',async()=>{
+  const b=await bootClear();trade(b,'AAA','sell','5','110');const put=await beginBatch(b),payload=b.payload(put);put.reject(Error('丢回执'));await settle();
+  assert.equal(b.clearState().record.step,'quantity');assert.deepEqual(payload.items.AAA,{qty:0,cost:0});await b.save();
+  await clearReply(b,'groups.json',CLEAR_GROUPS);await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',payload);
+  await clearReply(b,'holdings.json',CLEAR_CONFIG);await clearReply(b,'position-costs.json',payload);const next=b.payload(b.requests.at(-1));
+  await clearReply(b,'holdings.json',{content:{sha:'b'.repeat(40)},commit:{sha:'c'.repeat(40)}},'PUT');await clearReply(b,'holdings.json',next);
+  assert.equal(b.puts().length,2);assert.equal(b.clearState().record.step,'done');assert.equal(next.positions.AAA,undefined);await b.dispose();
+});
+for(const mode of ['readonly','closed','bad-draft','frozen','huge'])test('生产交易保护边界 '+mode+' 不改数据或创建上传',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
+  b.doc.querySelector('[data-trade-action="buy"][data-sym="AAA"]').click();const d=b.doc.querySelector('.cost-trade-dialog');
+  d.querySelector('[data-trade-qty]').value=mode==='huge'?'9'.repeat(308):'1';d.querySelector('[data-trade-price]').value='100';
+  if(mode==='readonly')await b.dispose();else if(mode==='closed')b.doc.getElementById('costCancel').click();
+  else if(mode==='bad-draft')b.edit('BBB','qty','bad');else if(mode==='frozen'){b.markClear('AAA','default');await b.save();}
+  const before=b.canonical(b.state().DATA),n=b.requests.length;d.querySelector('[data-trade-confirm]').click();
+  assert.equal(b.canonical(b.state().DATA),before);assert.equal(b.requests.length,n);assert.equal(b.puts().length,0);await b.dispose();
+});
+test('普通双固收在途旧保存成功推进后续已冻结双字段基线',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('BOND','fixed_cost','25');await b.save();
+  b.respond(b.requests.at(-1),meta(SEED));await settle();const first=b.puts()[0];await b.enter();b.edit('BOND','fixed_cost','35');await b.save();
+  b.respond(first,{});await settle();await b.tick(15000);const second=await finishPush(b,200,b.payload(first));
+  assert.equal(b.payload(second).fixed,35);assert.equal(b.payload(second).fixed_cost,35);assert.equal(b.state().dirty,false);await b.dispose();
+});
+for(const action of ['cancel','fold'])test('生产交易ESC或折叠撤销活动确认，重开重新可编辑 '+action,async()=>{
+  const b=await boot({noLocks:true,forbidRequests:true});await b.enter();b.doc.querySelector('[data-trade-action="buy"][data-sym="AAA"]').click();
+  const d=b.doc.querySelector('.cost-trade-dialog');d.querySelector('[data-trade-qty]').value='1';d.querySelector('[data-trade-price]').value='100';
+  if(action==='cancel'){d.fire('cancel');d.close();}else{const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');}
+  const before=b.canonical(b.state().DATA);d.querySelector('[data-trade-confirm]').click();assert.equal(b.canonical(b.state().DATA),before);
+  if(action==='fold')await b.enter();trade(b,'AAA','buy','1','100');assert.equal(d.querySelector('[data-trade-qty]').disabled,false);
+  assert.equal(b.state().DATA.items.AAA.qty,6);assert.equal(b.requests.length,0);await b.dispose();
+});
+test('自动成本展示四位但连续买卖拆股保留原始精度，不逐笔舍入',async()=>{
+  const local={...copy(SEED),items:{AAA:{qty:5,cost:100.123456789}}},b=await boot({local,noLocks:true,forbidRequests:true});await b.enter();
+  let basis=5*100.123456789,qty=5;
+  const operations=[['buy','1','102.1234'],['sell','.3333','103.0001'],['buy','.0001','']];
+  for(let i=0;i<20;i++)operations.push(['buy','.25','110'],['sell','.125','120']);
+  for(const [side,q,p]of operations){
+    trade(b,'AAA',side,q,p);const amount=Number(q);basis+=side==='buy'?(p===''?0:amount*Number(p)):-amount*Number(p);
+    qty=Number(b.trim4(qty+(side==='buy'?amount:-amount)));const expected=basis/qty,actual=b.state().DATA.items.AAA.cost;
+    assert.ok(Math.abs(actual-expected)<1e-10,'成本只允许IEEE-754运算误差，不允许四位截断');
+    const saved=b.sessionLocal()._local.editDraft['AAA|cost'];assert.equal(saved.exact,actual);assert.equal(saved.raw,b.trim4(actual));
+  }
+  assert.notEqual(b.state().DATA.items.AAA.cost,Number(b.trim4(b.state().DATA.items.AAA.cost)));
+  assert.equal(b.doc.querySelectorAll('[data-cost-row] [title]').length,0);await b.dispose();
+});
+test('自动原始成本普通保存PUT导出保留，手填同一显示值明确覆盖exact',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();trade(b,'AAA','buy','1','101');
+  const exact=601/6;assert.equal(b.state().DATA.items.AAA.cost,exact);assert.equal(b.doc.querySelector('input[data-sym="AAA"][data-f="cost"]').value,'100.1667');
+  await b.save();const first=await finishPush(b);assert.equal(b.payload(first).items.AAA.cost,exact);
+  b.exportData();assert.equal(JSON.parse(await b.blobs.at(-1).text()).items.AAA.cost,exact);
+  await b.enter();b.edit('AAA','cost','100.1667');assert.equal(Object.hasOwn(b.local()._local.editDraft['AAA|cost'],'exact'),false);
+  assert.equal(b.state().DATA.items.AAA.cost,100.1667);trade(b,'AAA','buy','1','102');assert.equal(b.state().DATA.items.AAA.cost,(6*100.1667+102)/7);
+  await b.dispose();
+});
+test('自动原始成本草稿跨隔离刷新和折叠恢复，取消恢复原始高精度基准',async()=>{
+  const initial={...copy(SEED),items:{AAA:{qty:5,cost:100.123456789}}},b=await boot({local:initial,noLocks:true,forbidRequests:true});await b.enter();
+  trade(b,'AAA','sell','1','110');const exact=(5*initial.items.AAA.cost-110)/4;
+  const panel=b.doc.getElementById('costManage');panel.open=false;panel.fire('toggle');await b.enter();assert.equal(b.state().DATA.items.AAA.cost,exact);
+  await b.dispose();const c=await boot({store:b.store,session:b.session,noLocks:true,forbidRequests:true});await c.enter();
+  assert.equal(c.state().DATA.items.AAA.cost,exact);assert.equal(c.sessionLocal()._local.editDraft['AAA|cost'].exact,exact);
+  trade(c,'AAA','buy','1','100');assert.equal(c.state().DATA.items.AAA.cost,(4*exact+100)/5);
+  c.doc.getElementById('costCancel').click();assert.equal(c.state().DATA.items.AAA.cost,exact);assert.deepEqual(c.sessionLocal()._local.editDraft['AAA|cost'],{raw:c.trim4(exact),error:'',exact});
+  await c.dispose();const d=await boot({local:initial,noLocks:true,forbidRequests:true});await d.enter();trade(d,'AAA','buy','1','101');
+  d.doc.getElementById('costCancel').click();assert.equal(d.state().DATA.items.AAA.cost,initial.items.AAA.cost);assert.deepEqual(d.sessionLocal()._local.editDraft,{});await d.dispose();
+});
+for(const [name,field,raw,exact]of [
+  ['显示不一致','cost','100.1',100.123456],['空成本','cost','',100],['字符串','cost','100','100'],
+  ['null','cost','100',null],['非有限','cost','100',Infinity],['NaN','cost','100',NaN],['对象','cost','100',{value:100}],
+  ['非法手填','cost','bad',100],['超过四位','cost','100.123456',100.123456],['非成本字段','qty','5',5]
+])test('自动成本序列化异常 '+name+' 阻断保存不吞错，手填可修正',async()=>{
+  const local={...copy(SEED),_local:{editDraft:{['AAA|'+field]:{raw,exact}}}},b=await boot({local,noLocks:true,forbidRequests:true});await b.enter();
+  const before=b.canonical(b.state().DATA);await b.save();assert.equal(b.state().editing,true);assert.equal(b.canonical(b.state().DATA),before);
+  assert.ok(b.doc.querySelector('input[data-sym="AAA"][data-f="'+field+'"]').validationMessage);assert.equal(b.requests.length,0);
+  b.edit('AAA',field,field==='qty'?'5':'100');assert.equal(Object.hasOwn(b.sessionLocal()._local.editDraft['AAA|'+field],'exact'),false);
+  await b.save();assert.equal(b.state().editing,false);await b.dispose();
+});
 test('成本面板JS和回归文件语法有效',()=>{
   new vm.Script(SOURCE.replace(/^<script>\s*/,'').replace(/\s*<\/script>\s*$/,''),{filename:'cost_panel.js'});
   new vm.Script(fs.readFileSync(__filename,'utf8'),{filename:'tests/mm_test_cost.js'});
@@ -1871,7 +2050,8 @@ test('优化回归：未变化不读取或重建DOM，展开态独立保留，�
   assert.equal(host.querySelector('[data-cost-row][data-sym="AAA"]'),row);assert.equal(fold.open,true);
   fold.open=false;b.paint();assert.equal(host.htmlWrites,writes);assert.equal(fold.open,false);
   fold.open=true;b.rows[0].price=102;b.paint();
-  assert.equal(host.htmlWrites,writes+1);assert.equal(fold.open,true);
+  assert.equal(host.htmlWrites,writes,'编辑行不再显示行情市值，不为行情变化重建');assert.equal(fold.open,true);
+  b.edit('AAA','cost','102');b.paint();assert.equal(host.htmlWrites,writes+1);
   b.paint();assert.equal(host.htmlWrites,writes+1);assert.equal(b.puts().length,0);
 });
 test('优化回归：编辑无变化保留输入节点光标，容器替换后重建缓存',async()=>{
@@ -1973,7 +2153,7 @@ test('刷新首屏：成本绘制不再动态重建静态统计区',async()=>{
 
 // 审核边界用例只运行内存 DOM、存储及 fetch mock。
 for(const [sym,field,raw] of [
-  ['AAA','qty','2oops'],['AAA','cost','-1'],['USD','cash','0.00001'],
+  ['AAA','qty','2oops'],['AAA','cost','--1'],['USD','cash','0.00001'],
   ['USD','cash_extra','1e309'],['BOND','fixed_cost','NaN'],['BOND','fixed_cost','-2'],
   ['USD','cash','9'.repeat(305)]
 ])test('审核边界：跨格重绘保留完整无效草稿 '+sym+'/'+field+'/'+(raw.length>100?'溢出':raw),async()=>{
@@ -2268,8 +2448,8 @@ async function finishClear(b,op,put,config=CLEAR_CONFIG,status=200){
   if(status===200)await clearReply(b,'holdings.json',next);await op;return {zero,move,next};
 }
 for(const choice of ['default','focus'])test('红叉清仓 '+choice+' 只归零目标、现金不变、远端移组且取消不复活数量',async()=>{
-  const b=await bootClear();const buttons=b.doc.querySelectorAll('[data-cost-clear]');assert.equal(buttons.length,2);
-  assert.equal(buttons[0].textContent,'×');assert.equal(b.doc.querySelector('.cost-clear-dialog').querySelectorAll('input').length,2);
+  const b=await bootClear();assert.equal(b.doc.querySelectorAll('[data-cost-clear]').length,0);
+  assert.equal(b.doc.querySelectorAll('[data-trade-action="sell"]').length,2);assert.equal(b.doc.querySelector('.cost-clear-dialog').querySelectorAll('input').length,2);
   const op=b.executeClear('AAA',choice),put=await clearToQuantity(b);
   const sent=b.payload(put);assert.equal(sent.items.AAA.qty,0);assert.deepEqual(sent.items.BBB,SEED.items.BBB);
   for(const k of ['cash','cash_extra','fixed','fixed_cost'])assert.equal(sent[k],b.state().CLOUD[k]);
@@ -2390,7 +2570,8 @@ test('确认红叉0请求，可继续改数值、重选清仓去向、撤销且�
   const b=await bootClear(),n=b.requests.length;confirmMark(b);
   assert.equal(b.requests.length,n);assert.equal(b.state().DATA.items.AAA.qty,5);
   assert.deepEqual(b.clearState().draft,{AAA:'default'});assert.equal(b.state().positionsAuthorized,false);
-  assert.match(b.doc.querySelector('[data-cost-row][data-sym="AAA"]').textContent,/待清仓.*默认/);
+  assert.equal(b.doc.querySelector('[data-cost-row][data-sym="AAA"] .ep-code').hasAttribute('title'),false);
+  assert.deepEqual(b.clearState().draft,{AAA:'default'});
   assert.doesNotMatch(b.doc.querySelector('.cost-clear-dialog').textContent,/点击面板保存后生效|不在券商卖出|不自动增加现金/);
   assert.equal(b.state().NOTICE,'');
   b.edit('BBB','qty','9');b.edit('USD','cash','77');confirmMark(b,'AAA','focus');
@@ -2497,13 +2678,13 @@ test('新增入口真实dialog仅加草稿，代码规范化，无行情不捏�
   dialog.querySelector('[data-add-symbol]').value='  xyz.a  ';dialog.querySelector('[data-add-qty]').value='1.2345';
   dialog.querySelector('[data-add-cost]').value='2.3456';dialog.querySelector('[data-add-confirm]').click();
   assert.equal(b.requests.length,n);assert.equal(dialog.open,false);assert.ok(b.clearState().additions['XYZ.A']);
-  assert.equal(b.state().DATA.items['XYZ.A'].qty,1.2345);assert.match(b.doc.querySelector('[data-cost-row][data-sym="XYZ.A"]').textContent,/待新增/);
-  assert.equal(b.doc.querySelectorAll('.ep-val').at(-1).textContent,'—');b.edit('XYZ.A','qty','2.3456');assert.equal(b.state().DATA.items['XYZ.A'].qty,2.3456);
-  b.doc.querySelector('[data-cost-remove-added="XYZ.A"]').click();assert.equal(b.state().DATA.items['XYZ.A'],undefined);
+  assert.equal(b.state().DATA.items['XYZ.A'].qty,1.2345);assert.equal(b.doc.querySelector('[data-cost-row][data-sym="XYZ.A"] .ep-code').textContent,'XYZ.A');
+  assert.equal(b.doc.querySelectorAll('.ep-val').length,0);b.edit('XYZ.A','qty','2.3456');assert.equal(b.state().DATA.items['XYZ.A'].qty,2.3456);
+  trade(b,'XYZ.A','sell','2.3456','3');assert.equal(b.state().DATA.items['XYZ.A'],undefined);
   assert.equal(b.puts().length,0);await b.dispose();
 });
 for(const [sym,hold,qty,cost] of [['AAA','long','1','2'],['SGOV','long','1','2'],['USD','long','1','2'],['BOND','long','1','2'],['^GSPC','long','1','2'],
-  ['bad code','long','1','2'],['CCC','bad','1','2'],['CCC','long','0','2'],['CCC','short','1e2','2'],['CCC','long','1','-2']])
+  ['bad code','long','1','2'],['CCC','bad','1','2'],['CCC','long','0','2'],['CCC','short','1e2','2'],['CCC','long','1','--2']])
 test('新增拒绝非法/重复/专属口径 '+[sym,hold,qty,cost].join('/'),async()=>{
   const b=await bootClear();assert.throws(()=>b.addPosition(sym,hold,qty,cost));assert.deepEqual(b.clearState().additions,{});assert.equal(b.puts().length,0);await b.dispose();
 });
@@ -2513,7 +2694,7 @@ test('新增only一次data一次main且记录hold，既有普通监控配置备�
   assert.deepEqual(sent.items.CCC,{qty:3,cost:11});assert.deepEqual(sent.items.AAA,SEED.items.AAA);
   const {next}=await finishBatch(b,put,config);assert.deepEqual(next.positions.CCC,{note:'已有代码',trigger:12,target:20,hold:'short'});
   assert.deepEqual(next.technology.CCC,config.technology.CCC);assert.equal(b.puts().length,2);assert.equal(b.state().DATA.cash,30);
-  await b.enter();assert.match(b.doc.querySelector('[data-cost-row][data-sym="CCC"]').textContent,/已保存.*行情/);await b.dispose();
+  await b.enter();assert.equal(b.doc.querySelector('[data-cost-row][data-sym="CCC"] .ep-code').textContent,'CCC');assert.ok(b.clearState().added.CCC);await b.dispose();
 });
 test('新增清仓数值同批两次PUT且取消未保存全部撤销',async()=>{
   const b=await bootClear();b.addPosition('CCC','long','4','');confirmMark(b);b.edit('BBB','cost','92');
@@ -2841,23 +3022,23 @@ test('新增清仓dialog仅保留必要选项和真实错误，无常驻解释�
   assert.match(add.querySelector('[data-add-message]').textContent,/数量必须/);assert.equal(add.open,true);
   add.querySelector('[data-add-qty]').value='1';add.querySelector('[data-add-confirm]').click();assert.equal(b.state().NOTICE,'');await b.dispose();
 });
-test('编辑字号与手机44像素红叉独立命中区，长代码限制在四列表格内',async()=>{
+test('五列原生编辑器字号与交易命中区，长代码不压入买卖列且仅600/601两档',async()=>{
   const sym='A'.repeat(32),b=await bootClear({symbols:[sym,'BBB'],local:{...copy(SEED),items:{[sym]:{qty:1,cost:2},BBB:SEED.items.BBB}}});
   const row=b.doc.querySelector('[data-cost-row][data-sym="'+sym+'"]');
-  assert.equal(row.querySelector('.ep-name').textContent.startsWith(sym),true);assert.equal(row.querySelector('.ep-clear').parentElement,row);
-  assert.equal(row.nextElementSibling.getAttribute('data-f'),'cost');assert.equal(row.nextElementSibling.nextElementSibling.getAttribute('data-f'),'qty');
-  assert.match(CSS,/#costManage \.ep-sym\{[^}]*display:grid;[^}]*grid-template-columns:auto minmax\(0,1fr\);[^}]*min-width:0;[^}]*font-size:16px/);
-  assert.match(CSS,/#costManage \.ep-name\{[^}]*min-width:0;overflow:hidden;text-overflow:ellipsis/);
-  const mobile=CSS.slice(CSS.indexOf('@media(max-width:600px)'));
-  assert.match(mobile,/#costManage \.ep-clear\{width:44px;height:44px;font-size:24px/);assert.doesNotMatch(CSS,/position:absolute[^}]*44px/);
-  assert.match(CSS,/#costManage \.ep-h\{font-size:15px/);assert.match(CSS,/#costManage \.ep-val\{font-size:16px/);
+  assert.equal(row.querySelector('.ep-code').textContent,sym);assert.equal(row.querySelector('.ep-clear'),null);
+  assert.equal(row.children[3].getAttribute('data-f'),'cost');assert.equal(row.children[4].getAttribute('data-f'),'qty');
+  assert.match(CSS,/#costManage \.ep-code\{[^}]*min-width:0;overflow:hidden;text-overflow:ellipsis;[^}]*font-size:16px/);
+  assert.match(CSS,/#costManage \.ep-trade\{[^}]*width:58px;height:34px/);
+  assert.match(CSS,/@media\(min-width:601px\)\{#costManage \.ep-editor-head,#costManage \.ep-editor-row\{grid-template-columns:58px 58px 58px 112px 90px/);
+  assert.match(CSS,/#costManage \.ep-editor-head\{margin-bottom:4px;font-size:13px;color:var\(--dim\)/);
+  assert.match(CSS,/#costManage \.ep-h\{font-size:13px;color:var\(--dim\)/);
   assert.match(CSS,/#costManage \.ep-grid input,#costManage \.ep-cash input\{[^}]*font-size:16px/);
   assert.match(CSS,/#costManage \.ep-cash label\{[^}]*font-size:16px/);assert.match(CSS,/\.cost-acts button\{font-size:16px/);
   assert.match(CSS,/#costManage \[data-cost-add\]\{[^}]*margin:0 auto 0 0;[^}]*font-size:16px/);
   assert.match(CSS,/#costManage \.cost-clear-dialog h3\{[^}]*font-size:18px/);assert.match(CSS,/#costManage \.cost-clear-dialog label\{display:block;[^}]*font-size:16px/);
   assert.match(CSS,/#costManage \.cost-clear-dialog p\{[^}]*font-size:15px/);assert.match(CSS,/#costManage \.cost-add-dialog input:not\(\[type="radio"\]\)\{[^}]*font-size:16px/);
   assert.match(CSS,/#costManage \.cost-add-hold,#costManage \.cost-clear-choice\{display:flex;[^}]*gap:16px/);assert.match(CSS,/#costManage \.cost-add-hold label,#costManage \.cost-clear-choice label\{display:inline-flex/);
-  assert.equal((CSS.match(/@media/g)||[]).length,1);assert.doesNotMatch(CSS,/@media\(max-width:(?!600)/);await b.dispose();
+  assert.equal((CSS.match(/@media/g)||[]).length,2);assert.doesNotMatch(CSS,/@media\((?:max-width:(?!600)|min-width:(?!601))/);await b.dispose();
 });
 
 test('新增入口固定在保存操作栏左侧，关闭编辑或错误只读时隐藏且重绘不重复',async()=>{

@@ -6885,7 +6885,7 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('if (opening) {\n    //', js)
         self.assertIn('function revealSignalPanel(panel) {', js)
 
-    def test_collapse_button_css_has_full_width_short_tinted_strip(self):
+    def test_collapse_button_css_keeps_full_width_and_positions_transparent_strip(self):
         button_rule = re.search(r'\.collapse-group\{([^}]+)\}', monitor.PAGE_CSS)
         self.assertIsNotNone(button_rule)
         for declaration in ('width:100%', 'height:26px', 'padding:0', 'background:var(--collapse-bg)', 'border:0',
@@ -6906,8 +6906,10 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertNotIn('opacity:', button_rule.group(1))
         self.assertIn('--collapse-bg:var(--signal-bg)', monitor.PAGE_CSS)
         pos_rule = re.search(r'#group_positions\{([^}]+)\}', monitor.PAGE_CSS)[1]
-        self.assertIn('--collapse-bg:var(--positions-collapse)', pos_rule)
-        self.assertIn('--positions-collapse:rgba(46,160,67,.15)', monitor.PAGE_CSS)
+        self.assertIn('--collapse-bg:transparent', pos_rule)
+        self.assertIn('border:0', pos_rule)
+        self.assertIn('background:var(--card)', pos_rule)
+        self.assertIn('.zone-card .group-bottom{margin:0 4px 0}', monitor.PAGE_CSS)
         self.assertIn('--signal-border:var(--frame-green)', pos_rule)
         # 收起态不常亮：没有 id 级 border-color，绿只由展开态的 --signal-border 带出来
         self.assertNotIn('border-color:', pos_rule)
@@ -7075,7 +7077,7 @@ class TestPositionZones(unittest.TestCase):
         self.assertEqual(re.findall(r'<details class="zone-card" id="([^"]+)">', out),
                          ['group_positions_long', 'group_positions_short'])
         self.assertNotRegex(out, r'<details class="zone-card"[^>]*\bopen\b')
-        self.assertIn('<details class="card group-card" id="group_positions" open>', out)
+        self.assertRegex(out, r'<details\b(?=[^>]*\bid="group_positions")(?=[^>]*\sopen(?:\s|>))(?=[^>]*\bdata-open-locked="1")[^>]*>')
         self.assertIn('<details class="quiet-list" open>', out)
         self.assertEqual(re.findall(r'<span class="zone-name">([^<]+)</span>', out),
                          ['长持仓 (1)', '短持仓 (2)'])
@@ -7128,8 +7130,9 @@ class TestPositionZones(unittest.TestCase):
 
     def test_short_zone_bottom_gap_uses_final_three_pixel_contract(self):
         self.assertIn('#group_positions[open]{padding-bottom:2px}', monitor.PAGE_CSS)
-        self.assertIn('#group_positions_short.zone-card{background:none;border:1px solid var(--frame-green);margin:9px -2px 0}',
+        self.assertIn('#group_positions_short.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 0}',
                       monitor.PAGE_CSS)
+        self.assertIn('.zone-card .group-bottom{margin:0 4px 0}', monitor.PAGE_CSS)
 
     def test_other_groups_keep_one_body(self):
         group = next(g for g in monitor.GROUPS if g['key'] == 'focus')
@@ -7622,7 +7625,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             page = monitor.render({}, rows, len(rows), snapshot=snap)
             technology = page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
             self.assertTrue(technology.startswith('>'))  # 近期财报不自动展开分类，用户点开后才看到
-            self.assertEqual(re.findall(r'<details class="card[^"]*" id="(\w+)" open>', page), ['signalCounts', 'group_positions'])  # 终稿初载统计与持仓父组展开，其他分类仍折叠
+            self.assertEqual(re.findall(r'<details\b(?=[^>]*\sopen(?:\s|>))[^>]*\bid="(\w+)"[^>]*>', page), ['signalCounts', 'group_positions'])  # open不限定末属性；统计与持仓父展开，其余仍折叠
             self.assertRegex(technology.split('<details class="quiet-list"')[0],
                                 r'<td class="sym"><span class="sym-box \w+">AAPL')
             self.assertIn('无异动 1 只', technology)

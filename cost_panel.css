@@ -26,11 +26,14 @@
   --cost-contrib-cols: minmax(0,.74fr) 66px 62px minmax(0,1fr);
   --cost-cbar-left: 15.5px;
 }
-/* 终稿四列编辑器：复用真实保存/取消及草稿校验，不额外增加入口。 */
+/* 五列交易编辑器：交易只改草稿，保存/取消沿真实事务链执行。 */
 #costManage.cost-manage {
   display: none;
   min-height: 0;
-  margin: 8px 4px 10px;
+  box-sizing: border-box;
+  width: min(100%,720px);
+  max-width: 720px;
+  margin: 8px auto 10px 0;
   padding: 10px;
   border: 1.5px solid var(--signal-border);
   border-radius: 6px;
@@ -41,33 +44,39 @@
 #costManage > summary, #costManage > .group-bottom { display: none; }
 #costManage .cost-body { display: flex; flex-direction: column; padding: 0; margin: 0; }
 #costMembers { order: 1; margin: 0; }
-#costManage .ep-grid {
+#costManage .ep-grid { display: block; }
+#costManage .ep-editor-head, #costManage .ep-editor-row {
   display: grid;
-  grid-template-columns: minmax(0,1.5fr) repeat(3,minmax(0,1fr));
-  gap: 4px 6px;
+  box-sizing: border-box;
+  width: 100%;
+  grid-template-columns: 54px 58px 58px 92px 88px;
   align-items: center;
-}
-#costManage .ep-h { font-size: 15px; color: var(--dim); }
-#costManage .ep-sym {
-  display: grid;
-  grid-template-columns: auto minmax(0,1fr);
-  align-items: center;
+  justify-content: space-between;
+  column-gap: 0;
   min-width: 0;
-  font-size: 16px;
-  color: var(--text);
-  overflow: hidden;
-  white-space: nowrap;
 }
-#costManage .ep-name { grid-column: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#costManage .ep-clear {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 24px; margin: 0 3px 0 0; padding: 0;
-  vertical-align: middle; border: 0; background: none;
-  color: var(--lamp-red); font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+#costManage .ep-editor-head { margin-bottom: 4px; font-size: 13px; color: var(--dim); }
+#costManage .ep-editor-row { padding: 4px 0; }
+#costManage .ep-h { font-size: 13px; color: var(--dim); }
+#costManage .ep-h:nth-child(2), #costManage .ep-h:nth-child(3) { text-align: center; }
+#costManage .ep-code { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 16px; color: var(--text); white-space: nowrap; text-align: left; }
+#costManage .ep-trade {
+  box-sizing: border-box; width: 58px; height: 34px; padding: 4px 5px;
+  border: 1px solid var(--cost-edit-border); border-radius: 4px;
+  background: var(--cost-edit-bg); color: var(--cost-edit-text); font-size: 16px; line-height: 1.2;
+  cursor: pointer; touch-action: manipulation;
 }
-#costManage .ep-clear:focus-visible { outline: 1px solid var(--head-blue-on); }
-#costManage .ep-clear:disabled { opacity: .45; cursor: default; }
-#costManage .ep-clear-mark { grid-column: 1 / -1; display: block; font-size: 13px; line-height: 1.4; color: var(--lamp-yellow); overflow: hidden; text-overflow: ellipsis; }
+#costManage .ep-trade[data-trade-action="sell"] { color: var(--lamp-red); }
+#costManage .ep-trade:disabled { opacity: .45; cursor: default; }
+@media(min-width:601px) {
+  #costManage .ep-editor-head, #costManage .ep-editor-row { grid-template-columns: 58px 58px 58px 112px 90px; }
+}
+#costManage [data-trade-destination][hidden] { display: none; }
+#costManage .cost-trade-dialog input:not([type="radio"]) {
+  box-sizing: border-box; width: 100%; margin-top: 5px; padding: 6px 8px;
+  background: var(--cost-input-bg); color: var(--text); border: 1px solid var(--cost-input-border);
+  border-radius: 4px; font: inherit; font-size: 16px;
+}
 #costManage .cost-clear-dialog {
   box-sizing: border-box; width: min(360px,calc(100vw - 24px)); padding: 16px;
   background: var(--card); color: var(--text); border: var(--frame-w) solid var(--signal-border); border-radius: 6px;
@@ -89,7 +98,6 @@
   border: 1px solid var(--cost-input-border); border-radius: 3px;
   background: var(--cost-input-bg); color: var(--text); font-size: 16px;
 }
-#costManage .ep-val { font-size: 16px; color: var(--text); text-align: right; }
 #costManage .ep-grid input, #costManage .ep-cash input {
   width: 100%;
   min-width: 0;
@@ -364,7 +372,6 @@
   }
   .cost-edit-btn { padding: 8px 13px; font-size: 16px; line-height: 1.08; }
   .runbar .cost-edit-btn { height: 40px; }
-  #costManage .ep-clear { width: 44px; height: 44px; font-size: 24px; }
   .cost-legend { font-size: 12px; gap: 3px 10px; }
   .cost-contrib { padding-left: 12px; }
   .cost-contrib li { font-size: 13px; line-height: 15.75px; }

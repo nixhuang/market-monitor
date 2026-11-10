@@ -601,8 +601,10 @@ h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 h1.brand{color:var(--up)}
 .sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
-#group_positions{background:var(--card);--collapse-bg:var(--positions-collapse);--signal-border:var(--frame-green)}
-#group_positions_long.zone-card{background:none;border:1px solid var(--frame-green);margin:9px -2px 9px}
+#group_positions{background:var(--card);--collapse-bg:transparent;--signal-border:var(--frame-green);border:0;box-shadow:none;padding:3px 5px 2px;overflow:hidden}
+#group_positions>summary{cursor:default}
+#group_positions>summary::before{visibility:hidden}
+#group_positions_long.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 9px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
@@ -835,7 +837,7 @@ tr.gray td{color:var(--dim)}
 .group-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
 .group-card>summary .rs-spy{margin-left:auto}
 .zone-card{margin:10px -2px 12px;padding-left:4px;padding-right:4px;border:1px solid var(--line);border-radius:9px;background:var(--zone-bg)}
-.zone-card .group-bottom{margin:0 -4px 0}
+.zone-card .group-bottom{margin:0 4px 0}
 .zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;list-style:none;touch-action:manipulation}
 .zone-card>summary::-webkit-details-marker{display:none}
 .zone-card>summary::before{content:"›";color:var(--dim);font-size:18px;line-height:1}
@@ -1082,7 +1084,7 @@ table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>
 #group_positions[open]{padding-bottom:2px}
 #group_positions>.group-bottom{display:none}
 #group_positions details.quiet-list>summary{display:none}
-#group_positions_short.zone-card{background:none;border:1px solid var(--frame-green);margin:9px -2px 0}
+#group_positions_short.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 0}
 #runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
 #signalCounts .signal-extra-row{--chip-w:74px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
 #signalCounts .signal-extra-row>.text-only>summary{position:relative;box-sizing:border-box;min-height:54px;padding:16px var(--xr) 16px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
@@ -1306,6 +1308,26 @@ COST_PANEL_HTML = r'''<details class="edit-panel cost-manage" id="costManage">
 # 单独导出供 monitor 替换旧锚点处理器；PAGE_INTERACTION_JS 已含此块，勿重复追加。
 RULES_INTERACTION_JS = ""  # 保留导出兼容；规则跳转、hash监听和高亮计时器已删除。
 PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
+// 持仓父组常驻展开；只锁父summary，不干预长短子框或它们的收起滚动补偿。
+(function lockPositionsOpen() {
+  document.querySelectorAll('#group_positions[data-open-locked="1"]').forEach(function(card) {
+    card.open = true;
+    const summary = card.querySelector(':scope > summary');
+    if (summary) {
+      function keepOpen(event) {
+        if (event.type === 'keydown' && !['Enter', ' ', 'Spacebar'].includes(event.key)) return;
+        event.preventDefault();
+        card.open = true;
+      }
+      summary.addEventListener('click', keepOpen);
+      summary.addEventListener('keydown', keepOpen);
+    }
+    card.addEventListener('toggle', function(event) {
+      if (event.target === card && !card.open) card.open = true;
+    });
+  });
+})();
+
 // 当日/风险共用一处常驻详情区；只切换hidden，不移动内容或重算数据。
 (function bindDualCards() {
   document.querySelectorAll('.dual-row').forEach(function(row) {

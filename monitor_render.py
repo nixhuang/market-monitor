@@ -965,7 +965,7 @@ class PageRenderer:
             parts.insert(0, '<div class="cashbond-row"><span class="cb-total">'
                          '<span class="cb-total-amt">—</span>'
                          '<span class="cb-total-pnl">—</span></span>'
-                         '<span class="cb-item cb-cash"><span class="cb-name">现金</span><span class="cb-amt">—</span></span>'
+                         '<span class="cb-item cb-cash"><span class="cb-name">Cash</span><span class="cb-amt">—</span></span>'
                          '<span class="cb-item cb-bond"><span class="cb-name">固收</span><span class="cb-amt">—</span></span></div>')
             parts.insert(0, '<div class="cost-foot asset-row cost-manage"></div>')
         else:
@@ -973,8 +973,8 @@ class PageRenderer:
                                      f'group_{group["key"]}', group["label"], empty_note))
         body = "\n".join(parts)
         stats = self._context._group_stats_html(g, group, items_by_symbol, enabled)
-        # 终稿初载：统计与持仓父组展开，长/短子区折叠；无异动持仓列表静态open。
-        initial_open = ' open' if group['key'] == 'positions' else ''
+        # 持仓父组固定展开；只有长/短子区折叠，无异动持仓列表静态open。
+        initial_open = ' open data-open-locked="1"' if group['key'] == 'positions' else ''
         return (f'<details class="card group-card" id="group_{html_lib.escape(str(group["key"]), quote=True)}"{initial_open}>'
                 f'<summary class="grp"><span class="grp-name">{html_lib.escape(str(group["label"]))} ({len(g)})</span>'
                 f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
@@ -1646,7 +1646,9 @@ class PageRenderer:
                 h = _json.load(stream)
             for sym, c in (h.get("positions") or {}).items():
                 cost = (c or {}).get("cost")
-                if isinstance(cost, (int, float)) and cost > 0:
+                # 做T后的净成本可为零或负；只拒绝未知、布尔和非有限成本。
+                if (isinstance(cost, (int, float)) and not isinstance(cost, bool)
+                        and math.isfinite(cost)):
                     items[sym] = {"cost": cost, "qty": 0}
         except Exception as e:
             self._context.log(f"  ! 持仓成本种子读取失败：{e}")
