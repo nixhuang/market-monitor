@@ -113,7 +113,8 @@
     },
     "AAPL": {
       "note": "苹果",
-      "cost": 325.03
+      "cost": 325.03,
+      "hold": "long"
     }
   },
   "focus": {
