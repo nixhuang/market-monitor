@@ -2465,16 +2465,21 @@
         var crows = cl
           .map(function (x) {
             var c = x.share >= 0 ? 'up' : 'down',
-              w = mx > 0 ? Math.min((Math.abs(x.share) / mx) * 50, 50) : 0;
+              w = mx > 0 ? Math.min((Math.abs(x.share) / mx) * 50, 50) : 0,
+              targetRow = all('table.stk tr[data-symbol]').find(function (tr) { return tr.getAttribute('data-symbol') === x.sym; }),
+              targetId = targetRow && targetRow.id;
             return (
               '<li class="lv-' +
               x.lv +
               '" aria-label="占当日盈亏绝对值 ' +
               fmt1(Math.abs(x.share)) +
-              '%"><span class="cn-name"><span class="cnsym">' +
+              '%"><span class="cn-name">' +
+              (targetId ? '<a class="signal-member-jump" href="#' + esc(targetId) + '">' : '') +
+              '<span class="cnsym">' +
               esc(x.sym) +
               '</span>' +
               (x.cn ? ' <span class="cncn">' + esc(x.cn) + '</span>' : '') +
+              (targetId ? '</a>' : '') +
               '</span><span class="cv ' +
               (x.chg >= 0 ? 'up' : 'down') +
               '">' +

@@ -963,7 +963,7 @@ class PageRenderer:
                          f'<summary><span class="zone-name">短持仓 ({len(short_g)})</span>'
                          f'<span class="group-stats zone-stats">{nums}</span></summary>{short_body}</details>')
             parts.insert(0, '<div class="cashbond-row"><span class="cb-total">'
-                         '<span class="cb-total-amt">—</span><span class="cb-sep">·</span>'
+                         '<span class="cb-total-amt">—</span>'
                          '<span class="cb-total-pnl">—</span></span>'
                          '<span class="cb-item cb-cash"><span class="cb-name">现金</span><span class="cb-amt">—</span></span>'
                          '<span class="cb-item cb-bond"><span class="cb-name">固收</span><span class="cb-amt">—</span></span></div>')

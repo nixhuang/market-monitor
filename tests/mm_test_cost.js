@@ -635,6 +635,11 @@ test('仓位绿色外框与顶部编辑操作区契约',async()=>{
   assert.match(CSS,/#costManage \.ep-cash\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
   await b.enter();assert.equal(acts.hidden,false);b.exitEdit(true);assert.equal(acts.hidden,true);
 });
+test('持仓资产行金额与盈亏取消圆点并按固定自然间距排列',()=>{
+  assert.match(CSS,/#group_positions > \.cashbond-row\{[^}]*justify-content:flex-start;[^}]*gap:12px/);
+  assert.match(CSS,/#group_positions > \.cashbond-row \.cb-total\{[^}]*display:flex;[^}]*gap:12px;[^}]*white-space:nowrap/);
+  assert.doesNotMatch(CSS,/\.cb-sep/);
+});
 test('云端校验失败仅在顶部操作行提示，无备份或重试上传按钮',async()=>{
   const b=await boot({token:false}),panel=b.doc.getElementById('costManage');
   const acts=b.doc.getElementById('costActs'),notice=b.doc.getElementById('costNotice');
@@ -978,6 +983,17 @@ test('终稿四列编辑器右对齐数值，贡献列表金额百分比仍居�
   assert.match(CSS,/\.cost-contrib \.cv,\.cost-contrib \.ca\{[^}]*text-align:center/);
   assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
 });
+test('当日面板标题维持统一字号，仅面板内容文字各增加1px',()=>{
+  assert.doesNotMatch(CSS,/#dayPnlCard\s*>\s*summary\s+\.grp-name\s*\{[^}]*font-size/);
+  assert.match(CSS,/#dayPnlCard > summary \.dp-amt,#dayPnlCard > summary \.dp-pct\s*\{[^}]*font-size:\s*18px/);
+  assert.match(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.cnsym\s*\{[^}]*font-size:\s*16px/);
+  assert.match(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.cncn,[\s\S]*?\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.ca\s*\{[^}]*font-size:\s*15px/);
+  assert.match(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.signal-member-jump\s*\{[^}]*color:\s*var\(--text\)[^}]*text-decoration:\s*none[^}]*border-bottom:\s*1px dotted var\(--list-border\)/);
+  assert.doesNotMatch(CSS,/\.dual-body\s*>\s*ul\.cost-contrib\[data-owner="day"\]\s+\.signal-member-jump(?::hover|:focus-visible)/);
+  assert.doesNotMatch(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.cn-name(?::has\([^}]*\)|\s*>\s*\.signal-member-jump)/);
+  // 名称仍横向省略；容器向下多留 1px 给 inline 链接底边，负外边距抵消占位，不能增高列表行。
+  assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*overflow:hidden[^}]*padding-bottom:1px;margin-bottom:-1px/);
+});
 /* 旧六列成本表已被四列真实编辑器替代，下面为退役样式断言，不执行。 */
 /*
 test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
@@ -1025,6 +1041,16 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(CSS,/\.cost-contrib \.ca\{order:2/);assert.match(CSS,/\.cost-contrib \.cv\{order:3/);
   assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
   assert.ok(topLevel(CSS).includes('.sub .cost-state'));
+  // 手机当日贡献列表：名称轨与金额文本中心不动；盈亏比在78px轨道内居中，长值向两侧展开。
+  const mobileCostCSS=CSS.slice(CSS.indexOf('@media(max-width:600px)'));
+  assert.ok(mobileCostCSS.includes('--cost-contrib-cols:minmax(0,1.5fr) 78px 78px minmax(0,.853fr);'));
+  assert.ok(mobileCostCSS.includes('.cost-contrib li > .ca{position:relative;left:-21px;}'));
+  assert.doesNotMatch(mobileCostCSS,/\.cost-contrib li > \.cv\{text-align:right/);
+  assert.doesNotMatch(mobileCostCSS,/\.cost-contrib li > \.cv\{position:relative;left:-\d+px/);
+  assert.ok(mobileCostCSS.includes('--cost-cbar-left:4px;'));
+  assert.ok(mobileCostCSS.includes('.cost-contrib .cbar{height:12px;margin:0 8px 0 var(--cost-cbar-left);}'));
+  assert.doesNotMatch(mobileCostCSS,/\.cost-contrib \.cbar\{[^}]*margin:[^}]*-\d/);
+  assert.match(CSS,/\.cost-contrib \.cbar\{order:4;position:relative;height:7px/);
   /* 旧六列成本卡及其旧桌面/手机微调已由终稿四列编辑器替代；历史断言退役。
   assert.match(CSS,/\.cost-contrib li::before\{content:"";position:absolute;left:-9px;top:50%;\s*width:3px;height:12px;border-radius:1px;background:var\(--name-lamp,var\(--dim\)\);/);
   for(const [lv,v] of [['red','--red'],['yellow','--yellow'],['green','--green'],['gray','--text']])
@@ -1718,6 +1744,16 @@ test('成本面板JS和回归文件语法有效',()=>{
   new vm.Script(fs.readFileSync(__filename,'utf8'),{filename:'tests/mm_test_cost.js'});
 });
 
+test('当日贡献代码和中文名按实际监控行ID跳转，无目标时保留纯文本',async()=>{
+  const b=await bootCash({prepareDocument(doc){doc.getElementById('s-aaa').id='main-row-AAA';}});
+  const stockRow=b.doc.querySelectorAll('table.stk tr[data-symbol]').find(tr=>tr.getAttribute('data-symbol')==='AAA');
+  const name=b.doc.querySelector('.cost-contrib .cn-name'),link=name.querySelector('a.signal-member-jump');
+  assert.ok(stockRow);assert.equal(link.getAttribute('href'),'#'+stockRow.id);
+  assert.equal(link.querySelector('.cnsym').textContent,'AAA');assert.equal(link.querySelector('.cncn').textContent,'测试名称');
+  const legacy=await bootCash({legacySymbols:true}),legacyName=legacy.doc.querySelector('.cost-contrib .cn-name');
+  assert.equal(legacyName.querySelector('a.signal-member-jump'),null);
+  assert.match(legacyName.textContent,/AAA/);assert.match(legacyName.textContent,/测试名称/);
+});
 for(const [rawPrice,rawPrev,text,chg] of [
   ['100.0001','100','100.00','+0.00%'],['99.9999','100','100.00','+1.00%'],
   ['103.0001','101.234567','103.00','+1.00%'],['100.0001','100','100.00','-100.00%']

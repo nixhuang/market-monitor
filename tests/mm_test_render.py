@@ -419,7 +419,8 @@ check('.quiet-list{margin:8px 0;border-top:1px solid var(--quiet-rule);border-bo
       "「无异动 N 只」整体作为可点开的条目，上下各有一条细横线")
 check('id="dayPnlCard"' in html and 'class="dual-body macro-scope"' in html and 'data-owner="day"' in html,
       "当日盈亏卡与展开清单使用终稿静态dualRow骨架")
-check('.quiet-list .stk tr[id^="s-"]' not in _cost_css and 'margin-bottom:-1px' not in _cost_css,
+check('.quiet-list .stk tr[id^="s-"]' not in _cost_css
+      and not re.search(r'\.cost-contrib li\s*\{[^}]*\bborder(?:-(?:top|right|bottom|left))?\s*:', _cost_css, re.S),
       "细框不再加在清单内部的股票行／盈亏贡献的每一行上（那是条目内部，不是可展开范围）")
 check('<div class="foot">' not in html5 and 'href="#marketRiskRules"' not in html5
       and 'href="#glossary-fetch"' not in html5,

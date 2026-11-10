@@ -7088,6 +7088,8 @@ class TestPositionZones(unittest.TestCase):
         self.assertIn('BBB', short_zone)
         self.assertNotIn('AAA', short_zone)
         self.assertIn('class="cashbond-row"', out)
+        self.assertIn('<span class="cb-total-amt">—</span><span class="cb-total-pnl">—</span>', out)
+        self.assertNotIn('cb-sep', out)
         self.assertIn('class="cost-foot asset-row cost-manage"', out)
 
     def test_empty_long_zone_is_not_rendered(self):

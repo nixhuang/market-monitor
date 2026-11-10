@@ -243,7 +243,8 @@
 .cost-contrib li.lv-yellow { --name-lamp: var(--yellow); }
 .cost-contrib li.lv-green { --name-lamp: var(--green); }
 .cost-contrib li.lv-gray { --name-lamp: var(--text); }
-.cost-contrib .cn-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; order: 1; }
+/* 给底部虚线预留绘制区，负外边距抵消占位，不改贡献行高度。 */
+.cost-contrib .cn-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; order: 1; padding-bottom:1px; margin-bottom:-1px; }
 .cost-contrib .cnsym { font-weight: 600; }
 .cost-contrib .cncn { color: var(--dim); }
 .cost-contrib .ca { order: 2; }
@@ -251,6 +252,12 @@
 .cost-contrib .cv, .cost-contrib .ca { text-align: center; white-space: nowrap; justify-self: stretch; }
 .cost-contrib .cv.up, .cost-contrib .ca.up { color: var(--up); }
 .cost-contrib .cv.down, .cost-contrib .ca.down { color: var(--down); }
+#dayPnlCard > summary .dp-amt, #dayPnlCard > summary .dp-pct { font-size: 18px; }
+.dual-body > ul.cost-contrib[data-owner="day"] .cnsym { font-size: 16px; }
+.dual-body > ul.cost-contrib[data-owner="day"] .cncn,
+.dual-body > ul.cost-contrib[data-owner="day"] .cv,
+.dual-body > ul.cost-contrib[data-owner="day"] .ca { font-size: 15px; }
+.dual-body > ul.cost-contrib[data-owner="day"] .signal-member-jump { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--list-border); }
 .cost-contrib .cbar {
   order: 4;
   position: relative;
@@ -290,7 +297,7 @@
 #group_positions > .asset-row { margin: 8px 4px 4px; padding: 0; }
 #group_positions > .cashbond-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   margin: 4px 4px 8px;
   padding: 5px 8px;
@@ -307,11 +314,16 @@
   justify-content: flex-start;
   gap: 4px;
 }
-#group_positions > .cashbond-row .cb-total { flex: 0 0 auto; white-space: nowrap; }
+#group_positions > .cashbond-row .cb-total {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 12px;
+  white-space: nowrap;
+}
 .cashbond-row .cb-cash .cb-name, .cashbond-row .cb-cash .cb-amt { color: var(--cost-cash); }
 .cashbond-row .cb-bond .cb-name, .cashbond-row .cb-bond .cb-amt { color: var(--cost-bond); }
-.cb-total .cb-total-amt, .cb-total .cb-sep { color: var(--text); }
-.cb-total .cb-sep { margin: 0 1px; }
+.cb-total .cb-total-amt { color: var(--text); }
 .cb-total .cb-total-pnl.is-up { color: var(--up); }
 .cb-total .cb-total-pnl.is-down { color: var(--down); }
 #group_positions_long.zone-card > summary .zone-stats,
@@ -346,8 +358,9 @@
 .rules-body li.rule-setting { margin-left: 6px; border-left: 2px solid var(--line); padding-left: 8px; }
 @media(max-width:600px) {
   .cost-manage, .dual-body {
-    --cost-contrib-cols: minmax(0,1.16fr) 66px 66px minmax(0,.66fr);
-    --cost-cbar-left: 10.5px;
+    /* 440px基准：78px列可容纳+$9,999.9/-1234.5%；名称轨保持原宽，比例条吸收收窄。 */
+    --cost-contrib-cols: minmax(0,1.5fr) 78px 78px minmax(0,.853fr);
+    --cost-cbar-left: 4px;
   }
   .cost-edit-btn { padding: 8px 13px; font-size: 16px; line-height: 1.08; }
   .runbar .cost-edit-btn { height: 40px; }
@@ -356,7 +369,12 @@
   .cost-contrib { padding-left: 12px; }
   .cost-contrib li { font-size: 13px; line-height: 15.75px; }
   .cost-contrib li > .cn-name, .cost-contrib li > .cv, .cost-contrib li > .ca { height: 15.75px; }
-  .cost-contrib .cbar { height: 6px; }
+  /* 金额轨扩宽后左移6px，文本中心不变；盈亏比在78px轨道内居中，长值向两侧展开。 */
+  .cost-contrib li > .ca { position: relative; left: -21px; }
+  .cost-contrib .cbar {
+    height: 12px;
+    margin: 0 8px 0 var(--cost-cbar-left);
+  }
   .cost-foot { font-size: 12px; }
   #group_positions_long.zone-card > summary .zone-stats,
   #group_positions_short.zone-card > summary .zone-stats { gap: 6px; }
