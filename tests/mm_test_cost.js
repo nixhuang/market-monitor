@@ -3027,7 +3027,7 @@ test('五列原生编辑器字号与交易命中区，长代码不压入买卖�
   const row=b.doc.querySelector('[data-cost-row][data-sym="'+sym+'"]');
   assert.equal(row.querySelector('.ep-code').textContent,sym);assert.equal(row.querySelector('.ep-clear'),null);
   assert.equal(row.children[3].getAttribute('data-f'),'cost');assert.equal(row.children[4].getAttribute('data-f'),'qty');
-  assert.match(CSS,/#costManage \.ep-code\{[^}]*min-width:0;overflow:hidden;text-overflow:ellipsis;[^}]*font-size:16px/);
+  assert.match(CSS,/#costManage \.ep-code\{[^}]*min-width:max-content;overflow:visible;[^}]*font-size:16px/);
   assert.match(CSS,/#costManage \.ep-trade\{[^}]*width:58px;height:34px/);
   assert.match(CSS,/@media\(min-width:601px\)\{#costManage \.ep-editor-head,#costManage \.ep-editor-row\{grid-template-columns:58px 58px 58px 112px 90px/);
   assert.match(CSS,/#costManage \.ep-editor-head\{margin-bottom:4px;font-size:13px;color:var\(--dim\)/);

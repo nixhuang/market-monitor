@@ -59,7 +59,8 @@
 #costManage .ep-editor-row { padding: 4px 0; }
 #costManage .ep-h { font-size: 13px; color: var(--dim); }
 #costManage .ep-h:nth-child(2), #costManage .ep-h:nth-child(3) { text-align: center; }
-#costManage .ep-code { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 16px; color: var(--text); white-space: nowrap; text-align: left; }
+/* 代码保持16px/原五列轨道；跨平台字体略宽时可用空列距，不把GOOGL裁成省略号。 */
+#costManage .ep-code { min-width: max-content; overflow: visible; font-size: 16px; color: var(--text); white-space: nowrap; text-align: left; }
 #costManage .ep-trade {
   box-sizing: border-box; width: 58px; height: 34px; padding: 4px 5px;
   border: 1px solid var(--cost-edit-border); border-radius: 4px;

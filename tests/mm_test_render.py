@@ -2658,8 +2658,17 @@ const deadline = setTimeout(() => {
       const cashLabel=extra.closest('label'),cashTotal=panel.querySelector('.ep-cash-total'),bond=panel.querySelector('input[data-f="fixed_cost"]').closest('label');
       qty.value='9999.9999';const q=rect(qty),c=rect(code),e=rect(extra),b=rect(bond),t=rect(cashTotal),rr=rect(row);
       const s=getComputedStyle(qty),canvas=document.createElement('canvas'),ctx=canvas.getContext('2d');ctx.font=s.font;
+      const codeRange=document.createRange();codeRange.selectNodeContents(code);
+      const ink=codeRange.getBoundingClientRect(),buy=row.querySelector('[data-trade-action="buy"]');
+      const codeStyle=getComputedStyle(code),codeVisible=ink.right<=c.right+1||codeStyle.overflowX==='visible';
+      const codeFits=codeVisible&&ink.width>0&&ink.height>0&&codeStyle.visibility==='visible'
+        &&codeStyle.display!=='none'&&ink.left>=rr.left&&ink.top>=rr.top&&ink.bottom<=rr.bottom
+        &&ink.right<=rect(buy).left-1&&rect(buy).right<=rect(panel).right
+        &&rr.right<=rect(panel).right&&codeStyle.textOverflow!=='ellipsis';
       state.editor={panel:styles(panel),row:styles(row),head:styles(grid),headingStyles:[...grid.children].map(styles),code:styles(code),quantity:styles(qty),cashExtra:styles(extra),
-        columns:getComputedStyle(row).gridTemplateColumns.split(/\\s+/),codeText:code.textContent,codeFits:code.scrollWidth<=code.clientWidth+1,
+        columns:getComputedStyle(row).gridTemplateColumns.split(/\\s+/),codeText:code.textContent,codeFits,
+        codeInkWidth:ink.width,codeToBuyGap:rect(buy).left-ink.right,codeOverflow:codeStyle.overflowX,
+        codeFontFamily:codeStyle.fontFamily,codeScrollWidth:code.scrollWidth,codeClientWidth:code.clientWidth,
         rightAligned:Math.abs(q.right-e.right)<1,quantityTextFits:ctx.measureText(qty.value).width<=q.width-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight)-2,
         buttonsSameRow:[...row.querySelectorAll('[data-trade-action]')].every(x=>Math.abs(rect(x).top-(rr.top+rr.bottom-rect(x).height)/2)<=1),
         bondTotalSameRow:Math.abs((b.top+b.bottom)-(t.top+t.bottom))<=2,
