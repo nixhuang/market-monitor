@@ -2021,7 +2021,7 @@
       var fields = [
         ['现金 1', 'USD', 'cash', cashFirst(DATA)],
         ['现金 2', 'USD', 'cash_extra', DATA.cash_extra],
-        ['固收成本', 'BOND', 'fixed_cost', fixedCost],
+        ['固收', 'BOND', 'fixed_cost', fixedCost],
       ]
         .map(function (f) {
           return '<label><span>' + f[0] + '</span>' + inp(f[1], f[2], f[3] ? vt(f[3]) : '', f[0]) + '</label>';
@@ -2041,9 +2041,9 @@
         }).join('') +
         '</div><div class="ep-cash">' +
         fields +
-        '</div>' +
-        '<div class="ep-cash-total">现金合计 USD$' +
+        '<div class="ep-cash-total">现金合计 $' +
         trim4(cash) +
+        '</div>' +
         '</div>'
       );
     }

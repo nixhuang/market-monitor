@@ -1528,9 +1528,11 @@ for(const [name,first,second,total] of [
   assert.equal(cashInput(b,'cash').value,'');assert.equal(cashInput(b,'cash_extra').value,'');
   b.edit('USD','cash',first);b.edit('USD','cash_extra',second);await b.tick(16);
   assertCash(b,Number(first),Number(second),total);
-  assert.equal(b.doc.querySelector('.ep-cash-total').textContent,'现金合计 USD$'+String(total));
+  const totalNode=b.doc.querySelector('.ep-cash-total');
+  assert.equal(totalNode.textContent,'现金合计 $'+String(total));
+  assert.equal(totalNode.parentNode.className,'ep-cash');
   assert.equal(b.doc.querySelectorAll('.ep-cash label').length,3);
-  assert.deepEqual(b.doc.querySelectorAll('.ep-cash label').map(el=>el.querySelector('span').textContent),['现金 1','现金 2','固收成本']);
+  assert.deepEqual(b.doc.querySelectorAll('.ep-cash label').map(el=>el.querySelector('span').textContent),['现金 1','现金 2','固收']);
   await b.save();assert.equal(b.state().editing,false);assert.equal(b.doc.getElementById('costManage').classList.contains('cost-edit-open'),false);
   assert.equal(b.doc.querySelector('.cashbond-row .cb-cash .cb-amt').textContent,'$'+String(Math.round(total)));
   assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
@@ -2713,7 +2715,7 @@ test('混合块复核：非法草稿期间旧ACK入口不读写也不吞错误',
 test('固收单框DOM仅三项，打开和未编辑保存不改变旧云两字段',async()=>{
   const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
   const labels=b.doc.querySelectorAll('.ep-cash label');
-  assert.deepEqual(labels.map(el=>el.querySelector('span').textContent),['现金 1','现金 2','固收成本']);
+  assert.deepEqual(labels.map(el=>el.querySelector('span').textContent),['现金 1','现金 2','固收']);
   assert.equal(b.doc.querySelectorAll('input[data-sym="BOND"]').length,1);
   assert.equal(b.doc.querySelector('input[data-f="fixed"]'),null);
   assert.equal(b.doc.querySelector('input[data-f="fixed_cost"]').value,'15');
