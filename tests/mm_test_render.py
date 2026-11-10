@@ -2384,6 +2384,7 @@ const deadline = setTimeout(() => {
         const cb=cashbond.getBoundingClientRect();
         const sum=cashbond.querySelector('.cb-total'),sb=sum.getBoundingClientRect();
         const members=[...cashbond.children].map(e=>e.getBoundingClientRect());
+        const memberGaps=members.slice(1).map((r,i)=>+(r.left-members[i].right).toFixed(1));
         return {exists:true,
           inRunbar:!!(bar&&bar.contains(btn)),
           afterRefresh:!!(refresh&&(refresh.compareDocumentPosition(btn)&Node.DOCUMENT_POSITION_FOLLOWING)),
@@ -2392,8 +2393,7 @@ const deadline = setTimeout(() => {
           height:+b.height.toFixed(1),
           headH:+cb.height.toFixed(1),
           sumSameRow:members.every(r=>Math.abs((r.top+r.bottom)/2-(sb.top+sb.bottom)/2)<=2),
-          sumLeftGap:+(sb.left-cb.left).toFixed(1),
-          bondRightGap:+(cb.right-cashbond.querySelector('.cb-bond').getBoundingClientRect().right).toFixed(1),
+          sumLeftGap:+(sb.left-cb.left).toFixed(1),memberGaps,
           order:[...cashbond.children].map(e=>e.className),
           total:cashbond.querySelector('.cb-total-amt').textContent,
           editorHidden:getComputedStyle(card).display==='none',
@@ -2409,7 +2409,9 @@ const deadline = setTimeout(() => {
           && edit.exists && edit.inRunbar && edit.afterRefresh && edit.sameRowAsRefresh
           && edit.gapToRefresh>=8 && edit.gapToRefresh<=12 && edit.height>=24 && !edit.overflow
           && edit.radius==='7px' && edit.fontSize===(width<=600?'16px':'13px')
-          && edit.sumSameRow && edit.headH<=56 && edit.sumLeftGap===8 && edit.bondRightGap===8
+          // 金额、现金、固收按同一行12px自然间隔；不再要求固收贴右侧制造空隙。
+          && edit.sumSameRow && edit.headH<=56 && edit.sumLeftGap===8
+          && edit.memberGaps.length===2 && edit.memberGaps.every(g=>Math.abs(g-12)<=0.5)
           && JSON.stringify(edit.order)===JSON.stringify(['cb-total','cb-item cb-cash','cb-item cb-bond'])
           && edit.total.replace(/[^0-9]/g,'')==='4940' && edit.editorHidden && edit.assetVisible,
         name:width+'px52周条几何和数值不变；顶栏编辑按钮、真实资产4940及总额/现金/固收顺序',actual:{bars,edit}});
