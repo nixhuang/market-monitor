@@ -288,7 +288,8 @@ kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
 details.set{margin-top:4px}
 details.set summary{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;padding:4px 0;outline:none}
 details.set[open] summary{margin-bottom:8px}
-.setsec{font-size:12px;color:#5f6672;margin:8px 0 2px;letter-spacing:.4px}
+/* 参数分类标题（布林带/个股/宏观/行情源开关）：原来 12px 深灰几乎看不见，改 14px 加粗浅蓝，与卡片标题同色系 */
+.setsec{font-size:14px;font-weight:600;color:var(--head-blue,#bfd5ff);margin:8px 0 2px;letter-spacing:.4px}
 details.fold{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:0 12px;margin-bottom:10px}
 details.fold>summary{font-size:15px;color:var(--dim);font-weight:600;cursor:pointer;
@@ -356,7 +357,7 @@ details.set[open]>summary{margin-bottom:2px}
 #btnSaveRules{margin-top:0}
 /* 手机设置页：所有可见文字不小于「监测开启」按钮的 13px。 */
 @media(max-width:600px){
-.sub,.sub a,.note,.monitor-note,.savebar .sp,.pager,.setsec,.subsec,kbd{font-size:13px}
+.sub,.sub a,.note,.monitor-note,.savebar .sp,.pager,.subsec,kbd{font-size:13px}
 #marketRiskRules h5{font-size:15px}
 }
 </style>

@@ -308,7 +308,7 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
     && /\.edit-group>summary\{color:var\(--text\);font-size:15px/.test(src),
     '折叠标题字号统一 15px（手机桌面同档）');
   check(/\.setrow label\{flex:1;font-size:13px/.test(src)
-    && /\.setsec\{font-size:12px/.test(src) && /\.subsec\{font-size:12px/.test(src)
+    && /\.setsec\{font-size:14px;font-weight:600;color:var\(--head-blue/.test(src) && /\.subsec\{font-size:12px/.test(src)
     && /\.note\{color:var\(--dim\);font-size:12\.5px/.test(src)
     && /h2\{font-size:14px/.test(src),
     '设置项文字加大：label 13px、分节小字 12px、说明 12.5px、小节标题 14px');
