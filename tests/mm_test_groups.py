@@ -7598,7 +7598,8 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             # 折叠态绝对不占高度：移动端内核不重排时用 CSS 兜底
             self.assertIn('#signalCounts .earnings-week:not([open])>*:not(summary){display:none}', monitor.PAGE_CSS)
             self.assertIn('#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text)', monitor.PAGE_CSS)
-            self.assertIn('#signalCounts td{padding:6.3px 5px;', monitor.PAGE_CSS)  # 统计面板压缩上下留白
+            self.assertIn('#signalCounts td{padding:6.25px 5px;', monitor.PAGE_CSS)  # 统计面板压缩上下留白（每排合计51px）
+            self.assertIn('#signalCounts tr:not(.signal-members-row)>td{height:51px}', monitor.PAGE_CSS)
             self.assertIn('.signal-count-toggle{box-sizing:border-box;height:38px;width:44px;', monitor.PAGE_CSS)  # 数字胶囊扁长方形
             self.assertIn('.signal-filter-toggle{box-sizing:border-box;height:38px;', monitor.PAGE_CSS)  # 与信号名胶囊同高对齐
             # 财报的灯跟统计表其它栏目一致：行首圆点（marker），不再在行尾挂一个 stat-dot

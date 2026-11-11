@@ -640,7 +640,9 @@ tr:first-child td{border-top:none}
 #signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-earn{color:var(--text)}
 #signalCounts table{table-layout:fixed}
-#signalCounts td{padding:6.3px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
+#signalCounts td{padding:6.25px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
+/* 统计面板每一排统一 51px：胶囊 38 + 上下内边距 12.5 + 合并边线的一半 0.5 = 51；首排没有上边线，用 height 补齐 */
+#signalCounts tr:not(.signal-members-row)>td{height:51px}
 #signalCounts td.num{text-align:center}
 #signalCounts td:first-child{width:26%}
 #signalCounts td:first-child:not([colspan]){font-weight:600}
@@ -713,7 +715,7 @@ tr:first-child td{border-top:none}
 #signalCounts .text-only ul{margin:0 0 10px;padding-left:30px}
 #signalCounts .text-only li{margin:8px 0;overflow-wrap:anywhere;color:var(--text);font-size:13px}
 /* 左侧紫灯/财报是多选按钮，必须盖过后绘制的整行 summary 命中区。 */
-#signalCounts .signal-extra-row>.signal-filter-toggle{position:absolute;z-index:1;top:8px;left:5px;width:var(--chip-w);padding:0;justify-content:center;text-align:center;font-weight:600}
+#signalCounts .signal-extra-row>.signal-filter-toggle{position:absolute;z-index:1;top:6px;left:5px;width:var(--chip-w);padding:0;justify-content:center;text-align:center;font-weight:600}
 #signalCounts .signal-extra-row>.text-only{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
 #signalCounts .signal-extra-row>.earnings-week{display:block;margin:0;padding:0;border:0;border-radius:0;background:transparent}
 #signalCounts .signal-extra-row>.text-only[open]>summary{border-bottom:0}
@@ -968,7 +970,7 @@ tr.gray td{color:var(--dim)}
 .market-risk-badge[data-level="yellow"]{color:var(--lamp-yellow)}
 .dp-head .dp-amt{font-size:17px}
 .dp-head .dp-pct{font-size:17px}
-#signalCounts .signal-extra-row.pnl-extra>.pnl-chip{position:absolute;top:8px;left:5px;width:var(--chip-w);box-sizing:border-box;height:38px;max-width:100%;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;text-align:center;font:inherit;font-size:14px;font-weight:600;line-height:1.15;color:var(--text);background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:default;white-space:normal}
+#signalCounts .signal-extra-row.pnl-extra>.pnl-chip{position:absolute;top:6px;left:5px;width:var(--chip-w);box-sizing:border-box;height:38px;max-width:100%;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;text-align:center;font:inherit;font-size:14px;font-weight:600;line-height:1.15;color:var(--text);background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:default;white-space:normal}
 #signalCounts .pnl-extra .text-only ul.signal-member-list{margin:0 0 10px;padding-left:2px;list-style:none}
 #signalCounts .pnl-extra .text-only ul.signal-member-list>li{list-style:none}
 #signalCounts .pnl-extra .text-only ul.signal-member-list>li::before{content:"";display:inline-block;width:3px;height:12px;border-radius:1px;background:var(--name-lamp,var(--dim));margin-right:6px;vertical-align:-1px}
@@ -1094,8 +1096,8 @@ table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>
 #group_positions_short.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 0}
 #runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
 #signalCounts .signal-extra-row{--chip-w:74px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
-#signalCounts .signal-extra-row>.text-only>summary{position:relative;box-sizing:border-box;min-height:54px;padding:16px var(--xr) 16px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
-#signalCounts .signal-extra-row>.earnings-week>summary{position:relative;box-sizing:border-box;min-height:54px;padding:16px var(--xr) 16px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
+#signalCounts .signal-extra-row>.text-only>summary{position:relative;box-sizing:border-box;min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
+#signalCounts .signal-extra-row>.earnings-week>summary{position:relative;box-sizing:border-box;min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
 #signalCounts .signal-extra-row>.text-only[open]>summary::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--list-border);pointer-events:none}
 #signalCounts .signal-extra-row>.earnings-week[open]>summary::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--list-border);pointer-events:none}
 #signalCounts .signal-extra-row>.text-only>summary~*{margin-left:5px;margin-right:var(--xr)}
@@ -1122,10 +1124,12 @@ body{padding-left:5px;padding-right:5px}
 .group-card{padding-top:2px}
 .macro-card{padding-top:2px}
 .group-card:not([open]){padding-bottom:2px;min-height:63px}
-.macro-card:not([open]){padding-bottom:2px;min-height:63px}
-.zone-card>summary{line-height:22.5px;box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0}
+.macro-card:not([open]){padding-bottom:2px;min-height:53px}
+.day-pnl-card:not([open]){padding-bottom:2px;min-height:53px}   /* 当日与风险折叠态同为53，比其它分组(63)矮；放在 .group-card 规则之后以覆盖 */
+.zone-card>summary{line-height:22.5px;box-sizing:border-box;min-height:48px;padding-top:0;padding-bottom:0}
 .group-card>summary.grp{line-height:24px;box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0;font-size:18px}
-.macro-card>summary.grp{line-height:24px;box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0;font-size:18px}
+.macro-card>summary.grp{line-height:24px;box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0;font-size:18px}
+.day-pnl-card>summary.grp{line-height:24px;box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0;font-size:18px}
 .group-card>summary .group-stats{line-height:24px;font-size:16px;gap:6px}
 .macro-card>summary .group-stats{line-height:24px;font-size:16px;gap:6px}
 .zone-card>summary .group-stats{font-size:14px;line-height:22.5px;gap:6px}
@@ -1203,8 +1207,9 @@ table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 .group-card:not([open]){padding-bottom:2px}
 .macro-card:not([open]){padding-bottom:2px}
 .group-card>summary.grp{box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
-.macro-card>summary.grp{box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
-.zone-card>summary{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}
+.macro-card>summary.grp{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}
+.day-pnl-card>summary.grp{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}
+.zone-card>summary{box-sizing:border-box;height:48px;padding-top:0;padding-bottom:0}
 .sub{padding-left:var(--head-inset);padding-right:var(--head-inset)}
 .runbar{padding-left:var(--head-inset);padding-right:var(--head-inset)}
 .statusrow{padding-left:var(--head-inset);padding-right:var(--head-inset)}

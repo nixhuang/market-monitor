@@ -334,11 +334,11 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('--list-border:#465e87', css)
         self.assertNotIn('background:#121a27', css)
         self.assertIn('#signalCounts .signal-extra-row{--chip-w:74px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}', css)
-        # 两档均74px；三条统计行统一54px内容+1px分隔，展开不改变标题高度。
+        # 两档均74px；三条统计行统一50px内容+1px分隔=51px（与表格各排一致），展开不改变标题高度。
         mobile = css.split('@media(max-width:600px){', 1)[1].split('@media(min-width:601px){', 1)[0]
         self.assertIn('#signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}', mobile)
         for kind in ('text-only', 'earnings-week'):
-            self.assertIn(f'#signalCounts .signal-extra-row>.{kind}>summary{{position:relative;box-sizing:border-box;min-height:54px;', css)
+            self.assertIn(f'#signalCounts .signal-extra-row>.{kind}>summary{{position:relative;box-sizing:border-box;min-height:50px;', css)
         self.assertNotIn('background:#182130', css)
         # 展开的分组卡：整卡套外框，标题不再铺底色、不再画左条
         for selector in ('.group-card[open]:where(:not(#signalCounts,#costManage))', '.macro-card[open]'):
@@ -378,11 +378,20 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('body{padding-left:5px;padding-right:5px}', mobile)
         self.assertIn('padding:env(safe-area-inset-top) 17px 40px 15px}', css)
         self.assertIn('.wrap{max-width:718px;margin:0 auto}', css)
-        self.assertIn('padding-bottom:2px;min-height:63px}', css)
-        self.assertIn('box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0', css)
+        # 折叠整卡：普通分组63；当日与风险为53（summary 47 + 内边距2+2 + 边框1+1）
+        self.assertIn('.group-card:not([open]){padding-bottom:2px;min-height:63px}', css)
+        self.assertIn('.macro-card:not([open]){padding-bottom:2px;min-height:53px}', css)
+        self.assertIn('.day-pnl-card:not([open]){padding-bottom:2px;min-height:53px}', css)
+        self.assertIn('.group-card>summary.grp{line-height:24px;box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0;font-size:18px}', mobile)
+        for card in ('macro-card', 'day-pnl-card'):
+            self.assertIn(f'.{card}>summary.grp{{line-height:24px;box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0;font-size:18px}}', mobile)
         for card in ('group-card','macro-card'):
-            self.assertIn(f'.{card}>summary.grp{{line-height:24px;box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0;font-size:18px}}', mobile)
             self.assertIn(f'.{card}>summary .group-stats{{line-height:24px;font-size:16px;gap:6px}}', mobile)
+        # 长/短持仓折叠框 50（summary 48 + 边框2）；桌面同值
+        self.assertIn('.zone-card>summary{line-height:22.5px;box-sizing:border-box;min-height:48px;padding-top:0;padding-bottom:0}', mobile)
+        self.assertIn('.zone-card>summary{box-sizing:border-box;height:48px;padding-top:0;padding-bottom:0}', css)
+        for card in ('macro-card', 'day-pnl-card'):
+            self.assertIn(f'.{card}>summary.grp{{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}}', css)
         self.assertIn('.stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}', mobile)
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.20)', css)
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
