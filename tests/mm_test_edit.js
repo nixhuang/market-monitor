@@ -307,6 +307,7 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
   check(/details\.fold>summary\{font-size:15px/.test(src)
     && /\.edit-group>summary\{color:var\(--text\);font-size:15px/.test(src),
     '折叠标题字号统一 15px（手机桌面同档）');
+  check(/\.setsec::after\{content:"";flex:1;height:1px/.test(src)&&/\.setsec\{display:flex;align-items:center/.test(src), '参数分类标题右侧有分隔线');
   check(/\.setrow label\{flex:1;font-size:13px/.test(src)
     && /\.setsec\{font-size:14px;font-weight:600;color:var\(--head-blue/.test(src) && /\.subsec\{font-size:12px/.test(src)
     && /\.note\{color:var\(--dim\);font-size:12\.5px/.test(src)

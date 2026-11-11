@@ -290,6 +290,9 @@ details.set summary{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;
 details.set[open] summary{margin-bottom:8px}
 /* 参数分类标题（布林带/个股/宏观/行情源开关）：原来 12px 深灰几乎看不见，改 14px 加粗浅蓝，与卡片标题同色系 */
 .setsec{font-size:14px;font-weight:600;color:var(--head-blue,#bfd5ff);margin:8px 0 2px;letter-spacing:.4px}
+/* 分类标题右侧接一条分隔线，延伸到行尾 */
+.setsec{display:flex;align-items:center;gap:10px}
+.setsec::after{content:"";flex:1;height:1px;background:rgba(139,147,161,.4)}
 details.fold{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:0 12px;margin-bottom:10px}
 details.fold>summary{font-size:15px;color:var(--dim);font-weight:600;cursor:pointer;
