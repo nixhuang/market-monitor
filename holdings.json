@@ -114,6 +114,7 @@
     "AAPL": {
       "note": "苹果",
       "cost": 325.03,
+      "hold": "long",
       "trigger": 315
     }
   },
