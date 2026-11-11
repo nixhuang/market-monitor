@@ -322,12 +322,12 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
   check(/details\.set summary\{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;/.test(src)
     && /details\.set>summary\{box-sizing:border-box;height:46px;display:flex;/.test(src),
     '参数开关「布林 / 均线 / …」15px 蓝色 600 粗细，与「显示与交互」字号字重同高全部一致');
-  check(/<div class="card" id="displayCard">\s*<h2>显示与交互<\/h2>/.test(src)&&/<div class="card" id="dcaCard">\s*<h2>定投提醒<\/h2>/.test(src)
+  check(/<div class="set-block" id="displayCard">\s*<div class="set-title">显示与交互<\/div>/.test(src)&&/<div class="card" id="dcaCard">\s*<h2>定投提醒<\/h2>/.test(src)
     &&!/<details[^>]*id="(?:displayCard|dcaCard)"/.test(src), '「显示与交互」「定投提醒」不再折叠，直接显示');
   check(src.includes('.dca-grid,.dca-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}')&&
     /<div class="dca-grid">[\s\S]*set_dca_start[\s\S]*set_dca_every[\s\S]*<\/div>\s*<div class="dca-actions">\s*<button id="btnClearDca">[^<]*<\/button>\s*<button class="primary" id="btnSaveDca">/.test(src),
     '定投两排：第一排起点日与间隔，第二排保存与关闭');
-  check(/button\.danger\{color:var\(--lamp-red,#ff8580\)/.test(src), '「清除本机令牌」改浅红字，深色底上看得清');
+  check(/button\.danger\{color:#ffb3ad;font-weight:600;border-color:#ff8580;background:rgba\(255,133,128,\.14\)\}/.test(src), '「清除本机令牌」亮粉红加粗字+红描边+淡红底，深色底上看得清');
   check(/\.sub\{color:var\(--dim\);font-size:12\.5px;margin-bottom:4px;/.test(src)
     && /#msg\{font-size:13px;min-height:20px;margin:0 2px 4px;/.test(src),
     '回看板按钮到「规则参数」卡之间的空隙收窄（46 → 28px）');

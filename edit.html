@@ -339,7 +339,10 @@ details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:c
 .token-tools{margin:8px 0 0}
 .token-tools button{white-space:nowrap}
 /* 红色文字在深色按钮底上对比不足：「清除本机令牌」改用浅红 --lamp-red */
-button.danger{color:var(--lamp-red,#ff8580);border-color:rgba(255,133,128,.55)}
+button.danger{color:#ffb3ad;font-weight:600;border-color:#ff8580;background:rgba(255,133,128,.14)}
+/* 「显示与交互」与「布林 / 均线…」同级：同款蓝色 15px 加粗标题，不再包一层卡片框（不折叠，所以没有三角） */
+.set-block{margin-top:4px}
+.set-title{box-sizing:border-box;height:34px;display:flex;align-items:center;padding-left:18px;font-size:15px;font-weight:600;color:#6ba3f0}
 /* 定投提醒：两排放下——第一排起点日与间隔各占一半，第二排两个按钮等宽 */
 .dca-grid,.dca-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .dca-actions{margin-top:10px}
@@ -467,8 +470,8 @@ details.set[open]>summary{margin-bottom:2px}
           <select id="set_use_realtime"><option value="1">开</option><option value="0">关</option></select></div>
       </div>
     </details>
-    <div class="card" id="displayCard">
-      <h2>显示与交互</h2>
+    <div class="set-block" id="displayCard">
+      <div class="set-title">显示与交互</div>
       <div class="setgrid">
         <div class="setrow"><label>统计明细单组展开</label>
           <select id="set_signal_single_open"><option value="1">开</option><option value="0">关</option></select></div>
