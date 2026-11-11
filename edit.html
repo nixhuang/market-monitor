@@ -26,8 +26,8 @@ h1{font-size:19px;margin:14px 0 4px;font-weight:600}
 .sub a{color:#6ba3f0;text-decoration:none}
 /* 「← 回看板」原来只是一行 12px 的普通链接，手机上点不到。单独放大成一颗和页面按钮同高
    （约 37px）的可点块：字号 12→15px、加内边距，配色沿用 .sub 的链接蓝，不改文案和跳转。 */
-/* 顶栏：「← 回看板」在左，「清除本机令牌」在右，同一排 */
-.top-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 8px}
+/* 顶栏：「← 回看板」 */
+.top-bar{display:flex;align-items:center;gap:8px;margin:8px 0 8px}
 .sub a.back-board{display:inline-block;margin-top:0;padding:9px 16px;font-size:15px;
   background:#232833;border:1px solid #333a47;border-radius:8px}
 .sub a.back-board:hover{background:#2b303c}
@@ -342,8 +342,9 @@ details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:c
 #marketRiskRules>summary{color:var(--head-blue,#bfd5ff)}
 #marketRiskRules[open]{padding-bottom:8px}
 /* 令牌两个按钮同排不换行，字号按普通按钮 14px；生成的链接 13px。 */
-.top-bar button{white-space:nowrap;flex:none}
-.top-bar button.danger{padding:5px 8px;font-size:13px;border-radius:7px}
+.token-tools{margin:8px 0 0}
+.token-tools button{white-space:nowrap}
+.token-tools button.danger{padding:6px 12px;font-size:13px;border-radius:7px}
 /* 红色文字在深色按钮底上对比不足：「清除本机令牌」改用浅红 --lamp-red */
 button.danger{color:#c9433d;font-weight:500}   /* 底色/边框沿用普通灰色按钮，只把字改成暗红 */
 /* 「显示与交互」与「布林 / 均线…」同级：同款蓝色 15px 加粗标题，不再包一层卡片框（不折叠，所以没有三角） */
@@ -386,7 +387,6 @@ details.set[open]>summary{margin-bottom:2px}
 <h1>编辑自选清单</h1>
 <div class="sub top-bar">
   <a class="back-board" href="./index.html">← 回看板</a>
-  <button id="btnWipe" class="danger">清除本机令牌</button>
 </div>
 
 <div id="msg"></div>
@@ -529,6 +529,10 @@ details.set[open]>summary{margin-bottom:2px}
       <button id="btnClearDca">关闭定投提醒</button>
       <button class="primary" id="btnSaveDca">保存定投提醒</button>
     </div>
+  </div>
+
+  <div class="row token-tools">
+    <button id="btnWipe" class="danger">清除本机令牌</button>
   </div>
 
   <div class="group-tools" id="rulesTools"><h2>规则与说明</h2></div>

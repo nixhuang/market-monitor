@@ -327,7 +327,7 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
   check(src.includes('.dca-grid,.dca-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}')&&
     /<div class="dca-grid">[\s\S]*set_dca_start[\s\S]*set_dca_every[\s\S]*<\/div>\s*<div class="dca-actions">\s*<button id="btnClearDca">[^<]*<\/button>\s*<button class="primary" id="btnSaveDca">/.test(src),
     '定投两排：第一排起点日与间隔，第二排保存与关闭');
-  check(/button\.danger\{color:#c9433d;font-weight:500\}/.test(src)&&!/button\.danger\{[^}]*(?:background|border)/.test(src)&&src.includes('.top-bar button.danger{padding:5px 8px;font-size:13px'), '「清除本机令牌」灰色按钮底色（沿用普通按钮）、暗红字#c9433d、13px小按钮');
+  check(/button\.danger\{color:#c9433d;font-weight:500\}/.test(src)&&/button\.danger\{color:#c9433d;font-weight:500\}[^\n]*\n/.test(src)&&src.includes('.token-tools button.danger{padding:6px 12px;font-size:13px')&&/<div class="row token-tools">\s*<button id="btnWipe" class="danger">清除本机令牌<\/button>\s*<\/div>\s*<div class="group-tools" id="rulesTools">/.test(src)&&src.indexOf('id="dcaCard"')<src.indexOf('id="btnWipe"'), '「清除本机令牌」放回定投提醒下面，灰色按钮底色、暗红字#c9433d、13px小按钮');
   check(/\.sub\{color:var\(--dim\);font-size:12\.5px;margin-bottom:4px;/.test(src)
     && /#msg\{font-size:13px;margin:0 2px 8px;/.test(src)&&src.includes('#msg:empty{display:none}'),
     '回看板按钮到「规则参数」卡之间的空隙收窄（46 → 28px）');

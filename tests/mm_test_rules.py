@@ -636,13 +636,14 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
     def test_settings_mobile_text_never_below_monitor_toggle_and_tools_share_row(self):
         source = (ROOT / 'edit.html').read_text(encoding='utf-8')
         self.assertNotIn('手机上也要改', source)
-        # 顶栏：回看板在左、清除本机令牌在右，同一排；原说明句已删除
-        self.assertRegex(source, r'<div class="sub top-bar">\s*<a class="back-board" href="\./index\.html">← 回看板</a>\s*<button id="btnWipe" class="danger">清除本机令牌</button>\s*</div>')
+        # 顶栏只有回看板；清除本机令牌在定投提醒下面；原说明句已删除
+        self.assertRegex(source, r'<div class="sub top-bar">\s*<a class="back-board" href="\./index\.html">← 回看板</a>\s*</div>')
+        self.assertRegex(source, r'<div class="row token-tools">\s*<button id="btnWipe" class="danger">清除本机令牌</button>\s*</div>')
         self.assertNotIn('自动重跑看板', source.split('<script', 1)[0].split('<h1>', 1)[1])
         self.assertNotIn('btnLink', source)       # 手机用的带令牌链接已删除
         self.assertNotIn('importCard', source)    # CSV/EBK 导入已删除
         self.assertNotIn('list-import', source)
-        self.assertIn('.top-bar button{white-space:nowrap;flex:none}', source)
+        self.assertIn('.token-tools button{white-space:nowrap}', source)
         mobile = source[source.rindex('@media(max-width:600px){\n.sub,'):]
         for selector in ('.sub', '.note', '.monitor-note', '.pager', '.subsec', 'kbd'):
             self.assertIn(selector, mobile.split('}', 1)[0])
