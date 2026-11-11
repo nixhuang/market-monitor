@@ -6889,7 +6889,7 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('function revealSignalPanel(panel) {', js)
         # 展开的清单/分组从屏幕 1/6 高度线开始（上面留给 iOS 灵动岛）
         self.assertIn('function topReserve() {', js)
-        self.assertIn('return Math.round(vh / 8);', js)
+        self.assertIn('return Math.round(vh * 0.075);', js)
         self.assertIn('window.scrollBy({top: dy, behavior: "smooth"});', js)
 
     def test_collapse_button_css_keeps_full_width_and_positions_tinted_strip(self):

@@ -692,7 +692,7 @@ click(focus);focus.open=true;focus.top=40;flush();
 assert.equal(cards[1].open,false);assert.equal(cards[2].open,false);assert.equal(cards[4].open,false);
 assert.equal(cards[0].open,true);assert.equal(focus.open,true);
 assert.equal(ctx.scrolled,-60);     // 点开的这组被上拽后拉回原位（top 100→40 补 -60）
-assert.equal(ctx.smooth,-35);       // 再平滑滚到 1/8 高度线：屏高600→线在75，当前top 40 → 补 -35
+assert.equal(ctx.smooth,-5);        // 再平滑滚到 7.5% 高度线：屏高600→线在45，当前top 40 → 补 +5 的反向 -5（45-40=5 → top-线=-5）
 // 点的是持仓父卡标题（固定展开）：不参与
 cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,true);
 // 点击后其实是在收起：不动其它

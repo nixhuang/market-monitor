@@ -1566,14 +1566,14 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
     });
   }, {once: true});
 })();
-// 屏幕最上面 1/8 留给 iOS 灵动岛/状态栏：展开的分组、清单一律从 1/8 高度线开始显示，不再贴着屏幕顶边。
-// （2026-11-11 由 1/6 上调到 1/8：用户要求再往上走一些；要改只改这一个除数。）
+// 屏幕最上面 7.5% 留给 iOS 灵动岛/状态栏：展开的分组、清单一律从这条线开始显示，不再贴着屏幕顶边。
+// （2026-11-11 先 1/6=16.7%，再 1/8=12.5%，最后按用户要求「在 1/8 基础上再往上提 4 成」= 12.5%×0.6 = 7.5%；要改只改这一个系数。）
 function topReserve() {
   var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-  return Math.round(vh / 8);
+  return Math.round(vh * 0.075);
 }
 function revealSignalPanel(panel) {
-  // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从 1/8 线开始对齐。
+  // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从顶部 7.5% 线开始对齐。
   var pad = 12;
   var top = topReserve();
   var vh = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -1583,7 +1583,7 @@ function revealSignalPanel(panel) {
   var y = window.pageYOffset || document.documentElement.scrollTop || 0;
   var target = (rect.height + top + pad <= vh && rect.bottom > vh - pad)
     ? y + rect.bottom - (vh - pad)                          // 整块往上推
-    : y + rect.top - top;                                   // 其余：从 1/8 线开始看起
+    : y + rect.top - top;                                   // 其余：从顶部 7.5% 线开始看起
   window.scrollTo({ top: target < 0 ? 0 : target, behavior: "smooth" });
 }
 function normalizeSignalCard(card) {
@@ -1652,7 +1652,7 @@ document.addEventListener("click", function(event) {
     document.querySelectorAll("details[id^='group_'][open]:not([data-open-locked])").forEach(function(other) {
       if (other !== d) other.open = false;
     });
-    // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到 1/8 高度线（上面留给灵动岛）。
+    // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到顶部 7.5% 高度线（上面留给灵动岛）。
     const delta = d.getBoundingClientRect().top - topBefore;
     if (Math.abs(delta) > 1) window.scrollBy(0, delta);
     const dy = d.getBoundingClientRect().top - topReserve();
