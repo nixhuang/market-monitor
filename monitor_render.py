@@ -774,22 +774,9 @@ class PageRenderer:
         scope = value["scope"]
         caption = (f'{scope}低 {self._context.fmt(low)}，本轮价 {self._context.fmt(price)} 位于区间 {pos:.1f}%，'
                    f'{scope}高 {self._context.fmt(high)}；{value["from"]} 至 {value["to"]} 日线高低价')
-        # 成本价：紫方块是本轮价，黄竖线是成本价，形状区分开。
-        # 成本价落在 52 周区间外时不再按 0~100% 夹取了事：竖线贴到对应端点，
-        # 再加一个朝外的小箭头（class out-lo / out-hi），读屏标签里写清实际数值与方向
-        cost_html = ""
-        if valid(d.get("cost")):
-            cost = d["cost"]
-            cpos = (cost - low) / (high - low) * 100
-            if cpos < 0:
-                cost_html = '<span class="range52-cost out-lo"></span>'
-                caption += f'；成本价 {self._context.fmt(cost)} 低于{scope}低点 {self._context.fmt(low)}'
-            elif cpos > 100:
-                cost_html = '<span class="range52-cost out-hi"></span>'
-                caption += f'；成本价 {self._context.fmt(cost)} 高于{scope}高点 {self._context.fmt(high)}'
-            else:
-                cost_html = f'<span class="range52-cost" style="left:{cpos:.1f}%"></span>'
-                caption += f'；成本价 {self._context.fmt(cost)} 位于区间 {cpos:.1f}%'
+        # 成本价黄线不在服务端画：成本只在首页「编辑」里维护（云端 position-costs.json），
+        # holdings.json 里的 cost 只是首次打开的兜底种子，会过期。这里画出来的话，页面刚打开时会
+        # 先显示旧位置、等脚本读到云端再跳。统一由 cost_panel.js 按首页编辑算出的成本绘制。
         # 两端第二行＝从本轮价到低／高点的变化幅度，以本轮价为基数；不是区间位置。
         # 全组生效（不再只有持仓），仅展示，不参与报灯、评分或折叠判定；等于端点时写 0.0%，不带负号。
         low_gap = (low / price - 1) * 100
@@ -804,8 +791,7 @@ class PageRenderer:
                 f'<div class="range52-rail" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
                 f'<span class="range52-lo" aria-hidden="true">{self._context.fmt(low)}{low_gap_html}</span>'
                 f'<div class="range52-track">'
-                f'<span class="range52-marker" style="left:{pos:.1f}%"></span>'
-                f'{cost_html}</div>'
+                f'<span class="range52-marker" style="left:{pos:.1f}%"></span></div>'
                 f'<span class="range52-hi" aria-hidden="true">{self._context.fmt(high)}{high_gap_html}</span>'
                 f'</div></td></tr>')
 

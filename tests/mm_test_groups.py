@@ -6661,24 +6661,17 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertNotIn('.range52-percent{', monitor.PAGE_CSS)
         self.assertNotIn('clamp(40px,var(--range-pos)', monitor.PAGE_CSS)
 
-    def test_cost_price_draws_a_white_triangle_without_touching_the_range_bar(self):
-        """成本价只在位置条上多一个白三角：紫方块是本轮价（条上），白三角是成本价（条下）。
-        成本价不参与灯级，写错或没写都不能画出来。"""
+    def test_cost_price_line_is_never_server_rendered(self):
+        """成本价黄线只由前端按首页编辑（云端）的成本绘制：服务端无论 holdings.json 里有没有、对不对
+        都不画，避免页面刚打开时先显示过期位置再跳变。成本价仍不参与灯级。"""
         result = monitor._range52_from_history(self.history())   # 低 100 / 高 200 / 本轮价 150
         base = {'range52': result, 'price': 150.0, 'data_date': result['to']}
-        row = monitor._range52_row({**base, 'cost': 125.0})
-        self.assertIn('<span class="range52-cost" style="left:25.0%"></span>', row)
-        self.assertIn('成本价 125.00 位于区间 25.0%', row)
-        self.assertNotIn('低于区间', row)
-        self.assertIn('style="left:50.0%"', row)          # 本轮价的三角位置不变
-        self.assertIn('class="range52-gap">-33.3%</span>', row)   # 端点下方仍是本轮价到两端的幅度
-        below = monitor._range52_row({**base, 'cost': 40.0})
-        self.assertIn('<span class="range52-cost out-lo"></span>', below)   # 区间外：朝外箭头，不再夹成 0% 假位置
-        self.assertIn('range52-cost out-lo', below)
-        self.assertIn('成本价 40.00 低于52周低点 100.00', below)
-        above = monitor._range52_row({**base, 'cost': 260.0})
-        self.assertIn('<span class="range52-cost out-hi"></span>', above)   # 高于区间：朝外箭头，不再夹成 100% 假位置
-        self.assertIn('成本价 260.00 高于52周高点 200.00', above)
+        for cost in (125.0, 40.0, 260.0):                 # 区间内、低于低点、高于高点：都不在服务端画
+            row = monitor._range52_row({**base, 'cost': cost})
+            self.assertNotIn('range52-cost', row)
+            self.assertNotIn('成本价', row)
+            self.assertIn('style="left:50.0%"', row)          # 本轮价的三角位置不变
+            self.assertIn('class="range52-gap">-33.3%</span>', row)   # 端点下方仍是本轮价到两端的幅度
         self.assertEqual(monitor.cost_rule({'cost': 288.5}), 288.5)
         for bad in (0, -1, '300', True, None, float('nan'), float('inf'), ''):
             with self.subTest(bad=bad):
