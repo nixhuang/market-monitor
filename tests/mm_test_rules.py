@@ -703,6 +703,25 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
                                 cwd=ROOT, input=js, capture_output=True, text=True, encoding="utf-8", timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_stat_find_box_header_abbreviation_and_status_button_label(self):
+        # 统计栏最右侧的代码定位：位于 .group-stats 之后、同在 summary 内；财报计数缩写为「报」
+        card = monitor._signal_counts_card({'summary': {'red': 1, 'yellow': 2}, 'signal_counts': {}})
+        header = card.split('</summary>', 1)[0]
+        self.assertLess(header.index('class="group-stats"'), header.index('class="stat-find"'))
+        self.assertIn('id="statFindInput" type="text" maxlength="8"', header)
+        self.assertIn('<button type="button" id="statFindBtn">FIND</button>', header)
+        self.assertRegex(header, r'<span class="count-total count-earn">报 [—0-9]+</span>')
+        self.assertNotIn('财报 ', header)
+        js = page_assets.PAGE_INTERACTION_JS
+        self.assertIn('function findStock()', js)
+        self.assertIn('target.closest(".stat-find")', js)      # 点 FIND 不触发统计卡「点标题归一化」
+        css = page_assets.PAGE_CSS
+        self.assertIn('.stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}', css)
+        self.assertRegex(css, r'\.stat-find input\{[^}]*font-size:16px')   # 16px：iOS 聚焦不自动放大页面
+        status = (ROOT / 'run-status.js').read_text(encoding='utf-8')
+        self.assertIn("b.textContent = '核对';", status)
+        self.assertNotIn('核对中', status)
+
     def test_settings_expandables_have_a_rotating_chevron(self):
         source = (ROOT / 'edit.html').read_text(encoding='utf-8')
         self.assertIn("details.fold>summary::before,details.set>summary::before{content:'›'", source)

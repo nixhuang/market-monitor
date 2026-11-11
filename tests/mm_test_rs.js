@@ -918,7 +918,7 @@ async function check(name, fn) {
     const rules = deferred(); f.data.delay = rules.promise; f.data.intercept = null;
     const next = f.els.btnCheckStatus.onclick(); await flush();
     assert.equal(f.els.btnCheckStatus.disabled, true);
-    assert.equal(f.els.btnCheckStatus.textContent, '核对中…');
+    assert.equal(f.els.btnCheckStatus.textContent, '核对');
     oldRun.resolve(response({workflow_runs: [{id: 9, status: 'completed', conclusion: 'failure'}]}));
     await old; await flush();
     assert.equal(f.els.btnCheckStatus.disabled, true);

@@ -7585,10 +7585,10 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                           '<span class="stat-badge red" aria-label="红 0 项">0</span>'
                           '<span class="stat-badge yellow" aria-label="黄 0 项">0</span>', panel)
             self.assertIn('白 0', panel)
-            self.assertIn('财报 2', panel)
+            self.assertIn('报 2', panel)
             old = monitor._signal_counts_card({'summary': {'red': 4, 'yellow': 32},
                                                'signal_counts': {'target': {'label': '目标价', 'purple': 3}}})
-            for text in ('红 4', '黄 32', '白 0', '财报 —'):
+            for text in ('红 4', '黄 32', '白 0', '报 —'):
                 self.assertIn(text, old)
             self.assertNotIn('紫灯 3 只', old)
             self.assertNotIn('class="signal-member-symbol"', old)

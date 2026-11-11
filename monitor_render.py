@@ -1351,7 +1351,7 @@ class PageRenderer:
                           for entries in gray_by_kind.values() for m in entries})
         totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
                   ("gray", "白", gray_count), ("purple", "紫", whole(summary.get("purple"))),
-                  ("earn", "财报", self._context._earnings_week_panel(snapshot, count_only=True)))
+                  ("earn", "报", self._context._earnings_week_panel(snapshot, count_only=True)))
         stats = "".join(
             (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple")
              else f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>')
@@ -1364,7 +1364,10 @@ class PageRenderer:
                      '<details class="text-only pnl-detail"><summary>盈亏到价 · 0 只</summary>'
                      f'{pnl_blocks}</details></div>')
         return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'
-                f'<span class="group-stats">{stats}</span></summary>'
+                f'<span class="group-stats">{stats}</span>'
+                '<span class="stat-find"><input id="statFindInput" type="text" maxlength="8" placeholder="代码" '
+                'aria-label="按股票代码定位" autocapitalize="characters" autocomplete="off" autocorrect="off" '
+                'spellcheck="false" enterkeyhint="search"><button type="button" id="statFindBtn">FIND</button></span></summary>'
                 f'{f"<table>{rows}</table>" if rows else ""}{purple_panel}'
                 f'{earnings_panel}{pnl_panel}{filter_html}'
                 f'{self._context._collapse_button("signalCounts", "统计")}</details>\n')

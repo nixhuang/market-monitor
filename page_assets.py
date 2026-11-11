@@ -639,6 +639,13 @@ tr:first-child td{border-top:none}
 #signalCounts .count-red{color:var(--red)}
 #signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-earn{color:var(--text)}
+/* 统计栏最右侧的代码定位：5 位代码 + FIND；字号 16px 防止 iOS 聚焦时自动放大页面 */
+.stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}
+.stat-find input{box-sizing:border-box;width:74px;height:32px;padding:0 6px;font:inherit;font-size:16px;font-weight:600;line-height:30px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;text-transform:uppercase;text-align:center;outline:none}
+.stat-find input::placeholder{color:var(--dim);font-weight:400;text-transform:none}
+.stat-find input:focus{border-color:var(--head-blue-on)}
+.stat-find input.miss{border-color:var(--lamp-red)}
+.stat-find button{box-sizing:border-box;height:32px;padding:0 9px;font-size:13px;font-weight:600;line-height:30px;letter-spacing:.3px;color:var(--head-blue);background:var(--card);border:1px solid var(--line);border-radius:7px;cursor:pointer;white-space:nowrap}
 #signalCounts table{table-layout:fixed}
 #signalCounts td{padding:6.25px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
 /* 统计面板每一排统一 51px：胶囊 38 + 上下内边距 12.5 + 合并边线的一半 0.5 = 51；首排没有上边线，用 height 补齐 */
@@ -1642,7 +1649,7 @@ document.addEventListener("toggle", function(event) {
 document.addEventListener("click", function(event) {
   const target = event.target;
   if (!target || !target.closest) return;
-  if (!target.closest("#signalCounts > summary")) return;
+  if (!target.closest("#signalCounts > summary") || target.closest(".stat-find")) return;
   const card = document.getElementById("signalCounts");
   if (!card) return;
   requestAnimationFrame(function() { normalizeSignalCard(card); });
@@ -1988,6 +1995,19 @@ document.addEventListener("click", function(event) {
   }
 });
 
+function revealStockRow(target, hash) {
+  let node = target;
+  while (node && node !== document.body) {   // 从里到外把所有祖先 details 打开
+    if (node.tagName === "DETAILS") node.open = true;
+    node = node.parentElement;
+  }
+  target.classList.remove("stk-flash");
+  void target.offsetWidth;                   // 强制重排，保证连点同一个名字也能再闪一次
+  target.classList.add("stk-flash");
+  target.scrollIntoView({block: "center", behavior: "smooth"});
+  if (hash && history.replaceState) history.replaceState(null, "", hash);
+  window.setTimeout(function() { target.classList.remove("stk-flash"); }, 1800);
+}
 // 统计面板里的标的名字 → 跳到首页该股所在行。
 // 个股可能躺在两层折叠里（分组卡片 + 「无异动 N 只」列表），跳转前必须逐层撑开祖先 details。
 document.addEventListener("click", function(event) {
@@ -1999,18 +2019,50 @@ document.addEventListener("click", function(event) {
   const target = document.getElementById(hash.slice(1));
   if (!target) return;                       // 目标不在本页（比如该股这轮没进表），交给浏览器默认行为
   event.preventDefault();
-  let node = target;
-  while (node && node !== document.body) {   // 从里到外把所有祖先 details 打开
-    if (node.tagName === "DETAILS") node.open = true;
-    node = node.parentElement;
-  }
-  target.classList.remove("stk-flash");
-  void target.offsetWidth;                   // 强制重排，保证连点同一个名字也能再闪一次
-  target.classList.add("stk-flash");
-  target.scrollIntoView({block: "center", behavior: "smooth"});
-  if (history.replaceState) history.replaceState(null, "", hash);
-  window.setTimeout(function() { target.classList.remove("stk-flash"); }, 1800);
+  revealStockRow(target, hash);
 });
+// 统计栏右侧「FIND」：按代码定位到首页该股所在行（精确优先，其次前缀）。
+// 「首页分组单个展开」打开时，先收起不含目标的其它分组，再展开目标所在分组。
+function findStock() {
+  const input = document.getElementById("statFindInput");
+  if (!input) return;
+  const q = input.value.trim().toUpperCase().replace(/^\$/, "").replace(/[./]/g, "-");
+  if (!q) return;
+  let exact = null, prefix = null;
+  document.querySelectorAll("tr[data-symbol]").forEach(function(tr) {
+    const s = String(tr.getAttribute("data-symbol")).toUpperCase();
+    if (!exact && s === q) exact = tr;
+    else if (!prefix && s.indexOf(q) === 0) prefix = tr;
+  });
+  const target = exact || prefix;
+  input.classList.remove("miss");
+  if (!target || !target.id) {
+    void input.offsetWidth;
+    input.classList.add("miss");
+    window.setTimeout(function() { input.classList.remove("miss"); }, 1500);
+    return;
+  }
+  if (window.MM_SETTINGS && window.MM_SETTINGS.group_single_open === 1) {
+    document.querySelectorAll("details[id^='group_'][open]:not([data-open-locked])").forEach(function(d) {
+      if (!d.contains(target)) d.open = false;
+    });
+  }
+  revealStockRow(target, "#" + target.id);
+  input.blur();
+}
+document.addEventListener("click", function(event) {
+  if (!(event.target instanceof Element)) return;
+  const box = event.target.closest(".stat-find");
+  if (!box) return;
+  event.preventDefault();                    // 在统计栏标题里点输入框/按钮，不能顺带把统计卡折叠
+  if (event.target.closest("#statFindBtn")) findStock();
+}, true);
+document.addEventListener("keydown", function(event) {
+  if (event.key === "Enter" && event.target && event.target.id === "statFindInput") {
+    event.preventDefault();
+    findStock();
+  }
+}, true);
 """
 
 if __name__ == "__main__":

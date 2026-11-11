@@ -1274,7 +1274,7 @@ test('明确刷新恢复统计和持仓父组展开、长短子区折叠，普�
 test('目标名单跳转执行真实页面监听打开祖先及滚动到成员',()=>{
   const assets=fs.readFileSync(path.join(__dirname,'..','page_assets.py'),'utf8');
   const pos=assets.indexOf('const link = event.target.closest("a.signal-member-jump")');
-  const start=assets.lastIndexOf('document.addEventListener(',pos),end=assets.indexOf('\n});',pos)+4;
+  const start=assets.lastIndexOf('function revealStockRow(',pos),end=assets.indexOf('\n});',pos)+4;
   assert.ok(pos>=0&&start>=0&&end>pos,'真实页面必须提供成员跳转监听');
   const body={},group={tagName:'DETAILS',open:false,parentElement:body},quiet={tagName:'DETAILS',open:false,parentElement:group};
   const classes=new Set(),scrolls=[],timers=[],hashes=[];

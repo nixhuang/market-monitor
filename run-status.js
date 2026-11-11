@@ -1022,7 +1022,7 @@
     checkDismissed = false;
     const b = el('btnCheckStatus');
     if (b && checkLabel === null) checkLabel = b.textContent;
-    if (b) { b.disabled = true; b.textContent = '核对中…'; }
+    if (b) { b.disabled = true; b.textContent = '核对'; }
     checkFeedback = '正在核对最新任务和已发布看板…';
     checkPhase = 'busy';
     render();
