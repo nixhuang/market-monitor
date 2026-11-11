@@ -720,7 +720,9 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertIn('target.closest(".stat-find")', js)      # 点 FIND 不触发统计卡「点标题归一化」
         css = page_assets.PAGE_CSS
         self.assertIn('.stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}', css)
-        self.assertIn('.brandbar h1.brand{margin:0;font-size:21px;text-align:left;white-space:nowrap}', css)
+        self.assertIn('.brandbar h1.brand{margin:0;font-size:26px;line-height:1.5;text-align:left;white-space:nowrap}', css)
+        self.assertIn('.brandbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:18px 0 4px}', css)   # 搜索与站名底边对齐
+        self.assertIn('input.value = "";', js)                 # 点 FIND 后清空输入框
         self.assertIn('background:#1e232d;border:1px solid var(--line)', css)
         self.assertRegex(css, r'\.stat-find input\{[^}]*font-size:16px')   # 16px：iOS 聚焦不自动放大页面
         status = (ROOT / 'run-status.js').read_text(encoding='utf-8')

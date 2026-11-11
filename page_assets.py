@@ -600,8 +600,9 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 h1.brand{color:var(--up)}
 /* 顶部一排：站名靠左（比其它标题大2px=21px），代码定位 FIND 靠右 */
-.brandbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 4px}
-.brandbar h1.brand{margin:0;font-size:21px;text-align:left;white-space:nowrap}
+/* 站名放大到 26px，FIND 与站名底边对齐（flex-end）：整排被站名撑高，搜索框随之下移，避开 iOS 灵动岛/状态栏顶部的黑色渐变 */
+.brandbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:18px 0 4px}
+.brandbar h1.brand{margin:0;font-size:26px;line-height:1.5;text-align:left;white-space:nowrap}
 .sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
 /* 父级只留标题内缩，资产行与子框使用完整分组宽度；▲沿用原持仓绿色底。 */
@@ -2031,7 +2032,9 @@ document.addEventListener("click", function(event) {
 function findStock() {
   const input = document.getElementById("statFindInput");
   if (!input) return;
-  const q = input.value.trim().toUpperCase().replace(/^\$/, "").replace(/[./]/g, "-");
+  const raw = input.value;
+  input.value = "";                          // 点 FIND（或回车）后立刻清空输入框，不论找到与否
+  const q = raw.trim().toUpperCase().replace(/^\$/, "").replace(/[./]/g, "-");
   if (!q) return;
   let exact = null, prefix = null;
   document.querySelectorAll("tr[data-symbol]").forEach(function(tr) {
