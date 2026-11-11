@@ -327,7 +327,7 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
   check(src.includes('.dca-grid,.dca-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}')&&
     /<div class="dca-grid">[\s\S]*set_dca_start[\s\S]*set_dca_every[\s\S]*<\/div>\s*<div class="dca-actions">\s*<button id="btnClearDca">[^<]*<\/button>\s*<button class="primary" id="btnSaveDca">/.test(src),
     '定投两排：第一排起点日与间隔，第二排保存与关闭');
-  check(/button\.danger\{color:#e5534b;font-weight:500;border-color:transparent;background:transparent\}/.test(src)&&src.includes('.top-bar button.danger{padding:5px 8px;font-size:13px'), '「清除本机令牌」无外框无红描边、字色更暗（#e5534b）、13px小按钮');
+  check(/button\.danger\{color:#e5534b;font-weight:500;border-color:transparent;background:transparent;-webkit-appearance:none;appearance:none\}/.test(src)&&src.includes('.top-bar button.danger{padding:5px 8px;font-size:13px'), '「清除本机令牌」无外框无红描边、字色更暗（#e5534b）、13px小按钮');
   check(/\.sub\{color:var\(--dim\);font-size:12\.5px;margin-bottom:4px;/.test(src)
     && /#msg\{font-size:13px;margin:0 2px 8px;/.test(src)&&src.includes('#msg:empty{display:none}'),
     '回看板按钮到「规则参数」卡之间的空隙收窄（46 → 28px）');
