@@ -682,7 +682,7 @@ const sel=s=>s==="details[id^='group_'][open]:not([data-open-locked])"?cards.fil
 const frames=[];
 const ctx={HTMLDetailsElement:Details,Element,Date,requestAnimationFrame:f=>frames.push(f),
   document:{addEventListener:(k,f)=>(ev[k]||=[]).push(f),querySelectorAll:sel,querySelector:()=>null,getElementById:()=>null},
-  window:{MM_SETTINGS:{group_single_open:1},addEventListener(){},scrollBy:(x,y)=>{ctx.scrolled=y;}}};
+  window:{innerHeight:600,MM_SETTINGS:{group_single_open:1},addEventListener(){},scrollBy:(x,y)=>{if(typeof x==='object')ctx.smooth=x.top;else ctx.scrolled=y;}}};
 vm.createContext(ctx);vm.runInContext(fs.readFileSync(0,'utf8'),ctx);
 const click=(card)=>{ev.click.forEach(f=>f({target:new Element(card)}));};
 const flush=()=>{while(frames.length)frames.shift()();};
@@ -692,6 +692,7 @@ click(focus);focus.open=true;focus.top=40;flush();
 assert.equal(cards[1].open,false);assert.equal(cards[2].open,false);assert.equal(cards[4].open,false);
 assert.equal(cards[0].open,true);assert.equal(focus.open,true);
 assert.equal(ctx.scrolled,-60);     // 点开的这组被上拽后拉回原位（top 100→40 补 -60）
+assert.equal(ctx.smooth,-60);       // 再平滑滚到 1/6 高度线：屏高600→线在100，当前top 40 → 补 -60
 // 点的是持仓父卡标题（固定展开）：不参与
 cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,true);
 // 点击后其实是在收起：不动其它
