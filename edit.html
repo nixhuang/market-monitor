@@ -246,14 +246,15 @@ details.fold>summary,details.set>summary{gap:8px}
 /* 每只股票一排：列标题 + 一行（代码纯文字不可改 / 备注 / 各价位 / 分组 / 删除）。
    列宽只由 --price-fields 决定（持仓3、重点2、其余1），列标题与每行共用同一组轨道，不再有空格子。
    手机内宽约412px：44 代码 + 100 备注（固定，刚好7个中文字13px=91px+内边距）+ 价位各占剩余均分（持仓3列约54px，重点2列约83px，其余1列）+ 56 分组 + 26 删除；字号不小于13px。 */
-.edit-group .stock-head,.edit-group .stock-row{display:grid;grid-template-columns:44px 100px repeat(var(--price-fields),minmax(0,1fr)) 56px 26px;column-gap:4px;align-items:center;margin:0}
+.edit-group .stock-head,.edit-group .stock-row{display:grid;grid-template-columns:54px 100px repeat(var(--price-fields),minmax(0,1fr)) 56px 26px;column-gap:4px;align-items:center;margin:0}
 .edit-group .stock-head{padding:2px 0 4px;font-size:13px;line-height:1.4;color:var(--dim)}
 .edit-group .stock-head>span{min-width:0;overflow:hidden;white-space:nowrap;padding-left:5px}
 .edit-group .stock-head>span:first-child{padding-left:0}
 .edit-group .stock-row{padding:4px 0}
 .edit-group .stock-row~.stock-row{border-top:1px solid var(--stock-divider)}
 .edit-group .stock-row>.sym.etf{color:var(--link-blue,#6ba3f0)}   /* ETF只靠蓝色代码区分，不再单独分区；股票白字 */
-.edit-group .stock-row>.sym{width:auto;min-width:0;padding:0;border:0;border-radius:0;background:none;color:var(--text);font-size:14px;overflow:hidden;text-overflow:ellipsis}
+/* 股票代码与首页同款：页面无衬线字体（不再用等宽字体，等宽显得细长）、加粗600；字号比原来大1px，行距保持原21.7px */
+.edit-group .stock-row>.sym{width:auto;min-width:0;padding:0;border:0;border-radius:0;background:none;color:var(--text);font-family:inherit;font-weight:600;font-size:15px;line-height:21.7px;overflow:hidden;text-overflow:ellipsis}
 .edit-group .stock-row>input.n,.edit-group .stock-row input.t{min-width:0;width:100%;padding:6px 3px 6px 4px;font-size:13px}
 .edit-group .stock-row>.move{min-width:0;max-width:none;width:100%;padding:6px 1px;font-size:13px}
 .edit-group .stock-row>.del{width:26px;min-height:34px;padding:0;font-size:15px;line-height:1}

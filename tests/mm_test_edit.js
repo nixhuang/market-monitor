@@ -382,7 +382,7 @@ const sel0 = (pos.match(/<select class="move"[\s\S]*?<\/select>/) || [''])[0];
 check(sel0.includes('>长持仓<') && sel0.includes('>短持仓<') && sel0.includes('>重点<'),
       '一个下拉里就能选长持仓 / 短持仓 / 其它分组');
 check(src.indexOf('class="hold"') === -1, '已移除独立的长/短持仓下拉');
-check(src.includes('.edit-group .stock-head,.edit-group .stock-row{display:grid;grid-template-columns:44px 100px repeat(var(--price-fields),minmax(0,1fr)) 56px 26px;')
+check(src.includes('.edit-group .stock-head,.edit-group .stock-row{display:grid;grid-template-columns:54px 100px repeat(var(--price-fields),minmax(0,1fr)) 56px 26px;')
   &&src.includes('.edit-group .stock-row~.stock-row{border-top:1px solid var(--stock-divider)}')
   &&src.includes('.stock-prices{display:contents}')&&!src.includes('grid-row:2;display:grid;'),
   '每股单排：列标题与每行共用同一组列轨道，价格容器display:contents不增排，相邻股票有分隔线');

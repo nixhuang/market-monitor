@@ -724,7 +724,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         source = (ROOT / 'edit.html').read_text(encoding='utf-8')
         # 每股单排：列标题和每行共用同一组轨道；价格容器display:contents不增排；代码不再是胶囊框。
         self.assertIn('.edit-group .stock-head,.edit-group .stock-row{display:grid;'
-                      'grid-template-columns:44px 100px repeat(var(--price-fields),minmax(0,1fr)) 56px 26px;', source)
+                      'grid-template-columns:54px 100px repeat(var(--price-fields),minmax(0,1fr)) 56px 26px;', source)
         self.assertIn('.edit-group .stock-row~.stock-row{border-top:1px solid var(--stock-divider)}', source)
         self.assertIn('.stock-prices{display:contents}', source)
         self.assertNotIn('grid-row:2;display:grid;', source)
