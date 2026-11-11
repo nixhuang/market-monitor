@@ -349,7 +349,8 @@ button.danger{color:var(--lamp-red,#ff8580);border-color:rgba(255,133,128,.55)}
 /* 搜索定位：输入框占满，命中的行短暂高亮 */
 .search-row{margin:0 0 10px;flex-wrap:nowrap}
 .search-row button{flex:none;white-space:nowrap}
-/* 「规则参数」标题栏：标题在左，保存规则/恢复默认在右；未保存提示紧跟在标题栏下一行 */
+/* 按钮顺序统一：取消/恢复/关闭类在左，保存/确认类在右（与首页编辑「取消｜保存」一致）。
+   「规则参数」标题栏：标题在左，恢复默认｜保存规则在右；未保存提示紧跟在标题栏下一行 */
 .card-head{margin-bottom:2px}
 .card-head h2{margin:0 auto 0 0}
 .dirty-note:empty{display:none}
@@ -401,9 +402,9 @@ details.set[open]>summary{margin-bottom:2px}
 <div class="card hide" id="manualCard">
   <h2>手动模式 · 复制下面的内容 <span>（令牌模式不需要这一步）</span></h2>
   <div class="row">
-    <button class="primary" id="btnCopy">复制 JSON</button>
-    <a href="https://github.com/nixhuang/market-monitor/edit/main/holdings.json" target="_blank"><button>打开 GitHub 编辑页</button></a>
     <button id="btnBack">回到令牌模式</button>
+    <a href="https://github.com/nixhuang/market-monitor/edit/main/holdings.json" target="_blank"><button>打开 GitHub 编辑页</button></a>
+    <button class="primary" id="btnCopy">复制 JSON</button>
   </div>
   <textarea id="jsonOut" spellcheck="false"
     style="width:100%;height:220px;margin-top:10px;padding:10px;font-size:13px;line-height:1.5;
@@ -417,8 +418,8 @@ details.set[open]>summary{margin-bottom:2px}
   <div class="card">
     <div class="row card-head">
       <h2>规则参数</h2>
-      <button class="primary" id="btnSaveRules">保存规则</button>
       <button id="btnResetRules">恢复默认</button>
+      <button class="primary" id="btnSaveRules">保存规则</button>
     </div>
     <span class="note dirty-note" id="rulesDirty" role="status" aria-live="polite"></span>
     <details class="set" id="setToggle">
@@ -515,8 +516,8 @@ details.set[open]>summary{margin-bottom:2px}
         <input id="set_dca_every" inputmode="numeric" placeholder="5"></div>
     </div>
     <div class="dca-actions">
-      <button class="primary" id="btnSaveDca">保存定投提醒</button>
       <button id="btnClearDca">关闭定投提醒</button>
+      <button class="primary" id="btnSaveDca">保存定投提醒</button>
     </div>
   </div>
 
