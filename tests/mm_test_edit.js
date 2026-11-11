@@ -143,7 +143,7 @@ async function runDraftRecovery(){
   const bodyValue=()=>JSON.parse(Buffer.from(requests.at(-1).body.content,'base64').toString('utf8'));
 
   for(const field of ['trigger','reduce','target']){
-    for(const raw of ['  bad" <&  ','Infinity','1e309',...(field==='trigger'?[]:['0','-1'])]){
+    for(const raw of ['  bad" <&  ','Infinity','1e309',...(field==='trigger'?[]:field==='target'?['-1']:['0','-1'])]){
       const before=T.configText(),count=requests.length;
       edit('positions','AAPL',field,raw);T.render();
       check(input('positions','AAPL',field).value===raw&&input('positions','AAPL',field)['aria-invalid']==='true',field+' 无效原文跨渲染保留');
@@ -157,6 +157,12 @@ async function runDraftRecovery(){
     check(!(field in T.data.positions.AAPL)&&(field!=='target'||!('target_at' in T.data.positions.AAPL)),field+' 留空可清除错误及旧值');
     edit('positions','AAPL',field,'100');
   }
+  // 目标价填 0＝关闭「达到」报灯：合法、可保存、保留数字 0；清空恢复
+  edit('positions','AAPL','target','0');T.render();
+  check(T.data.positions.AAPL.target===0&&input('positions','AAPL','target')['aria-invalid']!=='true','目标价填 0 合法并保存为数字 0（关闭达到报灯）');
+  edit('positions','AAPL','target','');
+  check(!('target' in T.data.positions.AAPL),'目标价清空恢复报灯');
+  edit('positions','AAPL','target','100');
   T.pageState.technology=1;T.render();edit('technology','S055','trigger','abc');
   T.pageState.technology=0;T.render();els.fold_technology.open=false;
   const beforeHidden=requests.length;await saveList();

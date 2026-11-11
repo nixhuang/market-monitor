@@ -907,8 +907,8 @@ check(_technical_mention['signals'][0] in _row_signals(_technical_mention).repla
 _runbar = re.search(r'<div class="runbar">(.*?)</div>', _description_page, re.S)[1]
 check('href="#signalRules"' not in _runbar and 'shortcut.textContent = "预警规则"' not in monitor.PAGE_INTERACTION_JS,
       '静态及动态顶部均不恢复已删除的预警规则快捷按钮')
-check(bool(re.search(r'\.lvtag\.tgt\.high\{[^}]*color:var\(--target-high\)', _description_page)),
-      '高空间数字显式跟随紫红外框#dc62b8')
+check(not re.search(r'\.lvtag\.tgt\.high\{[^}]*color:', _description_page),
+      '高空间(>=90%)数字沿用普通紫，不再单独紫红；只有外框紫红#dc62b8')
 
 # 最新判灯：技术灰仍保留主表绿灯；组合不重复RSI/布林，缺/参考不进统计。
 from tests.mm_test_groups import TestBollRsiRules as _BollRules
@@ -2176,18 +2176,19 @@ const deadline = setTimeout(() => {
           runbarRuleLinks: document.querySelectorAll('.runbar a[href="#signalRules"]').length
         };
       })()`);
-      const pink = 'rgb(220, 98, 184)';
-      assertions.push({ok: actual.highColor === pink && actual.highBorder === pink
-        && actual.highNumbers.length >= 1 && actual.highNumbers.every(color => color === pink)
+      const pink = 'rgb(220, 98, 184)', purple = 'rgb(176, 132, 255)';
+      // 2026-11-11 用户：空间>=90% 只有外框紫红，数字沿用普通紫、不加粗影
+      assertions.push({ok: actual.highColor === purple && actual.highBorder === pink
+        && actual.highNumbers.length >= 1 && actual.highNumbers.every(color => color === purple)
         && actual.highSign === 'pos' && actual.highPercent === 'rgb(77, 208, 225)'
-        && actual.highShadow.includes(pink) && actual.highBorderWidth === '1px'
+        && actual.highShadow === 'none' && actual.highBorderWidth === '1px'
         && JSON.stringify(actual.highFrame.inset) === JSON.stringify(['2px','0px','2px','-1px'])
         && actual.highFrame.radius === '3px',
-        name: width + 'px终稿高空间框位于tgs、目标价格粉色加重、正空间百分比青色', actual});
+        name: width + 'px终稿高空间框位于tgs、目标价格沿用普通紫、正空间百分比青色', actual});
       assertions.push({ok: actual.originalSize[0] > 0 && actual.originalSize[1] > 0
         && JSON.stringify(actual.originalSize) === JSON.stringify(actual.priorSize)
         && actual.spaceColor === 'rgb(176, 132, 255)' && actual.spaceBorder === 'rgb(176, 132, 255)'
-        && actual.hitColor === 'rgb(255, 255, 255)' && actual.hitBackground === 'rgb(90, 71, 151)'
+        && actual.hitColor === 'rgb(255, 255, 255)' && actual.hitBackground === 'color(srgb 0.690196 0.517647 1 / 0.32)'
         && actual.hitFrame.border === '0px' && actual.hitFrame.radius === '0px'
         && actual.hitAfter === 'none' && actual.hitClass.includes('pur-hit') && !actual.hitClass.includes('pur-high')
         && actual.badColor === 'rgb(139, 147, 161)' && actual.badBorderStyle === 'none'

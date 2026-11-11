@@ -93,7 +93,7 @@ class RulesRegression(unittest.TestCase):
                 text = plain_text(rules)
                 for term in ("目标空间 所有分组", "有效空间≥40% → 紫空心灯",
                              "≥90% → 紫红空心灯", "达到目标／共识价 持仓分组、重点",
-                             "当日上穿／跌破或现价在目标±3% → 实心紫灯",
+                             "当日上穿／跌破、现价高于目标价（超过多少都算）或现价在目标±3% → 实心紫灯",
                              "目标空间<40%、未达到目标／共识价、共识获取失败及失败旧价"):
                     self.assertIn(term, text)
                 explanation = plain_text(glossary)
@@ -139,7 +139,7 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('background:var(--tgt-solid)', hit)
         self.assertIn('border-radius:0', hit)
         self.assertNotIn('border:', hit)
-        self.assertIn('--tgt-solid:#5a4797', css)
+        self.assertIn('--tgt-solid:color-mix(in srgb,var(--purple) 32%,transparent)', css)
         self.assertIn('color:var(--white)', declarations(prefix + ' .lvtag.tgt.hit'))
         self.assertIn('color:var(--dim)', declarations(prefix + ' .lvtag.tgt.bad'))
         self.assertIn('border-top:9px solid var(--range-marker-border)', declarations('.range52-marker'))
@@ -571,7 +571,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('.target-purple .target-space-high .signal-member-belong', css)
         self.assertNotIn('.tone-target-high,.target-space-high{', css)
         self.assertNotIn('#signalCounts .tone-target-high,#signalCounts .target-space-high,', css)
-        self.assertIn('td.tgs .lvtag.tgt.high{color:var(--target-high);', css)
+        self.assertNotIn('td.tgs .lvtag.tgt.high{', css)   # >=90% 数字沿用普通紫，只有外框紫红
         self.assertNotIn('.sig .tp{', css)
         # 删除右条后不再存在跨行虚线相位；左竖条与它的续行也一并撤掉（2026-11-03）
         self.assertNotIn('var(--lw)', css)
@@ -692,7 +692,7 @@ click(focus);focus.open=true;focus.top=40;flush();
 assert.equal(cards[1].open,false);assert.equal(cards[2].open,false);assert.equal(cards[4].open,false);
 assert.equal(cards[0].open,true);assert.equal(focus.open,true);
 assert.equal(ctx.scrolled,-60);     // 点开的这组被上拽后拉回原位（top 100→40 补 -60）
-assert.equal(ctx.smooth,-5);        // 再平滑滚到 7.5% 高度线：屏高600→线在45，当前top 40 → 补 +5 的反向 -5（45-40=5 → top-线=-5）
+assert.equal(ctx.smooth,-13);       // 再平滑滚到 8.75% 高度线：屏高600→线在 round(52.5)=53，当前top 40 → top-线 = -13
 // 点的是持仓父卡标题（固定展开）：不参与
 cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,true);
 // 点击后其实是在收起：不动其它

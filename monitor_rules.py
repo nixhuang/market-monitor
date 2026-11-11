@@ -248,13 +248,27 @@ class RuleEngine:
         v = entry.get("target")
         price = self._context._pos_num(v)
         if price is None:
-            if v not in (None, "") and not quiet:
+            if v not in (None, "") and not quiet and not self.reached_muted(entry):
                 self._context.log(f"  ! 目标价无效，已忽略：{v!r}")
             return None
         return price, self._context._month_of(entry.get("target_at"))
 
 
+    @staticmethod
+    def reached_muted(entry):
+        """设置页目标价填 0＝纯手动关闭这只股票的「达到」报灯（空间提醒照旧按共识价算）；清空即恢复。"""
+        v = entry.get("target") if isinstance(entry, dict) else None
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and v == 0
+
+
     def resolve_target(self, cfg, cons):
+        result = self._resolve_target_base(cfg, cons)
+        if result is not None and self.reached_muted(cfg):
+            result = dict(result, mute_reached=True)
+        return result
+
+
+    def _resolve_target_base(self, cfg, cons):
         """手填优先于共识价。返回 {"kind","price","month","failed"}；都没有返回 None。
     共识价获取失败但有旧值：price 是旧值、failed=True（只显示标签，不参与警示）；没有旧值：price=None。"""
         m = self._context.manual_target(cfg)
@@ -270,7 +284,7 @@ class RuleEngine:
 
 
     def target_alerts(self, price, prev, target, label, gap_pct):
-        """仅计算达到，返回具体上穿/跌破/区间文字；空间不参与达到条件。"""
+        """仅计算达到，返回具体上穿/跌破/现价超过/区间文字；空间不参与达到条件。"""
         if self._context._pos_num(price) is None or self._context._pos_num(target) is None:
             return []
         tstr = self._context._price_text(target)
@@ -282,7 +296,8 @@ class RuleEngine:
             return [f"上穿 {tstr} {space:+.1f}%{suffix}"]
         if self._context._pos_num(prev) is not None and prev > target >= price:
             return [f"跌破 {tstr} {space:+.1f}%{suffix}"]
-        if abs(p - t) * 100 <= Decimal(str(gap_pct)) * t:
+        # 现价高于目标价一律算达到（超过多少都算，2026-11-12 起）；未到目标价则仍只在 ±gap% 内算。
+        if p > t or abs(p - t) * 100 <= Decimal(str(gap_pct)) * t:
             return [f"现价{'超' if space < 0 else '低'}{tstr} {space:+.1f}%{suffix}"]
         return []
 
@@ -306,7 +321,7 @@ class RuleEngine:
             if tp * 100 == p * (100 + boundary):
                 space = float(boundary)
         reached = (self._context.target_alerts(price, prev, t["price"], self._context.target_label(t), gap_pct)
-                   if group in self._context.CONSENSUS_GROUPS else [])
+                   if group in self._context.CONSENSUS_GROUPS and not t.get("mute_reached") else [])
         space_hit = band in ("medium", "high")
         detail = (f"{self._context.target_label(t)} {self._context._price_text(t['price'])}，"
                   f"空间 {space:+.1f}%") if space_hit else ""

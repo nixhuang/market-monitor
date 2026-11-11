@@ -28,7 +28,8 @@ line-47|rule-target-space|h5|目标空间 所有分组
 line-48||p|有效空间≥${target_space_pct}% → 紫空心灯；
 target-space-positive||p|≥${target_high_space_pct}% → 紫红空心灯。
 line-50|rule-target-reached|h5|达到目标／共识价 持仓分组、重点
-target-reached-positive||p|当日上穿／跌破或现价在目标±${target_gap_pct}% → 实心紫灯。"""),
+target-reached-positive||p|当日上穿／跌破、现价高于目标价（超过多少都算）或现价在目标±${target_gap_pct}% → 实心紫灯。
+target-mute||p|设置页该股目标价填 0 → 关闭“达到”报灯（空间提醒照旧）；清空即恢复。"""),
     ("rule-text", r"""line-52||h4|二、不报灯且不折叠
 line-53|rule-earnings|h5|财报临近 所有分组
 line-54||p|美东财报日期按北京时间：前一日／当日／后一日 → 红字；
@@ -530,11 +531,11 @@ PAGE_PALETTE = """:root{
   --head-inset:64px;
   --row-height:21px;
   --section-line:rgba(139,147,161,.32);
-  --tgt-solid:#5a4797;
+  --tgt-solid:color-mix(in srgb,var(--purple) 32%,transparent);
   --tgt-pos:#4dd0e1;
   --tgt-neg:#ff5c8d;
-  --tgt-pos-on:#c2f6ff;
-  --tgt-neg-on:#ffd0de;
+  --tgt-pos-on:#8eecf7;
+  --tgt-neg-on:#ffa3c4;
   --orange:#ffa94d;
   --cyan:#4dd0e1;
   --positions-collapse:rgba(46,160,67,.15);
@@ -645,7 +646,7 @@ tr:first-child td{border-top:none}
 #signalCounts .count-earn{color:var(--text)}
 /* 顶部右侧的代码定位：5 位代码 + FIND；字号 16px 防止 iOS 聚焦时自动放大页面 */
 .stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}
-.stat-find input{box-sizing:border-box;width:74px;height:32px;padding:0 6px;font:inherit;font-size:16px;font-weight:600;line-height:30px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;text-transform:uppercase;text-align:center;outline:none}
+.stat-find input{box-sizing:border-box;width:111px;height:32px;padding:0 6px;font:inherit;font-size:16px;font-weight:600;line-height:30px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;text-transform:uppercase;text-align:center;outline:none}
 .stat-find input::placeholder{color:var(--dim);font-weight:400;text-transform:none}
 .stat-find input:focus{border-color:var(--head-blue-on)}
 .stat-find input.miss{border-color:var(--lamp-red)}
@@ -738,7 +739,8 @@ tr:first-child td{border-top:none}
 #signalCounts .purple-extra .target-purple li{margin:8px 0}
 #signalCounts .target-purple .note{display:inline;margin-left:6px}
 #signalCounts .target-purple .signal-member-direction{color:var(--purple)}
-#signalCounts .target-purple .target-space-high .signal-member-direction{color:var(--target-high)}
+/* 空间>=90%：整行仍是普通紫，只有百分比数字加紫红下划线（价格数字不加；2026-11-12 用户） */
+#signalCounts .target-purple .target-space-high .signal-member-direction .percent-change{text-decoration:underline;text-decoration-color:var(--target-high);text-decoration-thickness:1.5px;text-underline-offset:3px}
 .tone-target-high{color:var(--target-high)}
 #signalCounts .tone-target-high{color:var(--target-high)}
 #signalCounts .purple-extra .text-only .text-only-kind.tone-target-high{color:var(--target-high)}
@@ -800,6 +802,9 @@ tr[id^="s-"]{scroll-margin-top:64px}
 .range52-missing{display:block;color:var(--dim);font-size:11px;line-height:15px}
 .up{color:var(--up)}
 .down{color:var(--down)}
+/* 描述/统计里带正负号的百分比数字（+8.3% / -9.8%）：只有数字用涨跌色，文字和灯条仍按条件灯级 */
+.num-up{color:var(--up,#3fb950)}
+.num-down{color:var(--down,#f85149)}
 tr.red td:first-child{box-shadow:inset 4px 0 0 var(--red);padding-left:14px}
 tr.yellow td:first-child{box-shadow:inset 4px 0 0 var(--yellow);padding-left:12px}
 tr.green td:first-child{box-shadow:inset 2px 0 0 var(--green)}
@@ -1030,7 +1035,6 @@ table.stk tr[data-symbol]>td.tgs .lvtag.tgt>span{height:var(--row-height);line-h
 table.stk tr[data-symbol]>td.tgs .target-space{grid-area:1/1/2/3}
 table.stk tr[data-symbol]>td.tgs .target-price{grid-area:2/1/3/2}
 table.stk tr[data-symbol]>td.tgs .target-month{grid-area:2/2/3/3;margin-left:3px}
-table.stk tr[data-symbol]>td.tgs .lvtag.tgt.high{color:var(--target-high);text-shadow:.2px 0 currentColor,-.2px 0 currentColor}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad{position:relative;color:var(--dim);border-radius:4px}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:url("__TARGET_DASH_BORDER__") center/100% 100% no-repeat}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad .target-price{grid-area:1/1/2/3}
@@ -1566,14 +1570,14 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
     });
   }, {once: true});
 })();
-// 屏幕最上面 7.5% 留给 iOS 灵动岛/状态栏：展开的分组、清单一律从这条线开始显示，不再贴着屏幕顶边。
-// （2026-11-11 先 1/6=16.7%，再 1/8=12.5%，最后按用户要求「在 1/8 基础上再往上提 4 成」= 12.5%×0.6 = 7.5%；要改只改这一个系数。）
+// 屏幕最上面 8.75% 留给 iOS 灵动岛/状态栏：展开的分组、清单一律从这条线开始显示，不再贴着屏幕顶边。
+// （2026-11-11 先 1/6=16.7%，再 1/8=12.5%，再按用户要求「在 1/8 基础上上提 4 成」= 7.5%，最后改为「上提 3 成」= 12.5%×0.7 = 8.75%；要改只改这一个系数。）
 function topReserve() {
   var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-  return Math.round(vh * 0.075);
+  return Math.round(vh * 0.0875);
 }
 function revealSignalPanel(panel) {
-  // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从顶部 7.5% 线开始对齐。
+  // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从顶部 8.75% 线开始对齐。
   var pad = 12;
   var top = topReserve();
   var vh = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -1583,7 +1587,7 @@ function revealSignalPanel(panel) {
   var y = window.pageYOffset || document.documentElement.scrollTop || 0;
   var target = (rect.height + top + pad <= vh && rect.bottom > vh - pad)
     ? y + rect.bottom - (vh - pad)                          // 整块往上推
-    : y + rect.top - top;                                   // 其余：从顶部 7.5% 线开始看起
+    : y + rect.top - top;                                   // 其余：从顶部 8.75% 线开始看起
   window.scrollTo({ top: target < 0 ? 0 : target, behavior: "smooth" });
 }
 function normalizeSignalCard(card) {
@@ -1652,7 +1656,7 @@ document.addEventListener("click", function(event) {
     document.querySelectorAll("details[id^='group_'][open]:not([data-open-locked])").forEach(function(other) {
       if (other !== d) other.open = false;
     });
-    // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到顶部 7.5% 高度线（上面留给灵动岛）。
+    // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到顶部 8.75% 高度线（上面留给灵动岛）。
     const delta = d.getBoundingClientRect().top - topBefore;
     if (Math.abs(delta) > 1) window.scrollBy(0, delta);
     const dy = d.getBoundingClientRect().top - topReserve();
@@ -1797,6 +1801,8 @@ function mergeMaFilters(data) {
 function appendRsiArrows(parent, text) {
   const classes = {"▲": "arrow-band-up", "▼": "arrow-band-down",
     "↑": "arrow-rsi-up", "↓": "arrow-rsi-down"};
+  // 带正负号的百分比数字（+8.31% / -5.47%）用涨跌色；「±3.1%」不匹配，0 不上色。
+  const pctRe = /(?<![±\d.])([+\-\u2212])(\d[\d,]*(?:\.\d+)?)%/y;
   let buf = "";
   const flush = function() {
     if (buf) { parent.appendChild(document.createTextNode(buf)); buf = ""; }
@@ -1809,7 +1815,22 @@ function appendRsiArrows(parent, text) {
       span.className = classes[ch];
       span.textContent = ch;
       parent.appendChild(span);
-    } else { buf += ch; }
+      continue;
+    }
+    if (ch === "+" || ch === "-" || ch === "\u2212") {
+      pctRe.lastIndex = i;
+      const m = pctRe.exec(text);
+      if (m && Number(m[2].replace(/,/g, "")) !== 0) {
+        flush();
+        const span = document.createElement("span");
+        span.className = m[1] === "+" ? "num-up" : "num-down";
+        span.textContent = m[0];
+        parent.appendChild(span);
+        i += m[0].length - 1;
+        continue;
+      }
+    }
+    buf += ch;
   }
   flush();
 }

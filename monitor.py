@@ -2947,6 +2947,7 @@ def _next_earnings_dates(earn_stat):
 
 
 manual_target = _rule_engine.manual_target
+reached_muted = _rule_engine.reached_muted
 
 
 resolve_target = _rule_engine.resolve_target
@@ -3298,6 +3299,7 @@ _block_title_html = _page_renderer._block_title_html
 
 
 arrow_html = _page_renderer.arrow_html
+pct_html = monitor_render.pct_html
 
 
 _member_block = _page_renderer._member_block

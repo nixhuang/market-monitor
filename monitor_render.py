@@ -89,6 +89,25 @@ _ARROW_CLASSES = (("▲", "arrow-band-up"), ("▼", "arrow-band-down"),
                   (_ARROW_RSI_UP, "arrow-rsi-up"), (_ARROW_RSI_DOWN, "arrow-rsi-down"))
 
 
+# 描述与统计里带正负号的百分比（异动 +8.3%、波动 -9.8%、涨跌幅 -5.47%）数字单独用涨跌色：
+# +绿 var(--up) / -红 var(--down)；文字与名称前的灯条仍按条件灯级着色。
+# 「±3.1%」（平时波动区间）不是方向，前面带 ± 的不匹配；0 不上色。输入必须是已转义文本。
+_SIGNED_PCT_RE = re.compile(r"(?<![±\d.])([+\-\u2212])(\d[\d,]*(?:\.\d+)?)%")
+
+
+def pct_html(escaped_text):
+    def repl(match):
+        try:
+            value = float(match[2].replace(",", ""))
+        except ValueError:
+            return match[0]
+        if value == 0:
+            return match[0]
+        cls = "num-up" if match[1] == "+" else "num-down"
+        return f'<span class="{cls}">{match[0]}</span>'
+    return _SIGNED_PCT_RE.sub(repl, str(escaped_text))
+
+
 # 描述分类只用于排版，灯色只认对应指标 marks，不从整行灯色或文案猜灯。
 _SIGNAL_DESCRIPTION_RULES = (
     ("rsi", re.compile(r"^RSI\b")),
@@ -728,13 +747,13 @@ class PageRenderer:
                     zones[1 if re.match(r"^\s*RSI\b", text) else 0].append(text)
                 for col, zone in enumerate(zones):
                     if zone:
-                        body = self._squeeze_punct(self._context.arrow_html(html_lib.escape(" · ".join(zone))))
+                        body = self._squeeze_punct(pct_html(self._context.arrow_html(html_lib.escape(" · ".join(zone)))))
                         columns[col].append(f'<span class="signal-item"{attrs}>'
                                             f'<span class="sig-zone" data-side="{("boll", "rsi")[col]}">{body}</span></span>')
                 if all(zones):
                     combo_level = level or "gray"
             else:
-                body = self._squeeze_punct(self._context.arrow_html(html_lib.escape("，".join(display))))
+                body = self._squeeze_punct(pct_html(self._context.arrow_html(html_lib.escape("，".join(display)))))
                 if kind in ("boll", "rsi"):
                     columns[kind == "rsi"].append(f'<span class="signal-item"{attrs}>{body}</span>')
                 else:
@@ -1197,7 +1216,7 @@ class PageRenderer:
                         direction = self._context._member_icons(d, kind, level).strip() if icon else ""
                         # 分框栏目的框标题已经写了方向，行尾不再重复同一句
                         metric = "" if kind in self._context._NO_ROW_METRIC_KINDS else self._context._member_metric_text(d, kind)
-                        value = f' <span class="signal-member-metric">{self._context.arrow_html(esc(metric))}</span>' if metric else ""
+                        value = f' <span class="signal-member-metric">{pct_html(self._context.arrow_html(esc(metric)))}</span>' if metric else ""
                         note = (f'<span class="note">{esc(d["note"])}</span>'
                                 if isinstance(d.get("note"), str) and d["note"].strip() else "")
                         # 分组写在代码后面的括号里：持仓内部标长/短，跟首页分区对得上

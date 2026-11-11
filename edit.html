@@ -109,11 +109,11 @@ details.fold>summary,details.set>summary{gap:8px}
   --head-inset:64px;
   --row-height:21px;
   --section-line:rgba(139,147,161,.32);
-  --tgt-solid:#5a4797;
+  --tgt-solid:color-mix(in srgb,var(--purple) 32%,transparent);
   --tgt-pos:#4dd0e1;
   --tgt-neg:#ff5c8d;
-  --tgt-pos-on:#c2f6ff;
-  --tgt-neg-on:#ffd0de;
+  --tgt-pos-on:#8eecf7;
+  --tgt-neg-on:#ffa3c4;
   --orange:#ffa94d;
   --cyan:#4dd0e1;
   --positions-collapse:rgba(46,160,67,.15);
@@ -515,7 +515,7 @@ details.set[open]>summary{margin-bottom:2px}
     </div>
   </div>
   <fieldset id="groupEditor" disabled style="border:0;padding:0;margin:0;min-width:0"></fieldset>
-  <p class="note">保存股票清单、备注、加仓价、减仓价、目标价和监测开关，不影响规则与定投设置。恢复清单会先询问是否丢弃未保存的清单改动。</p>
+  <p class="note">保存股票清单、备注、加仓价、减仓价、目标价和监测开关，不影响规则与定投设置。目标价填 0＝关闭这只股票的“达到”报灯（空间提醒照旧），清空即恢复。恢复清单会先询问是否丢弃未保存的清单改动。</p>
 
   <div class="card" id="dcaCard">
     <h2>定投提醒</h2>
@@ -598,7 +598,7 @@ const PRICE_LABELS={trigger:'加仓价',reduce:'减仓价',target:'目标价',co
 const draftKey=(kind,symbol,field)=>JSON.stringify([kind,symbol,field]);
 function priceError(field,raw){
   const value=String(raw).trim();
-  return value!==''&&(!Number.isFinite(Number(value))||(field!=='trigger'&&Number(value)<=0));
+  return value!==''&&(!Number.isFinite(Number(value))||(field==='target'?Number(value)<0:(field!=='trigger'&&Number(value)<=0)));
 }
 function editListField(kind,symbol,field,raw,input){
   const value=raw.trim(),record=data[kind][symbol],key=draftKey(kind,symbol,field);
@@ -622,7 +622,7 @@ function validateListDraft(kind){
   const input=row&&row.querySelector('[data-f="'+error.field+'"]');
   if(input){input.focus();input.scrollIntoView({block:'center'});}
   setMsg('清单未保存：「'+KIND_LABEL[error.kind]+'」'+error.symbol+' 的'+PRICE_LABELS[error.field]+
-    (error.field==='trigger'?'应填写有限数字或留空':'应填写大于 0 的有限数字或留空')+'；无效文本已保留','err');
+    (error.field==='trigger'?'应填写有限数字或留空':error.field==='target'?'应填写大于或等于 0 的有限数字（0＝关闭达到报灯）或留空':'应填写大于 0 的有限数字或留空')+'；无效文本已保留','err');
   return false;
 }
 let loadRevision=0, loaded=false;

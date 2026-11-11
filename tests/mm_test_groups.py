@@ -2791,11 +2791,17 @@ class TestTargets(unittest.TestCase):
                 self.assertTrue(detail['target']['hit'])
 
     def test_far_from_target_or_far_beyond_is_silent(self):
-        for target in (104, 120, 139.999, 96, 90, 60):      # 低空间且未达到：都不报
+        for target in (104, 120, 139.999):                  # 目标价在上方、带外且空间<40%：不报
             with self.subTest(target=target):
                 level, base, hit, detail = self._tg({'target': target})
                 self.assertEqual(hit, [])
                 self.assertFalse(detail['purple'])
+        for target in (96, 90, 60):                          # 现价已高于目标价：超过多少都算达到（2026-11-12）
+            with self.subTest(target=target):
+                level, base, hit, detail = self._tg({'target': target})
+                self.assertEqual(len(hit), 1)
+                self.assertTrue(hit[0].startswith('现价超'))
+                self.assertTrue(detail['purple'])
 
     def test_same_day_cross_is_purple_even_when_jump_is_big(self):
         _, _, hit, d = self._tg({'target': 100.5}, price=101, prev=100)
@@ -2806,9 +2812,27 @@ class TestTargets(unittest.TestCase):
         # 跳空一次越过 ±3% 的带：只要跨越就报
         _, _, hit, _ = self._tg({'target': 100}, price=108, prev=95)
         self.assertEqual(hit, ['上穿 100 -7.4%'])
-        # 跨越之后第二天：还在带内照报（带内一律报），出了带就不报
+        # 跨越之后第二天：带内照报，出了带仍报（现价高于目标价一律算达到）
         self.assertEqual(len(self._tg({'target': 100}, price=102, prev=101)[2]), 1)
-        self.assertEqual(self._tg({'target': 100}, price=110, prev=108)[2], [])
+        self.assertEqual(self._tg({'target': 100}, price=110, prev=108)[2], ['现价超100 -9.1%'])
+
+    def test_target_zero_mutes_reached_only_and_blank_restores(self):
+        # 设置页目标价填 0＝纯手动关闭「达到」报灯；空间提醒仍按自动共识价；清空恢复
+        reached = lambda *a, **k: [x for x in self._tg(*a, **k)[2] if re.match(r'^(?:上穿 |跌破 |现价[超低])\d', x)]
+        cons = {'s': 'ok', 'avg': 140}
+        d = self._tg({'target': 0}, price=100, cons=cons)[3]
+        self.assertEqual(reached({'target': 0}, price=100, cons=cons), [])
+        self.assertTrue(d['target']['space_hit'])            # 共识价 140 → 空间 +40%
+        self.assertEqual(d['target']['kind'], 'consensus')
+        cons_below = {'s': 'ok', 'avg': 90}                  # 现价已高于共识价：本应达到，填 0 后不报
+        self.assertEqual(reached({'target': 0}, price=100, cons=cons_below), [])
+        self.assertEqual(len(reached({}, price=100, cons=cons_below)), 1)           # 空白恢复
+        self.assertEqual(len(reached({'target': None}, price=100, cons=cons_below)), 1)
+        self.assertEqual(reached({'target': 0}, price=100, prev=95, cons={'s': 'ok', 'avg': 98}), [])  # 上穿也不报
+        self.assertTrue(monitor.reached_muted({'target': 0}))
+        self.assertFalse(monitor.reached_muted({'target': False}))
+        self.assertFalse(monitor.reached_muted({'target': -1}))
+        self.assertFalse(monitor.reached_muted({}))
 
     def test_space_at_40_is_purple_but_not_reached(self):
         for price in (140, 150, 160, 190, 250):
@@ -2946,7 +2970,7 @@ class TestTargets(unittest.TestCase):
                     self.assertEqual(level, base)
 
     def test_reached_gap_has_exact_inclusive_boundaries_and_uses_settings(self):
-        for price, reached in ((96.999, False), (97, True), (103, True), (103.001, False)):
+        for price, reached in ((96.999, False), (97, True), (103, True), (103.001, True), (150, True)):   # 现价高于目标价：超过多少都算
             with self.subTest(price=price):
                 # 无昨收：只验证带内，不能伪造今日跨越。
                 target = monitor.evaluate_target(price, None,
@@ -3289,7 +3313,7 @@ class TestTargets(unittest.TestCase):
         page = self._page([self._row('MAN', 'yellow', False, t, ['波动 +2.1%'])])
         body = re.search(r'<tr\b[^>]*\bid="s-man"[^>]*>(.*?)</tr>', page, re.S)[1]
         sig = re.search(r'<td class="sig">(.*?)</td>', body, re.S)[1]
-        self.assertIn('波动 +2.1%', sig)
+        self.assertIn('波动 <span class="num-up">+2.1%</span>', sig)   # 数字走涨跌色，文字仍按条件灯级
         self.assertNotIn('目标价', sig)
         self.assertNotIn('data-signal-kind="target"', sig)
         self.assertNotIn('<span class="tnote">', page)
@@ -6889,7 +6913,7 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('function revealSignalPanel(panel) {', js)
         # 展开的清单/分组从屏幕 1/6 高度线开始（上面留给 iOS 灵动岛）
         self.assertIn('function topReserve() {', js)
-        self.assertIn('return Math.round(vh * 0.075);', js)
+        self.assertIn('return Math.round(vh * 0.0875);', js)
         self.assertIn('window.scrollBy({top: dy, behavior: "smooth"});', js)
 
     def test_collapse_button_css_keeps_full_width_and_positions_tinted_strip(self):
@@ -8148,11 +8172,23 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         page = monitor._signal_counts_card(monitor.build_snapshot({}, rows, {}, group_counts={}))
         red, yellow = self.panel(page, 'chg', 'red'), self.panel(page, 'chg', 'yellow')
         self.assertIn(f'<h5><span class="grp-arrow arrow-band-up">▲</span> 上涨</h5>', red)
-        self.assertIn('涨跌幅 +6.24%', red)
+        self.assertIn('涨跌幅 <span class="num-up">+6.24%</span>', red)   # 数字涨跌色，「涨跌幅」文字跟条件灯级
         self.assertIn(f'<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>', yellow)
-        self.assertIn('涨跌幅 -1.45%', yellow)
+        self.assertIn('涨跌幅 <span class="num-down">-1.45%</span>', yellow)
         self.assertNotIn('tone-red', red)
         self.assertNotIn('白▲ / 白▼', yellow)
+
+    def test_signed_percent_uses_up_down_colors_but_not_plus_minus_ranges(self):
+        # 描述/统计里带正负号的百分比数字用涨跌色；「±3.1%」区间、0%、无符号的振幅不上色
+        h = monitor.pct_html
+        self.assertEqual(h('异动 +8.3%'), '异动 <span class="num-up">+8.3%</span>')
+        self.assertEqual(h('波动 -9.8%'), '波动 <span class="num-down">-9.8%</span>')
+        self.assertEqual(h('波动 \u22125.5%'), '波动 <span class="num-down">\u22125.5%</span>')
+        self.assertEqual(h('平时约 ±3.1%'), '平时约 ±3.1%')
+        self.assertEqual(h('振幅 8.6%'), '振幅 8.6%')
+        self.assertEqual(h('涨跌幅 +0.00%'), '涨跌幅 +0.00%')
+        self.assertEqual(h('日期 2026-11-10'), '日期 2026-11-10')
+        # 主表整合由 test_page_manual_target_only_shows_space_in_capsule 覆盖；统计整合由 change_members 测试覆盖
 
     def test_boll_range_entry_is_white_and_intraday_break_is_yellow(self):
         cases = [('逼近布林上轨▲ 还差0.4%', 'tone-white', '▲', '逼近上轨'),
@@ -9687,7 +9723,7 @@ class TestFinalSourceContract(unittest.TestCase):
     def test_target_wording_uses_current_price_denominator_but_trigger_does_not(self):
         from decimal import Decimal
         for price, target, prev, expected_hit in (
-                (103, 100, 103, True), (103.0000000001, 100, 103, False),
+                (103, 100, 103, True), (103.0000000001, 100, 103, True),
                 (97, 100, 97, True), (96.9999999999, 100, 97, False),
                 (108, 100, 95, True), (92, 100, 105, True)):
             with self.subTest(price=price, target=target, prev=prev):
