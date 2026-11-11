@@ -705,7 +705,8 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   check(fp&&!fp.exact&&fp.symbol==='AAPL', '前缀也能定位（标注按前缀匹配）');
   check(T.findSymbol('NOSUCHXX')===null&&T.findSymbol('  ')===null, '找不到或空输入返回空，不报错');
   check(/<div class="row card-head">\s*<h2>规则参数<\/h2>\s*<button class="primary" id="btnSaveRules">[^<]*<\/button>\s*<button id="btnResetRules">/.test(src), '「保存规则」「恢复默认」在「规则参数」标题栏');
-  check(/<div class="row group-tools">[\s\S]*?id="dirty"[\s\S]*?<button id="btnReload">/.test(src)&&!src.includes('savebar'), '「有未保存的改动」提示在分类清单标题栏、保存清单按钮旁');
+  check(/<div class="row search-row">\s*<span class="dirty-text" id="dirty"[^>]*><\/span>\s*<input id="symSearch"/.test(src)&&!src.includes('savebar'), '「有未保存的改动」提示在搜索框前面，不占标题栏、不挤保存按钮');
+  check(/<h2>分类清单<\/h2><span id="groupTotal"><\/span>\s*<button id="btnReload">/.test(src)&&src.includes('.group-tools{flex-wrap:nowrap}'), '分组/记录数紧跟「分类清单」，标题栏固定一行');
   check(src.includes('id="symSearch"')&&src.includes('id="btnLocate"')&&src.includes('.stock-row.hit{'), '分类清单上方有搜索框、定位按钮和命中高亮样式');
 
   // 手动新增只要求有效代码；名称备注不在静态表中时也可留空。
