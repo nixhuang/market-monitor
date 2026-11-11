@@ -54,9 +54,6 @@ button.danger{color:var(--red)}
 .del{padding:7px 11px;font-size:13px;color:var(--red);background:#2a1d20;
   border:1px solid #48292c;border-radius:7px}
 .del:hover{background:#3a2528}
-.add{margin-top:8px}
-.add input.s{width:104px}
-.add select{width:104px}   /* 「长持仓 / 短持仓 / 各分组」要一眼看全 */
 /* 2026-10-30 统一：折叠标题一律 15px、写死 46px（box-sizing 含边框），三处折叠框同高。
    「监测开关」按钮 min-height 36px 在 46px 里居中；组名 nowrap + 省略号兜底。 */
 .edit-group>summary{color:var(--text);font-size:15px;list-style:none;display:flex;gap:8px;align-items:center}
@@ -66,10 +63,13 @@ button.danger{color:var(--red)}
 .monitor-toggle[aria-checked="true"]{color:var(--green);border-color:var(--green)}
 .monitor-note{font-size:12.5px;color:var(--dim);margin:4px 0 10px;line-height:1.6}
 .monitor-toggle:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
-.edit-group>summary::before{content:'›';font-size:20px;color:var(--dim)}
-.edit-group[open]>summary::before{transform:rotate(90deg)}
+/* 设置页所有可展开项（分组、参数开关、折叠卡、规则说明）标题前统一加展开三角，展开时转 90°。 */
+details.fold>summary::before,details.set>summary::before{content:'›';flex:none;width:10px;text-align:center;font-size:20px;line-height:1;color:var(--dim)}
+details.fold[open]>summary::before,details.set[open]>summary::before{transform:rotate(90deg)}
+details.fold>summary,details.set>summary{gap:8px}
 .edit-group .move{font-size:13px;max-width:120px;padding:7px}
 .edit-group .row input.n{min-width:140px}
+.stock-prices{display:contents}
 .group-tools{color:var(--dim);font-size:13px;gap:8px;margin:14px 2px 10px}
 .group-tools h2{margin:0 auto 0 0;color:var(--text);font-size:14px}
 .group-tools button{padding:5px 9px;font-size:13px}
@@ -183,10 +183,10 @@ button.danger{color:var(--red)}
 /* 预警表原行盒12px×1.65=19.8px；只放大字，不随字号放大行距。 */
 .card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:inherit;line-height:19.8px;overflow-wrap:anywhere}
 .card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:var(--cost-row-bg);border-bottom:1px solid var(--rules-border)}
-#rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border-left:0;border-right:0}
-.card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center}
+#rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border:0;border-collapse:collapse}
+/* 报灯表只留横向细线：不再有外框和逐格竖框，分组末行用较亮的同宽细线分段。 */
+.card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center;border:0;border-bottom:1px solid var(--rules-cell-border)}
 .card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}
-#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid var(--rules-group-border)}
 .card .rules-body .rule-table col.cat-col{width:18px}
 .card .rules-body .rule-table col.col-cond{width:40%}
 .card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:13.2px;font-size:inherit;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
@@ -206,7 +206,7 @@ button.danger{color:var(--red)}
 #signalCounts .arrow-band-down,#signalCounts .arrow-rsi-down{color:var(--down)}
 .card .rules-body .rule-table .ar-band-up,.card .rules-body .rule-table .ar-band-down,
 .card .rules-body .rule-table .ar-rsi-up,.card .rules-body .rule-table .ar-rsi-down{font-weight:700}
-.card .rules-body .rule-table tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid var(--rules-group-border)}
+.card .rules-body #rules-lamp-table tr.rule-group-end>th,.card .rules-body #rules-lamp-table tr.rule-group-end>td{border-bottom:1px solid var(--rules-group-border)}
 .card .rules-body .rule-table td.cell-red{background:var(--rules-red-bg);text-align:center}
 .card .rules-body .rule-table td.cell-yellow{background:var(--rules-yellow-bg);text-align:center}
 .card .rules-body .rule-table td.cell-gray{background:var(--rules-gray-bg);text-align:center}
@@ -215,13 +215,14 @@ button.danger{color:var(--red)}
 .card .rules-body #rules-lamp-table tbody td:first-of-type{color:var(--rules-strong)}
 .card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
 .card .rules-body .rule-anchor{display:block;height:0}
-@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
+@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-20px;margin-right:-20px;width:calc(100% + 40px)}.card .rules-body .rule-table col.col-cond{width:auto}#rules-lamp-table col[span]{width:86px}#rules-lamp-table td.cell-gray-fold{white-space:nowrap}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
 #signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
 #signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
 #signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
 #signalRulesBody h5.rule-original,#signalRulesBody .rule-layout-heading,#glossaryRulesBody h5{margin:14px 0 4px}
 #signalRulesBody .rule-layout-scope{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
 #signalRulesBody h4.rule-original{margin:18px 0 7px}
+#signalRulesBody section:first-of-type h4.rule-original{margin-top:6px}
 .card .rules-body .signal-term{display:inline-flex;align-items:center;vertical-align:baseline;white-space:nowrap;overflow-wrap:normal;gap:1px}
 .card .rules-body .dir-arrow{display:inline-block;flex:none;width:auto;height:18px;vertical-align:middle;margin-left:2px;overflow:visible}
 #signalRulesBody .nav-gray{color:var(--rules-muted)}
@@ -236,17 +237,34 @@ button.danger{color:var(--red)}
 #glossary-vol-table thead th:nth-child(3){color:var(--lamp-yellow)}
 #glossary-chg-table td,#glossary-amp-table td,#glossary-vol-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
 /* MM_RULECSS_END */
-@media(max-width:480px){.edit-group .row{display:grid;grid-template-columns:82px minmax(0,1fr) 42px;gap:6px}
-.edit-group .sym{width:82px;grid-column:1;grid-row:1}
-.edit-group .row input.n{min-width:0;width:100%;grid-column:2;grid-row:1}
-.edit-group .del{grid-column:3;grid-row:1;padding:7px}
-.edit-group .row input.t{grid-column:1;grid-row:2;width:82px;font-size:13px}
-.edit-group .row input.r{grid-column:1;grid-row:3}
-.edit-group .row input.g,.edit-group .add input.g{grid-column:2;grid-row:2}
-/* 每行只剩一个下拉（分区/分组都在这里选），手机上占满下半行 */
-.edit-group .move{grid-column:2 / span 2;grid-row:3;max-width:none;width:100%}.edit-group .add .s{width:82px;font-size:13px}
-.edit-group .add button{grid-column:3;grid-row:1;padding:7px 3px;font-size:13px}
-.edit-group .add .t{grid-row:2}}
+/* 每只股票一排：列标题 + 一行（代码纯文字不可改 / 备注 / 各价位 / 分组 / 删除）。
+   列宽只由 --price-fields 决定（持仓3、重点2、其余1），列标题与每行共用同一组轨道，不再有空格子。
+   手机内宽约412px：44 代码 + 100 备注（固定，刚好7个中文字13px=91px+内边距）+ 价位各占剩余均分（持仓3列约54px，重点2列约83px，其余1列）+ 56 分组 + 26 删除；字号不小于13px。 */
+.edit-group .stock-head,.edit-group .stock-row{display:grid;grid-template-columns:44px 100px repeat(var(--price-fields),minmax(0,1fr)) 56px 26px;column-gap:4px;align-items:center;margin:0}
+.edit-group .stock-head{padding:2px 0 4px;font-size:13px;line-height:1.4;color:var(--dim)}
+.edit-group .stock-head>span{min-width:0;overflow:hidden;white-space:nowrap;padding-left:5px}
+.edit-group .stock-head>span:first-child{padding-left:0}
+.edit-group .stock-row{padding:4px 0}
+.edit-group .stock-row~.stock-row{border-top:1px solid var(--stock-divider)}
+.edit-group .stock-row>.sym.etf{color:var(--link-blue,#6ba3f0)}   /* ETF只靠蓝色代码区分，不再单独分区；股票白字 */
+.edit-group .stock-row>.sym{width:auto;min-width:0;padding:0;border:0;border-radius:0;background:none;color:var(--text);font-size:14px;overflow:hidden;text-overflow:ellipsis}
+.edit-group .stock-row>input.n,.edit-group .stock-row input.t{min-width:0;width:100%;padding:6px 3px 6px 4px;font-size:13px}
+.edit-group .stock-row>.move{min-width:0;max-width:none;width:100%;padding:6px 1px;font-size:13px}
+.edit-group .stock-row>.del{width:26px;min-height:34px;padding:0;font-size:15px;line-height:1}
+@media(min-width:601px){
+/* 601px 时行内宽约532px：64 代码 + 108 备注 + 价位各≥56 + 96 分组 + 28 删除 + 间距，最窄也放得下；更宽时价位列均分余量。 */
+.edit-group .stock-head,.edit-group .stock-row{grid-template-columns:64px 108px repeat(var(--price-fields),minmax(56px,1fr)) 96px 28px;column-gap:6px}
+.edit-group .stock-row>input.n,.edit-group .stock-row input.t{padding:6px 4px}
+.edit-group .stock-row>.del{width:28px}
+}
+@media(max-width:600px){
+body{padding-left:5px;padding-right:5px}
+details.fold.edit-group{padding:0 8px}
+}
+/* 统一新增入口：只选分组，价位添加后在对应行里填。 */
+.add-entry .add-row{display:grid;grid-template-columns:76px minmax(0,1fr) 104px 52px;gap:6px;align-items:center}
+.add-entry input,.add-entry select{min-width:0;width:100%}
+.add-entry button{padding:9px 0}
 .edit-group summary:focus-visible{outline:2px solid #6ba3f0;outline-offset:2px}
 .empty{color:#5f6672;font-size:13px;padding:3px 0 8px}
 /* 消息区排在「← 回看板」按钮下面：原来是 min-height 22 + 下外距 12，加上 .sub 的下外距，
@@ -254,11 +272,6 @@ button.danger{color:var(--red)}
    min-height 仍留得下一行 13px/1.6 的提示文字（约 21px），出现提示不会明显顶开版面。 */
 #msg{font-size:13px;min-height:20px;margin:0 2px 4px;line-height:1.6}
 #msg.ok{color:var(--green)} #msg.err{color:var(--red)} #msg.busy{color:var(--dim)}
-.filebtn{display:inline-block;padding:8px 14px;font-size:13px;background:#232833;
-  border:1px solid #333a47;border-radius:8px;cursor:pointer}
-.filebtn:hover{background:#2b303c}
-.csvinfo{font-size:12.5px;color:var(--dim);line-height:1.9;margin:8px 0}
-.csvinfo b{color:var(--text);font-weight:500}
 .savebar{background:var(--bg);padding:8px 0 4px;
   display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .savebar .sp{flex:1;font-size:12.5px;color:var(--dim)}
@@ -271,6 +284,7 @@ kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
 .setrow{display:flex;gap:8px;align-items:center}
 .setrow label{flex:1;font-size:13px;color:var(--dim);line-height:1.4}
 .setrow input{width:96px;text-align:right;font-variant-numeric:tabular-nums}
+.setrow .def{flex:none;min-width:36px;text-align:right;font-size:13px;color:#6f7785;font-variant-numeric:tabular-nums}
 details.set{margin-top:4px}
 details.set summary{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;padding:4px 0;outline:none}
 details.set[open] summary{margin-bottom:8px}
@@ -307,14 +321,44 @@ details.fold[open]>summary{padding-bottom:0}
    是并列的同级开关，文字同样 15px、同样蓝色，高度也一起并到卡片级的 46px（原 36px）。 */
 details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:center;
   padding-top:0;padding-bottom:0}
-/* 「显示与交互」原本是折叠卡的灰色标题，与它上面蓝色小字的参数开关不同色；
-   同一张「规则参数」卡内两行并列，颜色统一成链接蓝 #6ba3f0（只改这一行，不动其它卡片标题）。 */
-#displayCard>summary{color:#6ba3f0}
 /* 「综合判断与宏观细则」注入时已拆掉模板自带的 section 卡壳、并补上 fold 卡类（见页尾脚本），
    高度/字号随上面的 fold 总块走；这里只补标题颜色，与「预警规则」「名词解释」一致。
    id 全页唯一，直接用 id 选择器。 */
 #marketRiskRules>summary{color:var(--head-blue,#bfd5ff)}
 #marketRiskRules[open]{padding-bottom:8px}
+/* 令牌两个按钮同排不换行，字号按普通按钮 14px；生成的链接 13px。 */
+.token-tools{margin:8px 0 0}
+.token-tools button{white-space:nowrap}
+/* 红色文字在深色按钮底上对比不足：「清除本机令牌」改用浅红 --lamp-red */
+button.danger{color:var(--lamp-red,#ff8580);border-color:rgba(255,133,128,.55)}
+/* 定投提醒：两排放下——第一排起点日与间隔各占一半，第二排两个按钮等宽 */
+.dca-grid,.dca-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dca-actions{margin-top:10px}
+.dca-grid .field label{display:block;font-size:13px;color:var(--dim);line-height:1.4;margin-bottom:4px}
+.dca-grid .field input{width:100%;text-align:left}
+.dca-actions button{width:100%;padding:9px 4px;white-space:nowrap}
+/* 搜索定位：输入框占满，命中的行短暂高亮 */
+.search-row{margin:0 0 10px}
+/* 「规则参数」标题栏：标题在左，保存规则/恢复默认在右；未保存提示紧跟在标题栏下一行 */
+.card-head{margin-bottom:2px}
+.card-head h2{margin:0 auto 0 0}
+.dirty-note:empty{display:none}
+.dirty-note{display:block;margin:0 0 4px}
+.search-row input{flex:1;min-width:0}
+.edit-group .stock-row.hit{background:rgba(107,163,240,.2);box-shadow:0 0 0 2px rgba(107,163,240,.35);border-radius:6px}
+/* 「规则参数」卡：原来每个开关行固定 46px、设置行间距 5px+输入框上下 8px，文字之间空得过大；
+   开关行收成 34px，设置行输入框上下 5px、行距 2px，小节标题与按钮行间距同步收紧。 */
+#setToggle>summary{height:34px}
+details.set[open]>summary{margin-bottom:2px}
+.setgrid{gap:2px}
+.setrow input,.setrow select{padding-top:5px;padding-bottom:5px}
+.setsec{margin:6px 0 0}
+#btnSaveRules{margin-top:0}
+/* 手机设置页：所有可见文字不小于「监测开启」按钮的 13px。 */
+@media(max-width:600px){
+.sub,.sub a,.note,.monitor-note,.savebar .sp,.pager,.setsec,.subsec,kbd{font-size:13px}
+#marketRiskRules h5{font-size:15px}
+}
 </style>
 </head>
 <body>
@@ -340,7 +384,7 @@ details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:c
   </p>
   <div class="row" style="margin-top:12px">
     <button id="btnSkip">不想用令牌，改成手动复制模式</button>
-    <span style="font-size:12px;color:var(--dim)">功能一样，最后一步自己粘一下</span>
+    <span style="font-size:13px;color:var(--dim)">功能一样，最后一步自己粘一下</span>
   </div>
 </div>
 
@@ -352,7 +396,7 @@ details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:c
     <button id="btnBack">回到令牌模式</button>
   </div>
   <textarea id="jsonOut" spellcheck="false"
-    style="width:100%;height:220px;margin-top:10px;padding:10px;font-size:12px;line-height:1.5;
+    style="width:100%;height:220px;margin-top:10px;padding:10px;font-size:13px;line-height:1.5;
     font-family:ui-monospace,Menlo,monospace;background:#0e1014;color:#9fd3ff;
     border:1px solid var(--line);border-radius:8px;resize:vertical"></textarea>
   <p class="note">粘贴进去后点页面最下方的 <b>Commit changes</b>，会触发自动重跑；排队、生成和 Pages 发布可能需要等待，可刷新公开状态查看。手动复制没有本页提交回执，不能自动验证该次提交。</p>
@@ -361,7 +405,12 @@ details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:c
 <div id="main" class="hide">
 
   <div class="card">
-    <h2>规则参数</h2>
+    <div class="row card-head">
+      <h2>规则参数</h2>
+      <button class="primary" id="btnSaveRules">保存规则</button>
+      <button id="btnResetRules">恢复默认</button>
+    </div>
+    <span class="note dirty-note" id="rulesDirty" role="status" aria-live="polite"></span>
     <details class="set" id="setToggle">
       <summary>布林 / 均线 / 涨跌幅 / RSI / 量比 / 宏观</summary>
       <div class="setsec">布林带</div>
@@ -407,80 +456,65 @@ details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:c
           <select id="set_use_realtime"><option value="1">开</option><option value="0">关</option></select></div>
       </div>
     </details>
-    <details class="card fold" id="displayCard">
-      <summary>显示与交互</summary>
-      <div class="pane">
-        <div class="setgrid">
-          <div class="setrow"><label>统计明细单组展开</label>
-            <select id="set_signal_single_open"><option value="1">开</option><option value="0">关</option></select></div>
-        </div>
+    <div class="card" id="displayCard">
+      <h2>显示与交互</h2>
+      <div class="setgrid">
+        <div class="setrow"><label>统计明细单组展开</label>
+          <select id="set_signal_single_open"><option value="1">开</option><option value="0">关</option></select></div>
+        <div class="setrow"><label>首页分组单个展开（当日/风险/统计除外）</label>
+          <select id="set_group_single_open"><option value="1">开</option><option value="0">关</option></select></div>
       </div>
-    </details>
-
-    <div class="row" style="margin-top:10px">
-      <button class="primary" id="btnSaveRules">保存规则</button>
-      <button id="btnResetRules">恢复默认</button>
-      <span class="note" id="rulesDirty" role="status" aria-live="polite"></span>
     </div>
+
     <p class="note">
       保存规则只提交 <kbd>settings.json</kbd>；清单另行保存。
       <textarea id="rulesOut" spellcheck="false" class="hide"
-        style="width:100%;height:160px;margin-top:10px;padding:10px;font-size:12px;
+        style="width:100%;height:160px;margin-top:10px;padding:10px;font-size:13px;
         font-family:ui-monospace,Menlo,monospace;background:#0e1014;color:#9fd3ff;
         border:1px solid var(--line);border-radius:8px;resize:vertical"></textarea>
     </p>
   </div>
 
-  <details class="card fold group-intro" id="importCard">
-    <summary>CSV / EBK 导入</summary>
-    <div class="pane">
-    <div class="row">
-      <label for="csvKind" class="note">导入到</label>
-      <select id="csvKind" aria-label="CSV 目标分组"></select>
-      <label class="filebtn">上传 CSV / EBK<input type="file" id="fileCsv" accept=".csv,.ebk,.txt,.tsv" hidden></label>
-    </div>
-    <p class="note" id="csvMode">持仓：按 CSV 替换整组，其余组不受影响。</p>
-    <p class="note">CSV 可读取代码及名称；EBK 自动识别富途市场标识并补充名称。忽略 A股、港股和 SGOV，特殊指数 / 期货 / 汇率代码保留，暂不支持报价时显示无数据。持仓替换，其余分类追加；已有备注、加仓价和减仓价保留。</p>
-    <div class="note" id="importAudit"></div>
-    <div class="csvinfo" id="csvInfo" aria-live="polite"></div>
-    <button class="primary hide" id="btnApply">确认导入</button>
-    </div>
-  </details>
   <div class="row group-tools">
     <h2>分类清单</h2><span id="groupTotal"></span>
-    <button id="btnExpandGroups">全部展开</button><button id="btnCollapseGroups">全部收起</button>
+    <button id="btnReload">恢复清单</button><button class="primary" id="btnSave">保存清单</button>
+  </div>
+  <div class="row search-row">
+    <input id="symSearch" type="search" placeholder="搜索股票代码，定位所在分组" aria-label="搜索股票代码" autocapitalize="characters" autocomplete="off" enterkeyhint="search">
+    <button id="btnLocate">定位</button>
+  </div>
+  <div class="card add-entry" id="addEntry">
+    <h2>新增股票</h2>
+    <div class="add-row">
+      <input class="s" id="newSym" placeholder="代码" aria-label="股票代码" autocapitalize="characters" disabled>
+      <input class="n" id="newNote" placeholder="名称备注（选填）" aria-label="名称备注（选填）" disabled>
+      <select class="move" id="newMove" aria-label="新增到分区或分组" disabled></select>
+      <button class="primary" id="btnAddSym" disabled>添加</button>
+    </div>
   </div>
   <fieldset id="groupEditor" disabled style="border:0;padding:0;margin:0;min-width:0"></fieldset>
   <div class="savebar">
     <span class="sp" id="dirty"></span>
-    <button id="btnReload">重新读取已保存清单</button>
-    <button class="primary" id="btnSave">保存清单与分组</button>
   </div>
-  <p class="note">保存股票清单、备注、加仓价、减仓价、目标价和监测开关，不影响规则与定投设置。重新读取会先询问是否丢弃未保存的清单改动。</p>
+  <p class="note">保存股票清单、备注、加仓价、减仓价、目标价和监测开关，不影响规则与定投设置。恢复清单会先询问是否丢弃未保存的清单改动。</p>
 
-  <details class="card fold" id="dcaCard">
-    <summary>定投提醒</summary>
-    <div class="pane">
-    <div class="setrow"><label>起点日（YYYY-MM-DD）</label>
-      <input id="set_dca_start" placeholder="2026-10-01" style="width:130px"></div>
-    <div class="setrow" style="margin-top:7px"><label>间隔（交易日，0或留空关闭）</label>
-      <input id="set_dca_every" inputmode="numeric" placeholder="5"></div>
-    <div class="row" style="margin-top:10px">
+  <div class="card" id="dcaCard">
+    <h2>定投提醒</h2>
+    <div class="dca-grid">
+      <div class="field"><label for="set_dca_start">起点日（YYYY-MM-DD）</label>
+        <input id="set_dca_start" placeholder="2026-10-01"></div>
+      <div class="field"><label for="set_dca_every">间隔（交易日，0关闭）</label>
+        <input id="set_dca_every" inputmode="numeric" placeholder="5"></div>
+    </div>
+    <div class="dca-actions">
       <button class="primary" id="btnSaveDca">保存定投提醒</button>
       <button id="btnClearDca">关闭定投提醒</button>
     </div>
-    </div>
-  </details>
+  </div>
 
-  <p class="note" style="margin-top:18px">
-    手机上也要改？点下面生成一条<b>带令牌的链接</b>，发到微信里用手机打开就行，
-    不用在手机上再贴一次。<b>这条链接等于你的令牌</b>；微信、剪贴板或截图都可能泄露它，建议在手机直接输入令牌，切勿转发。<br>
-    <button id="btnLink" style="padding:5px 10px;font-size:12px;margin-top:6px">生成手机用的链接</button>
-    <span id="linkBox" style="display:block;margin-top:7px;word-break:break-all;color:#6ba3f0;font-size:11px"></span>
-  </p>
-  <p class="note">
-    <button id="btnWipe" class="danger" style="padding:5px 10px;font-size:12px">清除本机令牌</button>
-  </p>
+  <div class="row token-tools" style="margin-top:18px">
+    <button id="btnWipe" class="danger">清除本机令牌</button>
+  </div>
 
   <div class="group-tools" id="rulesTools"><h2>规则与说明</h2></div>
   <div id="rulesHost"><p class="note">正在读取最近一次构建的规则说明…</p></div>
@@ -489,28 +523,18 @@ details.set>summary{box-sizing:border-box;height:46px;display:flex;align-items:c
 </div>
 
 <script src="./run-status.js?v=534c1cf55912ff8d"></script>
-<script src="./list-import.js?v=d2bf213fe06a1385"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
 const TKEY='mm_gh_token_v1';
 const LOCAL_PREVIEW=location.origin!=='https://nixhuang.github.io';
 const DRAFT_KEY='mm_groups_preview_monitoring_v3';
-let AUDIT=null;
-function showAudit(){
-  if(!AUDIT)return;
-  const all=new Set(GROUPS.flatMap(g=>Object.keys(data[g.key]||{})));
-  const missing=AUDIT.all_symbols.filter(s=>!all.has(s));
-  const extra=[...all].filter(s=>!AUDIT.all_symbols.includes(s));
-  $('importAudit').textContent='按上传的原分组保留成员，不自动补归。当前在册唯一代码 '+all.size+' 个。'
-    +(missing.length?' 全部清单中另有 '+missing.length+' 个代码未指定分组，保留待确认，不自动添加：'+missing.join('、'):'')
-    +(extra.length?' 与全部清单不同的代码：'+extra.join('、'):'');
-}
 let GROUPS=[], KINDS=[], KIND_LABEL={}, NAMES={};
 const pageState={};
 let monitoring={};
 function hasReduce(key){return key==='positions';}
-function hasCost(key){return key==='positions';}
+function hasCost(key){return key==='positions';}   // 成本只在首页编辑；设置页不再显示成本价输入，但整份记录里已有的cost原样保留、随分组一起转移
+const COST_IN_LIST=false;
 function hasTarget(key){return key==='positions'||key==='focus';}
 const POS_ZONES=[{v:'long',label:'长持仓'},{v:'short',label:'短持仓'}];
 const ZONE_LABEL={long:'长持仓',short:'短持仓'};
@@ -582,10 +606,10 @@ function validateListDraft(kind){
     (error.field==='trigger'?'应填写有限数字或留空':'应填写大于 0 的有限数字或留空')+'；无效文本已保留','err');
   return false;
 }
-let pending=null, loadRevision=0, loaded=false;
+let loadRevision=0, loaded=false;
 function loadingControls(loading){
   $('groupEditor').disabled=loading;
-  ['btnSave','csvKind','fileCsv'].forEach(id=>$(id).disabled=loading);
+  ['btnSave','newSym','newNote','newMove','btnAddSym','symSearch','btnLocate'].forEach(id=>$(id).disabled=loading);
 }
 
 function b64enc(s){const b=new TextEncoder().encode(s);let x='';for(const v of b)x+=String.fromCharCode(v);return btoa(x);}
@@ -643,52 +667,31 @@ function whyFail(status,dflt){
   return dflt||('HTTP '+status);
 }
 
-/* ---------- CSV 识别 ---------- */
+/* ---------- 代码规范化与校验 ---------- */
 const NOISE=new Set(['','-','--','n/a','na','cash','cash & money market','total','totals',
   'pending','symbol','ticker','代码','股票代码','证券代码','account total','合计','小计']);
-const Import=window.MMListImport;
-function isTicker(v){return !NOISE.has(String(v||'').trim().toLowerCase())&&Import.valid(v);}
-function normTicker(v){return Import.normalize(v);}
-function parseCsv(text){
-  let rows;
-  try{rows=Import.csvRecords(text);}catch(error){
-    return {symbols:[],names:{},ignored:[],rejected:[],format:'CSV',error:error.message};
+const SPECIAL_TICKER=/^(?:\.[A-Z0-9]+|BD#[A-Z0-9]+|2USDCNY|2XAUUSD)$/;
+function normTicker(value){
+  let t=String(value||'').replace(/^\uFEFF/,'').trim().toUpperCase().replace(/^\$/,'');
+  if(t.startsWith('31#'))t=t.slice(3);
+  if(SPECIAL_TICKER.test(t))return t;
+  const suffix=t.match(/^(.+?)[-./](US|HK|SH|SZ|SS|SG|JP|UK|AU|CA)$/);
+  if(suffix){
+    const [,code,market]=suffix;
+    if(market==='US')return code.replace(/[./]/g,'-');
+    return code+'.'+(market==='SH'?'SS':market);
   }
-  if(!rows.length)return {symbols:[],names:{},ignored:[],rejected:[],format:'CSV',how:'文件是空的'};
-  const hints=['symbol','ticker','代码','证券代码','股票代码','标的','sym'];
-  let col=null,hi=-1;
-  for(let i=0;i<Math.min(10,rows.length);i++){
-    for(let j=0;j<rows[i].length;j++){
-      const c=rows[i][j].trim().toLowerCase();
-      if(hints.some(h=>c.indexOf(h)>=0)){col=j;hi=i;break;}
-    }
-    if(col!==null)break;
-  }
-  let how='按表头识别代码列';
-  if(col===null){
-    let best=0,bs=-1,ties=0;
-    const columns=rows.reduce((max,row)=>Math.max(max,row.length),0);
-    for(let j=0;j<columns;j++){
-      let sc=0;rows.forEach(r=>{if(j<r.length&&isTicker(r[j]))sc++;});
-      if(sc>bs){bs=sc;best=j;ties=1;}else if(sc===bs){ties++;}
-    }
-    if(bs>0&&ties>1)return {symbols:[],names:{},ignored:[],rejected:[],format:'CSV',
-      error:'无法明确识别代码列：多个列同样像股票代码，请补充 symbol 或「代码」表头后上传。'};
-    col=best;hi=-1;how='没找到表头，按内容推测代码列';
-  }
-  const headers=hi>=0?rows[hi].map(v=>v.trim().toLowerCase()):[];
-  const nameCol=headers.findIndex(v=>['名称','公司名称','证券名称','股票名称','中文名称','name','company','company name','description','security name'].includes(v));
-  const out=[],names={},ignored=[],rejected=[],seen=new Set();
-  for(let i=hi+1;i<rows.length;i++){
-    const v=(col<rows[i].length)?rows[i][col].trim():'';
-    const reason=Import.ignoredReason(v);
-    if(reason){ignored.push({raw:v,reason});continue;}
-    if(!isTicker(v)){if(v&&!NOISE.has(v.toLowerCase()))rejected.push(v);continue;}
-    const s=normTicker(v);
-    if(s&&!seen.has(s)){seen.add(s);out.push(s);}
-    if(nameCol>=0&&rows[i][nameCol])names[s]=rows[i][nameCol].trim();
-  }
-  return {symbols:out,names,ignored,rejected,format:'CSV',how:how};
+  return t.replace(/[./]/g,'-');
+}
+// A股、港股和 SGOV 不收录
+function ignoredTicker(value){
+  const raw=String(value||'').trim().toUpperCase(),t=normTicker(raw);
+  return t==='SGOV'||/^74#/.test(raw)||/^\d+\.HK$/.test(t)||/^[01]\d{6}$/.test(raw)||/^\d+\.(SS|SZ)$/.test(t)||/^\d{5,6}$/.test(raw);
+}
+function isTicker(v){
+  if(NOISE.has(String(v||'').trim().toLowerCase())||ignoredTicker(v))return false;
+  const t=normTicker(v);
+  return SPECIAL_TICKER.test(t)||/^[A-Z][A-Z0-9-]{0,11}$/.test(t);
 }
 
 // 以读入/已提交版本为共同基线；只有明确确认后才采用冲突项的本地值。
@@ -711,6 +714,35 @@ function confirmMerge(conflicts){
   return !conflicts.length||confirm('以下字段在远端和本地都已修改：\n'+conflicts.join('\n')+
     '\n确定：这些字段采用本地草稿，其余字段保留远端更新。取消：不合并、不写入，继续保留当前草稿。合并后仍需再次点击保存。');
 }
+/* 同一只股票全页只能存在一份：按分组顺序（持仓 > 重点 > 其他）保留最高优先级那份，
+   低优先级重复项里「胜出者还没填」的信息并入胜出者（备注/加仓价/减仓价/目标价/成本价），然后删掉重复项。 */
+const MERGE_FIELDS={note:()=>true,trigger:()=>true,reduce:hasReduce,target:hasTarget,cost:hasCost};
+let dedupedCount=0;
+function holderOf(symbol,exceptKey){
+  const n=normTicker(symbol);
+  return GROUPS.find(g=>g.key!==exceptKey&&Object.keys(data[g.key]||{}).some(s=>normTicker(s)===n))||null;
+}
+function emptyField(v){return v===undefined||v===null||v==='';}
+function mergeInto(winner,loser,groupKey){
+  Object.entries(MERGE_FIELDS).forEach(([f,ok])=>{
+    if(ok(groupKey)&&emptyField(winner[f])&&!emptyField(loser[f])){
+      winner[f]=loser[f];
+      if(f==='target'&&loser.target_at)winner.target_at=loser.target_at;
+    }
+  });
+}
+function dedupeData(nextData){
+  const seen=new Map();let removed=0;
+  GROUPS.forEach(g=>{
+    Object.keys(nextData[g.key]).forEach(symbol=>{
+      const n=normTicker(symbol),first=seen.get(n);
+      if(!first){seen.set(n,{key:g.key,symbol});return;}
+      mergeInto(nextData[first.key][first.symbol],nextData[g.key][symbol],first.key);
+      delete nextData[g.key][symbol];removed++;
+    });
+  });
+  return removed;
+}
 function applyHoldings(config){
   if(!config||typeof config!=='object'||Array.isArray(config))throw new Error('清单顶层不是对象');
   const nextData=Object.fromEntries(GROUPS.map(g=>{
@@ -721,6 +753,7 @@ function applyHoldings(config){
       return [symbol,{...record,...(!record.note&&NAMES[normTicker(symbol)]?{note:NAMES[normTicker(symbol)]}:{})}];
     }))];
   }));
+  dedupedCount=dedupeData(nextData);
   data=nextData;
   monitoring=config.group_monitoring&&typeof config.group_monitoring==='object'&&!Array.isArray(config.group_monitoring)
     ?{...config.group_monitoring}:{};
@@ -740,8 +773,8 @@ async function recoverHoldings(){
     if(!confirmMerge(merged.conflicts)){setMsg('已取消合并，原清单草稿保留；再次保存可重新读取最新版','err');return;}
     const baseline=JSON.parse(JSON.stringify(remote));
     applyHoldings(merged.value);SHA=r.data.sha;holdingsBaseline=baseline;holdingsConflict=false;
-    pending=null;csvRevision++;$('btnApply').classList.add('hide');render();touch();
-    setMsg('已读取最新版并合并清单草稿，尚未写入；请核对后再次点击「保存清单与分组」','ok');
+    render();touch();
+    setMsg('已读取最新版并合并清单草稿，尚未写入；请核对后再次点击「保存清单」','ok');
   }catch(error){setMsg('清单恢复失败；草稿保留：'+error.message,'err');}
   finally{holdingsSaving=false;loadingControls(false);}
 }
@@ -750,7 +783,7 @@ async function recoverHoldings(){
 async function load(){
   if(holdingsSaving)return;
   const revision=++loadRevision;
-  loadingControls(true);pending=null;$('btnApply').classList.add('hide');csvRevision++;
+  loadingControls(true);
   setMsg('正在读取清单…','busy');
   const r=await gh('GET','/contents/holdings.json?ref='+BRANCH);
   if(revision!==loadRevision)return;
@@ -768,6 +801,7 @@ async function load(){
     SHA=r.data.sha||'';holdingsBaseline=JSON.parse(configText());holdingsConflict=false;
     listDraftErrors.clear();changed=false;$('dirty').textContent='';
     render();
+    if(dedupedCount){changed=true;$('dirty').textContent='有未保存的改动';}
     setMsg(LOCAL_PREVIEW?'本地预览：保存仅存本机草稿，不提交 GitHub':TOKEN?'':'手动模式：改完点保存，复制 JSON 到 GitHub',TOKEN?'':'ok');
     loaded=true;loadingControls(false);loadRun();loadSettings();
   }catch(e){setMsg('仓库里的 holdings.json 不是合法 JSON：'+e,'err');loadingControls(!loaded);}
@@ -786,59 +820,77 @@ function initGroups(groups){
   GROUPS=groups;
   KIND_LABEL=Object.fromEntries(groups.map(g=>[g.key,g.label]));
   KINDS=groups.map(g=>({k:g.key,list:'list_'+g.key,pager:'pager_'+g.key,cnt:'cnt_'+g.key,sort:g.key!=='positions'}));
-  $('csvKind').innerHTML=groups.map(g=>'<option value="'+esc(g.key)+'">'+esc(g.label)+'</option>').join('');
   $('groupEditor').innerHTML=groups.map(g=>'<details class="fold edit-group" id="fold_'+esc(g.key)+'">'
     +'<summary>'+esc(g.label)+' <span id="cnt_'+esc(g.key)+'">(0)</span>'
     +(alwaysMonitored(g.key)?'<span class="monitor-note" style="margin:0 0 0 auto">始终监测</span>'
       :'<button type="button" class="monitor-toggle" id="monitor_'+esc(g.key)+'" role="switch" aria-checked="false" aria-label="'+esc(g.label)+'分组监测">监测关闭</button>')+'</summary>'
     +'<div class="pane">'
     +'<div id="list_'+esc(g.key)+'"></div><div class="pager" id="pager_'+esc(g.key)+'"></div>'
-    +'<div class="add row"><input class="s" id="newSym_'+esc(g.key)+'" placeholder="股票代码" aria-label="'+esc(g.label)+'股票代码">'
-    +'<input class="n" id="newNote_'+esc(g.key)+'" placeholder="名称备注（选填）" aria-label="'+esc(g.label)+'名称备注（选填）">'
-    +'<input class="t" id="newTrig_'+esc(g.key)+'" placeholder="加仓价" inputmode="decimal">'
-    +(hasReduce(g.key)?'<input class="t r" id="newReduce_'+esc(g.key)+'" placeholder="减仓价" inputmode="decimal" aria-label="减仓价">':'')
-    +(hasTarget(g.key)?'<input class="t g" id="newTarget_'+esc(g.key)+'" placeholder="目标价" inputmode="decimal" aria-label="目标价">':'')
-    +'<select class="move" id="newMove_'+esc(g.key)+'" aria-label="新增到分区或分组">'+moveOptions(targetOf(g.key))+'</select>'
-    +'<button class="primary" id="add_'+esc(g.key)+'">添加</button></div></div></details>').join('');
+    +'</div></details>').join('');
+  $('newMove').innerHTML=moveOptions(targetOf('positions'));
+  $('btnAddSym').onclick=addSymbol;
   groups.forEach(g=>{
     data[g.key] ||= {}; pageState[g.key]=0;
-    $('add_'+g.key).onclick=()=>addSymbol(g.key);
     if(alwaysMonitored(g.key))return;
     $('monitor_'+g.key).onclick=e=>{
       e.preventDefault();e.stopPropagation();
       if(!loaded||$('groupEditor').disabled)return;
       monitoring[g.key]=!monitorEnabled(g.key);render();touch();
-      setMsg('「'+g.label+'」监测'+(monitorEnabled(g.key)?'已开启':'已关闭')+'，点「保存清单与分组」才生效','ok');
+      setMsg('「'+g.label+'」监测'+(monitorEnabled(g.key)?'已开启':'已关闭')+'，点「保存清单」才生效','ok');
     };
   });
 }
-function addSymbol(kind){
-  const symbol=normTicker($('newSym_'+kind).value);
+/* 「首页分组单个展开」开关同样管设置页的个股分组：点开一个自动收起其它；添加后自动展开和搜索定位不走这条。 */
+let groupClickAt=0;
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('.edit-group>summary'))groupClickAt=Date.now();},true);
+document.addEventListener('toggle',e=>{
+  const d=e.target;
+  if(!d.classList||!d.classList.contains('edit-group')||!d.open)return;
+  const sw=$('set_group_single_open');
+  if(!sw||sw.value!=='1'||Date.now()-groupClickAt>800)return;
+  const before=d.getBoundingClientRect().top;
+  document.querySelectorAll('.edit-group[open]').forEach(o=>{if(o!==d)o.open=false;});
+  const delta=d.getBoundingClientRect().top-before;
+  if(Math.abs(delta)>1)window.scrollBy(0,delta);
+},true);
+/* 搜索股票代码：只定位——展开所在分组、翻到所在页、滚到该行并短暂高亮。代码全页唯一，所以最多一个结果；
+   精确匹配优先，其次取代码前缀匹配的第一个。 */
+function findSymbol(q){
+  const n=normTicker(q);if(!n)return null;
+  let partial=null;
+  for(const g of GROUPS){
+    const keys=orderedKeys(g.key);
+    const i=keys.findIndex(s=>normTicker(s)===n);
+    if(i>=0)return {kind:g.key,symbol:keys[i],page:Math.floor(i/PAGE_SIZE),exact:true};
+    if(!partial){const j=keys.findIndex(s=>normTicker(s).startsWith(n));if(j>=0)partial={kind:g.key,symbol:keys[j],page:Math.floor(j/PAGE_SIZE),exact:false};}
+  }
+  return partial;
+}
+function locateSymbol(){
+  const q=$('symSearch').value.trim();if(!q)return;
+  const r=findSymbol(q);
+  if(!r){setMsg('没有找到「'+q.toUpperCase()+'」','err');return;}
+  if($('set_group_single_open').value==='1')GROUPS.forEach(g=>{if(g.key!==r.kind)$('fold_'+g.key).open=false;});
+  pageState[r.kind]=r.page;$('fold_'+r.kind).open=true;render();
+  const row=[...$('list_'+r.kind).querySelectorAll('.stock-row')].find(e=>e.dataset.s===r.symbol);
+  if(row){row.scrollIntoView({block:'center',behavior:'smooth'});row.classList.add('hit');setTimeout(()=>row.classList.remove('hit'),1600);}
+  setMsg(r.symbol+' 在「'+KIND_LABEL[r.kind]+'」'+(r.exact?'':'（按前缀匹配）'),'ok');
+}
+$('btnLocate').onclick=locateSymbol;
+$('symSearch').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();locateSymbol();}};
+function addSymbol(){
+  const symbol=normTicker($('newSym').value);
   if(!isTicker(symbol)){setMsg('请填写有效代码，A股、港股和 SGOV 不导入','err');return;}
-  if(Object.keys(data[kind]).some(s=>normTicker(s)===symbol)){setMsg(symbol+' 已在该分组中','err');return;}
-  const note=$('newNote_'+kind).value.trim()||NAMES[symbol]||'';
-  const trigger=$('newTrig_'+kind).value.trim();
-  if(trigger&&!Number.isFinite(Number(trigger))){setMsg('加仓价应填写数字','err');return;}
-  let reduce='';
-  if(hasReduce(kind)){
-    reduce=$('newReduce_'+kind).value.trim();
-    if(reduce&&!(Number.isFinite(Number(reduce))&&Number(reduce)>0)){setMsg('减仓价应填写大于 0 的数字','err');return;}
-  }
-  let target='';
-  if(hasTarget(kind)){
-    target=$('newTarget_'+kind).value.trim();
-    if(target&&!(Number.isFinite(Number(target))&&Number(target)>0)){setMsg('目标价应填写大于 0 的数字','err');return;}
-  }
-  const sel=$('newMove_'+kind);
-  let t=sel?parseTarget(sel.value):{group:''};
-  if(!KIND_LABEL[t.group])t={group:kind,hold:kind==='positions'?'short':null};
+  const t=parseTarget($('newMove').value);
+  if(!KIND_LABEL[t.group]){setMsg('请先选择要加入的分组','err');return;}
   const to=t.group;
-  if(Object.keys(data[to]).some(s=>normTicker(s)===symbol)){setMsg(symbol+' 已在该分组中','err');return;}
-  data[to][symbol]={...(note?{note}:{}),...(trigger?{trigger:Number(trigger)}:{}),...(reduce?{reduce:Number(reduce)}:{}),
-    ...(target?{target:Number(target),target_at:monthNow()}:{}),...(to==='positions'?{hold:t.hold||'short'}:{})};
-  ['newSym_','newNote_','newTrig_'].concat(hasReduce(to)?['newReduce_']:[]).concat(hasTarget(to)?['newTarget_']:[])
-    .forEach(id=>{const el=$(id+kind);if(el&&el.tagName!=='SELECT')el.value='';});
-  render();touch();setMsg('已添加 '+symbol+' 到「'+targetLabel(t)+'」','ok');
+  const holder=holderOf(symbol);
+  if(holder){setMsg(symbol+' 已在「'+holder.label+'」，同一只股票只能存在一份；请在该分组里用下拉「分组」转移','err');return;}
+  const note=$('newNote').value.trim()||NAMES[symbol]||'';
+  data[to][symbol]={...(note?{note}:{}),...(to==='positions'?{hold:t.hold||'short'}:{})};
+  $('newSym').value='';$('newNote').value='';
+  const fold=$('fold_'+to);if(fold)fold.open=true;
+  render();touch();setMsg('已添加 '+symbol+' 到「'+targetLabel(t)+'」，价位可在该行里填写，点保存才生效','ok');
 }
 function moveSymbol(from,to,symbol){
   if([...listDraftErrors.values()].some(draft=>draft.kind===from&&draft.symbol===symbol)){
@@ -850,9 +902,10 @@ function moveSymbol(from,to,symbol){
   const sameGroup=t.group===from;
   if(sameGroup&&(t.group!=='positions'||t.hold===curZone))return;   // 原地不动（同区改选也不算移动）
   // 同组内换区时不能拿自己当重复项
-  if(!sameGroup&&Object.keys(data[t.group]).some(s=>normTicker(s)===normTicker(symbol))){setMsg('目标分组已包含 '+symbol+'，未移动','err');render();return;}
+  const dupKey=Object.keys(data[t.group]).find(s=>normTicker(s)===normTicker(symbol));
   const rec=data[from][symbol];
   delete data[from][symbol];
+  if(!sameGroup&&dupKey!==undefined){mergeInto(data[t.group][dupKey],rec,t.group);render();touch();setMsg(symbol+' 已合并到「'+KIND_LABEL[t.group]+'」的现有记录，信息已一并带过去','ok');return;}
   data[t.group][symbol]=rec;
   if(!hasReduce(t.group))delete data[t.group][symbol].reduce;
   if(!hasCost(t.group))delete data[t.group][symbol].cost;
@@ -861,8 +914,6 @@ function moveSymbol(from,to,symbol){
   else delete data[t.group][symbol].hold;   // 长/短只对持仓有意义
   render();touch();
 }
-$('btnExpandGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=true);
-$('btnCollapseGroups').onclick=()=>GROUPS.forEach(g=>$('fold_'+g.key).open=false);
 
 function orderedKeys(kind){
   let keys=Object.keys(data[kind]||{});
@@ -890,27 +941,28 @@ function render(){
     if(!slice.length){
       box.innerHTML='<div class="empty">（空）</div>';
     }else{
-    let h='';
-    let prevEtf=false,curZone=null;
+    const pf=1+Number(hasReduce(K.k))+Number(hasTarget(K.k))+Number(COST_IN_LIST&&hasCost(K.k));
+    let h='<div class="stock-head" aria-hidden="true" style="--price-fields:'+pf+'"><span>代码</span><span>备注</span><span>加仓价</span>'
+      +(hasReduce(K.k)?'<span>减仓价</span>':'')+(hasTarget(K.k)?'<span>目标价</span>':'')+(COST_IN_LIST&&hasCost(K.k)?'<span>成本价</span>':'')
+      +'<span>分组</span><span></span></div>';
+    let curZone=null;
     slice.forEach(s=>{
       const z=zoneOf(K.k,data[K.k][s]);
-      if(z&&z!==curZone){h+='<div class="subsec">— '+ZONE_LABEL[z]+' —</div>';curZone=z;prevEtf=false;}
-      const e=isEtf(s);
-      if(e&&!prevEtf){h+='<div class="subsec">— ETF 基金 —</div>';}
-      prevEtf=e;
+      if(z&&z!==curZone){h+='<div class="subsec">— '+ZONE_LABEL[z]+' —</div>';curZone=z;}
       const c=data[K.k][s]||{};
       const tv=(c.trigger===null||c.trigger===undefined)?'':c.trigger;
       const rv=(c.reduce===null||c.reduce===undefined)?'':c.reduce;
       const gv=(c.target===null||c.target===undefined)?'':c.target;
       const cv2=(c.cost===null||c.cost===undefined)?'':c.cost;
-      h+='<div class="row" data-k="'+esc(K.k)+'" data-s="'+esc(s)+'">'
-        +'<span class="sym">'+esc(s)+'</span>'
-        +'<input class="n" value="'+esc(c.note||'')+'" placeholder="备注" data-f="note">'
-        +'<input class="t" value="'+esc(tv)+'" placeholder="加仓价" data-f="trigger" inputmode="decimal">'
-        +(hasReduce(K.k)?'<input class="t r" value="'+esc(rv)+'" placeholder="减仓价" data-f="reduce" inputmode="decimal" aria-label="减仓价">':'')
-        +(hasTarget(K.k)?'<input class="t g" value="'+esc(gv)+'" placeholder="目标价" data-f="target" inputmode="decimal" aria-label="目标价">':'')
-        +(hasCost(K.k)?'<input class="t" value="'+esc(cv2)+'" placeholder="成本价" data-f="cost" inputmode="decimal" aria-label="成本价">':'')
-        +'<select class="move" aria-label="移动 '+esc(s)+' 到分区或分组">'
+      h+='<div class="row stock-row" data-k="'+esc(K.k)+'" data-s="'+esc(s)+'" style="--price-fields:'+pf+'">'
+        +'<span class="sym'+(isEtf(s)?' etf':'')+'">'+esc(s)+'</span>'
+        +'<input class="n" value="'+esc(c.note||'')+'" aria-label="'+esc(s)+' 备注" data-f="note">'
+        +'<div class="stock-prices" style="--price-fields:'+pf+'">'
+        +'<input class="t" value="'+esc(tv)+'" aria-label="'+esc(s)+' 加仓价" data-f="trigger" inputmode="decimal">'
+        +(hasReduce(K.k)?'<input class="t r" value="'+esc(rv)+'" aria-label="'+esc(s)+' 减仓价" data-f="reduce" inputmode="decimal">':'')
+        +(hasTarget(K.k)?'<input class="t g" value="'+esc(gv)+'" aria-label="'+esc(s)+' 目标价" data-f="target" inputmode="decimal">':'')
+        +(COST_IN_LIST&&hasCost(K.k)?'<input class="t" value="'+esc(cv2)+'" aria-label="'+esc(s)+' 成本价" data-f="cost" inputmode="decimal">':'')
+        +'</div><select class="move" aria-label="移动 '+esc(s)+' 到分区或分组">'
         +moveOptions(K.k==='positions'?('positions:'+zoneOf(K.k,c)):K.k)+'</select>'
         +'<button class="del" aria-label="删除">×</button></div>';
     });
@@ -955,7 +1007,6 @@ function render(){
     });
   });
   $('groupTotal').textContent=GROUPS.length+' 个分组 · '+Object.values(data).reduce((n,g)=>n+Object.keys(g).length,0)+' 条记录';
-  showAudit();
 }
 function touch(){changed=true;$('dirty').textContent='有未保存的改动';}
 
@@ -996,7 +1047,7 @@ $('btnSave').onclick=async e=>{
   }else{
     if(r.status===409)holdingsConflict=true;
     setMsg('保存失败：'+whyFail(r.status,r.data.message)+
-      (r.status===409?'；草稿已保留，再点保存或重新读取可「保留草稿后读取最新版」，合并确认后再保存':''),'err');
+      (r.status===409?'；草稿已保留，再点保存或恢复清单可「保留草稿后读取最新版」，合并确认后再保存':''),'err');
   }
   holdingsSaving=false;e.target.disabled=false;
 };
@@ -1010,12 +1061,23 @@ $('btnReload').onclick=()=>{
 
 /* ---------- 规则阈值（settings.json） ---------- */
 /* MM_SCHEMA_BEGIN：由 page_assets 生成，不手改 */
-const SET_SCHEMA={"defaults":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"boll_near_band_pct":15.0,"chg_red":4.0,"chg_yellow":2.0,"rsi_high":70,"rsi_low":35,"near_52w_low_pct":1.0,"trigger_gap_pct":5.0,"reduce_gap_pct":3.0,"target_space_pct":40.0,"target_high_space_pct":90.0,"target_gap_pct":3.0,"vol_ratio":1.5,"vol_ratio_red":3.0,"vol_ratio_z":2.0,"vol_ratio_red_z":3.6,"amp_yellow":5.0,"amp_red":8.0,"ma_short":50,"ma_long":200,"hy_green":350,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":0,"dca_start":"","signal_single_open":1},"limits":{"boll_n":[2,250],"boll_k":[0.1,10],"boll_near_pct":[0,100],"boll_near_band_pct":[0,100],"chg_red":[0,100],"chg_yellow":[0,100],"rsi_high":[0,100],"rsi_low":[0,100],"near_52w_low_pct":[0,100],"trigger_gap_pct":[0,100],"reduce_gap_pct":[0,100],"target_space_pct":[40,40],"target_high_space_pct":[90,90],"target_gap_pct":[0,100],"vol_ratio":[0.1,100],"vol_ratio_red":[0.1,100],"vol_ratio_z":[0,10],"vol_ratio_red_z":[0,10],"amp_yellow":[0,100],"amp_red":[0,100],"ma_short":[0,250],"ma_long":[0,250],"hy_green":[0,10000],"hy_red":[0,10000],"vix_green":[0,200],"vix_yellow":[0,200],"vix_red":[0,200],"use_realtime":[0,1],"dca_every":[0,10000],"signal_single_open":[0,1]},"integers":["boll_n","ma_short","ma_long","use_realtime","dca_every","signal_single_open"],"excluded":{"ma_short":[1],"ma_long":[1]},"relations":[{"keys":["chg_yellow","chg_red"],"strict":false,"skip_zero":false},{"keys":["rsi_low","rsi_high"],"strict":true,"skip_zero":false},{"keys":["vol_ratio","vol_ratio_red"],"strict":false,"skip_zero":false},{"keys":["vol_ratio_z","vol_ratio_red_z"],"strict":false,"skip_zero":true},{"keys":["amp_yellow","amp_red"],"strict":false,"skip_zero":false},{"keys":["ma_short","ma_long"],"strict":false,"skip_zero":true},{"keys":["hy_green","hy_red"],"strict":false,"skip_zero":false},{"keys":["vix_green","vix_yellow","vix_red"],"strict":false,"skip_zero":false}]};
+const SET_SCHEMA={"defaults":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"boll_near_band_pct":15.0,"chg_red":4.0,"chg_yellow":2.0,"rsi_high":70,"rsi_low":35,"near_52w_low_pct":1.0,"trigger_gap_pct":5.0,"reduce_gap_pct":3.0,"target_space_pct":40.0,"target_high_space_pct":90.0,"target_gap_pct":3.0,"vol_ratio":1.5,"vol_ratio_red":3.0,"vol_ratio_z":2.0,"vol_ratio_red_z":3.6,"amp_yellow":5.0,"amp_red":8.0,"ma_short":50,"ma_long":200,"hy_green":350,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":0,"dca_start":"","signal_single_open":1,"group_single_open":0},"limits":{"boll_n":[2,250],"boll_k":[0.1,10],"boll_near_pct":[0,100],"boll_near_band_pct":[0,100],"chg_red":[0,100],"chg_yellow":[0,100],"rsi_high":[0,100],"rsi_low":[0,100],"near_52w_low_pct":[0,100],"trigger_gap_pct":[0,100],"reduce_gap_pct":[0,100],"target_space_pct":[40,40],"target_high_space_pct":[90,90],"target_gap_pct":[0,100],"vol_ratio":[0.1,100],"vol_ratio_red":[0.1,100],"vol_ratio_z":[0,10],"vol_ratio_red_z":[0,10],"amp_yellow":[0,100],"amp_red":[0,100],"ma_short":[0,250],"ma_long":[0,250],"hy_green":[0,10000],"hy_red":[0,10000],"vix_green":[0,200],"vix_yellow":[0,200],"vix_red":[0,200],"use_realtime":[0,1],"dca_every":[0,10000],"signal_single_open":[0,1],"group_single_open":[0,1]},"integers":["boll_n","ma_short","ma_long","use_realtime","dca_every","signal_single_open","group_single_open"],"excluded":{"ma_short":[1],"ma_long":[1]},"relations":[{"keys":["chg_yellow","chg_red"],"strict":false,"skip_zero":false},{"keys":["rsi_low","rsi_high"],"strict":true,"skip_zero":false},{"keys":["vol_ratio","vol_ratio_red"],"strict":false,"skip_zero":false},{"keys":["vol_ratio_z","vol_ratio_red_z"],"strict":false,"skip_zero":true},{"keys":["amp_yellow","amp_red"],"strict":false,"skip_zero":false},{"keys":["ma_short","ma_long"],"strict":false,"skip_zero":true},{"keys":["hy_green","hy_red"],"strict":false,"skip_zero":false},{"keys":["vix_green","vix_yellow","vix_red"],"strict":false,"skip_zero":false}]};
 const SET_DEFS=SET_SCHEMA.defaults;
 const SET_KEYS=Object.keys(SET_DEFS);
 const SET_LIMITS=SET_SCHEMA.limits;
 /* 规则说明正文不在设置页重算：只展示最近一次构建生成的同一份内容。 */
 /* MM_SCHEMA_END */
+/* 每个数值框左侧用灰字标出默认值（只标数值，开关项标「开」「关」），「恢复默认」会恢复成这些值。 */
+function markDefaults(){
+  SET_KEYS.forEach(k=>{
+    const el=$('set_'+k);
+    if(!el||typeof el.closest!=='function'||!el.closest('.setrow'))return;
+    const d=SET_DEFS[k],span=document.createElement('span');
+    span.className='def';span.textContent=el.tagName==='SELECT'?(d?'开':'关'):String(d);
+    el.parentNode.insertBefore(span,el);
+  });
+}
+markDefaults();
 const DATE_RE=/^\d{4}-\d{2}-\d{2}$/;
 function settingsError(){
   const values=Object.assign({},SET);
@@ -1058,7 +1120,7 @@ SET_KEYS.forEach(k=>{
 
 function settingInputValue(values,key){
   if(key==='use_realtime')return String(values[key]||0);
-  if(key==='signal_single_open')return String(values[key]?1:0);
+  if(key==='signal_single_open'||key==='group_single_open')return String(values[key]?1:0);
   if(key==='dca_every')return values[key]?String(values[key]):'';
   return String(values[key]);
 }
@@ -1070,7 +1132,7 @@ function collectSettings(){
     const el=$('set_'+k);if(!el)return;
     const v=String(el.value).trim();
     if(k==='use_realtime'){SET[k]=v==='0'?0:1;return;}
-    if(k==='signal_single_open'){SET[k]=v==='0'?0:1;return;}
+    if(k==='signal_single_open'||k==='group_single_open'){SET[k]=v==='0'?0:1;return;}
     if(k==='dca_start'){                 // 日期格式不对就保持原值
       if(v===''||DATE_RE.test(v))SET[k]=v;
       return;
@@ -1229,71 +1291,6 @@ $('btnResetRules').onclick=()=>{
   setMsg('已填回默认值，点「保存规则」才写入仓库','ok');
 };
 
-/* ---------- CSV 导入 ---------- */
-let csvRevision=0;
-function previewCsv(text,kind,filename=''){
-  pending=null;$('btnApply').classList.add('hide');
-  if(!KIND_LABEL[kind])return;
-  const ebk=/\.ebk$/i.test(filename)||(!/\.(csv|tsv)$/i.test(filename)&&Import.looksLikeEbk(text));
-  const res=ebk?Import.parseEbk(text):parseCsv(text);
-  const symbols=res.symbols;
-  if(res.error){$('csvInfo').textContent=res.error;setMsg(res.error,'err');return;}
-  if(!symbols.length){
-    $('csvInfo').textContent='未导入。忽略 '+res.ignored.length+' 条：'+res.ignored.map(v=>v.raw+'（'+v.reason+'）').join('、')
-      +(res.rejected.length?'；未识别：'+res.rejected.join('、'):'');
-    setMsg('没有可用代码，未修改任何清单','err');return;
-  }
-  const old=data[kind],oldNorm=Object.fromEntries(Object.keys(old).map(s=>[normTicker(s),s]));
-  const added=symbols.filter(s=>oldNorm[s]===undefined),kept=symbols.filter(s=>oldNorm[s]!==undefined);
-  const removed=kind==='positions'?Object.keys(old).filter(s=>!symbols.includes(normTicker(s))):[];
-  const unnamed=symbols.filter(s=>!old[oldNorm[s]]?.note&&!NAMES[s]&&!res.names[s]);
-  pending={kind,symbols,names:res.names||{},baseline:JSON.stringify(old),text,filename};
-  $('csvInfo').innerHTML='<b>目标分组：'+esc(KIND_LABEL[kind])+'</b> · '+res.format+' · '+symbols.length+' 只<br>'
-    +'新增 '+added.length+'：'+esc(added.slice(0,20).join(' ')||'—')+'<br>'
-    +'已在组内 '+kept.length+'：'+esc(kept.slice(0,20).join(' ')||'—')+'<br>'
-    +(kind==='positions'?'将移除 '+removed.length+'：'+esc(removed.slice(0,20).join(' ')||'—'):'追加模式，不删除原有标的')
-    +(res.ignored.length?'<br>已忽略 '+res.ignored.length+' 条：'+esc(res.ignored.map(v=>v.raw+'（'+v.reason+'）').join('、')):'')
-    +(res.rejected.length?'<br>未识别 '+res.rejected.length+' 条，未导入：'+esc(res.rejected.join('、')):'')
-    +(unnamed.length?'<br>'+unnamed.length+' 只未提供公司名称，导入后请在备注中补充':'')
-    +'<br><b>确认前不会修改任何清单。</b>';
-  $('btnApply').textContent='确认导入到「'+KIND_LABEL[kind]+'」';$('btnApply').classList.remove('hide');
-}
-async function readCsv(input){
-  const file=input.files[0];if(!file)return;
-  const kind=$('csvKind').value,revision=++csvRevision;
-  pending=null;$('btnApply').classList.add('hide');
-  try{
-    const bytes=new Uint8Array(await file.arrayBuffer());
-    const utf16=bytes[0]===0xff&&bytes[1]===0xfe?'utf-16le':bytes[0]===0xfe&&bytes[1]===0xff?'utf-16be':null;
-    let text;
-    try{text=new TextDecoder(utf16||'utf-8',{fatal:true}).decode(bytes);}catch(e){text=new TextDecoder('gb18030',{fatal:true}).decode(bytes);}
-    if(revision===csvRevision)previewCsv(text,kind,file.name);
-  }catch(e){setMsg('文件读取失败：'+e.message,'err');}
-  input.value='';
-}
-$('fileCsv').onchange=e=>readCsv(e.target);
-$('csvKind').onchange=()=>{
-  csvRevision++;pending=null;$('btnApply').classList.add('hide');$('csvInfo').textContent='';
-  $('csvMode').textContent=$('csvKind').value==='positions'?'持仓：按 CSV 替换整组，其余组不受影响。':'追加到所选分组，只增不删，其他组不受影响。';
-};
-$('btnApply').onclick=()=>{
-  if(!pending)return;
-  const {kind,symbols,names,baseline,text,filename}=pending,old=data[kind];
-  if(!validateListDraft(kind))return;
-  if(JSON.stringify(old)!==baseline){previewCsv(text,kind,filename);setMsg('目标清单已变化，已重新预览，请再次确认','err');return;}
-  const oldNorm=Object.fromEntries(Object.keys(old).map(s=>[normTicker(s),s]));
-  const next=kind==='positions'?{}:{...old};
-  symbols.forEach(s=>{
-    const key=kind!=='positions'&&oldNorm[s]!==undefined?oldNorm[s]:s;
-    const existing=old[oldNorm[s]]||{};
-    next[key]={...existing};
-    if(!next[key].note)next[key].note=names[s]||NAMES[s]||'';
-  });
-  data[kind]=next;pending=null;$('btnApply').classList.add('hide');
-  render();touch();
-  setMsg('已导入到「'+KIND_LABEL[kind]+'」，共 '+symbols.length+' 只；尚未保存','ok');
-};
-
 /* ---------- 令牌 ---------- */
 async function enter(t){
   if(!t){setMsg('令牌不能为空','err');return;}
@@ -1309,23 +1306,12 @@ $('btnTok').onclick=()=>enter($('tok').value.trim());
 $('btnWipe').onclick=()=>{
   if(!confirm('清除本机令牌？当前编辑内容会保留，下次写入需重新贴令牌。'))return;
   TOKEN='';try{localStorage.removeItem(TKEY);}catch(e){}
-  $('tok').value='';$('linkBox').textContent='';
+  $('tok').value='';
   $('authCard').classList.remove('hide');
   setMsg('本机令牌已清除，编辑内容未重载；无令牌仍可查看公开状态','ok');
   void loadRun();
 };
 $('tok').onkeydown=e=>{if(e.key==='Enter')$('btnTok').click();};
-
-$('btnLink').onclick=async()=>{
-  if(!TOKEN){setMsg('手动模式没有令牌，手机上也直接用手动模式打开就行','err');return;}
-  if(!confirm('链接包含可编辑仓库和触发运行的令牌，微信/剪贴板可能留存。确认仍生成？'))return;
-  const u=location.origin+location.pathname+'#'+TOKEN;
-  $('linkBox').textContent=u;
-  let copied=false;
-  try{await navigator.clipboard.writeText(u);copied=true;}catch(e){}
-  setMsg(copied?'已复制：发到微信里用手机打开，令牌就不用在手机上再贴一次'
-                :'链接已显示在下面，长按复制后发到手机','ok');
-};
 
 $('btnSkip').onclick=()=>{
   TOKEN='';
@@ -1353,15 +1339,6 @@ $('btnCopy').onclick=async ()=>{
 window.addEventListener('error',e=>setMsg('页面脚本出错：'+e.message,'err'));
 window.addEventListener('unhandledrejection',e=>setMsg('请求出错：'+(e.reason&&e.reason.message||e.reason),'err'));
 
-// 链接里带令牌（edit.html#github_pat_xxx）：手机扫码/点开即自动填好，不用手打
-(function(){
-  const h=(location.hash||'').replace(/^#/,'').trim();
-  if(!LOCAL_PREVIEW&&h&&/^(ghp_|github_pat_)/.test(h)){
-    saveTok(h);
-    try{history.replaceState(null,'',location.pathname+(location.search||''));}catch(e){}
-  }
-})();
-
 async function bootstrap(){
   loadingControls(true);
   try{
@@ -1370,11 +1347,10 @@ async function bootstrap(){
     }));
     NAMES=names;initGroups(groups);
     if(LOCAL_PREVIEW){
-      try{const r=await fetch('./import-audit.json',{cache:'no-store'});if(r.ok)AUDIT=await r.json();}catch(e){}
       $('authCard').classList.add('hide');$('main').classList.remove('hide');
       $('btnSave').textContent='保存本机草稿';
       document.querySelector('.sub').innerHTML='本地分类预览 · 不会提交或修改 GitHub<br><a href="./preview.html">← 查看首页分类预览</a>';
-      ['btnTok','btnLink','btnWipe'].forEach(id=>$(id).disabled=true);
+      ['btnTok','btnWipe'].forEach(id=>$(id).disabled=true);
       await load();
     }else if(TOKEN){$('authCard').classList.add('hide');$('main').classList.remove('hide');await load();}
   }catch(e){setMsg('分类页面初始化失败：'+e.message,'err');}

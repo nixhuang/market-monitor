@@ -14,7 +14,6 @@ function localScriptPath(filename){
   if(matches.length!==1)throw new Error('设置页应唯一引用本地脚本 '+filename+'，实际：'+matches.length);
   return path.join(ROOT,filename);
 }
-const importScriptPath=localScriptPath('list-import.js');
 const runStatusScriptPath=localScriptPath('run-status.js');
 
 const decodeAttribute=value=>value.replace(/&quot;/g,'"').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
@@ -35,15 +34,26 @@ function makeEl(id) {
         if (child.tagName === 'DETAILS') child.open = /(?:^|\s)open(?:\s|=|$)/.test(match[2]);
       }
       this._rows=[];
-      for(const match of v.matchAll(/<div class="row" data-k="([^"]*)" data-s="([^"]*)">([\s\S]*?)<\/div>/g)){
-        const row=makeEl('row');row.dataset={k:decodeAttribute(match[1]),s:decodeAttribute(match[2])};
-        row._inputs=[...match[3].matchAll(/<input\b((?:"[^"]*"|'[^']*'|[^'">])*)>/gi)].map(([,attrs])=>{
+      // 生产行新增stock-prices嵌套div；按div深度取完整行，不能在子容器结束处截断删/移控件。
+      for(const match of v.matchAll(/<div\b(?=[^>]*\bclass="[^"]*\bstock-row\b[^"]*")(?=[^>]*\bdata-k="([^"]*)")(?=[^>]*\bdata-s="([^"]*)")[^>]*>/g)){
+        let depth=1,end=-1;
+        const tags=/<\/?div\b[^>]*>/g;tags.lastIndex=match.index+match[0].length;
+        for(let tag;(tag=tags.exec(v));){depth+=tag[0].startsWith('</')?-1:1;if(depth===0){end=tag.index;break;}}
+        if(end<0)throw new Error('股票行div结构未闭合');
+        const body=v.slice(match.index+match[0].length,end),row=makeEl('row');row._html=body;
+        row.dataset={k:decodeAttribute(match[1]),s:decodeAttribute(match[2])};
+        row._inputs=[...body.matchAll(/<input\b((?:"[^"]*"|'[^']*'|[^'">])*)>/gi)].map(([,attrs])=>{
           const input=makeEl('input');input.tagName='INPUT';
           const field=attrs.match(/(?:^|\s)data-f="([^"]+)"/),value=attrs.match(/(?:^|\s)value="([^"]*)"/);
           if(!field||!value)throw new Error('清单输入控件缺少 data-f 或 value 属性');
           input.dataset.f=field[1];
           input.value=decodeAttribute(value[1]);return input;
         });
+        if(!/<button class="del"/.test(body)||!/<select class="move"/.test(body))throw new Error('股票行缺少真实删除/移动控件');
+        const prices=body.match(/<div class="stock-prices" style="--price-fields:(\d+)">([\s\S]*?)<\/div>/);
+        if(!prices)throw new Error('股票行缺少第二排价格容器');
+        row._priceCount=Number(prices[1]);
+        row._priceFields=[...prices[2].matchAll(/data-f="([^"]+)"/g)].map(m=>m[1]);
         row._del=makeEl('delete');row._move=makeEl('move');this._rows.push(row);
       }
     },
@@ -90,16 +100,15 @@ global.alert = () => {};
 global.fetch = async () => { throw new Error('no network in test'); };
 let runOptions;
 global.MMRunStatus = { init(options) { runOptions=options; }, refresh() { return {}; }, watchConfig() {}, startManual: async () => {} };
-global.MMListImport = require(importScriptPath);
 
 let fails = 0;
 const check = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if (!cond) fails++; };
 global.window.addEventListener = () => {};
 
 try {
-  eval(code + '\n;globalThis.__T={render,get data(){return data;},pageState,ETF_SET,get SET(){return SET;},SET_DEFS,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,previewCsv,moveSymbol,load,monitorEnabled,renderSettings,settingsError,normalizeSettings,trackReceipt,saveRules,loadRun,bootstrap,setToken:t=>{TOKEN=t;}};');
+  eval(code + '\n;globalThis.__T={render,get data(){return data;},pageState,ETF_SET,get SET(){return SET;},SET_DEFS,collectSettings,setJsonText,loadSettings,initGroups,configText,addSymbol,findSymbol,markDefaults,isTicker,normTicker,moveSymbol,load,monitorEnabled,renderSettings,settingsError,normalizeSettings,trackReceipt,saveRules,loadRun,bootstrap,setToken:t=>{TOKEN=t;}};');
   globalThis.__T.initGroups(JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8')));
-  console.log('PASS 脚本加载无异常');
+  if(!process.argv.includes('--layout-fixture'))console.log('PASS 脚本加载无异常');
 } catch (e) {
   console.error('FAIL 脚本加载异常:', e.message);
   process.exit(1);
@@ -133,7 +142,7 @@ async function runDraftRecovery(){
   const editSetting=(key,value)=>{els['set_'+key].value=value;els['set_'+key].oninput();};
   const bodyValue=()=>JSON.parse(Buffer.from(requests.at(-1).body.content,'base64').toString('utf8'));
 
-  for(const field of ['trigger','reduce','target','cost']){
+  for(const field of ['trigger','reduce','target']){
     for(const raw of ['  bad" <&  ','Infinity','1e309',...(field==='trigger'?[]:['0','-1'])]){
       const before=T.configText(),count=requests.length;
       edit('positions','AAPL',field,raw);T.render();
@@ -157,31 +166,17 @@ async function runDraftRecovery(){
   check(!!T.data.technology.S055&&!T.data.positions.S055&&input('technology','S055','trigger').value==='abc','移动不会丢弃无效输入');
   edit('technology','S055','trigger','');
   edit('positions','AAPL','reduce','bad');
-  T.previewCsv('symbol\nMSFT\n','positions','replace.csv');els.btnApply.onclick();
-  check(!!T.data.positions.AAPL&&!T.data.positions.MSFT&&input('positions','AAPL','reduce').value==='bad','替换导入不能丢弃目标组无效草稿');
   const beforeManual=copies.length;T.setToken('');await saveList();await els.btnCopy.onclick();
   check(copies.length===beforeManual,'手动导出与复制入口同样阻断无效草稿');
   T.setToken('github_pat_offline_fixture');edit('positions','AAPL','reduce','100');
   await saveList();check(requests.at(-1).method==='PUT'&&bodyValue().positions.AAPL.reduce===100,'修正全部草稿后才允许提交新值');
   let resolveWrite;
   global.fetch=()=>new Promise(resolve=>{resolveWrite=resolve;});
-  const inFlight=saveList();edit('positions','AAPL','cost','bad');
+  const inFlight=saveList();edit('positions','AAPL','reduce','bad');
   resolveWrite(response({content:{sha:'d'.repeat(40)},commit:{sha:'e'.repeat(40)}}));await inFlight;
-  check(els.dirty.textContent.includes('未保存')&&input('positions','AAPL','cost').value==='bad','提交期间新增的无效输入不能被旧快照回执标为已保存');
+  check(els.dirty.textContent.includes('未保存')&&input('positions','AAPL','reduce').value==='bad','提交期间新增的无效输入不能被旧快照回执标为已保存');
   global.fetch=mockFetch;
-  edit('positions','AAPL','cost','');
-
-  const importHash=require('node:crypto').createHash('sha256').update(fs.readFileSync(importScriptPath,'utf8').replace(/\r\n/g,'\n')).digest('hex').slice(0,16);
-  check(src.includes('./list-import.js?v='+importHash),'编辑页导入脚本缓存摘要与实际内容一致');
-  const records=MMListImport.csvRecords('\uFEFFsymbol,name,extra\r\nAAPL,"第一行\r\nMSFT\r\n第二行 ""引号""",\r\nNVDA,,\r\n');
-  check(same(records,[['symbol','name','extra'],['AAPL','第一行\r\nMSFT\r\n第二行 "引号"',''],['NVDA','','']]),'记录级CSV保留CRLF、转义引号和连续/尾部空字段');
-  check(same(MMListImport.csvRecords('"symbol"\t"name,with,commas"\rAAPL\t"甲\n乙"\r'),[['symbol','name,with,commas'],['AAPL','甲\n乙']]),'TSV分隔符识别忽略引号内逗号并支持CR记录边界');
-  T.previewCsv('symbol,name\r\nAAPL,"第一行\r\nMSFT\r\n第二行 ""引号"""\r\nNVDA,\r\n','focus','multiline.csv');els.btnApply.onclick();
-  check(!!T.data.focus.AAPL&&!!T.data.focus.NVDA&&!T.data.focus.MSFT&&T.data.focus.AAPL.note==='第一行\r\nMSFT\r\n第二行 "引号"','导入完整多行名称，不把名称中的代码误导入');
-  for(const bad of ['symbol,name\nAAPL,"未闭合','symbol,name\nAAPL,"名称"非法','symbol,name\nAAPL,错"误']){
-    const before=T.configText();T.previewCsv(bad,'positions','bad.csv');els.btnApply.onclick();
-    check(T.configText()===before&&els.csvInfo.textContent.includes('引号'),'损坏CSV拒绝整次导入且不保留可应用的旧预览');
-  }
+  edit('positions','AAPL','reduce','');
 
   // 清单409：取消、读取失败、确认合并、显式重试和二次冲突。
   holdings=clone(JSON.parse(T.configText()));await T.load();await new Promise(resolve=>setImmediate(resolve));
@@ -230,7 +225,28 @@ async function runDraftRecovery(){
   check(Object.keys(store).length===0,'恢复过程不写本地存储或令牌备份');
   T.setToken('');
 }
-if(process.argv.includes('--draft-recovery')){
+function settingsLayoutFixture(){
+  // 每个正式分组放两只合成证券；调用真实render而非重新手写生产行，绝不读取/保存真实仓位。
+  const groups=JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8'));
+  const expected=[];
+  groups.forEach((g,i)=>{
+    T.data[g.key]={};
+    for(const suffix of ['A','B']){
+      const sym='TEST'+i+suffix;
+      T.data[g.key][sym]={note:'合成备注 '+suffix+' <&"',trigger:12.3456,reduce:23.4567,target:34.5678,cost:45.6789};
+      if(g.key==='positions')T.data[g.key][sym].hold=suffix==='A'?'long':'short';
+      expected.push({group:g.key,symbol:sym,fields:g.key==='positions'?['trigger','reduce','target']:g.key==='focus'?['trigger','target']:['trigger']});
+    }
+    T.pageState[g.key]=0;
+  });
+  T.render();
+  const body=groups.map(g=>'<details class="card edit-group" open data-test-group="'+g.key+'"><summary>合成 '+g.key+'</summary><div id="list_'+g.key+'">'+els['list_'+g.key]._html+'</div></details>').join('');
+  const styles=[...src.matchAll(/<style\b[^>]*>[\s\S]*?<\/style>/gi)].map(m=>m[0]).join('');
+  return {html:'<!doctype html><html><head><meta charset="utf-8">'+styles+'</head><body>'+body+'</body></html>',expected};
+}
+if(process.argv.includes('--layout-fixture')){
+  process.stdout.write(JSON.stringify(settingsLayoutFixture()));
+}else if(process.argv.includes('--draft-recovery')){
   runDraftRecovery().then(()=>{if(fails)process.exitCode=1;else console.log('定向用例全部通过');})
     .catch(error=>{console.error(error);process.exitCode=1;});
 }else{
@@ -240,7 +256,7 @@ const expectedDefaults = {
   rsi_high:70,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,
   target_space_pct:40,target_high_space_pct:90,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:2,vol_ratio_red_z:3.6,
   amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,hy_green:350,hy_red:400,
-  vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,dca_every:0,dca_start:'',signal_single_open:1,
+  vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,dca_every:0,dca_start:'',signal_single_open:1,group_single_open:0,
 };
 check(Object.keys(T.SET_DEFS).length===Object.keys(expectedDefaults).length&&
   Object.entries(expectedDefaults).every(([key,value])=>T.SET_DEFS[key]===value), '共用schema仅更新目标空间40／90，保留全部非相关默认值');
@@ -305,8 +321,12 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
   check(/details\.set summary\{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;/.test(src)
     && /details\.set>summary\{box-sizing:border-box;height:46px;display:flex;/.test(src),
     '参数开关「布林 / 均线 / …」15px 蓝色 600 粗细，与「显示与交互」字号字重同高全部一致');
-  check(/#displayCard>summary\{color:#6ba3f0\}/.test(src),
-    '「显示与交互」标题改蓝色，与同卡参数开关同色（其它卡片标题仍灰）');
+  check(/<div class="card" id="displayCard">\s*<h2>显示与交互<\/h2>/.test(src)&&/<div class="card" id="dcaCard">\s*<h2>定投提醒<\/h2>/.test(src)
+    &&!/<details[^>]*id="(?:displayCard|dcaCard)"/.test(src), '「显示与交互」「定投提醒」不再折叠，直接显示');
+  check(src.includes('.dca-grid,.dca-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}')&&
+    /<div class="dca-grid">[\s\S]*set_dca_start[\s\S]*set_dca_every[\s\S]*<\/div>\s*<div class="dca-actions">\s*<button class="primary" id="btnSaveDca">[^<]*<\/button>\s*<button id="btnClearDca">/.test(src),
+    '定投两排：第一排起点日与间隔，第二排保存与关闭');
+  check(/button\.danger\{color:var\(--lamp-red,#ff8580\)/.test(src), '「清除本机令牌」改浅红字，深色底上看得清');
   check(/\.sub\{color:var\(--dim\);font-size:12\.5px;margin-bottom:4px;/.test(src)
     && /#msg\{font-size:13px;min-height:20px;margin:0 2px 4px;/.test(src),
     '回看板按钮到「规则参数」卡之间的空隙收窄（46 → 28px）');
@@ -323,18 +343,18 @@ check(!src.includes('id="runCard"')&&!src.includes('id="btnRun"')&&!src.includes
 check(['btnSave','btnSaveRules','btnResetRules','btnSaveDca','btnClearDca','btnReload'].every(id=>
   doc.getElementById(id)&&typeof els[id].onclick==='function'), '清单／规则／定投保存及恢复默认、重读按钮仍绑定真实功能');
 const groupKeys=JSON.parse(fs.readFileSync(path.join(ROOT,'groups.json'),'utf8')).map(g=>g.key);
-const foldIds=['setToggle','displayCard','importCard','dcaCard',...groupKeys.map(k=>'fold_'+k)];
+const foldIds=['setToggle',...groupKeys.map(k=>'fold_'+k)];
 check(foldIds.every(id=>els[id]&&els[id].tagName==='DETAILS'&&els[id].open===false),
-  '所有设置、导入、定投和清单分组初始关闭（含持仓）');
+  '所有设置、定投和清单分组初始关闭（含持仓）');
 check(!/<details\b[^>]*\sopen(?:\s|=|>)/.test(src), '静态折叠项不含默认open属性');
-els.setToggle.open=true;els.displayCard.open=true;els.fold_focus.open=true;
+els.setToggle.open=true;els.fold_focus.open=true;
 T.render();T.renderSettings();
-check(els.setToggle.open&&els.displayCard.open&&els.fold_focus.open&&!els.fold_positions.open,
+check(els.setToggle.open&&els.fold_focus.open&&!els.fold_positions.open,
   '普通清单和参数重渲染保留手动展开／关闭状态');
-els.btnExpandGroups.onclick();
-check(groupKeys.every(k=>els['fold_'+k].open), '全部展开按钮仍有效');
-els.btnCollapseGroups.onclick();T.render();
-check(groupKeys.every(k=>els['fold_'+k].open===false), '全部收起后重渲染不会自动打开持仓或其它组');
+groupKeys.forEach(k=>{els['fold_'+k].open=false;});T.render();
+check(groupKeys.every(k=>els['fold_'+k].open===false), '分组全部收起后重渲染不会自动打开持仓或其它组');
+check(!src.includes('btnExpandGroups')&&!src.includes('btnCollapseGroups'), '设置页已移除「全部展开」「全部收起」');
+check(/<div class="row group-tools">[\s\S]*?<button id="btnReload">[^<]*<\/button><button class="primary" id="btnSave">[^<]*<\/button>\s*<\/div>/.test(src), '「重新读取已保存清单」「保存清单与分组」移到分类清单标题栏');
 check(runOptions.canReload()===false, '后台状态刷新不重载设置页以免重置手动折叠状态');
 delete store.mm_gh_token_v1;
 T.data.positions = { 'BRK-B': {}, SPYM: {}, NTNX: {} };
@@ -348,19 +368,38 @@ check(els.cnt_technology.textContent === '(5)', 'IT 分类计数 5');
 
 const pos = els.list_positions._html;
 check(pos.indexOf('BRK-B') < pos.indexOf('NTNX'), '持仓保持载入顺序（BRK-B 在 NTNX 前）');
-check(pos.indexOf('NTNX') < pos.indexOf('— ETF 基金 —') && pos.indexOf('— ETF 基金 —') < pos.indexOf('SPYM'),
-      '持仓内 ETF（SPYM）分区到尾部');
+check(pos.indexOf('NTNX') < pos.indexOf('SPYM') && !pos.includes('ETF 基金'),
+      '持仓内 ETF（SPYM）排在个股之后，且不再有单独的 ETF 分区标题');
+check(/<span class="sym etf">SPYM<\/span>/.test(pos) && /<span class="sym">NTNX<\/span>/.test(pos) && src.includes('.sym.etf{color:var(--link-blue,#6ba3f0)}'),
+      'ETF 代码用蓝色（sym etf），股票代码保持白字');
 
 // 长持仓 / 短持仓：设置页每行只留一个下拉，两个区和其它分组都在里面选；列表按两区显示。
-const rowN = (pos.match(/<div class="row"/g) || []).length;
+const rowN = (pos.match(/<div class="row stock-row"/g) || []).length;
 const selN = (pos.match(/<select class="move"/g) || []).length;
 check(rowN > 0 && selN === rowN, '持仓每行只有一个下拉（不再单独一个长/短控件）');
 const sel0 = (pos.match(/<select class="move"[\s\S]*?<\/select>/) || [''])[0];
 check(sel0.includes('>长持仓<') && sel0.includes('>短持仓<') && sel0.includes('>重点<'),
       '一个下拉里就能选长持仓 / 短持仓 / 其它分组');
 check(src.indexOf('class="hold"') === -1, '已移除独立的长/短持仓下拉');
-check(src.includes('.edit-group .move{grid-column:2 / span 2;grid-row:3'),
-      '手机上这个下拉独占一格，不会和其它控件叠在一起');
+check(src.includes('.edit-group .stock-head,.edit-group .stock-row{display:grid;grid-template-columns:44px 100px repeat(var(--price-fields),minmax(0,1fr)) 56px 26px;')
+  &&src.includes('.edit-group .stock-row~.stock-row{border-top:1px solid var(--stock-divider)}')
+  &&src.includes('.stock-prices{display:contents}')&&!src.includes('grid-row:2;display:grid;'),
+  '每股单排：列标题与每行共用同一组列轨道，价格容器display:contents不增排，相邻股票有分隔线');
+check(src.includes('.edit-group .stock-row>.sym{width:auto;min-width:0;padding:0;border:0;border-radius:0;background:none;'),
+  '代码是不可改的纯文字，不再画占宽的胶囊框');
+for(const kind of groupKeys){
+  const expectedPrices=kind==='positions'?['trigger','reduce','target']:kind==='focus'?['trigger','target']:['trigger'];
+  const labels={trigger:'加仓价',reduce:'减仓价',target:'目标价',cost:'成本价'};
+  const html=els['list_'+kind]._html,rows=els['list_'+kind].querySelectorAll('.row');
+  if(!rows.length)continue;
+  const head=html.match(/^<div class="stock-head"[^>]*--price-fields:(\d+)[^>]*>([\s\S]*?)<\/div>/);
+  const headLabels=head?[...head[2].matchAll(/<span>([^<]*)<\/span>/g)].map(m=>m[1]):[];
+  check(!!head&&Number(head[1])===expectedPrices.length&&JSON.stringify(headLabels)===JSON.stringify(['代码','备注',...expectedPrices.map(f=>labels[f]),'分组','']),
+    kind+' 每组列表上方有列标题，价位列与该组实际价位字段一一对应');
+  check(rows.every(r=>JSON.stringify(r._priceFields)===JSON.stringify(expectedPrices)&&r._priceCount===expectedPrices.length
+    &&r._inputs.some(i=>i.dataset.f==='note')&&!!r._del&&!!r._move),kind+' 真实render每股一排且备注/价格/删除/移动控件完整');
+  check(!html.includes('placeholder='),kind+' 行内输入框不再放占位文字，由列标题说明');
+}
 T.data.positions['BRK-B'].hold = 'long';
 T.render();
 const pos2 = els.list_positions._html;
@@ -382,14 +421,13 @@ delete T.data.positions['BRK-B'].hold;
 T.render();
 
 const focus = els.list_focus._html;
-check(focus.indexOf('TEM') < focus.indexOf('— ETF 基金 —') &&
-      focus.indexOf('— ETF 基金 —') < focus.indexOf('SOXL'),
-      '重点关注：个股（TEM）在前，ETF 分区（SOXL）在后');
+check(focus.indexOf('TEM') < focus.indexOf('SOXL') && !focus.includes('ETF 基金'),
+      '重点关注：个股（TEM）在前，ETF（SOXL）在后，无分区标题');
 
 const watch = els.list_technology._html;
 const iA = watch.indexOf('AAPL'), iM = watch.indexOf('MCD'), iH = watch.indexOf('HYG'),
-      iSub = watch.indexOf('— ETF 基金 —'), iQ = watch.indexOf('QQQ'), iX = watch.indexOf('XLU');
-check(iA < iM && iM < iSub && iSub < iQ && iQ < iX, '其他关注：个股字母序 → ETF 分区 → ETF 字母序');
+      iQ = watch.indexOf('QQQ'), iX = watch.indexOf('XLU');
+check(iA < iM && iM < iQ && iQ < iX && !watch.includes('ETF 基金'), '其他关注：个股字母序 → ETF 字母序，无分区标题');
 
 // 分页：塞 120 只验证 pageState
 T.data.technology = {};
@@ -404,37 +442,18 @@ check(els.list_technology._html.includes('S119'), '第 3 页包含最后一只')
 check(!src.includes('id="filterAll"') && !src.includes('group-filter') &&
   !els.groupEditor.innerHTML.includes('id="filter_'), '设置页不展示全组或分组搜索控件');
 check(els.pager_technology._html.includes('第 3/3 页'), '移除搜索后分页仍可翻到最后一页');
-T.previewCsv('symbol,name\nXLV,医疗\nABC,Example Company\n','healthcare');
-check(!Object.keys(T.data.healthcare).length, 'CSV 预览前不修改目标组');
-els.btnApply.onclick();
-check(T.data.healthcare.XLV.note==='医疗'&&T.data.healthcare.ABC.note==='Example Company', '确认导入只写入目标分类与名称');
-check(els.fold_healthcare.open===false, '确认导入不强制打开原本关闭的目标清单组');
+// 代码规范化与校验（原 CSV/EBK 导入模块里留下的唯一部分，供新增入口使用）
+check(T.normTicker('brk.b')==='BRK-B'&&T.normTicker('BRK.B-US')==='BRK-B'&&T.normTicker('$aapl')==='AAPL'&&T.normTicker('31#.SPX')==='.SPX', '代码规范化：大小写、点转横线、-US后缀、31#前缀');
+check(T.isTicker('MSFT')&&T.isTicker('BRK-B')&&T.isTicker('2USDCNY')&&T.isTicker('.SPX'), '普通股票、带横线代码及汇率/指数代码有效');
+check(!T.isTicker('SGOV')&&!T.isTicker('00700.HK')&&!T.isTicker('600519')&&!T.isTicker('')&&!T.isTicker('total')&&!T.isTicker('1ABC'), 'SGOV、港股、A股、空值、表头噪声和数字开头代码无效');
+els.fold_healthcare.open=false;
+doc.getElementById('newSym').value='ABC';doc.getElementById('newNote').value='Example Company';doc.getElementById('newMove').value='healthcare';
+T.addSymbol();
+check(T.data.healthcare.ABC&&T.data.healthcare.ABC.note==='Example Company', '统一入口添加只写入目标分类与备注');
 check(!('watch' in JSON.parse(T.configText())), '保存不包含旧其他关注');
-T.previewCsv('symbol,name\nBRK.B-US,Berkshire\n','positions');
-T.data.positions.EXTRA={note:'新添加公司'};
-els.btnApply.onclick();
-check(!!T.data.positions.EXTRA, '清单变化后旧导入预览不能覆盖新标的');
-check(els.msg.textContent.includes('重新预览'), '清单变化提示重新确认');
-els.csvKind.value='focus';els.csvKind.onchange();
 check(src.includes('location.origin!==\'https://nixhuang.github.io\''), '非正式来源隔离远端写入');
-T.data.index_funds={};
-T.previewCsv('symbol\nAAPL\n2USDCNY\nMSFT\n','index_funds','mixed.csv');
-els.btnApply.onclick();
-check(Object.keys(T.data.index_funds).join(',')==='AAPL,2USDCNY,MSFT', 'CSV 含汇率代码仍保留全部普通股票');
-T.previewCsv('31#BRK.B\n31#.SPX\n31#SGOV\n74#00700\n1600519\n','index_funds','sample.ebk');
-els.btnApply.onclick();
-check(!!T.data.index_funds['BRK-B']&&!!T.data.index_funds['.SPX']&&!T.data.index_funds.SGOV, 'EBK 股类和指数保留，SGOV及非美股排除');
-const beforeAmbiguous=T.configText();
-T.previewCsv('Apple,AAPL\nMicrosoft,MSFT\n','positions','no-header.csv');
-els.btnApply.onclick();
-check(T.configText()===beforeAmbiguous, '歧义 CSV 不修改或覆盖持仓');
-check(els.csvInfo.textContent.includes('多个列同样像股票代码'), '歧义 CSV 要求补充代码表头');
-T.previewCsv('name,symbol\nApple,AAPL\nMicrosoft,MSFT\n','financials','with-header.csv');
-els.btnApply.onclick();
-check(!!T.data.financials.AAPL&&!!T.data.financials.MSFT&&!T.data.financials.APPLE, '补充表头后正确导入股票而非公司名');
-T.previewCsv('AAPL\nMSFT\n','energy','single-column.csv');
-els.btnApply.onclick();
-check(!!T.data.energy.AAPL&&!!T.data.energy.MSFT, '无表头单列代码仍可导入');
+check(!src.includes('importCard')&&!src.includes('list-import')&&!src.includes('btnLink')&&!src.includes('import-audit')&&
+  !/previewCsv|readCsv|parseCsv/.test(src), 'CSV/EBK 导入与手机令牌链接功能已从设置页移除');
 
 doc.getElementById('set_amp_yellow').value = '3';
 doc.getElementById('set_amp_red').value = '9';
@@ -510,7 +529,7 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   global.fetch=async()=>({ok:true,status:200,json:async()=>({content:Buffer.from(JSON.stringify(persisted)).toString('base64'),sha:'a'.repeat(40)})});
   els.fold_focus.open=true;els.fold_materials.open=false;
   await T.load();
-  check(els.fold_focus.open&&!els.fold_materials.open&&els.setToggle.open&&els.displayCard.open,
+  check(els.fold_focus.open&&!els.fold_materials.open&&els.setToggle.open,
     '重新读取清单及异步参数读取保留用户的手动折叠状态');
   check(T.monitorEnabled('positions')&&T.monitorEnabled('focus')&&!T.monitorEnabled('materials'), '旧配置关闭值不影响持仓重点关注始终监测');
   const normalized=JSON.parse(T.configText());
@@ -572,28 +591,27 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
     focus:{ZS:{note:'Zscaler',reduce:50}},technology:{AMD:{note:'超威',reduce:90}}};
   await T.load();
   const gh=els.groupEditor.innerHTML;
-  check(gh.includes('id="newReduce_positions"')&&!gh.includes('newRDir_')&&!gh.includes('rdir'), '持仓的添加栏只有减仓价，没有方向下拉');
-  check(!/newReduce_(?!positions)/.test(gh), '其他分组的添加栏没有减仓价');
+  check(!gh.includes('newReduce_')&&!gh.includes('class="add row"')&&!/id="newSym_/.test(gh), '分组里不再有逐组新增表单');
+  check(!!els.newSym&&!!els.newNote&&!!els.newMove&&!!els.btnAddSym&&src.includes('<h2>新增股票</h2>'), '页面只有一个统一新增入口');
   const lp=els.list_positions.innerHTML;
   check(lp.includes('data-f="reduce"')&&lp.includes('value="200"')&&lp.includes('value="300"'), '持仓每行显示已存的减仓价');
   check(!lp.includes('<select class="rdir"')&&!lp.includes('reduce_dir'), '持仓每行没有方向下拉');
   check(!els.list_focus.innerHTML.includes('data-f="reduce"')&&!els.list_technology.innerHTML.includes('data-f="reduce"'), '其他分组每行没有减仓价');
   let cfg2=JSON.parse(T.configText());
   check(cfg2.positions.AAPL.reduce===200&&!('reduce_dir' in cfg2.positions.AAPL)&&cfg2.positions.AAPL.trigger===80&&cfg2.positions.MSFT.reduce===300, '保存内容保留减仓价和加仓价');
-  doc.getElementById('newSym_positions').value='NVDA';doc.getElementById('newNote_positions').value='英伟达';doc.getElementById('newTrig_positions').value='';
-  doc.getElementById('newReduce_positions').value='95.5';
-  T.addSymbol('positions');
+  doc.getElementById('newSym').value='NVDA';doc.getElementById('newNote').value='英伟达';doc.getElementById('newMove').value='positions:long';
+  T.addSymbol();
   cfg2=JSON.parse(T.configText());
-  check(cfg2.positions.NVDA&&cfg2.positions.NVDA.reduce===95.5&&!('reduce_dir' in cfg2.positions.NVDA)&&!('trigger' in cfg2.positions.NVDA), '添加持仓时可填减仓价（不存方向）');
-  check(doc.getElementById('newReduce_positions').value==='', '添加后清空减仓价');
-  for(const bad of ['-3','0','abc']){
-    doc.getElementById('newSym_positions').value='AMZN';doc.getElementById('newNote_positions').value='亚马逊';doc.getElementById('newReduce_positions').value=bad;
-    T.addSymbol('positions');
-    check(!('AMZN' in JSON.parse(T.configText()).positions), '减仓价“'+bad+'”被拒绝，不添加');
-  }
-  doc.getElementById('newReduce_positions').value='';T.addSymbol('positions');
+  check(cfg2.positions.NVDA&&cfg2.positions.NVDA.hold==='long'&&cfg2.positions.NVDA.note==='英伟达'&&!('reduce' in cfg2.positions.NVDA)&&!('trigger' in cfg2.positions.NVDA),
+    '统一入口选「长持仓」添加：写入hold=long，不预置价位');
+  check(doc.getElementById('newSym').value===''&&doc.getElementById('newNote').value==='', '添加后清空代码与备注');
+  doc.getElementById('newSym').value='AMZN';doc.getElementById('newNote').value='亚马逊';doc.getElementById('newMove').value='';
+  T.addSymbol();
+  check(!('AMZN' in JSON.parse(T.configText()).positions), '未选分组时拒绝添加');
+  doc.getElementById('newMove').value='positions:short';T.addSymbol();
   cfg2=JSON.parse(T.configText());
-  check(cfg2.positions.AMZN&&!('reduce' in cfg2.positions.AMZN)&&!('reduce_dir' in cfg2.positions.AMZN), '不填减仓价时不写 reduce');
+  check(cfg2.positions.AMZN&&cfg2.positions.AMZN.hold==='short'&&!('reduce' in cfg2.positions.AMZN)&&!('reduce_dir' in cfg2.positions.AMZN), '选「短持仓」添加且不写 reduce');
+  T.data.positions.NVDA.reduce=95.5;
   T.moveSymbol('positions','focus','NVDA');
   cfg2=JSON.parse(T.configText());
   check(cfg2.focus.NVDA&&!cfg2.positions.NVDA&&!('reduce' in cfg2.focus.NVDA)&&!('reduce_dir' in cfg2.focus.NVDA), '移出持仓时清掉减仓价，避免留下不监测的残值');
@@ -608,27 +626,19 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
     technology:{AMD:{note:'超威',target:90,target_at:'2026-10'}}};
   await T.load();
   const gt=els.groupEditor.innerHTML;
-  check(gt.includes('id="newTarget_positions"')&&gt.includes('id="newTarget_focus"'), '持仓和重点关注的添加栏都有目标价');
-  check(!/newTarget_(?!positions|focus)/.test(gt), '其他分组的添加栏没有目标价');
+  check(!gt.includes('newTarget_'), '分组里不再有逐组新增表单（目标价在添加后的行里填）');
   check(els.list_positions.innerHTML.includes('data-f="target"')&&els.list_positions.innerHTML.includes('value="350"'), '持仓每行显示已存的目标价');
   check(els.list_focus.innerHTML.includes('data-f="target"')&&els.list_focus.innerHTML.includes('value="250.5"'), '重点关注每行显示已存的目标价');
   check(!els.list_technology.innerHTML.includes('data-f="target"'), '其他分组每行没有目标价');
   cfg2=JSON.parse(T.configText());
   check(cfg2.positions.AAPL.target===350&&cfg2.positions.AAPL.target_at==='2026-09'&&cfg2.focus.ZS.target===250.5, '保存内容保留目标价和保存月份');
-  doc.getElementById('newSym_focus').value='NVDA';doc.getElementById('newNote_focus').value='英伟达';
-  doc.getElementById('newTarget_focus').value='1000';
-  T.addSymbol('focus');
+  doc.getElementById('newSym').value='NVDA';doc.getElementById('newNote').value='英伟达';doc.getElementById('newMove').value='focus';
+  T.addSymbol();
   cfg2=JSON.parse(T.configText());
-  check(cfg2.focus.NVDA&&cfg2.focus.NVDA.target===1000&&/^\d{4}-(0[1-9]|1[0-2])$/.test(cfg2.focus.NVDA.target_at), '添加时填目标价：同时记下保存月份');
-  check(doc.getElementById('newTarget_focus').value==='', '添加后清空目标价');
-  for(const bad of ['-3','0','abc']){
-    doc.getElementById('newSym_focus').value='AMZN';doc.getElementById('newNote_focus').value='亚马逊';doc.getElementById('newTarget_focus').value=bad;
-    T.addSymbol('focus');
-    check(!('AMZN' in JSON.parse(T.configText()).focus), '目标价“'+bad+'”被拒绝，不添加');
-  }
-  doc.getElementById('newTarget_focus').value='';T.addSymbol('focus');
+  check(cfg2.focus.NVDA&&!('target' in cfg2.focus.NVDA)&&!('target_at' in cfg2.focus.NVDA), '统一入口添加到重点：不预置目标价');
+  check(els.fold_focus.open===true&&els.msg.textContent.includes('已添加 NVDA'), '添加后自动展开目标分组并提示在行内填价位');
+  T.data.focus.NVDA.target=1000;T.data.focus.NVDA.target_at='2026-11';
   cfg2=JSON.parse(T.configText());
-  check(cfg2.focus.AMZN&&!('target' in cfg2.focus.AMZN)&&!('target_at' in cfg2.focus.AMZN), '不填目标价时不写 target');
   T.moveSymbol('focus','positions','NVDA');
   cfg2=JSON.parse(T.configText());
   check(cfg2.positions.NVDA&&cfg2.positions.NVDA.target===1000, '持仓和重点关注之间移动，目标价保留');
@@ -652,15 +662,59 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   check(fixedSaved.target_space_pct===40&&fixedSaved.target_high_space_pct===90&&T.settingsError()==='',
     '无空间输入框时采集保存仍保留固定40／90');
 
+  // ---- 同一只股票全页只能一份：载入合并、新增拦截、移动整份转移、导入不复制；成本价不在设置页 ----
+  persisted={positions:{AAPL:{note:'苹果',cost:325.03,hold:'long'}},focus:{AAPL:{note:'苹果',trigger:325,target:400,target_at:'2026-10'},ZS:{note:'云安全'}},
+    technology:{AAPL:{note:''},ZS:{note:'云安全',trigger:230},AMD:{note:'超威'}}};
+  await T.load();
+  let uq=JSON.parse(T.configText());
+  check(Object.keys(uq.positions).join()==='AAPL'&&!uq.focus.AAPL&&!uq.technology.AAPL&&!uq.technology.ZS&&uq.focus.ZS&&uq.technology.AMD,
+    '载入时同一代码只保留最高优先级（持仓>重点>其他）那一份，重复项被移除');
+  check(uq.positions.AAPL.trigger===325&&uq.positions.AAPL.target===400&&uq.positions.AAPL.target_at==='2026-10'&&uq.positions.AAPL.cost===325.03&&uq.positions.AAPL.hold==='long',
+    '被移除重复项里胜出者缺的加仓价/目标价并入，已有成本与长/短不被覆盖');
+  check(uq.focus.ZS.trigger===230, '重点与其他分组重复：缺的加仓价并入保留的重点那份');
+  check(els.dirty.textContent.includes('未保存'), '载入时合并过重复项，提示有未保存改动');
+  check(!els.list_positions.innerHTML.includes('data-f="cost"')&&!els.list_positions.innerHTML.includes('成本价'), '设置页持仓不再有成本价输入或列');
+  check(JSON.parse(T.configText()).positions.AAPL.cost===325.03, '不显示成本价，但保存时已有成本原样保留');
+  doc.getElementById('newSym').value='AAPL';doc.getElementById('newMove').value='technology';T.addSymbol();
+  check(!JSON.parse(T.configText()).technology.AAPL&&els.msg.textContent.includes('已在「持仓」'), '新增代码已存在于别的分组：拒绝复制，提示用分组下拉转移');
+  T.moveSymbol('positions','focus','AAPL');
+  uq=JSON.parse(T.configText());
+  check(!uq.positions.AAPL&&uq.focus.AAPL&&uq.focus.AAPL.trigger===325&&uq.focus.AAPL.target===400&&uq.focus.AAPL.note==='苹果',
+    '从持仓转到重点：整份记录带着已有信息转移，不是复制');
+  T.moveSymbol('focus','positions:short','AAPL');
+  uq=JSON.parse(T.configText());
+  check(uq.positions.AAPL&&uq.positions.AAPL.hold==='short'&&uq.positions.AAPL.trigger===325&&!uq.focus.AAPL,
+    '从重点转回持仓（短持仓）：加仓价等随之带回，重点里不留副本');
+
+  // 默认值灰字：每个设置框左侧标出默认数值，开关项标开/关
+  {
+    const log=[];const fake=(id,tag)=>{els[id]={tagName:tag,closest:()=>({}),parentNode:{insertBefore:(n,e)=>log.push([id,n.textContent,n.className])}};};
+    fake('set_boll_n','INPUT');fake('set_chg_red','INPUT');fake('set_use_realtime','SELECT');fake('set_group_single_open','SELECT');
+    T.markDefaults();
+    const got=Object.fromEntries(log.map(([id,text,cls])=>[id,[text,cls]]));
+    check(got.set_boll_n&&got.set_boll_n[0]==='20'&&got.set_chg_red&&got.set_chg_red[0]==='4'&&got.set_boll_n[1]==='def', '数值框左侧标出默认数值（只标数值，不写「默认」）');
+    check(got.set_use_realtime[0]==='开'&&got.set_group_single_open[0]==='关', '开关项标默认的开/关');
+    check(/\.setrow \.def\{[^}]*font-size:13px[^}]*color:#6f7785/.test(src), '默认值是灰字、不小于13px');
+  }
+  // 搜索定位：精确优先、前缀其次、找不到返回 null；代码全页唯一所以只会命中一个分组；返回所在页
+  const holderKey=sym=>Object.keys(T.data).find(g=>T.data[g]&&T.data[g][sym]);
+  const fa=T.findSymbol(' aapl ');
+  check(fa&&fa.exact&&fa.kind===holderKey('AAPL')&&fa.symbol==='AAPL'&&fa.page===0, '搜索代码（不分大小写、去空格）精确命中所在分组');
+  const fp=T.findSymbol('AAP');
+  check(fp&&!fp.exact&&fp.symbol==='AAPL', '前缀也能定位（标注按前缀匹配）');
+  check(T.findSymbol('NOSUCHXX')===null&&T.findSymbol('  ')===null, '找不到或空输入返回空，不报错');
+  check(/<div class="row card-head">\s*<h2>规则参数<\/h2>\s*<button class="primary" id="btnSaveRules">[^<]*<\/button>\s*<button id="btnResetRules">/.test(src), '「保存规则」「恢复默认」在「规则参数」标题栏');
+  check(src.includes('id="symSearch"')&&src.includes('id="btnLocate"')&&src.includes('.stock-row.hit{'), '分类清单上方有搜索框、定位按钮和命中高亮样式');
+
   // 手动新增只要求有效代码；名称备注不在静态表中时也可留空。
-  check(els.groupEditor.innerHTML.includes('placeholder="名称备注（选填）"'), '新增栏明确标注名称备注选填');
-  doc.getElementById('newSym_energy').value='ZZZX';doc.getElementById('newNote_energy').value='  ';
-  T.addSymbol('energy');
+  check(src.includes('id="newNote" placeholder="名称备注（选填）"'), '新增栏明确标注名称备注选填');
+  doc.getElementById('newSym').value='ZZZX';doc.getElementById('newNote').value='  ';doc.getElementById('newMove').value='energy';
+  T.addSymbol();
   cfg2=JSON.parse(T.configText());
   check(!!cfg2.energy.ZZZX&&!('note' in cfg2.energy.ZZZX), '不填名称的未知代码可添加并保存，无空备注字段');
   check(els.list_energy.innerHTML.includes('ZZZX'), '未填备注的标的仍显示股票代码');
-  check(els.newSym_energy.value===''&&els.msg.textContent.includes('已添加 ZZZX'), '添加成功后清空代码并反馈');
-  els.newSym_energy.value='';els.newNote_energy.value='  ';T.addSymbol('energy');
+  check(els.newSym.value===''&&els.msg.textContent.includes('已添加 ZZZX'), '添加成功后清空代码并反馈');
+  els.newSym.value='';els.newNote.value='  ';T.addSymbol();
   check(Object.keys(JSON.parse(T.configText()).energy).length===Object.keys(cfg2.energy).length, '空代码仍不能添加');
   // 真实按钮保存：只用内存令牌与模拟PUT，覆盖回执缺失、提交校验和恢复默认。
   T.renderSettings();
@@ -685,9 +739,9 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   check(T.trackReceipt('settings.json',{content:{sha:'bad'}})===false&&els.msg.className==='err',
     '移除生效UI不移除有效blob／commit回执校验');
   T.SET.dca_start='2026-10-01';T.SET.dca_every=5;T.SET.vol_ratio_z=1;T.renderSettings();
-  els.dcaCard.open=true;els.btnResetRules.onclick();
+  els.btnResetRules.onclick();
   check(T.SET.vol_ratio_z===2&&T.SET.vol_ratio_red_z===3.6&&T.SET.dca_every===5&&T.SET.dca_start==='2026-10-01'&&
-    els.dcaCard.open&&els.setToggle.open, '恢复默认保留定投和手动折叠状态，并恢复黄2／红3.6σ');
+    els.setToggle.open, '恢复默认保留定投和手动折叠状态，并恢复黄2／红3.6σ');
 
   // 延迟回执：快照、编辑基线和共享写锁必须彼此独立，所有请求均为内存桩。
   Object.assign(T.SET,expectedDefaults);T.renderSettings();
@@ -841,7 +895,7 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
     bootstrapRequests.some(r=>r.url.includes('/contents/holdings.json'))&&
     bootstrapRequests.some(r=>r.url.includes('/contents/settings.json')),
     '携带?rules=1和规则锚点仍正常加载设置页，不执行旧规则跳转');
-  check(groupKeys.every(k=>els['fold_'+k].open===false)&&els.setToggle.open&&els.displayCard.open,
+  check(groupKeys.every(k=>els['fold_'+k].open===false)&&els.setToggle.open,
     '完整初始化后清单默认关闭，参数普通刷新仍保留手动展开状态');
   check(bootstrapRequests.every(r=>r.method==='GET')&&JSON.stringify(store)===beforeBootstrapStore&&
     removedIds.every(id=>doc.getElementById(id)===null), '旧书签初始化只模拟GET、不写存储、不重建已删除说明和详情DOM');

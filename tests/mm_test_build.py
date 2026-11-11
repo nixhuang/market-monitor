@@ -97,7 +97,7 @@ class BuildTests(unittest.TestCase):
 
     def test_all_production_input_changes_are_rejected(self):
         for name in ("monitor.py", "holdings.json", "settings.json", "cost_panel.css", "cost_panel.js",
-                     "edit.html", "run-status.js", "list-import.js", "official-earnings.json",
+                     "edit.html", "run-status.js", "official-earnings.json",
                      "position-costs.seed.json", "requirements.txt", "build_support.py"):
             with self.subTest(path=name):
                 sha = self.revision({name: "新输入"})
@@ -132,7 +132,7 @@ class BuildTests(unittest.TestCase):
         sha = self.revision({"README.md": "新文档", "tests/test_new.py": "assert True",
                              "outputs/report.html": "报告", ".cache/market-monitor.json": "{}",
                              "run-receipt.json": "{}", "status.json": "{}", "index.html": "另一个产物",
-                             "position-costs.json": "{}", "import-audit.json": "{}",
+                             "position-costs.json": "{}",
                              ".github/workflows/tests.yml": "独立测试变更"})
         self.assertEqual(b.verify_inputs(self.root, self.frozen, sha), self.frozen["input_hash"])
         self.assertEqual(self.frozen["source_sha"], self.base)
@@ -1173,13 +1173,14 @@ class RulesTemplateTests(unittest.TestCase):
             self.assertIn(retained, glossary)
 
     def test_category_column_section_borders_only(self):
-        self.assertIn('#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid var(--rules-group-border)}', assets.RULES_CSS)
+        self.assertNotIn('border-top:3px solid var(--rules-group-border)', assets.RULES_CSS)  # 报灯表只留横向细线，不再有逐组粗上框
+        self.assertIn('#rules-lamp-table tr.rule-group-end>th,.card .rules-body #rules-lamp-table tr.rule-group-end>td{border-bottom:1px solid var(--rules-group-border)}', assets.RULES_CSS)
         rows = re.findall(r'<tr\b[^>]*>.*?</tr>', assets.LAMP_RULE_TABLE, re.S)
         sections = [row for row in rows if 'class="cat-col" rowspan=' in row]
         self.assertEqual(len(sections), 4)
         self.assertEqual([self.plain(re.search(r'<th\b[^>]*>(.*?)</th>', row)[1]) for row in sections],
                          ['布林+RSI', '单独RSI', '单独布林', '价格与量能'])
-        self.assertIn('tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid var(--rules-group-border)}', assets.RULES_CSS)
+        self.assertNotIn('border-bottom:2px solid var(--rules-group-border)', assets.RULES_CSS)
 
     def test_lamp_table_horizontal_center_is_scoped_and_keeps_other_layout(self):
         css = assets.RULES_CSS
@@ -1200,7 +1201,7 @@ class RulesTemplateTests(unittest.TestCase):
                        if re.search(r'#rules-lamp-table\s+(?:th|td)$', selector)]
             if targets:
                 self.assertEqual(len(targets), len(selector_list), '水平居中不得覆盖其它表')
-                self.assertEqual(declarations.strip().rstrip(';'), 'text-align:center', '只允许改水平对齐')
+                self.assertEqual(declarations.strip().rstrip(';'), 'text-align:center;border:0;border-bottom:1px solid var(--rules-cell-border)', '只允许水平居中和报灯表横向细线')
                 centered.update(selector.rsplit(' ', 1)[1] for selector in targets)
         self.assertEqual(centered, {'th', 'td'}, '分类、表头、条件及全部灯级单元格均需居中')
         common = re.search(r'\.card \.rules-body \.rule-table th,\.card \.rules-body \.rule-table td\{([^}]*)\}', css)[1]

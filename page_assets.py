@@ -454,7 +454,7 @@ def sync_edit_html(source, base, constants):
     result, count = re.subn(pattern, lambda _: generated, source, flags=re.S)
     if count != 1:
         raise ValueError("edit.html 必须有且仅有一个 schema 生成区块")
-    for name in ("run-status.js", "list-import.js"):
+    for name in ("run-status.js",):
         pattern = r'(?<=src=")\./' + re.escape(name) + r'(?:\?v=[^"\s]*)?(?=")'
         result, count = re.subn(pattern, lambda _: asset_url(base, name), result)
         if count != 1:
@@ -601,8 +601,9 @@ h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 h1.brand{color:var(--up)}
 .sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
-#group_positions{background:var(--card);--collapse-bg:transparent;--signal-border:var(--frame-green);border:0;box-shadow:none;padding:3px 5px 2px;overflow:hidden}
-#group_positions>summary{cursor:default}
+/* 父级只留标题内缩，资产行与子框使用完整分组宽度；▲沿用原持仓绿色底。 */
+#group_positions{background:var(--card);--collapse-bg:var(--positions-collapse);--signal-border:var(--frame-green);border:0;box-shadow:none;padding:3px 0 2px;overflow:hidden}
+#group_positions>summary{cursor:default;margin-left:5px;margin-right:5px}
 #group_positions>summary::before{visibility:hidden}
 #group_positions_long.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 9px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
@@ -1049,17 +1050,23 @@ table.stk tr[data-symbol]>td.cost-line[hidden]{display:none}
 table.stk tr[data-symbol]>td.cost-line>span{font-size:inherit}
 table.stk tr[data-symbol]>td.cost-line[data-pnl="loss"]{background:var(--pnl-loss-bg)}
 table.stk tr[data-symbol]>td.cost-line[data-pnl="gain"]{background:var(--pnl-gain-bg)}
-table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:10.25px 10px 7px;font-size:14.5px;line-height:21.75px;--sig-col-gap:30px;--sig-row-gap:7px}
+table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:10.25px 10px 7px;font-size:14.5px;line-height:21.75px;--sig-col-gap:18px;--sig-row-gap:7px}
 .sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}
 .sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}
-/* 仅校正加号墨迹中心到首排布林/RSI文字；不移动两列或改变字号/颜色。 */
-.sig-cols[data-combo="1"]{position:relative;--combo-scale:1.43;--combo-dy:-2px;--combo-color:var(--dim)}
-.sig-cols[data-combo="1"]::after{content:"+";position:absolute;left:50%;top:0;transform:translate(-50%,var(--combo-dy)) scale(var(--combo-scale));transform-origin:center;width:16px;height:21.75px;display:flex;align-items:center;justify-content:center;font-size:inherit;line-height:1;font-weight:500;color:var(--combo-color);pointer-events:none}
+/* 加号改为1.1px细线绘制（原字形放大后笔画约1.7px偏粗）；尺寸、墨迹中心沿用原字形放大后的位置。 */
+.sig-cols[data-combo="1"]{position:relative;--combo-size:10.5px;--combo-cy:10.6px;--combo-stroke:1.1px;--combo-color:var(--dim)}
+.sig-cols[data-combo="1"]::after{content:"";position:absolute;left:50%;top:calc(var(--combo-cy) - var(--combo-size) / 2);width:var(--combo-size);height:var(--combo-size);transform:translateX(-50%);background:linear-gradient(var(--combo-color),var(--combo-color)) center/100% var(--combo-stroke) no-repeat,linear-gradient(var(--combo-color),var(--combo-color)) center/var(--combo-stroke) 100% no-repeat;pointer-events:none}
+/* 中线右半区比左半区多4px（左9px、右13px）；加号仍压在中线上。 */
+.sig-cols>.sig-col:last-child{padding-left:4px}
 .sig-cols[data-combo-level="red"]{--combo-color:var(--lamp-red)}
 .sig-cols[data-combo-level="yellow"]{--combo-color:var(--lamp-yellow)}
 .sig-cols[data-combo-level="gray"]{--combo-color:var(--text)}
 
 .stk td.sig .signal-item{display:block;min-width:0;overflow-wrap:anywhere;padding-left:8px;text-indent:-8px}
+/* 全角标点只收掉自己字框里的空白半格，汉字/数字间距不动：
+   「，」「）」字形在字框左半、「（」在右半，另一半本来就是空的，所以各收0.5字不会盖到邻字。 */
+.stk td.sig .cm,.stk td.sig .pr{margin-right:-.5em}
+.stk td.sig .pl{margin-left:-.5em}
 .stk td.sig .signal-item::before{content:"";display:inline-block;width:3px;height:10px;margin-right:5px;border-radius:1px;background:currentColor;vertical-align:middle}
 .stk td.sig .signal-item:has(.sig-zone){padding-left:0;text-indent:0}
 .stk td.sig .signal-item:has(.sig-zone)::before{display:none}
@@ -1104,10 +1111,8 @@ table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>
 #signalCounts .signal-filter .signal-member-belong:empty{display:none}
 @media(max-width:600px){
 :root{--status-font-size:14.5px}
-.stk td.sig .signal-item{letter-spacing:-.6px}
-.sig-cols[data-combo="1"]{--combo-scale:1.57}
-.sig-cols[data-combo="1"]::after{height:19.575px}
-.stk td.sig .signal-item[data-signal-kind="amp"]{white-space:nowrap;overflow-wrap:normal;letter-spacing:-.4px}
+.sig-cols[data-combo="1"]{--combo-size:11.3px;--combo-cy:9.7px}
+.stk td.sig .signal-item[data-signal-kind="amp"]{white-space:nowrap;overflow-wrap:normal}
 body{padding-left:5px;padding-right:5px}
 .oil-reference-row td{padding:8px 6px}
 .runbar{padding-left:16px;padding-right:16px;gap:12px}
@@ -1158,7 +1163,7 @@ table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 .dual-body>.cost-contrib .cnsym{font-size:15px;line-height:15.75px}
 .dual-body>.cost-contrib .cncn{font-size:14px;line-height:15.75px}
 .dual-body>.cost-contrib .ca,.dual-body>.cost-contrib .cv{font-size:14px;line-height:15.75px}
-#group_positions>.asset-row .cost-legend b{font-size:13px;line-height:19.2px}
+#group_positions>.asset-row .cost-legend b{font-size:14px;line-height:19.2px}
 #signalCounts .signal-member-symbol{font-size:15px;line-height:19.5px}
 #signalCounts .signal-member-jump .note{font-size:14px;line-height:18px}
 #signalCounts .signal-member-list .signal-member-symbol{line-height:16.25px}
@@ -1239,10 +1244,10 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 /* 预警表原行盒12px×1.65=19.8px；只放大字，不随字号放大行距。 */
 .card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:inherit;line-height:19.8px;overflow-wrap:anywhere}
 .card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:var(--cost-row-bg);border-bottom:1px solid var(--rules-border)}
-#rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border-left:0;border-right:0}
-.card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center}
+#rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border:0;border-collapse:collapse}
+/* 报灯表只留横向细线：不再有外框和逐格竖框，分组末行用较亮的同宽细线分段。 */
+.card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center;border:0;border-bottom:1px solid var(--rules-cell-border)}
 .card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}
-#rules-lamp-table tbody tr:not(:first-child)>th.cat-col{border-top:3px solid var(--rules-group-border)}
 .card .rules-body .rule-table col.cat-col{width:18px}
 .card .rules-body .rule-table col.col-cond{width:40%}
 .card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:13.2px;font-size:inherit;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
@@ -1262,7 +1267,7 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 #signalCounts .arrow-band-down,#signalCounts .arrow-rsi-down{color:var(--down)}
 .card .rules-body .rule-table .ar-band-up,.card .rules-body .rule-table .ar-band-down,
 .card .rules-body .rule-table .ar-rsi-up,.card .rules-body .rule-table .ar-rsi-down{font-weight:700}
-.card .rules-body .rule-table tr.rule-group-end>th,.card .rules-body .rule-table tr.rule-group-end>td{border-bottom:2px solid var(--rules-group-border)}
+.card .rules-body #rules-lamp-table tr.rule-group-end>th,.card .rules-body #rules-lamp-table tr.rule-group-end>td{border-bottom:1px solid var(--rules-group-border)}
 .card .rules-body .rule-table td.cell-red{background:var(--rules-red-bg);text-align:center}
 .card .rules-body .rule-table td.cell-yellow{background:var(--rules-yellow-bg);text-align:center}
 .card .rules-body .rule-table td.cell-gray{background:var(--rules-gray-bg);text-align:center}
@@ -1271,13 +1276,14 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 .card .rules-body #rules-lamp-table tbody td:first-of-type{color:var(--rules-strong)}
 .card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
 .card .rules-body .rule-anchor{display:block;height:0}
-@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-12px;margin-right:-12px;width:calc(100% + 24px)}.card .rules-body .rule-table col.col-cond{width:38%}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
+@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-20px;margin-right:-20px;width:calc(100% + 40px)}.card .rules-body .rule-table col.col-cond{width:auto}#rules-lamp-table col[span]{width:86px}#rules-lamp-table td.cell-gray-fold{white-space:nowrap}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
 #signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
 #signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
 #signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
 #signalRulesBody h5.rule-original,#signalRulesBody .rule-layout-heading,#glossaryRulesBody h5{margin:14px 0 4px}
 #signalRulesBody .rule-layout-scope{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
 #signalRulesBody h4.rule-original{margin:18px 0 7px}
+#signalRulesBody section:first-of-type h4.rule-original{margin-top:6px}
 .card .rules-body .signal-term{display:inline-flex;align-items:center;vertical-align:baseline;white-space:nowrap;overflow-wrap:normal;gap:1px}
 .card .rules-body .dir-arrow{display:inline-block;flex:none;width:auto;height:18px;vertical-align:middle;margin-left:2px;overflow:visible}
 #signalRulesBody .nav-gray{color:var(--rules-muted)}
@@ -1602,6 +1608,24 @@ document.addEventListener("toggle", function(event) {
   if (Math.abs(delta) > 1) window.scrollBy(0, delta);
   requestAnimationFrame(function() { revealSignalPanel(d); });
 }, true);
+// 设置「首页分组单个展开」=1：用户点标题展开某个分组（含长/短持仓）时自动收起其它分组；
+// 当日、风险、统计和固定展开的「持仓」父卡不参与。只响应点标题（页面加载时的默认展开不触发）。
+document.addEventListener("click", function(event) {
+  const summary = event.target instanceof Element ? event.target.closest("details[id^='group_'] > summary") : null;
+  if (!summary || !(window.MM_SETTINGS && window.MM_SETTINGS.group_single_open === 1)) return;
+  const d = summary.parentElement;
+  if (!d || d.dataset.openLocked) return;
+  const topBefore = d.getBoundingClientRect().top;
+  requestAnimationFrame(function() {
+    if (!d.open) return;
+    document.querySelectorAll("details[id^='group_'][open]:not([data-open-locked])").forEach(function(other) {
+      if (other !== d) other.open = false;
+    });
+    // 收起上面的分组会把页面拉上去：把刚点开的这一组拉回原来的屏幕位置。
+    const delta = d.getBoundingClientRect().top - topBefore;
+    if (Math.abs(delta) > 1) window.scrollBy(0, delta);
+  });
+}, true);
 document.addEventListener("toggle", function(event) {
   const card = event.target;
   if (!(card instanceof HTMLDetailsElement) || card.id !== "signalCounts") return;
@@ -1893,16 +1917,14 @@ document.addEventListener("click", function(event) {
   if (closeButton) {
     const card = closeButton.closest("details");
     if (!card) return;
-    // 只收本组。收起会让按钮以上整段塌掉、把下方内容一起拽上来，所以拿「本组之后的第一个
-    // 元素」当锚点，收起后把它拉回原来的屏幕位置：视觉上按钮以上的部分向下折叠、收进按钮
-    // 所在的这一行，下面的内容原地不动（不再用 scrollIntoView 把整页拉到分组标题）。
-    const anchor = card.nextElementSibling;
-    const anchorTop = anchor ? anchor.getBoundingClientRect().top : null;
+    // 只收本组：按钮以上整段塌掉，视觉上向下折进按钮所在的这一行（不再用 scrollIntoView 把整页拉到分组标题）。
+    // 长持仓、短持仓和其它分组同为分组卡（只多了「持仓」标题和底色），统一处理：
+    // 本组底边（▲按钮所在的那一行）就是锚点——文档流里它下面的一切都随它一起移动，
+    // 收起后把底边拉回原来的屏幕位置，下面的内容就原地不动；不用找兄弟/父级。
+    const bottomBefore = card.getBoundingClientRect().bottom;
     card.open = false;
-    if (anchor && anchorTop !== null) {
-      const delta = anchor.getBoundingClientRect().top - anchorTop;
-      if (Math.abs(delta) > 1) window.scrollBy(0, delta);
-    }
+    const delta = card.getBoundingClientRect().bottom - bottomBefore;
+    if (Math.abs(delta) > 1) window.scrollBy(0, delta);
     const heading = card.querySelector(":scope > summary");
     if (heading) heading.focus({preventScroll: true});
     return;

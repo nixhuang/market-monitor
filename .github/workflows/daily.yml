@@ -40,7 +40,6 @@ on:
       - '!status.json'
       - '!run-receipt.json'
       - '!position-costs.json'
-      - '!import-audit.json'
   # 定时仍仅由 Worker 在美东 20:15 / 20:45 派发 ensure-morning.yml。
   # 首轮由 Worker 派发；缺数后在 20:00–24:00 窗口内延迟重试，不增加 GitHub schedule。
   workflow_dispatch:

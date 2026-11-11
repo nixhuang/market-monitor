@@ -187,8 +187,8 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('line-height:13.2px', re.search(re.escape('.card .rules-body .rule-table th.cat-col') + r'\{([^}]*)\}', css)[1])
         self.assertIn('.card .rules-body .rule-table th.cat-col{line-height:12.1px}', css)
         for stable in ('width:calc(100% + 32px)', 'margin-left:-16px;margin-right:-16px',
-                       'width:calc(100% + 24px)', 'margin-left:-12px;margin-right:-12px',
-                       'col.cat-col{width:18px}', 'col.col-cond{width:40%}', 'col.col-cond{width:38%}',
+                       'width:calc(100% + 40px)', 'margin-left:-20px;margin-right:-20px',
+                       'col.cat-col{width:18px}', 'col.col-cond{width:40%}', 'col.col-cond{width:auto}', '#rules-lamp-table col[span]{width:86px}', '#rules-lamp-table td.cell-gray-fold{white-space:nowrap}',
                        '.rule-table td{padding:6px 4px}'):
             self.assertIn(stable, css)
 
@@ -459,14 +459,16 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
 
     def test_combo_only_adjusts_ink_vertical_offset_preserving_shape_and_gap_center(self):
         css = page_assets.PAGE_CSS
-        self.assertIn('--combo-scale:1.43;--combo-dy:-2px;', css)
-        self.assertIn('.sig-cols[data-combo="1"]{--combo-scale:1.57}', css)
-        self.assertEqual(css.count('--combo-dy:'), 1)
-        self.assertIn('left:50%;top:0;transform:translate(-50%,var(--combo-dy)) scale(var(--combo-scale))', css)
-        self.assertIn('width:16px;height:21.75px;', css)
-        self.assertIn('.sig-cols[data-combo="1"]::after{height:19.575px}', css)
-        self.assertIn('font-size:inherit;line-height:1;font-weight:500;color:var(--combo-color)', css)
-        self.assertIn('--sig-col-gap:30px;--sig-row-gap:7px', css)
+        # 加号改为细线绘制：笔画1.1px（原字形放大后约1.7px），仍压在中线上，尺寸/墨迹中心沿用原值。
+        self.assertIn('--combo-size:10.5px;--combo-cy:10.6px;--combo-stroke:1.1px;', css)
+        self.assertIn('.sig-cols[data-combo="1"]{--combo-size:11.3px;--combo-cy:9.7px}', css)
+        self.assertEqual(css.count('--combo-cy:'), 2)
+        self.assertIn('content:"";position:absolute;left:50%;top:calc(var(--combo-cy) - var(--combo-size) / 2)', css)
+        self.assertIn('center/100% var(--combo-stroke) no-repeat', css)
+        self.assertNotIn('content:"+"', css)
+        self.assertNotIn('--combo-scale', css)
+        self.assertIn('.sig-cols>.sig-col:last-child{padding-left:4px}', css)
+        self.assertIn('--sig-col-gap:18px;--sig-row-gap:7px', css)
         self.assertIn('gap:11px;height:26px;padding-bottom:13px', css)
 
     def test_main_row_price_and_target_use_the_same_two_rows(self):
@@ -485,7 +487,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         桌面档 ≥601（iPad mini 744/1133 与 PC 共用）。不允许再冒出更细的断点。"""
         css = page_assets.PAGE_CSS
         cost = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
-        for name, text in (('PAGE_CSS', css), ('cost_panel.css', cost)):
+        edit = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        for name, text in (('PAGE_CSS', css), ('cost_panel.css', cost), ('edit.html', edit)):
             conds = re.findall(r'@media[^{]*?(?:max|min)-width:\s*(\d+)px', text)
             bad = sorted({c for c in conds if c not in ('600', '601')})
             self.assertEqual(bad, [], f'{name} 出现了 600/601 之外的断点：{bad}')
@@ -571,10 +574,14 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('--collapse-bg:var(--signal-bg);', css)
         # 11-10终稿：父去框但保卡片底和原标题位置；子框仍保持绿色。
         pos = re.search(r'#group_positions\{([^}]+)\}', css)[1]
-        self.assertIn('--collapse-bg:transparent', pos)
+        self.assertIn('--collapse-bg:var(--positions-collapse)', pos)
         self.assertIn('background:var(--card)', pos)
-        self.assertIn('border:0;box-shadow:none;padding:3px 5px 2px;overflow:hidden', pos)
-        self.assertIn('#group_positions>summary{cursor:default}', css)
+        self.assertIn('border:0;box-shadow:none;padding:3px 0 2px;overflow:hidden', pos)
+        self.assertIn('#group_positions>summary{cursor:default;margin-left:5px;margin-right:5px}', css)
+        tint = re.search(r'--positions-collapse:rgba\((\d+),(\d+),(\d+),([.\d]+)\)', css)
+        self.assertIsNotNone(tint)
+        self.assertEqual(tuple(map(int, tint.groups()[:3])), (46, 160, 67))
+        self.assertGreater(float(tint[4]), 0)
         self.assertIn('#group_positions>summary::before{visibility:hidden}', css)
         self.assertIn('--signal-border:var(--frame-green)', pos)
         self.assertIn('--frame-green:#2c8f3e', css)
@@ -592,6 +599,189 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('background:var(--collapse-bg)', button)
         self.assertIn('.collapse-group:hover{color:var(--text);background:var(--collapse-bg)}', css)
         self.assertNotIn('.collapse-group:hover{color:var(--text);background:transparent}', css)
+
+    def test_day_links_have_natural_name_height_and_visible_border_contract(self):
+        css = strip_css_comments((ROOT / 'cost_panel.css').read_text(encoding='utf-8'))
+        name = re.search(r'\.cost-contrib \.cn-name\s*\{([^}]*)\}', css)[1]
+        self.assertNotRegex(name, r'(?:^|;)\s*(?:height|max-height)\s*:')
+        self.assertIn('overflow: hidden', name)
+        link = re.search(r'\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.signal-member-jump\s*\{([^}]*)\}', css)[1]
+        for declaration in ('display: inline-block', 'line-height: 20px', 'max-width: 100%',
+                            'border-bottom: 1px dotted var(--list-border)', 'color: var(--text)'):
+            self.assertIn(declaration, link)
+        self.assertNotRegex(link, r'(?:^|;)\s*(?:height|max-height)\s*:')
+        # 此为源契约，不代替真实边框box未被cn-name或祖先裁切的几何验收。
+
+    def test_description_comma_hangs_without_changing_inline_spacing(self):
+        css = strip_css_comments(page_assets.PAGE_CSS)
+        # 行内逗号仍占一个字宽（0宽逗号 + 行尾自动消失的空格），行尾放不下时悬挂，不靠压缩字距。
+        self.assertIn('.stk td.sig .cm,.stk td.sig .pr{margin-right:-.5em}', css)
+        self.assertIn('.stk td.sig .pl{margin-left:-.5em}', css)
+        self.assertNotIn('word-spacing', re.search(r'\.stk td\.sig \.cm[^{]*\{[^}]*\}', css)[0])
+        # 汉字/数字字距保持正常：描述正文不再有负字距
+        self.assertNotRegex(css, r'\.stk td\.sig \.signal-item[^{]*\{[^}]*letter-spacing:-')
+        self.assertIn('--sig-col-gap:18px', css)
+
+    def test_lamp_table_has_only_horizontal_rules_and_five_character_cells_fit(self):
+        css = strip_css_comments(page_assets.RULES_CSS)
+        table = re.search(r'#rules-lamp-table\{([^}]*)\}', css)[1]
+        self.assertIn('border:0', table)
+        self.assertIn('border-collapse:collapse', table)
+        cell = re.search(r'#rules-lamp-table th,\.card \.rules-body #rules-lamp-table td\{([^}]*)\}', css)[1]
+        self.assertIn('border:0;border-bottom:1px solid var(--rules-cell-border)', cell)
+        mobile = css[css.index('@media(max-width:600px){.card .rules-body'):]
+        self.assertIn('#rules-lamp-table col[span]{width:86px}', mobile)   # 5个15px字 + 内边距
+        self.assertIn('#rules-lamp-table td.cell-gray-fold{white-space:nowrap}', mobile)
+
+    def test_settings_mobile_text_never_below_monitor_toggle_and_tools_share_row(self):
+        source = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        self.assertNotIn('手机上也要改', source)
+        self.assertRegex(source, r'<div class="row token-tools"[^>]*>\s*<button id="btnWipe" class="danger">清除本机令牌</button>\s*</div>')
+        self.assertNotIn('btnLink', source)       # 手机用的带令牌链接已删除
+        self.assertNotIn('importCard', source)    # CSV/EBK 导入已删除
+        self.assertNotIn('list-import', source)
+        self.assertIn('.token-tools button{white-space:nowrap}', source)
+        mobile = source[source.rindex('@media(max-width:600px){\n.sub,'):]
+        for selector in ('.sub', '.note', '.monitor-note', '.savebar .sp', '.pager', '.setsec', '.subsec', 'kbd'):
+            self.assertIn(selector, mobile.split('}', 1)[0])
+        self.assertIn('font-size:13px', mobile)
+        for fragment in re.findall(r'font-size:(\d+(?:\.\d+)?)px', source.split('<body>', 1)[1]):
+            self.assertGreaterEqual(float(fragment), 13, '正文内联字号不得小于监测开启按钮的13px')
+
+    def test_group_single_open_switch_is_off_by_default_and_wired_on_both_pages(self):
+        self.assertEqual(rules_config.DEFAULT_SETTINGS['group_single_open'], 0)
+        source = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        self.assertIn('id="set_group_single_open"', source)
+        self.assertIn("document.querySelectorAll('.edit-group[open]').forEach(o=>{if(o!==d)o.open=false;});", source)
+        js = page_assets.PAGE_INTERACTION_JS
+        self.assertIn('window.MM_SETTINGS.group_single_open === 1', js)
+        self.assertNotIn('groupSummaryClickAt', js)   # 不再用 toggle 监听（会干扰统计面板的筛选归一化时序）
+        # 当日/风险/统计不是 group_ 前缀，固定展开的持仓父卡带 data-open-locked，均不参与。
+        self.assertIn("details[id^='group_'][open]:not([data-open-locked])", js)
+        script = r'''
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const ev={};class Details{constructor(id,open,locked){this.id=id;this.open=open;this.dataset=locked?{openLocked:'1'}:{};this.top=100;}
+  getBoundingClientRect(){return {top:this.top};}}
+const mk=(id,open,locked)=>new Details(id,open,locked);
+const cards=[mk('group_positions',true,true),mk('group_positions_long',true),mk('group_positions_short',true),mk('group_focus',false),mk('group_tech',true)];
+class Element{constructor(card){this.card=card;}
+  closest(q){return q==="details[id^='group_'] > summary"&&this.card?{parentElement:this.card}:null;}}
+const sel=s=>s==="details[id^='group_'][open]:not([data-open-locked])"?cards.filter(c=>c.open&&!c.dataset.openLocked):[];
+const frames=[];
+const ctx={HTMLDetailsElement:Details,Element,Date,requestAnimationFrame:f=>frames.push(f),
+  document:{addEventListener:(k,f)=>(ev[k]||=[]).push(f),querySelectorAll:sel,querySelector:()=>null,getElementById:()=>null},
+  window:{MM_SETTINGS:{group_single_open:1},addEventListener(){},scrollBy:(x,y)=>{ctx.scrolled=y;}}};
+vm.createContext(ctx);vm.runInContext(fs.readFileSync(0,'utf8'),ctx);
+const click=(card)=>{ev.click.forEach(f=>f({target:new Element(card)}));};
+const flush=()=>{while(frames.length)frames.shift()();};
+const focus=cards[3];
+// 用户点分组标题并展开：其它分组（含长/短持仓）收起，固定展开的持仓父卡保持
+click(focus);focus.open=true;focus.top=40;flush();
+assert.equal(cards[1].open,false);assert.equal(cards[2].open,false);assert.equal(cards[4].open,false);
+assert.equal(cards[0].open,true);assert.equal(focus.open,true);
+assert.equal(ctx.scrolled,-60);     // 点开的这组被上拽后拉回原位（top 100→40 补 -60）
+// 点的是持仓父卡标题（固定展开）：不参与
+cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,true);
+// 点击后其实是在收起：不动其它
+cards[4].open=true;focus.open=false;click(focus);flush();assert.equal(cards[4].open,true);
+// 开关关闭：不动
+focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();assert.equal(cards[4].open,true);
+'''
+        result = subprocess.run([sys.executable, "-B", str(ROOT / "tests/run_all.py"), "--offline-node", "-e", script],
+                                cwd=ROOT, input=js, capture_output=True, text=True, encoding="utf-8", timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_settings_expandables_have_a_rotating_chevron(self):
+        source = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        self.assertIn("details.fold>summary::before,details.set>summary::before{content:'›'", source)
+        self.assertIn("details.fold[open]>summary::before,details.set[open]>summary::before{transform:rotate(90deg)}", source)
+
+    def test_single_add_entry_replaces_per_group_add_forms(self):
+        source = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        self.assertEqual(source.count('class="card add-entry"'), 1)
+        for ident in ('newSym', 'newNote', 'newMove', 'btnAddSym'):
+            self.assertEqual(source.count('id="' + ident + '"'), 1)
+        self.assertNotIn('class="add row"', source)
+        self.assertNotIn('add-prices', source)
+        self.assertNotRegex(source, r"newSym_|newReduce_|newTarget_|newTrig_|'add_'")
+        self.assertIn('.add-entry .add-row{display:grid;grid-template-columns:76px minmax(0,1fr) 104px 52px;', source)
+
+    def test_positions_full_width_rows_preserve_title_inset(self):
+        css = page_assets.PAGE_CSS
+        parent = re.search(r'#group_positions\{([^}]+)\}', css)[1]
+        self.assertIn('padding:3px 0 2px', parent)
+        self.assertIn('#group_positions>summary{cursor:default;margin-left:5px;margin-right:5px}', css)
+        cost = strip_css_comments((ROOT / 'cost_panel.css').read_text(encoding='utf-8'))
+        self.assertIn('margin: 8px 0 4px', re.search(r'#group_positions > \.asset-row\s*\{([^}]*)\}', cost)[1])
+        self.assertIn('margin: 4px 0 8px', re.search(r'#group_positions > \.cashbond-row\s*\{([^}]*)\}', cost)[1])
+        for zone in ('long', 'short'):
+            declarations = re.search(r'#group_positions_' + zone + r'\.zone-card\{([^}]*)\}', css)[1]
+            self.assertIn('width:100%', declarations)
+            self.assertNotIn('margin-left:', declarations)
+            self.assertNotIn('margin-right:', declarations)
+
+    def test_mobile_settings_two_row_fixture_preserves_all_fields_and_dividers(self):
+        source = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        # 每股单排：列标题和每行共用同一组轨道；价格容器display:contents不增排；代码不再是胶囊框。
+        self.assertIn('.edit-group .stock-head,.edit-group .stock-row{display:grid;'
+                      'grid-template-columns:44px 100px repeat(var(--price-fields),minmax(0,1fr)) 56px 26px;', source)
+        self.assertIn('.edit-group .stock-row~.stock-row{border-top:1px solid var(--stock-divider)}', source)
+        self.assertIn('.stock-prices{display:contents}', source)
+        self.assertNotIn('grid-row:2;display:grid;', source)
+        self.assertIn('.edit-group .stock-row>.sym{width:auto;min-width:0;padding:0;border:0;border-radius:0;background:none;', source)
+        result = subprocess.run([sys.executable, '-B', str(ROOT / 'tests/run_all.py'), '--offline-node',
+                                 str(ROOT / 'tests/mm_test_edit.js'), '--layout-fixture'],
+                                cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        fixture = json.loads(result.stdout)
+
+        class Rows(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.rows, self.row, self.depth, self.price_depth = [], None, 0, None
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'div' and 'stock-row' in attrs.get('class', '').split():
+                    self.row = {'group': attrs['data-k'], 'symbol': attrs['data-s'], 'first': [], 'prices': [], 'move': 0, 'delete': 0}
+                    self.rows.append(self.row)
+                    self.depth = 0
+                if self.row is None:
+                    return
+                if tag == 'div':
+                    self.depth += 1
+                    if attrs.get('class') == 'stock-prices':
+                        self.price_depth = self.depth
+                        self.row['count'] = int(attrs['style'].split(':')[1])
+                if tag == 'input':
+                    self.row['prices' if self.price_depth is not None else 'first'].append(attrs['data-f'])
+                if tag == 'select' and attrs.get('class') == 'move':
+                    self.row['move'] += 1
+                if tag == 'button' and attrs.get('class') == 'del':
+                    self.row['delete'] += 1
+            def handle_endtag(self, tag):
+                if tag == 'div' and self.row is not None:
+                    if self.depth == self.price_depth:
+                        self.price_depth = None
+                    self.depth -= 1
+                    if self.depth == 0:
+                        self.row = None
+        parser = Rows()
+        parser.feed(fixture['html'])
+        groups = json.loads((ROOT / 'groups.json').read_text(encoding='utf-8'))
+        self.assertEqual(len(parser.rows), len(groups) * 2)
+        self.assertEqual(fixture['html'].count('class="stock-head"'), len(groups))   # 每组列表上方一条列标题
+        for g in groups:
+            rows = [r for r in parser.rows if r['group'] == g['key']]
+            self.assertEqual(len(rows), 2)
+            fields = ['trigger', 'reduce', 'target'] if g['key'] == 'positions' else ['trigger', 'target'] if g['key'] == 'focus' else ['trigger']
+            for row in rows:
+                with self.subTest(group=g['key'], symbol=row['symbol']):
+                    self.assertEqual(row['first'], ['note'])
+                    self.assertEqual(row['prices'], fields)
+                    self.assertEqual(row['count'], len(fields))
+                    self.assertEqual((row['move'], row['delete']), (1, 1))
+        self.assertNotIn('<script', fixture['html'])
+        self.assertNotIn('mm_gh_token_v1', fixture['html'])
 
     def test_invalid_fields_warn_and_preserve_other_overrides(self):
         invalid = {"boll_n": 1, "ma_short": 1, "ma_long": 200.5, "use_realtime": True,
@@ -651,7 +841,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn("相差≤3% → 点亮青色", plain_text(rules))
         self.assertNotIn('可点红灯', plain_text(rules))
         self.assertNotIn("fund_", match[1])
-        self.assertIn('window.MM_SETTINGS={"signal_single_open":0}', page)
+        self.assertIn('window.MM_SETTINGS={"signal_single_open":0,"group_single_open":0}', page)
 
     def test_render_does_not_use_import_time_rules_snapshot(self):
         first = self.render()
@@ -1046,7 +1236,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page_assets.PAGE_CSS)
         self.assertIn('#signalCounts .collapse-group{color:var(--white)}', page_assets.PAGE_CSS)
         pos = re.search(r'#group_positions\{([^}]+)\}', page_assets.PAGE_CSS)[1]
-        self.assertIn('--collapse-bg:transparent', pos)
+        self.assertIn('--collapse-bg:var(--positions-collapse)', pos)
         self.assertNotIn('bar.appendChild(shortcut)', page_assets.RULES_INTERACTION_JS)
 
     def test_volume_adaptive_off_on_and_fixed_fallback(self):
@@ -1213,8 +1403,7 @@ const closed=new Details();closed.open=true;let focused=false,scrolled=false;
 closed.querySelector=()=>({focus:()=>{focused=true;},scrollIntoView:()=>{scrolled=true;}});
 // 点底部 ▲：只收本组；拿「本组之后的第一个元素」当锚点把下方内容拉回原屏幕位置，
 // 不再用 scrollIntoView 把整页拉到分组标题。
-const anchor={getBoundingClientRect:()=>({top:closed.open?500:100})};
-closed.nextElementSibling=anchor;
+closed.getBoundingClientRect=()=>({bottom:closed.open?900:500});   // 本组底边：展开900 → 收起500
 let scrolledBy=null;
 context.window.scrollBy=(x,y)=>{scrolledBy=y;};
 class Element {closest(s){return s==='.collapse-group'?{closest:()=>closed}:null;}}
@@ -1222,7 +1411,16 @@ context.Element=Element;
 for(const f of clickEvents)f({target:new Element()});
 assert.equal(closed.open,false);assert.equal(focused,true);
 assert.equal(scrolled,false);      // 不再 scrollIntoView，页面不整体跳到标题
-assert.equal(scrolledBy,-400);     // 锚点被上拽 400，反向补回原位
+assert.equal(scrolledBy,-400);     // 底边被上拽 400，反向补回原位
+// 短持仓是父卡里最后一个子框（没有下一个兄弟）：同一套以本组底边为锚的逻辑，不依赖兄弟/父级。
+const shortZone=new Details();shortZone.open=true;shortZone.nextElementSibling=null;shortZone.parentElement={nextElementSibling:null};
+shortZone.querySelector=()=>({focus:()=>{}});
+shortZone.getBoundingClientRect=()=>({bottom:shortZone.open?2000:1350});
+scrolledBy=null;
+context.Element=class Element2 {closest(s){return s==='.collapse-group'?{closest:()=>shortZone}:null;}};
+for(const f of clickEvents)f({target:new context.Element()});
+assert.equal(shortZone.open,false);
+assert.equal(scrolledBy,-650);     // 短持仓收起后下方内容同样原地不动
 '''
         result = subprocess.run([sys.executable, "-B", str(ROOT / "tests/run_all.py"),
             "--offline-node", "-e", script], cwd=ROOT, input=page_assets.PAGE_INTERACTION_JS,
@@ -1241,7 +1439,7 @@ assert.equal(scrolledBy,-400);     // 锚点被上拽 400，反向补回原位
         elements = Elements()
         elements.feed(markup)
         by_id = {attrs['id']: (tag, attrs) for tag, attrs in elements.tags if 'id' in attrs}
-        for ident in ('setToggle', 'displayCard', 'importCard', 'dcaCard'):
+        for ident in ('setToggle',):
             with self.subTest(ident=ident):
                 tag, attrs = by_id[ident]
                 self.assertEqual(tag, 'details')
@@ -1445,18 +1643,18 @@ assert.equal(scrolledBy,-400);     // 锚点被上拽 400，反向补回原位
         self.assertEqual(expected, page_assets.sync_edit_html(expected, ROOT, monitor._rule_constants()))
         schema = json.loads(re.search(r"const SET_SCHEMA=(.*?);\n", source)[1])
         self.assertEqual(schema, json.loads(json.dumps(rules_config.browser_schema())))
-        for name in ("run-status.js", "list-import.js"):
+        for name in ("run-status.js",):
             self.assertIn(page_assets.asset_url(ROOT, name), source)
         self.assertNotRegex(source, r'\.js\?v=2026\d{4}(?:-\d+)?"')
 
     def test_editor_hash_refresh_is_limited_to_generated_parts(self):
         source = (ROOT / "edit.html").read_text(encoding="utf-8")
         with tempfile.TemporaryDirectory() as tmp:
-            for name in ("run-status.js", "list-import.js"):
+            for name in ("run-status.js",):
                 (Path(tmp) / name).write_bytes((ROOT / name).read_bytes() + b"\n/* offline */")
             result = page_assets.sync_edit_html(source, tmp, monitor._rule_constants())
             self.assertNotEqual(source, result)
-            for name in ("run-status.js", "list-import.js"):
+            for name in ("run-status.js",):
                 result = result.replace(page_assets.asset_url(tmp, name), page_assets.asset_url(ROOT, name))
             self.assertEqual(result, source)
 

@@ -15,7 +15,6 @@ on:
       - 'status.json'
       - 'run-receipt.json'
       - 'position-costs.json'
-      - 'import-audit.json'
   workflow_call:
     inputs:
       called_by_daily:

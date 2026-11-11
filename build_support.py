@@ -28,13 +28,12 @@ BUILD_INPUT_PATTERNS = (
 )
 EXCLUDED_INPUTS = frozenset({
     "index.html", "status.json", "run-receipt.json", "position-costs.json",
-    "import-audit.json",
 })
 REQUIRED_INPUTS = frozenset({
     "build_support.py", "requirements.txt", "monitor.py", "holdings.json",
     "settings.json", "groups.json", "official-earnings.json", "symbol-names.json",
     "position-costs.seed.json", "cost_panel.js", "cost_panel.css", "edit.html",
-    "run-status.js", "list-import.js",
+    "run-status.js",
 })
 ARTIFACTS = ("index.html", "status.json")
 SCHEMA_VERSION = 1

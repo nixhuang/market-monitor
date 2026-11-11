@@ -309,7 +309,7 @@ check('class="stat-badge red"' in pos_title and 'class="stat-badge missing"' in 
 # 2026-10-15 再调：名称与灯圈之间不再留 6px，靠得更近
 check('.group-card>summary .group-stats{margin-left:0' in html and
       '.group-stats{margin-left:auto' in html, "警示紧贴分组名称右侧左对齐，宏观标题保持原样")
-check('window.MM_SETTINGS={"signal_single_open":1}' in html and
+check('window.MM_SETTINGS={"signal_single_open":1,"group_single_open":0}' in html and
       'window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0' in html,
       "设置里的「灯详情只留一个打开」注入页面，默认开")
 check('box-sizing:border-box;width:24px;min-width:24px;height:18px;padding:0 1px;border-radius:999px' in html
@@ -357,7 +357,7 @@ items3 = [d for d in items if d["group"] != "focus"]
 snap3 = dict(snapshot)
 snap3["list_counts"] = {"positions": 2, "focus": 0, "technology": 6, "triggers": 0, "dca": 0}
 html3 = monitor.render(macro, items3, 8, snapshot=snap3, dup_hidden=0)
-check('重点 (0)' in html3 and '暂无标的，去设置页录入或导入 CSV' in html3, "重点关注空态提示")
+check('重点 (0)' in html3 and '暂无标的，去设置页录入' in html3, "重点关注空态提示")
 
 # 抓取失败文案
 snap4 = dict(snapshot)
@@ -902,7 +902,7 @@ for _kind in ('manual', None):
           'kind=' + repr(_kind) + '不靠文字误判为自动共识')
 _technical_mention = item('TECHKEEP', 'technology', 'green')
 _technical_mention.update(target={'kind': 'consensus'}, signals=['RSI 原技术描述，与共识价交叉核对'])
-check(_technical_mention['signals'][0] in _row_signals(_technical_mention),
+check(_technical_mention['signals'][0] in _row_signals(_technical_mention).replace('<span class="cm">，</span>', '，'),
       '自动共识kind也不误删包含关键字的原技术描述')
 _runbar = re.search(r'<div class="runbar">(.*?)</div>', _description_page, re.S)[1]
 check('href="#signalRules"' not in _runbar and 'shortcut.textContent = "预警规则"' not in monitor.PAGE_INTERACTION_JS,
@@ -1542,9 +1542,10 @@ for _level, _body_color in (('red', 'var(--lamp-red)'), ('yellow', 'var(--lamp-y
 check('.signal-item{color:var(--dim)}' in _arrow_css
       and '.arrow-rsi-up,.arrow-rsi-down{color:inherit;font-size:1.15em;line-height:1}' in _arrow_css,
       '无灯正文灰字与RSI继承色/字号基础规则均保持')
-check('.stk td.sig .signal-item{letter-spacing:-.6px}' in _arrow_css
-      and '.stk td.sig .sig-zone{letter-spacing:-.6px}' not in _arrow_css,
-      '手机端普通描述与组合布林描述统一使用SNDK的-0.6px字距')
+check(not re.search(r'\.stk td\.sig \.(?:signal-item|sig-zone)[^{]*\{[^}]*letter-spacing', _arrow_css)
+      and '.stk td.sig .cm,.stk td.sig .pr{margin-right:-.5em}' in _arrow_css
+      and '.stk td.sig .pl{margin-left:-.5em}' in _arrow_css,
+      '描述正文字距恢复正常，只有全角逗号/括号收掉自己字框里的空白半格')
 
 _rules_arrow_table = re.search(r'<table\b[^>]*id="rules-lamp-table"[^>]*>.*?</table>',
                               re.search(r'<template id="rulesTpl">(.*?)</template>', html, re.S)[1], re.S)[0]
@@ -1869,6 +1870,13 @@ if '--chrome' in sys.argv:
     import subprocess as _subprocess
     import tempfile as _tempfile
     _chrome = os.environ.get('MM_TEST_CHROME', 'C:/Program Files/Google/Chrome/Application/chrome.exe')
+    # 真实设置render的合成两股/每组fixture，无脚本、授权、网络或真实仓位。
+    _settings_result = _subprocess.run([sys.executable, '-B', os.path.join(ROOT, 'tests/run_all.py'),
+        '--offline-node', os.path.join(ROOT, 'tests/mm_test_edit.js'), '--layout-fixture'],
+        cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=30)
+    if _settings_result.returncode:
+        raise AssertionError('设置两排fixture生成失败：' + _settings_result.stderr)
+    _settings_fixture = _json.loads(_settings_result.stdout)
     _browser_script = r'''
 const fs = require('node:fs');
 const {spawn} = require('node:child_process');
@@ -2484,9 +2492,9 @@ const deadline = setTimeout(() => {
           && edit.exists && edit.inRunbar && edit.afterRefresh && edit.sameRowAsRefresh
           && edit.gapToRefresh>=8 && edit.gapToRefresh<=12 && edit.height>=24 && !edit.overflow
           && edit.radius==='7px' && edit.fontSize===(width<=600?'16px':'13px')
-          // 金额、现金、固收按同一行12px自然间隔；不再要求固收贴右侧制造空隙。
+          // 总额(含盈亏)、现金、固收三组铺满整行、组间距相等（space-between），不再是固定12px间隔。
           && edit.sumSameRow && edit.headH<=56 && Math.abs(edit.sumLeftGap-edit.cashPaddingLeft)<=0.5
-          && edit.memberGaps.length===2 && edit.memberGaps.every(g=>Math.abs(g-12)<=0.5)
+          && edit.memberGaps.length===2 && edit.memberGaps[0]>=12 && Math.abs(edit.memberGaps[0]-edit.memberGaps[1])<=1.5
           && JSON.stringify(edit.order)===JSON.stringify(['cb-total','cb-item cb-cash','cb-item cb-bond'])
           && edit.total.replace(/[^0-9]/g,'')==='4940' && edit.editorHidden && edit.assetVisible,
         name:width+'px52周条几何和数值不变；顶栏编辑按钮、真实资产4940及总额/现金/固收顺序',actual:{bars,edit}});
@@ -2631,13 +2639,27 @@ const deadline = setTimeout(() => {
     const productionLayouts=[];
     const readLayout=()=>evaluate(`(async()=>{
       const parent=document.getElementById('group_positions'),head=parent.querySelector(':scope>summary');
-      const styles=e=>{const s=getComputedStyle(e);return Object.fromEntries(['fontSize','lineHeight','padding','margin','color','backgroundColor','borderWidth','borderRadius','visibility','display','direction','textAlign'].map(k=>[k,k==='textAlign'&&['start','end'].includes(s[k])?((s[k]==='start')===(s.direction==='ltr')?'left':'right'):s[k]]));};
+      const styles=e=>{const s=getComputedStyle(e);return Object.fromEntries(['fontSize','fontWeight','lineHeight','padding','margin','color','backgroundColor','borderWidth','borderRadius','visibility','display','direction','textAlign'].map(k=>[k,k==='textAlign'&&['start','end'].includes(s[k])?((s[k]==='start')===(s.direction==='ltr')?'left':'right'):s[k]]));};
       const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
       const p=rect(parent),hs=styles(head),triangle=getComputedStyle(head,'::before');
       const zones=['long','short'].map(k=>{const z=document.getElementById('group_positions_'+k);return {rect:rect(z),style:styles(z),head:styles(z.querySelector('summary'))};});
-      const cash=parent.querySelector('.cashbond-row');
-      const state={parent:styles(parent),parentRect:p,head:hs,triangle:{visibility:triangle.visibility,width:triangle.width,display:triangle.display},zones,cash:styles(cash),cashText:cash.querySelector('.cb-cash .cb-name').textContent,rs:parent.querySelector('.rs-spy')?.textContent||''};
+      const cash=parent.querySelector('.cashbond-row'),asset=parent.querySelector(':scope>.asset-row');
+      const topGroups=[...document.querySelectorAll('details.card.group-card[id^="group_"]')].filter(e=>e!==parent&&rect(e).width>0).map(e=>({id:e.id,rect:rect(e)}));
+      const sameEdges=(a,b)=>Math.abs(a.left-b.left)<=0.5&&Math.abs(a.right-b.right)<=0.5;
+      const cashRect=rect(cash),assetRect=rect(asset);
+      const fullWidth=topGroups.length>=2&&topGroups.every(g=>[p,cashRect,assetRect,...zones.map(z=>z.rect)].every(r=>sameEdges(r,g.rect)));
+      const state={parent:styles(parent),parentRect:p,head:hs,triangle:{visibility:triangle.visibility,width:triangle.width,display:triangle.display},zones,cash:styles(cash),cashRect,assetRect,topGroups,fullWidth,cashText:cash.querySelector('.cb-cash .cb-name').textContent,rs:parent.querySelector('.rs-spy')?.textContent||''};
       head.click();state.clickKeepsOpen=parent.open;
+      const alpha=color=>{const parts=color.match(/[\\d.]+/g)||[];return color==='transparent'?0:parts.length===4?Number(parts[3]):parts.length===3?1:0;};
+      state.collapse=[];
+      for(const key of ['long','short']){
+        const zone=document.getElementById('group_positions_'+key),wasOpen=zone.open;zone.open=true;
+        await new Promise(r=>requestAnimationFrame(r));
+        const button=zone.querySelector('.collapse-group'),s=getComputedStyle(button),b=rect(button);
+        state.collapse.push({key,background:s.backgroundColor,alpha:alpha(s.backgroundColor),rect:b,visible:b.width>0&&b.height===26&&s.visibility==='visible'&&Number(s.opacity)>0});
+        zone.open=wasOpen;
+      }
+      await new Promise(r=>requestAnimationFrame(r));
       const day=document.getElementById('dayPnlCard');day.open=true;await new Promise(r=>requestAnimationFrame(r));
       const dayRoot=document.querySelector('#dualRow>.dual-body>ul.cost-contrib[data-owner="day"]');
       const dayRow=dayRoot?.querySelector('li'),dayLink=dayRow?.querySelector('.signal-member-jump');
@@ -2647,6 +2669,25 @@ const deadline = setTimeout(() => {
         link:dayLink?styles(dayLink):null,bar:dayRow?styles(dayRow.querySelector('.cbar')):null,
         linkStatic:dayLink?getComputedStyle(dayLink).borderBottomStyle:null,
         barFits:dayRoot?[...dayRoot.querySelectorAll('.cbar')].every(b=>rect(b).right<=rect(b.closest('li')).right+0.5):false};
+      state.day.links=dayRoot?[...dayRoot.querySelectorAll('.cn-name .signal-member-jump')].map(link=>{
+        const s=getComputedStyle(link),b=rect(link),nameBox=link.closest('.cn-name'),clips=[];
+        for(let node=nameBox;node&&node!==document.body;node=node.parentElement){
+          const style=getComputedStyle(node),r=rect(node);
+          if(node===nameBox||style.overflowX!=='visible'||style.overflowY!=='visible')clips.push({tag:node.className,left:r.left+node.clientLeft,right:r.left+node.clientLeft+node.clientWidth,top:r.top+node.clientTop,bottom:r.top+node.clientTop+node.clientHeight});
+        }
+        const contains=(r,clip)=>r.left>=clip.left-0.5&&r.right<=clip.right+0.5&&r.top>=clip.top-0.5&&r.bottom<=clip.bottom+0.5;
+        const border={left:b.left,right:b.right,top:b.bottom-parseFloat(s.borderBottomWidth),bottom:b.bottom};
+        const name=link.querySelector('.cncn'),nameRange=document.createRange();if(name)nameRange.selectNodeContents(name);
+        const nr=name?nameRange.getBoundingClientRect():null;
+        return {href:link.getAttribute('href'),text:link.textContent,rect:b,border,clips,borderWidth:parseFloat(s.borderBottomWidth),borderStyle:s.borderBottomStyle,borderColor:s.borderBottomColor,
+          borderFits:clips.every(c=>contains(border,c)),nameText:name?.textContent||'',nameRect:nr?{left:nr.left,right:nr.right,top:nr.top,bottom:nr.bottom,width:nr.width,height:nr.height}:null,
+          nameVisible:!!nr&&nr.width>0&&nr.height>0&&getComputedStyle(name).visibility==='visible'
+            // 文字范围是字体内容区（ascent+descent，比字形墨迹高约3px），竖向允许1.5px浮动；左右仍须完全在裁切盒内。
+            &&clips.every(c=>nr.left>=c.left-0.5&&nr.right<=c.right+0.5&&nr.top>=c.top-1.5&&nr.bottom<=c.bottom+1.5),
+          visible:b.width>0&&b.height>0&&s.display!=='none'&&s.visibility==='visible'&&Number(s.opacity)>0&&alpha(s.borderBottomColor)>0};
+      }):[];
+      state.day.allLinksVisible=state.day.links.length>=2&&state.day.links.length===dayRoot.querySelectorAll('li').length
+        &&state.day.links.every(l=>l.visible&&Number.isFinite(l.borderWidth)&&l.borderWidth>0&&l.borderStyle==='dotted'&&l.borderFits&&l.nameVisible);
       const editButton=document.getElementById('costEditBtn');
       if(editButton.getAttribute('aria-pressed')!=='true')editButton.click();
       await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
@@ -2681,17 +2722,19 @@ const deadline = setTimeout(() => {
       const zoneWidth=layout.zones[0].rect.width;
       assertions.push({ok:layout.clickKeepsOpen&&layout.parent.borderWidth==='0px'&&layout.parent.backgroundColor==='rgb(23, 26, 33)'
         &&layout.triangle.visibility==='hidden'&&layout.triangle.width==='10px'&&layout.triangle.display!=='none'
-        &&Math.abs(zoneWidth-layout.zones[1].rect.width)<0.1&&layout.zones.every(z=>z.rect.left>=layout.parentRect.left&&z.rect.right<=layout.parentRect.right
+        &&layout.fullWidth&&Math.abs(zoneWidth-layout.zones[1].rect.width)<0.1&&layout.zones.every(z=>z.rect.left>=layout.parentRect.left&&z.rect.right<=layout.parentRect.right
           &&parseFloat(z.style.borderWidth)>0&&parseFloat(z.style.borderRadius)>0)
+        &&layout.collapse.length===2&&layout.collapse.every(c=>c.visible&&c.alpha>0)
         &&layout.cashText==='Cash'&&layout.rs==='20日对.SPX +3.5%'&&layout.editor.columns.length===5
         &&layout.editor.headingStyles.length===5&&layout.editor.headingStyles.every(s=>s.fontSize==='13px'&&s.lineHeight==='19.5px'&&s.color==='rgb(139, 147, 161)')
         &&layout.editor.codeText==='GOOGL'&&layout.editor.codeFits&&layout.editor.rightAligned&&layout.editor.quantityTextFits
         &&layout.editor.buttonsSameRow&&layout.editor.bondTotalSameRow&&layout.editor.quantity.textAlign==='right'&&layout.editor.cashExtra.textAlign==='right',
-        name:width+'px终稿父无框不可折叠、三角保位置、长短等宽完整圆角、真实rs20与五列输入容量',actual:layout});
-      assertions.push({ok:layout.day.amount.fontSize==='18px'&&layout.day.percent.fontSize==='18px'
+        name:width+'px持仓/资产/现金/长短外缘与其它顶层分组同全宽，父不可折叠、子▲有底色及交易容量',actual:layout});
+      assertions.push({ok:layout.day.amount.fontSize==='16px'&&layout.day.percent.fontSize==='16px'&&layout.day.amount.fontWeight==='400'&&layout.day.percent.fontWeight==='400'
         &&layout.day.code?.fontSize==='16px'&&layout.day.name?.fontSize==='15px'&&layout.day.pnl?.fontSize==='15px'
-        &&layout.day.ratio?.fontSize==='15px'&&layout.day.ratio.textAlign==='center'&&layout.day.linkStatic==='dotted'&&layout.day.barFits,
-        name:width+'px终稿当日面板18/16/15字号、静态跳转虚线无hover焦点依赖、比例居中和条不越界',actual:layout.day});
+        &&layout.day.ratio?.fontSize==='15px'&&layout.day.ratio.textAlign==='center'&&layout.day.linkStatic==='dotted'&&layout.day.barFits
+        &&layout.day.allLinksVisible,
+        name:width+'px当日每股名称可见及跳转边框完整位于cn-name与祖先裁切盒内，标题16不加粗/列表16/15和比例条不越界',actual:layout.day});
       const trade=await evaluate(`(async()=>{
         const panel=document.getElementById('costManage'),edit=()=>document.getElementById('costEditBtn').click(),cancel=()=>document.getElementById('costCancel').click();
         const field=f=>panel.querySelector('input[data-sym="GOOGL"][data-f="'+f+'"]');
@@ -2726,6 +2769,42 @@ const deadline = setTimeout(() => {
       assertions.push({ok:JSON.stringify(layout.editor.columns)===JSON.stringify(width===600?['54px','58px','58px','92px','88px']:['58px','58px','58px','112px','90px'])
         &&layout.editor.rightAligned&&layout.editor.quantityTextFits&&layout.editor.codeFits&&layout.editor.buttonsSameRow&&layout.editor.bondTotalSameRow,
         name:width+'px五列手机桌面断点、GOOGL/9999.9999完整及现金2右齐',actual:layout.editor});
+    }
+    // 设置页实际render输出：每股一排、列标题与各列对齐、全部字段/分隔线；价格容器全宽度display:contents。
+    for(const width of [440,600,601]){
+      await cdp('Emulation.setDeviceMetricsOverride',{width,height:956,deviceScaleFactor:1,mobile:false});
+      const loaded=waitLoad();await cdp('Page.navigate',{url:'about:blank'});await loaded;
+      const tree=await cdp('Page.getFrameTree');
+      await cdp('Page.setDocumentContent',{frameId:tree.frameTree.frame.id,html:syntheticPage(input.settingsFixture.html)});
+      const settings=await evaluate(`(async()=>{
+        await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+        const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
+        const rows=[...document.querySelectorAll('.stock-row')].map(row=>{
+          const r=rect(row),first=[row.querySelector(':scope>.sym'),row.querySelector(':scope>input.n'),row.querySelector(':scope>.move'),row.querySelector(':scope>.del')],prices=row.querySelector('.stock-prices'),pr=rect(prices),priceFields=[...prices.querySelectorAll('input[data-f]')];
+          const boxes=first.map(rect),pb=priceFields.map(rect),style=getComputedStyle(row),previous=[...row.parentElement.querySelectorAll('.stock-row')].indexOf(row)>0;
+          const headCells=[...row.parentElement.querySelectorAll(':scope>.stock-head>span')].map(rect);
+          const ordered=[boxes[0],boxes[1],...pb,boxes[2],boxes[3]];
+          const fields=[...row.querySelectorAll('input[data-f]')].map(e=>e.dataset.f),tint=style.borderTopColor.match(/[\\d.]+/g)||[];
+          const borderAlpha=tint.length===4?Number(tint[3]):tint.length===3?1:0;
+          return {group:row.dataset.k,symbol:row.dataset.s,fields,priceFields:priceFields.map(e=>e.dataset.f),priceCount:Number(prices.style.getPropertyValue('--price-fields')),
+            rect:r,first:boxes,prices:pb,priceDisplay:getComputedStyle(prices).display,
+            oneRow:ordered.every(b=>Math.abs((b.top+b.bottom)/2-(r.top+r.bottom)/2)<=4),
+            headAligned:headCells.length===ordered.length&&ordered.every((b,i)=>Math.abs(headCells[i].left-b.left)<=1.5),
+            smallestFont:Math.min(...[...row.querySelectorAll('input,select,button')].map(e=>parseFloat(getComputedStyle(e).fontSize))),
+            codePlain:getComputedStyle(row.querySelector(':scope>.sym')).borderTopWidth==='0px'&&parseFloat(getComputedStyle(row.querySelector(':scope>.sym')).paddingLeft)===0,
+            fieldsInside:[...boxes,...pb].every(b=>b.width>0&&b.height>0&&b.left>=r.left-0.5&&b.right<=r.right+0.5&&b.bottom<=r.bottom+0.5),
+            previous,divider:parseFloat(style.borderTopWidth)>0&&style.borderTopStyle==='solid'&&borderAlpha>0,
+            selectors:first.every(e=>!!e)&&first[3].textContent==='×'};
+        });
+        return {rows,overflow:document.documentElement.scrollWidth>innerWidth+1,scriptCount:document.scripts.length};
+      })()`);
+      const expected=input.settingsFixture.expected;
+      assertions.push({ok:settings.rows.length===expected.length&&settings.scriptCount===1&&settings.rows.every(row=>{
+        const e=expected.find(e=>e.group===row.group&&e.symbol===row.symbol);
+        return !!e&&JSON.stringify(row.fields)===JSON.stringify(['note',...e.fields])&&JSON.stringify(row.priceFields)===JSON.stringify(e.fields)&&row.priceCount===e.fields.length&&row.selectors
+          &&row.priceDisplay==='contents'&&row.oneRow&&row.headAligned&&row.fieldsInside&&row.codePlain&&row.smallestFont>=13
+          &&(!row.previous||row.divider);
+      })&&!settings.overflow,name:width+'px真实设置renderer每股一排：列标题与各列对齐、代码纯文字、字号不小于13px、全部字段/删除/移动与相邻分隔线',actual:settings});
     }
     await freshPage(input.negativePage);
     const negative=await evaluate(`(async()=>{
@@ -2826,6 +2905,7 @@ const deadline = setTimeout(() => {
                               'colorPage': _color_page, 'rangePage': _range_page, 'filterPage': _filter_page,
                               'timePage': _time_page, 'rulesPage': _rules_page,
                               'tradePage': _trade_page, 'negativePage': _negative_page, 'tradeSeed': _trade_seed, 'finalDemo': _final_demo,
+                              'settingsFixture': _settings_fixture,
                               'ciNoSandbox': sys.platform == 'linux' and os.environ.get('GITHUB_ACTIONS') == 'true'
                                   and os.environ.get('MM_TEST_CHROME_NO_SANDBOX') == '1',
                               'injectionPage': _unsafe_page, 'injectionProbe': _unsafe_snapshot['probe']}),

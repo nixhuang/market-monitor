@@ -38,7 +38,7 @@ PY = [
     ("mm_test_sessions", [sys.executable, "tests/mm_test_sessions.py"]),
     ("mm_test_rules", [sys.executable, "tests/mm_test_rules.py"]),
 ]
-JS = ["mm_test_ebk", "mm_test_edit", "mm_test_homebtn", "mm_test_rs", "mm_test_cost"]
+JS = ["mm_test_edit", "mm_test_homebtn", "mm_test_rs", "mm_test_cost"]
 
 
 def _install_python_guard():

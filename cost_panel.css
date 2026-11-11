@@ -252,8 +252,8 @@
 .cost-contrib li.lv-yellow { --name-lamp: var(--yellow); }
 .cost-contrib li.lv-green { --name-lamp: var(--green); }
 .cost-contrib li.lv-gray { --name-lamp: var(--text); }
-/* 给底部虚线预留绘制区，负外边距抵消占位，不改贡献行高度。 */
-.cost-contrib .cn-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; order: 1; padding-bottom:1px; margin-bottom:-1px; }
+/* 名称盒随链接自然高度容纳底边；不再用15.75px锁高裁掉16px文字下的虚线。 */
+.cost-contrib .cn-name { color: var(--text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; order: 1; }
 .cost-contrib .cnsym { font-weight: 600; }
 .cost-contrib .cncn { color: var(--dim); }
 .cost-contrib .ca { order: 2; }
@@ -261,12 +261,12 @@
 .cost-contrib .cv, .cost-contrib .ca { text-align: center; white-space: nowrap; justify-self: stretch; }
 .cost-contrib .cv.up, .cost-contrib .ca.up { color: var(--up); }
 .cost-contrib .cv.down, .cost-contrib .ca.down { color: var(--down); }
-#dayPnlCard > summary .dp-amt, #dayPnlCard > summary .dp-pct { font-size: 18px; }
+#dayPnlCard > summary .dp-amt, #dayPnlCard > summary .dp-pct { font-size: 16px; font-weight: 400; }
 .dual-body > ul.cost-contrib[data-owner="day"] .cnsym { font-size: 16px; }
 .dual-body > ul.cost-contrib[data-owner="day"] .cncn,
 .dual-body > ul.cost-contrib[data-owner="day"] .cv,
 .dual-body > ul.cost-contrib[data-owner="day"] .ca { font-size: 15px; }
-.dual-body > ul.cost-contrib[data-owner="day"] .signal-member-jump { color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--list-border); }
+.dual-body > ul.cost-contrib[data-owner="day"] .signal-member-jump { display: inline-block; max-width: 100%; vertical-align: top; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); text-decoration: none; border-bottom: 1px dotted var(--list-border); }
 .cost-contrib .cbar {
   order: 4;
   position: relative;
@@ -293,7 +293,7 @@
 .cost-manage .s-cash { background: var(--cost-cash); }
 .cost-manage .s-bond { background: var(--cost-bond); }
 .cost-footrow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 5px; }
-.cost-legend { display: flex; flex-wrap: wrap; gap: 3px 13px; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.cost-legend { display: flex; flex-wrap: wrap; flex: 1 1 100%; justify-content: space-evenly; gap: 3px 0; font-size: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .cost-legend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .cost-legend i { width: 9px; height: 9px; border-radius: 2px; flex: none; }
 .cost-legend .seg-all { display: inline-flex; gap: 0; flex: none; }
@@ -303,16 +303,16 @@
 .quiet-list[hidden] { display: none; }
 .quiet-list[open] > summary { background: none; box-shadow: none; color: var(--head-blue); }
 /* 终稿静态持仓资产行；不再克隆旧成本卡或靠脚本回补布局。 */
-#group_positions > .asset-row { margin: 8px 4px 4px; padding: 0; }
+#group_positions > .asset-row { margin: 8px 0 4px; padding: 0; }
 #group_positions > .cashbond-row {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 12px;
-  margin: 4px 4px 8px;
+  margin: 4px 0 8px;
   padding: 5px 8px;
   background: rgba(143,184,240,.06);
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
 #group_positions > .cashbond-row .cb-item {
@@ -327,7 +327,7 @@
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 12px;
+  gap: 6px;
   white-space: nowrap;
 }
 .cashbond-row .cb-cash .cb-name, .cashbond-row .cb-cash .cb-amt { color: var(--cost-cash); }
@@ -373,10 +373,11 @@
   }
   .cost-edit-btn { padding: 8px 13px; font-size: 16px; line-height: 1.08; }
   .runbar .cost-edit-btn { height: 40px; }
-  .cost-legend { font-size: 12px; gap: 3px 10px; }
+  .cost-legend { font-size: 12px; }
+  #group_positions > .cashbond-row { font-size: 14.5px; }
   .cost-contrib { padding-left: 12px; }
   .cost-contrib li { font-size: 13px; line-height: 15.75px; }
-  .cost-contrib li > .cn-name, .cost-contrib li > .cv, .cost-contrib li > .ca { height: 15.75px; }
+  .cost-contrib li > .cv, .cost-contrib li > .ca { height: 15.75px; }
   /* 金额轨扩宽后左移6px，文本中心不变；盈亏比在78px轨道内居中，长值向两侧展开。 */
   .cost-contrib li > .ca { position: relative; left: -21px; }
   .cost-contrib .cbar {

@@ -636,8 +636,8 @@ test('仓位绿色外框与顶部编辑操作区契约',async()=>{
   await b.enter();assert.equal(acts.hidden,false);b.exitEdit(true);assert.equal(acts.hidden,true);
 });
 test('持仓资产行金额与盈亏取消圆点并按固定自然间距排列',()=>{
-  assert.match(CSS,/#group_positions > \.cashbond-row\{[^}]*justify-content:flex-start;[^}]*gap:12px/);
-  assert.match(CSS,/#group_positions > \.cashbond-row \.cb-total\{[^}]*display:flex;[^}]*gap:12px;[^}]*white-space:nowrap/);
+  assert.match(CSS,/#group_positions > \.cashbond-row\{[^}]*justify-content:space-between;[^}]*gap:12px/);
+  assert.match(CSS,/#group_positions > \.cashbond-row \.cb-total\{[^}]*display:flex;[^}]*gap:6px;[^}]*white-space:nowrap/);
   assert.doesNotMatch(CSS,/\.cb-sep/);
 });
 test('云端校验失败仅在顶部操作行提示，无备份或重试上传按钮',async()=>{
@@ -985,14 +985,19 @@ test('终稿五列编辑器右对齐数值，贡献列表金额百分比仍居�
 });
 test('当日面板标题维持统一字号，仅面板内容文字各增加1px',()=>{
   assert.doesNotMatch(CSS,/#dayPnlCard\s*>\s*summary\s+\.grp-name\s*\{[^}]*font-size/);
-  assert.match(CSS,/#dayPnlCard > summary \.dp-amt,#dayPnlCard > summary \.dp-pct\s*\{[^}]*font-size:\s*18px/);
+  assert.match(CSS,/#dayPnlCard > summary \.dp-amt,#dayPnlCard > summary \.dp-pct\s*\{[^}]*font-size:\s*16px;\s*font-weight:\s*400/);
   assert.match(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.cnsym\s*\{[^}]*font-size:\s*16px/);
   assert.match(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.cncn,[\s\S]*?\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.ca\s*\{[^}]*font-size:\s*15px/);
   assert.match(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.signal-member-jump\s*\{[^}]*color:\s*var\(--text\)[^}]*text-decoration:\s*none[^}]*border-bottom:\s*1px dotted var\(--list-border\)/);
   assert.doesNotMatch(CSS,/\.dual-body\s*>\s*ul\.cost-contrib\[data-owner="day"\]\s+\.signal-member-jump(?::hover|:focus-visible)/);
   assert.doesNotMatch(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.cn-name(?::has\([^}]*\)|\s*>\s*\.signal-member-jump)/);
-  // 名称仍横向省略；容器向下多留 1px 给 inline 链接底边，负外边距抵消占位，不能增高列表行。
-  assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*overflow:hidden[^}]*padding-bottom:1px;margin-bottom:-1px/);
+  // 不以固定15.75px名称盒裁切16px文字底边：链接用自然盒高，横向仍省略。
+  assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*min-width:0[^}]*overflow:hidden/);
+  assert.match(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.signal-member-jump\{[^}]*display:inline-block;max-width:100%;vertical-align:top;line-height:20px/);
+  assert.doesNotMatch(CSS,/\.cost-contrib li > \.cn-name[^}]*height:15\.75px/);
+  assert.match(ASSETS,/#group_positions\{[^}]*--collapse-bg:var\(--positions-collapse\)[^}]*padding:3px 0 2px/);
+  assert.match(ASSETS,/#group_positions>summary\{[^}]*margin-left:5px;margin-right:5px/);
+  assert.match(CSS,/#group_positions > \.cashbond-row\{[^}]*margin:4px 0 8px/);
 });
 /* 旧六列成本表已被四列真实编辑器替代，下面为退役样式断言，不执行。 */
 /*
@@ -1138,7 +1143,7 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   for(const rule of [
     '.cost-colhead{font-size:12px;padding-left:12px}',
     '.cost-cell input{font-size:12px;padding:2px 3px}',
-    '.cost-legend{font-size:12px;gap:3px 10px}',
+    '.cost-legend{font-size:12px}',
     '.cost-mini .t-name .cnt{font-size:12px}',
     '.cash-inputs label>span,.cash-total{font-size:12px}',
     '.cost-foot{font-size:12px}'

@@ -40,6 +40,7 @@ SETTING_SCHEMA = {
     "dca_every": _number(0, 0, 10000, integer=True),
     "dca_start": {"default": "", "type": "date"},
     "signal_single_open": _number(1, 0, 1, integer=True),
+    "group_single_open": _number(0, 0, 1, integer=True),
 }
 
 DEFAULT_SETTINGS = {key: spec["default"] for key, spec in SETTING_SCHEMA.items()}

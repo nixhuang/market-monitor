@@ -688,6 +688,14 @@ class PageRenderer:
         return text
 
 
+    @staticmethod
+    def _squeeze_punct(markup):
+        """主表描述的全角逗号/括号各包一层class：文字不变，样式只收标点字框里的空白半格。"""
+        return (markup.replace("，", '<span class="cm">，</span>')
+                .replace("（", '<span class="pl">（</span>')
+                .replace("）", '<span class="pr">）</span>'))
+
+
     def _signals_html(self, d):
         """主表价格提醒分主次但各自按真实灯级着色；统计事实不变，不添加圆点。"""
         # 手填价仅替换共识价；所有目标状态只投影到胶囊，统计仍消费原signals/marks。
@@ -720,13 +728,13 @@ class PageRenderer:
                     zones[1 if re.match(r"^\s*RSI\b", text) else 0].append(text)
                 for col, zone in enumerate(zones):
                     if zone:
-                        body = self._context.arrow_html(html_lib.escape(" · ".join(zone)))
+                        body = self._squeeze_punct(self._context.arrow_html(html_lib.escape(" · ".join(zone))))
                         columns[col].append(f'<span class="signal-item"{attrs}>'
                                             f'<span class="sig-zone" data-side="{("boll", "rsi")[col]}">{body}</span></span>')
                 if all(zones):
                     combo_level = level or "gray"
             else:
-                body = self._context.arrow_html(html_lib.escape("，".join(display)))
+                body = self._squeeze_punct(self._context.arrow_html(html_lib.escape("，".join(display))))
                 if kind in ("boll", "rsi"):
                     columns[kind == "rsi"].append(f'<span class="signal-item"{attrs}>{body}</span>')
                 else:
@@ -952,7 +960,7 @@ class PageRenderer:
         empty_note = ''
         if not g and enabled:
             empty_note = ('本组标的已在优先分组展示，避免重复信号' if registered.get(group["key"], 0)
-                          else '暂无标的，去设置页录入或导入 CSV / EBK')
+                          else '暂无标的，去设置页录入')
         if group["key"] == "positions":
             parts.append(self._context._position_long_zone_card(g, group, items_by_symbol, snapshot, earnings_week, enabled))
             short_g = [d for d in g if self._context._position_zone(d) == "short"]
@@ -1877,7 +1885,7 @@ class PageRenderer:
 <div class="autoplan">{autoplan_line}</div>
 {notes_tpl}
 {run_js}
-<script>window.MM_SETTINGS={{"signal_single_open":{int(self._context.S.get("signal_single_open", 1))}}};</script>
+<script>window.MM_SETTINGS={{"signal_single_open":{int(self._context.S.get("signal_single_open", 1))},"group_single_open":{int(self._context.S.get("group_single_open", 0))}}};</script>
 <script>{self._context.PAGE_INTERACTION_JS}</script>
 {cost_js}
 </div></body></html>""")

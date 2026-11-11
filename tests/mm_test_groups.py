@@ -163,6 +163,10 @@ def plain_text(html):
     """去掉标签与方向符号配色 span，只留可见文字，便于断言统一文案。"""
     return re.sub(r'<[^>]+>', '', str(html))
 
+def unpunct(html):
+    """主表描述的全角逗号/括号带有只收空白半格的标点span；比较文字时还原，不改变事实文字。"""
+    return re.sub(r'<span class="(?:cm|pl|pr)">([，（）])</span>', r'\1', str(html))
+
 # 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
 monitor.S.clear()
 monitor.S.update(monitor.DEFAULT_SETTINGS)
@@ -1139,7 +1143,7 @@ class TestGroups(unittest.TestCase):
                     page = f.read()
             self.assertEqual(fetched, ['FIRST'])
             self.assertEqual(snap['summary']['total'], 3)
-            self.assertIn('本轮抓取时间预算不足，尚未取数', page)
+            self.assertIn('本轮抓取时间预算不足<span class="cm">，</span>尚未取数', page)
 
     def test_concurrent_quotes_keep_order_and_single_symbol_budget(self):
         import time as real_time
@@ -6730,7 +6734,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('td.tgs .target-month{grid-area:2/2/3/3;margin-left:3px}', css)
         self.assertIn('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}', css)
         self.assertIn('.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}', css)
-        self.assertIn('--sig-col-gap:30px;--sig-row-gap:7px', css)
+        self.assertIn('--sig-col-gap:18px;--sig-row-gap:7px', css)
         self.assertIn('td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}', css)
         self.assertIn('width:3px;height:10px;margin-right:5px;border-radius:1px;', css)
         self.assertIn('function balanceDescriptions(row)', monitor.PAGE_INTERACTION_JS)
@@ -6885,7 +6889,7 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('if (opening) {\n    //', js)
         self.assertIn('function revealSignalPanel(panel) {', js)
 
-    def test_collapse_button_css_keeps_full_width_and_positions_transparent_strip(self):
+    def test_collapse_button_css_keeps_full_width_and_positions_tinted_strip(self):
         button_rule = re.search(r'\.collapse-group\{([^}]+)\}', monitor.PAGE_CSS)
         self.assertIsNotNone(button_rule)
         for declaration in ('width:100%', 'height:26px', 'padding:0', 'background:var(--collapse-bg)', 'border:0',
@@ -6906,7 +6910,12 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertNotIn('opacity:', button_rule.group(1))
         self.assertIn('--collapse-bg:var(--signal-bg)', monitor.PAGE_CSS)
         pos_rule = re.search(r'#group_positions\{([^}]+)\}', monitor.PAGE_CSS)[1]
-        self.assertIn('--collapse-bg:transparent', pos_rule)
+        self.assertIn('--collapse-bg:var(--positions-collapse)', pos_rule)
+        tint = re.search(r'--positions-collapse:rgba\((\d+),(\d+),(\d+),([.\d]+)\)', monitor.PAGE_CSS)
+        self.assertIsNotNone(tint)
+        self.assertEqual(tuple(map(int, tint.groups()[:3])), (46, 160, 67))
+        self.assertGreater(float(tint[4]), 0)
+        self.assertLessEqual(float(tint[4]), 1)
         self.assertIn('border:0', pos_rule)
         self.assertIn('background:var(--card)', pos_rule)
         self.assertIn('.zone-card .group-bottom{margin:0 4px 0}', monitor.PAGE_CSS)
@@ -8938,12 +8947,13 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                                  f'<span class="sig-sep"> · </span>'
                                  f'<span class="sig-zone" data-side="rsi" style="--sig-row:1">{rsi_zone}</span>')
                         expected = f'<span class="signal-item" data-signal-kind="boll_rsi"{attr}>{zoned}</span>'
-                        output = monitor._signals_html(row)
+                        output_squeezed = monitor._signals_html(row)
+                        output = unpunct(output_squeezed)
                         expected_text = _logical_signal_text(expected).replace('连续第', '第').replace('（其中', '（')
                         self.assertEqual(_logical_signal_text(output), expected_text)
                         self.assertEqual(output.count('class="sig-col"'), 2)
                         self.assertEqual(plain_text(expected), plain_text(body))
-                        self.assertIn('<td class="sig">' + output + '</td>', monitor._stock_row(row, {}))
+                        self.assertIn('<td class="sig">' + output_squeezed + '</td>', monitor._stock_row(row, {}))
                         left, right = output.split('<div class="sig-col">')[1:]
                         self.assertIn(boll_zone, left)
                         self.assertNotIn(rsi_zone, left)
@@ -8952,7 +8962,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                         self.assertEqual(output.count('data-signal-kind="boll_rsi"' + attr), 2)
                         self.assertEqual(row, before)
                         row['level'] = 'yellow'
-                        self.assertEqual(monitor._signals_html(row), output)
+                        self.assertEqual(monitor._signals_html(row), output_squeezed)
         unlit = {'signals': ['无灯说明 ▲↑▼↓'], 'signal_marks': [], 'level': 'red'}
         self.assertEqual(monitor._signals_html(unlit),
                          '<div class="sig-cols"><div class="sig-col">'
@@ -9219,7 +9229,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                'signal_marks': [('boll_rsi', 'yellow'), ('vol_ratio', 'yellow')]}
         before = copy.deepcopy(row)
         result = monitor._signals_html(row)
-        self.assertIn('触及布林下轨<span class="arrow-band-down">▼</span>，第2日贴近下轨', result)
+        self.assertIn('触及布林下轨<span class="arrow-band-down">▼</span><span class="cm">，</span>第2日贴近下轨', result)
         left, right = result.split('<div class="sig-col">')[1:]
         self.assertIn('第2日贴近下轨', plain_text(left))
         self.assertIn('RSI 2条 ', plain_text(right))
@@ -9342,8 +9352,8 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         self.assertEqual(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
                                    r'(?: data-signal-level="([^"]*)")?[^>]*>', result),
                          [('ma', 'yellow'), ('', '')])
-        self.assertIn('上穿长均线，触及长均线±1%', result)
-        self.assertIn('&lt;img onerror=x&gt;，说明', result)
+        self.assertIn('上穿长均线<span class="cm">，</span>触及长均线±1%', result)
+        self.assertIn('&lt;img onerror=x&gt;<span class="cm">，</span>说明', result)
         self.assertNotIn('<img', result)
 
 
@@ -9616,7 +9626,7 @@ class TestMainOnlyDescriptionProjection(unittest.TestCase):
                 self.assertEqual(monitor._signal_description_groups(row)[0]['texts'], [raw])
         _, _, actual = Test52wLow.run_sym([100.] * 150 + [80.] * 20 + [90.] * 29 + [82.])
         self.assertAlmostEqual(actual['low52'], 79.92)
-        self.assertIn('（低点价：79.92）', monitor._signals_html(actual))
+        self.assertIn('（低点价：79.92）', unpunct(monitor._signals_html(actual)))
         self.assertEqual(monitor.signal_count_members([actual])['low52']['red'][0]['low52_price'], '79.92')
 
     def test_low52_missing_or_invalid_does_not_use_current_price_or_distance(self):
