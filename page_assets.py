@@ -599,6 +599,9 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system
 .wrap{max-width:718px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 h1.brand{color:var(--up)}
+/* 顶部一排：站名靠左（比其它标题大2px=21px），代码定位 FIND 靠右 */
+.brandbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:18px 0 4px}
+.brandbar h1.brand{margin:0;font-size:21px;text-align:left;white-space:nowrap}
 .sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
 /* 父级只留标题内缩，资产行与子框使用完整分组宽度；▲沿用原持仓绿色底。 */
@@ -639,13 +642,13 @@ tr:first-child td{border-top:none}
 #signalCounts .count-red{color:var(--red)}
 #signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-earn{color:var(--text)}
-/* 统计栏最右侧的代码定位：5 位代码 + FIND；字号 16px 防止 iOS 聚焦时自动放大页面 */
+/* 顶部右侧的代码定位：5 位代码 + FIND；字号 16px 防止 iOS 聚焦时自动放大页面 */
 .stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}
 .stat-find input{box-sizing:border-box;width:74px;height:32px;padding:0 6px;font:inherit;font-size:16px;font-weight:600;line-height:30px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;text-transform:uppercase;text-align:center;outline:none}
 .stat-find input::placeholder{color:var(--dim);font-weight:400;text-transform:none}
 .stat-find input:focus{border-color:var(--head-blue-on)}
 .stat-find input.miss{border-color:var(--lamp-red)}
-.stat-find button{box-sizing:border-box;height:32px;padding:0 9px;font-size:13px;font-weight:600;line-height:30px;letter-spacing:.3px;color:var(--head-blue);background:var(--card);border:1px solid var(--line);border-radius:7px;cursor:pointer;white-space:nowrap}
+.stat-find button{box-sizing:border-box;height:32px;padding:0 9px;font-size:13px;font-weight:600;line-height:30px;letter-spacing:.3px;color:var(--head-blue);background:#1e232d;border:1px solid var(--line);border-radius:7px;cursor:pointer;white-space:nowrap}
 #signalCounts table{table-layout:fixed}
 #signalCounts td{padding:6.25px 5px;font-size:13px;line-height:1.25;overflow-wrap:anywhere;vertical-align:middle}
 /* 统计面板每一排统一 51px：胶囊 38 + 上下内边距 12.5 + 合并边线的一半 0.5 = 51；首排没有上边线，用 height 补齐 */
@@ -1125,6 +1128,7 @@ table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>
 body{padding-left:5px;padding-right:5px}
 .oil-reference-row td{padding:8px 6px}
 .runbar{padding-left:16px;padding-right:16px;gap:12px}
+.brandbar{padding-left:16px;padding-right:16px}
 .acts{gap:26px}
 .statusrow{margin:-6px 0 8px;gap:4px;padding-left:16px;padding-right:16px}
 .statusrow .runlight{line-height:16.88px}
@@ -1219,6 +1223,7 @@ table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 .zone-card>summary{box-sizing:border-box;height:48px;padding-top:0;padding-bottom:0}
 .sub{padding-left:var(--head-inset);padding-right:var(--head-inset)}
 .runbar{padding-left:var(--head-inset);padding-right:var(--head-inset)}
+.brandbar{padding-left:var(--head-inset);padding-right:var(--head-inset)}
 .statusrow{padding-left:var(--head-inset);padding-right:var(--head-inset)}
 .check-result{padding-left:var(--head-inset);padding-right:var(--head-inset)}
 .dual-row > details[open]{min-height:50px}

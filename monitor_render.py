@@ -1364,10 +1364,7 @@ class PageRenderer:
                      '<details class="text-only pnl-detail"><summary>盈亏到价 · 0 只</summary>'
                      f'{pnl_blocks}</details></div>')
         return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'
-                f'<span class="group-stats">{stats}</span>'
-                '<span class="stat-find"><input id="statFindInput" type="text" maxlength="8" placeholder="代码" '
-                'aria-label="按股票代码定位" autocapitalize="characters" autocomplete="off" autocorrect="off" '
-                'spellcheck="false" enterkeyhint="search"><button type="button" id="statFindBtn">FIND</button></span></summary>'
+                f'<span class="group-stats">{stats}</span></summary>'
                 f'{f"<table>{rows}</table>" if rows else ""}{purple_panel}'
                 f'{earnings_panel}{pnl_panel}{filter_html}'
                 f'{self._context._collapse_button("signalCounts", "统计")}</details>\n')
@@ -1825,7 +1822,7 @@ class PageRenderer:
 {self._context.RULES_CSS}</style>
 </head>
 <body>{current_rules}<div class="wrap">
-<h1 class="brand">NIX-Matrix</h1>
+<div class="brandbar"><h1 class="brand">NIX-Matrix</h1><span class="stat-find"><input id="statFindInput" type="text" maxlength="8" placeholder="代码" aria-label="按股票代码定位" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><button type="button" id="statFindBtn">FIND</button></span></div>
 <div class="sub">{html_lib.escape(sub_line)}</div>
 
 <div class="runbar">
