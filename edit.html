@@ -31,7 +31,8 @@ h1{font-size:19px;margin:14px 0 4px;font-weight:600}
 .sub a.back-board:hover{background:#2b303c}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
   padding:12px;margin-bottom:10px}
-h2{font-size:14px;color:var(--dim);font-weight:600;margin:0 0 8px;letter-spacing:.3px}
+/* 区块标题（分类清单/规则参数/定投提醒/新增股票/规则与说明）统一：16px 白字加粗 */
+h2{font-size:16px;color:#fff;font-weight:600;margin:0 0 8px;letter-spacing:.3px}
 h2 span{color:#5f6672;font-weight:400}
 input,select{padding:8px 10px;font-size:16px;background:#0e1014;color:var(--text);
   border:1px solid var(--line);border-radius:7px;outline:none;font-family:inherit}
@@ -73,8 +74,9 @@ details.fold>summary,details.set>summary{gap:8px}
 .group-tools{color:var(--dim);font-size:13px;gap:8px;margin:14px 2px 10px}
 /* 标题栏固定一行：分类清单 + 分组/记录数在左，恢复清单/保存清单在右；提示文字不在这一行，按钮位置永远不变 */
 .group-tools{flex-wrap:nowrap}
-.group-tools h2{margin:0;color:var(--text);font-size:14px;white-space:nowrap}
-.group-tools #groupTotal{margin-right:auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.group-tools h2{margin:0;white-space:nowrap}
+.group-tools #btnReload{margin-left:auto}   /* 按钮永远靠右，提示出现/消失都不移动 */
+.search-row #groupTotal{flex:none;white-space:nowrap;font-size:13px;color:var(--dim)}
 .group-tools button{white-space:nowrap;flex:none}
 .group-tools button{padding:5px 9px;font-size:13px}
 /* MM_RULECSS_BEGIN：由 page_assets 生成，不手改 */
@@ -277,8 +279,8 @@ details.fold.edit-group{padding:0 8px}
 #msg{font-size:13px;min-height:20px;margin:0 2px 4px;line-height:1.6}
 #msg.ok{color:var(--green)} #msg.err{color:var(--red)} #msg.busy{color:var(--dim)}
 /* 「有未保存的改动」提示跟在分类清单标题栏、紧挨「保存清单」按钮 */
-/* 「有未保存的改动」提示在搜索框前面；搜索框随之缩短，不顶换行 */
-.dirty-text{flex:0 1 auto;max-width:60%;font-size:13px;color:var(--yellow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 「有未保存的改动」提示紧跟在「分类清单」标题后面，字号加大；过长时省略号截断，不挤按钮 */
+.dirty-text{flex:0 1 auto;min-width:0;max-width:60%;font-size:15px;color:var(--yellow);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dirty-text:empty{display:none}
 .hide{display:none}
 .note{color:var(--dim);font-size:12.5px;line-height:1.75;margin:6px 0 0}
@@ -490,11 +492,12 @@ details.set[open]>summary{margin-bottom:2px}
   </div>
 
   <div class="row group-tools">
-    <h2>分类清单</h2><span id="groupTotal"></span>
+    <h2>分类清单</h2>
+    <span class="dirty-text" id="dirty" role="status" aria-live="polite"></span>
     <button id="btnReload">恢复清单</button><button class="primary" id="btnSave">保存清单</button>
   </div>
   <div class="row search-row">
-    <span class="dirty-text" id="dirty" role="status" aria-live="polite"></span>
+    <span id="groupTotal"></span>
     <input id="symSearch" type="search" placeholder="搜索股票代码，定位所在分组" aria-label="搜索股票代码" autocapitalize="characters" autocomplete="off" enterkeyhint="search">
     <button id="btnLocate">定位</button>
   </div>

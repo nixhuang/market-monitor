@@ -311,7 +311,7 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
   check(/\.setrow label\{flex:1;font-size:13px/.test(src)
     && /\.setsec\{font-size:14px;font-weight:600;color:var\(--head-blue/.test(src) && /\.subsec\{font-size:12px/.test(src)
     && /\.note\{color:var\(--dim\);font-size:12\.5px/.test(src)
-    && /h2\{font-size:14px/.test(src),
+    && /\nh2\{font-size:16px;color:#fff;font-weight:600/.test(src),
     '设置项文字加大：label 13px、分节小字 12px、说明 12.5px、小节标题 14px');
   check(/\.card\{background:var\(--card\);border:1px solid var\(--line\);border-radius:12px;\s*padding:12px;margin-bottom:10px\}/.test(src)
     && /\.setgrid\{display:grid;grid-template-columns:1fr;gap:5px\}/.test(src)
@@ -705,8 +705,8 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   check(fp&&!fp.exact&&fp.symbol==='AAPL', '前缀也能定位（标注按前缀匹配）');
   check(T.findSymbol('NOSUCHXX')===null&&T.findSymbol('  ')===null, '找不到或空输入返回空，不报错');
   check(/<div class="row card-head">\s*<h2>规则参数<\/h2>\s*<button id="btnResetRules">[^<]*<\/button>\s*<button class="primary" id="btnSaveRules">/.test(src), '「恢复默认」「保存规则」在「规则参数」标题栏（恢复在左、保存在右）');
-  check(/<div class="row search-row">\s*<span class="dirty-text" id="dirty"[^>]*><\/span>\s*<input id="symSearch"/.test(src)&&!src.includes('savebar'), '「有未保存的改动」提示在搜索框前面，不占标题栏、不挤保存按钮');
-  check(/<h2>分类清单<\/h2><span id="groupTotal"><\/span>\s*<button id="btnReload">/.test(src)&&src.includes('.group-tools{flex-wrap:nowrap}'), '分组/记录数紧跟「分类清单」，标题栏固定一行');
+  check(/<h2>分类清单<\/h2>\s*<span class="dirty-text" id="dirty"[^>]*><\/span>\s*<button id="btnReload">/.test(src)&&!src.includes('savebar'), '「有未保存的改动」提示紧跟「分类清单」标题，字号15px');
+  check(/<div class="row search-row">\s*<span id="groupTotal"><\/span>\s*<input id="symSearch"/.test(src)&&src.includes('.group-tools{flex-wrap:nowrap}'), '分组/记录数与搜索定位同一排，标题栏固定一行');
   {
     // 统一按钮顺序：同一组里取消/恢复/关闭类在左，保存/确认类（primary）在右
     const order=(...ids)=>ids.map(id=>src.indexOf('id="'+id+'"'));
