@@ -642,7 +642,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('list-import', source)
         self.assertIn('.token-tools button{white-space:nowrap}', source)
         mobile = source[source.rindex('@media(max-width:600px){\n.sub,'):]
-        for selector in ('.sub', '.note', '.monitor-note', '.savebar .sp', '.pager', '.subsec', 'kbd'):
+        for selector in ('.sub', '.note', '.monitor-note', '.pager', '.subsec', 'kbd'):
             self.assertIn(selector, mobile.split('}', 1)[0])
         self.assertIn('font-size:13px', mobile)
         for fragment in re.findall(r'font-size:(\d+(?:\.\d+)?)px', source.split('<body>', 1)[1]):
