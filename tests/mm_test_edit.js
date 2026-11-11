@@ -293,7 +293,7 @@ check(src.includes('href="./index.html"')&&src.includes('id="authCard"')&&src.in
 // 「← 回看板」原来只是 .sub 里 12px 的裸链接，手机上太小点不到；单独放大成按钮大小的块，
 // 但必须保持同一个 href 与文案，不能变成新入口或改跳转。
 check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>')
-  && /\.sub a\.back-board\{display:inline-block;margin-top:8px;padding:9px 16px;font-size:15px;/.test(src),
+  && /\.sub a\.back-board\{display:inline-block;margin-top:0;padding:9px 16px;font-size:15px;/.test(src),
   '返回看板链接已放大为按钮大小（字号 15px + 内边距），href 与文案不变');
 // 2026-10-30 设置页版面统一：折叠标题一律 15px、写死 46px 同高；字号分档统一；间距收窄。
 // 统一总块必须写在 MM_RULECSS_END 之后（后声明压过生成块里 13px 的规则卡标题）。
@@ -329,7 +329,7 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
     '定投两排：第一排起点日与间隔，第二排保存与关闭');
   check(/button\.danger\{color:#ffb3ad;font-weight:600;border-color:#ff8580;background:rgba\(255,133,128,\.14\)\}/.test(src), '「清除本机令牌」亮粉红加粗字+红描边+淡红底，深色底上看得清');
   check(/\.sub\{color:var\(--dim\);font-size:12\.5px;margin-bottom:4px;/.test(src)
-    && /#msg\{font-size:13px;min-height:20px;margin:0 2px 4px;/.test(src),
+    && /#msg\{font-size:13px;margin:0 2px 8px;/.test(src)&&src.includes('#msg:empty{display:none}'),
     '回看板按钮到「规则参数」卡之间的空隙收窄（46 → 28px）');
   // 「综合判断与宏观细则」：注入时拆掉模板自带的 section 卡壳 + 补 fold 卡类，三块说明卡完全同款
   check(/var sec=frag\.querySelector\('section\.card\.page-notes'\);/.test(src)
