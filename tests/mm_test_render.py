@@ -393,7 +393,7 @@ check('<div class="foot">' not in html5 and 'href="#signalRules"' not in html5,
       '页底重复规则入口已删除，完整规则模板仍保留')
 head5 = html5.split('</head>', 1)[0]
 check('rel="icon"' in head5 and './icons/favicon-32.png' in head5, "页头有网页图标（相对路径）")
-check('rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png"' in head5, "页头有 apple-touch-icon")
+check('rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=3"' in head5, "页头有 apple-touch-icon（带版本号，换图后手机不吃旧缓存）")
 check('rel="manifest" href="./manifest.webmanifest"' in head5 and 'name="theme-color"' in head5, "页头有 manifest 与 theme-color")
 import json as _json, os as _os
 _root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
