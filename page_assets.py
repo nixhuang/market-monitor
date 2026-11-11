@@ -1566,13 +1566,14 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
     });
   }, {once: true});
 })();
-// 屏幕最上面 1/6 留给 iOS 灵动岛/状态栏：展开的分组、清单一律从 1/6 高度线开始显示，不再贴着屏幕顶边。
+// 屏幕最上面 1/8 留给 iOS 灵动岛/状态栏：展开的分组、清单一律从 1/8 高度线开始显示，不再贴着屏幕顶边。
+// （2026-11-11 由 1/6 上调到 1/8：用户要求再往上走一些；要改只改这一个除数。）
 function topReserve() {
   var vh = window.innerHeight || document.documentElement.clientHeight || 0;
-  return Math.round(vh / 6);
+  return Math.round(vh / 8);
 }
 function revealSignalPanel(panel) {
-  // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从 1/6 线开始对齐。
+  // 把刚展开的清单带进视口：能整块放下就整块露出，放不下就从 1/8 线开始对齐。
   var pad = 12;
   var top = topReserve();
   var vh = window.innerHeight || document.documentElement.clientHeight || 0;
@@ -1582,7 +1583,7 @@ function revealSignalPanel(panel) {
   var y = window.pageYOffset || document.documentElement.scrollTop || 0;
   var target = (rect.height + top + pad <= vh && rect.bottom > vh - pad)
     ? y + rect.bottom - (vh - pad)                          // 整块往上推
-    : y + rect.top - top;                                   // 其余：从 1/6 线开始看起
+    : y + rect.top - top;                                   // 其余：从 1/8 线开始看起
   window.scrollTo({ top: target < 0 ? 0 : target, behavior: "smooth" });
 }
 function normalizeSignalCard(card) {
@@ -1602,6 +1603,12 @@ function normalizeSignalCard(card) {
     panel.style.display = "none";
     void panel.offsetHeight;
     panel.style.display = "";
+  });
+  // 外面那一层「信号行」也一并重排：iOS WebKit 可能让行容器还记着展开时的旧高度。
+  card.querySelectorAll(":scope > .signal-extra-row, :scope > .group-bottom").forEach(function(row) {
+    row.style.display = "none";
+    void row.offsetHeight;
+    row.style.display = "";
   });
   card.querySelectorAll(".signal-filter-toggle").forEach(function(button) {
     button.setAttribute("aria-pressed", "false");
@@ -1645,7 +1652,7 @@ document.addEventListener("click", function(event) {
     document.querySelectorAll("details[id^='group_'][open]:not([data-open-locked])").forEach(function(other) {
       if (other !== d) other.open = false;
     });
-    // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到 1/6 高度线（上面留给灵动岛）。
+    // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到 1/8 高度线（上面留给灵动岛）。
     const delta = d.getBoundingClientRect().top - topBefore;
     if (Math.abs(delta) > 1) window.scrollBy(0, delta);
     const dy = d.getBoundingClientRect().top - topReserve();
@@ -1658,6 +1665,8 @@ document.addEventListener("toggle", function(event) {
   // 展开和收起都归一化一次：只在收起时做的话，内层「未来15天财报」是在面板已经不可见
   // 的状态下被脚本关掉的，部分移动端浏览器会留下旧高度，再展开就多出一块空白。
   normalizeSignalCard(card);
+  // 展开后再延迟刷新一次：个别手机内核在展开动画/滚动恢复之后才把旧高度算回来。
+  if (card.open) window.setTimeout(function() { if (card.open) normalizeSignalCard(card); }, 350);
 }, true);
 // 兜底一：少数移动内核的 toggle 事件不稳，点标题后用下一帧再归一化一次。
 document.addEventListener("click", function(event) {

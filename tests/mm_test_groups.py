@@ -6864,6 +6864,8 @@ class TestDisplayInteractions(unittest.TestCase):
         # 紫灯/盈亏到价(.text-only)与财报(.earnings-week)三块都要显式绕一次 display 逼重排，且收起前在可见状态下先归一化
         self.assertIn('card.querySelectorAll(".text-only, .earnings-week").forEach(function(panel) {', monitor.PAGE_INTERACTION_JS)
         self.assertIn('panel.style.display = "none";', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('row.style.display = "none";', monitor.PAGE_INTERACTION_JS)   # 外层信号行与▲行也强制重排
+        self.assertIn('window.setTimeout(function() { if (card.open) normalizeSignalCard(card); }, 350);', monitor.PAGE_INTERACTION_JS)
         self.assertIn('if (card.open) normalizeSignalCard(card);', monitor.PAGE_INTERACTION_JS)
         # 移动端兜底：点标题后下一帧再归一化一次 + bfcache 返回时复位（2026-10-15 手机端仍留白）
         self.assertIn('target.closest("#signalCounts > summary")', monitor.PAGE_INTERACTION_JS)
@@ -6887,7 +6889,7 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('function revealSignalPanel(panel) {', js)
         # 展开的清单/分组从屏幕 1/6 高度线开始（上面留给 iOS 灵动岛）
         self.assertIn('function topReserve() {', js)
-        self.assertIn('return Math.round(vh / 6);', js)
+        self.assertIn('return Math.round(vh / 8);', js)
         self.assertIn('window.scrollBy({top: dy, behavior: "smooth"});', js)
 
     def test_collapse_button_css_keeps_full_width_and_positions_tinted_strip(self):
