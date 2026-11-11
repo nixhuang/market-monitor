@@ -1587,16 +1587,16 @@ function normalizeSignalCard(card) {
   card.querySelectorAll(".signal-count-toggle").forEach(function(button) {
     button.setAttribute("aria-expanded", "false");
   });
-  card.querySelectorAll(".text-only").forEach(function(panel) { panel.open = false; });
-  const earnings = card.querySelector(".earnings-week");
-  if (earnings) {
-    earnings.open = false;
-    // 移动端（iOS Safari / 部分安卓内核）在父面板不可见期间改 open，偶尔不重算子元素
-    // 高度，再展开就会留一块空白。这里显式绕一次 display，逼它按折叠态重排。
-    earnings.style.display = "none";
-    void earnings.offsetHeight;
-    earnings.style.display = "";
-  }
+  // 紫灯、盈亏到价（.text-only）和未来15天财报（.earnings-week）三块同类：
+  // 移动端（iOS Safari / 部分安卓内核）在父面板不可见期间改 open，偶尔不重算子元素
+  // 高度，再展开就会留一块空白（紫灯展开时折叠统计、再展开尤其明显）。
+  // 这里对三块都显式绕一次 display，逼它们按折叠态重排。
+  card.querySelectorAll(".text-only, .earnings-week").forEach(function(panel) {
+    panel.open = false;
+    panel.style.display = "none";
+    void panel.offsetHeight;
+    panel.style.display = "";
+  });
   card.querySelectorAll(".signal-filter-toggle").forEach(function(button) {
     button.setAttribute("aria-pressed", "false");
   });
@@ -1658,6 +1658,9 @@ document.addEventListener("click", function(event) {
   if (!target.closest("#signalCounts > summary") || target.closest(".stat-find")) return;
   const card = document.getElementById("signalCounts");
   if (!card) return;
+  // 即将收起（此刻点击发生在默认的折叠动作之前、面板仍可见）：先在可见状态下把三块关好并重排，
+  // 避免它们是在父面板已不可见时才被关掉的。
+  if (card.open) normalizeSignalCard(card);
   requestAnimationFrame(function() { normalizeSignalCard(card); });
 }, true);
 // 兜底二：iOS Safari 往返缓存（bfcache）会原样恢复 details 状态，回到页面时统一复位。

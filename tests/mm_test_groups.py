@@ -6861,6 +6861,10 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertNotIn('card.id !== "signalCounts" || card.open', monitor.PAGE_INTERACTION_JS)
         self.assertIn('normalizeSignalCard(card);', monitor.PAGE_INTERACTION_JS)
         self.assertIn('void card.offsetHeight;', monitor.PAGE_INTERACTION_JS)
+        # 紫灯/盈亏到价(.text-only)与财报(.earnings-week)三块都要显式绕一次 display 逼重排，且收起前在可见状态下先归一化
+        self.assertIn('card.querySelectorAll(".text-only, .earnings-week").forEach(function(panel) {', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('panel.style.display = "none";', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('if (card.open) normalizeSignalCard(card);', monitor.PAGE_INTERACTION_JS)
         # 移动端兜底：点标题后下一帧再归一化一次 + bfcache 返回时复位（2026-10-15 手机端仍留白）
         self.assertIn('target.closest("#signalCounts > summary")', monitor.PAGE_INTERACTION_JS)
         self.assertIn('requestAnimationFrame(function() { normalizeSignalCard(card); });', monitor.PAGE_INTERACTION_JS)
@@ -7594,7 +7598,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             self.assertNotIn('class="signal-member-symbol"', old)
             self.assertNotIn('美东 2026-10-14 至 2026-10-21', panel)
             self.assertNotIn('预计或估算日期可能调整', panel)
-            self.assertIn('earnings.open = false;', monitor.PAGE_INTERACTION_JS)
+            self.assertIn('panel.open = false;', monitor.PAGE_INTERACTION_JS)   # 财报与紫灯/盈亏到价同一处统一关闭并重排
             # 折叠态绝对不占高度：移动端内核不重排时用 CSS 兜底
             self.assertIn('#signalCounts .earnings-week:not([open])>*:not(summary){display:none}', monitor.PAGE_CSS)
             self.assertIn('#signalCounts .earnings-week summary{padding:8.1px 0;color:var(--text)', monitor.PAGE_CSS)
