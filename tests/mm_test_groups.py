@@ -2137,6 +2137,54 @@ class TestGroups(unittest.TestCase):
         with patch.object(monitor, 'CLOSED_ONLY', False):
             self.assertIs(monitor.patch_closing_bar('AAPL', hist), hist)
 
+    def test_opens_are_kept_aligned_and_patched_bars_have_unknown_open(self):
+        """开盘价（2026-11-12 起保留）：各来源带真实开盘价；补出来的当日一根（Nasdaq 收盘报价/实时价/Yahoo meta）
+        开盘价记为 None，绝不拿收盘价冒充；裁剪与原数据互不污染；旧数据没有 opens 时不受影响。"""
+        from datetime import datetime as _dt, timezone as _tz
+        hist = {'dates': ['2026-09-%02d' % d for d in range(1, 31)] + ['2026-10-19'],
+                'closes': [100.0] * 30 + [101.0], 'volumes': [10] * 31, 'highs': [102.0] * 31, 'lows': [99.0] * 31,
+                'opens': [100.5] * 30 + [100.8]}
+        hist.update(price=101.0, prev_close=100.0)
+        after = _dt(2026, 10, 21, 0, 46, tzinfo=_tz.utc)
+
+        class Now(monitor.datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return after
+        with patch.object(monitor, 'CLOSED_ONLY', True), patch.object(monitor, 'TARGET_DATE', '2026-10-20'), \
+                patch.object(monitor, 'datetime', Now), patch.object(monitor, 'valid_history', return_value=True), \
+                patch.object(monitor, 'nasdaq_closing_quote', return_value={'price': 102.0, 'volume': 15}):
+            got = monitor.patch_closing_bar('AAPL', hist)
+            self.assertEqual(len(got['opens']), len(got['dates']))
+            self.assertIsNone(got['opens'][-1])                       # 补出来的当日一根：开盘价未知
+            self.assertEqual(got['opens'][-2], 100.8)                  # 之前的真实开盘价不动
+            self.assertEqual(len(hist['opens']), 31)                   # 原数据不被改
+        # 没有 opens 的旧数据：补当日照旧、不凭空生成 opens
+        old = {k: v for k, v in hist.items() if k != 'opens'}
+        with patch.object(monitor, 'CLOSED_ONLY', True), patch.object(monitor, 'TARGET_DATE', '2026-10-20'), \
+                patch.object(monitor, 'datetime', Now), patch.object(monitor, 'valid_history', return_value=True), \
+                patch.object(monitor, 'nasdaq_closing_quote', return_value={'price': 102.0, 'volume': 15}):
+            self.assertNotIn('opens', monitor.patch_closing_bar('AAPL', old))
+        # 裁剪：opens 与其它序列同步按日期裁
+        cut = monitor.trim_history(hist, '2026-09-30')
+        self.assertEqual(len(cut['opens']), len(cut['dates']))
+        self.assertEqual(cut['dates'][-1], '2026-09-30')
+        # Yahoo meta 补当日：调用方要给 opens 补 None（这里验证 _yahoo_meta_close 本身不动 opens，补行逻辑在 yahoo_history）
+        ts = int(_dt(2026, 10, 20, 20, 0, 5, tzinfo=_tz.utc).timestamp())
+        meta = {'regularMarketPrice': 102.5, 'regularMarketTime': ts, 'regularMarketDayHigh': 104.0,
+                'regularMarketDayLow': 100.5, 'regularMarketVolume': 12}
+        out = monitor._yahoo_meta_close(meta, ['2026-10-16', '2026-10-19'], [100.0, 101.0], [10, 11],
+                                        [102.0, 103.0], [99.0, 100.0], [True, True])
+        self.assertTrue(out[6])
+        # 记账：真实 / 未知 / 来源不带
+        with patch.dict(monitor._OPEN_STATS, {'real': 0, 'missing': 0, 'no_opens': 0}):
+            monitor._note_open({'opens': [1.0, 2.0]})
+            monitor._note_open({'opens': [1.0, None]})
+            monitor._note_open({'opens': [1.0, float('nan')]})
+            monitor._note_open({'closes': [1.0]})
+            monitor._note_open(None)
+            self.assertEqual(dict(monitor._OPEN_STATS), {'real': 1, 'missing': 2, 'no_opens': 2})
+
     def test_ensure_schedule_run_only_acts_inside_pause_window(self):
         import tempfile
         from unittest.mock import MagicMock

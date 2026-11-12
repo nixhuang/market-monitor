@@ -394,7 +394,7 @@ def trim_history(data, cutoff):
     if not keep:
         return None
     out = dict(data)
-    for key in ("dates", "closes", "volumes", "highs", "lows", "ma_range_valid"):
+    for key in ("dates", "closes", "volumes", "highs", "lows", "opens", "ma_range_valid"):
         seq = data.get(key)
         # 源本身没有这个字段就别补空列表：会被下游当成「有效位清单长度不符」，
         # 52周区间和日内高低判断会整段判废。stooq / Nasdaq 都不带 ma_range_valid。
@@ -1221,7 +1221,7 @@ def patch_closing_bar(symbol, data):
         if not q:
             return data
         out = dict(data)
-        for key in ("dates", "closes", "highs", "lows", "volumes"):
+        for key in ("dates", "closes", "highs", "lows", "volumes", "opens"):
             if data.get(key) is not None:
                 out[key] = list(data[key])
         validity = data.get("ma_range_valid")
@@ -1233,6 +1233,8 @@ def patch_closing_bar(symbol, data):
                 out[key].append(q["price"])
         if out.get("volumes") is not None:
             out["volumes"].append(q["volume"])
+        if out.get("opens") is not None:
+            out["opens"].append(None)   # 收盘报价页没有开盘价：补出来的当日一根开盘价未知，绝不编
         out.update(price=q["price"], prev_close=out["closes"][-2], realtime=False, rt_ts="",
                    close_patch="nasdaq-quote")
         return out if valid_history(out) else data
@@ -1278,6 +1280,7 @@ def yahoo_history(symbol):
                 vols = aligned("volume", lambda i: 0)
                 highs = aligned("high", lambda i: raw[i])
                 lows = aligned("low", lambda i: raw[i])
+                opens = aligned("open", lambda i: None)   # 开盘价缺失就留 None，不拿收盘价冒充
                 # 兼容其他指标的旧填补行为，但长均线不能把填补值冒充真实日内高低。
                 range_valid = [all(i < len(q.get(key) or []) and (q.get(key) or [])[i] is not None
                                    for key in ("high", "low")) for i in valid]
@@ -1288,6 +1291,8 @@ def yahoo_history(symbol):
                 YAHOO_GATE.ok()
                 dates, closes, vols, highs, lows, range_valid, patched = _yahoo_meta_close(
                     meta, dates, closes, vols, highs, lows, range_valid)
+                if patched:
+                    opens = opens + [None]   # meta 摘要没有开盘价，补出来的当日一根开盘价未知
                 # 注意：不要用 meta.chartPreviousClose！
                 # 它返回的是「请求区间起点之前」的那根 K 线收盘价，range=1y 时等于一年前的价格，
                 # 用它算涨跌幅会得到 +40% / +95% 这种荒谬数字。
@@ -1298,6 +1303,7 @@ def yahoo_history(symbol):
                     "volumes": vols,
                     "highs": highs,
                     "lows": lows,
+                    "opens": opens,
                     "ma_range_valid": range_valid,
                     "price": closes[-1],
                     "prev_close": closes[-2] if len(closes) >= 2 else None,
@@ -1357,6 +1363,7 @@ def stooq_history(symbol):
             "volumes": [r["v"] for r in rows],
             "highs": [r["h"] for r in rows],
             "lows": [r["l"] for r in rows],
+            "opens": [r["o"] for r in rows],
             "price": rows[-1]["c"],
             "prev_close": rows[-2]["c"] if len(rows) >= 2 else None,
             "currency": "USD",
@@ -1449,7 +1456,7 @@ def apply_realtime(symbol, data, asof=None):
                 or not math.isfinite(rt_vol) or rt_vol <= 0):
             rt_vol = 0
         out = dict(data)
-        for key in ("dates", "closes", "highs", "lows", "volumes", "ma_range_valid"):
+        for key in ("dates", "closes", "highs", "lows", "volumes", "opens", "ma_range_valid"):
             if data.get(key) is not None:
                 out[key] = list(data[key])
         if replacing:
@@ -1470,6 +1477,8 @@ def apply_realtime(symbol, data, asof=None):
                     out[key].append(px)
             if out.get("volumes"):
                 out["volumes"].append(rt_vol)
+            if out.get("opens") is not None:
+                out["opens"].append(None)   # 实时价没有开盘价
         out.update(price=px, prev_close=out["closes"][-2], realtime=True, rt_ts=rt["ts"])
         out.pop("rt_volume", None)
         if rt_vol > 0:
@@ -1531,6 +1540,7 @@ def nasdaq_history(symbol):
                     "volumes": [p["v"] for p in parsed],
                     "highs": [p["h"] for p in parsed],
                     "lows": [p["l"] for p in parsed],
+                    "opens": [p["o"] for p in parsed],
                     "price": parsed[-1]["c"],
                     "prev_close": parsed[-2]["c"] if len(parsed) >= 2 else None,
                     "currency": "USD",
@@ -2509,7 +2519,30 @@ QUOTE_CLOSED_SOURCES = ("nasdaq", "yahoo", "stooq")
 QUOTE_INTRADAY_SOURCES = ("yahoo", "stooq", "nasdaq")
 
 
+_OPEN_STATS = {"real": 0, "missing": 0, "no_opens": 0}   # 本轮最新一根日线「有真实开盘价 / 开盘价未知 / 来源不带开盘价」的只数
+
+
+def _note_open(data):
+    """只记账，用于日志核验开盘价覆盖情况；不参与取舍，也不改数据。"""
+    opens = data.get("opens") if isinstance(data, dict) else None
+    with _SRC_DAYS_LOCK:
+        if not opens:
+            _OPEN_STATS["no_opens"] += 1
+        elif isinstance(opens[-1], (int, float)) and not isinstance(opens[-1], bool) \
+                and math.isfinite(opens[-1]) and opens[-1] > 0:
+            _OPEN_STATS["real"] += 1
+        else:
+            _OPEN_STATS["missing"] += 1
+
+
 def fetch_history(symbol):
+    data = _fetch_history_impl(symbol)
+    if data:
+        _note_open(data)
+    return data
+
+
+def _fetch_history_impl(symbol):
     """普通标的收盘 Nasdaq → Yahoo → stooq，盘中 Yahoo → stooq → Nasdaq。
     指数／期货只取经映射的 Yahoo 日线；先规范化代码，再校验日线与来源身份。
     """
@@ -3995,9 +4028,12 @@ def _main(argv, runtime, snapshots=None):
                     to_fetch = to_fetch + [spy_key]
         with _SRC_DAYS_LOCK:
             _SRC_DAYS.clear()
+            _OPEN_STATS.update(real=0, missing=0, no_opens=0)
         fetched = collect_quotes(to_fetch)
         for src, days in source_day_summary().items():
             log(f"  {src} 最新日线：" + "，".join(f"{d} {n} 只" for d, n in days.items()))
+        with _SRC_DAYS_LOCK:
+            log(f"  开盘价：最新一根带真实开盘价 {_OPEN_STATS['real']} 只，开盘价未知（补出来的当日一根）{_OPEN_STATS['missing']} 只，来源不带开盘价 {_OPEN_STATS['no_opens']} 只")
         bench_data = None
         if bench_rows:
             bench_data = {"dates": [d for d, _ in bench_rows], "closes": [v for _, v in bench_rows]}
