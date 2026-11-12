@@ -9,18 +9,18 @@
     "next_in": 1,
     "next_date": "2026-11-12"
   },
-  "run_id": "43044356853",
+  "run_id": "43133298853",
   "request_id": "",
-  "source_sha": "641c004ead9bd45ec1c24d13d35024c7231ba885",
+  "source_sha": "eef0a986f0503c665452cadd68d6424acc7d7e68",
   "input_hash": "0dd2ed87e9f35726d1e257c43866fbebfc14bdb46d2b0e8890c042435dc873a9",
-  "build_id": "43044356853-1",
-  "started_at": "2026-11-11T15:02:37+00:00",
-  "started_at_bj": "2026-11-11T23:02:37+08:00",
-  "finished_at": "2026-11-11T23:05:26.837354+08:00",
-  "finished_at_bj": "2026-11-11T23:05:26+08:00",
-  "event": "push",
+  "build_id": "43133298853-1",
+  "started_at": "2026-11-12T01:15:53+00:00",
+  "started_at_bj": "2026-11-12T09:15:53+08:00",
+  "finished_at": "2026-11-12T09:18:57.695845+08:00",
+  "finished_at_bj": "2026-11-12T09:18:57+08:00",
+  "event": "schedule",
   "target_trade_date": "2026-11-11",
-  "mode": "manual_or_config",
+  "mode": "closed",
   "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
   "config_files": {
     "holdings.json": "d190f2d01c5dee597da35b1997655b8c619af865",
@@ -195,11 +195,11 @@
     "dca": 1
   },
   "summary": {
-    "red": 4,
-    "yellow": 25,
-    "green": 69,
+    "red": 6,
+    "yellow": 21,
+    "green": 71,
     "gray": 0,
-    "purple": 33,
+    "purple": 31,
     "total": 98,
     "macro_ok": 7,
     "stale_symbols": [],
@@ -213,26 +213,26 @@
   "signal_counts": {
     "chg": {
       "label": "涨跌幅",
-      "red": 1,
-      "yellow": 10,
+      "red": 3,
+      "yellow": 11,
       "purple": 0
     },
     "amp": {
       "label": "振幅",
       "red": 0,
-      "yellow": 0,
+      "yellow": 5,
       "purple": 0
     },
     "vol_ratio": {
       "label": "量比",
-      "red": 1,
-      "yellow": 16,
+      "red": 0,
+      "yellow": 3,
       "purple": 0
     },
     "rsi": {
       "label": "RSI",
       "red": 0,
-      "yellow": 1,
+      "yellow": 0,
       "purple": 0
     },
     "boll": {
@@ -243,32 +243,47 @@
     },
     "boll_rsi": {
       "label": "布林+RSI",
-      "red": 2,
-      "yellow": 2,
+      "red": 3,
+      "yellow": 1,
       "purple": 0
     },
     "ma": {
       "label": "均线",
       "red": 0,
-      "yellow": 8,
+      "yellow": 9,
       "purple": 0
     },
     "low52": {
       "label": "52周低位",
-      "red": 1,
-      "yellow": 1,
+      "red": 0,
+      "yellow": 0,
       "purple": 0
     },
     "target": {
       "label": "共识价",
       "red": 0,
       "yellow": 0,
-      "purple": 33
+      "purple": 31
     }
   },
   "signal_members": {
     "chg": {
       "red": [
+        {
+          "symbol": "MU",
+          "note": "美光科技",
+          "group": "technology",
+          "hold": "short",
+          "level": "red",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-11-11股价上涨11.89%"
+            }
+          ],
+          "metric": "涨跌幅 +11.89%"
+        },
         {
           "symbol": "SNDK",
           "note": "闪迪",
@@ -279,10 +294,25 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨12.61%"
+              "label": "2026-11-11股价上涨13.69%"
             }
           ],
-          "metric": "涨跌幅 +12.61%"
+          "metric": "涨跌幅 +13.69%"
+        },
+        {
+          "symbol": "ARM",
+          "note": "芯片架构",
+          "group": "technology",
+          "hold": "short",
+          "level": "red",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-11-11股价上涨12.05%"
+            }
+          ],
+          "metric": "涨跌幅 +12.05%"
         }
       ],
       "yellow": [
@@ -296,10 +326,10 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨8.94%"
+              "label": "2026-11-11股价上涨10.36%"
             }
           ],
-          "metric": "涨跌幅 +8.94%"
+          "metric": "涨跌幅 +10.36%"
         },
         {
           "symbol": "SKHY",
@@ -311,25 +341,10 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨7.90%"
+              "label": "2026-11-11股价上涨9.71%"
             }
           ],
-          "metric": "涨跌幅 +7.90%"
-        },
-        {
-          "symbol": "MU",
-          "note": "美光科技",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨9.42%"
-            }
-          ],
-          "metric": "涨跌幅 +9.42%"
+          "metric": "涨跌幅 +9.71%"
         },
         {
           "symbol": "STX",
@@ -341,10 +356,10 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨9.09%"
+              "label": "2026-11-11股价上涨9.99%"
             }
           ],
-          "metric": "涨跌幅 +9.09%"
+          "metric": "涨跌幅 +9.99%"
         },
         {
           "symbol": "COHR",
@@ -356,29 +371,14 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨8.03%"
+              "label": "2026-11-11股价上涨9.25%"
             }
           ],
-          "metric": "涨跌幅 +8.03%"
+          "metric": "涨跌幅 +9.25%"
         },
         {
           "symbol": "INTC",
           "note": "英特尔",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨7.38%"
-            }
-          ],
-          "metric": "涨跌幅 +7.38%"
-        },
-        {
-          "symbol": "CIEN",
-          "note": "光网络",
           "group": "technology",
           "hold": "short",
           "level": "yellow",
@@ -392,6 +392,21 @@
           "metric": "涨跌幅 +7.52%"
         },
         {
+          "symbol": "CIEN",
+          "note": "光网络",
+          "group": "technology",
+          "hold": "short",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-11-11股价上涨8.80%"
+            }
+          ],
+          "metric": "涨跌幅 +8.80%"
+        },
+        {
           "symbol": "LITE",
           "note": "光模块",
           "group": "technology",
@@ -401,10 +416,10 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨10.87%"
+              "label": "2026-11-11股价上涨10.67%"
             }
           ],
-          "metric": "涨跌幅 +10.87%"
+          "metric": "涨跌幅 +10.67%"
         },
         {
           "symbol": "MRVL",
@@ -416,10 +431,10 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨7.45%"
+              "label": "2026-11-11股价上涨9.33%"
             }
           ],
-          "metric": "涨跌幅 +7.45%"
+          "metric": "涨跌幅 +9.33%"
         },
         {
           "symbol": "CRDO",
@@ -431,24 +446,50 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨8.25%"
+              "label": "2026-11-11股价上涨8.94%"
             }
           ],
-          "metric": "涨跌幅 +8.25%"
+          "metric": "涨跌幅 +8.94%"
+        },
+        {
+          "symbol": "TER",
+          "note": "泰瑞达",
+          "group": "technology",
+          "hold": "short",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-11-11股价上涨8.30%"
+            }
+          ],
+          "metric": "涨跌幅 +8.30%"
+        },
+        {
+          "symbol": "WDC",
+          "note": "西部数据",
+          "group": "technology",
+          "hold": "short",
+          "level": "yellow",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-11-11股价上涨8.34%"
+            }
+          ],
+          "metric": "涨跌幅 +8.34%"
         }
       ],
       "purple": []
     },
     "amp": {
       "red": [],
-      "yellow": [],
-      "purple": []
-    },
-    "vol_ratio": {
-      "red": [
+      "yellow": [
         {
-          "symbol": "NVDA",
-          "note": "英伟达",
+          "symbol": "MU",
+          "note": "美光科技",
           "group": "technology",
           "hold": "short",
           "level": "red",
@@ -456,132 +497,10 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨2.70%"
+              "label": "2026-11-11股价上涨11.89%"
             }
           ],
-          "metric": "盘中量比 5.5×（截至 10:05 ET）"
-        }
-      ],
-      "yellow": [
-        {
-          "symbol": "AVGO",
-          "note": "博通",
-          "group": "position",
-          "hold": "long",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨6.33%"
-            }
-          ],
-          "metric": "盘中量比 3.4×（截至 10:04 ET）"
-        },
-        {
-          "symbol": "CRSP",
-          "note": "基因编辑",
-          "group": "position",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-11-11股价下跌0.97%"
-            }
-          ],
-          "metric": "盘中量比 4.6×（截至 10:04 ET）"
-        },
-        {
-          "symbol": "DRAM",
-          "note": "存储芯片",
-          "group": "position",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨8.94%"
-            }
-          ],
-          "metric": "盘中量比 3.6×（截至 10:04 ET）"
-        },
-        {
-          "symbol": "TSM",
-          "note": "台积电",
-          "group": "focus",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨3.18%"
-            }
-          ],
-          "metric": "盘中量比 3.3×（截至 10:04 ET）"
-        },
-        {
-          "symbol": "XLK",
-          "note": "科技行业",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨2.71%"
-            }
-          ],
-          "metric": "盘中量比 3.2×（截至 10:04 ET）"
-        },
-        {
-          "symbol": "SOXX",
-          "note": "半导体行业",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨4.40%"
-            }
-          ],
-          "metric": "盘中量比 4.0×（截至 10:04 ET）"
-        },
-        {
-          "symbol": "SKHY",
-          "note": "海力士",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨7.90%"
-            }
-          ],
-          "metric": "盘中量比 2.6×（截至 10:04 ET）"
-        },
-        {
-          "symbol": "MU",
-          "note": "美光科技",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨9.42%"
-            }
-          ],
-          "metric": "盘中量比 3.1×（截至 10:04 ET）"
+          "metric": "振幅 8.9%"
         },
         {
           "symbol": "SNDK",
@@ -593,25 +512,10 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨12.61%"
+              "label": "2026-11-11股价上涨13.69%"
             }
           ],
-          "metric": "盘中量比 4.4×（截至 10:04 ET）"
-        },
-        {
-          "symbol": "FTNT",
-          "note": "防火墙",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▲",
-              "tone": "white",
-              "label": "2026-11-11股价上涨3.55%"
-            }
-          ],
-          "metric": "盘中量比 3.2×（截至 10:04 ET）"
+          "metric": "振幅 10.6%"
         },
         {
           "symbol": "COHR",
@@ -623,14 +527,29 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨8.03%"
+              "label": "2026-11-11股价上涨9.25%"
             }
           ],
-          "metric": "盘中量比 3.4×（截至 10:04 ET）"
+          "metric": "振幅 10.3%"
         },
         {
-          "symbol": "CIEN",
-          "note": "光网络",
+          "symbol": "ARM",
+          "note": "芯片架构",
+          "group": "technology",
+          "hold": "short",
+          "level": "red",
+          "indicators": [
+            {
+              "shape": "▲",
+              "tone": "white",
+              "label": "2026-11-11股价上涨12.05%"
+            }
+          ],
+          "metric": "振幅 10.5%"
+        },
+        {
+          "symbol": "CRDO",
+          "note": "高速互连",
           "group": "technology",
           "hold": "short",
           "level": "yellow",
@@ -638,55 +557,46 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨7.52%"
+              "label": "2026-11-11股价上涨8.94%"
             }
           ],
-          "metric": "盘中量比 2.6×（截至 10:04 ET）"
-        },
+          "metric": "振幅 9.2%"
+        }
+      ],
+      "purple": []
+    },
+    "vol_ratio": {
+      "red": [],
+      "yellow": [
         {
-          "symbol": "LITE",
-          "note": "光模块",
-          "group": "technology",
+          "symbol": "CRSP",
+          "note": "基因编辑",
+          "group": "position",
           "hold": "short",
           "level": "yellow",
           "indicators": [
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨10.87%"
+              "label": "2026-11-11股价上涨1.33%"
             }
           ],
-          "metric": "盘中量比 2.9×（截至 10:04 ET）"
+          "metric": "量比 1.8×（2026-11-11）"
         },
         {
-          "symbol": "MRVL",
-          "note": "迈威尔科技",
+          "symbol": "NVDA",
+          "note": "英伟达",
           "group": "technology",
           "hold": "short",
-          "level": "yellow",
+          "level": "red",
           "indicators": [
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨7.45%"
+              "label": "2026-11-11股价上涨2.87%"
             }
           ],
-          "metric": "盘中量比 2.9×（截至 10:04 ET）"
-        },
-        {
-          "symbol": "SPCX",
-          "note": "商业航天",
-          "group": "technology",
-          "hold": "short",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "▼",
-              "tone": "white",
-              "label": "2026-11-11股价下跌1.74%"
-            }
-          ],
-          "metric": "盘中量比 3.3×（截至 10:05 ET）"
+          "metric": "量比 1.8×（2026-11-11）"
         },
         {
           "symbol": "TTWO",
@@ -698,33 +608,17 @@
             {
               "shape": "▲",
               "tone": "white",
-              "label": "2026-11-11股价上涨2.92%"
+              "label": "2026-11-11股价上涨2.97%"
             }
           ],
-          "metric": "盘中量比 3.4×（截至 10:05 ET）"
+          "metric": "量比 1.7×（2026-11-11）"
         }
       ],
       "purple": []
     },
     "rsi": {
       "red": [],
-      "yellow": [
-        {
-          "symbol": "BRK-B",
-          "note": "伯克希尔",
-          "group": "position",
-          "hold": "long",
-          "level": "yellow",
-          "indicators": [
-            {
-              "shape": "↑",
-              "tone": "yellow",
-              "label": "RSI 3条 ↑超买"
-            }
-          ],
-          "rsi_hits": "RSI 3条 ↑超买"
-        }
-      ],
+      "yellow": [],
       "purple": []
     },
     "boll": {
@@ -734,6 +628,15 @@
     },
     "boll_rsi": {
       "red": [
+        {
+          "symbol": "BRK-B",
+          "note": "伯克希尔",
+          "group": "position",
+          "hold": "long",
+          "level": "red",
+          "direction": "上轨（超买）",
+          "boll_rsi_hits": 3
+        },
         {
           "symbol": "NVDA",
           "note": "英伟达",
@@ -755,18 +658,9 @@
       ],
       "yellow": [
         {
-          "symbol": "CRSP",
-          "note": "基因编辑",
-          "group": "position",
-          "hold": "short",
-          "level": "yellow",
-          "direction": "下轨（超卖）",
-          "boll_rsi_hits": 2
-        },
-        {
-          "symbol": "IBIT",
-          "note": "比特币",
-          "group": "index_funds",
+          "symbol": "CRCL",
+          "note": "稳定币",
+          "group": "financials",
           "hold": "short",
           "level": "yellow",
           "direction": "下轨（超卖）",
@@ -786,9 +680,14 @@
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▼",
+              "shape": "▲",
               "tone": "cyan",
-              "label": "日内触及250日均线，现价在均线下方"
+              "label": "上穿250日均线"
+            },
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "日内触及250日均线，现价在均线上方"
             }
           ],
           "ma_settings": {
@@ -798,7 +697,11 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 169.17~170.40，现价偏离 -0.2%）"
+              "text": "日内触及250日均线 ±1%区间（日内 169.17~171.41，现价偏离 +0.5%）"
+            },
+            {
+              "kind": "ma_cross",
+              "text": "上穿250日均线"
             }
           ]
         },
@@ -834,6 +737,39 @@
           "level": "yellow",
           "indicators": [
             {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "上穿250日均线"
+            },
+            {
+              "shape": "▲",
+              "tone": "cyan",
+              "label": "日内触及250日均线，现价在均线上方"
+            }
+          ],
+          "ma_settings": {
+            "ma_short": 0,
+            "ma_long": 250
+          },
+          "ma_facts": [
+            {
+              "kind": "ma_band",
+              "text": "日内触及250日均线 ±1%区间（日内 162.50~174.53，现价偏离 +1.6%）"
+            },
+            {
+              "kind": "ma_cross",
+              "text": "上穿250日均线"
+            }
+          ]
+        },
+        {
+          "symbol": "GS",
+          "note": "高盛",
+          "group": "financials",
+          "hold": "short",
+          "level": "yellow",
+          "indicators": [
+            {
               "shape": "▼",
               "tone": "cyan",
               "label": "日内触及250日均线，现价在均线下方"
@@ -846,7 +782,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 162.50~168.22，现价偏离 -0.1%）"
+              "text": "日内触及250日均线 ±1%区间（日内 912.86~932.49，现价偏离 -1.5%）"
             }
           ]
         },
@@ -870,7 +806,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 43.57~43.78，现价偏离 -0.9%）"
+              "text": "日内触及250日均线 ±1%区间（日内 43.57~43.88，现价偏离 -0.7%）"
             }
           ]
         },
@@ -894,7 +830,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 85.74~86.23，现价偏离 -0.6%）"
+              "text": "日内触及250日均线 ±1%区间（日内 85.56~86.23，现价偏离 -0.5%）"
             }
           ]
         },
@@ -918,7 +854,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 225.21~233.69，现价偏离 +3.2%）"
+              "text": "日内触及250日均线 ±1%区间（日内 225.21~237.40，现价偏离 +3.3%）"
             }
           ]
         },
@@ -930,9 +866,14 @@
           "level": "yellow",
           "indicators": [
             {
-              "shape": "▲",
+              "shape": "▼",
               "tone": "cyan",
-              "label": "日内触及250日均线，现价在均线上方"
+              "label": "跌破250日均线"
+            },
+            {
+              "shape": "▼",
+              "tone": "cyan",
+              "label": "日内触及250日均线，现价在均线下方"
             }
           ],
           "ma_settings": {
@@ -942,7 +883,11 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 637.46~648.45，现价偏离 +0.8%）"
+              "text": "日内触及250日均线 ±1%区间（日内 628.02~648.45，现价偏离 -0.8%）"
+            },
+            {
+              "kind": "ma_cross",
+              "text": "跌破250日均线"
             }
           ]
         },
@@ -966,7 +911,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及250日均线 ±1%区间（日内 386.35~392.67，现价偏离 -1.3%）"
+              "text": "日内触及250日均线 ±1%区间（日内 386.35~395.43，现价偏离 -1.0%）"
             }
           ]
         }
@@ -974,26 +919,8 @@
       "purple": []
     },
     "low52": {
-      "red": [
-        {
-          "symbol": "NFLX",
-          "note": "奈飞",
-          "group": "communications",
-          "hold": "short",
-          "level": "red",
-          "low52_price": "61.39"
-        }
-      ],
-      "yellow": [
-        {
-          "symbol": "CRSP",
-          "note": "基因编辑",
-          "group": "position",
-          "hold": "short",
-          "level": "yellow",
-          "low52_price": "44.12"
-        }
-      ],
+      "red": [],
+      "yellow": [],
       "purple": []
     },
     "target": {
@@ -1005,12 +932,12 @@
           "note": "博通",
           "group": "position",
           "hold": "long",
-          "level": "yellow",
-          "space": 50.185557664523074,
+          "level": "green",
+          "space": 53.56584207172238,
           "band": "medium",
           "price": 530.14,
           "kind": "consensus",
-          "detail": "共识价 530.14，空间 +50.2%"
+          "detail": "共识价 530.14，空间 +53.6%"
         },
         {
           "symbol": "CRSP",
@@ -1018,23 +945,11 @@
           "group": "position",
           "hold": "short",
           "level": "yellow",
-          "space": 91.05345560277343,
-          "band": "high",
+          "space": 86.7103825136612,
+          "band": "medium",
           "price": 85.42,
           "kind": "consensus",
-          "detail": "共识价 85.42，空间 +91.1%"
-        },
-        {
-          "symbol": "GOOGL",
-          "note": "谷歌",
-          "group": "position",
-          "hold": "long",
-          "level": "green",
-          "space": 40.42048035235015,
-          "band": "medium",
-          "price": 408.09,
-          "kind": "consensus",
-          "detail": "共识价 408.09，空间 +40.4%"
+          "detail": "共识价 85.42，空间 +86.7%"
         },
         {
           "symbol": "UBER",
@@ -1042,11 +957,11 @@
           "group": "position",
           "hold": "short",
           "level": "green",
-          "space": 44.666242335396426,
+          "space": 42.1335597057159,
           "band": "medium",
           "price": 100.46,
           "kind": "consensus",
-          "detail": "共识价 100.46，空间 +44.7%"
+          "detail": "共识价 100.46，空间 +42.1%"
         },
         {
           "symbol": "VRT",
@@ -1054,23 +969,23 @@
           "group": "position",
           "hold": "short",
           "level": "green",
-          "space": 65.38386498878158,
+          "space": 64.19059609704131,
           "band": "medium",
           "price": 339.07,
           "kind": "consensus",
-          "detail": "共识价 339.07，空间 +65.4%"
+          "detail": "共识价 339.07，空间 +64.2%"
         },
         {
           "symbol": "TSM",
           "note": "台积电",
           "group": "focus",
           "hold": "short",
-          "level": "yellow",
-          "space": 42.856444417282894,
+          "level": "green",
+          "space": 41.37897665416717,
           "band": "medium",
           "price": 584.39,
           "kind": "consensus",
-          "detail": "共识价 584.39，空间 +42.9%"
+          "detail": "共识价 584.39，空间 +41.4%"
         },
         {
           "symbol": "SNOW",
@@ -1078,11 +993,11 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 40.19783140040354,
+          "space": 41.866409932939376,
           "band": "medium",
           "price": 427.33,
           "kind": "consensus",
-          "detail": "共识价 427.33，空间 +40.2%"
+          "detail": "共识价 427.33，空间 +41.9%"
         },
         {
           "symbol": "SKHY",
@@ -1090,23 +1005,23 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 86.30450321658327,
+          "space": 83.22671353251319,
           "band": "medium",
           "price": 260.64,
           "kind": "consensus",
-          "detail": "共识价 260.64，空间 +86.3%"
+          "detail": "共识价 260.64，空间 +83.2%"
         },
         {
           "symbol": "MU",
           "note": "美光科技",
           "group": "technology",
           "hold": "short",
-          "level": "yellow",
-          "space": 96.85793109046043,
+          "level": "red",
+          "space": 92.51941328731665,
           "band": "high",
           "price": 1561.91,
           "kind": "consensus",
-          "detail": "共识价 1561.91，空间 +96.9%"
+          "detail": "共识价 1561.91，空间 +92.5%"
         },
         {
           "symbol": "SNDK",
@@ -1114,11 +1029,11 @@
           "group": "technology",
           "hold": "short",
           "level": "red",
-          "space": 109.52271789700752,
+          "space": 107.53408544630712,
           "band": "high",
           "price": 2029.04,
           "kind": "consensus",
-          "detail": "共识价 2029.04，空间 +109.5%"
+          "detail": "共识价 2029.04，空间 +107.5%"
         },
         {
           "symbol": "STX",
@@ -1126,11 +1041,11 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 89.03528809780524,
+          "space": 87.49003117523381,
           "band": "medium",
           "price": 1034.42,
           "kind": "consensus",
-          "detail": "共识价 1034.42，空间 +89.0%"
+          "detail": "共识价 1034.42，空间 +87.5%"
         },
         {
           "symbol": "NOW",
@@ -1138,11 +1053,11 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 52.884378540814815,
+          "space": 51.00233553912028,
           "band": "medium",
           "price": 155.17,
           "kind": "consensus",
-          "detail": "共识价 155.17，空间 +52.9%"
+          "detail": "共识价 155.17，空间 +51.0%"
         },
         {
           "symbol": "COHR",
@@ -1150,11 +1065,11 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 67.22364761432483,
+          "space": 65.36608246983072,
           "band": "medium",
           "price": 387.8,
           "kind": "consensus",
-          "detail": "共识价 387.8，空间 +67.2%"
+          "detail": "共识价 387.8，空间 +65.4%"
         },
         {
           "symbol": "INTC",
@@ -1162,11 +1077,11 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 52.27588770193977,
+          "space": 52.08,
           "band": "medium",
           "price": 95.05,
           "kind": "consensus",
-          "detail": "共识价 95.05，空间 +52.3%"
+          "detail": "共识价 95.05，空间 +52.1%"
         },
         {
           "symbol": "AMAT",
@@ -1174,23 +1089,11 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 61.72453888537877,
+          "space": 58.6665991697884,
           "band": "medium",
           "price": 626.86,
           "kind": "consensus",
-          "detail": "共识价 626.86，空间 +61.7%"
-        },
-        {
-          "symbol": "ARM",
-          "note": "芯片架构",
-          "group": "technology",
-          "hold": "short",
-          "level": "green",
-          "space": 41.85648316297411,
-          "band": "medium",
-          "price": 273.4,
-          "kind": "consensus",
-          "detail": "共识价 273.4，空间 +41.9%"
+          "detail": "共识价 626.86，空间 +58.7%"
         },
         {
           "symbol": "CIEN",
@@ -1198,11 +1101,11 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 75.33923505485866,
+          "space": 73.28401567355763,
           "band": "medium",
           "price": 512.99,
           "kind": "consensus",
-          "detail": "共识价 512.99，空间 +75.3%"
+          "detail": "共识价 512.99，空间 +73.3%"
         },
         {
           "symbol": "LITE",
@@ -1210,11 +1113,11 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 69.45327962910194,
+          "space": 69.76051600160478,
           "band": "medium",
           "price": 1100.15,
           "kind": "consensus",
-          "detail": "共识价 1100.15，空间 +69.5%"
+          "detail": "共识价 1100.15，空间 +69.8%"
         },
         {
           "symbol": "MRVL",
@@ -1222,11 +1125,11 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 87.43745855687504,
+          "space": 84.20616113744076,
           "band": "medium",
           "price": 310.94,
           "kind": "consensus",
-          "detail": "共识价 310.94，空间 +87.4%"
+          "detail": "共识价 310.94，空间 +84.2%"
         },
         {
           "symbol": "CRDO",
@@ -1234,23 +1137,23 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 102.15643014732048,
+          "space": 100.86981118732763,
           "band": "high",
           "price": 284.05,
           "kind": "consensus",
-          "detail": "共识价 284.05，空间 +102.2%"
+          "detail": "共识价 284.05，空间 +100.9%"
         },
         {
           "symbol": "TER",
           "note": "泰瑞达",
           "group": "technology",
           "hold": "short",
-          "level": "green",
-          "space": 65.71604747957453,
+          "level": "yellow",
+          "space": 61.787944916848524,
           "band": "medium",
           "price": 430.0,
           "kind": "consensus",
-          "detail": "共识价 430，空间 +65.7%"
+          "detail": "共识价 430，空间 +61.8%"
         },
         {
           "symbol": "LRCX",
@@ -1258,11 +1161,11 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 56.195829400154466,
+          "space": 54.3284721044599,
           "band": "medium",
           "price": 364.03,
           "kind": "consensus",
-          "detail": "共识价 364.03，空间 +56.2%"
+          "detail": "共识价 364.03，空间 +54.3%"
         },
         {
           "symbol": "NVDA",
@@ -1270,47 +1173,47 @@
           "group": "technology",
           "hold": "short",
           "level": "red",
-          "space": 87.82358028250216,
+          "space": 87.520865711161,
           "band": "medium",
           "price": 325.78,
           "kind": "consensus",
-          "detail": "共识价 325.78，空间 +87.8%"
+          "detail": "共识价 325.78，空间 +87.5%"
         },
         {
           "symbol": "WDC",
           "note": "西部数据",
           "group": "technology",
           "hold": "short",
-          "level": "green",
-          "space": 98.60769330397616,
+          "level": "yellow",
+          "space": 95.77415339440171,
           "band": "high",
           "price": 613.38,
           "kind": "consensus",
-          "detail": "共识价 613.38，空间 +98.6%"
+          "detail": "共识价 613.38，空间 +95.8%"
         },
         {
           "symbol": "SPCX",
           "note": "商业航天",
           "group": "technology",
           "hold": "short",
-          "level": "yellow",
-          "space": 82.86628733997155,
+          "level": "green",
+          "space": 83.97853309481216,
           "band": "medium",
           "price": 257.11,
           "kind": "consensus",
-          "detail": "共识价 257.11，空间 +82.9%"
+          "detail": "共识价 257.11，空间 +84.0%"
         },
         {
           "symbol": "CRCL",
           "note": "稳定币",
           "group": "financials",
           "hold": "short",
-          "level": "green",
-          "space": 60.58240768537976,
+          "level": "yellow",
+          "space": 59.38617401668653,
           "band": "medium",
           "price": 106.98,
           "kind": "consensus",
-          "detail": "共识价 106.98，空间 +60.6%"
+          "detail": "共识价 106.98，空间 +59.4%"
         },
         {
           "symbol": "COIN",
@@ -1318,11 +1221,11 @@
           "group": "financials",
           "hold": "short",
           "level": "green",
-          "space": 53.625897129186605,
+          "space": 50.79621339986791,
           "band": "medium",
           "price": 205.49,
           "kind": "consensus",
-          "detail": "共识价 205.49，空间 +53.6%"
+          "detail": "共识价 205.49，空间 +50.8%"
         },
         {
           "symbol": "HOOD",
@@ -1330,11 +1233,11 @@
           "group": "financials",
           "hold": "short",
           "level": "green",
-          "space": 57.13155940474698,
+          "space": 54.10262473397967,
           "band": "medium",
           "price": 130.34,
           "kind": "consensus",
-          "detail": "共识价 130.34，空间 +57.1%"
+          "detail": "共识价 130.34，空间 +54.1%"
         },
         {
           "symbol": "AXON",
@@ -1342,11 +1245,11 @@
           "group": "industrials",
           "hold": "short",
           "level": "red",
-          "space": 80.288747209687,
+          "space": 77.95954600215586,
           "band": "medium",
           "price": 561.32,
           "kind": "consensus",
-          "detail": "共识价 561.32，空间 +80.3%"
+          "detail": "共识价 561.32，空间 +78.0%"
         },
         {
           "symbol": "CAT",
@@ -1354,11 +1257,11 @@
           "group": "industrials",
           "hold": "short",
           "level": "green",
-          "space": 44.84695593676421,
+          "space": 43.15918950815312,
           "band": "medium",
           "price": 861.26,
           "kind": "consensus",
-          "detail": "共识价 861.26，空间 +44.8%"
+          "detail": "共识价 861.26，空间 +43.2%"
         },
         {
           "symbol": "PDD",
@@ -1366,11 +1269,11 @@
           "group": "consumer_discretionary",
           "hold": "short",
           "level": "green",
-          "space": 45.618915159944365,
+          "space": 45.76635868877357,
           "band": "medium",
           "price": 115.17,
           "kind": "consensus",
-          "detail": "共识价 115.17，空间 +45.6%"
+          "detail": "共识价 115.17，空间 +45.8%"
         },
         {
           "symbol": "BKNG",
@@ -1378,11 +1281,11 @@
           "group": "consumer_discretionary",
           "hold": "short",
           "level": "green",
-          "space": 46.78392278874849,
+          "space": 44.291866924661385,
           "band": "medium",
           "price": 231.17,
           "kind": "consensus",
-          "detail": "共识价 231.17，空间 +46.8%"
+          "detail": "共识价 231.17，空间 +44.3%"
         },
         {
           "symbol": "COST",
@@ -1390,11 +1293,11 @@
           "group": "focus",
           "hold": "short",
           "level": "green",
-          "space": -0.5111478694406263,
+          "space": -1.8407333511093131,
           "band": "low",
           "price": 1067.59,
           "kind": "consensus",
-          "detail": "上穿 1067.59 -0.5%（±3% 内）"
+          "detail": "上穿 1067.59 -1.8%（±3% 内）"
         }
       ]
     }
@@ -1406,12 +1309,12 @@
         "note": "博通",
         "group": "position",
         "hold": "long",
-        "level": "yellow",
-        "space": 50.185557664523074,
+        "level": "green",
+        "space": 53.56584207172238,
         "band": "medium",
         "price": 530.14,
         "kind": "consensus",
-        "detail": "共识价 530.14，空间 +50.2%"
+        "detail": "共识价 530.14，空间 +53.6%"
       },
       {
         "symbol": "CRSP",
@@ -1419,23 +1322,11 @@
         "group": "position",
         "hold": "short",
         "level": "yellow",
-        "space": 91.05345560277343,
-        "band": "high",
+        "space": 86.7103825136612,
+        "band": "medium",
         "price": 85.42,
         "kind": "consensus",
-        "detail": "共识价 85.42，空间 +91.1%"
-      },
-      {
-        "symbol": "GOOGL",
-        "note": "谷歌",
-        "group": "position",
-        "hold": "long",
-        "level": "green",
-        "space": 40.42048035235015,
-        "band": "medium",
-        "price": 408.09,
-        "kind": "consensus",
-        "detail": "共识价 408.09，空间 +40.4%"
+        "detail": "共识价 85.42，空间 +86.7%"
       },
       {
         "symbol": "UBER",
@@ -1443,11 +1334,11 @@
         "group": "position",
         "hold": "short",
         "level": "green",
-        "space": 44.666242335396426,
+        "space": 42.1335597057159,
         "band": "medium",
         "price": 100.46,
         "kind": "consensus",
-        "detail": "共识价 100.46，空间 +44.7%"
+        "detail": "共识价 100.46，空间 +42.1%"
       },
       {
         "symbol": "VRT",
@@ -1455,23 +1346,23 @@
         "group": "position",
         "hold": "short",
         "level": "green",
-        "space": 65.38386498878158,
+        "space": 64.19059609704131,
         "band": "medium",
         "price": 339.07,
         "kind": "consensus",
-        "detail": "共识价 339.07，空间 +65.4%"
+        "detail": "共识价 339.07，空间 +64.2%"
       },
       {
         "symbol": "TSM",
         "note": "台积电",
         "group": "focus",
         "hold": "short",
-        "level": "yellow",
-        "space": 42.856444417282894,
+        "level": "green",
+        "space": 41.37897665416717,
         "band": "medium",
         "price": 584.39,
         "kind": "consensus",
-        "detail": "共识价 584.39，空间 +42.9%"
+        "detail": "共识价 584.39，空间 +41.4%"
       },
       {
         "symbol": "SNOW",
@@ -1479,11 +1370,11 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 40.19783140040354,
+        "space": 41.866409932939376,
         "band": "medium",
         "price": 427.33,
         "kind": "consensus",
-        "detail": "共识价 427.33，空间 +40.2%"
+        "detail": "共识价 427.33，空间 +41.9%"
       },
       {
         "symbol": "SKHY",
@@ -1491,23 +1382,23 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 86.30450321658327,
+        "space": 83.22671353251319,
         "band": "medium",
         "price": 260.64,
         "kind": "consensus",
-        "detail": "共识价 260.64，空间 +86.3%"
+        "detail": "共识价 260.64，空间 +83.2%"
       },
       {
         "symbol": "MU",
         "note": "美光科技",
         "group": "technology",
         "hold": "short",
-        "level": "yellow",
-        "space": 96.85793109046043,
+        "level": "red",
+        "space": 92.51941328731665,
         "band": "high",
         "price": 1561.91,
         "kind": "consensus",
-        "detail": "共识价 1561.91，空间 +96.9%"
+        "detail": "共识价 1561.91，空间 +92.5%"
       },
       {
         "symbol": "SNDK",
@@ -1515,11 +1406,11 @@
         "group": "technology",
         "hold": "short",
         "level": "red",
-        "space": 109.52271789700752,
+        "space": 107.53408544630712,
         "band": "high",
         "price": 2029.04,
         "kind": "consensus",
-        "detail": "共识价 2029.04，空间 +109.5%"
+        "detail": "共识价 2029.04，空间 +107.5%"
       },
       {
         "symbol": "STX",
@@ -1527,11 +1418,11 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 89.03528809780524,
+        "space": 87.49003117523381,
         "band": "medium",
         "price": 1034.42,
         "kind": "consensus",
-        "detail": "共识价 1034.42，空间 +89.0%"
+        "detail": "共识价 1034.42，空间 +87.5%"
       },
       {
         "symbol": "NOW",
@@ -1539,11 +1430,11 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 52.884378540814815,
+        "space": 51.00233553912028,
         "band": "medium",
         "price": 155.17,
         "kind": "consensus",
-        "detail": "共识价 155.17，空间 +52.9%"
+        "detail": "共识价 155.17，空间 +51.0%"
       },
       {
         "symbol": "COHR",
@@ -1551,11 +1442,11 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 67.22364761432483,
+        "space": 65.36608246983072,
         "band": "medium",
         "price": 387.8,
         "kind": "consensus",
-        "detail": "共识价 387.8，空间 +67.2%"
+        "detail": "共识价 387.8，空间 +65.4%"
       },
       {
         "symbol": "INTC",
@@ -1563,11 +1454,11 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 52.27588770193977,
+        "space": 52.08,
         "band": "medium",
         "price": 95.05,
         "kind": "consensus",
-        "detail": "共识价 95.05，空间 +52.3%"
+        "detail": "共识价 95.05，空间 +52.1%"
       },
       {
         "symbol": "AMAT",
@@ -1575,23 +1466,11 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 61.72453888537877,
+        "space": 58.6665991697884,
         "band": "medium",
         "price": 626.86,
         "kind": "consensus",
-        "detail": "共识价 626.86，空间 +61.7%"
-      },
-      {
-        "symbol": "ARM",
-        "note": "芯片架构",
-        "group": "technology",
-        "hold": "short",
-        "level": "green",
-        "space": 41.85648316297411,
-        "band": "medium",
-        "price": 273.4,
-        "kind": "consensus",
-        "detail": "共识价 273.4，空间 +41.9%"
+        "detail": "共识价 626.86，空间 +58.7%"
       },
       {
         "symbol": "CIEN",
@@ -1599,11 +1478,11 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 75.33923505485866,
+        "space": 73.28401567355763,
         "band": "medium",
         "price": 512.99,
         "kind": "consensus",
-        "detail": "共识价 512.99，空间 +75.3%"
+        "detail": "共识价 512.99，空间 +73.3%"
       },
       {
         "symbol": "LITE",
@@ -1611,11 +1490,11 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 69.45327962910194,
+        "space": 69.76051600160478,
         "band": "medium",
         "price": 1100.15,
         "kind": "consensus",
-        "detail": "共识价 1100.15，空间 +69.5%"
+        "detail": "共识价 1100.15，空间 +69.8%"
       },
       {
         "symbol": "MRVL",
@@ -1623,11 +1502,11 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 87.43745855687504,
+        "space": 84.20616113744076,
         "band": "medium",
         "price": 310.94,
         "kind": "consensus",
-        "detail": "共识价 310.94，空间 +87.4%"
+        "detail": "共识价 310.94，空间 +84.2%"
       },
       {
         "symbol": "CRDO",
@@ -1635,23 +1514,23 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 102.15643014732048,
+        "space": 100.86981118732763,
         "band": "high",
         "price": 284.05,
         "kind": "consensus",
-        "detail": "共识价 284.05，空间 +102.2%"
+        "detail": "共识价 284.05，空间 +100.9%"
       },
       {
         "symbol": "TER",
         "note": "泰瑞达",
         "group": "technology",
         "hold": "short",
-        "level": "green",
-        "space": 65.71604747957453,
+        "level": "yellow",
+        "space": 61.787944916848524,
         "band": "medium",
         "price": 430.0,
         "kind": "consensus",
-        "detail": "共识价 430，空间 +65.7%"
+        "detail": "共识价 430，空间 +61.8%"
       },
       {
         "symbol": "LRCX",
@@ -1659,11 +1538,11 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 56.195829400154466,
+        "space": 54.3284721044599,
         "band": "medium",
         "price": 364.03,
         "kind": "consensus",
-        "detail": "共识价 364.03，空间 +56.2%"
+        "detail": "共识价 364.03，空间 +54.3%"
       },
       {
         "symbol": "NVDA",
@@ -1671,47 +1550,47 @@
         "group": "technology",
         "hold": "short",
         "level": "red",
-        "space": 87.82358028250216,
+        "space": 87.520865711161,
         "band": "medium",
         "price": 325.78,
         "kind": "consensus",
-        "detail": "共识价 325.78，空间 +87.8%"
+        "detail": "共识价 325.78，空间 +87.5%"
       },
       {
         "symbol": "WDC",
         "note": "西部数据",
         "group": "technology",
         "hold": "short",
-        "level": "green",
-        "space": 98.60769330397616,
+        "level": "yellow",
+        "space": 95.77415339440171,
         "band": "high",
         "price": 613.38,
         "kind": "consensus",
-        "detail": "共识价 613.38，空间 +98.6%"
+        "detail": "共识价 613.38，空间 +95.8%"
       },
       {
         "symbol": "SPCX",
         "note": "商业航天",
         "group": "technology",
         "hold": "short",
-        "level": "yellow",
-        "space": 82.86628733997155,
+        "level": "green",
+        "space": 83.97853309481216,
         "band": "medium",
         "price": 257.11,
         "kind": "consensus",
-        "detail": "共识价 257.11，空间 +82.9%"
+        "detail": "共识价 257.11，空间 +84.0%"
       },
       {
         "symbol": "CRCL",
         "note": "稳定币",
         "group": "financials",
         "hold": "short",
-        "level": "green",
-        "space": 60.58240768537976,
+        "level": "yellow",
+        "space": 59.38617401668653,
         "band": "medium",
         "price": 106.98,
         "kind": "consensus",
-        "detail": "共识价 106.98，空间 +60.6%"
+        "detail": "共识价 106.98，空间 +59.4%"
       },
       {
         "symbol": "COIN",
@@ -1719,11 +1598,11 @@
         "group": "financials",
         "hold": "short",
         "level": "green",
-        "space": 53.625897129186605,
+        "space": 50.79621339986791,
         "band": "medium",
         "price": 205.49,
         "kind": "consensus",
-        "detail": "共识价 205.49，空间 +53.6%"
+        "detail": "共识价 205.49，空间 +50.8%"
       },
       {
         "symbol": "HOOD",
@@ -1731,11 +1610,11 @@
         "group": "financials",
         "hold": "short",
         "level": "green",
-        "space": 57.13155940474698,
+        "space": 54.10262473397967,
         "band": "medium",
         "price": 130.34,
         "kind": "consensus",
-        "detail": "共识价 130.34，空间 +57.1%"
+        "detail": "共识价 130.34，空间 +54.1%"
       },
       {
         "symbol": "AXON",
@@ -1743,11 +1622,11 @@
         "group": "industrials",
         "hold": "short",
         "level": "red",
-        "space": 80.288747209687,
+        "space": 77.95954600215586,
         "band": "medium",
         "price": 561.32,
         "kind": "consensus",
-        "detail": "共识价 561.32，空间 +80.3%"
+        "detail": "共识价 561.32，空间 +78.0%"
       },
       {
         "symbol": "CAT",
@@ -1755,11 +1634,11 @@
         "group": "industrials",
         "hold": "short",
         "level": "green",
-        "space": 44.84695593676421,
+        "space": 43.15918950815312,
         "band": "medium",
         "price": 861.26,
         "kind": "consensus",
-        "detail": "共识价 861.26，空间 +44.8%"
+        "detail": "共识价 861.26，空间 +43.2%"
       },
       {
         "symbol": "PDD",
@@ -1767,11 +1646,11 @@
         "group": "consumer_discretionary",
         "hold": "short",
         "level": "green",
-        "space": 45.618915159944365,
+        "space": 45.76635868877357,
         "band": "medium",
         "price": 115.17,
         "kind": "consensus",
-        "detail": "共识价 115.17，空间 +45.6%"
+        "detail": "共识价 115.17，空间 +45.8%"
       },
       {
         "symbol": "BKNG",
@@ -1779,11 +1658,11 @@
         "group": "consumer_discretionary",
         "hold": "short",
         "level": "green",
-        "space": 46.78392278874849,
+        "space": 44.291866924661385,
         "band": "medium",
         "price": 231.17,
         "kind": "consensus",
-        "detail": "共识价 231.17，空间 +46.8%"
+        "detail": "共识价 231.17，空间 +44.3%"
       }
     ],
     "reached": [
@@ -1793,11 +1672,11 @@
         "group": "focus",
         "hold": "short",
         "level": "green",
-        "space": -0.5111478694406263,
+        "space": -1.8407333511093131,
         "band": "low",
         "price": 1067.59,
         "kind": "consensus",
-        "detail": "上穿 1067.59 -0.5%（±3% 内）"
+        "detail": "上穿 1067.59 -1.8%（±3% 内）"
       }
     ]
   },
@@ -1809,7 +1688,7 @@
       "side": "上轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林上轨▲ 还差1.62%",
+      "detail": "逼近布林上轨▲ 还差1.24%",
       "group": "position",
       "level": "green",
       "hold": "long",
@@ -1822,11 +1701,24 @@
       "side": "上轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林上轨▲ 还差1.65%",
+      "detail": "逼近布林上轨▲ 还差0.61%",
       "group": "position",
-      "level": "yellow",
+      "level": "green",
       "hold": "long",
       "note": "博通"
+    },
+    {
+      "symbol": "CRSP",
+      "kind": "boll_rsi",
+      "shape": "▼",
+      "side": "下轨",
+      "rsi_n": 1,
+      "rsi_side": "超卖",
+      "detail": "跌破布林下轨▼ · RSI 1条 ↓超卖",
+      "group": "position",
+      "level": "yellow",
+      "hold": "short",
+      "note": "基因编辑"
     },
     {
       "symbol": "NTNX",
@@ -1842,13 +1734,26 @@
       "note": "混合云"
     },
     {
+      "symbol": "XLI",
+      "kind": "boll",
+      "shape": "▲",
+      "side": "上轨",
+      "rsi_n": 0,
+      "rsi_side": "",
+      "detail": "逼近布林上轨▲ 还差0.52%",
+      "group": "position",
+      "level": "yellow",
+      "hold": "long",
+      "note": "工业行业"
+    },
+    {
       "symbol": "NXPI",
       "kind": "boll",
       "shape": "▲",
       "side": "上轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林上轨▲ 还差1.78%",
+      "detail": "逼近布林上轨▲ 还差0.08%",
       "group": "position",
       "level": "green",
       "hold": "short",
@@ -1861,11 +1766,24 @@
       "side": "上轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "盘中突破布林上轨▲",
+      "detail": "突破布林上轨▲",
       "group": "position",
       "level": "green",
       "hold": "long",
       "note": "苹果"
+    },
+    {
+      "symbol": "ZS",
+      "kind": "rsi",
+      "shape": "▼",
+      "side": "",
+      "rsi_n": 2,
+      "rsi_side": "超卖",
+      "detail": "RSI 2条 ↓超卖",
+      "group": "focus",
+      "level": "green",
+      "hold": "short",
+      "note": "云安全"
     },
     {
       "symbol": "COST",
@@ -1874,11 +1792,24 @@
       "side": "上轨",
       "rsi_n": 2,
       "rsi_side": "超买",
-      "detail": "盘中突破布林上轨▲ · RSI 2条 ↑超买",
+      "detail": "突破布林上轨▲ · RSI 2条 ↑超买",
       "group": "focus",
       "level": "green",
       "hold": "short",
       "note": "好市多"
+    },
+    {
+      "symbol": "IBIT",
+      "kind": "boll_rsi",
+      "shape": "▼",
+      "side": "下轨",
+      "rsi_n": 1,
+      "rsi_side": "超卖",
+      "detail": "逼近布林下轨▼ 还差0.28% · RSI 1条 ↓超卖",
+      "group": "index_funds",
+      "level": "green",
+      "hold": "short",
+      "note": "比特币"
     },
     {
       "symbol": "NOW",
@@ -1892,49 +1823,10 @@
       "level": "green",
       "hold": "short",
       "note": "工作流软件"
-    },
-    {
-      "symbol": "CRCL",
-      "kind": "rsi",
-      "shape": "▼",
-      "side": "",
-      "rsi_n": 2,
-      "rsi_side": "超卖",
-      "detail": "RSI 2条 ↓超卖",
-      "group": "financials",
-      "level": "green",
-      "hold": "short",
-      "note": "稳定币"
-    },
-    {
-      "symbol": "COIN",
-      "kind": "rsi",
-      "shape": "▼",
-      "side": "",
-      "rsi_n": 2,
-      "rsi_side": "超卖",
-      "detail": "RSI 2条 ↓超卖",
-      "group": "financials",
-      "level": "green",
-      "hold": "short",
-      "note": "加密交易所"
-    },
-    {
-      "symbol": "CAT",
-      "kind": "rsi",
-      "shape": "▼",
-      "side": "",
-      "rsi_n": 2,
-      "rsi_side": "超卖",
-      "detail": "RSI 2条 ↓超卖",
-      "group": "industrials",
-      "level": "green",
-      "hold": "short",
-      "note": "卡特彼勒"
     }
   ],
   "earnings_week": {
-    "asof": "2026-11-11",
+    "asof": "2026-11-12",
     "members": [
       {
         "symbol": "AMAT",
@@ -2025,7 +1917,7 @@
     "delta_month": -0.24199962615966797
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
-  "data_time_text": "2026-11-11 23:05:26（盘中，北京）",
+  "data_time_text": "2026-11-11 收盘（美东交易日）",
   "market_risk": {
     "level": "green",
     "label": "平稳",
@@ -2044,17 +1936,17 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 18.6299991607666,
+      "value": 17.489999771118164,
       "date": "2026-11-11",
       "source": "Yahoo ^VIX",
       "drawdown": null
     },
     "sp500": {
       "ok": true,
-      "value": 7585.27001953125,
+      "value": 7619.3798828125,
       "date": "2026-11-11",
       "source": "Yahoo ^GSPC",
-      "drawdown": -2.9883903679527757
+      "drawdown": -2.5521431766566627
     }
   },
   "nfci_cache": {
@@ -2093,10 +1985,10 @@
       ]
     ],
     "source": "NFCI周度数据（FRED同步备用）",
-    "checked_at": "2026-11-11T10:04:35.894256-05:00",
+    "checked_at": "2026-11-11T20:18:03.257976-05:00",
     "result": "pending",
     "schema_version": 2,
-    "asof": "2026-11-11T15:04:38.150475+00:00"
+    "asof": "2026-11-12T01:18:06.040007+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
@@ -2109,13 +2001,8 @@
       "fail": 0,
       "stopped": "",
       "quota": {
-        "date": "2026-11-11",
-        "symbols": [
-          "CEG",
-          "CRSP",
-          "TTWO",
-          "WMT"
-        ],
+        "date": "2026-11-12",
+        "symbols": [],
         "retry_symbols": []
       }
     },
@@ -2982,17 +2869,12 @@
       }
     },
     "quota": {
-      "date": "2026-11-11",
-      "symbols": [
-        "CEG",
-        "CRSP",
-        "TTWO",
-        "WMT"
-      ],
+      "date": "2026-11-12",
+      "symbols": [],
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-11-11T15:05:26.600727+00:00",
+    "asof": "2026-11-12T01:18:57.470028+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -3006,7 +2888,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3023,7 +2905,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3057,7 +2939,7 @@
           "digest": "4626f389ee826a738887c0a366bf8229fcafb8aa83db3118473507a0868f9c7c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "b349fa6c02925a10b4c0ad8d6d8d65e34f76d0ae66f22ab5c6828f6d00e6cb2c"
         }
@@ -3074,7 +2956,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -3125,7 +3007,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3142,7 +3024,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -3159,7 +3041,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -3176,7 +3058,7 @@
           "digest": "46b490563bd5cb78458eeb18d8240e99af070de5f14fb5452156f0c62c741568"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "6fdb6ee21dd39b64f32af0d297a6d403868a02a83a7383f5815c35496219be18"
         }
@@ -3244,7 +3126,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3261,7 +3143,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -3278,7 +3160,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3295,7 +3177,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3312,7 +3194,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "229a5c551d6be267e2680ad2327c9c9ec18631501e1522fedaede2a850edc80c"
         }
@@ -3346,7 +3228,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3380,7 +3262,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3397,7 +3279,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -3414,7 +3296,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3448,7 +3330,7 @@
           "digest": "38b99354de62a830320a1bca2468ac9f0132bf25a39fad2f2feb3ce1292801ba"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -3465,7 +3347,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3482,7 +3364,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
         }
@@ -3499,7 +3381,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3516,7 +3398,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3550,7 +3432,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3584,7 +3466,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "b7a4c2b0adc9ad39ba193b21a13a13ba857e0b2f7ed153a419387fc314ade66d"
         }
@@ -3652,7 +3534,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "3ab1dd1df2994e85b2a5605788e0537c6440ea5fd9762e98445e57c4308b3fd2"
         }
@@ -3669,7 +3551,7 @@
           "digest": "46b490563bd5cb78458eeb18d8240e99af070de5f14fb5452156f0c62c741568"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8c841de081d855f40075b8b3875d5e6f5be1e29a5833b154513a59fca3480448"
         }
@@ -3686,7 +3568,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -3720,7 +3602,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "be73c567fb53ae88b9a6a819456010b5421fa578533609edd51e3d37be3f2baa"
         }
@@ -3737,7 +3619,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -3754,7 +3636,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "1ffef9318e623e19ec19c8be4793ccf2948522c884ed3ec29e26c3cac8264cc1"
         }
@@ -3771,7 +3653,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "f97f96841e2044aa1096720b7bbac3d8168300f18ffe485ae269935a626c3b79"
         }
@@ -3788,7 +3670,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -3805,7 +3687,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3839,7 +3721,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -3856,7 +3738,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "45d062dd2d8b7a4bb67cd2ec479ce7e0063d5bd5ca4214b2a800d39bd44a87de"
         }
@@ -3873,7 +3755,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "be73c567fb53ae88b9a6a819456010b5421fa578533609edd51e3d37be3f2baa"
         }
@@ -3890,7 +3772,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -3924,7 +3806,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "3187ddd3f2df50fd097eff406e02d1c4150cce8f627eda20976775643bc7fb1d"
         }
@@ -3941,7 +3823,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3958,7 +3840,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -3992,7 +3874,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "d950462b69fbadb5117bc1791218968f86c1ae42863f65dcf4969a039e9e1cda"
         }
@@ -4009,7 +3891,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "229a5c551d6be267e2680ad2327c9c9ec18631501e1522fedaede2a850edc80c"
         }
@@ -4043,7 +3925,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -4060,7 +3942,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "cd7c27f761a0ea07c0c7a59d7ebc6c5057dc5b4ed6b72f601d2b20e9d9597531"
         }
@@ -4077,7 +3959,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "cd7c27f761a0ea07c0c7a59d7ebc6c5057dc5b4ed6b72f601d2b20e9d9597531"
         }
@@ -4094,7 +3976,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
         }
@@ -4111,7 +3993,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4128,7 +4010,7 @@
           "digest": "4626f389ee826a738887c0a366bf8229fcafb8aa83db3118473507a0868f9c7c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "b349fa6c02925a10b4c0ad8d6d8d65e34f76d0ae66f22ab5c6828f6d00e6cb2c"
         }
@@ -4145,7 +4027,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4179,7 +4061,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -4196,7 +4078,7 @@
           "digest": "704eaf2a58b16a4f56d4354254e0014442d583f44106cb45c50a18fc201fc6b8"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -4213,7 +4095,7 @@
           "digest": "4626f389ee826a738887c0a366bf8229fcafb8aa83db3118473507a0868f9c7c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "ab1e5e6c25c9659351aabc27f8b1136c570d41c441edd0227be35ebe44b28188"
         }
@@ -4230,7 +4112,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4247,7 +4129,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -4281,7 +4163,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
         }
@@ -4298,7 +4180,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4315,7 +4197,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "3187ddd3f2df50fd097eff406e02d1c4150cce8f627eda20976775643bc7fb1d"
         }
@@ -4332,7 +4214,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-11T15:05:26.600727+00:00",
+          "asof": "2026-11-12T01:18:57.470028+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -5117,7 +4999,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-11-11T15:05:26.561390+00:00",
+    "asof": "2026-11-12T01:18:57.443251+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -6526,23 +6408,17 @@
       "rules": "美联储仅展示最近已核实的正式利率决议、目标区间、发布日期和官方来源；调整基点仅在声明明确且可核实时显示，不从区间或其他数据猜测。决议信息为neutral中性状态，不作风险灯或买卖解读。成功后持久缓存，日常仅本地比较下次公布时间，到期随下一次监测运行查询新决议，不按24小时重复抓取。失败或待更新后至少1小时重试，到期不绕过错误限速；日程缺失仅补查日历，已核实的同一声明不重复下载。仅按例行日程更新，临时决议可能延迟发现。旧正式决议不按天数或跨年删除，新决议到期或查询失败明确待更新并保留旧日期。原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。原油参考不计入综合灯，不是官方风险线、市场概率或交易指令。"
     },
     "oil": {
-      "level": "green",
-      "text": "未快速上涨",
+      "level": "gray",
+      "text": "历史不足或口径不一致，未判定涨幅",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 87.6500015258789,
+      "price": 85.86000061035156,
       "date": "2026-11-11",
-      "contract": "Crude Oil Dec 26",
-      "day": 1.8712233765922808,
-      "day_from": "2026-11-10",
-      "week": -0.533364963746963,
-      "month": -6.6560169312430695,
-      "incomplete": false,
-      "contract_symbol": "CLZ26.NYM"
+      "contract": "Crude Oil Dec 26"
     },
-    "assessed_at": "2026-11-11T23:04:35.894256+08:00",
+    "assessed_at": "2026-11-12T09:18:03.257976+08:00",
     "schema_version": 2,
-    "asof": "2026-11-11T15:04:38.445111+00:00"
+    "asof": "2026-11-12T01:18:06.455560+00:00"
   },
   "data_lag": {
     "target": "2026-11-11",
@@ -6550,6 +6426,9 @@
     "today": 98,
     "expected": 98,
     "by_source": {
+      "nasdaq": {
+        "2026-11-10": 98
+      },
       "yahoo": {
         "2026-11-11": 98
       }
