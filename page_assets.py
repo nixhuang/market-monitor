@@ -502,6 +502,8 @@ TARGET_DASH_BORDER = 'data:image/svg+xml,' + quote(
 PAGE_PALETTE = """:root{
   --bg:#0f1115;
   --card:#171a21;
+  --tgs-w:80px;       /* 紫灯框内容实测最宽 71px；固定 80px，没紫灯的行也留同样宽的空格 */
+  --px-row-h:25px;    /* 价格区两排各 25px，合计 50px 与左侧代码两行同高 */
   --line:#252a33;
   --text:#e6e8ec;
   --dim:#8b93a1;
@@ -567,7 +569,7 @@ PAGE_PALETTE = """:root{
   --status-busy-halo:rgba(210,153,34,.18);
   --status-ok-halo:rgba(63,185,80,.18);
   --status-bad-halo:rgba(248,81,73,.18);
-  --stock-divider:#414b5a;
+  --stock-divider:#495568;
   --cost-row-bg:rgba(143,184,240,.07);
   --pnl-loss-bg:rgba(248,81,73,.12);
   --pnl-gain-bg:rgba(63,185,80,.12);
@@ -998,7 +1000,7 @@ tr.gray td{color:var(--dim)}
 table.stk{display:block;width:100%;table-layout:fixed}
 table.stk tbody{display:block;width:100%;table-layout:fixed}
 table.stk thead{display:block;width:100%;table-layout:fixed}
-table.stk tr[data-symbol]{position:relative;display:grid;grid-template-columns:max-content max-content max-content minmax(0,1fr);grid-template-areas:"sym px tgs earn" "cost cost cost cost" "sig sig sig sig";align-items:stretch;width:100%;border-top:1px solid var(--stock-divider);--lamp-line:var(--line)}
+table.stk tr[data-symbol]{position:relative;display:grid;grid-template-columns:max-content minmax(0,1fr) var(--tgs-w);grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig";align-items:stretch;width:100%;border-top:1px solid var(--stock-divider);--lamp-line:var(--line)}
 table.stk tr[data-symbol]:first-child{border-top:0}
 table.stk tr[data-symbol]>td{border:0;box-shadow:none;min-width:0;margin:0}
 /* 终稿首格清影：保留:first-child特异性，压过旧红行inset而不改变行伪元素灯条。 */
@@ -1009,24 +1011,39 @@ table.stk tr.green[data-symbol]{--lamp-line:var(--green)}
 table.stk tr.gray[data-symbol]{--lamp-line:var(--text)}
 table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:9.5px;width:2px;height:41.7px;background:var(--lamp-line);pointer-events:none;z-index:2}
 table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:4px 8px;font-size:14px;line-height:var(--row-height)}
-table.stk tr[data-layout="tight"]>td.sym{padding-right:2px}
 table.stk tr[data-symbol]>td.sym>.sym-box{display:grid;grid-template-rows:var(--row-height) var(--row-height);align-items:center;width:max-content;max-width:100%;margin:0;padding:0;border:0;background:none;color:var(--text);line-height:var(--row-height);cursor:default}
 table.stk tr[data-symbol]>td.sym>.sym-box:has(.tag){color:var(--head-blue-on)}
 table.stk tr[data-symbol]>td.sym>.sym-box .tag{display:none}
 table.stk tr[data-symbol]>td.sym>.sym-box .note{display:block;margin:0;font-size:11.5px;line-height:var(--row-height);white-space:nowrap}
 table.stk tr[data-symbol]>td.sym>.sym-box .unit{display:inline-block;margin-left:4px}
 table.stk tr[data-symbol]>td.sym::after{content:"";position:absolute;left:var(--vl-x);top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
-/* 价格区三排（现价/涨跌幅/涨跌金额）统一 15px，铺满首行 50px 高度：三排行高 17/17/16，整块下移 3px，
-   最后一排数字下沿低于右侧紫灯框下沿约 3px，三排之间约 6px 间隔（2026-11-12 用户：不要挤在一起、下面不要空一大块） */
-table.stk tr[data-symbol]>td.px{grid-area:px;position:relative;display:block;padding:0 6px;text-align:left;white-space:nowrap}
-table.stk tr[data-layout="tight"]>td.px{padding-left:3px;padding-right:3px}
-table.stk tr[data-symbol]>td.px .px-main{display:grid;grid-template-rows:17px 17px 16px;align-items:center;position:relative;top:3px;height:50px;margin:0;padding:0 6px 0 0;min-width:0}
-table.stk tr[data-symbol]>td.px .px-price,table.stk tr[data-symbol]>td.px .px-chg{display:block;margin:0;height:17px;line-height:17px}
-table.stk tr[data-symbol]>td.px .px-amt{display:block;margin:0;height:16px;line-height:16px}
-.px-price,.px-chg,.px-amt{font-size:15px}
+/* 价格区两排八项（2026-11-12）：第一排现价16.5/涨跌幅15/涨跌额15/振幅，第二排开高低量比（标签13、数值15）。
+   两排各 --px-row-h 共 50px，与左侧代码两行同高；只有真的溢出时才由 fitPx 逐档收紧，桌面保持指定字号。 */
+table.stk tr[data-symbol]>td.px{grid-area:px;position:relative;display:block;min-width:0;padding:0 6px;text-align:left;white-space:nowrap}
+table.stk tr[data-symbol]>td.px .px-main{display:grid;grid-template-rows:var(--px-row-h) var(--px-row-h);align-items:center;height:calc(var(--px-row-h) * 2);min-width:0;margin:0;padding:0 4px 0 0}
+table.stk tr[data-symbol]>td.px .px-row{display:flex;align-items:center;justify-content:space-between;gap:2px;min-width:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+.px-price{font-size:16.5px}
+.px-chg,.px-amt,.px-v{font-size:15px}
+.px-k{font-size:13px;color:var(--dim)}
+/* 开／高／低是参考口径，数字跟标签一起用 --dim 灰；振幅、现价与涨跌仍用主文本色（2026-11-12）。 */
+.px-metric:is(.px-open,.px-high,.px-low) .px-v{color:var(--dim)}
+/* 量比只在数字上表达灯级（描述里不再重复这条事实）：红/黄沿用描述字色，未触发保持主文本色。 */
+.px-v.vol-red{color:var(--lamp-red)}
+.px-v.vol-yellow{color:var(--lamp-yellow)}
+/* 振幅同理只在数字上着色：显示值 >6% 黄、>10% 红；纯显示，不报灯、不进统计（2026-11-12）。 */
+.px-v.amp-yellow{color:var(--lamp-yellow)}
+.px-v.amp-red{color:var(--lamp-red)}
+.px-metric{display:inline-flex;align-items:baseline;gap:2px}
+table.stk tr[data-symbol][data-pxfit="1"] .px-row{gap:1px}
+table.stk tr[data-symbol][data-pxfit="1"] .px-k{font-size:12px}
+table.stk tr[data-symbol][data-pxfit="1"] .px-v{font-size:13.5px}
+table.stk tr[data-symbol][data-pxfit="1"] .px-price{font-size:15.5px}
+table.stk tr[data-symbol][data-pxfit="1"] :is(.px-chg,.px-amt){font-size:14px}
+table.stk tr[data-symbol][data-pxfit="2"] .px-price{font-size:15px}
+table.stk tr[data-symbol][data-pxfit="2"] :is(.px-chg,.px-amt,.px-v){font-size:13px}
 table.stk tr[data-symbol]>td.px::after{content:"";position:absolute;right:0;top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
 table.stk tr[data-symbol]>td.tgs::after{content:"";position:absolute;right:0;top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
-table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:4px 3px 4px 2px;line-height:0;text-align:center;width:auto;max-width:none}
+table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:4px 3px 4px 2px;line-height:0;text-align:center;box-sizing:border-box;width:var(--tgs-w);min-width:var(--tgs-w);max-width:var(--tgs-w)}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt{display:grid;grid-template-columns:auto 1fr;grid-template-rows:var(--row-height) var(--row-height);height:auto;min-height:0;margin:0;padding:0 1px;border:0;background:transparent;column-gap:0;row-gap:0;align-items:center;justify-items:start;line-height:var(--row-height);white-space:nowrap;font-size:13px;font-weight:400;color:var(--purple);font-variant-numeric:tabular-nums}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt>span{height:var(--row-height);line-height:var(--row-height);white-space:nowrap}
 table.stk tr[data-symbol]>td.tgs .target-space{grid-area:1/1/2/3}
@@ -1050,21 +1067,23 @@ table.stk tr[data-symbol]>td.tgs [data-sign="neg"]{color:var(--tgt-neg)}
 #signalCounts .target-purple .percent-change.neg{color:var(--tgt-neg)}
 table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="pos"]{color:var(--tgt-pos-on)}
 table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="neg"]{color:var(--tgt-neg-on)}
-table.stk tr[data-symbol]>td.lamp-earn{grid-area:earn;position:static;display:block;width:auto;max-width:100%;white-space:nowrap;text-align:right;padding:4px 0;align-self:stretch}
-.earn{display:block;margin:0;font-size:15px;font-weight:400;line-height:var(--row-height);white-space:nowrap;color:var(--head-blue-on);overflow:hidden;text-overflow:ellipsis;--timing-color:var(--head-blue-on)}
-.earn.soon{color:var(--lamp-yellow);--timing-color:var(--lamp-yellow)}
-.earn.urgent{color:var(--lamp-red);--timing-color:var(--lamp-red)}
-.earn>.unit{display:block;margin-left:0;height:var(--row-height);line-height:var(--row-height);white-space:nowrap;letter-spacing:0;font-size:15px;color:var(--dim)}
-.earn>.unit::before{content:attr(data-timing);color:var(--timing-color)}
+/* 财报整排：52 周条下方留白改成一行带底色的文字条；倒计时＋美东日期时段＋北京说明全部同行。 */
+.earn-band{display:block;margin:5px 0 0;padding:2px 8px;background:var(--cost-row-bg);border-radius:3px;overflow:hidden}
+.earn{display:block;margin:0;font-size:14px;font-weight:400;line-height:19px;white-space:nowrap;color:var(--head-blue-on);overflow:hidden;text-overflow:ellipsis}
+.earn.soon{color:var(--lamp-yellow)}
+.earn.urgent{color:var(--lamp-red)}
+.earn .earn-sep,.earn .earn-bj{color:var(--dim)}
 .earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--white);margin-right:-.5em}
 .earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd{color:var(--head-blue-on)}
-.earn>.unit.is-countdown,#signalCounts .earnings-week-bj.is-countdown{color:var(--white)}
+#signalCounts .earnings-week-bj.is-countdown{color:var(--white)}
 table.stk tr[data-symbol]>td.cost-line{grid-area:cost;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 8px;margin:5px 0 0;background:var(--cost-row-bg);border-radius:3px;color:var(--text);white-space:nowrap;font-size:15px;line-height:22.5px;font-variant-numeric:tabular-nums}
 table.stk tr[data-symbol]>td.cost-line[hidden]{display:none}
 table.stk tr[data-symbol]>td.cost-line>span{font-size:inherit}
 table.stk tr[data-symbol]>td.cost-line[data-pnl="loss"]{background:var(--pnl-loss-bg)}
 table.stk tr[data-symbol]>td.cost-line[data-pnl="gain"]{background:var(--pnl-gain-bg)}
-table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:10.25px 10px 7px;font-size:14.5px;line-height:21.75px;--sig-col-gap:18px;--sig-row-gap:7px}
+/* 描述区共用参数（2026-11-12）：列距 18→10，两列各多 4px；--sig-borrow 是每条描述可再借用的空白，
+   左列借列间空白、右列借单元格右内边距，都不越出单元格。窄屏只覆盖 padding，不再重抄整条 grid。 */
+table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:10.25px 10px 7px;font-size:14.5px;line-height:21.75px;--sig-col-gap:10px;--sig-borrow:6px;--sig-row-gap:7px}
 .sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}
 .sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}
 /* 加号改为1.1px细线绘制（原字形放大后笔画约1.7px偏粗）；尺寸、墨迹中心沿用原字形放大后的位置。 */
@@ -1077,6 +1096,11 @@ table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:10.25px 10p
 .sig-cols[data-combo-level="gray"]{--combo-color:var(--text)}
 
 .stk td.sig .signal-item{display:block;min-width:0;overflow-wrap:anywhere;padding-left:8px;text-indent:-8px}
+/* 描述折行（2026-11-12 终稿）：用浏览器默认贪心排——第一行尽量往右放，整块放不下的西文数字串
+   才落到第二行。不做两行等长平衡（会把第一行砍短、右半空一大片），也不给任何描述强制不换行
+   （强行单行会顶到行外）。每条自动描述再借用 --sig-borrow 的空白，用足可用宽度，实在放不下才换行；
+   数据属性驱动，新增同类描述自动生效。 */
+.sig-cols>.sig-col .signal-item[data-signal-flow="auto"]{width:calc(100% + var(--sig-borrow));max-width:none;align-self:flex-start}
 /* 全角标点只收掉自己字框里的空白半格，汉字/数字间距不动：
    「，」「）」字形在字框左半、「（」在右半，另一半本来就是空的，所以各收0.5字不会盖到邻字。 */
 .stk td.sig .cm,.stk td.sig .pr{margin-right:-.5em}
@@ -1098,9 +1122,8 @@ table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:10.25px 10p
 .stk tr.gray:not([data-symbol]){display:block;width:100%}
 .stk tr.range52-row>td{display:block;width:100%}
 .stk tr.gray:not([data-symbol])>td{display:block;width:100%}
-table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 12px 10px;border:0;box-shadow:none}
-/* 保留终稿非持仓范围条下5px留白，不恢复旧空cost-info节点。 */
-table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>td:first-child{padding-bottom:17px}
+/* 财报条接在轨道下面，底色框底边到下一条个股分隔线只留 6px（2026-11-12 用户定稿；曾试 3px 太贴，原为 8px）。分隔线略提亮 #495568。 */
+table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10px;border:0;box-shadow:none}
 .stk th{font-size:13px;color:var(--dim);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
 #group_positions[open]{padding-bottom:2px}
 #group_positions>.group-bottom{display:none}
@@ -1158,11 +1181,9 @@ body{padding-left:5px;padding-right:5px}
 table.stk tr[data-symbol]>td.sym{font-size:17px}
 table.stk tr[data-symbol]>td.sym>.sym-box{line-height:20.8px}
 table.stk tr[data-symbol]>td.sym>.sym-box .note{font-size:14.5px}
-table.stk tr[data-symbol]>td.px :is(.px-price,.px-chg,.px-amt){font-size:15px}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt{font-size:15px}
 table.stk tr[data-symbol]>td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}
-table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}
-table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>td:first-child{padding-bottom:19px}
+table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}
 table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 .stk th{padding:7px 5px;font-size:12px}
 #signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}
@@ -1213,6 +1234,9 @@ table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 .autoplan{font-size:16px;line-height:23.8px}
 }
 @media(min-width:601px){
+/* 桌面列宽更富余：长均线那类长描述多借 8px 空白，避免第二行只剩一个孤字；手机仍用基础 6px。
+   全档只覆盖这一个变量值，不重抄 grid 或字号。 */
+table.stk tr[data-symbol]>td.sig{--sig-borrow:14px}
 .group-card{padding-top:2px}
 .macro-card{padding-top:2px}
 .group-card:not([open]){padding-bottom:2px}
@@ -1387,76 +1411,23 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
   const rows = Array.from(document.querySelectorAll('table.stk tr[data-symbol]'));
   let frame = 0;
   const dirty = new Set();
-  function note(row, tight) {
-    const node = row.querySelector('td.sym .note[data-full]');
-    if (!node) return;
-    const full = node.dataset.full, chars = Array.from(full);
-    const cut = tight && chars.length > 4;
-    const text = cut ? chars.slice(0, 4).join('') + '…' : full;
-    if (node.textContent !== text) node.textContent = text;
-    if (cut) node.title = full;
-    else node.removeAttribute('title');
-  }
-  // 价格区三排的小数位压缩：现价≥100 少一位小数、涨跌幅少一位、涨跌金额≥$10 少一位；原文存在 data-px-full 里，随时可还原。
-  function pxCompact(row, on) {
-    let changed = false;
-    row.querySelectorAll('td.px .px-price,td.px .px-chg,td.px .px-amt').forEach(function(n) {
-      if (n.dataset.pxFull === undefined) n.dataset.pxFull = n.textContent;
-      const full = n.dataset.pxFull;
-      let text = full;
-      if (on) {
-        // 按四舍五入少一位小数（不是截断）；数值取显示文本本身，不另读行情。
-        const one = function(v) { return Math.abs(v).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}); };
-        if (n.classList.contains('px-price')) {
-          const m = full.match(/^([\d,]+\.\d\d)(.*)$/);
-          if (m && Number(m[1].replace(/,/g, '')) >= 100) text = one(Number(m[1].replace(/,/g, ''))) + m[2];
-        } else if (n.classList.contains('px-chg')) {
-          const m = full.match(/^([+-])(\d+\.\d\d)%$/);
-          if (m) { const v = Number(m[2]); text = (Number(one(v)) === 0 ? '' : m[1]) + one(v) + '%'; }
-        } else {
-          const m = full.match(/^([+-])([\d,]+\.\d\d)$/);
-          if (m && Number(m[2].replace(/,/g, '')) >= 10) text = m[1] + one(Number(m[2].replace(/,/g, '')));
-        }
-      }
-      if (n.textContent !== text) { n.textContent = text; changed = true; }
-    });
-    return changed;
-  }
-  function layoutEarn(earn, cell) {
-    const unit = earn.querySelector(':scope > .unit');
-    const countdown = earn.querySelector(':scope > .cd');
-    const text = Array.from(earn.childNodes).find(function(n) {
-      return n.nodeType === Node.TEXT_NODE && n.textContent.trim();
-    });
-    if (!unit || !text || !cell.clientWidth) return 'loose';
-    const main = earn.dataset.main;
-    const matched = main.match(/^(.*?)\s*(时段待定|盘前|盘后|盘中)\s*$/);
-    const base = matched ? matched[1].trimEnd() : main;
-    const timing = matched ? matched[2] : '';
-    const cd = countdown ? countdown.textContent : '';
-    const probe = document.createElement('span');
-    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;left:0;top:0;letter-spacing:0';
-    earn.appendChild(probe);
-    const width = function(value) { probe.textContent = value; return probe.getBoundingClientRect().width; };
-    const available = cell.clientWidth - (parseFloat(getComputedStyle(cell).paddingLeft) || 0) - .5;
-    const adjust = countdown ? parseFloat(getComputedStyle(countdown).marginRight) || 0 : 0;
-    let fullWidth = width(cd + main) + adjust;
-    const baseWidth = width(cd + base) + adjust;
-    const unitWidth = width(unit.textContent);
-    const movedWidth = width(timing ? timing + '·' + unit.textContent : unit.textContent);
-    probe.remove();
-    let compressed = false;
-    if (fullWidth > available && unitWidth <= available && fullWidth - .25 * main.length <= available) {
-      compressed = true;
-      fullWidth -= .25 * main.length;
-    }
-    const mode = fullWidth <= available && unitWidth <= available ? 'full'
-      : timing && baseWidth <= available && movedWidth <= available ? 'move' : 'drop';
-    earn.style.letterSpacing = mode === 'full' && compressed ? '-.25px' : '';
-    text.textContent = mode === 'full' ? main : base;
-    unit.dataset.timing = mode === 'move' ? timing + '·' : '';
-    earn.dataset.mode = mode;
-    return mode === 'full' && !compressed ? 'loose' : 'tight';
+  // 两排八项按指定字号排；只有物理上真的溢出时才逐档收紧，静态文案与灯级一律不重算。
+  function fitPx(row) {
+    const main = row.querySelector('td.px .px-main');
+    if (!main || !main.getBoundingClientRect().width) return;
+    row.dataset.pxfit = '0';
+    const rows = Array.from(main.querySelectorAll('.px-row'));
+    const overflow = function() {
+      const right = main.getBoundingClientRect().right;
+      return rows.some(function(r) {
+        const last = r.lastElementChild;
+        return last && last.getBoundingClientRect().right > right + .5;
+      });
+    };
+    if (!overflow()) return;
+    row.dataset.pxfit = '1';
+    if (!overflow()) return;
+    row.dataset.pxfit = '2';
   }
   function balanceDescriptions(row) {
     const cols = row.querySelector('td.sig > .sig-cols');
@@ -1464,21 +1435,32 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
     const columns = Array.from(cols.children).filter(function(n) { return n.classList.contains('sig-col'); });
     if (columns.length !== 2) return;
     const automatic = Array.from(cols.querySelectorAll('.signal-item[data-signal-flow="auto"]'))
-      .sort(function(a, b) { return Number(a.dataset.signalOrder) - Number(b.dataset.signalOrder); });
+      .sort(function(a, b) {
+        // 触及长均线是主条件，优先分到左列先读到；其余条件沿用渲染时的 signalOrder 原序。
+        // 优先级表放这里，以后要提前别的条件只加一行，不用改静态 HTML。
+        const rank = function(n) { return ({ma: -1})[n.dataset.signalKind] || 0; };
+        return rank(a) - rank(b) || Number(a.dataset.signalOrder) - Number(b.dataset.signalOrder);
+      });
     if (!automatic.length) return;
     const caps = columns.map(function(c) { return Array.from(c.children).filter(function(n) { return n.matches('.lvtag.add,.lvtag.cut'); }); });
     const planned = columns.map(function(c) { return Array.from(c.children).filter(function(n) {
       return !n.matches('[data-signal-flow="auto"],.lvtag.add,.lvtag.cut');
     }); });
     // 终稿 reflowSignalColumns 在父 td.sig 仍为双列 grid、fontPatch 尚未执行时
-    // 按列高分配：测量宽度=(最终内容宽度-列间距)/2，13.5px，手机1.45/桌面1.5。
-    // 只在不可见副本复现这一测量坐标系；不使真实描述闪回窄列或重引演示补丁。
+    // 按列高分配：13.5px，手机1.45/桌面1.5。只在不可见副本复现这一测量坐标系；
+    // 不使真实描述闪回窄列或重引演示补丁。
+    // 2026-11-12 修：旧代码把「一列宽」当成整个两列 grid 的宽度，副本里每列只有真实列宽的一半，
+    // 首屏第一行被误判成两行，auto 描述被连续塞进同一列（长均线跑右列、右列折行、左列留白）。
+    // 副本改 display:block，两个 measured 各自按真实列宽垂直测量，高度才是真实行数。
     const probe = cols.cloneNode(false);
     probe.removeAttribute('data-combo');
     const gap = parseFloat(getComputedStyle(cols).columnGap) || 0;
-    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;font-size:13.5px;line-height:'
+    // 真实描述宽度 = 列宽 + 借用空白；副本不加这 6px 会把两行估成一行，分栏又会失衡。
+    const borrow = parseFloat(getComputedStyle(cols).getPropertyValue('--sig-borrow')) || 0;
+    const colWidth = Math.max(0, (cols.getBoundingClientRect().width - gap) / 2) + borrow;
+    probe.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;left:0;top:0;display:block;font-size:13.5px;line-height:'
       + (matchMedia('(max-width:600px)').matches ? '1.45' : '1.5')
-      + ';width:' + Math.max(0, (cols.getBoundingClientRect().width - gap) / 2) + 'px';
+      + ';width:' + colWidth + 'px';
     const measured = columns.map(function() { const c = document.createElement('div'); c.className = 'sig-col'; probe.appendChild(c); return c; });
     planned.forEach(function(nodes, side) { nodes.forEach(function(n) { measured[side].appendChild(n.cloneNode(true)); }); });
     cols.parentElement.appendChild(probe);
@@ -1511,22 +1493,7 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
   }
   function layout(row) {
     if (!row.getBoundingClientRect().width) return; // 折叠行展开后才测量。
-    row.dataset.layout = 'loose';
-    pxCompact(row, false);
-    note(row, false);
-    const cell = row.querySelector(':scope > td.lamp-earn');
-    const earn = cell && cell.querySelector('.earn[data-main]');
-    if (earn && layoutEarn(earn, cell) === 'tight') {
-      row.dataset.layout = 'tight';
-      // 财报区放不下才动价格区：先压价格区小数位（财报字不多时价格区一律完整显示小数位），
-      // 仍放不下才走原来的截断备注 + 压财报字距。
-      if (pxCompact(row, true) && layoutEarn(earn, cell) !== 'tight') {
-        // 压价格区小数位后财报区已能完整显示
-      } else {
-        note(row, true);
-        layoutEarn(earn, cell);
-      }
-    }
+    fitPx(row);
     balanceDescriptions(row);
     verticalLines(row);
   }

@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import monitor
 import page_assets
-from monitor_render import strip_css_comments
+from monitor_render import strip_css_comments, _amp_display_tone
 import rules_config
 
 
@@ -158,8 +158,8 @@ class RulesRegression(unittest.TestCase):
         # 财报不是涨跌方向：红字跟个股描述红 #ff8580 同色，不能用上涨红 var(--red)。
         self.assertIn('#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red);font-weight:400;--earn-bj-color:var(--lamp-red)}', css)
         self.assertIn('#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow);font-weight:400;--earn-bj-color:var(--lamp-yellow)}', css)
-        self.assertIn('.earn.urgent{color:var(--lamp-red);--timing-color:var(--lamp-red)}', css)
-        self.assertIn('.earn.soon{color:var(--lamp-yellow);--timing-color:var(--lamp-yellow)}', css)
+        self.assertIn('.earn.urgent{color:var(--lamp-red)}', css)
+        self.assertIn('.earn.soon{color:var(--lamp-yellow)}', css)
         # 所有位置的财报文字都不加粗（名单 meta、主表财报单元、多选组合条件）。
         for selector, body in re.findall(r'([^{}]*(?:earnings-week-meta|\.earn)[^{}]*)\{([^{}]*)\}', css):
             if 'summary' in selector:  # 「未来15天财报」这类区块标题照旧加粗
@@ -201,7 +201,7 @@ class RulesRegression(unittest.TestCase):
         selectors = '.earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd'
         declarations = re.search(re.escape(selectors) + r'\{([^}]*)\}', css)[1]
         self.assertIn('color:var(--white)', declarations)
-        self.assertIn('.earn>.unit.is-countdown,#signalCounts .earnings-week-bj.is-countdown{color:var(--white)}', css)
+        self.assertIn('#signalCounts .earnings-week-bj.is-countdown{color:var(--white)}', css)
         self.assertIn('已知时段按北京落点计算并用白字', page_assets.GLOSSARY_BODY)
         self.assertIn('时段待定按美东日期计算并用蓝字', page_assets.GLOSSARY_BODY)
         self.assertIn('不随打开页面日期漂移', page_assets.GLOSSARY_BODY)
@@ -209,9 +209,9 @@ class RulesRegression(unittest.TestCase):
     def test_earnings_relative_nodes_and_dynamic_filter_metadata_use_frozen_beijing_day(self):
         today = '2026-11-10'
         for timing, date, countdown, relative in (
-                ('post', '2026-11-20', '（11）', False), ('pre', '2026-11-12', '（2）', False),
-                ('post', '2026-11-10', '（明）', False), ('post', '2026-11-09', '（今）', True),
-                ('pre', '2026-11-09', '（昨）', True), (None, '2026-11-10', '（今）', False)):
+                ('post', '2026-11-20', '（北京11天）', False), ('pre', '2026-11-12', '（北京2天）', False),
+                ('post', '2026-11-10', '（北京明天）', False), ('post', '2026-11-09', '（北京今天）', True),
+                ('pre', '2026-11-09', '（北京昨天）', True), (None, '2026-11-10', '（美今天）', False)):
             with self.subTest(timing=timing, date=date):
                 event = {'status': 'ok', 'date': date, 'timing': timing}
                 entry = {'symbol': 'AAA', 'date': date, 'timing': timing, 'group': 'focus', 'level': 'green'}
@@ -222,7 +222,7 @@ class RulesRegression(unittest.TestCase):
                 panel = monitor._earnings_week_panel(snapshot)
                 for markup in (main, panel):
                     self.assertIn(f'<span class="{mark_cls}">{countdown}</span>', markup)
-                self.assertEqual('class="unit is-countdown"' in main, relative)
+                self.assertEqual(any(word in main for word in ('北京 今出', '北京 昨出', '北京 已出')), relative)
                 self.assertEqual('class="earnings-week-bj is-countdown"' in panel, relative)
                 rendered = monitor._signal_counts_card(snapshot)
                 data = json.loads(html.unescape(re.search(r'data-filter="([^"]*)"', rendered)[1]))
@@ -413,13 +413,21 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.18)', cost)
 
     def test_main_row_signal_area_is_two_columns_on_both_breakpoints(self):
-        """11-09终稿：四区双排，信号静态双列；退休单列/搬家/ACK补丁不保留。"""
+        """11-12改版：主行三区双排（价格区吃下原财报栏），信号静态双列；退休单列/搬家/ACK补丁不保留。"""
         css = page_assets.PAGE_CSS
-        self.assertIn('grid-template-areas:"sym px tgs earn" "cost cost cost cost" "sig sig sig sig"', css)
+        self.assertIn('grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig"', css)
+        self.assertIn('grid-template-columns:max-content minmax(0,1fr) var(--tgs-w)', css)
         self.assertEqual(css.count('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));'), 1)
         self.assertIn('column-gap:var(--sig-col-gap);align-items:start;min-width:0', css)
         self.assertIn('.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}', css)
         self.assertIn('table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;', css)
+        # 描述折行终稿：贪心排满第一行，不做两行等长平衡、不强制单行、按变量借用空白。
+        self.assertIn('.sig-cols>.sig-col .signal-item[data-signal-flow="auto"]{width:calc(100% + var(--sig-borrow));max-width:none;align-self:flex-start}', css)
+        self.assertIn('--sig-borrow:6px', css)
+        self.assertIn('table.stk tr[data-symbol]>td.sig{--sig-borrow:14px}', css)
+        self.assertNotIn('text-wrap:balance', css)
+        self.assertNotIn('text-wrap:nowrap', css)
+        self.assertNotIn('data-signal-kind="chg"]{white-space:nowrap', css)
         for level in ('red', 'yellow', 'green'):
             self.assertIn(f'table.stk tr.{level}[data-symbol]{{--lamp-line:var(--{level})}}', css)
         self.assertIn('top:9.5px;width:2px;height:41.7px;background:var(--lamp-line)', css)
@@ -442,7 +450,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('class="lvtag add signal-item"', left)
         self.assertIn('class="lvtag cut signal-item"', right)
         self.assertEqual(out.count('data-signal-kind="boll_rsi" data-signal-level="red"'), 2)
-        self.assertEqual(out.count('data-signal-kind="vol_ratio" data-signal-level="yellow"'), 1)
+        # 量比不再写进个股描述：投影层过滤，数据（signals/marks）与统计报灯一点不变。
+        self.assertEqual(out.count('data-signal-kind="vol_ratio"'), 0)
+        self.assertNotIn('量比 2.8x', out)
         self.assertEqual(json.dumps(row, sort_keys=True), before)
         js = page_assets.PAGE_INTERACTION_JS
         self.assertIn('function balanceDescriptions(row)', js)
@@ -458,6 +468,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('font-size:13.5px;line-height:', js)
         self.assertIn("matchMedia('(max-width:600px)').matches ? '1.45' : '1.5'", js)
         self.assertIn('(cols.getBoundingClientRect().width - gap) / 2', js)
+        # 隐藏副本按真实描述宽度（列宽 + 借用空白）测量，否则两行会被估成一行。
+        self.assertIn("getPropertyValue('--sig-borrow')", js)
+        self.assertIn('+ borrow', js)
         self.assertIn('measured[0].getBoundingClientRect().height <= measured[1].getBoundingClientRect().height', js)
         self.assertIn('measured[side].appendChild(n.cloneNode(true))', js)
         self.assertIn('finally { probe.remove(); }', js)
@@ -477,19 +490,98 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('content:"+"', css)
         self.assertNotIn('--combo-scale', css)
         self.assertIn('.sig-cols>.sig-col:last-child{padding-left:4px}', css)
-        self.assertIn('--sig-col-gap:18px;--sig-row-gap:7px', css)
+        self.assertIn('--sig-col-gap:10px;--sig-borrow:6px;--sig-row-gap:7px', css)
         self.assertIn('gap:11px;height:26px;padding-bottom:13px', css)
 
     def test_main_row_price_and_target_use_the_same_two_rows(self):
         css = page_assets.PAGE_CSS
         prefix = 'table.stk tr[data-symbol]>'
-        self.assertIn(prefix + 'td.px .px-main{display:grid;grid-template-rows:17px 17px 16px', css)
-        self.assertIn(prefix + 'td.px .px-price,' + prefix + 'td.px .px-chg{display:block;margin:0;height:17px;line-height:17px}', css)
-        self.assertIn(prefix + 'td.px .px-amt{display:block;margin:0;height:16px;line-height:16px}', css)
+        self.assertIn(prefix + 'td.px .px-main{display:grid;grid-template-rows:var(--px-row-h) var(--px-row-h)', css)
+        self.assertIn('.px-price{font-size:16.5px}', css)
+        self.assertIn('.px-chg,.px-amt,.px-v{font-size:15px}', css)
+        self.assertIn('.px-k{font-size:13px', css)
+        self.assertIn('.px-metric:is(.px-open,.px-high,.px-low) .px-v{color:var(--dim)}', css)
+        self.assertIn('.px-v.vol-red{color:var(--lamp-red)}', css)
+        self.assertIn('.px-v.vol-yellow{color:var(--lamp-yellow)}', css)
         for cls, area in (('target-space','1/1/2/3'), ('target-price','2/1/3/2'), ('target-month','2/2/3/3')):
             self.assertIn(prefix + f'td.tgs .{cls}{{grid-area:{area}', css)
         self.assertIn('target-month{grid-area:2/2/3/3;margin-left:3px}', css)
         self.assertNotIn('.stk td.px .tgs{', css)
+
+    def test_volume_lamp_only_on_number_and_earnings_display_thresholds(self):
+        """量比只在价格区数字上表达灯级；财报倒计时 >15 天、整条 >30 天不显示（2026-11-12）。"""
+        cases = (
+            ({'vol_ratio': 4.2, 'signal_marks': [('vol_ratio', 'red')]}, 'closed', 'vol-red'),
+            ({'vol_ratio': 2.1, 'signal_marks': [('vol_ratio', 'yellow')]}, 'closed', 'vol-yellow'),
+            ({'rt_vol_ratio': 3.3, 'signal_marks': [('vol_ratio', 'yellow')]}, 'intraday', 'vol-yellow'),
+            ({'vol_ratio': 2.1, 'signal_marks': []}, 'closed', ''),
+            ({'signal_marks': [('vol_ratio', 'yellow')]}, 'closed', ''),   # 静默期数字是「—」，不挂色
+        )
+        for data, mode, expected in cases:
+            with self.subTest(data=data, mode=mode):
+                d = dict(price=100.0, chg=1.0, group='focus', level='yellow',
+                         signals=['量比 2.1×'], **data)
+                px = monitor._price_rows_html(d, {'mode': mode})
+                if expected:
+                    self.assertIn('px-v ' + expected, px)
+                else:
+                    self.assertNotIn('px-v vol-', px)
+                self.assertNotIn('量比', monitor._signals_html(d))
+        today = '2026-10-07'
+        ev = lambda day, timing='pre': {'status': 'ok', 'date': day, 'timing': timing, 'kind': 'expected'}
+        self.assertEqual(monitor.earnings_countdown(ev('2026-10-22'), today), '（北京15天）')
+        self.assertEqual(monitor.earnings_countdown(ev('2026-10-23'), today), '')
+        self.assertEqual(monitor.earnings_countdown(ev('2026-10-21', 'post'), today), '（北京15天）')
+        self.assertEqual(monitor.earnings_countdown(ev('2026-10-22', 'post'), today), '')
+        plain = monitor._earnings_html({'earnings': ev('2026-10-23')}, today)
+        self.assertIn('美 10/23 盘前', plain)
+        self.assertNotIn('class="cd"', plain)
+        self.assertNotIn('> 美', plain)   # 没倒计时时不留前导空格
+        self.assertIn('美 11/06 盘前', monitor._earnings_html({'earnings': ev('2026-11-06')}, today))
+        self.assertEqual(monitor._earnings_html({'earnings': ev('2026-11-07')}, today), '')
+        # 两个阈值只管显示：判灯窗口、无异动折叠、统计名单窗口一个都没动。
+        self.assertEqual(monitor.earnings_urgency(ev('2026-10-08'), today), 'red')
+        self.assertEqual(monitor.earnings_urgency(ev('2026-10-13'), today), 'yellow')
+        self.assertTrue(monitor.earnings_within_list(ev('2026-10-22'), today))
+        self.assertFalse(monitor.earnings_within_list(ev('2026-10-23'), today))
+
+    def test_amplitude_display_tone_colors_number_without_reporting_lamp(self):
+        """振幅显示值 >6% 黄、>10% 红；只染数字，不报灯、不进统计（2026-11-12）。"""
+        css = page_assets.PAGE_CSS
+        self.assertIn('.px-v.amp-yellow{color:var(--lamp-yellow)}', css)
+        self.assertIn('.px-v.amp-red{color:var(--lamp-red)}', css)
+        cases = (
+            (6.0, '6.0%', ''),
+            (6.04, '6.0%', ''),            # 按显示值判色，避免出现「6.0% 却是黄字」
+            (6.1, '6.1%', 'amp-yellow'),
+            (10.0, '10.0%', 'amp-yellow'),
+            (10.1, '10.1%', 'amp-red'),
+            (18.6, '18.6%', 'amp-red'),
+            (0, '0.0%', ''),
+            (None, '—', ''),
+        )
+        for amp, text, expected in cases:
+            with self.subTest(amp=amp):
+                d = dict(price=100.0, chg=1.0, group='focus', level='gray',
+                         signals=[], signal_marks=[], day_amp=amp)
+                px = monitor._price_rows_html(d, {'mode': 'closed'})
+                cell = re.search(r'<span class="px-metric px-amp">.*?</span></span>', px, re.S)
+                self.assertIsNotNone(cell)
+                self.assertIn('>' + text + '</span>', cell.group(0))
+                if expected:
+                    self.assertIn('px-v ' + expected, px)
+                else:
+                    self.assertNotIn('px-v amp-', px)
+                self.assertNotIn('px-v vol-', px)
+                # 纯显示：描述、灯级、信号标记、统计类别、设置项一概不动
+                self.assertNotIn('振幅', monitor._signals_html(d))
+                self.assertEqual(d['level'], 'gray')
+                self.assertEqual(d['signal_marks'], [])
+                self.assertNotIn(('amp', '振幅'), monitor.SIGNAL_KINDS)
+                self.assertNotIn('amp_yellow', monitor.DEFAULT_SETTINGS)
+                self.assertNotIn('amp_red', monitor.DEFAULT_SETTINGS)
+        self.assertEqual(_amp_display_tone(10.04), 'yellow')
+        self.assertEqual(_amp_display_tone('7.2'), '')
 
     def test_only_two_breakpoints_phone_600_and_desktop_601(self):
         """只适配三台设备（2026-11-01 定）：手机档 ≤600（按 iPhone 18 Pro Max 竖屏 440 定稿）、
@@ -509,19 +601,24 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
     def test_mobile_stock_numbers_and_main_row_padding_are_compact(self):
         css = page_assets.PAGE_CSS
         mobile = css.split('@media(max-width:600px){', 1)[1].split('@media(min-width:601px){', 1)[0]
-        for cls, size in (('sym',17), ('px :is(.px-price,.px-chg,.px-amt)',15), ('tgs .lvtag.tgt',15)):
-            self.assertIn(f'table.stk tr[data-symbol]>td.{cls}{{font-size:{size}px}}', mobile)   # 价格区三排统一15px（2026-11-12）
-        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}', mobile)
+        for cls, size in (('sym',17), ('tgs .lvtag.tgt',15)):
+            self.assertIn(f'table.stk tr[data-symbol]>td.{cls}{{font-size:{size}px}}', mobile)
+        # 两排八项：现价16.5、数值15、标签13（基础规则里，不在手机档重抄一遍）
+        self.assertIn('.px-price{font-size:16.5px}', css)
+        self.assertIn('.px-chg,.px-amt,.px-v{font-size:15px}', css)
+        self.assertIn('.px-k{font-size:13px', css)
+        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}', mobile)
         self.assertIn('table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:4px 8px;', css)
-        self.assertIn('table.stk tr[data-layout="tight"]>td.px{padding-left:3px;padding-right:3px}', css)
+        self.assertNotIn('data-layout="tight"', css)
         self.assertNotRegex(css, r'add-ck|ack-btn|手机（iOS Chrome）最终覆盖')
 
     def test_mobile_descriptions_14_5px_and_earnings_two_rows(self):
         css = page_assets.PAGE_CSS
         self.assertIn('table.stk tr[data-symbol]>td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}', css)
-        self.assertIn('.earn{display:block;margin:0;font-size:15px;font-weight:400;line-height:var(--row-height)', css)
-        self.assertIn('.earn>.unit{display:block;margin-left:0;height:var(--row-height);line-height:var(--row-height)', css)
-        self.assertIn('.earn>.unit::before{content:attr(data-timing);color:var(--timing-color)}', css)
+        self.assertIn('.earn{display:block;margin:0;font-size:14px;font-weight:400;line-height:19px', css)
+        self.assertIn('.earn-band{display:block;margin:5px 0 0;padding:2px 8px;background:var(--cost-row-bg)', css)
+        self.assertIn('.earn .earn-sep,.earn .earn-bj{color:var(--dim)}', css)
+        self.assertNotIn('.earn>.unit', css)
         self.assertIn('.earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd{color:var(--head-blue-on)}', css)
         for cls in ('add', 'cut'):
             body = re.search(r'\.stk td\.sig \.lvtag\.' + cls + r'\{([^}]*)\}', css)[1]
@@ -629,7 +726,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('word-spacing', re.search(r'\.stk td\.sig \.cm[^{]*\{[^}]*\}', css)[0])
         # 汉字/数字字距保持正常：描述正文不再有负字距
         self.assertNotRegex(css, r'\.stk td\.sig \.signal-item[^{]*\{[^}]*letter-spacing:-')
-        self.assertIn('--sig-col-gap:18px', css)
+        self.assertIn('--sig-col-gap:10px', css)
 
     def test_lamp_table_has_only_horizontal_rules_and_five_character_cells_fit(self):
         css = strip_css_comments(page_assets.RULES_CSS)
@@ -1543,8 +1640,8 @@ assert.equal(scrolledBy,-650);     // 短持仓收起后下方内容同样原地
                        '.runbar button', '.signal-filter-condition[data-signal-level=', '.signal-name-lamp{', '.grp-arrow',
                        '.arrow-rsi-up,.arrow-rsi-down', '.rule-table th.cat-col'):
             self.assertIn(active, css)
-        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 12px 10px;border:0;box-shadow:none}'), 1)
-        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}'), 1)
+        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10px;border:0;box-shadow:none}'), 1)
+        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}'), 1)
         for phase in ('busy', 'partial', 'ok', 'bad'):
             self.assertIn(f'.runlight[data-phase="{phase}"]', css)
 

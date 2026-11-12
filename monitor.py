@@ -2090,8 +2090,13 @@ STK_COLS = monitor_render.STK_COLS
 STK_HEAD = monitor_render.STK_HEAD
 
 
-def _earnings_gap(e, today=None):
-    """展示倒计时：盘后取北京次日；其它时段取事件日。紧迫度规则另算，不受此影响。"""
+EARN_COUNTDOWN_DAYS = 15   # 财报倒计时：距今超过 15 天（含盘后跨日）不再显示括号，只留日期与北京说明
+EARN_ROW_DAYS = 30         # 财报整条：距今超过 30 天连带底色的整条都不占位；两个阈值只管显示，不碰判灯
+
+
+def _earnings_display_gap(e, today=None):
+    """倒计时与整条显示的共同口径：时段已知按北京落点（盘后 +1），时段待定只认美东日期。
+    紧迫度判灯、无异动折叠、统计名单窗口仍各走原函数，不受这两个显示阈值影响。"""
     if not isinstance(e, dict) or e.get("status") != "ok":
         return None
     try:
@@ -2102,11 +2107,25 @@ def _earnings_gap(e, today=None):
     return (event - base).days + (1 if e.get("timing") == "post" else 0)
 
 
+def _earnings_gap(e, today=None):
+    """展示倒计时：盘后取北京次日；其它时段取事件日。紧迫度规则另算，不受此影响。"""
+    return _earnings_display_gap(e, today)
+
+
 def earnings_countdown(e, today=None):
-    gap = _earnings_gap(e, today)
-    if gap is None or gap < -1:
+    """只留一个倒计时，括号里直接写清口径，不再靠蓝／白颜色区分。
+
+    有些财报只有美东日期、没有时段；盘前／盘后在北京会跨一天。时段已知时用北京
+    落点（盘后再加一天），时段待定时只认美东日期。距今超过 EARN_COUNTDOWN_DAYS 天不写倒计时；
+    判灯与名单窗口仍走 earnings_urgency，不受这里影响；基准沿用页面渲染日 today，
+    离线回放不随打开页面的日期漂移。
+    """
+    gap = _earnings_display_gap(e, today)
+    if gap is None or gap < -1 or gap > EARN_COUNTDOWN_DAYS:
         return ""
-    return {1: "（明）", 0: "（今）", -1: "（昨）"}.get(gap, f"（{gap}）")
+    timed = e.get("timing") in ("pre", "post", "during")
+    word = {1: "明天", 0: "今天", -1: "昨天"}.get(gap, f"{gap}天")
+    return f"（北京{word}）" if timed else f"（美{word}）"
 
 
 def earnings_label(e, today=None):
@@ -3388,6 +3407,12 @@ _row_tags = _page_renderer._row_tags
 
 
 _earnings_html = _page_renderer._earnings_html
+
+
+_earnings_band_html = _page_renderer._earnings_band_html
+
+
+_price_rows_html = _page_renderer._price_rows_html
 
 
 _signal_text_html = _page_renderer._signal_text_html

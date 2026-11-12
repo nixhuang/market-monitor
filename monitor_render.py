@@ -11,6 +11,24 @@ from decimal import Decimal
 from monitor_rules import _ARROW_RSI_UP, _ARROW_RSI_DOWN, day_change_amount
 from page_assets import COST_PANEL_HTML
 
+# 振幅数字的显示着色（2026-11-12）：显示值 >6% 黄、>10% 红。纯显示口径——
+# 不注册信号类别、不写 signal_marks、不改整股灯级、不进统计名单、不加设置项。
+_DISPLAY_AMP_YELLOW = 6.0
+_DISPLAY_AMP_RED = 10.0
+
+
+def _amp_display_tone(value):
+    """按页面上真正显示的一位小数判色，避免「写着 6.0% 却按原始 6.04% 染黄」。"""
+    if not (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value)):
+        return ""
+    shown = float(f"{value:.1f}")
+    if shown > _DISPLAY_AMP_RED:
+        return "red"
+    if shown > _DISPLAY_AMP_YELLOW:
+        return "yellow"
+    return ""
+
 # 「强制刷新」按钮：清掉 Cache Storage / Service Worker，再带时间戳参数重新加载，绕开浏览器和 CDN 缓存
 HARD_REFRESH_JS = (
     "(function(){var b=document.getElementById('btnHardRefresh');if(!b)return;"
@@ -580,19 +598,26 @@ class PageRenderer:
 
 
     def _earnings_html(self, d, today=None):
-        """静态两排财报；只由前端物理量测决定是否将时段搬到第二排。"""
+        """财报整排一行：倒计时（写明口径）＋美东日期时段＋北京说明，不再由前端量宽拆排。
+        距今超过 EARN_ROW_DAYS 天的整条不显示；15~30 天之间仍显示日期与北京说明、只是没有倒计时。"""
         event = d.get("earnings")
+        gap = self._context._earnings_display_gap(event, today)
+        if gap is not None and gap > self._context.EARN_ROW_DAYS:
+            return ""
         earn = self._context.earnings_label(event, today)
         if not earn:
             return ""
         urgency = self._context.earnings_urgency(event, today)
         soon = {"red": " urgent", "yellow": " soon"}.get(urgency, "")
         main, sub = (html_lib.escape(text, quote=True) for text in earn)
-        relative = (event or {}).get("timing") in ("pre", "post", "during") and re.match(r"北京 (?:今出|昨出|已出)", sub)
-        unit_cls = "unit is-countdown" if relative else "unit"
-        unit = f'<span class="{unit_cls}" data-unit-full="{sub}" data-timing="">{sub}</span>' if sub else ""
-        return (f'<span class="earn{soon}" data-main="{main}" data-mode="full">'
-                f'{self._countdown_html(event, today)}{main}{unit}</span>')
+        cd = self._countdown_html(event, today)
+        return (f'<span class="earn{soon}">{cd}{" " if cd else ""}{main}'
+                f'<span class="earn-sep"> · </span><span class="earn-bj">{sub}</span></span>')
+
+    def _earnings_band_html(self, d, today=None):
+        """整行带底色的财报条，挂在 52 周条那一行的下方；没有财报就不占位。"""
+        earn = self._earnings_html(d, today)
+        return f'<div class="earn-band">{earn}</div>' if earn else ""
 
 
     def _signal_text_html(self, text):
@@ -718,7 +743,10 @@ class PageRenderer:
     def _signals_html(self, d):
         """主表价格提醒各自按真实灯级着色；统计事实不变，不添加圆点。"""
         # 手填价仅替换共识价；所有目标状态只投影到胶囊，统计仍消费原signals/marks。
-        groups = [g for g in self._context._signal_description_groups(d) if g["kind"] != "target"]
+        # 投影层过滤：共识价与量比都不再写进个股描述（量比改由价格区数字灯级表达）。
+        # 与仅改排版一样，统计仍消费原 signals/marks，判灯与统计名单一点不变。
+        groups = [g for g in self._context._signal_description_groups(d)
+                  if g["kind"] not in ("target", "vol_ratio")]
         columns, flowing = [[], []], []
         combo_level = ""
         for index, group in enumerate(groups):
@@ -760,15 +788,19 @@ class PageRenderer:
                 + "".join(f'<div class="sig-col">{"".join(col)}</div>' for col in columns) + '</div>')
 
 
-    def _range52_row(self, d):
+    def _range52_cell(self, body, earn_band):
+        """区间条与财报条同占一行：财报整排挂在轨道下面那块留白里。"""
+        return f'<tr class="range52-row"><td colspan="5">{body}{earn_band}</td></tr>'
+
+    def _range52_row(self, d, earn_band=""):
         """每只标的下面显示当前价在已核验的日线高低区间的位置；旧快照绝不推算极值。"""
         if d.get("reference_only"):
-            return ""
+            return self._range52_cell("", earn_band) if earn_band else ""
         value = d.get("range52")
         price = d.get("price")
         valid = lambda n: isinstance(n, (int, float)) and not isinstance(n, bool) and math.isfinite(n) and n > 0
         if not isinstance(value, dict):
-            return '<tr class="range52-row"><td colspan="5"><span class="range52-missing">52周区间：数据待更新</span></td></tr>'
+            return self._range52_cell('<span class="range52-missing">52周区间：数据待更新</span>', earn_band)
         low, high = value.get("low"), value.get("high")
         if (not all(valid(n) for n in (price, low, high)) or not low < high or not low <= price <= high
                 or value.get("scope") not in ("52周", "可用历史")
@@ -777,7 +809,7 @@ class PageRenderer:
                 or value["from"] > value["to"] or value["to"] != d.get("data_date")
                 or value.get("position") is None or type(value["position"]) not in (int, float)
                 or not math.isfinite(value["position"])):
-            return '<tr class="range52-row"><td colspan="5"><span class="range52-missing">52周区间：数据待更新</span></td></tr>'
+            return self._range52_cell('<span class="range52-missing">52周区间：数据待更新</span>', earn_band)
         pos = (price - low) / (high - low) * 100
         scope = value["scope"]
         caption = (f'{scope}低 {self._context.fmt(low)}，本轮价 {self._context.fmt(price)} 位于区间 {pos:.1f}%，'
@@ -795,13 +827,13 @@ class PageRenderer:
         high_gap_html = f'<span class="range52-gap">{high_text}</span>'
         caption += f'；从本轮价到低点 {low_text}、到高点 {high_text}（均以本轮价为基数）'
         # 现价三角之上不再写百分比：位置由三角在灰轨上的位置表达，端点下方两行给出涨跌空间。
-        return (f'<tr class="range52-row"><td colspan="5">'
-                f'<div class="range52-rail" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
+        rail = (f'<div class="range52-rail" role="img" aria-label="{caption}" style="--range-pos:{pos:.1f}%">'
                 f'<span class="range52-lo" aria-hidden="true">{self._context.fmt(low)}{low_gap_html}</span>'
                 f'<div class="range52-track">'
                 f'<span class="range52-marker" style="left:{pos:.1f}%"></span></div>'
                 f'<span class="range52-hi" aria-hidden="true">{self._context.fmt(high)}{high_gap_html}</span>'
-                f'</div></td></tr>')
+                f'</div>')
+        return self._range52_cell(rail, earn_band)
 
 
     def _stock_anchor_id(self, symbol):
@@ -816,6 +848,52 @@ class PageRenderer:
                     or self._context._target_active(d) or self._context.earnings_soon(d.get("earnings"), earnings_week))
 
 
+    def _price_rows_html(self, d, snapshot):
+        """两排八项：现价／涨跌幅／涨跌额／振幅，开／高／低／量比。只显示，不报灯。
+
+        量比只在显示层选口径（判灯仍走规则层）：收盘快照用抓取的完整日量比，
+        盘中快照用按已开盘分钟折算的当时量比；开盘静默期拿不到盘中值就写「—」，
+        不悄悄回落到昨天的完整日量比。开／高／低／振幅没有真实日线值也写「—」。
+        振幅只在数字上按 >6% 黄／>10% 红着色，判色用显示值；这一层不报灯、不进统计。
+        """
+        def number(value):
+            return (isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and math.isfinite(value) and value > 0)
+        price = d.get("price")
+        chg = d.get("chg")
+        chg_cls = "up" if (chg or 0) > 0 else "down" if (chg or 0) < 0 else ""
+        chg_txt = f"{chg:+.2f}%" if chg is not None else "—"
+        amt_txt = day_change_amount(price, d.get("prev_close")) or "—"
+        amt_cls = "up" if amt_txt.startswith("+") else "down" if amt_txt.startswith("-") else ""
+        # 开／高／低是「简写」：只留一位小数（现价仍按完整精度显示），两排才放得下手机 440。
+        price_text = lambda value, digits=2: f"{value:,.{digits}f}" if number(value) else "—"
+        amp = d.get("day_amp")
+        amp_txt = f"{amp:.1f}%" if number(amp) or amp == 0 else "—"
+        amp_tone = _amp_display_tone(amp)
+        amp_cls = f" amp-{amp_tone}" if amp_tone else ""
+        ratio = d.get("rt_vol_ratio") if snapshot.get("mode") != "closed" else d.get("vol_ratio")
+        vol_txt = f"{ratio:.1f}×" if number(ratio) else "—"
+        # 量比不再写进个股描述，改由这个数字自身表达灯级；等级只读规则层已写入的 marks，
+        # 不在这里重算门槛。缺数值（如开盘静默期显示「—」）时不染色，避免给空值挂红黄。
+        vol_level = next((level for kind, level in d.get("signal_marks") or []
+                          if kind == "vol_ratio" and level in ("red", "yellow")), "")
+        vol_cls = f" vol-{vol_level}" if vol_level and number(ratio) else ""
+        def metric(key, label, value, extra=""):
+            return (f'<span class="px-metric px-{key}"><span class="px-k">{label}</span>'
+                    f'<span class="px-v{extra}">{value}</span></span>')
+        return (f'<span class="px-main">'
+                f'<span class="px-row px-row-main">'
+                f'<span class="px-price">{self._context.fmt(price) if number(price) else "—"}{html_lib.escape(str(d.get("unit") or ""))}</span>'
+                f'<span class="px-chg {chg_cls}">{chg_txt}</span>'
+                f'<span class="px-amt {amt_cls}">{amt_txt}</span>'
+                f'{metric("amp", "振", amp_txt, amp_cls)}</span>'
+                f'<span class="px-row px-row-sub">'
+                f'{metric("open", "开", price_text(d.get("day_open"), 1))}'
+                f'{metric("high", "高", price_text(d.get("day_high"), 1))}'
+                f'{metric("low", "低", price_text(d.get("day_low"), 1))}'
+                f'{metric("vol", "量", vol_txt, vol_cls)}</span></span>')
+
+
     def _stock_row(self, d, snapshot, earnings_week=None):
         if d.get("target") or d.get("purple") or any(kind == "target" for kind, _ in d.get("signal_marks") or []):
             d = self._context._apply_target(d)
@@ -824,15 +902,11 @@ class PageRenderer:
         state = self._context.target_display_state(d.get("target"))
         stripe = {"reached": "pur-hit", "space": "pur-space", "high": "pur-high"}.get(state)
         cls = d["level"] + (" pur " + stripe if self._context._target_active(d) and stripe else "")
-        chg_cls = "up" if (d["chg"] or 0) > 0 else (
-            "down" if (d["chg"] or 0) < 0 else "")
-        chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
-        # 第三排：每股当日涨跌金额（现价−昨收），涨跌色跟金额符号；缺昨收时留空，不编。
-        amt_txt = day_change_amount(d.get("price"), d.get("prev_close"))
-        amt_cls = "up" if amt_txt.startswith("+") else "down" if amt_txt.startswith("-") else ""
         full_note = html_lib.escape(str(d.get("note") or ""), quote=True)
         note = f'<span class="note" data-full="{full_note}">{full_note}</span>' if full_note else ""
-        tg_html = self._context.target_tag(d.get("target") or {})
+        # 紫灯框固定在最右列；没有目标价的行也留同样宽的空格，所有行的列线才对齐。
+        tg_html = (self._context.target_tag(d.get("target") or {})
+                   or '<td class="tgs" data-target-state="none"></td>')
         # 灯色外框（2026-11-03）：左侧竖灯条撤掉后，整股灯级改由「代码＋中文名」**外面**
         # 那一圈灯色框表达（红／黄／绿／白＝缺失）——不是名称后面再加一枚写着灯名的胶囊。
         # 框色走 --lamp-line（已在 tr 上按等级定义），这里只挂等级 class 兜底。
@@ -841,8 +915,8 @@ class PageRenderer:
         # 长短归属已由独立分区标题表达，主行不重复加“长”字。
         hold_html = ""
         cost_cell = '<td class="cost-line" colspan="5" hidden></td>' if d.get("group") == "position" else ""
-        earn_html = self._context._earnings_html(d, self._render_day(snapshot))
-        earn_cell = f'<td class="lamp-earn">{earn_html}</td>' if earn_html else ""
+        # 财报整排移到 52 周条那一行，主行只留代码／价格／紫灯框三列。
+        band = self._context._earnings_band_html(d, self._render_day(snapshot))
         return (
             f'<tr class="{html_lib.escape(cls, quote=True)}" id="{self._context._stock_anchor_id(d["symbol"])}" data-quiet-keep="{quiet_keep}" '
             f'data-symbol="{html_lib.escape(self._context.normalize_symbol(d["symbol"]), quote=True)}" '
@@ -851,12 +925,9 @@ class PageRenderer:
             f'<span class="sym-box {lamp_cls}">'
             f'{html_lib.escape(self._context.normalize_symbol(d["symbol"]))}{note}{hold_html}'
             f'{self._context._row_tags(d, snapshot)}</span>'
-            f'</td><td class="num px"><span class="px-main">'
-            f'<span class="px-price">{self._context.fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
-            f'<span class="px-chg {chg_cls}">{chg_txt}</span>'
-            f'<span class="px-amt {amt_cls}">{amt_txt}</span></span></td>'
-            f'{cost_cell}<td class="sig">{self._context._signals_html(d)}</td>{tg_html}{earn_cell}</tr>'
-            + self._context._range52_row(d)
+            f'</td><td class="num px">{self._price_rows_html(d, snapshot)}</td>'
+            f'{tg_html}{cost_cell}<td class="sig">{self._context._signals_html(d)}</td></tr>'
+            + self._context._range52_row(d, band)
         )
 
 

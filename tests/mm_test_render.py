@@ -152,14 +152,19 @@ check('<table class="stk"><colgroup><col class="c-sym"><col class="c-px"><col cl
       and 'class="px-price"' in html and 'class="lamp-rule"' not in html
       and '<td class="earn-cell">' not in html, "个股表用固定列宽 colgroup，价格/涨跌幅同列；第一排＝描边框＋灯色横线（财报独立一栏已撤）")
 _near = item("NTNX", "position", "red", chg=5.2); _near["earnings"] = {"status": "ok", "date": "2026-10-09", "timing": "post", "kind": "expected"}
-_far = item("TEM", "focus", "red", chg=8.0); _far["earnings"] = {"status": "ok", "date": "2026-12-20", "timing": "pre", "kind": "expected"}
+_far = item("TEM", "focus", "red", chg=8.0); _far["earnings"] = {"status": "ok", "date": "2026-10-27", "timing": "pre", "kind": "expected"}
 from unittest.mock import patch as _patch
 with _patch.object(monitor, "_bj_today", return_value="2026-10-07"):   # 财报颜色按北京时间日算，固定「今天」
     _html_e = monitor.render(macro, [_near, _far] + [d for d in items if d["symbol"] not in ("NTNX", "TEM")], 10, snapshot=snapshot, dup_hidden=2)
 check('<span class="earn soon"' in _html_e and _html_e.count('<span class="earn soon"') == 1
-      and '<span class="earn" data-main=' in _html_e
-      and '<td class="lamp-earn"><span class="earn soon"' in _html_e,
-      "D 距北京今天 2 天的财报标黄（earn soon），更远的保持蓝色；财报包在 .lamp-earn 里叠在灯色横线上方")
+      and '<span class="earn">美 10/27 盘前' in _html_e
+      and '<div class="earn-band"><span class="earn soon"' in _html_e,
+      "D 距北京今天 2 天的财报标黄（earn soon），20 天后仍显示蓝字但不再带倒计时；财报整排落在 52 周条下方带底色的条里")
+check(monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-22', 'timing': 'pre'}, '2026-10-07') == '（北京15天）'
+      and monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-23', 'timing': 'pre'}, '2026-10-07') == ''
+      and monitor._earnings_html({'earnings': {'status': 'ok', 'date': '2026-11-06', 'timing': 'pre'}}, '2026-10-07') != ''
+      and monitor._earnings_html({'earnings': {'status': 'ok', 'date': '2026-11-07', 'timing': 'pre'}}, '2026-10-07') == '',
+      '财报倒计时 >15 天不显示、财报整条 >30 天不显示；两个边界当天仍显示')
 check(' title="' not in _html_e and " title='" not in _html_e, "首页不含任何 title 悬停提示（手机/iPad 无法悬停）")
 check(".earn.soon{color:var(--lamp-yellow)" in _html_e, "财报标黄样式存在")
 # 整页验证冬夏令时北京午夜：同一 D 的时段文字仍不同，但红黄窗口必须完全一致。
@@ -178,7 +183,7 @@ for _d in ('2026-01-15', '2026-07-15', '2026-10-11', '2027-01-01'):
                 _page = monitor.render({}, _rows, len(_rows), snapshot={})
             _card = _page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
             _css = {'red': ' urgent', 'yellow': ' soon', '': ''}[_urgency]
-            check(_card.count(f'<span class="earn{_css}" ') == 5
+            check(_card.count(f'<span class="earn{_css}">') == 5
                   and ('无异动 5 只' not in _card if _urgency else '无异动 5 只' in _card)
                   and _card.count('<tr class="green"') == 5
                   and all(_row['level'] == 'green' for _row in _rows),
@@ -202,14 +207,14 @@ _visible_html = re.sub(r'<(script|style)\b[^>]*>.*?</\1>', '', _html_e, flags=re
 check('行灯' not in _unescape(re.sub(r'<[^>]+>', '', _visible_html)), '全部用户可见说明统一使用报灯，不残留行灯')
 
 # 终稿两端共用四区网格，成本和描述独立整行；不再沿用旧四列百分比表格。
-check('grid-template-areas:"sym px tgs earn" "cost cost cost cost" "sig sig sig sig"' in _html_e,
-      '主行四区及成本/描述两整行网格齐全')
-check('grid-template-columns:max-content max-content max-content minmax(0,1fr)' in _html_e,
-      '四区按真实内容分配空间，财报获得剩余宽度')
+check('grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig"' in _html_e,
+      '主行三区及成本/描述两整行网格齐全')
+check('grid-template-columns:max-content minmax(0,1fr) var(--tgs-w)' in _html_e,
+      '价格区吃下原财报栏，紫灯框固定最右列；没有紫灯的行也留同样宽的空格')
 check('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))' in _html_e,
       '两端均保留双列描述网格')
-check('data-layout="tight"' in _html_e and 'max-width:600px' in _html_e,
-      '手机断点与真实量测紧凑状态存在')
+check('data-pxfit="1"' in _html_e and 'max-width:600px' in _html_e,
+      '手机断点与价格区溢出兜底存在')
 _macro_u = dict(macro, ust10=dict(macro["ust10"], value=4.55, delta_week=0.12, month_ago=4.0, delta_month=0.55))
 _html_u = monitor.render(_macro_u, items, 10, snapshot=snapshot, dup_hidden=2)
 check('id="ust10Ref"' in _html_u and "急升 +55 bp" in _html_u and '<span class="unit">参考</span>' not in _html_u and "不计入综合灯" not in _html_u
@@ -1091,10 +1096,10 @@ for _level, _rsi in ((None, None), ('yellow', 'RSI 2条 ↓超卖（≤35）'),
           and _technical['level'] == (_level or 'gray')
           and _plain + '，' + _tail in _technical['texts']
           and 'signal-dot' not in _html_tail and _html_tail.count('signal-separator') == 0
-          and _signal_pairs(_html_tail)
-          == {('boll_rsi' if _rsi else 'boll', _level or 'gray'), ('vol_ratio', '')}
+          and _signal_pairs(_html_tail) == {('boll_rsi' if _rsi else 'boll', _level or 'gray')}
+          and '量比 1.2x' not in _html_tail
           and _groups_tail[-1]['kind'] == 'vol_ratio' and _groups_tail[-1]['level'] is None,
-          str(_level) + '连续天数留同一指标一次级别，斜线后独立量比无灯灰字')
+          str(_level) + '连续天数留同一指标一次级别；量比事实仍在数据层，只是不再写进个股描述')
     check(_tail_row == _before_tail, '尾句恢复不改原始signals/marks')
 check(monitor._description_signals([_tail]) == [_tail]
       and monitor._description_signals(['突破布林上轨▲', _tail]) == ['突破布林上轨▲', _tail]
@@ -1167,7 +1172,8 @@ with _patch.dict(monitor.S, {'ma_short': 120, 'ma_long': 60}), \
 _order_body = re.search(r'<tr\b[^>]*\bid="s-orderescape"[^>]*>(.*?)</tr>', _order_page, re.S)[1]
 _order_sig = re.search(r'<td class="sig">(.*?)</td>', _order_body, re.S)[1]
 check(_signal_pairs(_order_sig) == {('chg', 'red'), ('ma', 'yellow'),
-          ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', '')}
+          ('rsi', 'gray'), ('', '')}
+      and '量比 2.8x' not in _order_sig
       and 'signal-dot' not in _order_body
       and 'class="lvtag add signal-item" data-lv="90" data-near="0"' in _order_sig
       and _order_sig.count('data-signal-kind="ma"') == 1
@@ -1205,7 +1211,7 @@ _order_control_sig = re.search(r'<td class="sig">(.*?)</td>', _order_control_bod
 check(_order_control_classes[0] == 'red'
       and _signal_pairs(_order_control_sig)
       == {('chg', 'red'), ('ma', 'yellow'),
-          ('vol_ratio', 'yellow'), ('', ''), ('rsi', '')}
+          ('', ''), ('rsi', '')}
       and 'RSI 2条' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig))
       and '↑超买' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig)),
       '原排序2high控制仅文字，独立红黄紫灯及无灯首次出现排序不变')
@@ -2264,9 +2270,10 @@ const deadline = setTimeout(() => {
         document.querySelectorAll('details').forEach(d=>d.open=true);await document.fonts.ready;
         const symbols=['EPREV','ENOW','ERED','EYELLOW','EFAR','ETBD'];
         const sample=(sym,where)=>{
-          const el=where==='main'?document.querySelector('#s-'+sym.toLowerCase()+' .earn'):
+          const row=document.getElementById('s-'+sym.toLowerCase());
+          const el=where==='main'?(row&&row.nextElementSibling?row.nextElementSibling.querySelector('.earn'):null):
             [...document.querySelectorAll('#signalCounts .earnings-week li')].find(li=>li.querySelector('.signal-member-symbol')?.textContent===sym)?.querySelector('.earnings-week-meta');
-          if(!el)return {sym,where,missing:true};const cd=el.querySelector('.cd'),bj=el.querySelector('.unit,.earnings-week-bj');
+          if(!el)return {sym,where,missing:true};const cd=el.querySelector('.cd'),bj=el.querySelector('.earn-bj,.earnings-week-bj');
           return {sym,where,color:getComputedStyle(el).color,cd:cd?getComputedStyle(cd).color:null,
             tbd:!!cd?.classList.contains('tbd'),bj:bj?getComputedStyle(bj).color:null,relative:!!bj?.classList.contains('is-countdown')};
         };

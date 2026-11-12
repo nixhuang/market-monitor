@@ -34,6 +34,37 @@ _ARROW_BAND_UP, _ARROW_BAND_DOWN = "▲", "▼"
 _ARROW_RSI_UP, _ARROW_RSI_DOWN = "↑", "↓"
 
 
+def _display_session_values(data, price, prev):
+    """价格区专用的当日开／高／低／振幅：只显示，不报灯、不进统计、不加设置项。
+
+    真实值只认日线序列最后一根：ma_range_valid 明确标 False 的那根（收盘报价补当日、
+    Yahoo 摘要补当日、实时价补当日）没有真实日内范围，高低是拿收盘价顶的，开盘价也是 None；
+    这些一律返回 None，页面显示「—」，绝不把补出来的假 OHLC 当行情。
+    振幅沿用旧规则的口径：(max(高,现价) − min(低,现价)) ÷ 昨收。
+    """
+    def pos(v):
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0
+    data = data if isinstance(data, dict) else {}
+    opens, highs, lows = (data.get(key) for key in ("opens", "highs", "lows"))
+    validity = data.get("ma_range_valid")
+    day_open = opens[-1] if isinstance(opens, (list, tuple)) and opens and pos(opens[-1]) else None
+    range_real = (not validity or (isinstance(validity, (list, tuple)) and validity
+                                  and isinstance(highs, (list, tuple)) and len(validity) == len(highs)
+                                  and validity[-1] is True))
+    day_high = day_low = None
+    if range_real and isinstance(highs, (list, tuple)) and isinstance(lows, (list, tuple)) \
+            and highs and lows and len(highs) == len(lows):
+        high, low = highs[-1], lows[-1]
+        if pos(high) and pos(low) and low <= high and (not pos(price) or low - 1e-6 <= price <= high + 1e-6):
+            day_high, day_low = high, low
+    day_amp = None
+    if day_high is not None and day_low is not None and pos(prev) and pos(price):
+        day_amp = (max(day_high, price) - min(day_low, price)) / prev * 100
+        if not math.isfinite(day_amp) or day_amp < 0:
+            day_amp = None
+    return {"day_open": day_open, "day_high": day_high, "day_low": day_low, "day_amp": day_amp}
+
+
 def streak_tail(st, rail="上轨"):
     """把连续天数拼成信号尾巴。连续 1 日不啰嗦，>=2 日才标。"""
     if not st or st["days"] < 2:
@@ -723,6 +754,7 @@ class RuleEngine:
             "target": x.tgt,
             "purple": bool(x.tgt and (x.tgt.get("hit") or x.tgt.get("space_hit"))),
             "prev_close": x.prev,
+            **_display_session_values(getattr(x, "data", {}), x.price, x.prev),
             "asset": x.data.get("asset") or x.cfg.get("asset"),
             "source": x.data.get("source", ""),
             "data_date": (x.data.get("dates") or [""])[-1],

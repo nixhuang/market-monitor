@@ -302,7 +302,9 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(kept['official_checked'], '2030-10-11')
         self.assertEqual(kept['official_error'], 'http_429')
         self.assertEqual(kept['official_attempted'], '2030-10-20')
-        html = monitor._earnings_html({'symbol': 'COST', 'earnings': kept})
+        # 2030 的官方日期离测试运行日超过 30 天，按新显示阈值整条不占位；
+        # 这里固定一个事件附近的渲染日，验证的仍是来源/复查状态的文字契约。
+        html = monitor._earnings_html({'symbol': 'COST', 'earnings': kept}, '2030-12-01')
         # 财报列不写来源，未知时段与复查状态仍如实保留。
         self.assertNotIn('官方来源', html)
         self.assertNotIn('<a ', html)
@@ -1311,9 +1313,11 @@ class TestGroups(unittest.TestCase):
                         main = f'美 {date_txt} {label}'
                         self.assertEqual(monitor.earnings_label(e, '2026-10-20'), (main, note))
                         markup = monitor._earnings_html({'earnings': e}, '2026-10-20')
-                        self.assertIn(f'data-main="{main}" data-mode="full"', markup)
-                        self.assertIn(f'data-unit-full="{note}" data-timing="">{note}</span>', markup)
-                        self.assertIn('（11）' if timing == 'post' else '（10）', markup)
+                        self.assertIn(f' {main}<span class="earn-sep">', markup)
+                        self.assertIn(f'<span class="earn-bj">{note}</span>', markup)
+                        timed = timing in ('pre', 'post', 'during')
+                        days = 11 if timing == 'post' else 10
+                        self.assertIn(f'（{"北京" if timed else "美"}{days}天）', markup)
                         self.assertNotIn('美东', markup)
                         self.assertEqual(e, before)
 
@@ -1321,10 +1325,11 @@ class TestGroups(unittest.TestCase):
         for kind in ('official', 'expected', 'estimated'):
             with self.subTest(kind=kind):
                 e = {'status': 'ok', 'date': '2026-12-31', 'kind': kind, 'timing': 'post'}
-                main, note = monitor.earnings_label(e)
+                today = '2026-12-20'   # 固定渲染日：距今 12 天，倒计时与整条都还在显示窗口内
+                main, note = monitor.earnings_label(e, today)
                 self.assertIn('北京 01/01 凌晨', note)
                 markup = monitor._earnings_html({
-                    'earnings': e, 'fund_cache_note': '读取失败 <旧>'})
+                    'earnings': e, 'fund_cache_note': '读取失败 <旧>'}, today)
                 self.assertIn(main, markup)
                 self.assertIn(note, markup)
                 for text in ('基本面', '读取失败', '官方', '预计', '估算'):
@@ -3467,7 +3472,8 @@ class TestTargets(unittest.TestCase):
 
     def test_page_no_target_means_no_tag_and_no_credit(self):
         page = self._page([self._row('AAPL', 'red', signals=['异动 +5.0%'])])
-        self.assertNotIn('class="tgs"', page)
+        self.assertNotIn('lvtag tgt', page)                    # 没有目标价就不画紫灯框
+        self.assertIn('data-target-state="none"', page)         # 但最右列仍留同样宽的空格对齐
         self.assertNotIn('共识价来源', page)
 
     def test_main_passes_consensus_to_analysis_and_saves_cache(self):
@@ -4345,8 +4351,6 @@ class TestVolumeRatioZscore(unittest.TestCase):
 
     def test_volume_text_matches_main_and_statistics_in_all_modes(self):
         import copy
-        import html
-        import re
         cases = (
             (True, 2.1, False, 'yellow', '盘中量比 2.1×（截至 10:30 ET）'),
             (True, 4.0, False, 'red', '盘中量比 4.0×（截至 10:30 ET）'),
@@ -4368,9 +4372,13 @@ class TestVolumeRatioZscore(unittest.TestCase):
                 d = dict(vars(x), symbol='VOLTEXT', group='focus', price=100.0, chg=1.0,
                          level=al.level, signals=al.signals, signal_marks=al.marks)
                 before = copy.deepcopy(d)
+                # 主表描述不再重复量比，灯级改由价格区的量比数字表达；统计名单文字照旧。
                 main = monitor._signals_html(d)
-                self.assertEqual(html.unescape(re.sub(r'<[^>]+>', '', main)), expected)
-                self.assertIn(f'data-signal-level="{level}"', main)
+                self.assertNotIn(expected, main)
+                self.assertNotIn('data-signal-kind="vol_ratio"', main)
+                px = monitor._price_rows_html(d, {'mode': 'intraday' if intraday else 'closed'})
+                self.assertIn(f'px-v vol-{level}', px)
+                self.assertIn(expected.split('（')[0].split()[-1], px)
                 self.assertEqual(monitor._member_metric(d, 'vol_ratio'), expected)
                 snap = monitor.build_snapshot({}, [d], {}, group_counts={})
                 member = snap['signal_members']['vol_ratio'][level][0]
@@ -6617,17 +6625,18 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('HII', output)
         self.assertEqual(output.count('class="range52-row"'), 1)
         css = monitor.PAGE_CSS
-        # 四区双排取代旧两区搬家补丁；区间条独占完整后续行，手机/桌面各自内边距。
-        self.assertIn('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 12px 10px;border:0;box-shadow:none}', css)
-        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}', css)
-        self.assertIn('grid-template-areas:"sym px tgs earn" "cost cost cost cost" "sig sig sig sig"', css)
-        self.assertIn('td.px .px-main{display:grid;grid-template-rows:17px 17px 16px', css)
+        # 三区网格：价格区吃下原财报栏，紫灯框固定最右；区间条与财报条同占后续整行。
+        self.assertIn('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10px;border:0;box-shadow:none}', css)
+        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}', css)
+        self.assertIn('grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig"', css)
+        self.assertIn('td.px .px-main{display:grid;grid-template-rows:var(--px-row-h) var(--px-row-h)', css)
+        self.assertIn('.earn-band{display:block;', css)
         self.assertIn('td.tgs .target-space{grid-area:1/1/2/3}', css)
         self.assertIn('td.tgs .target-price{grid-area:2/1/3/2}', css)
         self.assertIn('td.tgs .target-month{grid-area:2/2/3/3;margin-left:3px}', css)
         self.assertIn('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}', css)
         self.assertIn('.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}', css)
-        self.assertIn('--sig-col-gap:18px;--sig-row-gap:7px', css)
+        self.assertIn('--sig-col-gap:10px;--sig-borrow:6px;--sig-row-gap:7px', css)
         self.assertIn('td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}', css)
         self.assertIn('width:3px;height:10px;margin-right:5px;border-radius:1px;', css)
         self.assertIn('function balanceDescriptions(row)', monitor.PAGE_INTERACTION_JS)
@@ -7518,7 +7527,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                           '<span class="signal-member-belong">（IT · AI）</span> ', panel)
             self.assertIn('美 10/14 盘后<span class="earnings-week-bj">·北京 10/15 凌晨</span></span><span class="lamp-text">（绿灯）</span>', panel)
             self.assertIn('<span class="signal-member-belong">（短持仓）</span> '
-                          '<span class="earnings-week-meta is-yellow"><span class="cd">（7）</span>美 10/20 盘后'
+                          '<span class="earnings-week-meta is-yellow"><span class="cd">（北京7天）</span>美 10/20 盘后'
                           '<span class="earnings-week-bj">·北京 10/21 凌晨</span></span>'
                           '<span class="lamp-text">（绿灯）</span>', panel)
             self.assertNotIn('earnings-week-group', panel)
@@ -7585,9 +7594,11 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     folded = position.split('<details class="quiet-list"', 1)[1]
                     main, note = monitor.earnings_label(e, '2026-10-20')
                     self.assertIn(label, main)
-                    self.assertIn(f'data-main="{main}"', folded)
-                    self.assertIn(f'data-unit-full="{note}"', folded)
-                    self.assertIn('（11）' if timing == 'post' else '（10）', folded)
+                    self.assertIn(f' {main}<span class="earn-sep">', folded)
+                    self.assertIn(f'<span class="earn-bj">{note}</span>', folded)
+                    timed = timing in ('pre', 'post', 'during')
+                    days = 11 if timing == 'post' else 10
+                    self.assertIn(f'（{"北京" if timed else "美"}{days}天）', folded)
                     self.assertEqual(snap['summary']['green'], 1)
                     self.assertTrue(all(c['red'] == c['yellow'] == 0 for c in snap['signal_counts'].values()))
                     for today, urgency in (('2026-10-28', 'yellow'), ('2026-10-29', 'red'), ('2026-10-30', 'red'),
@@ -8987,13 +8998,13 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         output = monitor._signals_html(row)
         self.assertEqual(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
                                    r'(?: data-signal-level="([^"]*)")?[^>]*>', output),
-                         [('chg', 'red'), ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', '')])
+                         [('chg', 'red'), ('', ''), ('rsi', 'gray')])
         self.assertEqual(output.count('signal-separator'), 0)
-        self.assertEqual(output.count('data-signal-flow="auto"'), 3)
+        self.assertEqual(output.count('data-signal-flow="auto"'), 2)
         self.assertIn('data-signal-kind="rsi" data-signal-level="gray"', output)
         self.assertIn(monitor.html_lib.escape(row['signals'][0]), output)
         self.assertEqual(monitor.html_lib.unescape(plain_text(output)),
-                         '异动 -6%量比 2.8xRSI 2条 ↓超卖' + row['signals'][0])
+                         '异动 -6%' + row['signals'][0] + 'RSI 2条 ↓超卖')
         stock = monitor._stock_row(row, {})
         self.assertNotIn('signal-dot', stock)
         self.assertNotRegex(stock, r'<img\b|<b\b|<[^>]+\sonerror\s*=')
@@ -9064,8 +9075,8 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                             self.assertEqual(re.search(attr + r'="([^"]*)"', current)[1], re.search(attr + r'="([^"]*)"', expected)[1])
                         self.assertIn('备注 &lt;b&gt;安全&lt;/b&gt;', current)
                         self.assertIn('<td class="sig"><div class="sig-cols">', current)
-                        self.assertIn('data-main="美 10/22 盘后"', current)
-                        self.assertIn('data-mode="full"', current)
+                        self.assertIn('class="earn-band"', current)
+                        self.assertIn('美 10/22 盘后', current)
                         self.assertIn('<tr class="' + level, current)
                         self.assertIn('class="range52-row"', current)
                         self.assertEqual(row, before)
@@ -9139,7 +9150,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         result = _row_signals(row)
         self.assertNotIn('signal-dot', result)
         self.assertEqual(re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', result),
-                         [('boll_rsi', 'red'), ('vol_ratio', 'yellow'), ('boll_rsi', 'red'), ('ma', 'yellow')])
+                         [('boll_rsi', 'red'), ('ma', 'yellow'), ('boll_rsi', 'red')])
         self.assertEqual(result.count('data-signal-kind="boll_rsi"'), 2)
         self.assertNotIn('data-signal-kind="rsi"', result)
         self.assertNotIn('data-signal-kind="boll"', result)
@@ -9160,16 +9171,20 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         self.assertEqual(result.count('signal-separator'), 0)
         self.assertEqual(row, original)
 
-    def test_white_volume_text_gets_its_own_yellow_not_other_red(self):
+    def test_volume_description_is_hidden_but_statistics_keep_the_lamp(self):
         row = {'symbol': 'SPCX', 'group': 'focus', 'level': 'red', 'price': 10,
                'signals': ['异动 -12.1%', '量比 2.8x'],
                'signal_marks': [('chg', 'red'), ('vol_ratio', 'yellow')]}
         groups = monitor._signal_description_groups(row)
         self.assertEqual([(g['kind'], g['level']) for g in groups], [('chg', 'red'), ('vol_ratio', 'yellow')])
-        self.assertIn('data-signal-kind="vol_ratio" data-signal-level="yellow"', _row_signals(row))
+        # 数据层仍保留量比事实（统计照旧报灯），投影层只把它从个股描述里拿掉。
+        self.assertNotIn('data-signal-kind="vol_ratio"', _row_signals(row))
+        self.assertNotIn('量比 2.8x', _row_signals(row))
         self.assertNotIn('signal-dot', _row_signals(row))
         row['signal_marks'] = [('chg', 'red')]
-        self.assertIn('<span class="signal-item" data-signal-kind="vol_ratio" data-signal-flow="auto" data-signal-order="1">量比 2.8x</span>', _row_signals(row))
+        self.assertEqual([(g['kind'], g['level']) for g in monitor._signal_description_groups(row)],
+                         [('chg', 'red'), ('vol_ratio', None)])
+        self.assertNotIn('量比 2.8x', _row_signals(row))
         self.assertNotIn('data-signal-level="yellow"', _row_signals(row))
 
     def test_gray_is_only_true_technical_gray_and_context_has_no_lamp(self):
@@ -9200,14 +9215,14 @@ class TestSignalDescriptionLamps(unittest.TestCase):
                           ('', None), ('', None), ('', None), ('target', 'purple')])
         output = _row_signals(row)
         self.assertEqual(re.findall(r'data-signal-kind="([^"]*)"', output),
-                         ['chg', 'ma', '', '', 'rsi', 'vol_ratio', ''])   # 去掉振幅后两列重新均衡，顺序随之变化
+                         ['chg', 'ma', '', 'rsi', '', ''])   # 去掉振幅、量比描述后两列重新均衡，顺序随之变化
         self.assertNotIn('signal-dot', output)
         self.assertEqual(re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
                                    r'(?: data-signal-level="([^"]*)")?[^>]*>', output),
-                         [('chg', 'red'), ('ma', 'yellow'), ('', ''), ('', ''),
-                          ('rsi', 'gray'), ('vol_ratio', 'yellow'), ('', '')])
+                         [('chg', 'red'), ('ma', 'yellow'), ('', ''),
+                          ('rsi', 'gray'), ('', ''), ('', '')])
         # 自动流排序稳定；RSI固定右列，不再让已退休加仓红灯混入技术等级。
-        self.assertEqual(sorted(map(int, re.findall(r'data-signal-order="(\d+)"', output))), [0, 1, 2, 4, 5, 6])
+        self.assertEqual(sorted(map(int, re.findall(r'data-signal-order="(\d+)"', output))), [0, 1, 3, 4, 5])
         self.assertNotIn('data-signal-kind="add_price"', output)
         self.assertEqual(monitor._signal_description_groups(row), groups)
         self.assertEqual(output.count('触及长均线±1%'), 1)
@@ -9513,7 +9528,10 @@ class TestFinalSourceContract(unittest.TestCase):
                     event_day = date.fromisoformat(today) + timedelta(days=raw_gap)
                     event = {'status': 'ok', 'date': event_day.isoformat(), 'timing': timing}
                     gap = raw_gap + (timing == 'post')
-                    expected_cd = '' if gap < -1 else {1: '（明）', 0: '（今）', -1: '（昨）'}.get(gap, f'（{gap}）')
+                    timed = timing in ('pre', 'post', 'during')
+                    shown = raw_gap + (1 if timed and timing == 'post' else 0)
+                    word = {1: '明天', 0: '今天', -1: '昨天'}.get(shown, f'{shown}天')
+                    expected_cd = ('' if shown < -1 else f'（{"北京" if timed else "美"}{word}）')
                     with self.subTest(today=today, timing=timing, gap=raw_gap):
                         self.assertEqual(monitor.earnings_countdown(event, today), expected_cd)
                         main, note = monitor.earnings_label(event, today)
@@ -9524,8 +9542,8 @@ class TestFinalSourceContract(unittest.TestCase):
                         else:
                             self.assertNotRegex(note, '今出|昨出|已出')
                         markup = monitor._earnings_html({'earnings': event}, today)
-                        self.assertIn('data-main=', markup)
-                        self.assertIn('data-unit-full=', markup)
+                        self.assertIn('class="earn-sep"', markup)
+                        self.assertIn('class="earn-bj"', markup)
                         self.assertEqual(len(re.findall(r'class="cd(?: tbd)?"', markup)), int(bool(expected_cd)))
                         if expected_cd:
                             self.assertIn('class="cd' + (' tbd' if timing not in ('pre', 'post', 'during') else '') + '"', markup)
@@ -9576,10 +9594,11 @@ class TestFinalSourceContract(unittest.TestCase):
                'earnings': {'status': 'ok', 'date': '2026-11-03', 'timing': 'post'}}
         rendered = monitor._stock_row(row, {'finished_at_bj': '2026-11-03T09:18:00+08:00'})
         parser = Cells(); parser.feed(rendered)
-        for cls in ('sym', 'px', 'tgs', 'lamp-earn'):
+        for cls in ('sym', 'px', 'tgs'):
             self.assertTrue(any(tag == 'td' and cls in classes.split()
                                 for tag, classes in parser.direct), (cls, parser.direct))
         self.assertTrue(all(tag in ('td', 'th') for tag, _ in parser.direct))
+        self.assertIn('class="earn-band"', rendered)  # 财报整排落在 52 周条那一行，主行不再有财报格
         self.assertIn('class="target-month" title="10月">⑩</span>', rendered)
         self.assertIn('class="target-space" data-sign="pos"', rendered)
         self.assertNotRegex(rendered, r'data-ack|ack-btn|cost-warn|r48-demo|data-r58-key')
