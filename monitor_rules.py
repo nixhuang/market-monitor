@@ -15,9 +15,6 @@ TARGET_HIGH_SPACE_PCT = 90
 CONSENSUS_GROUPS = ("position", "focus")   # 仅达到规则限这两组；空间规则覆盖全部个股
 
 
-AMP_GROUPS = ("position", "focus")   # 保留旧导出值供兼容；振幅覆盖全部分组，不再用它门控。
-
-
 BOLL_UP_SIGNAL_GROUPS = ("position", "focus")  # 上轨普通过热仅持仓/重点；三超卖红覆盖全组，持仓不分长短。
 
 
@@ -75,6 +72,19 @@ def _pos_num(v):
     return float(v)
 
 
+def day_change_amount(price, prev):
+    """每股当日涨跌金额文字（现价−昨收）：「+12.35」「-3.10」「0.00」（不带货币符号）；缺价/昨收/非有限数返回空串，绝不编。
+    盘中运行时现价是盘中价、昨收仍是上一交易日收盘，与页面涨跌幅同一对数字。低于 $1 的价格多留两位小数。"""
+    p, q = _pos_num(price), _pos_num(prev)
+    if p is None or q is None:
+        return ""
+    amount = p - q
+    nd = 2 if max(p, q) >= 1 else 4
+    if round(abs(amount), nd) == 0:
+        return f"{0:.{nd}f}"
+    return f"{'+' if amount > 0 else '-'}{abs(amount):,.{nd}f}"
+
+
 def _month_of(text):
     """'2026-10-07' / '2026-10' → 10；其它 → None。"""
     m = re.match(r"\d{4}-(0[1-9]|1[0-2])(?!\d)", text) if isinstance(text, str) else None
@@ -121,28 +131,6 @@ def _touch_note(price, touch):
     if touch is None or abs(touch - price) < 1e-9:
         return ""
     return f"（盘中触及 {touch:,.2f}）"
-
-
-def _rule_amplitude(al, x):
-    """日内振幅：涨跌幅只看「收盘 vs 昨收」，盘中冲高又回落、最后收平的票不会响，这条专门抓它。
-    用当日最高/最低（盘中重跑时再和当前价取极值）除以昨收。"""
-    x.amp = None
-    # 全组必须有对齐且有效的日内范围；布林现价回退不能冒充0%振幅。
-    if hasattr(x, "data") and not _ma_day_range(x)[2]:
-        return
-    if (not all(isinstance(v, (int, float)) and not isinstance(v, bool)
-                and math.isfinite(v) and v > 0 for v in (x.touch_up, x.touch_dn, x.prev))
-            or x.touch_dn > x.touch_up):
-        return
-    amp = (x.touch_up - x.touch_dn) / x.prev * 100
-    if not math.isfinite(amp) or amp < 0:
-        return
-    x.amp = amp
-    text = f"振幅 {x.amp:.1f}%（{x.touch_dn:,.2f}~{x.touch_up:,.2f}）"
-    if x.amp >= x.amp_red:
-        al.add("amp", text, "red")
-    elif x.amp >= x.amp_yellow:
-        al.add("amp", text, "yellow")
 
 
 def _ma_day_range(x):
@@ -405,12 +393,11 @@ class RuleEngine:
 
 
     def _apply_vol_tier(self, x):
-        """涨跌 / 振幅阈值：设置页的值是中档，按这只股自己的平时波动缩放；
-    涨跌幅与有效振幅对所有分组生效；达到红线优先报红，否则达到黄线报黄。"""
+        """涨跌阈值：设置页的值是中档，按这只股自己的平时波动缩放；
+    涨跌幅对所有分组生效；达到红线优先报红，否则达到黄线报黄。（振幅条件已于 2026-11-12 整体删除）"""
         x.vol_tier, x.vol_sigma = self._context.vol_profile(x.closes)
         mult = self._context.VOL_MULT[x.vol_tier]
         x.chg_red, x.chg_yellow = self._context.S["chg_red"] * mult, self._context.S["chg_yellow"] * mult
-        x.amp_red, x.amp_yellow = self._context.S["amp_red"] * mult, self._context.S["amp_yellow"] * mult
         x.usual = f"（平时约 ±{x.vol_sigma:.1f}%）" if x.vol_sigma is not None else ""
 
 
@@ -728,7 +715,6 @@ class RuleEngine:
             "rt_vol_elapsed": getattr(x, "rt_vol_elapsed", None),
             "rt_vol_total": getattr(x, "rt_vol_total", None),
             "vol_ratio_intraday": x.vol_ratio_intraday,
-            "amp": x.amp,
             "vol_tier": x.vol_tier,
             "vol_sigma": x.vol_sigma,
             "trigger": x.trig,
@@ -777,7 +763,6 @@ class RuleEngine:
         self._context._rule_boll(al, x)
         self._context._rule_chg_yellow(al, x)
         self._context._rule_vol_ratio(al, x)
-        self._context._rule_amplitude(al, x)
         self._context._rule_moving_averages(al, x)
         return al.level, al.signals, self._context._analysis_detail(x, al)
 

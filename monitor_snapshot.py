@@ -4,9 +4,11 @@ import math
 import os
 import re
 
+from monitor_rules import day_change_amount
+
 # 各类信号的统计名称（status.json 的 signal_counts 用）；顺序即展示顺序
 SIGNAL_KINDS = (
-    ("chg", "涨跌幅"), ("amp", "振幅"), ("vol_ratio", "量比"),
+    ("chg", "涨跌幅"), ("vol_ratio", "量比"),
     ("rsi", "RSI"), ("boll", "布林"), ("boll_rsi", "布林+RSI"),
     ("ma", "均线"), ("low52", "52周低位"), ("target", "共识价"),
 )
@@ -19,21 +21,28 @@ _TEXT_BOLL_PREFIX = ("逼近布林", "触及布林", "跌破布林", "突破布�
 
 
 # 仅用于读入历史缓存时丢弃退役信号；不再注册分类、计数或生成新信号。
-_RETIRED_PRICE_SIGNALS = frozenset({"add_price", "reduce_price", "cost_loss"})
-_RETIRED_PRICE_TEXT = re.compile(r"^(?:(?:已跌破|距)加仓价|(?:已涨到|距)减仓价|成本浮亏)")
+# 振幅条件 2026-11-12 整体删除：旧快照里的 amp 字段/标记/名单/文字读入时一并清掉。
+_RETIRED_PRICE_SIGNALS = frozenset({"add_price", "reduce_price", "cost_loss", "amp"})
+_RETIRED_PRICE_TEXT = re.compile(r"^(?:(?:已跌破|距)加仓价|(?:已涨到|距)减仓价|成本浮亏|振幅 )")
 
 
 _RETIRED_SNAPSHOT_KEYS = _RETIRED_PRICE_SIGNALS | frozenset({
     "fund", "fundamental", "fund_cache_note", "fund_hits", "fund_period",
     "fund_enable", "fund_rev_red", "fund_rev_yellow", "fund_om_drop", "fund_gm_drop",
     "fund_de_rise", "fund_cr_drop", "fund_roe_drop", "fund_pm_abnormal", "fund_report_grace_days",
-    "target_anomaly_pct",
+    "target_anomaly_pct", "amp_yellow", "amp_red",
 })
+
+
+def _day_change_amount(d):
+    """统计里跟在涨跌幅后面的当日涨跌金额；前面用一个 en 空格 U+2002 分隔（渲染端据此给金额上涨跌色）；缺价/昨收就不写。"""
+    text = day_change_amount(d.get("price"), d.get("prev_close"))
+    return f"\u2002{text}" if text else ""
 
 
 def _member_metric(d, kind):
     """仅把本轮已触发信号的数值带入成员明细；旧快照缺值时不回查行情。"""
-    if kind not in ("chg", "amp", "vol_ratio"):
+    if kind not in ("chg", "vol_ratio"):
         return ""
     if kind == "vol_ratio" and d.get("vol_ratio_intraday"):
         value = d.get("rt_vol_ratio")
@@ -44,14 +53,12 @@ def _member_metric(d, kind):
         moment_text = (f"（截至 {moment} ET）" if isinstance(moment, str)
                        and re.fullmatch(r"\d{2}:\d{2}", moment) else "")
         return f"盘中量比 {value:.1f}×{moment_text}"
-    value = d.get({"chg": "chg", "amp": "amp", "vol_ratio": "vol_ratio"}[kind])
+    value = d.get({"chg": "chg", "vol_ratio": "vol_ratio"}[kind])
     if (not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value)
             or (kind != "chg" and value < 0)):
         return ""
     if kind == "chg":
-        return f"涨跌幅 {value:+.2f}%"
-    if kind == "amp":
-        return f"振幅 {value:.1f}%"
+        return f"涨跌幅 {value:+.2f}%" + _day_change_amount(d)
     day = d.get("vol_ratio_date")
     date_text = f"（{day}）" if isinstance(day, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
     # σ 不出现在页面上：判灯照常用 z，展示只留「哪天、几倍」
@@ -350,7 +357,7 @@ class SnapshotBuilder:
                     add(self._context._ARROW_RSI_UP if side == "超买" else self._context._ARROW_RSI_DOWN,
                         "red" if count == 3 and side == "超卖" else "yellow",
                         self._context.rsi_hits_text(count, side))
-        elif kind in ("chg", "amp", "vol_ratio"):
+        elif kind in ("chg", "vol_ratio"):
             chg = d.get("chg")
             if isinstance(chg, (int, float)) and not isinstance(chg, bool) and math.isfinite(chg) and chg != 0:
                 day = d.get("data_date")
@@ -452,7 +459,7 @@ class SnapshotBuilder:
             member["rsi_hits"] = " / ".join(str(marker["label"]) for marker in indicators)
         if kind == "boll" and indicators:
             member["boll_state"] = " / ".join(marker["label"] for marker in indicators)
-        if kind in ("chg", "amp", "vol_ratio") and d.get("chg") == 0 and not isinstance(d.get("chg"), bool):
+        if kind in ("chg", "vol_ratio") and d.get("chg") == 0 and not isinstance(d.get("chg"), bool):
             member["flat"] = True
 
 
@@ -578,16 +585,6 @@ class SnapshotBuilder:
                     out["level"] = "red" if "red" in remaining else "yellow"
                 elif not out.get("technical_pending"):
                     out["level"] = "green"
-            retired_amp = any(kind == "amp" and level == "gray" for kind, level in out["signal_marks"])
-            if retired_amp:
-                out["signal_marks"] = [mark for mark in out["signal_marks"] if mark != ("amp", "gray") and mark != ["amp", "gray"]]
-                if not any(kind == "amp" and level in ("red", "yellow") for kind, level in out["signal_marks"]):
-                    out["signals"] = [text for text in out.get("signals") or []
-                                      if not isinstance(text, str) or not text.startswith("振幅 ")]
-                # 旧振幅灰曾强制不折叠；仅按已保存技术事实恢复资格，不回查行情或重判振幅。
-                technical_marks = {kind for kind, _ in out["signal_marks"] if kind in ("rsi", "boll", "boll_rsi")}
-                if facts and (not technical_marks or technical_marks == {facts["kind"]}):
-                    out["foldable"] = facts["foldable"]
         if "symbol" in out and any(key in out for key in ("target", "purple", "signal_marks", "signals")):
             out = self._context._apply_target(out)
         return out
@@ -677,7 +674,7 @@ class SnapshotBuilder:
                 out[field] = [self._context._sanitize_snapshot_fields(item) if isinstance(item, dict) else item
                               for item in out[field]
                               if not (field == "text_only" and isinstance(item, dict)
-                                      and item.get("kind") in _RETIRED_PRICE_SIGNALS | {"amp"})]
+                                      and item.get("kind") in _RETIRED_PRICE_SIGNALS)]
                 if field in ("items", "stocks"):
                     out[field] = [{**item, "ma_settings": item.get("ma_settings")
                                    if isinstance(item.get("ma_settings"), dict) else
@@ -765,7 +762,7 @@ class SnapshotBuilder:
             "event": self._context.EVENT,
             "target_trade_date": self._context.TARGET_DATE,
             "mode": "closed" if self._context.CLOSED_ONLY else "manual_or_config",
-            "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
+            "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
             "config_files": {f: self._context.config_hash(f) for f in ("holdings.json", "settings.json")},
             "effective_settings": self._context._sanitize_snapshot_fields(self._context.S),
             "groups": self._context.GROUPS,

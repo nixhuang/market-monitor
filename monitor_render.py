@@ -8,7 +8,7 @@ import os
 import re
 from datetime import timedelta
 from decimal import Decimal
-from monitor_rules import _ARROW_RSI_UP, _ARROW_RSI_DOWN
+from monitor_rules import _ARROW_RSI_UP, _ARROW_RSI_DOWN, day_change_amount
 from page_assets import COST_PANEL_HTML
 
 # 「强制刷新」按钮：清掉 Cache Storage / Service Worker，再带时间戳参数重新加载，绕开浏览器和 CDN 缓存
@@ -71,11 +71,11 @@ STK_HEAD = ''
 
 # 方向提到「框标题」上的栏目：名单里不再逐条画三角，▲/▼ 只出现在每个框的标题里。
 # 量比按涨跌、布林+RSI 按上下轨、均线穿越按上穿/跌破、长均线触及按现价在均线哪一侧。
-# 只改这几栏——涨跌幅、振幅等栏目行内三角照旧，别把没要求的栏目一起改了。
+# 只改这几栏——涨跌幅等栏目行内三角照旧，别把没要求的栏目一起改了。
 # 所有按方向分组的栏目都分框展示：三角只出现在框标题（也就是名单最前面），
 # 单独指标和组合条件同一套位置、同一套大小，不再一个在名称前一个在名称后。
 _BLOCK_PANEL_KINDS = ("vol_ratio", "boll_rsi", "ma", "ma_cross", "ma_band",
-                      "rsi", "boll", "chg", "amp")
+                      "rsi", "boll", "chg")
 
 
 # 框标题已经写明方向的栏目，行尾不再重复同一句话（布林+RSI 曾经标题行尾都写
@@ -89,22 +89,23 @@ _ARROW_CLASSES = (("▲", "arrow-band-up"), ("▼", "arrow-band-down"),
                   (_ARROW_RSI_UP, "arrow-rsi-up"), (_ARROW_RSI_DOWN, "arrow-rsi-down"))
 
 
-# 描述与统计里带正负号的百分比（异动 +8.3%、波动 -9.8%、涨跌幅 -5.47%）数字单独用涨跌色：
+# 描述与统计里带正负号的百分比与金额（异动 +8.3%、波动 -9.8%、涨跌幅 -5.47% 后接 U+2002 与涨跌金额 +12.35）数字单独用涨跌色：
 # +绿 var(--up) / -红 var(--down)；文字与名称前的灯条仍按条件灯级着色。
 # 「±3.1%」（平时波动区间）不是方向，前面带 ± 的不匹配；0 不上色。输入必须是已转义文本。
-_SIGNED_PCT_RE = re.compile(r"(?<![±\d.])([+\-\u2212])(\d[\d,]*(?:\.\d+)?)%")
+_SIGNED_PCT_RE = re.compile(r"(?<![±\d.])([+\-\u2212])(\d[\d,]*(?:\.\d+)?)%|(?<=\u2002)([+\-\u2212]?)(\d[\d,]*\.\d+)(?![\d%])")
 
 
 def pct_html(escaped_text):
     def repl(match):
+        sign, num = (match[1], match[2]) if match[1] else (match[3], match[4])
         try:
-            value = float(match[2].replace(",", ""))
+            value = float(num.replace(",", ""))
         except ValueError:
             return match[0]
-        if value == 0:
+        if value == 0 or not sign:
             return match[0]
-        cls = "num-up" if match[1] == "+" else "num-down"
-        return f'<span class="{cls}">{match[0]}</span>'
+        cls = "num-up" if sign == "+" else "num-down"
+        return f'<span class="{cls}">{sign}{num}{"%" if match[1] else ""}</span>'
     return _SIGNED_PCT_RE.sub(repl, str(escaped_text))
 
 
@@ -114,7 +115,6 @@ _SIGNAL_DESCRIPTION_RULES = (
     ("boll", re.compile(r"^(?:盘中突破|盘中跌破|突破|跌破|触及|逼近)布林[上下]轨")),
     ("boll_rsi", re.compile(r"^布林\s*\+\s*RSI")),
     ("chg", re.compile(r"^(?:异动|波动)\s*[+-]?\d")),
-    ("amp", re.compile(r"^(?:日内)?振幅")),
     ("vol_ratio", re.compile(r"^(?:盘中|最近完整日)?量比")),
     ("ma", re.compile(r"^(?:日内触及|现价贴近|贴近|触及|上穿|跌破)\d+日(?:弱)?均线")),
     ("low52", re.compile(r"^(?:触及52周新低|仍在52周低位|距52周低点)")),
@@ -317,7 +317,7 @@ class PageRenderer:
     def _block_title_html(self, kind, shape, title):
         """框标题和正文方向符号统一独立着色，标题文字本身保留原颜色。"""
         head = self._context._block_head(shape, title)
-        if kind not in ("boll", "rsi", "boll_rsi", "chg", "amp", "vol_ratio",
+        if kind not in ("boll", "rsi", "boll_rsi", "chg", "vol_ratio",
                         "ma", "ma_cross", "ma_band"):
             return html_lib.escape(head)
         prefix = f"{shape} " if shape and head.startswith(f"{shape} ") else ""
@@ -378,7 +378,7 @@ class PageRenderer:
                     label = f"{match.group(2)}日均线{match.group(1)}"
                 return (marker["shape"], self._context._ma_display_text(label, d.get("ma_settings")) or ("均线穿越" if kind == "ma_cross" else "触及长均线"))
             return ("", "方向待下次更新")
-        if kind in ("chg", "amp"):
+        if kind == "chg":
             for marker in d.get("indicators") or []:
                 if isinstance(marker, dict) and marker.get("shape") in ("▲", "▼"):
                     return (marker["shape"], "上涨" if marker["shape"] == "▲" else "下跌")
@@ -419,7 +419,7 @@ class PageRenderer:
 
     def _member_metric_text(self, d, kind):
         """成员行里跟在代码后面的数值；只带本轮已算出来的值，缺就留空不编。"""
-        if kind in ("chg", "amp", "vol_ratio"):
+        if kind in ("chg", "vol_ratio"):
             return d.get("metric") or "数值待下次更新"
         if kind == "rsi":
             return d.get("rsi_hits") or "条数待下次更新"
@@ -716,18 +716,9 @@ class PageRenderer:
 
 
     def _signals_html(self, d):
-        """主表价格提醒分主次但各自按真实灯级着色；统计事实不变，不添加圆点。"""
+        """主表价格提醒各自按真实灯级着色；统计事实不变，不添加圆点。"""
         # 手填价仅替换共识价；所有目标状态只投影到胶囊，统计仍消费原signals/marks。
         groups = [g for g in self._context._signal_description_groups(d) if g["kind"] != "target"]
-        prices = {g["kind"]: g for g in groups
-                  if g["kind"] in ("chg", "amp") and g["level"] in ("red", "yellow")}
-        primary = supplement = None
-        if len(prices) == 2:
-            primary = "amp" if prices["amp"]["level"] == "red" and prices["chg"]["level"] == "yellow" else "chg"
-            supplement = "chg" if primary == "amp" else "amp"
-            # 只重排主表副本，补充事实紧跟主要提醒，不改共享分组及原marks。
-            groups.remove(prices[supplement])
-            groups.insert(groups.index(prices[primary]) + 1, prices[supplement])
         columns, flowing = [[], []], []
         combo_level = ""
         for index, group in enumerate(groups):
@@ -737,10 +728,8 @@ class PageRenderer:
                 selected = str(d.get("boll_alert_text") or next((text for text in texts if "布林" in text), ""))
                 side = "上轨" if "上轨" in selected else "下轨" if "下轨" in selected else ""
                 display = [_reverse_rsi_description(text, side) for text in display]
-            role = "primary" if kind == primary else "supplement" if kind == supplement else None
             attrs = (f' data-signal-kind="{kind}"'
-                     + (f' data-signal-level="{level}"' if level else "")
-                     + (f' data-signal-role="{role}"' if role else ""))
+                     + (f' data-signal-level="{level}"' if level else ""))
             if kind == "boll_rsi" and len(display) > 1:
                 zones = [[], []]
                 for text in display:
@@ -838,6 +827,9 @@ class PageRenderer:
         chg_cls = "up" if (d["chg"] or 0) > 0 else (
             "down" if (d["chg"] or 0) < 0 else "")
         chg_txt = f'{d["chg"]:+.2f}%' if d["chg"] is not None else "—"
+        # 第三排：每股当日涨跌金额（现价−昨收），涨跌色跟金额符号；缺昨收时留空，不编。
+        amt_txt = day_change_amount(d.get("price"), d.get("prev_close"))
+        amt_cls = "up" if amt_txt.startswith("+") else "down" if amt_txt.startswith("-") else ""
         full_note = html_lib.escape(str(d.get("note") or ""), quote=True)
         note = f'<span class="note" data-full="{full_note}">{full_note}</span>' if full_note else ""
         tg_html = self._context.target_tag(d.get("target") or {})
@@ -861,7 +853,8 @@ class PageRenderer:
             f'{self._context._row_tags(d, snapshot)}</span>'
             f'</td><td class="num px"><span class="px-main">'
             f'<span class="px-price">{self._context.fmt(d["price"])}{html_lib.escape(str(d.get("unit") or ""))}</span>'
-            f'<span class="px-chg {chg_cls}">{chg_txt}</span></span></td>'
+            f'<span class="px-chg {chg_cls}">{chg_txt}</span>'
+            f'<span class="px-amt {amt_cls}">{amt_txt}</span></span></td>'
             f'{cost_cell}<td class="sig">{self._context._signals_html(d)}</td>{tg_html}{earn_cell}</tr>'
             + self._context._range52_row(d)
         )
@@ -1012,9 +1005,9 @@ class PageRenderer:
                 value = self._context.boll_rsi_text(direction, hits) if direction.startswith(("上轨", "下轨")) \
                     else ("方向待下次更新" if direction in known or not direction else direction)
                 return f' <span class="signal-member-direction">{esc(value)}</span>'
-        elif kind in ("rsi", "boll", "ma", "ma_cross", "ma_band", "chg", "amp", "vol_ratio") or (kind == "target" and level == "purple"):
+        elif kind in ("rsi", "boll", "ma", "ma_cross", "ma_band", "chg", "vol_ratio") or (kind == "target" and level == "purple"):
             markers = d.get("indicators")
-            if kind in ("chg", "amp", "vol_ratio") and d.get("flat") is True:
+            if kind in ("chg", "vol_ratio") and d.get("flat") is True:
                 return ' <span class="signal-member-direction">平盘</span>'
             if not isinstance(markers, list) or not markers:
                 return ' <span class="signal-member-direction">方向待下次更新</span>'
@@ -1035,7 +1028,7 @@ class PageRenderer:
             shape, tone, label = marker.get("shape"), marker.get("tone"), marker.get("label")
             if shape not in ("▲", "▼", "■", "□", self._context._ARROW_RSI_UP, self._context._ARROW_RSI_DOWN) or tone not in ("white", "yellow", "red", "cyan", "purple"):
                 continue
-            allowed = {"chg": ("white",), "amp": ("white",), "vol_ratio": ("white",),
+            allowed = {"chg": ("white",), "vol_ratio": ("white",),
                        "rsi": ("yellow", "red"), "boll": ("white", "yellow"),
                        "boll_rsi": ("yellow", "red"), "ma": ("cyan",), "ma_cross": ("cyan",),
                        "ma_band": ("cyan",), "target": ("purple",)}
@@ -1062,7 +1055,7 @@ class PageRenderer:
 
     def _filter_detail(self, d, kind, label):
         """同时满足筛选里每个条件的简短数值，与计数明细口径一致；缺值时只写信号名。"""
-        if kind in ("chg", "amp", "vol_ratio") and isinstance(d.get("metric"), str) and d["metric"]:
+        if kind in ("chg", "vol_ratio") and isinstance(d.get("metric"), str) and d["metric"]:
             return d["metric"]
         if kind == "rsi" and isinstance(d.get("rsi_hits"), str) and d["rsi_hits"]:
             return d["rsi_hits"]   # 已经是「RSI 2条 ↑超买」完整写法，不再补一次前缀
@@ -1688,32 +1681,9 @@ class PageRenderer:
                 fixed, fixed_cost = fi.get("market") or 0, fi.get("cost") or 0
             except Exception as e:
                 self._context.log(f"  ! 持仓数量种子读取失败（只用成本价）：{e}")
-        # rs20：持仓组合「20日对.SPX」用的快照——每只持仓自己的 20 日涨跌 + 同期基准涨跌。
-        # 只提供收益率，市值加权在浏览器里按本机数量即时算（改数量不用重跑抓数）。
-        rs20 = None
-        try:
-            pos = {str(s).upper() for s in self._context._position_symbols()}
-            rs_items, bench, meta = {}, None, None
-            for it in fetched or []:
-                rs = (it or {}).get("rs_spy") or {} if isinstance(it, dict) else {}
-                if isinstance(rs.get("bench"), (int, float)) and rs.get("days"):
-                    bench, meta = rs["bench"], rs
-                sym = str(it.get("symbol") or "").upper()
-                if sym in pos and isinstance(rs.get("etf"), (int, float)):
-                    rs_items[sym] = round(float(rs["etf"]), 4)
-            if bench is not None and meta and rs_items:
-                rs20 = {"asof": meta.get("end") or "", "start": meta.get("start") or "",
-                        "end": meta.get("end") or "", "days": meta.get("days") or 20,
-                        "bench": round(float(bench), 4),
-                        "bench_name": meta.get("bench_name") or "标普500", "items": rs_items}
-                # 这里刻意不打日志：本函数在页面渲染路径上执行，
-                # render 期间调 log 会破坏离线测试契约（tests/mm_test_render 断言 log 未被调用）
-                pass
-        except Exception:
-            rs20 = None
         # asof＝内置快照的日期（种子文件里的券商截图日期）：换设备取不到云端时页面要拿它说明数据来源
         return self._context.json_script({"asof": asof, "cash": cash, "cash_extra": cash_extra, "fixed": fixed,
-                                          "fixed_cost": fixed_cost, "items": items, "rs20": rs20})
+                                          "fixed_cost": fixed_cost, "items": items})
 
 
     def _cost_panel_assets(self, items=None):
@@ -1803,10 +1773,10 @@ class PageRenderer:
                             lambda m: '<span class="run-timestamp">' + m[0] + '</span>', init_light)
         # 第二排：数据时间 + 自动计划。冬夏令时只显示当日适用的那条（以当天美东是否夏令时为准）。
         ny_now = self._context.datetime.now(self._context.US_TZ)
-        bj_auto = "夏令时次日 08:15" if ny_now.dst() != timedelta(0) else "冬令时次日 09:15"
+        bj_auto = "夏令时次日 08:30" if ny_now.dst() != timedelta(0) else "冬令时次日 09:30"
         sub_line = f"数据时间 {self._context.market_data_time(snapshot)}"
         # 自动计划从头部第二排挪到页底返回看板下方；措辞与时点口径不变。
-        autoplan_line = f"自动计划：美东周一至五 20:15（北京 {bj_auto}）"
+        autoplan_line = f"自动计划：美东周一至五 20:30（北京 {bj_auto}）"
         # 「在册：…」一整行按 2026-10-15 要求删除，不再在首页展示分组在册数与去重说明。
 
         cost_css, cost_js = self._context._cost_panel_assets(items)

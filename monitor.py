@@ -2672,7 +2672,6 @@ CONSENSUS_RETRY_PER_DAY = 3          # 失败重试最多占用 3 个名额，�
 CONSENSUS_RETRY_BACKOFF = (1, 2, 4, 7)  # 连续失败：首次次日重试，此后逐步退避
 
 
-AMP_GROUPS = monitor_rules.AMP_GROUPS  # 兼容旧导出，不参与振幅规则门控。
 
 
 BOLL_UP_SIGNAL_GROUPS = monitor_rules.BOLL_UP_SIGNAL_GROUPS
@@ -3138,7 +3137,6 @@ _vol_ratio_z_enabled = _rule_engine._vol_ratio_z_enabled
 _rule_vol_ratio = _rule_engine._rule_vol_ratio
 
 
-_rule_amplitude = monitor_rules._rule_amplitude
 
 
 _ma_day_range = monitor_rules._ma_day_range
@@ -3981,11 +3979,8 @@ def _main(argv, runtime, snapshots=None):
         to_fetch = [sym for sym, _, _ in universe
                     if quote_supported(sym) and instrument_identity(sym) != '^TNX']
         sector_etfs = {g["sector_etf"] for g in GROUPS if g.get("sector_etf")}
-        # 持仓个股也要算 20 日收益率：页面「持仓」卡标题的「20日对.SPX」按市值加权，
-        # 需要每只持仓自己的 20 日涨跌（此前只给板块 ETF 算，持仓卡就永远没这个数）。
-        # 只扩大「谁算rs」，不扩大「要不要抓基准」——基准本来就因为板块 ETF 而取，
-        # 持仓是蹭现成数据，绝不为它额外发一次请求。
-        rs_targets = sector_etfs | {normalize_symbol(s) for s in _position_symbols()}
+        # 只有板块 ETF 算相对标普的强弱（持仓组合的「20日对.SPX」已于 2026-11-12 删除）。
+        rs_targets = set(sector_etfs)
         # 板块 ETF 相对强弱的基准是标普500指数本身，来源优先级：
         #   1) 风险参考已取的 Yahoo ^GSPC 日线（不额外请求）  2) History of Market 日线  3) 都没有才抓 SPY 作近似
         need_bench = any(normalize_symbol(s) in sector_etfs for s in to_fetch)

@@ -1006,7 +1006,7 @@ class RulesTemplateTests(unittest.TestCase):
         self.assertIn('History of Market', self.plain(glossary))
         for alias in ('alerts', 'display', 'quiet', 'prices', 'loss', 'space', 'reached',
                       'earnings', 'missing', 'terms', 'fetch',
-                      'change-terms', 'amplitude-terms', 'boll-terms', 'rsi-terms',
+                      'change-terms', 'boll-terms', 'rsi-terms',
                       'volume-terms', 'ma-terms', 'target-terms', 'earnings-terms',
                       'fetch-consensus', 'fetch-after-earnings', 'fetch-earnings-cache',
                       'dataSourceRules'):
@@ -1037,7 +1037,7 @@ class RulesTemplateTests(unittest.TestCase):
         self.assertEqual(rules.count('class="nav-gray"'), 16)  # 整体下线加仓、减仓、浮亏三处已读转白说明。
 
     def test_threshold_tables_are_only_in_glossary_and_follow_settings_and_constants(self):
-        settings = {'chg_yellow': 7, 'chg_red': 11, 'amp_yellow': 13, 'amp_red': 17,
+        settings = {'chg_yellow': 7, 'chg_red': 11,
                     'ma_short': 25, 'ma_long': 180, 'boll_n': 30, 'boll_k': 2.7,
                     'boll_near_band_pct': 10, 'boll_near_pct': 0.9,
                     'rsi_high': 82, 'rsi_low': 24, 'near_52w_low_pct': 2.2,
@@ -1055,10 +1055,9 @@ class RulesTemplateTests(unittest.TestCase):
         glossary = assets.glossary_body(settings, constants)
         self.assertEqual(re.findall(r'<table[^>]*id="([^"]+)"', rules), ['rules-lamp-table'])
         self.assertNotIn('glossary-chg-table', rules)
-        self.assertNotIn('glossary-amp-table', rules)
-        self.assertEqual(glossary.count('<table'), 10)
-        for kind, expected in (('chg', ['≥3.5%', '≥5.5%', '≥7.7%', '≥12.1%', '≥12.6%', '≥19.8%']),
-                               ('amp', ['≥6.5%', '≥8.5%', '≥14.3%', '≥18.7%', '≥23.4%', '≥30.6%'])):
+        self.assertNotIn('glossary-amp-table', glossary)      # 振幅已整体删除
+        self.assertEqual(glossary.count('<table'), 9)
+        for kind, expected in (('chg', ['≥3.5%', '≥5.5%', '≥7.7%', '≥12.1%', '≥12.6%', '≥19.8%']),):
             table = re.search(r'<table[^>]+id="glossary-' + kind + r'-table">.*?</table>', glossary, re.S)[0]
             for threshold in expected:
                 self.assertIn(threshold, table)
@@ -1123,7 +1122,7 @@ class RulesTemplateTests(unittest.TestCase):
             self.assertEqual(len(re.findall(r'<span class="ar-(?:band|rsi)-(?:up|down)">', text)), 2)
         self.assertIn('.card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}', assets.RULES_CSS)
         self.assertNotIn('rule-reverse', assets.glossary_body({}, {}))
-        for condition in ('涨跌幅 · 自适应', '振幅 · 自适应'):
+        for condition in ('涨跌幅 · 自适应',):
             row = next(row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', rules, re.S)
                        if condition in self.plain(row))
             cells = re.findall(r'<td\b([^>]*)>(.*?)</td>', row, re.S)
@@ -1132,9 +1131,7 @@ class RulesTemplateTests(unittest.TestCase):
             self.assertEqual(self.plain(row).count('红灯／黄灯'), 1)
             self.assertNotIn('cell-gray', row)
         glossary = self.plain(assets.glossary_body({}, {}))
-        self.assertIn('所有分组沿用上节波动档', glossary)
-        self.assertIn('有效0%保留数值', glossary)
-        self.assertIn('低于黄门槛不提示、不计白，也不因振幅强制不折叠', glossary)
+        self.assertNotIn('振幅', glossary)
         self.assertNotIn('不设门槛、不升红黄', glossary)
 
     def test_condition_arrows_white_only_in_lamp_table_and_earnings_list_note(self):
@@ -1302,7 +1299,7 @@ class RulesTemplateTests(unittest.TestCase):
 
     def test_unique_tables_and_dual_track_sentence_remain(self):
         glossary = assets.glossary_body({}, {})
-        self.assertEqual(glossary.count('class="glossary-entry"'), 15)
+        self.assertEqual(glossary.count('class="glossary-entry"'), 14)
         self.assertNotIn('可点红灯与已读', glossary)
         for unique in ('穿越确认幅度', '连续失败', '正常缓存＋已记录财报事件',
                        '来源日期仍早于财报', '供应商确认', '官方核验', '估算日期',
@@ -1527,7 +1524,7 @@ const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),{chromiu
         code = r'''
 const assert=require('assert/strict'),vm=require('vm'),fs=require('fs');
 const input=JSON.parse(fs.readFileSync(0,'utf8'));
-for(const hash of ['', '#nav-up-buy-three', '#glossary-amp-table']){
+for(const hash of ['', '#nav-up-buy-three', '#glossary-chg-table']){
   let calls=0;
   const forbidden=()=>{calls++;throw Error('删除后的规则脚本不应操作DOM、注册监听或计时器');};
   const context={document:new Proxy({},{get:()=>forbidden}),

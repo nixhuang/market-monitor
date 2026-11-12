@@ -99,6 +99,8 @@
   border: 1px solid var(--cost-input-border); border-radius: 3px;
   background: var(--cost-input-bg); color: var(--text); font-size: 16px;
 }
+/* 三个字的标签（加仓价/减仓价/目标价）比两个字的多占约 16px，输入框相应收窄，避免弹框内横向溢出 */
+#costManage .cost-add-dialog input[data-add-trigger], #costManage .cost-add-dialog input[data-add-reduce], #costManage .cost-add-dialog input[data-add-target] { width: calc(100% - 58px); }
 #costManage .ep-grid input, #costManage .ep-cash input {
   width: 100%;
   min-width: 0;

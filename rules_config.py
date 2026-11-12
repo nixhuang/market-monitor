@@ -27,8 +27,6 @@ SETTING_SCHEMA = {
     "vol_ratio_red": _number(3.0, 0.1, 100, order=("volume", 1)),
     "vol_ratio_z": _number(2.0, 0, 10, order=("volume_z", 0)),
     "vol_ratio_red_z": _number(3.6, 0, 10, order=("volume_z", 1)),
-    "amp_yellow": _number(5.0, 0, 100, order=("amp", 0)),
-    "amp_red": _number(8.0, 0, 100, order=("amp", 1)),
     "ma_short": _number(50, 0, 250, integer=True, exclude=(1,), order=("ma", 0)),
     "ma_long": _number(200, 0, 250, integer=True, exclude=(1,), order=("ma", 1)),
     "hy_green": _number(350, 0, 10000, order=("hy", 0)),

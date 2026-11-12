@@ -78,7 +78,7 @@ snapshot = {
     "finished_at": "2026-10-07T20:40:28+08:00",
     "finished_at_bj": "2026-10-07T20:40:28+08:00",
     "event": "push", "target_trade_date": "2026-10-06", "mode": "closed",
-    "schedule": "美东周一至周五20:15；北京时间夏季次日08:15、冬季次日09:15",
+    "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
     "config_files": {}, "effective_settings": {},
     "list_counts": {"positions": 2, "focus": 2, "technology": 6, "triggers": 0, "dca": 0},
     "summary": {"red": 2, "yellow": 2, "green": 4, "gray": 2, "total": 10,
@@ -145,8 +145,8 @@ check("市场自检" not in html, "旧标题已移除")
 check("数据时间 2026-10-06 收盘（美东交易日）" in html and "本页数据更新" not in html,
       "休市顶部显示行情收盘日，不重复抓取完成时间")
 check("成功 ·2026-10-07 20:40（北京）" in re.sub(r'<[^>]+>', '', html), "静态成功灯只报「成功 ·日期 时:分」，不带秒")
-check("自动计划：美东周一至五 20:15（北京 " in html, "第二排自动计划")
-check(("夏令时次日 08:15" in html) != ("冬令时次日 09:15" in html), "冬夏令时只出现一个")
+check("自动计划：美东周一至五 20:30（北京 " in html, "第二排自动计划")
+check(("夏令时次日 08:30" in html) != ("冬令时次日 09:30" in html), "冬夏令时只出现一个")
 check('id="btnRunNow"' in html and 'id="btnCheckStatus"' in html, "第三排两个按钮都在")
 check('<table class="stk"><colgroup><col class="c-sym"><col class="c-px"><col class="c-target"><col class="c-earn"><col class="c-sig"></colgroup>' in html
       and 'class="px-price"' in html and 'class="lamp-rule"' not in html
@@ -1148,9 +1148,9 @@ check(_zone_html.count('class="signal-item"') == 2
 _order_row = item('ORDERESCAPE', 'technology', 'red')
 _order_row.update(signals=['手填目标价说明 <b>尾部</b>', '无灯说明 <img onerror=x>',
     'RSI 2条 ↓超卖（≤35）', '日内触及120日均线 ±1%区间', '上穿60日弱均线',
-    '振幅 6%', '量比 2.8x', '异动 -12.1%', '距加仓价 90 还差 1%', '另条说明 & 保留'],
+    '量比 2.8x', '异动 -12.1%', '距加仓价 90 还差 1%', '另条说明 & 保留'],
     signal_marks=[('target', 'purple'), ('ma_band', 'yellow'), ('ma_cross', 'yellow'),
-                  ('amp', 'yellow'), ('vol_ratio', 'yellow'), ('chg', 'red'), ('add_price', 'red')],
+                  ('vol_ratio', 'yellow'), ('chg', 'red'), ('add_price', 'red')],
     ma_band_direction='up', ma_settings={'ma_short': 60, 'ma_long': 120}, trigger=90,
     target=monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 150}, 'technology', 3))
 _order_no_gray = _copy.deepcopy(_order_row)
@@ -1166,15 +1166,13 @@ with _patch.dict(monitor.S, {'ma_short': 120, 'ma_long': 60}), \
     _order_page = monitor.render({}, [_order_row, _order_no_gray], 2, snapshot=_order_snap)
 _order_body = re.search(r'<tr\b[^>]*\bid="s-orderescape"[^>]*>(.*?)</tr>', _order_page, re.S)[1]
 _order_sig = re.search(r'<td class="sig">(.*?)</td>', _order_body, re.S)[1]
-check(_signal_pairs(_order_sig) == {('chg', 'red'), ('amp', 'yellow'), ('ma', 'yellow'),
+check(_signal_pairs(_order_sig) == {('chg', 'red'), ('ma', 'yellow'),
           ('vol_ratio', 'yellow'), ('rsi', 'gray'), ('', '')}
       and 'signal-dot' not in _order_body
       and 'class="lvtag add signal-item" data-lv="90" data-near="0"' in _order_sig
       and _order_sig.count('data-signal-kind="ma"') == 1
-      and 'data-signal-role="primary" data-signal-flow="auto" data-signal-order="0"' in _order_sig
-      and 'data-signal-role="supplement" data-signal-flow="auto" data-signal-order="1"' in _order_sig
-      and 'data-signal-kind="amp" data-signal-level="yellow" data-signal-role="supplement"' in _order_sig,
-      '全页零圆点，价格补充紧跟主要提醒，其余描述稳定排序且均线合并一次级别')
+      and 'data-signal-role=' not in _order_sig,
+      '全页零圆点，其余描述稳定排序且均线合并一次级别（振幅已删除，不再有主次角色）')
 check(all(text in _order_sig for text in ('&lt;img onerror=x&gt;', '&amp; 保留'))
       and '目标价' not in _order_sig
       and '<img' not in _order_sig and '<b>' not in _order_sig,
@@ -1191,9 +1189,8 @@ check('现价在长均线上方' in _order_stats and '现价在长均线上方' 
 _order_filter_data = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _order_page)[1]))
 check(_order_filter_data['chg']['members'][0]['d'][0]['l'] == 'red'
       and _order_filter_data['ma']['members'][0]['d'][0]['l'] == 'yellow'
-      and _order_filter_data['amp']['members'][0]['d'][0]['l'] == 'yellow'
       and _order_filter_data['rsi']['members'][0]['d'][0]['l'] == 'gray'
-      and all(_order_filter_data[k]['members'][0]['l'] == 'red' for k in ('chg', 'ma', 'amp', 'rsi')),
+      and all(_order_filter_data[k]['members'][0]['l'] == 'red' for k in ('chg', 'ma', 'rsi')),
       '全页筛选同股红黄灰事实颜色独立取统计条件，不沿用整股红灯')
 check(all(set(fact) == {'l', 't'} and not re.search(r'灰灯|白灯|红灯|黄灯|布林\+RSI', fact['t'])
           for condition in _order_filter_data.values() for member in condition['members'] for fact in member['d']),
@@ -1207,7 +1204,7 @@ _order_control_classes, _order_control_body = rendered_stock_row(_order_page, _o
 _order_control_sig = re.search(r'<td class="sig">(.*?)</td>', _order_control_body, re.S)[1]
 check(_order_control_classes[0] == 'red'
       and _signal_pairs(_order_control_sig)
-      == {('chg', 'red'), ('amp', 'yellow'), ('ma', 'yellow'),
+      == {('chg', 'red'), ('ma', 'yellow'),
           ('vol_ratio', 'yellow'), ('', ''), ('rsi', '')}
       and 'RSI 2条' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig))
       and '↑超买' in _unescape(re.sub(r'<[^>]+>', '', _order_control_sig)),
@@ -1400,110 +1397,6 @@ for _condition, _expected in (
     check(len(_rule_rows) == 1 and [_unescape(re.sub(r'<[^>]+>', '', text)) for text in
           re.findall(r'<td\b[^>]*>(.*?)</td>', _rule_rows[0] if _rule_rows else '', re.S)] == [_condition] + _expected,
           _condition + '全页规则与实际分类一致，持仓重点上轨三反向超卖均黄')
-
-# 振幅专项真实分析→快照→红黄/静默；技术灰、条件颜色、折叠资格互不覆盖。
-from tests.mm_test_groups import TestAmplitudeChain as _AmplitudeChain
-_amp_engine = _AmplitudeChain()
-_amp_engine.setUp()
-try:
-    _amp_rows = [_amp_engine.analyze(symbol='AMPUP', prev=99, high=104, low=98),
-                 _amp_engine.analyze(symbol='AMPDOWN', group='healthcare', prev=101, high=103, low=96),
-                 _amp_engine.analyze(symbol='AMPZERO', group='index_funds', high=100, low=100),
-                 _amp_engine.analyze(symbol='AMPDUAL', high=106, low=94, values=(35, 35, 50)),
-                 _amp_engine.analyze(symbol='AMPCOMBO', values=(35, 35, 35), bands=(100, 110, 99)),
-                 _amp_engine.analyze(symbol='AMPSTACK', high=106, low=94, prev=100 / 1.06, values=(70, 50, 50),
-                                     bands=(100, 110, 99), cfg={'trigger': 100, 'target': 190}, ratio=3)]
-    _amp_no_gray_row = _amp_engine.analyze(symbol='AMPDUAL2HIGH', high=106, low=94, values=(70, 70, 50))
-    _amp_no_gray_before = _copy.deepcopy(_amp_no_gray_row)
-    _amp_no_gray_snap = monitor.build_snapshot({}, [_amp_no_gray_row], {}, group_counts={})
-    _amp_no_gray_snap_before = _copy.deepcopy(_amp_no_gray_snap)
-    _amp_no_gray_page = monitor.render({}, [_amp_no_gray_row], 1, snapshot=_amp_no_gray_snap)
-    _amp_input_before = _copy.deepcopy(_amp_rows)
-    _amp_snap = monitor.build_snapshot({}, _amp_rows, {}, group_counts={})
-    _amp_snap_before = _copy.deepcopy(_amp_snap)
-    _amp_page = monitor.render({}, _amp_rows, len(_amp_rows), snapshot=_amp_snap)
-finally:
-    _amp_engine.doCleanups()
-_amp_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _amp_page)[1]))
-check([m['kind'] for m in _amp_snap['text_only']] == ['rsi', 'boll_rsi'],
-      '真实振幅全链：只保留2项技术灰，振幅不再计灰')
-_amp_stats = _amp_page.split('id="signalCounts"', 1)[1].split('id="group_positions"', 1)[0]
-_amp_stats_table = _amp_stats.split('</table>', 1)[0]   # 只看统计表本身（宏观表另有自己的 mh 表头）
-check('aria-label="白 2 项"' in _amp_stats and 'aria-label="红 3 项"' in _amp_stats
-      and 'class="gray mh"' not in _amp_stats_table and '>灰</td>' not in _amp_stats
-      and not re.search(r'aria-label="(?:灰灯|灰 \d+ 项)', _amp_stats),
-      '白标题仍按技术gray身份并集2，振幅红与其他红按最终行去重计3')
-_amp_stat_row = re.search(r'<tr><td><button[^>]*data-kind="amp".*?</tr>', _amp_stats, re.S)[0]
-check([_unescape(re.sub(r'<[^>]+>', '', cell)) for cell in
-       re.findall(r'<td\b[^>]*>(.*?)</td>', _amp_stat_row, re.S)] == ['振幅', '2', '2', '—'],
-      '振幅统计表精确列序：红2、黄2、灰空')
-_amp_panels = {}
-for _level in ('red', 'yellow'):
-    _panel_id = 'signal-members-' + __import__('hashlib').sha256(b'amp').hexdigest() + '-' + _level
-    _amp_panels[_level] = re.search(r'<div class="signal-members-panel tone-' + _level + '" id="' + _panel_id
-        + r'" hidden>(.*?)</div>(?=</td>|<div class="signal-members-panel)', _amp_stats, re.S)[1]
-check(all(title in _amp_panels['yellow'] for title in ('<h5><span class="grp-arrow arrow-band-up">▲</span> 上涨</h5>',
-                                                     '<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>'))
-      and _amp_panels['yellow'].index('上涨</h5>') < _amp_panels['yellow'].index('下跌</h5>')
-      and '<h5>平盘</h5>' in _amp_panels['red'],
-      '振幅红黄名单仍按涨/跌/平分框，方向结构不变')
-check(all(len(re.findall(r'<li\b[^>]*>', panel)) == 2 for panel in _amp_panels.values())
-      and '振幅 0.0%' not in ''.join(_amp_panels.values())
-      and not re.search(r'aria-label="(?:灰灯|白灯) · 振幅', _amp_stats),
-      '振幅仅已触发红黄进入名单，合法0静默，无旧振幅灰面板')
-for _row, _amp_level in zip(_amp_rows, ('yellow', 'yellow', None, 'red', None, 'red')):
-    _classes, _body = rendered_stock_row(_amp_page, _row, not _row['foldable'])
-    _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
-    _kinds_levels = re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', _sig)
-    _expected_classes = [_row['level']] + (['pur', 'pur-high'] if _row['purple'] else [])
-    check(_classes == _expected_classes and ('amp', 'gray') not in _kinds_levels
-          and _kinds_levels.count(('amp', _amp_level)) == int(_amp_level is not None)
-          and ('data-signal-kind="amp"' in _sig) == (_amp_level is not None) and 'signal-dot' not in _sig,
-          _row['symbol'] + '振幅只呈现自身红黄颜色，低于黄线无条件文字，主行灯独立')
-    _record = next((m for m in _amp_filter['amp']['members'] if m['s'] == _row['symbol']), None)
-    if _amp_level:
-        _metric = next(m['metric'] for m in _amp_snap['signal_members']['amp'][_amp_level]
-                       if m['symbol'] == _row['symbol'])
-        check(_record['l'] == _row['level'] and _record['d'] == [{'l': _amp_level, 't': _metric}],
-              _row['symbol'] + '振幅筛选保留最终行灯和逐条件红黄事实')
-    else:
-        check(_record is None, _row['symbol'] + '未达黄线不进入振幅筛选')
-check(_amp_rows[2]['amp'] == 0 and _amp_rows[2]['foldable'] and _amp_rows[2]['signals'] == []
-      and monitor._stock_anchor_id('AMPZERO') in ''.join(re.findall(
-          r'<details class="quiet-list"(?: open)?>.*?<table class="stk">(.*?)</table>', _amp_page, re.S)),
-      '合法0保存数值，静默且可进入无异动，不强制不折叠')
-check('data-signal-kind="rsi" data-signal-level="gray"' in monitor._signals_html(_amp_rows[3])
-      and 'data-signal-kind="amp" data-signal-level="red"' in monitor._signals_html(_amp_rows[3]),
-      '同股合法2low技术灰+振幅红分别白字/红字，不继承整行灯色')
-_amp_control_classes, _amp_control_body = rendered_stock_row(_amp_no_gray_page, _amp_no_gray_row, False)
-_amp_control_sig = re.search(r'<td class="sig">(.*?)</td>', _amp_control_body, re.S)[1]
-_amp_control_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _amp_no_gray_page)[1]))
-check(_amp_control_classes == ['red'] and _amp_no_gray_row['foldable']
-      and _amp_no_gray_row['signal_marks'] == [('amp', 'red')]
-      and re.findall(r'<span class="signal-item" data-signal-kind="([^"]*)"'
-                     r'(?: data-signal-level="([^"]*)")?[^>]*>', _amp_control_sig)
-      == [('amp', 'red'), ('rsi', '')]
-      and '↑超买' in _unescape(re.sub(r'<[^>]+>', '', _amp_control_sig)),
-      '原振幅2high控制保留无灯技术文字、独立振幅红与既有可折叠资格')
-check(_amp_no_gray_snap['text_only'] == [] and _amp_no_gray_snap['summary']['red'] == 1
-      and _amp_no_gray_snap['signal_counts']['amp']['red'] == 1
-      and all(not members for members in _amp_no_gray_snap['signal_members']['rsi'].values())
-      and not _amp_control_filter.get('rsi', {}).get('members', [])
-      and _amp_control_filter['amp']['members'][0]['l'] == 'red'
-      and _amp_no_gray_row == _amp_no_gray_before and _amp_no_gray_snap == _amp_no_gray_snap_before,
-      '原振幅2high控制不进灰名单或RSI筛选，振幅红统计保留且事实快照不突变')
-check('data-signal-kind="boll_rsi" data-signal-level="red"' in monitor._signals_html(_amp_rows[4])
-      and monitor.text_only_members([_amp_rows[4]]) == []
-      and _amp_snap['signal_counts']['boll_rsi']['red'] == 1
-      and all(_amp_snap['signal_counts'][k][c] == 0 for k in ('boll', 'rsi') for c in ('red', 'yellow')),
-      '组合红时低振幅静默，不重复单独布林RSI或技术灰')
-check(all((kind, 'red') in _amp_rows[-1]['signal_marks'] for kind in ('chg', 'vol_ratio', 'amp'))
-      and _amp_rows[-1]['purple'] and not _amp_rows[-1]['foldable']
-      and [m['kind'] for m in monitor.text_only_members([_amp_rows[-1]])] == ['boll_rsi'],
-      '振幅红+技术灰+涨跌/加仓/量比红+目标紫独立，技术不折叠资格不变')
-check('.signal-item[data-signal-level="gray"]{color:var(--text)}' in monitor.PAGE_CSS
-      and _amp_rows == _amp_input_before and _amp_snap == _amp_snap_before,
-      '生产技术灰仍白字且完整渲染不突变分析或快照')
 
 # 四箭头只独立着色；使用既有生产分析样本，不改变灯规则与输入事实。
 for _row, _side in _oversold_rows:
@@ -1713,8 +1606,8 @@ with _patch('io.open', _mock_open(read_data=_json.dumps(_seed_payload))), \
         'bench_name': _inject + '\u2028\u2029'}}])
 check('<' not in _seed_text and '\u2028' not in _seed_text and '\u2029' not in _seed_text
       and _json.loads(_seed_text)['items'][_inject]['cost'] == 25
-      and _json.loads(_seed_text)['rs20']['bench_name'] == _inject + '\u2028\u2029',
-      '成本种子代码与基准名安全JSON序列化，不允许script结束标签且保留原值')
+      and 'rs20' not in _json.loads(_seed_text),
+      '成本种子代码安全JSON序列化，不允许script结束标签且保留原值，且不再带 rs20')
 with _patch.object(monitor, '_cost_seed_json', return_value=_seed_text):
     _safe_cost_css, _safe_cost_js = monitor._cost_panel_assets([])
     _unsafe_page = monitor.render({}, [_escaped_row], 1, snapshot=_unsafe_snapshot)
@@ -1726,12 +1619,10 @@ check(_inject not in _safe_cost_js and '__MM_REAL__' not in _safe_cost_js
 if '--chrome' in sys.argv:
     # 生产渲染合成红/黄价格配对，并保留白灯及仅文字同股样本；不读取真实仓位。
     _color_rows = [_copy.deepcopy(_order_row)]
-    for _chg_level, _amp_level in (('red', 'red'), ('red', 'yellow'), ('yellow', 'red'), ('yellow', 'yellow')):
-        _color_row = item('COLOR' + _chg_level.upper() + _amp_level.upper(), 'technology',
-                          'red' if 'red' in (_chg_level, _amp_level) else 'yellow')
-        _color_row.update(signals=[('异动 -12.0%' if _chg_level == 'red' else '波动 +8.2%'),
-                                   '振幅 11.2%（756.00~840.47）'],
-                          signal_marks=[('chg', _chg_level), ('amp', _amp_level)])
+    for _chg_level in ('red', 'yellow'):
+        _color_row = item('COLOR' + _chg_level.upper(), 'technology', _chg_level)
+        _color_row.update(signals=[('异动 -12.0%' if _chg_level == 'red' else '波动 +8.2%')],
+                          signal_marks=[('chg', _chg_level)])
         _color_rows.append(_color_row)
     with _patch.object(monitor, 'global_dca', return_value=None):
         _color_snapshot = monitor.build_snapshot({}, _color_rows, {}, group_counts={})
@@ -2305,11 +2196,10 @@ const deadline = setTimeout(() => {
             expected:expected[el.dataset.signalLevel||'']}))}));
       })()`);
       const all=colors.flatMap(row=>row.items);
-      assertions.push({ok:colors.length===5 && all.length>0 && all.every(el=>el.color===el.expected)
+      assertions.push({ok:colors.length===3 && all.length>0 && all.every(el=>el.color===el.expected)
         && ['red','yellow','gray',''].every(level=>all.some(el=>el.level===level))
-        && colors.every(row=>row.items.filter(el=>el.role==='primary').length===1
-          && row.items.filter(el=>el.role==='supplement').length===1),
-        name:width+'px红红/红黄/黄红/黄黄配对及同股白灯、仅文字均按自身等级着色，补充不再变灰',actual:colors});
+        && colors.every(row=>row.items.every(el=>el.role==='')),
+        name:width+'px涨跌幅红/黄及同股白灯、仅文字均按自身等级着色（振幅已删除，不再有主次配对）',actual:colors});
       const lamps=await evaluate(`(() => {
         const levels=['red','yellow','green','gray'];
         const expected={red:'rgb(248, 81, 73)',yellow:'rgb(210, 153, 34)',
@@ -2649,7 +2539,7 @@ const deadline = setTimeout(() => {
       const sameEdges=(a,b)=>Math.abs(a.left-b.left)<=0.5&&Math.abs(a.right-b.right)<=0.5;
       const cashRect=rect(cash),assetRect=rect(asset);
       const fullWidth=topGroups.length>=2&&topGroups.every(g=>[p,cashRect,assetRect,...zones.map(z=>z.rect)].every(r=>sameEdges(r,g.rect)));
-      const state={parent:styles(parent),parentRect:p,head:hs,triangle:{visibility:triangle.visibility,width:triangle.width,display:triangle.display},zones,cash:styles(cash),cashRect,assetRect,topGroups,fullWidth,cashText:cash.querySelector('.cb-cash .cb-name').textContent,rs:parent.querySelector('.rs-spy')?.textContent||''};
+      const state={parent:styles(parent),parentRect:p,head:hs,triangle:{visibility:triangle.visibility,width:triangle.width,display:triangle.display},zones,cash:styles(cash),cashRect,assetRect,topGroups,fullWidth,cashText:cash.querySelector('.cb-cash .cb-name').textContent,rs:parent.querySelector('.rs-spy')?.textContent||'',total:parent.querySelector('.pos-total')?.textContent||''};
       head.click();state.clickKeepsOpen=parent.open;
       const alpha=color=>{const parts=color.match(/[\\d.]+/g)||[];return color==='transparent'?0:parts.length===4?Number(parts[3]):parts.length===3?1:0;};
       state.collapse=[];
@@ -2726,7 +2616,7 @@ const deadline = setTimeout(() => {
         &&layout.fullWidth&&Math.abs(zoneWidth-layout.zones[1].rect.width)<0.1&&layout.zones.every(z=>z.rect.left>=layout.parentRect.left&&z.rect.right<=layout.parentRect.right
           &&parseFloat(z.style.borderWidth)>0&&parseFloat(z.style.borderRadius)>0)
         &&layout.collapse.length===2&&layout.collapse.every(c=>c.visible&&c.alpha>0)
-        &&layout.cashText==='Cash'&&layout.rs==='20日对.SPX +3.5%'&&layout.editor.columns.length===5
+        &&layout.cashText==='Cash'&&layout.rs===''&&/^\$[\d,]+$/.test(layout.total)&&layout.editor.columns.length===5
         &&layout.editor.headingStyles.length===5&&layout.editor.headingStyles.every(s=>s.fontSize==='13px'&&s.lineHeight==='19.5px'&&s.color==='rgb(139, 147, 161)')
         &&layout.editor.codeText==='GOOGL'&&layout.editor.codeFits&&layout.editor.rightAligned&&layout.editor.quantityTextFits
         &&layout.editor.buttonsSameRow&&layout.editor.bondTotalSameRow&&layout.editor.quantity.textAlign==='right'&&layout.editor.cashExtra.textAlign==='right',

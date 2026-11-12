@@ -791,12 +791,15 @@ test('已清仓硬编码GEHC不再删掉其他分组及对应链接',async()=>{
     prepareDocument:d=>{let ul=d.createElement('ul');ul.innerHTML='<li><a href="#s-gehc">GEHC</a></li>';d.body.appendChild(ul);}});
   assert.ok(b.doc.getElementById('s-gehc'));assert.ok(b.doc.querySelector('a[href="#s-gehc"]'));assert.equal(b.doc.querySelector('.cost-sum>b').textContent,'$250');
 });
-test('移组标的不参与20日组合收益',async()=>{
-  let seed={...SEED,rs20:{items:{AAA:90,BBB:10},bench:0,days:20}};let b=await boot({seed,groups:{AAA:'focus'}});
-  assert.match(b.doc.querySelector('#group_positions .rs-spy').textContent,/\+10\.0%/);
-  b.move('BBB','focus');assert.equal(b.doc.querySelector('#group_positions .rs-spy').textContent,'');
+test('持仓标题行放总资产、现金行最左放长短持仓合计市值；20日对.SPX 已删除',async()=>{
+  let b=await boot({});
+  const head=b.doc.querySelector('#group_positions>summary .group-stats .pos-total');
+  assert.ok(head);assert.equal(b.doc.querySelector('#group_positions .rs-spy'),null);
+  assert.match(head.textContent,/^\$[\d,]+$/);
+  const hold=b.doc.querySelector('#group_positions>.cashbond-row .cb-total-amt').textContent;
+  assert.match(hold,/^\$[\d,]+$/);
+  assert.ok(Number(head.textContent.replace(/[^\d]/g,''))>=Number(hold.replace(/[^\d]/g,'')));   // 总资产含现金固收，不小于持仓市值
 });
-
 test('编辑时移组拒绝旧输入框提交已移走的标的',async()=>{
   let b=await boot();await b.enter();let input=b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]');b.move('AAA','focus');input.value='999';
   b.doc.getElementById('costManage').fire('input',{target:input});assert.equal(b.state().DATA.items.AAA.qty,5);assert.equal(b.doc.querySelector('input[data-sym="AAA"]'),null);
@@ -2692,6 +2695,29 @@ for(const [sym,hold,qty,cost] of [['AAA','long','1','2'],['SGOV','long','1','2']
   ['bad code','long','1','2'],['CCC','bad','1','2'],['CCC','long','0','2'],['CCC','short','1e2','2'],['CCC','long','1','--2']])
 test('新增拒绝非法/重复/专属口径 '+[sym,hold,qty,cost].join('/'),async()=>{
   const b=await bootClear();assert.throws(()=>b.addPosition(sym,hold,qty,cost));assert.deepEqual(b.clearState().additions,{});assert.equal(b.puts().length,0);await b.dispose();
+});
+test('新增弹框选填备注/加仓价/减仓价/目标价：覆盖复制来的旧值、没填的保留、目标价0关闭达到且不写target_at',async()=>{
+  const b=await bootClear(),config=copy(CLEAR_CONFIG);config.technology.CCC={note:'旧备注',trigger:12,reduce:50,target:20,target_at:'2026-09'};
+  b.doc.querySelector('[data-cost-add]').click();const d=b.doc.querySelector('.cost-add-dialog');
+  for(const k of ['note','trigger','reduce','target'])assert.equal(d.querySelector('[data-add-'+k+']').value,'');
+  d.querySelector('[data-add-symbol]').value='ccc';d.querySelector('[data-add-qty]').value='3';d.querySelector('[data-add-cost]').value='11';
+  d.querySelector('[data-add-note]').value='新备注';d.querySelector('[data-add-trigger]').value='9.5';d.querySelector('[data-add-target]').value='0';
+  d.querySelector('[data-add-confirm]').click();
+  assert.equal(d.open,false);assert.deepEqual(b.clearState().additions.CCC.extra,{note:'新备注',trigger:9.5,target:0});
+  const put=await beginBatch(b,config),{next}=await finishBatch(b,put,config);
+  // 填了的覆盖（备注/加仓价/目标价），没填的减仓价保留；目标价0 → 删除 target_at
+  assert.deepEqual(next.positions.CCC,{note:'新备注',trigger:9.5,reduce:50,target:0,hold:'long'});
+  await b.dispose();
+});
+test('新增弹框选填字段校验：备注超7字、减仓价<=0、目标价<0、非数字均拒绝，且不留草稿',async()=>{
+  for(const [note,trigger,reduce,target] of [['一二三四五六七八','','',''],['','abc','',''],['','','0',''],['','','-1',''],['','','','-1'],['','','','1e999']]){
+    const b=await bootClear();assert.throws(()=>b.addPosition('CCC','long','1','2',note,trigger,reduce,target));
+    assert.deepEqual(b.clearState().additions,{});assert.equal(b.puts().length,0);await b.dispose();
+  }
+});
+test('新增不填选填字段：草稿与事务记录里不出现extra（与旧行为完全一致）',async()=>{
+  const b=await bootClear();b.addPosition('CCC','long','1','2','','','','');
+  assert.equal('extra' in b.clearState().additions.CCC,false);await b.dispose();
 });
 test('新增only一次data一次main且记录hold，既有普通监控配置备注trigger不丢',async()=>{
   const b=await bootClear(),config=copy(CLEAR_CONFIG);config.technology.CCC={note:'已有代码',trigger:12,target:20};

@@ -33,8 +33,7 @@ class TestRSI(unittest.TestCase):
                 patch.object(monitor, 'calc_rsi', side_effect=values) as rsi, \
                 patch.object(monitor, 'vol_profile', return_value=('mid', sigma)), \
                 patch.object(monitor, 'boll', return_value=bands), \
-                patch.object(monitor, 'boll_streak', return_value=streak or {'up': 0, 'dn': 0}), \
-                patch.object(monitor, '_rule_amplitude', side_effect=lambda al, x: setattr(x, 'amp', None)):
+                patch.object(monitor, 'boll_streak', return_value=streak or {'up': 0, 'dn': 0}):
             result = monitor.analyze_symbol('TEST', cfg or {}, data or neutral_data(), group=group)
             self.assertEqual([call.args[1] for call in rsi.call_args_list], [6, 12, 24])
         return result

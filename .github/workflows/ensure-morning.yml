@@ -1,7 +1,7 @@
 name: 早间自动结果保险
 run-name: "自动结果保险 · ${{ github.event_name }}"
 
-# 唯一入口：Cloudflare Worker（cloudflare/market-monitor-trigger.js）在美东 20:15 / 20:45 各派发一次。
+# 唯一入口：Cloudflare Worker（cloudflare/market-monitor-trigger.js）在美东 20:30 / 20:45 各派发一次。
 # 当日日线未就绪时，daily.yml 会再派发本工作流（delay_minutes=30）做延迟重试，最晚到美东 24 点。
 # monitor.py --ensure-schedule-run 判断：不在美东 20:00–24:00 → 不做；当晚结果已存在且当日日线齐 → 不做；
 # 主任务正在排队/运行 → 不做；否则派发 daily.yml（source=schedule-fallback，按定时口径跑）。

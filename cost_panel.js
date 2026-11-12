@@ -463,6 +463,7 @@
           if (object(entries)) Object.keys(entries).forEach(function (sym) {
             if (/^[A-Z0-9.^=_-]{1,32}$/.test(sym) && object(entries[sym]) && ['long', 'short'].indexOf(entries[sym].hold) >= 0)
               (key === 'addDraft' ? addDraft : addedPositions)[sym] = clone(entries[sym]);
+            if (key === 'addDraft' && own(entries[sym], 'extra') && !validExtra(entries[sym].extra)) delete addDraft[sym].extra;
           });
         });
         editBaseline = null;
@@ -1175,6 +1176,40 @@
     // 恢复记录只供面板保存核验，不恢复上传授权。
     var clearBusy = false, clearDialog = null, clearChoice = null;
     var clearRecord = null;
+    // 新建仓位弹框里选填的备注、加仓价、减仓价、目标价（目标价 0＝关闭「达到」报灯，与设置页一致）。
+    // 只在填了时才出现在草稿/事务记录里，没填的字段不写、不覆盖已有分组里复制来的值。
+    function validExtra(x) {
+      if (!object(x)) return false;
+      var keys = Object.keys(x);
+      if (!keys.length) return false;
+      return keys.every(function (k) {
+        var v = x[k];
+        if (k === 'note') return typeof v === 'string' && v.trim() === v && v.length > 0 && Array.from(v).length <= 7;
+        if (typeof v !== 'number' || !isFinite(v)) return false;
+        if (k === 'trigger') return true;
+        if (k === 'reduce') return v > 0;
+        if (k === 'target') return v >= 0;
+        return false;
+      });
+    }
+    function monthBJ() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 7); }
+    function parseExtra(note, trigger, reduce, target) {
+      var out = {};
+      note = String(note || '').trim();
+      if (note) {
+        if (Array.from(note).length > 7) throw new Error('备注最多7个字');
+        out.note = note;
+      }
+      [['trigger', trigger, '加仓价'], ['reduce', reduce, '减仓价'], ['target', target, '目标价']].forEach(function (f) {
+        var raw = String(f[1] == null ? '' : f[1]).trim();
+        if (!raw) return;
+        var n = Number(raw);
+        if (!isFinite(n) || (f[0] === 'reduce' && n <= 0) || (f[0] === 'target' && n < 0))
+          throw new Error(f[2] + (f[0] === 'trigger' ? '请填有限数字或留空' : f[0] === 'target' ? '请填大于或等于0的数字（0＝关闭达到报灯）或留空' : '请填大于0的数字或留空'));
+        out[f[0]] = n;
+      });
+      return Object.keys(out).length ? out : null;
+    }
     function reloadClearRecord() {
       var record = isolated ? null : read(LS_CLEAR);
       if (record === null) { clearRecord = null; return; }
@@ -1183,7 +1218,8 @@
       }
       if (record.version === 2 && Array.isArray(record.targets) && (record.targets.length || (Array.isArray(record.additions) && record.additions.length)) &&
           (!own(record, 'additions') || (Array.isArray(record.additions) && record.additions.every(function (t) {
-            return object(t) && /^[A-Z0-9.^=_-]{1,32}$/.test(t.sym || '') && ['long', 'short'].indexOf(t.hold) >= 0;
+            return object(t) && /^[A-Z0-9.^=_-]{1,32}$/.test(t.sym || '') && ['long', 'short'].indexOf(t.hold) >= 0 &&
+              (!own(t, 'extra') || validExtra(t.extra));
           }))) &&
           record.targets.every(function (t) { return object(t) && /^[A-Z0-9.^=_-]{1,32}$/.test(t.sym || '') && ['default', 'focus'].indexOf(t.choice) >= 0; }))
         clearRecord = record;
@@ -1328,6 +1364,11 @@
         }
       });
       var record = clone(source || {}); record.hold = t.hold;
+      if (t.extra) {
+        // 填了才覆盖；没填保留已有分组里复制来的值
+        Object.keys(t.extra).forEach(function (k) { record[k] = t.extra[k]; });
+        if (own(t.extra, 'target')) { if (t.extra.target > 0) record.target_at = monthBJ(); else delete record.target_at; }
+      }
       return { record: record, signature: JSON.stringify(records) };
     }
     function clearAccept(remote) {
@@ -1367,7 +1408,11 @@
         Object.keys(next.items).flatMap(function (sym) { return [sym + '|qty', sym + '|cost']; })
       ).forEach(function (key) { if (clearField(next, key) !== clearField(baseline, key)) fields[key] = clearField(next, key); });
       var targets = Object.keys(clearDraft).map(function (sym) { return { sym: sym, choice: clearDraft[sym] }; });
-      var additions = Object.keys(addDraft).map(function (sym) { return { sym: sym, hold: addDraft[sym].hold }; });
+      var additions = Object.keys(addDraft).map(function (sym) {
+        var a = { sym: sym, hold: addDraft[sym].hold };
+        if (addDraft[sym].extra) a.extra = clone(addDraft[sym].extra);
+        return a;
+      });
       saveClearRecord({ version: 2, targets: targets, additions: additions, step: 'quantity', baseline: baseline, fields: fields });
     }
     async function executeClear(sym, choice) {
@@ -1521,7 +1566,10 @@
           // 预检未写入远端，释放冻结但保留草稿，允许改选目的地或修正后重存。
           clearRecord.targets.forEach(function (t) { clearDraft[t.sym] = t.choice; });
           (clearRecord.additions || []).forEach(function (t) {
-            if (!addDraft[t.sym]) addDraft[t.sym] = { hold: t.hold, before: (clearRecord.baseline && clearRecord.baseline.items[t.sym]) || null };
+            if (!addDraft[t.sym]) {
+              addDraft[t.sym] = { hold: t.hold, before: (clearRecord.baseline && clearRecord.baseline.items[t.sym]) || null };
+              if (t.extra) addDraft[t.sym].extra = clone(t.extra);
+            }
           });
           if (write(LS_CLEAR, null)) clearRecord = null;
           draftPending = true; persist();
@@ -1690,7 +1738,7 @@
       clearDialogControls(); tradeDialog.showModal(); tradeDialog.querySelector('[data-trade-qty]').focus();
     }
     var addDialog = null;
-    function addPosition(sym, hold, qty, cost) {
+    function addPosition(sym, hold, qty, cost, note, trigger, reduce, target) {
       if (!editing || !writer || disposed || clearBusy) return;
       if (clearRecord && clearRecord.step !== 'done') throw new Error('请先完成面板保存事务核验，再新增仓位');
       sym = String(sym || '').trim().toUpperCase();
@@ -1704,7 +1752,9 @@
       qty = String(qty || '').trim(); cost = String(cost || '').trim();
       if (draftError(qty) || draftError(cost, 'cost') || !(Number(qty) > 0)) throw new Error('数量必须大于0；数量与成本最多四位小数，成本可留空');
       if (!checkedDraft()) { persist(); paint(); throw new Error('已有无效输入，请先修正后新增仓位'); }
+      var extra = parseExtra(note, trigger, reduce, target);
       addDraft[sym] = { hold: hold, before: DATA.items[sym] ? clone(DATA.items[sym]) : null };
+      if (extra) addDraft[sym].extra = extra;
       editDraft[sym + '|qty'] = { raw: qty, error: '' };
       editDraft[sym + '|cost'] = { raw: cost, error: '' };
       DATA = checkedDraft(); draftPending = true; changed();
@@ -1727,6 +1777,10 @@
           '<label><input type="radio" name="addHold" data-add-hold value="short">短持仓</label></div>' +
           '<label>数量 <input data-add-qty inputmode="decimal" aria-label="新仓位数量"></label>' +
           '<label>成本 <input data-add-cost inputmode="decimal" aria-label="新仓位成本"></label>' +
+          '<label>备注 <input data-add-note maxlength="7" placeholder="中文名，选填" aria-label="新仓位备注名"></label>' +
+          '<label>加仓价 <input data-add-trigger inputmode="decimal" placeholder="选填" aria-label="新仓位加仓价"></label>' +
+          '<label>减仓价 <input data-add-reduce inputmode="decimal" placeholder="选填" aria-label="新仓位减仓价"></label>' +
+          '<label>目标价 <input data-add-target inputmode="decimal" placeholder="选填，0＝关闭达到报灯" aria-label="新仓位目标价"></label>' +
           '<p data-add-message role="status"></p>' +
           '<div class="cost-acts"><button type="button" data-add-cancel>取消</button><button type="button" class="primary" data-add-confirm>加入草稿</button></div>';
         panel.appendChild(addDialog);
@@ -1735,12 +1789,15 @@
           else if (e.target.closest('[data-add-confirm]')) {
             try { addPosition(addDialog.querySelector('[data-add-symbol]').value,
               addDialog.querySelector('[data-add-hold]:checked').value,
-              addDialog.querySelector('[data-add-qty]').value, addDialog.querySelector('[data-add-cost]').value); }
+              addDialog.querySelector('[data-add-qty]').value, addDialog.querySelector('[data-add-cost]').value,
+              addDialog.querySelector('[data-add-note]').value, addDialog.querySelector('[data-add-trigger]').value,
+              addDialog.querySelector('[data-add-reduce]').value, addDialog.querySelector('[data-add-target]').value); }
             catch (err) { addDialog.querySelector('[data-add-message]').textContent = err.message; }
           }
         });
       }
       addDialog.querySelector('[data-add-message]').textContent = '';
+      ['note', 'trigger', 'reduce', 'target'].forEach(function (k) { addDialog.querySelector('[data-add-' + k + ']').value = ''; });
       all('[data-add-hold]', addDialog).forEach(function (input) { input.checked = input.value === 'long'; });
       addDialog.showModal(); addDialog.querySelector('[data-add-symbol]').focus();
     }
@@ -2187,64 +2244,22 @@
     function fmt1(n) {
       return (n >= 0 ? '+' : '') + n.toFixed(1);
     }
-    var rsEl = document.querySelector('#group_positions>summary .group-stats .rs-spy');
-    if (!rsEl) {
+    // 持仓标题行右侧：总资产（含现金、固收）。原相对标普强弱项已于 2026-11-12 删除。
+    var totEl = document.querySelector('#group_positions>summary .group-stats .pos-total');
+    if (!totEl) {
       var st = document.querySelector('#group_positions>summary .group-stats');
       if (st) {
-        rsEl = document.createElement('span');
-        rsEl.className = 'rs-spy';
-        st.appendChild(rsEl);
+        totEl = document.createElement('span');
+        totEl.className = 'pos-total';
+        st.appendChild(totEl);
       }
     }
-    function renderRs() {
-      if (!rsEl) return;
-      rsEl.className = 'rs-spy';
-      rsEl.textContent = '';
-      rsEl.removeAttribute('title');
-      var rs = REAL && REAL.rs20;
-      if (!rs || !rs.items) return;
-      var v1 = 0,
-        v0 = 0,
-        n = 0,
-        miss = [];
-      ROWS.forEach(function (r) {
-        if (!isPosition(r)) return;
-        var it = DATA.items[r.sym],
-          q = it ? num(it.qty) : 0;
-        if (!(q > 0)) return;
-        var ri = rs.items[r.sym];
-        if (typeof ri !== 'number') {
-          miss.push(r.sym);
-          return;
-        }
-        var mv = q * r.price;
-        v1 += mv;
-        v0 += mv / (1 + ri / 100);
-        n++;
-      });
-      if (!n || !(v0 > 0)) return;
-      var R = (v1 / v0 - 1) * 100,
-        diff = R - num(rs.bench),
-        cls = diff >= 0.5 ? 'up' : diff <= -0.5 ? 'down' : '';
-      rsEl.className = 'rs-spy' + (cls ? ' ' + cls : '');
-      rsEl.textContent = (rs.days || 20) + '日对.SPX ' + fmt1(diff) + '%';
-      rsEl.setAttribute(
-        'aria-label',
-        '持仓 20 日 ' +
-          fmt1(R) +
-          '% − ' +
-          (rs.bench_name || '标普500') +
-          ' ' +
-          fmt1(num(rs.bench)) +
-          '%（' +
-          (rs.start || '') +
-          '→' +
-          (rs.end || '') +
-          '，' +
-          n +
-          ' 只按市值加权）' +
-          (miss.length ? '；' + miss.join('、') + ' 无 20 日数据未计入' : ''),
-      );
+    function renderPosTotal(totalAsset) {
+      if (!totEl) return;
+      var text = totalAsset > 0 ? plain(totalAsset) : '';
+      if (totEl.textContent !== text) totEl.textContent = text;
+      if (text) totEl.setAttribute('aria-label', '总资产 ' + text + '（含现金及固收）');
+      else totEl.removeAttribute('aria-label');
     }
     function groupName(r) {
       var z = r.tr.closest('details.zone-card'),
@@ -2428,7 +2443,8 @@
           }
         }
       });
-      updateText('#group_positions>.cashbond-row .cb-total-amt', plain(totalAsset));
+      // 现金/固收行最左侧：长短持仓合计市值（股票/ETF），与右侧盈亏同口径；总资产改放持仓标题行。
+      updateText('#group_positions>.cashbond-row .cb-total-amt', plain(sumOf(longs.concat(shorts), function (x) { return x.mv; })));
       var el = updateText(
         '#group_positions>.cashbond-row .cb-total-pnl',
         money(totalPnl) + '（' + pct(tPct) + '）',
@@ -2551,7 +2567,7 @@
           '总资产 ' + plain(totalAsset) + '；股票/ETF持仓盈亏 ' + money(totalPnl) + '，' + pct(tPct),
         );
       }
-      renderRs();
+      renderPosTotal(totalAsset);
       renderPositionTotals(longs, shorts, totalAsset, totalPnl, tPct, cash, fixed);
       var cmp = editing
         ? function (a, b) {

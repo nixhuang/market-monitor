@@ -1,10 +1,10 @@
 // Cloudflare Worker: market-monitor-trigger
-// 唯一职责：在美东 20:15 / 20:45 各派发一次 ensure-morning.yml。
+// 唯一职责：在美东 20:30 / 20:45 各派发一次 ensure-morning.yml。
 // 「要不要真跑、数据齐不齐、是不是已有任务在跑」全部交给 GitHub 侧 monitor.py --ensure-schedule-run 判断，
 // Worker 不再读 status.json / runs 列表（以前两边各写一套判断，Worker 那套还不看当日数据齐不齐）。
 //
 // Cron（只需 1 条，覆盖夏/冬令时共 4 个时点，错季节的由下面的美东时间闸门丢掉）：
-//   15,45 0,1 * * TUE-SAT
+//   30,45 0,1 * * TUE-SAT
 // Secret：GITHUB_TOKEN（细粒度令牌，仅 nixhuang/market-monitor，Actions: Read and write）
 
 const REPO = "nixhuang/market-monitor";
@@ -31,9 +31,9 @@ export default {
     const actualDay = `${actual.year}-${actual.month}-${actual.day}`;
     const minute = Number(planned.minute);
 
-    // 只放行美东周一~周五 20:15 / 20:45；错季节（落在 19:xx / 21:xx）和被拖过 21:00 的投递直接丢掉。
+    // 只放行美东周一~周五 20:30 / 20:45；错季节（落在 19:xx / 21:xx）和被拖过 21:00 的投递直接丢掉。
     if (!["Mon", "Tue", "Wed", "Thu", "Fri"].includes(planned.weekday) ||
-        planned.hour !== "20" || ![15, 45].includes(minute) ||
+        planned.hour !== "20" || ![30, 45].includes(minute) ||
         actualDay !== plannedDay || actual.hour !== "20") {
       console.log(`skip: cron=${event.cron} planned NY ${plannedDay} ${planned.hour}:${planned.minute}`);
       return;

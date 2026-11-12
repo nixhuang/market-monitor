@@ -208,9 +208,9 @@ async function runDraftRecovery(){
   editSetting('dca_start','2026-10-08');editSetting('dca_every','7');
   const settingDraft=els.set_vol_ratio.value,ruleCount=requests.length;
   await T.loadSettings();check(requests.length===ruleCount,'普通后台重读不能覆盖冲突草稿');
-  settings={...settings,vol_ratio:2.2,amp_red:12,custom_rule:{remote:true}};sha='e'.repeat(40);
+  settings={...settings,vol_ratio:2.2,chg_red:12,custom_rule:{remote:true}};sha='e'.repeat(40);
   confirms=0;global.confirm=()=>++confirms===1;await saveSettings();
-  check(els.set_vol_ratio.value===settingDraft&&els.set_amp_red.value==='8','规则取消同字段合并不换SHA或表单');
+  check(els.set_vol_ratio.value===settingDraft&&els.set_chg_red.value==='4','规则取消同字段合并不换SHA或表单');
   global.confirm=text=>{prompts.push(text);return true;};
   getStatus=503;await saveSettings();check(els.set_vol_ratio.value==='1.8'&&els.rulesDirty.textContent.includes('未保存'),'规则读取失败保留草稿和dirty');
   getStatus=200;
@@ -219,11 +219,11 @@ async function runDraftRecovery(){
   resolveRead(response({content:Buffer.from(JSON.stringify(settings)).toString('base64'),sha}));await loading;
   check(els.set_vol_ratio.value==='not-a-number'&&els.msg.textContent.includes('停止合并'),'恢复期间继续输入时慢GET不能覆盖草稿');
   global.fetch=mockFetch;await saveSettings();
-  check(els.set_vol_ratio.value==='not-a-number'&&els.set_amp_red.value==='12'&&els.set_dca_every.value==='7'&&T.SET.custom_rule.remote,'显式恢复保留无效原始输入、定投草稿和远端隐藏字段');
+  check(els.set_vol_ratio.value==='not-a-number'&&els.set_chg_red.value==='12'&&els.set_dca_every.value==='7'&&T.SET.custom_rule.remote,'显式恢复保留无效原始输入、定投草稿和远端隐藏字段');
   const beforeInvalid=requests.length;await saveSettings();
   check(requests.length===beforeInvalid&&els.msg.textContent.includes('vol_ratio'),'恢复后的无效规则仍不能提交');
   editSetting('vol_ratio','1.9');putStatus=200;await saveSettings();
-  check(requests.at(-1).method==='PUT'&&requests.at(-1).body.sha==='e'.repeat(40)&&bodyValue().amp_red===12&&
+  check(requests.at(-1).method==='PUT'&&requests.at(-1).body.sha==='e'.repeat(40)&&bodyValue().chg_red===12&&
     bodyValue().vol_ratio===1.9&&bodyValue().custom_rule.remote&&bodyValue().dca_every===7,'规则经再次保存携带最新SHA和显式合并结果');
   editSetting('vol_ratio','2.0');putStatus=409;await saveSettings();
   const beforeSecond=requests.length;settings.vol_ratio=2.3;sha='9'.repeat(40);await saveSettings();
@@ -261,7 +261,7 @@ const expectedDefaults = {
   boll_n:20,boll_k:2,boll_near_pct:0.5,boll_near_band_pct:15,chg_red:4,chg_yellow:2,
   rsi_high:70,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,
   target_space_pct:40,target_high_space_pct:90,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:2,vol_ratio_red_z:3.6,
-  amp_yellow:5,amp_red:8,ma_short:50,ma_long:200,hy_green:350,hy_red:400,
+  ma_short:50,ma_long:200,hy_green:350,hy_red:400,
   vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,dca_every:0,dca_start:'',signal_single_open:1,group_single_open:0,
 };
 check(Object.keys(T.SET_DEFS).length===Object.keys(expectedDefaults).length&&
@@ -462,29 +462,29 @@ check(src.includes('location.origin!==\'https://nixhuang.github.io\''), '非正�
 check(!src.includes('importCard')&&!src.includes('list-import')&&!src.includes('btnLink')&&!src.includes('import-audit')&&
   !/previewCsv|readCsv|parseCsv/.test(src), 'CSV/EBK 导入与手机令牌链接功能已从设置页移除');
 
-doc.getElementById('set_amp_yellow').value = '3';
-doc.getElementById('set_amp_red').value = '9';
+doc.getElementById('set_chg_yellow').value = '3';
+doc.getElementById('set_chg_red').value = '9';
 T.SET.custom_rule = 42;
 T.collectSettings();
 const saved = JSON.parse(T.setJsonText());
-check(saved.amp_yellow === 3 && saved.amp_red === 9, '振幅阈值正确采集并保留到保存 JSON');
+check(saved.chg_yellow === 3 && saved.chg_red === 9, '涨跌幅阈值正确采集并保留到保存 JSON');
 check(saved.custom_rule === 42, '表单外已有设置不会被保存操作删除');
 T.SET.fund_enable=1;T.SET.fund_om_drop=7;T.SET.fund_future_rule=99;
 const retiredSaved=JSON.parse(T.setJsonText());
 check(!Object.keys(retiredSaved).some(k=>k.startsWith('fund_'))&&retiredSaved.custom_rule===42&&
-  retiredSaved.amp_yellow===3&&retiredSaved.amp_red===9, '保存剔除全部旧fund设置但保留其他设置');
+  retiredSaved.chg_yellow===3&&retiredSaved.chg_red===9, '保存剔除全部旧fund设置但保留其他设置');
 check(!src.includes('基本面')&&!src.includes('set_fund_')&&!Object.keys(T.SET_DEFS).some(k=>k.startsWith('fund_')),
   '设置页无基本面UI或schema参数');
 delete T.SET.fund_enable;delete T.SET.fund_om_drop;delete T.SET.fund_future_rule;
 check(!('hy_yellow' in saved), '保存规则不保留无效的旧黄色信用利差阈值');
-check(src.includes('id="set_amp_yellow"') && src.includes('id="set_amp_red"'), '编辑页确实有两个振幅输入项');
+check(!src.includes('set_amp_') && !src.includes('振幅'), '设置页已无任何振幅输入项（2026-11-12 整体删除）');
 check(!src.includes('id="set_hy_yellow"')&&src.includes('垃圾债利差黄线（bp）')&&src.includes('垃圾债利差红线（bp）')&&
   src.includes('id="set_hy_green"')&&src.includes('id="set_hy_red"'), '信用利差仅保留有效黄红阈值控件和简短标签');
 check(!src.includes('同类只取最高分')&&!src.includes('站上200日均线的股票不足50%为黄'),
   '设置页不再保留宏观完整说明');
 check(!src.includes('高收益债利差')&&!src.includes('跑路价签'), '编辑页只使用垃圾债利差新名称');
 check(src.includes('id="set_ma_short"')&&src.includes('id="set_ma_long"')&&
-  src.includes('id="set_amp_yellow"')&&src.includes('id="set_amp_red"'), '设置页保留可编辑阈值输入框');
+  src.includes('id="set_chg_yellow"')&&src.includes('id="set_chg_red"'), '设置页保留可编辑阈值输入框');
 check(!src.includes('id="sourceDetails"')&&!src.includes('五指标综合市场风险')&&
   !src.includes('id="effectiveRuleText"')&&Object.keys(expectedDefaults).filter(k=>
     !['target_space_pct','target_high_space_pct'].includes(k)).every(k=>doc.getElementById('set_'+k)),
@@ -516,7 +516,7 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   const beforeMigrationStore=JSON.stringify(store);
   els.msg.textContent='迁移前';
   global.fetch=async(url,options)=>{migrationRequests.push(options.method);return {ok:true,status:200,
-    json:async()=>({content:Buffer.from('{"target_space_pct":50,"amp_yellow":3,"amp_red":9}').toString('base64'),sha:'a'.repeat(40)})};};
+    json:async()=>({content:Buffer.from('{"target_space_pct":50,"chg_yellow":3,"chg_red":9}').toString('base64'),sha:'a'.repeat(40)})};};
   await T.loadSettings();
   check(migrationRequests.join(',')==='GET'&&JSON.stringify(store)===beforeMigrationStore&&els.msg.textContent==='迁移前',
     '读取旧50仅GET，无维护上传、无本地写入、无参数警告');
@@ -525,10 +525,10 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   let resolve;
   global.fetch = () => new Promise(r => { resolve = r; });
   const loading = T.loadSettings();
-  doc.getElementById('set_amp_yellow').value = '4';
-  resolve({ok: true, status: 200, json: async () => ({content: Buffer.from('{"amp_yellow":8}').toString('base64'), sha: 'a'.repeat(40)})});
+  doc.getElementById('set_chg_yellow').value = '4';
+  resolve({ok: true, status: 200, json: async () => ({content: Buffer.from('{"chg_yellow":8}').toString('base64'), sha: 'a'.repeat(40)})});
   await loading;
-  check(els.set_amp_yellow.value === '4', '慢读取不会覆盖用户正在编辑的振幅');
+  check(els.set_chg_yellow.value === '4', '慢读取不会覆盖用户正在编辑的涨跌幅阈值');
   const cfg=JSON.parse(T.configText());cfg.positions.AAPL={note:'测试',trigger:80};
   cfg.materials={XLB:{note:'板块'},DD:{note:'化工'}};cfg.custom_field='preserved';
   cfg.group_monitoring={positions:false,focus:true,materials:false,future_group:true};
@@ -587,7 +587,7 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   check(T.settingsError().includes('boll_n'), '布林周期零被阻止');
   els.set_boll_n.value='20';els.set_rsi_low.value='80';
   check(T.settingsError().includes('RSI'), 'RSI上下限倒置被阻止');
-  els.set_rsi_low.value='30';els.set_chg_yellow.value='6';
+  els.set_rsi_low.value='30';els.set_chg_red.value='4';els.set_chg_yellow.value='6';
   check(T.settingsError().includes('chg_yellow'), '黄色高于红色阈值被阻止');
   els.set_chg_yellow.value='2';els.set_dca_start.value='2026-02-30';
   check(T.settingsError().includes('定投起点日'), '虚构日期不能保存');

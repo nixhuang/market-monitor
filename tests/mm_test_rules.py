@@ -264,7 +264,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         # 两块分区标题就是「名词解释与计算」「抓取规则」，指标名全部是 h5。
         glossary = page_assets.GLOSSARY_BODY
         self.assertEqual(re.findall(r'<h4>(.*?)</h4>', glossary), ['名词解释与计算', '抓取规则'])
-        self.assertEqual(len(re.findall(r'<h5 id="(?:glossary|fetch)-', glossary)), 15)
+        self.assertEqual(len(re.findall(r'<h5 id="(?:glossary|fetch)-', glossary)), 14)
         self.assertNotIn('可点红灯与已读', glossary)
 
     def test_purple_ring_and_capsule_share_one_variable(self):
@@ -483,9 +483,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
     def test_main_row_price_and_target_use_the_same_two_rows(self):
         css = page_assets.PAGE_CSS
         prefix = 'table.stk tr[data-symbol]>'
-        self.assertIn(prefix + 'td.px .px-main{display:grid;grid-template-rows:var(--row-height) var(--row-height)', css)
-        for cls in ('px-price', 'px-chg'):
-            self.assertIn(prefix + f'td.px .{cls}{{display:block;margin:0;height:var(--row-height);line-height:var(--row-height)}}', css)
+        self.assertIn(prefix + 'td.px .px-main{display:grid;grid-template-rows:17px 17px 16px', css)
+        self.assertIn(prefix + 'td.px .px-price,' + prefix + 'td.px .px-chg{display:block;margin:0;height:17px;line-height:17px}', css)
+        self.assertIn(prefix + 'td.px .px-amt{display:block;margin:0;height:16px;line-height:16px}', css)
         for cls, area in (('target-space','1/1/2/3'), ('target-price','2/1/3/2'), ('target-month','2/2/3/3')):
             self.assertIn(prefix + f'td.tgs .{cls}{{grid-area:{area}', css)
         self.assertIn('target-month{grid-area:2/2/3/3;margin-left:3px}', css)
@@ -509,8 +509,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
     def test_mobile_stock_numbers_and_main_row_padding_are_compact(self):
         css = page_assets.PAGE_CSS
         mobile = css.split('@media(max-width:600px){', 1)[1].split('@media(min-width:601px){', 1)[0]
-        for cls, size in (('sym',17), ('px .px-price',16), ('px .px-chg',16), ('tgs .lvtag.tgt',15)):
-            self.assertIn(f'table.stk tr[data-symbol]>td.{cls}{{font-size:{size}px}}', mobile)
+        for cls, size in (('sym',17), ('px :is(.px-price,.px-chg,.px-amt)',15), ('tgs .lvtag.tgt',15)):
+            self.assertIn(f'table.stk tr[data-symbol]>td.{cls}{{font-size:{size}px}}', mobile)   # 价格区三排统一15px（2026-11-12）
         self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}', mobile)
         self.assertIn('table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:4px 8px;', css)
         self.assertIn('table.stk tr[data-layout="tight"]>td.px{padding-left:3px;padding-right:3px}', css)
@@ -925,8 +925,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
                             ('布林上轨▲ + RSI 1条 ↓超卖（反）', [(' class="cell-gray"', '白灯'), ('', '仅文字'), ('', '无提示')]),
                             ('RSI 2条 ↑超买', [(' class="cell-gray"', '白灯'), ('', '仅文字'), ('', '无提示')]),
                             ('RSI 1条 ↓超卖', [(' colspan="3"', '仅文字')]),
-                            ('涨跌幅 · 自适应', [(' colspan="3"', '红灯／黄灯')]),
-                            ('振幅 · 自适应', [(' colspan="3"', '红灯／黄灯')])):
+                            ('涨跌幅 · 自适应', [(' colspan="3"', '红灯／黄灯')])):
                         with self.subTest(source=label, condition=condition, settings=settings):
                             rows = [row for row in re.findall(r'<tr\b[^>]*>.*?</tr>', table, re.S)
                                     if '<td' in row and plain_text(re.search(r'<td\b[^>]*>(.*?)</td>', row, re.S)[1]) == condition]
@@ -935,41 +934,6 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
                                      re.findall(r'<td\b([^>]*)>(.*?)</td>', rows[0], re.S)]
                             self.assertEqual(cells, [('', condition)] + expected)
                     self.assertIn('text-align:center', page_assets.RULES_CSS)
-
-    def test_amplitude_all_groups_adaptive_boundaries_and_independent_marks(self):
-        groups = [g['item_group'] for g in monitor.GROUPS] + ['custom_group']
-        for group in groups:
-            for tier, sigma, mult in (('low', 1, .6), ('mid', 2, 1), ('high', 3, 1.4)):
-                for amp, expected in ((0, None), (.01, None), (6 * mult - .001, None),
-                                      (6 * mult, 'yellow'), (10 * mult - .001, 'yellow'),
-                                      (10 * mult, 'red'), (12 * mult, 'red')):
-                    with self.subTest(group=group, tier=tier, amp=amp), \
-                            patch.dict(monitor.S, amp_yellow=6, amp_red=10), \
-                            patch.object(monitor, 'vol_profile', return_value=(tier, sigma)), \
-                            patch.object(monitor, 'AMP_GROUPS', ()):
-                        # 同量级价格构造范围，避免在100附近相减丢失边界精度。
-                        x = SimpleNamespace(group=group, closes=[], touch_up=2 * amp if amp else 1,
-                                            touch_dn=amp if amp else 1, prev=100, foldable=True)
-                        monitor._apply_vol_tier(x)
-                        al = monitor._Alerts()
-                        al.add('chg', '异动 +6.0%', 'red')
-                        monitor._rule_amplitude(al, x)
-                        actual = 'red' if x.amp >= x.amp_red else 'yellow' if x.amp >= x.amp_yellow else None
-                        self.assertEqual(actual, expected)
-                        self.assertEqual(al.marks, [('chg', 'red')] + ([('amp', expected)] if expected else []))
-                        self.assertEqual(al.level, 'red')
-                        self.assertTrue(x.foldable)
-                        self.assertAlmostEqual(x.amp, amp)
-        for up, down, prev in ((None, 99, 100), (101, None, 100), (101, 99, 0),
-                               (99, 101, 100), (float('nan'), 99, 100), (float('inf'), 99, 100),
-                               (101, 99, True), (101, 99, float('inf')), (True, True, 100),
-                               (101, -1, 100), (101, 99, -100), (101, 99, 1e-320)):
-            x = SimpleNamespace(touch_up=up, touch_dn=down, prev=prev,
-                                amp_yellow=6, amp_red=10, foldable=True)
-            al = monitor._Alerts()
-            monitor._rule_amplitude(al, x)
-            self.assertIsNone(x.amp)
-            self.assertEqual((al.marks, al.signals, x.foldable), ([], [], True))
 
     def test_standalone_oversold_reuses_rsi_statistics_kind_without_new_interface(self):
         self.assertIn(('rsi', 'RSI'), monitor.SIGNAL_KINDS)
@@ -1134,10 +1098,10 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertIn('Cboe官方VIX日线优先', text)
         self.assertIn('标的去重与显示优先级', text)
         self.assertNotRegex(markup, r'\$\{\w+\}')
-        self.assertEqual(markup.count('<table '), 10)  # 两项阈值、三项连续示例、五项抓取表。
-        for ident in ('glossary-chg-table', 'glossary-amp-table', 'glossary-vol-table', 'fetch-reference'):
+        self.assertEqual(markup.count('<table '), 9)  # 一项阈值、三项连续示例、五项抓取表。
+        for ident in ('glossary-chg-table', 'glossary-vol-table', 'fetch-reference'):
             self.assertEqual(markup.count(f'id="{ident}"'), 1)
-        self.assertEqual(re.search(r'<section id="glossary-calculation">(.*?)</section>', markup, re.S)[1].count('<table '), 5)
+        self.assertEqual(re.search(r'<section id="glossary-calculation">(.*?)</section>', markup, re.S)[1].count('<table '), 4)
         self.assertEqual(re.search(r'<section id="glossary-fetch">(.*?)</section>', markup, re.S)[1].count('<table '), 5)
 
     def test_home_rules_explain_cost_membership_and_boll_upper_without_jargon(self):
@@ -1376,11 +1340,12 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertNotIn('open', elements.tags['group_positions_short'][1])
         self.assertIn('<span class="cb-name">Cash</span>', page)
         self.assertNotIn('<span class="cb-name">现金</span>', page)
-        # 组合20日对SPX仍由真实rs20和仓位值计算；父标题改版不替换数据函数。
+        # 2026-11-12：持仓「20日对.SPX」已删除；标题行右侧改放总资产，现金行最左放长短持仓合计市值。
         cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
-        self.assertIn("#group_positions>summary .group-stats .rs-spy", cost)
-        self.assertIn('REAL.rs20', cost)
-        self.assertNotIn('20日对.SPX -1.6%', page_assets.PAGE_INTERACTION_JS)
+        self.assertIn("#group_positions>summary .group-stats .pos-total", cost)
+        self.assertNotIn('REAL.rs20', cost)
+        self.assertNotIn('renderRs', cost)
+        self.assertNotIn('日对.SPX', cost)
 
     def test_positions_lock_blocks_parent_activation_not_child_collapse(self):
         lock = re.search(r'\(function lockPositionsOpen\(\) \{.*?\n\}\)\(\);',

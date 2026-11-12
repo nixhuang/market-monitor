@@ -102,10 +102,9 @@ LAMP_RULE_TABLE = (
     '<td>无提示</td><td>无提示</td></tr>'
     '<tr class="rule-group-end"><td>布林下轨▼ + RSI 0条</td>'
     '<td class="cell-gray">白灯</td><td class="cell-gray-fold" colspan="2">白灯（折）</td></tr>'
-    '<tr><th scope="row" class="cat-col" rowspan="5">价格与量能</th>'
+    '<tr><th scope="row" class="cat-col" rowspan="4">价格与量能</th>'
     '<td>涨跌幅 · 自适应</td>'
     '<td colspan="3">红灯／黄灯</td></tr>'
-    '<tr><td>振幅 · 自适应</td><td colspan="3">红灯／黄灯</td></tr>'
     '<tr><td>52周低位（距低点≤${near_52w_low_pct}%）</td>'
     '<td colspan="3">红灯（新进入／跌破／昨日未知）；黄灯（其余持续低位）</td></tr>'
     '<tr><td>均线（短均线穿越；长均线触及±${ma_long_band_pct}%或穿越）</td>'
@@ -124,13 +123,9 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 <h4>名词解释与计算</h4>
 <h5 id="glossary-chg">涨跌幅 · 计算与阈值</h5>
 <p>涨跌幅＝（现价÷昨收−1）×100%；报灯取绝对值。</p>
-<p>两项共用历史日波动档：&lt;${vol_low_sigma}%低档，&gt;${vol_high_sigma}%高档，其余中档；不足${vol_min_returns}个有效日收益取中档。不是按今天的涨跌选档。</p>
+<p>按这只股票自己的历史日波动分档：&lt;${vol_low_sigma}%低档，&gt;${vol_high_sigma}%高档，其余中档；不足${vol_min_returns}个有效日收益取中档。不是按今天的涨跌选档。</p>
 <p>所有分组适用；达到红门槛报红，否则达到黄门槛报黄。</p>
 ${chg_threshold_table}
-<h5 id="glossary-amp">振幅 · 计算与阈值</h5>
-<p>振幅＝（日高−日低）÷昨收×100%，表示日内摆动宽度。涨跌幅接近0，振幅仍可能很大。</p>
-<p>所有分组沿用上节波动档，达到红门槛优先报红，否则达到黄门槛报黄。有效0%保留数值；低于黄门槛不提示、不计白，也不因振幅强制不折叠。日内高低缺失、错位、无效或仅由现价填补时，不计算振幅。</p>
-${amp_threshold_table}
 <h5 id="glossary-boll">布林逼近 · 自适应</h5>
 <p>布林为${boll_n}日、±${boll_k}倍标准差。逼近范围＝历史日波动×${boll_near_factor}（当前${boll_near_band_pct}%设置）；波动越大，范围越宽。关闭自适应或波动无效时固定${boll_near_pct}%。</p>
 <p>连续自适应示例，不是固定三档：</p>
@@ -265,13 +260,13 @@ def _rules_markup(body):
     aliases = {
         "rule-lamps": "alerts", "rule-text": "display", "rule-folded": "quiet",
         "rule-boll-upper": "upper", "rule-boll-lower": "lower", "rule-vol": "volume",
-        "rule-chg": "change", "rule-amp": "amplitude", "rule-low52": "low",
+        "rule-chg": "change", "rule-low52": "low",
         "rule-ma": "ma", "rule-prices": "prices", "rule-cost-loss": "loss",
         "rule-target-space": "space", "rule-target-reached": "reached",
         "rule-earnings": "earnings", "rule-quotes": "missing", "rule-rsi": "single",
         "glossary-calculation": "terms", "glossary-fetch": "fetch",
         "glossary-chg": "change-terms",
-        "glossary-amp": "amplitude-terms", "glossary-boll": "boll-terms",
+        "glossary-boll": "boll-terms",
         "glossary-rsi": "rsi-terms", "glossary-vol": "volume-terms",
         "glossary-ma": "ma-terms", "glossary-target": "target-terms",
         "glossary-earnings": "earnings-terms", "fetch-target": "fetch-consensus",
@@ -321,7 +316,7 @@ def _rule_values(settings, constants):
     for tier in ("low", "mid", "high"):
         mult = values.get("vol_mult_" + tier, multipliers[tier])
         values["vol_mult_" + tier] = mult
-        for kind in ("chg", "amp"):
+        for kind in ("chg",):
             for level in ("red", "yellow"):
                 values[f"{kind}_{tier}_{level}"] = round(values[f"{kind}_{level}"] * mult, 6)
     for period in ("short", "long"):
@@ -399,7 +394,7 @@ def rules_body(settings, constants):
 
 def glossary_body(settings, constants):
     values = _rule_values(settings, constants)
-    tables = {kind + "_threshold_table": _threshold_table(kind, values) for kind in ("chg", "amp")}
+    tables = {kind + "_threshold_table": _threshold_table(kind, values) for kind in ("chg",)}
     tables["vol_example_table"] = _volume_example_table(values)
     body = re.sub(r"\$\{(\w+)\}", lambda m: tables[m[1]] if m[1] in tables else _text(values[m[1]]),
                   GLOSSARY_BODY)
@@ -854,7 +849,7 @@ tr.gray td{color:var(--dim)}
 .macro-card[open]>summary{border-bottom:1px solid var(--line)}
 .group-stats{margin-left:auto;color:var(--dim);font-size:14px;font-weight:400}
 .group-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
-.group-card>summary .rs-spy{margin-left:auto}
+.group-card>summary .rs-spy,.group-card>summary .pos-total{margin-left:auto}
 .zone-card{margin:10px -2px 12px;padding-left:4px;padding-right:4px;border:1px solid var(--line);border-radius:9px;background:var(--zone-bg)}
 .zone-card .group-bottom{margin:0 4px 0}
 .zone-card>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:9px 10px;list-style:none;touch-action:manipulation}
@@ -889,6 +884,7 @@ tr.gray td{color:var(--dim)}
 .group-card>summary .grp-name{white-space:nowrap;flex:none}
 .macro-card>summary .grp-name{white-space:nowrap;flex:none}
 .rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
+.pos-total{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text)}
 .rs-spy.up{color:var(--up)}
 .rs-spy.down{color:var(--down)}
 .stat-dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
@@ -1020,13 +1016,14 @@ table.stk tr[data-symbol]>td.sym>.sym-box .tag{display:none}
 table.stk tr[data-symbol]>td.sym>.sym-box .note{display:block;margin:0;font-size:11.5px;line-height:var(--row-height);white-space:nowrap}
 table.stk tr[data-symbol]>td.sym>.sym-box .unit{display:inline-block;margin-left:4px}
 table.stk tr[data-symbol]>td.sym::after{content:"";position:absolute;left:var(--vl-x);top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
-table.stk tr[data-symbol]>td.px{grid-area:px;position:relative;display:block;padding:4px 6px;text-align:left;white-space:nowrap}
+/* 价格区三排（现价/涨跌幅/涨跌金额）统一 15px，铺满首行 50px 高度：三排行高 17/17/16，整块下移 3px，
+   最后一排数字下沿低于右侧紫灯框下沿约 3px，三排之间约 6px 间隔（2026-11-12 用户：不要挤在一起、下面不要空一大块） */
+table.stk tr[data-symbol]>td.px{grid-area:px;position:relative;display:block;padding:0 6px;text-align:left;white-space:nowrap}
 table.stk tr[data-layout="tight"]>td.px{padding-left:3px;padding-right:3px}
-table.stk tr[data-symbol]>td.px .px-main{display:grid;grid-template-rows:var(--row-height) var(--row-height);align-items:center;margin:0;padding:0 6px 0 0;min-width:0}
-table.stk tr[data-symbol]>td.px .px-price{display:block;margin:0;height:var(--row-height);line-height:var(--row-height)}
-table.stk tr[data-symbol]>td.px .px-chg{display:block;margin:0;height:var(--row-height);line-height:var(--row-height)}
-.px-price{font-size:15px}
-.px-chg{font-size:14.5px}
+table.stk tr[data-symbol]>td.px .px-main{display:grid;grid-template-rows:17px 17px 16px;align-items:center;position:relative;top:3px;height:50px;margin:0;padding:0 6px 0 0;min-width:0}
+table.stk tr[data-symbol]>td.px .px-price,table.stk tr[data-symbol]>td.px .px-chg{display:block;margin:0;height:17px;line-height:17px}
+table.stk tr[data-symbol]>td.px .px-amt{display:block;margin:0;height:16px;line-height:16px}
+.px-price,.px-chg,.px-amt{font-size:15px}
 table.stk tr[data-symbol]>td.px::after{content:"";position:absolute;right:0;top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
 table.stk tr[data-symbol]>td.tgs::after{content:"";position:absolute;right:0;top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
 table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:4px 3px 4px 2px;line-height:0;text-align:center;width:auto;max-width:none}
@@ -1129,7 +1126,6 @@ table.stk tr[data-symbol]:not(:has(>td.cost-line:not([hidden])))+tr.range52-row>
 @media(max-width:600px){
 :root{--status-font-size:14.5px}
 .sig-cols[data-combo="1"]{--combo-size:11.3px;--combo-cy:9.7px}
-.stk td.sig .signal-item[data-signal-kind="amp"]{white-space:nowrap;overflow-wrap:normal}
 body{padding-left:5px;padding-right:5px}
 .oil-reference-row td{padding:8px 6px}
 .runbar{padding-left:16px;padding-right:16px;gap:12px}
@@ -1162,8 +1158,7 @@ body{padding-left:5px;padding-right:5px}
 table.stk tr[data-symbol]>td.sym{font-size:17px}
 table.stk tr[data-symbol]>td.sym>.sym-box{line-height:20.8px}
 table.stk tr[data-symbol]>td.sym>.sym-box .note{font-size:14.5px}
-table.stk tr[data-symbol]>td.px .px-price{font-size:16px}
-table.stk tr[data-symbol]>td.px .px-chg{font-size:16px}
+table.stk tr[data-symbol]>td.px :is(.px-price,.px-chg,.px-amt){font-size:15px}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt{font-size:15px}
 table.stk tr[data-symbol]>td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}
 table.stk tr.range52-row>td:first-child{padding:0 6px 12px 6px}
@@ -1177,7 +1172,7 @@ table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 .runlight{line-height:16.88px}
 .stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}
 #signalCounts .signal-count-toggle{font-size:17px;line-height:16px}
-.rs-spy{font-size:16px;line-height:24px}
+.rs-spy,.pos-total{font-size:16px;line-height:24px}
 .zone-card>summary .zone-name{font-size:16px;line-height:22.5px}
 .zone-card>summary .zone-num{font-size:16px;line-height:22.5px}
 .dual-body>.cost-contrib .cnsym{font-size:15px;line-height:15.75px}
@@ -1318,7 +1313,7 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 #glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:var(--lamp-red)}
 #glossary-vol-table thead th:nth-child(2){color:var(--lamp-red)}
 #glossary-vol-table thead th:nth-child(3){color:var(--lamp-yellow)}
-#glossary-chg-table td,#glossary-amp-table td,#glossary-vol-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
+#glossary-chg-table td,#glossary-vol-table td{font-variant-numeric:tabular-nums;white-space:nowrap}
 """
 PAGE_CSS = PAGE_CSS.replace('__TARGET_DASH_BORDER__', TARGET_DASH_BORDER)
 PAGE_CSS += RULES_CSS
@@ -1401,6 +1396,31 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
     if (node.textContent !== text) node.textContent = text;
     if (cut) node.title = full;
     else node.removeAttribute('title');
+  }
+  // 价格区三排的小数位压缩：现价≥100 少一位小数、涨跌幅少一位、涨跌金额≥$10 少一位；原文存在 data-px-full 里，随时可还原。
+  function pxCompact(row, on) {
+    let changed = false;
+    row.querySelectorAll('td.px .px-price,td.px .px-chg,td.px .px-amt').forEach(function(n) {
+      if (n.dataset.pxFull === undefined) n.dataset.pxFull = n.textContent;
+      const full = n.dataset.pxFull;
+      let text = full;
+      if (on) {
+        // 按四舍五入少一位小数（不是截断）；数值取显示文本本身，不另读行情。
+        const one = function(v) { return Math.abs(v).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}); };
+        if (n.classList.contains('px-price')) {
+          const m = full.match(/^([\d,]+\.\d\d)(.*)$/);
+          if (m && Number(m[1].replace(/,/g, '')) >= 100) text = one(Number(m[1].replace(/,/g, ''))) + m[2];
+        } else if (n.classList.contains('px-chg')) {
+          const m = full.match(/^([+-])(\d+\.\d\d)%$/);
+          if (m) { const v = Number(m[2]); text = (Number(one(v)) === 0 ? '' : m[1]) + one(v) + '%'; }
+        } else {
+          const m = full.match(/^([+-])([\d,]+\.\d\d)$/);
+          if (m && Number(m[2].replace(/,/g, '')) >= 10) text = m[1] + one(Number(m[2].replace(/,/g, '')));
+        }
+      }
+      if (n.textContent !== text) { n.textContent = text; changed = true; }
+    });
+    return changed;
   }
   function layoutEarn(earn, cell) {
     const unit = earn.querySelector(':scope > .unit');
@@ -1492,13 +1512,20 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
   function layout(row) {
     if (!row.getBoundingClientRect().width) return; // 折叠行展开后才测量。
     row.dataset.layout = 'loose';
+    pxCompact(row, false);
     note(row, false);
     const cell = row.querySelector(':scope > td.lamp-earn');
     const earn = cell && cell.querySelector('.earn[data-main]');
     if (earn && layoutEarn(earn, cell) === 'tight') {
       row.dataset.layout = 'tight';
-      note(row, true);
-      layoutEarn(earn, cell);
+      // 财报区放不下才动价格区：先压价格区小数位（财报字不多时价格区一律完整显示小数位），
+      // 仍放不下才走原来的截断备注 + 压财报字距。
+      if (pxCompact(row, true) && layoutEarn(earn, cell) !== 'tight') {
+        // 压价格区小数位后财报区已能完整显示
+      } else {
+        note(row, true);
+        layoutEarn(earn, cell);
+      }
     }
     balanceDescriptions(row);
     verticalLines(row);
@@ -1803,6 +1830,7 @@ function appendRsiArrows(parent, text) {
     "↑": "arrow-rsi-up", "↓": "arrow-rsi-down"};
   // 带正负号的百分比数字（+8.31% / -5.47%）用涨跌色；「±3.1%」不匹配，0 不上色。
   const pctRe = /(?<![±\d.])([+\-\u2212])(\d[\d,]*(?:\.\d+)?)%/y;
+  const amtRe = /([+\-\u2212]?)(\d[\d,]*\.\d+)(?![\d%])/y;   // 跟在 U+2002 后面的涨跌金额（不带货币符号）
   let buf = "";
   const flush = function() {
     if (buf) { parent.appendChild(document.createTextNode(buf)); buf = ""; }
@@ -1830,6 +1858,20 @@ function appendRsiArrows(parent, text) {
         continue;
       }
     }
+    if (ch === "\u2002") {
+      amtRe.lastIndex = i + 1;
+      const m = amtRe.exec(text);
+      if (m && m[1] && Number(m[2].replace(/,/g, "")) !== 0) {
+        buf += ch;
+        flush();
+        const span = document.createElement("span");
+        span.className = m[1] === "+" ? "num-up" : "num-down";
+        span.textContent = m[0];
+        parent.appendChild(span);
+        i += m[0].length;
+        continue;
+      }
+    }
     buf += ch;
   }
   flush();
@@ -1840,14 +1882,14 @@ function signalMemberKey(member) {
   const weights = {red:5, yellow:4, gray:3, white:3, purple:2, green:1};
   const order = member.o == null ? 9 : Number(member.o);
   const bucket = order === 0 && ['长持仓', '短持仓'].includes(member.g) ? 0 : order === 1 ? 1 : 2;
-  let red = 0, score = 0, count = 0, amplitude = 0;
+  let red = 0, score = 0, count = 0, magnitude = 0;
   member.details.forEach(function(part) {
     red += part.l === 'red' ? 1 : 0;
     score += weights[part.l] || 0;
     for (const match of part.t.matchAll(/(\d+)\s*条/g)) count = Math.max(count, Number(match[1]));
-    for (const match of part.t.matchAll(/(-?\d+(?:\.\d+)?)\s*[%×]/g)) amplitude = Math.max(amplitude, Math.abs(Number(match[1])));
+    for (const match of part.t.matchAll(/(-?\d+(?:\.\d+)?)\s*[%×]/g)) magnitude = Math.max(magnitude, Math.abs(Number(match[1])));
   });
-  return [bucket, -(weights[member.l] || 0), -red, -score, -count, -amplitude, order, member.s];
+  return [bucket, -(weights[member.l] || 0), -red, -score, -count, -magnitude, order, member.s];
 }
 
 function renderSignalFilter() {
