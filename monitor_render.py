@@ -307,8 +307,14 @@ class PageRenderer:
         if self._context._pos_num(t.get("price")) is not None:
             parts.append(f'<span class="target-price">{self._context._price_text(t["price"])}</span>')
         month = t.get("month")
+        # 2026-11-13 19:35 用户：「分隔符·要在两个数字中间」（原来 · 写进文本、前导空格被行首折叠，
+        # 导致 · 贴着价格、离月份却隔了一个空格）。分隔符独立成 .target-sep 元素，左右由同一变量
+        # --tgs-month-gap 给等距 margin，· 的中心严格落在「共识价右缘 ↔ 月份数字左缘」的中点。
+        # 排版仍由 page_assets.py 的四列成组布局承担：共识价 + (· + N月) 作为一整组在框内居中；
+        # 「N月」字号由 CSS 定值 14px。title 仍写「N月」便于核对。
         if state != "failed" and type(month) is int and 1 <= month <= 12:
-            parts.append(f'<span class="target-month" title="{month}月">{chr(0x2460 + month - 1)}</span>')
+            parts.append(f'<span class="target-month" title="{month}月">'
+                         f'<span class="target-sep">&middot;</span>{month}月</span>')
         if state == "failed":
             parts.append('<span>获取失败</span>')
         return (f'<td class="tgs {cls}" data-target-state="{state}">'
@@ -593,7 +599,8 @@ class PageRenderer:
 
     def _countdown_html(self, event, today):
         mark = self._context.earnings_countdown(event, today)
-        tbd = " tbd" if (event or {}).get("timing") not in ("pre", "post", "during") else ""
+        # 蓝字只给「时段待定且还没发布」的美东倒计时；已发布的「（北京N已出）」也是北京口径，写白字。
+        tbd = "" if self._context.earnings_cd_merged(event, today) else " tbd"
         return f'<span class="cd{tbd}">{mark}</span>' if mark else ""
 
 
@@ -611,8 +618,10 @@ class PageRenderer:
         soon = {"red": " urgent", "yellow": " soon"}.get(urgency, "")
         main, sub = (html_lib.escape(text, quote=True) for text in earn)
         cd = self._countdown_html(event, today)
-        return (f'<span class="earn{soon}">{cd}{" " if cd else ""}{main}'
-                f'<span class="earn-sep"> · </span><span class="earn-bj">{sub}</span></span>')
+        # 倒计时并入北京相对日＋时段后，美东时间后不再重复同一句北京说明。
+        bj = (f'<span class="earn-sep"> · </span><span class="earn-bj">{sub}</span>'
+              if sub else "")
+        return f'<span class="earn{soon}">{cd}{" " if cd else ""}{main}{bj}</span>'
 
     def _earnings_band_html(self, d, today=None):
         """整行带底色的财报条，挂在 52 周条那一行的下方；没有财报就不占位。"""
@@ -845,16 +854,23 @@ class PageRenderer:
     def _quiet_keep(self, d, earnings_week):
         """独立于红黄灯的主表保留原因。"""
         return bool(d.get("reference_only") or not d.get("foldable", True)
-                    or self._context._target_active(d) or self._context.earnings_soon(d.get("earnings"), earnings_week))
+                    or self._context._target_active(d)
+                    or self._context.earnings_soon(d.get("earnings"), earnings_week)
+                    or self._context.earnings_past_keep(d.get("earnings"), earnings_week))
 
 
     def _price_rows_html(self, d, snapshot):
-        """两排八项：现价／涨跌幅／涨跌额／振幅，开／高／低／量比。只显示，不报灯。
+        """两排五项（2026-11-13）：左块上排 现价／涨跌额（带 $）、下排 涨跌幅；
+        振／量仍是上下两排（上振下量），整列靠右贴住紫灯框左侧、从右往左铺开。
+        开／高／低已下架，但规则层仍用真实日线算 day_amp，
+        数据字段与抓取链路一行不动。
 
+        只显示，不报灯。涨跌额在这里给显示文字加美元符号（+$12.35 / -$3.10 / $0.00），
+        day_change_amount 本身保持不带货币符号，统计名单等其它口径不受影响。
         量比只在显示层选口径（判灯仍走规则层）：收盘快照用抓取的完整日量比，
         盘中快照用按已开盘分钟折算的当时量比；开盘静默期拿不到盘中值就写「—」，
-        不悄悄回落到昨天的完整日量比。开／高／低／振幅没有真实日线值也写「—」。
-        振幅只在数字上按 >6% 黄／>10% 红着色，判色用显示值；这一层不报灯、不进统计。
+        不悄悄回落到昨天的完整日量比。振幅只在数字上按 >6% 黄／>10% 红着色，
+        判色用显示值；这一层不报灯、不进统计。
         """
         def number(value):
             return (isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -863,10 +879,14 @@ class PageRenderer:
         chg = d.get("chg")
         chg_cls = "up" if (chg or 0) > 0 else "down" if (chg or 0) < 0 else ""
         chg_txt = f"{chg:+.2f}%" if chg is not None else "—"
-        amt_txt = day_change_amount(price, d.get("prev_close")) or "—"
-        amt_cls = "up" if amt_txt.startswith("+") else "down" if amt_txt.startswith("-") else ""
-        # 开／高／低是「简写」：只留一位小数（现价仍按完整精度显示），两排才放得下手机 440。
-        price_text = lambda value, digits=2: f"{value:,.{digits}f}" if number(value) else "—"
+        raw_amt = day_change_amount(price, d.get("prev_close"))
+        if not raw_amt:
+            amt_txt, amt_cls = "—", ""
+        else:
+            # 符号放最前、美元标志紧跟符号：+$12.35 / -$3.10 / $0.00；「—」不加币符。
+            sign = raw_amt[0] if raw_amt[0] in "+-" else ""
+            amt_txt = f"{sign}${raw_amt.lstrip('+-')}"
+            amt_cls = "up" if sign == "+" else "down" if sign == "-" else ""
         amp = d.get("day_amp")
         amp_txt = f"{amp:.1f}%" if number(amp) or amp == 0 else "—"
         amp_tone = _amp_display_tone(amp)
@@ -884,13 +904,11 @@ class PageRenderer:
         return (f'<span class="px-main">'
                 f'<span class="px-row px-row-main">'
                 f'<span class="px-price">{self._context.fmt(price) if number(price) else "—"}{html_lib.escape(str(d.get("unit") or ""))}</span>'
-                f'<span class="px-chg {chg_cls}">{chg_txt}</span>'
-                f'<span class="px-amt {amt_cls}">{amt_txt}</span>'
-                f'{metric("amp", "振", amp_txt, amp_cls)}</span>'
+                f'<span class="px-amt {amt_cls}">{amt_txt}</span></span>'
                 f'<span class="px-row px-row-sub">'
-                f'{metric("open", "开", price_text(d.get("day_open"), 1))}'
-                f'{metric("high", "高", price_text(d.get("day_high"), 1))}'
-                f'{metric("low", "低", price_text(d.get("day_low"), 1))}'
+                f'<span class="px-chg {chg_cls}">{chg_txt}</span></span>'
+                f'<span class="px-side">'
+                f'{metric("amp", "振", amp_txt, amp_cls)}'
                 f'{metric("vol", "量", vol_txt, vol_cls)}</span></span>')
 
 
@@ -1186,13 +1204,13 @@ class PageRenderer:
             anchor = self._context._stock_anchor_id(entry["symbol"])
             urg = self._context.earnings_urgency(event, today)
             urg_cls = {"red": " is-red", "yellow": " is-yellow"}.get(urg, "")
-            relative = event.get("timing") in ("pre", "post", "during") and re.match(r"北京 (?:今出|昨出|已出)", sub)
+            relative = bool(sub) and self._context.earnings_bj_relative(event, today)
             bj_cls = "earnings-week-bj is-countdown" if relative else "earnings-week-bj"
+            bj = f'<span class="{bj_cls}">·{esc(sub)}</span>' if sub else ""
             lines.append(f'<li{lamp_cls}><a class="signal-member-jump" href="#{anchor}">'
                          f'<span class="signal-member-symbol">{esc(entry["symbol"])}</span>{note}</a>'
                          f'<span class="signal-member-belong">（{esc(belong)}）</span> '
-                         f'<span class="earnings-week-meta{urg_cls}">{countdown}{esc(main)}'
-                         f'<span class="{bj_cls}">·{esc(sub)}</span></span>'
+                         f'<span class="earnings-week-meta{urg_cls}">{countdown}{esc(main)}{bj}</span>'
                          f'{lamp_text}</li>')
         if count_only:
             return len(lines)
@@ -1412,12 +1430,12 @@ class PageRenderer:
                     event = dict(event) if isinstance(event, dict) and event.get("date") == d["date"] else {}
                     event.update(status="ok", date=d["date"], timing=d.get("timing"))
                     _, sub = self._context.earnings_label(event, today)
-                    tbd = event.get("timing") not in ("pre", "post", "during")
+                    tbd = not self._context.earnings_cd_merged(event, today)
                     rec = filters["earnings_week"]["members"].get(self._context.instrument_identity(symbol))
                     if rec:
                         rec["d"][0]["e"] = {
                             "c": self._context.earnings_countdown(event, today), "b": sub, "tbd": tbd,
-                            "relative": bool(not tbd and re.match(r"北京 (?:今出|昨出|已出)", sub)),
+                            "relative": bool(sub) and self._context.earnings_bj_relative(event, today),
                         }
 
         filter_data = {kind: {"label": f["label"], "ok": f["ok"],

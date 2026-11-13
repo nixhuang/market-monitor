@@ -160,7 +160,7 @@ check('<span class="earn soon"' in _html_e and _html_e.count('<span class="earn 
       and '<span class="earn">美 10/27 盘前' in _html_e
       and '<div class="earn-band"><span class="earn soon"' in _html_e,
       "D 距北京今天 2 天的财报标黄（earn soon），20 天后仍显示蓝字但不再带倒计时；财报整排落在 52 周条下方带底色的条里")
-check(monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-22', 'timing': 'pre'}, '2026-10-07') == '（北京15天）'
+check(monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-22', 'timing': 'pre'}, '2026-10-07') == '（北京15天 晚间）'
       and monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-23', 'timing': 'pre'}, '2026-10-07') == ''
       and monitor._earnings_html({'earnings': {'status': 'ok', 'date': '2026-11-06', 'timing': 'pre'}}, '2026-10-07') != ''
       and monitor._earnings_html({'earnings': {'status': 'ok', 'date': '2026-11-07', 'timing': 'pre'}}, '2026-10-07') == '',
@@ -183,8 +183,10 @@ for _d in ('2026-01-15', '2026-07-15', '2026-10-11', '2027-01-01'):
                 _page = monitor.render({}, _rows, len(_rows), snapshot={})
             _card = _page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
             _css = {'red': ' urgent', 'yellow': ' soon', '': ''}[_urgency]
+            # 2026-11-13：D+2 落在 D+3 保留窗口内，财报行不再折进「无异动」；
+            # 只有 D-8 这种既不在红黄窗口、也不在保留窗口的日子才整组折叠。
             check(_card.count(f'<span class="earn{_css}">') == 5
-                  and ('无异动 5 只' not in _card if _urgency else '无异动 5 只' in _card)
+                  and ('无异动 5 只' in _card) == (_offset == -8)
                   and _card.count('<tr class="green"') == 5
                   and all(_row['level'] == 'green' for _row in _rows),
                   f'北京 {_day} {_time} / D={_d}：五种时段同窗 {_urgency or "普通"}，不改行情绿灯及正确折叠')
@@ -209,8 +211,8 @@ check('行灯' not in _unescape(re.sub(r'<[^>]+>', '', _visible_html)), '全部�
 # 终稿两端共用四区网格，成本和描述独立整行；不再沿用旧四列百分比表格。
 check('grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig"' in _html_e,
       '主行三区及成本/描述两整行网格齐全')
-check('grid-template-columns:max-content minmax(0,1fr) var(--tgs-w)' in _html_e,
-      '价格区吃下原财报栏，紫灯框固定最右列；没有紫灯的行也留同样宽的空格')
+check('grid-template-columns:var(--sym-w) minmax(0,1fr) var(--tgs-w)' in _html_e,
+      '代码列按 --sym-w 定宽、紫灯框固定最右列；没有紫灯的行也留同样宽的空格')
 check('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))' in _html_e,
       '两端均保留双列描述网格')
 check('data-pxfit="1"' in _html_e and 'max-width:600px' in _html_e,
@@ -733,15 +735,15 @@ for _state in ('space', 'high', 'hit'):
           and '--pstripe' not in monitor.PAGE_CSS,
           _state + '主行及52周续行均不再绘制右紫条')
 # 2026-10-30：红灯条宽度跟黄灯条对齐（6 → 4px），左内边距保持 14px 不动（文字左缘不变）。
-# 终稿：主表左灯条固定双端几何，不和墨迹测量分区线共用变量，也不延伸至52周行；
-# 统计面板名单仍用全局 tr.red/yellow/green td:first-child 的 inset 灯条。
+# 2026-11-13：主表左灯条固定双端几何，三处分区竖线共用同组变量、长度与灯条一致；
+# 不延伸至52周行；统计面板名单仍用全局 tr.red/yellow/green td:first-child 的 inset 灯条。
 for _level, _width in (('red', 4), ('yellow', 4), ('green', 2)):
     check('table.stk tr.' + _level + '[data-symbol]{--lamp-line:var(--' + _level + ')}' in monitor.PAGE_CSS
           and 'tr.' + _level + '+tr.range52-row>td{--lc' not in monitor.PAGE_CSS
-          and 'table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:9.5px;width:2px;height:41.7px;' in monitor.PAGE_CSS
-          and 'table.stk tr[data-symbol]::before{top:7px;height:42.7px}' in monitor.PAGE_CSS
-          and 'top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line)' in monitor.PAGE_CSS,
-          _level + '主表左灯条保留固定双端几何，与分区线独立且不延伸52周行')
+          and 'table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:2px;height:var(--lamp-h);' in monitor.PAGE_CSS
+          and '--lamp-top:10px;--lamp-h:36px' in monitor.PAGE_CSS
+          and 'top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)' in monitor.PAGE_CSS,
+          _level + '主表左灯条与分区线同长且不延伸52周行')
 # 2026-10-30：成本价搬到「代码 + 备注名」下面那一排，跟加／减仓价胶囊共用 .lvs 容器，
 # 只出文字不做胶囊 —— 规则里不能出现 border / border-radius，否则又变成一颗胶囊。
 _cost_inline = re.search(r'\.cost-inline\{([^}]*)\}', monitor.PAGE_CSS)
@@ -2053,7 +2055,7 @@ const deadline = setTimeout(() => {
         return {
           stripes, sparseBorders: [sparseBorder(low), sparseBorder(bad)],
           highColor: style(high).color,
-          highNumbers: [...high.querySelectorAll('.target-price,.target-month')].map(el => style(el).color),
+          highNumbers: [...high.querySelectorAll('.target-price,.target-month')].map(el => ({month: el.classList.contains('target-month'), color: style(el).color})),
           highPercent:style(high.querySelector('.target-space')).color,
           highSign:high.querySelector('.target-space').dataset.sign,
           highBorder: getComputedStyle(high.closest('td.tgs'), '::before').borderTopColor,
@@ -2073,15 +2075,20 @@ const deadline = setTimeout(() => {
           runbarRuleLinks: document.querySelectorAll('.runbar a[href="#signalRules"]').length
         };
       })()`);
-      const pink = 'rgb(220, 98, 184)', purple = 'rgb(176, 132, 255)';
+      const pink = 'rgb(220, 98, 184)', purple = 'rgb(176, 132, 255)', dim = 'rgb(139, 147, 161)';
+      // 2026-11-13：上下框线到数字墨迹都是 5px；14:58 首行内容下移 3px 后
+      // 框顶同步 +3px（桌面 top9/手机 top7），下边线统一收进 3px（bottom6），5/5px 留白不变。
+      const frameTop = width <= 600 ? '7px' : '9px';
       // 2026-11-11 用户：空间>=90% 只有外框紫红，数字沿用普通紫、不加粗影
+      // 2026-11-13 20:51：共识价仍普通紫，「· N月」整块降为 13px 灰（次要标注）。
       assertions.push({ok: actual.highColor === purple && actual.highBorder === pink
-        && actual.highNumbers.length >= 1 && actual.highNumbers.every(color => color === purple)
+        && actual.highNumbers.length >= 1
+        && actual.highNumbers.every(x => x.color === (x.month ? dim : purple))
         && actual.highSign === 'pos' && actual.highPercent === 'rgb(77, 208, 225)'
         && actual.highShadow === 'none' && actual.highBorderWidth === '1px'
-        && JSON.stringify(actual.highFrame.inset) === JSON.stringify(['2px','0px','2px','-1px'])
+        && JSON.stringify(actual.highFrame.inset) === JSON.stringify([frameTop,'0px','6px','-1px'])
         && actual.highFrame.radius === '3px',
-        name: width + 'px终稿高空间框位于tgs、目标价格沿用普通紫、正空间百分比青色', actual});
+        name: width + 'px终稿高空间框位于tgs、目标价格沿用普通紫、月份次要灰、正空间百分比青色', actual});
       assertions.push({ok: actual.originalSize[0] > 0 && actual.originalSize[1] > 0
         && JSON.stringify(actual.originalSize) === JSON.stringify(actual.priorSize)
         && actual.spaceColor === 'rgb(176, 132, 255)' && actual.spaceBorder === 'rgb(176, 132, 255)'
@@ -2099,8 +2106,8 @@ const deadline = setTimeout(() => {
       assertions.push({ok: actual.stripes.length === 9 && actual.stripes.every(s =>
         s.sigImage === 'none' && s.sigShadow === 'none'
         && s.rowContent === '""' && s.rowWidth === '2px' && s.rowColor === s.color
-        && Math.abs(parseFloat(s.rowTop)-(width<=600?7:9.5))<0.02
-        && Math.abs(parseFloat(s.rowHeight)-(width<=600?42.7:41.7))<0.02
+        && Math.abs(parseFloat(s.rowTop)-(width<=600?10:12.5))<0.02
+        && Math.abs(parseFloat(s.rowHeight)-(width<=600?36:31.5))<0.02
         && s.leftImage === 'none' && s.leftShadow === 'none'
         && s.rangeImage === 'none' && s.rangeSize === 'auto'),
         name: width + 'px终稿目标状态保留2px固定左灯条、首格无重复灯条且52周不续接', actual: actual.stripes});
@@ -2274,8 +2281,10 @@ const deadline = setTimeout(() => {
           const el=where==='main'?(row&&row.nextElementSibling?row.nextElementSibling.querySelector('.earn'):null):
             [...document.querySelectorAll('#signalCounts .earnings-week li')].find(li=>li.querySelector('.signal-member-symbol')?.textContent===sym)?.querySelector('.earnings-week-meta');
           if(!el)return {sym,where,missing:true};const cd=el.querySelector('.cd'),bj=el.querySelector('.earn-bj,.earnings-week-bj');
+          const cdText=cd?cd.textContent:'';
           return {sym,where,color:getComputedStyle(el).color,cd:cd?getComputedStyle(cd).color:null,
-            tbd:!!cd?.classList.contains('tbd'),bj:bj?getComputedStyle(bj).color:null,relative:!!bj?.classList.contains('is-countdown')};
+            cdText,tbd:!!cd?.classList.contains('tbd'),bj:bj?getComputedStyle(bj).color:null,relative:!!bj?.classList.contains('is-countdown'),
+            merged:/^（北京 (?:今天|明天) |^（北京.*已出/.test(cdText)};
         };
         const list=symbols.flatMap(s=>[sample(s,'main'),sample(s,'list')]);
         const box=document.getElementById('signalFilterResult'),data=signalFilterData();
@@ -2290,17 +2299,22 @@ const deadline = setTimeout(() => {
         renderSignalFilter();
         const filtered=[...box.querySelectorAll('[data-signal-kind="earnings_week"]')].map(e=>{
           const sym=e.closest('li').querySelector('.signal-member-symbol').textContent,cd=e.querySelector('.cd'),bj=e.querySelector('.earnings-week-bj');
+          const cdText=cd?cd.textContent:'';
           return {sym,where:'filter',color:getComputedStyle(e).color,cd:cd?getComputedStyle(cd).color:null,
-            tbd:!!cd?.classList.contains('tbd'),bj:bj?getComputedStyle(bj).color:null,relative:!!bj?.classList.contains('is-countdown')};
+            cdText,tbd:!!cd?.classList.contains('tbd'),bj:bj?getComputedStyle(bj).color:null,relative:!!bj?.classList.contains('is-countdown'),
+            merged:/^（北京 (?:今天|明天) |^（北京.*已出/.test(cdText)};
         });return {list,filtered};
       })()`);
       const expected={EPREV:'rgb(255, 133, 128)',ENOW:'rgb(255, 133, 128)',ERED:'rgb(255, 133, 128)',
         EYELLOW:'rgb(240, 198, 116)',EFAR:'rgb(143, 184, 240)',ETBD:'rgb(143, 184, 240)'};
+      // 2026-11-13：时段已定与已出都只在倒计时写一次（已出连北京月日一起写全），
+      // 后面不再重复北京时间；蓝字 tbd（时段待定且未发布）才保留灰字「北京 待定」。
       assertions.push({ok:times.list.length===12&&times.filtered.length===6&&times.list.concat(times.filtered).every(t=>
         !t.missing&&t.color===expected[t.sym]&&t.cd===(t.tbd?'rgb(143, 184, 240)':'rgb(255, 255, 255)')
         &&(!t.relative||t.bj==='rgb(255, 255, 255)')
-        &&(t.where==='main'||t.relative||t.bj===(['EFAR','ETBD'].includes(t.sym)?'rgb(139, 147, 161)':expected[t.sym]))),
-        name:width+'px主表、财报名单及多选交集保留红黄日期，无警ET蓝/BJ原色，北京倒计时白且ET待定蓝',actual:times});
+        &&(t.tbd?t.bj==='rgb(139, 147, 161)':t.bj===null||(t.relative&&t.bj==='rgb(255, 255, 255)'))
+        &&(!t.merged||/^（北京/.test(t.cdText))),
+        name:width+'px合并倒计时后主表／名单／交集不再重复北京说明，红黄日期与ET待定蓝仍保留',actual:times});
     }
     const rulesTree=await cdp('Page.getFrameTree');
     await cdp('Page.setDocumentContent',{frameId:rulesTree.frameTree.frame.id,html:syntheticPage(input.rulesPage)});

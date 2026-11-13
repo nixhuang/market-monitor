@@ -1207,7 +1207,8 @@ class TestGroups(unittest.TestCase):
                     self.assertEqual(monitor.earnings_urgency(e, today), urgency)
                     self.assertEqual(monitor.earnings_within_week(e, today), bool(urgency))
                     self.assertEqual(monitor.earnings_soon(e, today), bool(urgency))
-                    self.assertEqual(monitor.earnings_within_list(e, today), -1 <= gap <= 15)
+                    # 2026-11-13：名单保留窗口放宽到 D+3，红黄窗口不变。
+                    self.assertEqual(monitor.earnings_within_list(e, today), -monitor.EARN_PAST_KEEP_DAYS <= gap <= 15)
                     with patch.object(monitor, '_bj_today', return_value=today):
                         css = {'red': ' urgent', 'yellow': ' soon', '': ''}[urgency]
                         self.assertIn(f'class="earn{css}"', monitor._earnings_html({'earnings': e}))
@@ -1241,7 +1242,7 @@ class TestGroups(unittest.TestCase):
                             e = {'status': 'ok', 'date': d, 'timing': timing}
                             self.assertEqual(monitor.earnings_urgency(e), urgency)
                             self.assertEqual(monitor.earnings_within_week(e), bool(urgency))
-                            self.assertEqual(monitor.earnings_within_list(e), -15 <= offset <= 1)
+                            self.assertEqual(monitor.earnings_within_list(e), -15 <= offset <= monitor.EARN_PAST_KEEP_DAYS)
 
     def test_official_reschedule_in_red_window_replaces_date_without_stale_event(self):
         old = dict(self.official_fixture(), fetched='2030-12-06', official_checked='2030-12-06')
@@ -1279,12 +1280,17 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(parse('X will report on 13/45/2026', '2026-10-09'), {'status': 'unknown'})
         self.assertEqual(monitor.earnings_label(None), None)
         self.assertEqual(monitor.earnings_label({'status': 'na'}), None)
-        self.assertEqual(monitor.earnings_label({'status': 'unknown'})[0], '日期待确认')
-        self.assertIn('不代表没有财报', monitor.earnings_label({'status': 'error'})[1])
+        # 2026-11-13：取数失败与日期待确认共用一句短文案，页面不解释失败原因。
+        for e in ({'status': 'unknown'}, {'status': 'error'}, {'status': 'ok', 'date': 'bad'}):
+            self.assertEqual(monitor.earnings_label(e), ('日期待确认', '未取得'))
+            self.assertNotIn('不代表没有财报', str(monitor.earnings_label(e)))
+            self.assertNotIn('本轮读取失败', str(monitor.earnings_label(e)))
         text, note = monitor.earnings_label(dict(ok, date='2026-10-30'), '2026-10-20')
         self.assertIn('美 10/30 盘后', text)
         self.assertNotIn('财报', text)   # 「财报」二字只写在表头
-        self.assertIn('北京 10/31 凌晨', note)   # 2026-10-15 精简：北京时间说明去掉「约」与冗余字
+        # 2026-11-13：时段已定只在倒计时写北京口径，后面不再重复北京时间；倒计时也不编造钟点。
+        self.assertEqual(note, '')
+        self.assertEqual(monitor.earnings_countdown(dict(ok, date='2026-10-30'), '2026-10-20'), '（北京11天 凌晨）')
         self.assertNotIn('不含具体钟点', note)
         self.assertNotIn('数据源只给', note)
         # 2026-11-03：无时段写「时段待定」（原「具体时段待定」）；北京时间那行照旧保留
@@ -1295,10 +1301,12 @@ class TestGroups(unittest.TestCase):
         date = '2026-10-30'
         date_txt = '10/30'  # 使用冻结运行日，不让测试随真实日期漂移。
         for kind in ('official', 'expected', 'estimated'):
+            # 2026-11-13：时段已定只在倒计时写北京口径，后面不再重复北京时间；
+            # 时段待定仍保留「北京 待定」，附加状态（待复核／另源日期）两态都要留。
             for timing, label, bj in (
-                    ('pre', '盘前', '北京 10/30 晚间'),
-                    ('post', '盘后', '北京 10/31 凌晨'),
-                    ('during', '盘中', '北京 10/30 夜–10/31 凌晨'),
+                    ('pre', '盘前', ''),
+                    ('post', '盘后', ''),
+                    ('during', '盘中', ''),
                     ('', '时段待定', '北京 待定'),
                     (None, '时段待定', '北京 待定'),
                     ('unknown', '时段待定', '北京 待定')):
@@ -1309,15 +1317,21 @@ class TestGroups(unittest.TestCase):
                         before = dict(e)
                         note = bj
                         if kind == 'official' and error:
-                            note += '·待复核'
+                            note += ('·' if note else '') + '待复核'
                         main = f'美 {date_txt} {label}'
                         self.assertEqual(monitor.earnings_label(e, '2026-10-20'), (main, note))
                         markup = monitor._earnings_html({'earnings': e}, '2026-10-20')
-                        self.assertIn(f' {main}<span class="earn-sep">', markup)
-                        self.assertIn(f'<span class="earn-bj">{note}</span>', markup)
+                        if note:
+                            self.assertIn(f' {main}<span class="earn-sep">', markup)
+                            self.assertIn(f'<span class="earn-bj">{note}</span>', markup)
+                        else:
+                            self.assertIn(f' {main}</span>', markup)
+                            self.assertNotIn('earn-bj', markup)
                         timed = timing in ('pre', 'post', 'during')
                         days = 11 if timing == 'post' else 10
-                        self.assertIn(f'（{"北京" if timed else "美"}{days}天）', markup)
+                        period = {'pre': '晚间', 'post': '凌晨', 'during': '夜–凌晨'}
+                        cd = f'（北京{days}天 {period[timing]}）' if timed else f'（美{days}天）'
+                        self.assertIn(cd, markup)
                         self.assertNotIn('美东', markup)
                         self.assertEqual(e, before)
 
@@ -1327,11 +1341,12 @@ class TestGroups(unittest.TestCase):
                 e = {'status': 'ok', 'date': '2026-12-31', 'kind': kind, 'timing': 'post'}
                 today = '2026-12-20'   # 固定渲染日：距今 12 天，倒计时与整条都还在显示窗口内
                 main, note = monitor.earnings_label(e, today)
-                self.assertIn('北京 01/01 凌晨', note)
+                # 2026-11-13：时段已定，北京口径只写在倒计时，后面不再重复北京时间。
+                self.assertEqual(note, '')
                 markup = monitor._earnings_html({
                     'earnings': e, 'fund_cache_note': '读取失败 <旧>'}, today)
                 self.assertIn(main, markup)
-                self.assertIn(note, markup)
+                self.assertIn('（北京12天 凌晨）', markup)
                 for text in ('基本面', '读取失败', '官方', '预计', '估算'):
                     self.assertNotIn(text, markup)
         self.assertEqual(monitor._earnings_html({'fund_cache_note': '读取失败 <旧>'}), '')
@@ -2987,7 +3002,7 @@ class TestTargets(unittest.TestCase):
                     self.assertEqual(tag(target), f'<td class="tgs {css}" data-target-state="{state}"><span class="lvtag tgt {css}">'
                                      + '<span class="target-space" data-sign="pos">+' + str(space) + '%</span> '
                                      + '<span class="target-price">429.47</span> '
-                                     + '<span class="target-month" title="10月">⑩</span></span></td>')
+                                     + '<span class="target-month" title="10月"><span class="target-sep">&middot;</span>10月</span></span></td>')
                     self.assertNotIn('共识', tag(target))
                     self.assertNotIn('目标', tag(target))
         failed = tag({'kind': 'consensus', 'price': 429.0, 'month': 8, 'failed': True,
@@ -3370,7 +3385,7 @@ class TestTargets(unittest.TestCase):
         self.assertNotIn('data-signal-kind="target"', sig)
         self.assertNotIn('<span class="tnote">', page)
         # 手填目标价胶囊同样不写「目标」，开头是距现价的空间百分比（2026-10-15 改）
-        self.assertIn('<span class="target-space" data-sign="pos">+8%</span> <span class="target-price">108</span> <span class="target-month" title="10月">⑩</span>', page)
+        self.assertIn('<span class="target-space" data-sign="pos">+8%</span> <span class="target-price">108</span> <span class="target-month" title="10月"><span class="target-sep">&middot;</span>10月</span>', page)
         self.assertNotIn('<span>目标</span>', page)
         self.assertNotIn('共识价来源', page)               # 只有手填：不显示共识来源
 
@@ -3397,16 +3412,17 @@ class TestTargets(unittest.TestCase):
 
     def test_target_states_and_range52_rows_have_no_left_lamp_stripe(self):
         css = monitor.PAGE_CSS
-        # 终稿：主表左灯条固定双端几何，与三处分区竖线的墨迹测量分离；
-        # 52 周位置行不续接灯条；统计面板名单的 inset 灯条照旧。
+        # 2026-11-13：主表左灯条与三处分区竖线共用 --lamp-top/--lamp-h，同起同止；
+        # 竖线不再按代码墨迹量高；52 周位置行不续接灯条；统计面板名单的 inset 灯条照旧。
         for level, width in (('red', 4), ('yellow', 4), ('green', 2)):
             self.assertNotIn('.stk tr.' + level + '[data-symbol]{--lc', css)
             self.assertNotIn('tr.' + level + '+tr.range52-row>td{--lc', css)
             self.assertIn('tr.' + level + ' td:first-child{box-shadow:inset ' + str(width)
                           + 'px 0 0 var(--' + level + ')', css)
-        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:9.5px;width:2px;height:41.7px;', css)
-        self.assertIn('table.stk tr[data-symbol]::before{top:7px;height:42.7px}', css)
-        self.assertIn('top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line)', css)
+        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
+                      'top:var(--lamp-top);width:2px;height:var(--lamp-h);', css)
+        self.assertIn('--lamp-top:10px;--lamp-h:36px', css)
+        self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
         self.assertNotIn('linear-gradient(var(--lc),var(--lc))', css)
         self.assertIn('table.stk tr[data-symbol]>td{border:0;box-shadow:none', css)
         for level in ('red', 'yellow', 'green'):
@@ -3832,12 +3848,18 @@ class TestCacheAudit(unittest.TestCase):
         self.assertEqual(st3['data']['AAA']['date'], '2027-01-10')
 
     def test_deferred_past_date_is_not_shown_as_next(self):
+        # 2026-11-13：D+3 内旧日期继续展示（不冒充「下一次」，只是保留），D+4 起才转「日期待确认」。
         rows = [self._row('AAA')]
         with patch.object(monitor, 'EARN_MAX_FETCH_PER_RUN', 0), patch.object(monitor, 'log'):
             st = monitor.attach_earnings(rows, {'AAA': self._earn('2026-10-08')}, '2026-10-10')
-        self.assertEqual(rows[0]['earnings']['status'], 'unknown')
+        self.assertEqual(rows[0]['earnings']['status'], 'ok')
+        self.assertEqual(rows[0]['earnings']['date'], '2026-10-08')
         self.assertEqual(st['events']['AAA'], ['2026-10-08'])
         self.assertIn('AAA', st['data'])
+        later = [self._row('AAA')]
+        with patch.object(monitor, 'EARN_MAX_FETCH_PER_RUN', 0), patch.object(monitor, 'log'):
+            monitor.attach_earnings(later, st['data'], '2026-10-12')
+        self.assertEqual(later[0]['earnings']['status'], 'unknown')
 
 
 
@@ -6629,15 +6651,28 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10px;border:0;box-shadow:none}', css)
         self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}', css)
         self.assertIn('grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig"', css)
-        self.assertIn('td.px .px-main{display:grid;grid-template-rows:var(--px-row-h) var(--px-row-h)', css)
+        self.assertIn('td.px .px-main{display:grid;grid-template-columns:max-content minmax(0,1fr);grid-template-rows:var(--px-row-h) var(--px-row-h)', css)
+        self.assertIn('grid-template-columns:var(--sym-w) minmax(0,1fr) var(--tgs-w)', css)
         self.assertIn('.earn-band{display:block;', css)
-        self.assertIn('td.tgs .target-space{grid-area:1/1/2/3}', css)
-        self.assertIn('td.tgs .target-price{grid-area:2/1/3/2}', css)
-        self.assertIn('td.tgs .target-month{grid-area:2/2/3/3;margin-left:3px}', css)
+        # 2026-11-13 四列成组：共识价 + 「· N月」整组居中，20:51 起 N月 定值 13px 灰；
+        # 分隔符独立成 .target-sep 真元素，左右同一变量等距，· 严格落在两个数字中点。
+        self.assertNotIn('--tgs-month-slot', css)
+        self.assertIn('grid-template-columns:minmax(0,1fr) auto auto minmax(0,1fr)', css)
+        self.assertIn('td.tgs .target-space{grid-area:1/2/2/4}', css)
+        self.assertIn('td.tgs .target-price{grid-area:2/2/3/3}', css)
+        self.assertIn('td.tgs .target-month{grid-area:2/3/3/4;justify-self:start;white-space:nowrap;'
+                      'margin-left:var(--tgs-month-gap);font-size:var(--tgs-month-font);'
+                      'color:var(--dim,#8b93a1)}', css)
+        self.assertIn('td.tgs .target-sep{margin-right:var(--tgs-month-gap);'
+                      'font-size:inherit;line-height:inherit;color:inherit}', css)
+        self.assertIn('--tgs-month-gap:2px', css)
+        self.assertIn('--tgs-month-font:13px', css)
+        self.assertNotIn('font-size:calc(var(--tgs-font) - 1px)', css)
+        self.assertNotIn('target-month::before', css)   # 分隔符是真元素，不用伪元素
         self.assertIn('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}', css)
         self.assertIn('.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}', css)
         self.assertIn('--sig-col-gap:10px;--sig-borrow:6px;--sig-row-gap:7px', css)
-        self.assertIn('td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}', css)
+        self.assertIn('td.sig{padding:5px 5px 7px;font-size:14.5px;line-height:19.57px}', css)
         self.assertIn('width:3px;height:10px;margin-right:5px;border-radius:1px;', css)
         self.assertIn('function balanceDescriptions(row)', monitor.PAGE_INTERACTION_JS)
         for dead in ('cost-warn', 'ack-btn', 'sig-lead', 'data-reflowed'):
@@ -6645,9 +6680,10 @@ class Test52wRangeBar(unittest.TestCase):
         # 旧仓位快捷跳转不借主表代码冒充编辑按钮；真正编辑入口由成本套覆盖。
         self.assertIn('cursor:default', css)
         self.assertNotIn('.stk tr.red+tr.range52-row>td{--lc:', css)
-        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:9.5px;width:2px;height:41.7px;', css)
-        self.assertIn('table.stk tr[data-symbol]::before{top:7px;height:42.7px}', css)
-        self.assertIn('top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line)', css)
+        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
+                      'top:var(--lamp-top);width:2px;height:var(--lamp-h);', css)
+        self.assertIn('--lamp-top:10px;--lamp-h:36px', css)
+        self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
         for level in ('red', 'yellow', 'green'):
             self.assertIn(f'table.stk tr.{level}[data-symbol]{{--lamp-line:var(--{level})}}', css)
         self.assertIn('</tr><tr class="range52-row"><td colspan="5">', output)
@@ -7488,16 +7524,16 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     item('BRK-B', 'technology', '2026-10-20'),  # 持仓优先，不能重复
                     item('D15', 'focus', '2026-10-29'),   # 第15天（含）进名单
                     item('LATE', 'focus', '2026-10-30'),  # 第16天不进
-                    item('PAST', 'position', '2026-10-12'),   # 已是 D+2，退出红窗及名单
+                    item('PAST', 'position', '2026-10-12'),   # D+2：红窗已退出，但 D+3 保留窗口内仍在名单
                     item('UNKNOWN', 'technology', '2026-10-15', status='unknown')]
             snap = monitor.build_snapshot({}, rows, {'group_monitoring': {'technology': True}}, group_counts={})
             self.assertEqual(snap['earnings_week']['asof'], '2026-10-14')
-            self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], ['AAPL', 'BRK-B', 'D15'])
+            self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], ['PAST', 'AAPL', 'BRK-B', 'D15'])
             self.assertEqual(snap['signal_counts']['chg']['red'], 0)
             self.assertEqual(snap['summary']['green'], 6)  # 同身份按优先分组去重，财报仍不改绿灯
             snap['finished_at_bj'] = '2026-10-14T00:00:00+08:00'
             panel = monitor._signal_counts_card(snap)
-            self.assertIn('<details class="earnings-week"><summary>未来15天财报 · 3 只</summary>', panel)
+            self.assertIn('<details class="earnings-week"><summary>未来15天财报 · 4 只</summary>', panel)
             self.assertNotIn('<details class="earnings-week" open>', panel)
             self.assertIn('<summary class="grp"><span class="grp-name">统计</span><span class="group-stats">'
                           '<span class="stat-badge red" aria-label="红 0 项">0</span>'
@@ -7525,11 +7561,13 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             self.assertIn('<li class="lamp-green"><a class="signal-member-jump" href="#s-aapl">'
                           '<span class="signal-member-symbol">AAPL</span></a>'
                           '<span class="signal-member-belong">（IT · AI）</span> ', panel)
-            self.assertIn('美 10/14 盘后<span class="earnings-week-bj">·北京 10/15 凌晨</span></span><span class="lamp-text">（绿灯）</span>', panel)
+            # 北京时段已定的「明天」并进倒计时，美东时间后不再重复北京说明。
+            self.assertIn('<span class="earnings-week-meta is-red"><span class="cd">（北京 明天 凌晨）</span>'
+                          '美 10/14 盘后</span><span class="lamp-text">（绿灯）</span>', panel)
+            # 2026-11-13：时段已定只在倒计时写北京口径，美东时间后不再重复北京时间。
             self.assertIn('<span class="signal-member-belong">（短持仓）</span> '
-                          '<span class="earnings-week-meta is-yellow"><span class="cd">（北京7天）</span>美 10/20 盘后'
-                          '<span class="earnings-week-bj">·北京 10/21 凌晨</span></span>'
-                          '<span class="lamp-text">（绿灯）</span>', panel)
+                          '<span class="earnings-week-meta is-yellow"><span class="cd">（北京7天 凌晨）</span>美 10/20 盘后'
+                          '</span><span class="lamp-text">（绿灯）</span>', panel)
             self.assertNotIn('earnings-week-group', panel)
             self.assertNotIn('<strong>', panel.split('earnings-week', 1)[1])
             self.assertNotIn('stat-dot', panel)
@@ -7582,7 +7620,17 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     self.assertEqual(monitor.earnings_week_members([duplicate, row], '2026-10-20'),
                                      [member])
                     panel = monitor._signal_counts_card(snap)
-                    self.assertIn(f'美 10/30 {label}<span class="earnings-week-bj">', panel)
+                    main, note = monitor.earnings_label(e, '2026-10-20')
+                    # 2026-11-13：时段已定只在倒计时写北京口径，后面不再重复。
+                    # 统计名单用服务端冻结的日期重建 event，不带 official_error，所以它的
+                    # 北京说明只看时段；主表那条则保留「待复核」后缀，两者各自核对。
+                    panel_bj = '' if timing in ('pre', 'post', 'during') else '北京 待定'
+                    if panel_bj:
+                        self.assertIn(f'美 10/30 {label}<span class="earnings-week-bj', panel)
+                        self.assertIn(f'·{panel_bj}</span></span>', panel)
+                    else:
+                        self.assertIn(f'美 10/30 {label}</span>', panel)
+                        self.assertNotIn('earnings-week-bj', panel)
                     self.assertEqual(monitor._earnings_week_panel(snap, count_only=True), 1)
                     data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', panel).group(1)))
                     self.assertTrue(data['earnings_week']['ok'])
@@ -7592,13 +7640,18 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
                     self.assertIn('无异动 1 只', position)
                     folded = position.split('<details class="quiet-list"', 1)[1]
-                    main, note = monitor.earnings_label(e, '2026-10-20')
                     self.assertIn(label, main)
-                    self.assertIn(f' {main}<span class="earn-sep">', folded)
-                    self.assertIn(f'<span class="earn-bj">{note}</span>', folded)
+                    if note:
+                        self.assertIn(f' {main}<span class="earn-sep">', folded)
+                        self.assertIn(f'<span class="earn-bj">{note}</span>', folded)
+                    else:
+                        self.assertIn(f' {main}</span>', folded)
+                        self.assertNotIn('class="earn-bj"', folded)
                     timed = timing in ('pre', 'post', 'during')
                     days = 11 if timing == 'post' else 10
-                    self.assertIn(f'（{"北京" if timed else "美"}{days}天）', folded)
+                    period = {'pre': '晚间', 'post': '凌晨', 'during': '夜–凌晨'}
+                    cd = f'（北京{days}天 {period[timing]}）' if timed else f'（美{days}天）'
+                    self.assertIn(cd, folded)
                     self.assertEqual(snap['summary']['green'], 1)
                     self.assertTrue(all(c['red'] == c['yellow'] == 0 for c in snap['signal_counts'].values()))
                     for today, urgency in (('2026-10-28', 'yellow'), ('2026-10-29', 'red'), ('2026-10-30', 'red'),
@@ -7631,7 +7684,8 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                         rows.append(row)
                     before = copy.deepcopy(rows)
                     snap = monitor.build_snapshot({}, rows, {}, group_counts={})
-                    expected = ['YESTERDAY', 'TODAY', 'TOMORROW', 'D2', 'D7', 'D8', 'D15']
+                    # 2026-11-13：D+3 保留窗口让 OLD（D+2）也留在名单与主表。
+                    expected = ['OLD', 'YESTERDAY', 'TODAY', 'TOMORROW', 'D2', 'D7', 'D8', 'D15']
                     self.assertEqual(snap['earnings_week']['asof'], bj_day)
                     self.assertEqual([m['symbol'] for m in snap['earnings_week']['members']], expected)
                     self.assertEqual(snap['summary']['green'], len(rows))
@@ -7639,20 +7693,20 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     # 渲染以快照完成日为准，不能只冻分析用NOW而留下真实finished_at。
                     snap['finished_at_bj'] = bj_day + 'T00:00:00+08:00'
                     panel = monitor._signal_counts_card(snap)
-                    self.assertIn('未来15天财报 · 7 只', panel)
+                    self.assertIn('未来15天财报 · 8 只', panel)
                     self.assertEqual(panel.count('earnings-week-meta is-red'), 3)
                     self.assertEqual(panel.count('earnings-week-meta is-yellow'), 2)
-                    self.assertEqual(monitor._earnings_week_panel(snap, count_only=True), 7)
+                    self.assertEqual(monitor._earnings_week_panel(snap, count_only=True), 8)
                     filtered = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', panel).group(1)))
                     self.assertTrue(filtered['earnings_week']['ok'])
                     self.assertEqual([m['id'] for m in filtered['earnings_week']['members']], sorted(expected))
                     body = monitor._group_body(rows, {'item_group': 'technology'}, snap, bj_day, True, 'group_technology', '科技')
                     main, folded = body.split('<details class="quiet-list"', 1)
-                    self.assertIn('无异动 6 只', folded)
+                    self.assertIn('无异动 5 只', folded)
                     for symbol in expected[:5]:
                         self.assertIn(f'id="s-{symbol.lower()}"', main)
                         self.assertNotIn(f'id="s-{symbol.lower()}"', folded)
-                    for symbol in ('OLD', 'D8', 'D15', 'D16', 'PENDING', 'ERROR'):
+                    for symbol in ('D8', 'D15', 'D16', 'PENDING', 'ERROR'):
                         self.assertIn(f'id="s-{symbol.lower()}"', folded)
                         self.assertNotIn(f'id="s-{symbol.lower()}"', main)
                     self.assertEqual(rows, before)
@@ -7663,12 +7717,16 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             rows = [self.member_row(name, 'position', 'green') for name in ('UNKNOWN', 'BROKEN', 'OLD', 'FUTURE')]
             for row, e in zip(rows, ({'status': 'unknown', 'date': '2026-10-15'},
                                      {'status': 'ok', 'date': '2026-10-50'},
-                                     {'status': 'ok', 'date': '2026-10-12'},
+                                     {'status': 'ok', 'date': '2026-10-10'},   # D+4：超出 D+3 保留窗口
                                      {'status': 'ok', 'date': '2026-10-30'})):
                 row.update(price=100.0, chg=0.0, signals=[], earnings=e)
             self.assertEqual(monitor.earnings_week_members(rows, '2026-10-14'), [])
             self.assertNotIn('未来15天财报', monitor._signal_counts_card(
                 monitor.build_snapshot({}, rows, {}, group_counts={})))
+            # 2026-11-13：D+2 仍在 D+3 保留窗口内，必须进名单。
+            past = self.member_row('D2', 'position', 'green')
+            past.update(price=100.0, chg=0.0, signals=[], earnings={'status': 'ok', 'date': '2026-10-12'})
+            self.assertEqual([m['symbol'] for m in monitor.earnings_week_members([past], '2026-10-14')], ['D2'])
 
     def test_text_only_boll_rsi_detail_names_rsi_count(self):
         row = {'symbol': 'XLP', 'group': 'focus', 'level': 'green', 'note': '',
@@ -9527,26 +9585,37 @@ class TestFinalSourceContract(unittest.TestCase):
                 for raw_gap in (-3, -2, -1, 0, 1, 2):
                     event_day = date.fromisoformat(today) + timedelta(days=raw_gap)
                     event = {'status': 'ok', 'date': event_day.isoformat(), 'timing': timing}
-                    gap = raw_gap + (timing == 'post')
                     timed = timing in ('pre', 'post', 'during')
-                    shown = raw_gap + (1 if timed and timing == 'post' else 0)
-                    word = {1: '明天', 0: '今天', -1: '昨天'}.get(shown, f'{shown}天')
-                    expected_cd = ('' if shown < -1 else f'（{"北京" if timed else "美"}{word}）')
+                    shown = raw_gap + (1 if timing == 'post' else 0)
+                    period = {'pre': '晚间', 'post': '凌晨', 'during': '夜–凌晨'}
+                    bj_day = event_day + timedelta(days=1 if timing == 'post' else 0)
+                    past = {0: '今天', -1: '昨天', -2: '前天'}
+                    # 2026-11-13：已出在倒计时一次写全「相对日＋北京月日＋已出」，
+                    # 时段已定与已出都不在美东时间后重复北京说明；只有「时段待定且未发布」留北京待定。
+                    if shown < -monitor.EARN_PAST_KEEP_DAYS or shown > monitor.EARN_COUNTDOWN_DAYS:
+                        expected_cd = ''
+                    elif timed and shown in (0, 1):
+                        expected_cd = f'（北京 {"明天" if shown == 1 else "今天"} {period[timing]}）'
+                    elif shown <= 0:
+                        expected_cd = (f'（北京{past.get(shown, "")}'
+                                       f'{bj_day.month}月{bj_day.day}日已出）')
+                    elif not timed:
+                        expected_cd = f'（美{"明天" if shown == 1 else str(shown) + "天"}）'
+                    else:
+                        expected_cd = f'（北京{shown}天 {period[timing]}）'
+                    expected_note = '' if timed or shown <= 0 else '北京 待定'
                     with self.subTest(today=today, timing=timing, gap=raw_gap):
                         self.assertEqual(monitor.earnings_countdown(event, today), expected_cd)
                         main, note = monitor.earnings_label(event, today)
                         self.assertTrue(main.startswith('美 '))
-                        released = gap <= 0 if timing == 'post' else gap < 0
-                        if released:
-                            self.assertEqual(note, '北京 ' + ('今出' if gap == 0 else '昨出' if gap == -1 else '已出'))
-                        else:
-                            self.assertNotRegex(note, '今出|昨出|已出')
+                        self.assertEqual(note, expected_note)
                         markup = monitor._earnings_html({'earnings': event}, today)
-                        self.assertIn('class="earn-sep"', markup)
-                        self.assertIn('class="earn-bj"', markup)
+                        self.assertEqual('class="earn-sep"' in markup, bool(expected_note))
+                        self.assertEqual('class="earn-bj"' in markup, bool(expected_note))
                         self.assertEqual(len(re.findall(r'class="cd(?: tbd)?"', markup)), int(bool(expected_cd)))
                         if expected_cd:
-                            self.assertIn('class="cd' + (' tbd' if timing not in ('pre', 'post', 'during') else '') + '"', markup)
+                            tbd = ' tbd' if (not timed and shown > 0) else ''
+                            self.assertIn('class="cd' + tbd + '"', markup)
 
     def test_invalid_earnings_never_fabricate_countdown(self):
         for event in (None, {}, [], 'broken', {'status': 'na'}, {'status': 'unknown'},
@@ -9599,7 +9668,7 @@ class TestFinalSourceContract(unittest.TestCase):
                                 for tag, classes in parser.direct), (cls, parser.direct))
         self.assertTrue(all(tag in ('td', 'th') for tag, _ in parser.direct))
         self.assertIn('class="earn-band"', rendered)  # 财报整排落在 52 周条那一行，主行不再有财报格
-        self.assertIn('class="target-month" title="10月">⑩</span>', rendered)
+        self.assertIn('class="target-month" title="10月"><span class="target-sep">&middot;</span>10月</span>', rendered)
         self.assertIn('class="target-space" data-sign="pos"', rendered)
         self.assertNotRegex(rendered, r'data-ack|ack-btn|cost-warn|r48-demo|data-r58-key')
 

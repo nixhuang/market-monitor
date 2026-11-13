@@ -502,8 +502,37 @@ TARGET_DASH_BORDER = 'data:image/svg+xml,' + quote(
 PAGE_PALETTE = """:root{
   --bg:#0f1115;
   --card:#171a21;
-  --tgs-w:80px;       /* 紫灯框内容实测最宽 71px；固定 80px，没紫灯的行也留同样宽的空格 */
-  --px-row-h:25px;    /* 价格区两排各 25px，合计 50px 与左侧代码两行同高 */
+  --sym-w:100px;      /* 代码列按用户指的「LMT 那么宽」定死：桌面 100 / 手机 98（代码+中文备注名）。
+                         原来是 max-content，各行 40~121px 参差、价格区左边界跟着晃；手机档覆盖 98px。
+                         2026-11-13 用户「电脑上 7 个中文字宽、手机上 6 个」：桌面 note 11.5px（单字 12px），
+                         100px − 左右各 8px 内距＝84px＝精确 7 字；手机 note 14.5px（单字 15px），
+                         98px − 左 6px／右 2px 内距＝90px＝精确 6 字。灰线（td.sym::after，由 --vl-x
+                         按 sym 右边界算）随列宽：桌面 100px / 手机 98px；长名照旧 ellipsis。
+                         19:35 用户「没让你动代码和中文名的位置啊现在贴到灯条上了」：手机左内距从 2px
+                         恢复到 6px（代码/中文名离左侧 2px 灯条重新留 4px），此后左内距不再动。
+                         20:51 用户「LMT 六字洛克希德马丁离右灰线还有一点距离，左移一点灰线，
+                         把这个宽度空间给到紫灯区」：实测基线文字墨迹→灰线 6px，左移 4px（102→98）
+                         后留 2px；同步把右内距 6→2px，note 可见宽仍 90px＝6 字完整不裁切，
+                         代码/中文名的左侧位置完全不变。 */
+  --tgs-w:104px;      /* 紫灯框宽度：桌面 104px；手机档覆盖 108px（2026-11-13 20:51）。
+                         19:35 由 96px 往左加宽 8px 给「共识价 · N月」整组腾地方；20:51 再把代码列
+                         左移灰线省下的 4px 转给紫灯区（--sym-w 102→98、--tgs-w 104→108，中间
+                         minmax(0,1fr) 价格区净宽不变），四位数共识价（COST/LITE）的「10月」离框右线
+                         由 4px 放宽到 7.5px。极端窄屏时 fitTgs() 会在 table 上按实测侵占量临时
+                         收窄它（下限 58px），腾给价格区。 */
+  --tgs-font:13px;    /* 紫灯框内三列字号（手机档覆盖 16px）。字号恒定：2026-11-13 用户明确「紫灯框里的
+                          数字字号不该变小」，极端窄屏只压缩框内留白（列宽 + 左右内距），绝不缩字号。 */
+  --tgs-pad-l:2px;    /* 紫灯框左右内距：fitTgs() 在窄屏把这两个归零，腾出 5px 给价格区；
+                          改的是框内空白，框线（::before right:0/left:-1px）与数字位置都不受影响。 */
+  --tgs-pad-r:3px;
+  --px-row-h:21px;    /* 与 --row-height 同高：价格区两行和左侧「代码／中文名」两行逐行同高、同顶层内距。 */
+  --px-gap:8px;       /* 左块内「现价 ↔ 涨跌额」间距；手机档只覆盖变量值收紧。 */
+  --px-col-gap:12px;  /* 左块与右侧「振／量」的间距；手机档只覆盖变量值收紧。 */
+  --lamp-top:12.5px;  /* 左灯条与价格区两侧灰色分隔线共用同一组上下几何（2026-11-13）：
+                         竖线不再按代码墨迹动态量高（那会比灯条短一截），直接跟灯条同起同止。
+                         桌面 12.5/31.5、手机 10/36：14:58 首行内容整体下移 3px（线组到下方内容 +3px），
+                         灯条与三条竖线随内容一起下移 3px、长度不变，相对中文名墨迹位置不变。 */
+  --lamp-h:31.5px;
   --line:#252a33;
   --text:#e6e8ec;
   --dim:#8b93a1;
@@ -527,6 +556,21 @@ PAGE_PALETTE = """:root{
   --lamp-size:14px;
   --head-inset:64px;
   --row-height:21px;
+  --tgt-frame-top:9px;    /* 紫灯框上下框线到数字墨迹都留 5px（2026-11-13）：只动框的 ::before 定位，
+                             数字位置不变。原桌面 6px／手机 4px；14:58 首行内容下移 3px 后各 +3px
+                             （桌面 9／手机 7），框顶跟着数字一起下移，5/5px 留白不变；下边线两档统一 3px。 */
+  --tgt-frame-bottom:6px; /* 与 --tgt-frame-top 成对：空心(space/high)与实心(hit)三种框共用同一组留白。
+                             14:58 首行内容下移 3px 后 td.tgs 被 stretch 撑高 6px、框底比数字多下移 3px，
+                             实测墨迹留白变 5/8px；bottom 由 3px 收进 3px（3→6）把下边线提回来，恢复 5/5px。 */
+  --tgs-month-font:13px; /* 「· N月」这一小块的字号：19:35 用户定 14px，20:51 用户「四位数共识价里的
+                           月还是压到了紫灯框，把 10月 改为 13px 灰色文字」再收 1px。两档统一，
+                           不再用 calc(var(--tgs-font) - 1px) 跟着主字号联动（手机原 15px 会把
+                           COST/LITE 的「10月」顶到紫框右线）。一个变量管两档，@media 里不重抄规则。 */
+  --tgs-month-gap:2px; /* 分隔符「·」左右各留的等距空白（2026-11-13 19:35 用户「· 要在两个数字中间」）。
+                           旧写法把「 · N月」整段塞进同一段文本：span 内的前导空格被行首折叠吞掉，
+                           实测价格右缘→· 只有 2px、·→月份却有 1 个空格约 5px，所以看着贴近价格。
+                           现在分隔符独立成 .target-sep，左右 margin 都用这一个变量，· 的中心严格落在
+                           「共识价右缘 ↔ 月份数字左缘」的中点；压缩态在 table[data-tgs-cut] 上归零。 */
   --section-line:rgba(139,147,161,.32);
   --tgt-solid:color-mix(in srgb,var(--purple) 32%,transparent);
   --tgt-pos:#4dd0e1;
@@ -1000,8 +1044,20 @@ tr.gray td{color:var(--dim)}
 table.stk{display:block;width:100%;table-layout:fixed}
 table.stk tbody{display:block;width:100%;table-layout:fixed}
 table.stk thead{display:block;width:100%;table-layout:fixed}
-table.stk tr[data-symbol]{position:relative;display:grid;grid-template-columns:max-content minmax(0,1fr) var(--tgs-w);grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig";align-items:stretch;width:100%;border-top:1px solid var(--stock-divider);--lamp-line:var(--line)}
+table.stk tr[data-symbol]{position:relative;display:grid;grid-template-columns:var(--sym-w) minmax(0,1fr) var(--tgs-w);grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig";align-items:stretch;width:100%;border-top:1px solid var(--stock-divider);--lamp-line:var(--line)}
 table.stk tr[data-symbol]:first-child{border-top:0}
+/* 14:58 双线组与「上面内容」拉开 3px：给非首行个股行留 3px 行外上边距，两条线本身和 ::after 的
+   top 都不动，整组线随行一起下移。不能把 3px 加在上一行 td.sig 的 padding-bottom：CDP 实测紧贴
+   线的上一行大多是 52 周条（tr.range52-row），加在 sig 底部只会把描述和 52 周条一起往下推，
+   52 周条到线的距离并不变，还白白多出 3px 行高。下方那一侧由首行三个 td 的 padding-top 承担。 */
+table.stk tr[data-symbol]:not(:first-child){margin-top:3px}
+/* 个股分隔线改双线（2026-11-13）：保留原 1px border-top，再用 ::after 在其下 1px 空隙处补第二条
+   1px 线（线-空-线各 1px = 标准 3px double 的观感）。14:58 用户澄清：两条线本身保持不动，
+   要的是线组整体距「上面内容」和「下面内容」各 +3px —— 上方靠上面那条 margin-top，下方靠
+   首行三格 padding-top（4→7px）；这里 top 恒 1px 不改。不用 border-top:3px double
+   是因为那样每行高 2px，会连带推高分组栏高度和灯条位置；伪元素绝对定位不占文档流。
+   首行本来就没有 border-top，双线也一并跳过。颜色仍走 --stock-divider。 */
+table.stk tr[data-symbol]:not(:first-child)::after{content:"";position:absolute;left:0;right:0;top:1px;height:1px;background:var(--stock-divider);pointer-events:none;z-index:1}
 table.stk tr[data-symbol]>td{border:0;box-shadow:none;min-width:0;margin:0}
 /* 终稿首格清影：保留:first-child特异性，压过旧红行inset而不改变行伪元素灯条。 */
 table.stk tr[data-symbol]>td:first-child{box-shadow:none}
@@ -1009,24 +1065,38 @@ table.stk tr.red[data-symbol]{--lamp-line:var(--red)}
 table.stk tr.yellow[data-symbol]{--lamp-line:var(--yellow)}
 table.stk tr.green[data-symbol]{--lamp-line:var(--green)}
 table.stk tr.gray[data-symbol]{--lamp-line:var(--text)}
-table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:9.5px;width:2px;height:41.7px;background:var(--lamp-line);pointer-events:none;z-index:2}
-table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:4px 8px;font-size:14px;line-height:var(--row-height)}
-table.stk tr[data-symbol]>td.sym>.sym-box{display:grid;grid-template-rows:var(--row-height) var(--row-height);align-items:center;width:max-content;max-width:100%;margin:0;padding:0;border:0;background:none;color:var(--text);line-height:var(--row-height);cursor:default}
+/* 左灯条下端在「中文备注名」文字下沿之上再收 3px（用户 11-12 定稿），上端保持原值不动：
+   CDP 440/744/956/1440 实测中文名墨迹下沿 46（手机）/ 44（桌面）相对行顶，
+   对齐值原为手机 39=46-7、桌面 34.5=44-9.5，再各减 3 → 36 / 31.5。
+   原 41.7/42.7 会多探出 7.2 / 3.7px。
+   2026-11-13：三处分区竖线改用同一组 --lamp-top/--lamp-h，长度与灯条一样，不再各量各的。 */
+table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:2px;height:var(--lamp-h);background:var(--lamp-line);pointer-events:none;z-index:2}
+table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:7px 8px;font-size:14px;line-height:var(--row-height)}
+table.stk tr[data-symbol]>td.sym>.sym-box{display:grid;grid-template-rows:var(--row-height) var(--row-height);align-items:center;width:100%;max-width:100%;margin:0;padding:0;border:0;background:none;color:var(--text);line-height:var(--row-height);cursor:default}
 table.stk tr[data-symbol]>td.sym>.sym-box:has(.tag){color:var(--head-blue-on)}
 table.stk tr[data-symbol]>td.sym>.sym-box .tag{display:none}
-table.stk tr[data-symbol]>td.sym>.sym-box .note{display:block;margin:0;font-size:11.5px;line-height:var(--row-height);white-space:nowrap}
+/* 代码列定宽后极少数超长中文备注名（如「赛默飞世尔科技」）省略显示，完整名仍在 data-full；
+   不给它撑宽整列，否则价格区左边界又会跟着晃。 */
+table.stk tr[data-symbol]>td.sym>.sym-box .note{display:block;margin:0;font-size:11.5px;line-height:var(--row-height);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 table.stk tr[data-symbol]>td.sym>.sym-box .unit{display:inline-block;margin-left:4px}
-table.stk tr[data-symbol]>td.sym::after{content:"";position:absolute;left:var(--vl-x);top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
-/* 价格区两排八项（2026-11-12）：第一排现价16.5/涨跌幅15/涨跌额15/振幅，第二排开高低量比（标签13、数值15）。
-   两排各 --px-row-h 共 50px，与左侧代码两行同高；只有真的溢出时才由 fitPx 逐档收紧，桌面保持指定字号。 */
-table.stk tr[data-symbol]>td.px{grid-area:px;position:relative;display:block;min-width:0;padding:0 6px;text-align:left;white-space:nowrap}
-table.stk tr[data-symbol]>td.px .px-main{display:grid;grid-template-rows:var(--px-row-h) var(--px-row-h);align-items:center;height:calc(var(--px-row-h) * 2);min-width:0;margin:0;padding:0 4px 0 0}
-table.stk tr[data-symbol]>td.px .px-row{display:flex;align-items:center;justify-content:space-between;gap:2px;min-width:0;white-space:nowrap;font-variant-numeric:tabular-nums}
-.px-price{font-size:16.5px}
-.px-chg,.px-amt,.px-v{font-size:15px}
-.px-k{font-size:13px;color:var(--dim)}
-/* 开／高／低是参考口径，数字跟标签一起用 --dim 灰；振幅、现价与涨跌仍用主文本色（2026-11-12）。 */
-.px-metric:is(.px-open,.px-high,.px-low) .px-v{color:var(--dim)}
+table.stk tr[data-symbol]>td.sym::after{content:"";position:absolute;left:var(--vl-x);top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line);pointer-events:none}
+/* 价格区两排五项（2026-11-13）：左块上排「现价 涨跌额（带$）」、下排「涨跌幅」；
+   「振／量」仍是上下两排（上振下量），但整列靠右贴住紫灯框左侧、从右往左铺开：
+   grid 两行 + justify-items:end，右端齐平，不再像原来靠左留一大块空白。
+   两排行高与左侧代码两行同用 --px-row-h，
+   td.px 也补 4px 顶内距，现价与代码第一行中心对齐（原 25px 行高 + 18.5px 字让现价顶部
+   比代码高 3.4px 手机 / 6.4px 桌面）。字号收敛到 17.5/16.5/14，只有真的溢出才由 fitPx 收紧。 */
+table.stk tr[data-symbol]>td.px{grid-area:px;position:relative;display:block;min-width:0;padding:7px 6px;text-align:left;white-space:nowrap}
+table.stk tr[data-symbol]>td.px .px-main{display:grid;grid-template-columns:max-content minmax(0,1fr);grid-template-rows:var(--px-row-h) var(--px-row-h);column-gap:var(--px-col-gap);align-items:center;min-width:0;margin:0;padding:0 4px 0 0}
+table.stk tr[data-symbol]>td.px .px-row{display:flex;align-items:center;gap:var(--px-gap);min-width:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+table.stk tr[data-symbol]>td.px .px-row-main{grid-area:1/1/2/2}
+table.stk tr[data-symbol]>td.px .px-row-sub{grid-area:2/1/3/2}
+table.stk tr[data-symbol]>td.px .px-side{grid-area:1/2/3/3;display:grid;grid-template-rows:var(--px-row-h) var(--px-row-h);align-items:center;justify-items:end;min-width:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+.px-price{font-size:17.5px}
+.px-chg,.px-amt,.px-v{font-size:16.5px}
+.px-k{font-size:14px;color:var(--dim)}
+/* 文字框与左侧代码两行同用 21px 行高：现价顶部原本比代码高 3.6px（桌面），统一后近乎齐平。 */
+.px-price,.px-chg,.px-amt,.px-v,.px-k{line-height:var(--px-row-h)}
 /* 量比只在数字上表达灯级（描述里不再重复这条事实）：红/黄沿用描述字色，未触发保持主文本色。 */
 .px-v.vol-red{color:var(--lamp-red)}
 .px-v.vol-yellow{color:var(--lamp-yellow)}
@@ -1034,56 +1104,94 @@ table.stk tr[data-symbol]>td.px .px-row{display:flex;align-items:center;justify-
 .px-v.amp-yellow{color:var(--lamp-yellow)}
 .px-v.amp-red{color:var(--lamp-red)}
 .px-metric{display:inline-flex;align-items:baseline;gap:2px}
-table.stk tr[data-symbol][data-pxfit="1"] .px-row{gap:1px}
-table.stk tr[data-symbol][data-pxfit="1"] .px-k{font-size:12px}
-table.stk tr[data-symbol][data-pxfit="1"] .px-v{font-size:13.5px}
-table.stk tr[data-symbol][data-pxfit="1"] .px-price{font-size:15.5px}
-table.stk tr[data-symbol][data-pxfit="1"] :is(.px-chg,.px-amt){font-size:14px}
-table.stk tr[data-symbol][data-pxfit="2"] .px-price{font-size:15px}
-table.stk tr[data-symbol][data-pxfit="2"] :is(.px-chg,.px-amt,.px-v){font-size:13px}
-table.stk tr[data-symbol]>td.px::after{content:"";position:absolute;right:0;top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
-table.stk tr[data-symbol]>td.tgs::after{content:"";position:absolute;right:0;top:var(--vl-top);height:var(--vl-h);width:1px;background:var(--section-line);pointer-events:none}
-table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:4px 3px 4px 2px;line-height:0;text-align:center;box-sizing:border-box;width:var(--tgs-w);min-width:var(--tgs-w);max-width:var(--tgs-w)}
-table.stk tr[data-symbol]>td.tgs .lvtag.tgt{display:grid;grid-template-columns:auto 1fr;grid-template-rows:var(--row-height) var(--row-height);height:auto;min-height:0;margin:0;padding:0 1px;border:0;background:transparent;column-gap:0;row-gap:0;align-items:center;justify-items:start;line-height:var(--row-height);white-space:nowrap;font-size:13px;font-weight:400;color:var(--purple);font-variant-numeric:tabular-nums}
+table.stk tr[data-symbol][data-pxfit="1"] .px-row{gap:4px}
+table.stk tr[data-symbol][data-pxfit="1"] .px-main{column-gap:6px}
+table.stk tr[data-symbol][data-pxfit="1"] .px-k{font-size:13px}
+table.stk tr[data-symbol][data-pxfit="1"] .px-v{font-size:15px}
+table.stk tr[data-symbol][data-pxfit="1"] .px-price{font-size:16.5px}
+table.stk tr[data-symbol][data-pxfit="1"] :is(.px-chg,.px-amt){font-size:15.5px}
+table.stk tr[data-symbol][data-pxfit="2"] .px-price{font-size:15.5px}
+table.stk tr[data-symbol][data-pxfit="2"] :is(.px-chg,.px-amt,.px-v){font-size:14.5px}
+table.stk tr[data-symbol][data-pxfit="2"] .px-k{font-size:13px}
+/* 第 3 档只在 fitTgs() 把紫灯框压到下限仍挡不住价格区时启用（<=360px 一类极端窄屏）；
+   常规视口永远走不到，避免为了兜底把 440px 的设计字号也一起缩小。 */
+table.stk tr[data-symbol][data-pxfit="3"] .px-row{gap:3px}
+table.stk tr[data-symbol][data-pxfit="3"] .px-main{column-gap:4px}
+table.stk tr[data-symbol][data-pxfit="3"] .px-price{font-size:13.5px}
+table.stk tr[data-symbol][data-pxfit="3"] :is(.px-chg,.px-amt,.px-v){font-size:12.5px}
+table.stk tr[data-symbol][data-pxfit="3"] .px-k{font-size:11.5px}
+/* 第 4 档只在 ultra（紫灯框已到下限、第 3 档仍挡不住，约 320px 一类）启用；
+   裁切另由 data-tgs-cut 在所有压缩态统一生效：宁可把价格数字尾部截在 td.px 里，
+   也不让它画进紫灯框。常规宽度不压缩、不裁切，视觉零改动。 */
+table.stk tr[data-symbol][data-pxfit="4"] .px-row{gap:2px}
+table.stk tr[data-symbol][data-pxfit="4"] .px-main{column-gap:3px}
+table.stk tr[data-symbol][data-pxfit="4"] .px-price{font-size:11.5px}
+table.stk tr[data-symbol][data-pxfit="4"] :is(.px-chg,.px-amt,.px-v){font-size:10.5px}
+table.stk tr[data-symbol][data-pxfit="4"] .px-k{font-size:10px}
+/* 压缩态（fitTgs() 已把紫灯框收到下限）优先保证「共识价 · N月」整组不溢出：把组内的 2px 间隔让回去。
+   <440 是项目已声明不适配档，优先「不叠入紫灯框」；设计档 440 与全部桌面档没有 data-tgs-cut，
+   --tgs-month-gap 恒 2px。变量在表上覆盖，子元素 .target-month 自动继承，无需改 JS。 */
+table.stk[data-tgs-cut]{--tgs-month-gap:0px}
+table.stk[data-tgs-cut] tr[data-symbol]>td.px{overflow:hidden}
+table.stk tr[data-symbol]>td.px::after{content:"";position:absolute;right:0;top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line);pointer-events:none}
+table.stk tr[data-symbol]>td.tgs::after{content:"";position:absolute;right:0;top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line);pointer-events:none}
+table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:7px var(--tgs-pad-r,3px) 4px var(--tgs-pad-l,2px);line-height:0;text-align:center;box-sizing:border-box;width:var(--tgs-w);min-width:var(--tgs-w);max-width:var(--tgs-w)}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt{display:grid;grid-template-columns:minmax(0,1fr) auto auto minmax(0,1fr);grid-template-rows:var(--row-height) var(--row-height);flex:1;min-width:0;height:auto;min-height:0;margin:0;padding:0 1px;border:0;background:transparent;column-gap:0;row-gap:0;align-items:center;justify-items:center;line-height:var(--row-height);white-space:nowrap;font-size:var(--tgs-font);font-weight:400;color:var(--purple);font-variant-numeric:tabular-nums}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt>span{height:var(--row-height);line-height:var(--row-height);white-space:nowrap}
-table.stk tr[data-symbol]>td.tgs .target-space{grid-area:1/1/2/3}
-table.stk tr[data-symbol]>td.tgs .target-price{grid-area:2/1/3/2}
-table.stk tr[data-symbol]>td.tgs .target-month{grid-area:2/2/3/3;margin-left:3px}
-table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad{position:relative;color:var(--dim);border-radius:4px}
+table.stk tr[data-symbol]>td.tgs .target-space{grid-area:1/2/2/4}
+table.stk tr[data-symbol]>td.tgs .target-price{grid-area:2/2/3/3}
+table.stk tr[data-symbol]>td.tgs .target-month{grid-area:2/3/3/4;justify-self:start;white-space:nowrap;margin-left:var(--tgs-month-gap);font-size:var(--tgs-month-font);color:var(--dim,#8b93a1)}
+table.stk tr[data-symbol]>td.tgs .target-sep{margin-right:var(--tgs-month-gap);font-size:inherit;line-height:inherit;color:inherit}
+/* 2026-11-13 19:35 分隔符归位：原来「 · N月」整段写在一个 span 文本里，span 作为 grid item 时
+   前导空格被行首折叠吞掉，· 紧贴 span 左边缘（实测价格右缘→· 只有 2px），而 · 后面还带一个
+   空格（约 4px），所以看着「离价格近、离月份远」。现在 · 独立成 .target-sep 真元素，
+   左侧由 .target-month 的 margin-left、右侧由 .target-sep 的 margin-right，两侧都用同一个
+   --tgs-month-gap：价格右缘→· 中心 = gap + ·宽/2，· 中心→N月 左缘 = ·宽/2 + gap，恒等 ——
+   · 严格落在两个数字的几何中点，压缩态 gap 归零也仍然居中。整组比原来少两个空格，
+   COST/LITE 的「10月」不再顶到紫框右线。四列成组居中逻辑完全不变：百分比跨 2/4 列居中、
+   共识价变长自然往左延伸；20:51 起「· N月」整块定值 13px 灰（--tgs-month-font + var(--dim)），
+   不再随主字号联动，四位数共识价那一行的「月」离框右线再退 1.5px。 */
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad{position:relative;color:var(--dim);border-radius:4px;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad::after{content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;background:url("__TARGET_DASH_BORDER__") center/100% 100% no-repeat}
-table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad .target-price{grid-area:1/1/2/3}
-table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad>span:not(.target-price){grid-area:2/1/3/3}
-table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad:not(:has(.target-price))>span{grid-area:1/1/2/3}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad .target-price{grid-area:1/2/2/3}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad>span:not(.target-price){grid-area:2/2/3/3}
+table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad:not(:has(.target-price))>span{grid-area:1/2/2/3}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt.hit{color:var(--white)}
 table.stk tr[data-symbol]>td.tgs:has(.tgt.space)::after{display:none}
 table.stk tr[data-symbol]>td.tgs:has(.tgt.high)::after{display:none}
 table.stk tr[data-symbol]>td.tgs:has(.tgt.hit)::after{display:none}
-table.stk tr[data-symbol]>td.tgs:has(.tgt.space)::before{content:"";position:absolute;top:2px;right:0;bottom:2px;left:-1px;z-index:-1;pointer-events:none;background:var(--card);border:1px solid var(--purple);border-radius:3px}
-table.stk tr[data-symbol]>td.tgs:has(.tgt.high)::before{content:"";position:absolute;top:2px;right:0;bottom:2px;left:-1px;z-index:-1;pointer-events:none;background:var(--card);border:1px solid var(--purple);border-radius:3px;border-color:var(--target-high)}
-table.stk tr[data-symbol]>td.tgs:has(.tgt.hit)::before{content:"";position:absolute;top:2px;right:0;bottom:2px;left:-1px;z-index:-1;pointer-events:none;background:var(--tgt-solid);border-radius:0}
+table.stk tr[data-symbol]>td.tgs:has(.tgt.space)::before{content:"";position:absolute;top:var(--tgt-frame-top);right:0;bottom:var(--tgt-frame-bottom);left:-1px;z-index:-1;pointer-events:none;background:var(--card);border:1px solid var(--purple);border-radius:3px}
+table.stk tr[data-symbol]>td.tgs:has(.tgt.high)::before{content:"";position:absolute;top:var(--tgt-frame-top);right:0;bottom:var(--tgt-frame-bottom);left:-1px;z-index:-1;pointer-events:none;background:var(--card);border:1px solid var(--purple);border-radius:3px;border-color:var(--target-high)}
+table.stk tr[data-symbol]>td.tgs:has(.tgt.hit)::before{content:"";position:absolute;top:var(--tgt-frame-top);right:0;bottom:var(--tgt-frame-bottom);left:-1px;z-index:-1;pointer-events:none;background:var(--tgt-solid);border-radius:0}
 table.stk tr[data-symbol]>td.tgs [data-sign="pos"]{color:var(--tgt-pos)}
 #signalCounts .target-purple .percent-change.pos{color:var(--tgt-pos)}
 table.stk tr[data-symbol]>td.tgs [data-sign="neg"]{color:var(--tgt-neg)}
 #signalCounts .target-purple .percent-change.neg{color:var(--tgt-neg)}
 table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="pos"]{color:var(--tgt-pos-on)}
 table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="neg"]{color:var(--tgt-neg-on)}
-/* 财报整排：52 周条下方留白改成一行带底色的文字条；倒计时＋美东日期时段＋北京说明全部同行。 */
+/* 财报整排：52 周条下方留白改成一行带底色的文字条；倒计时＋美东日期时段＋北京说明全部同行。
+   字号 14→14.5px（2026-11-13）：与个股描述区 td.sig 正文同号，原 14px 比描述小 0.5px。
+   行高 19px 不动：单行 nowrap + 省略号，14.5px 字形在 19px 行盒里不裁切，整条仍 23px 高。 */
 .earn-band{display:block;margin:5px 0 0;padding:2px 8px;background:var(--cost-row-bg);border-radius:3px;overflow:hidden}
-.earn{display:block;margin:0;font-size:14px;font-weight:400;line-height:19px;white-space:nowrap;color:var(--head-blue-on);overflow:hidden;text-overflow:ellipsis}
+.earn{display:block;margin:0;font-size:14.5px;font-weight:400;line-height:19px;white-space:nowrap;color:var(--head-blue-on);overflow:hidden;text-overflow:ellipsis}
 .earn.soon{color:var(--lamp-yellow)}
 .earn.urgent{color:var(--lamp-red)}
 .earn .earn-sep,.earn .earn-bj{color:var(--dim)}
 .earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--white);margin-right:-.5em}
 .earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd{color:var(--head-blue-on)}
 #signalCounts .earnings-week-bj.is-countdown{color:var(--white)}
-table.stk tr[data-symbol]>td.cost-line{grid-area:cost;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 8px;margin:5px 0 0;background:var(--cost-row-bg);border-radius:3px;color:var(--text);white-space:nowrap;font-size:15px;line-height:22.5px;font-variant-numeric:tabular-nums}
+/* 成本条上下留白（2026-11-12 用户收紧）：上边距 5→2、条内上下 3→2；价格区两排 50px 已经偏紧，
+   成本条再留 5px 会把描述推得太远。条高 28.5→26.5px，字号与 15px／22.5px 行高一律不动。 */
+table.stk tr[data-symbol]>td.cost-line{grid-area:cost;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 8px;margin:2px 0 0;background:var(--cost-row-bg);border-radius:3px;color:var(--text);white-space:nowrap;font-size:15px;line-height:22.5px;font-variant-numeric:tabular-nums}
 table.stk tr[data-symbol]>td.cost-line[hidden]{display:none}
 table.stk tr[data-symbol]>td.cost-line>span{font-size:inherit}
 table.stk tr[data-symbol]>td.cost-line[data-pnl="loss"]{background:var(--pnl-loss-bg)}
 table.stk tr[data-symbol]>td.cost-line[data-pnl="gain"]{background:var(--pnl-gain-bg)}
 /* 描述区共用参数（2026-11-12）：列距 18→10，两列各多 4px；--sig-borrow 是每条描述可再借用的空白，
    左列借列间空白、右列借单元格右内边距，都不越出单元格。窄屏只覆盖 padding，不再重抄整条 grid。 */
-table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:10.25px 10px 7px;font-size:14.5px;line-height:21.75px;--sig-col-gap:10px;--sig-borrow:6px;--sig-row-gap:7px}
+/* 描述区上留白 10.25→5（2026-11-12 用户收紧）：这一格既是「成本条下方」也是其它分组
+   「价格区→第一排描述」的距离，原来 10.25px 两处都嫌宽；下留白 7px 与列内行距不动，避免整块糊在一起。 */
+table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:5px 10px 7px;font-size:14.5px;line-height:21.75px;--sig-col-gap:10px;--sig-borrow:6px;--sig-row-gap:7px}
 .sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}
 .sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}
 /* 加号改为1.1px细线绘制（原字形放大后笔画约1.7px偏粗）；尺寸、墨迹中心沿用原字形放大后的位置。 */
@@ -1147,7 +1255,12 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10p
 #signalCounts .signal-filter .signal-member-block ul{margin:0}
 #signalCounts .signal-filter .signal-member-belong:empty{display:none}
 @media(max-width:600px){
-:root{--status-font-size:14.5px}
+/* 手机档：代码列 98px / 紫灯列 108px（2026-11-13 20:51 用户「LMT 六字离右灰线还有一点距离，
+   左移一点灰线，把这个宽度空间给到紫灯区」）。19:35 恢复的左内距 6px（中文名不贴灯条）不动，
+   只把右内距 6→2px：note 可见宽仍是 98−6−2＝90px＝精确 6 个中文字，文字墨迹→灰线由 6px 收到 2px。
+   灰线左移 4px 全部转给 --tgs-w（104→108），中间 minmax(0,1fr) 价格区净宽不变，98 行仍全 0 档、
+   零侵占。四位数共识价的「10月」离紫框右线由 4px 放宽到 7.5px。其余只覆盖变量值。 */
+:root{--status-font-size:14.5px;--sym-w:98px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;--lamp-top:10px;--lamp-h:36px;--tgt-frame-top:7px;--tgs-font:16px;--tgs-pad-l:0px;--tgs-pad-r:0px}
 .sig-cols[data-combo="1"]{--combo-size:11.3px;--combo-cy:9.7px}
 body{padding-left:5px;padding-right:5px}
 .oil-reference-row td{padding:8px 6px}
@@ -1178,13 +1291,21 @@ body{padding-left:5px;padding-right:5px}
 :is(#macroCard, .macro-scope) .oil-reference-row td{padding-top:6px;padding-bottom:6px}
 :is(#macroCard, .macro-scope) .oil-reference-row td:last-child{line-height:20.25px}
 :is(#macroCard, .macro-scope) .oil-reference-row td:first-child::before{top:6px;bottom:6px}
-table.stk tr[data-symbol]>td.sym{font-size:17px}
+table.stk tr[data-symbol]>td.sym{font-size:17px;padding-left:6px;padding-right:2px}
 table.stk tr[data-symbol]>td.sym>.sym-box{line-height:20.8px}
 table.stk tr[data-symbol]>td.sym>.sym-box .note{font-size:14.5px}
-table.stk tr[data-symbol]>td.tgs .lvtag.tgt{font-size:15px}
-table.stk tr[data-symbol]>td.sig{padding:9.5px 5px 7px;font-size:14.5px;line-height:19.57px}
+/* 2026-11-13 用户定：手机档三组数字字号恒定 —— 紫灯框 16px（:root 的 --tgs-font）、振/量 15px、
+   涨跌幅/涨跌额 16px。16px 比原 15px 宽约 5px，靠 --tgs-pad-l/r 归零腾出（只动框内空白，
+   框线 ::before 与数字居中/靠右关系都不变），CDP 实测框内溢出由 5px 回到 0。
+   下面四条高特异性规则把 data-pxfit 压缩档也锁死：压缩档只准收间距，不准再改这三组字号 ——
+   本地 demo 里 COST 曾因 1,040.55 单独进第 1 档变 15/15.5px，而用户手机上（线上旧版无 fitPx）
+   看到的却是全不压缩；定值后字号变小自带余量，COST 自动回到 0 档，98 行全 0 档，数字整齐一致。 */
+table.stk tr[data-symbol] .px-v{font-size:15px}
+table.stk tr[data-symbol] :is(.px-chg,.px-amt){font-size:16px}
+table.stk tr[data-symbol][data-pxfit] .px-v{font-size:15px}
+table.stk tr[data-symbol][data-pxfit] :is(.px-chg,.px-amt){font-size:16px}
+table.stk tr[data-symbol]>td.sig{padding:5px 5px 7px;font-size:14.5px;line-height:19.57px}
 table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}
-table.stk tr[data-symbol]::before{top:7px;height:42.7px}
 .stk th{padding:7px 5px;font-size:12px}
 #signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}
 .grp-name{font-size:20px;line-height:24px}
@@ -1411,23 +1532,27 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
   const rows = Array.from(document.querySelectorAll('table.stk tr[data-symbol]'));
   let frame = 0;
   const dirty = new Set();
-  // 两排八项按指定字号排；只有物理上真的溢出时才逐档收紧，静态文案与灯级一律不重算。
+  // 两排五项按内容排成「左块 + 右侧上下两排、靠右铺开的振/量」，只有物理上真的顶到列边界才逐档收紧，
+  // 静态文案与灯级一律不重算。逐项量右边界，侧列也一并守着。
   function fitPx(row) {
     const main = row.querySelector('td.px .px-main');
     if (!main || !main.getBoundingClientRect().width) return;
     row.dataset.pxfit = '0';
-    const rows = Array.from(main.querySelectorAll('.px-row'));
+    const items = Array.from(main.querySelectorAll('.px-price,.px-chg,.px-amt,.px-metric'));
     const overflow = function() {
       const right = main.getBoundingClientRect().right;
-      return rows.some(function(r) {
-        const last = r.lastElementChild;
-        return last && last.getBoundingClientRect().right > right + .5;
-      });
+      return items.some(function(el) { return el.getBoundingClientRect().right > right + .5; });
     };
+    const mode = row.closest('table.stk').dataset.tgsfit;
     if (!overflow()) return;
     row.dataset.pxfit = '1';
     if (!overflow()) return;
     row.dataset.pxfit = '2';
+    // 第 3/4 档只在紫灯框已压到下限、仍挡不住价格区时由 fitTgs() 逐档放行；常规视口不进这两档。
+    if (!overflow() || (mode !== 'tight' && mode !== 'ultra')) return;
+    row.dataset.pxfit = '3';
+    if (!overflow() || mode !== 'ultra') return;
+    row.dataset.pxfit = '4';
   }
   function balanceDescriptions(row) {
     const cols = row.querySelector('td.sig > .sig-cols');
@@ -1478,18 +1603,96 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
     });
   }
   function verticalLines(row) {
-    const cell = row.querySelector('td.sym'), box = cell && cell.querySelector('.sym-box');
-    if (!box) return;
-    const code = Array.from(box.childNodes).find(function(n) { return n.nodeType === Node.TEXT_NODE && n.textContent.trim(); });
-    const name = box.querySelector('.note');
-    if (!code || !name) return;
-    const ink = function(n) { const range = document.createRange(); range.selectNodeContents(n); return range.getBoundingClientRect(); };
-    const a = ink(code), b = ink(name), root = row.getBoundingClientRect(), rect = cell.getBoundingClientRect();
-    if (!a.height || !b.height) return;
-    const top = Math.min(a.top, b.top) - rect.top;
+    const cell = row.querySelector('td.sym');
+    if (!cell) return;
+    const root = row.getBoundingClientRect(), rect = cell.getBoundingClientRect();
+    // 竖线上下几何统一走 CSS 的 --lamp-top/--lamp-h，和左灯条同起同止（2026-11-13）；
+    // 这里只量水平位置，不再按代码文字墨迹量高，免得三条线比灯条短一截。
     row.style.setProperty('--vl-x', (rect.right - root.left).toFixed(2) + 'px');
-    row.style.setProperty('--vl-top', top.toFixed(2) + 'px');
-    row.style.setProperty('--vl-h', (Math.max(a.bottom, b.bottom) - Math.min(a.top, b.top)).toFixed(2) + 'px');
+  }
+  // 2026-11-13：极端窄屏/极端长价格时，主动压缩「紫灯框内空间」（左右内距 + 列宽），
+  // 把宽度让给价格区，不让振/量数字画进框里。按实测「最挤的一行」整张表统一压缩，所有行列线仍对齐。
+  // 字号恒定 13/15px（用户明确不允许紫灯框数字变小），列宽最多收到框内三列刚好不被挤出；
+  // 收到底仍侵占的部分交给价格区第 3/4 档与裁切，绝不动紫灯框数字。
+  // 二分判据只认 tag 自身溢出。<440 属项目已声明不适配档（2026-11-01 定的两档断点），
+  // 不为它加安全余量或额外几何判据；设计档 440 与桌面档根本不走这段。
+  const TGS_CLEAR = 3, TGS_MIN_W = 58;
+  function tgsNeed(own) {
+    let need = 0;
+    own.forEach(function(row) {
+      if (!row.getBoundingClientRect().width) return; // 折叠行不参与测量。
+      const px = row.querySelector('td.px'), tgs = row.querySelector('td.tgs');
+      if (!px || !tgs) return;
+      const limit = tgs.getBoundingClientRect().left - 1 - TGS_CLEAR; // 框左线 ::before 在 tgs.left-1
+      px.querySelectorAll('.px-main .px-price,.px-main .px-chg,.px-main .px-amt,.px-main .px-metric')
+        .forEach(function(el) {
+          const over = el.getBoundingClientRect().right - limit;
+          if (over > need) need = over;
+        });
+    });
+    return need;
+  }
+  function tgsInnerOver(own) {
+    let over = 0;
+    own.forEach(function(row) {
+      const tag = row.querySelector('td.tgs .lvtag.tgt');
+      if (!tag || !tag.getBoundingClientRect().width) return;
+      const d = tag.scrollWidth - tag.clientWidth;
+      if (d > over) over = d;
+    });
+    return over;
+  }
+  function resetTgs() {
+    document.querySelectorAll('table.stk').forEach(function(table) {
+      table.style.removeProperty('--tgs-w');
+      table.style.removeProperty('--tgs-pad-l');
+      table.style.removeProperty('--tgs-pad-r');
+      delete table.dataset.tgsfit;
+      delete table.dataset.tgsCut;
+    });
+  }
+  function fitTgs() {
+    document.querySelectorAll('table.stk').forEach(function(table) {
+      const own = rows.filter(function(row) { return table.contains(row); });
+      if (!own.length) return;
+      const baseW = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tgs-w')) || 96;
+      const apply = function(w) {
+        table.style.setProperty('--tgs-w', w + 'px');
+        table.style.setProperty('--tgs-pad-l', '0px');
+        table.style.setProperty('--tgs-pad-r', '0px');
+      };
+      apply(baseW);
+      let need = tgsNeed(own);
+      if (need <= 0) {                           // 常规宽度零改动，视觉与改前完全一致。
+        table.style.removeProperty('--tgs-pad-l');
+        table.style.removeProperty('--tgs-pad-r');
+        return;
+      }
+      // 压缩态统一在 td.px 内裁切：列宽收到框内不溢出的极限后若还有几 px 侵占，
+      // 也只截在价格区里，绝不画到紫灯框上（用户要的是「不叠入」，不是把框压变形）。
+      table.dataset.tgsCut = '1';
+      // 只压缩「框内空间」：把左右内距归零 + 收窄列宽（两侧 1fr 弹性留白自然被压到 1em）。
+      // 字号恒定 13/15px 不动（用户 2026-11-13 明确不允许紫灯框数字变小）。
+      // 收窄下限由「框内三列不被挤出」决定：二分找最小的不溢出列宽，再窄就把百分比/价格/
+      // 月份圈压出框了，属于压缩过头。剩余的侵占交给价格区第 3/4 档与裁切，不动紫灯框。
+      const target = Math.max(TGS_MIN_W, Math.round(baseW - need));
+      let lo = target, hi = baseW;
+      while (lo < hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        apply(mid);
+        if (tgsInnerOver(own) > .5) lo = mid + 1; else hi = mid;
+      }
+      apply(lo);
+      if (tgsInnerOver(own) > .5) apply(Math.min(baseW, lo + 1));
+      if (tgsNeed(own) > 0) {                   // 收到内容极限仍侵占：价格区第 3 档兜底。
+        table.dataset.tgsfit = 'tight';
+        own.forEach(fitPx);
+        if (tgsNeed(own) > 0) {                // 第 3 档还不够（约 320px）：第 4 档 + 裁切硬兜底。
+          table.dataset.tgsfit = 'ultra';
+          own.forEach(fitPx);
+        }
+      }
+    });
   }
   function layout(row) {
     if (!row.getBoundingClientRect().width) return; // 折叠行展开后才测量。
@@ -1503,7 +1706,10 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
     frame = requestAnimationFrame(function() {
       frame = 0;
       const pending = Array.from(dirty); dirty.clear();
+      // 先回到基准列宽再让 fitPx 量，避免上一帧的压缩值参与这一档判定（否则会逐帧来回摆）。
+      resetTgs();
       pending.forEach(layout);
+      fitTgs();
     });
   }
   if (window.ResizeObserver) {

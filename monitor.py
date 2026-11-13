@@ -2092,6 +2092,8 @@ STK_HEAD = monitor_render.STK_HEAD
 
 EARN_COUNTDOWN_DAYS = 15   # 财报倒计时：距今超过 15 天（含盘后跨日）不再显示括号，只留日期与北京说明
 EARN_ROW_DAYS = 30         # 财报整条：距今超过 30 天连带底色的整条都不占位；两个阈值只管显示，不碰判灯
+EARN_PAST_KEEP_DAYS = 3    # 财报发布后旧日期最多留到 D+3（2026-11-13）：源更新到下一季就顶掉，
+                           # 源没更新也不冒充「下一次」，到 D+4 才转「日期待确认」。只管保留，不碰红黄窗口。
 
 
 def _earnings_display_gap(e, today=None):
@@ -2112,6 +2114,46 @@ def _earnings_gap(e, today=None):
     return _earnings_display_gap(e, today)
 
 
+_EARN_BJ_PERIOD = {"pre": "晚间", "post": "凌晨", "during": "夜–凌晨"}
+
+
+_EARN_PAST_WORD = {0: "今天", -1: "昨天", -2: "前天"}
+
+
+def earnings_bj_date(e):
+    """北京落点日期：盘后跨到次日凌晨，其余按美东当天；用来写「N月N日已出」。"""
+    if not isinstance(e, dict) or not _iso_date(e.get("date")):
+        return None
+    try:
+        return (datetime.strptime(e["date"], "%Y-%m-%d").date()
+                + timedelta(days=1 if e.get("timing") == "post" else 0))
+    except (ValueError, TypeError):
+        return None
+
+
+def _earnings_bj_day_text(e):
+    day = earnings_bj_date(e)
+    return f"{day.month}月{day.day}日" if day else ""
+
+
+def earnings_cd_merged(e, today=None):
+    """倒计时是不是北京口径（白字）：时段已定一律走北京；时段待定只有「已出」这种
+    确定已经过去的日期才走北京，未来仍按美东日期写「（美N天）」用蓝字。
+    渲染层、筛选元数据共用，避免三处口径分叉。"""
+    timed = isinstance(e, dict) and e.get("timing") in ("pre", "post", "during")
+    gap = _earnings_display_gap(e, today)
+    return bool(timed or (gap is not None and gap <= 0))
+
+
+def earnings_bj_relative(e, today=None):
+    """北京说明与倒计时同义（要染成白字）：D+3 内的已出日，或时段已定的今天／明天。"""
+    gap = _earnings_display_gap(e, today)
+    if gap is None:
+        return False
+    timed = isinstance(e, dict) and e.get("timing") in ("pre", "post", "during")
+    return (-EARN_PAST_KEEP_DAYS <= gap <= 0) or (timed and gap == 1)
+
+
 def earnings_countdown(e, today=None):
     """只留一个倒计时，括号里直接写清口径，不再靠蓝／白颜色区分。
 
@@ -2119,25 +2161,36 @@ def earnings_countdown(e, today=None):
     落点（盘后再加一天），时段待定时只认美东日期。距今超过 EARN_COUNTDOWN_DAYS 天不写倒计时；
     判灯与名单窗口仍走 earnings_urgency，不受这里影响；基准沿用页面渲染日 today，
     离线回放不随打开页面的日期漂移。
+    时段已定的今天／明天写「（北京 明天 晚间）」「（北京 今天 凌晨）」，把北京落点与
+    时段并进倒计时；未发布的 N 天同样把时段写在括号里「（北京2天 晚间）」，
+    以免后面按「不重复北京时间」清掉说明后连晚间／凌晨都看不到。
+    凡是已经发布的（含时段待定）在倒计时里一次写全相对日＋月日
+    「（北京昨天11月2日已出）」，后面不再重复；时段待定且未发布仍写「（美N天）」。
     """
     gap = _earnings_display_gap(e, today)
-    if gap is None or gap < -1 or gap > EARN_COUNTDOWN_DAYS:
+    if gap is None or gap > EARN_COUNTDOWN_DAYS or gap < -EARN_PAST_KEEP_DAYS:
         return ""
     timed = e.get("timing") in ("pre", "post", "during")
-    word = {1: "明天", 0: "今天", -1: "昨天"}.get(gap, f"{gap}天")
-    return f"（北京{word}）" if timed else f"（美{word}）"
+    if timed and gap in (0, 1):
+        return f"（北京 {'明天' if gap == 1 else '今天'} {_EARN_BJ_PERIOD[e['timing']]}）"
+    if gap <= 0:
+        # 2026-11-13：已出只写这一处，相对日＋北京月日一起写全，后面不再补第二句北京说明。
+        return f"（北京{_EARN_PAST_WORD.get(gap, '')}{_earnings_bj_day_text(e)}已出）"
+    if not timed:
+        return f"（美{'明天' if gap == 1 else str(gap) + '天'}）"
+    # 时段已定、还没发布的 N 天：括号里连北京时段一起写，后面不再补第二句北京说明。
+    return f"（北京{gap}天 {_EARN_BJ_PERIOD[e['timing']]}）"
 
 
 def earnings_label(e, today=None):
-    """返回 (页面文字, 北京说明) 或 None；只展示源提供的时段，不编造钟点。"""
+    """返回 (页面文字, 北京说明) 或 None；只展示源提供的时段，不编造钟点。
+
+    取数失败、日期待确认、日期非法共用同一句短文案「日期待确认 · 未取得」：
+    页面只写这一句，不解释失败原因；失败与否由抓取日志与 status.json 记录。
+    """
     if not e or e.get("status") in (None, "na"):
         return None
-    status = e["status"]
-    if status == "unknown":
-        return "日期待确认", "未取得"
-    if status == "error":
-        return "日期暂未取得", "本轮读取失败，不代表没有财报"
-    if not _iso_date(e.get("date")):
+    if e.get("status") != "ok" or not _iso_date(e.get("date")):
         return "日期待确认", "未取得"
     year, month, day = e["date"].split("-")
     this_year = int((today if _iso_date(today) else _bj_today())[:4])
@@ -2160,10 +2213,14 @@ def earnings_label(e, today=None):
         alt = e["alt_date"][5:].replace("-", "/")
         extra.append(f"另源 {alt}")
     gap = _earnings_gap(e, today)
-    if gap is not None and (gap <= 0 if e.get("timing") == "post" else gap < 0):
-        note = "北京 " + ("今出" if gap == 0 else "昨出" if gap == -1 else "已出")
+    timed = e.get("timing") in ("pre", "post", "during")
+    if timed or (gap is not None and gap <= 0):
+        # 2026-11-13：北京具体时段、以及所有已出（含时段待定）都只在倒计时里写一次，
+        # 已出写「（北京昨天11月2日已出）」，美东时间后不再重复同一句北京说明。
+        # 附加状态（待复核／另源日期）仍要留。
+        note = ""
     if extra:
-        note += "·" + "·".join(extra)
+        note += ("·" if note else "") + "·".join(extra)
     return f"美 {date_txt} {timing}", note
 
 
@@ -2206,16 +2263,29 @@ def earnings_within_week(e, today=None):
 EARN_LIST_DAYS = 15   # 统计面板「财报条件」名单：北京时间今天起至第 15 天（含）；不影响黄字与「无异动」折叠
 
 
+def earnings_past_keep(e, today=None):
+    """财报已发布但还在 D+3 内：旧日期继续挂在页面上，等数据源更新到下一季。
+    只管「保留」，不扩红黄窗口；红字期 D-1/D/D+1 仍由 earnings_urgency 决定。"""
+    if not isinstance(e, dict) or e.get("status") != "ok" or not isinstance(e.get("date"), str):
+        return False
+    try:
+        base = datetime.strptime(today or _bj_today(), "%Y-%m-%d").date()
+        event = datetime.strptime(e["date"], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return False
+    return -EARN_PAST_KEEP_DAYS <= (event - base).days <= EARN_BEFORE_DAYS
+
+
 def earnings_within_list(e, today=None):
     """统计面板财报名单/筛选口径：北京时间今天起至第 EARN_LIST_DAYS 天（含），
-    D-1/D/D+1 红字期均保留；D+1 对应的昨天事件额外留在名单中。"""
+    D-1/D/D+1 红字期均保留；已发布的事件按 D+3 额外留在名单中。"""
     if not isinstance(e, dict) or e.get("status") != "ok" or not isinstance(e.get("date"), str):
         return False
     try:
         today = today or _bj_today()
         start = datetime.strptime(today, "%Y-%m-%d").date()
         event = datetime.strptime(e["date"], "%Y-%m-%d").date()
-        return -EARN_AFTER_DAYS <= (event - start).days <= EARN_LIST_DAYS
+        return -EARN_PAST_KEEP_DAYS <= (event - start).days <= EARN_LIST_DAYS
     except (ValueError, TypeError):
         return False
 
@@ -2440,9 +2510,11 @@ def attach_earnings(items, prev=None, today=None, prev_events=None, deadline=Non
             stat["data"][k] = e
         if e.get("status") == "na":
             continue
-        # 财报按北京 D-1/D/D+1 三整日展示；红字期后，过期缓存不冒充“下一次”。
+        # 财报发布后旧日期最多留到 D+3：源更新到下一季就由新日期顶掉，源没更新也不冒充
+        # 「下一次」，到 D+4 才转「日期待确认」。红字期与 D+3 窗口共用这一道闸。
         expired = e.get("status") == "ok" and not _earn_cache_usable(e, today)
-        shown = {"status": "unknown"} if expired and earnings_urgency(e) != "red" else e
+        keep = earnings_past_keep(e, today) or earnings_urgency(e) == "red"
+        shown = {"status": "unknown"} if expired and not keep else e
         d["earnings"] = shown
         key = {"ok": "dated", "unknown": "pending"}.get(shown.get("status"), "failed")
         stat[key] += 1

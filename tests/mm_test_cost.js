@@ -1033,7 +1033,8 @@ test('所有数值CSS居中，列宽字号灯级与名称靠左保留',()=>{
 */
 test('数据时间和只读/同步状态跟随规则字号，定投在手机和桌面各加2px',()=>{
   assert.match(ASSETS,/--status-font-size:13\.5px/);
-  assert.match(ASSETS,/:root\{--status-font-size:14\.5px\}/);
+  // 手机档 :root 还可能覆盖其它共用变量（如代码列定宽 --sym-w），只锁字号值本身。
+  assert.match(ASSETS,/:root\{--status-font-size:14\.5px(?:;--[\w-]+:[^;}]+)*\}/);
   assert.match(ASSETS,/\.sub\{[^}]*font-size:var\(--status-font-size\)/);
   assert.match(ASSETS,/\.runlight\{[^}]*font-size:var\(--status-font-size\)/);
   assert.match(CSS,/\.sub \.cost-state\{margin-left:auto;flex:none;font-size:inherit;?\}/);
@@ -2414,9 +2415,9 @@ test('终稿四组pnl静态骨架重绘保留summary胶囊与展开状态',async
   for(const g of ['gain','loss','cut','add'])assert.equal(extra.querySelectorAll('ul[data-g="'+g+'"]').length,1);
 });
 for(const state of ['low','space','high','hit','bad'])test('终稿目标'+state+'不受成本淡底和价位重绘影响',async()=>{
-  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){const tr=qaQuote(doc,'AAA',100,100);tr.querySelector('.tgs').innerHTML='<span class="lvtag tgt '+state+'"><span>+20%</span><span>120</span><span title="10月">⑩</span></span>';}});
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){const tr=qaQuote(doc,'AAA',100,100);tr.querySelector('.tgs').innerHTML='<span class="lvtag tgt '+state+'"><span>+20%</span><span>120</span><span class="target-month" title="10月"><span class="target-sep">·</span>10月</span></span>';}});
   const tr=b.doc.getElementById('s-aaa'),target=tr.querySelector('.tgt'),parent=tr.parentNode;for(let i=0;i<4;i++)b.paint();
-  assert.equal(target.className,'lvtag tgt '+state);assert.equal(tr.className,'green');assert.equal(tr.parentNode,parent);assert.equal(target.textContent,'+20%120⑩');
+  assert.equal(target.className,'lvtag tgt '+state);assert.equal(tr.className,'green');assert.equal(tr.parentNode,parent);assert.equal(target.textContent,'+20%120·10月');
 });
 test('终稿每次动态绘制通过document发cost:painted并已完成名单更新',async()=>{
   const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',100,100);}});let n=0;
