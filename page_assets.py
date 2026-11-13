@@ -157,7 +157,7 @@ ${vol_example_table}
 <h5 id="glossary-earnings">财报与显示</h5>
 <p>报灯与名单窗口沿用美东财报日期对比快照北京运行日，盘前／盘后不平移。名单含运行日至+${earn_list_days}天，另留前一日红字；红字保留期结束后才检查下一次。</p>
 <p>失败时沿用有效旧日期；“待公布”仅表示本站未取得日期。</p>
-<p>显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。已知时段按北京落点计算并用白字，盘后顺延一日；时段待定按美东日期计算并用蓝字，未知不猜钟点。显示换算不改变报灯窗口。</p>
+<p>显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。已知时段按北京落点计算，盘后顺延一日；时段待定按美东日期计算，未知不猜钟点。财报文字按预警规则变红／黄；无预警时美东时间用蓝色、北京时间（含写北京的倒计时）用灰色。显示换算不改变报灯窗口。</p>
 <h5 id="glossary-dedup">标的去重与显示优先级</h5>
 <p>显示与报警优先级：市场风险／持仓 → 重点 → 其他。同一实质标的只显示最高级，清单记录不删。</p>
 <p>VIX与标普指数仅在市场风险显示。</p>
@@ -1174,12 +1174,16 @@ table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="neg"]{color:var(--tgt-neg-
    行高 19px 不动：单行 nowrap + 省略号，14.5px 字形在 19px 行盒里不裁切，整条仍 23px 高。 */
 .earn-band{display:block;margin:5px 0 0;padding:2px 8px;background:var(--cost-row-bg);border-radius:3px;overflow:hidden}
 .earn{display:block;margin:0;font-size:14.5px;font-weight:400;line-height:19px;white-space:nowrap;color:var(--head-blue-on);overflow:hidden;text-overflow:ellipsis}
-.earn.soon{color:var(--lamp-yellow)}
-.earn.urgent{color:var(--lamp-red)}
-.earn .earn-sep,.earn .earn-bj{color:var(--dim)}
-.earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--white);margin-right:-.5em}
-.earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd{color:var(--head-blue-on)}
-#signalCounts .earnings-week-bj.is-countdown{color:var(--white)}
+/* 颜色只按口径分：蓝色（--head-blue-on）恒为美东时间，灰色（--dim）恒为北京时间。
+   23:29 用户「蓝色一直是美东时间的颜色」：括号里写「北京…已出／北京 今天 凌晨」的倒计时
+   属于北京口径，必须跟北京说明一起用灰；只有写「（美N天）」的 .cd.tbd 才是美东口径、用蓝。
+   命中红黄时 --earn-bj-color 被父级改成红／黄，两种口径的倒计时与整条一起变色。
+   --earn-bj-color 与统计名单、筛选条件共用同一套，避免三处口径分叉。 */
+.earn.soon{color:var(--lamp-yellow);--earn-bj-color:var(--lamp-yellow)}
+.earn.urgent{color:var(--lamp-red);--earn-bj-color:var(--lamp-red)}
+.earn .earn-sep,.earn .earn-bj{color:var(--earn-bj-color,var(--dim))}
+.earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--earn-bj-color,var(--dim));margin-right:-.5em}
+.earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd{color:var(--earn-bj-color,var(--head-blue-on))}
 /* 成本条上下留白（2026-11-12 用户收紧）：上边距 5→2、条内上下 3→2；价格区两排 50px 已经偏紧，
    成本条再留 5px 会把描述推得太远。条高 28.5→26.5px，字号与 15px／22.5px 行高一律不动。 */
 table.stk tr[data-symbol]>td.cost-line{grid-area:cost;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 8px;margin:2px 0 0;background:var(--cost-row-bg);border-radius:3px;color:var(--text);white-space:nowrap;font-size:15px;line-height:22.5px;font-variant-numeric:tabular-nums}

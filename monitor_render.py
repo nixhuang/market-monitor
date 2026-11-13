@@ -599,7 +599,9 @@ class PageRenderer:
 
     def _countdown_html(self, event, today):
         mark = self._context.earnings_countdown(event, today)
-        # 蓝字只给「时段待定且还没发布」的美东倒计时；已发布的「（北京N已出）」也是北京口径，写白字。
+        # 23:29：倒计时按括号里写的口径着色——写北京的（含已出）跟北京说明一起用灰，
+        # 写「（美N天）」的 .cd.tbd 用美东蓝；命中红黄时整条统一变色，不再另设白字。
+        # tbd 只作为「时段待定且未发布」的结构标记保留。
         tbd = "" if self._context.earnings_cd_merged(event, today) else " tbd"
         return f'<span class="cd{tbd}">{mark}</span>' if mark else ""
 
@@ -1190,7 +1192,7 @@ class PageRenderer:
             event = saved.get(self._context.normalize_symbol(entry["symbol"]))
             event = dict(event) if isinstance(event, dict) and event.get("date") == date else {}
             event.update(status="ok", date=date, timing=entry.get("timing"))
-            main, sub = self._context.earnings_label(event, today)
+            main, sub = self._context.earnings_label(event, today) or ("", "")
             countdown = self._countdown_html(event, today)
             note = f'<span class="note">{esc(entry["note"])}</span>' if entry.get("note") else ""
             belong = self._context._member_belong(entry)   # 跟其它名单一样：分组写在代码后面的括号里，持仓分长/短
@@ -1416,11 +1418,16 @@ class PageRenderer:
                         {"status": "ok", "date": d.get("date"), "timing": d.get("timing")}, asof)
                     return urg if urg in ("red", "yellow") else "gray"
 
-                # 同样不解释来源：筛选结果里只写「财报 日期 时段」
+                # 同样不解释来源：筛选结果里只写「财报 日期 时段」；已出且源没给时段时不写「时段待定」。
+                def earn_text(d):
+                    timing_txt = timing_labels.get(d.get("timing"), "时段待定")
+                    gap = self._context._earnings_display_gap(
+                        {"status": "ok", "date": d.get("date"), "timing": d.get("timing")}, asof)
+                    if timing_txt == "时段待定" and gap is not None and gap <= 0:
+                        timing_txt = ""
+                    return f"财报 {d.get('date', '')} {timing_txt}".rstrip()
                 add_overlay_filter("earnings_week", "未来15天财报", earn_members, len(earn_members),
-                                   lambda d: f"财报 {d.get('date', '')} "
-                                   f"{timing_labels.get(d.get('timing'), '时段待定')}",
-                                   earn_level)
+                                   earn_text, earn_level)
                 # 动态交集只使用服务端冻结的展示信息，不在打开页面时重算时间。
                 today = self._render_day(snapshot)
                 saved = (snapshot.get("earnings") or {}).get("data") or {}
@@ -1429,7 +1436,7 @@ class PageRenderer:
                     event = saved.get(symbol)
                     event = dict(event) if isinstance(event, dict) and event.get("date") == d["date"] else {}
                     event.update(status="ok", date=d["date"], timing=d.get("timing"))
-                    _, sub = self._context.earnings_label(event, today)
+                    _, sub = self._context.earnings_label(event, today) or ("", "")
                     tbd = not self._context.earnings_cd_merged(event, today)
                     rec = filters["earnings_week"]["members"].get(self._context.instrument_identity(symbol))
                     if rec:

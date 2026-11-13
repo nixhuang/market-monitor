@@ -158,8 +158,8 @@ class RulesRegression(unittest.TestCase):
         # 财报不是涨跌方向：红字跟个股描述红 #ff8580 同色，不能用上涨红 var(--red)。
         self.assertIn('#signalCounts .earnings-week-meta.is-red{color:var(--lamp-red);font-weight:400;--earn-bj-color:var(--lamp-red)}', css)
         self.assertIn('#signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow);font-weight:400;--earn-bj-color:var(--lamp-yellow)}', css)
-        self.assertIn('.earn.urgent{color:var(--lamp-red)}', css)
-        self.assertIn('.earn.soon{color:var(--lamp-yellow)}', css)
+        self.assertIn('.earn.urgent{color:var(--lamp-red);--earn-bj-color:var(--lamp-red)}', css)
+        self.assertIn('.earn.soon{color:var(--lamp-yellow);--earn-bj-color:var(--lamp-yellow)}', css)
         # 所有位置的财报文字都不加粗（名单 meta、主表财报单元、多选组合条件）。
         for selector, body in re.findall(r'([^{}]*(?:earnings-week-meta|\.earn)[^{}]*)\{([^{}]*)\}', css):
             if 'summary' in selector:  # 「未来15天财报」这类区块标题照旧加粗
@@ -200,11 +200,24 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('#signalCounts .earnings-week-bj{color:var(--earn-bj-color,var(--dim))', css)
         selectors = '.earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd'
         declarations = re.search(re.escape(selectors) + r'\{([^}]*)\}', css)[1]
-        self.assertIn('color:var(--white)', declarations)
-        self.assertIn('#signalCounts .earnings-week-bj.is-countdown{color:var(--white)}', css)
-        self.assertIn('已知时段按北京落点计算并用白字', page_assets.GLOSSARY_BODY)
-        self.assertIn('时段待定按美东日期计算并用蓝字', page_assets.GLOSSARY_BODY)
+        # 23:29 用户「蓝色一直是美东时间的颜色」：颜色按口径分，不按「是不是倒计时」分。
+        # 写北京的倒计时（含已出）跟北京说明同灰，只有写「（美N天）」的 .cd.tbd 用美东蓝；
+        # 红黄由 --earn-bj-color 统一覆盖，避免写死颜色后倒计时不跟预警变色。
+        self.assertIn('color:var(--earn-bj-color,var(--dim))', declarations)
+        self.assertNotIn('color:inherit', declarations)
+        self.assertNotIn('color:var(--white)', declarations)
+        tbd_selectors = ('.earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,'
+                         '#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd')
+        tbd_declarations = re.search(re.escape(tbd_selectors) + r'\{([^}]*)\}', css)[1]
+        self.assertIn('color:var(--earn-bj-color,var(--head-blue-on))', tbd_declarations)
+        self.assertNotIn('.cd.tbd{color:var(--head-blue-on)}', css)
+        self.assertNotIn('.earnings-week-bj.is-countdown{color:var(--white)}', css)
+        self.assertIn('.earn .earn-sep,.earn .earn-bj{color:var(--earn-bj-color,var(--dim))}', css)
+        self.assertIn('已知时段按北京落点计算', page_assets.GLOSSARY_BODY)
+        self.assertIn('财报文字按预警规则变红／黄；无预警时美东时间用蓝色、北京时间（含写北京的倒计时）用灰色', page_assets.GLOSSARY_BODY)
         self.assertIn('不随打开页面日期漂移', page_assets.GLOSSARY_BODY)
+        self.assertNotIn('并用白字', page_assets.GLOSSARY_BODY)
+        self.assertNotIn('并用蓝字', page_assets.GLOSSARY_BODY)
 
     def test_earnings_relative_nodes_and_dynamic_filter_metadata_use_frozen_beijing_day(self):
         """2026-11-13：北京具体时段及所有已出都只在倒计时写一次，
@@ -237,7 +250,11 @@ class RulesRegression(unittest.TestCase):
                 rendered = monitor._signal_counts_card(snapshot)
                 data = json.loads(html.unescape(re.search(r'data-filter="([^"]*)"', rendered)[1]))
                 part = data['earnings_week']['members'][0]['d'][0]
-                self.assertEqual(part['t'], f"财报 {date} " + ({'post': '盘后', 'pre': '盘前'}.get(timing, '时段待定')))
+                label = {'post': '盘后', 'pre': '盘前'}.get(timing, '时段待定')
+                # 22:35 已出且源没给时段时，倒计时已写「已出」，筛选结果也不再写「时段待定」。
+                if label == '时段待定' and monitor._earnings_display_gap(event, today) <= 0:
+                    label = ''
+                self.assertEqual(part['t'], f"财报 {date} {label}".rstrip())
                 self.assertEqual(part['e'], {'c': countdown, 'b': bj, 'tbd': tbd,
                                              'relative': relative and bool(bj)})
         js = page_assets.PAGE_INTERACTION_JS
@@ -621,11 +638,14 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertEqual(day_change_amount(123.45, 120.0), '+3.45')
 
     def test_earnings_fallback_has_no_dead_disclaimer_text(self):
-        """2026-11-13：财报兜底只留「日期待确认 · 未取得」，源码里不许再留失败解释长句。"""
+        """22:35：没取到日期的财报整条隐藏，源码不许再留失败解释长句或占位提示。"""
         src = (ROOT / "monitor.py").read_text(encoding="utf-8")
-        for dead in ("不代表没有财报", "本轮读取失败", "日期暂未取得"):
+        for dead in ("不代表没有财报", "本轮读取失败", "日期暂未取得",
+                     'return "日期待确认", "未取得"'):
             self.assertNotIn(dead, src)
-        self.assertEqual(monitor.earnings_label({"status": "error"}), ("日期待确认", "未取得"))
+        # 行为守门：失败态连整条都不渲染（源码别处的「未取得行情」是行情文案，不受此约束）。
+        self.assertIsNone(monitor.earnings_label({"status": "error"}))
+        self.assertEqual(monitor._earnings_html({'earnings': {'status': 'error'}}, '2026-11-13'), '')
 
     def test_volume_lamp_only_on_number_and_earnings_display_thresholds(self):
         """量比只在价格区数字上表达灯级；财报倒计时 >15 天、整条 >30 天不显示（2026-11-12）。"""
@@ -764,9 +784,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         sig_fs = re.search(r'table\.stk tr\[data-symbol\]>td\.sig\{[^}]*font-size:([\d.]+)px', css).group(1)
         self.assertEqual(earn_fs, sig_fs)
         self.assertIn('.earn-band{display:block;margin:5px 0 0;padding:2px 8px;background:var(--cost-row-bg)', css)
-        self.assertIn('.earn .earn-sep,.earn .earn-bj{color:var(--dim)}', css)
+        self.assertIn('.earn .earn-sep,.earn .earn-bj{color:var(--earn-bj-color,var(--dim))}', css)
         self.assertNotIn('.earn>.unit', css)
-        self.assertIn('.earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd{color:var(--head-blue-on)}', css)
+        self.assertNotIn('.cd.tbd{color:var(--head-blue-on)}', css)
         for cls in ('add', 'cut'):
             body = re.search(r'\.stk td\.sig \.lvtag\.' + cls + r'\{([^}]*)\}', css)[1]
             self.assertIn('font:inherit', body)

@@ -2185,13 +2185,14 @@ def earnings_countdown(e, today=None):
 def earnings_label(e, today=None):
     """返回 (页面文字, 北京说明) 或 None；只展示源提供的时段，不编造钟点。
 
-    取数失败、日期待确认、日期非法共用同一句短文案「日期待确认 · 未取得」：
-    页面只写这一句，不解释失败原因；失败与否由抓取日志与 status.json 记录。
+    取数失败、日期待确认、日期非法一律返回 None —— 主表、名单、筛选结果都不占位
+    （2026-11-13 22:35 用户「日期待确认 · 未取得 也可以隐藏」）。失败与否由抓取日志
+    与 status.json 记录，页面上不再为「没取到日期」单独留一条提示。
     """
     if not e or e.get("status") in (None, "na"):
         return None
     if e.get("status") != "ok" or not _iso_date(e.get("date")):
-        return "日期待确认", "未取得"
+        return None
     year, month, day = e["date"].split("-")
     this_year = int((today if _iso_date(today) else _bj_today())[:4])
     date_txt = f"{month}/{day}" if int(year) == this_year else f"{year}/{month}/{day}"
@@ -2214,14 +2215,23 @@ def earnings_label(e, today=None):
         extra.append(f"另源 {alt}")
     gap = _earnings_gap(e, today)
     timed = e.get("timing") in ("pre", "post", "during")
-    if timed or (gap is not None and gap <= 0):
+    # 22:35 用户「都已出了还待定？」：已出（gap<=0）且源没给时段时，倒计时已经写明
+    # 「（北京昨天N月N日已出）」，后面再挂「时段待定」自相矛盾；这类只留美东日期。
+    if gap is not None and gap <= 0 and not timed:
+        timing = ""
+    cd = earnings_countdown(e, today)
+    if (timed and cd) or (gap is not None and gap <= 0):
         # 2026-11-13：北京具体时段、以及所有已出（含时段待定）都只在倒计时里写一次，
         # 已出写「（北京昨天11月2日已出）」，美东时间后不再重复同一句北京说明。
         # 附加状态（待复核／另源日期）仍要留。
+        # 22:16 修：只在「倒计时确实写了北京口径」时才省略这句。距今 > EARN_COUNTDOWN_DAYS
+        # 的 15~30 天窗口（如 11/13 看 12/01 盘后，北京落点 12/02，gap=19）倒计时按规则为空，
+        # 原先 timed 仍无条件清空 note，导致整条只剩「美 12/01 盘后」、北京时间凭空消失。
+        # _earnings_html 的设计本来就是「15~30 天仍显示日期与北京说明、只是没有倒计时」。
         note = ""
     if extra:
         note += ("·" if note else "") + "·".join(extra)
-    return f"美 {date_txt} {timing}", note
+    return f"美 {date_txt} {timing}".rstrip(), note
 
 
 EARN_SOON_DAYS = 7    # 美东财报日期 D 的前 7 天；以北京日历比较，红字优先于黄字

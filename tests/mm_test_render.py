@@ -2319,14 +2319,18 @@ const deadline = setTimeout(() => {
       })()`);
       const expected={EPREV:'rgb(255, 133, 128)',ENOW:'rgb(255, 133, 128)',ERED:'rgb(255, 133, 128)',
         EYELLOW:'rgb(240, 198, 116)',EFAR:'rgb(143, 184, 240)',ETBD:'rgb(143, 184, 240)'};
-      // 2026-11-13：时段已定与已出都只在倒计时写一次（已出连北京月日一起写全），
-      // 后面不再重复北京时间；蓝字 tbd（时段待定且未发布）才保留灰字「北京 待定」。
+      // 23:29 用户「蓝色一直是美东时间的颜色」：颜色按口径分，不按「是不是倒计时」分。
+      // 写北京的倒计时（含已出）跟北京说明同灰，写「（美N天）」的 .cd.tbd 才是美东蓝；
+      // 命中红黄时整条（含两种口径的倒计时、北京说明）统一变色。
+      const dim='rgb(139, 147, 161)',blue='rgb(143, 184, 240)',red='rgb(255, 133, 128)',yellow='rgb(240, 198, 116)';
+      const cdExpected=t=>(t.color===red||t.color===yellow)?t.color:(t.tbd?blue:dim);
+      const bjExpected=c=>(c===red||c===yellow)?c:dim;
       assertions.push({ok:times.list.length===12&&times.filtered.length===6&&times.list.concat(times.filtered).every(t=>
-        !t.missing&&t.color===expected[t.sym]&&t.cd===(t.tbd?'rgb(143, 184, 240)':'rgb(255, 255, 255)')
-        &&(!t.relative||t.bj==='rgb(255, 255, 255)')
-        &&(t.tbd?t.bj==='rgb(139, 147, 161)':t.bj===null||(t.relative&&t.bj==='rgb(255, 255, 255)'))
-        &&(!t.merged||/^（北京/.test(t.cdText))),
-        name:width+'px合并倒计时后主表／名单／交集不再重复北京说明，红黄日期与ET待定蓝仍保留',actual:times});
+        !t.missing&&t.color===expected[t.sym]&&t.cd===cdExpected(t)
+        &&(t.bj===null||t.bj===bjExpected(t.color))
+        &&(!t.merged||/^（北京/.test(t.cdText))
+        &&(!t.tbd||/^（美/.test(t.cdText))),
+        name:width+'px财报颜色按口径分：美东蓝北京灰、红黄整条统一',actual:times});
     }
     const rulesTree=await cdp('Page.getFrameTree');
     await cdp('Page.setDocumentContent',{frameId:rulesTree.frameTree.frame.id,html:syntheticPage(input.rulesPage)});
