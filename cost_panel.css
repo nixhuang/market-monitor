@@ -62,7 +62,7 @@
 /* 代码保持16px/原五列轨道；跨平台字体略宽时可用空列距，不把GOOGL裁成省略号。 */
 #costManage .ep-code { min-width: max-content; overflow: visible; font-size: 16px; color: var(--text); white-space: nowrap; text-align: left; }
 #costManage .ep-trade {
-  box-sizing: border-box; width: 58px; height: 34px; padding: 4px 5px;
+  box-sizing: border-box; width: 55px; height: 31px; padding: 4px 5px;
   border: 1px solid var(--cost-edit-border); border-radius: 4px;
   background: var(--cost-edit-bg); color: var(--cost-edit-text); font-size: 16px; line-height: 1.2;
   cursor: pointer; touch-action: manipulation;
@@ -72,7 +72,16 @@
 @media(min-width:601px) {
   #costManage .ep-editor-head, #costManage .ep-editor-row { grid-template-columns: 58px 58px 58px 112px 90px; }
 }
-#costManage [data-trade-destination][hidden] { display: none; }
+#costManage [data-trade-destination][hidden], #costManage [data-trade-fill-all][hidden] { display: none; }
+/* 卖出弹框数量行：输入框占满剩余宽度，「清仓」贴右、只填数量不提交；按钮高度对齐 33px 输入框，
+   下外距与 label 的 10px 一致，flex-end 对齐后两者底边齐平，不撑高弹框。 */
+#costManage .cost-trade-dialog .cost-trade-qty-row { display: flex; align-items: flex-end; gap: 8px; }
+#costManage .cost-trade-dialog .cost-trade-qty-row label { flex: 1 1 auto; min-width: 0; }
+#costManage .cost-trade-dialog .cost-trade-fill {
+  flex: 0 0 auto; box-sizing: border-box; height: 33px; margin-bottom: 10px; padding: 0 10px;
+  border: 1px solid var(--cost-edit-border); border-radius: 4px;
+  background: var(--cost-edit-bg); color: var(--cost-edit-text); font-size: 14px; cursor: pointer;
+}
 #costManage .cost-trade-dialog input:not([type="radio"]) {
   box-sizing: border-box; width: 100%; margin-top: 5px; padding: 6px 8px;
   background: var(--cost-input-bg); color: var(--text); border: 1px solid var(--cost-input-border);
@@ -133,7 +142,7 @@
   color: var(--dim);
   white-space: nowrap;
 }
-#costManage .ep-cash-total { display: flex; align-items: center; min-width: 0; white-space: nowrap; font-size: 16px; color: var(--dim); }
+#costManage .ep-cash-total { display: flex; align-items: center; min-width: 0; white-space: nowrap; font-size: 16px; color: var(--white); }
 .cost-acts {
   order: 2;
   display: flex;

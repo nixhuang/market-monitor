@@ -1630,7 +1630,7 @@
       var add = panel.querySelector('[data-cost-add]');
       if (add) add.disabled = clearBusy || pending;
       all('input[data-f],[data-trade-action]', panel).forEach(function (input) { input.disabled = clearBusy || pending; });
-      if (tradeDialog) all('input,[data-trade-confirm]', tradeDialog).forEach(function (input) { input.disabled = clearBusy || pending || !writer || !editing; });
+      if (tradeDialog) all('input,[data-trade-confirm],[data-trade-fill-all]', tradeDialog).forEach(function (input) { input.disabled = clearBusy || pending || !writer || !editing; });
       if (editBtn) editBtn.disabled = clearBusy;
     }
     function openClear(sym) {
@@ -1708,7 +1708,10 @@
       try { tradeGuard(sym); } catch (err) { clearMessage(err.message); return; }
       if (!tradeDialog) {
         tradeDialog = document.createElement('dialog'); tradeDialog.className = 'cost-clear-dialog cost-trade-dialog';
-        tradeDialog.innerHTML = '<h3></h3><label>成交数量<input data-trade-qty inputmode="decimal" step="0.0001" autocomplete="off"></label>' +
+        // 2026-11-14：数量行右侧「清仓」只把当前持仓数量填进输入框，不提交交易、不改草稿；
+        // 只有卖出需要它（买入没有「全部」的概念），用 hidden 属性跟目的地那排一样开合。
+        tradeDialog.innerHTML = '<h3></h3><div class="cost-trade-qty-row"><label>成交数量<input data-trade-qty inputmode="decimal" step="0.0001" autocomplete="off"></label>' +
+          '<button type="button" class="cost-trade-fill" data-trade-fill-all hidden>清仓</button></div>' +
           '<label>成交价<input data-trade-price inputmode="decimal" step="0.0001" autocomplete="off"></label><p data-trade-note></p>' +
           '<div class="cost-clear-choice" data-trade-destination><label><input type="radio" name="tradeDestination" value="default">全卖回默认</label>' +
           '<label><input type="radio" name="tradeDestination" value="focus">全卖进重点</label></div><p data-trade-error role="status"></p>' +
@@ -1717,6 +1720,18 @@
         tradeDialog.addEventListener('cancel', function () { tradeActive = null; });
         tradeDialog.addEventListener('click', function (e) {
           if (e.target.closest('[data-trade-cancel]')) { tradeDialog.close(); tradeActive = null; }
+          else if (e.target.closest('[data-trade-fill-all]')) {
+            try {
+              if (!tradeActive || tradeActive.generation !== editGeneration) throw new Error('编辑会话已变化，请重新打开交易');
+              var allDraft = checkedDraft();
+              if (!allDraft) throw new Error(draftNotice() || '存在无效输入，请修正后交易');
+              var held = allDraft.items[tradeActive.sym], allQty = held ? Number(held.qty) : 0;
+              if (!(allQty > 0)) throw new Error('当前持仓数量为 0，无需清仓');
+              // 用草稿里的实时数量（含本次编辑会话里手改的数量），四位小数原样落入输入框。
+              tradeDialog.querySelector('[data-trade-qty]').value = trim4(allQty);
+              tradeDialog.querySelector('[data-trade-error]').textContent = '';
+            } catch (err) { tradeDialog.querySelector('[data-trade-error]').textContent = err.message; }
+          }
           else if (e.target.closest('[data-trade-confirm]')) {
             try {
               if (!tradeActive || tradeActive.generation !== editGeneration) throw new Error('编辑会话已变化，请重新打开交易');
@@ -1732,8 +1747,9 @@
       tradeDialog.querySelector('h3').textContent = (side === 'buy' ? '买入 ' : '卖出 ') + sym;
       tradeDialog.querySelector('[data-trade-qty]').value = ''; tradeDialog.querySelector('[data-trade-price]').value = '';
       tradeDialog.querySelector('[data-trade-error]').textContent = '';
-      tradeDialog.querySelector('[data-trade-note]').textContent = side === 'buy' ? '买入价可空用于拆股；不改现金，忽略费用。' : '卖出价必填；全卖在面板保存后归零移组，不改现金，忽略费用。';
+      tradeDialog.querySelector('[data-trade-note]').textContent = side === 'buy' ? '买入价可空用于拆股；不改现金，忽略费用。' : '卖出价必填；清仓后移组。';
       tradeDialog.querySelector('[data-trade-destination]').hidden = side !== 'sell';
+      tradeDialog.querySelector('[data-trade-fill-all]').hidden = side !== 'sell';
       all('input[name="tradeDestination"]', tradeDialog).forEach(function (input) { input.checked = input.value === (clearDraft[sym] || 'default'); });
       clearDialogControls(); tradeDialog.showModal(); tradeDialog.querySelector('[data-trade-qty]').focus();
     }
@@ -1858,7 +1874,7 @@
     }
     function syncEditUI() {
       if (editBtn) {
-        editBtn.textContent = editing ? '编辑中' : '编辑';
+        editBtn.textContent = '编辑';
         editBtn.setAttribute('aria-pressed', String(editing));
         editBtn.className = 'cost-edit-btn' + (editing ? ' on' : '');
       }
@@ -2217,8 +2233,8 @@
         return editorRow(r.sym, r.costKnown ? vt(r.cost) : '', vt(r.qty));
       }).join('');
       var fields = [
-        ['现金 1', 'USD', 'cash', cashFirst(DATA)],
-        ['现金 2', 'USD', 'cash_extra', DATA.cash_extra],
+        ['现金', 'USD', 'cash', cashFirst(DATA)],
+        ['sgov', 'USD', 'cash_extra', DATA.cash_extra],
         ['固收', 'BOND', 'fixed_cost', fixedCost],
       ]
         .map(function (f) {

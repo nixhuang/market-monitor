@@ -620,7 +620,7 @@ class PageRenderer:
         soon = {"red": " urgent", "yellow": " soon"}.get(urgency, "")
         main, sub = (html_lib.escape(text, quote=True) for text in earn)
         cd = self._countdown_html(event, today)
-        # 倒计时并入北京相对日＋时段后，美东时间后不再重复同一句北京说明。
+        # 倒计时并入北京日期／相对日＋时段后，美东时间后不再重复同一句北京说明。
         bj = (f'<span class="earn-sep"> · </span><span class="earn-bj">{sub}</span>'
               if sub else "")
         return f'<span class="earn{soon}">{cd}{" " if cd else ""}{main}{bj}</span>'

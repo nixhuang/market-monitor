@@ -157,7 +157,7 @@ ${vol_example_table}
 <h5 id="glossary-earnings">财报与显示</h5>
 <p>报灯与名单窗口沿用美东财报日期对比快照北京运行日，盘前／盘后不平移。名单含运行日至+${earn_list_days}天，另留前一日红字；红字保留期结束后才检查下一次。</p>
 <p>失败时沿用有效旧日期；“待公布”仅表示本站未取得日期。</p>
-<p>显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。已知时段按北京落点计算，盘后顺延一日；时段待定按美东日期计算，未知不猜钟点。财报文字按预警规则变红／黄；无预警时美东时间用蓝色、北京时间（含写北京的倒计时）用灰色。显示换算不改变报灯窗口。</p>
+<p>显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。已知时段按北京落点计算，盘后顺延一日；时段待定按美东日期计算，未知不猜钟点。有具体时段的财报整条有且只有一次美东日期和一次北京日期：有倒计时时北京日期写在括号里，倒计时隐藏时写在后面的北京说明里；时段待定只写美东日期。财报文字按预警规则变红／黄；无预警时美东时间用蓝色、北京时间（含写北京的倒计时）用灰色。显示换算不改变报灯窗口。</p>
 <h5 id="glossary-dedup">标的去重与显示优先级</h5>
 <p>显示与报警优先级：市场风险／持仓 → 重点 → 其他。同一实质标的只显示最高级，清单记录不删。</p>
 <p>VIX与标普指数仅在市场风险显示。</p>
@@ -875,7 +875,7 @@ tr.gray td{color:var(--dim)}
 #runMsg.ok{color:var(--green)}
 #runMsg.err{color:var(--red)}
 .runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-.runbar button:not(.cost-edit-btn){padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;cursor:pointer;font-family:inherit}
+.runbar button:not(.cost-edit-btn){padding:6px 13px;font-size:13px;line-height:1.2;align-self:center;box-sizing:border-box;height:34px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;cursor:pointer;font-family:inherit}
 .runbar button:disabled{opacity:.5;cursor:not-allowed}
 .runbar button.primary{background:var(--blue);border-color:var(--blue);color:var(--white)}
 .runbar a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
@@ -1313,7 +1313,7 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}
 .stk th{padding:7px 5px;font-size:12px}
 #signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}
 .grp-name{font-size:20px;line-height:24px}
-.runbar button:not(.cost-edit-btn){padding:8px 14px;font-size:20px;line-height:21.6px}
+.runbar button:not(.cost-edit-btn){padding:8px 13px;font-size:16px;line-height:1.08;height:40px}
 .sub{padding-left:16px;padding-right:16px;margin-bottom:8px;line-height:18px}
 .runlight{line-height:16.88px}
 .stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}

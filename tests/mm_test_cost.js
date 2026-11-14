@@ -1120,10 +1120,11 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   // 2026-11-02：「编辑」搬到顶栏后，标题行只剩「总资产·盈亏」→ 顶到最右，不留一截空白；
   // 顶栏那条 .runbar button 必须排除 .cost-edit-btn，否则会盖掉这颗的小圆角蓝边与字号
   assert.match(CSS,/\.cost-manage>summary \.group-stats\{justify-content:flex-end\}/);
-  assert.match(ASSETS,/\.runbar button:not\(\.cost-edit-btn\)\{padding:6px 12px/);
-  // 手机档那条同理：不排除会把同排三个按钮从 18px 压回 15px（特指度 0,2,1 > 0,1,1）。
-  // 2026-11-02 定档 66×43：字号 16.5 → 18px、上下内距 7 → 8px（左右仍 14px）。
-  assert.match(ASSETS,/\.runbar button:not\(\.cost-edit-btn\)\{padding:8px 14px;font-size:18px\}/);
+  assert.match(ASSETS,/\.runbar button:not\(\.cost-edit-btn\)\{padding:6px 13px;font-size:13px/);
+  // 手机档那条同理：不排除会盖掉同排按钮与「编辑」一致的尺寸（特指度 0,2,1 > 0,1,1）。
+  // 2026-11-14 用户「运行/状态/刷新三个按钮和编辑按钮一样大」：手机 16px / 8px 13px / 40px，
+  // 桌面 13px / 6px 13px / 34px，两档都与 .cost-edit-btn 同值。
+  assert.match(ASSETS,/\.runbar button:not\(\.cost-edit-btn\)\{padding:8px 13px;font-size:16px;line-height:1\.08;height:40px\}/);
   // 2026-11-02：「编辑」改成**固定高度 + 垂直居中**（手机 40 / 桌面 34），不再用 stretch
   // 撑满整行——同排三个按钮加到 43px 后，编辑要矮 3px 且居中，不是跟着一起变高。
   assert.match(CSS,/\.runbar \.cost-edit-btn\{align-self:center;box-sizing:border-box;height:34px\}/);
@@ -1567,7 +1568,7 @@ for(const [name,first,second,total] of [
   assert.equal(totalNode.textContent,'现金合计 $'+String(total));
   assert.equal(totalNode.parentNode.className,'ep-cash');
   assert.equal(b.doc.querySelectorAll('.ep-cash label').length,3);
-  assert.deepEqual(b.doc.querySelectorAll('.ep-cash label').map(el=>el.querySelector('span').textContent),['现金 1','现金 2','固收']);
+  assert.deepEqual(b.doc.querySelectorAll('.ep-cash label').map(el=>el.querySelector('span').textContent),['现金','sgov','固收']);
   await b.save();assert.equal(b.state().editing,false);assert.equal(b.doc.getElementById('costManage').classList.contains('cost-edit-open'),false);
   assert.equal(b.doc.querySelector('.cashbond-row .cb-cash .cb-amt').textContent,'$'+String(Math.round(total)));
   assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
@@ -1763,6 +1764,55 @@ test('生产五列原生交易行：代码独立完整，无备注红叉市值�
   assert.equal(row.querySelector('[data-trade-action="sell"]').textContent,'SELL');assert.equal(row.querySelector('.ep-name,.ep-clear,.ep-val'),null);
   b.addPosition('GOOGL','long','2','99');const added=b.doc.querySelector('[data-cost-row][data-sym="GOOGL"]');
   assert.equal(added.querySelector('.ep-code').textContent,'GOOGL');assert.equal(added.children.length,5);await b.dispose();
+});
+test('SELL 弹框提示改为「卖出价必填；清仓后移组。」，BUY 说明不变',async()=>{
+  // 2026-11-14 用户：旧句「全卖在面板保存后归零移组，不改现金，忽略费用。」太长，压成一句。
+  // 买方文案是另一条分支，不能跟着被改短。
+  assert.ok(!SOURCE.includes('全卖在面板保存后归零移组'));
+  const b=await boot({noLocks:true,forbidRequests:true});await b.enter();
+  const panel=b.doc.getElementById('costManage');
+  panel.querySelector('[data-trade-action="sell"][data-sym="AAA"]').click();
+  let d=b.doc.querySelector('.cost-trade-dialog');
+  assert.equal(d.querySelector('[data-trade-note]').textContent,'卖出价必填；清仓后移组。');
+  d.querySelector('[data-trade-cancel]').click();
+  panel.querySelector('[data-trade-action="buy"][data-sym="AAA"]').click();
+  d=b.doc.querySelector('.cost-trade-dialog');
+  assert.equal(d.querySelector('[data-trade-note]').textContent,'买入价可空用于拆股；不改现金，忽略费用。');
+  d.querySelector('[data-trade-cancel]').click();await b.dispose();
+});
+test('卖出弹框数量行清仓按钮只在SELL出现，按草稿持仓数量自动填入且不提交',async()=>{
+  const local={...copy(SEED),items:{AAA:{cost:100,qty:15.0123},BBB:SEED.items.BBB}};
+  const b=await boot({local,noLocks:true,forbidRequests:true});await b.enter();
+  const panel=b.doc.getElementById('costManage'),before=b.canonical(b.state().DATA);
+  const open=side=>{panel.querySelector('[data-trade-action="'+side+'"][data-sym="AAA"]').click();
+    return b.doc.querySelector('.cost-trade-dialog');};
+  let d=open('sell'),fill=d.querySelector('[data-trade-fill-all]');
+  assert.ok(fill);assert.equal(fill.textContent,'清仓');assert.equal(fill.hidden,false);
+  assert.equal(fill.parentElement.querySelector('[data-trade-qty]'),d.querySelector('[data-trade-qty]'));
+  d.querySelector('[data-trade-qty]').value='1';fill.click();
+  assert.equal(d.querySelector('[data-trade-qty]').value,'15.0123');
+  assert.equal(d.querySelector('[data-trade-price]').value,'');
+  assert.equal(d.querySelector('[data-trade-error]').textContent,'');
+  assert.equal(b.canonical(b.state().DATA),before);assert.equal(b.puts().length,0);
+  d.querySelector('[data-trade-cancel]').click();
+  d=open('buy');assert.equal(d.querySelector('[data-trade-fill-all]').hidden,true);
+  d.querySelector('[data-trade-cancel]').click();await b.dispose();
+});
+test('清仓按钮填入的数量可直接确认全卖，零持仓不猜数量',async()=>{
+  const b=await bootClear(),panel=b.doc.getElementById('costManage');
+  panel.querySelector('[data-trade-action="sell"][data-sym="AAA"]').click();
+  const d=b.doc.querySelector('.cost-trade-dialog');
+  d.querySelector('[data-trade-fill-all]').click();assert.equal(d.querySelector('[data-trade-qty]').value,'5');
+  d.querySelector('[data-trade-price]').value='110';d.querySelector('[data-trade-confirm]').click();
+  assert.equal(d.open,false);assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:0,cost:0});
+  assert.deepEqual(b.clearState().draft,{AAA:'default'});
+  panel.querySelector('[data-trade-action="sell"][data-sym="AAA"]').click();
+  const again=b.doc.querySelector('.cost-trade-dialog');
+  again.querySelector('[data-trade-fill-all]').click();
+  assert.equal(again.querySelector('[data-trade-qty]').value,'');
+  assert.match(again.querySelector('[data-trade-error]').textContent,/持仓数量为 0/);
+  again.querySelector('[data-trade-cancel]').click();
+  b.doc.getElementById('costCancel').click();await b.dispose();
 });
 test('生产交易净投入回算、拆股、手填最后覆盖、取消恢复且不自动改现金或上传',async()=>{
   const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();const n=b.requests.length;
@@ -2964,7 +3014,7 @@ test('混合块复核：非法草稿期间旧ACK入口不读写也不吞错误',
 test('固收单框DOM仅三项，打开和未编辑保存不改变旧云两字段',async()=>{
   const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
   const labels=b.doc.querySelectorAll('.ep-cash label');
-  assert.deepEqual(labels.map(el=>el.querySelector('span').textContent),['现金 1','现金 2','固收']);
+  assert.deepEqual(labels.map(el=>el.querySelector('span').textContent),['现金','sgov','固收']);
   assert.equal(b.doc.querySelectorAll('input[data-sym="BOND"]').length,1);
   assert.equal(b.doc.querySelector('input[data-f="fixed"]'),null);
   assert.equal(b.doc.querySelector('input[data-f="fixed_cost"]').value,'15');
@@ -3060,7 +3110,7 @@ test('五列原生编辑器字号与交易命中区，长代码不压入买卖�
   assert.equal(row.querySelector('.ep-code').textContent,sym);assert.equal(row.querySelector('.ep-clear'),null);
   assert.equal(row.children[3].getAttribute('data-f'),'cost');assert.equal(row.children[4].getAttribute('data-f'),'qty');
   assert.match(CSS,/#costManage \.ep-code\{[^}]*min-width:max-content;overflow:visible;[^}]*font-size:16px/);
-  assert.match(CSS,/#costManage \.ep-trade\{[^}]*width:58px;height:34px/);
+  assert.match(CSS,/#costManage \.ep-trade\{[^}]*width:55px;height:31px/);
   assert.match(CSS,/@media\(min-width:601px\)\{#costManage \.ep-editor-head,#costManage \.ep-editor-row\{grid-template-columns:58px 58px 58px 112px 90px/);
   assert.match(CSS,/#costManage \.ep-editor-head\{margin-bottom:4px;font-size:13px;color:var\(--dim\)/);
   assert.match(CSS,/#costManage \.ep-h\{font-size:13px;color:var\(--dim\)/);
@@ -3070,6 +3120,11 @@ test('五列原生编辑器字号与交易命中区，长代码不压入买卖�
   assert.match(CSS,/#costManage \.cost-clear-dialog h3\{[^}]*font-size:18px/);assert.match(CSS,/#costManage \.cost-clear-dialog label\{display:block;[^}]*font-size:16px/);
   assert.match(CSS,/#costManage \.cost-clear-dialog p\{[^}]*font-size:15px/);assert.match(CSS,/#costManage \.cost-add-dialog input:not\(\[type="radio"\]\)\{[^}]*font-size:16px/);
   assert.match(CSS,/#costManage \.cost-add-hold,#costManage \.cost-clear-choice\{display:flex;[^}]*gap:16px/);assert.match(CSS,/#costManage \.cost-add-hold label,#costManage \.cost-clear-choice label\{display:inline-flex/);
+  // 2026-11-14：卖出弹框数量行右侧「清仓」按钮与输入框同排，hidden 时彻底不占位。
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-qty-row\{[^}]*display:flex;align-items:flex-end;gap:8px/);
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-qty-row label\{[^}]*flex:1 1 auto;min-width:0/);
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-fill\{[^}]*height:33px;[^}]*font-size:14px/);
+  assert.match(CSS,/\[data-trade-fill-all\]\[hidden\]\{display:none/);
   assert.equal((CSS.match(/@media/g)||[]).length,2);assert.doesNotMatch(CSS,/@media\((?:max-width:(?!600)|min-width:(?!601))/);await b.dispose();
 });
 

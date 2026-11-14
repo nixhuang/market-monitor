@@ -160,7 +160,7 @@ check('<span class="earn soon"' in _html_e and _html_e.count('<span class="earn 
       and '<span class="earn">美 10/27 盘前' in _html_e
       and '<div class="earn-band"><span class="earn soon"' in _html_e,
       "D 距北京今天 2 天的财报标黄（earn soon），20 天后仍显示蓝字但不再带倒计时；财报整排落在 52 周条下方带底色的条里")
-check(monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-22', 'timing': 'pre'}, '2026-10-07') == '（北京15天 晚间）'
+check(monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-22', 'timing': 'pre'}, '2026-10-07') == '（北京15天 10月22日 晚间）'
       and monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-23', 'timing': 'pre'}, '2026-10-07') == ''
       and monitor._earnings_html({'earnings': {'status': 'ok', 'date': '2026-11-06', 'timing': 'pre'}}, '2026-10-07') != ''
       and monitor._earnings_html({'earnings': {'status': 'ok', 'date': '2026-11-07', 'timing': 'pre'}}, '2026-10-07') == '',
@@ -2450,6 +2450,13 @@ const deadline = setTimeout(() => {
         result.addInActs=add.parentElement.id==='costActs'&&panel.querySelectorAll('[data-cost-add]').length===1;
         result.actsSameRow=Math.abs(ar.top-xr.top)<1&&Math.abs(xr.top-sr.top)<1&&ar.right<xr.left&&xr.right<sr.left;
         sell.click();const dialog=panel.querySelector('.cost-trade-dialog');
+        const fill=dialog.querySelector('[data-trade-fill-all]'),qtyInput=dialog.querySelector('[data-trade-qty]');
+        result.fillText=fill?fill.textContent:null;
+        result.fillVisible=!!fill&&getComputedStyle(fill).display!=='none';
+        result.fillSameRow=!!fill&&fill.parentElement.contains(qtyInput)&&fill.previousElementSibling===qtyInput.parentElement;
+        result.fillRight=!!fill&&fill.getBoundingClientRect().left>=qtyInput.getBoundingClientRect().right-0.5;
+        if(fill)fill.click();result.fillQty=qtyInput.value;
+        result.fillNoOverflow=document.documentElement.scrollWidth<=innerWidth;
         result.dialogOpen=dialog.open;result.destinations=[...dialog.querySelectorAll('input[name="tradeDestination"]')].map(i=>i.value);
         result.dialogWidth=dialog.getBoundingClientRect().width;result.hasCash=!!dialog.querySelector('[data-f="cash"]');
         result.sellNote=dialog.querySelector('[data-trade-note]').textContent;
@@ -2458,6 +2465,9 @@ const deadline = setTimeout(() => {
         const choices=[...dialog.querySelectorAll('.cost-clear-choice label')].map(e=>e.getBoundingClientRect());
         result.choicesSameRow=choices.length===2&&Math.abs(choices[0].top-choices[1].top)<1&&choices[0].right<choices[1].left;
         dialog.querySelector('[data-trade-cancel]').click();result.dialogClosed=!dialog.open;
+        panel.querySelector('[data-trade-action="buy"][data-sym="RANGENORM"]').click();
+        result.buyFillHidden=getComputedStyle(dialog.querySelector('[data-trade-fill-all]')).display==='none';
+        dialog.querySelector('[data-trade-cancel]').click();
         document.getElementById('costCancel').click();result.cancelHidden=getComputedStyle(panel).display==='none';
         return result;
       })()`);
@@ -2469,8 +2479,10 @@ const deadline = setTimeout(() => {
         &&editor.dialogOpen&&editor.dialogClosed&&JSON.stringify(editor.destinations)===JSON.stringify(['default','focus'])
         &&editor.dialogWidth>0&&editor.dialogWidth<=width-24&&!editor.hasCash
         &&editor.fixedFields===1&&editor.fixedCost&&editor.editorFont==='16px'&&editor.inputFont==='16px'
-        &&editor.noOverflow&&editor.sellNote.includes('卖出价必填')&&editor.dialogFont==='18px'&&editor.labelFont==='16px'
-        &&editor.addInActs&&editor.actsSameRow&&editor.choicesSameRow&&editor.hitWidth===58&&editor.hitHeight===34,
+        &&editor.noOverflow&&editor.sellNote==='卖出价必填；清仓后移组。'&&editor.dialogFont==='18px'&&editor.labelFont==='16px'
+        &&editor.fillText==='清仓'&&editor.fillVisible&&editor.fillSameRow&&editor.fillRight&&editor.fillQty==='10'
+        &&editor.fillNoOverflow&&editor.buyFillHidden
+        &&editor.addInActs&&editor.actsSameRow&&editor.choicesSameRow&&editor.hitWidth===55&&editor.hitHeight===31,
         name:width+'px真实五列代码/BUY/SELL/成本/数量、退休红叉市值列不显示及取消不变',actual:editor});
       const clearPoint=await evaluate(`(()=>{
         document.getElementById('costEditBtn').click();

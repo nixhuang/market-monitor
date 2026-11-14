@@ -225,8 +225,8 @@ class RulesRegression(unittest.TestCase):
         tbd 蓝字只剩「时段待定且未发布」。"""
         today = '2026-11-10'
         cases = (
-            ('post', '2026-11-20', '（北京11天 凌晨）', '', 'cd', False, False),
-            ('pre',  '2026-11-12', '（北京2天 晚间）', '', 'cd', False, False),
+            ('post', '2026-11-20', '（北京11天 11月21日 凌晨）', '', 'cd', False, False),
+            ('pre',  '2026-11-12', '（北京2天 11月12日 晚间）', '', 'cd', False, False),
             (None,   '2026-11-12', '（美2天）', '北京 待定', 'cd tbd', True, False),
             ('post', '2026-11-10', '（北京 明天 凌晨）', '', 'cd', False, True),
             ('post', '2026-11-09', '（北京 今天 凌晨）', '', 'cd', False, True),
@@ -668,9 +668,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
                 self.assertNotIn('量比', monitor._signals_html(d))
         today = '2026-10-07'
         ev = lambda day, timing='pre': {'status': 'ok', 'date': day, 'timing': timing, 'kind': 'expected'}
-        self.assertEqual(monitor.earnings_countdown(ev('2026-10-22'), today), '（北京15天 晚间）')
+        self.assertEqual(monitor.earnings_countdown(ev('2026-10-22'), today), '（北京15天 10月22日 晚间）')
         self.assertEqual(monitor.earnings_countdown(ev('2026-10-23'), today), '')
-        self.assertEqual(monitor.earnings_countdown(ev('2026-10-21', 'post'), today), '（北京15天 凌晨）')
+        self.assertEqual(monitor.earnings_countdown(ev('2026-10-21', 'post'), today), '（北京15天 10月22日 凌晨）')
         self.assertEqual(monitor.earnings_countdown(ev('2026-10-22', 'post'), today), '')
         plain = monitor._earnings_html({'earnings': ev('2026-10-23')}, today)
         self.assertIn('美 10/23 盘前', plain)
