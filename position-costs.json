@@ -1,39 +1,83 @@
 {
-  "schema_version": 2,
-  "real": true,
-  "updated_at": "2026-11-10T14:33:23.990Z",
-  "cash": 22243.04,
-  "cash_extra": 20646.92,
-  "fixed": 16916.97,
-  "fixed_cost": 16916.97,
-  "items": {
-    "AAPL": {"qty": 6, "cost": 325.03},
-    "APH": {"qty": 30, "cost": 77.008},
-    "AVGO": {"qty": 4, "cost": 364.9225},
-    "BRK-B": {"qty": 1, "cost": 505},
-    "CRSP": {"qty": 12, "cost": 46.91833333333333},
-    "DRAM": {"qty": 16, "cost": 49.6575},
-    "GOOGL": {"qty": 10, "cost": 328.121},
-    "HII": {"qty": 2, "cost": 272},
-    "LMT": {"qty": 3, "cost": 513},
-    "NTNX": {"qty": 13, "cost": 44.80846153846154},
-    "NXPI": {"qty": 2, "cost": 220},
-    "QQQM": {"qty": 7.0022, "cost": 296.8010053983034},
-    "SCHD": {"qty": 46.0903, "cost": 32.88110513491993},
-    "SPYM": {"qty": 30.0188, "cost": 88.77836555758391},
-    "UBER": {"qty": 5, "cost": 58.72},
-    "UNH": {"qty": 6, "cost": 387.6},
-    "VRT": {"qty": 4, "cost": 208.98},
-    "XLI": {"qty": 2, "cost": 167.9}
+ "schema_version": 2,
+ "real": true,
+ "updated_at": "2026-11-14T01:58:04.716Z",
+ "cash": 21746.15,
+ "cash_extra": 20680,
+ "fixed": 16916.97,
+ "fixed_cost": 16916.97,
+ "items": {
+  "AAPL": {
+   "qty": 6,
+   "cost": 325.03
   },
-  "acks": {
-    "GOOGL|loss10": "2026-10-30T04:24:52.178Z",
-    "AVGO|loss10": "2026-11-02T03:53:55.746Z"
+  "APH": {
+   "qty": 30,
+   "cost": 77.008
   },
-  "ack_tombstones": {
-    "AVGO|loss10": "2026-10-27T00:45:44.678Z",
-    "GOOGL|loss10": "2026-10-30T04:24:44.062Z"
+  "AVGO": {
+   "qty": 4,
+   "cost": 364.9225
   },
-  "ack_contexts": {},
-  "ack_invalidations": {}
+  "BRK-B": {
+   "qty": 1,
+   "cost": 505
+  },
+  "CRSP": {
+   "qty": 12,
+   "cost": 46.91833333333333
+  },
+  "DRAM": {
+   "qty": 16,
+   "cost": 49.6575
+  },
+  "GOOGL": {
+   "qty": 10,
+   "cost": 328.121
+  },
+  "HII": {
+   "qty": 2,
+   "cost": 272
+  },
+  "LMT": {
+   "qty": 3,
+   "cost": 513
+  },
+  "NTNX": {
+   "qty": 13,
+   "cost": 44.80846153846154
+  },
+  "NXPI": {
+   "qty": 2,
+   "cost": 220
+  },
+  "QQQM": {
+   "qty": 7.0022,
+   "cost": 296.8010053983034
+  },
+  "SCHD": {
+   "qty": 46.0903,
+   "cost": 32.88110513491993
+  },
+  "SPYM": {
+   "qty": 36.0188,
+   "cost": 88.70367696869413
+  },
+  "UBER": {
+   "qty": 5,
+   "cost": 58.72
+  },
+  "UNH": {
+   "qty": 6,
+   "cost": 387.6
+  },
+  "VRT": {
+   "qty": 4,
+   "cost": 208.98
+  },
+  "XLI": {
+   "qty": 2,
+   "cost": 167.9
+  }
+ }
 }
