@@ -9,16 +9,16 @@
     "next_in": 19,
     "next_date": "2026-12-11"
   },
-  "run_id": "43541073509",
+  "run_id": "43588341564",
   "request_id": "",
-  "source_sha": "f6be6768a3b0ecac8d5c7998b55c3cc501666eb4",
-  "input_hash": "2351333daa17206178df2abe33d381ac8b069e9c2eed33b9a8f3e8e67c5db8f9",
-  "build_id": "43541073509-1",
-  "started_at": "2026-11-14T01:31:14+00:00",
-  "started_at_bj": "2026-11-14T09:31:14+08:00",
-  "finished_at": "2026-11-14T09:34:04.457365+08:00",
-  "finished_at_bj": "2026-11-14T09:34:04+08:00",
-  "event": "schedule",
+  "source_sha": "d169589d120d6f0274dee4a03d360ff721eef77a",
+  "input_hash": "f9575c4b1a00412240f921b9e1d066f3ed55c9be34b69be9364fadd24a855ca8",
+  "build_id": "43588341564-1",
+  "started_at": "2026-11-14T11:05:23+00:00",
+  "started_at_bj": "2026-11-14T19:05:23+08:00",
+  "finished_at": "2026-11-14T19:08:01.709388+08:00",
+  "finished_at_bj": "2026-11-14T19:08:01+08:00",
+  "event": "push",
   "target_trade_date": "2026-11-13",
   "mode": "closed",
   "schedule": "美东周一至周五20:30；北京时间夏季次日08:30、冬季次日09:30",
@@ -447,7 +447,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及200日均线 ±1%区间（日内 276.61~283.62，现价偏离 -0.3%）"
+              "text": "日内触及200日均线 ±1%区间（日内 276.60~283.62，现价偏离 -0.3%）"
             },
             {
               "kind": "ma_cross",
@@ -480,7 +480,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及200日均线 ±1%区间（日内 391.50~408.09，现价偏离 -1.1%）"
+              "text": "日内触及200日均线 ±1%区间（日内 391.50~408.08，现价偏离 -1.1%）"
             },
             {
               "kind": "ma_cross",
@@ -714,7 +714,7 @@
           "ma_facts": [
             {
               "kind": "ma_band",
-              "text": "日内触及200日均线 ±1%区间（日内 624.83~643.91，现价偏离 +1.7%）"
+              "text": "日内触及200日均线 ±1%区间（日内 624.79~643.91，现价偏离 +1.7%）"
             },
             {
               "kind": "ma_cross",
@@ -757,7 +757,7 @@
           "group": "position",
           "hold": "short",
           "level": "red",
-          "low52_price": "41.79"
+          "low52_price": "41.75"
         },
         {
           "symbol": "COIN",
@@ -790,7 +790,7 @@
           "group": "position",
           "hold": "long",
           "level": "green",
-          "space": 53.71890867363702,
+          "space": 53.718912999625374,
           "band": "medium",
           "price": 533.42,
           "kind": "consensus",
@@ -838,7 +838,7 @@
           "group": "focus",
           "hold": "short",
           "level": "yellow",
-          "space": 46.56283296920881,
+          "space": 46.56283700749881,
           "band": "medium",
           "price": 584.39,
           "kind": "consensus",
@@ -874,7 +874,7 @@
           "group": "technology",
           "hold": "short",
           "level": "yellow",
-          "space": 100.67967839285197,
+          "space": 100.67967776335907,
           "band": "high",
           "price": 1561.91,
           "kind": "consensus",
@@ -898,7 +898,7 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 97.77585103950629,
+          "space": 97.77584281360616,
           "band": "high",
           "price": 1044.83,
           "kind": "consensus",
@@ -922,7 +922,7 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 77.7675960807119,
+          "space": 77.76759110703644,
           "band": "medium",
           "price": 387.8,
           "kind": "consensus",
@@ -934,7 +934,7 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 59.319477444019824,
+          "space": 59.3194770365404,
           "band": "medium",
           "price": 95.05,
           "kind": "consensus",
@@ -946,11 +946,11 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 69.19298245614036,
+          "space": 57.67071524966262,
           "band": "medium",
-          "price": 626.86,
+          "price": 584.17,
           "kind": "consensus",
-          "detail": "共识价 626.86，空间 +69.2%"
+          "detail": "共识价 584.17，空间 +57.7%"
         },
         {
           "symbol": "ARM",
@@ -970,7 +970,7 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 82.85805388711846,
+          "space": 82.85805945676196,
           "band": "medium",
           "price": 512.99,
           "kind": "consensus",
@@ -994,7 +994,7 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 98.35417893335064,
+          "space": 98.35417198264864,
           "band": "high",
           "price": 310.94,
           "kind": "consensus",
@@ -1018,7 +1018,7 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 66.6519715144001,
+          "space": 66.65197355239431,
           "band": "medium",
           "price": 415.88,
           "kind": "consensus",
@@ -1030,7 +1030,7 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 61.13226051275665,
+          "space": 61.132259206798864,
           "band": "medium",
           "price": 364.03,
           "kind": "consensus",
@@ -1042,7 +1042,7 @@
           "group": "technology",
           "hold": "short",
           "level": "red",
-          "space": 100.04911746390597,
+          "space": 100.04912496162112,
           "band": "high",
           "price": 325.78,
           "kind": "consensus",
@@ -1054,7 +1054,7 @@
           "group": "technology",
           "hold": "short",
           "level": "green",
-          "space": 107.4682944910738,
+          "space": 107.46829020801624,
           "band": "high",
           "price": 613.38,
           "kind": "consensus",
@@ -1114,7 +1114,7 @@
           "group": "industrials",
           "hold": "short",
           "level": "red",
-          "space": 77.95390832632708,
+          "space": 77.95390419427449,
           "band": "medium",
           "price": 561.32,
           "kind": "consensus",
@@ -1126,7 +1126,7 @@
           "group": "industrials",
           "hold": "short",
           "level": "green",
-          "space": 43.4954985810496,
+          "space": 43.495501499500165,
           "band": "medium",
           "price": 861.26,
           "kind": "consensus",
@@ -1150,7 +1150,7 @@
           "group": "consumer_discretionary",
           "hold": "short",
           "level": "green",
-          "space": 44.86150980543083,
+          "space": 44.861511467602455,
           "band": "medium",
           "price": 231.17,
           "kind": "consensus",
@@ -1162,7 +1162,7 @@
           "group": "position",
           "hold": "long",
           "level": "green",
-          "space": -6.452968176556027,
+          "space": -6.452971061273753,
           "band": "low",
           "price": 333.28,
           "kind": "consensus",
@@ -1174,7 +1174,7 @@
           "group": "focus",
           "hold": "short",
           "level": "red",
-          "space": -2.9704994619332092,
+          "space": -2.9705028882400266,
           "band": "low",
           "price": 1073.35,
           "kind": "consensus",
@@ -1191,7 +1191,7 @@
         "group": "position",
         "hold": "long",
         "level": "green",
-        "space": 53.71890867363702,
+        "space": 53.718912999625374,
         "band": "medium",
         "price": 533.42,
         "kind": "consensus",
@@ -1239,7 +1239,7 @@
         "group": "focus",
         "hold": "short",
         "level": "yellow",
-        "space": 46.56283296920881,
+        "space": 46.56283700749881,
         "band": "medium",
         "price": 584.39,
         "kind": "consensus",
@@ -1275,7 +1275,7 @@
         "group": "technology",
         "hold": "short",
         "level": "yellow",
-        "space": 100.67967839285197,
+        "space": 100.67967776335907,
         "band": "high",
         "price": 1561.91,
         "kind": "consensus",
@@ -1299,7 +1299,7 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 97.77585103950629,
+        "space": 97.77584281360616,
         "band": "high",
         "price": 1044.83,
         "kind": "consensus",
@@ -1323,7 +1323,7 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 77.7675960807119,
+        "space": 77.76759110703644,
         "band": "medium",
         "price": 387.8,
         "kind": "consensus",
@@ -1335,7 +1335,7 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 59.319477444019824,
+        "space": 59.3194770365404,
         "band": "medium",
         "price": 95.05,
         "kind": "consensus",
@@ -1347,11 +1347,11 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 69.19298245614036,
+        "space": 57.67071524966262,
         "band": "medium",
-        "price": 626.86,
+        "price": 584.17,
         "kind": "consensus",
-        "detail": "共识价 626.86，空间 +69.2%"
+        "detail": "共识价 584.17，空间 +57.7%"
       },
       {
         "symbol": "ARM",
@@ -1371,7 +1371,7 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 82.85805388711846,
+        "space": 82.85805945676196,
         "band": "medium",
         "price": 512.99,
         "kind": "consensus",
@@ -1395,7 +1395,7 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 98.35417893335064,
+        "space": 98.35417198264864,
         "band": "high",
         "price": 310.94,
         "kind": "consensus",
@@ -1419,7 +1419,7 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 66.6519715144001,
+        "space": 66.65197355239431,
         "band": "medium",
         "price": 415.88,
         "kind": "consensus",
@@ -1431,7 +1431,7 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 61.13226051275665,
+        "space": 61.132259206798864,
         "band": "medium",
         "price": 364.03,
         "kind": "consensus",
@@ -1443,7 +1443,7 @@
         "group": "technology",
         "hold": "short",
         "level": "red",
-        "space": 100.04911746390597,
+        "space": 100.04912496162112,
         "band": "high",
         "price": 325.78,
         "kind": "consensus",
@@ -1455,7 +1455,7 @@
         "group": "technology",
         "hold": "short",
         "level": "green",
-        "space": 107.4682944910738,
+        "space": 107.46829020801624,
         "band": "high",
         "price": 613.38,
         "kind": "consensus",
@@ -1515,7 +1515,7 @@
         "group": "industrials",
         "hold": "short",
         "level": "red",
-        "space": 77.95390832632708,
+        "space": 77.95390419427449,
         "band": "medium",
         "price": 561.32,
         "kind": "consensus",
@@ -1527,7 +1527,7 @@
         "group": "industrials",
         "hold": "short",
         "level": "green",
-        "space": 43.4954985810496,
+        "space": 43.495501499500165,
         "band": "medium",
         "price": 861.26,
         "kind": "consensus",
@@ -1551,7 +1551,7 @@
         "group": "consumer_discretionary",
         "hold": "short",
         "level": "green",
-        "space": 44.86150980543083,
+        "space": 44.861511467602455,
         "band": "medium",
         "price": 231.17,
         "kind": "consensus",
@@ -1565,7 +1565,7 @@
         "group": "position",
         "hold": "long",
         "level": "green",
-        "space": -6.452968176556027,
+        "space": -6.452971061273753,
         "band": "low",
         "price": 333.28,
         "kind": "consensus",
@@ -1577,7 +1577,7 @@
         "group": "focus",
         "hold": "short",
         "level": "red",
-        "space": -2.9704994619332092,
+        "space": -2.9705028882400266,
         "band": "low",
         "price": 1073.35,
         "kind": "consensus",
@@ -1697,7 +1697,7 @@
       "side": "下轨",
       "rsi_n": 0,
       "rsi_side": "",
-      "detail": "逼近布林下轨▼ 还差0.71%",
+      "detail": "逼近布林下轨▼ 还差0.72%",
       "group": "consumer_discretionary",
       "level": "green",
       "hold": "short",
@@ -1769,12 +1769,12 @@
     "sp500": "2026-11-13",
     "ust10": "2026-11-13",
     "nfci": "2026-11-06",
-    "breadth": "2026-11-12",
+    "breadth": "2026-11-13",
     "nasdaq": "2026-11-13"
   },
   "treasury_reference": {
     "ok": true,
-    "value": 5.154000282287598,
+    "value": 5.1539998054504395,
     "date": "2026-11-13",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -1783,7 +1783,7 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": -0.03599977493286133
+    "delta_month": -0.03600025177001953
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "2026-11-13 收盘（美东交易日）",
@@ -1805,9 +1805,9 @@
   "risk_quotes": {
     "vix": {
       "ok": true,
-      "value": 19.299999237060547,
+      "value": 19.3,
       "date": "2026-11-13",
-      "source": "Yahoo ^VIX",
+      "source": "Cboe VIX 官方日线",
       "drawdown": null
     },
     "sp500": {
@@ -1857,21 +1857,23 @@
     "checked_at": "2026-11-12T20:33:09.291952-05:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-11-14T01:33:11.027854+00:00"
+    "asof": "2026-11-14T11:07:15.410102+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 0,
+      "due": 1,
       "deferred": 0,
-      "tried": 0,
-      "ok": 0,
+      "tried": 1,
+      "ok": 1,
       "none": 0,
       "fail": 0,
       "stopped": "",
       "quota": {
         "date": "2026-11-14",
-        "symbols": [],
+        "symbols": [
+          "AMAT"
+        ],
         "retry_symbols": []
       }
     },
@@ -2213,12 +2215,12 @@
         ]
       },
       "AMAT": {
-        "avg": 626.86,
-        "upd": "2026-11-03",
-        "r": "2026-11-09",
+        "avg": 584.17,
+        "upd": "2026-11-13",
+        "r": "2026-11-14",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-11-09",
+        "try": "2026-11-14",
         "ne": "2027-02-11",
         "earn_pending": [
           "2026-11-12"
@@ -2742,11 +2744,13 @@
     },
     "quota": {
       "date": "2026-11-14",
-      "symbols": [],
+      "symbols": [
+        "AMAT"
+      ],
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-11-14T01:34:04.182711+00:00",
+    "asof": "2026-11-14T11:08:01.415447+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -2760,7 +2764,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -2777,7 +2781,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -2811,7 +2815,7 @@
           "digest": "4626f389ee826a738887c0a366bf8229fcafb8aa83db3118473507a0868f9c7c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "b349fa6c02925a10b4c0ad8d6d8d65e34f76d0ae66f22ab5c6828f6d00e6cb2c"
         }
@@ -2828,7 +2832,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -2879,7 +2883,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -2896,7 +2900,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -2913,7 +2917,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -2930,7 +2934,7 @@
           "digest": "46b490563bd5cb78458eeb18d8240e99af070de5f14fb5452156f0c62c741568"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "6fdb6ee21dd39b64f32af0d297a6d403868a02a83a7383f5815c35496219be18"
         }
@@ -2998,7 +3002,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3015,7 +3019,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -3032,7 +3036,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3049,7 +3053,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3066,7 +3070,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "229a5c551d6be267e2680ad2327c9c9ec18631501e1522fedaede2a850edc80c"
         }
@@ -3100,7 +3104,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3134,7 +3138,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3151,7 +3155,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -3168,7 +3172,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3202,7 +3206,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -3219,7 +3223,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3236,7 +3240,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
         }
@@ -3253,7 +3257,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3270,24 +3274,24 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
       },
       "AMAT": {
         "facts": {
-          "asof": "2026-11-09T11:55:53.118010+00:00",
-          "at": "2026-11-09T00:00:00+00:00",
-          "digest": "8cd91b97ec8e39232ac9f315f5caa09606d5298d49ab3fc6bf5af780c2d7da40"
+          "asof": "2026-11-14T11:08:01.415447+00:00",
+          "at": "2026-11-14T00:00:00+00:00",
+          "digest": "a2f7e82aae710699390bd6edbaa061a998aa8156eb275d3a716b69122adb83c1"
         },
         "attempt": {
-          "asof": "2026-11-09T11:55:53.118010+00:00",
-          "at": "2026-11-08T16:00:00+00:00",
-          "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
+          "asof": "2026-11-14T11:08:01.415447+00:00",
+          "at": "2026-11-13T16:00:00+00:00",
+          "digest": "801bc35ecf7a307bb0c37c85715cdc18931e37c57e8916fbbc358e56e9835c83"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "dd2a107b95a38bfdbfcabb3c2c8ff10b83d4aab2134f1395d1ee79cef8685c98"
         }
@@ -3304,7 +3308,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3338,7 +3342,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "b7a4c2b0adc9ad39ba193b21a13a13ba857e0b2f7ed153a419387fc314ade66d"
         }
@@ -3406,7 +3410,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "3ab1dd1df2994e85b2a5605788e0537c6440ea5fd9762e98445e57c4308b3fd2"
         }
@@ -3423,7 +3427,7 @@
           "digest": "46b490563bd5cb78458eeb18d8240e99af070de5f14fb5452156f0c62c741568"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8c841de081d855f40075b8b3875d5e6f5be1e29a5833b154513a59fca3480448"
         }
@@ -3440,7 +3444,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -3474,7 +3478,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "be73c567fb53ae88b9a6a819456010b5421fa578533609edd51e3d37be3f2baa"
         }
@@ -3491,7 +3495,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -3508,7 +3512,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "1ffef9318e623e19ec19c8be4793ccf2948522c884ed3ec29e26c3cac8264cc1"
         }
@@ -3525,7 +3529,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "f97f96841e2044aa1096720b7bbac3d8168300f18ffe485ae269935a626c3b79"
         }
@@ -3542,7 +3546,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -3559,7 +3563,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3593,7 +3597,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
         }
@@ -3610,7 +3614,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "45d062dd2d8b7a4bb67cd2ec479ce7e0063d5bd5ca4214b2a800d39bd44a87de"
         }
@@ -3627,7 +3631,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "be73c567fb53ae88b9a6a819456010b5421fa578533609edd51e3d37be3f2baa"
         }
@@ -3644,7 +3648,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -3678,7 +3682,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "3187ddd3f2df50fd097eff406e02d1c4150cce8f627eda20976775643bc7fb1d"
         }
@@ -3695,7 +3699,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3712,7 +3716,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -3746,7 +3750,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "d950462b69fbadb5117bc1791218968f86c1ae42863f65dcf4969a039e9e1cda"
         }
@@ -3763,7 +3767,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "229a5c551d6be267e2680ad2327c9c9ec18631501e1522fedaede2a850edc80c"
         }
@@ -3797,7 +3801,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3814,7 +3818,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "cd7c27f761a0ea07c0c7a59d7ebc6c5057dc5b4ed6b72f601d2b20e9d9597531"
         }
@@ -3831,7 +3835,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "cd7c27f761a0ea07c0c7a59d7ebc6c5057dc5b4ed6b72f601d2b20e9d9597531"
         }
@@ -3848,7 +3852,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
         }
@@ -3865,7 +3869,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3882,7 +3886,7 @@
           "digest": "4626f389ee826a738887c0a366bf8229fcafb8aa83db3118473507a0868f9c7c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "b349fa6c02925a10b4c0ad8d6d8d65e34f76d0ae66f22ab5c6828f6d00e6cb2c"
         }
@@ -3899,7 +3903,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -3933,7 +3937,7 @@
           "digest": "b35e1c49ee65afff8806c8383e1deec42c7021c42ffb622dc4966175ff8840d2"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -3950,7 +3954,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
         }
@@ -3967,7 +3971,7 @@
           "digest": "4626f389ee826a738887c0a366bf8229fcafb8aa83db3118473507a0868f9c7c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "ab1e5e6c25c9659351aabc27f8b1136c570d41c441edd0227be35ebe44b28188"
         }
@@ -3984,7 +3988,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4001,7 +4005,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -4035,7 +4039,7 @@
           "digest": "9f389f1532d7353dd61be4389ce6b1ba0d68754e434ef389fd83978f60b7ced9"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
         }
@@ -4052,7 +4056,7 @@
           "digest": "95d98d750a083d1efb78eb717ba4051fd90a9e3d6f2252da7474f3c84665e270"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4069,7 +4073,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "3187ddd3f2df50fd097eff406e02d1c4150cce8f627eda20976775643bc7fb1d"
         }
@@ -4086,7 +4090,7 @@
           "digest": "3b6a6ed657fef35f34be1370c916992adef8db9b3e13b37ca0547a2cb334676c"
         },
         "events": {
-          "asof": "2026-11-14T01:34:04.182711+00:00",
+          "asof": "2026-11-14T11:08:01.415447+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4432,7 +4436,7 @@
         "kind": "expected",
         "label": "Earnings Date",
         "cross": "agree",
-        "fetched": "2026-11-09",
+        "fetched": "2026-11-14",
         "status": "ok"
       },
       "WDC": {
@@ -4872,7 +4876,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-11-14T01:34:04.150761+00:00",
+    "asof": "2026-11-14T11:08:01.140053+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -5607,13 +5611,13 @@
       },
       "NVDA": {
         "facts": {
-          "asof": "2026-11-09T11:55:29.090899+00:00",
-          "at": "2026-11-09T00:00:00+00:00",
-          "digest": "c47a8067cd57a3e8b9cde90caf0585694071d227646c124b096ea5873096b7c0"
+          "asof": "2026-11-14T11:08:01.140053+00:00",
+          "at": "2026-11-14T00:00:00+00:00",
+          "digest": "d14ef92f3f23a858ebafca9c34349261806a1285ccf18b3cbb03b5a0dce38722"
         },
         "attempt": {
-          "asof": "2026-11-09T11:55:29.090899+00:00",
-          "at": "2026-11-09T00:00:00+00:00",
+          "asof": "2026-11-14T11:08:01.140053+00:00",
+          "at": "2026-11-14T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6285,19 +6289,19 @@
       "text": "未快速上涨",
       "source": "Yahoo NYMEX WTI期货",
       "url": "https://finance.yahoo.com/quote/CL=F/",
-      "price": 88.91999816894531,
+      "price": 88.55999755859375,
       "date": "2026-11-13",
       "contract": "Crude Oil Dec 26",
-      "day": 0.20284010537402766,
+      "day": -0.20284010537402766,
       "day_from": "2026-11-12",
-      "week": -2.1028334510683138,
-      "month": -10.19995840893448,
+      "week": -2.499178935043055,
+      "month": -10.563521954234567,
       "incomplete": false,
       "contract_symbol": "CLZ26.NYM"
     },
-    "assessed_at": "2026-11-14T09:33:09.332307+08:00",
+    "assessed_at": "2026-11-14T19:07:13.738650+08:00",
     "schema_version": 2,
-    "asof": "2026-11-14T01:33:11.405255+00:00"
+    "asof": "2026-11-14T11:07:15.691250+00:00"
   },
   "data_lag": {
     "target": "2026-11-13",
@@ -6306,9 +6310,6 @@
     "expected": 98,
     "by_source": {
       "nasdaq": {
-        "2026-11-12": 98
-      },
-      "yahoo": {
         "2026-11-13": 98
       }
     }
