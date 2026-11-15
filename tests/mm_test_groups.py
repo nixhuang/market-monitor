@@ -1827,10 +1827,27 @@ class TestGroups(unittest.TestCase):
             for label,value in (('加仓价',trigger),('减仓价',reduce)):
                 if value is not None:
                     self.assertIn(f'data-lv="{value}"',output)
-                    self.assertIn(f'{label} {value} · 距 —',output)
+                    self.assertIn(f'{label} {value} · 需 —',output)
             self.assertNotIn('class="lvs"',output)
         for bad in (None, '', 0, -1, 'abc', True, float('nan'), float('inf')):
             self.assertEqual(monitor.level_note(bad, bad), '')
+
+    def test_level_note_gap_follows_setting_price_direction(self):
+        """2026-11-15：幅度按 (设置价 − 现价)/现价 带符号，不再写无方向的「需±N%」。
+
+        加仓价也可能高于现价、减仓价也可能低于现价，一律只看设置价相对现价的方向。
+        """
+        for value, want in ((90, '需-10.0%'), (97, '需-3.0%'), (100, '需+0.0%'),
+                            (103, '需+3.0%'), (110, '需+10.0%')):
+            with self.subTest(value=value):
+                self.assertIn(want, monitor.level_note(value, None, 100))
+                self.assertIn(want, monitor.level_note(None, value, 100))
+        both = monitor.level_note(97, 103, 100)
+        self.assertIn('加仓价 97 · 需-3.0%', both)
+        self.assertIn('减仓价 103 · 需+3.0%', both)
+        self.assertNotIn('需±', both)
+        # 幅度四舍五入归零时不写「需-0.0%」这种方向自相矛盾的写法。
+        self.assertNotIn('需-0.0%', monitor.level_note(99.99, None, 100))
 
     def test_page_shows_level_note_under_name_and_clearing_removes_it(self):
         def page_for(trigger, reduce):
@@ -4008,10 +4025,13 @@ class TestCompletedDayVolume(unittest.TestCase):
         self.assertEqual(day, latest)
         self.assertAlmostEqual(ratio, 4000 / 1050)
         self.assertEqual(self.measure(data, '2026-10-13T20:15:00-04:00', latest)[1], latest)
-        # CLOSED_ONLY 是整页口径，不可令盘中尚未完结的量混入量比。
+        # CLOSED_ONLY 是整页口径，不可令盘中尚未完结的量混入量比；此时完整日量比属于 previous，
+        # 与页面目标交易日 latest 不一致 → 2026-11-15 的日期闸门整体按缺值处理：
+        # 不报灯、统计清单不出现、个股量比写「—」。
         with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T12:00:00-04:00')), \
                 patch.object(monitor, 'TARGET_DATE', latest), patch.object(monitor, 'CLOSED_ONLY', True):
-            self.assertEqual(monitor._analysis_context('AAPL', {}, data, 'technology').vol_ratio_date, previous)
+            ctx = monitor._analysis_context('AAPL', {}, data, 'technology')
+            self.assertEqual((ctx.vol_ratio, ctx.vol_ratio_date), (None, ''))
 
     def test_winter_half_day_holiday_and_incomplete_source(self):
         data = self.history('2026-11-27')  # 感恩节次日13:00美东提前收盘
@@ -4030,15 +4050,28 @@ class TestCompletedDayVolume(unittest.TestCase):
         self.assertEqual(monitor.completed_day_volume_ratio('^VIX', data), (None, ''))
 
     def test_alert_uses_completed_day_and_date_without_inventing_current_volume(self):
+        """盘中不能拿昨天的完整日量比凑灯；量比日期必须等于页面目标交易日。"""
         data = self.history('2026-10-13')
-        latest = data['dates'][-1]
+        previous, latest = data['dates'][-2:]
         from datetime import datetime
+        # 盘中：完整日量比属于 previous，顶栏数据时间是 latest → 2026-11-15 日期闸门拦掉，
+        # 不报灯、统计清单不出现、个股量比写「—」。
         with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T12:00:00-04:00')), \
                 patch.object(monitor, 'TARGET_DATE', latest):
+            _, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
+            self.assertEqual(detail['vol_ratio_date'], '')
+            self.assertIsNone(detail['vol_ratio'])
+            self.assertFalse(any(text.startswith('量比') for text in signals))
+            self.assertFalse(any(k == 'vol_ratio' for k, _ in detail['signal_marks']))
+        # 页面目标交易日就是 previous（数据源只到那天）→ 日期一致，正常报灯；
+        # 2026-11-15 起清单文案不再标年月日，顶栏「数据时间」是唯一日期。
+        with patch.object(monitor, 'NOW', datetime.fromisoformat('2026-10-13T12:00:00-04:00')), \
+                patch.object(monitor, 'TARGET_DATE', previous):
             level, signals, detail = monitor.analyze_symbol('AAPL', {}, data)
-            self.assertEqual(detail['vol_ratio_date'], data['dates'][-2])
+            self.assertEqual(detail['vol_ratio_date'], previous)
             self.assertAlmostEqual(detail['vol_ratio'], 2.0)
-            self.assertIn(f"量比 2.0×（{data['dates'][-2]}）", signals)
+            self.assertIn('量比 2.0×', signals)
+            self.assertNotIn(previous, ''.join(signals))
             self.assertIn(('vol_ratio', 'yellow'), detail['signal_marks'])
             with patch.object(monitor, 'S', {**monitor.S, 'vol_ratio_red': 2.0}):  # 达到红线报红，所有分组
                 for group in ('position', 'technology'):
@@ -4339,7 +4372,7 @@ class TestVolumeRatioZscore(unittest.TestCase):
                     al = self.run_rule(x)
                     self.assertEqual(al.marks, [] if level is None else [('vol_ratio', level)])
                     if level:
-                        self.assertEqual(al.signals[0], f'量比 {ratio:.1f}×（2026-10-13）')
+                        self.assertEqual(al.signals[0], f'量比 {ratio:.1f}×')
         x = self.context(ratio=1.7)
         x.vol_ratio_m, x.vol_ratio_s = 0, 0.3
         self.assertEqual(self.run_rule(x, vol_ratio_z=3).marks, [])
@@ -4380,10 +4413,10 @@ class TestVolumeRatioZscore(unittest.TestCase):
         cases = (
             (True, 2.1, False, 'yellow', '盘中量比 2.1×（截至 10:30 ET）'),
             (True, 4.0, False, 'red', '盘中量比 4.0×（截至 10:30 ET）'),
-            (False, 2.1, False, 'yellow', '量比 2.1×（2026-10-26）'),
-            (False, 4.0, False, 'red', '量比 4.0×（2026-10-26）'),
-            (False, 2.1, True, 'yellow', '量比 2.1×（2026-10-26）'),
-            (False, 4.0, True, 'red', '量比 4.0×（2026-10-26）'),
+            (False, 2.1, False, 'yellow', '量比 2.1×'),
+            (False, 4.0, False, 'red', '量比 4.0×'),
+            (False, 2.1, True, 'yellow', '量比 2.1×'),
+            (False, 4.0, True, 'red', '量比 4.0×'),
         )
         for intraday, ratio, adaptive, level, expected in cases:
             with self.subTest(intraday=intraday, ratio=ratio, adaptive=adaptive):
@@ -4415,13 +4448,44 @@ class TestVolumeRatioZscore(unittest.TestCase):
 
     def test_detail_carries_z_but_page_never_prints_sigma(self):
         d = {'vol_ratio': 1.3, 'vol_ratio_z': 1.6, 'vol_ratio_date': '2026-10-13'}
-        self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×（2026-10-13）')
+        self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×')
         with patch.object(monitor, 'S', {**monitor.S, 'vol_ratio_z': 0}):
-            self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×（2026-10-13）')
+            self.assertEqual(monitor._member_metric(d, 'vol_ratio'), '量比 1.3×')
         # 自适应开着也不把 σ 写出来：用户看不懂，判定照用
         self.assertNotIn('σ', monitor._member_metric(d, 'vol_ratio'))
         self.assertEqual(monitor._member_metric(dict(d, vol_ratio_z=None), 'vol_ratio'),
-                         '量比 1.3×（2026-10-13）')
+                         '量比 1.3×')
+
+    def test_volume_metric_has_no_date_and_intraday_keeps_et_time(self):
+        """2026-11-15：清单量比不再标年月日（顶栏「数据时间」是唯一日期）；
+        盘中拿到当时量比时仍写「截至 HH:MM ET」，两者都不受日期闸门影响。"""
+        d = {'vol_ratio': 1.9, 'vol_ratio_date': '2026-11-13', 'vol_ratio_intraday': False}
+        text = monitor._member_metric(d, 'vol_ratio')
+        self.assertEqual(text, '量比 1.9×')
+        self.assertNotIn('2026-11-13', text)
+        self.assertNotIn('（', text)
+        intra = dict(d, vol_ratio_intraday=True, rt_vol_ratio=3.6, rt_vol_time='12:00')
+        self.assertEqual(monitor._member_metric(intra, 'vol_ratio'),
+                         '盘中量比 3.6×（截至 12:00 ET）')
+
+    def test_member_belong_uses_only_first_two_characters(self):
+        """2026-11-15：统计清单里个股所属组名只用前两个字；长持仓→长持、IT · AI→IT、
+        可选消费→可选。取前两个字符是通用规则，遍历全部分组标签守住，不逐条打补丁。
+        「上涨／下跌／浮盈」这些小分组标题不走 _member_belong，另有守门（见量比方向分框测试）。"""
+        self.assertEqual(monitor._member_belong({'group': 'position', 'hold': 'long'}), '长持')
+        self.assertEqual(monitor._member_belong({'group': 'position', 'hold': 'short'}), '短持')
+        self.assertEqual(monitor._member_belong({'group': 'nope'}), '未分')
+        labels = monitor.GROUP_LABELS
+        self.assertIn('IT · AI', labels.values())
+        self.assertIn('可选消费', labels.values())
+        for key, label in labels.items():
+            with self.subTest(group=key):
+                row = {'group': key}
+                if key == 'position':   # 持仓组按 hold 分长短，标签本身写作「持仓」
+                    row['hold'] = 'long'
+                    self.assertEqual(monitor._member_belong(row), '长持')
+                else:
+                    self.assertEqual(monitor._member_belong(row), label[:2])
 
     def test_end_to_end_after_close_lights_by_own_swing(self):
         from datetime import datetime
@@ -4433,7 +4497,7 @@ class TestVolumeRatioZscore(unittest.TestCase):
         self.assertIsInstance(detail.get('vol_ratio_z'), float)
         self.assertGreater(detail['vol_ratio_z'], 1.8)   # 这条波动序列上 1.5× 已超过 1.8σ
         self.assertIn(('vol_ratio', 'yellow'), detail['signal_marks'])
-        self.assertTrue(any(text == '量比 1.5×（2026-10-13）' for text in signals), signals)
+        self.assertTrue(any(text == '量比 1.5×' for text in signals), signals)
         # 同一只股放到 3× 量：z 更高，直接红
         huge = dict(data, volumes=data['volumes'][:-1] + [self.base_mean(data) * 3])
         with patch.object(monitor, 'NOW', datetime.fromisoformat(self.CLOSE)), \
@@ -6673,10 +6737,11 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('--tgs-month-font:13px', css)
         self.assertNotIn('font-size:calc(var(--tgs-font) - 1px)', css)
         self.assertNotIn('target-month::before', css)   # 分隔符是真元素，不用伪元素
-        self.assertIn('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}', css)
+        self.assertIn('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0;'
+                      'background:linear-gradient(var(--section-line),var(--section-line)) center/1px 100% no-repeat}', css)
         self.assertIn('.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}', css)
-        self.assertIn('--sig-col-gap:10px;--sig-borrow:6px;--sig-row-gap:7px', css)
-        self.assertIn('td.sig{padding:5px 5px 7px;font-size:14.5px;line-height:19.57px}', css)
+        self.assertIn('--sig-col-gap:16px;--sig-borrow:6px;--sig-row-gap:4px', css)
+        self.assertIn('td.sig{padding:5px 5px 7px;font-size:15px;line-height:20.25px}', css)
         self.assertIn('width:3px;height:10px;margin-right:5px;border-radius:1px;', css)
         self.assertIn('function balanceDescriptions(row)', monitor.PAGE_INTERACTION_JS)
         for dead in ('cost-warn', 'ack-btn', 'sig-lead', 'data-reflowed'):
@@ -7564,12 +7629,12 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             # 跟其它名单同一套：名字可点跳转 + 分组写在括号里 + 灰色小字说明，不再有加粗蓝色分组
             self.assertIn('<li class="lamp-green"><a class="signal-member-jump" href="#s-aapl">'
                           '<span class="signal-member-symbol">AAPL</span></a>'
-                          '<span class="signal-member-belong">（IT · AI）</span> ', panel)
+                          '<span class="signal-member-belong">（IT）</span> ', panel)
             # 北京时段已定的「明天」并进倒计时，美东时间后不再重复北京说明。
             self.assertIn('<span class="earnings-week-meta is-red"><span class="cd">（北京 明天 凌晨）</span>'
                           '美 10/14 盘后</span><span class="lamp-text">（绿灯）</span>', panel)
             # 2026-11-13：时段已定只在倒计时写北京口径，美东时间后不再重复北京时间。
-            self.assertIn('<span class="signal-member-belong">（短持仓）</span> '
+            self.assertIn('<span class="signal-member-belong">（短持）</span> '
                           '<span class="earnings-week-meta is-yellow"><span class="cd">（北京7天 10月21日 凌晨）</span>美 10/20 盘后'
                           '</span><span class="lamp-text">（绿灯）</span>', panel)
             self.assertNotIn('earnings-week-group', panel)
@@ -7803,7 +7868,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertTrue(set(ids('boll')).isdisjoint(ids('boll_rsi')))
         self.assertEqual(ids('boll_rsi'), ['CCC'])
         aaa = next(m for m in data['vol_ratio']['members'] if m['id'] == 'AAA')
-        self.assertEqual((aaa['g'], aaa['l'], aaa['a']), ('短持仓', 'red', 's-aaa'))
+        self.assertEqual((aaa['g'], aaa['l'], aaa['a']), ('短持', 'red', 's-aaa'))
         self.assertEqual(snap['signal_counts']['boll']['yellow'], 2)  # 筛选和计数都是单独布林
         broken = dict(snap, signal_members={**snap['signal_members'], 'boll': {'yellow': []}})
         bad = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', monitor._signal_counts_card(broken)).group(1)))
@@ -7902,8 +7967,8 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         output = monitor._signal_counts_card({'signal_counts': counts, 'signal_members': members})
         self.assertNotIn('加仓价', output)
         self.assertNotIn('减仓价', output)
-        self.assertIn('加仓价 325 · 距 0.0%', monitor._signals_html(rows[0]))
-        self.assertIn('减仓价 400.5 · 距 0.0%', monitor._signals_html(rows[1]))
+        self.assertIn('加仓价 325 · 需+0.0%', monitor._signals_html(rows[0]))
+        self.assertIn('减仓价 400.5 · 需+0.0%', monitor._signals_html(rows[1]))
         self.assertNotIn('lvtag add', monitor._signals_html(rows[2]))
 
     def test_low52_members_print_the_52_week_low_price(self):
@@ -7930,9 +7995,9 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         before = copy.deepcopy(row)
         output = monitor._signals_html(row)
         left, right = output.split('<div class="sig-col">')[1:]
-        self.assertIn('加仓价 97 · 距 3.0%', left)
+        self.assertIn('加仓价 97 · 需-3.0%', left)
         self.assertNotIn('减仓价', left)
-        self.assertIn('减仓价 103 · 距 3.0%', right)
+        self.assertIn('减仓价 103 · 需+3.0%', right)
         self.assertNotIn('加仓价', right)
         self.assertEqual(output.count('data-near="1"'), 2)
         self.assertNotIn('data-signal-level="red"', output)
@@ -8088,7 +8153,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertNotIn('amp', snap['signal_counts'])
         self.assertEqual(snap['signal_counts']['vol_ratio']['yellow'], 3)
         self.assertEqual(snap['signal_members']['vol_ratio']['yellow'][0]['metric'],
-                         '量比 2.4×（2026-10-13）')
+                         '量比 2.4×')
         output = monitor._signal_counts_card(snap)
         volume = self.panel(output, 'vol_ratio', 'yellow')
         # 量比/涨跌幅按方向分框：三角只出现在框标题（上涨绿／下跌红），名单里不再逐条画三角
@@ -8096,8 +8161,8 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertIn(f'<h5><span class="grp-arrow arrow-band-down">▼</span> 下跌</h5>', volume)
         self.assertIn('<h5>平盘</h5>', volume)
         self.assertNotIn('signal-member-icon', volume)
-        self.assertIn('量比 2.4×（2026-10-13）', volume)
-        self.assertIn('量比 1.6×（2026-10-13）', volume)
+        self.assertIn('量比 2.4×', volume)
+        self.assertIn('量比 1.6×', volume)
         self.assertNotIn('量比数字取标注的完整交易日，不一定与股价三角同日', volume)
         self.assertNotIn('title=', output)
 
@@ -8386,7 +8451,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                       '<span class="grp-arrow arrow-band-up">▲</span> 触及长均线，现价在长均线上方',
                       '<span class="grp-arrow arrow-band-down">▼</span> 触及长均线，现价在长均线下方'):
             self.assertIn(f'<h5>{title}</h5>', panel)
-        for group in ('长持仓', '重点', '短持仓', '金融'):
+        for group in ('长持', '重点', '短持', '金融'):
             self.assertIn(f'<span class="signal-member-belong">（{group}）</span>', panel)
         self.assertNotIn('signal-member-icon', panel)
 
@@ -8399,7 +8464,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         page = self.panel(output, 'boll_rsi', 'yellow')
         self.assertIn('<h5>下轨<span class="arrow-band-down">▼</span> · RSI 2条 <span class="arrow-rsi-down">↓</span>超卖</h5>', page)
         self.assertEqual(page.count('RSI 2条'), 1)   # 只有框标题一处
-        self.assertIn('<span class="signal-member-belong">（长持仓）</span>', page)
+        self.assertIn('<span class="signal-member-belong">（长持）</span>', page)
 
     def test_members_deduplicate_marks_not_cross_kind_or_level(self):
         row = self.member_row('AAA', 'position', 'red', ('rsi', 'red'), ('rsi', 'red'),
@@ -8626,10 +8691,10 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertNotIn('<h4>', output)
         self.assertEqual(output.count('class="note"'), 1)
         # 分组回到名单里，且必须完整转义（不能变成真的标签）。
-        # 持仓组写「长持仓 / 短持仓」而不是配置里的分组名，所以原始标签不出现在可见部分。
+        # 持仓组写「长持 / 短持」（组名前两个字）而不是配置里的分组名，原始标签不出现在可见部分。
         visible = output.split('data-filter=')[0]
         self.assertIn('class="signal-member-belong"', visible)
-        self.assertIn('（短持仓）', visible)
+        self.assertIn('（短持）', visible)
         self.assertNotIn(group_label, visible)
 
     def test_old_snapshot_keeps_counts_but_does_not_invent_members(self):
@@ -8809,7 +8874,7 @@ class TestTargetOverlays(unittest.TestCase):
         self.assertNotIn('>▼</span>', target)
         self.assertEqual(target.count('href="#s-both"'), 2)
         self.assertIn('href="#s-high"', target)
-        self.assertIn('（IT · AI）', target)
+        self.assertIn('（IT）', target)
         self.assertIn('测试备注', target)
         data = json.loads(H.unescape(re.search(r'data-filter="([^"]*)"', output)[1]))
         union = data['target_purple']

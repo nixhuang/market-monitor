@@ -282,14 +282,20 @@ class PageRenderer:
             text = self._context._level_num(value)
             if text is None:
                 continue
-            near, distance = "0", "—"
+            # 2026-11-15 用户「改加减仓价方向文案」：不再写无方向的「需±N%」，
+            # 改成 (设置价 − 现价)/现价 的有符号幅度：+ 表示要涨到价，- 表示要跌到价。
+            # 加仓价也可能高于现价、减仓价也可能低于现价，一律按设置价相对现价的方向写。
+            # 没有有效现价时幅度未知，只写「需 —」。
+            near, suffix = "0", "需 —"
             if valid_price is not None:
                 p, level = Decimal(str(price)), Decimal(str(value))
-                gap = abs(p - level) * 100 / p
-                near = "1" if abs(p - level) * 100 <= p * 3 else "0"
-                distance = f"{gap:.1f}%"
+                delta = (level - p) * 100 / p
+                magnitude = f"{abs(delta):.1f}"
+                sign = "-" if delta < 0 and magnitude != "0.0" else "+"
+                near = "1" if abs(level - p) * 100 <= p * 3 else "0"
+                suffix = f"需{sign}{magnitude}%"
             parts.append(f'<span class="lvtag {kind} signal-item" data-lv="{value}" data-near="{near}">'
-                         f'{label} {text} · 距 {distance}</span>')
+                         f'{label} {text} · {suffix}</span>')
         return "".join(parts)
 
 
@@ -434,11 +440,17 @@ class PageRenderer:
 
 
     def _member_belong(self, d):
-        """名单里的分组标识，写在代码后面；持仓内部按 hold 分长短，跟首页两区一致。"""
+        """名单里的分组标识，写在代码后面；持仓内部按 hold 分长短，跟首页两区一致。
+        2026-11-15 用户「统计中个股所在组名只用前两个字」：长持仓→长持、短持仓→短持、
+        IT · AI→IT、可选消费→可选。只截这条括号里的所属组名；统计面板里「上涨／下跌／浮盈」
+        这些小分组标题是另一套（.signal-member-block h5），不走这里，保持原样。
+        取前两个字符是通用规则，不按组名逐条打补丁，中文组名与英文缩写都同样生效。"""
         group = str(d.get("group") or "")
         if group == "position":
-            return "长持仓" if str(d.get("hold") or "short").lower() == "long" else "短持仓"
-        return self._context.GROUP_LABELS.get(group) or "未分类"
+            label = "长持仓" if str(d.get("hold") or "short").lower() == "long" else "短持仓"
+        else:
+            label = self._context.GROUP_LABELS.get(group) or "未分类"
+        return label[:2]
 
 
     def _member_metric_text(self, d, kind):

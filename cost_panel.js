@@ -2284,7 +2284,9 @@
         z = r.tr.closest('details.group-card');
         h = z && z.querySelector('summary .grp-name');
       }
-      return h ? h.textContent.replace(/\s*\(\d+\)\s*/g, '').trim() : '';
+      var name = h ? h.textContent.replace(/\s*\(\d+\)\s*/g, '').trim() : '';
+      // 2026-11-15 用户：统计清单里个股所属组名只用前两个字（长持仓→长持、IT · AI→IT）。
+      return name.slice(0, 2);
     }
     function setDirectText(el, text) {
       if (!el) return;
@@ -2321,9 +2323,15 @@
           tag.hidden = !valid;
           if (!valid) return;
           var d = Math.abs(((r.price - lv) / r.price) * 100),
+            signed = (((lv - r.price) / r.price) * 100).toFixed(1),
+            dir = signed.charAt(0) === '-' && signed !== '-0.0' ? '-' : '+',
+            mag = Math.abs(Number(signed)).toFixed(1),
             near = nearPrice(r.price, lv, 3);
           tag.setAttribute('data-near', near ? '1' : '0');
-          var text = (kind === 'add' ? '加仓价 ' : '减仓价 ') + lv + ' · 距 ' + d.toFixed(1) + '%';
+          // 2026-11-15：主表加减仓价方向文案跟服务端真源一致，按 (设置价 − 现价)/现价
+          // 写「需+N%」／「需-N%」；前端重绘不能覆写回旧文案。
+          // 统计面板「盈亏到价」名单第二行仍是「距 价 · 差%」，那一条不在本次改动范围内。
+          var text = (kind === 'add' ? '加仓价 ' : '减仓价 ') + lv + ' · 需' + dir + mag + '%';
           setDirectText(tag.querySelector('span') || tag, text);
           if (near)
             groups[kind].push({ r: r, value: '距 ' + lv + ' · ' + d.toFixed(1) + '%', sort: d, cls: kind });

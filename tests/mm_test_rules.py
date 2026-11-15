@@ -360,10 +360,10 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('#signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid var(--list-border);text-align:left}', css)
         self.assertIn('--list-border:#465e87', css)
         self.assertNotIn('background:#121a27', css)
-        self.assertIn('#signalCounts .signal-extra-row{--chip-w:74px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}', css)
+        self.assertIn('#signalCounts .signal-extra-row{--chip-w:84px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}', css)
         # 两档均74px；三条统计行统一50px内容+1px分隔=51px（与表格各排一致），展开不改变标题高度。
         mobile = css.split('@media(max-width:600px){', 1)[1].split('@media(min-width:601px){', 1)[0]
-        self.assertIn('#signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}', mobile)
+        self.assertIn('#signalCounts .signal-extra-row{--chip-w:84px;--xr:8px;padding:0}', mobile)
         for kind in ('text-only', 'earnings-week'):
             self.assertIn(f'#signalCounts .signal-extra-row>.{kind}>summary{{position:relative;box-sizing:border-box;min-height:50px;', css)
         self.assertNotIn('background:#182130', css)
@@ -423,7 +423,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.20)', css)
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
         # 「信号」列所有胶囊同宽且文字居中
-        self.assertIn('#signalCounts td .signal-filter-toggle{width:74px;padding:0 4px}', css)
+        self.assertIn('#signalCounts td .signal-filter-toggle{width:84px;padding:0 4px}', css)
         # 11-10真实五列编辑器：表头与行共用网格，不回退旧四列；不再复制隐藏标题。
         editor = re.search(r'#costManage\.cost-manage\s*\{([^}]*)\}', cost)[1]
         for decl in ('display: none', 'border: 1.5px solid var(--signal-border)', 'box-shadow: none', 'background: var(--card)'):
@@ -479,7 +479,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
                                    'background:var(--section-line)'), 3)
         self.assertNotIn('var(--vl-top)', css)
         self.assertNotIn('var(--vl-h)', css)
-        self.assertIn('font-size:14.5px;line-height:21.75px', css)
+        self.assertIn('font-size:15px;line-height:21.75px', css)
         self.assertIn('width:3px;height:10px;', css)
         for dead in ('cost-warn', 'ack-btn', 'pos-jump', '.lamp-frame', '.sig-lead', 'r58patch'):
             self.assertNotIn(dead, css)
@@ -536,7 +536,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('content:"+"', css)
         self.assertNotIn('--combo-scale', css)
         self.assertIn('.sig-cols>.sig-col:last-child{padding-left:4px}', css)
-        self.assertIn('--sig-col-gap:10px;--sig-borrow:6px;--sig-row-gap:7px', css)
+        self.assertIn('--sig-col-gap:16px;--sig-borrow:6px;--sig-row-gap:4px', css)
         self.assertIn('gap:11px;height:26px;padding-bottom:13px', css)
 
     def test_main_row_price_and_target_use_the_same_two_rows(self):
@@ -768,9 +768,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('data-layout="tight"', css)
         self.assertNotRegex(css, r'add-ck|ack-btn|手机（iOS Chrome）最终覆盖')
 
-    def test_mobile_descriptions_14_5px_and_earnings_two_rows(self):
+    def test_mobile_descriptions_15px_and_earnings_two_rows(self):
         css = page_assets.PAGE_CSS
-        self.assertIn('table.stk tr[data-symbol]>td.sig{padding:5px 5px 7px;font-size:14.5px;line-height:19.57px}', css)
+        self.assertIn('table.stk tr[data-symbol]>td.sig{padding:5px 5px 7px;font-size:15px;line-height:20.25px}', css)
         # 2026-11-12 收紧个股行上下留白：描述区上留白与成本条上下间距，桌面/手机两档都要守住。
         # 14:58 的「线组距上下内容各 +3px」不许借 td.sig 下内距实现：紧贴线的上一行是 52 周条，
         # 加在 sig 底部只会整体下推、线到 52 周条的距离不变，还会白多 3px 行高。
@@ -778,7 +778,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('td.cost-line{grid-area:cost;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 8px;margin:2px 0 0;', page_assets.PAGE_CSS)
         self.assertNotIn('padding:9.5px 5px 7px', page_assets.PAGE_CSS)
         self.assertNotIn('padding:3px 8px;margin:5px 0 0', page_assets.PAGE_CSS)
-        self.assertIn('.earn{display:block;margin:0;font-size:14.5px;font-weight:400;line-height:19px', css)
+        self.assertIn('.earn{display:block;margin:0;font-size:15px;font-weight:400;line-height:19px', css)
         # 2026-11-13：财报整排字号与描述区正文必须同号；以后任一边单独改字号都在这里拦下。
         earn_fs = re.search(r'\.earn\{[^}]*font-size:([\d.]+)px', css).group(1)
         sig_fs = re.search(r'table\.stk tr\[data-symbol\]>td\.sig\{[^}]*font-size:([\d.]+)px', css).group(1)
@@ -942,7 +942,75 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('word-spacing', re.search(r'\.stk td\.sig \.cm[^{]*\{[^}]*\}', css)[0])
         # 汉字/数字字距保持正常：描述正文不再有负字距
         self.assertNotRegex(css, r'\.stk td\.sig \.signal-item[^{]*\{[^}]*letter-spacing:-')
-        self.assertIn('--sig-col-gap:10px', css)
+        self.assertIn('--sig-col-gap:16px', css)
+
+    def test_description_center_line_is_1px_gray_with_wider_combo_gap(self):
+        """2026-11-14：左右分区中线用 1px 灰竖线显示；列距 10→16px，组合加号两边留出空隙。
+        线画在 .sig-cols 背景层，不占 grid 格、不改两列宽度，也不新增颜色或窄屏断点。"""
+        css = strip_css_comments(page_assets.PAGE_CSS)
+        center = re.search(r'\.sig-cols\{([^}]*)\}', css).group(1)
+        self.assertIn('background:linear-gradient(var(--section-line),var(--section-line)) '
+                      'center/1px 100% no-repeat', center)
+        self.assertIn('--section-line:rgba(139,147,161,.32)', css)
+        self.assertEqual(css.count('center/1px 100% no-repeat'), 1)
+        self.assertIn('--sig-col-gap:16px', css)
+        self.assertNotIn('--sig-col-gap:10px', css)
+        # 桌面加号 10.5px、手机 11.3px；16px 列距下两侧各留 2.75 / 2.35px，不再贴成一句话。
+        desk = float(re.search(r'--combo-size:(\d+(?:\.\d+)?)px', css).group(1))
+        mob = float(re.search(r'\.sig-cols\[data-combo="1"\]\{--combo-size:(\d+(?:\.\d+)?)px', css).group(1))
+        for size in (desk, mob):
+            self.assertGreaterEqual((16 - size) / 2, 2)
+        # 桌面／手机描述区与财报同为 15px；行距回到字号应有的比例，不同指标只在行距外多 4px。
+        self.assertIn('font-size:15px;line-height:21.75px', css)
+        self.assertIn('td.sig{padding:5px 5px 7px;font-size:15px;line-height:20.25px}', css)
+        self.assertIn('.earn{display:block;margin:0;font-size:15px;font-weight:400;line-height:19px', css)
+        self.assertIn('--sig-row-gap:4px', css)
+        self.assertNotIn('--sig-row-gap:7px', css)
+        self.assertAlmostEqual(21.75 / 15, 1.45, places=2)
+        self.assertAlmostEqual(20.25 / 15, 1.35, places=2)
+        # 规则模板说明跟主表 tag 用同一套带方向写法「需+X%／需-X%」，不能只改一处。
+        rules = "".join(part for _, part in page_assets.RULE_SECTIONS)
+        self.assertIn('「加仓价 N · 需+X%／需-X%」', rules)
+        self.assertIn('「减仓价 N · 需+X%／需-X%」', rules)
+        self.assertNotIn('需±X%', rules)
+        self.assertNotIn('距 X%', rules)
+
+    def test_stat_members_mobile_font_15px_indicator_16px_frame_84px(self):
+        """2026-11-15：统计面板清单分三档——描述文字 16→15px、代码保持 16px、
+        指标名称（量比/均线/布林+RSI）15→16px；指标名称按钮外框 74→84px，高度不变。
+        桌面档 13/12px、个股描述区 15px 一律不动，行高也不动。"""
+        css = strip_css_comments(page_assets.PAGE_CSS)
+        mobile = css[css.index('@media(max-width:600px){'):css.index('@media(min-width:601px){')]
+        # 代码仍是 16px，描述文字从 16px 回落到 15px（行高一律不动）。
+        self.assertIn('#signalCounts .signal-member-symbol{font-size:16px;line-height:19.5px}', mobile)
+        self.assertIn('#signalCounts .signal-member-metric{font-size:15px;line-height:16.88px}', mobile)
+        for selector in ('#signalCounts .signal-filter-detail', '#signalCounts .signal-filter-condition',
+                         '#signalCounts .earnings-week-meta', '#signalCounts .signal-member-direction'):
+            self.assertIn(selector + '{font-size:15px;line-height:20.25px}', mobile)
+        # 描述文字不许残留 14.5px 或 16px；代码不许回落到 15px。
+        self.assertNotIn('#signalCounts .signal-member-metric{font-size:14.5px', css)
+        self.assertNotIn('#signalCounts .signal-member-metric{font-size:16px', css)
+        self.assertNotIn('#signalCounts .signal-member-symbol{font-size:15px', css)
+        self.assertIn('#signalCounts .signal-member-jump .note{font-size:14px;line-height:18px}', mobile)
+        self.assertIn('#signalCounts .signal-member-belong{font-size:14px;line-height:18px}', mobile)
+        # 指标名称按钮：文字 15→16px，外框 +10px，高度 38px / 表格行 51px / summary 50px 全不动。
+        self.assertIn('#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:16px;line-height:15.95px}', mobile)
+        self.assertIn('#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:16px;line-height:16.68px}', mobile)
+        self.assertIn('#signalCounts td .signal-filter-toggle{width:84px;padding:0 4px}', css)
+        self.assertNotIn('#signalCounts td .signal-filter-toggle{width:74px', css)
+        # 同组胶囊（紫灯/财报/盈亏到价）共用 --chip-w，两档同步 +10px，不许 84/74 混排。
+        self.assertIn('#signalCounts .signal-extra-row{--chip-w:84px;--xr:12px;', css)
+        self.assertIn('#signalCounts .signal-extra-row{--chip-w:84px;--xr:8px;padding:0}', mobile)
+        self.assertNotIn('--chip-w:74px', css)
+        self.assertIn('#signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;', css)
+        self.assertIn('#signalCounts tr:not(.signal-members-row)>td{height:51px}', css)
+        self.assertIn('min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px)', css)
+        # 桌面档指标名称仍是 14px，个股描述区与财报依旧 15px，不能被统计面板的字号带跑。
+        self.assertIn('#signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;'
+                      'padding:0 7px;font:inherit;font-size:14px;', css)
+        self.assertIn('td.sig{padding:5px 5px 7px;font-size:15px;line-height:20.25px}', mobile)
+        self.assertIn('table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:5px 10px 7px;'
+                      'font-size:15px;line-height:21.75px', css)
 
     def test_lamp_table_has_only_horizontal_rules_and_five_character_cells_fit(self):
         css = strip_css_comments(page_assets.RULES_CSS)

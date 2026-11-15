@@ -175,7 +175,7 @@ function makeDocument(opts={}){
     if(!opts.legacySymbols)tr.setAttribute('data-symbol',sym);
     tr.setAttribute('data-price','100');
     if(opts.quoteDate!==null)tr.setAttribute('data-quote-date',opts.quoteDate||'2026-10-20');
-    tr.innerHTML='<td class="sym">'+sym+'<span class="note" data-full="测试名称">测试名称</span></td><td class="px"><span class="px-price">100.00</span><span class="px-chg">+1.00%</span></td><td class="tgs"></td><td class="lamp-earn"></td><td class="cost-line"></td><td class="sig"><span class="sig-col"><span class="lvtag add signal-item" data-lv="95" data-near="0"><span class="fsz">加仓价 95 · 距 5.0%</span></span></span><span class="sig-col"><span class="lvtag cut signal-item" data-lv="104" data-near="0"><span class="fsz">减仓价 104 · 距 4.0%</span></span></span></td>';
+    tr.innerHTML='<td class="sym">'+sym+'<span class="note" data-full="测试名称">测试名称</span></td><td class="px"><span class="px-price">100.00</span><span class="px-chg">+1.00%</span></td><td class="tgs"></td><td class="lamp-earn"></td><td class="cost-line"></td><td class="sig"><span class="sig-col"><span class="lvtag add signal-item" data-lv="95" data-near="0"><span class="fsz">加仓价 95 · 需-5.0%</span></span></span><span class="sig-col"><span class="lvtag cut signal-item" data-lv="104" data-near="0"><span class="fsz">减仓价 104 · 需+4.0%</span></span></span></td>';
     table.appendChild(tr);
     const rail=new Element('tr',doc);rail.className='range52-row';rail.innerHTML='<td><span class="range52-rail" aria-label="50.00低，本轮价 100.00 位于区间 50%，本轮高 150.00"><span class="range52-track"></span></span></td>';table.appendChild(rail);
   }
@@ -2464,6 +2464,29 @@ test('终稿四组pnl静态骨架重绘保留summary胶囊与展开状态',async
   for(let i=0;i<4;i++)b.paint();assert.equal(details.open,true);assert.equal(extra.querySelector('.pnl-chip'),chip);
   for(const g of ['gain','loss','cut','add'])assert.equal(extra.querySelectorAll('ul[data-g="'+g+'"]').length,1);
 });
+test('统计盈亏到价名单个股所属组名只保留前两个字',async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){
+    qaQuote(doc,'AAA',100,100);
+    // 夹具默认分组卡不带 grp-name 文本，补成真实页面结构，groupName() 才取得到组名。
+    const card=doc.querySelector('#group_positions');
+    card.className='group-card';
+    card.querySelector('summary .grp-name').textContent='长持仓';
+  }});
+  const li=qaPnlRows(b,'loss')[0];
+  assert.ok(li,'浮亏名单里至少要有一条');
+  const span=li.querySelector('.signal-member-belong');
+  assert.ok(span,'名单里要有分组标识');
+  const txt=span.textContent;
+  assert.equal(txt,'（长持）');
+  assert.match(txt,/^（.{1,2}）$/);
+  assert.ok(!/长持仓|短持仓|IT · AI|可选消费|通信娱乐|公水电气|工航防建|必须消费|指数基/.test(txt),
+    '组名不能还是完整名: '+txt);
+  assert.ok(SOURCE.includes('name.slice(0, 2)'),'前端截断规则必须存在');
+  for(let i=0;i<4;i++)b.paint();
+  const after=qaPnlRows(b,'loss')[0].querySelector('.signal-member-belong').textContent;
+  assert.equal(after,txt,'重绘不得还原完整组名');
+  await b.dispose();
+});
 for(const state of ['low','space','high','hit','bad'])test('终稿目标'+state+'不受成本淡底和价位重绘影响',async()=>{
   const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){const tr=qaQuote(doc,'AAA',100,100);tr.querySelector('.tgs').innerHTML='<span class="lvtag tgt '+state+'"><span>+20%</span><span>120</span><span class="target-month" title="10月"><span class="target-sep">·</span>10月</span></span>';}});
   const tr=b.doc.getElementById('s-aaa'),target=tr.querySelector('.tgt'),parent=tr.parentNode;for(let i=0;i<4;i++)b.paint();
@@ -3141,6 +3164,28 @@ test('清仓目的地使用独立横排容器且保留确认仅草稿',async()=>
   assert.ok(choice);assert.equal(choice.querySelectorAll('label').length,2);
   assert.equal(choice.querySelector('input[value="focus"]').parentElement.textContent,'进重点');
   const n=b.requests.length;confirmMark(b,'focus');assert.equal(b.requests.length,n);await b.dispose();
+});
+
+test('加减仓价主表方向文案按设置价相对现价带符号',()=>{
+  // 2026-11-15：设置价高于现价写需+N%、低于写需-N%，跟 monitor_render.level_note() 同一套；
+  // 前端 paint 必须同文案，否则一次重绘就覆写回旧版。
+  assert.match(SOURCE,/signed = \(\(\(lv - r\.price\) \/ r\.price\) \* 100\)\.toFixed\(1\)/);
+  assert.match(SOURCE,/dir = signed\.charAt\(0\) === '-' && signed !== '-0\.0' \? '-' : '\+'/);
+  assert.match(SOURCE,/\+ ' · 需' \+ dir \+ mag \+ '%'/);
+  assert.doesNotMatch(SOURCE,/' · 需±'/);
+  assert.doesNotMatch(SOURCE,/\+ lv \+ ' · 距 ' \+/);
+  // 统计面板「盈亏到价」名单第二行仍是「距 价 · 差%」，本次不改这一条。
+  assert.match(SOURCE,/value: '距 ' \+ lv \+ ' · ' \+ d\.toFixed\(1\) \+ '%'/);
+});
+test('加减仓价重绘后仍按设置价方向带符号',async()=>{
+  // fixture：现价 100、加仓价 95（要跌 5%）、减仓价 104（要涨 4%），跑一次真实 paint。
+  const b=await boot();
+  b.paint();
+  const add=b.doc.querySelector('.lvtag.add .fsz'),cut=b.doc.querySelector('.lvtag.cut .fsz');
+  assert.ok(add&&cut,'fixture 必须带加减仓价 tag');
+  assert.equal(add.textContent,'加仓价 95 · 需-5.0%');
+  assert.equal(cut.textContent,'减仓价 104 · 需+4.0%');
+  await b.dispose();
 });
 
 const selectedTests=process.env.MM_COST_TEST_FILTER?tests.filter(t=>t.name.includes(process.env.MM_COST_TEST_FILTER)):tests;

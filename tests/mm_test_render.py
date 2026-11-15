@@ -642,7 +642,7 @@ for _side in ('add', 'cut', 'both'):
         # 终稿价位常驻描述不再调用或生成加减价技术灯。
         _x.trig, _x.reduce = _x.cfg['trigger'], _x.cfg['reduce']
         if _extra:
-            _al.add('vol_ratio', '量比 5.0×（2026-10-26）', _extra)
+            _al.add('vol_ratio', '量比 5.0×', _extra)
         _row = item('BASE' + _side.upper() + str(_extra), 'position', _al.level, chg=0)
         _row.update(signals=_al.signals, signal_marks=_al.marks, trigger=_x.trig, reduce=_x.reduce,
                     target=monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 101}, 'position', 3))

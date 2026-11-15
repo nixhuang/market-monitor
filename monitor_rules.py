@@ -406,6 +406,14 @@ class RuleEngine:
         x.low52 = low52          # 52 周区间最低价本身：统计名单里要写出这个价格
         x.range52 = self._context._range52_from_history(data)
         x.vol_ratio, x.vol_ratio_date = self._context.completed_day_volume_ratio(sym, data)
+        # 2026-11-15 用户「日期和顶栏数据时间不一致直接就不该出现」：量比只认页面目标交易日，
+        # 对不上（盘中静默期退回昨天完整日、或日线源滞后）就整体按缺值处理 —— 不报灯、
+        # 清单不出现、个股量比写「—」。盘中真正拿到当时量比时走 vol_ratio_intraday 分支，
+        # 用的是 rt_vol_ratio 且规则层提前 return，不受这道闸影响。TARGET_DATE 未设置时
+        # （本地调试/单测）不启用闸门，避免把整页量比误清空。
+        target = getattr(self._context, "TARGET_DATE", "") or ""
+        if target and x.vol_ratio_date and x.vol_ratio_date != target:
+            x.vol_ratio, x.vol_ratio_date = None, ""
         x.vol_ratio_z = self._context.completed_day_volume_z(sym, data)
         distribution_fn = getattr(self._context, "completed_day_volume_distribution", None)
         distribution = distribution_fn(sym, data) if callable(distribution_fn) else None
@@ -673,11 +681,11 @@ class RuleEngine:
             red = m / 2 + (s / 2) * self._context.S["vol_ratio_red_z"] + math.log(self._context.S["vol_ratio_red"]) / 2
             level = "red" if log_ratio >= red else "yellow" if log_ratio >= yellow else ""
             if level:
-                al.add("vol_ratio", f"量比 {ratio:.1f}×（{x.vol_ratio_date}）", level)
+                al.add("vol_ratio", f"量比 {ratio:.1f}×", level)
             return   # 有效自适应未达标，不按固定倍数补灯
         level = "red" if ratio >= self._context.S["vol_ratio_red"] else "yellow" if ratio >= self._context.S["vol_ratio"] else ""
         if level:
-            al.add("vol_ratio", f"量比 {ratio:.1f}×（{x.vol_ratio_date}）", level)
+            al.add("vol_ratio", f"量比 {ratio:.1f}×", level)
 
 
     def _rule_moving_averages(self, al, x):

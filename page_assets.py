@@ -18,8 +18,8 @@ RULE_SECTIONS = (
     ("rule-lamps", r"""line-0||h4|一、报灯规则
 lamp-table||table|${lamp_table}
 line-35|rule-prices|h5|加仓价／减仓价 须设置有效价位
-line-36||p|加仓价 · 所有分组：主表描述区常驻显示「加仓价 N · 距 X%」，平时灰字；现价与设置价相差≤3% → 点亮橙色，并列入统计面板「盈亏到价」。
-line-38||p|减仓价 · 持仓分组：主表描述区常驻显示「减仓价 N · 距 X%」，平时灰字；现价与设置价相差≤3% → 点亮青色，并列入统计面板「盈亏到价」。
+line-36||p|加仓价 · 所有分组：主表描述区常驻显示「加仓价 N · 需+X%／需-X%」，平时灰字；现价与设置价相差≤3% → 点亮橙色，并列入统计面板「盈亏到价」。
+line-38||p|减仓价 · 持仓分组：主表描述区常驻显示「减仓价 N · 需+X%／需-X%」，平时灰字；现价与设置价相差≤3% → 点亮青色，并列入统计面板「盈亏到价」。
 line-40||p|减仓价：重点、其他分组不适用。
 line-41|rule-cost-loss|h5|持仓盈亏 持仓分组
 line-42||p|浮盈或浮亏达到 ±10% → 成本行加淡底色（盈绿、亏红），并列入统计面板「盈亏到价」；只作提示，不再出红灯。
@@ -805,7 +805,9 @@ tr[id^="s-"]{scroll-margin-top:64px}
 #signalCounts .earnings-week-meta.is-yellow{color:var(--lamp-yellow);font-weight:400;--earn-bj-color:var(--lamp-yellow)}
 #signalCounts .earnings-week .note{display:inline;margin-left:6px}
 #signalCounts .signal-filter-toggle{box-sizing:border-box;height:38px;max-width:100%;padding:0 7px;font:inherit;font-size:14px;color:var(--text);display:inline-flex;align-items:center;justify-content:center;white-space:normal;background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:pointer;text-align:center;line-height:1.15;touch-action:manipulation}
-#signalCounts td .signal-filter-toggle{width:74px;padding:0 4px}
+/* 指标名称按钮外框（2026-11-15）：字号 15→16px 后给「布林+RSI」这类长名字多留 10px，宽度 74→84px；
+   height:38px 不动，表格 51px 行高与 summary min-height:50px 都不跟着变，高度不变。 */
+#signalCounts td .signal-filter-toggle{width:84px;padding:0 4px}
 #signalCounts .signal-filter-toggle[aria-pressed="true"]{background:var(--blue);border-color:var(--blue);color:var(--white)}
 #signalCounts .signal-filter-toggle:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
 #signalCounts .signal-filter-clear:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
@@ -1170,10 +1172,11 @@ table.stk tr[data-symbol]>td.tgs [data-sign="neg"]{color:var(--tgt-neg)}
 table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="pos"]{color:var(--tgt-pos-on)}
 table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="neg"]{color:var(--tgt-neg-on)}
 /* 财报整排：52 周条下方留白改成一行带底色的文字条；倒计时＋美东日期时段＋北京说明全部同行。
-   字号 14→14.5px（2026-11-13）：与个股描述区 td.sig 正文同号，原 14px 比描述小 0.5px。
-   行高 19px 不动：单行 nowrap + 省略号，14.5px 字形在 19px 行盒里不裁切，整条仍 23px 高。 */
+   字号 15px（2026-11-14 用户「描述区文字和财报文字改为 15px」）：与个股描述区 td.sig 正文同号，
+   两档一起从 14.5px 加到 15px。行高 19px 不动：单行 nowrap + 省略号，15px 字形在 19px 行盒里
+   不裁切，整条仍 23px 高，只加大字号不加行距，个股行高不变。 */
 .earn-band{display:block;margin:5px 0 0;padding:2px 8px;background:var(--cost-row-bg);border-radius:3px;overflow:hidden}
-.earn{display:block;margin:0;font-size:14.5px;font-weight:400;line-height:19px;white-space:nowrap;color:var(--head-blue-on);overflow:hidden;text-overflow:ellipsis}
+.earn{display:block;margin:0;font-size:15px;font-weight:400;line-height:19px;white-space:nowrap;color:var(--head-blue-on);overflow:hidden;text-overflow:ellipsis}
 /* 颜色只按口径分：蓝色（--head-blue-on）恒为美东时间，灰色（--dim）恒为北京时间。
    23:29 用户「蓝色一直是美东时间的颜色」：括号里写「北京…已出／北京 今天 凌晨」的倒计时
    属于北京口径，必须跟北京说明一起用灰；只有写「（美N天）」的 .cd.tbd 才是美东口径、用蓝。
@@ -1191,12 +1194,20 @@ table.stk tr[data-symbol]>td.cost-line[hidden]{display:none}
 table.stk tr[data-symbol]>td.cost-line>span{font-size:inherit}
 table.stk tr[data-symbol]>td.cost-line[data-pnl="loss"]{background:var(--pnl-loss-bg)}
 table.stk tr[data-symbol]>td.cost-line[data-pnl="gain"]{background:var(--pnl-gain-bg)}
-/* 描述区共用参数（2026-11-12）：列距 18→10，两列各多 4px；--sig-borrow 是每条描述可再借用的空白，
-   左列借列间空白、右列借单元格右内边距，都不越出单元格。窄屏只覆盖 padding，不再重抄整条 grid。 */
+/* 描述区共用参数（2026-11-12）：--sig-borrow 是每条描述可再借用的空白，左列借列间空白、
+   右列借单元格右内边距，都不越出单元格。窄屏只覆盖 padding，不再重抄整条 grid。
+   2026-11-14 用户「加一些中线列距」：列距 10→16px，左右两列各让出 3px 给中线，
+   组合加号（10.5px，手机 11.3px）压在线上时两侧各留约 2.75px 空隙，不再像一句话连着。
+   描述区字号 14.5→15px（与财报 .earn 同号）；2026-11-15 行距回到 15px 应有的比例：
+   桌面 21.75px＝15×1.45 不动，手机 19.57→20.25px＝15×1.35（原 14.5×1.35）；
+   不同指标间距 --sig-row-gap 7→4px，即正常折行行距之外只多 4px。 */
 /* 描述区上留白 10.25→5（2026-11-12 用户收紧）：这一格既是「成本条下方」也是其它分组
-   「价格区→第一排描述」的距离，原来 10.25px 两处都嫌宽；下留白 7px 与列内行距不动，避免整块糊在一起。 */
-table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:5px 10px 7px;font-size:14.5px;line-height:21.75px;--sig-col-gap:10px;--sig-borrow:6px;--sig-row-gap:7px}
-.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0}
+   「价格区→第一排描述」的距离，原来 10.25px 两处都嫌宽；下留白 7px 不动，避免整块糊在一起。 */
+table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:5px 10px 7px;font-size:15px;line-height:21.75px;--sig-col-gap:16px;--sig-borrow:6px;--sig-row-gap:4px}
+/* 左右分区中线（2026-11-14）：原来两列之间只有空白「隐形中线」，现在用 1px 灰线显示出来，
+   颜色沿用代码/价格/紫灯区三条分区竖线的 --section-line，不新增颜色。线画在容器背景层，
+   不占 grid 格、不改两列宽度与折行测量；组合加号 ::after 仍压在中线上，颜色跟灯级走。 */
+.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0;background:linear-gradient(var(--section-line),var(--section-line)) center/1px 100% no-repeat}
 .sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}
 /* 加号改为1.1px细线绘制（原字形放大后笔画约1.7px偏粗）；尺寸、墨迹中心沿用原字形放大后的位置。 */
 .sig-cols[data-combo="1"]{position:relative;--combo-size:10.5px;--combo-cy:10.6px;--combo-stroke:1.1px;--combo-color:var(--dim)}
@@ -1242,7 +1253,7 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10p
 #group_positions details.quiet-list>summary{display:none}
 #group_positions_short.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 0}
 #runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
-#signalCounts .signal-extra-row{--chip-w:74px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
+#signalCounts .signal-extra-row{--chip-w:84px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
 #signalCounts .signal-extra-row>.text-only>summary{position:relative;box-sizing:border-box;min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
 #signalCounts .signal-extra-row>.earnings-week>summary{position:relative;box-sizing:border-box;min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
 #signalCounts .signal-extra-row>.text-only[open]>summary::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--list-border);pointer-events:none}
@@ -1308,10 +1319,13 @@ table.stk tr[data-symbol] .px-v{font-size:15px}
 table.stk tr[data-symbol] :is(.px-chg,.px-amt){font-size:16px}
 table.stk tr[data-symbol][data-pxfit] .px-v{font-size:15px}
 table.stk tr[data-symbol][data-pxfit] :is(.px-chg,.px-amt){font-size:16px}
-table.stk tr[data-symbol]>td.sig{padding:5px 5px 7px;font-size:14.5px;line-height:19.57px}
+/* 2026-11-14 用户「描述区文字和财报文字改为 15px」：手机档同样 15px，与 .earn 同号。
+   2026-11-15 行距回到 15×1.35＝20.25px（原 14.5×1.35＝19.57px），桌面 21.75px＝15×1.45 不动；
+   两档各自保持原有松紧比例，只动行距不动字号。 */
+table.stk tr[data-symbol]>td.sig{padding:5px 5px 7px;font-size:15px;line-height:20.25px}
 table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}
 .stk th{padding:7px 5px;font-size:12px}
-#signalCounts .signal-extra-row{--chip-w:74px;--xr:8px;padding:0}
+#signalCounts .signal-extra-row{--chip-w:84px;--xr:8px;padding:0}
 .grp-name{font-size:20px;line-height:24px}
 .runbar button:not(.cost-edit-btn){padding:8px 13px;font-size:16px;line-height:1.08;height:40px}
 .sub{padding-left:16px;padding-right:16px;margin-bottom:8px;line-height:18px}
@@ -1325,7 +1339,11 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}
 .dual-body>.cost-contrib .cncn{font-size:14px;line-height:15.75px}
 .dual-body>.cost-contrib .ca,.dual-body>.cost-contrib .cv{font-size:14px;line-height:15.75px}
 #group_positions>.asset-row .cost-legend b{font-size:14px;line-height:19.2px}
-#signalCounts .signal-member-symbol{font-size:15px;line-height:19.5px}
+/* 2026-11-15 用户「统计清单描述文字 16→15px、指标名称 +1px 到 16px、外框加宽 10px 高度不变」：
+   只动手机档这几条，桌面档（13px/12px）与个股描述区（15px）都不变；行高一律不动。
+   清单「描述文字」＝跟在代码后面的数值/条件/财报说明/方向：14.5→16（上一版）→15px（本版），
+   代码 .signal-member-symbol 保持 16px；指标名称 .signal-filter-toggle 15→16px（加大 1px）。 */
+#signalCounts .signal-member-symbol{font-size:16px;line-height:19.5px}
 #signalCounts .signal-member-jump .note{font-size:14px;line-height:18px}
 #signalCounts .signal-member-list .signal-member-symbol{line-height:16.25px}
 #signalCounts .signal-member-list .note{line-height:15px}
@@ -1333,15 +1351,15 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}
 #signalCounts .signal-member-list .signal-member-belong{line-height:15px}
 #signalCounts .target-purple .signal-member-symbol{line-height:19.5px}
 #signalCounts .target-purple .note,#signalCounts .target-purple .signal-member-belong{line-height:18px}
-#signalCounts .signal-member-metric{font-size:14.5px;line-height:16.88px}
-#signalCounts .signal-filter-detail{font-size:14.5px;line-height:20.25px}
-#signalCounts .signal-filter-condition{font-size:14.5px;line-height:20.25px}
-#signalCounts .earnings-week-meta{font-size:14.5px;line-height:20.25px}
-#signalCounts .signal-member-direction{font-size:14.5px;line-height:20.25px}
+#signalCounts .signal-member-metric{font-size:15px;line-height:16.88px}
+#signalCounts .signal-filter-detail{font-size:15px;line-height:20.25px}
+#signalCounts .signal-filter-condition{font-size:15px;line-height:20.25px}
+#signalCounts .earnings-week-meta{font-size:15px;line-height:20.25px}
+#signalCounts .signal-member-direction{font-size:15px;line-height:20.25px}
 #signalCounts .signal-filter-head>span{font-size:13px;line-height:19.5px}
 #signalCounts .signal-filter-clear{font-size:13px;line-height:19.5px}
-#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:15px;line-height:15.95px}
-#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:15px;line-height:16.68px}
+#signalCounts td .signal-filter-toggle{padding:0 4px;font-size:16px;line-height:15.95px}
+#signalCounts .signal-extra-row>.signal-filter-toggle{font-size:16px;line-height:16.68px}
 #signalCounts .signal-extra-row>details>summary{font-size:16px;line-height:22px}
 #signalCounts .signal-member-block h5{font-size:15px;line-height:16.25px}
 #signalCounts .target-purple>h5{font-size:15px;line-height:16.25px}

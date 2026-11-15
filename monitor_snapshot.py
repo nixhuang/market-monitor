@@ -59,10 +59,10 @@ def _member_metric(d, kind):
         return ""
     if kind == "chg":
         return f"涨跌幅 {value:+.2f}%" + _day_change_amount(d)
-    day = d.get("vol_ratio_date")
-    date_text = f"（{day}）" if isinstance(day, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) else ""
-    # σ 不出现在页面上：判灯照常用 z，展示只留「哪天、几倍」
-    return f"量比 {value:.1f}×{date_text}"
+    # 2026-11-15 用户「量比描述不需要标日期」：页面顶栏已经写了「数据时间 YYYY-MM-DD」，
+    # 清单里不再逐条重复；日期与目标交易日对不上时生成端已按缺值拦掉，不会走到这里。
+    # σ 不出现在页面上：判灯照常用 z，展示只留倍数。
+    return f"量比 {value:.1f}×"
 
 
 def _signal_texts(value):
