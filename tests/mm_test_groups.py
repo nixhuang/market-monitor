@@ -1589,8 +1589,10 @@ class TestGroups(unittest.TestCase):
             snap = monitor.build_snapshot({}, [quiet], {'positions': {'AAPL': {}}})
             page = monitor.render({}, [quiet], 1, snapshot=snap)
         position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
-        self.assertIn('无异动 1 只', position)
-        folded = position.split('无异动 1 只', 1)[1]
+        # 2026-11-16：持仓不再拆「无异动」表，财报行直接在同一张个股表里
+        self.assertNotIn('无异动 1 只', position)
+        self.assertNotIn('class="quiet-list"', position)
+        folded = position
         self.assertIn('美 10/30 盘后', folded)
         self.assertNotIn('财报 美东', folded)
 
@@ -3374,10 +3376,13 @@ class TestTargets(unittest.TestCase):
                     self.assertEqual(re.findall(r'\b' + name + r'="([^"]*)"', attrs), [value])
                 self.assertRegex(body, r'<td class="sym"><span class="sym-box \w+">' + symbol)
         self.assertRegex(page, r'<td class="sym"><span class="sym-box \w+">DDD')
-        shown, folded = page.split('无异动 1 只', 1)
-        self.assertIn('>AAA', shown)                      # 紫色的绿灯行不折叠
-        self.assertNotIn('>DDD', shown)                   # 普通绿灯行仍然折叠
-        self.assertIn('>DDD', folded)
+        # 2026-11-16：持仓合成一张表，普通绿灯不再有折叠段，只以 data-quiet-keep 区分
+        position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
+        self.assertNotIn('class="quiet-list"', position)
+        self.assertNotIn('无异动', position)
+        self.assertIn('>AAA', position)
+        self.assertIn('>DDD', position)
+        self.assertRegex(page, r'id="s-ddd"[^>]*data-quiet-keep="false"')
         self.assertIn('lvtag tgt space', page)
         self.assertNotIn('tr.pur td.sig', page)
         self.assertIn('--purple:', page)
@@ -3442,7 +3447,7 @@ class TestTargets(unittest.TestCase):
                           + 'px 0 0 var(--' + level + ')', css)
         self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
                       'top:var(--lamp-top);width:2px;height:var(--lamp-h);', css)
-        self.assertIn('--lamp-top:10px;--lamp-h:36px', css)
+        self.assertIn('--lamp-top:13px;--lamp-h:36px', css)
         self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
         self.assertNotIn('linear-gradient(var(--lc),var(--lc))', css)
         self.assertIn('table.stk tr[data-symbol]>td{border:0;box-shadow:none', css)
@@ -6613,7 +6618,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('border-top:7px solid var(--range-marker-fill)', monitor.PAGE_CSS)   # 内层高度不跟着缩
         self.assertIn('.range52-marker::before{', monitor.PAGE_CSS)
         self.assertNotIn('width:8.4px;height:8.4px;border-radius:2px;background:#713caf', monitor.PAGE_CSS)
-        self.assertIn('height:2.1px;background:var(--range-track);border-radius:99px}', monitor.PAGE_CSS)
+        self.assertIn('height:2.1px;background:var(--range-track-line);border-radius:99px}', monitor.PAGE_CSS)
         visible = re.sub(r' aria-label="[^"]*"', '', row)
         for text in ('52周低 100.00', '52周高 200.00', '区间位置 50.0%',
                      '本轮价 150.00', '日线盘中高低价', '未满52周'):
@@ -6740,8 +6745,8 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('.sig-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--sig-col-gap);align-items:start;min-width:0;'
                       'background:linear-gradient(var(--section-line),var(--section-line)) center/1px 100% no-repeat}', css)
         self.assertIn('.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}', css)
-        self.assertIn('--sig-col-gap:16px;--sig-borrow:6px;--sig-row-gap:4px', css)
-        self.assertIn('td.sig{padding:5px 5px 7px;font-size:15px;line-height:20.25px}', css)
+        self.assertIn('--sig-col-gap:16px;--sig-borrow:6px', css)
+        self.assertIn('td.sig{padding:var(--sig-row-gap) 5px 7px;font-size:15px;line-height:20.25px}', css)
         self.assertIn('width:3px;height:10px;margin-right:5px;border-radius:1px;', css)
         self.assertIn('function balanceDescriptions(row)', monitor.PAGE_INTERACTION_JS)
         for dead in ('cost-warn', 'ack-btn', 'sig-lead', 'data-reflowed'):
@@ -6751,7 +6756,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertNotIn('.stk tr.red+tr.range52-row>td{--lc:', css)
         self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
                       'top:var(--lamp-top);width:2px;height:var(--lamp-h);', css)
-        self.assertIn('--lamp-top:10px;--lamp-h:36px', css)
+        self.assertIn('--lamp-top:13px;--lamp-h:36px', css)
         self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
         for level in ('red', 'yellow', 'green'):
             self.assertIn(f'table.stk tr.{level}[data-symbol]{{--lamp-line:var(--{level})}}', css)
@@ -7009,6 +7014,14 @@ class TestQuietKeep(unittest.TestCase):
                                   earnings={'status': 'ok', 'kind': 'official', 'date': '2030-10-21'})]
                 with self.subTest(group=group, level=level):
                     output = self.body(rows, group)
+                    if group == 'position':
+                        # 2026-11-16：持仓不再拆「无异动」表，四档 keep 只体现在行标记上
+                        self.assertNotIn('<details class="quiet-list"', output)
+                        for row in rows:
+                            keep = row['symbol'] != 'NORMAL'
+                            marker = f'id="{monitor._stock_anchor_id(row["symbol"])}" data-quiet-keep="{str(keep).lower()}"'
+                            self.assertIn(marker, output)
+                        continue
                     shown, _, quiet = output.partition('<details class="quiet-list"')
                     for row in rows:
                         keep = row['symbol'] != 'NORMAL'
@@ -7039,7 +7052,8 @@ class TestQuietKeep(unittest.TestCase):
             self.assertNotIn('<details class="quiet-list"', output)
             output = self.body([row], asof='2030-12-01', snapshot=snapshot)
             self.assertIn('data-quiet-keep="false"', output)
-            self.assertIn('<details class="quiet-list"', output)
+            self.assertNotIn('<details class="quiet-list"', output)  # 持仓已合并成一张表
+            self.assertIn('id="s-test"', output)
             direct = monitor._stock_row(row, {'earnings_week': {'asof': '2030-10-20'}})
             self.assertIn('data-quiet-keep="true"', direct)
 
@@ -7050,7 +7064,8 @@ class TestQuietKeep(unittest.TestCase):
             with self.subTest(level=level):
                 self.assertIn('data-quiet-keep="false"', monitor._stock_row(row, {}))
                 output = self.body([row])
-                self.assertEqual('<details class="quiet-list"' in output, level == 'green')
+                self.assertNotIn('<details class="quiet-list"', output)  # 持仓已合并成一张表
+                self.assertIn('id="s-test"', output)
 
     def test_target_below_medium_and_etf_target_do_not_force_keep(self):
         for row in (self.item(target=monitor.evaluate_target(100, 100,
@@ -7059,7 +7074,8 @@ class TestQuietKeep(unittest.TestCase):
                              {'kind': 'manual', 'price': 150}, 'position', 3))):
             output = self.body([row])
             self.assertIn('data-quiet-keep="false"', output)
-            self.assertIn('<details class="quiet-list"', output)
+            self.assertNotIn('<details class="quiet-list"', output)  # 持仓已合并成一张表
+            self.assertIn('id="s-test"', output)
 
     def test_long_and_short_zones_share_the_same_keep_and_earnings_window(self):
         rows = [self.item('LONGRED', level='red', hold='long'),
@@ -7104,7 +7120,7 @@ class TestPositionZones(unittest.TestCase):
                          ['group_positions_long', 'group_positions_short'])
         self.assertNotRegex(out, r'<details class="zone-card"[^>]*\bopen\b')
         self.assertRegex(out, r'<details\b(?=[^>]*\bid="group_positions")(?=[^>]*\sopen(?:\s|>))(?=[^>]*\bdata-open-locked="1")[^>]*>')
-        self.assertIn('<details class="quiet-list" open>', out)
+        self.assertNotIn('<details class="quiet-list" open>', out)
         self.assertEqual(re.findall(r'<span class="zone-name">([^<]+)</span>', out),
                          ['长持仓 (1)', '短持仓 (2)'])
         self.assertEqual(out.count('class="zone-num"'), 6)
@@ -7139,14 +7155,22 @@ class TestPositionZones(unittest.TestCase):
         self.assertNotIn('长持仓不看一般过热', out)
         self.assertNotIn('class="quiet"', out.split('zone-card', 1)[-1].split('<table', 1)[0])
 
-    def test_position_quiet_lists_stay_open_but_other_groups_reset(self):
+    def test_position_merges_quiet_rows_and_other_groups_still_reset(self):
+        """2026-11-16：持仓（长/短）把「无异动」个股并进同一张表，不再有恒展开的空壳；
+        其它分组的「无异动 N 只」仍默认折叠、仍由 resetQuietLists 复位。"""
         out = self.card([self.item('AAA', 'red', 'long'),
                          self.item('BBB', 'green', 'long'), self.item('CCC', 'green', 'short')])
-        self.assertEqual(out.count('<details class="quiet-list" open>'), 2)
+        position = out.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
+        self.assertNotIn('class="quiet-list"', position)
+        self.assertNotIn('无异动', position)
+        self.assertEqual(position.count('<table class="stk">'), 2)  # 长/短各一张
+        for symbol in ('AAA', 'BBB', 'CCC'):
+            self.assertIn(f'id="s-{symbol.lower()}"', position)
+        self.assertNotIn('<details class="quiet-list" open>', out)
         js = monitor.PAGE_INTERACTION_JS
         self.assertIn('function resetQuietLists(card) {', js)
         self.assertIn('card.querySelectorAll("details.quiet-list[open]")', js)
-        self.assertIn("if (sub.closest('#group_positions')) return;", js)
+        self.assertNotIn("if (sub.closest('#group_positions')) return;", js)
         self.assertIn('sub.open = false;', js)
         self.assertIn('resetQuietLists(card);', js)
         group = next(g for g in monitor.GROUPS if g['key'] == 'focus')
@@ -7707,8 +7731,10 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     self.assertEqual(filtered['d'][0]['l'], 'gray')   # 10/30 距基准 10 天：不红不黄，跟财报名单同为灰字
                     self.assertEqual(filtered['d'][0]['t'], f'财报 {date} {label}')
                     position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
-                    self.assertIn('无异动 1 只', position)
-                    folded = position.split('<details class="quiet-list"', 1)[1]
+                    # 2026-11-16：持仓合并成一张表，财报行直接落在个股表里
+                    self.assertNotIn('无异动 1 只', position)
+                    self.assertNotIn('class="quiet-list"', position)
+                    folded = position
                     self.assertIn(label, main)
                     if note:
                         self.assertIn(f' {main}<span class="earn-sep">', folded)

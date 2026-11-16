@@ -528,9 +528,10 @@ PAGE_PALETTE = """:root{
   --px-row-h:21px;    /* 与 --row-height 同高：价格区两行和左侧「代码／中文名」两行逐行同高、同顶层内距。 */
   --px-gap:8px;       /* 左块内「现价 ↔ 涨跌额」间距；手机档只覆盖变量值收紧。 */
   --px-col-gap:12px;  /* 左块与右侧「振／量」的间距；手机档只覆盖变量值收紧。 */
-  --lamp-top:12.5px;  /* 左灯条与价格区两侧灰色分隔线共用同一组上下几何（2026-11-13）：
+  --lamp-top:15.5px;  /* 左灯条与价格区两侧灰色分隔线共用同一组上下几何（2026-11-13）：
                          竖线不再按代码墨迹动态量高（那会比灯条短一截），直接跟灯条同起同止。
-                         桌面 12.5/31.5、手机 10/36：14:58 首行内容整体下移 3px（线组到下方内容 +3px），
+                         桌面 15.5/31.5、手机 13/36：14:58 首行内容整体下移 3px（线组到下方内容 +3px）；
+                         2026-11-16 用户「分隔线到紫灯框的距离增加 3px」，首行再整体下移 3px，
                          灯条与三条竖线随内容一起下移 3px、长度不变，相对中文名墨迹位置不变。 */
   --lamp-h:31.5px;
   --line:#252a33;
@@ -556,12 +557,19 @@ PAGE_PALETTE = """:root{
   --lamp-size:14px;
   --head-inset:64px;
   --row-height:21px;
-  --tgt-frame-top:9px;    /* 紫灯框上下框线到数字墨迹都留 5px（2026-11-13）：只动框的 ::before 定位，
+  --tgt-frame-top:12px;   /* 紫灯框上下框线到数字墨迹都留 5px（2026-11-13）：只动框的 ::before 定位，
                              数字位置不变。原桌面 6px／手机 4px；14:58 首行内容下移 3px 后各 +3px
-                             （桌面 9／手机 7），框顶跟着数字一起下移，5/5px 留白不变；下边线两档统一 3px。 */
-  --tgt-frame-bottom:6px; /* 与 --tgt-frame-top 成对：空心(space/high)与实心(hit)三种框共用同一组留白。
-                             14:58 首行内容下移 3px 后 td.tgs 被 stretch 撑高 6px、框底比数字多下移 3px，
-                             实测墨迹留白变 5/8px；bottom 由 3px 收进 3px（3→6）把下边线提回来，恢复 5/5px。 */
+                             （桌面 9／手机 7）；2026-11-16 线组→紫灯框再拉开 3px，首行又整体下移 3px，
+                             故两档各 +3px（桌面 12／手机 10）。框顶跟着数字一起下移，5/5px 留白不变。
+                             线组下沿在行顶下 4px（1px border + ::after top2 + 1px 线），距框顶
+                             桌面 12−3＝9px／手机 10−3＝7px（原 6／4px），正好各 +3px。 */
+  --tgt-frame-bottom:-1px; /* 空心(space/high)与实心(hit)三种框共用。2026-11-16 三格下内距归零后
+                             td.tgs 由 stretch 的 56→49px，框底若仍按 bottom:6px 会随 td 上移 7px、
+                             裁掉第二行数字。框底要保持原来的绝对位置（行顶下 50px），bottom 需从
+                             6 收进 7 → -1px（越过 td.tgs 底 1px，落进下一排 4px 留白里，不遮文字）。
+                             11-16 首行三格上内距 7→10px 后 td.tgs 由 stretch 自动 49→52px，框底
+                             随 td 一起下移 3px，bottom 保持 -1px 即可，框高仍是桌面 41px／手机 43px，
+                             数字与上下框线的墨迹留白原样不变（不要同步把 bottom 再改成 -4px）。 */
   --tgs-month-font:13px; /* 「· N月」这一小块的字号：19:35 用户定 14px，20:51 用户「四位数共识价里的
                            月还是压到了紫灯框，把 10月 改为 13px 灰色文字」再收 1px。两档统一，
                            不再用 calc(var(--tgs-font) - 1px) 跟着主字号联动（手机原 15px 会把
@@ -590,6 +598,7 @@ PAGE_PALETTE = """:root{
   --list-border:#465e87;
   --stat-rule-soft:#3a4356;
   --range-track:#9fa3aa;
+  --range-track-line:#495568; /* 52周价格横条：2026-11-16 与个股双线互换，取原 --stock-divider 值 */
   --count-active:#2f4f86;
   --count-red-border:rgba(255,133,128,.45);
   --count-yellow-border:rgba(240,198,116,.45);
@@ -614,6 +623,12 @@ PAGE_PALETTE = """:root{
   --status-ok-halo:rgba(63,185,80,.18);
   --status-bad-halo:rgba(248,81,73,.18);
   --stock-divider:#495568;
+  --stock-pair-line:#6c7484; /* 个股双分割线：2026-11-16 先定 HSL 明度 42%（#606876，实得 41.96%），
+                         随后用户「分隔线的 HSL 亮度增加 5%」→ 名义 47%（实得 47.06%，比旧色
+                         +5.10 个百分点）。做法：取 #606876 的 H218.18°/S10.28% 不动，只把 L 设成
+                         47% 反算 RGB 再取整 → #6c7484（108,116,132）；整数 RGB 量化后 H220°/S10%，
+                         色相偏 1.8° 肉眼不可辨。独立变量，不连坐 --dim 数字色、--stock-divider
+                         设置页行线与 --range-track-line 52 周横条。 */
   --cost-row-bg:rgba(143,184,240,.07);
   --pnl-loss-bg:rgba(248,81,73,.12);
   --pnl-gain-bg:rgba(63,185,80,.12);
@@ -832,7 +847,7 @@ tr[id^="s-"]{scroll-margin-top:64px}
 .range52-rail{position:relative;display:flex;align-items:flex-end;gap:11px;height:26px;padding-bottom:13px;font-variant-numeric:tabular-nums}
 .range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
 .range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
-.range52-track{position:relative;flex:1 1 auto;height:2.1px;background:var(--range-track);border-radius:99px}
+.range52-track{position:relative;flex:1 1 auto;height:2.1px;background:var(--range-track-line);border-radius:99px}
 .range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;color:var(--dim)}
 .range52-hi .range52-gap{left:auto;right:0}
 .range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;border-left:4.2px solid transparent;border-right:4.2px solid transparent;border-top:9px solid var(--range-marker-border);transform:translateX(-50%);z-index:1}
@@ -1046,20 +1061,28 @@ tr.gray td{color:var(--dim)}
 table.stk{display:block;width:100%;table-layout:fixed}
 table.stk tbody{display:block;width:100%;table-layout:fixed}
 table.stk thead{display:block;width:100%;table-layout:fixed}
-table.stk tr[data-symbol]{position:relative;display:grid;grid-template-columns:var(--sym-w) minmax(0,1fr) var(--tgs-w);grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig";align-items:stretch;width:100%;border-top:1px solid var(--stock-divider);--lamp-line:var(--line)}
+/* 2026-11-16：--sig-row-gap 提到行级，一处管两个间距 —— 描述区不同指标之间（.sig-col 的 gap）、
+   以及「代码/价格/紫灯两排」下沿到紧接的下一排内容（成本条或描述区首行）。用户要求两者相等，
+   所以三格下内距归零，间距全部由下一排的上留白引用本变量承担，改一处两处同步。
+   值 4px 沿用 11-15 定稿的不同指标间距，不再另开变量。 */
+table.stk tr[data-symbol]{position:relative;display:grid;grid-template-columns:var(--sym-w) minmax(0,1fr) var(--tgs-w);grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig";align-items:stretch;width:100%;border-top:1px solid var(--stock-pair-line);--lamp-line:var(--line);--sig-row-gap:4px}
 table.stk tr[data-symbol]:first-child{border-top:0}
-/* 14:58 双线组与「上面内容」拉开 3px：给非首行个股行留 3px 行外上边距，两条线本身和 ::after 的
-   top 都不动，整组线随行一起下移。不能把 3px 加在上一行 td.sig 的 padding-bottom：CDP 实测紧贴
-   线的上一行大多是 52 周条（tr.range52-row），加在 sig 底部只会把描述和 52 周条一起往下推，
-   52 周条到线的距离并不变，还白白多出 3px 行高。下方那一侧由首行三个 td 的 padding-top 承担。 */
+/* 14:58 双线组与「上面内容」拉开 3px：给非首行个股行留 3px 行外上边距，整组线随行一起下移。
+   不能把 3px 加在上一行 td.sig 的 padding-bottom：CDP 实测紧贴线的上一行大多是 52 周条
+   （tr.range52-row），加在 sig 底部只会把描述和 52 周条一起往下推，52 周条到线的距离并不变，
+   还白白多出 3px 行高。下方那一侧由首行三个 td 的 padding-top 承担。 */
 table.stk tr[data-symbol]:not(:first-child){margin-top:3px}
-/* 个股分隔线改双线（2026-11-13）：保留原 1px border-top，再用 ::after 在其下 1px 空隙处补第二条
-   1px 线（线-空-线各 1px = 标准 3px double 的观感）。14:58 用户澄清：两条线本身保持不动，
-   要的是线组整体距「上面内容」和「下面内容」各 +3px —— 上方靠上面那条 margin-top，下方靠
-   首行三格 padding-top（4→7px）；这里 top 恒 1px 不改。不用 border-top:3px double
-   是因为那样每行高 2px，会连带推高分组栏高度和灯条位置；伪元素绝对定位不占文档流。
-   首行本来就没有 border-top，双线也一并跳过。颜色仍走 --stock-divider。 */
-table.stk tr[data-symbol]:not(:first-child)::after{content:"";position:absolute;left:0;right:0;top:1px;height:1px;background:var(--stock-divider);pointer-events:none;z-index:1}
+/* 个股分隔线改双线（2026-11-13）：保留原 1px border-top，再用 ::after 补第二条 1px 线。
+   ::after 相对 padding box 定位，top:1px 时两线之间空 1px（线组 3px，标准 double 观感）；
+   2026-11-16 用户要求两线间距 +1px → top:2px，空隙 2px（线组 4px）。伪元素绝对定位不占
+   文档流，行高、分组栏、灯条位置零变化；不要用 border-top:3px double（那样每行高 2px）。
+   线组距上方内容靠非首行 margin-top:3px，距下方内容靠首行三格 padding-top（4→7→10px），两者都不动。
+   11-16 用户「分隔线和紫灯框之间的距离增加 3px」：三格 padding-top 7→10px 把整个第一排
+   （代码/价格/紫灯框及其中数字）一起下移 3px，灯条与三条竖线由 --lamp-top 同步 +3px，
+   紫灯框由 --tgt-frame-top 同步 +3px；线组本身绝对定位在行顶、完全不动，故距离 +3px。
+   首行本来就没有 border-top，双线也一并跳过。颜色走 --stock-pair-line（11-16 先定 HSL 明度 42%
+   → #606876，随后 +5 个百分点到 47% → #6c7484；只提明度，色相/饱和度不动）。 */
+table.stk tr[data-symbol]:not(:first-child)::after{content:"";position:absolute;left:0;right:0;top:2px;height:1px;background:var(--stock-pair-line);pointer-events:none;z-index:1}
 table.stk tr[data-symbol]>td{border:0;box-shadow:none;min-width:0;margin:0}
 /* 终稿首格清影：保留:first-child特异性，压过旧红行inset而不改变行伪元素灯条。 */
 table.stk tr[data-symbol]>td:first-child{box-shadow:none}
@@ -1073,7 +1096,7 @@ table.stk tr.gray[data-symbol]{--lamp-line:var(--text)}
    原 41.7/42.7 会多探出 7.2 / 3.7px。
    2026-11-13：三处分区竖线改用同一组 --lamp-top/--lamp-h，长度与灯条一样，不再各量各的。 */
 table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:2px;height:var(--lamp-h);background:var(--lamp-line);pointer-events:none;z-index:2}
-table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:7px 8px;font-size:14px;line-height:var(--row-height)}
+table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:10px 8px 0;font-size:14px;line-height:var(--row-height)}
 table.stk tr[data-symbol]>td.sym>.sym-box{display:grid;grid-template-rows:var(--row-height) var(--row-height);align-items:center;width:100%;max-width:100%;margin:0;padding:0;border:0;background:none;color:var(--text);line-height:var(--row-height);cursor:default}
 table.stk tr[data-symbol]>td.sym>.sym-box:has(.tag){color:var(--head-blue-on)}
 table.stk tr[data-symbol]>td.sym>.sym-box .tag{display:none}
@@ -1088,7 +1111,7 @@ table.stk tr[data-symbol]>td.sym::after{content:"";position:absolute;left:var(--
    两排行高与左侧代码两行同用 --px-row-h，
    td.px 也补 4px 顶内距，现价与代码第一行中心对齐（原 25px 行高 + 18.5px 字让现价顶部
    比代码高 3.4px 手机 / 6.4px 桌面）。字号收敛到 17.5/16.5/14，只有真的溢出才由 fitPx 收紧。 */
-table.stk tr[data-symbol]>td.px{grid-area:px;position:relative;display:block;min-width:0;padding:7px 6px;text-align:left;white-space:nowrap}
+table.stk tr[data-symbol]>td.px{grid-area:px;position:relative;display:block;min-width:0;padding:10px 6px 0;text-align:left;white-space:nowrap}
 table.stk tr[data-symbol]>td.px .px-main{display:grid;grid-template-columns:max-content minmax(0,1fr);grid-template-rows:var(--px-row-h) var(--px-row-h);column-gap:var(--px-col-gap);align-items:center;min-width:0;margin:0;padding:0 4px 0 0}
 table.stk tr[data-symbol]>td.px .px-row{display:flex;align-items:center;gap:var(--px-gap);min-width:0;white-space:nowrap;font-variant-numeric:tabular-nums}
 table.stk tr[data-symbol]>td.px .px-row-main{grid-area:1/1/2/2}
@@ -1137,7 +1160,7 @@ table.stk[data-tgs-cut]{--tgs-month-gap:0px}
 table.stk[data-tgs-cut] tr[data-symbol]>td.px{overflow:hidden}
 table.stk tr[data-symbol]>td.px::after{content:"";position:absolute;right:0;top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line);pointer-events:none}
 table.stk tr[data-symbol]>td.tgs::after{content:"";position:absolute;right:0;top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line);pointer-events:none}
-table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:7px var(--tgs-pad-r,3px) 4px var(--tgs-pad-l,2px);line-height:0;text-align:center;box-sizing:border-box;width:var(--tgs-w);min-width:var(--tgs-w);max-width:var(--tgs-w)}
+table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:10px var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);line-height:0;text-align:center;box-sizing:border-box;width:var(--tgs-w);min-width:var(--tgs-w);max-width:var(--tgs-w)}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt{display:grid;grid-template-columns:minmax(0,1fr) auto auto minmax(0,1fr);grid-template-rows:var(--row-height) var(--row-height);flex:1;min-width:0;height:auto;min-height:0;margin:0;padding:0 1px;border:0;background:transparent;column-gap:0;row-gap:0;align-items:center;justify-items:center;line-height:var(--row-height);white-space:nowrap;font-size:var(--tgs-font);font-weight:400;color:var(--purple);font-variant-numeric:tabular-nums}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt>span{height:var(--row-height);line-height:var(--row-height);white-space:nowrap}
 table.stk tr[data-symbol]>td.tgs .target-space{grid-area:1/2/2/4}
@@ -1187,9 +1210,10 @@ table.stk tr[data-symbol]>td.tgs .tgt.hit [data-sign="neg"]{color:var(--tgt-neg-
 .earn .earn-sep,.earn .earn-bj{color:var(--earn-bj-color,var(--dim))}
 .earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd{font-size:inherit;letter-spacing:0;font-weight:400;color:var(--earn-bj-color,var(--dim));margin-right:-.5em}
 .earn>.cd.tbd,#signalCounts .earnings-week-meta .cd.tbd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd.tbd{color:var(--earn-bj-color,var(--head-blue-on))}
-/* 成本条上下留白（2026-11-12 用户收紧）：上边距 5→2、条内上下 3→2；价格区两排 50px 已经偏紧，
-   成本条再留 5px 会把描述推得太远。条高 28.5→26.5px，字号与 15px／22.5px 行高一律不动。 */
-table.stk tr[data-symbol]>td.cost-line{grid-area:cost;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 8px;margin:2px 0 0;background:var(--cost-row-bg);border-radius:3px;color:var(--text);white-space:nowrap;font-size:15px;line-height:22.5px;font-variant-numeric:tabular-nums}
+/* 成本条上下留白（2026-11-12 收紧条内上下 3→2；2026-11-16 上边距 2→var(--sig-row-gap)）：
+   两排文字下沿到成本条上边缘＝描述区不同指标之间的间距 4px。条高 26.5px、字号 15px／
+   22.5px 行高一律不动。 */
+table.stk tr[data-symbol]>td.cost-line{grid-area:cost;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 8px;margin:var(--sig-row-gap) 0 0;background:var(--cost-row-bg);border-radius:3px;color:var(--text);white-space:nowrap;font-size:15px;line-height:22.5px;font-variant-numeric:tabular-nums}
 table.stk tr[data-symbol]>td.cost-line[hidden]{display:none}
 table.stk tr[data-symbol]>td.cost-line>span{font-size:inherit}
 table.stk tr[data-symbol]>td.cost-line[data-pnl="loss"]{background:var(--pnl-loss-bg)}
@@ -1200,10 +1224,12 @@ table.stk tr[data-symbol]>td.cost-line[data-pnl="gain"]{background:var(--pnl-gai
    组合加号（10.5px，手机 11.3px）压在线上时两侧各留约 2.75px 空隙，不再像一句话连着。
    描述区字号 14.5→15px（与财报 .earn 同号）；2026-11-15 行距回到 15px 应有的比例：
    桌面 21.75px＝15×1.45 不动，手机 19.57→20.25px＝15×1.35（原 14.5×1.35）；
-   不同指标间距 --sig-row-gap 7→4px，即正常折行行距之外只多 4px。 */
-/* 描述区上留白 10.25→5（2026-11-12 用户收紧）：这一格既是「成本条下方」也是其它分组
-   「价格区→第一排描述」的距离，原来 10.25px 两处都嫌宽；下留白 7px 不动，避免整块糊在一起。 */
-table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:5px 10px 7px;font-size:15px;line-height:21.75px;--sig-col-gap:16px;--sig-borrow:6px;--sig-row-gap:4px}
+   不同指标间距 --sig-row-gap 7→4px，即正常折行行距之外只多 4px；2026-11-16 起该变量提到 tr 级，
+   同时作为「第一排两排文字下沿 → 下一排内容」的间距，两处永远同值。 */
+/* 描述区上留白（2026-11-16）：第一排三格下内距归零后，这一格的上内距就是「两排文字下沿 →
+   描述区首行文字」的距离，取 --sig-row-gap。有成本条时它管条→描述，无成本条时管第一排→描述，
+   两种情形都是 4px；下留白 7px 不动，避免整块糊在一起。 */
+table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:var(--sig-row-gap) 10px 7px;font-size:15px;line-height:21.75px;--sig-col-gap:16px;--sig-borrow:6px}
 /* 左右分区中线（2026-11-14）：原来两列之间只有空白「隐形中线」，现在用 1px 灰线显示出来，
    颜色沿用代码/价格/紫灯区三条分区竖线的 --section-line，不新增颜色。线画在容器背景层，
    不占 grid 格、不改两列宽度与折行测量；组合加号 ::after 仍压在中线上，颜色跟灯级走。 */
@@ -1250,7 +1276,6 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10p
 .stk th{font-size:13px;color:var(--dim);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
 #group_positions[open]{padding-bottom:2px}
 #group_positions>.group-bottom{display:none}
-#group_positions details.quiet-list>summary{display:none}
 #group_positions_short.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 0}
 #runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
 #signalCounts .signal-extra-row{--chip-w:84px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
@@ -1275,7 +1300,7 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10p
    只把右内距 6→2px：note 可见宽仍是 98−6−2＝90px＝精确 6 个中文字，文字墨迹→灰线由 6px 收到 2px。
    灰线左移 4px 全部转给 --tgs-w（104→108），中间 minmax(0,1fr) 价格区净宽不变，98 行仍全 0 档、
    零侵占。四位数共识价的「10月」离紫框右线由 4px 放宽到 7.5px。其余只覆盖变量值。 */
-:root{--status-font-size:14.5px;--sym-w:98px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;--lamp-top:10px;--lamp-h:36px;--tgt-frame-top:7px;--tgs-font:16px;--tgs-pad-l:0px;--tgs-pad-r:0px}
+:root{--status-font-size:14.5px;--sym-w:98px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;--lamp-top:13px;--lamp-h:36px;--tgt-frame-top:10px;--tgs-font:16px;--tgs-pad-l:0px;--tgs-pad-r:0px}
 .sig-cols[data-combo="1"]{--combo-size:11.3px;--combo-cy:9.7px}
 body{padding-left:5px;padding-right:5px}
 .oil-reference-row td{padding:8px 6px}
@@ -1322,7 +1347,7 @@ table.stk tr[data-symbol][data-pxfit] :is(.px-chg,.px-amt){font-size:16px}
 /* 2026-11-14 用户「描述区文字和财报文字改为 15px」：手机档同样 15px，与 .earn 同号。
    2026-11-15 行距回到 15×1.35＝20.25px（原 14.5×1.35＝19.57px），桌面 21.75px＝15×1.45 不动；
    两档各自保持原有松紧比例，只动行距不动字号。 */
-table.stk tr[data-symbol]>td.sig{padding:5px 5px 7px;font-size:15px;line-height:20.25px}
+table.stk tr[data-symbol]>td.sig{padding:var(--sig-row-gap) 5px 7px;font-size:15px;line-height:20.25px}
 table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}
 .stk th{padding:7px 5px;font-size:12px}
 #signalCounts .signal-extra-row{--chip-w:84px;--xr:8px;padding:0}
@@ -1912,10 +1937,9 @@ window.addEventListener("pageshow", function() {
   if (card) normalizeSignalCard(card);
 });
 // 卡片收起时，里面的「无异动 N 只」跟着回到默认折叠。否则浏览器会记住 details 的 open 状态，
-// 下次再展开（长/短持仓区尤其明显：关掉区再打开）刚点开的那份清单还是开着的。
+// 下次再展开刚点开的那份清单还是开着的。2026-11-16 持仓已合并成一张表，不再有常开清单。
 function resetQuietLists(card) {
   card.querySelectorAll("details.quiet-list[open]").forEach(function(sub) {
-    if (sub.closest('#group_positions')) return; // 持仓静态常开，只有外层长/短区可折叠。
     sub.open = false;
     // 同统计面板的处理：父容器不可见期间改 open，部分移动端内核不重算高度，会留一块空白
     sub.style.display = "none";

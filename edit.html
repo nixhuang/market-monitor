@@ -111,9 +111,10 @@ details.fold>summary,details.set>summary{gap:8px}
   --px-row-h:21px;    /* 与 --row-height 同高：价格区两行和左侧「代码／中文名」两行逐行同高、同顶层内距。 */
   --px-gap:8px;       /* 左块内「现价 ↔ 涨跌额」间距；手机档只覆盖变量值收紧。 */
   --px-col-gap:12px;  /* 左块与右侧「振／量」的间距；手机档只覆盖变量值收紧。 */
-  --lamp-top:12.5px;  /* 左灯条与价格区两侧灰色分隔线共用同一组上下几何（2026-11-13）：
+  --lamp-top:15.5px;  /* 左灯条与价格区两侧灰色分隔线共用同一组上下几何（2026-11-13）：
                          竖线不再按代码墨迹动态量高（那会比灯条短一截），直接跟灯条同起同止。
-                         桌面 12.5/31.5、手机 10/36：14:58 首行内容整体下移 3px（线组到下方内容 +3px），
+                         桌面 15.5/31.5、手机 13/36：14:58 首行内容整体下移 3px（线组到下方内容 +3px）；
+                         2026-11-16 用户「分隔线到紫灯框的距离增加 3px」，首行再整体下移 3px，
                          灯条与三条竖线随内容一起下移 3px、长度不变，相对中文名墨迹位置不变。 */
   --lamp-h:31.5px;
   --line:#252a33;
@@ -139,12 +140,19 @@ details.fold>summary,details.set>summary{gap:8px}
   --lamp-size:14px;
   --head-inset:64px;
   --row-height:21px;
-  --tgt-frame-top:9px;    /* 紫灯框上下框线到数字墨迹都留 5px（2026-11-13）：只动框的 ::before 定位，
+  --tgt-frame-top:12px;   /* 紫灯框上下框线到数字墨迹都留 5px（2026-11-13）：只动框的 ::before 定位，
                              数字位置不变。原桌面 6px／手机 4px；14:58 首行内容下移 3px 后各 +3px
-                             （桌面 9／手机 7），框顶跟着数字一起下移，5/5px 留白不变；下边线两档统一 3px。 */
-  --tgt-frame-bottom:6px; /* 与 --tgt-frame-top 成对：空心(space/high)与实心(hit)三种框共用同一组留白。
-                             14:58 首行内容下移 3px 后 td.tgs 被 stretch 撑高 6px、框底比数字多下移 3px，
-                             实测墨迹留白变 5/8px；bottom 由 3px 收进 3px（3→6）把下边线提回来，恢复 5/5px。 */
+                             （桌面 9／手机 7）；2026-11-16 线组→紫灯框再拉开 3px，首行又整体下移 3px，
+                             故两档各 +3px（桌面 12／手机 10）。框顶跟着数字一起下移，5/5px 留白不变。
+                             线组下沿在行顶下 4px（1px border + ::after top2 + 1px 线），距框顶
+                             桌面 12−3＝9px／手机 10−3＝7px（原 6／4px），正好各 +3px。 */
+  --tgt-frame-bottom:-1px; /* 空心(space/high)与实心(hit)三种框共用。2026-11-16 三格下内距归零后
+                             td.tgs 由 stretch 的 56→49px，框底若仍按 bottom:6px 会随 td 上移 7px、
+                             裁掉第二行数字。框底要保持原来的绝对位置（行顶下 50px），bottom 需从
+                             6 收进 7 → -1px（越过 td.tgs 底 1px，落进下一排 4px 留白里，不遮文字）。
+                             11-16 首行三格上内距 7→10px 后 td.tgs 由 stretch 自动 49→52px，框底
+                             随 td 一起下移 3px，bottom 保持 -1px 即可，框高仍是桌面 41px／手机 43px，
+                             数字与上下框线的墨迹留白原样不变（不要同步把 bottom 再改成 -4px）。 */
   --tgs-month-font:13px; /* 「· N月」这一小块的字号：19:35 用户定 14px，20:51 用户「四位数共识价里的
                            月还是压到了紫灯框，把 10月 改为 13px 灰色文字」再收 1px。两档统一，
                            不再用 calc(var(--tgs-font) - 1px) 跟着主字号联动（手机原 15px 会把
@@ -173,6 +181,7 @@ details.fold>summary,details.set>summary{gap:8px}
   --list-border:#465e87;
   --stat-rule-soft:#3a4356;
   --range-track:#9fa3aa;
+  --range-track-line:#495568; /* 52周价格横条：2026-11-16 与个股双线互换，取原 --stock-divider 值 */
   --count-active:#2f4f86;
   --count-red-border:rgba(255,133,128,.45);
   --count-yellow-border:rgba(240,198,116,.45);
@@ -197,6 +206,12 @@ details.fold>summary,details.set>summary{gap:8px}
   --status-ok-halo:rgba(63,185,80,.18);
   --status-bad-halo:rgba(248,81,73,.18);
   --stock-divider:#495568;
+  --stock-pair-line:#6c7484; /* 个股双分割线：2026-11-16 先定 HSL 明度 42%（#606876，实得 41.96%），
+                         随后用户「分隔线的 HSL 亮度增加 5%」→ 名义 47%（实得 47.06%，比旧色
+                         +5.10 个百分点）。做法：取 #606876 的 H218.18°/S10.28% 不动，只把 L 设成
+                         47% 反算 RGB 再取整 → #6c7484（108,116,132）；整数 RGB 量化后 H220°/S10%，
+                         色相偏 1.8° 肉眼不可辨。独立变量，不连坐 --dim 数字色、--stock-divider
+                         设置页行线与 --range-track-line 52 周横条。 */
   --cost-row-bg:rgba(143,184,240,.07);
   --pnl-loss-bg:rgba(248,81,73,.12);
   --pnl-gain-bg:rgba(63,185,80,.12);

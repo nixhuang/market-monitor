@@ -331,7 +331,10 @@ check(all('<thead' not in table and '<th>名称</th>' not in table and 'class="h
       "表头「名称｜财报」整行已删除（2026-10-15）")
 check(monitor.STK_HEAD == '', "STK_HEAD 不再输出表头")
 check("财报 美东" not in html and "下一次财报" not in html.split('id="group_positions"')[1].split('<div class="acts">')[0], "每行不再重复写「财报」二字")
-check('无异动 1 只' in html and 'SPYM' in html, "无异动标的可展开查看")
+# 2026-11-16：持仓把「无异动」并进同一张表，不再生成恒展开的折叠空壳；
+# 其它分组仍保留可点开的「无异动 N 只」。
+check('SPYM' in html and 'id="s-spym"' in html, "持仓无异动标的并入主表且行锚点保留")
+check('<details class="quiet-list">' in html, "其它分组的「无异动 N 只」仍可点开")
 pos_card = html.split('id="group_positions"')[1].split('id="group_focus"')[0]
 check('NTNX' in pos_card and 'SPYM' in pos_card, "持仓包含警示及无异动标的")
 focus_card = html.split('id="group_focus"')[1].split('id="group_technology"')[0]
@@ -741,7 +744,7 @@ for _level, _width in (('red', 4), ('yellow', 4), ('green', 2)):
     check('table.stk tr.' + _level + '[data-symbol]{--lamp-line:var(--' + _level + ')}' in monitor.PAGE_CSS
           and 'tr.' + _level + '+tr.range52-row>td{--lc' not in monitor.PAGE_CSS
           and 'table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:2px;height:var(--lamp-h);' in monitor.PAGE_CSS
-          and '--lamp-top:10px;--lamp-h:36px' in monitor.PAGE_CSS
+          and '--lamp-top:13px;--lamp-h:36px' in monitor.PAGE_CSS
           and 'top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)' in monitor.PAGE_CSS,
           _level + '主表左灯条与分区线同长且不延伸52周行')
 # 2026-10-30：成本价搬到「代码 + 备注名」下面那一排，跟加／减仓价胶囊共用 .lvs 容器，
@@ -1366,8 +1369,10 @@ for _row, _kind, _technical_level, _foldable, _overall in _four_cases:
     check(_classes == [_overall] and _row['foldable'] == _foldable and set(_levels) == set(_expected) and all(_levels.count(pair) <= (2 if pair[0] == 'boll_rsi' else 1) for pair in _levels),
           _row['symbol'] + '技术灰白字、仅文字灰字、独立红黄和主行竖条各自保留')
     _anchor = 'id="' + monitor._stock_anchor_id(_row['symbol']) + '"'
-    check((_anchor in _four_quiet_html) == (_foldable and _overall == 'green'),
-          _row['symbol'] + '可折叠绿行进无异动；不折叠白灯和独立红黄留主表')
+    # 2026-11-16：持仓已把「无异动」并进主表，不再有折叠段；其余分组仍按原规则
+    _foldable_quiet = _row['group'] != 'position' and _foldable and _overall == 'green'
+    check((_anchor in _four_quiet_html) == _foldable_quiet,
+          _row['symbol'] + '可折叠绿行进无异动（持仓除外）；不折叠白灯和独立红黄留主表')
     _members = {m['s']: m for m in _four_filter.get(_kind, {}).get('members', [])}
     check((_row['symbol'] in _members) == bool(_technical_level),
           _row['symbol'] + '仅文字不统计，技术灰或红黄进对应筛选名单')
@@ -2077,8 +2082,11 @@ const deadline = setTimeout(() => {
       })()`);
       const pink = 'rgb(220, 98, 184)', purple = 'rgb(176, 132, 255)', dim = 'rgb(139, 147, 161)';
       // 2026-11-13：上下框线到数字墨迹都是 5px；14:58 首行内容下移 3px 后
-      // 框顶同步 +3px（桌面 top9/手机 top7），下边线统一收进 3px（bottom6），5/5px 留白不变。
-      const frameTop = width <= 600 ? '7px' : '9px';
+      // 框顶同步 +3px（桌面 top9/手机 top7）。2026-11-16 第一排三格下内距归零，td.tgs
+      // 由 56→49px，bottom 6→-1px 补偿；同日「线组→紫灯框距离 +3px」再把三格上内距
+      // 7→10px、框顶 9/7→12/10px，td.tgs 由 stretch 49→52px，框底自动跟随 +3px，
+      // bottom 仍 -1px，框高桌面 41/手机 43 不变，5/5px 墨迹留白不变，第二行数字不会被裁。
+      const frameTop = width <= 600 ? '10px' : '12px';
       // 2026-11-11 用户：空间>=90% 只有外框紫红，数字沿用普通紫、不加粗影
       // 2026-11-13 20:51：共识价仍普通紫，「· N月」整块降为 13px 灰（次要标注）。
       assertions.push({ok: actual.highColor === purple && actual.highBorder === pink
@@ -2086,7 +2094,7 @@ const deadline = setTimeout(() => {
         && actual.highNumbers.every(x => x.color === (x.month ? dim : purple))
         && actual.highSign === 'pos' && actual.highPercent === 'rgb(77, 208, 225)'
         && actual.highShadow === 'none' && actual.highBorderWidth === '1px'
-        && JSON.stringify(actual.highFrame.inset) === JSON.stringify([frameTop,'0px','6px','-1px'])
+        && JSON.stringify(actual.highFrame.inset) === JSON.stringify([frameTop,'0px','-1px','-1px'])
         && actual.highFrame.radius === '3px',
         name: width + 'px终稿高空间框位于tgs、目标价格沿用普通紫、月份次要灰、正空间百分比青色', actual});
       assertions.push({ok: actual.originalSize[0] > 0 && actual.originalSize[1] > 0
@@ -2106,7 +2114,7 @@ const deadline = setTimeout(() => {
       assertions.push({ok: actual.stripes.length === 9 && actual.stripes.every(s =>
         s.sigImage === 'none' && s.sigShadow === 'none'
         && s.rowContent === '""' && s.rowWidth === '2px' && s.rowColor === s.color
-        && Math.abs(parseFloat(s.rowTop)-(width<=600?10:12.5))<0.02
+        && Math.abs(parseFloat(s.rowTop)-(width<=600?13:15.5))<0.02
         && Math.abs(parseFloat(s.rowHeight)-(width<=600?36:31.5))<0.02
         && s.leftImage === 'none' && s.leftShadow === 'none'
         && s.rangeImage === 'none' && s.rangeSize === 'auto'),

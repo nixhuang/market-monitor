@@ -1016,7 +1016,13 @@ class PageRenderer:
 
 
     def _group_body(self, g, group, snapshot, earnings_week, enabled, collapse_id, collapse_label, empty_note=""):
-        """分组（或持仓内部某个区）的展开内容：空提示 + 警示表 + 「无异动 N 只」折叠表 + 底部收起条。"""
+        """分组（或持仓内部某个区）的展开内容：空提示 + 个股表 + 底部收起条。
+
+        2026-11-16 起持仓（长/短）把所有个股合成一张表：原来「有异动」与「无异动」是两张
+        独立的 <table class="stk">，后者的首行命中 :first-child 免线规则，边界只剩单线；
+        而持仓那份「无异动」又是恒展开、summary 被隐藏的空壳，本来就没有折叠功能。
+        其它分组仍保留可点开的「无异动 N 只」折叠表，不受影响。
+        """
         earnings_week = earnings_week or (snapshot.get("earnings_week") or {}).get("asof") or self._context._bj_today()
         g = [dict(d, group=group["item_group"]) if d.get("group") != group["item_group"] else d for d in g]
         g = [self._context._apply_target(d) if d.get("target") or d.get("purple")
@@ -1026,11 +1032,12 @@ class PageRenderer:
         parts = []
         if empty_note:
             parts.append(f'<div class="quiet">{empty_note}</div>')
-        if shown:
-            parts.append(f'<table class="stk">{self._context.STK_COLS}{self._context.STK_HEAD}{self._context._stock_rows(shown, snapshot, earnings_week)}</table>')
-        if quiet:
-            opened = ' open' if group['item_group'] == 'position' else ''
-            parts.append(f'<details class="quiet-list"{opened}><summary>无异动 {len(quiet)} 只</summary>'
+        is_position = group['item_group'] == 'position'
+        main_rows = shown + quiet if is_position else shown
+        if main_rows:
+            parts.append(f'<table class="stk">{self._context.STK_COLS}{self._context.STK_HEAD}{self._context._stock_rows(main_rows, snapshot, earnings_week)}</table>')
+        if quiet and not is_position:
+            parts.append(f'<details class="quiet-list"><summary>无异动 {len(quiet)} 只</summary>'
                          f'<table class="stk">{self._context.STK_COLS}{self._context.STK_HEAD}{self._context._stock_rows(quiet, snapshot, earnings_week)}</table></details>')
         parts.append(self._context._collapse_button(collapse_id, collapse_label))
         return "\n".join(parts)
