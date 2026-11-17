@@ -106,11 +106,6 @@
       "hold": "short",
       "cost": 208.98
     },
-    "NXPI": {
-      "note": "恩智浦半导体",
-      "hold": "short",
-      "cost": 220
-    },
     "AAPL": {
       "note": "苹果",
       "cost": 325.03,
@@ -139,6 +134,9 @@
     },
     "SYK": {
       "note": "医疗机器人"
+    },
+    "NXPI": {
+      "note": "恩智浦半导体"
     }
   },
   "index_funds": {
