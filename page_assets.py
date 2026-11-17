@@ -526,7 +526,11 @@ PAGE_PALETTE = """:root{
                           改的是框内空白，框线（::before right:0/left:-1px）与数字位置都不受影响。 */
   --tgs-pad-r:3px;
   --px-row-h:21px;    /* 与 --row-height 同高：价格区两行和左侧「代码／中文名」两行逐行同高、同顶层内距。 */
-  --px-gap:8px;       /* 左块内「现价 ↔ 涨跌额」间距；手机档只覆盖变量值收紧。 */
+  --px-gap:8px;       /* 下排「日涨跌幅 ↔ 周涨跌幅」的 flex 基础间距；上排现价↔涨跌额
+                          已由 gap:0 + .px-amt 的 1ch 接管，手机档只覆盖变量值收紧。 */
+  --px-week-gap:6px;  /* 11-17 用户「周涨跌幅和日涨跌幅拉开点距离」：只给 .px-week 的额外
+                          左外距，和上面的基础间距叠成一对。单独一个变量，改这一对不会
+                          连坐振／量，也不会动上排的 1ch；压缩档沿用同一个变量。 */
   --px-col-gap:12px;  /* 左块与右侧「振／量」的间距；手机档只覆盖变量值收紧。 */
   --lamp-top:8.5px;   /* 左灯条与价格区两侧灰色分隔线共用同一组上下几何（2026-11-13）：
                          竖线不再按代码墨迹动态量高（那会比灯条短一截），直接跟灯条同起同止。
@@ -552,12 +556,14 @@ PAGE_PALETTE = """:root{
   --frame-w:1.5px;
   --head-blue:#bfd5ff;
   --head-blue-on:#8fb8f0;
-  --sym-fade:rgba(143,184,240,.20);     /* 个股首排底色渐变：左端 20% 标题蓝 → 72% 处 5% → 透明。
+  --sym-fade:rgba(143,184,240,.14);     /* 个股首排底色渐变：左端 14% 标题蓝 → 72% 处 5% → 透明。
                            2026-11-16 用户指定起始浓度 20%、只铺代码区；2026-11-17 改为从代码区
-                           一路铺进价格区、到行宽一半（--sym-fade-w）淡出。载体由 td.sym 换成
-                           tr[data-symbol] 的背景，因为 td 的背景不能画到格子外；背景在内容之下，
-                           文字不蒙色。固定蓝，不跟灯级变色。变量化是为了不撞 10-28 退役的
-                           分组标题高亮字面量（测试禁止那个串回来）。 */
+                           一路铺进价格区；11-17 傍晚定稿右端在紫灯区左边界截止（见 --sym-fade-w）。随后用户「左边起始处太亮／更透明」：
+                           只把起始不透明度 20% → 14%，RGB(143,184,240) 与色相一律不动，
+                           是「更透明」不是换成更深的蓝；--sym-fade-mid 的 5% 也不动。
+                           载体由 td.sym 换成 tr[data-symbol] 的背景，因为 td 的背景不能画到格子外；
+                           背景在内容之下，文字不蒙色。固定蓝，不跟灯级变色。变量化是为了不撞
+                           10-28 退役的分组标题高亮字面量（测试禁止那个串回来）。 */
   --sym-fade-mid:rgba(143,184,240,.05);
   --sym-fade-top:5px;      /* 渐变上边缘距「本行上方那条 1px 分隔线」下沿的空隙，两档统一 5px
                              （2026-11-17 用户：原来只有 1px 太贴）。只改背景的 position/size，
@@ -568,7 +574,14 @@ PAGE_PALETTE = """:root{
                              首排高＝--row-pad-top + 2×--row-height（桌面 45px／手机 47px），
                              故渐变高 40／42px。11-17 上午那版「上下留白等距」的裁切变量已整条退役，
                              连变量名都不留在注释里，避免以后有人照着它改回去。 */
-  --sym-fade-w:50%;        /* 渐变横向终点＝行宽一半，即「差不多页面一半的位置」（11-17 用户）。 */
+  --sym-fade-w:calc(100% - var(--tgs-w)); /* 渐变右端＝紫灯区左边界。background-size 里的
+                                      100% 按 tr 的 padding-box 算＝整行宽，减掉第三列 --tgs-w
+                                      （桌面 104 / 手机 108）正好是 td.tgs 左边缘，也就是紫灯框
+                                      ::before(left:-1px) 所在那一列的起点；no-repeat，右边不再画。
+                                      用同一列变量，六档视口与 fitTgs() 动态收窄的紫灯列都自动跟随；
+                                      渐变末点本来就是 transparent，最右 1px 不会给框线染色。
+                                      11-17 上午的行宽一半、下午再加固定 30px 两步口径都已退役，
+                                      不另开变量（一组参数＝一个变量），background-size 规则行一字不动。 */
   --row-pad-top:3px;     /* 个股第一排（代码/价格/紫灯框）三格共用上内距，手机档覆盖 5px。
                            2026-11-16 单线定稿：第一排整体上移到「线→框顶 5px」；桌面 3 / 手机 5
                            是让 td.tgs 由 stretch 得 45/47px，减框顶 5px 与 bottom -1px 后
@@ -1096,7 +1109,7 @@ table.stk thead{display:block;width:100%;table-layout:fixed}
    值 4px 沿用 11-15 定稿的不同指标间距，不再另开变量。 */
 /* 首排底色渐变（2026-11-17）：载体放在整行 tr 的背景上，因为 td 的背景会被裁在各自格子内，
    没法从代码列一路铺进价格区。背景天生在内容之下，不会给文字蒙色；只铺一次（no-repeat），
-   宽 --sym-fade-w＝行宽一半，高＝首排高 − --sym-fade-top，起点 0/--sym-fade-top：
+   宽 --sym-fade-w＝整行宽 − 紫灯列宽（右端截止在紫灯区左边界），高＝首排高 − --sym-fade-top，起点 0/--sym-fade-top：
    上边缘距上方 1px 分隔线 5px，下边缘仍贴首排底（成本条那一排不吃渐变）。
    首排高＝--row-pad-top + 2×--row-height（桌面 45／手机 47），两档由变量自动算，不写字面量。 */
 table.stk tr[data-symbol]{position:relative;display:grid;grid-template-columns:var(--sym-w) minmax(0,1fr) var(--tgs-w);grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig";align-items:stretch;width:100%;border-top:1px solid var(--stock-pair-line);--lamp-line:var(--line);--sig-row-gap:4px;background-image:linear-gradient(90deg,var(--sym-fade),var(--sym-fade-mid) 72%,transparent);background-repeat:no-repeat;background-size:var(--sym-fade-w) calc(var(--row-pad-top) + var(--row-height) + var(--row-height) - var(--sym-fade-top));background-position:0 var(--sym-fade-top)}
@@ -1167,6 +1180,9 @@ table.stk tr[data-symbol][data-pxfit] > td.px .px-row-main{gap:0}
 .px-v.amp-yellow{color:var(--lamp-yellow)}
 .px-v.amp-red{color:var(--lamp-red)}
 .px-metric{display:inline-flex;align-items:baseline;gap:2px}
+/* 11-17 用户「周涨跌幅和日涨跌幅拉开点距离」：整组（含「周」标签）一起右移，
+   组内 2px 与「周」的灰色都不动；振／量共用 .px-metric 类，但只在 .px-week 上生效。 */
+.px-week{margin-left:var(--px-week-gap)}
 table.stk tr[data-symbol][data-pxfit="1"] .px-row{gap:4px}
 table.stk tr[data-symbol][data-pxfit="1"] .px-main{column-gap:6px}
 table.stk tr[data-symbol][data-pxfit="1"] .px-k{font-size:13px}

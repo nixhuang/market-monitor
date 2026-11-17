@@ -420,7 +420,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         for card in ('macro-card', 'day-pnl-card'):
             self.assertIn(f'.{card}>summary.grp{{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}}', css)
         self.assertIn('.stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}', mobile)
-        self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.20)', css)
+        self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,', css)
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
         # 「信号」列所有胶囊同宽且文字居中
         self.assertIn('#signalCounts td .signal-filter-toggle{width:84px;padding:0 4px}', css)
@@ -625,6 +625,26 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('px-v amp-yellow', px)                    # 振幅与量比染色不受影响
         self.assertIn('px-v vol-yellow', px)
 
+    def test_week_change_gap_and_number_tone_2026_11_17(self):
+        """2026-11-17 用户「周涨跌幅和日涨跌幅拉开点距离，周涨跌幅的比例数字用涨跌色，
+        『周』颜色不变」：距离由 --px-week-gap 单独给 .px-week 的左外距，叠在下排 --px-gap 上，
+        不碰上排现价↔涨跌额的 1ch、不碰振／量；数字只挂全局 up/down（--up/--down，
+        与日涨跌幅 .px-chg 同一套），标签仍是 var(--dim) 的 .px-k；零值不染色。"""
+        css = page_assets.PAGE_CSS
+        self.assertEqual(css.count('--px-week-gap:6px'), 1)
+        self.assertIn('.px-week{margin-left:var(--px-week-gap)}', css)
+        self.assertIn('.px-metric{display:inline-flex;align-items:baseline;gap:2px}', css)
+        self.assertIn('.px-k{font-size:14px;color:var(--dim)}', css)
+        self.assertNotIn('.px-week .px-k{color:', css)
+        base = dict(price=110.0, prev_close=104.0, chg=1.0, group='focus', level='gray',
+                    signals=[], signal_marks=[], day_amp=1.0, vol_ratio=1.0)
+        for week, cls in ((3.2, 'up'), (-2.4, 'down'), (0.0, '')):
+            px = monitor._price_rows_html(dict(base, week_chg=week), {'mode': 'closed'})
+            self.assertIn('<span class="px-metric px-week"><span class="px-k">周</span>'
+                          '<span class="px-v%s">%+.1f%%</span></span>'
+                          % (' ' + cls if cls else '', week), px)
+        self.assertNotIn('px-week', monitor._price_rows_html(base, {'mode': 'closed'}))
+
     def test_price_change_amount_dollar_sign_variants(self):
         """2026-11-17 涨跌额在显示层去掉 $：正负零与缺价四态，day_change_amount 口径不动。"""
         base = dict(group='focus', level='gray', signals=[], signal_marks=[], chg=1.0,
@@ -644,7 +664,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
     def test_week_change_blank_macro_cell_and_fade_symmetry_2026_11_17(self):
         """11-17 定稿：周涨跌幅＝现价相对 5 个交易日前收盘（closes[-6]），只显示不报灯；
         缺值整项留空；变化列不看周变化时空白、看涨跌时挂 data-sign；
-        渐变上边缘距单线 5px、横向铺到行宽一半、代码文字位置不动；涨跌额与现价恒隔 1ch。"""
+        渐变上边缘距单线 5px、横向截止在紫灯区左边界、代码文字位置不动；涨跌额与现价恒隔 1ch。"""
         from monitor_rules import _display_session_values
         css = page_assets.PAGE_CSS
         # 数据层：末根 110 是当日价，closes[-6]=100 是 5 个交易日前 → +10.0%
@@ -657,14 +677,14 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
                     signals=[], signal_marks=[], day_amp=1.0, vol_ratio=1.0)
         px = monitor._price_rows_html(dict(base, week_chg=10.0), {'mode': 'closed'})
         self.assertIn('<span class="px-metric px-week"><span class="px-k">周</span>'
-                      '<span class="px-v">+10.0%</span></span>', px)
+                      '<span class="px-v up">+10.0%</span></span>', px)
         self.assertNotIn('px-week', monitor._price_rows_html(base, {'mode': 'closed'}))
         self.assertNotIn('+$', px)
-        # CSS：1ch 间距、渐变载体挪到整行 tr、5px 上留白／行宽一半、变化列下排灰字
+        # CSS：1ch 间距、渐变载体挪到整行 tr、5px 上留白／右端截止紫灯区、变化列下排灰字
         self.assertIn('.px-amt{margin-left:1ch}', css)
         self.assertNotIn('--sym-fade-crop', css)          # 上下等距口径已退役，不留死变量
         self.assertIn('--sym-fade-top:5px', css)
-        self.assertIn('--sym-fade-w:50%', css)
+        self.assertIn('--sym-fade-w:calc(100% - var(--tgs-w))', css)
         self.assertIn('background-size:var(--sym-fade-w) calc(var(--row-pad-top) + var(--row-height) + var(--row-height) - var(--sym-fade-top))', css)
         self.assertIn('background-position:0 var(--sym-fade-top)', css)
         self.assertIn('td.num.dim{font-size:var(--macro-chg);color:var(--text)}', css)
@@ -939,15 +959,15 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
 
     def test_code_column_blue_fade_only_2026_11_16(self):
         """2026-11-16 起「代码区底色渐变 20% 蓝」，2026-11-17 改为从代码区一路铺进价格区、
-        到行宽一半淡出：载体必须是整行 tr[data-symbol] 的背景（td 背景画不到格子外）。
+        到紫灯区左边界淡出：载体必须是整行 tr[data-symbol] 的背景（td 背景画不到格子外）。
         上边缘距本行 1px 单分隔线 5px（默认 padding-box 定位区，5px 是线底到渐变顶的空隙），
         下边缘贴首排底；td.sym / td.px / td.tgs 一律不许再各自画背景渐变。
         色值走 --sym-fade / --sym-fade-mid 两个 :root 变量，避免撞 10-28 退役的
         分组标题高亮字面量（测试禁止那个串回来）。"""
         css = page_assets.PAGE_CSS
-        self.assertEqual(css.count('--sym-fade:rgba(143,184,240,.20)'), 1)
+        self.assertEqual(css.count('--sym-fade:rgba(143,184,240,.14)'), 1)
         self.assertEqual(css.count('--sym-fade-mid:rgba(143,184,240,.05)'), 1)
-        self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.20)', css)
+        self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,', css)
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
         grad = 'linear-gradient(90deg,var(--sym-fade),var(--sym-fade-mid) 72%,transparent)'
         self.assertEqual(css.count(grad), 1)
@@ -970,6 +990,26 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         # 「代码文字高度位置不变」：td.sym 的文字几何三件套原样保留
         self.assertIn('padding:var(--row-pad-top) 8px 0;', sym_rule)
         self.assertIn('font-size:14px;line-height:var(--row-height)', sym_rule)
+
+    def test_code_fade_more_transparent_and_ends_before_target_zone_2026_11_17(self):
+        """2026-11-17 用户「左边起始处太亮／更透明」＋「底色渐变右侧加到紫灯区前截止」：
+        更透明＝起始不透明度 20% → 14%，RGB(143,184,240) 与色相不动，不换成更深的蓝；
+        右端不再按行宽一半（含中途的 +30px），而是整行宽减第三列 --tgs-w，精确落在
+        td.tgs 左边缘＝紫灯框所在列起点，六档视口与 fitTgs() 动态收窄都跟随。
+        中段 5%／5px 上留白／高度公式／代码文字几何一律不动；background-size
+        规则行仍只用 var(--sym-fade-w)，不开第二个变量。"""
+        css = page_assets.PAGE_CSS
+        self.assertEqual(css.count('--sym-fade:rgba(143,184,240,.14)'), 1)
+        self.assertNotIn('--sym-fade:rgba(143,184,240,.20)', css)
+        self.assertEqual(css.count('--sym-fade-mid:rgba(143,184,240,.05)'), 1)
+        self.assertIn('--sym-fade-w:calc(100% - var(--tgs-w))', css)
+        self.assertNotIn('--sym-fade-w:50%', css)
+        self.assertNotIn('calc(50% + 30px)', css)
+        self.assertNotIn('--sym-fade-ext', css)
+        self.assertIn('--sym-fade-top:5px', css)
+        self.assertIn('background-position:0 var(--sym-fade-top)', css)
+        self.assertIn('background-size:var(--sym-fade-w) calc(', css)
+        self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,', css)
 
     def test_text_only_gray_description_has_no_lamp_block_2026_11_17(self):
         """2026-11-17 定稿：用户先说「仅文字级别的灰字描述前不要有灯块」，随后纠正

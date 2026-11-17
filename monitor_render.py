@@ -925,11 +925,15 @@ class PageRenderer:
                     f'<span class="px-v{extra}">{value}</span></span>')
         # 周涨跌幅（11-17）：最近 5 个交易日，字号规格直接复用 .px-k/.px-v，与量比一致；
         # 放在涨跌幅之后、量比之前；缺值／非有限数整项留空，不写「—」。
+        # 11-17 傍晚用户「周涨跌幅的比例数字用涨跌色，『周』颜色不变」：只在数字那个
+        # .px-v 上挂全局 up/down（与日涨跌幅 .px-chg 同一套 --up/--down），标签仍是
+        # var(--dim) 的 .px-k；判色只看数值正负，0.0%／缺值不染色，不报灯、不进统计。
         week = d.get("week_chg")
-        week_txt = ""
+        week_txt, week_cls = "", ""
         if isinstance(week, (int, float)) and not isinstance(week, bool) and math.isfinite(week):
             week_txt = f"{week:+.1f}%"
-        week_item = metric("week", "周", week_txt) if week_txt else ""
+            week_cls = " up" if week > 0 else " down" if week < 0 else ""
+        week_item = metric("week", "周", week_txt, week_cls) if week_txt else ""
         return (f'<span class="px-main">'
                 f'<span class="px-row px-row-main">'
                 f'<span class="px-price">{self._context.fmt(price) if number(price) else "—"}{html_lib.escape(str(d.get("unit") or ""))}</span>'
