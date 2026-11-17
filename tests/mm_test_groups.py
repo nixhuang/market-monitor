@@ -474,11 +474,14 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('截至', risk)
         self.assertIn('23,918.44', risk)
         self.assertIn('id="nasdaqRef"', risk)
-        # 2026-10-30：纳斯达克补评语（持平/上涨＝绿「一周平稳」），标普500 补一周点差＋百分比
+        # 2026-11-17 用户「风险里的纳指不需要周变化了」：变化列整格空白，
+        # 一周涨跌仍只用来给灯级与「一周平稳／走弱／急跌」评语，取数层一行不动。
         self.assertIn('<tr class="green" id="nasdaqRef"', risk)
         self.assertIn('<td>一周平稳</td>', risk)
-        self.assertIn('周 <span class="chg-num">+0.0%</span>', risk)
-        self.assertIn('<td class="num dim">+0<span class="unit">周 <span class="chg-num">+0.0%</span></span></td>', risk)
+        _nd = risk.split('id="nasdaqRef"')[1].split('</tr>')[0]
+        self.assertIn('<td class="num dim"></td>', _nd)
+        self.assertNotIn('chg-num', _nd)
+        self.assertNotIn('周 bp', _nd)
         self.assertNotIn('Cboe VIX 官方日线', risk)   # 2026-10-15：指标行不再逐条展示数据来源
         self.assertNotIn('.VIX</td>', page)
         self.assertNotIn('.SPX</td>', page)
@@ -3447,7 +3450,7 @@ class TestTargets(unittest.TestCase):
                           + 'px 0 0 var(--' + level + ')', css)
         self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
                       'top:var(--lamp-top);width:2px;height:var(--lamp-h);', css)
-        self.assertIn('--lamp-top:13px;--lamp-h:36px', css)
+        self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
         self.assertNotIn('linear-gradient(var(--lc),var(--lc))', css)
         self.assertIn('table.stk tr[data-symbol]>td{border:0;box-shadow:none', css)
@@ -6721,8 +6724,8 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertEqual(output.count('class="range52-row"'), 1)
         css = monitor.PAGE_CSS
         # 三区网格：价格区吃下原财报栏，紫灯框固定最右；区间条与财报条同占后续整行。
-        self.assertIn('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10px;border:0;box-shadow:none}', css)
-        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}', css)
+        self.assertIn('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10px;border:0;box-shadow:none}', css)
+        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}', css)
         self.assertIn('grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig"', css)
         self.assertIn('td.px .px-main{display:grid;grid-template-columns:max-content minmax(0,1fr);grid-template-rows:var(--px-row-h) var(--px-row-h)', css)
         self.assertIn('grid-template-columns:var(--sym-w) minmax(0,1fr) var(--tgs-w)', css)
@@ -6756,7 +6759,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertNotIn('.stk tr.red+tr.range52-row>td{--lc:', css)
         self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
                       'top:var(--lamp-top);width:2px;height:var(--lamp-h);', css)
-        self.assertIn('--lamp-top:13px;--lamp-h:36px', css)
+        self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
         for level in ('red', 'yellow', 'green'):
             self.assertIn(f'table.stk tr.{level}[data-symbol]{{--lamp-line:var(--{level})}}', css)

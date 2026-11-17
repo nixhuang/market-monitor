@@ -254,11 +254,11 @@ _macro_n = dict(macro, nasdaq={"ok": True, "name": "纳斯达克指数", "value"
                                "source": "Yahoo ^IXIC"})
 _html_n = monitor.render(_macro_n, items, 10, snapshot=snapshot, dup_hidden=2)
 check('<tr class="green" id="nasdaqRef">' in _html_n and '23,918.44' in _html_n
-      and '<td class="num dim">+312<span class="unit">周 <span class="chg-num">+1.3%</span></span></td>' in _html_n
-      and '<td>一周平稳</td>' in _html_n
+      and '<td class="num dim"></td><td>一周平稳</td>' in _html_n
+      and 'chg-num' not in _html_n.split('id="nasdaqRef"')[1].split('</tr>')[0]
       and '纳斯达克指数<span class="unit">2026-10-06</span>' in _html_n
       and '<span class="unit">参考</span>' not in _html_n,
-      "纳斯达克指数参考行：点位两位小数、周变化＝点差＋百分比小字、上涨给「一周平稳」")
+      "纳斯达克指数参考行：点位两位小数、变化列整格空白（11-17 用户）、上涨仍给「一周平稳」")
 # 一周下跌分档：>=2% 黄「一周走弱」、>=4% 红「一周急跌」；上涨不出警
 _nrow = lambda nd: re.search(r'<tr class="(\w+)" id="nasdaqRef".*?</tr>',
                              monitor.render(dict(macro, nasdaq=nd), items, 10,
@@ -279,9 +279,9 @@ check(monitor.macro_status("nasdaq", {"ok": True, "value": 23918.44, "delta_week
 _macro_s = {k: (dict(v) if isinstance(v, dict) else v) for k, v in macro.items()}
 _macro_s["sp500"] = dict(macro["sp500"], value=6800.0, week_ago=6700.0, delta_week=100.0)
 _html_s = monitor.render(_macro_s, items, 10, snapshot=snapshot, dup_hidden=2)
-check('<td class="num dim">+100<span class="unit">周 <span class="chg-num">+1.5%</span></span></td>' in _html_s
-      and '<td class="num dim">—<span class="unit">周</span></td>' in _html_s,
-      "标普500 显示一周点差＋百分比；VIX／参与度等不看周变化的仍留「—」")
+check('<td class="num dim" data-sign="up">+100<span class="unit">周 <span class="chg-num">+1.5%</span></span></td>' in _html_s
+      and '<td class="num dim"></td>' in _html_s,
+      "标普500 显示一周点差＋百分比并挂涨跌色；VIX／参与度等不看周变化的变化列整格留空")
 # 参考行不能影响综合灯与「有效指标 N/5」：它不在 RISK_INDICATORS 里
 _vc = lambda h: re.search(r'有效指标 (\d+)/5', h).group(1)
 check(_vc(html) == _vc(_html_n) and monitor.RISK_INDICATORS == ("hy_oas", "vix", "sp500", "breadth", "nfci"),
@@ -744,7 +744,7 @@ for _level, _width in (('red', 4), ('yellow', 4), ('green', 2)):
     check('table.stk tr.' + _level + '[data-symbol]{--lamp-line:var(--' + _level + ')}' in monitor.PAGE_CSS
           and 'tr.' + _level + '+tr.range52-row>td{--lc' not in monitor.PAGE_CSS
           and 'table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:2px;height:var(--lamp-h);' in monitor.PAGE_CSS
-          and '--lamp-top:13px;--lamp-h:36px' in monitor.PAGE_CSS
+          and '--lamp-top:8px;--lamp-h:36px' in monitor.PAGE_CSS
           and 'top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)' in monitor.PAGE_CSS,
           _level + '主表左灯条与分区线同长且不延伸52周行')
 # 2026-10-30：成本价搬到「代码 + 备注名」下面那一排，跟加／减仓价胶囊共用 .lvs 容器，
@@ -2052,6 +2052,8 @@ const deadline = setTimeout(() => {
               sigShadow: sig.boxShadow, rowColor: bar.backgroundColor, rowWidth: bar.width,
               rowContent: bar.content, rowTop:bar.top, rowHeight:bar.height,
               leftImage: left.backgroundImage, leftShadow: left.boxShadow,
+              // 11-17：渐变载体由 td.sym 挪到整行 tr，首格自身不许再画背景
+              rowImage: style(row).backgroundImage,
               rangeImage: continuation.backgroundImage, rangeSize: continuation.backgroundSize,
               rangePosition: continuation.backgroundPosition});
           }
@@ -2081,12 +2083,10 @@ const deadline = setTimeout(() => {
         };
       })()`);
       const pink = 'rgb(220, 98, 184)', purple = 'rgb(176, 132, 255)', dim = 'rgb(139, 147, 161)';
-      // 2026-11-13：上下框线到数字墨迹都是 5px；14:58 首行内容下移 3px 后
-      // 框顶同步 +3px（桌面 top9/手机 top7）。2026-11-16 第一排三格下内距归零，td.tgs
-      // 由 56→49px，bottom 6→-1px 补偿；同日「线组→紫灯框距离 +3px」再把三格上内距
-      // 7→10px、框顶 9/7→12/10px，td.tgs 由 stretch 49→52px，框底自动跟随 +3px，
+      // 2026-11-16 单线定稿：::after 第二条线删除，线组下沿只剩行顶下 1px；
+      // 第一排上内距 10→3/5px，td.tgs 由 stretch 得 45/47px，框顶两档统一 5px、
       // bottom 仍 -1px，框高桌面 41/手机 43 不变，5/5px 墨迹留白不变，第二行数字不会被裁。
-      const frameTop = width <= 600 ? '10px' : '12px';
+      const frameTop = '5px';
       // 2026-11-11 用户：空间>=90% 只有外框紫红，数字沿用普通紫、不加粗影
       // 2026-11-13 20:51：共识价仍普通紫，「· N月」整块降为 13px 灰（次要标注）。
       assertions.push({ok: actual.highColor === purple && actual.highBorder === pink
@@ -2114,8 +2114,9 @@ const deadline = setTimeout(() => {
       assertions.push({ok: actual.stripes.length === 9 && actual.stripes.every(s =>
         s.sigImage === 'none' && s.sigShadow === 'none'
         && s.rowContent === '""' && s.rowWidth === '2px' && s.rowColor === s.color
-        && Math.abs(parseFloat(s.rowTop)-(width<=600?13:15.5))<0.02
+        && Math.abs(parseFloat(s.rowTop)-(width<=600?8:8.5))<0.02
         && Math.abs(parseFloat(s.rowHeight)-(width<=600?36:31.5))<0.02
+        && s.rowImage.startsWith('linear-gradient(90deg') && s.rowImage.includes('143, 184, 240')
         && s.leftImage === 'none' && s.leftShadow === 'none'
         && s.rangeImage === 'none' && s.rangeSize === 'auto'),
         name: width + 'px终稿目标状态保留2px固定左灯条、首格无重复灯条且52周不续接', actual: actual.stripes});

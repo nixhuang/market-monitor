@@ -390,14 +390,18 @@
         JSON.stringify({dataTime: dt, when: humanTime(s), run_id: s.run_id, at: Date.now()}));
     } catch (_) { /* 隐私模式不能存储时忽略 */ }
   }
-  // 新任务失败/取消时，看板仍显示上一次成功发布的数据——要明确告诉用户这一点和数据时间
+  // 新任务失败/取消时，看板仍显示上一次成功发布的数据。2026-11-17 用户定：这句只留在
+  // 编辑页的运行详情里；首页抬头状态灯不拼它（手机上一行放不下会折行），
+  // 「状态」查询里也不重复写（已有「继续使用上一版」）。
   function keptData() {
     const when = humanTime(verifiedSnapshot || latestStatus);
     return '；看板仍显示上次成功发布的数据' + (when ? '（' + when + '）' : '');
   }
-  function failureText(state) {
-    if (state.cancelled) return state.message + '，不是抓取失败' + keptData();
-    return '运行失败：' + state.message.replace(/^派发失败：/, '') + keptData();
+  // brief=true 供首页状态灯：只留「运行失败：…」，失败原因去「状态」查询看。
+  function failureText(state, brief) {
+    const kept = brief ? '' : keptData();
+    if (state.cancelled) return state.message + '，不是抓取失败' + kept;
+    return '运行失败：' + state.message.replace(/^派发失败：/, '') + kept;
   }
   function plainApplied() {
     const when = humanTime(verifiedSnapshot || latestStatus);
@@ -513,8 +517,10 @@
     return {phase: 'busy', text: '等待更新'};
   }
   function lightState() {
-    // 点了「立即运行」但没令牌/令牌不对：直接把原因写在灯上，否则按钮看着像坏了
-    if (authNotice) return {phase: 'bad', text: authNotice};
+    // 2026-11-17 用户定：状态灯只报「状态」，整段令牌/权限/限流诊断去「状态」查询看，
+    // 手机上一行放不下会折行。点「立即运行」没令牌/令牌不对时只报「运行未启动」，
+    // authNotice 全文由 manualCheck 追加到状态查询结果里，不丢信息。
+    if (authNotice) return {phase: 'bad', text: '运行未启动'};
     const current = pageSnapshot();
     const trackedPublished = manual && !manual.rejected && manualState.phase === 'published' ||
       Object.keys(targets).length && configState.phase === 'published';
@@ -526,7 +532,10 @@
     // 「N 项数据已更新」是废话（2026-10-20），「保存后抓取成功 · 完成于 …」在手机上会撑成两行（2026-10-27）。
     // 只有真有缺失（灰）或不支持报价的特殊代码时才补一句，跟 monitor.py 的静态文案同一口径。
     const success = '成功 ·' + (finished || '未记录') + '（北京）';
-    const suffix = oldPage ? ' · 新结果已发布，本页仍是旧数据' : '';
+    // 2026-11-17 用户定：旧页只补一句「新结果已发布」，不再写「，本页仍是旧数据」，
+    // 也不在灯上另挂刷新链接（状态查询结果里已有一个，这里重复且会把抬头撑到折行）。
+    // 总口径＝灯只报状态，详情去「状态」里看。
+    const suffix = oldPage ? ' · 新结果已发布' : '';
     const info = snap ? (snap.summary || {}) : {};
     const busyText = phase => {
       if (phase === 'dispatching' || phase === 'queued') return '正在提交运行请求…';
@@ -535,15 +544,18 @@
       return '正在抓取…';
     };
     if (manual && manualState.phase === 'failed' && (!manual.rejected || !checkFeedback || publication.phase !== 'published')) {
-      return {phase: manualState.cancelled ? 'busy' : 'bad',
-        text: manual.rejected ? manualState.message : failureText(manualState)};
+      // 灯只报状态：请求被拒绝／令牌权限限流一律报「运行未启动」，整段诊断去「状态」查询看。
+      const brief = manual.rejected ? '运行未启动'
+        : manualState.cancelled ? '运行已取消，不是抓取失败'
+        : failureText(manualState, true);
+      return {phase: manualState.cancelled ? 'busy' : 'bad', text: brief};
     }
     if (activeManual()) return {phase: 'busy', text: busyText(manualState.phase)};
     if (Object.keys(targets).length) {
       if (configState.phase === 'failed') {
         return configState.cancelled
-          ? {phase: 'busy', text: configState.message + '，不是抓取失败' + keptData()}
-          : {phase: 'bad', text: '运行失败：本次运行未成功' + keptData()};
+          ? {phase: 'busy', text: '运行已取消，不是抓取失败'}
+          : {phase: 'bad', text: '运行失败：本次运行未成功'};
       }
       if (activeConfig()) return {phase: 'busy', text: busyText(configState.phase)};
     }
@@ -568,10 +580,10 @@
         const parts = [kind + '运行已完成',
           '市场风险数据缺失：' + missingRisk.join('、') + '（有效指标 ' + valid + '/5）',
           ...deficits, '完成于 ' + (finished || '未记录') + '（北京时间）'];
-        return {phase: 'partial', text: parts.join(' · ') + suffix, reload: !!oldPage};
+        return {phase: 'partial', text: parts.join(' · ') + suffix};
       }
       const extra = deficits.length ? ' · ' + deficits.join(' · ') : '';
-      return {phase: 'ok', text: success + extra + suffix, reload: !!oldPage};
+      return {phase: 'ok', text: success + extra + suffix};
     }
     if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
     return {phase: 'idle', text: '点「立即运行」抓最新行情'};
@@ -634,10 +646,8 @@
     }
     const light = lightState();
     if (el('runLight')) el('runLight').dataset.phase = light.phase;
+    // 抬头灯只报状态：不再另挂「刷新当前看板」，状态查询结果里已有一个，重复会把抬头撑折行。
     put('runLightTxt', light.text, light.phase);
-    if (light.reload && el('runLightTxt')) {
-      refreshLink(el('runLightTxt'), 'display:inline-block;margin-left:8px;color:#6ba3f0');
-    }
     const rule = ruleState();
     if (el('ruleLight')) el('ruleLight').dataset.phase = rule.phase;
     put('ruleLightTxt', rule.text, rule.phase);
@@ -1113,6 +1123,10 @@
         action = action.replace(/[，；]?暂不需要刷新。/, '');
         if (action && !action.endsWith('。')) action += '。';
       }
+      // 2026-11-17 用户定：抬头灯只报状态；令牌／权限／限流的整段诊断属于详情，点「状态」
+      // 在这里看，不会把抬头撑成两行。「看板仍显示上次成功发布的数据」不再重复写进来：
+      // 失败／取消时上面的 action 已有「继续使用上一版」，第二行同义话只是噪声。
+      if (authNotice) reason = authNotice + (reason ? '；' + reason : '');
       if (reason) lines.push('原因：' + reason);
       if (actionsError) lines.push('运行记录：暂无法核对；' + actionsError);
       if (action) lines.push(action);

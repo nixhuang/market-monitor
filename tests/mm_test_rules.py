@@ -449,7 +449,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         # 19:35 恢复左内距 6px（不贴灯条）；20:51 左移灰线 4px 转给紫灯区，note 可见宽仍 90px。
         self.assertIn('--sym-w:100px', css)
         self.assertIn(':root{--status-font-size:14.5px;--sym-w:98px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;'
-                      '--lamp-top:13px;--lamp-h:36px;--tgt-frame-top:10px;--tgs-font:16px;'
+                      '--lamp-top:8px;--lamp-h:36px;--row-pad-top:5px;--tgs-font:16px;'
                       '--tgs-pad-l:0px;--tgs-pad-r:0px}', css)
         self.assertIn('table.stk tr[data-symbol]>td.sym{font-size:17px;padding-left:6px;padding-right:2px}', css)
         self.assertIn('--tgs-w:104px', css)
@@ -470,10 +470,10 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         for level in ('red', 'yellow', 'green'):
             self.assertIn(f'table.stk tr.{level}[data-symbol]{{--lamp-line:var(--{level})}}', css)
         # 2026-11-13：灯条与价格区两侧（共三条）灰色分隔线共用同一组上下几何，长度一致。
-        self.assertIn('--lamp-top:15.5px', css)
+        self.assertIn('--lamp-top:8.5px', css)
         self.assertIn('--lamp-h:31.5px', css)
         self.assertIn('top:var(--lamp-top);width:2px;height:var(--lamp-h);background:var(--lamp-line)', css)
-        self.assertIn('--lamp-top:13px;--lamp-h:36px', css)
+        self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertNotIn('table.stk tr[data-symbol]::before{top:7px;height:36px}', css)
         self.assertEqual(css.count('top:var(--lamp-top);height:var(--lamp-h);width:1px;'
                                    'background:var(--section-line)'), 3)
@@ -544,12 +544,12 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         prefix = 'table.stk tr[data-symbol]>'
         # 价格区两行与左侧代码两行同高、同顶内距，现价与代码第一行中心对齐。
         self.assertIn('--px-row-h:21px', css)
-        self.assertIn(prefix + 'td.px{grid-area:px;position:relative;display:block;min-width:0;padding:10px 6px 0;', css)
+        self.assertIn(prefix + 'td.px{grid-area:px;position:relative;display:block;min-width:0;padding:var(--row-pad-top) 6px 0;', css)
         self.assertIn(prefix + 'td.px .px-main{display:grid;grid-template-columns:max-content minmax(0,1fr);grid-template-rows:var(--px-row-h) var(--px-row-h);column-gap:var(--px-col-gap)', css)
         # 左块上排 现价+涨跌额／下排 涨跌幅；振／量恢复上下两排、靠右贴住紫灯框左侧。
         self.assertIn(prefix + 'td.px .px-row{display:flex;align-items:center;gap:var(--px-gap)', css)
         self.assertIn('.px-price,.px-chg,.px-amt,.px-v,.px-k{line-height:var(--px-row-h)}', css)
-        self.assertIn(prefix + 'td.px .px-row-main{grid-area:1/1/2/2}', css)
+        self.assertIn(prefix + 'td.px .px-row-main{grid-area:1/1/2/2;gap:0}', css)
         self.assertIn(prefix + 'td.px .px-row-sub{grid-area:2/1/3/2}', css)
         self.assertIn(prefix + 'td.px .px-side{grid-area:1/2/3/3;display:grid;'
                       'grid-template-rows:var(--px-row-h) var(--px-row-h);'
@@ -590,12 +590,13 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         振／量上下两排靠右贴紫灯框左侧（上振下量）。"""
         d = dict(price=123.45, prev_close=120.0, chg=2.88, group='focus', level='gray',
                  signals=[], signal_marks=[('vol_ratio', 'yellow')],
-                 day_open=120.5, day_high=124.0, day_low=119.8, day_amp=7.2, vol_ratio=2.1)
+                 day_open=120.5, day_high=124.0, day_low=119.8, day_amp=7.2, vol_ratio=2.1,
+                 week_chg=3.2)
         px = monitor._price_rows_html(d, {'mode': 'closed'})
         left, sep, side = px.partition('<span class="px-side">')
         self.assertTrue(sep)
         self.assertEqual(px.count('class="px-row '), 2)          # 左块仍是两排
-        self.assertEqual(px.count('class="px-metric'), 2)        # 侧列只剩振、量两个标签项
+        self.assertEqual(px.count('class="px-metric'), 3)        # 振、量 + 周涨跌幅
         for cls in ('px-price', 'px-chg ', 'px-amt '):
             self.assertIn('class="' + cls, left)                 # 三项都在左块
         # 2026-11-13 午：涨跌额与涨跌幅交换位置，上排跟现价同行、下排单独一行。
@@ -603,10 +604,13 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         sub = re.search(r'<span class="px-row px-row-sub">(.*?)</span></span>', px, re.S).group(1)
         self.assertIn('class="px-price', main)
         self.assertIn('class="px-amt', main)
-        self.assertIn('+$3.45', main)                            # 涨跌额带美元标志
+        self.assertIn('+3.45', main)                             # 11-17：涨跌额不再带 $
+        self.assertNotIn('$', main)
         self.assertNotIn('class="px-chg', main)
         self.assertIn('class="px-chg', sub)
         self.assertIn('+2.88%', sub)
+        self.assertIn('class="px-metric px-week"', sub)         # 周涨跌幅在涨跌幅与量比之间
+        self.assertIn('+3.2%', sub)
         self.assertNotIn('class="px-amt', sub)
         for cls in ('px-amp', 'px-vol'):
             self.assertIn(cls, side)                             # 侧列两项
@@ -622,12 +626,12 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('px-v vol-yellow', px)
 
     def test_price_change_amount_dollar_sign_variants(self):
-        """涨跌额只在显示层带 $：正负零与缺价四态，day_change_amount 本身口径不动。"""
+        """2026-11-17 涨跌额在显示层去掉 $：正负零与缺价四态，day_change_amount 口径不动。"""
         base = dict(group='focus', level='gray', signals=[], signal_marks=[], chg=1.0,
                     day_amp=1.0, vol_ratio=1.0)
-        cases = ((123.45, 120.0, '+$3.45', 'up'),
-                 (117.6, 120.0, '-$2.40', 'down'),
-                 (120.0, 120.0, '$0.00', ''),
+        cases = ((123.45, 120.0, '+3.45', 'up'),
+                 (117.6, 120.0, '-2.40', 'down'),
+                 (120.0, 120.0, '0.00', ''),
                  (None, 120.0, '—', ''))
         for price, prev, text, cls in cases:
             with self.subTest(price=price, text=text):
@@ -636,6 +640,44 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         # 统计名单与其它口径仍不带货币符号。
         from monitor_rules import day_change_amount
         self.assertEqual(day_change_amount(123.45, 120.0), '+3.45')
+
+    def test_week_change_blank_macro_cell_and_fade_symmetry_2026_11_17(self):
+        """11-17 定稿：周涨跌幅＝现价相对 5 个交易日前收盘（closes[-6]），只显示不报灯；
+        缺值整项留空；变化列不看周变化时空白、看涨跌时挂 data-sign；
+        渐变上边缘距单线 5px、横向铺到行宽一半、代码文字位置不动；涨跌额与现价恒隔 1ch。"""
+        from monitor_rules import _display_session_values
+        css = page_assets.PAGE_CSS
+        # 数据层：末根 110 是当日价，closes[-6]=100 是 5 个交易日前 → +10.0%
+        data = {'closes': [100, 101, 102, 103, 104, 110], 'ma_range_valid': [False] * 6}
+        got = _display_session_values(data, 110.0, 104.0)
+        self.assertAlmostEqual(got['week_chg'], 10.0)
+        self.assertIsNone(_display_session_values({'closes': [100, 110]}, 110.0, 100.0)['week_chg'])
+        # 渲染层：有值出「周 +10.0%」，缺值连标签都不生成（不写「—」）
+        base = dict(price=110.0, prev_close=104.0, chg=5.77, group='focus', level='gray',
+                    signals=[], signal_marks=[], day_amp=1.0, vol_ratio=1.0)
+        px = monitor._price_rows_html(dict(base, week_chg=10.0), {'mode': 'closed'})
+        self.assertIn('<span class="px-metric px-week"><span class="px-k">周</span>'
+                      '<span class="px-v">+10.0%</span></span>', px)
+        self.assertNotIn('px-week', monitor._price_rows_html(base, {'mode': 'closed'}))
+        self.assertNotIn('+$', px)
+        # CSS：1ch 间距、渐变载体挪到整行 tr、5px 上留白／行宽一半、变化列下排灰字
+        self.assertIn('.px-amt{margin-left:1ch}', css)
+        self.assertNotIn('--sym-fade-crop', css)          # 上下等距口径已退役，不留死变量
+        self.assertIn('--sym-fade-top:5px', css)
+        self.assertIn('--sym-fade-w:50%', css)
+        self.assertIn('background-size:var(--sym-fade-w) calc(var(--row-pad-top) + var(--row-height) + var(--row-height) - var(--sym-fade-top))', css)
+        self.assertIn('background-position:0 var(--sym-fade-top)', css)
+        self.assertIn('td.num.dim{font-size:var(--macro-chg);color:var(--text)}', css)
+        self.assertIn('td.num.dim[data-sign="up"]{color:var(--up)}', css)
+        self.assertIn('td.num.dim[data-sign="down"]{color:var(--down)}', css)
+        # 11-17 用户「变化列下排『周』『周 bp』保持灰色」：不跟上排涨跌色跳
+        self.assertIn('td.num.dim .unit{font-size:var(--macro-aux);color:var(--dim)}', css)
+        self.assertIn('td.num.dim .chg-num{font-size:var(--macro-chg);color:var(--dim)}', css)
+        # 渲染层不再产出「—」变化列，纳指参考行也整格空白（精确 HTML 由 mm_test_render.py 守门）
+        src = (ROOT / 'monitor_render.py').read_text(encoding='utf-8')
+        self.assertIn('def chg_cell(txt, unit="", sign=""):', src)     # 无值整格留空只在这一处
+        self.assertIn('\'<td class="num dim"></td>\' if not txt else', src)
+        self.assertIn('{chg_cell("")}', src)                          # 纳指参考行恒空白
 
     def test_earnings_fallback_has_no_dead_disclaimer_text(self):
         """22:35：没取到日期的财报整条隐藏，源码不许再留失败解释长句或占位提示。"""
@@ -763,8 +805,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('.px-price{font-size:17.5px}', css)
         self.assertIn('.px-chg,.px-amt,.px-v{font-size:16.5px}', css)
         self.assertIn('.px-k{font-size:14px', css)
-        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}', mobile)
-        self.assertIn('table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:10px 8px 0;', css)
+        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}', mobile)
+        self.assertIn('table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0;', css)
         self.assertNotIn('data-layout="tight"', css)
         self.assertNotRegex(css, r'add-ck|ack-btn|手机（iOS Chrome）最终覆盖')
 
@@ -792,93 +834,176 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
             self.assertIn('font:inherit', body)
             self.assertNotIn('font-size:', body)
 
-    def test_purple_frame_top_even_ink_gaps_and_double_stock_divider(self):
-        """2026-11-13：紫灯框上下框线到数字墨迹都是 5px（14:58 桌面 top9／手机 top7；
-        2026-11-16 线组→框再 +3px 后 top12／10，bottom 仍 -1px，框随首行内容下移）；
-        个股双线＝1px border-top + ::after 1px 线。
-        2026-11-16 用户要求两线间距 +1px → ::after top:1px 改 2px（空隙 1→2px，线组 3→4px），
-        绝对定位仍不占文档流。线组距「上面内容」+3px 靠非首行的 margin-top（不能加在 td.sig
-        padding-bottom，紧贴线的上一行是 52 周条，加了只会整体下推），距「下面内容」先靠首行
-        三个 td 的 padding-top 4→7px；11-16 用户要「分隔线和紫灯框之间距离增加 3px」，
-        三格再 7→10px、灯条/竖线 --lamp-top 与框 --tgt-frame-top 同步 +3px。td.sig 下内距保持原 7px。"""
+    def test_purple_frame_top_even_ink_gaps_and_single_stock_divider(self):
+        """2026-11-16 单线定稿：紫灯框上下框线到数字墨迹仍是 5px，框顶两档统一
+        --tgt-frame-top:5px、--tgt-frame-bottom:-1px；个股分隔线只剩 1px border-top，
+        ::after 第二条线整条删除（不留 display:none 死代码）。
+        上方 5px＝range52 的 padding-bottom 2px + 非首行 margin-top 3px；
+        下方 5px＝单线下沿（行顶下 1px）到框顶（1px + 5px）。"""
         css = page_assets.PAGE_CSS
-        self.assertIn('--tgt-frame-top:12px', css)
+        self.assertEqual(css.count('--tgt-frame-top:5px'), 1)
         self.assertIn('--tgt-frame-bottom:-1px', css)
-        self.assertIn('--tgt-frame-top:10px;--tgs-font:16px;', css)
+        self.assertNotIn('--tgt-frame-top:12px', css)
+        self.assertNotIn('--tgt-frame-top:10px', css)
         self.assertEqual(css.count('top:var(--tgt-frame-top);right:0;bottom:var(--tgt-frame-bottom);left:-1px'), 3)
         self.assertNotIn('top:2px;right:0;bottom:2px', css)
-        self.assertIn('border-top:1px solid var(--stock-pair-line)', css)
-        self.assertIn('table.stk tr[data-symbol]:not(:first-child)::after{content:"";position:absolute;'
-                      'left:0;right:0;top:2px;height:1px;background:var(--stock-pair-line)', css)
+        self.assertEqual(css.count('border-top:1px solid var(--stock-pair-line)'), 1)
+        self.assertEqual(css.count('var(--stock-pair-line)'), 1)
+        self.assertNotIn('table.stk tr[data-symbol]:not(:first-child)::after', css)
+        self.assertNotIn('background:var(--stock-pair-line)', css)
         self.assertNotIn('top:1px;height:1px;background:var(--stock-pair-line)', css)
         self.assertIn('table.stk tr[data-symbol]:not(:first-child){margin-top:3px}', css)
+        self.assertIn('position:relative;padding:0 10px 2px 10px;', css)
+        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}', css)
+        self.assertIn('--row-pad-top:3px', css)
+        self.assertIn('--row-pad-top:5px', css)
         self.assertIn('td.sig{grid-area:sig;display:block;padding:var(--sig-row-gap) 10px 7px;', css)
 
     def test_first_row_to_next_row_equals_description_indicator_gap_2026_11_16(self):
         """2026-11-16：用户要求「代码/价格/紫灯两排」的下沿到持仓信息条或描述区首行文字的距离，
         等于描述区不同指标描述文字之间的间距。做法是 --sig-row-gap 提到 tr 级（一处同时管
         .sig-col 的 gap 与下一排的上留白），第一排三格下内距归零，间距全部由下一排承担。
-        同日稍后线组→紫灯框再 +3px，三格上内距 7→10px，但下一排上留白仍引用变量 4px，
-        所以「第一排下沿→下一排内容」不受影响，仍是 4px。"""
+        单线定稿后三格上内距改由 --row-pad-top 管（桌面 3 / 手机 5），下一排上留白仍引用
+        变量 4px，所以「第一排下沿→下一排内容」不受影响，仍是 4px。"""
         css = page_assets.PAGE_CSS
-        self.assertIn('border-top:1px solid var(--stock-pair-line);--lamp-line:var(--line);--sig-row-gap:4px}', css)
-        self.assertIn('td.sym{grid-area:sym;position:static;display:block;padding:10px 8px 0;', css)
-        self.assertIn('td.px{grid-area:px;position:relative;display:block;min-width:0;padding:10px 6px 0;', css)
-        self.assertIn('padding:10px var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);', css)
+        self.assertIn('border-top:1px solid var(--stock-pair-line);--lamp-line:var(--line);--sig-row-gap:4px;background-image:', css)
+        for rule in ('td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0;',
+                     'td.px{grid-area:px;position:relative;display:block;min-width:0;padding:var(--row-pad-top) 6px 0;',
+                     'padding:var(--row-pad-top) var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);'):
+            self.assertIn(rule, css)
         self.assertIn('padding:2px 8px;margin:var(--sig-row-gap) 0 0;', css)
         self.assertIn('td.sig{grid-area:sig;display:block;padding:var(--sig-row-gap) 10px 7px;', css)
         self.assertIn('td.sig{padding:var(--sig-row-gap) 5px 7px;', css)
         self.assertIn('.sig-col{display:flex;flex-direction:column;gap:var(--sig-row-gap);min-width:0}', css)
-        # 旧的分叉值不能回来：两档上内距写死 5px、成本条上边距写死 2px、三格留 7/4px 下内距。
         for old in ('td.sig{grid-area:sig;display:block;padding:5px 10px 7px;',
                     'td.sig{padding:5px 5px 7px;',
                     'gap:6px;padding:2px 8px;margin:2px 0 0;',
-                    'padding:7px 8px;font-size:14px', 'padding:7px 6px;text-align:left'):
+                    'padding:7px 8px;font-size:14px', 'padding:7px 6px;text-align:left',
+                    'padding:10px 8px 0;', 'padding:10px 6px 0;'):
             self.assertNotIn(old, css)
-        # 第一行高度＝上内距 10 + 两排各 --row-height + 下内距 0＝52px。
-        # 紫灯框用 top / bottom 定位，td.tgs 被 stretch 撑到 52，bottom 仍是 -1px：
-        # 框底随 td 自动下移 3px，框高保持桌面 41px／手机 43px，不裁第二行数字。
+        # 第一排高度＝上内距 + 两排各 --row-height + 下内距 0：桌面 3+42＝45、手机 5+42＝47。
+        # 框顶 5px / bottom -1px，两档框高仍是 41/43px，不裁第二行数字。
         row_h = float(re.search(r'--row-height:(\d+(?:\.\d+)?)px', css).group(1))
-        first_row = 10 + 2 * row_h
-        tops = sorted([float(x) for x in re.findall(r'--tgt-frame-top:(\d+(?:\.\d+)?)px', css)], reverse=True)
+        pads = sorted(float(x) for x in re.findall(r'--row-pad-top:(\d+(?:\.\d+)?)px', css))
+        tops = [float(x) for x in re.findall(r'--tgt-frame-top:(\d+(?:\.\d+)?)px', css)]
         bottom = float(re.search(r'--tgt-frame-bottom:(-?\d+(?:\.\d+)?)px', css).group(1))
-        self.assertEqual(tops, [12, 10])
+        self.assertEqual(pads, [3, 5])
+        self.assertEqual(tops, [5])
         self.assertEqual(bottom, -1)
-        self.assertEqual(first_row, 52)
-        self.assertEqual([first_row - t - bottom for t in tops], [41, 43])
+        self.assertEqual([p + 2 * row_h - tops[0] - bottom for p in pads], [41, 43])
         self.assertNotIn('--tgt-frame-bottom:6px', css)
 
-    def test_divider_to_purple_frame_gap_plus3_2026_11_16(self):
-        """2026-11-16 用户「让个股分隔线和紫灯框之间的距离增加 3px」：
-        线组下沿在行顶下 4px（1px border-top + ::after top2 + 1px 线），框顶在行顶下
-        1px + --tgt-frame-top，故距离＝--tgt-frame-top − 3：桌面 12−3＝9px、手机 10−3＝7px
-        （原 9−3＝6px／7−3＝4px），两档各 +3px。做法是把整个第一排下移 3px 而不是只挪框：
-        三格 padding-top、--lamp-top、--tgt-frame-top 三处一起 +3px，框高与框内 5/5px
-        墨迹留白不变；--tgt-frame-bottom 保持 -1px（td.tgs 由 stretch 自动长高 3px，
-        框底随之 +3px，再改 bottom 会把框拉高）。下方到成本条/描述区的 4px 间距不变。"""
+    def test_single_divider_equal_5px_gaps_2026_11_16(self):
+        """2026-11-16 用户「单分隔线 1px。单分隔线上面离 52 周价格条数字下边缘和离
+        紫灯框上边缘的距离相等为 5px」：
+        单线＝1px border-top（::after 第二条线删除），线组下沿在行顶下 1px；
+        框顶＝1px + --tgt-frame-top:5px，故「线→框」＝5px（两档统一）。
+        上方＝上一行 range52 的 padding-bottom 2px + 本行 margin-top 3px＝5px，
+        无财报条时上一行内容盒底就是 52 周价格数字墨迹下沿；带财报条的行
+        （AAPL 等）财报条接在轨道下方，仍是「最后一行内容下沿→线」5px，
+        52 周数字到线会自然更大，这是既有版式，不改。
+        做法是整个第一排上移：三格上内距 10→3/5px、灯条/竖线 --lamp-top
+        15.5/13→8.5/8px、框顶 12/10→5px；--tgt-frame-bottom 仍 -1px，
+        框高 41/43px 与框内 5/5px 墨迹留白不变，下方到成本条/描述区 4px 不变。"""
         css = page_assets.PAGE_CSS
-        tops = sorted([float(x) for x in re.findall(r'--tgt-frame-top:(\d+(?:\.\d+)?)px', css)], reverse=True)
-        self.assertEqual(tops, [12, 10])
-        self.assertEqual([t - 3 for t in tops], [9, 7])
-        # 线组本身不许动，距离只能靠框（及整排内容）下移实现。
-        self.assertIn('left:0;right:0;top:2px;height:1px;background:var(--stock-pair-line)', css)
-        self.assertIn('border-top:1px solid var(--stock-pair-line)', css)
+        self.assertEqual([float(x) for x in re.findall(r'--tgt-frame-top:(\d+(?:\.\d+)?)px', css)], [5])
+        self.assertEqual(css.count('border-top:1px solid var(--stock-pair-line)'), 1)
+        self.assertNotIn('table.stk tr[data-symbol]:not(:first-child)::after', css)
         self.assertIn('table.stk tr[data-symbol]:not(:first-child){margin-top:3px}', css)
-        # 整排一起下移：三格上内距 10px、灯条/竖线两档 15.5/13px。
-        for rule in ('td.sym{grid-area:sym;position:static;display:block;padding:10px 8px 0;',
-                     'td.px{grid-area:px;position:relative;display:block;min-width:0;padding:10px 6px 0;',
-                     'padding:10px var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);'):
+        self.assertIn('position:relative;padding:0 10px 2px 10px;', css)
+        self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}', css)
+        # 上方 2+3＝5；下方 (1+5)−1＝5。
+        pb = float(re.search(r'position:relative;padding:0 10px (\d+(?:\.\d+)?)px 10px;', css).group(1))
+        mt = float(re.search(r'not\(:first-child\)\{margin-top:(\d+(?:\.\d+)?)px\}', css).group(1))
+        border = float(re.search(r'border-top:(\d+(?:\.\d+)?)px solid var\(--stock-pair-line\)', css).group(1))
+        top = float(re.search(r'--tgt-frame-top:(\d+(?:\.\d+)?)px', css).group(1))
+        self.assertEqual(pb + mt, 5)
+        self.assertEqual(border, 1)
+        self.assertEqual(top, 5)
+        for rule in ('td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0;',
+                     'td.px{grid-area:px;position:relative;display:block;min-width:0;padding:var(--row-pad-top) 6px 0;',
+                     'padding:var(--row-pad-top) var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);'):
             self.assertIn(rule, css)
-        self.assertIn('--lamp-top:15.5px', css)
-        self.assertIn('--lamp-top:13px;--lamp-h:36px', css)
+        self.assertIn('--lamp-top:8.5px', css)
+        self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertIn('--lamp-h:31.5px', css)
-        # 旧值不许回来；bottom 不许跟着改成 -4px（那会把框拉高 3px）。
-        for old in ('padding:7px 8px 0;', 'padding:7px 6px 0;',
-                    'padding:7px var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);',
-                    '--lamp-top:12.5px', '--lamp-top:10px;--lamp-h:36px',
-                    '--tgt-frame-top:9px', '--tgt-frame-top:7px;', '--tgt-frame-bottom:-4px'):
+        for old in ('--lamp-top:15.5px', '--lamp-top:13px', '--lamp-top:12.5px',
+                    '--lamp-top:10px;--lamp-h:36px',
+                    '--tgt-frame-top:12px', '--tgt-frame-top:10px', '--tgt-frame-top:9px',
+                    '--tgt-frame-top:7px;', '--tgt-frame-bottom:-4px',
+                    'padding:10px 8px 0;', 'padding:10px 6px 0;',
+                    'padding:7px 8px 0;', 'padding:7px 6px 0;',
+                    'top:2px;height:1px;background:var(--stock-pair-line)'):
             self.assertNotIn(old, css)
-        self.assertIn('--sig-row-gap:4px}', css)
+        self.assertIn('--sig-row-gap:4px;background-image:', css)
+
+    def test_code_column_blue_fade_only_2026_11_16(self):
+        """2026-11-16 起「代码区底色渐变 20% 蓝」，2026-11-17 改为从代码区一路铺进价格区、
+        到行宽一半淡出：载体必须是整行 tr[data-symbol] 的背景（td 背景画不到格子外）。
+        上边缘距本行 1px 单分隔线 5px（默认 padding-box 定位区，5px 是线底到渐变顶的空隙），
+        下边缘贴首排底；td.sym / td.px / td.tgs 一律不许再各自画背景渐变。
+        色值走 --sym-fade / --sym-fade-mid 两个 :root 变量，避免撞 10-28 退役的
+        分组标题高亮字面量（测试禁止那个串回来）。"""
+        css = page_assets.PAGE_CSS
+        self.assertEqual(css.count('--sym-fade:rgba(143,184,240,.20)'), 1)
+        self.assertEqual(css.count('--sym-fade-mid:rgba(143,184,240,.05)'), 1)
+        self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,.20)', css)
+        self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
+        grad = 'linear-gradient(90deg,var(--sym-fade),var(--sym-fade-mid) 72%,transparent)'
+        self.assertEqual(css.count(grad), 1)
+        i = css.index(grad)
+        brace = css.rfind('{', 0, i)
+        sel = css[css.rfind('}', 0, brace) + 1:brace]
+        body = css[brace:css.find('}', i)]
+        self.assertTrue(sel.strip().endswith('table.stk tr[data-symbol]'))
+        self.assertIn('background-image:' + grad, body)
+        self.assertIn('background-repeat:no-repeat', body)
+        self.assertIn('background-size:var(--sym-fade-w) ', body)
+        self.assertIn('background-position:0 var(--sym-fade-top)', body)
+        self.assertNotIn('background:' + grad, body)
+        # td.sym 只管文字几何，不许再画背景（否则铺到价格区的渐变会被切成两段）
+        sym_rule = re.search(r'table\.stk tr\[data-symbol\]>td\.sym\{[^}]*\}', css).group(0)
+        self.assertNotIn('background', sym_rule)
+        self.assertNotIn('--sym-fade-crop', css)
+        self.assertNotIn('td.px', sel)
+        self.assertNotIn('td.tgs', sel)
+        # 「代码文字高度位置不变」：td.sym 的文字几何三件套原样保留
+        self.assertIn('padding:var(--row-pad-top) 8px 0;', sym_rule)
+        self.assertIn('font-size:14px;line-height:var(--row-height)', sym_rule)
+
+    def test_text_only_gray_description_has_no_lamp_block_2026_11_17(self):
+        """2026-11-17 定稿：用户先说「仅文字级别的灰字描述前不要有灯块」，随后纠正
+        「仅文字灰字描述要保持缩进，只是不显示前面的方灯块」。规则表口径「仅文字＝
+        折叠且不计白」，渲染层落为没有 data-signal-level 的灰字 .signal-item（默认 var(--dim)），
+        含布林+RSI 组合里的 .sig-zone 与未点亮的加/减仓价 lvtag。这些项保留 8px 左内距、
+        text-indent 归零（文字起点与有灯级描述同为 8px），但连 ::before 的 content 都不生成；
+        红/黄/白灯/绿灯描述和 [data-near="1"] 到价点亮态的 3×10px 竖条一条不动。
+        旧的「先画再透明」「灰字撤缩进」两条死规则都不许回来。"""
+        css = page_assets.PAGE_CSS
+        base = ('.stk td.sig .signal-item{display:block;min-width:0;overflow-wrap:anywhere;'
+                'padding-left:8px;text-indent:0}')
+        self.assertIn(base, css)
+        lamp_sel = '.stk td.sig :is(.signal-item[data-signal-level],.signal-item[data-near="1"])'
+        self.assertIn(lamp_sel + '{text-indent:-8px}', css)
+        lamp = (lamp_sel + '::before{content:"";display:inline-block;width:3px;height:10px;'
+                'margin-right:5px;border-radius:1px;background:currentColor;vertical-align:middle}')
+        self.assertIn(lamp, css)
+        # 组合里竖条只画在有灯级描述的 .sig-zone 上，外层仍有 display:none 兜底；
+        # 仅文字组合把缩进落在 .sig-zone 自身，文字起点同样是 8px。
+        zone_sel = '.stk td.sig .signal-item[data-signal-level] .sig-zone'
+        self.assertIn(zone_sel + '{text-indent:-8px}', css)
+        self.assertIn(zone_sel + '::before{content:"";', css)
+        self.assertIn('.stk td.sig .sig-zone{display:block;min-width:0;overflow-wrap:anywhere;padding-left:8px;text-indent:0}', css)
+        self.assertIn('.stk td.sig .signal-item:has(.sig-zone)::before{display:none}', css)
+        # 退役串：无条件画竖条、灰字撤缩进／负缩进、未点亮 lvtag 的透明占位
+        for retired in ('.stk td.sig .signal-item::before{',
+                        '.stk td.sig .sig-zone::before{',
+                        '.stk td.sig .lvtag:not([data-near="1"])::before{background:transparent}',
+                        '.stk td.sig .signal-item{display:block;min-width:0;overflow-wrap:anywhere}',
+                        '.stk td.sig .sig-zone{display:block;min-width:0;overflow-wrap:anywhere}',
+                        '.stk td.sig .signal-item{display:block;min-width:0;overflow-wrap:anywhere;padding-left:8px;text-indent:-8px}',
+                        '.stk td.sig .sig-zone{display:block;min-width:0;overflow-wrap:anywhere;padding-left:8px;text-indent:-8px}'):
+            self.assertNotIn(retired, css)
 
     def test_stock_pair_line_hsl_lightness_plus5_2026_11_16(self):
         """2026-11-16 用户「分隔线的 HSL 亮度增加 5%」：以 42% 档 #606876 为基准，
@@ -908,8 +1033,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('--range-track:#9fa3aa', css)
 
     def test_stock_pair_line_and_range_track_swap_colors_2026_11_16(self):
-        """2026-11-16：先把个股双线与 52 周横条互换（横条取原双线色 #495568），
-        随后双线经 #8b93a1 定为 HSL 明度 42% 的 #606876，同日再 +5 个百分点到 47% → #6c7484
+        """2026-11-16：先把个股分隔线与 52 周横条互换（横条取原线色 #495568），
+        随后线色经 #8b93a1 定为 HSL 明度 42% 的 #606876，同日再 +5 个百分点到 47% → #6c7484
         （保持原色相/饱和度只提明度）；两边价格数字、价位三角、统计名单灰灯与设置页行线
         一律保持原值，不连坐换色。"""
         css = page_assets.PAGE_CSS
@@ -926,7 +1051,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('--range-track:#9fa3aa', css)
         self.assertIn('background:var(--range-track-line);border-radius:99px}', css)
         self.assertIn('border-top:1px solid var(--stock-pair-line)', css)
-        self.assertIn('background:var(--stock-pair-line)', css)
+        self.assertNotIn('background:var(--stock-pair-line)', css)
+        self.assertEqual(css.count('var(--stock-pair-line)'), 1)
         self.assertIn('.range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim)', css)
         self.assertIn('.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim)', css)
         self.assertIn('border-top:9px solid var(--range-marker-border);', css)
@@ -958,7 +1084,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn("table.style.setProperty('--tgs-pad-l', '0px');", js)
         self.assertIn("table.style.setProperty('--tgs-pad-r', '0px');", js)
         self.assertIn("table.dataset.tgsCut = '1';", js)
-        self.assertIn('padding:10px var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px)', css)
+        self.assertIn('padding:var(--row-pad-top) var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px)', css)
         self.assertIn("const mode = row.closest('table.stk').dataset.tgsfit;", js)
         self.assertIn("table.dataset.tgsfit = 'ultra';", js)
         # 每帧先回基准列宽再量 fitPx，最后整体压缩：顺序写死，避免逐帧来回摆。
@@ -2047,8 +2173,8 @@ assert.equal(scrolledBy,-650);     // 短持仓收起后下方内容同样原地
                        '.runbar button', '.signal-filter-condition[data-signal-level=', '.signal-name-lamp{', '.grp-arrow',
                        '.arrow-rsi-up,.arrow-rsi-down', '.rule-table th.cat-col'):
             self.assertIn(active, css)
-        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 6px 10px;border:0;box-shadow:none}'), 1)
-        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{padding:0 6px 6px 6px}'), 1)
+        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10px;border:0;box-shadow:none}'), 1)
+        self.assertEqual(css.count('table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}'), 1)
         for phase in ('busy', 'partial', 'ok', 'bad'):
             self.assertIn(f'.runlight[data-phase="{phase}"]', css)
 

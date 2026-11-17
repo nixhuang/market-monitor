@@ -304,7 +304,11 @@ async function check(name, fn) {
     fresh.source_sha=D;f.data.status=fresh;f.data.published=fresh;
     const result=await f.win.MMRunStatus.refresh();assert.equal(result.config.phase,'published');
     assert.equal(f.els.ruleLightTxt.textContent,'需要刷新');assert.equal(f.data.reloads.length,0);
-    const link=f.els.runLightTxt.children.at(-1);assert.equal(link.textContent,'刷新当前看板');
+    // 2026-11-17：抬头灯只报状态，刷新入口只在「状态」查询结果里，不再重复挂一个。
+    assert(!f.els.runLightTxt.children.some(c=>c.textContent==='刷新当前看板'),'抬头灯不该重复挂刷新链接');
+    await f.els.btnCheckStatus.onclick();
+    assert.match(f.els.checkResult.textContent,/已有新版，请刷新当前看板/);
+    const link=f.els.checkResult.children.at(-1);assert.equal(link.textContent,'刷新当前看板');
     f.win.location.href='https://example.test/market-monitor/index.html?focus=pos&edit=1&keep=1&token=synthetic#s-test';
     link.onclick({preventDefault(){}});assert.equal(f.data.reloads.length,1);
     const refreshed=new URL(f.data.reloads[0]);
@@ -410,21 +414,24 @@ async function check(name, fn) {
     const f=fixture();f.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});
     const rejected=await f.win.MMRunStatus.startManual();
     assert.equal(rejected.manual.phase,'failed');
-    assert.match(f.els.runLightTxt.textContent,/未启动.*此令牌无权/);
-    assert.doesNotMatch(f.els.runLightTxt.textContent,/运行失败/);
+    assert.match(f.els.runLightTxt.textContent,/^运行未启动$/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/运行失败|此令牌无权/);
     await f.els.btnCheckStatus.onclick();
     assert.equal(f.data.posts,1);
     assert.equal(f.els.runLight.dataset.phase,'ok');
     assert.match(f.els.checkResult.textContent,/当前发布：run 1/);
     assert.match(f.els.checkResult.textContent,/最新任务：未启动（手动）/);
+    assert.match(f.els.checkResult.textContent,/此令牌无权/);
     assert.equal(f.els.checkResult.hidden,false);
   });
   await check('限流响应尊重冷却时间，查状态仍读公开页面且不反复请求API', async () => {
     const f=fixture();f.data.dispatchError={status:403,message:'API rate limit exceeded',headers:{'x-ratelimit-remaining':'0','retry-after':'120'}};
     f.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});
     await f.win.MMRunStatus.startManual();
-    assert.match(f.els.runLightTxt.textContent,/限流，不代表令牌过期/);
+    assert.match(f.els.runLightTxt.textContent,/^运行未启动$/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/限流|令牌过期/);
     await f.els.btnCheckStatus.onclick();
+    assert.match(f.els.checkResult.textContent,/限流，不代表令牌过期/);
     const before=f.urls.length;
     await f.win.MMRunStatus.startManual();
     assert.equal(f.data.posts,1);
@@ -435,8 +442,22 @@ async function check(name, fn) {
     for(const [status,message,expected] of [[401,'Bad credentials',/无效、被撤销或过期/],
       [403,'Forbidden',/尚不能确定/],[429,'Too many requests',/限流/]]) {
       const f=fixture();f.data.dispatchError={status,message};f.win.MMRunStatus.init({getToken:()=> 'github_pat_test'});
-      await f.win.MMRunStatus.startManual();assert.match(f.els.runLightTxt.textContent,expected);
+      await f.win.MMRunStatus.startManual();
+      // 诊断整段归「状态」查询，抬头只留一句「运行未启动」。
+      assert.match(f.els.runLightTxt.textContent,/^运行未启动$/);
+      assert.doesNotMatch(f.els.runLightTxt.textContent,/无效|尚不能确定|限流/);
+      await f.els.btnCheckStatus.onclick();
+      assert.match(f.els.checkResult.textContent,expected);
     }
+  });
+  await check('没贴令牌时抬头只报运行未启动，整段诊断留在状态查询', async () => {
+    const f=fixture();f.win.prompt=()=>null;
+    await f.win.MMRunStatus.startManual();
+    assert.match(f.els.runLightTxt.textContent,/^运行未启动$/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/令牌|限流/);
+    await f.els.btnCheckStatus.onclick();
+    assert.match(f.els.checkResult.textContent,/没有令牌，无法立即运行/);
+    assert.equal(f.data.posts||0,0);
   });
   await check('公开状态读取失败必须显示核对未完成，不是假成功', async () => {
     const f=fixture();await f.win.MMRunStatus.refresh();f.data.failPublic=true;
@@ -614,8 +635,11 @@ async function check(name, fn) {
     assert.equal(result.manual.phase,'published');
     assert.match(f.els.runLightTxt.textContent,/成功 ·2026-10-08 10:11（北京）/);
     assert.doesNotMatch(f.els.runLightTxt.textContent,/红\d/);
-    assert.match(f.els.runLightTxt.textContent,/本页仍是旧数据/);
-    assert.equal(f.els.runLightTxt.children.at(-1).textContent,'刷新当前看板');
+    assert.match(f.els.runLightTxt.textContent,/ · 新结果已发布$/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent,/本页仍是旧数据|刷新当前看板/);
+    await f.els.btnCheckStatus.onclick();
+    assert.match(f.els.checkResult.textContent,/已有新版，请刷新当前看板/);
+    assert.equal(f.els.checkResult.children.at(-1).textContent,'刷新当前看板');
     assert.equal(JSON.parse(f.els.snapshotData.textContent).run_id,'1');
   });
   await check('配置发布后不自动刷新，缓存旧页同样提示需要刷新', async () => {
@@ -813,7 +837,8 @@ async function check(name, fn) {
     const s = await f.win.MMRunStatus.refresh();
     assert.equal(s.manual.phase, 'published');
     assert.equal(s.request_id, fresh.request_id);
-    assert.match(f.els.runLightTxt.textContent, /本页仍是旧数据/);
+    assert.match(f.els.runLightTxt.textContent, /新结果已发布/);
+    assert.doesNotMatch(f.els.runLightTxt.textContent, /本页仍是旧数据|刷新当前看板/);
     f.data.failPublic = false;
     const next = await f.win.MMRunStatus.startManual();
     assert.notEqual(next.request_id, fresh.request_id);
@@ -833,7 +858,17 @@ async function check(name, fn) {
       if (reason === 'target') f.data.sha = A;
       if (reason === 'dirty') dirty = true;
       await f.win.MMRunStatus.refresh();
-      let link = f.els.runLightTxt.children.at(-1);
+      // 2026-11-17：刷新入口统一在「状态」查询结果里，抬头灯不再重复挂。
+      assert(!f.els.runLightTxt.children.some(c => c.textContent === '刷新当前看板'), reason);
+      await f.els.btnCheckStatus.onclick();
+      const link = f.els.checkResult.children.at(-1);
+      if (reason === 'public') {
+        // 发布未核验时不盲目建议刷新：两处都不该出现刷新入口。
+        assert.match(f.els.checkResult.textContent, /当前发布：暂无法核验/);
+        assert(!f.els.checkResult.children.some(c => c.textContent === '刷新当前看板'), reason);
+        assert.equal(f.data.reloads.length, 0);
+        continue;
+      }
       assert.equal(link.textContent, '刷新当前看板');
       const count = f.urls.length;
       link.onclick({preventDefault() {}});
@@ -842,9 +877,11 @@ async function check(name, fn) {
       assert.equal(f.urls.length, count);
       f.data.failPublic = false; f.data.failRules = false; f.data.sha = C; dirty = false;
       await f.win.MMRunStatus.refresh();
-      link = f.els.runLightTxt.children.at(-1);
+      await f.els.btnCheckStatus.onclick();
+      const ready = f.els.checkResult.children.at(-1);
+      assert.equal(ready.textContent, '刷新当前看板');
       f.win.location.href = 'https://example.test/market-monitor/index.html?focus=pos&edit=1&keep=1#rules';
-      link.onclick({preventDefault() {}}); link.onclick({preventDefault() {}});
+      ready.onclick({preventDefault() {}}); ready.onclick({preventDefault() {}});
       assert.equal(f.data.reloads.length, 1);
       const url = new URL(f.data.reloads[0]);
       assert.equal(url.hash, ''); assert.equal(url.searchParams.has('focus'), false);

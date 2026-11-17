@@ -35,12 +35,14 @@ _ARROW_RSI_UP, _ARROW_RSI_DOWN = "↑", "↓"
 
 
 def _display_session_values(data, price, prev):
-    """价格区专用的当日开／高／低／振幅：只显示，不报灯、不进统计、不加设置项。
+    """价格区专用的当日开／高／低／振幅／周涨跌幅：只显示，不报灯、不进统计、不加设置项。
 
     真实值只认日线序列最后一根：ma_range_valid 明确标 False 的那根（收盘报价补当日、
     Yahoo 摘要补当日、实时价补当日）没有真实日内范围，高低是拿收盘价顶的，开盘价也是 None；
     这些一律返回 None，页面显示「—」，绝不把补出来的假 OHLC 当行情。
     振幅沿用旧规则的口径：(max(高,现价) − min(低,现价)) ÷ 昨收。
+    周涨跌幅（2026-11-17）：末根 closes[-1] 是当日收盘／盘中价，closes[-6] 是 5 个交易日前
+    收盘，(现价 ÷ closes[-6] − 1)×100；不足 6 根或基准非正数留 None，前端整项留空。
     """
     def pos(v):
         return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v > 0
@@ -62,7 +64,16 @@ def _display_session_values(data, price, prev):
         day_amp = (max(day_high, price) - min(day_low, price)) / prev * 100
         if not math.isfinite(day_amp) or day_amp < 0:
             day_amp = None
-    return {"day_open": day_open, "day_high": day_high, "day_low": day_low, "day_amp": day_amp}
+    week_chg = None
+    closes = data.get("closes")
+    if isinstance(closes, (list, tuple)) and len(closes) >= 6 and pos(price):
+        base = closes[-6]
+        if pos(base):
+            value = (price / base - 1) * 100
+            if math.isfinite(value):
+                week_chg = value
+    return {"day_open": day_open, "day_high": day_high, "day_low": day_low,
+            "day_amp": day_amp, "week_chg": week_chg}
 
 
 def streak_tail(st, rail="上轨"):

@@ -479,6 +479,11 @@ class PageRenderer:
     def _macro_rows(self, macro, risk):
         """市场风险参考表的各行（五项指标 + 10Y 美债参考行）。"""
         rows_macro = []
+
+        def chg_cell(txt, unit="", sign=""):
+            """变化列单元格（2026-11-17）：没有值就整格留空，不写「—」免得被当成抓取失败。"""
+            return ('<td class="num dim"></td>' if not txt else
+                    f'<td class="num dim"{sign}>{txt}<span class="unit">{unit}</span></td>')
         for key in self._context.RISK_INDICATORS:
             it = macro.get(key, {})
             if risk["levels"][key] == "gray":
@@ -509,22 +514,28 @@ class PageRenderer:
 
             dw = it.get("delta_week")
             base = it.get("week_ago")
-            # 2026-10-30：标普500 补上周变化（点差作主数、百分比进小字），与纳斯达克参考行同口径；
-            # 垃圾债利差维持 bp 点差原样，其余指标仍留「—」（它们的评语不看一周变化）。
+            # 2026-11-17 用户「完全不显示的就空白好了」：不看周变化的指标整格留空，连「周」
+            # 单位都不写，免得「—」被当成抓取失败。数值默认白色（td.num.dim 已改色），
+            # 只有标普500 这类按点差＋百分比读涨跌的指数挂 data-sign 走涨跌色；
+            # 纳指参考行（11-17 用户「不需要周变化了」）也整格留空，只留点位／日期／评语；
+            # 垃圾债利差／10Y 美债是 bp 点差，风险表里红绿另有灯义，保持白色不混色。
+            sign_attr = ""
             if key == "hy_oas" and dw is not None:
                 dw_txt, dw_pct = f'{dw:+.0f}', ""
             elif key == "sp500" and dw is not None:
                 dw_txt = f'{dw:+.0f}'
                 dw_pct = f' <span class="chg-num">{dw / base * 100:+.1f}%</span>' if base else ""
+                sign_attr = (' data-sign="up"' if dw > 0 else
+                             ' data-sign="down"' if dw < 0 else "")
             else:
-                dw_txt, dw_pct = "—", ""
+                dw_txt, dw_pct = "", ""
             label = html_lib.escape(str(it.get("name") or self._context.RISK_LABELS[key]))
             # 2026-10-30：「截至」二字删掉，只留日期（单独一行小字，谁都看得出是数据日期）
             label += f'<span class="unit">{html_lib.escape(it["date"])}</span>'
             # 数据来源（FRED / Cboe / Yahoo …）按 2026-10-15 要求不再在指标行里展示，页底仍保留整体来源说明
             rows_macro.append(
                 f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
-                f'<td class="num dim">{dw_txt}<span class="unit">周{dw_pct}</span></td><td>{txt}</td></tr>'
+                f'{chg_cell(dw_txt, "周" + dw_pct, sign_attr)}<td>{txt}</td></tr>'
             )
 
         # 参考行：10Y 美债一个月变化。只看利率冲击，不进 RISK_INDICATORS，不影响综合灯和有效指标数
@@ -532,34 +543,29 @@ class PageRenderer:
         if ut.get("ok") and ut.get("delta_month") is not None:
             ulv, utxt = self._context.macro_status("ust10", ut)
             uw = ut.get("delta_week")
-            uw_txt = f'{uw * 100:+.0f}' if uw is not None else "—"
+            uw_txt = f'{uw * 100:+.0f}' if uw is not None else ""
             ulabel = (f'{html_lib.escape(str(ut.get("name") or "10Y美债"))}'
                       f'<span class="unit">{html_lib.escape(ut["date"])}</span>')
+            # 11-17：缺一周前数据时整格空白，不再写「—」；有值也只走白色（bp 不套涨跌色）。
             rows_macro.append(
                 f'<tr class="{ulv}" id="ust10Ref"><td>{ulabel}</td><td class="num">{ut["value"]:.2f}%</td>'
-                f'<td class="num dim">{uw_txt}<span class="unit">周 bp</span></td><td>{utxt}</td></tr>')
+                f'{chg_cell(uw_txt, "周 bp")}<td>{utxt}</td></tr>')
         else:
             rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债</td>'
                               '<td colspan="3">无数据或已过期</td></tr>')
-        # 纳斯达克指数参考行（2026-10-30）：展示点位与周变化，并按一周涨跌给评语（只提示下跌）。
+        # 纳斯达克指数参考行（2026-10-30）：展示点位，并按一周涨跌给评语（只提示下跌）。
         # 灯级只作用于本行显示，仍不进 RISK_INDICATORS、不计入综合灯与有效指标数。
-        # 终稿仅保留名称与日期两行；参考属性仍由行id和页底口径说明保留，不参与评分。
+        # 2026-11-17 用户「纳指不需要周变化了」：变化列整格留空，只留点位／日期／评语。
+        # 一周涨跌仍由 macro_status 用来给灯级与「一周平稳／走弱／急跌」评语，数据层一行不动。
         nd = macro.get("nasdaq") or {}
         nd_val = self._context._pos_num(nd.get("value"))
-        nd_week = nd.get("delta_week")
-        nd_week = (nd_week if isinstance(nd_week, (int, float)) and not isinstance(nd_week, bool)
-                   and nd_week == nd_week and nd_week not in (float("inf"), float("-inf")) else None)
         if nd.get("ok") is True and nd_val is not None:
             nd_lv, nd_txt = self._context.macro_status("nasdaq", nd)
-            ndw_txt = f'{nd_week:+,.0f}' if nd_week is not None else "—"
-            nd_base = self._context._pos_num(nd.get("week_ago"))
-            nd_pct = f' <span class="chg-num">{nd_week / nd_base * 100:+.1f}%</span>' if (nd_week is not None and nd_base) else ""
             rows_macro.append(
                 f'<tr class="{nd_lv}" id="nasdaqRef"><td>纳斯达克指数'
                 f'<span class="unit">{html_lib.escape(str(nd.get("date") or ""))}</span></td>'
                 f'<td class="num">{nd_val:,.2f}</td>'
-                f'<td class="num dim">{ndw_txt}<span class="unit">周{nd_pct}</span></td>'
-                f'<td>{nd_txt}</td></tr>')
+                f'{chg_cell("")}<td>{nd_txt}</td></tr>')
         else:
             rows_macro.append('<tr class="gray" id="nasdaqRef"><td>纳斯达克指数</td>'
                               '<td colspan="3">无数据或已过期</td></tr>')
@@ -874,13 +880,15 @@ class PageRenderer:
 
 
     def _price_rows_html(self, d, snapshot):
-        """两排五项（2026-11-13）：左块上排 现价／涨跌额（带 $）、下排 涨跌幅；
-        振／量仍是上下两排（上振下量），整列靠右贴住紫灯框左侧、从右往左铺开。
+        """左块上排 现价／涨跌额、下排 涨跌幅／周涨跌幅；右侧振／量仍是上下两排
+        （上振下量），整列靠右贴住紫灯框左侧、从右往左铺开。
         开／高／低已下架，但规则层仍用真实日线算 day_amp，
         数据字段与抓取链路一行不动。
 
-        只显示，不报灯。涨跌额在这里给显示文字加美元符号（+$12.35 / -$3.10 / $0.00），
-        day_change_amount 本身保持不带货币符号，统计名单等其它口径不受影响。
+        只显示，不报灯。2026-11-17 涨跌额去掉美元符号（+12.35 / -3.10 / 0.00），
+        与现价的距离交给 CSS 的 1ch；day_change_amount 本身不带货币符号，
+        统计名单等其它口径不受影响。周涨跌幅＝现价相对 5 个交易日前收盘，
+        只显示、不报灯、不进统计；不足 6 根日线时整项留空（不写「—」）。
         量比只在显示层选口径（判灯仍走规则层）：收盘快照用抓取的完整日量比，
         盘中快照用按已开盘分钟折算的当时量比；开盘静默期拿不到盘中值就写「—」，
         不悄悄回落到昨天的完整日量比。振幅只在数字上按 >6% 黄／>10% 红着色，
@@ -897,9 +905,9 @@ class PageRenderer:
         if not raw_amt:
             amt_txt, amt_cls = "—", ""
         else:
-            # 符号放最前、美元标志紧跟符号：+$12.35 / -$3.10 / $0.00；「—」不加币符。
+            # 11-17：不再加 $，原样保留符号与数字：+12.35 / -3.10 / 0.00；「—」不加币符。
             sign = raw_amt[0] if raw_amt[0] in "+-" else ""
-            amt_txt = f"{sign}${raw_amt.lstrip('+-')}"
+            amt_txt = raw_amt
             amt_cls = "up" if sign == "+" else "down" if sign == "-" else ""
         amp = d.get("day_amp")
         amp_txt = f"{amp:.1f}%" if number(amp) or amp == 0 else "—"
@@ -915,12 +923,19 @@ class PageRenderer:
         def metric(key, label, value, extra=""):
             return (f'<span class="px-metric px-{key}"><span class="px-k">{label}</span>'
                     f'<span class="px-v{extra}">{value}</span></span>')
+        # 周涨跌幅（11-17）：最近 5 个交易日，字号规格直接复用 .px-k/.px-v，与量比一致；
+        # 放在涨跌幅之后、量比之前；缺值／非有限数整项留空，不写「—」。
+        week = d.get("week_chg")
+        week_txt = ""
+        if isinstance(week, (int, float)) and not isinstance(week, bool) and math.isfinite(week):
+            week_txt = f"{week:+.1f}%"
+        week_item = metric("week", "周", week_txt) if week_txt else ""
         return (f'<span class="px-main">'
                 f'<span class="px-row px-row-main">'
                 f'<span class="px-price">{self._context.fmt(price) if number(price) else "—"}{html_lib.escape(str(d.get("unit") or ""))}</span>'
                 f'<span class="px-amt {amt_cls}">{amt_txt}</span></span>'
                 f'<span class="px-row px-row-sub">'
-                f'<span class="px-chg {chg_cls}">{chg_txt}</span></span>'
+                f'<span class="px-chg {chg_cls}">{chg_txt}</span>{week_item}</span>'
                 f'<span class="px-side">'
                 f'{metric("amp", "振", amp_txt, amp_cls)}'
                 f'{metric("vol", "量", vol_txt, vol_cls)}</span></span>')

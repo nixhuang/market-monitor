@@ -56,18 +56,21 @@ check(typeof win.MMRunStatus === 'object', '首页元素组合下 MMRunStatus �
 check(typeof els.btnRunNow.onclick === 'function', 'btnRunNow 已绑定点击（修复前是 undefined）');
 check(typeof els.btnCheckStatus.onclick === 'function', '首页 btnCheckStatus 已绑定点击');
 
-// 2) 无令牌点运行：应弹一次 prompt，取消后灯上要有原因
+// 2) 无令牌点运行：应弹一次 prompt。2026-11-17 定：抬头灯只报「运行未启动」，
+//    整段令牌诊断归「状态」查询（mm_test_rs.js 有真实例覆盖），否则手机上一行会折行。
 prompts.returnValue = null;
 els.btnRunNow.onclick();
 check(prompts.length === 1, '无令牌时弹了一次令牌输入框');
-check(/没有令牌|无法立即运行/.test(els.runLightTxt.textContent || ''),
-      '取消后灯上写明原因：' + JSON.stringify(els.runLightTxt.textContent));
+check(els.runLightTxt.textContent === '运行未启动',
+      '取消后灯只报「运行未启动」：' + JSON.stringify(els.runLightTxt.textContent));
 check(els.runLight.dataset.phase === 'bad', '灯相位为 bad（红色）');
+check(/没有令牌，无法立即运行/.test(src), '整段未启动诊断仍在真源里（详情由状态查询承接）');
 
-// 3) 粘贴了假令牌：拒绝并提示
+// 3) 粘贴了假令牌：同样只报状态，诊断不丢
 prompts.returnValue = 'abcdef123';
 els.btnRunNow.onclick();
-check(/不像 GitHub 令牌/.test(els.runLightTxt.textContent || ''), '假令牌被拒绝并给出提示');
+check(els.runLightTxt.textContent === '运行未启动', '假令牌被拒绝，灯仍只报「运行未启动」');
+check(/不像 GitHub 令牌/.test(src), '假令牌诊断仍在真源里（详情由状态查询承接）');
 check(!('mm_gh_token_v1' in store), '假令牌没有写入 localStorage');
 
 // 4) 粘贴真令牌：存入并放行（会走到派发，这里 fetch 拒绝 → 不报错即可）
@@ -76,7 +79,8 @@ let threw = false;
 try { els.btnRunNow.onclick(); } catch (e) { threw = true; }
 check(!threw, '真令牌路径不抛异常');
 check(store['mm_gh_token_v1'] === 'github_pat_testAAA', '真令牌已存入 localStorage');
-check(!/没有令牌|不像/.test(els.runLightTxt.textContent || ''), '真令牌后灯上不再显示令牌错误');
+check(!/没有令牌|不像/.test(els.runLightTxt.textContent || '') &&
+      els.runLightTxt.textContent !== '运行未启动', '真令牌后灯上不再显示令牌错误');
 
 console.log(fails ? `\n${fails} 项失败` : '\n全部通过');
 process.exit(fails ? 1 : 0);
