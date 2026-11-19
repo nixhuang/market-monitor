@@ -2480,6 +2480,60 @@
       updateText('#group_positions>.cashbond-row .cb-cash .cb-amt', plain(cash));
       updateText('#group_positions>.cashbond-row .cb-bond .cb-amt', plain(fixed));
     }
+    // 2026-11-19 v18：仓位展开明细（三项汇总 + 行业权重）。
+    // 三项汇总是独立累计账，直接取构建期注入的核算结果；行业权重按当前持仓实时聚合，
+    // 用户做 T / 改数量后随 paint 一起重算，不会出现静态快照与编辑值不一致。
+    function kpiMoney(v) {
+      var n = Number(v) || 0;
+      return (n < 0 ? '-' : '') + '$' + Math.abs(n).toLocaleString('en-US', {
+        minimumFractionDigits: 2, maximumFractionDigits: 2
+      });
+    }
+    function renderPositionPanel(rows, holdingsMv) {
+      var body = document.getElementById('piBody');
+      if (!body) return;
+      var t = (REAL && REAL.trade) || {};
+      [['piRealized', t.total], ['piYear', t.year]].forEach(function (pair) {
+        var el = document.getElementById(pair[0]);
+        if (!el) return;
+        var v = Number(pair[1]) || 0;
+        el.textContent = kpiMoney(v);
+        el.classList.toggle('up', v >= 0);
+        el.classList.toggle('down', v < 0);
+      });
+      var cleared = document.getElementById('piCleared');
+      if (cleared) cleared.textContent = String(Number(t.cleared) || 0);
+
+      var wlist = document.getElementById('piWeights');
+      if (!wlist) return;
+      var sectors = t.sectors || {}, groups = t.sector_groups || [];
+      var agg = {};
+      rows.forEach(function (r) {
+        if (!r.has || !(r.mv > 0)) return;
+        var key = sectors[r.sym];
+        if (!key) return;
+        if (!agg[key]) agg[key] = { mv: 0, cost: 0 };
+        agg[key].mv += r.mv;
+        agg[key].cost += num(r.cost) * num(r.qty);
+      });
+      var shown = groups.filter(function (g) { return agg[g[0]] && agg[g[0]].mv > 0; })
+        .map(function (g) {
+          var a = agg[g[0]];
+          return { key: g[0], label: g[1], color: g[2], mv: a.mv,
+                   pc: holdingsMv > 0 ? (a.mv / holdingsMv) * 100 : 0,
+                   ratio: a.cost > 0 ? ((a.mv - a.cost) / a.cost) * 100 : 0 };
+        }).sort(function (a, b) { return b.pc - a.pc; });
+      var block = wlist.closest('.pi-block');
+      if (block) block.hidden = !shown.length;
+      wlist.innerHTML = shown.map(function (s) {
+        return '<div class="pi-wrow"><span class="pi-wname">' + esc(s.label) + '</span>' +
+               '<b class="pi-wpnl ' + (s.ratio >= 0 ? 'up' : 'down') + '">' + pct(s.ratio) + '</b>' +
+               '<b class="pi-wpct">' + s.pc.toFixed(1) + '%</b>' +
+               '<span class="pi-wbar"><i style="width:' + s.pc.toFixed(4) + '%;background:' +
+               s.color + '"></i></span></div>';
+      }).join('');
+    }
+
     function paint() {
       if (!panel || disposed) return;
       if (_paintFrame) {
@@ -2799,6 +2853,7 @@
       }
       clearDialogControls();
       syncCostNotice();
+      renderPositionPanel(longs.concat(shorts), longMv + shortMv);
       document.dispatchEvent(new CustomEvent('cost:painted'));
     }
     paint();

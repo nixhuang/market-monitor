@@ -1612,13 +1612,14 @@ class TestGroups(unittest.TestCase):
         position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
         self.assertNotIn('<h2>', position)
         self.assertEqual(position.count('<table'), 1)          # 个股和 ETF 同一张表
-        # 持仓组：红(NVDA 个股在 XLK ETF 前) → 黄(AAPL 个股在 QQQ ETF 前)；同级 ETF 排最后
+        # 2026-11-18：ETF 不再强制排最后，与个股同按「级别 + 涨跌幅绝对值」排序
+        # 红：NVDA(9%) → XLK(4%)；黄：QQQ(6%) → AAPL(3%)
         # 2026-11-03：代码＋中文名外面多了一层灯色框 <span class="sym-box LEVEL">
         order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, position).start()
-                 for s in ('NVDA', 'XLK', 'AAPL', 'QQQ')]
+                 for s in ('NVDA', 'XLK', 'QQQ', 'AAPL')]
         self.assertEqual(order, sorted(order))
 
-    def test_position_etf_last_per_level_and_sector_etf_first_only_when_alerting(self):
+    def test_position_etf_normal_sort_and_sector_etf_stays_in_main_when_quiet(self):
         def mk(symbol, level, chg, group):
             return {'symbol': symbol, 'note': symbol, 'price': 10, 'chg': chg, 'rsi': {}, 'dist_high': None,
                     'dist_low': None, 'vol_ratio': None, 'trigger': None, 'group': group,
@@ -1632,15 +1633,17 @@ class TestGroups(unittest.TestCase):
             snap = monitor.build_snapshot({}, items, {'positions': {'SPYM': {}, 'AAPL': {}, 'QQQM': {}, 'NVDA': {}}})
         page = monitor.render({}, items, 8, snapshot=snap)
         pos = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
+        # 2026-11-18：ETF 不再强制排最后，与个股同按「级别 + 涨跌幅绝对值」排序
+        # 红档 QQQM(8%) 在 NVDA(2%) 前，黄档 SPYM(9%) 在 AAPL(1%) 前
         order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, pos).start()
-                 for s in ('NVDA', 'QQQM', 'AAPL', 'SPYM')]
-        self.assertEqual(order, sorted(order))      # 红：个股 NVDA 在 ETF QQQM 前；黄：AAPL 在 SPYM 前
+                 for s in ('QQQM', 'NVDA', 'SPYM', 'AAPL')]
+        self.assertEqual(order, sorted(order))
         tech = page.split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
         main, quiet = tech.split('<details class=\"quiet-list\">', 1)
-        # 板块 ETF 绿灯无警示：不在主表，照常折叠
-        self.assertNotRegex(main, r'<td class="sym"><span class="sym-box \w+">XLK')
-        self.assertRegex(quiet, r'<td class="sym"><span class="sym-box \w+">XLK')
-        self.assertIn('无异动 2 只', tech)
+        # 2026-11-18：板块 ETF 绿灯无警示仍常驻主表，不折叠进「无异动」
+        self.assertRegex(main, r'<td class="sym"><span class="sym-box \w+">XLK')
+        self.assertNotRegex(quiet, r'<td class="sym"><span class="sym-box \w+">XLK')
+        self.assertIn('无异动 1 只', tech)
         # 板块 ETF 有警示时：排在同一预警级别第一位（红里 XLK 在 MU 前，不越过更高级别）
         items2 = [mk('XLK', 'red', 1.0, 'technology'), mk('MU', 'red', 5.0, 'technology'),
                   mk('AMD', 'yellow', 7.0, 'technology'), mk('NVDA2', 'yellow', 9.0, 'technology')]
@@ -4988,7 +4991,10 @@ class TestBollRsiRules(unittest.TestCase):
                 self.assertEqual(row['foldable'], not keep)
                 self.assertIn(f'data-quiet-keep="{str(keep).lower()}"', monitor._stock_row(row, {}))
 
-    def test_group_body_keeps_designated_gray_rows_but_folds_other_text(self):
+    def test_group_body_keeps_every_row_with_visible_text_2026_11_18(self):
+        # 2026-11-18 用户：个股分组里描述区有可见文字的绿行（含仅灰字技术事实）
+        # 一律常驻主表，不再收进「无异动 N 只」；只有描述区全空的绿行才折叠。
+        # 这 5 行虽然都是绿灯，描述区却都有文字，因此整组不再出现折叠列表。
         group = next(g for g in monitor.GROUPS if g['item_group'] == 'technology')
         rows = [self.analyze([35, 35, 50], 'technology', bands=(100, 101, 90), symbol='UPLOW'),
                 self.analyze([70, 50, 50], 'technology', bands=(100, 110, 99), symbol='DOWNONE'),
@@ -4996,14 +5002,10 @@ class TestBollRsiRules(unittest.TestCase):
                 self.analyze([50, 50, 50], 'technology', bands=(100, 110, 99), symbol='PLAIN'),
                 self.analyze([35, 35, 50], 'technology', symbol='RSIONLY')]
         body = monitor._group_body(rows, group, {}, {}, True, 'group_technology', group['label'])
-        shown, quiet = body.split('<details class="quiet-list"', 1)
-        for symbol in ('DOWNONE',):
-            self.assertIn(f'id="s-{symbol.lower()}"', shown)
-            self.assertNotIn(f'id="s-{symbol.lower()}"', quiet)
-        self.assertIn('无异动 4 只', quiet)
-        for symbol in ('UPLOW', 'UPHIGH', 'PLAIN', 'RSIONLY'):
-            self.assertNotIn(f'id="s-{symbol.lower()}"', shown)
-            self.assertIn(f'id="s-{symbol.lower()}"', quiet)
+        self.assertNotIn('<details class="quiet-list"', body)
+        self.assertNotIn('无异动', body)
+        for symbol in ('UPLOW', 'DOWNONE', 'UPHIGH', 'PLAIN', 'RSIONLY'):
+            self.assertIn(f'id="s-{symbol.lower()}"', body)
         counts = monitor.signal_counts(rows)
         self.assertTrue(all(v['red'] == v['yellow'] == v['purple'] == 0 for v in counts.values()))
         self.assertEqual({m['symbol'] for m in monitor.text_only_members(rows)},
@@ -5264,12 +5266,27 @@ class TestBollRsiRules(unittest.TestCase):
                 self.assertNotIn('data-signal-kind="boll"', output)
                 self.assertNotIn('data-signal-level="gray"', output)
 
-    def test_legacy_row_without_foldable_keeps_existing_folding(self):
+    def test_legacy_row_without_foldable_stays_shown_when_text_2026_11_18(self):
         group = next(g for g in monitor.GROUPS if g['item_group'] == 'technology')
         row = self.analyze([35, 35, 50], 'technology', bands=(100, 101, 90))
         row.pop('foldable')
         body = monitor._group_body([row], group, {}, {}, True, 'group_technology', group['label'])
+        # 2026-11-18：描述区有可见文字，即使缺 foldable 旧字段也常驻主表，不进无异动折叠。
+        self.assertNotIn('无异动 1 只', body)
+        self.assertNotIn('<details class="quiet-list"', body)
+        self.assertIn('id="s-test"', body)
+
+    def test_blank_description_green_row_still_folds_2026_11_18(self):
+        # 对照：描述区完全空白的绿行仍折叠进「无异动 1 只」，折叠功能没有消失。
+        group = next(g for g in monitor.GROUPS if g['item_group'] == 'technology')
+        row = self.analyze([35, 35, 50], 'technology', bands=(100, 101, 90))
+        row.pop('foldable')
+        row['signals'] = []
+        row['signal_marks'] = []
+        row['boll_alert_text'] = ''
+        body = monitor._group_body([row], group, {}, {}, True, 'group_technology', group['label'])
         self.assertIn('无异动 1 只', body)
+        self.assertNotIn('id="s-test"', body.split('<details class="quiet-list"', 1)[0])
 
 
 class TestTechnicalFacts(unittest.TestCase):

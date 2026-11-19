@@ -706,6 +706,28 @@ function editListField(kind,symbol,field,raw,input){
   if(input)input.setAttribute('aria-invalid',String(listDraftErrors.has(key)));
   touch();
 }
+/* 代码改名：设置页里的代码不再是只读文字，改完保存会连成本记录一起换过来。
+   只在「失焦 / 回车」时提交一次，不按字符重绘。 */
+const pendingRenames=[];
+function renameSymbol(kind,from,raw,input){
+  const to=String(raw||'').trim().toUpperCase();
+  const revert=(msg)=>{
+    if(input){input.value=from;input.setAttribute('aria-invalid','true');}
+    setMsg(msg,'err');
+  };
+  if(to===from){if(input)input.value=from;return;}
+  if(!/^[A-Z0-9.^=_-]{1,32}$/.test(to))return revert('代码只能是 1–32 位大写字母、数字或 . ^ = _ -，已还原');
+  const used=new Set(Object.values(data).flatMap(g=>Object.keys(g)));
+  used.delete(from);
+  if(used.has(to))return revert(to+' 已在其它分组里，代码不能重复；已还原');
+  data[kind]=Object.fromEntries(Object.entries(data[kind]).map(([k,v])=>[k===from?to:k,v]));
+  // 连续改两次时合并成「最初代码 → 最终代码」，成本文件只需搬一次
+  const prev=pendingRenames.find(r=>r.kind===kind&&r.to===from);
+  if(prev)prev.to=to;else pendingRenames.push({kind,from,to});
+  for(const [key,draft] of listDraftErrors)if(draft.kind===kind&&draft.symbol===from)listDraftErrors.delete(key);
+  render();touch();
+  setMsg('已把 '+from+' 改成 '+to+'；点「保存清单」后生效，成本记录会一起改名','ok');
+}
 function validateListDraft(kind){
   const error=[...listDraftErrors.values()].find(item=>!kind||item.kind===kind);
   if(!error)return true;
@@ -1068,7 +1090,11 @@ function render(){
       const gv=(c.target===null||c.target===undefined)?'':c.target;
       const cv2=(c.cost===null||c.cost===undefined)?'':c.cost;
       h+='<div class="row stock-row" data-k="'+esc(K.k)+'" data-s="'+esc(s)+'" style="--price-fields:'+pf+'">'
-        +'<span class="sym'+(isEtf(s)?' etf':'')+'">'+esc(s)+'</span>'
+        +'<span class="sym'+(isEtf(s)?' etf':'')+'"><input class="sym-edit" value="'+esc(s)+'"'
+        +' aria-label="'+esc(s)+' 代码，可修改" data-f="sym" spellcheck="false"'
+        +' autocapitalize="characters" autocomplete="off"'
+        +' style="width:100%;min-width:0;background:transparent;border:0;color:inherit;font:inherit;'
+        +'padding:0;outline-offset:2px"></span>'
         +'<input class="n" value="'+esc(c.note||'')+'" aria-label="'+esc(s)+' 备注" data-f="note">'
         +'<div class="stock-prices" style="--price-fields:'+pf+'">'
         +'<input class="t" value="'+esc(tv)+'" aria-label="'+esc(s)+' 加仓价" data-f="trigger" inputmode="decimal">'
@@ -1103,6 +1129,12 @@ function render(){
     box.querySelectorAll('.row').forEach(row=>{
       row.querySelectorAll('input').forEach(inp=>{
         const {k,s}=row.dataset,f=inp.dataset.f;
+        if(f==='sym'){
+          // 代码整条改完（失焦/回车）才换 key，避免每敲一个字符就重绘把焦点弄丢
+          inp.onchange=()=>renameSymbol(k,s,inp.value,inp);
+          inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();inp.blur();}};
+          return;
+        }
         const draft=listDraftErrors.get(draftKey(k,s,f));
         if(draft)inp.value=draft.raw;
         inp.setAttribute('aria-invalid',String(!!draft));
@@ -1123,6 +1155,35 @@ function render(){
 }
 function touch(){changed=true;$('dirty').textContent='有未保存的改动';}
 
+/* 改名后把 data 分支成本快照里的旧代码搬到新代码，避免首页成本对不上。 */
+async function syncCostRenames(list){
+  if(LOCAL_PREVIEW){list.length=0;setMsg('本地预览：改名只存本机草稿，成本文件不动','ok');return;}
+  try{
+    const r=await gh('GET','/contents/position-costs.json?ref=data');
+    if(!r.ok||!r.data.content){
+      setMsg('清单已保存，但成本文件读取失败，旧代码的成本未跟随改名：'+whyFail(r.status,r.data.message),'err');return;
+    }
+    const j=JSON.parse(b64dec(r.data.content));
+    let moved=0;
+    list.forEach(x=>{
+      if(j.items&&Object.prototype.hasOwnProperty.call(j.items,x.from)&&
+         !Object.prototype.hasOwnProperty.call(j.items,x.to)){
+        j.items[x.to]=j.items[x.from];delete j.items[x.from];moved++;
+      }
+    });
+    if(!moved){list.length=0;return;}
+    j.updated_at=new Date().toISOString();
+    const put=await gh('PUT','/contents/position-costs.json',{
+      message:'代码改名同步成本记录',content:b64enc(JSON.stringify(j,null,2)+'\n'),
+      branch:'data',sha:r.data.sha});
+    if(!put.ok){
+      setMsg('清单已保存，但成本文件写入失败（'+whyFail(put.status,put.data.message)+'）；再点一次保存可重试','err');return;
+    }
+    list.length=0;
+    setMsg('清单与成本记录已同步改名','ok');
+  }catch(error){setMsg('清单已保存，但成本同步失败：'+error.message,'err');}
+}
+
 /* ---------- 保存 ---------- */
 $('btnSave').onclick=async e=>{
   if(holdingsSaving)return;
@@ -1141,8 +1202,9 @@ $('btnSave').onclick=async e=>{
     $('manualCard').classList.remove('hide');
     let copied=false;
     try{await navigator.clipboard.writeText(text);copied=true;}catch(e){}
-    setMsg(copied?'已复制：点「打开 GitHub 编辑页」全选粘贴进去，再点 Commit changes'
-                 :'JSON 已生成在下面，全选复制 → 粘到 GitHub 编辑页 → Commit changes','ok');
+    const manualTip=copied?'已复制：点「打开 GitHub 编辑页」全选粘贴进去，再点 Commit changes'
+                 :'JSON 已生成在下面，全选复制 → 粘到 GitHub 编辑页 → Commit changes';
+    setMsg(manualTip+(pendingRenames.length?'；有代码改名，还需手动把 data 分支 position-costs.json 里的旧代码改成新代码':''),'ok');
     $('manualCard').scrollIntoView({behavior:'smooth',block:'center'});
     return;
   }
@@ -1157,6 +1219,7 @@ $('btnSave').onclick=async e=>{
     changed=currentText!==text||listDraftErrors.size>0;
     $('dirty').textContent=changed?'有未保存的改动（提交期间又修改了清单）':'清单已提交，等待发布验证';
     trackReceipt('holdings.json',r.data);
+    if(pendingRenames.length)await syncCostRenames(pendingRenames);
   }else{
     if(r.status===409)holdingsConflict=true;
     setMsg('保存失败：'+whyFail(r.status,r.data.message)+

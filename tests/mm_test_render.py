@@ -331,10 +331,15 @@ check(all('<thead' not in table and '<th>名称</th>' not in table and 'class="h
       "表头「名称｜财报」整行已删除（2026-10-15）")
 check(monitor.STK_HEAD == '', "STK_HEAD 不再输出表头")
 check("财报 美东" not in html and "下一次财报" not in html.split('id="group_positions"')[1].split('<div class="acts">')[0], "每行不再重复写「财报」二字")
-# 2026-11-16：持仓把「无异动」并进同一张表，不再生成恒展开的折叠空壳；
-# 其它分组仍保留可点开的「无异动 N 只」。
+# 2026-11-16：持仓把「无异动」并进同一张表，不再生成恒展开的折叠空壳。
+# 2026-11-18：描述区有可见文字的绿行改常驻主表；折叠只收描述区全空的绿行，
+# 因此合成页里可能整组不再出现折叠段，改以「样式仍在 + 折叠段内没有文字行」守门。
 check('SPYM' in html and 'id="s-spym"' in html, "持仓无异动标的并入主表且行锚点保留")
-check('<details class="quiet-list">' in html, "其它分组的「无异动 N 只」仍可点开")
+check('.quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:13px;cursor:pointer}' in html,
+      "无异动折叠仍保留且可点开（仅收描述区全空的绿行）")
+check(all('signal-item' not in table for table in
+          re.findall(r'<details class="quiet-list"(?: open)?>.*?<table class="stk">(.*?)</table>', html, re.S)),
+      "描述区有文字的绿行不再收进无异动折叠")
 pos_card = html.split('id="group_positions"')[1].split('id="group_focus"')[0]
 check('NTNX' in pos_card and 'SPYM' in pos_card, "持仓包含警示及无异动标的")
 focus_card = html.split('id="group_focus"')[1].split('id="group_technology"')[0]
@@ -1245,7 +1250,10 @@ with _patch.object(monitor, 'global_dca', return_value=None):
     _focus_page = monitor.render({}, _focus_items, len(_focus_items), snapshot=_focus_snap)
 _focus_filter = _json.loads(_unescape(re.search(r'data-filter="([^"]*)"', _focus_page)[1]))
 _focus_card = _focus_page.split('id="group_focus"', 1)[1].split('id="group_technology"', 1)[0]
-_focus_shown, _focus_quiet = _focus_card.split('<details class="quiet-list">', 1)
+# 2026-11-18 起「描述区有文字的绿行」常驻主表，focus 组里全是仅文字行，
+# 折叠列表可能整个不存在；按可选分段处理，不能再硬拆两份。
+_focus_parts = _focus_card.split('<details class="quiet-list">', 1)
+_focus_shown, _focus_quiet = _focus_parts[0], (_focus_parts[1] if len(_focus_parts) > 1 else '')
 for _row, _direction in _focus_text_rows:
     _keep = _row['group'] == 'position' and _direction == '↓超卖'
     _classes, _body = rendered_stock_row(_focus_page, _row, _keep)
@@ -1259,9 +1267,8 @@ for _row, _direction in _focus_text_rows:
           _row['symbol'] + '原方向事实保留，持仓技术灰白字、重点/其他仅文字灰字且不继承涨跌红')
     if _focus_only:
         _anchor = 'id="' + monitor._stock_anchor_id(_row['symbol']) + '"'
-        check(_anchor in (_focus_shown if _row['chg'] else _focus_quiet)
-              and _anchor not in (_focus_quiet if _row['chg'] else _focus_shown),
-              _row['symbol'] + '仅文字绿行可折叠，独立涨跌红仍留主表')
+        check(_anchor in _focus_shown and _anchor not in _focus_quiet,
+              _row['symbol'] + '仅文字绿行常驻主表，不再收进无异动折叠')
     if _row['group'] != 'position':
         check(all(member['s'] != _row['symbol'] for kind in ('rsi', 'boll', 'boll_rsi')
                   for member in _focus_filter.get(kind, {}).get('members', [])),
@@ -1369,10 +1376,13 @@ for _row, _kind, _technical_level, _foldable, _overall in _four_cases:
     check(_classes == [_overall] and _row['foldable'] == _foldable and set(_levels) == set(_expected) and all(_levels.count(pair) <= (2 if pair[0] == 'boll_rsi' else 1) for pair in _levels),
           _row['symbol'] + '技术灰白字、仅文字灰字、独立红黄和主行竖条各自保留')
     _anchor = 'id="' + monitor._stock_anchor_id(_row['symbol']) + '"'
-    # 2026-11-16：持仓已把「无异动」并进主表，不再有折叠段；其余分组仍按原规则
-    _foldable_quiet = _row['group'] != 'position' and _foldable and _overall == 'green'
+    # 2026-11-16：持仓把「无异动」并进主表；2026-11-18：描述区有可见文字的绿行
+    # 一律常驻主表，只有描述区全空、可折叠、绿灯且非持仓的行才进折叠段。
+    _has_note = bool(_sig.strip())
+    _foldable_quiet = (_row['group'] != 'position' and _foldable and _overall == 'green'
+                       and not _has_note)
     check((_anchor in _four_quiet_html) == _foldable_quiet,
-          _row['symbol'] + '可折叠绿行进无异动（持仓除外）；不折叠白灯和独立红黄留主表')
+          _row['symbol'] + '有文字绿行常驻主表；仅描述全空绿行进无异动')
     _members = {m['s']: m for m in _four_filter.get(_kind, {}).get('members', [])}
     check((_row['symbol'] in _members) == bool(_technical_level),
           _row['symbol'] + '仅文字不统计，技术灰或红黄进对应筛选名单')
@@ -2750,7 +2760,7 @@ const deadline = setTimeout(() => {
       const expected=input.settingsFixture.expected;
       assertions.push({ok:settings.rows.length===expected.length&&settings.scriptCount===1&&settings.rows.every(row=>{
         const e=expected.find(e=>e.group===row.group&&e.symbol===row.symbol);
-        return !!e&&JSON.stringify(row.fields)===JSON.stringify(['note',...e.fields])&&JSON.stringify(row.priceFields)===JSON.stringify(e.fields)&&row.priceCount===e.fields.length&&row.selectors
+        return !!e&&JSON.stringify(row.fields)===JSON.stringify(['sym','note',...e.fields])&&JSON.stringify(row.priceFields)===JSON.stringify(e.fields)&&row.priceCount===e.fields.length&&row.selectors
           &&row.priceDisplay==='contents'&&row.oneRow&&row.headAligned&&row.fieldsInside&&row.codePlain&&row.smallestFont>=13
           &&(!row.previous||row.divider);
       })&&!settings.overflow,name:width+'px真实设置renderer每股一排：列标题与各列对齐、代码纯文字、字号不小于13px、全部字段/删除/移动与相邻分隔线',actual:settings});

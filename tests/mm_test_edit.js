@@ -377,8 +377,11 @@ const pos = els.list_positions._html;
 check(pos.indexOf('BRK-B') < pos.indexOf('NTNX'), '持仓保持载入顺序（BRK-B 在 NTNX 前）');
 check(pos.indexOf('NTNX') < pos.indexOf('SPYM') && !pos.includes('ETF 基金'),
       '持仓内 ETF（SPYM）排在个股之后，且不再有单独的 ETF 分区标题');
-check(/<span class="sym etf">SPYM<\/span>/.test(pos) && /<span class="sym">NTNX<\/span>/.test(pos) && src.includes('.sym.etf{color:var(--link-blue,#6ba3f0)}'),
-      'ETF 代码用蓝色（sym etf），股票代码保持白字');
+check(/<span class="sym etf"><input class="sym-edit" value="SPYM"/.test(pos)
+  && /<span class="sym"><input class="sym-edit" value="NTNX"/.test(pos)
+  && src.includes('.sym.etf{color:var(--link-blue,#6ba3f0)}')
+  && src.includes('function renameSymbol('),
+      'ETF 代码仍用蓝色、股票代码保持白字，两行代码都能直接修改');
 
 // 长持仓 / 短持仓：设置页每行只留一个下拉，两个区和其它分组都在里面选；列表按两区显示。
 const rowN = (pos.match(/<div class="row stock-row"/g) || []).length;
@@ -393,7 +396,7 @@ check(src.includes('.edit-group .stock-head,.edit-group .stock-row{display:grid;
   &&src.includes('.stock-prices{display:contents}')&&!src.includes('grid-row:2;display:grid;'),
   '每股单排：列标题与每行共用同一组列轨道，价格容器display:contents不增排，相邻股票有分隔线');
 check(src.includes('.edit-group .stock-row>.sym{width:auto;min-width:0;padding:0;border:0;border-radius:0;background:none;'),
-  '代码是不可改的纯文字，不再画占宽的胶囊框');
+  '代码框不画占宽的胶囊框（现在是可直接改的输入框）');
 for(const kind of groupKeys){
   const expectedPrices=kind==='positions'?['trigger','reduce','target']:kind==='focus'?['trigger','target']:['trigger'];
   const labels={trigger:'加仓价',reduce:'减仓价',target:'目标价',cost:'成本价'};

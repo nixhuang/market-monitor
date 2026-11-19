@@ -1017,12 +1017,13 @@ class PageRenderer:
 
 
     def _sort_group_items(self, g, group):
-        etf_row = lambda d: bool(d.get("etf")) or self._context.is_etf(d["symbol"])
         if group["item_group"] in ("position", "focus"):
-            # 持仓 / 重点关注：同一预警级别里 ETF 排在个股后面（稳定排序，级别和涨跌幅顺序不变）
-            return sorted(g, key=lambda d: (self._context._sort_key(d)[0], etf_row(d)))
+            # 2026-11-18 用户：长短持仓里的 ETF 不再强制排在同一预警级别最后，
+            # 与个股同口径按「级别 + 涨跌幅绝对值」正常参与排序。
+            return sorted(g, key=lambda d: self._context._sort_key(d))
         if group.get("sector_etf"):
-            # 行业分类：本行业板块 ETF（XLK、XLV…）只在同一预警级别内排第一；无警示（绿灯）时照常折叠
+            # 行业分类：本行业板块 ETF（XLK、XLV…）只在同一预警级别内排第一；
+            # 2026-11-18 起绿灯时也不折叠进「无异动」，常驻主表（见 _group_body）。
             return sorted(g, key=lambda d: (self._context._sort_key(d)[0],
                                             self._context.normalize_symbol(d["symbol"]) != group["sector_etf"],
                                             self._context._sort_key(d)[1]))
@@ -1046,8 +1047,20 @@ class PageRenderer:
         g = [dict(d, group=group["item_group"]) if d.get("group") != group["item_group"] else d for d in g]
         g = [self._context._apply_target(d) if d.get("target") or d.get("purple")
              or any(kind == "target" for kind, _ in d.get("signal_marks") or []) else d for d in g]
-        shown = [d for d in g if d["level"] in ("red", "yellow", "gray") or self._context._quiet_keep(d, earnings_week)]
-        quiet = [d for d in g if d["level"] == "green" and not self._context._quiet_keep(d, earnings_week)]
+        # 2026-11-18 用户：行业分类里的本板块 ETF（XLK / XLV …）绿灯时也不收进
+        # 「无异动 N 只」，与其它分组一样常驻主表，方便直接看板块基准。
+        sector_etf = self._context.normalize_symbol(group["sector_etf"]) if group.get("sector_etf") else None
+        def sector_anchor(d):
+            return sector_etf is not None and self._context.normalize_symbol(d["symbol"]) == sector_etf
+        def text_note(d):
+            # 2026-11-18 用户：描述区有可见文字（含仅灰字技术事实、加减仓价提示）的个股，
+            # 哪怕整行绿灯也常驻主表，不收进「无异动 N 只」；只有描述区全空的才折叠。
+            return bool(self._signals_html(d).strip())
+        shown = [d for d in g if d["level"] in ("red", "yellow", "gray")
+                 or self._context._quiet_keep(d, earnings_week) or sector_anchor(d) or text_note(d)]
+        quiet = [d for d in g if d["level"] == "green"
+                 and not self._context._quiet_keep(d, earnings_week) and not sector_anchor(d)
+                 and not text_note(d)]
         parts = []
         if empty_note:
             parts.append(f'<div class="quiet">{empty_note}</div>')
@@ -1097,12 +1110,26 @@ class PageRenderer:
             parts.append(f'<details class="zone-card" id="group_positions_short">'
                          f'<summary><span class="zone-name">短持仓 ({len(short_g)})</span>'
                          f'<span class="group-stats zone-stats">{nums}</span></summary>{short_body}</details>')
+            # 2026-11-19 v18：资金排文案按样张改成「持仓 / Cash / 固收」，总盈亏不再写在这一排
+            # （仍保留 .cb-total-pnl 节点和值，只是由 cost_panel.css 隐藏，不改动线上填值逻辑）。
             parts.insert(0, '<div class="cashbond-row"><span class="cb-total">'
-                         '<span class="cb-total-amt">—</span>'
+                         '<span class="pi-cname">持仓</span><span class="cb-total-amt">—</span>'
                          '<span class="cb-total-pnl">—</span></span>'
                          '<span class="cb-item cb-cash"><span class="cb-name">Cash</span><span class="cb-amt">—</span></span>'
                          '<span class="cb-item cb-bond"><span class="cb-name">固收</span><span class="cb-amt">—</span></span></div>')
             parts.insert(0, '<div class="cost-foot asset-row cost-manage"></div>')
+            # 新增展开明细：三项汇总（独立累计账）/ 行业权重（由页面脚本按最新持仓算）/ 交易记录入口。
+            # 骨架静态输出，数字由 cost_panel.js 在 cost:painted 时填入，离线首屏也有完整结构。
+            parts.insert(2, '<div class="pi-body" id="piBody">'
+                         '<div class="pi-block pi-funds"><div class="pi-kpis">'
+                         '<span class="pi-kpi"><span class="pi-kname">已实现</span><b class="pi-kval" id="piRealized">—</b></span>'
+                         '<span class="pi-kpi"><span class="pi-kname">今年</span><b class="pi-kval" id="piYear">—</b></span>'
+                         '<span class="pi-kpi"><span class="pi-kname">清仓</span><b class="pi-kval" id="piCleared">—</b></span>'
+                         '</div></div>'
+                         '<div class="pi-block"><div class="pi-wlist" id="piWeights"></div></div>'
+                         '<div class="pi-block pi-records"><a class="pi-log-link" href="./trade-log.html" '
+                         'target="_blank" rel="noopener">交易记录'
+                         '<span class="pi-arrow" aria-hidden="true">↗</span></a></div></div>')
         else:
             parts.append(self._context._group_body(g, group, snapshot, earnings_week, enabled,
                                      f'group_{group["key"]}', group["label"], empty_note))
@@ -1815,9 +1842,26 @@ class PageRenderer:
                 fixed, fixed_cost = fi.get("market") or 0, fi.get("cost") or 0
             except Exception as e:
                 self._context.log(f"  ! 持仓数量种子读取失败（只用成本价）：{e}")
+        # 2026-11-19：仓位面板三项汇总（已实现 / 今年 / 清仓）与行业标签。
+        # 只数「一年内」的口径按构建当年的北京时间年份取；累计已实现不随交易记录窗口裁剪重算。
+        trade = {}
+        try:
+            import io as _io
+            with _io.open(os.path.join(self._context.BASE, "trade-summary.json"), encoding="utf-8") as stream:
+                t = _json.load(stream)
+            year = str(self._context._bj_today())[:4]
+            trade = {
+                "total": t.get("realized_total", 0),
+                "year": (t.get("realized_by_year") or {}).get(year, 0),
+                "cleared": (t.get("cleared_by_year") or {}).get(year, 0),
+                "sectors": t.get("sectors") or {},
+                "sector_groups": t.get("sector_groups") or [],
+            }
+        except Exception as e:
+            self._context.log(f"  ! 交易汇总读取失败：{e}")
         # asof＝内置快照的日期（种子文件里的券商截图日期）：换设备取不到云端时页面要拿它说明数据来源
         return self._context.json_script({"asof": asof, "cash": cash, "cash_extra": cash_extra, "fixed": fixed,
-                                          "fixed_cost": fixed_cost, "items": items})
+                                          "fixed_cost": fixed_cost, "items": items, "trade": trade})
 
 
     def _cost_panel_assets(self, items=None):

@@ -1380,6 +1380,11 @@ body{padding-left:5px;padding-right:5px}
 .group-card:not([open]){padding-bottom:2px;min-height:63px}
 .macro-card:not([open]){padding-bottom:2px;min-height:53px}
 .day-pnl-card:not([open]){padding-bottom:2px;min-height:53px}   /* 当日与风险折叠态同为53，比其它分组(63)矮；放在 .group-card 规则之后以覆盖 */
+/* 2026-11-18 用户「手机上当日/风险展开后，面板离标题有点远，拉近些」：桌面档已经把展开态
+   压到 50px，手机档漏了覆盖，仍是基础规则的 63px —— summary 只有 47px，多出的 16px 空白
+   再加 8px row-gap，面板看着离标题 21px（桌面 11px）。这里补回与折叠态同高的 53px，
+   既消去空白又保证折叠/展开两态不跳高；基础规则与桌面档的 50px 一律不动。 */
+.dual-row > details[open]{min-height:53px}
 .zone-card>summary{line-height:22.5px;box-sizing:border-box;min-height:48px;padding-top:0;padding-bottom:0}
 .group-card>summary.grp{line-height:24px;box-sizing:border-box;min-height:56px;padding-top:0;padding-bottom:0;font-size:18px}
 .macro-card>summary.grp{line-height:24px;box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0;font-size:18px}

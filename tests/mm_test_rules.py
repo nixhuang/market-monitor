@@ -799,6 +799,19 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         # 第十三轮只把 .lvtag>span 规则加进已有的 601 块，不新增重复媒体块/第三档断点
         self.assertEqual(css.count('@media(min-width:601px){'), 1)
 
+    def test_mobile_dual_row_open_tightens_gap_2026_11_18(self):
+        # 2026-11-18 用户：手机上「当日 / 风险」展开后面板离标题偏远。
+        # 桌面档早把展开态压到 50px，手机档漏覆盖仍是基础 63px；现在手机档补 53px，
+        # 与折叠态同高：既消掉多出的空白，收起 / 展开两态也不跳高。
+        css = page_assets.PAGE_CSS
+        mobile = css.split('@media(max-width:600px){', 1)[1].split('@media(min-width:601px){', 1)[0]
+        desktop = css.split('@media(min-width:601px){', 1)[1]
+        self.assertIn('.dual-row > details[open]{min-height:53px}', mobile)
+        self.assertEqual(mobile.count('.dual-row > details[open]{min-height:53px}'), 1)
+        self.assertIn('.dual-row > details[open]{min-height:50px}', desktop)
+        self.assertIn('.day-pnl-card:not([open]){padding-bottom:2px;min-height:53px}', mobile)
+        self.assertIn('.dual-row > details[open]{padding-bottom:2px;min-height:63px', css)
+
     def test_mobile_stock_numbers_and_main_row_padding_are_compact(self):
         css = page_assets.PAGE_CSS
         mobile = css.split('@media(max-width:600px){', 1)[1].split('@media(min-width:601px){', 1)[0]
@@ -1485,7 +1498,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
             fields = ['trigger', 'reduce', 'target'] if g['key'] == 'positions' else ['trigger', 'target'] if g['key'] == 'focus' else ['trigger']
             for row in rows:
                 with self.subTest(group=g['key'], symbol=row['symbol']):
-                    self.assertEqual(row['first'], ['note'])
+                    self.assertEqual(row['first'], ['sym', 'note'])   # 2026-11-18：代码列改为可直接修改的输入框
                     self.assertEqual(row['prices'], fields)
                     self.assertEqual(row['count'], len(fields))
                     self.assertEqual((row['move'], row['delete']), (1, 1))

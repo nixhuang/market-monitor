@@ -398,5 +398,48 @@
   .cost-foot { font-size: 12px; }
   #group_positions_long.zone-card > summary .zone-stats,
   #group_positions_short.zone-card > summary .zone-stats { gap: 6px; }
+  /* v18 仓位展开明细：手机档仍只用这一个 ≤600 断点，不新增第二档 */
+  .pi-body { font-size: 15px; padding: 2px 8px 9px; }
+  .pi-wrow { grid-template-columns: minmax(0,1fr) minmax(0,1fr) 48px minmax(0,.85fr); gap: 6px; }
+  .pi-kpis { gap: 4px; }
+  .pi-kpi { gap: 3px; }
+  #group_positions > .cashbond-row .cb-item { gap: 3px; }
 }
+
+/* ===== 2026-11-19 v18 仓位展开明细（已验收样张落地） =====
+   沿用线上 .asset-row（比例条）与 .cashbond-row（资金排）的 DOM 与填值脚本，
+   只重排外观并追加「三项汇总 / 行业权重 / 交易记录入口」三块。
+   两组标签文字统一 14px + 仅文字灰，金额与数字的字号、颜色一律不动。 */
+/* 资金排沿用线上 .cashbond-row 的盒模型（margin / padding / 底色一律不动，守线上布局），
+   只改三项：隐藏重复的总盈亏、标签变灰并缩小 1px、金额仍 15px。 */
+#group_positions > .cashbond-row .cb-total-pnl { display: none; }
+/* ID 前缀压过 .cashbond-row .cb-cash .cb-name 的 Cash / 固收色，让三个标签都是说明文字灰 */
+#group_positions > .cashbond-row .cb-name,
+#group_positions > .cashbond-row .pi-cname { font-size: 14px; color: var(--dim, #8b93a1); }
+#group_positions > .cashbond-row .cb-total-amt,
+#group_positions > .cashbond-row .cb-amt { font-size: 15px; font-weight: 600; }
+.pi-body { font-variant-numeric: tabular-nums; }
+.pi-block { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); }
+.pi-block.pi-records { margin-top: 2px; padding-top: 2px; border-top: 0; text-align: center; }
+.pi-kpis { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px; font-size: 15px; line-height: 22.5px; white-space: nowrap; min-width: 0; height: 22.5px; }
+.pi-kpi { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
+.pi-kname { font-size: 14px; color: var(--dim, #8b93a1); }
+.pi-kval { font-size: 16px; font-weight: 600; }
+.pi-body .up { color: var(--up); }
+.pi-body .down { color: var(--down); }
+/* 行业权重四列：名称 | 盈亏比（涨跌色） | 仓位比例 | 柱条 */
+.pi-wlist { display: flex; flex-direction: column; gap: 5px; }
+.pi-wrow { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) 52px minmax(0,1.05fr);
+  align-items: center; gap: 8px; min-width: 0; }
+.pi-wname, .pi-wpnl, .pi-wpct { font-size: 15px; font-variant-numeric: tabular-nums; }
+.pi-wname { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-wpnl { font-weight: 600; text-align: left; }
+.pi-wpct { font-weight: 600; text-align: right; }
+.pi-wbar { display: block; height: 9px; border-radius: 5px; background: var(--line); overflow: hidden; }
+.pi-wbar i { display: block; height: 100%; min-width: 2px; border-radius: 5px; }
+.pi-log-link { display: inline-flex; align-items: center; gap: 5px; color: var(--head-blue-on);
+  font-size: 16px; font-weight: 600; text-decoration: none; }
+.pi-log-link:hover, .pi-log-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.pi-arrow { font-size: 13px; font-weight: 400; }
 </style>
