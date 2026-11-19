@@ -945,6 +945,36 @@ class PageRenderer:
                 f'{metric("vol", "量", vol_txt, vol_cls)}</span></span>')
 
 
+    def _sector_tags(self):
+        """2026-11-19：持仓 / 重点分组里的个股，代码右边显示行业标签（分组名前两个字，如「医疗保健」→「医疗」）。
+        行业来源：记录自带的 sector（从行业分组移进持仓/重点时带过来的），没有就取它所在的行业分组；
+        两者都没有则不显示。每次渲染读一次 holdings.json 并缓存，读不到就全部不显示。"""
+        cache = getattr(self, "_sector_cache", None)
+        if cache is not None:
+            return cache
+        tags = {}
+        try:
+            import io as _io
+            with _io.open(os.path.join(self._context.BASE, "holdings.json"), encoding="utf-8") as stream:
+                cfg = json.load(stream)
+            labels = {g["key"]: str(g["label"]).replace(" ", "")[:2] for g in self._context.GROUPS
+                      if g["key"] not in ("positions", "focus")}
+            ident = self._context.instrument_identity
+            for gkey in ("positions", "focus"):
+                for sym, rec in (cfg.get(gkey) or {}).items():
+                    if not isinstance(rec, dict):
+                        continue
+                    key = rec.get("sector") if rec.get("sector") in labels else None
+                    if not key:
+                        key = next((k for k in labels if any(ident(x) == ident(sym)
+                                    for x in (cfg.get(k) or {}))), None)
+                    if key:
+                        tags.setdefault(ident(sym), labels[key])
+        except Exception as e:
+            self._context.log(f"  ! 行业标签读取失败：{e}")
+        self._sector_cache = tags
+        return tags
+
     def _stock_row(self, d, snapshot, earnings_week=None):
         if d.get("target") or d.get("purple") or any(kind == "target" for kind, _ in d.get("signal_marks") or []):
             d = self._context._apply_target(d)
@@ -965,6 +995,9 @@ class PageRenderer:
         # 长短表示持有周期；判灯口径只由规则表定义，不在提示中硬编码另一套规则。
         # 长短归属已由独立分区标题表达，主行不重复加“长”字。
         hold_html = ""
+        sec = self._sector_tags().get(self._context.instrument_identity(d["symbol"])) \
+            if d.get("group") in ("position", "focus") else None
+        sec_html = f'<span class="sec-tag">{html_lib.escape(sec)}</span>' if sec else ""
         cost_cell = '<td class="cost-line" colspan="5" hidden></td>' if d.get("group") == "position" else ""
         # 财报整排移到 52 周条那一行，主行只留代码／价格／紫灯框三列。
         band = self._context._earnings_band_html(d, self._render_day(snapshot))
@@ -974,7 +1007,7 @@ class PageRenderer:
             f'data-price="{html_lib.escape(str(d.get("price") or ""), quote=True)}" '
             f'data-prev-close="{html_lib.escape(str(d.get("prev_close") or ""), quote=True)}"><td class="sym">'
             f'<span class="sym-box {lamp_cls}">'
-            f'{html_lib.escape(self._context.normalize_symbol(d["symbol"]))}{note}{hold_html}'
+            f'{html_lib.escape(self._context.normalize_symbol(d["symbol"]))}{sec_html}{note}{hold_html}'
             f'{self._context._row_tags(d, snapshot)}</span>'
             f'</td><td class="num px">{self._price_rows_html(d, snapshot)}</td>'
             f'{tg_html}{cost_cell}<td class="sig">{self._context._signals_html(d)}</td></tr>'
@@ -1932,6 +1965,7 @@ class PageRenderer:
 
 
     def render(self, macro, items, watch_count, data_down=False, snapshot=None, dup_hidden=0):
+        self._sector_cache = None   # 每次渲染重读 holdings.json
         original_levels = [item.get("level") for item in items]
         snapshot = self._context._sanitize_snapshot(snapshot or {})
         items = [self._context._sanitize_snapshot_fields(item) for item in items]

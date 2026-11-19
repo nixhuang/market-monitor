@@ -1152,6 +1152,12 @@ table.stk tr[data-symbol]>td.sym>.sym-box .tag{display:none}
    不给它撑宽整列，否则价格区左边界又会跟着晃。 */
 table.stk tr[data-symbol]>td.sym>.sym-box .note{display:block;margin:0;font-size:11.5px;line-height:var(--row-height);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 table.stk tr[data-symbol]>td.sym>.sym-box .unit{display:inline-block;margin-left:4px}
+/* 行业标签（2026-11-19）：只在持仓 / 重点两组出现，贴在代码右边，分组名前两个字，灰色 14px。
+   sym-box 改两列网格——代码文字（匿名项）在第 1 行第 1 列、标签在第 1 行第 2 列，中文名仍独占第 2 行整行；
+   没有标签的行（其它分组）不含 .sec-tag，保持原单列几何，一个像素都不动。 */
+table.stk tr[data-symbol]>td.sym>.sym-box:has(.sec-tag){grid-template-columns:auto minmax(0,1fr);column-gap:3px}   /* 手机档代码列 98px：GOOGL(17px)58 + 3 + 「通信」28 ＝89 ≤ 内宽90，gap 再大就挤出 */
+table.stk tr[data-symbol]>td.sym>.sym-box .sec-tag{grid-row:1;grid-column:2;color:var(--dim);font-size:14px;font-weight:400;line-height:var(--row-height);white-space:nowrap;overflow:hidden;text-overflow:clip}
+table.stk tr[data-symbol]>td.sym>.sym-box:has(.sec-tag) .note{grid-row:2;grid-column:1/-1}
 table.stk tr[data-symbol]>td.sym::after{content:"";position:absolute;left:var(--vl-x);top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line);pointer-events:none}
 /* 价格区两排（2026-11-13 定，11-17 加周涨跌幅）：左块上排「现价 涨跌额（无$）」、
    下排「涨跌幅 周涨跌幅」；「振／量」仍是上下两排（上振下量），但整列靠右贴住

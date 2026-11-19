@@ -58,7 +58,7 @@
       "note": "谷歌",
       "hold": "long",
       "cost": 328.121,
-      "sector": "communications"
+      "sector": "technology"
     },
     "LMT": {
       "note": "洛克希德马丁",
@@ -132,28 +132,36 @@
   },
   "focus": {
     "ZS": {
-      "note": "云安全"
+      "note": "云安全",
+      "sector": "technology"
     },
     "COST": {
-      "note": "好市多"
+      "note": "好市多",
+      "sector": "consumer_staples"
     },
     "TSM": {
-      "note": "台积电"
+      "note": "台积电",
+      "sector": "technology"
     },
     "MA": {
-      "note": "万事达"
+      "note": "万事达",
+      "sector": "financials"
     },
     "V": {
-      "note": "支付"
+      "note": "支付",
+      "sector": "financials"
     },
     "MSFT": {
-      "note": "微软"
+      "note": "微软",
+      "sector": "technology"
     },
     "SYK": {
-      "note": "医疗机器人"
+      "note": "医疗机器人",
+      "sector": "healthcare"
     },
     "NXPI": {
-      "note": "恩智浦半导体"
+      "note": "恩智浦半导体",
+      "sector": "technology"
     }
   },
   "index_funds": {

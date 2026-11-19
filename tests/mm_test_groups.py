@@ -1873,10 +1873,28 @@ class TestGroups(unittest.TestCase):
             self.assertIn('加仓价 325', sig_td)
             self.assertIn('减仓价 400', sig_td)
             self.assertNotIn('lvtag', sym_td)
-            self.assertIn('AAPL<span class="note" data-full="苹果">苹果</span>', sym_td)
+            # 2026-11-19：持仓 / 重点个股代码右边多一个行业标签（分组名前两字），中文名紧随其后
+            self.assertIn('AAPL<span class="sec-tag">IT</span><span class="note" data-full="苹果">苹果</span>', sym_td)
             cleared = page_for(None, None)                                  # 设置页清空后：不再显示
             self.assertNotIn('class="lvs"', cleared)
             self.assertNotIn('class="lvtag', cleared)
+
+    def test_sector_tag_only_in_positions_and_focus_with_first_two_chars(self):
+        """2026-11-19：持仓 / 重点个股代码右边显示行业标签（分组名前两个字，灰色 14px）；其它分组不显示。"""
+        def row(sym, group):
+            d = dict(symbol=sym, note='测', price=100.0, chg=0.0, level='green', signals=[],
+                     group=group, data_date='2026-10-08')
+            return monitor._stock_row(d, {})
+        with patch.object(monitor, 'global_dca', return_value=None):
+            self.assertIn('<span class="sec-tag">医疗</span>', row('UNH', 'position'))   # 医疗保健 → 医疗
+            self.assertIn('<span class="sec-tag">工航</span>', row('LMT', 'position'))   # 工航防建 → 工航
+            self.assertIn('<span class="sec-tag">IT</span>', row('AAPL', 'position'))    # IT · AI → IT（去空格取前两字）
+            self.assertIn('<span class="sec-tag">金融</span>', row('V', 'focus'))        # 重点组里的行业来自记录自带 sector
+            self.assertNotIn('sec-tag', row('UNH', 'technology'))                        # 其它分组不显示
+        css = monitor.PAGE_CSS
+        rule = re.search(r'\.sym-box \.sec-tag\{([^}]*)\}', css)[1]
+        self.assertIn('font-size:14px', rule)
+        self.assertIn('color:var(--dim)', rule)
 
     def test_homepage_omits_duplicate_indicator_notes_and_keeps_other_notes(self):
         with patch.object(monitor, 'global_dca', return_value=None):
