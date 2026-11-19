@@ -1296,7 +1296,7 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('财报', text)   # 「财报」二字只写在表头
         # 2026-11-13：时段已定只在倒计时写北京口径，后面不再重复北京时间；倒计时也不编造钟点。
         self.assertEqual(note, '')
-        self.assertEqual(monitor.earnings_countdown(dict(ok, date='2026-10-30'), '2026-10-20'), '（北京11天 10月31日 凌晨）')
+        self.assertEqual(monitor.earnings_countdown(dict(ok, date='2026-10-30'), '2026-10-20'), '（北京11天 10/31 凌晨）')
         self.assertNotIn('不含具体钟点', note)
         self.assertNotIn('数据源只给', note)
         # 2026-11-03：无时段写「时段待定」（原「具体时段待定」）；北京时间那行照旧保留
@@ -1335,7 +1335,7 @@ class TestGroups(unittest.TestCase):
                             self.assertNotIn('earn-bj', markup)
                         timed = timing in ('pre', 'post', 'during')
                         days = 11 if timing == 'post' else 10
-                        bj_txt = '10月31日' if timing == 'post' else '10月30日'
+                        bj_txt = '10/31' if timing == 'post' else '10/30'
                         period = {'pre': '晚间', 'post': '凌晨', 'during': '夜–凌晨'}
                         cd = f'（北京{days}天 {bj_txt} {period[timing]}）' if timed else f'（美{days}天）'
                         self.assertIn(cd, markup)
@@ -1353,7 +1353,7 @@ class TestGroups(unittest.TestCase):
                 markup = monitor._earnings_html({
                     'earnings': e, 'fund_cache_note': '读取失败 <旧>'}, today)
                 self.assertIn(main, markup)
-                self.assertIn('（北京12天 1月1日 凌晨）', markup)
+                self.assertIn('（北京12天 01/01 凌晨）', markup)
                 for text in ('基本面', '读取失败', '官方', '预计', '估算'):
                     self.assertNotIn(text, markup)
         self.assertEqual(monitor._earnings_html({'fund_cache_note': '读取失败 <旧>'}), '')
@@ -1878,6 +1878,39 @@ class TestGroups(unittest.TestCase):
             cleared = page_for(None, None)                                  # 设置页清空后：不再显示
             self.assertNotIn('class="lvs"', cleared)
             self.assertNotIn('class="lvtag', cleared)
+
+    def test_released_earnings_keep_previously_fetched_timing(self):
+        """2026-11-20：发布后数据源清掉下一次财报，重抓回来的同日事件没有时段——取到过的沿用，没取到过的保持没有。"""
+        old = {'status': 'ok', 'date': '2026-11-18', 'timing': 'post', 'kind': 'expected'}
+        got = monitor._carry_timing({'status': 'ok', 'date': '2026-11-18', 'timing': '', 'fetched': '2026-11-19'}, old)
+        self.assertEqual(got['timing'], 'post')
+        # 改期 / 下一季：日期不同不沿用
+        self.assertEqual(monitor._carry_timing({'status': 'ok', 'date': '2027-02-18', 'timing': ''}, old)['timing'], '')
+        # 一直没取到过的：保持没有
+        none_old = dict(old, timing='')
+        self.assertEqual(monitor._carry_timing({'status': 'ok', 'date': '2026-11-18', 'timing': ''}, none_old)['timing'], '')
+        # 新抓到自己的时段：以新的为准
+        self.assertEqual(monitor._carry_timing({'status': 'ok', 'date': '2026-11-18', 'timing': 'pre'}, old)['timing'], 'pre')
+        # 页面：有时段的已出，北京倒计时和美东段都写时段
+        main, sub = monitor.earnings_label({'status': 'ok', 'date': '2026-11-18', 'timing': 'post'}, '2026-11-20')
+        self.assertEqual(main, '美 11/18 盘后')
+        self.assertEqual(monitor.earnings_countdown({'status': 'ok', 'date': '2026-11-18', 'timing': 'post'}, '2026-11-20'),
+                         '（北京昨天11/19凌晨已出）')
+        self.assertEqual(monitor.earnings_countdown({'status': 'ok', 'date': '2026-11-19', 'timing': ''}, '2026-11-20'),
+                         '（北京昨天11/19已出）')
+
+    def test_attach_earnings_keeps_timing_after_source_clears_next_report(self):
+        """走完整 attach_earnings：财报日已过、重抓回来没时段，页面条目仍沿用上一轮取到的盘后。"""
+        old = {'status': 'ok', 'date': '2026-11-18', 'timing': 'post', 'kind': 'expected', 'fetched': '2026-11-17'}
+        fresh = {'status': 'ok', 'date': '2026-11-18', 'timing': '', 'kind': 'expected', 'fetched': '2026-11-19'}
+        item = {'symbol': 'PANW', 'group': 'position'}
+        with patch.object(monitor, 'resolve_earnings', return_value=fresh), \
+             patch.object(monitor, 'verified_earnings_events', return_value={}), \
+             patch.object(monitor, 'quote_supported', return_value=True), \
+             patch.object(monitor, 'is_etf', return_value=False):
+            stat = monitor.attach_earnings([item], {'PANW': old}, today='2026-11-20')
+        self.assertEqual(stat['data']['PANW']['timing'], 'post')
+        self.assertEqual(item['earnings']['timing'], 'post')
 
     def test_sector_tag_only_in_positions_and_focus_with_first_two_chars(self):
         """2026-11-19：持仓 / 重点个股代码右边显示行业标签（分组名前两个字，灰色 14px）；其它分组不显示。"""
@@ -7674,7 +7707,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                           '<span class="stat-badge red" aria-label="红 0 项">0</span>'
                           '<span class="stat-badge yellow" aria-label="黄 0 项">0</span>', panel)
             self.assertIn('白 0', panel)
-            self.assertIn('报 2', panel)
+            self.assertIn('count-earn">报 4</span>', panel)   # 2026-11-20 筛选文案日期改 MM/DD 后，原先靠「财报 2026-…」凑出的「报 2」改为断言真正的财报计数
             old = monitor._signal_counts_card({'summary': {'red': 4, 'yellow': 32},
                                                'signal_counts': {'target': {'label': '目标价', 'purple': 3}}})
             for text in ('红 4', '黄 32', '白 0', '报 —'):
@@ -7701,7 +7734,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                           '美 10/14 盘后</span><span class="lamp-text">（绿灯）</span>', panel)
             # 2026-11-13：时段已定只在倒计时写北京口径，美东时间后不再重复北京时间。
             self.assertIn('<span class="signal-member-belong">（短持）</span> '
-                          '<span class="earnings-week-meta is-yellow"><span class="cd">（北京7天 10月21日 凌晨）</span>美 10/20 盘后'
+                          '<span class="earnings-week-meta is-yellow"><span class="cd">（北京7天 10/21 凌晨）</span>美 10/20 盘后'
                           '</span><span class="lamp-text">（绿灯）</span>', panel)
             self.assertNotIn('earnings-week-group', panel)
             self.assertNotIn('<strong>', panel.split('earnings-week', 1)[1])
@@ -7771,7 +7804,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     self.assertTrue(data['earnings_week']['ok'])
                     filtered, = data['earnings_week']['members']
                     self.assertEqual(filtered['d'][0]['l'], 'gray')   # 10/30 距基准 10 天：不红不黄，跟财报名单同为灰字
-                    self.assertEqual(filtered['d'][0]['t'], f'财报 {date} {label}')
+                    self.assertEqual(filtered['d'][0]['t'], f'财报 美 {date[5:].replace("-", "/")} {label}')
                     position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
                     # 2026-11-16：持仓合并成一张表，财报行直接落在个股表里
                     self.assertNotIn('无异动 1 只', position)
@@ -7786,7 +7819,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                         self.assertNotIn('class="earn-bj"', folded)
                     timed = timing in ('pre', 'post', 'during')
                     days = 11 if timing == 'post' else 10
-                    bj_txt = '10月31日' if timing == 'post' else '10月30日'
+                    bj_txt = '10/31' if timing == 'post' else '10/30'
                     period = {'pre': '晚间', 'post': '凌晨', 'during': '夜–凌晨'}
                     cd = f'（北京{days}天 {bj_txt} {period[timing]}）' if timed else f'（美{days}天）'
                     self.assertIn(cd, folded)
@@ -9735,13 +9768,14 @@ class TestFinalSourceContract(unittest.TestCase):
                     elif timed and shown in (0, 1):
                         expected_cd = f'（北京 {"明天" if shown == 1 else "今天"} {period[timing]}）'
                     elif shown <= 0:
-                        expected_cd = (f'（北京{past.get(shown, "")}'
-                                       f'{bj_day.month}月{bj_day.day}日已出）')
+                        # 2026-11-20：已出的北京日期一律写「MM/DD」，取到时段再接时段
+                        day_txt = f'{bj_day.month:02d}/{bj_day.day:02d}' + (period[timing] if timed else '')
+                        expected_cd = f'（北京{past.get(shown, "")}{day_txt}已出）'
                     elif not timed:
                         expected_cd = f'（美{"明天" if shown == 1 else str(shown) + "天"}）'
                     else:
                         # 2026-11-14：N 天倒计时不是日期，必须再写一次北京落点月日。
-                        expected_cd = f'（北京{shown}天 {bj_day.month}月{bj_day.day}日 {period[timing]}）'
+                        expected_cd = f'（北京{shown}天 {bj_day.month:02d}/{bj_day.day:02d} {period[timing]}）'
                     expected_note = '' if timed or shown <= 0 else '北京 待定'
                     with self.subTest(today=today, timing=timing, gap=raw_gap):
                         self.assertEqual(monitor.earnings_countdown(event, today), expected_cd)
@@ -9782,9 +9816,9 @@ class TestFinalSourceContract(unittest.TestCase):
                 with self.subTest(timing=timing, shown=shown):
                     self.assertEqual(len(us.findall(main)), 1)   # 美东日期恒有且只有一次
                     if shown <= monitor.EARN_COUNTDOWN_DAYS:
-                        self.assertRegex(cd, r'^（北京\d+天 \d{1,2}月\d{1,2}日 ')
+                        self.assertRegex(cd, r'^（北京\d+天 \d{2}/\d{2} ')    # 2026-11-20：全页财报日期统一「11/19」写法
                         self.assertEqual(note, '')
-                        self.assertEqual(len(re.findall(r'\d{1,2}月\d{1,2}日', text)), 1)
+                        self.assertEqual(len(re.findall(r'北京\d+天 \d{2}/\d{2}', text)), 1)
                     else:
                         self.assertEqual(cd, '')
                         self.assertRegex(note, r'^北京 \d{2}/\d{2}')
@@ -9818,7 +9852,7 @@ class TestFinalSourceContract(unittest.TestCase):
         """22:35 用户「（北京昨天11月12日已出） 美 11/12 时段待定 这种也很奇怪，都已出了还待定？」。
 
         已出（gap<=0）且源没给时段时，倒计时已经写明「已出」，主表／名单／筛选结果
-        都不再挂「时段待定」；时段已知或未发布仍照常写时段。
+        都不再挂「时段待定」，2026-11-20 起改写「未获取」；时段已知或未发布仍照常写时段。
         """
         today = '2026-11-13'
         released = [
@@ -9829,7 +9863,7 @@ class TestFinalSourceContract(unittest.TestCase):
         for event in released:
             with self.subTest(event=event):
                 main, _ = monitor.earnings_label(event, today)
-                self.assertEqual(main, '美 11/12')
+                self.assertEqual(main, '美 11/12 未获取')
                 html = monitor._earnings_html({'earnings': event}, today)
                 self.assertIn('已出', html)
                 self.assertNotIn('时段待定', html)
@@ -9847,7 +9881,7 @@ class TestFinalSourceContract(unittest.TestCase):
         self.assertNotIn('时段待定', panel)
         card = monitor._signal_counts_card(snapshot)
         data = json.loads(monitor.html_lib.unescape(re.search(r'data-filter="([^"]*)"', card).group(1)))
-        self.assertEqual(data['earnings_week']['members'][0]['d'][0]['t'], '财报 2026-11-12')
+        self.assertEqual(data['earnings_week']['members'][0]['d'][0]['t'], '财报 美 11/12 未获取')
 
     def test_far_earnings_keep_beijing_note_when_countdown_is_hidden(self):
         """2026-11-13 22:16 用户「线上版 MRVL 财报是美 12/01 盘后，怎么没有北京时间了」。
@@ -9884,7 +9918,7 @@ class TestFinalSourceContract(unittest.TestCase):
         self.assertEqual(monitor._earnings_html({'earnings': far}, today), '')
         edge = {'status': 'ok', 'date': '2026-11-27', 'timing': 'post'}
         self.assertEqual(monitor._earnings_display_gap(edge, today), 15)
-        self.assertIn('（北京15天 11月28日 凌晨）', monitor.earnings_countdown(edge, today))
+        self.assertIn('（北京15天 11/28 凌晨）', monitor.earnings_countdown(edge, today))
         self.assertEqual(monitor.earnings_label(edge, today)[1], '')
 
     def test_invalid_earnings_never_fabricate_countdown(self):

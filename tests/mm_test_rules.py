@@ -225,14 +225,14 @@ class RulesRegression(unittest.TestCase):
         tbd 蓝字只剩「时段待定且未发布」。"""
         today = '2026-11-10'
         cases = (
-            ('post', '2026-11-20', '（北京11天 11月21日 凌晨）', '', 'cd', False, False),
-            ('pre',  '2026-11-12', '（北京2天 11月12日 晚间）', '', 'cd', False, False),
+            ('post', '2026-11-20', '（北京11天 11/21 凌晨）', '', 'cd', False, False),
+            ('pre',  '2026-11-12', '（北京2天 11/12 晚间）', '', 'cd', False, False),
             (None,   '2026-11-12', '（美2天）', '北京 待定', 'cd tbd', True, False),
             ('post', '2026-11-10', '（北京 明天 凌晨）', '', 'cd', False, True),
             ('post', '2026-11-09', '（北京 今天 凌晨）', '', 'cd', False, True),
-            ('pre',  '2026-11-09', '（北京昨天11月9日已出）', '', 'cd', False, True),
-            (None,   '2026-11-09', '（北京昨天11月9日已出）', '', 'cd', False, True),
-            (None,   '2026-11-10', '（北京今天11月10日已出）', '', 'cd', False, True),
+            ('pre',  '2026-11-09', '（北京昨天11/09晚间已出）', '', 'cd', False, True),   # 2026-11-20：取到过时段的已出，倒计时里也写时段
+            (None,   '2026-11-09', '（北京昨天11/09已出）', '', 'cd', False, True),   # 2026-11-20：没取到时段的已出写 MM/DD
+            (None,   '2026-11-10', '（北京今天11/10已出）', '', 'cd', False, True),
         )
         for timing, date, countdown, bj, mark_cls, tbd, relative in cases:
             with self.subTest(timing=timing, date=date):
@@ -253,8 +253,8 @@ class RulesRegression(unittest.TestCase):
                 label = {'post': '盘后', 'pre': '盘前'}.get(timing, '时段待定')
                 # 22:35 已出且源没给时段时，倒计时已写「已出」，筛选结果也不再写「时段待定」。
                 if label == '时段待定' and monitor._earnings_display_gap(event, today) <= 0:
-                    label = ''
-                self.assertEqual(part['t'], f"财报 {date} {label}".rstrip())
+                    label = '未获取'
+                self.assertEqual(part['t'], f"财报 美 {date[5:].replace('-', '/')} {label}".rstrip())
                 self.assertEqual(part['e'], {'c': countdown, 'b': bj, 'tbd': tbd,
                                              'relative': relative and bool(bj)})
         js = page_assets.PAGE_INTERACTION_JS
@@ -269,6 +269,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         result = subprocess.run(['node', '-e', script], capture_output=True, text=True, encoding='utf-8', timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('cd.textContent = part.e.c;', js)
+        # 2026-11-20：指标名「财报」永远在最前，倒计时在其后（与「涨跌幅」等指标名在前一致）
+        self.assertLess(js.index('rest.indexOf("财报") === 0'), js.index('cd.textContent = part.e.c;'))
         self.assertIn('bj.textContent = "·" + part.e.b;', js)
         self.assertNotIn('new Date(', js[js.index('function renderSignalFilter('):js.index('document.addEventListener("click"', js.index('function renderSignalFilter('))])
 
@@ -735,9 +737,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
                 self.assertNotIn('量比', monitor._signals_html(d))
         today = '2026-10-07'
         ev = lambda day, timing='pre': {'status': 'ok', 'date': day, 'timing': timing, 'kind': 'expected'}
-        self.assertEqual(monitor.earnings_countdown(ev('2026-10-22'), today), '（北京15天 10月22日 晚间）')
+        self.assertEqual(monitor.earnings_countdown(ev('2026-10-22'), today), '（北京15天 10/22 晚间）')
         self.assertEqual(monitor.earnings_countdown(ev('2026-10-23'), today), '')
-        self.assertEqual(monitor.earnings_countdown(ev('2026-10-21', 'post'), today), '（北京15天 10月22日 凌晨）')
+        self.assertEqual(monitor.earnings_countdown(ev('2026-10-21', 'post'), today), '（北京15天 10/22 凌晨）')
         self.assertEqual(monitor.earnings_countdown(ev('2026-10-22', 'post'), today), '')
         plain = monitor._earnings_html({'earnings': ev('2026-10-23')}, today)
         self.assertIn('美 10/23 盘前', plain)

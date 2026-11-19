@@ -2133,7 +2133,7 @@ def earnings_bj_date(e):
 
 def _earnings_bj_day_text(e):
     day = earnings_bj_date(e)
-    return f"{day.month}月{day.day}日" if day else ""
+    return f"{day.month:02d}/{day.day:02d}" if day else ""    # 2026-11-20 用户：全页财报日期统一「11/19」写法
 
 
 def earnings_cd_merged(e, today=None):
@@ -2176,7 +2176,12 @@ def earnings_countdown(e, today=None):
         return f"（北京 {'明天' if gap == 1 else '今天'} {_EARN_BJ_PERIOD[e['timing']]}）"
     if gap <= 0:
         # 2026-11-13：已出只写这一处，相对日＋北京月日一起写全，后面不再补第二句北京说明。
-        return f"（北京{_EARN_PAST_WORD.get(gap, '')}{_earnings_bj_day_text(e)}已出）"
+        # 2026-11-20 用户：取到过时段的已出，北京倒计时里也要写时段（美东那段本来就带盘前/盘后）。
+        # 2026-11-20 用户：已出的北京日期一律写「11/18」这种（与美东段同款），有时段再接时段；
+        # 没取到过时段的美东段后另写「未获取」。
+        day = earnings_bj_date(e)
+        period = _EARN_BJ_PERIOD[e["timing"]] if timed else ""
+        return f"（北京{_EARN_PAST_WORD.get(gap, '')}{day.month:02d}/{day.day:02d}{period}已出）"
     if not timed:
         return f"（美{'明天' if gap == 1 else str(gap) + '天'}）"
     # 时段已定、还没发布的 N 天：括号里写北京落点日期＋时段，后面不再补第二句北京说明。
@@ -2184,6 +2189,13 @@ def earnings_countdown(e, today=None):
     # 美东日期由「美 MM/DD 盘后」给出，北京日期只在这里出现一次；>15 天窗口倒计时为空，
     # 北京日期改由后面的「北京 MM/DD 凌晨」承担。日期沿用 earnings_bj_date（盘后顺延一日）。
     return f"（北京{gap}天 {_earnings_bj_day_text(e)} {_EARN_BJ_PERIOD[e['timing']]}）"
+
+
+def earnings_date_text(date, today=None):
+    """页面上所有财报日期的统一写法：「11/19」；跨年（非当年）才带年份「2027/01/27」。"""
+    year, month, day = str(date).split("-")
+    this_year = int((today if _iso_date(today) else _bj_today())[:4])
+    return f"{month}/{day}" if int(year) == this_year else f"{year}/{month}/{day}"
 
 
 def earnings_label(e, today=None):
@@ -2197,9 +2209,8 @@ def earnings_label(e, today=None):
         return None
     if e.get("status") != "ok" or not _iso_date(e.get("date")):
         return None
+    date_txt = earnings_date_text(e["date"], today)
     year, month, day = e["date"].split("-")
-    this_year = int((today if _iso_date(today) else _bj_today())[:4])
-    date_txt = f"{month}/{day}" if int(year) == this_year else f"{year}/{month}/{day}"
     # 2026-11-03：无时段只写「时段待定」（原「具体时段待定」，少两个字）。
     # 注意只改这一截——北京时间那行是独立信息，不能跟着一起删。
     timing = {"pre": "盘前", "post": "盘后", "during": "盘中"}.get(e.get("timing"), "时段待定")
@@ -2222,7 +2233,7 @@ def earnings_label(e, today=None):
     # 22:35 用户「都已出了还待定？」：已出（gap<=0）且源没给时段时，倒计时已经写明
     # 「（北京昨天N月N日已出）」，后面再挂「时段待定」自相矛盾；这类只留美东日期。
     if gap is not None and gap <= 0 and not timed:
-        timing = ""
+        timing = "未获取"      # 2026-11-20：已出且从没取到过时段，如实写「未获取」（不再留白）
     cd = earnings_countdown(e, today)
     if (timed and cd) or (gap is not None and gap <= 0):
         # 2026-11-13：北京具体时段、以及所有已出（含时段待定）都只在倒计时里写一次，
@@ -2396,6 +2407,16 @@ def _earn_cache_usable(entry, today):
         return False
 
 
+def _carry_timing(new, old):
+    """2026-11-20 用户：财报发布后数据源（Nasdaq）会清掉「下一次财报」，重抓回来的同一天事件没有盘前/盘后。
+    之前取到过时段的，同一个日期就沿用旧时段；一直没取到过的保持没有。日期变了（改期/下一季）不沿用。"""
+    if (isinstance(new, dict) and isinstance(old, dict) and new.get("status") == "ok" and old.get("status") == "ok"
+            and new.get("date") == old.get("date") and not new.get("timing")
+            and old.get("timing") in ("pre", "post", "during")):
+        return {**new, "timing": old["timing"]}
+    return new
+
+
 def attach_earnings(items, prev=None, today=None, prev_events=None, deadline=None, clock=None):
     """全部非 ETF 个股都查财报日期，但靠跨次缓存按远近分档刷新，大部分运行只需少量请求。
     抓到的日期全部挂到页面上；财报在 EARN_SOON_DAYS 天内的文字标黄（由 earnings_soon 决定）。
@@ -2507,7 +2528,7 @@ def attach_earnings(items, prev=None, today=None, prev_events=None, deadline=Non
                     else:
                         resolved[k] = {"status": "error"}   # 不写进缓存，下一轮必重抓
                 else:
-                    resolved[k] = {**e, "fetched": today}
+                    resolved[k] = _carry_timing({**e, "fetched": today}, old)
     except Exception as e:
         log(f"  ! 财报日期读取中断，用已有缓存：{e}")      # 加分项，不能拖垮页面生成
         for k in todo:

@@ -162,6 +162,10 @@
     "NXPI": {
       "note": "恩智浦半导体",
       "sector": "technology"
+    },
+    "ANT": {
+      "note": "Anthropic",
+      "sector": "technology"
     }
   },
   "index_funds": {

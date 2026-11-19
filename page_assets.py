@@ -2263,13 +2263,20 @@ function renderSignalFilter() {
       condition.dataset.signalKind = part.k;
       condition.dataset.signalLevel = part.l;
       if (part.k === "earnings_week" && part.e) {
+        // 指标名「财报」永远在最前（与「涨跌幅」等一致），其后才是北京倒计时，再是美东日期时段、北京说明。
+        let rest = part.t;
+        const nameEnd = rest.indexOf(" ");
+        if (rest.indexOf("财报") === 0 && nameEnd > 0) {
+          condition.appendChild(document.createTextNode(rest.slice(0, nameEnd + 1)));
+          rest = rest.slice(nameEnd + 1);
+        }
         if (part.e.c) {
           const cd = document.createElement("span");
           cd.className = part.e.tbd ? "cd tbd" : "cd";
           cd.textContent = part.e.c;
           condition.append(cd);
         }
-        condition.appendChild(document.createTextNode(part.t));
+        condition.appendChild(document.createTextNode(rest));
         if (part.e.b) {
           const bj = document.createElement("span");
           bj.className = part.e.relative ? "earnings-week-bj is-countdown" : "earnings-week-bj";

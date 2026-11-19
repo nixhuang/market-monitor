@@ -160,7 +160,7 @@ check('<span class="earn soon"' in _html_e and _html_e.count('<span class="earn 
       and '<span class="earn">美 10/27 盘前' in _html_e
       and '<div class="earn-band"><span class="earn soon"' in _html_e,
       "D 距北京今天 2 天的财报标黄（earn soon），20 天后仍显示蓝字但不再带倒计时；财报整排落在 52 周条下方带底色的条里")
-check(monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-22', 'timing': 'pre'}, '2026-10-07') == '（北京15天 10月22日 晚间）'
+check(monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-22', 'timing': 'pre'}, '2026-10-07') == '（北京15天 10/22 晚间）'
       and monitor.earnings_countdown({'status': 'ok', 'date': '2026-10-23', 'timing': 'pre'}, '2026-10-07') == ''
       and monitor._earnings_html({'earnings': {'status': 'ok', 'date': '2026-11-06', 'timing': 'pre'}}, '2026-10-07') != ''
       and monitor._earnings_html({'earnings': {'status': 'ok', 'date': '2026-11-07', 'timing': 'pre'}}, '2026-10-07') == '',

@@ -1538,14 +1538,18 @@ class PageRenderer:
                         {"status": "ok", "date": d.get("date"), "timing": d.get("timing")}, asof)
                     return urg if urg in ("red", "yellow") else "gray"
 
-                # 同样不解释来源：筛选结果里只写「财报 日期 时段」；已出且源没给时段时不写「时段待定」。
+                # 同样不解释来源：筛选结果里只写「财报 日期 时段」；已出且源没给时段时写「未获取」。
                 def earn_text(d):
                     timing_txt = timing_labels.get(d.get("timing"), "时段待定")
                     gap = self._context._earnings_display_gap(
                         {"status": "ok", "date": d.get("date"), "timing": d.get("timing")}, asof)
                     if timing_txt == "时段待定" and gap is not None and gap <= 0:
-                        timing_txt = ""
-                    return f"财报 {d.get('date', '')} {timing_txt}".rstrip()
+                        timing_txt = "未获取"
+                    # 2026-11-20 用户：财报时间永远北京＋美东都写；指标名「财报」在最前，其后才是北京倒计时与美东日期时段。
+                    # 这里写「财报 美 11/19 盘后」，页面脚本把倒计时插在「财报」二字之后。
+                    shown_date = (self._context.earnings_date_text(d["date"], asof)
+                                  if self._context._iso_date(d.get("date")) else d.get("date", ""))
+                    return f"财报 美 {shown_date} {timing_txt}".rstrip()
                 add_overlay_filter("earnings_week", "未来15天财报", earn_members, len(earn_members),
                                    earn_text, earn_level)
                 # 动态交集只使用服务端冻结的展示信息，不在打开页面时重算时间。
