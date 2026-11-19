@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>交易记录 · NIX-Matrix</title>
 <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=3">
 <style>
@@ -10,18 +10,19 @@
   --bg:#0b0e14;--card:#141a24;--text:#e6e8ec;--dim:#8b93a1;--line:#252a33;
   --head:#4a5772;--blue:#8fb8f0;--border:#a371f7;--fw:1px;--sel:#182131;
   --up:#3fb950;--down:#f85149;
+  --cyan:#3cc8d6;--orange:#ff9f43;   /* 加仓＝青，减仓＝橙；建仓＝涨绿、清仓＝跌红（同看板涨跌色） */
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,
   BlinkMacSystemFont,"Segoe UI","Noto Sans","Microsoft YaHei",sans-serif}
-.stage{padding:14px 4px 28px}
+.stage{padding:calc(env(safe-area-inset-top,0px) + 64px) 4px 28px}   /* 整页下移：避开 iPhone 灵动岛 / 状态栏 */
 .sheet{width:min(1000px,100%);margin:0 auto;background:var(--card);
   border:var(--fw) solid var(--border);border-radius:8px;overflow:hidden}
-.shead{display:flex;align-items:baseline;gap:10px;padding:8px 12px;border-bottom:1px solid var(--head)}
-.shead h1{margin:0;font-size:16px;font-weight:600;color:var(--blue)}
+.sfoot{display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid var(--head)}
+h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}   /* 页面不写标题，仅留给读屏 */
 .scount{margin-left:auto;color:var(--dim);font-size:13px;font-variant-numeric:tabular-nums}
-.back{color:var(--blue);font-size:13px;text-decoration:none}
-.back:hover,.back:focus-visible{text-decoration:underline;text-underline-offset:3px}
+.back{color:var(--blue);font-size:15px;line-height:1.3;text-decoration:none;padding:3px 12px;border:1px solid var(--blue);border-radius:6px;white-space:nowrap}
+.back:hover,.back:focus-visible{background:var(--sel);outline:none}
 .tblwrap{overflow-x:auto}
 /* 12:23 口径：表格文字 +1px（13.5→14.5 / 手机 12.5→13.5），六档实测零溢出才保留 */
 table{width:100%;border-collapse:collapse;font-size:14.5px;font-variant-numeric:tabular-nums}
@@ -35,90 +36,57 @@ td.sym{font-weight:600}
 /* 已实现列：赚用涨色、亏用跌色，与看板其它盈亏数字同一套变量 */
 td.up{color:var(--up)}
 td.down{color:var(--down)}
-.pager{display:flex;align-items:center;gap:7px;padding:9px 12px;
-  border-top:1px solid var(--head);flex-wrap:wrap}
-.pager button{background:var(--sel);border:1px solid var(--border);color:var(--text);
-  border-radius:5px;padding:3px 10px;font-size:13px;cursor:pointer;font-variant-numeric:tabular-nums}
-.pager button:disabled{opacity:.35;cursor:default}
-.pager button.on{background:rgba(143,184,240,.22);border-color:var(--blue);color:#fff;font-weight:600}
-.pinfo{color:var(--dim);font-size:13px;font-variant-numeric:tabular-nums}
-.psel{margin-left:auto;display:flex;align-items:center;gap:6px;color:var(--dim);font-size:13px}
-.psel select{background:var(--sel);border:1px solid var(--border);color:var(--text);
-  border-radius:5px;padding:3px 6px;font-size:13px}
+td.add{color:var(--cyan)}
+td.open{color:var(--up)}
+td.close{color:var(--down)}
+td.cut{color:var(--orange)}
 @media(max-width:600px){
-  .stage{padding:10px 4px 20px}
+  .stage{padding:calc(env(safe-area-inset-top,0px) + 60px) 4px 20px}
   table{font-size:13.5px}
   th,td{padding:4px 5px}
-  .shead{padding:7px 9px}
-  .shead h1{font-size:15px}
-  .pager{padding:8px 9px;gap:6px}
-  .pager button{padding:3px 7px;font-size:12.5px}
-  .pager button.pnum{padding:3px 7px}
-  .psel{width:100%;margin-left:0;justify-content:flex-end}
+  .sfoot{padding:7px 9px}
 }
 </style>
 </head>
 <body>
 <div class="stage">
 <div class="sheet" id="sheet">
-  <div class="shead"><h1>交易记录</h1><a class="back" href="./index.html">返回看板</a><span class="scount" id="scount"></span></div>
+  <h1>交易记录</h1>
   <div class="tblwrap">
     <table>
       <thead><tr><th>代码</th><th>方向</th><th>股数</th><th>成交价</th><th>已实现</th><th>金额</th><th>时间</th></tr></thead>
       <tbody id="tbody"></tbody>
     </table>
   </div>
-  <div class="pager" id="pager"></div>
+  <div class="sfoot"><a class="back" href="./index.html">返回看板</a><span class="scount" id="scount"></span></div>
 </div>
 </div>
 
 <script>
 (function(){
-  var MAX = 50;                       // 滚动窗口上限：新记录进来顶掉最旧一条
-  var DATA = [["NXPI", "清仓", "2", "249.00", "+57.99", "497.99", "26-11-17"], ["NTNX", "加仓", "2", "56.96", "—", "113.92", "26-11-17"], ["SPYM", "加仓", "6", "88.329", "—", "529.97", "26-11-13"], ["PDD", "清仓", "10", "81.12", "+21.18", "811.18", "26-11-09"], ["NTNX", "减仓", "10", "60.00", "—", "599.99", "26-11-05"], ["SPYM", "加仓", "5", "88.80", "—", "444.00", "26-11-03"], ["AAPL", "建仓", "6", "325.03", "—", "1950.18", "26-11-02"], ["GOOGL", "加仓", "1", "286.00", "—", "286.00", "26-10-29"], ["GOOGL", "加仓", "1", "294.86", "—", "294.86", "26-10-29"], ["GOOGL", "加仓", "1", "328.00", "—", "328.00", "26-10-22"], ["APH", "加仓", "2", "75.40", "—", "150.80", "26-10-22"], ["PDD", "建仓", "10", "79.00", "—", "790.00", "26-10-21"], ["CRSP", "加仓", "2", "49.71", "—", "99.42", "26-10-20"], ["GEHC", "清仓", "10", "71.01", "+33.79", "710.09", "26-10-16"], ["NTNX", "加仓", "5", "69.00", "—", "345.00", "26-10-16"], ["VRT", "建仓", "4", "208.98", "—", "835.92", "26-10-15"], ["SPYM", "加仓", "10", "90.33", "—", "903.30", "26-10-15"], ["QQQM", "加仓", "4", "296.6502", "—", "1186.60", "26-10-15"], ["NXPI", "建仓", "2", "220.00", "—", "440.00", "26-10-14"], ["DRAM", "加仓", "3", "52.39", "—", "157.17", "26-10-13"], ["GEHC", "建仓", "10", "67.63", "—", "676.30", "26-10-13"], ["NTNX", "加仓", "3", "72.60", "—", "217.80", "26-10-13"], ["XLI", "建仓", "2", "167.90", "—", "335.80", "26-10-08"], ["UNH", "加仓", "1", "371.00", "—", "371.00", "26-10-05"], ["SCHD", "加仓", "10", "32.70", "—", "327.00", "26-10-05"], ["ZS", "清仓", "3", "202.30", "+159.61", "606.89", "26-10-05"], ["NTNX", "减仓", "3", "73.56", "—", "220.68", "26-10-05"], ["SCHD", "加仓", "5", "32.70", "—", "163.50", "26-10-02"], ["SPYM", "加仓", "5", "89.89", "—", "449.45", "26-09-29"], ["SCHD", "加仓", "0.0903", "33.0189", "—", "2.98", "26-09-28"], ["SCHD", "加仓", "15", "32.98", "—", "494.70", "26-09-28"], ["BRK-B", "建仓", "1", "505.00", "—", "505.00", "26-09-28"], ["UNH", "加仓", "2", "377.30", "—", "754.60", "26-09-28"], ["QQQM", "加仓", "0.0022", "306.1376", "—", "0.66", "26-09-25"], ["HII", "建仓", "2", "272.00", "—", "544.00", "26-09-21"], ["ZS", "减仓", "3", "194.03", "—", "582.08", "26-09-17"], ["SCHD", "加仓", "3", "34.16", "—", "102.48", "26-09-16"], ["SPYM", "加仓", "0.0188", "88.94", "—", "1.67", "26-09-15"], ["AVGO", "加仓", "1", "343.00", "—", "343.00", "26-09-03"], ["UBER", "减仓", "5", "80.00", "—", "399.99", "26-08-25"], ["ZS", "建仓", "6", "171.56", "—", "1029.36", "26-08-25"], ["AVGO", "加仓", "1", "362.03", "—", "362.03", "26-08-24"], ["QCOM", "清仓", "2", "163.00", "+24.32", "325.99", "26-08-19"], ["QQQM", "建仓", "3", "297.00", "—", "891.00", "26-08-18"], ["UNH", "建仓", "3", "400.00", "—", "1200.00", "26-08-13"], ["QCOM", "减仓", "4", "170.00", "—", "679.99", "26-08-10"], ["APH", "加仓", "8", "171.13", "—", "684.52", "26-08-06"], ["APH", "减仓", "6", "172.66", "—", "517.97", "26-08-04"], ["DRAM", "减仓", "3", "48.30", "—", "144.90", "26-07-30"], ["QCOM", "加仓", "1", "146.01", "—", "146.01", "26-07-30"]];                // 与 trade-log.md 同源的内联兜底数据
-  var per = 20, page = 1;
+  var MAX = 20;                       // 只留最近 20 笔：新记录进来顶掉最旧一条，不翻页
+  var DATA = [["NXPI", "清仓", "2", "249.00", "+57.99", "497.99", "26-11-17"], ["NTNX", "加仓", "2", "56.96", "—", "113.92", "26-11-17"], ["SPYM", "加仓", "6", "88.329", "—", "529.97", "26-11-13"], ["PDD", "清仓", "10", "81.12", "+21.18", "811.18", "26-11-09"], ["NTNX", "减仓", "10", "60.00", "—", "599.99", "26-11-05"], ["SPYM", "加仓", "5", "88.80", "—", "444.00", "26-11-03"], ["AAPL", "建仓", "6", "325.03", "—", "1950.18", "26-11-02"], ["GOOGL", "加仓", "1", "286.00", "—", "286.00", "26-10-29"], ["GOOGL", "加仓", "1", "294.86", "—", "294.86", "26-10-29"], ["GOOGL", "加仓", "1", "328.00", "—", "328.00", "26-10-22"], ["APH", "加仓", "2", "75.40", "—", "150.80", "26-10-22"], ["PDD", "建仓", "10", "79.00", "—", "790.00", "26-10-21"], ["CRSP", "加仓", "2", "49.71", "—", "99.42", "26-10-20"], ["GEHC", "清仓", "10", "71.01", "+33.79", "710.09", "26-10-16"], ["NTNX", "加仓", "5", "69.00", "—", "345.00", "26-10-16"], ["VRT", "建仓", "4", "208.98", "—", "835.92", "26-10-15"], ["SPYM", "加仓", "10", "90.33", "—", "903.30", "26-10-15"], ["QQQM", "加仓", "4", "296.6502", "—", "1186.60", "26-10-15"], ["NXPI", "建仓", "2", "220.00", "—", "440.00", "26-10-14"], ["DRAM", "加仓", "3", "52.39", "—", "157.17", "26-10-13"]];                // 与 trade-log.md 同源的内联兜底数据
   var tbody = document.getElementById('tbody');
-  var pager = document.getElementById('pager');
-
-  function pages(){ return Math.max(1, Math.ceil(DATA.length / per)); }
 
   function render(){
-    var ps = pages();
-    if(page > ps) page = ps;
-    if(page < 1) page = 1;
-    var list = DATA.slice((page - 1) * per, page * per);
+    var list = DATA.slice(0, MAX);
     tbody.innerHTML = list.map(function(r){
       return '<tr><td class="sym">' + r[0] + '</td>' + r.slice(1).map(function(c, i){
         var cls = '';
-        if(i === 3){                    // 已实现列
+        if(i === 0){                    // 方向列：建仓/加仓青、清仓/减仓橙
+          if(c === '加仓') cls = ' class="add"';
+          else if(c === '建仓') cls = ' class="open"';
+          else if(c === '清仓') cls = ' class="close"';
+          else if(c === '减仓') cls = ' class="cut"';
+        } else if(i === 3){             // 已实现列
           if(c.charAt(0) === '+') cls = ' class="up"';
           else if(c.charAt(0) === '-') cls = ' class="down"';
         }
         return '<td' + cls + '>' + c + '</td>';
       }).join('') + '</tr>';
     }).join('');
-    document.getElementById('scount').textContent = '最近 ' + DATA.length + ' 笔';
+    document.getElementById('scount').textContent = '最近 ' + Math.min(DATA.length, MAX) + ' 条';
 
-    var h = '<button type="button" id="prev"' + (page <= 1 ? ' disabled' : '') + '>上一页</button>';
-    for(var i = 1; i <= ps; i++){
-      h += '<button type="button" class="pnum' + (i === page ? ' on' : '') +
-           '" data-page="' + i + '">' + i + '</button>';
-    }
-    h += '<button type="button" id="next"' + (page >= ps ? ' disabled' : '') + '>下一页</button>';
-    h += '<span class="pinfo">' + page + ' / ' + ps + ' 页</span>';
-    h += '<span class="psel">每页 <select id="perSel">' +
-         '<option value="20"' + (per === 20 ? ' selected' : '') + '>20 笔</option>' +
-         '<option value="50"' + (per === 50 ? ' selected' : '') + '>50 笔</option>' +
-         '</select></span>';
-    pager.innerHTML = h;
-    document.getElementById('perSel').addEventListener('change', function(){
-      per = +this.value; page = 1; render();
-    });
-    document.getElementById('prev').addEventListener('click', function(){ page--; render(); });
-    document.getElementById('next').addEventListener('click', function(){ page++; render(); });
-    pager.querySelectorAll('[data-page]').forEach(function(b){
-      b.addEventListener('click', function(){ page = +b.dataset.page; render(); });
-    });
   }
 
   // 在线时以账本为唯一真源：账本更新（新成交顶掉旧记录）后页面自动跟随；
@@ -141,14 +109,14 @@ td.down{color:var(--down)}
       .then(function(led){
         var rows = (led && Array.isArray(led.records) ? led.records : []).filter(function(c){ return c.length === 7; });
         if(!rows.length) throw new Error('empty');
-        DATA = rows.slice(0, MAX); page = 1; render();
+        DATA = rows.slice(0, MAX); render();
       })
       .catch(function(){
         return fetch('./trade-log.md?cb=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
       .then(function(text){
         var rows = fromLedger(text);
-        if(rows.length){ DATA = rows; page = 1; render(); }
+        if(rows.length){ DATA = rows; render(); }
       })
       .catch(function(){ /* 都读不到就保留内联同源数据 */ });
       });

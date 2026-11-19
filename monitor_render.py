@@ -1898,7 +1898,7 @@ class PageRenderer:
                 "cleared_by_year": t.get("cleared_by_year") or {},
                 "sectors": sectors,
                 "sector_groups": t.get("sector_groups") or [],
-                "records": records[:50],
+                "records": records[:20],
                 # 清仓 / 新增弹窗的分组下拉：除「持仓」外的全部分组，顺序同 groups.json
                 "groups": [[g["key"], g["label"]] for g in self._context.GROUPS if g["key"] != "positions"],
             }
