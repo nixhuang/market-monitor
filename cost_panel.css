@@ -314,19 +314,20 @@
 .quiet-list[hidden] { display: none; }
 .quiet-list[open] > summary { background: none; box-shadow: none; color: var(--head-blue); }
 /* 终稿静态持仓资产行；不再克隆旧成本卡或靠脚本回补布局。 */
-#group_positions > .asset-row { margin: 8px 0 4px; padding: 0; }
-#group_positions > .cashbond-row {
+#group_positions .asset-row { margin: 8px 0 4px; padding: 0; }
+#group_positions .cashbond-row {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  margin: 4px 0 8px;
-  padding: 5px 8px;
-  background: rgba(143,184,240,.06);
-  border-radius: 4px;
-  font-size: 16px;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  font-size: 15px;
+  line-height: 22.5px;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-#group_positions > .cashbond-row .cb-item {
+#group_positions .cashbond-row .cb-item {
   flex: 0 0 auto;
   min-width: 0;
   display: flex;
@@ -334,9 +335,9 @@
   justify-content: flex-start;
   gap: 4px;
 }
-#group_positions > .cashbond-row .cb-total {
+#group_positions .cashbond-row .cb-total {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   flex: 0 0 auto;
   gap: 6px;
   white-space: nowrap;
@@ -351,8 +352,8 @@
 .zone-card > summary .zone-num { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text); }
 .zone-card > summary .zone-num.up { color: var(--up); }
 .zone-card > summary .zone-num.down { color: var(--down); }
-#group_positions .zone-stats > .zone-num:last-child,
-#group_positions td.cost-line > span:last-child {
+#group_positions_long td.cost-line > span:last-child,
+#group_positions_short td.cost-line > span:last-child {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
@@ -385,7 +386,6 @@
   .cost-edit-btn { padding: 8px 13px; font-size: 16px; line-height: 1.08; }
   .runbar .cost-edit-btn { height: 40px; }
   .cost-legend { font-size: 12px; }
-  #group_positions > .cashbond-row { font-size: 14.5px; }
   .cost-contrib { padding-left: 12px; }
   .cost-contrib li { font-size: 13px; line-height: 15.75px; }
   .cost-contrib li > .cv, .cost-contrib li > .ca { height: 15.75px; }
@@ -399,11 +399,15 @@
   #group_positions_long.zone-card > summary .zone-stats,
   #group_positions_short.zone-card > summary .zone-stats { gap: 6px; }
   /* v18 仓位展开明细：手机档仍只用这一个 ≤600 断点，不新增第二档 */
-  .pi-body { font-size: 15px; padding: 2px 8px 9px; }
+  .pi-body { padding: 2px 8px 9px; }
   .pi-wrow { grid-template-columns: minmax(0,1fr) minmax(0,1fr) 48px minmax(0,.85fr); gap: 6px; }
   .pi-kpis { gap: 4px; }
   .pi-kpi { gap: 3px; }
-  #group_positions > .cashbond-row .cb-item { gap: 3px; }
+  #group_positions .cashbond-row .cb-item, #group_positions .cashbond-row .cb-total { gap: 3px; }
+  #group_positions .cashbond-row { gap: 4px; }
+  #costManage .cost-add-dialog { margin: 8px auto auto; }
+  #group_positions > summary .pos-pnl { font-size: 16px; }
+  #group_positions .asset-row .cost-legend b { line-height: 19.2px; }
 }
 
 /* ===== 2026-11-19 v18 仓位展开明细（已验收样张落地） =====
@@ -412,13 +416,28 @@
    两组标签文字统一 14px + 仅文字灰，金额与数字的字号、颜色一律不动。 */
 /* 资金排沿用线上 .cashbond-row 的盒模型（margin / padding / 底色一律不动，守线上布局），
    只改三项：隐藏重复的总盈亏、标签变灰并缩小 1px、金额仍 15px。 */
-#group_positions > .cashbond-row .cb-total-pnl { display: none; }
+#group_positions .cashbond-row .cb-total-pnl { display: none; }
 /* ID 前缀压过 .cashbond-row .cb-cash .cb-name 的 Cash / 固收色，让三个标签都是说明文字灰 */
-#group_positions > .cashbond-row .cb-name,
-#group_positions > .cashbond-row .pi-cname { font-size: 14px; color: var(--dim, #8b93a1); }
-#group_positions > .cashbond-row .cb-total-amt,
-#group_positions > .cashbond-row .cb-amt { font-size: 15px; font-weight: 600; }
-.pi-body { font-variant-numeric: tabular-nums; }
+#group_positions .cashbond-row .cb-name,
+#group_positions .cashbond-row .pi-cname { font-size: 14px; color: var(--dim, #8b93a1); }
+#group_positions .cashbond-row .cb-total-amt,
+#group_positions .cashbond-row .cb-amt { font-size: 15px; font-weight: 600; }
+.pi-body { padding: 2px 10px 10px; color: var(--text); font-size: 15px; line-height: 1.5; min-width: 0;
+  font-variant-numeric: tabular-nums; }
+.pi-body * { box-sizing: border-box; min-width: 0; }
+.pi-block.pi-first { margin-top: 0; padding-top: 0; border-top: 0; }
+.pi-funds { display: flex; flex-direction: column; gap: 9px; }
+/* 比例条下百分比与行业权重表数字同号 15px；行高锁回原值，不撑高图例 */
+#group_positions .asset-row .cost-legend b { font-size: 15px; line-height: 22.4px; }
+/* 仓位标题：总资产后面跟总盈亏（涨跌色），灯圈已搬到长/短持仓标题栏 */
+#group_positions > summary .pos-pnl { white-space: nowrap; font-variant-numeric: tabular-nums;
+  font-size: 14px; line-height: 24px; }
+#group_positions > summary .pos-pnl.up { color: var(--up); }
+#group_positions > summary .pos-pnl.down { color: var(--down); }
+/* 长/短持仓标题与展开三角整体左移，与「重点」等普通分组对齐（padding 4px / 三角 10px·20px / gap 6px） */
+#group_positions_long.zone-card > summary, #group_positions_short.zone-card > summary { padding-left: 4px; gap: 6px; }
+#group_positions_long.zone-card > summary::before, #group_positions_short.zone-card > summary::before {
+  display: inline-block; width: 10px; text-align: center; font-size: 20px; line-height: 1; }
 .pi-block { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); }
 .pi-block.pi-records { margin-top: 2px; padding-top: 2px; border-top: 0; text-align: center; }
 .pi-kpis { display: flex; align-items: baseline; justify-content: space-between;
@@ -442,4 +461,35 @@
   font-size: 16px; font-weight: 600; text-decoration: none; }
 .pi-log-link:hover, .pi-log-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 .pi-arrow { font-size: 13px; font-weight: 400; }
+
+/* 新增仓位弹窗压矮（键盘弹出也放得下）：代码｜长短持仓、数量｜成本、加仓价｜减仓价、目标价｜分类标签各并一排；
+   每格文字在上、控件满宽，字段一个不少。弹窗贴顶且超高可滚动，底部按钮不会被输入法吃掉。 */
+#costManage .cost-add-dialog { padding: 12px 14px; max-height: calc(100dvh - 16px); overflow-y: auto; }
+#costManage .cost-add-dialog h3 { margin: 0 0 6px; }
+#costManage .cost-add-dialog .add-pair { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 0 10px; margin: 5px 0; }
+#costManage .cost-add-dialog .add-pair > label { display: block; margin: 0; min-width: 0; font-size: 16px; }
+#costManage .cost-add-dialog .add-pair > label > span,
+#costManage .cost-add-dialog .add-hold-cell > span { display: block; margin: 0 0 2px; font-size: 13px; color: var(--dim); }
+#costManage .cost-add-dialog .add-hold-cell { min-width: 0; }
+#costManage .cost-add-dialog .add-hold-cell .cost-add-hold { display: flex; align-items: center; gap: 6px; height: 30px; }
+#costManage .cost-add-dialog .add-hold-cell .cost-add-hold label { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; white-space: nowrap; margin: 0; }
+#costManage .cost-add-dialog .add-hold-cell .cost-add-hold input[type="radio"] { width: 13px; height: 13px; margin: 0; flex: none; }
+#costManage .cost-add-dialog .add-pair input:not([type="radio"]),
+#costManage .cost-add-dialog .add-pair select {
+  box-sizing: border-box; display: block; width: 100%; height: 30px; padding: 3px 6px;
+  background: var(--cost-input-bg); color: var(--text); border: 1px solid var(--cost-input-border);
+  border-radius: 3px; font: inherit; font-size: 16px; }
+#costManage .cost-add-dialog > label.add-note { display: block; margin: 5px 0; }
+#costManage .cost-add-dialog > label.add-note input { box-sizing: border-box; display: inline-block; width: calc(100% - 42px); height: 30px; padding: 3px 6px; }
+#costManage .cost-add-dialog > p { margin: 5px 0; }
+#costManage .cost-add-dialog > .cost-acts { margin: 6px 0 0; }
+#costManage .cost-add-dialog select.add-must { border-color: var(--lamp-red); }
+/* 卖出弹窗只留一个「分组」下拉（清仓后归属分组） */
+#costManage .cost-trade-dialog .cost-trade-group { margin: 10px 0; }
+#costManage .cost-trade-dialog .cost-trade-group label { display: block; margin: 0; font-size: 16px; }
+#costManage .cost-trade-dialog .cost-trade-group select {
+  box-sizing: border-box; width: 100%; margin-top: 5px; padding: 6px 8px;
+  background: var(--cost-input-bg); color: var(--text); border: 1px solid var(--cost-input-border);
+  border-radius: 4px; font: inherit; font-size: 16px; }
+#costManage .cost-trade-dialog [data-trade-destination][hidden] { display: none; }
 </style>

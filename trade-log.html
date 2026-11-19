@@ -7,8 +7,8 @@
 <link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png?v=3">
 <style>
 :root{
-  --bg:#0f1115;--card:#171a21;--text:#e6e8ec;--dim:#8b93a1;--line:#252a33;
-  --head:#4a5772;--blue:#8fb8f0;--border:#6686c6;--fw:1.5px;--sel:#182131;
+  --bg:#0b0e14;--card:#141a24;--text:#e6e8ec;--dim:#8b93a1;--line:#252a33;
+  --head:#4a5772;--blue:#8fb8f0;--border:#a371f7;--fw:1px;--sel:#182131;
   --up:#3fb950;--down:#f85149;
 }
 *{box-sizing:border-box}
@@ -134,13 +134,24 @@ td.down{color:var(--down)}
   }
   render();
   if(location.protocol === 'http:' || location.protocol === 'https:'){
-    fetch('./trade-log.md?cb=' + Date.now(), {cache:'no-store'})
+    // 自动记账写在 data 分支 trade-ledger.json（保存成功后页面自己追加）：读得到就以它为准；
+    // 读不到再退回随站发布的 trade-log.md，最后才是内联数据。
+    fetch('https://raw.githubusercontent.com/nixhuang/market-monitor/data/trade-ledger.json?cb=' + Date.now(), {cache:'no-store'})
+      .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+      .then(function(led){
+        var rows = (led && Array.isArray(led.records) ? led.records : []).filter(function(c){ return c.length === 7; });
+        if(!rows.length) throw new Error('empty');
+        DATA = rows.slice(0, MAX); page = 1; render();
+      })
+      .catch(function(){
+        return fetch('./trade-log.md?cb=' + Date.now(), {cache:'no-store'})
       .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
       .then(function(text){
         var rows = fromLedger(text);
         if(rows.length){ DATA = rows; page = 1; render(); }
       })
-      .catch(function(){ /* 账本读不到就保留内联同源数据 */ });
+      .catch(function(){ /* 都读不到就保留内联同源数据 */ });
+      });
   }
 })();
 </script>

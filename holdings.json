@@ -27,90 +27,107 @@
     "BRK-B": {
       "note": "伯克希尔",
       "hold": "long",
-      "cost": 505
+      "cost": 505,
+      "sector": "financials"
     },
     "HII": {
       "note": "亨廷顿工业",
       "hold": "short",
-      "cost": 272
+      "cost": 272,
+      "sector": "industrials"
     },
     "APH": {
       "note": "安费诺",
       "hold": "long",
-      "cost": 77.008
+      "cost": 77.008,
+      "sector": "technology"
     },
     "AVGO": {
       "note": "博通",
       "hold": "long",
-      "cost": 364.9225
+      "cost": 364.9225,
+      "sector": "technology"
     },
     "CRSP": {
       "note": "基因编辑",
       "hold": "short",
-      "cost": 46.91833333333333
+      "cost": 46.91833333333333,
+      "sector": "healthcare"
     },
     "GOOGL": {
       "note": "谷歌",
       "hold": "long",
-      "cost": 328.121
+      "cost": 328.121,
+      "sector": "communications"
     },
     "LMT": {
       "note": "洛克希德马丁",
       "hold": "long",
       "cost": 513,
       "target": 680,
-      "target_at": "2026-10"
+      "target_at": "2026-10",
+      "sector": "industrials"
     },
     "NTNX": {
       "note": "混合云",
       "hold": "short",
-      "cost": 44.80846153846154
+      "cost": 44.80846153846154,
+      "sector": "technology"
     },
     "UNH": {
       "note": "联合健康",
       "hold": "long",
-      "cost": 387.6
+      "cost": 387.6,
+      "sector": "healthcare"
     },
     "UBER": {
       "note": "优步",
       "hold": "short",
-      "cost": 58.72
+      "cost": 58.72,
+      "sector": "consumer_discretionary"
     },
     "DRAM": {
       "note": "存储芯片",
       "hold": "short",
-      "cost": 49.6575
+      "cost": 49.6575,
+      "sector": "technology"
     },
     "SPYM": {
       "note": "标普500指数",
       "hold": "long",
-      "cost": 88.77836555758391
+      "cost": 88.77836555758391,
+      "sector": "index_funds"
     },
     "SCHD": {
       "note": "嘉信红利",
       "hold": "long",
-      "cost": 32.88110513491993
+      "cost": 32.88110513491993,
+      "sector": "index_funds"
     },
     "QQQM": {
       "note": "纳指",
       "hold": "long",
-      "cost": 296.8010053983034
+      "cost": 296.8010053983034,
+      "sector": "index_funds"
     },
     "XLI": {
       "note": "工业行业",
       "hold": "long",
-      "cost": 167.9
+      "cost": 167.9,
+      "sector": "industrials"
     },
     "VRT": {
       "note": "维谛技术",
       "hold": "short",
-      "cost": 208.98
+      "cost": 208.98,
+      "sector": "industrials"
     },
     "AAPL": {
       "note": "苹果",
       "cost": 325.03,
       "hold": "long",
-      "trigger": 315
+      "trigger": 315,
+      "sector": "technology"
     }
   },
   "focus": {

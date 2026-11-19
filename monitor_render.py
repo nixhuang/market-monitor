@@ -1075,6 +1075,22 @@ class PageRenderer:
         return "\n".join(parts)
 
 
+    # 长/短持仓标题栏右侧只剩「市值 / 盈亏（比例）」两列，占比已于 2026-11-19 撤掉；数字由 cost_panel.js 填。
+    _ZONE_NUMS = '<span class="zone-num">—</span><span class="zone-num">—</span>'
+
+    def _zone_badges(self, zg):
+        """2026-11-19：红 / 黄 / 紫灯圈从「仓位」标题搬到各自的长 / 短持仓标题，按本区个股自己统计。"""
+        out = ''.join(self._context._count_badge(lv, count, label)
+                      for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"))
+                      if (count := sum(d["level"] == lv for d in zg)))
+        # 缺失（无数据）虚线圈与紫灯跟原「仓位」标题的顺序一致：红、黄、缺失、紫。
+        if (n_miss := sum(d["level"] == "gray" for d in zg)):
+            out += self._context._count_badge("missing", n_miss, "缺失")
+        if (n_pur := self._context.purple_counts(zg)):
+            out += self._context._count_badge("purple", n_pur, "紫色警示")
+        return out
+
+
     def _position_long_zone_card(self, g, group, items_by_symbol, snapshot, earnings_week, enabled):
         """生成长持仓子区；短持仓由_group_card生成，空长持仓不占位。"""
         zlabel = dict(self._context.POSITION_ZONES)["long"]
@@ -1083,10 +1099,9 @@ class PageRenderer:
             return ""
         zid = "group_positions_long"
         zbody = self._context._group_body(zg, group, snapshot, earnings_week, enabled, zid, zlabel)
-        zstats = '<span class="zone-num">—</span>' * 3
         return (f'<details class="zone-card" id="{zid}">'
-                f'<summary><span class="zone-name">{zlabel} ({len(zg)})</span>'
-                f'<span class="group-stats zone-stats">{zstats}</span></summary>{zbody}</details>')
+                f'<summary><span class="zone-name">{zlabel}({len(zg)})</span>{self._zone_badges(zg)}'
+                f'<span class="group-stats zone-stats">{self._ZONE_NUMS}</span></summary>{zbody}</details>')
 
 
     def _group_card(self, group, g, items_by_symbol, snapshot):
@@ -1106,21 +1121,20 @@ class PageRenderer:
             short_g = [d for d in g if self._context._position_zone(d) == "short"]
             short_body = self._context._group_body(short_g, group, snapshot, earnings_week, enabled,
                                                    'group_positions_short', '短持仓', empty_note)
-            nums = '<span class="zone-num">—</span>' * 3
             parts.append(f'<details class="zone-card" id="group_positions_short">'
-                         f'<summary><span class="zone-name">短持仓 ({len(short_g)})</span>'
-                         f'<span class="group-stats zone-stats">{nums}</span></summary>{short_body}</details>')
-            # 2026-11-19 v18：资金排文案按样张改成「持仓 / Cash / 固收」，总盈亏不再写在这一排
-            # （仍保留 .cb-total-pnl 节点和值，只是由 cost_panel.css 隐藏，不改动线上填值逻辑）。
-            parts.insert(0, '<div class="cashbond-row"><span class="cb-total">'
+                         f'<summary><span class="zone-name">短持仓({len(short_g)})</span>{self._zone_badges(short_g)}'
+                         f'<span class="group-stats zone-stats">{self._ZONE_NUMS}</span></summary>{short_body}</details>')
+            # 2026-11-19：展开明细 = 比例条与图例 + 「持仓 / Cash / 固收」资金排（同属一块、不画分隔线）
+            # + 三项汇总（已实现 / 今年 / 清仓）+ 行业权重 + 交易记录入口。骨架静态输出，数字由
+            # cost_panel.js 填；资金排沿用原 .cashbond-row 节点与填值逻辑，总盈亏节点保留但隐藏。
+            parts.insert(0, '<div class="pi-body" id="piBody">'
+                         '<div class="pi-block pi-first">'
+                         '<div class="cost-foot asset-row cost-manage"></div>'
+                         '<div class="cashbond-row"><span class="cb-total">'
                          '<span class="pi-cname">持仓</span><span class="cb-total-amt">—</span>'
                          '<span class="cb-total-pnl">—</span></span>'
                          '<span class="cb-item cb-cash"><span class="cb-name">Cash</span><span class="cb-amt">—</span></span>'
-                         '<span class="cb-item cb-bond"><span class="cb-name">固收</span><span class="cb-amt">—</span></span></div>')
-            parts.insert(0, '<div class="cost-foot asset-row cost-manage"></div>')
-            # 新增展开明细：三项汇总（独立累计账）/ 行业权重（由页面脚本按最新持仓算）/ 交易记录入口。
-            # 骨架静态输出，数字由 cost_panel.js 在 cost:painted 时填入，离线首屏也有完整结构。
-            parts.insert(2, '<div class="pi-body" id="piBody">'
+                         '<span class="cb-item cb-bond"><span class="cb-name">固收</span><span class="cb-amt">—</span></span></div></div>'
                          '<div class="pi-block pi-funds"><div class="pi-kpis">'
                          '<span class="pi-kpi"><span class="pi-kname">已实现</span><b class="pi-kval" id="piRealized">—</b></span>'
                          '<span class="pi-kpi"><span class="pi-kname">今年</span><b class="pi-kval" id="piYear">—</b></span>'
@@ -1133,13 +1147,21 @@ class PageRenderer:
         else:
             parts.append(self._context._group_body(g, group, snapshot, earnings_week, enabled,
                                      f'group_{group["key"]}', group["label"], empty_note))
+        # 2026-11-19：长 / 短持仓子框从「仓位」卡里移出，成为紧跟其后的两张平级绿框卡；
+        # 「仓位」卡自己只装展开明细（比例条 / 资金排 / 三项汇总 / 行业权重 / 交易记录入口）。
+        zones_html = ""
+        if group["key"] == "positions":
+            zones_html = "\n".join(parts[1:]) + "\n"
+            parts = parts[:1]
         body = "\n".join(parts)
-        stats = self._context._group_stats_html(g, group, items_by_symbol, enabled)
-        # 持仓父组固定展开；只有长/短子区折叠，无异动持仓列表静态open。
-        initial_open = ' open data-open-locked="1"' if group['key'] == 'positions' else ''
-        return (f'<details class="card group-card" id="group_{html_lib.escape(str(group["key"]), quote=True)}"{initial_open}>'
-                f'<summary class="grp"><span class="grp-name">{html_lib.escape(str(group["label"]))} ({len(g)})</span>'
-                f'<span class="group-stats">{stats}</span></summary>{body}</details>\n')
+        # 2026-11-19：「持仓」栏目改名「仓位」，默认折叠、点标题开合，与其它分组一致；标题右侧只放
+        # 总资产与总盈亏（由 cost_panel.js 填），3 个灯圈已搬到长 / 短持仓各自的标题栏。
+        is_pos = group['key'] == 'positions'
+        stats = '' if is_pos else self._context._group_stats_html(g, group, items_by_symbol, enabled)
+        label = '仓位' if is_pos else str(group["label"])
+        return (f'<details class="card group-card" id="group_{html_lib.escape(str(group["key"]), quote=True)}">'
+                f'<summary class="grp"><span class="grp-name">{html_lib.escape(label)} ({len(g)})</span>'
+                f'<span class="group-stats">{stats}</span></summary>{body}</details>\n{zones_html}')
 
 
     def _member_icons(self, d, kind, level):
@@ -1849,13 +1871,36 @@ class PageRenderer:
             import io as _io
             with _io.open(os.path.join(self._context.BASE, "trade-summary.json"), encoding="utf-8") as stream:
                 t = _json.load(stream)
-            year = str(self._context._bj_today())[:4]
+            sectors = {}
+            try:
+                with _io.open(os.path.join(self._context.BASE, "holdings.json"), encoding="utf-8") as stream:
+                    hh = _json.load(stream)
+                for sym, c in (hh.get("positions") or {}).items():
+                    if isinstance(c, dict) and isinstance(c.get("sector"), str) and c["sector"]:
+                        sectors[sym] = c["sector"]
+            except Exception as e:
+                self._context.log(f"  ! 行业标签读取失败：{e}")
+            # 年份由页面按浏览器当下的北京时间年份取（跨年自动重新计数），这里只给完整年份表。
+            # 交易记录页的最近 50 笔种子（trade-log.md 的表格行）：页面在第一次自动记账时把它当起点，
+            # 之后的新成交往上叠加；云端读得到时以 data 分支的 trade-ledger.json 为准。
+            records = []
+            try:
+                with _io.open(os.path.join(self._context.BASE, "trade-log.md"), encoding="utf-8") as stream:
+                    for line in stream.read().splitlines()[2:]:
+                        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+                        if line.startswith("| ") and len(cells) == 7:
+                            records.append(cells)
+            except Exception as e:
+                self._context.log(f"  ! 交易记录种子读取失败：{e}")
             trade = {
                 "total": t.get("realized_total", 0),
-                "year": (t.get("realized_by_year") or {}).get(year, 0),
-                "cleared": (t.get("cleared_by_year") or {}).get(year, 0),
-                "sectors": t.get("sectors") or {},
+                "by_year": t.get("realized_by_year") or {},
+                "cleared_by_year": t.get("cleared_by_year") or {},
+                "sectors": sectors,
                 "sector_groups": t.get("sector_groups") or [],
+                "records": records[:50],
+                # 清仓 / 新增弹窗的分组下拉：除「持仓」外的全部分组，顺序同 groups.json
+                "groups": [[g["key"], g["label"]] for g in self._context.GROUPS if g["key"] != "positions"],
             }
         except Exception as e:
             self._context.log(f"  ! 交易汇总读取失败：{e}")

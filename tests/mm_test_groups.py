@@ -1766,7 +1766,7 @@ class TestGroups(unittest.TestCase):
         page = monitor.render({}, items, 3, snapshot=snap)
         self.assertEqual(snap['registered_counts']['technology'], 3)       # 登记 3，AAPL 去重落在持仓
         self.assertIn('IT · AI (2)', page)
-        self.assertIn('持仓 (1)', page)
+        self.assertIn('仓位 (1)', page)   # 2026-11-19：栏目改名「仓位」
 
     def _reduce_signals(self, cfg, group='position', price=100):
         closes = [100 + (0.5 if i % 2 else -0.5) for i in range(60)]
@@ -3498,8 +3498,8 @@ class TestTargets(unittest.TestCase):
         # 紫灯文字与紫灯胶囊外框同色（统一走 --purple，#b084ff 为该变量的取值）。
         self.assertIn('color:var(--purple)', re.search(r'\.lvtag\.tgt\{([^}]*)\}', css)[1])
         self.assertIn('--purple:#b084ff', css)
-        for dead in ('#a371f7', '#c4a3ff'):
-            self.assertNotIn(dead, css)
+        self.assertEqual(css.count('#a371f7'), 1)   # 2026-11-19 框紫 --frame-purple，只许 :root 一处
+        self.assertNotIn('#c4a3ff', css)
         base = re.search(r'\.lvtag\.tgt\{([^}]*)\}', css)[1]
         self.assertIn('grid-template-rows:var(--row-height) var(--row-height)', base)
         self.assertIn('border:0', base)
@@ -6951,18 +6951,19 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('#signalCounts .collapse-group{color:var(--white)}', monitor.PAGE_CSS)
         self.assertNotIn('opacity:', button_rule.group(1))
         self.assertIn('--collapse-bg:var(--signal-bg)', monitor.PAGE_CSS)
-        pos_rule = re.search(r'#group_positions\{([^}]+)\}', monitor.PAGE_CSS)[1]
-        self.assertIn('--collapse-bg:var(--positions-collapse)', pos_rule)
+        # 2026-11-19 Demo：仓位父卡黄框、可开合；绿色收起条与绿框归长/短持仓平级卡。
+        pos_rule = re.search(r'#group_positions,#group_positions\[open\]\{([^}]+)\}', monitor.PAGE_CSS)[1]
+        zone_rule = re.search(r'#group_positions_long\.zone-card,#group_positions_short\.zone-card\{([^}]+)\}', monitor.PAGE_CSS)[1]
+        self.assertIn('--collapse-bg:var(--positions-collapse)', zone_rule)
         tint = re.search(r'--positions-collapse:rgba\((\d+),(\d+),(\d+),([.\d]+)\)', monitor.PAGE_CSS)
         self.assertIsNotNone(tint)
         self.assertEqual(tuple(map(int, tint.groups()[:3])), (46, 160, 67))
         self.assertGreater(float(tint[4]), 0)
         self.assertLessEqual(float(tint[4]), 1)
-        self.assertIn('border:0', pos_rule)
+        self.assertIn('border:var(--frame-w) solid var(--frame-yellow)', pos_rule)
         self.assertIn('background:var(--card)', pos_rule)
         self.assertIn('.zone-card .group-bottom{margin:0 4px 0}', monitor.PAGE_CSS)
-        self.assertIn('--signal-border:var(--frame-green)', pos_rule)
-        # 收起态不常亮：没有 id 级 border-color，绿只由展开态的 --signal-border 带出来
+        self.assertIn('--signal-border:var(--frame-green)', zone_rule)
         self.assertNotIn('border-color:', pos_rule)
 
     def test_jump_flash_never_overwrites_the_lamp_bar(self):
@@ -7139,11 +7140,13 @@ class TestPositionZones(unittest.TestCase):
         self.assertEqual(re.findall(r'<details class="zone-card" id="([^"]+)">', out),
                          ['group_positions_long', 'group_positions_short'])
         self.assertNotRegex(out, r'<details class="zone-card"[^>]*\bopen\b')
-        self.assertRegex(out, r'<details\b(?=[^>]*\bid="group_positions")(?=[^>]*\sopen(?:\s|>))(?=[^>]*\bdata-open-locked="1")[^>]*>')
+        # 2026-11-19：「仓位」父卡默认收起、不再锁常开；长/短持仓是它后面两张平级卡
+        self.assertNotRegex(out, r'<details\b(?=[^>]*\bid="group_positions")(?=[^>]*\sopen(?:\s|>))[^>]*>')
+        self.assertNotIn('data-open-locked', out)
         self.assertNotIn('<details class="quiet-list" open>', out)
         self.assertEqual(re.findall(r'<span class="zone-name">([^<]+)</span>', out),
-                         ['长持仓 (1)', '短持仓 (2)'])
-        self.assertEqual(out.count('class="zone-num"'), 6)
+                         ['长持仓(1)', '短持仓(2)'])   # 半角括号、无空格（2026-11-19）
+        self.assertEqual(out.count('class="zone-num"'), 4)      # 每区只剩「市值 / 盈亏」两列，占比已撤
         self.assertEqual(re.findall(r'aria-controls="([^"]+)"', out),
                          ['group_positions_long', 'group_positions_short'])
         long_zone, short_zone = out.split('id="group_positions_short"', 1)
@@ -7165,8 +7168,8 @@ class TestPositionZones(unittest.TestCase):
     def test_unmarked_positions_count_as_short(self):
         # 没标 hold 的仍算短持仓，不能漏入总额或落到长持仓。
         out = self.card([self.item('CCC', 'green')])
-        self.assertNotIn('长持仓 (', out)
-        self.assertIn('短持仓 (1)', out)
+        self.assertNotIn('长持仓(', out)
+        self.assertIn('短持仓(1)', out)
         self.assertIn('CCC', out.split('id="group_positions_short"', 1)[1])
 
     def test_long_zone_does_not_repeat_the_rule_text(self):
@@ -7200,8 +7203,9 @@ class TestPositionZones(unittest.TestCase):
 
     def test_short_zone_bottom_gap_uses_final_three_pixel_contract(self):
         self.assertIn('#group_positions[open]{padding-bottom:2px}', monitor.PAGE_CSS)
-        self.assertIn('#group_positions_short.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 0}',
-                      monitor.PAGE_CSS)
+        self.assertIn('#group_positions_long.zone-card,#group_positions_short.zone-card{--collapse-bg:var(--positions-collapse);'
+                      '--signal-border:var(--frame-green);box-sizing:border-box;width:100%;background:var(--card);'
+                      'border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 9px}', monitor.PAGE_CSS)
         self.assertIn('.zone-card .group-bottom{margin:0 4px 0}', monitor.PAGE_CSS)
 
     def test_other_groups_keep_one_body(self):
@@ -7697,7 +7701,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             page = monitor.render({}, rows, len(rows), snapshot=snap)
             technology = page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
             self.assertTrue(technology.startswith('>'))  # 近期财报不自动展开分类，用户点开后才看到
-            self.assertEqual(re.findall(r'<details\b(?=[^>]*\sopen(?:\s|>))[^>]*\bid="(\w+)"[^>]*>', page), ['signalCounts', 'group_positions'])  # open不限定末属性；统计与持仓父展开，其余仍折叠
+            self.assertEqual(re.findall(r'<details\b(?=[^>]*\sopen(?:\s|>))[^>]*\bid="(\w+)"[^>]*>', page), ['signalCounts'])  # open不限定末属性；2026-11-19 起仅统计展开，「仓位」同其余分组默认折叠
             self.assertRegex(technology.split('<details class="quiet-list"')[0],
                                 r'<td class="sym"><span class="sym-box \w+">AAPL')
             self.assertIn('无异动 1 只', technology)

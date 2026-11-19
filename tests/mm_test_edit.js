@@ -427,6 +427,21 @@ check(els.fold_focus.open===false&&els.fold_positions.open===false, '移动标�
 T.moveSymbol('focus', 'positions:long', 'BRK-B');
 check(T.data.positions['BRK-B'].hold === 'long', '从其它分组也能直接挪进长持仓区');
 check(els.list_technology._html.includes('>长持仓<'), '其它分组的行同样提供长/短持仓两个区可选');
+// ---- 行业标签规则（2026-11-19）：行业分组本身就是标签；持仓/重点之间移动不动标签；行业→重点把原行业带成标签 ----
+T.data.technology.SOXXT={note:'半导体'};
+T.moveSymbol('technology','focus','SOXXT');
+check(T.data.focus.SOXXT.sector==='technology'&&!T.data.technology.SOXXT,'从行业分组进重点：行业带成标签（SOXX 仍是 IT，只是换了归属）');
+T.moveSymbol('focus','positions:long','SOXXT');
+check(T.data.positions.SOXXT.sector==='technology','重点→持仓：标签不动');
+T.moveSymbol('positions','focus','SOXXT');
+check(T.data.focus.SOXXT.sector==='technology','持仓→重点：标签不动');
+T.moveSymbol('focus','healthcare','SOXXT');
+check(T.data.healthcare.SOXXT&&!('sector' in T.data.healthcare.SOXXT),'进行业分组：分组就是标签，不另存 sector（改分组＝改标签）');
+T.moveSymbol('healthcare','positions:short','SOXXT');
+check(T.data.positions.SOXXT.sector==='healthcare','行业分组→持仓：原行业带成标签');
+T.moveSymbol('positions','energy','SOXXT');
+check(!('sector' in T.data.energy.SOXXT),'持仓→另一个行业分组：标签随新分组，旧标签作废');
+delete T.data.energy.SOXXT;T.render();
 delete T.data.positions['BRK-B'].hold;
 T.render();
 

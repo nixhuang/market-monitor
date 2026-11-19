@@ -10,6 +10,7 @@
       LS_SORT = 'mm_position_sort_v1',
       LOCK_NAME = 'mm-position-writer-v2',
       LS_CLEAR = 'mm_position_clear_v1';
+    var LS_TRADES = 'mm_trade_pending_v1';
     var READ_ONLY_NOTICE = '本页只读';
     var SCHEMA_VERSION = 2,
       SESSION_LOCAL = 'mm_position_costs_preview_v2';
@@ -222,13 +223,29 @@
       return d * 100n >= v[1] * 10n ? 'gain' : -d * 100n >= v[1] * 10n ? 'loss' : '';
     }
 
+    // ---- 交易记录 / 累计账：三项汇总（已实现 / 今年 / 清仓）与记录页的最近 50 笔。
+    // 种子来自构建期 REAL.trade；云端读得到时以 data 分支 trade-ledger.json 为准。
+    var T0 = (REAL && REAL.trade) || {};
+    var TRADE = { total: Number(T0.total) || 0, by_year: clone(T0.by_year || {}),
+      cleared_by_year: clone(T0.cleared_by_year || {}), records: (T0.records || []).slice(0, 50), ids: [] };
+    // 分类标签下拉：构建期注入行业表；没注入时兜底成内置行业表，保证下拉永远有可选项。
+    var SECTOR_GROUPS = (Array.isArray(T0.sector_groups) && T0.sector_groups.length) ? T0.sector_groups :
+      [['technology', 'IT·AI'], ['industrials', '工航防建'], ['index_funds', '指数基'], ['healthcare', '医疗保健'],
+       ['financials', '金融'], ['communications', '通信娱乐'], ['consumer_discretionary', '可选消费'], ['energy', '能源'],
+       ['materials', '化材金纸'], ['utilities', '公水电气'], ['consumer_staples', '必须消费'], ['real_estate', '房地产']];
+    // 分组下拉：构建期注入全部分组；没注入（测试夹具 / 读取失败）时兜底成内置的「默认 / 重点」，保证清仓永远可确认。
+    var DEST_GROUPS = (Array.isArray(T0.groups) && T0.groups.length) ? T0.groups : [['default', '默认'], ['focus', '重点']];
+    function destKeys() { return DEST_GROUPS.map(function (g) { return g[0]; }); }
+    function validDest(v) { return v === 'default' || v === 'focus' || destKeys().indexOf(v) >= 0; }
+    function bjNow() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString(); }
     var ROWS = [],
       ROW_BY_SYM = Object.create(null);
     function live(r) {
       return !!(r && document.documentElement.contains(r.tr));
     }
     function isPosition(r) {
-      return live(r) && !!r.tr.closest('#group_positions');
+      // 2026-11-19：长短持仓已移出成平级绿框卡；保留对父卡的兼容（历史 DOM 与测试夹具里行仍挂在父卡下）。
+      return live(r) && !!r.tr.closest('#group_positions_long,#group_positions_short,#group_positions');
     }
     function rowBySym(sym) {
       return ROW_BY_SYM[sym] || null;
@@ -454,7 +471,7 @@
         clearDraft = {};
         var marks = j && j._local && j._local.clearDraft;
         if (object(marks)) Object.keys(marks).forEach(function (sym) {
-          if (/^[A-Z0-9.^=_-]{1,32}$/.test(sym) && ['default', 'focus'].indexOf(marks[sym]) >= 0)
+          if (/^[A-Z0-9.^=_-]{1,32}$/.test(sym) && validDest(marks[sym]))
             clearDraft[sym] = marks[sym];
         });
         addDraft = {}; addedPositions = {};
@@ -1006,6 +1023,7 @@
           requestSave(0, false);
         } else if (ok) {
           uncertain = null;
+          markTradesReady();
           // 在途旧保存成功时，仅将新保存仍沿用的同字段基线推进到自己的已提交值。
           if (positionSave && positionSave.generation !== sent.positionGeneration && positionSave.fieldBaseline && sent.fieldBaseline)
             Object.keys(positionSave.fieldBaseline).forEach(function (key) {
@@ -1185,6 +1203,7 @@
       return keys.every(function (k) {
         var v = x[k];
         if (k === 'note') return typeof v === 'string' && v.trim() === v && v.length > 0 && Array.from(v).length <= 7;
+        if (k === 'sector') return typeof v === 'string' && /^[a-z_]{1,32}$/.test(v);
         if (typeof v !== 'number' || !isFinite(v)) return false;
         if (k === 'trigger') return true;
         if (k === 'reduce') return v > 0;
@@ -1193,8 +1212,13 @@
       });
     }
     function monthBJ() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 7); }
-    function parseExtra(note, trigger, reduce, target) {
+    function parseExtra(note, trigger, reduce, target, sector) {
       var out = {};
+      sector = String(sector || '').trim();
+      if (sector) {
+        if (!/^[a-z_]{1,32}$/.test(sector)) throw new Error('分类标签无效');
+        out.sector = sector;
+      }
       note = String(note || '').trim();
       if (note) {
         if (Array.from(note).length > 7) throw new Error('备注最多7个字');
@@ -1221,9 +1245,9 @@
             return object(t) && /^[A-Z0-9.^=_-]{1,32}$/.test(t.sym || '') && ['long', 'short'].indexOf(t.hold) >= 0 &&
               (!own(t, 'extra') || validExtra(t.extra));
           }))) &&
-          record.targets.every(function (t) { return object(t) && /^[A-Z0-9.^=_-]{1,32}$/.test(t.sym || '') && ['default', 'focus'].indexOf(t.choice) >= 0; }))
+          record.targets.every(function (t) { return object(t) && /^[A-Z0-9.^=_-]{1,32}$/.test(t.sym || '') && validDest(t.choice); }))
         clearRecord = record;
-      else if (/^[A-Z0-9.^=_-]{1,32}$/.test(record.sym || '') && ['default', 'focus'].indexOf(record.choice) >= 0)
+      else if (/^[A-Z0-9.^=_-]{1,32}$/.test(record.sym || '') && validDest(record.choice))
         clearRecord = Object.assign({}, record, { version: 2, legacy: true, targets: [{ sym: record.sym, choice: record.choice,
           source: record.source, destination: record.destination }], payload: record.zero });
       else { storageErrors[LS_CLEAR] = '清仓事务记录无效，请保留备份并核对，禁止覆盖'; clearRecord = null; }
@@ -1271,6 +1295,7 @@
         return object(g) && /^[a-z_]+$/.test(g.key || '') && ['positions', 'focus'].indexOf(g.key) < 0;
       });
       var key = choice === 'focus' ? 'focus' :
+        ordinary.some(function (g) { return g.key === choice; }) ? choice :
         (ordinary.find(function (g) { return object(config[g.key]) && own(config[g.key], sym); }) || {}).key;
       // 用户明确：三只宽基/红利ETF没有旧分类时，默认回指数基。
       if (!key && ['SPYM', 'QQQM', 'SCHD'].indexOf(sym) >= 0) key = 'index_funds';
@@ -1286,6 +1311,9 @@
       var rec = clone(next[destination.key][sym] || source);
       delete rec.cost; delete rec.reduce; delete rec.hold;
       if (destination.key !== 'focus') { delete rec.target; delete rec.target_at; }
+      // 行业标签：进行业分组＝分组就是标签（不另存）；进重点＝不动标签，沿用持仓上的行业。
+      if (destination.key === 'focus') { if (!rec.sector && object(source) && source.sector) rec.sector = source.sector; }
+      else delete rec.sector;
       next[destination.key][sym] = rec;
       delete next.positions[sym];
       // 选择回默认分组就是退出重点；其它板块记录原样保留，不覆盖其备注/触发价。
@@ -1371,8 +1399,13 @@
       }
       return { record: record, signature: JSON.stringify(records) };
     }
+    function addedMeta(t) {
+      var m = { hold: t.hold };
+      if (t.extra && t.extra.sector) m.sector = t.extra.sector;
+      return m;
+    }
     function clearAccept(remote) {
-      (clearRecord.additions || []).forEach(function (t) { addedPositions[t.sym] = { hold: t.hold }; });
+      (clearRecord.additions || []).forEach(function (t) { addedPositions[t.sym] = addedMeta(t); });
       DATA = clone(remote); CLOUD = clone(remote); cloudVerified = true;
       dirty = false; draftPending = false; editDraft = {}; cloudFirstPending = false;
       editBaseline = clone(remote);
@@ -1382,6 +1415,7 @@
     }
     function completeClear(receipt) {
       saveClearRecord(Object.assign({}, clearRecord, { step: 'done', receipt: receipt }));
+      markTradesReady();
       clearDraft = {}; addDraft = {}; editDraft = {}; editBaseline = null; draftPending = false;
       clearRecord.targets.forEach(function (t) { delete addedPositions[t.sym]; });
       persist(); clearTrack(receipt);
@@ -1498,7 +1532,7 @@
         (clearRecord.additions || []).forEach(function (t) {
           if (JSON.stringify(remote.items[t.sym] || null) !== JSON.stringify(clearRecord.payload.items[t.sym] || null))
             clearConflict(t.sym + ' 新增仓位被远端修改，停止规则提交');
-          addedPositions[t.sym] = { hold: t.hold };
+          addedPositions[t.sym] = addedMeta(t);
         });
         clearAccept(remote);
         clearMessage('数值已保存，正在批量更新持仓分组…');
@@ -1630,7 +1664,7 @@
       var add = panel.querySelector('[data-cost-add]');
       if (add) add.disabled = clearBusy || pending;
       all('input[data-f],[data-trade-action]', panel).forEach(function (input) { input.disabled = clearBusy || pending; });
-      if (tradeDialog) all('input,[data-trade-confirm],[data-trade-fill-all]', tradeDialog).forEach(function (input) { input.disabled = clearBusy || pending || !writer || !editing; });
+      if (tradeDialog) all('input,select,[data-trade-confirm],[data-trade-fill-all]', tradeDialog).forEach(function (input) { input.disabled = clearBusy || pending || !writer || !editing; });
       if (editBtn) editBtn.disabled = clearBusy;
     }
     function openClear(sym) {
@@ -1664,6 +1698,116 @@
       clearDialogControls(); clearDialog.showModal();
     }
     var tradeDialog = null, tradeActive = null;
+    // ---- 自动记账：本次编辑里的成交先放草稿，点「保存并上传」成功后统一写进 data 分支 trade-ledger.json。
+    var tradeDraft = [], tradeAwait = [];
+    var LEDGER_PATH = 'trade-ledger.json', tradeFlushing = false, tradeRetry = null;
+    (function () {
+      var saved = read(LS_TRADES);
+      if (Array.isArray(saved)) tradeAwait = saved.filter(function (e) { return object(e) && typeof e.id === 'string'; });
+    })();
+    function persistTrades() { write(LS_TRADES, tradeAwait); }
+    function fmtPx(v) {
+      var t = Number(v).toFixed(4).replace(/0+$/, '');
+      var dec = t.indexOf('.') < 0 ? 0 : t.length - t.indexOf('.') - 1;
+      return dec >= 2 ? t : Number(v).toFixed(2);
+    }
+    function tradeRow(e) {
+      var r = e.realized;
+      return [e.sym, e.kind, trim4(e.qty), fmtPx(e.px),
+        r === null || r === undefined ? '—' : (r >= 0 ? '+' : '-') + Math.abs(r).toFixed(2),
+        (e.qty * e.px).toFixed(2), String(e.at || '').slice(2, 10)];
+    }
+    function ledgerApply(led, entries) {
+      var seen = {};
+      (led.ids || []).forEach(function (id) { seen[id] = 1; });
+      var fresh = entries.filter(function (e) { return !seen[e.id]; });
+      if (!fresh.length) return null;
+      var next = clone(led);
+      next.records = fresh.slice().reverse().map(tradeRow).concat(led.records || []).slice(0, 50);
+      next.by_year = next.by_year || {}; next.cleared_by_year = next.cleared_by_year || {};
+      fresh.forEach(function (e) {
+        var y = String(e.at || bjNow()).slice(0, 4);
+        if (typeof e.realized === 'number') {
+          next.total = Math.round(((Number(next.total) || 0) + e.realized) * 100) / 100;
+          next.by_year[y] = Math.round(((Number(next.by_year[y]) || 0) + e.realized) * 100) / 100;
+        }
+        if (e.closing) next.cleared_by_year[y] = (Number(next.cleared_by_year[y]) || 0) + 1;
+      });
+      next.ids = (led.ids || []).concat(fresh.map(function (e) { return e.id; })).slice(-200);
+      next.updated_at = new Date().toISOString();
+      return next;
+    }
+    function adoptLedger(led) {
+      if (!object(led) || !Array.isArray(led.records)) return;
+      TRADE = { total: Number(led.total) || 0, by_year: object(led.by_year) ? led.by_year : {},
+        cleared_by_year: object(led.cleared_by_year) ? led.cleared_by_year : {},
+        records: led.records.slice(0, 50), ids: Array.isArray(led.ids) ? led.ids : [] };
+    }
+    function stageTrades() {
+      if (!tradeDraft.length) return;
+      tradeAwait = tradeAwait.concat(tradeDraft.map(function (e) { return Object.assign({ ready: false }, e); }));
+      tradeDraft = [];
+      persistTrades();
+    }
+    function markTradesReady() {
+      if (tradeDraft.length) stageTrades();
+      var any = false;
+      tradeAwait.forEach(function (e) { if (!e.ready) { e.ready = true; any = true; } });
+      if (any) persistTrades();
+      flushTrades();
+    }
+    function ledgerApi() { return 'https://api.github.com/repos/' + GH.owner + '/' + GH.repo + '/contents/' + LEDGER_PATH; }
+    function flushTrades() {
+      if (isolated || tradeFlushing || disposed || !ghToken()) return;
+      var ready = tradeAwait.filter(function (e) { return e.ready; });
+      if (!ready.length) return;
+      tradeFlushing = true;
+      requestJson(ledgerApi() + '?ref=' + GH.branch + '&t=' + Date.now(), { headers: ghHead(), cache: 'no-store' })
+        .then(function (r) {
+          var led, sha = null;
+          if (r.status === 404) led = { total: TRADE.total, by_year: TRADE.by_year, cleared_by_year: TRADE.cleared_by_year,
+            records: TRADE.records, ids: [] };
+          else if (r.ok && r.data && r.data.content && r.data.sha) { led = parseCloud(r.data.content, '交易账本'); sha = r.data.sha; }
+          else throw new Error('读取交易账本失败：HTTP ' + r.status);
+          var next = ledgerApply(led, ready);
+          if (!next) return led;
+          var body = { branch: GH.branch, message: '交易记录 ' + new Date().toISOString().slice(0, 19).replace('T', ' '),
+            content: b64(JSON.stringify(next, null, 1)) };
+          if (sha) body.sha = sha;
+          return requestJson(ledgerApi(), { method: 'PUT', headers: ghHead(true), body: JSON.stringify(body) }).then(function (w) {
+            if (w.status !== 200 && w.status !== 201) throw new Error('写入交易账本失败：HTTP ' + w.status);
+            return next;
+          });
+        })
+        .then(function (done) {
+          var ids = {};
+          ready.forEach(function (e) { ids[e.id] = 1; });
+          tradeAwait = tradeAwait.filter(function (e) { return !ids[e.id]; });
+          persistTrades();
+          adoptLedger(done);
+          tradeFlushing = false;
+          if (!disposed) paint();
+        })
+        .catch(function () {
+          tradeFlushing = false;
+          if (tradeRetry) clearTimeout(tradeRetry);
+          tradeRetry = setTimeout(flushTrades, 30000);
+        });
+    }
+    function pullLedger() {
+      // 无交易账本种子（构建期没注入 REAL.trade.records，例如测试夹具）时完全静默，不占用首个请求位置。
+      if (isolated || !TRADE.records.length) return;
+      requestJson('https://raw.githubusercontent.com/' + GH.owner + '/' + GH.repo + '/' + GH.branch + '/' + LEDGER_PATH + '?t=' + Date.now(),
+        { cache: 'no-store' }).then(function (r) {
+          if (r.ok && object(r.data) && !tradeAwait.some(function (e) { return e.ready; })) { adoptLedger(r.data); if (!disposed) paint(); }
+        }).catch(function () {});
+    }
+    function sectorOf(sym) {
+      var t = (REAL && REAL.trade) || {};
+      if (own(addDraft, sym) && addDraft[sym].extra && addDraft[sym].extra.sector) return addDraft[sym].extra.sector;
+      if (own(addedPositions, sym) && addedPositions[sym].sector) return addedPositions[sym].sector;
+      return (t.sectors && t.sectors[sym]) || '';
+    }
     function tradeGuard(sym) {
       if (!editing || disposed || !writer || clearBusy || (clearRecord && clearRecord.step !== 'done'))
         throw new Error('编辑会话不可用，请先完成保存核验或重新接管');
@@ -1695,9 +1839,20 @@
       if (draftError(qtyText) || draftError(costText, 'cost')) throw new Error('交易结果超出四位小数输入范围');
       if (side === 'sell' && nextQty === 0) {
         if (own(addDraft, sym)) { removeAdded(sym); return; }
-        if (['default', 'focus'].indexOf(destination) < 0) throw new Error('请选择全卖后的清仓分组');
+        if (!validDest(destination)) throw new Error('请选择全卖后的清仓分组');
         clearDraft[sym] = destination;
       } else if (nextQty > 0) delete clearDraft[sym];
+      // 自动记账：只有写了成交价的买卖才算一笔（拆股买入价留空不记）；最终清仓才结算已实现。
+      if (px !== null) {
+        var closing = side === 'sell' && nextQty === 0;
+        tradeDraft.push({
+          id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+          sym: sym, qty: qty, px: px,
+          kind: side === 'buy' ? (oldQty > 0 ? '加仓' : '建仓') : (closing ? '清仓' : '减仓'),
+          realized: closing && known ? qty * px - oldQty * oldCost : null,
+          closing: closing, at: bjNow()
+        });
+      }
       editDraft[sym + '|qty'] = { raw: qtyText, error: '' };
       editDraft[sym + '|cost'] = { raw: costText, error: '' };
       // 自动回算保存原始有限成本；四位仅用于展示，手填 input 重建条目以覆盖该原值。
@@ -1713,8 +1868,9 @@
         tradeDialog.innerHTML = '<h3></h3><div class="cost-trade-qty-row"><label>成交数量<input data-trade-qty inputmode="decimal" step="0.0001" autocomplete="off"></label>' +
           '<button type="button" class="cost-trade-fill" data-trade-fill-all hidden>清仓</button></div>' +
           '<label>成交价<input data-trade-price inputmode="decimal" step="0.0001" autocomplete="off"></label><p data-trade-note></p>' +
-          '<div class="cost-clear-choice" data-trade-destination><label><input type="radio" name="tradeDestination" value="default">全卖回默认</label>' +
-          '<label><input type="radio" name="tradeDestination" value="focus">全卖进重点</label></div><p data-trade-error role="status"></p>' +
+          '<div class="cost-trade-group" data-trade-destination><label>分组<select data-trade-dest-select aria-label="卖出后归属分组">' +
+          DEST_GROUPS.map(function (g) { return '<option value="' + esc(g[0]) + '">' + esc(g[1]) + '</option>'; }).join('') +
+          '</select></label></div><p data-trade-error role="status"></p>' +
           '<div class="cost-acts"><button type="button" data-trade-cancel>取消</button><button type="button" class="primary" data-trade-confirm>加入草稿</button></div>';
         panel.appendChild(tradeDialog);
         tradeDialog.addEventListener('cancel', function () { tradeActive = null; });
@@ -1735,9 +1891,9 @@
           else if (e.target.closest('[data-trade-confirm]')) {
             try {
               if (!tradeActive || tradeActive.generation !== editGeneration) throw new Error('编辑会话已变化，请重新打开交易');
-              var choice = tradeDialog.querySelector('input[name="tradeDestination"]:checked');
+              var choice = tradeDialog.querySelector('[data-trade-dest-select]');
               applyTrade(tradeActive.sym, tradeActive.side, tradeDialog.querySelector('[data-trade-qty]').value,
-                tradeDialog.querySelector('[data-trade-price]').value, choice ? choice.value : 'default');
+                tradeDialog.querySelector('[data-trade-price]').value, choice ? choice.value : 'focus');
               tradeDialog.close(); tradeActive = null;
             } catch (err) { tradeDialog.querySelector('[data-trade-error]').textContent = err.message; }
           }
@@ -1747,14 +1903,18 @@
       tradeDialog.querySelector('h3').textContent = (side === 'buy' ? '买入 ' : '卖出 ') + sym;
       tradeDialog.querySelector('[data-trade-qty]').value = ''; tradeDialog.querySelector('[data-trade-price]').value = '';
       tradeDialog.querySelector('[data-trade-error]').textContent = '';
-      tradeDialog.querySelector('[data-trade-note]').textContent = side === 'buy' ? '买入价可空用于拆股；不改现金，忽略费用。' : '卖出价必填；清仓后移组。';
+      tradeDialog.querySelector('[data-trade-note]').textContent = side === 'buy' ? '买入价可空用于拆股；不改现金，忽略费用。' :
+        (sectorOf(sym) ? '卖出价必填；清仓后移组。' : '这只还没有行业分类，清仓前请先补分类标签');
       tradeDialog.querySelector('[data-trade-destination]').hidden = side !== 'sell';
       tradeDialog.querySelector('[data-trade-fill-all]').hidden = side !== 'sell';
-      all('input[name="tradeDestination"]', tradeDialog).forEach(function (input) { input.checked = input.value === (clearDraft[sym] || 'default'); });
+      // 老股已有行业标签 → 清仓分组自动预选同名分组（不点也有默认）；没标签的回落到「重点」。
+      var destSel = tradeDialog.querySelector('[data-trade-dest-select]'), tag = sectorOf(sym);
+      destSel.value = clearDraft[sym] && destKeys().indexOf(clearDraft[sym]) >= 0 ? clearDraft[sym] :
+        (destKeys().indexOf(tag) >= 0 ? tag : 'focus');
       clearDialogControls(); tradeDialog.showModal(); tradeDialog.querySelector('[data-trade-qty]').focus();
     }
     var addDialog = null;
-    function addPosition(sym, hold, qty, cost, note, trigger, reduce, target) {
+    function addPosition(sym, hold, qty, cost, note, trigger, reduce, target, sector) {
       if (!editing || !writer || disposed || clearBusy) return;
       if (clearRecord && clearRecord.step !== 'done') throw new Error('请先完成面板保存事务核验，再新增仓位');
       sym = String(sym || '').trim().toUpperCase();
@@ -1768,12 +1928,16 @@
       qty = String(qty || '').trim(); cost = String(cost || '').trim();
       if (draftError(qty) || draftError(cost, 'cost') || !(Number(qty) > 0)) throw new Error('数量必须大于0；数量与成本最多四位小数，成本可留空');
       if (!checkedDraft()) { persist(); paint(); throw new Error('已有无效输入，请先修正后新增仓位'); }
-      var extra = parseExtra(note, trigger, reduce, target);
+      var extra = parseExtra(note, trigger, reduce, target, sector);
       addDraft[sym] = { hold: hold, before: DATA.items[sym] ? clone(DATA.items[sym]) : null };
       if (extra) addDraft[sym].extra = extra;
       editDraft[sym + '|qty'] = { raw: qty, error: '' };
       editDraft[sym + '|cost'] = { raw: cost, error: '' };
       DATA = checkedDraft(); draftPending = true; changed();
+      // 新建仓位带着成本就是一笔建仓：写进记录（成交价取录入的成本）。
+      if (cost !== '' && Number(cost) > 0)
+        tradeDraft.push({ id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), sym: sym, qty: Number(qty),
+          px: Number(cost), kind: '建仓', realized: null, closing: false, at: bjNow(), src: 'add' });
       if (addDialog) addDialog.close();
       clearMessage('');
     }
@@ -1782,32 +1946,47 @@
       var before = addDraft[sym].before;
       if (before) DATA.items[sym] = clone(before); else delete DATA.items[sym];
       delete addDraft[sym]; delete editDraft[sym + '|qty']; delete editDraft[sym + '|cost'];
+      tradeDraft = tradeDraft.filter(function (e) { return e.sym !== sym; });
       draftPending = true; changed(); paint();
     }
     function openAdd() {
       if (!editing || !writer || disposed || clearBusy) return;
       if (!addDialog) {
         addDialog = document.createElement('dialog'); addDialog.className = 'cost-clear-dialog cost-add-dialog';
-        addDialog.innerHTML = '<h3>新增仓位</h3><label>代码 <input data-add-symbol maxlength="32" aria-label="新仓位代码"></label>' +
-          '<div class="cost-add-hold"><label><input type="radio" name="addHold" data-add-hold value="long" checked>长持仓</label>' +
-          '<label><input type="radio" name="addHold" data-add-hold value="short">短持仓</label></div>' +
-          '<label>数量 <input data-add-qty inputmode="decimal" aria-label="新仓位数量"></label>' +
-          '<label>成本 <input data-add-cost inputmode="decimal" aria-label="新仓位成本"></label>' +
-          '<label>备注 <input data-add-note maxlength="7" placeholder="中文名，选填" aria-label="新仓位备注名"></label>' +
-          '<label>加仓价 <input data-add-trigger inputmode="decimal" placeholder="选填" aria-label="新仓位加仓价"></label>' +
-          '<label>减仓价 <input data-add-reduce inputmode="decimal" placeholder="选填" aria-label="新仓位减仓价"></label>' +
-          '<label>目标价 <input data-add-target inputmode="decimal" placeholder="选填，0＝关闭达到报灯" aria-label="新仓位目标价"></label>' +
+        // 2026-11-19：弹窗压矮（键盘弹出也放得下）——代码｜长短持仓、数量｜成本、加仓价｜减仓价、目标价｜分类标签各并一排。
+        addDialog.innerHTML = '<h3>新增仓位</h3>' +
+          '<div class="add-pair"><label><span>代码</span><input data-add-symbol maxlength="32" aria-label="新仓位代码"></label>' +
+          '<div class="add-hold-cell"><span>持仓</span><div class="cost-add-hold"><label><input type="radio" name="addHold" data-add-hold value="long" checked>长持仓</label>' +
+          '<label><input type="radio" name="addHold" data-add-hold value="short">短持仓</label></div></div></div>' +
+          '<div class="add-pair"><label><span>数量</span><input data-add-qty inputmode="decimal" aria-label="新仓位数量"></label>' +
+          '<label><span>成本</span><input data-add-cost inputmode="decimal" aria-label="新仓位成本"></label></div>' +
+          '<label class="add-note">备注 <input data-add-note maxlength="7" placeholder="中文名，选填" aria-label="新仓位备注名"></label>' +
+          '<div class="add-pair"><label><span>加仓价</span><input data-add-trigger inputmode="decimal" placeholder="选填" aria-label="新仓位加仓价"></label>' +
+          '<label><span>减仓价</span><input data-add-reduce inputmode="decimal" placeholder="选填" aria-label="新仓位减仓价"></label></div>' +
+          '<div class="add-pair"><label><span>目标价</span><input data-add-target inputmode="decimal" placeholder="选填，0＝关闭达到报灯" aria-label="新仓位目标价"></label>' +
+          '<label><span>分类标签</span><select data-add-sector aria-label="分类标签"><option value="">选择分类标签</option>' +
+          SECTOR_GROUPS.map(function (g) { return '<option value="' + esc(g[0]) + '">' + esc(g[1]) + '</option>'; }).join('') +
+          '</select></label></div>' +
           '<p data-add-message role="status"></p>' +
           '<div class="cost-acts"><button type="button" data-add-cancel>取消</button><button type="button" class="primary" data-add-confirm>加入草稿</button></div>';
         panel.appendChild(addDialog);
         addDialog.addEventListener('click', function (e) {
           if (e.target.closest('[data-add-cancel]')) addDialog.close();
           else if (e.target.closest('[data-add-confirm]')) {
+            // 只有新建的仓位没选行业分类才提醒必须分类；已有分类标记的老股不受影响。
+            var secSel = addDialog.querySelector('[data-add-sector]');
+            if (!secSel.value) {
+              addDialog.querySelector('[data-add-message]').textContent = '请先选分类标签';
+              secSel.classList.add('add-must'); secSel.focus();
+              return;
+            }
+            secSel.classList.remove('add-must');
             try { addPosition(addDialog.querySelector('[data-add-symbol]').value,
               addDialog.querySelector('[data-add-hold]:checked').value,
               addDialog.querySelector('[data-add-qty]').value, addDialog.querySelector('[data-add-cost]').value,
               addDialog.querySelector('[data-add-note]').value, addDialog.querySelector('[data-add-trigger]').value,
-              addDialog.querySelector('[data-add-reduce]').value, addDialog.querySelector('[data-add-target]').value); }
+              addDialog.querySelector('[data-add-reduce]').value, addDialog.querySelector('[data-add-target]').value,
+              secSel.value); }
             catch (err) { addDialog.querySelector('[data-add-message]').textContent = err.message; }
           }
         });
@@ -1815,6 +1994,8 @@
       addDialog.querySelector('[data-add-message]').textContent = '';
       ['note', 'trigger', 'reduce', 'target'].forEach(function (k) { addDialog.querySelector('[data-add-' + k + ']').value = ''; });
       all('[data-add-hold]', addDialog).forEach(function (input) { input.checked = input.value === 'long'; });
+      var secReset = addDialog.querySelector('[data-add-sector]');
+      secReset.value = ''; secReset.classList.remove('add-must');
       addDialog.showModal(); addDialog.querySelector('[data-add-symbol]').focus();
     }
     var sortKey = read(LS_SORT) === 'wt' ? 'wt' : 'pnl';
@@ -1939,6 +2120,7 @@
         if (clearRecord && (clearRecord.step === 'move' || clearRecord.quantityAccepted) && clearRecord.payload) DATA = clone(clearRecord.payload);
         Object.keys(addDraft).forEach(function (sym) { if (!addedPositions[sym] && (!editBaseline || !editBaseline.items[sym])) delete DATA.items[sym]; });
         clearDraft = {}; addDraft = {};
+        if (clearRecord && (clearRecord.step === 'move' || clearRecord.quantityAccepted)) stageTrades(); else tradeDraft = [];
         editDraft = clearRecord && clearRecord.step !== 'done' ? {} : snapshotDraft || {};
         draftPending = clearRecord && clearRecord.step !== 'done' ? false : prevDraftPending;
         if (!inFlight && !uncertain) dirty = prevDirty;
@@ -2043,6 +2225,7 @@
         if ((clearRecord && clearRecord.step !== 'done') || Object.keys(clearDraft).length || Object.keys(addDraft).length) {
           void executeClear(); return;
         }
+        stageTrades();
         var next = checkedDraft();
         if (!next) {
           persist();
@@ -2277,6 +2460,22 @@
       if (text) totEl.setAttribute('aria-label', '总资产 ' + text + '（含现金及固收）');
       else totEl.removeAttribute('aria-label');
     }
+    var pnlEl = null;
+    function renderPosPnl(totalPnl, tPct) {
+      if (!totEl || !totEl.parentNode) return;
+      if (!pnlEl) {
+        pnlEl = totEl.parentNode.querySelector('.pos-pnl');
+        if (!pnlEl) {
+          pnlEl = document.createElement('span');
+          pnlEl.className = 'pos-pnl';
+          totEl.parentNode.appendChild(pnlEl);
+        }
+      }
+      var text = totalPnl === null ? '' : money(totalPnl) + '(' + pct(tPct) + ')';
+      if (pnlEl.textContent !== text) pnlEl.textContent = text;
+      pnlEl.classList.toggle('up', totalPnl !== null && totalPnl >= 0);
+      pnlEl.classList.toggle('down', totalPnl !== null && totalPnl < 0);
+    }
     function groupName(r) {
       var z = r.tr.closest('details.zone-card'),
         h = z && z.querySelector('summary .zone-name');
@@ -2459,26 +2658,25 @@
           stats = zone.querySelector('summary .zone-stats');
         if (stats) {
           var spans = stats.querySelectorAll('.zone-num');
-          if (spans.length >= 3) {
+          if (spans.length >= 2) {
             spans[0].textContent = plain(mv);
-            spans[1].textContent = money(pnl) + '（' + pct(pp) + '）';
-            spans[2].textContent = totalAsset > 0 ? ((mv / totalAsset) * 100).toFixed(1) + '%' : '—';
+            spans[1].textContent = money(pnl) + '(' + pct(pp) + ')';
             updateTone(spans[1], pnl);
           }
         }
       });
       // 现金/固收行最左侧：长短持仓合计市值（股票/ETF），与右侧盈亏同口径；总资产改放持仓标题行。
-      updateText('#group_positions>.cashbond-row .cb-total-amt', plain(sumOf(longs.concat(shorts), function (x) { return x.mv; })));
+      updateText('#group_positions .cashbond-row .cb-total-amt', plain(sumOf(longs.concat(shorts), function (x) { return x.mv; })));
       var el = updateText(
-        '#group_positions>.cashbond-row .cb-total-pnl',
+        '#group_positions .cashbond-row .cb-total-pnl',
         money(totalPnl) + '（' + pct(tPct) + '）',
       );
       if (el) {
         el.classList.toggle('is-up', totalPnl !== null && totalPnl >= 0);
         el.classList.toggle('is-down', totalPnl !== null && totalPnl < 0);
       }
-      updateText('#group_positions>.cashbond-row .cb-cash .cb-amt', plain(cash));
-      updateText('#group_positions>.cashbond-row .cb-bond .cb-amt', plain(fixed));
+      updateText('#group_positions .cashbond-row .cb-cash .cb-amt', plain(cash));
+      updateText('#group_positions .cashbond-row .cb-bond .cb-amt', plain(fixed));
     }
     // 2026-11-19 v18：仓位展开明细（三项汇总 + 行业权重）。
     // 三项汇总是独立累计账，直接取构建期注入的核算结果；行业权重按当前持仓实时聚合，
@@ -2492,8 +2690,8 @@
     function renderPositionPanel(rows, holdingsMv) {
       var body = document.getElementById('piBody');
       if (!body) return;
-      var t = (REAL && REAL.trade) || {};
-      [['piRealized', t.total], ['piYear', t.year]].forEach(function (pair) {
+      var t = (REAL && REAL.trade) || {}, yr = bjNow().slice(0, 4);
+      [['piRealized', TRADE.total], ['piYear', TRADE.by_year[yr]]].forEach(function (pair) {
         var el = document.getElementById(pair[0]);
         if (!el) return;
         var v = Number(pair[1]) || 0;
@@ -2502,15 +2700,15 @@
         el.classList.toggle('down', v < 0);
       });
       var cleared = document.getElementById('piCleared');
-      if (cleared) cleared.textContent = String(Number(t.cleared) || 0);
+      if (cleared) cleared.textContent = String(Number(TRADE.cleared_by_year[yr]) || 0);
 
       var wlist = document.getElementById('piWeights');
       if (!wlist) return;
-      var sectors = t.sectors || {}, groups = t.sector_groups || [];
+      var groups = SECTOR_GROUPS;
       var agg = {};
       rows.forEach(function (r) {
         if (!r.has || !(r.mv > 0)) return;
-        var key = sectors[r.sym];
+        var key = sectorOf(r.sym);
         if (!key) return;
         if (!agg[key]) agg[key] = { mv: 0, cost: 0 };
         agg[key].mv += r.mv;
@@ -2646,6 +2844,7 @@
         );
       }
       renderPosTotal(totalAsset);
+      renderPosPnl(totalPnl, tPct);
       renderPositionTotals(longs, shorts, totalAsset, totalPnl, tPct, cash, fixed);
       var cmp = editing
         ? function (a, b) {
@@ -2846,7 +3045,7 @@
               ISOLATED_NOTICE +
               ' <button type="button" data-cost-export>导出备份</button></div>'
             : '');
-      var asset = document.querySelector('#group_positions>.asset-row');
+      var asset = document.querySelector('#group_positions .asset-row');
       if (asset && asset._rendered !== footHtml) {
         asset.innerHTML = footHtml;
         asset._rendered = footHtml;
@@ -2862,5 +3061,7 @@
     takeOwnership(function () {
       paint();
     });
+    pullLedger();
+    setTimeout(flushTrades, 4000);
   })();
 </script>

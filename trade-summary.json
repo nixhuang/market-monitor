@@ -1,10 +1,10 @@
 {
   "_说明": [
-    "仓位面板三项汇总与行业标签。已实现 / 今年 / 清仓由富途牛牛与嘉信两份真实成交流水核算（只取股票与 ETF，不含固收、国债、股息、入金；富途与嘉信分开记账；APH 2:1 拆股已还原）。",
+    "仓位面板三项汇总的种子（构建时内联进页面）。已实现 / 今年 / 清仓由富途牛牛与嘉信两份真实成交流水核算（只取股票与 ETF，不含固收、国债、股息、入金；富途与嘉信分开记账；APH 2:1 拆股已还原）。",
     "已实现口径：整只标的彻底清仓且不再买回才结算；中途做 T 的高抛低吸不单独计盈亏，直接冲低剩余股数成本，避免重复计算。",
-    "清仓只数一年内（按当前年份取 cleared_by_year / realized_by_year）；累计已实现是独立累加账，不随交易记录页最近 50 条窗口裁剪重算。",
-    "sectors 是行业标签，与标的所在分组解耦；用于行业权重聚合与清仓默认分组，不从分组派生。",
-    "截至 2026-11-19 的静态核算结果。新增成交后需要重新核算更新本文件与 trade-log.md。"
+    "清仓只数一年内（按当前北京时间年份取 cleared_by_year / realized_by_year）；累计已实现是独立累加账，不随交易记录页最近 50 条窗口裁剪重算。",
+    "行业标签不在这里：每只持仓的 sector 写在 holdings.json 的 positions 里，与所在分组解耦（改分组不动标签）。sector_groups 只是行业名称与柱条颜色表。",
+    "新成交由页面在「保存并上传」后自动追加到 data 分支的 trade-log.md 与 trade-summary.json 并重算累计；本文件只是首次读不到云端时的兜底种子。"
   ],
   "asof": "2026-11-19",
   "currency": "USD",
@@ -17,31 +17,65 @@
     "2026": 24
   },
   "sector_groups": [
-    ["technology", "IT·AI", "var(--head-blue-on)"],
-    ["industrials", "工航防建", "var(--lamp-yellow)"],
-    ["index_funds", "指数基", "var(--purple)"],
-    ["healthcare", "医疗保健", "var(--cost-long)"],
-    ["financials", "金融", "var(--cost-cash)"],
-    ["communications", "通信娱乐", "var(--lamp-red)"],
-    ["consumer_discretionary", "可选消费", "var(--dim)"]
-  ],
-  "sectors": {
-    "AAPL": "technology",
-    "APH": "technology",
-    "AVGO": "technology",
-    "NTNX": "technology",
-    "DRAM": "technology",
-    "HII": "industrials",
-    "LMT": "industrials",
-    "VRT": "industrials",
-    "XLI": "industrials",
-    "QQQM": "index_funds",
-    "SCHD": "index_funds",
-    "SPYM": "index_funds",
-    "CRSP": "healthcare",
-    "UNH": "healthcare",
-    "BRK-B": "financials",
-    "GOOGL": "communications",
-    "UBER": "consumer_discretionary"
-  }
+    [
+      "technology",
+      "IT·AI",
+      "var(--head-blue-on)"
+    ],
+    [
+      "industrials",
+      "工航防建",
+      "var(--lamp-yellow)"
+    ],
+    [
+      "index_funds",
+      "指数基",
+      "var(--purple)"
+    ],
+    [
+      "healthcare",
+      "医疗保健",
+      "var(--cost-long)"
+    ],
+    [
+      "financials",
+      "金融",
+      "var(--cost-cash)"
+    ],
+    [
+      "communications",
+      "通信娱乐",
+      "var(--lamp-red)"
+    ],
+    [
+      "consumer_discretionary",
+      "可选消费",
+      "var(--dim)"
+    ],
+    [
+      "energy",
+      "能源",
+      "#e8905a"
+    ],
+    [
+      "materials",
+      "化材金纸",
+      "#b9a37a"
+    ],
+    [
+      "utilities",
+      "公水电气",
+      "#5fb3b3"
+    ],
+    [
+      "consumer_staples",
+      "必须消费",
+      "#7fbf7f"
+    ],
+    [
+      "real_estate",
+      "房地产",
+      "#c792ea"
+    ]
+  ]
 }

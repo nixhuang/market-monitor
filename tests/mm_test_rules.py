@@ -300,7 +300,11 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         # 变量是唯一紫源；旧暗紫 #a371f7 与任何 rgb 形式的写死紫都不许再出现。
         self.assertIn('--purple:#b084ff', css)
         self.assertEqual(css.count('#b084ff'), 1)
-        for dead in ('#a371f7', '#c4a3ff', '163,113,247', '196,163,255', '176,132,255'):
+        # 2026-11-19 Demo 的框紫（站名/外框/运行按钮）是另一个变量 --frame-purple：
+        # 十六进制与 rgb 三元组各只许在 :root 出现一次，别处一律走变量。
+        self.assertEqual(css.count('#a371f7'), 1)
+        self.assertEqual(css.count('163,113,247'), 1)
+        for dead in ('#c4a3ff', '196,163,255', '176,132,255'):
             self.assertNotIn(dead, css)
         # 灯圈（计数徽章）与胶囊（共识价标签）本体、描边圈同源。
         self.assertIn('.stat-badge.purple{border-color:var(--purple)}', css)
@@ -352,9 +356,10 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         css = page_assets.PAGE_CSS
         cost = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
         # 外框色与宽度只有 :root 一处来源，避免又冒出第二套框线
-        self.assertIn('--signal-border:#6686c6;', css)
-        self.assertIn('--frame-w:1.5px;', css)
-        self.assertEqual(css.count('--signal-border:#6686c6'), 1)
+        # 2026-11-19 Demo：外框改框紫、1px（原 #6686c6 / 1.5px 作废）
+        self.assertIn('--signal-border:var(--frame-purple);', css)
+        self.assertIn('--frame-w:1px;', css)
+        self.assertEqual(css.count('--signal-border:var(--frame-purple)'), 1)
         # 统计面板：只剩外框，卡底 / 名单面板底 / 紫灯财报行底全部去掉，左侧蓝条取消
         self.assertIn('border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
         self.assertIn('#signalCounts .signal-members-panel{padding:10px 12px;border-top:1px solid var(--list-border);text-align:left}', css)
@@ -978,8 +983,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         色值走 --sym-fade / --sym-fade-mid 两个 :root 变量，避免撞 10-28 退役的
         分组标题高亮字面量（测试禁止那个串回来）。"""
         css = page_assets.PAGE_CSS
-        self.assertEqual(css.count('--sym-fade:rgba(143,184,240,.14)'), 1)
-        self.assertEqual(css.count('--sym-fade-mid:rgba(143,184,240,.05)'), 1)
+        self.assertEqual(css.count('--sym-fade:rgba(var(--frame-purple-rgb),.16)'), 1)
+        self.assertEqual(css.count('--sym-fade-mid:rgba(88,166,255,.08)'), 1)
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,', css)
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
         grad = 'linear-gradient(90deg,var(--sym-fade),var(--sym-fade-mid) 72%,transparent)'
@@ -1012,9 +1017,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         中段 5%／5px 上留白／高度公式／代码文字几何一律不动；background-size
         规则行仍只用 var(--sym-fade-w)，不开第二个变量。"""
         css = page_assets.PAGE_CSS
-        self.assertEqual(css.count('--sym-fade:rgba(143,184,240,.14)'), 1)
+        self.assertEqual(css.count('--sym-fade:rgba(var(--frame-purple-rgb),.16)'), 1)
         self.assertNotIn('--sym-fade:rgba(143,184,240,.20)', css)
-        self.assertEqual(css.count('--sym-fade-mid:rgba(143,184,240,.05)'), 1)
+        self.assertEqual(css.count('--sym-fade-mid:rgba(88,166,255,.08)'), 1)
         self.assertIn('--sym-fade-w:calc(100% - var(--tgs-w))', css)
         self.assertNotIn('--sym-fade-w:50%', css)
         self.assertNotIn('calc(50% + 30px)', css)
@@ -1181,7 +1186,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('.target-purple .note{display:inline;margin-left:6px}', css)
         self.assertIn('.target-purple .signal-member-direction{color:var(--purple)}', css)
         self.assertIn('--purple:#b084ff', css)
-        self.assertNotIn('#a371f7', css)
+        self.assertEqual(css.count('#a371f7'), 1)  # 只在 :root 的 --frame-purple
         self.assertNotIn('.target-purple .target-space-high .note', css)
         self.assertNotIn('.target-purple .target-space-high .signal-member-belong', css)
         self.assertNotIn('.tone-target-high,.target-space-high{', css)
@@ -1197,26 +1202,24 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('--signal-bg:#182131;', css)
         self.assertIn('--collapse-bg:var(--signal-bg);', css)
         # 11-10终稿：父去框但保卡片底和原标题位置；子框仍保持绿色。
-        pos = re.search(r'#group_positions\{([^}]+)\}', css)[1]
-        self.assertIn('--collapse-bg:var(--positions-collapse)', pos)
+        # 2026-11-19 Demo：「仓位」父卡改黄框、可点开合；长/短持仓是它后面两张平级绿框卡。
+        pos = re.search(r'#group_positions,#group_positions\[open\]\{([^}]+)\}', css)[1]
         self.assertIn('background:var(--card)', pos)
-        self.assertIn('border:0;box-shadow:none;padding:3px 0 2px;overflow:hidden', pos)
-        self.assertIn('#group_positions>summary{cursor:default;margin-left:5px;margin-right:5px}', css)
+        self.assertIn('border:var(--frame-w) solid var(--frame-yellow)', pos)
+        self.assertIn('padding:3px 0 2px', pos)
+        self.assertIn('#group_positions>summary{cursor:pointer;margin-left:5px;margin-right:5px}', css)
         tint = re.search(r'--positions-collapse:rgba\((\d+),(\d+),(\d+),([.\d]+)\)', css)
         self.assertIsNotNone(tint)
         self.assertEqual(tuple(map(int, tint.groups()[:3])), (46, 160, 67))
         self.assertGreater(float(tint[4]), 0)
-        self.assertIn('#group_positions>summary::before{visibility:hidden}', css)
-        self.assertIn('--signal-border:var(--frame-green)', pos)
+        self.assertNotIn('#group_positions>summary::before{visibility:hidden}', css)  # 三角恢复可见
         self.assertIn('--frame-green:#2c8f3e', css)
         self.assertNotIn('border-color:', pos)
-        lng = re.search(r'#group_positions_long\.zone-card\{([^}]+)\}', css)[1]
-        self.assertIn('background:none;border:1px solid var(--frame-green)', lng)
-        self.assertIn('box-sizing:border-box;width:100%', lng)
-        self.assertIn('border-radius:9px;margin:9px 0 9px', lng)
-        short = re.search(r'#group_positions_short\.zone-card\{([^}]+)\}', css)[1]
-        self.assertIn('box-sizing:border-box;width:100%', short)
-        self.assertIn('border-radius:9px;margin:9px 0 0', short)
+        zone = re.search(r'#group_positions_long\.zone-card,#group_positions_short\.zone-card\{([^}]+)\}', css)[1]
+        self.assertIn('--signal-border:var(--frame-green)', zone)
+        self.assertIn('background:var(--card);border:1px solid var(--frame-green)', zone)
+        self.assertIn('box-sizing:border-box;width:100%', zone)
+        self.assertIn('border-radius:9px', zone)
         self.assertIn('height:26px;', re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1])
         self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
         button = re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1]
@@ -1351,17 +1354,18 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         js = page_assets.PAGE_INTERACTION_JS
         self.assertIn('window.MM_SETTINGS.group_single_open === 1', js)
         self.assertNotIn('groupSummaryClickAt', js)   # 不再用 toggle 监听（会干扰统计面板的筛选归一化时序）
-        # 当日/风险/统计不是 group_ 前缀，固定展开的持仓父卡带 data-open-locked，均不参与。
-        self.assertIn("details[id^='group_'][open]:not([data-open-locked])", js)
+        # 当日/风险/统计不是 group_ 前缀，不参与；2026-11-19 起「仓位」不再常开锁定，与普通分组同待遇。
+        self.assertIn("details[id^='group_'][open]", js)
+        self.assertNotIn('data-open-locked', js)
         script = r'''
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const ev={};class Details{constructor(id,open,locked){this.id=id;this.open=open;this.dataset=locked?{openLocked:'1'}:{};this.top=100;}
+const ev={};class Details{constructor(id,open){this.id=id;this.open=open;this.dataset={};this.top=100;}
   getBoundingClientRect(){return {top:this.top};}}
-const mk=(id,open,locked)=>new Details(id,open,locked);
-const cards=[mk('group_positions',true,true),mk('group_positions_long',true),mk('group_positions_short',true),mk('group_focus',false),mk('group_tech',true)];
+const mk=(id,open)=>new Details(id,open);
+const cards=[mk('group_positions',true),mk('group_positions_long',true),mk('group_positions_short',true),mk('group_focus',false),mk('group_tech',true)];
 class Element{constructor(card){this.card=card;}
   closest(q){return q==="details[id^='group_'] > summary"&&this.card?{parentElement:this.card}:null;}}
-const sel=s=>s==="details[id^='group_'][open]:not([data-open-locked])"?cards.filter(c=>c.open&&!c.dataset.openLocked):[];
+const sel=s=>s==="details[id^='group_'][open]"?cards.filter(c=>c.open):[];
 const frames=[];
 const ctx={HTMLDetailsElement:Details,Element,Date,requestAnimationFrame:f=>frames.push(f),
   document:{addEventListener:(k,f)=>(ev[k]||=[]).push(f),querySelectorAll:sel,querySelector:()=>null,getElementById:()=>null},
@@ -1370,14 +1374,14 @@ vm.createContext(ctx);vm.runInContext(fs.readFileSync(0,'utf8'),ctx);
 const click=(card)=>{ev.click.forEach(f=>f({target:new Element(card)}));};
 const flush=()=>{while(frames.length)frames.shift()();};
 const focus=cards[3];
-// 用户点分组标题并展开：其它分组（含长/短持仓）收起，固定展开的持仓父卡保持
+// 用户点分组标题并展开：其它分组（含「仓位」与长/短持仓）都收起
 click(focus);focus.open=true;focus.top=40;flush();
 assert.equal(cards[1].open,false);assert.equal(cards[2].open,false);assert.equal(cards[4].open,false);
-assert.equal(cards[0].open,true);assert.equal(focus.open,true);
+assert.equal(cards[0].open,false);assert.equal(focus.open,true);
 assert.equal(ctx.scrolled,-60);     // 点开的这组被上拽后拉回原位（top 100→40 补 -60）
 assert.equal(ctx.smooth,-13);       // 再平滑滚到 8.75% 高度线：屏高600→线在 round(52.5)=53，当前top 40 → top-线 = -13
-// 点的是持仓父卡标题（固定展开）：不参与
-cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,true);
+// 点「仓位」标题展开：与普通分组一样，其它分组收起
+cards[0].open=true;cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,false);
 // 点击后其实是在收起：不动其它
 cards[4].open=true;focus.open=false;click(focus);flush();assert.equal(cards[4].open,true);
 // 开关关闭：不动
@@ -1430,17 +1434,16 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
 
     def test_positions_full_width_rows_preserve_title_inset(self):
         css = page_assets.PAGE_CSS
-        parent = re.search(r'#group_positions\{([^}]+)\}', css)[1]
+        parent = re.search(r'#group_positions,#group_positions\[open\]\{([^}]+)\}', css)[1]
         self.assertIn('padding:3px 0 2px', parent)
-        self.assertIn('#group_positions>summary{cursor:default;margin-left:5px;margin-right:5px}', css)
+        self.assertIn('#group_positions>summary{cursor:pointer;margin-left:5px;margin-right:5px}', css)
         cost = strip_css_comments((ROOT / 'cost_panel.css').read_text(encoding='utf-8'))
-        self.assertIn('margin: 8px 0 4px', re.search(r'#group_positions > \.asset-row\s*\{([^}]*)\}', cost)[1])
-        self.assertIn('margin: 4px 0 8px', re.search(r'#group_positions > \.cashbond-row\s*\{([^}]*)\}', cost)[1])
-        for zone in ('long', 'short'):
-            declarations = re.search(r'#group_positions_' + zone + r'\.zone-card\{([^}]*)\}', css)[1]
-            self.assertIn('width:100%', declarations)
-            self.assertNotIn('margin-left:', declarations)
-            self.assertNotIn('margin-right:', declarations)
+        self.assertIn('margin: 8px 0 4px', re.search(r'#group_positions \.asset-row\s*\{([^}]*)\}', cost)[1])
+        self.assertIn('margin: 4px 0 0', re.search(r'#group_positions \.cashbond-row\s*\{([^}]*)\}', cost)[1])
+        declarations = re.search(r'#group_positions_long\.zone-card,#group_positions_short\.zone-card\{([^}]*)\}', css)[1]
+        self.assertIn('width:100%', declarations)
+        self.assertNotIn('margin-left:', declarations)
+        self.assertNotIn('margin-right:', declarations)
 
     def test_mobile_settings_two_row_fixture_preserves_all_fields_and_dividers(self):
         source = (ROOT / 'edit.html').read_text(encoding='utf-8')
@@ -1921,8 +1924,8 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
     def test_statistics_collapse_bar_shares_border_color_only_in_statistics(self):
         self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page_assets.PAGE_CSS)
         self.assertIn('#signalCounts .collapse-group{color:var(--white)}', page_assets.PAGE_CSS)
-        pos = re.search(r'#group_positions\{([^}]+)\}', page_assets.PAGE_CSS)[1]
-        self.assertIn('--collapse-bg:var(--positions-collapse)', pos)
+        zone = re.search(r'#group_positions_long\.zone-card,#group_positions_short\.zone-card\{([^}]+)\}', page_assets.PAGE_CSS)[1]
+        self.assertIn('--collapse-bg:var(--positions-collapse)', zone)
         self.assertNotIn('bar.appendChild(shortcut)', page_assets.RULES_INTERACTION_JS)
 
     def test_volume_adaptive_off_on_and_fixed_fallback(self):
@@ -2015,8 +2018,9 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         elements.feed(page)
         tag, parent = elements.tags['group_positions']
         self.assertEqual(tag, 'details')
-        self.assertIn('open', parent)
-        self.assertEqual(parent['data-open-locked'], '1')
+        # 2026-11-19 Demo：「仓位」默认收起、不再锁常开；长/短持仓是平级卡，同样默认收起
+        self.assertNotIn('open', parent)
+        self.assertNotIn('data-open-locked', parent)
         for ident, (_, attrs) in elements.tags.items():
             if ident != 'group_positions':
                 self.assertNotIn('data-open-locked', attrs, ident)
@@ -2031,38 +2035,9 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertNotIn('日对.SPX', cost)
 
     def test_positions_lock_blocks_parent_activation_not_child_collapse(self):
-        lock = re.search(r'\(function lockPositionsOpen\(\) \{.*?\n\}\)\(\);',
-                         page_assets.PAGE_INTERACTION_JS, re.S)
-        self.assertIsNotNone(lock)
-        script = r'''
-const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const events={},parentEvents={};
-const parent={open:false,querySelector:s=>s===':scope > summary'?summary:null,
-  addEventListener:(name,fn)=>{parentEvents[name]=fn;}};
-const summary={addEventListener:(name,fn)=>{events[name]=fn;}};
-const context={document:{querySelectorAll:s=>{
-  assert.equal(s,'#group_positions[data-open-locked="1"]');return [parent];
-}}};
-vm.createContext(context);vm.runInContext(fs.readFileSync(0,'utf8'),context);
-assert.equal(parent.open,true);
-for(const key of ['Enter',' ','Spacebar']){
-  parent.open=false;let blocked=false;
-  events.keydown({type:'keydown',key,preventDefault:()=>{blocked=true;}});
-  assert.equal(blocked,true);assert.equal(parent.open,true);
-}
-let blocked=false;
-events.keydown({type:'keydown',key:'ArrowDown',preventDefault:()=>{blocked=true;}});
-assert.equal(blocked,false);
-parent.open=false;
-events.click({type:'click',preventDefault:()=>{blocked=true;}});
-assert.equal(blocked,true);assert.equal(parent.open,true);
-parent.open=false;parentEvents.toggle({target:parent});assert.equal(parent.open,true);
-const child={open:false};parentEvents.toggle({target:child});assert.equal(child.open,false);
-'''
-        result = subprocess.run([sys.executable, '-B', str(ROOT / 'tests/run_all.py'),
-            '--offline-node', '-e', script], cwd=ROOT, input=lock[0],
-            capture_output=True, text=True, encoding='utf-8', timeout=30)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        # 2026-11-19 Demo：「仓位」父卡不再常开锁定，与其它分组一样点标题开合；常开脚本已整段删除。
+        self.assertNotRegex(page_assets.PAGE_INTERACTION_JS, r'lockPositionsOpen')
+        self.assertNotIn('data-open-locked', page_assets.PAGE_INTERACTION_JS)
 
     def test_quiet_list_reset_and_regular_collapse_still_execute(self):
         script = r'''

@@ -140,7 +140,7 @@ check(html.index(strip_css_comments(_cost_css)) < html.index(strip_css_comments(
 check("<title>NIX-Matrix</title>" in html and '<h1 class="brand">NIX-Matrix</h1>' in html
       and "MatrixPulse" not in html,
       "标题 = NIX-Matrix（带 brand 类，上涨绿，旧名 MatrixPulse 全站清除）")
-check("h1.brand{color:var(--up)}" in html, "站名用上涨绿 --up，不写死颜色")
+check("h1.brand{color:var(--frame-purple)}" in html, "站名用框紫 --frame-purple（2026-11-19 Demo），不写死颜色")
 check("市场自检" not in html, "旧标题已移除")
 check("数据时间 2026-10-06 收盘（美东交易日）" in html and "本页数据更新" not in html,
       "休市顶部显示行情收盘日，不重复抓取完成时间")
@@ -308,8 +308,9 @@ check('id="checkResult"' in html and html.index('id="checkResult"')<html.index('
 
 # 分组
 check(len(re.findall(r'<details[^>]*class="[^"]*group-card[^"]*"[^>]*id="group_', html)) == 14, "十四个分类均可折叠")
-check(re.search(r'<details[^>]*id="group_positions"\s+open\s+data-open-locked="1">', html) is not None and 'id="group_focus">' in html and ' open>' not in html.split('id="macroCard"', 1)[1][:2], "终稿持仓父组固定初载展开，重点、市场风险默认折叠")
-pos_title = html.split('id="group_positions"', 1)[1].split('</summary>', 1)[0]
+check(re.search(r'<details[^>]*id="group_positions"\s*>', html) is not None and 'data-open-locked' not in html and 'id="group_focus">' in html and ' open>' not in html.split('id="macroCard"', 1)[1][:2], "仓位父组与重点、市场风险一样默认折叠，不再锁常开（2026-11-19）")
+pos_title = ''.join(html.split(f'id="group_positions_{z}"', 1)[1].split('</summary>', 1)[0]
+                    for z in ('long', 'short') if f'id="group_positions_{z}"' in html)
 check('class="stat-badge red"' in pos_title and 'class="stat-badge missing"' in pos_title and
       '红1' not in pos_title and '缺失1' not in pos_title,
       "分组警示采用灯色圆里带数字的徽章而非颜色文字（2026-10-15）")
@@ -2126,7 +2127,7 @@ const deadline = setTimeout(() => {
         && s.rowContent === '""' && s.rowWidth === '2px' && s.rowColor === s.color
         && Math.abs(parseFloat(s.rowTop)-(width<=600?8:8.5))<0.02
         && Math.abs(parseFloat(s.rowHeight)-(width<=600?36:31.5))<0.02
-        && s.rowImage.startsWith('linear-gradient(90deg') && s.rowImage.includes('143, 184, 240')
+        && s.rowImage.startsWith('linear-gradient(90deg') && s.rowImage.includes('163, 113, 247')   /* 2026-11-19 Demo：代码列渐隐改框紫 */
         && s.leftImage === 'none' && s.leftShadow === 'none'
         && s.rangeImage === 'none' && s.rangeSize === 'auto'),
         name: width + 'px终稿目标状态保留2px固定左灯条、首格无重复灯条且52周不续接', actual: actual.stripes});
@@ -2183,7 +2184,7 @@ const deadline = setTimeout(() => {
         document.getElementById('group_positions').open=false;
         const u=new URL(location.href);u.searchParams.set('focus','pos');u.searchParams.set('edit','1');
         history.replaceState(null,'',u.href);
-        return {hash:location.hash,open:document.getElementById('s-thigh').closest('details.group-card').open};
+        return {hash:location.hash,open:document.getElementById('s-thigh').closest('details.group-card,details.zone-card').open};
       })()`);
       loaded=waitLoad();await evaluate(`document.getElementById('btnHardRefresh').click()`);await loaded;
       await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
@@ -2198,9 +2199,9 @@ const deadline = setTimeout(() => {
       })()`);
       assertions.push({ok:before.hash==='#s-thigh' && before.open && after.hash==='' && !after.focus && !after.edit
         && !after.marker && after.keep==='1' && after.token==='synthetic'
-        && JSON.stringify(after.open)===JSON.stringify(['signalCounts','group_positions'])
+        && JSON.stringify(after.open)===JSON.stringify(['signalCounts'])
         && after.zones.length>0 && after.zones.every(open=>!open) && after.editorHidden && after.y===0,
-        name:width+'px真实刷新清旧定位、统计与持仓父组展开/子区折叠及回顶部',actual:{before,after}});
+        name:width+'px真实刷新清旧定位、仅统计展开（仓位与长短持仓一并折叠）及回顶部',actual:{before,after}});
       const jumpAfter=await evaluate(`(() => {
         document.querySelector('a.signal-member-jump[href="#s-thigh"]').click();
         window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));
@@ -2406,8 +2407,10 @@ const deadline = setTimeout(() => {
       // 验证按钮几何、资产金额同源及总额/Cash/固收顺序；五列交易只形成草稿，不恢复红叉/市值列。
       const edit=await evaluate(`(() => {
         const card=document.getElementById('costManage'),btn=document.getElementById('costEditBtn');
-        const cashbond=document.querySelector('#group_positions>.cashbond-row');
-        const asset=document.querySelector('#group_positions>.asset-row');
+        // 2026-11-19：「仓位」默认收起；量几何前先展开（资金排/比例条已搬进展开明细 .pi-body）
+        document.querySelectorAll('#group_positions,#group_positions_long,#group_positions_short').forEach(d=>d.open=true);
+        const cashbond=document.querySelector('#group_positions .cashbond-row');
+        const asset=document.querySelector('#group_positions .asset-row');
         if(!card||!btn||!cashbond||!asset)return {exists:false};
         const bar=document.querySelector('.runbar'),refresh=document.getElementById('btnHardRefresh');
         const b=btn.getBoundingClientRect(),rb=refresh&&refresh.getBoundingClientRect();
@@ -2476,13 +2479,14 @@ const deadline = setTimeout(() => {
         result.fillRight=!!fill&&fill.getBoundingClientRect().left>=qtyInput.getBoundingClientRect().right-0.5;
         if(fill)fill.click();result.fillQty=qtyInput.value;
         result.fillNoOverflow=document.documentElement.scrollWidth<=innerWidth;
-        result.dialogOpen=dialog.open;result.destinations=[...dialog.querySelectorAll('input[name="tradeDestination"]')].map(i=>i.value);
+        result.dialogOpen=dialog.open;result.destinations=[...dialog.querySelectorAll('[data-trade-dest-select] option')].map(i=>i.value);
         result.dialogWidth=dialog.getBoundingClientRect().width;result.hasCash=!!dialog.querySelector('[data-f="cash"]');
         result.sellNote=dialog.querySelector('[data-trade-note]').textContent;
         result.dialogFont=getComputedStyle(dialog.querySelector('h3')).fontSize;
         result.labelFont=getComputedStyle(dialog.querySelector('label')).fontSize;
-        const choices=[...dialog.querySelectorAll('.cost-clear-choice label')].map(e=>e.getBoundingClientRect());
-        result.choicesSameRow=choices.length===2&&Math.abs(choices[0].top-choices[1].top)<1&&choices[0].right<choices[1].left;
+        // 2026-11-19 Demo：卖出弹窗只留一个「分组」下拉（原两个单选框横排作废）
+        const destSel=dialog.querySelector('[data-trade-dest-select]'),destRect=destSel&&destSel.getBoundingClientRect();
+        result.choicesSameRow=!!destSel&&dialog.querySelectorAll('input[type="radio"]').length===0&&destRect.width>0&&destRect.right<=dialog.getBoundingClientRect().right;
         dialog.querySelector('[data-trade-cancel]').click();result.dialogClosed=!dialog.open;
         panel.querySelector('[data-trade-action="buy"][data-sym="RANGENORM"]').click();
         result.buyFillHidden=getComputedStyle(dialog.querySelector('[data-trade-fill-all]')).display==='none';
@@ -2498,7 +2502,7 @@ const deadline = setTimeout(() => {
         &&editor.dialogOpen&&editor.dialogClosed&&JSON.stringify(editor.destinations)===JSON.stringify(['default','focus'])
         &&editor.dialogWidth>0&&editor.dialogWidth<=width-24&&!editor.hasCash
         &&editor.fixedFields===1&&editor.fixedCost&&editor.editorFont==='16px'&&editor.inputFont==='16px'
-        &&editor.noOverflow&&editor.sellNote==='卖出价必填；清仓后移组。'&&editor.dialogFont==='18px'&&editor.labelFont==='16px'
+        &&editor.noOverflow&&editor.sellNote==='这只还没有行业分类，清仓前请先补分类标签'&&editor.dialogFont==='18px'&&editor.labelFont==='16px'
         &&editor.fillText==='清仓'&&editor.fillVisible&&editor.fillSameRow&&editor.fillRight&&editor.fillQty==='10'
         &&editor.fillNoOverflow&&editor.buyFillHidden
         &&editor.addInActs&&editor.actsSameRow&&editor.choicesSameRow&&editor.hitWidth===55&&editor.hitHeight===31,
@@ -2528,7 +2532,7 @@ const deadline = setTimeout(() => {
           panel.querySelector('[data-trade-action="sell"][data-sym="'+sym+'"]').click();
           const d=panel.querySelector('.cost-trade-dialog');
           d.querySelector('[data-trade-qty]').value=quantity;d.querySelector('[data-trade-price]').value='150';
-          d.querySelector('input[value="'+value+'"]').checked=true;
+          d.querySelector('[data-trade-dest-select]').value=value;
           d.querySelector('[data-trade-confirm]').click();
           return !d.open;
         };
@@ -2539,15 +2543,16 @@ const deadline = setTimeout(() => {
         const secondClosed=choose('RANGEHI','default');
         panel.querySelector('[data-trade-action="sell"][data-sym="RANGENORM"]').click();
         const dialog=panel.querySelector('.cost-trade-dialog');
-        const retained=dialog.querySelector('input[value="focus"]').checked;
+        const retained=dialog.querySelector('[data-trade-dest-select]').value==='focus';
         const deferred=field('RANGENORM','qty').value==='0'&&field('RANGENORM','cost').value==='0'
-          &&document.getElementById('s-rangenorm').closest('#group_positions')!==null;
+          &&document.getElementById('s-rangenorm').closest('#group_positions_long,#group_positions_short')!==null;
         dialog.querySelector('[data-trade-cancel]').click();
         document.getElementById('costCancel').click();
         document.getElementById('costEditBtn').click();
         const restored=field('RANGEHI','cost').value===original.cost&&field('RANGENORM','qty').value===original.qty;
         panel.querySelector('[data-trade-action="sell"][data-sym="RANGENORM"]').click();
-        const cancelled=dialog.querySelector('input[value="default"]').checked;
+        // 无行业标签、无草稿的老股：分组下拉回落「重点」（2026-11-19 Demo）
+        const cancelled=dialog.querySelector('[data-trade-dest-select]').value==='focus';
         dialog.querySelector('[data-trade-cancel]').click();document.getElementById('costCancel').click();
         return {firstClosed,secondClosed,editable,retained,deferred,restored,cancelled};
       })()`);
@@ -2566,6 +2571,7 @@ const deadline = setTimeout(() => {
         d.querySelector('[data-add-symbol]').value=' msft ';
         d.querySelector('[data-add-hold][value="short"]').checked=true;
         d.querySelector('[data-add-qty]').value='2';d.querySelector('[data-add-cost]').value='100';
+        d.querySelector('[data-add-sector]').value='technology';
         d.querySelector('[data-add-confirm]').click();await new Promise(r=>requestAnimationFrame(r));
         const row=()=>panel.querySelector('[data-cost-row][data-sym="MSFT"]');
         const added=!d.open&&!!row()&&row().textContent.includes('MSFT')&&row().querySelector('[data-trade-action="buy"]')!==null;
@@ -2577,8 +2583,8 @@ const deadline = setTimeout(() => {
         trade.querySelector('[data-trade-qty]').value='2';trade.querySelector('[data-trade-price]').value='100';
         trade.querySelector('[data-trade-confirm]').click();await new Promise(r=>requestAnimationFrame(r));
         const removed=!row();panel.querySelector('[data-cost-add]').click();d.querySelector('[data-add-symbol]').value='RANGEHI';
-        d.querySelector('[data-add-confirm]').click();const duplicate=d.open&&!!d.querySelector('[data-add-message]').textContent;
-        d.querySelector('[data-add-symbol]').value='MSFT';d.querySelector('[data-add-confirm]').click();
+        d.querySelector('[data-add-sector]').value='technology';d.querySelector('[data-add-confirm]').click();const duplicate=d.open&&!!d.querySelector('[data-add-message]').textContent;
+        d.querySelector('[data-add-symbol]').value='MSFT';d.querySelector('[data-add-sector]').value='technology';d.querySelector('[data-add-confirm]').click();
         await new Promise(r=>requestAnimationFrame(r));document.getElementById('costCancel').click();document.getElementById('costEditBtn').click();
         const cancelled=!row();document.getElementById('costCancel').click();
         return {initial,widthOK,holdSameRow,enlarged,added,editable,noOverflow,unknownValue,removed,duplicate,cancelled};
@@ -2598,17 +2604,22 @@ const deadline = setTimeout(() => {
     const productionLayouts=[];
     const readLayout=()=>evaluate(`(async()=>{
       const parent=document.getElementById('group_positions'),head=parent.querySelector(':scope>summary');
+      // 2026-11-19：「仓位」与长/短持仓默认全收起；量几何前先展开
+      parent.open=true;document.querySelectorAll('#group_positions_long,#group_positions_short').forEach(z=>z.open=true);
+      await new Promise(r=>requestAnimationFrame(r));
       const styles=e=>{const s=getComputedStyle(e);return Object.fromEntries(['fontSize','fontWeight','lineHeight','padding','margin','color','backgroundColor','borderWidth','borderRadius','visibility','display','direction','textAlign'].map(k=>[k,k==='textAlign'&&['start','end'].includes(s[k])?((s[k]==='start')===(s.direction==='ltr')?'left':'right'):s[k]]));};
       const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
       const p=rect(parent),hs=styles(head),triangle=getComputedStyle(head,'::before');
       const zones=['long','short'].map(k=>{const z=document.getElementById('group_positions_'+k);return {rect:rect(z),style:styles(z),head:styles(z.querySelector('summary'))};});
-      const cash=parent.querySelector('.cashbond-row'),asset=parent.querySelector(':scope>.asset-row');
+      const cash=parent.querySelector('.cashbond-row'),asset=parent.querySelector('.asset-row');
       const topGroups=[...document.querySelectorAll('details.card.group-card[id^="group_"]')].filter(e=>e!==parent&&rect(e).width>0).map(e=>({id:e.id,rect:rect(e)}));
       const sameEdges=(a,b)=>Math.abs(a.left-b.left)<=0.5&&Math.abs(a.right-b.right)<=0.5;
       const cashRect=rect(cash),assetRect=rect(asset);
-      const fullWidth=topGroups.length>=2&&topGroups.every(g=>[p,cashRect,assetRect,...zones.map(z=>z.rect)].every(r=>sameEdges(r,g.rect)));
+      // 2026-11-19：长/短持仓是仓位后面的平级卡，与其它顶层分组同左右边；比例条/资金排在仓位卡内留内边距，只要求落在卡内
+      const inside=(r,o)=>r.left>=o.left-0.5&&r.right<=o.right+0.5;
+      const fullWidth=topGroups.length>=2&&topGroups.every(g=>[p,...zones.map(z=>z.rect)].every(r=>sameEdges(r,g.rect)))&&inside(cashRect,p)&&inside(assetRect,p);
       const state={parent:styles(parent),parentRect:p,head:hs,triangle:{visibility:triangle.visibility,width:triangle.width,display:triangle.display},zones,cash:styles(cash),cashRect,assetRect,topGroups,fullWidth,cashText:cash.querySelector('.cb-cash .cb-name').textContent,rs:parent.querySelector('.rs-spy')?.textContent||'',total:parent.querySelector('.pos-total')?.textContent||''};
-      head.click();state.clickKeepsOpen=parent.open;
+      head.click();state.clickToggles=!parent.open;head.click();state.reopened=parent.open;
       const alpha=color=>{const parts=color.match(/[\\d.]+/g)||[];return color==='transparent'?0:parts.length===4?Number(parts[3]):parts.length===3?1:0;};
       state.collapse=[];
       for(const key of ['long','short']){
@@ -2679,8 +2690,9 @@ const deadline = setTimeout(() => {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});await freshPage(input.tradePage);
       const layout=await readLayout();productionLayouts.push({width,layout});
       const zoneWidth=layout.zones[0].rect.width;
-      assertions.push({ok:layout.clickKeepsOpen&&layout.parent.borderWidth==='0px'&&layout.parent.backgroundColor==='rgb(23, 26, 33)'
-        &&layout.triangle.visibility==='hidden'&&layout.triangle.width==='10px'&&layout.triangle.display!=='none'
+      // 仓位父卡：黄框 1px、卡底 --card、点标题可开合（不再锁常开）、三角可见
+      assertions.push({ok:layout.clickToggles&&layout.reopened&&layout.parent.borderWidth==='1px'&&layout.parent.backgroundColor==='rgb(20, 26, 36)'
+        &&layout.triangle.visibility==='visible'&&layout.triangle.display!=='none'
         &&layout.fullWidth&&Math.abs(zoneWidth-layout.zones[1].rect.width)<0.1&&layout.zones.every(z=>z.rect.left>=layout.parentRect.left&&z.rect.right<=layout.parentRect.right
           &&parseFloat(z.style.borderWidth)>0&&parseFloat(z.style.borderRadius)>0)
         &&layout.collapse.length===2&&layout.collapse.every(c=>c.visible&&c.alpha>0)
@@ -2688,7 +2700,7 @@ const deadline = setTimeout(() => {
         &&layout.editor.headingStyles.length===5&&layout.editor.headingStyles.every(s=>s.fontSize==='13px'&&s.lineHeight==='19.5px'&&s.color==='rgb(139, 147, 161)')
         &&layout.editor.codeText==='GOOGL'&&layout.editor.codeFits&&layout.editor.rightAligned&&layout.editor.quantityTextFits
         &&layout.editor.buttonsSameRow&&layout.editor.bondTotalSameRow&&layout.editor.quantity.textAlign==='right'&&layout.editor.cashExtra.textAlign==='right',
-        name:width+'px持仓/资产/现金/长短外缘与其它顶层分组同全宽，父不可折叠、子▲有底色及交易容量',actual:layout});
+        name:width+'px仓位/资产/现金/长短外缘与其它顶层分组同全宽，仓位可点开合、子▲有底色及交易容量',actual:layout});
       assertions.push({ok:layout.day.amount.fontSize==='16px'&&layout.day.percent.fontSize==='16px'&&layout.day.amount.fontWeight==='400'&&layout.day.percent.fontWeight==='400'
         &&layout.day.code?.fontSize==='16px'&&layout.day.name?.fontSize==='15px'&&layout.day.pnl?.fontSize==='15px'
         &&layout.day.ratio?.fontSize==='15px'&&layout.day.ratio.textAlign==='center'&&layout.day.linkStatic==='dotted'&&layout.day.barFits
@@ -2709,7 +2721,7 @@ const deadline = setTimeout(() => {
         c=field('cost');c.value='88';c.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(r=>requestAnimationFrame(r));const manualLast=field('cost').value==='88';
         const beforeSell=values();d=submit('sell','21','100');const oversell=d.open&&d.querySelector('[data-trade-error]').textContent.includes('超过')&&JSON.stringify(beforeSell)===JSON.stringify(values());d.querySelector('[data-trade-cancel]').click();
         d=submit('sell','1','');const sellPriceRequired=d.open&&d.querySelector('[data-trade-error]').textContent.includes('成交价');d.querySelector('[data-trade-cancel]').click();
-        d=submit('sell','20','100');const fullSell=!d.open&&field('qty').value==='0'&&field('cost').value==='0'&&document.getElementById('s-googl').closest('#group_positions')!==null;
+        d=submit('sell','20','100');const fullSell=!d.open&&field('qty').value==='0'&&field('cost').value==='0'&&document.getElementById('s-googl').closest('#group_positions_long,#group_positions_short')!==null;
         const unchangedCash=values().cash===original.cash&&values().extra===original.extra;
         cancel();edit();const restored=JSON.stringify(values())===JSON.stringify(original);
         d=submit('buy','2','200');document.getElementById('costSave').click();await new Promise(r=>requestAnimationFrame(r));

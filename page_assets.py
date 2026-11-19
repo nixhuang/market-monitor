@@ -500,8 +500,8 @@ TARGET_DASH_BORDER = 'data:image/svg+xml,' + quote(
 
 # 两档正式页面资源；公共色板也随规则CSS同步至设置页。
 PAGE_PALETTE = """:root{
-  --bg:#0f1115;
-  --card:#171a21;
+  --bg:#0b0e14;
+  --card:#141a24;
   --sym-w:100px;      /* 代码列按用户指的「LMT 那么宽」定死：桌面 100 / 手机 98（代码+中文备注名）。
                          原来是 max-content，各行 40~121px 参差、价格区左边界跟着晃；手机档覆盖 98px。
                          2026-11-13 用户「电脑上 7 个中文字宽、手机上 6 个」：桌面 note 11.5px（单字 12px），
@@ -552,11 +552,11 @@ PAGE_PALETTE = """:root{
   --target-high:#dc62b8;
   --signal-bg:#182131;
   --collapse-bg:var(--signal-bg);
-  --signal-border:#6686c6;
-  --frame-w:1.5px;
+  --signal-border:var(--frame-purple);
+  --frame-w:1px;
   --head-blue:#bfd5ff;
   --head-blue-on:#8fb8f0;
-  --sym-fade:rgba(143,184,240,.14);     /* 个股首排底色渐变：左端 14% 标题蓝 → 72% 处 5% → 透明。
+  --sym-fade:rgba(var(--frame-purple-rgb),.16);     /* 个股首排底色渐变：左端 14% 标题蓝 → 72% 处 5% → 透明。
                            2026-11-16 用户指定起始浓度 20%、只铺代码区；2026-11-17 改为从代码区
                            一路铺进价格区；11-17 傍晚定稿右端在紫灯区左边界截止（见 --sym-fade-w）。随后用户「左边起始处太亮／更透明」：
                            只把起始不透明度 20% → 14%，RGB(143,184,240) 与色相一律不动，
@@ -564,7 +564,7 @@ PAGE_PALETTE = """:root{
                            载体由 td.sym 换成 tr[data-symbol] 的背景，因为 td 的背景不能画到格子外；
                            背景在内容之下，文字不蒙色。固定蓝，不跟灯级变色。变量化是为了不撞
                            10-28 退役的分组标题高亮字面量（测试禁止那个串回来）。 */
-  --sym-fade-mid:rgba(143,184,240,.05);
+  --sym-fade-mid:rgba(88,166,255,.08);
   --sym-fade-top:5px;      /* 渐变上边缘距「本行上方那条 1px 分隔线」下沿的空隙，两档统一 5px
                              （2026-11-17 用户：原来只有 1px 太贴）。只改背景的 position/size，
                              td.sym 的 padding／line-height／字号一律不动，代码文字高度位置不变。
@@ -589,6 +589,9 @@ PAGE_PALETTE = """:root{
   --lamp-red:#ff8580;
   --lamp-yellow:#f0c674;
   --frame-green:#2c8f3e;
+  --frame-purple:#a371f7;      /* 框紫唯一来源；rgb 三元组给半透明场合引用，别处不许再写死 */
+  --frame-purple-rgb:163,113,247;
+  --frame-yellow:#f0c674;
   --lamp-size:14px;
   --head-inset:64px;
   --row-height:21px;
@@ -690,7 +693,7 @@ PAGE_CSS = PAGE_PALETTE + """
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;padding:env(safe-area-inset-top) 17px 40px 15px}
 .wrap{max-width:718px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
-h1.brand{color:var(--up)}
+h1.brand{color:var(--frame-purple)}
 /* 顶部一排：站名靠左（比其它标题大2px=21px），代码定位 FIND 靠右 */
 /* 站名放大到 26px，FIND 与站名底边对齐（flex-end）：整排被站名撑高，搜索框随之下移，避开 iOS 灵动岛/状态栏顶部的黑色渐变 */
 .brandbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:18px 0 4px}
@@ -698,10 +701,9 @@ h1.brand{color:var(--up)}
 .sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
 /* 父级只留标题内缩，资产行与子框使用完整分组宽度；▲沿用原持仓绿色底。 */
-#group_positions{background:var(--card);--collapse-bg:var(--positions-collapse);--signal-border:var(--frame-green);border:0;box-shadow:none;padding:3px 0 2px;overflow:hidden}
-#group_positions>summary{cursor:default;margin-left:5px;margin-right:5px}
-#group_positions>summary::before{visibility:hidden}
-#group_positions_long.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 9px}
+#group_positions,#group_positions[open]{background:var(--card);border:var(--frame-w) solid var(--frame-yellow);box-shadow:none;padding:3px 0 2px;margin-bottom:0;overflow:hidden}
+#group_positions>summary{cursor:pointer;margin-left:5px;margin-right:5px}
+#group_positions_long.zone-card,#group_positions_short.zone-card{--collapse-bg:var(--positions-collapse);--signal-border:var(--frame-green);box-sizing:border-box;width:100%;background:var(--card);border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 9px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
@@ -727,6 +729,7 @@ tr:first-child td{border-top:none}
 .collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);display:flex;align-items:center;justify-content:center;box-sizing:border-box;background:var(--collapse-bg);border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
 .collapse-group .collapse-icon{font-size:16px;line-height:1}
 .collapse-group:hover{color:var(--text);background:var(--collapse-bg)}
+.card.group-card[open]>.group-bottom>.collapse-group,.card.group-card[open]>.group-bottom>.collapse-group:hover{background:rgba(var(--frame-purple-rgb),.2)}
 .collapse-group:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
 .signal-count-toggle:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
 #signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}
@@ -929,7 +932,7 @@ tr.gray td{color:var(--dim)}
 .runbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .runbar button:not(.cost-edit-btn){padding:6px 13px;font-size:13px;line-height:1.2;align-self:center;box-sizing:border-box;height:34px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;cursor:pointer;font-family:inherit}
 .runbar button:disabled{opacity:.5;cursor:not-allowed}
-.runbar button.primary{background:var(--blue);border-color:var(--blue);color:var(--white)}
+.runbar button.primary{background:rgba(var(--frame-purple-rgb),.3);border-color:var(--frame-purple);color:var(--white)}
 .runbar a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
 .acts a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
 .statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;font-size:13.5px;line-height:1.5}
@@ -1342,7 +1345,7 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10p
 .stk th{font-size:13px;color:var(--dim);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
 #group_positions[open]{padding-bottom:2px}
 #group_positions>.group-bottom{display:none}
-#group_positions_short.zone-card{box-sizing:border-box;width:100%;background:none;border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 0}
+#group_positions_short.zone-card{margin-bottom:16px}
 #runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
 #signalCounts .signal-extra-row{--chip-w:84px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
 #signalCounts .signal-extra-row>.text-only>summary{position:relative;box-sizing:border-box;min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
@@ -1434,7 +1437,6 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}
 .dual-body>.cost-contrib .cnsym{font-size:15px;line-height:15.75px}
 .dual-body>.cost-contrib .cncn{font-size:14px;line-height:15.75px}
 .dual-body>.cost-contrib .ca,.dual-body>.cost-contrib .cv{font-size:14px;line-height:15.75px}
-#group_positions>.asset-row .cost-legend b{font-size:14px;line-height:19.2px}
 /* 2026-11-15 用户「统计清单描述文字 16→15px、指标名称 +1px 到 16px、外框加宽 10px 高度不变」：
    只动手机档这几条，桌面档（13px/12px）与个股描述区（15px）都不变；行高一律不动。
    清单「描述文字」＝跟在代码后面的数值/条件/财报说明/方向：14.5→16（上一版）→15px（本版），
@@ -1594,26 +1596,6 @@ COST_PANEL_HTML = r'''<details class="edit-panel cost-manage" id="costManage">
 # 单独导出供 monitor 替换旧锚点处理器；PAGE_INTERACTION_JS 已含此块，勿重复追加。
 RULES_INTERACTION_JS = ""  # 保留导出兼容；规则跳转、hash监听和高亮计时器已删除。
 PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
-// 持仓父组常驻展开；只锁父summary，不干预长短子框或它们的收起滚动补偿。
-(function lockPositionsOpen() {
-  document.querySelectorAll('#group_positions[data-open-locked="1"]').forEach(function(card) {
-    card.open = true;
-    const summary = card.querySelector(':scope > summary');
-    if (summary) {
-      function keepOpen(event) {
-        if (event.type === 'keydown' && !['Enter', ' ', 'Spacebar'].includes(event.key)) return;
-        event.preventDefault();
-        card.open = true;
-      }
-      summary.addEventListener('click', keepOpen);
-      summary.addEventListener('keydown', keepOpen);
-    }
-    card.addEventListener('toggle', function(event) {
-      if (event.target === card && !card.open) card.open = true;
-    });
-  });
-})();
-
 // 当日/风险共用一处常驻详情区；只切换hidden，不移动内容或重算数据。
 (function bindDualCards() {
   document.querySelectorAll('.dual-row').forEach(function(row) {
@@ -1864,7 +1846,7 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
   } catch (_) {}
   function resetView() {
     document.querySelectorAll('details.card,details.cost-manage').forEach(function(card) {
-      card.open = card.id === 'signalCounts' || card.id === 'group_positions';
+      card.open = card.id === 'signalCounts';
     });
     // 明确刷新与初载同版面：持仓父组展开，长/短子区折叠；不碰无异动列表。
     document.querySelectorAll('#group_positions_long,#group_positions_short').forEach(function(card) {
@@ -1962,16 +1944,16 @@ document.addEventListener("toggle", function(event) {
   requestAnimationFrame(function() { revealSignalPanel(d); });
 }, true);
 // 设置「首页分组单个展开」=1：用户点标题展开某个分组（含长/短持仓）时自动收起其它分组；
-// 当日、风险、统计和固定展开的「持仓」父卡不参与。只响应点标题（页面加载时的默认展开不触发）。
+// 当日、风险、统计不参与（2026-11-19 起「仓位」不再常开，同普通分组）。只响应点标题（页面加载时的默认展开不触发）。
 document.addEventListener("click", function(event) {
   const summary = event.target instanceof Element ? event.target.closest("details[id^='group_'] > summary") : null;
   if (!summary || !(window.MM_SETTINGS && window.MM_SETTINGS.group_single_open === 1)) return;
   const d = summary.parentElement;
-  if (!d || d.dataset.openLocked) return;
+  if (!d) return;
   const topBefore = d.getBoundingClientRect().top;
   requestAnimationFrame(function() {
     if (!d.open) return;
-    document.querySelectorAll("details[id^='group_'][open]:not([data-open-locked])").forEach(function(other) {
+    document.querySelectorAll("details[id^='group_'][open]").forEach(function(other) {
       if (other !== d) other.open = false;
     });
     // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到顶部 8.75% 高度线（上面留给灵动岛）。
@@ -2424,7 +2406,7 @@ function findStock() {
     return;
   }
   if (window.MM_SETTINGS && window.MM_SETTINGS.group_single_open === 1) {
-    document.querySelectorAll("details[id^='group_'][open]:not([data-open-locked])").forEach(function(d) {
+    document.querySelectorAll("details[id^='group_'][open]").forEach(function(d) {
       if (!d.contains(target)) d.open = false;
     });
   }

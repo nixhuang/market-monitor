@@ -636,8 +636,10 @@ test('仓位绿色外框与顶部编辑操作区契约',async()=>{
   await b.enter();assert.equal(acts.hidden,false);b.exitEdit(true);assert.equal(acts.hidden,true);
 });
 test('持仓资产行金额与盈亏取消圆点并按固定自然间距排列',()=>{
-  assert.match(CSS,/#group_positions > \.cashbond-row\{[^}]*justify-content:space-between;[^}]*gap:12px/);
-  assert.match(CSS,/#group_positions > \.cashbond-row \.cb-total\{[^}]*display:flex;[^}]*gap:6px;[^}]*white-space:nowrap/);
+  // 2026-11-19 Demo：资金排移进 .pi-body（后代选择器）、gap 12→8、基线对齐；标签灰 14px、金额 15px。
+  assert.match(CSS,/#group_positions \.cashbond-row\{[^}]*align-items:baseline;[^}]*justify-content:space-between;[^}]*gap:8px/);
+  assert.match(CSS,/#group_positions \.cashbond-row \.cb-total\{[^}]*display:flex;[^}]*align-items:baseline;[^}]*gap:6px;[^}]*white-space:nowrap/);
+  assert.match(CSS,/#group_positions \.cashbond-row \.cb-name,[^{]*\.pi-cname\{font-size:14px;color:var\(--dim,#8b93a1\)/);
   assert.doesNotMatch(CSS,/\.cb-sep/);
 });
 test('云端校验失败仅在顶部操作行提示，无备份或重试上传按钮',async()=>{
@@ -998,9 +1000,10 @@ test('当日面板标题维持统一字号，仅面板内容文字各增加1px',
   assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*min-width:0[^}]*overflow:hidden/);
   assert.match(CSS,/\.dual-body > ul\.cost-contrib\[data-owner="day"\] \.signal-member-jump\{[^}]*display:inline-block;max-width:100%;vertical-align:top;line-height:20px/);
   assert.doesNotMatch(CSS,/\.cost-contrib li > \.cn-name[^}]*height:15\.75px/);
-  assert.match(ASSETS,/#group_positions\{[^}]*--collapse-bg:var\(--positions-collapse\)[^}]*padding:3px 0 2px/);
-  assert.match(ASSETS,/#group_positions>summary\{[^}]*margin-left:5px;margin-right:5px/);
-  assert.match(CSS,/#group_positions > \.cashbond-row\{[^}]*margin:4px 0 8px/);
+  // 2026-11-19 Demo：仓位卡黄框可开合、默认收起；灯圈与绿框移到长短持仓子卡。
+  assert.match(ASSETS,/#group_positions,#group_positions\[open\]\{[^}]*border:var\(--frame-w\) solid var\(--frame-yellow\)/);
+  assert.match(ASSETS,/#group_positions>summary\{[^}]*cursor:pointer;[^}]*margin-left:5px;margin-right:5px/);
+  assert.match(CSS,/#group_positions \.cashbond-row\{[^}]*margin:4px 0 0/);
 });
 /* 旧六列成本表已被四列真实编辑器替代，下面为退役样式断言，不执行。 */
 /*
@@ -1264,11 +1267,12 @@ test('明确刷新恢复统计和持仓父组展开、长短子区折叠，普�
       window:{location:{href},scrollTo:(x,y)=>scrolls.push([x,y]),addEventListener:(name,fn,options)=>events.push({name,fn,options})}};
     vm.runInNewContext(code,context);
     if(!requested){assert.equal(group.open,false);assert.equal(long.open,true);assert.equal(short.open,true);assert.equal(events.length,0);assert.equal(scrolls.length,0);continue;}
-    assert.equal(stats.open,true);assert.equal(group.open,true);assert.equal(macro.open,false);assert.equal(cost.open,false);
+    // 2026-11-19 Demo：仓位卡与其它分组一致——刷新/初载都收起，不再特例展开。
+    assert.equal(stats.open,true);assert.equal(group.open,false);assert.equal(macro.open,false);assert.equal(cost.open,false);
     assert.equal(long.open,false);assert.equal(short.open,false);assert.equal(history.scrollRestoration,'manual');
     assert.equal(events[0].name,'pageshow');assert.equal(events[0].options.once,true);
-    group.open=false;stats.open=false;long.open=true;short.open=true;events[0].fn();frames[0]();
-    assert.equal(group.open,true);assert.equal(stats.open,true);assert.equal(long.open,false);assert.equal(short.open,false);
+    group.open=true;stats.open=false;long.open=true;short.open=true;events[0].fn();frames[0]();
+    assert.equal(group.open,false);assert.equal(stats.open,true);assert.equal(long.open,false);assert.equal(short.open,false);
     assert.equal(history.scrollRestoration,'auto');
     const url=new URL(replaced[0].url);assert.equal(url.searchParams.has('_mm_reset_view'),false);
     assert.equal(url.searchParams.get('keep'),'1');assert.equal(url.searchParams.get('mm_refreshed_run'),'2');
@@ -1773,7 +1777,8 @@ test('SELL 弹框提示改为「卖出价必填；清仓后移组。」，BUY �
   const panel=b.doc.getElementById('costManage');
   panel.querySelector('[data-trade-action="sell"][data-sym="AAA"]').click();
   let d=b.doc.querySelector('.cost-trade-dialog');
-  assert.equal(d.querySelector('[data-trade-note]').textContent,'卖出价必填；清仓后移组。');
+  // 2026-11-19 Demo：无行业标签老股，卖出价提示改为提醒先补分类
+  assert.equal(d.querySelector('[data-trade-note]').textContent,'这只还没有行业分类，清仓前请先补分类标签');
   d.querySelector('[data-trade-cancel]').click();
   panel.querySelector('[data-trade-action="buy"][data-sym="AAA"]').click();
   d=b.doc.querySelector('.cost-trade-dialog');
@@ -1805,7 +1810,8 @@ test('清仓按钮填入的数量可直接确认全卖，零持仓不猜数量',
   d.querySelector('[data-trade-fill-all]').click();assert.equal(d.querySelector('[data-trade-qty]').value,'5');
   d.querySelector('[data-trade-price]').value='110';d.querySelector('[data-trade-confirm]').click();
   assert.equal(d.open,false);assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:0,cost:0});
-  assert.deepEqual(b.clearState().draft,{AAA:'default'});
+  // 2026-11-19 Demo：老股无行业标签时清仓默认回落「重点」（不再是 default）
+  assert.deepEqual(b.clearState().draft,{AAA:'focus'});
   panel.querySelector('[data-trade-action="sell"][data-sym="AAA"]').click();
   const again=b.doc.querySelector('.cost-trade-dialog');
   again.querySelector('[data-trade-fill-all]').click();
@@ -1839,7 +1845,7 @@ test('生产交易盈利超过本金允许负成本，保存导出刷新保留�
 });
 test('生产全卖仅记清仓草稿，最终面板保存统一归零和移组',async()=>{
   const b=await bootClear(),n=b.requests.length;trade(b,'AAA','sell','5','110');
-  assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:0,cost:0});assert.deepEqual(b.clearState().draft,{AAA:'default'});
+  assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:0,cost:0});assert.deepEqual(b.clearState().draft,{AAA:'focus'});
   assert.equal(b.requests.length,n);assert.equal(b.clearState().record,null);const put=await beginBatch(b);
   assert.deepEqual(b.payload(put).items.AAA,{qty:0,cost:0});const {next}=await finishBatch(b,put);
   assert.equal(next.positions.AAA,undefined);assert.equal(b.state().DATA.cash,30);assert.equal(b.puts().length,2);await b.dispose();
@@ -1865,7 +1871,7 @@ test('生产交易未知成本拆股保留未知，有价部分交易拒绝，�
   d.querySelector('[data-trade-cancel]').click();trade(b,'AAA','buy','5');assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:10});
   d=trade(b,'AAA','sell','1','100');assert.equal(d.open,true);d.querySelector('[data-trade-cancel]').click();
   trade(b,'AAA','sell','10','100');assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:0,cost:0});
-  assert.deepEqual(b.clearState().draft,{AAA:'default'});b.doc.getElementById('costCancel').click();assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:5});await b.dispose();
+  assert.deepEqual(b.clearState().draft,{AAA:'focus'});b.doc.getElementById('costCancel').click();assert.deepEqual(copy(b.state().DATA.items.AAA),{qty:5});await b.dispose();
 });
 test('生产交易全卖可选择重点，未保存又买入撤销清仓标记',async()=>{
   const b=await bootClear();b.doc.querySelector('[data-trade-action="sell"][data-sym="AAA"]').click();
@@ -2758,7 +2764,7 @@ test('旧单股未完成LS_CLEAR安全迁移，面板保存恢复quantity核验�
 test('新增入口真实dialog仅加草稿，代码规范化，无行情不捏造市值，允许继续编辑和撤销',async()=>{
   const b=await bootClear(),n=b.requests.length;b.doc.querySelector('[data-cost-add]').click();const dialog=b.doc.querySelector('.cost-add-dialog');
   dialog.querySelector('[data-add-symbol]').value='  xyz.a  ';dialog.querySelector('[data-add-qty]').value='1.2345';
-  dialog.querySelector('[data-add-cost]').value='2.3456';dialog.querySelector('[data-add-confirm]').click();
+  dialog.querySelector('[data-add-cost]').value='2.3456';dialog.querySelector('[data-add-sector]').value='technology';dialog.querySelector('[data-add-confirm]').click();
   assert.equal(b.requests.length,n);assert.equal(dialog.open,false);assert.ok(b.clearState().additions['XYZ.A']);
   assert.equal(b.state().DATA.items['XYZ.A'].qty,1.2345);assert.equal(b.doc.querySelector('[data-cost-row][data-sym="XYZ.A"] .ep-code').textContent,'XYZ.A');
   assert.equal(b.doc.querySelectorAll('.ep-val').length,0);b.edit('XYZ.A','qty','2.3456');assert.equal(b.state().DATA.items['XYZ.A'].qty,2.3456);
@@ -2776,11 +2782,12 @@ test('新增弹框选填备注/加仓价/减仓价/目标价：覆盖复制来�
   for(const k of ['note','trigger','reduce','target'])assert.equal(d.querySelector('[data-add-'+k+']').value,'');
   d.querySelector('[data-add-symbol]').value='ccc';d.querySelector('[data-add-qty]').value='3';d.querySelector('[data-add-cost]').value='11';
   d.querySelector('[data-add-note]').value='新备注';d.querySelector('[data-add-trigger]').value='9.5';d.querySelector('[data-add-target]').value='0';
-  d.querySelector('[data-add-confirm]').click();
-  assert.equal(d.open,false);assert.deepEqual(b.clearState().additions.CCC.extra,{note:'新备注',trigger:9.5,target:0});
+  d.querySelector('[data-add-sector]').value='technology';d.querySelector('[data-add-confirm]').click();
+  // 2026-11-19 Demo：新增仓位必须带行业分类，sector 进 extra 一起提交
+  assert.equal(d.open,false);assert.deepEqual(b.clearState().additions.CCC.extra,{note:'新备注',trigger:9.5,target:0,sector:'technology'});
   const put=await beginBatch(b,config),{next}=await finishBatch(b,put,config);
   // 填了的覆盖（备注/加仓价/目标价），没填的减仓价保留；目标价0 → 删除 target_at
-  assert.deepEqual(next.positions.CCC,{note:'新备注',trigger:9.5,reduce:50,target:0,hold:'long'});
+  assert.deepEqual(next.positions.CCC,{note:'新备注',trigger:9.5,reduce:50,target:0,hold:'long',sector:'technology'});
   await b.dispose();
 });
 test('新增弹框选填字段校验：备注超7字、减仓价<=0、目标价<0、非数字均拒绝，且不留草稿',async()=>{
@@ -2887,10 +2894,10 @@ test('已有其它非法输入时新增明确拒绝，直接接口和真实dialo
   assert.equal(b.canonical(b.state().DATA),before);assert.deepEqual(b.clearState().additions,{});
   b.doc.querySelector('[data-cost-add]').click();const dialog=b.doc.querySelector('.cost-add-dialog');
   dialog.querySelector('[data-add-symbol]').value='CCC';dialog.querySelector('[data-add-qty]').value='1';dialog.querySelector('[data-add-cost]').value='2';
-  dialog.querySelector('[data-add-confirm]').click();assert.equal(dialog.open,true);assert.match(dialog.querySelector('[data-add-message]').textContent,/已有无效输入/);
+  dialog.querySelector('[data-add-sector]').value='technology';dialog.querySelector('[data-add-confirm]').click();assert.equal(dialog.open,true);assert.match(dialog.querySelector('[data-add-message]').textContent,/已有无效输入/);
   assert.equal(b.canonical(b.state().DATA),before);assert.equal(b.local()._local.editDraft['BBB|qty'].raw,'bad');
   assert.ok(b.doc.querySelector('input[data-sym="BBB"][data-f="qty"]').validationMessage);
-  assert.equal(b.requests.length,n);assert.equal(b.puts().length,0);b.edit('BBB','qty','3');dialog.querySelector('[data-add-confirm]').click();
+  assert.equal(b.requests.length,n);assert.equal(b.puts().length,0);b.edit('BBB','qty','3');dialog.querySelector('[data-add-sector]').value='technology';dialog.querySelector('[data-add-confirm]').click();
   assert.equal(dialog.open,false);assert.equal(b.state().DATA.items.CCC.qty,1);assert.equal(b.state().DATA.items.BBB.qty,3);await b.dispose();
 });
 test('默认无归属预检失败释放冻结保留全部草稿，允许改选focus后统一重存',async()=>{
@@ -3123,6 +3130,7 @@ test('新增清仓dialog仅保留必要选项和真实错误，无常驻解释�
   b.doc.querySelector('[data-cost-add]').click();const add=b.doc.querySelector('.cost-add-dialog');
   assert.equal(add.querySelectorAll('p').length,1);assert.equal(add.querySelector('p').hasAttribute('data-add-message'),true);
   assert.equal(add.querySelector('.cost-add-hold').querySelectorAll('label').length,2);
+  add.querySelector('[data-add-sector]').value='technology';
   add.querySelector('[data-add-symbol]').value='CCC';add.querySelector('[data-add-qty]').value='bad';add.querySelector('[data-add-confirm]').click();
   assert.match(add.querySelector('[data-add-message]').textContent,/数量必须/);assert.equal(add.open,true);
   add.querySelector('[data-add-qty]').value='1';add.querySelector('[data-add-confirm]').click();assert.equal(b.state().NOTICE,'');await b.dispose();
@@ -3185,6 +3193,75 @@ test('加减仓价重绘后仍按设置价方向带符号',async()=>{
   assert.ok(add&&cut,'fixture 必须带加减仓价 tag');
   assert.equal(add.textContent,'加仓价 95 · 需-5.0%');
   assert.equal(cut.textContent,'减仓价 104 · 需+4.0%');
+  await b.dispose();
+});
+
+
+// ---- 2026-11-19 自动记账：成交先进草稿，点「保存并上传」成功后才写进 data 分支 trade-ledger.json，并自动重算累计。
+const TRADE_SEED={...SEED,trade:{total:100,by_year:{'2026':100},cleared_by_year:{'2026':2},
+  records:[['OLD','清仓','1','10.00','+5.00','10.00','26-11-01']],sectors:{AAA:'technology'},
+  groups:[['focus','重点'],['technology','IT·AI']],sector_groups:[['technology','IT·AI']]}};
+// 构建期种子带账本时，启动会多一条读账本的请求；按网址挑出「读仓位」那条再答，不按下标碰运气。
+const posGet=b=>b.requests.find(r=>r.init.method!=='PUT'&&r.url.includes('/position-costs.json'));
+async function bootTrade(clear=false){
+  const b=await boot({seed:TRADE_SEED});b.respond(posGet(b),meta(TRADE_SEED));await settle();await b.enter();
+  if(clear){b.ctx.MMRunStatus={watchConfig:async receipt=>{b.clearReceipts.push(receipt);}};b.clearReceipts=[];b.openClear('AAA');}
+  return b;
+}
+const ledgerGet=b=>b.requests.filter(r=>r.init.method!=='PUT'&&r.url.includes('api.github.com')&&r.url.includes('/trade-ledger.json')).at(-1);
+const ledgerPut=b=>b.requests.filter(r=>r.init.method==='PUT'&&r.url.includes('/trade-ledger.json')).at(-1);
+test('自动记账：加仓减仓保存成功后才写账本，累计「已实现」不动（做T只冲成本）',async()=>{
+  const b=await bootTrade();
+  trade(b,'AAA','buy','2','100');trade(b,'AAA','sell','1','120');
+  assert.equal(ledgerGet(b),undefined,'保存前不得碰账本');
+  await b.save();await finishPush(b,200,TRADE_SEED);await settle();
+  const get=ledgerGet(b);assert.ok(get,'保存成功后应读账本');
+  b.respond(get,{message:'Not Found'},404);await settle();
+  const put=ledgerPut(b);assert.ok(put,'应写账本');
+  const led=b.payload(put);
+  assert.equal(led.total,100);assert.equal(led.by_year['2026'],100);assert.equal(led.cleared_by_year['2026'],2);
+  assert.equal(led.records.length,3);
+  assert.deepEqual(led.records[0].slice(0,4),['AAA','减仓','1','120.00']);
+  assert.deepEqual(led.records[1].slice(0,4),['AAA','加仓','2','100.00']);
+  assert.equal(led.records[2][0],'OLD');
+  await b.dispose();
+});
+test('自动记账：取消草稿不记账，没保存就不碰账本',async()=>{
+  const b=await bootTrade();
+  trade(b,'AAA','buy','1','100');b.doc.getElementById('costCancel').click();await settle();
+  await b.tick(60000);assert.equal(ledgerGet(b),undefined);assert.equal(ledgerPut(b),undefined);await b.dispose();
+});
+test('自动记账：账本已满 50 笔时新记录顶掉最旧的，累计不随窗口裁剪重算',async()=>{
+  const b=await bootTrade();
+  trade(b,'AAA','sell','1','150');await b.save();await finishPush(b,200,TRADE_SEED);await settle();
+  const full={total:777,by_year:{'2026':700},cleared_by_year:{'2026':9},ids:[],
+    records:Array.from({length:50},(_,i)=>['X'+i,'加仓','1','1.00','—','1.00','26-11-01'])};
+  b.respond(ledgerGet(b),{sha:'led-sha',content:Buffer.from(JSON.stringify(full)).toString('base64')});await settle();
+  const led=b.payload(ledgerPut(b));
+  assert.equal(led.records.length,50);assert.equal(led.records[0][0],'AAA');assert.equal(led.records[49][0],'X48');
+  assert.equal(led.ids.length,1);assert.equal(led.total,777);assert.equal(led.by_year['2026'],700);assert.equal(led.cleared_by_year['2026'],9);
+  await b.dispose();
+});
+test('自动记账：整只清仓保存后结算已实现并清仓数+1，按成交价减成本计算',async()=>{
+  const b=await bootTrade(true);
+  trade(b,'AAA','sell','5','110');   // 成本100×5股，卖110 → 已实现 +50
+  const put=await beginBatch(b);await finishBatch(b,put);await settle();
+  const get=ledgerGet(b);assert.ok(get,'清仓完成后应读账本');
+  b.respond(get,{message:'Not Found'},404);await settle();
+  const led=b.payload(ledgerPut(b));
+  assert.equal(led.total,150);assert.equal(led.by_year['2026'],150);assert.equal(led.cleared_by_year['2026'],3);
+  assert.deepEqual(led.records[0].slice(0,5),['AAA','清仓','5','110.00','+50.00']);
+  await b.dispose();
+});
+
+
+test('清仓搬记录的行业标签：进行业分组＝分组即标签；进重点＝沿用持仓上的行业，不改标签',async()=>{
+  const b=await bootClear();
+  const cfg=copy(CLEAR_CONFIG);cfg.positions.AAA.sector='healthcare';
+  const toFocus=b.clearConfig(cfg,{key:'focus',label:'重点'},'AAA');
+  assert.equal(toFocus.focus.AAA.sector,'healthcare');assert.equal(toFocus.positions.AAA,undefined);
+  const toTech=b.clearConfig(cfg,{key:'technology',label:'IT · AI'},'AAA');
+  assert.equal('sector' in toTech.technology.AAA,false);assert.equal(toTech.positions.AAA,undefined);
   await b.dispose();
 });
 
