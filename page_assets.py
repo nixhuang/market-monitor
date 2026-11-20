@@ -699,7 +699,8 @@ h1.brand{color:var(--frame-purple)}
    FIND 不下移、整排高度不变；32px 时站名+FIND 共 330px，手机 440 净宽 398px 内零溢出。 */
 .brandbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:18px 0 4px}
 .brandbar h1.brand{margin:0;font-size:32px;line-height:39px;text-align:left;white-space:nowrap}
-.sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:16px}
+/* 2026-11-20 桌面抬头行距收紧：数据时间→按钮 16→8px，与手机档一致；手机档 @media 自带 8px，改这条不影响手机。 */
+.sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:8px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
 /* 父级只留标题内缩，资产行与子框使用完整分组宽度；▲沿用原持仓绿色底。 */
 #group_positions,#group_positions[open]{background:var(--card);border:var(--frame-w) solid var(--frame-yellow);box-shadow:none;padding:3px 0 2px;margin-bottom:0;overflow:hidden}
@@ -938,7 +939,10 @@ tr.gray td{color:var(--dim)}
 .runbar button.primary{background:rgba(var(--frame-purple-rgb),.3);border-color:var(--frame-purple);color:var(--white)}
 .runbar a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
 .acts a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
-.statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;font-size:13.5px;line-height:1.5}
+/* 2026-11-20 桌面抬头收紧：状态灯上下留白 -4/14 → -6/8（与手机档一致），
+   按钮→状态灯 10→8、状态灯→规则排 12→6；手机档 @media 已写死 -6/8，改这条对手机零影响。
+   加上 .sub 的 16→8，桌面抬头整体少 16px（173→157），正文随之上移。 */
+.statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-6px 0 8px;font-size:13.5px;line-height:1.5}
 /* 2026-11-20 抬头重排：抓取状态灯独占一排；下一排放规则说明（保留灯圈、靠左）与仓位同步（靠右，同号）。
    双类选择器压过 .statusrow 的 margin/gap；手机档 16px 内距仍由 .statusrow 自身继承，不另抄一遍。 */
 .statusrow.flagrow{justify-content:space-between;gap:8px;margin:-2px 0 8px}

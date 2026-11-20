@@ -1489,6 +1489,83 @@ def apply_realtime(symbol, data, asof=None):
         return data
 
 
+# 新股短历史：上市不足 30 个交易日时，Nasdaq 只给 1~29 根日线，常规通道必须丢弃
+# （RSI / 布林 / 均线 / 量比都要 30 根以上才算得准）。但收盘价本身是真实可核验的，
+# 所以把这段短日线留一份，由 new_listing_quote() 生成「只显示价格、不算指标」的行。
+# 留档发生在同一轮 Nasdaq 请求里，不再为新股多发一次请求。
+SHORT_HISTORY_MAX_BARS = 29
+_SHORT_HISTORY = {}
+_SHORT_HISTORY_LOCK = threading.Lock()
+
+
+def _parse_nasdaq_rows(rows):
+    parsed = []
+    for row in rows:
+        try:
+            parsed.append({
+                # Nasdaq 的日期是 10/06/2026 这种，统一成 2026-10-06 好比较
+                "d": _nasdaq_date(row.get("date", "")),
+                "c": float(str(row["close"]).replace("$", "").replace(",", "")),
+                "h": float(str(row["high"]).replace("$", "").replace(",", "")),
+                "l": float(str(row["low"]).replace("$", "").replace(",", "")),
+                "o": float(str(row["open"]).replace("$", "").replace(",", "")),
+                "v": float(str(row.get("volume", "0")).replace(",", "") or 0),
+            })
+        except (KeyError, ValueError):
+            continue
+    parsed.reverse()  # 旧 → 新
+    return parsed
+
+
+def _remember_short_history(symbol, parsed, asset):
+    """只留日期严格递增、收盘价为正、且不超过目标交易日的那几根。"""
+    rows = [p for p in parsed if p["d"] and _finite_pos(p["c"])
+            and (not TARGET_DATE or p["d"] <= TARGET_DATE)]
+    if not rows or len(rows) > SHORT_HISTORY_MAX_BARS:
+        return
+    if any(a["d"] >= b["d"] for a, b in zip(rows, rows[1:])):
+        return
+    with _SHORT_HISTORY_LOCK:
+        _SHORT_HISTORY[normalize_symbol(symbol)] = {
+            "dates": [p["d"] for p in rows],
+            "closes": [p["c"] for p in rows],
+            "price": rows[-1]["c"],
+            "prev_close": rows[-2]["c"] if len(rows) >= 2 else None,
+            "asset": asset,
+        }
+
+
+def short_history_of(symbol):
+    with _SHORT_HISTORY_LOCK:
+        return _SHORT_HISTORY.get(normalize_symbol(symbol))
+
+
+def new_listing_quote(symbol, sc, group):
+    """上市初期通道：只报已核验的收盘价与涨跌幅，不伪造 OHLC，也不计算任何技术信号。
+    没有短历史就返回 None，交回原来的「无数据」分支。"""
+    short = short_history_of(symbol)
+    if not short:
+        return None
+    price, prev = short["price"], short["prev_close"]
+    if not _finite_pos(price):
+        return None
+    bars = len(short["dates"])
+    chg = (price / prev - 1) * 100 if _finite_pos(prev) else None
+    return {
+        "symbol": symbol, "note": sc.get("note", ""), "price": price,
+        "prev_close": prev, "chg": chg,
+        "rsi": {period: None for period in RSI_PERIODS},
+        "dist_high": None, "dist_low": None, "vol_ratio": None,
+        "day_amp": None, "week_chg": None, "range52": None,
+        "trigger": sc.get("trigger"), "group": group,
+        "data_date": short["dates"][-1], "source": "Nasdaq 上市初期日线",
+        "boll_up": None, "boll_dn": None,
+        "signals": [f"上市第 {bars} 个交易日 · 日线不足 30 根，数据积累中，暂不计算技术指标"],
+        "signal_marks": [], "level": "green",
+        "new_listing": True, "listing_bars": bars,
+    }
+
+
 def nasdaq_history(symbol):
     """备用数据源 Nasdaq（api.nasdaq.com，免 key，中国大陆可直连）。失败返回 None
 
@@ -1515,25 +1592,17 @@ def nasdaq_history(symbol):
                 r.raise_for_status()
                 j = r.json()
                 rows = ((j.get("data") or {}).get("tradesTable") or {}).get("rows") or []
-                if len(rows) < 30:
+                if not rows:
                     continue
-                parsed = []
-                for row in rows:
-                    try:
-                        parsed.append({
-                            # Nasdaq 的日期是 10/06/2026 这种，统一成 2026-10-06 好比较
-                            "d": _nasdaq_date(row.get("date", "")),
-                            "c": float(str(row["close"]).replace("$", "").replace(",", "")),
-                            "h": float(str(row["high"]).replace("$", "").replace(",", "")),
-                            "l": float(str(row["low"]).replace("$", "").replace(",", "")),
-                            "o": float(str(row["open"]).replace("$", "").replace(",", "")),
-                            "v": float(str(row.get("volume", "0")).replace(",", "") or 0),
-                        })
-                    except (KeyError, ValueError):
-                        continue
+                parsed = _parse_nasdaq_rows(rows)
+                if len(rows) < 30:
+                    # 上市不足 30 个交易日：短日线只留档给「只显示价格」通道，
+                    # 常规信号计算仍必须走 ≥30 根的合格日线，绝不拿短历史凑指标。
+                    if parsed:
+                        _remember_short_history(symbol, parsed, ac)
+                    continue
                 if len(parsed) < 30:
                     continue
-                parsed.reverse()  # 旧 → 新
                 return {
                     "closes": [p["c"] for p in parsed],
                     "dates": [p["d"] for p in parsed],
@@ -4161,6 +4230,8 @@ def _main(argv, runtime, snapshots=None):
                     to_fetch = to_fetch + [spy_key]
         with _SRC_DAYS_LOCK:
             _SRC_DAYS.clear()
+            with _SHORT_HISTORY_LOCK:
+                _SHORT_HISTORY.clear()
             _OPEN_STATS.update(real=0, missing=0, no_opens=0)
         fetched = collect_quotes(to_fetch)
         for src, days in source_day_summary().items():
@@ -4185,6 +4256,13 @@ def _main(argv, runtime, snapshots=None):
                 reference = macro_index_quote(sym, sc, grp, macro)
                 if reference:
                     items.append(reference)
+                    continue
+            # 上市不足 30 个交易日的新股：常规日线通道拿不到合格历史，但收盘价是真的。
+            # 先给它一条「只显示价格、不算指标」的行，别再报成抓取失败。
+            if not data and supported:
+                newborn = new_listing_quote(sym, sc, grp)
+                if newborn:
+                    items.append(newborn)
                     continue
             if data:
                 cons = cons_data.get(normalize_symbol(sym))

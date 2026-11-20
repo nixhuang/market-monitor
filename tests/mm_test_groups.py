@@ -10015,5 +10015,108 @@ class TestFinalSourceContract(unittest.TestCase):
         self.assertNotRegex(rendered, r'data-ack|ack-btn|cost-warn|r48-demo|data-r58-key')
 
 
+class NewListingTests(unittest.TestCase):
+    """2026-11-20：ANT 上市首日只有 1 根日线，被 ≥30 根护栏判成抓取失败。
+    短历史通道把真实收盘价留下来，只显示价格与涨跌，不拿短日线凑技术指标。"""
+
+    def setUp(self):
+        cache = patch.dict(monitor._SHORT_HISTORY, {}, clear=True)
+        cache.start()
+        self.addCleanup(cache.stop)
+        target = patch.object(monitor, "TARGET_DATE", "2026-11-19")
+        target.start()
+        self.addCleanup(target.stop)
+
+    @staticmethod
+    def _nasdaq(rows):
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {"data": {"tradesTable": {"rows": rows}}}
+        return response
+
+    @staticmethod
+    def _bar(day, close):
+        return {"date": day, "close": f"${close}", "high": f"${close + 2}",
+                "low": f"${close - 2}", "open": f"${close - 1}", "volume": "12,345,678"}
+
+    def _seed(self, closes, dates):
+        monitor._SHORT_HISTORY["ANT"] = {
+            "dates": dates, "closes": closes, "price": closes[-1],
+            "prev_close": closes[-2] if len(closes) > 1 else None, "asset": "stocks"}
+
+    def test_short_history_is_captured_but_full_channel_still_rejects_it(self):
+        rows = [self._bar("11/19/2026", 97.17)]
+        with patch.object(monitor.requests, "get", return_value=self._nasdaq(rows)):
+            self.assertIsNone(monitor.nasdaq_history("ANT"))
+        short = monitor.short_history_of("ANT")
+        self.assertEqual(short["dates"], ["2026-11-19"])
+        self.assertAlmostEqual(short["price"], 97.17)
+        self.assertIsNone(short["prev_close"])
+        self.assertFalse(monitor.valid_history({"dates": short["dates"], "closes": short["closes"],
+                                                "price": short["price"], "prev_close": None}))
+        self.assertIsNone(monitor.trim_history({"dates": short["dates"], "closes": short["closes"]},
+                                               "2026-11-19"))
+
+    def test_full_history_still_returns_usable_bars(self):
+        from datetime import datetime
+        start = datetime(2026, 10, 1)
+        # Nasdaq 返回「新 → 旧」，按降序喂进去
+        rows = [self._bar((start + timedelta(days=29 - i)).strftime("%m/%d/%Y"), 100 + i)
+                for i in range(30)]
+        with patch.object(monitor.requests, "get", return_value=self._nasdaq(rows)):
+            data = monitor.nasdaq_history("ANT")
+        self.assertIsInstance(data, dict)
+        self.assertEqual(len(data["dates"]), 30)
+        self.assertEqual(data["dates"][-1], "2026-10-30")
+        self.assertAlmostEqual(data["price"], 100.0)
+        self.assertTrue(monitor._SHORT_HISTORY == {})
+
+    def test_new_listing_quote_has_price_but_no_technical_facts(self):
+        self._seed([97.17], ["2026-11-19"])
+        item = monitor.new_listing_quote("ANT", {"note": "Anthropic"}, "focus")
+        self.assertAlmostEqual(item["price"], 97.17)
+        self.assertIsNone(item["chg"])          # 只有 1 根时没有昨收，绝不编涨跌幅
+        self.assertEqual(item["data_date"], "2026-11-19")
+        self.assertEqual(item["level"], "green")
+        self.assertEqual(item["signal_marks"], [])
+        self.assertIn("数据积累中", item["signals"][0])
+        self.assertTrue(item["new_listing"])
+        self.assertTrue(all(value is None for value in item["rsi"].values()))
+        self.assertIsNone(item["range52"])
+
+    def test_second_bar_restores_change(self):
+        self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"])
+        item = monitor.new_listing_quote("ANT", {}, "focus")
+        self.assertAlmostEqual(item["chg"], (97.17 / 95.0 - 1) * 100)
+        self.assertAlmostEqual(item["prev_close"], 95.0)
+
+    def test_new_listing_is_not_counted_as_missing(self):
+        self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"])
+        item = monitor.new_listing_quote("ANT", {"note": "Anthropic"}, "focus")
+        snap = monitor.build_snapshot({}, [item], {"focus": {"ANT": {}}, "positions": {}})
+        summary = snap["summary"]
+        self.assertNotIn("ANT", summary["missing_symbols"])
+        self.assertEqual(summary["missing_prices"], 0)
+        self.assertEqual(summary["gray"], 0)
+        self.assertEqual(summary["green"], 1)
+        self.assertEqual(summary["today_prices"], 1)
+        self.assertTrue(all(counts["red"] == 0 and counts["yellow"] == 0
+                            for counts in snap["signal_counts"].values()))
+
+    def test_row_shows_price_and_pending_note_without_no_data_tag(self):
+        self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"])
+        item = monitor.new_listing_quote("ANT", {"note": "Anthropic"}, "focus")
+        item["earnings"] = {"status": "unknown"}
+        snap = monitor.build_snapshot({}, [item], {"focus": {"ANT": {}}, "positions": {}})
+        row = monitor._stock_row(item, snap)
+        self.assertIn("97.17", row)
+        self.assertIn("数据积累中", row)
+        self.assertNotIn("无数据", row)
+        self.assertNotIn("quote-note", row)
+
+    def test_no_short_history_falls_back_to_original_failure_branch(self):
+        self.assertIsNone(monitor.new_listing_quote("ANT", {}, "focus"))
+
+
 if __name__ == '__main__':
     unittest.main()

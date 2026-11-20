@@ -395,6 +395,10 @@ kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
 .setrow label{flex:1;font-size:13px;color:var(--dim);line-height:1.4}
 .setrow input{width:96px;text-align:right;font-variant-numeric:tabular-nums}
 .setrow .def{flex:none;min-width:36px;text-align:right;font-size:13px;color:#6f7785;font-variant-numeric:tabular-nums}
+/* 2026-11-20 用户点名：两条开关标签、规则区一行说明、新增股票一行提示，这四处灰字各 +1px；
+   同类其它灰字保持原字号，不整页放大，也不追加同选择器覆盖块。 */
+.note.tip-up{font-size:13.5px}         /* 桌面 12.5 → 13.5 */
+.setrow label.tip-up{font-size:14px}  /* 桌面/手机 13 → 14 */
 details.set{margin-top:4px}
 details.set summary{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;padding:4px 0;outline:none}
 details.set[open] summary{margin-bottom:8px}
@@ -477,6 +481,7 @@ details.set[open]>summary{margin-bottom:2px}
 /* 手机设置页：所有可见文字不小于「监测开启」按钮的 13px。 */
 @media(max-width:600px){
 .sub,.sub a,.note,.monitor-note,.pager,.subsec,kbd{font-size:13px}
+.note.tip-up{font-size:14px}          /* 手机原 13 → 14，与两条开关标签同号 */
 #marketRiskRules h5{font-size:15px}
 }
 </style>
@@ -576,14 +581,14 @@ details.set[open]>summary{margin-bottom:2px}
     <div class="set-block" id="displayCard">
       <div class="set-title">显示与交互</div>
       <div class="setgrid">
-        <div class="setrow"><label>统计明细单组展开</label>
+        <div class="setrow"><label class="tip-up">统计明细单组展开</label>
           <select id="set_signal_single_open"><option value="1">开</option><option value="0">关</option></select></div>
-        <div class="setrow"><label>首页分组单个展开（当日/风险/统计除外）</label>
+        <div class="setrow"><label class="tip-up">首页分组单个展开（当日/风险/统计除外）</label>
           <select id="set_group_single_open"><option value="1">开</option><option value="0">关</option></select></div>
       </div>
     </div>
 
-    <p class="note">
+    <p class="note tip-up">
       保存规则只提交 <kbd>settings.json</kbd>；清单另行保存。
       <textarea id="rulesOut" spellcheck="false" class="hide"
         style="width:100%;height:160px;margin-top:10px;padding:10px;font-size:13px;
@@ -607,12 +612,13 @@ details.set[open]>summary{margin-bottom:2px}
     <div class="add-row">
       <input class="s" id="newSym" placeholder="代码" aria-label="股票代码" autocapitalize="characters" disabled>
       <input class="n" id="newNote" placeholder="名称备注（选填）" aria-label="名称备注（选填）" disabled>
-      <select class="move" id="newMove" aria-label="新增到分区或分组" disabled></select>
+      <select class="move" id="newMove" aria-label="新增到分组（新增持仓股请到首页编辑）" disabled></select>
       <button class="primary" id="btnAddSym" disabled>添加</button>
     </div>
+    <p class="note tip-up">新股选行业分组点添加，再改为「重点」</p>
   </div>
   <fieldset id="groupEditor" disabled style="border:0;padding:0;margin:0;min-width:0"></fieldset>
-  <p class="note">保存股票清单、备注、加仓价、减仓价、目标价和监测开关，不影响规则与定投设置。目标价填 0＝关闭这只股票的“达到”报灯（空间提醒照旧），清空即恢复。恢复清单会先询问是否丢弃未保存的清单改动。</p>
+  <p class="note">保存股票清单、备注、加仓价、减仓价、目标价和监测开关，不影响规则与定投设置。目标价填 0＝关闭这只股票的“达到”报灯（空间提醒照旧），清空即恢复。恢复清单会先询问是否丢弃未保存的清单改动。这里只新增关注股与各行业分组；要新增持仓股请到首页「编辑」里添加，已有的持仓仍可用每行的下拉在长／短持仓之间移动。</p>
 
   <div class="card" id="dcaCard">
     <h2>定投提醒</h2>
@@ -655,7 +661,6 @@ function hasTarget(key){return key==='positions'||key==='focus';}
 const POS_ZONES=[{v:'long',label:'长持仓'},{v:'short',label:'短持仓'}];
 const ZONE_LABEL={long:'长持仓',short:'短持仓'};
 const isLongHeld=c=>String((c&&c.hold)||'').toLowerCase()==='long';
-function targetOf(key){return key==='positions'?'positions:short':key;}
 /* 行业标签规则（2026-11-19 用户定）：除「持仓」「重点」外，分组本身就是行业标签——改分组＝改标签；
    在持仓 / 重点之间来回移动不动标签；从行业分组进持仓 / 重点时，把原行业分组带成标签（SOXX 在 IT·AI 里＝标签 IT，
    进重点只是换了归属）。行业分组里的记录不另存 sector（分组本身就是它），避免和分组打架。 */
@@ -668,12 +673,16 @@ function parseTarget(v){
   const parts=String(v||'').split(':');
   return {group:parts[0]||'',hold:parts[0]==='positions'?(parts[1]||'short'):null};
 }
-// 一个下拉选全部：长持仓、短持仓、重点、各分类
-function moveOptions(sel){
-  return POS_ZONES.map(z=>{const v='positions:'+z.v;
-      return '<option value="'+v+'"'+(v===sel?' selected':'')+'>'+z.label+'</option>';}).join('')
-    +GROUPS.filter(g=>g.key!=='positions').map(g=>
+/* 2026-11-20 用户定：设置页「新增股票」下拉只列重点与各行业分组，不再出现长/短持仓
+   ——新的持仓股一律在首页「编辑」里加（那里要填数量、成本、分类标签）。
+   已有记录的行内「分组」下拉仍带长/短持仓，保证原来就能在两区之间移动。 */
+function moveOptions(sel,withPositions){
+  const zones=withPositions?POS_ZONES.map(z=>{const v='positions:'+z.v;
+      return '<option value="'+v+'"'+(v===sel?' selected':'')+'>'+z.label+'</option>';}).join(''):'';
+  const groups=GROUPS.filter(g=>g.key!=='positions').map(g=>
       '<option value="'+esc(g.key)+'"'+(g.key===sel?' selected':'')+'>'+esc(g.label)+'</option>').join('');
+  // 新增入口默认停在空选项，必须自己选分组，免得手滑把代码塞进第一个分组
+  return (withPositions?'':'<option value=""'+(sel?'':' selected')+'>选择分组</option>')+zones+groups;
 }
 function zoneOf(kind,c){return kind==='positions'?(isLongHeld(c)?'long':'short'):null;}
 function targetLabel(t){
@@ -975,7 +984,7 @@ function initGroups(groups){
     +'<div class="pane">'
     +'<div id="list_'+esc(g.key)+'"></div><div class="pager" id="pager_'+esc(g.key)+'"></div>'
     +'</div></details>').join('');
-  $('newMove').innerHTML=moveOptions(targetOf('positions'));
+  $('newMove').innerHTML=moveOptions('');
   $('btnAddSym').onclick=addSymbol;
   groups.forEach(g=>{
     data[g.key] ||= {}; pageState[g.key]=0;
@@ -1031,11 +1040,14 @@ function addSymbol(){
   if(!isTicker(symbol)){setMsg('请填写有效代码，A股、港股和 SGOV 不导入','err');return;}
   const t=parseTarget($('newMove').value);
   if(!KIND_LABEL[t.group]){setMsg('请先选择要加入的分组','err');return;}
+  if(t.group==='positions'){
+    setMsg('新增持仓股请在首页「编辑」里添加（设置页只加关注股与行业分组）','err');return;
+  }
   const to=t.group;
   const holder=holderOf(symbol);
   if(holder){setMsg(symbol+' 已在「'+holder.label+'」，同一只股票只能存在一份；请在该分组里用下拉「分组」转移','err');return;}
   const note=$('newNote').value.trim()||NAMES[symbol]||'';
-  data[to][symbol]={...(note?{note}:{}),...(to==='positions'?{hold:t.hold||'short'}:{})};
+  data[to][symbol]={...(note?{note}:{})};
   $('newSym').value='';$('newNote').value='';
   const fold=$('fold_'+to);if(fold)fold.open=true;
   render();touch();setMsg('已添加 '+symbol+' 到「'+targetLabel(t)+'」，价位可在该行里填写，点保存才生效','ok');
@@ -1121,7 +1133,7 @@ function render(){
         +(hasTarget(K.k)?'<input class="t g" value="'+esc(gv)+'" aria-label="'+esc(s)+' 目标价" data-f="target" inputmode="decimal">':'')
         +(COST_IN_LIST&&hasCost(K.k)?'<input class="t" value="'+esc(cv2)+'" aria-label="'+esc(s)+' 成本价" data-f="cost" inputmode="decimal">':'')
         +'</div><select class="move" aria-label="移动 '+esc(s)+' 到分区或分组">'
-        +moveOptions(K.k==='positions'?('positions:'+zoneOf(K.k,c)):K.k)+'</select>'
+        +moveOptions(K.k==='positions'?('positions:'+zoneOf(K.k,c)):K.k,true)+'</select>'
         +'<button class="del" aria-label="删除">×</button></div>';
     });
     box.innerHTML=h;

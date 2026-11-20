@@ -624,22 +624,32 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   check(!els.list_focus.innerHTML.includes('data-f="reduce"')&&!els.list_technology.innerHTML.includes('data-f="reduce"'), '其他分组每行没有减仓价');
   let cfg2=JSON.parse(T.configText());
   check(cfg2.positions.AAPL.reduce===200&&!('reduce_dir' in cfg2.positions.AAPL)&&cfg2.positions.AAPL.trigger===80&&cfg2.positions.MSFT.reduce===300, '保存内容保留减仓价和加仓价');
+  // 2026-11-20：设置页新增入口不再提供长/短持仓；新持仓股一律在首页「编辑」里加。
+  const newOpts=els.newMove.innerHTML;
+  check(!newOpts.includes('positions:long')&&!newOpts.includes('positions:short')
+        &&!newOpts.includes('>长持仓<')&&!newOpts.includes('>短持仓<')
+        &&newOpts.includes('>重点<')&&newOpts.includes('>选择分组<'),
+    '新增股票下拉删掉长/短持仓，只留「选择分组」、重点与各行业分组');
+  check(src.includes("K.k,true)+'</select>'"), '已有记录的行内下拉仍带长/短持仓，两区之间照样能移动');
   doc.getElementById('newSym').value='NVDA';doc.getElementById('newNote').value='英伟达';doc.getElementById('newMove').value='positions:long';
   T.addSymbol();
   cfg2=JSON.parse(T.configText());
-  check(cfg2.positions.NVDA&&cfg2.positions.NVDA.hold==='long'&&cfg2.positions.NVDA.note==='英伟达'&&!('reduce' in cfg2.positions.NVDA)&&!('trigger' in cfg2.positions.NVDA),
-    '统一入口选「长持仓」添加：写入hold=long，不预置价位');
+  check(!cfg2.positions.NVDA&&!cfg2.focus.NVDA&&els.msg.textContent.includes('首页'),
+    '新增入口选「长持仓」被拒绝，并提示到首页编辑里添加');
+  doc.getElementById('newSym').value='NVDA';doc.getElementById('newNote').value='英伟达';doc.getElementById('newMove').value='focus';
+  T.addSymbol();
+  cfg2=JSON.parse(T.configText());
+  check(cfg2.focus.NVDA&&cfg2.focus.NVDA.note==='英伟达'&&!('hold' in cfg2.focus.NVDA)
+        &&!('reduce' in cfg2.focus.NVDA)&&!('trigger' in cfg2.focus.NVDA),
+    '统一入口添加到重点：只写备注，不带 hold，不预置价位');
   check(doc.getElementById('newSym').value===''&&doc.getElementById('newNote').value==='', '添加后清空代码与备注');
   doc.getElementById('newSym').value='AMZN';doc.getElementById('newNote').value='亚马逊';doc.getElementById('newMove').value='';
   T.addSymbol();
-  check(!('AMZN' in JSON.parse(T.configText()).positions), '未选分组时拒绝添加');
-  doc.getElementById('newMove').value='positions:short';T.addSymbol();
+  check(!('AMZN' in JSON.parse(T.configText()).focus), '未选分组时拒绝添加');
+  T.data.positions.AMZN={note:'亚马逊',reduce:95.5,hold:'short'};T.render();
+  T.moveSymbol('positions','focus','AMZN');
   cfg2=JSON.parse(T.configText());
-  check(cfg2.positions.AMZN&&cfg2.positions.AMZN.hold==='short'&&!('reduce' in cfg2.positions.AMZN)&&!('reduce_dir' in cfg2.positions.AMZN), '选「短持仓」添加且不写 reduce');
-  T.data.positions.NVDA.reduce=95.5;
-  T.moveSymbol('positions','focus','NVDA');
-  cfg2=JSON.parse(T.configText());
-  check(cfg2.focus.NVDA&&!cfg2.positions.NVDA&&!('reduce' in cfg2.focus.NVDA)&&!('reduce_dir' in cfg2.focus.NVDA), '移出持仓时清掉减仓价，避免留下不监测的残值');
+  check(cfg2.focus.AMZN&&!cfg2.positions.AMZN&&!('reduce' in cfg2.focus.AMZN)&&!('reduce_dir' in cfg2.focus.AMZN), '移出持仓时清掉减仓价，避免留下不监测的残值');
   check(src.includes('id="set_reduce_gap_pct"'), '规则区有减仓价 ±x% 设置');
   T.SET.reduce_gap_pct=3;T.renderSettings();
   check(Number(els.set_reduce_gap_pct.value)===3&&T.settingsError()==='', '减仓价 ±x% 默认 3% 且通过校验');
