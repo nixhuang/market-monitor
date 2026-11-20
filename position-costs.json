@@ -1,7 +1,7 @@
 {
  "schema_version": 2,
  "real": true,
- "updated_at": "2026-11-20T15:08:24.258Z",
+ "updated_at": "2026-11-20T16:03:38.251Z",
  "cash": 21746.15,
  "cash_extra": 20680,
  "fixed": 16916.97,
@@ -44,8 +44,8 @@
    "cost": 513
   },
   "NTNX": {
-   "qty": 15,
-   "cost": 46.42866666666667
+   "qty": 10,
+   "cost": 41.843
   },
   "NXPI": {
    "qty": 0,
