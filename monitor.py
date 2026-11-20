@@ -3340,8 +3340,8 @@ def market_data_time(snapshot):
     if not latest:
         finished = beijing_iso(snapshot.get("finished_at_bj") or snapshot.get("finished_at"))
         if snapshot.get("mode") == "manual_or_config" and finished and not plan_run("local", datetime.fromisoformat(finished))["closed_only"]:
-            missing = snapshot.get("summary", {}).get("missing_prices", 0)
-            return f'{finished[:19].replace("T", " ")}（盘中，北京 · 未取得行情） · 无数据 {missing} 只'
+            # 2026-11-20：无数据的计数与名单只归状态灯那一处说，这行只回答「数据是几点的」
+            return f'{finished[:19].replace("T", " ")}（盘中，北京 · 未取得行情）'
         return "未取得行情"
     earliest = dates.get("min") or latest
     date_text = f"{earliest}～{latest}" if earliest != latest else latest
@@ -3351,23 +3351,24 @@ def market_data_time(snapshot):
         plan = plan_run("local", when)
         if not plan["closed_only"]:
             counts = snapshot.get("summary", {})
-            # 全部拿到当日价时这一串（当日价 99 只 / 较早日线 0 只 / 无数据 0 只）是废话，
-            # 只在真的有「较早日线」或「无数据」时才写出来，且只写非零的那几项
+            # 2026-11-20：「无数据 N 只」归状态灯（那里有名单），这行不再重复；
+            # 只在真有「较早日线」（数据没更新到今天）时写「较早日线 K 只」，不再写「当日价 N 只」
             detail = ""
             if "today_prices" in counts:
                 parts = []
-                if counts.get("prior_prices") or counts.get("missing_prices"):
-                    if counts.get("today_prices"):
-                        parts.append(f"当日价 {counts['today_prices']} 只")
+                if counts.get("prior_prices"):
                     if counts.get("prior_prices"):
                         parts.append(f"较早日线 {counts['prior_prices']} 只")
-                    if counts.get("missing_prices"):
-                        parts.append(f"无数据 {counts['missing_prices']} 只")
                 detail = (" · " + " / ".join(parts)) if parts else ""
             if latest == plan["target"]:
                 return finished[:19].replace("T", " ") + "（盘中，北京）" + detail
             return finished[:19].replace("T", " ") + f"（盘中，北京 · 仍为 {date_text} 日线）" + detail
-    return date_text + " 收盘（美东交易日）"
+    # 2026-11-20 用户（方案A）：只写最新一个交易日（不带年份，跨年才带）+「较早日线 N 只」，
+    # 不再写「最早～最晚」两个日期，也不写「（美东交易日）」。
+    shown = latest[5:] if latest[:4] == (TARGET_DATE or latest)[:4] else latest
+    older = (snapshot.get("summary") or {}).get("prior_prices")
+    tail = f" · 较早日线 {older} 只" if earliest != latest and type(older) is int and older > 0 else ""
+    return f"美 {shown} 收盘{tail}"   # 2026-11-20：「美」字标明是美东交易日，与财报「美 11/18 盘后」同写法
 
 
 signal_counts = _snapshot_builder.signal_counts

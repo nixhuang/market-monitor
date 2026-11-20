@@ -704,7 +704,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         src = (ROOT / 'monitor_render.py').read_text(encoding='utf-8')
         self.assertIn('def chg_cell(txt, unit="", sign=""):', src)     # 无值整格留空只在这一处
         self.assertIn('\'<td class="num dim"></td>\' if not txt else', src)
-        self.assertIn('{chg_cell("")}', src)                          # 纳指参考行恒空白
+        self.assertIn('nd_chg = chg_cell("")', src)                   # 纳指缺周数据时才空白；有数据写「周 ±x.x%」（2026-11-20）
 
     def test_earnings_fallback_has_no_dead_disclaimer_text(self):
         """22:35：没取到日期的财报整条隐藏，源码不许再留失败解释长句或占位提示。"""
@@ -1404,6 +1404,10 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertIn('id="statFindInput" type="text" maxlength="8"', brandbar)
         self.assertIn('<button type="button" id="statFindBtn">FIND</button>', brandbar)
         self.assertRegex(header, r'<span class="count-total count-earn">报 [—0-9]+</span>')
+        # 2026-11-20：标题栏最右是「总 N」＝数据那里抓取的总只数（含没取到的）
+        self.assertRegex(header, r'<span class="count-total count-all">总 [—0-9]+</span></span>$')
+        full = monitor._signal_counts_card({'summary': {'red': 1, 'yellow': 2, 'total': 99}, 'signal_counts': {}}).split('</summary>', 1)[0]
+        self.assertIn('<span class="count-total count-all">总 99</span>', full)
         self.assertNotIn('财报 ', header)
         js = page_assets.PAGE_INTERACTION_JS
         self.assertIn('function findStock()', js)

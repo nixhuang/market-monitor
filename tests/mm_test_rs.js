@@ -32,6 +32,7 @@ function element() {
     style: {}, dataset: {}, children: [], disabled: false,
     setAttribute(name, value) { this[name] = value; }, appendChild(child) { this.children.push(child); },
     replaceChildren(...children) { this._text = ''; this.children = children; },
+    removeAttribute(name) { delete this[name]; },
     classList: {contains() { return false; }}};
 }
 function fixture(page = snapshot(), onlyRule = false, initial = {}) {
@@ -191,12 +192,32 @@ async function check(name, fn) {
     f.els.snapshotData.textContent = JSON.stringify(f.data.published);
     await f.win.MMRunStatus.refresh(); assert.equal(f.els.ruleLight.dataset.phase, 'ok');
   });
-  await check('行情缺失运行红灯，但同版规则仍绿灯', async () => {
+  await check('行情缺失 3 只以内运行黄灯（成功N · 失败N：名单），同版规则仍绿灯', async () => {
     const page = snapshot(); page.summary.missing_symbols = ['NTNX', 'MCD'];
     const f = fixture(page); await f.win.MMRunStatus.refresh();
-    assert.equal(f.els.runLight.dataset.phase, 'bad');
-    assert.match(f.els.runLightTxt.textContent, /取数失败 2 只/);
+    assert.equal(f.els.runLight.dataset.phase, 'partial');
+    assert.equal(f.els.runLightTxt.textContent, '成功 127 ·未记录（北京） · 失败 2：NTNX…');   // 与成功时同格式带时间，只露第一只
+    assert.equal(f.els.runLightTxt.dataset.expandable, '1');
     assert.equal(f.els.ruleLight.dataset.phase, 'ok');
+  });
+  await check('行情缺失 4 只起运行红灯：名单只露前 3 个，点一下展开全部，再点收回', async () => {
+    const page = snapshot(); page.summary.missing_symbols = ['A1', 'B2', 'C3', 'D4', 'E5'];
+    page.summary.stale_symbols = ['S1'];
+    const f = fixture(page); await f.win.MMRunStatus.refresh();
+    const box = f.els.runLightTxt;
+    assert.equal(f.els.runLight.dataset.phase, 'bad');
+    assert.equal(box.textContent, '成功 123 ·未记录（北京） · 失败 5：A1… · 旧数据 1：S1');
+    assert.equal(box.dataset.expandable, '1');
+    box.onclick();
+    assert.equal(box.textContent, '成功 123 ·未记录（北京） · 失败 5：A1、B2、C3、D4、E5 · 旧数据 1：S1');
+    box.onclick();
+    assert.equal(box.textContent, '成功 123 ·未记录（北京） · 失败 5：A1… · 旧数据 1：S1');
+  });
+  await check('只有一只失败时名单就是它本身，不挂省略号也不可展开', async () => {
+    const page = snapshot(); page.summary.missing_symbols = ['ANT'];
+    const f = fixture(page); await f.win.MMRunStatus.refresh();
+    assert.equal(f.els.runLightTxt.textContent, '成功 128 ·未记录（北京） · 失败 1：ANT');
+    assert.equal(f.els.runLightTxt.dataset.expandable, undefined);
   });
   await check('市场风险缺项保留提示，完整行情不再显示更新计数', async () => {
     const page = snapshot(); page.event = 'push'; page.market_risk = {missing: ['VIX'], valid_count: 4};

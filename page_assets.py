@@ -738,6 +738,7 @@ tr:first-child td{border-top:none}
 #signalCounts .count-red{color:var(--red)}
 #signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-earn{color:var(--text)}
+#signalCounts .count-all{color:var(--dim)}   /* 总 N：抓取总只数，灰字不抢红黄白紫的注意力 */
 /* 顶部右侧的代码定位：5 位代码 + FIND；字号 16px 防止 iOS 聚焦时自动放大页面 */
 .stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}
 .stat-find input{box-sizing:border-box;width:111px;height:32px;padding:0 6px;font:inherit;font-size:16px;font-weight:600;line-height:30px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;text-transform:uppercase;text-align:center;outline:none}
@@ -1048,6 +1049,10 @@ tr.gray td{color:var(--dim)}
 :is(#macroCard, .macro-scope) tr.mh td{font-size:var(--macro-head);white-space:nowrap;padding:3px 8px}
 :is(#macroCard, .macro-scope) td .unit{font-size:var(--macro-aux);line-height:1.15}
 :is(#macroCard, .macro-scope) td:nth-child(3) .unit{white-space:nowrap;font-size:var(--macro-aux)}
+/* 2026-11-20：风险表小数字统一同号——回撤／短均线的数字与「周 -5.1%」一样 14px，只有标签保持 12px；
+   「长均线」标签写到数据前面同一排（行内，不再另起一行）。 */
+:is(#macroCard, .macro-scope) td .unit .unit-num{font-size:var(--macro-chg)}
+:is(#macroCard, .macro-scope) td .unit.unit-inline{display:inline;margin-right:2px}
 .dual-row > .dual-body{grid-column:1/-1;grid-row:2;min-width:0;margin:0;padding:0;border:0;background:transparent}
 .dual-row > .dual-body[hidden]{display:none}
 .day-pnl-card > summary.dp-head{display:flex;align-items:center;gap:8px;padding:0 12px 0 4px;list-style:none;cursor:pointer;box-sizing:border-box}
@@ -1353,6 +1358,7 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10p
 #group_positions>.group-bottom{display:none}
 #group_positions_short.zone-card{margin-bottom:16px}
 #runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
+#runLightTxt[data-expandable]{cursor:pointer}   /* 失败名单超过 3 只时折进「…」，点一下展开 */
 #signalCounts .signal-extra-row{--chip-w:84px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
 #signalCounts .signal-extra-row>.text-only>summary{position:relative;box-sizing:border-box;min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
 #signalCounts .signal-extra-row>.earnings-week>summary{position:relative;box-sizing:border-box;min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}

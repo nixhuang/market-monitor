@@ -142,7 +142,7 @@ check("<title>NIX-Matrix</title>" in html and '<h1 class="brand">NIX-Matrix</h1>
       "标题 = NIX-Matrix（带 brand 类，上涨绿，旧名 MatrixPulse 全站清除）")
 check("h1.brand{color:var(--frame-purple)}" in html, "站名用框紫 --frame-purple（2026-11-19 Demo），不写死颜色")
 check("市场自检" not in html, "旧标题已移除")
-check("数据时间 2026-10-06 收盘（美东交易日）" in html and "本页数据更新" not in html,
+check("数据时间 美 10-06 收盘" in html and "本页数据更新" not in html,
       "休市顶部显示行情收盘日，不重复抓取完成时间")
 check("成功 ·2026-10-07 20:40（北京）" in re.sub(r'<[^>]+>', '', html), "静态成功灯只报「成功 ·日期 时:分」，不带秒")
 check("自动计划：美东周一至五 20:30（北京 " in html, "第二排自动计划")
@@ -226,8 +226,8 @@ check('id="ust10Ref"' in html and "无数据或已过期" in html.split('id="ust
 _macro_b = dict(macro, breadth={"ok": True, "name": "上涨参与度", "date": "2026-10-06", "value": 47.0,
                                "pct50": 29.3, "unit": "%", "source": "History of Market"})
 _html_b = monitor.render(_macro_b, items, 10, snapshot=snapshot, dup_hidden=2)
-check("47.0%<span class=\"unit\">长均线</span>" in _html_b
-      and "短均线：29.3%" in _html_b
+check("<span class=\"unit unit-inline\">长均线</span> 47.0%" in _html_b
+      and "短均线：<span class=\"unit-num\">29.3%</span>" in _html_b
       and "上宏观" not in _html_b.split('id="macroCard"', 1)[1].split('</table>', 1)[0]
       and "宏观均线沿用数据源固定口径，不随个股均线设置变化" in _html_b
       and not re.search(r'\d+日(?:均线|线)', _html_b.split('id="macroCard"', 1)[1].split('</table>', 1)[0]),
@@ -254,11 +254,10 @@ _macro_n = dict(macro, nasdaq={"ok": True, "name": "纳斯达克指数", "value"
                                "source": "Yahoo ^IXIC"})
 _html_n = monitor.render(_macro_n, items, 10, snapshot=snapshot, dup_hidden=2)
 check('<tr class="green" id="nasdaqRef">' in _html_n and '23,918.44' in _html_n
-      and '<td class="num dim"></td><td>一周平稳</td>' in _html_n
-      and 'chg-num' not in _html_n.split('id="nasdaqRef"')[1].split('</tr>')[0]
+      and re.search(r'<td class="num dim" data-sign="up">\+312<span class="unit">周 <span class="chg-num">\+1\.3%</span></span></td><td>一周平稳</td>', _html_n)
       and '纳斯达克指数<span class="unit">2026-10-06</span>' in _html_n
       and '<span class="unit">参考</span>' not in _html_n,
-      "纳斯达克指数参考行：点位两位小数、变化列整格空白（11-17 用户）、上涨仍给「一周平稳」")
+      "纳斯达克指数参考行：点位两位小数、变化列写周变化（2026-11-20 补回）、上涨仍给「一周平稳」")
 # 一周下跌分档：>=2% 黄「一周走弱」、>=4% 红「一周急跌」；上涨不出警
 _nrow = lambda nd: re.search(r'<tr class="(\w+)" id="nasdaqRef".*?</tr>',
                              monitor.render(dict(macro, nasdaq=nd), items, 10,
@@ -379,8 +378,8 @@ check('重点 (0)' in html3 and '暂无标的，去设置页录入' in html3, "�
 snap4 = dict(snapshot)
 snap4["summary"] = dict(snapshot["summary"], stale_symbols=["NTNX", "MCD"])
 html4 = monitor.render(macro, items, 10, snapshot=snap4)
-check("当日行情未取得 2 只：NTNX、MCD" in html4 and "规则未完全生效" not in html4, "旧日线不被误报为完全没数据")
-check('id="runLight" data-phase="bad"' in html4, "运行灯初始为红")
+check("旧数据 2：NTNX…" in html4 and "规则未完全生效" not in html4, "旧日线不被误报为完全没数据")
+check('id="runLight" data-phase="partial"' in html4, "旧日线只有 2 只：运行灯初始为黄（3 只以内不红）")
 check('id="ruleLight" data-phase="idle"' in html4, "行情失败时规则灯仍独立待核验")
 
 # 旧基本面输入必须完全忽略，不改变行情灯、排序或无异动折叠。
@@ -1981,7 +1980,7 @@ const deadline = setTimeout(() => {
           overflow: document.documentElement.scrollWidth > innerWidth};
       })()`);
       assertions.push({ok: JSON.stringify(header.order) === JSON.stringify([
-        'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn'])
+        'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn','count-total count-all'])
         && header.count === String(header.expected) && header.border === 'rgb(176, 132, 255)' && !header.overflow,
         name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
       const statLines = await evaluate(`(() => {
@@ -2160,7 +2159,7 @@ const deadline = setTimeout(() => {
       await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
       const header=await evaluate(`(() => {
         const sub=document.querySelector('.sub'),mirror=document.getElementById('costSyncState');
-        sub.firstChild.textContent='数据时间 2026-11-06 收盘（美东交易日）';
+        sub.firstChild.textContent='数据时间 美 11-06 收盘';
         const rule=document.getElementById('ruleLightTxt');rule.textContent='规则已生效';
         const font=el=>getComputedStyle(el).fontSize;
         let dca=document.querySelector('.runbar .dca-badge');

@@ -371,7 +371,7 @@
     if (s && s.data_time_text) return s.data_time_text;
     const dates = (s && s.actual_dates) || {};
     const date = dates.max || dates.min || '';
-    return date ? date + (s && s.mode === 'closed' ? ' 收盘（美东交易日）' : '') : '';
+    return date ? (s && s.mode === 'closed' ? '美 ' : '') + date.slice(5) + (s && s.mode === 'closed' ? ' 收盘' : '') : '';   // 只写月-日；同 monitor.market_data_time
   }
   // 上次成功读到的看板状态：编辑页没有内嵌快照，网络失败时用它兜底，避免一律显示“未知”。
   const LAST_KEY = 'mm_last_pub_v1';
@@ -560,10 +560,19 @@
       if (activeConfig()) return {phase: 'busy', text: busyText(configState.phase)};
     }
     if (snap && info.red != null) {
-      const bad = [...new Set([...(info.stale_symbols || []), ...(info.missing_symbols || [])])];
+      // 2026-11-20：与 monitor_render._run_light 同一套——3 只以内黄字、4 只起红字；
+      // 「成功N ·时间（北京） · 失败N：名单 · 旧数据N：名单」，名单只露第一只，其余折进「…」，点一下整条展开。
+      const missingList = [...new Set(info.missing_symbols || [])];
+      const staleList = [...new Set(info.stale_symbols || [])].filter(s => !missingList.includes(s));
+      const bad = [...missingList, ...staleList];
       if (bad.length) {
-        return {phase: 'bad', text: ((info.stale_symbols || []).length ? '当日行情未取得 ' : '取数失败 ') +
-          bad.length + ' 只：' + bad.slice(0, 6).join('、') + (bad.length > 6 ? ' 等' : '')};
+        const okN = Number.isInteger(info.today_prices) ? info.today_prices
+          : Math.max(0, (info.total || 0) - (info.unsupported_symbols || []).length - bad.length);
+        const cut = (list, all) => (all ? list.join('、') : list[0] + (list.length > 1 ? '…' : ''));
+        const build = all => ['成功 ' + okN + ' ·' + (finished || '未记录') + '（北京）',
+          ...(missingList.length ? ['失败 ' + missingList.length + '：' + cut(missingList, all)] : []),
+          ...(staleList.length ? ['旧数据 ' + staleList.length + '：' + cut(staleList, all)] : [])].join(' · ');
+        return {phase: bad.length <= 3 ? 'partial' : 'bad', text: build(false), full: build(true)};
       }
       const unsupported = (info.unsupported_symbols || []).length;
       const total = info.total || 0;
@@ -588,12 +597,33 @@
     if (publication.phase === 'waiting') return {phase: 'busy', text: '正在读取运行状态…'};
     return {phase: 'idle', text: '点「立即运行」抓最新行情'};
   }
-  function put(id, text, phase) {
+  let lightOpen = false;   // 抬头灯的失败名单是否展开（重绘不丢）
+  function put(id, text, phase, full) {
     const box = el(id);
     if (!box) return;
     box.textContent = text;
     if (id === 'runLightTxt') {
-      const match = String(text).match(/^(.*?)(\d{4}-\d{2}-\d{2} \d{2}:\d{2})([\s\S]*)$/);
+      if (full && full !== text) {
+        box.textContent = lightOpen ? full : text;
+        box.dataset.expandable = '1';
+        box.setAttribute('role', 'button');
+        box.setAttribute('tabindex', '0');
+        box.setAttribute('aria-expanded', String(lightOpen));
+        const toggle = () => { lightOpen = !lightOpen; render(); };
+        box.onclick = toggle;
+        box.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); } };
+      } else if (box.dataset && box.dataset.expandable) {   // 只有从「可展开」退回时才清理
+        delete box.dataset.expandable;
+        box.removeAttribute('role');
+        box.removeAttribute('tabindex');
+        box.removeAttribute('aria-expanded');
+        box.onclick = null;
+        box.onkeydown = null;
+      }
+    }
+    if (id === 'runLightTxt') {
+      const shown = (full && full !== text && lightOpen) ? full : text;   // 展开时时间戳也要照样套样式
+      const match = String(shown).match(/^(.*?)(\d{4}-\d{2}-\d{2} \d{2}:\d{2})([\s\S]*)$/);
       if (match) {
         const timestamp = document.createElement('span');
         timestamp.className = 'run-timestamp';
@@ -647,7 +677,7 @@
     const light = lightState();
     if (el('runLight')) el('runLight').dataset.phase = light.phase;
     // 抬头灯只报状态：不再另挂「刷新当前看板」，状态查询结果里已有一个，重复会把抬头撑折行。
-    put('runLightTxt', light.text, light.phase);
+    put('runLightTxt', light.text, light.phase, light.full);
     const rule = ruleState();
     if (el('ruleLight')) el('ruleLight').dataset.phase = rule.phase;
     put('ruleLightTxt', rule.text, rule.phase);

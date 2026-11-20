@@ -204,11 +204,23 @@ def _run_light(snapshot, finished_txt):
         finished_txt = f'<span class="rt78">{finished_txt}</span>'
     # 无数据状态改叫「缺失」，避免和统计面板里「只出文字不报灯」的白灯撞名
     # （具体文案在下面按「有没有异常」拼，不再单独拼一段）
-    bad = list(dict.fromkeys(summary.get("stale_symbols", []) + summary.get("missing_symbols", [])))
+    # 2026-11-20 用户：抓不到的只数不多时别吓人——3 只以内黄字（partial），4 只起才红字（bad）；
+    # 文案「成功N ·时间（北京） · 失败N：名单」，旧日线另写「旧数据N：名单」；名单只露第一只，其余折进「…」，点一下展开（前端）。
+    missing = list(dict.fromkeys(summary.get("missing_symbols", [])))
+    stale = [s for s in dict.fromkeys(summary.get("stale_symbols", [])) if s not in missing]
+    bad = missing + stale
     if bad:
-        reason = "取数失败" if not summary.get("stale_symbols") else "当日行情未取得"
-        return "bad", (f"{reason} {len(bad)} 只：{html_lib.escape('、'.join(bad[:6]))}"
-                       + (" 等" if len(bad) > 6 else ""))
+        ok_n = summary.get("today_prices")
+        if type(ok_n) is not int:
+            ok_n = max(0, summary.get("total", 0) - len(summary.get("unsupported_symbols", [])) - len(bad))
+        names = lambda lst: html_lib.escape(lst[0]) + ("…" if len(lst) > 1 else "")
+        # 与成功时同一格式：成功 N ·时间（北京），失败名单跟在后面；名单只露第一只，其余折进「…」
+        parts = [f"成功 {ok_n} ·{finished_txt}（北京）"]
+        if missing:
+            parts.append(f"失败 {len(missing)}：{names(missing)}")
+        if stale:
+            parts.append(f"旧数据 {len(stale)}：{names(stale)}")
+        return ("partial" if len(bad) <= 3 else "bad"), " · ".join(parts)
     total = summary.get("total", 0)
     unsupported_count = len(summary.get("unsupported_symbols", []))
     if not total:
@@ -494,7 +506,9 @@ class PageRenderer:
             if key == "sp500":
                 # 2026-10-30：「较近一年高点」六个字删掉，只留「回撤 -1.3%」——同一格还有点位，
                 # 前缀太长会把数字挤到第二行，行高也压不下来。
-                val = f'{it["value"]:,.2f}<span class="unit">回撤 {it["drawdown"]:.1f}%</span>' if it.get("drawdown") is not None else "—"
+                # 2026-11-20 用户：回撤数字与「周 -5.1%」同号（14px），风险表字号统一；标签「回撤」仍是小字
+                val = (f'{it["value"]:,.2f}<span class="unit">回撤 <span class="unit-num">{it["drawdown"]:.1f}%</span></span>'
+                       if it.get("drawdown") is not None else "—")
             elif key == "hy_oas":
                 val = f'{it["value"]:.0f} bp'
             elif key == "vix":
@@ -505,8 +519,9 @@ class PageRenderer:
                 val = f'{it["value"]:.2f}<span class="unit">个百分点</span>'
             elif key == "breadth":
                 # 2026-10-30：「上宏观」三字删掉（长／短均线本身就是宏观口径，不必重复）
-                val = (f'{it["value"]:.1f}%<span class="unit">长均线</span>'
-                       f'<span class="unit">短均线：{it["pct50"]:.1f}%</span>')
+                # 2026-11-20 用户：「长均线」写到数据前面、同一排；数字与风险表其它小数字同号
+                val = (f'<span class="unit unit-inline">长均线</span> {it["value"]:.1f}%'
+                       f'<span class="unit">短均线：<span class="unit-num">{it["pct50"]:.1f}%</span></span>')
             elif key == "nfci":
                 val = f'{it["value"]:+.2f}'
             else:
@@ -561,11 +576,18 @@ class PageRenderer:
         nd_val = self._context._pos_num(nd.get("value"))
         if nd.get("ok") is True and nd_val is not None:
             nd_lv, nd_txt = self._context.macro_status("nasdaq", nd)
+            # 2026-11-20 用户：评语写「一周急跌」，变化列就该有周变化数据——补回，写法同标普500（点差＋周 百分比、涨跌色）
+            ndw, ndb = nd.get("delta_week"), nd.get("week_ago")
+            if ndw is not None and ndb:
+                nd_chg = chg_cell(f'{ndw:+.0f}', f'周 <span class="chg-num">{ndw / ndb * 100:+.1f}%</span>',
+                                  ' data-sign="up"' if ndw > 0 else ' data-sign="down"' if ndw < 0 else "")
+            else:
+                nd_chg = chg_cell("")
             rows_macro.append(
                 f'<tr class="{nd_lv}" id="nasdaqRef"><td>纳斯达克指数'
                 f'<span class="unit">{html_lib.escape(str(nd.get("date") or ""))}</span></td>'
                 f'<td class="num">{nd_val:,.2f}</td>'
-                f'{chg_cell("")}<td>{nd_txt}</td></tr>')
+                f'{nd_chg}<td>{nd_txt}</td></tr>')
         else:
             rows_macro.append('<tr class="gray" id="nasdaqRef"><td>纳斯达克指数</td>'
                               '<td colspan="3">无数据或已过期</td></tr>')
@@ -769,7 +791,17 @@ class PageRenderer:
                 .replace("）", '<span class="pr">）</span>'))
 
 
-    def _signals_html(self, d):
+    def _stale_note(self, d, snapshot):
+        """2026-11-20 用户：旧日线（数据日期早于目标交易日）的个股，描述区末尾加一行不带灯、有缩进的「旧日线：11/18」。
+        只给有价格的个股；参考值、无数据不加（它们已有自己的小标签）。"""
+        if d.get("price") is None or d.get("reference_only"):
+            return ""
+        day, target = d.get("data_date"), (snapshot or {}).get("target_trade_date") or self._context.TARGET_DATE
+        if not (self._context._iso_date(day) and self._context._iso_date(target)) or day >= target:
+            return ""
+        return f'<span class="signal-item stale-note">旧日线：{day[5:7]}/{day[8:10]}</span>'
+
+    def _signals_html(self, d, stale=""):
         """主表价格提醒各自按真实灯级着色；统计事实不变，不添加圆点。"""
         # 手填价仅替换共识价；所有目标状态只投影到胶囊，统计仍消费原signals/marks。
         # 投影层过滤：共识价与量比都不再写进个股描述（量比改由价格区数字灯级表达）。
@@ -810,6 +842,8 @@ class PageRenderer:
             columns[0 if len(columns[0]) <= len(columns[1]) else 1].append(item)
         columns[0].append(self._context.level_note(d.get("trigger"), None, d.get("price")))
         columns[1].append(self._context.level_note(None, d.get("reduce") if d.get("group") == "position" else None, d.get("price")))
+        if stale:
+            columns[0].append(stale)
         if not any(any(col) for col in columns):
             return ""
         combo = f' data-combo="1" data-combo-level="{combo_level}"' if combo_level else ""
@@ -1010,7 +1044,7 @@ class PageRenderer:
             f'{html_lib.escape(self._context.normalize_symbol(d["symbol"]))}{sec_html}{note}{hold_html}'
             f'{self._context._row_tags(d, snapshot)}</span>'
             f'</td><td class="num px">{self._price_rows_html(d, snapshot)}</td>'
-            f'{tg_html}{cost_cell}<td class="sig">{self._context._signals_html(d)}</td></tr>'
+            f'{tg_html}{cost_cell}<td class="sig">{self._context._signals_html(d, self._stale_note(d, snapshot))}</td></tr>'
             + self._context._range52_row(d, band)
         )
 
@@ -1583,7 +1617,9 @@ class PageRenderer:
                           for entries in gray_by_kind.values() for m in entries})
         totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
                   ("gray", "白", gray_count), ("purple", "紫", whole(summary.get("purple"))),
-                  ("earn", "报", self._context._earnings_week_panel(snapshot, count_only=True)))
+                  ("earn", "报", self._context._earnings_week_panel(snapshot, count_only=True)),
+                  # 2026-11-20 用户：标题栏最右写「总 N」＝数据那里一共抓取多少只（含没取到的，不含市场风险指标）
+                  ("all", "总", whole(summary.get("total"))))
         stats = "".join(
             (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple")
              else f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>')

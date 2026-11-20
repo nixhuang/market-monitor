@@ -474,14 +474,16 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('截至', risk)
         self.assertIn('23,918.44', risk)
         self.assertIn('id="nasdaqRef"', risk)
-        # 2026-11-17 用户「风险里的纳指不需要周变化了」：变化列整格空白，
-        # 一周涨跌仍只用来给灯级与「一周平稳／走弱／急跌」评语，取数层一行不动。
+        # 2026-11-20 用户：评语写「一周急跌」变化列就该有周变化——补回（同标普500：点差＋「周 ±x.x%」涨跌色）。
         self.assertIn('<tr class="green" id="nasdaqRef"', risk)
         self.assertIn('<td>一周平稳</td>', risk)
         _nd = risk.split('id="nasdaqRef"')[1].split('</tr>')[0]
-        self.assertIn('<td class="num dim"></td>', _nd)
-        self.assertNotIn('chg-num', _nd)
+        self.assertRegex(_nd, r'<td class="num dim"(?: data-sign="(?:up|down)")?>[+-]?\d+<span class="unit">周 <span class="chg-num">[+-]\d+\.\d%</span></span></td>')
         self.assertNotIn('周 bp', _nd)
+        # 风险表数字统一：回撤的数字与周百分比同号，长均线标签在数据前同一排
+        self.assertIn('class="unit">回撤 <span class="unit-num">', risk)
+        self.assertRegex(risk, r'<span class="unit unit-inline">长均线</span> [\d.]+%')
+        self.assertIn('td .unit .unit-num{font-size:var(--macro-chg)}', monitor.PAGE_CSS)
         self.assertNotIn('Cboe VIX 官方日线', risk)   # 2026-10-15：指标行不再逐条展示数据来源
         self.assertNotIn('.VIX</td>', page)
         self.assertNotIn('.SPX</td>', page)
@@ -816,7 +818,7 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(snap['summary']['stale_symbols'], [])
         self.assertEqual((snap['summary']['today_prices'], snap['summary']['prior_prices']), (1, 0))
         self.assertEqual(snap['actual_dates'], {'min': '2026-10-07', 'max': '2026-10-07'})
-        self.assertEqual(snap['data_time_text'], '2026-10-07 收盘（美东交易日）')
+        self.assertEqual(snap['data_time_text'], '美 10-07 收盘')
         with patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):
             page = monitor.render({}, [reference, daily], 2, snapshot=snap)
         self.assertNotIn('个股行情 2/2 已更新', page)
@@ -1912,6 +1914,24 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(stat['data']['PANW']['timing'], 'post')
         self.assertEqual(item['earnings']['timing'], 'post')
 
+    def test_stale_daily_bar_gets_unlit_indented_note(self):
+        """2026-11-20：数据日期早于目标交易日的个股，描述区末尾多一行不带灯的「旧日线：11/18」。"""
+        snap = {'target_trade_date': '2026-11-19', 'mode': 'closed'}
+        def sig(date, price=100.0, **kw):
+            d = dict(symbol='SNDK', note='闪迪', price=price, chg=0.0, level='red', signals=['RSI6 25.0 ↓超卖'],
+                     group='position', data_date=date, **kw)
+            return monitor._signals_html(d, monitor._page_renderer._stale_note(d, snap))
+        with patch.object(monitor, 'global_dca', return_value=None):
+            stale = sig('2026-11-18')
+            self.assertIn('<span class="signal-item stale-note">旧日线：11/18</span>', stale)
+            self.assertNotIn('data-signal-level', stale.split('stale-note')[1])         # 不带灯
+            self.assertLess(stale.index('RSI'), stale.index('旧日线'))                    # 排在描述末尾
+            self.assertNotIn('旧日线', sig('2026-11-19'))                                 # 当天数据不加
+            self.assertNotIn('旧日线', sig('2026-11-18', price=None))                     # 无数据不加
+            self.assertNotIn('旧日线', sig('2026-11-18', reference_only=True))            # 参考值不加
+        # 不带灯但有缩进：沿用 .signal-item 的 8px 内缩，且不出现 data-signal-level 的灯条
+        self.assertIn('.stk td.sig .signal-item{display:block;min-width:0;overflow-wrap:anywhere;padding-left:8px', monitor.PAGE_CSS)
+
     def test_sector_tag_only_in_positions_and_focus_with_first_two_chars(self):
         """2026-11-19：持仓 / 重点个股代码右边显示行业标签（分组名前两个字，灰色 14px）；其它分组不显示。"""
         def row(sym, group):
@@ -2170,7 +2190,7 @@ class TestGroups(unittest.TestCase):
             return {'finished_at_bj': when, 'mode': mode, 'actual_dates': {'min': date, 'max': date}}
         for when in ['2026-10-08T13:55:28+08:00', '2026-10-08T21:29:00+08:00',
                      '2026-10-08T04:00:00+08:00', '2026-10-10T23:00:00+08:00']:
-            self.assertEqual(monitor.market_data_time(snap(when)), '2026-10-07 收盘（美东交易日）')
+            self.assertEqual(monitor.market_data_time(snap(when)), '美 10-07 收盘')
         live = snap('2026-10-08T21:30:00+08:00', '2026-10-08')
         self.assertIn('2026-10-08 21:30:00（盘中，北京）', monitor.market_data_time(live))
         self.assertNotIn('盘中快照', monitor.market_data_time(snap('2026-10-08T21:30:00+08:00')))
@@ -2441,13 +2461,17 @@ class TestGroups(unittest.TestCase):
             snap['finished_at_bj'] = '2026-10-08T22:35:12+08:00'
             page = monitor.render({}, rows, 3, snapshot=snap)
         self.assertEqual([snap['summary'][k] for k in ('today_prices','prior_prices','missing_prices')], [1,1,1])
-        self.assertIn('2026-10-08 22:35:12（盘中，北京） · 当日价 1 只 / 较早日线 1 只 / 无数据 1 只',page)
+        # 2026-11-20：「无数据 N 只」归状态灯（有名单），数据时间行只留「较早日线」这类数据时间相关的计数
+        self.assertIn('2026-10-08 22:35:12（盘中，北京） · 较早日线 1 只</',page)   # 只写较早日线，不写当日价，也不写无数据
+        self.assertNotIn('当日价', page.split('id="runLight"', 1)[0])
+        self.assertNotIn('较早日线 1 只 / 无数据', page)
+        only_missing = dict(snap, summary=dict(snap['summary'], prior_prices=0))
+        self.assertEqual(monitor.market_data_time(only_missing), '2026-10-08 22:35:12（盘中，北京）')   # 只有无数据时不再挂计数
         self.assertIn('日线 2026-10-07 收盘', page)
         self.assertIn('class="tag quote-note">无数据</span>', page)
         self.assertNotIn('日线 2026-10-08 收盘', page)
         none = dict(snap, actual_dates={'min':'','max':''}, summary={'missing_prices':3})
-        self.assertIn('22:35:12（盘中，北京 · 未取得行情） · 无数据 3 只',
-                      monitor.market_data_time(none))
+        self.assertEqual('2026-10-08 22:35:12（盘中，北京 · 未取得行情）', monitor.market_data_time(none))
 
     def test_render_is_side_effect_free_and_layout(self):
         rows = [dict(symbol=s, note=s, price=100, chg=chg, signals=[], level=lv,
@@ -2838,7 +2862,19 @@ class TestGroups(unittest.TestCase):
         self.assertIn('id="runLight" data-phase="idle"', unsupported)
         duplicate_failure = monitor.render({}, [], 0, snapshot={'summary': {
             'total': 1, 'missing_symbols': ['AAPL'], 'stale_symbols': ['AAPL']}})
-        self.assertIn('当日行情未取得 1 只：AAPL', duplicate_failure)
+        self.assertRegex(duplicate_failure, r'成功 0 ·[^<]*(?:<[^>]+>[^<]*)*（北京） · 失败 1：AAPL')   # 与成功时同格式带时间   # 同一代码两处都有只算一次
+        self.assertIn('id="runLight" data-phase="partial"', duplicate_failure)   # 3 只以内黄字，不再红字
+        # 名单只露前 3 个，其余折进「…」；4 只起红字；旧日线另写「旧数据」
+        many = monitor.render({}, [], 0, snapshot={'summary': {
+            'total': 20, 'today_prices': 15, 'missing_symbols': ['A1', 'B2', 'C3', 'D4', 'E5'], 'stale_symbols': ['S1']}})
+        self.assertIn('失败 5：A1… · 旧数据 1：S1', many)   # 名单只露第一只，其余折进「…」
+        self.assertIn('id="runLight" data-phase="bad"', many)
+        self.assertNotIn('B2', re.search(r'<span id="runLightTxt">(.*?)</span>\s*</div>', many, re.S)[1])
+        three = monitor.render({}, [], 0, snapshot={'summary': {
+            'total': 20, 'today_prices': 17, 'missing_symbols': ['A1', 'B2', 'C3']}})
+        self.assertIn('成功 17 ·', three)
+        self.assertIn('失败 3：A1…</span>', three)
+        self.assertIn('id="runLight" data-phase="partial"', three)
 
     def test_run_light_partial_market_risk_does_not_claim_complete_success(self):
         snap = {'event': 'push', 'finished_at_bj': '2026-10-13T12:34:28+08:00',
@@ -2857,7 +2893,9 @@ class TestGroups(unittest.TestCase):
         complete = dict(snap, market_risk={'missing': [], 'valid_count': 5})
         self.assertEqual(monitor._run_light(complete, '2026-10-13 12:34:28')[0], 'ok')
         bad_quote = dict(snap, summary=dict(snap['summary'], missing_symbols=['NTNX']))
-        self.assertEqual(monitor._run_light(bad_quote, '2026-10-13 12:34:28')[0], 'bad')
+        self.assertEqual(monitor._run_light(bad_quote, '2026-10-13 12:34:28')[0], 'partial')   # 2026-11-20：3 只以内黄字
+        bad_many = dict(snap, summary=dict(snap['summary'], missing_symbols=['A', 'B', 'C', 'D']))
+        self.assertEqual(monitor._run_light(bad_many, '2026-10-13 12:34:28')[0], 'bad')       # 4 只起红字
         example = dict(snap, event='schedule', market_risk={'missing': ['垃圾债利差'], 'valid_count': 4})
         self.assertEqual(monitor._run_light(example, '2026-10-22 08:18:36'),
                          ('partial', '自动运行已完成 · 市场风险数据缺失：垃圾债利差（有效指标 4/5） · '
