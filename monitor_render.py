@@ -727,7 +727,10 @@ class PageRenderer:
             if kind == "boll_rsi" and re.fullmatch(r"布林\s*\+\s*RSI\s*→\s*[红黄]", text):
                 # 原总结只重复 marks；描述字色表达级别，事实不删除。
                 continue
-            text = re.sub(r"\s*·\s*", "，", text)
+            # 2026-11-20 用户指定的新股固定标签：一句话，不是多个事实的拼接，
+            # 不参与「· → ，」合并，页面原样显示「新股 · 数据积累中」。
+            if text != "新股 · 数据积累中":
+                text = re.sub(r"\s*·\s*", "，", text)
             if kind == "ma":
                 text = (self._context._ma_display_text(text, d.get("ma_settings"))
                         .replace(" / ", "，").replace("短均线/长均线", "短均线与长均线"))

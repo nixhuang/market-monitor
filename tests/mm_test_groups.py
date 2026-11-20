@@ -10039,10 +10039,14 @@ class NewListingTests(unittest.TestCase):
         return {"date": day, "close": f"${close}", "high": f"${close + 2}",
                 "low": f"${close - 2}", "open": f"${close - 1}", "volume": "12,345,678"}
 
-    def _seed(self, closes, dates):
+    def _seed(self, closes, dates, *, highs=None, lows=None, opens=None, range_valid=None):
         monitor._SHORT_HISTORY["ANT"] = {
             "dates": dates, "closes": closes, "price": closes[-1],
-            "prev_close": closes[-2] if len(closes) > 1 else None, "asset": "stocks"}
+            "prev_close": closes[-2] if len(closes) > 1 else None, "asset": "stocks",
+            "highs": highs if highs is not None else [c + 2 for c in closes],
+            "lows": lows if lows is not None else [c - 2 for c in closes],
+            "opens": opens if opens is not None else [c - 1 for c in closes],
+            "range_valid": range_valid}
 
     def test_short_history_is_captured_but_full_channel_still_rejects_it(self):
         rows = [self._bar("11/19/2026", 97.17)]
@@ -10052,6 +10056,10 @@ class NewListingTests(unittest.TestCase):
         self.assertEqual(short["dates"], ["2026-11-19"])
         self.assertAlmostEqual(short["price"], 97.17)
         self.assertIsNone(short["prev_close"])
+        self.assertAlmostEqual(short["highs"][-1], 99.17)   # 高低开一并留档，供振幅使用
+        self.assertAlmostEqual(short["lows"][-1], 95.17)
+        self.assertAlmostEqual(short["opens"][-1], 96.17)
+        self.assertIsNone(short["range_valid"])              # Nasdaq 真实日线，不需要真伪标记
         self.assertFalse(monitor.valid_history({"dates": short["dates"], "closes": short["closes"],
                                                 "price": short["price"], "prev_close": None}))
         self.assertIsNone(monitor.trim_history({"dates": short["dates"], "closes": short["closes"]},
@@ -10079,16 +10087,56 @@ class NewListingTests(unittest.TestCase):
         self.assertEqual(item["data_date"], "2026-11-19")
         self.assertEqual(item["level"], "green")
         self.assertEqual(item["signal_marks"], [])
-        self.assertIn("数据积累中", item["signals"][0])
+        self.assertEqual(item["signals"], ["新股 · 数据积累中"])
+        self.assertNotIn("上市第", item["signals"][0])
+        self.assertNotIn("不足 30", item["signals"][0])
         self.assertTrue(item["new_listing"])
         self.assertTrue(all(value is None for value in item["rsi"].values()))
         self.assertIsNone(item["range52"])
+        self.assertIsNone(item["day_amp"])        # 首日没有昨收，振幅留空
+
+    def test_new_listing_note_is_fixed_for_every_bar_count(self):
+        # 2026-11-20：文案不许随日线根数变，第 2、3、4…根都还是同一句
+        for count in (1, 2, 7, 29):
+            closes = [95.0 + i for i in range(count)]
+            dates = [f"2026-10-{i + 1:02d}" for i in range(count)]
+            self._seed(closes, dates)
+            item = monitor.new_listing_quote("ANT", {}, "focus")
+            self.assertEqual(item["signals"], ["新股 · 数据积累中"],
+                             f"{count} 根日线时文案不该变化")
 
     def test_second_bar_restores_change(self):
         self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"])
         item = monitor.new_listing_quote("ANT", {}, "focus")
         self.assertAlmostEqual(item["chg"], (97.17 / 95.0 - 1) * 100)
         self.assertAlmostEqual(item["prev_close"], 95.0)
+
+    def test_amplitude_needs_only_two_bars_not_thirty(self):
+        # 2026-11-20：振幅只要「当日真实高低 + 昨收」两根日线；
+        # 30 根是 RSI／布林／均线／量比的门槛，不该把振幅一起关掉。
+        self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"])
+        item = monitor.new_listing_quote("ANT", {}, "focus")
+        self.assertAlmostEqual(item["day_amp"], (99.17 - 95.17) / 95.0 * 100)
+        self.assertIsNone(item["week_chg"])        # 周涨跌仍要 6 根，本次不顺带放宽
+        self._seed([97.17], ["2026-11-19"])
+        self.assertIsNone(monitor.new_listing_quote("ANT", {}, "focus")["day_amp"],
+                          '首日没有昨收，振幅留空，不拿开盘价／发行价凑')
+
+    def test_fake_intraday_range_never_fakes_amplitude(self):
+        # Yahoo 用收盘价顶出来的假高低标 False，振幅必须算不出来
+        self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"],
+                   highs=[95.0, 97.17], lows=[95.0, 97.17],
+                   range_valid=[True, False])
+        self.assertIsNone(monitor.new_listing_quote("ANT", {}, "focus")["day_amp"])
+
+    def test_two_bar_amplitude_is_rendered(self):
+        self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"])
+        item = monitor.new_listing_quote("ANT", {}, "focus")
+        item["earnings"] = {"status": "unknown"}
+        snap = monitor.build_snapshot({}, [item], {"focus": {"ANT": {}}, "positions": {}})
+        row = monitor._stock_row(item, snap)
+        self.assertIn("4.2%", row)
+        self.assertNotIn('>振</span><span class="px-v">—</span>', row)
 
     def test_new_listing_is_not_counted_as_missing(self):
         self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"])
@@ -10110,12 +10158,39 @@ class NewListingTests(unittest.TestCase):
         snap = monitor.build_snapshot({}, [item], {"focus": {"ANT": {}}, "positions": {}})
         row = monitor._stock_row(item, snap)
         self.assertIn("97.17", row)
-        self.assertIn("数据积累中", row)
+        self.assertIn("新股 · 数据积累中", row)
+        self.assertNotIn('class="cm"', row, "固定标签不该被拆成逗号分隔的两段")
+        self.assertNotIn("上市第", row)
         self.assertNotIn("无数据", row)
         self.assertNotIn("quote-note", row)
 
     def test_no_short_history_falls_back_to_original_failure_branch(self):
         self.assertIsNone(monitor.new_listing_quote("ANT", {}, "focus"))
+
+
+class HoldingsListGuard(unittest.TestCase):
+    """2026-11-20 清单调整：删掉 COIN、重点组加 GEHC 且行业标签为「医疗」。"""
+
+    def setUp(self):
+        import io, json, os
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with io.open(os.path.join(root, "holdings.json"), encoding="utf-8") as f:
+            self.cfg = json.load(f)
+        with io.open(os.path.join(root, "symbol-names.json"), encoding="utf-8") as f:
+            self.names = json.load(f)
+
+    def test_coin_is_gone_from_list_and_names(self):
+        self.assertNotIn("COIN", json.dumps(self.cfg, ensure_ascii=False))
+        self.assertNotIn("COIN", self.names)
+
+    def test_gehc_is_focus_with_healthcare_tag(self):
+        rec = self.cfg["focus"]["GEHC"]
+        self.assertEqual(rec["sector"], "healthcare")   # 「医疗保健」前两字＝「医疗」
+        self.assertEqual(rec["note"], "医疗影像")
+        self.assertEqual(self.names.get("GEHC"), rec["note"])
+        for key in ("positions", "healthcare", "technology", "financials"):
+            self.assertNotIn("GEHC", self.cfg.get(key) or {},
+                             "同一只股票只能存在一份")
 
 
 if __name__ == '__main__':

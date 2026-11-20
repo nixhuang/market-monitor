@@ -166,6 +166,10 @@
     "ANT": {
       "note": "Anthropic",
       "sector": "technology"
+    },
+    "GEHC": {
+      "note": "医疗影像",
+      "sector": "healthcare"
     }
   },
   "index_funds": {
@@ -300,9 +304,6 @@
     },
     "CRCL": {
       "note": "稳定币"
-    },
-    "COIN": {
-      "note": "加密交易所"
     },
     "HOOD": {
       "note": "零售券商"

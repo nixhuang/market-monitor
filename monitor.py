@@ -1287,6 +1287,15 @@ def yahoo_history(symbol):
                 meta = res.get("meta", {})
                 if len(closes) < 30:
                     last_err = "历史数据不足"
+                    # 新股短历史也留档：高低可能是拿收盘价顶出来的，rv 标真伪，
+                    # 交给 _display_session_values 决定振幅算不算，绝不冒充真实日内范围。
+                    # 已有留档（通常是 Nasdaq 的真实日线）时不覆盖，免得假高低把振幅顶掉。
+                    if short_history_of(symbol) is None:
+                        _remember_short_history(symbol,
+                            [{"d": d, "c": c, "h": h, "l": l, "o": o, "v": v, "rv": rv}
+                             for d, c, h, l, o, v, rv in
+                             zip(dates, closes, highs, lows, opens, vols, range_valid)],
+                            "yahoo")
                     continue
                 YAHOO_GATE.ok()
                 dates, closes, vols, highs, lows, range_valid, patched = _yahoo_meta_close(
@@ -1518,17 +1527,25 @@ def _parse_nasdaq_rows(rows):
 
 
 def _remember_short_history(symbol, parsed, asset):
-    """只留日期严格递增、收盘价为正、且不超过目标交易日的那几根。"""
+    """只留日期严格递增、收盘价为正、且不超过目标交易日的那几根。
+    高／低／开一并留档：振幅只需要「当日真实高低 + 昨收」两根日线，不该被 30 根护栏连坐。
+    rv（Yahoo 专用）标出这根日内范围是不是真实的；拿收盘价顶出来的假高低必须标 False，
+    _display_session_values 会据此拒绝算振幅，绝不把补出来的假 OHLC 当行情。"""
     rows = [p for p in parsed if p["d"] and _finite_pos(p["c"])
             and (not TARGET_DATE or p["d"] <= TARGET_DATE)]
     if not rows or len(rows) > SHORT_HISTORY_MAX_BARS:
         return
     if any(a["d"] >= b["d"] for a, b in zip(rows, rows[1:])):
         return
+    marks = [p.get("rv") for p in rows]
     with _SHORT_HISTORY_LOCK:
         _SHORT_HISTORY[normalize_symbol(symbol)] = {
             "dates": [p["d"] for p in rows],
             "closes": [p["c"] for p in rows],
+            "highs": [p.get("h") for p in rows],
+            "lows": [p.get("l") for p in rows],
+            "opens": [p.get("o") for p in rows],
+            "range_valid": marks if any(m is not None for m in marks) else None,
             "price": rows[-1]["c"],
             "prev_close": rows[-2]["c"] if len(rows) >= 2 else None,
             "asset": asset,
@@ -1541,7 +1558,7 @@ def short_history_of(symbol):
 
 
 def new_listing_quote(symbol, sc, group):
-    """上市初期通道：只报已核验的收盘价与涨跌幅，不伪造 OHLC，也不计算任何技术信号。
+    """上市初期通道：只报已核验的价格、涨跌幅与振幅，不伪造 OHLC，也不计算任何技术信号。
     没有短历史就返回 None，交回原来的「无数据」分支。"""
     short = short_history_of(symbol)
     if not short:
@@ -1551,16 +1568,25 @@ def new_listing_quote(symbol, sc, group):
         return None
     bars = len(short["dates"])
     chg = (price / prev - 1) * 100 if _finite_pos(prev) else None
+    # 振幅只要「当日真实高低 + 昨收」两根日线就够，复用全站同一个算法，不另写公式。
+    # 首日没有昨收时 _display_session_values 自己会返回 None，页面仍是「—」。
+    session = monitor_rules._display_session_values(
+        {"opens": short.get("opens") or [], "highs": short.get("highs") or [],
+         "lows": short.get("lows") or [], "closes": short["closes"],
+         "ma_range_valid": short.get("range_valid")},
+        price, prev)
     return {
         "symbol": symbol, "note": sc.get("note", ""), "price": price,
         "prev_close": prev, "chg": chg,
         "rsi": {period: None for period in RSI_PERIODS},
         "dist_high": None, "dist_low": None, "vol_ratio": None,
-        "day_amp": None, "week_chg": None, "range52": None,
+        "day_amp": session["day_amp"], "week_chg": None, "range52": None,
         "trigger": sc.get("trigger"), "group": group,
         "data_date": short["dates"][-1], "source": "Nasdaq 上市初期日线",
         "boll_up": None, "boll_dn": None,
-        "signals": [f"上市第 {bars} 个交易日 · 日线不足 30 根，数据积累中，暂不计算技术指标"],
+        # 2026-11-20：文案固定，不写「第 N 个交易日」——那个数字每天变、且和
+        # 「日线不足 30 根／暂不计算技术指标」说的是同一件事，格子里本来就全是「—」。
+        "signals": ["新股 · 数据积累中"],
         "signal_marks": [], "level": "green",
         "new_listing": True, "listing_bars": bars,
     }
@@ -1596,12 +1622,15 @@ def nasdaq_history(symbol):
                     continue
                 parsed = _parse_nasdaq_rows(rows)
                 if len(rows) < 30:
-                    # 上市不足 30 个交易日：短日线只留档给「只显示价格」通道，
+                    # 上市不足 30 个交易日：短日线只留档给「只显示价格／涨跌／振幅」通道，
                     # 常规信号计算仍必须走 ≥30 根的合格日线，绝不拿短历史凑指标。
                     if parsed:
                         _remember_short_history(symbol, parsed, ac)
                     continue
                 if len(parsed) < 30:
+                    # 有行但解析不出 30 根（缺字段等）时同样留档，新股不应因此丢掉振幅
+                    if parsed:
+                        _remember_short_history(symbol, parsed, ac)
                     continue
                 return {
                     "closes": [p["c"] for p in parsed],
