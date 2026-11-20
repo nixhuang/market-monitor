@@ -2121,6 +2121,8 @@ class PageRenderer:
 </div>
 <div class="statusrow">
   <div class="runlight" id="runLight" data-phase="{init_light_phase}"><i class="dot"></i><span id="runLightTxt">{init_light}</span></div>
+</div>
+<div class="statusrow flagrow">
   <div class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">暂无法核验</span></div>
 </div>
 <div id="checkResult" class="check-result" role="status" hidden></div>

@@ -2001,8 +2001,9 @@
     var sortKey = read(LS_SORT) === 'wt' ? 'wt' : 'pnl';
     function syncMirrorEl() {
       if (syncMirror) return syncMirror;
-      var sub = document.querySelector('.sub');
-      if (!sub) return null;
+      // 2026-11-20：仓位同步搬到「规则说明」那排的最右；旧页面没有这排时退回数据时间排
+      var host = document.querySelector('.statusrow.flagrow') || document.querySelector('.sub');
+      if (!host) return null;
       syncMirror = document.createElement('span');
       syncMirror.className = 'cost-state';
       syncMirror.id = 'costSyncState';
@@ -2020,7 +2021,7 @@
           syncMirror.click();
         }
       });
-      sub.appendChild(syncMirror);
+      host.appendChild(syncMirror);
       return syncMirror;
     }
     function showNotice(t) {

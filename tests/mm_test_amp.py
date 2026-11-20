@@ -45,6 +45,13 @@ if m:
     check('btnlink' not in bar, "「设置」已从顶栏搬走（顶栏只留四个按钮 + 定投）")
     check('id="runLight"' in row and 'id="runLightTxt"' in row, "第四排：状态灯 + 文案")
     check('runLight' not in bar, "灯已从第三排移走")
+# 2026-11-20：抓取状态灯独占第四排，规则说明与仓位同步另起第五排（规则前灯圈保留）
+_flag = re.search(r'<div class="statusrow flagrow">(.*?)</div>', page, re.S)
+check(bool(_flag) and 'id="ruleLight"' in _flag.group(1) and 'id="runLight"' not in _flag.group(1),
+      "第五排：规则说明独占左位、仓位同步挂右侧，抓取灯留在上一排")
+_cost_js = (Path(ROOT) / 'cost_panel.js').read_text(encoding='utf-8')
+check("querySelector('.statusrow.flagrow')" in _cost_js and 'host.appendChild(syncMirror)' in _cost_js,
+      "仓位同步镜像改挂到「规则 + 同步」那一排")
 # 「设置」与「返回看板」同在页底 .acts 一排，顺序：返回看板 → 设置（2026-10-29）
 _acts = re.search(r'<div class="acts">(.*?)</div>', page, re.S)
 check(bool(_acts) and 'id="btnReturnBoard"' in _acts[1] and '>设置</a>' in _acts[1]

@@ -791,6 +791,23 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertEqual(_amp_display_tone(10.04), 'yellow')
         self.assertEqual(_amp_display_tone('7.2'), '')
 
+    def test_header_relayout_2026_11_20(self):
+        """抬头重排：站名 32px 锁 39px 行盒；抓取灯独占一排；规则说明带灯圈靠左、仓位同步靠右同号。"""
+        css = page_assets.PAGE_CSS
+        self.assertIn('.brandbar h1.brand{margin:0;font-size:32px;line-height:39px;', css)
+        self.assertIn('.statusrow.flagrow{justify-content:space-between;gap:8px;margin:-2px 0 8px}', css)
+        self.assertIn('.statusrow.flagrow .rulelight{flex:none;white-space:nowrap}', css)
+        self.assertIn('.statusrow.flagrow .cost-state{min-width:0;text-align:right;white-space:normal;overflow-wrap:anywhere;font-size:var(--status-font-size);line-height:1.4}', css)
+        self.assertNotIn('.flagrow .rulelight .dot{display:none', css)   # 2026-11-20 用户：规则前的灯圈保留
+        page = self.render()
+        self.assertIn('<div class="statusrow flagrow">', page)
+        status, flag = page.split('<div class="statusrow flagrow">', 1)
+        self.assertIn('id="runLight"', status)
+        self.assertNotIn('id="ruleLight"', status)
+        self.assertIn('id="ruleLight"', flag)
+        self.assertNotIn('id="runLight"', flag)
+        self.assertIn('<i class="dot"></i><span id="ruleLightTxt">', flag)
+
     def test_only_two_breakpoints_phone_600_and_desktop_601(self):
         """只适配三台设备（2026-11-01 定）：手机档 ≤600（按 iPhone 18 Pro Max 竖屏 440 定稿）、
         桌面档 ≥601（iPad mini 744/1133 与 PC 共用）。不允许再冒出更细的断点。"""
@@ -1408,13 +1425,14 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertRegex(header, r'<span class="count-total count-all">总 [—0-9]+</span></span>$')
         full = monitor._signal_counts_card({'summary': {'red': 1, 'yellow': 2, 'total': 99}, 'signal_counts': {}}).split('</summary>', 1)[0]
         self.assertIn('<span class="count-total count-all">总 99</span>', full)
+        self.assertIn('#signalCounts>summary .count-all{margin-left:auto}', page_assets.PAGE_CSS)   # 总 N 靠右
         self.assertNotIn('财报 ', header)
         js = page_assets.PAGE_INTERACTION_JS
         self.assertIn('function findStock()', js)
         self.assertIn('target.closest(".stat-find")', js)      # 点 FIND 不触发统计卡「点标题归一化」
         css = page_assets.PAGE_CSS
         self.assertIn('.stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}', css)
-        self.assertIn('.brandbar h1.brand{margin:0;font-size:26px;line-height:1.5;text-align:left;white-space:nowrap}', css)
+        self.assertIn('.brandbar h1.brand{margin:0;font-size:32px;line-height:39px;text-align:left;white-space:nowrap}', css)   # 2026-11-20：32px 锁 39px 行盒，FIND 不下移
         self.assertIn('.brandbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:18px 0 4px}', css)   # 搜索与站名底边对齐
         self.assertIn('input.value = "";', js)                 # 点 FIND 后清空输入框
         self.assertIn('background:#1e232d;border:1px solid var(--line)', css)

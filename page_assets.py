@@ -694,10 +694,11 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system
 .wrap{max-width:718px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 h1.brand{color:var(--frame-purple)}
-/* 顶部一排：站名靠左（比其它标题大2px=21px），代码定位 FIND 靠右 */
-/* 站名放大到 26px，FIND 与站名底边对齐（flex-end）：整排被站名撑高，搜索框随之下移，避开 iOS 灵动岛/状态栏顶部的黑色渐变 */
+/* 顶部一排：站名靠左、代码定位 FIND 靠右，两者底边对齐（flex-end） */
+/* 2026-11-20 站名 26→32px；行盒锁 39px（＝原 26×1.5），盒顶不动、盒底仍与 FIND 对齐，
+   FIND 不下移、整排高度不变；32px 时站名+FIND 共 330px，手机 440 净宽 398px 内零溢出。 */
 .brandbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:18px 0 4px}
-.brandbar h1.brand{margin:0;font-size:26px;line-height:1.5;text-align:left;white-space:nowrap}
+.brandbar h1.brand{margin:0;font-size:32px;line-height:39px;text-align:left;white-space:nowrap}
 .sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
 /* 父级只留标题内缩，资产行与子框使用完整分组宽度；▲沿用原持仓绿色底。 */
@@ -739,6 +740,7 @@ tr:first-child td{border-top:none}
 #signalCounts .count-yellow{color:var(--yellow)}
 #signalCounts .count-earn{color:var(--text)}
 #signalCounts .count-all{color:var(--dim)}   /* 总 N：抓取总只数，灰字不抢红黄白紫的注意力 */
+#signalCounts>summary .count-all{margin-left:auto}   /* 2026-11-20 用户：总 N 靠右，贴标题栏右缘（group-stats 是占满余宽的 flex，auto 外边距把它推到最右） */
 /* 顶部右侧的代码定位：5 位代码 + FIND；字号 16px 防止 iOS 聚焦时自动放大页面 */
 .stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}
 .stat-find input{box-sizing:border-box;width:111px;height:32px;padding:0 6px;font:inherit;font-size:16px;font-weight:600;line-height:30px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;text-transform:uppercase;text-align:center;outline:none}
@@ -937,6 +939,12 @@ tr.gray td{color:var(--dim)}
 .runbar a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
 .acts a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
 .statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-4px 0 14px;font-size:13.5px;line-height:1.5}
+/* 2026-11-20 抬头重排：抓取状态灯独占一排；下一排放规则说明（保留灯圈、靠左）与仓位同步（靠右，同号）。
+   双类选择器压过 .statusrow 的 margin/gap；手机档 16px 内距仍由 .statusrow 自身继承，不另抄一遍。 */
+.statusrow.flagrow{justify-content:space-between;gap:8px;margin:-2px 0 8px}
+.statusrow.flagrow .rulelight{flex:none;white-space:nowrap}
+.statusrow.flagrow .cost-state{min-width:0;text-align:right;white-space:normal;overflow-wrap:anywhere;font-size:var(--status-font-size);line-height:1.4}
+.statusrow.flagrow .cost-state .warn,.statusrow.flagrow .cost-state .ok,.statusrow.flagrow .cost-state .dim{font-size:inherit}
 .check-result{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
 .check-result[data-phase="bad"]{border-color:var(--red)}
 .check-result[data-phase="busy"]{border-color:var(--yellow)}
