@@ -1162,6 +1162,8 @@ class PageRenderer:
         if group.get("sector_etf"):
             # 行业分类：本行业板块 ETF（XLK、XLV…）只在同一预警级别内排第一；
             # 2026-11-18 起绿灯时也不折叠进「无异动」，常驻主表（见 _group_body）。
+            # 2026-11-24 用户最终确认：主表保持这个排法（曾短暂改成与个股同排，已还原）；
+            # 统计名单的涨跌幅／量比两栏另按「持仓／重点／其他 + 数值」排，与这里无关。
             return sorted(g, key=lambda d: (self._context._sort_key(d)[0],
                                             self._context.normalize_symbol(d["symbol"]) != group["sector_etf"],
                                             self._context._sort_key(d)[1]))
@@ -1613,7 +1615,20 @@ class PageRenderer:
                                 f'<span class="signal-member-symbol">{esc(d["symbol"])}</span>{note}</a>'
                                 f'{belong}{direction}{value}</li>')
 
-                    ordered = sorted(entries, key=lambda x: group_order.get(str(x.get("group") or ""), len(self._context.GROUPS)))
+                    if kind in ("chg", "vol_ratio"):
+                        # 2026-11-24 用户：涨跌幅栏、量比栏按分组后的数值大小排，不管灯级；
+                        # 分组只分「持仓（长短合并）／重点／其他」三段。数值取成员的 mv（涨跌幅取绝对值），
+                        # 旧快照没有 mv 时退回原来的分组顺序。
+                        def _bucket(x):
+                            grp = str(x.get("group") or "")
+                            return 0 if grp == "position" else 1 if grp == "focus" else 2
+                        def _mv(x):
+                            v = x.get("mv")
+                            return -v if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) else 0
+                        ordered = sorted(entries, key=lambda x: (_bucket(x), _mv(x),
+                                         group_order.get(str(x.get("group") or ""), len(self._context.GROUPS))))
+                    else:
+                        ordered = sorted(entries, key=lambda x: group_order.get(str(x.get("group") or ""), len(self._context.GROUPS)))
                     if kind in self._context._BLOCK_PANEL_KINDS:
                         # 方向放到框标题上：▲ 一框、▼ 一框，名单里不再逐条画三角
                         blocks, order = {}, []

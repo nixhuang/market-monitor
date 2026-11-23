@@ -449,6 +449,11 @@ class SnapshotBuilder:
         metric = self._context._member_metric(d, kind)
         if metric:
             member["metric"] = metric
+            # 排序用的数值（统计名单涨跌幅／量比两栏按它排）：涨跌幅取绝对值，量比盘中取盘中量比
+            raw = (d.get("rt_vol_ratio") if kind == "vol_ratio" and d.get("vol_ratio_intraday")
+                   else d.get("chg") if kind == "chg" else d.get("vol_ratio") if kind == "vol_ratio" else None)
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool) and math.isfinite(raw):
+                member["mv"] = abs(raw) if kind == "chg" else raw
         if kind == "low52":
             # 52周低位那一栏把低点价本身写出来：只说「距低点 +2.6%」看不见价格
             low = d.get("low52")

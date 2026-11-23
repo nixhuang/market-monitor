@@ -1504,8 +1504,20 @@ def nasdaq_realtime(symbol, asof=None):
                     vol = float(str(p.get("volume", "")).replace(",", "") or 0)
                 except ValueError:
                     vol = 0.0
-                return {"price": px, "ts": p.get("lastTradeTimestamp", ""),
-                        "volume": int(round(vol)) if math.isfinite(vol) and vol > 0 else 0}
+                out = {"price": px, "ts": p.get("lastTradeTimestamp", ""),
+                       "volume": int(round(vol)) if math.isfinite(vol) and vol > 0 else 0}
+                # 同一次响应里的当日最高／最低（keyStats.dayrange，形如 "84.79 - 94.24"）：
+                # 只给新股盘中补真实振幅用；普通标的的当日高低来自日线，不读这两个字段。
+                try:
+                    lo_s, hi_s = str(((r.json().get("data") or {}).get("keyStats") or {})
+                                     .get("dayrange", {}).get("value", "")).split("-")
+                    lo = float(lo_s.replace("$", "").replace(",", "").strip())
+                    hi = float(hi_s.replace("$", "").replace(",", "").strip())
+                    if math.isfinite(lo) and math.isfinite(hi) and 0 < lo <= hi:
+                        out["day_low"], out["day_high"] = lo, hi
+                except (ValueError, TypeError, AttributeError):
+                    pass
+                return out
             except Exception:
                 continue
     return None
@@ -1637,7 +1649,8 @@ def _new_listing_with_realtime(symbol, short):
     2026-11-24 用户：ANT 盘中抓到的是 20 日的日线。普通标的靠 apply_realtime 合并实时价，
     新股没走那条通道；这里照同一套校验补上——Nasdaq 报价必须 isRealTime、成交时间落在当日常规时段、
     延迟 ≤5 分钟，且短日线最后一根正好是上一交易日（不跨天补），才把当日价作为新的一根。
-    当日一根只有成交价、没有真实高低开 → 范围有效位标 False，振幅照旧算不出来，绝不编。
+    当日一根的高低取 Nasdaq 同一响应里的当日最高／最低（振幅可算）；取不到就只有成交价、范围有效位标 False，
+    振幅留空，绝不编。量比不在此补：要几十个交易日的成交量基线，新股没有，页面照旧留空。
     返回 (短日线副本, 实时成交时间)；任何一步不满足就原样返回 (short, "")。"""
     try:
         if CLOSED_ONLY or not S.get("use_realtime") or not TARGET_DATE or not short.get("dates"):
@@ -1659,19 +1672,26 @@ def _new_listing_with_realtime(symbol, short):
         n = len(short["dates"])
         out["dates"] = list(short["dates"]) + [TARGET_DATE]
         out["closes"] = list(short["closes"]) + [px]
-        out["highs"] = list(short.get("highs") or short["closes"]) + [px]
-        out["lows"] = list(short.get("lows") or short["closes"]) + [px]
+        # 当日真实高低：Nasdaq 同一响应带当日最高／最低，且现价必须落在区间内才信；
+        # 否则退回只有成交价、范围有效位 False（振幅留空，绝不编）。
+        hi, lo = rt.get("day_high"), rt.get("day_low")
+        real = _finite_pos(hi) and _finite_pos(lo) and lo - 1e-6 <= px <= hi + 1e-6
+        out["highs"] = list(short.get("highs") or short["closes"]) + [hi if real else px]
+        out["lows"] = list(short.get("lows") or short["closes"]) + [lo if real else px]
         out["opens"] = list(short.get("opens") or [None] * n) + [None]
-        out["range_valid"] = list(short.get("range_valid") or [True] * n) + [False]
+        out["range_valid"] = list(short.get("range_valid") or [True] * n) + [bool(real)]
         out["price"], out["prev_close"] = px, short["closes"][-1]
         return out, rt.get("ts") or "x"
     except (ValueError, TypeError, KeyError, IndexError, OverflowError):
         return short, ""
 
 
-def new_listing_quote(symbol, sc, group):
-    """上市初期通道：只报已核验的价格、涨跌幅与振幅，不伪造 OHLC，也不计算任何技术信号。
-    没有短历史就返回 None，交回原来的「无数据」分支。"""
+def new_listing_quote(symbol, sc, group, cons=None):
+    """上市初期通道：价格、涨跌幅、振幅、当日开高低、涨跌幅与目标价规则都和其他股一致；
+    只有「要几十日日线才算得出来」的东西（RSI、布林、均线、52 周、量比）留空，绝不伪造 OHLC。
+    2026-11-24 用户：新股盘中盘后，不需要多日线的部分都该和别的股一样。所以这里照常跑
+    涨跌幅红黄线（新股样本不足 40 个日收益，门槛按中档，与普通股的新股处理一致）和共识价／手填目标价
+    （紫灯、空间、达到），并带出加减价、成本。没有短历史就返回 None，交回原来的「无数据」分支。"""
     short = short_history_of(symbol)
     if not short:
         return None
@@ -1688,21 +1708,38 @@ def new_listing_quote(symbol, sc, group):
          "lows": short.get("lows") or [], "closes": short["closes"],
          "ma_range_valid": short.get("range_valid")},
         price, prev)
+    cfg = {**sc, "_consensus": cons} if cons else sc
+    x = SimpleNamespace(sym=symbol, cfg=cfg, group=group, price=price, prev=prev, closes=list(short["closes"]),
+                        data={"asset": short.get("asset"), "closes": list(short["closes"])})
+    x.chg = chg
+    x.hold = str((cfg or {}).get("hold") or "short").lower()
+    x.cost = cost_rule(cfg or {})
+    x.trig = cfg.get("trigger") if _pos_num(cfg.get("trigger")) is not None else None
+    x.reduce = reduce_rule(cfg) if group == "position" else None
+    al = _Alerts()
+    _apply_vol_tier(x)
+    _rule_chg_red(al, x)
+    _rule_chg_yellow(al, x)
+    _rule_target(al, x)
+    tgt = getattr(x, "tgt", None)
     return {
         "symbol": symbol, "note": sc.get("note", ""), "price": price,
         "prev_close": prev, "chg": chg,
         "rsi": {period: None for period in RSI_PERIODS},
         "dist_high": None, "dist_low": None, "vol_ratio": None,
-        "day_amp": session["day_amp"], "week_chg": None, "range52": None,
-        "trigger": sc.get("trigger"), "group": group,
+        **session, "range52": None,
+        "trigger": x.trig, "reduce": x.reduce, "cost": x.cost,
+        "target": tgt, "purple": bool(tgt and (tgt.get("hit") or tgt.get("space_hit"))),
+        "vol_tier": x.vol_tier, "vol_sigma": x.vol_sigma, "group": group, "hold": x.hold,
+        "asset": short.get("asset"),
         "data_date": short["dates"][-1],
         "source": "Nasdaq 上市初期实时价" if rt_ts else "Nasdaq 上市初期日线",
         "realtime": bool(rt_ts), "rt_ts": rt_ts,
         "boll_up": None, "boll_dn": None,
         # 2026-11-20：文案固定，不写「第 N 个交易日」——那个数字每天变、且和
         # 「日线不足 30 根／暂不计算技术指标」说的是同一件事，格子里本来就全是「—」。
-        "signals": ["新股 · 数据积累中"],
-        "signal_marks": [], "level": "green",
+        "signals": al.signals + ["新股 · 数据积累中"],
+        "signal_marks": al.marks, "level": al.level,
         "new_listing": True, "listing_bars": bars,
     }
 
@@ -4439,7 +4476,7 @@ def _main(argv, runtime, snapshots=None):
             # 上市不足 30 个交易日的新股：常规日线通道拿不到合格历史，但收盘价是真的。
             # 先给它一条「只显示价格、不算指标」的行，别再报成抓取失败。
             if not data and supported:
-                newborn = new_listing_quote(sym, sc, grp)
+                newborn = new_listing_quote(sym, sc, grp, cons_data.get(normalize_symbol(sym)))
                 if newborn:
                     items.append(newborn)
                     continue
@@ -4490,10 +4527,21 @@ def _main(argv, runtime, snapshots=None):
     for i, d in enumerate(items):
         sym = d["symbol"]
         key = normalize_symbol(sym)
-        if not isinstance(fetched.get(sym), dict) or cons_data.get(key) == old_cons.get(key):
+        if cons_data.get(key) == old_cons.get(key):
             continue
         sc, grp = configs[sym]
         cons = cons_data.get(key)
+        if d.get("new_listing") and not isinstance(fetched.get(sym), dict):
+            # 新股没有合格日线，共识价刷新后也要按新目标价重算紫灯，不能停在旧值
+            newborn = new_listing_quote(sym, sc, grp, cons)
+            if newborn:
+                for field in ("earnings", "rs_spy"):
+                    if field in d:
+                        newborn[field] = d[field]
+                items[i] = newborn
+            continue
+        if not isinstance(fetched.get(sym), dict):
+            continue
         _, _, detail = _analyze_symbol_safely(sym, {**sc, "_consensus": cons} if cons else sc, fetched[sym], group=grp)
         for field in ("earnings", "rs_spy"):
             if field in d:

@@ -1662,7 +1662,7 @@ class TestGroups(unittest.TestCase):
         self.assertRegex(main, r'<td class="sym"><span class="sym-box \w+">XLK')
         self.assertNotRegex(quiet, r'<td class="sym"><span class="sym-box \w+">XLK')
         self.assertIn('无异动 1 只', tech)
-        # 板块 ETF 有警示时：排在同一预警级别第一位（红里 XLK 在 MU 前，不越过更高级别）
+        # 板块 ETF 有警示时：排在同一预警级别第一位（红里 XLK 在 MU 前，不越过更高级别）；2026-11-24 用户最终确认保持
         items2 = [mk('XLK', 'red', 1.0, 'technology'), mk('MU', 'red', 5.0, 'technology'),
                   mk('AMD', 'yellow', 7.0, 'technology'), mk('NVDA2', 'yellow', 9.0, 'technology')]
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
@@ -10210,10 +10210,19 @@ class NewListingTests(unittest.TestCase):
              patch.object(monitor, "nasdaq_realtime", return_value={"price": 100.0, "ts": "Nov 20, 2026 10:30 AM ET", "volume": 1}):
             item = monitor.new_listing_quote("ANT", {}, "focus")
         self.assertAlmostEqual(item["price"], 100.0)
+        self.assertIsNone(item["day_amp"], "只有成交价、没有当日高低时振幅不能编")
+        # Nasdaq 同一响应给了当日高低 → 振幅按 (高−低)÷昨收 真实算出
+        with patch.object(monitor, "TARGET_DATE", "2026-11-20"), patch.object(monitor, "CLOSED_ONLY", False), \
+             patch.object(monitor.market_sessions, "active_session", return_value=sess), \
+             patch.object(monitor.market_sessions, "previous_session", return_value="2026-11-19"), \
+             patch.object(monitor.market_sessions, "validated_quote_time", return_value=object()), \
+             patch.object(monitor, "nasdaq_realtime", return_value={"price": 100.0, "ts": "x", "volume": 1,
+                                                                    "day_high": 102.0, "day_low": 96.0}):
+            withrange = monitor.new_listing_quote("ANT", {}, "focus")
+        self.assertAlmostEqual(withrange["day_amp"], (102.0 - 96.0) / 97.17 * 100)
         self.assertEqual(item["data_date"], "2026-11-20")
         self.assertAlmostEqual(item["chg"], (100.0 / 97.17 - 1) * 100)
         self.assertTrue(item["realtime"])
-        self.assertIsNone(item["day_amp"], "当日一根只有成交价，振幅不能编")
         # 实时价没过校验 → 原样用昨收日线，不假装是今天
         with patch.object(monitor, "TARGET_DATE", "2026-11-20"), patch.object(monitor, "CLOSED_ONLY", False), \
              patch.object(monitor.market_sessions, "active_session", return_value=sess), \
@@ -10270,8 +10279,66 @@ class NewListingTests(unittest.TestCase):
         self.assertIn("4.2%", row)
         self.assertNotIn('>振</span><span class="px-v">—</span>', row)
 
+    def test_stat_chg_and_vol_lists_sorted_by_value_within_position_focus_other(self):
+        # 2026-11-24 用户：统计里涨跌幅栏、量比栏按「持仓／重点／其他」三段、段内按数值大小，不管灯级
+        def row(sym, group, chg, vr, level="red"):
+            return {"symbol": sym, "note": "", "group": group, "level": level, "chg": chg, "vol_ratio": vr,
+                    "price": 10.0, "prev_close": 10.0 / (1 + chg / 100), "rsi": {}, "dist_high": None,
+                    "dist_low": None, "trigger": None, "boll_up": None, "boll_dn": None,
+                    "data_date": "2026-10-07", "signals": [f"异动 {chg:+.1f}%", "量比"],
+                    "signal_marks": [("chg", "red"), ("vol_ratio", "red")]}
+        items = [row("T1", "technology", 9.0, 2.0, "yellow"), row("T2", "technology", 21.0, 5.0, "red"),
+                 row("F1", "focus", 12.0, 3.0), row("F2", "focus", 15.0, 1.5, "yellow"),
+                 row("P1", "position", 6.0, 2.5), row("P2", "position", 8.0, 4.0, "yellow"),
+                 row("H1", "healthcare", 30.0, 6.0), row("T3", "technology", -25.0, 1.0)]
+        with patch.object(monitor, "TARGET_DATE", "2026-10-07"), patch.object(monitor, "global_dca", return_value=None):
+            snap = monitor.build_snapshot({}, items, {"positions": {"P1": {}, "P2": {}}})
+        import hashlib
+        out = monitor._signal_counts_card(
+            {"signal_counts": {k: {"label": k, "red": len(snap["signal_members"][k]["red"]),
+                                   "yellow": len(snap["signal_members"][k]["yellow"])}
+                               for k in ("chg", "vol_ratio")},
+             "signal_members": {k: snap["signal_members"][k] for k in ("chg", "vol_ratio")}})
+        def order(kind, level):
+            pid = f'signal-members-{hashlib.sha256(kind.encode("utf-8")).hexdigest()}-{level}'
+            m = re.search(r'id="' + pid + r'" hidden>(.*?)(?=<div class="signal-members-panel|</td>)', out, re.S)
+            if level == "red":
+                self.assertIsNotNone(m, kind)
+            return re.findall(r'signal-member-symbol">([A-Z0-9]+)<', m.group(1)) if m else []
+        # 涨跌幅（灯级混排也不影响）：持仓(P2 8%, P1 6%)、重点(F2 15%, F1 12%)、其他(H1 30%, T3 25%, T2 21%, T1 9%)
+        # 页面把 ▲ 与 ▼ 分段（T3 是 ▼），所以这里只核对上涨段内部的先后
+        got = order("chg", "red") + order("chg", "yellow")
+        self.assertEqual([x for x in got if x != "T3"], ["P2", "P1", "F2", "F1", "H1", "T2", "T1"])
+        self.assertLess(got.index("P2"), got.index("T3"))
+        # 量比同口径：持仓(P2 4.0, P1 2.5)、重点(F1 3.0, F2 1.5)、其他(H1 6.0, T2 5.0, T1 2.0, T3 1.0)
+        vr = order("vol_ratio", "red") + order("vol_ratio", "yellow")
+        self.assertEqual(vr, ["P2", "P1", "F1", "F2", "H1", "T2", "T1", "T3"])
+
+    def test_new_listing_applies_change_rules_and_consensus_target_like_other_stocks(self):
+        # 2026-11-24 用户：新股不需要多日线的部分（涨跌幅红黄灯、共识价/目标价紫灯、成本、加减价）与别的股一致
+        self._seed([95.0, 100.0], ["2026-11-18", "2026-11-19"])        # +5.26%，超过黄线
+        item = monitor.new_listing_quote("ANT", {"note": "Anthropic"}, "focus")
+        self.assertIn(item["level"], ("yellow", "red"))
+        self.assertTrue(any(kind == "chg" for kind, _ in item["signal_marks"]))
+        self.assertTrue(any("波动" in s or "异动" in s for s in item["signals"]))
+        self.assertIn("新股 · 数据积累中", item["signals"])
+        # 需要多日线的仍然留空
+        self.assertTrue(all(v is None for v in item["rsi"].values()))
+        self.assertIsNone(item["range52"]); self.assertIsNone(item["vol_ratio"])
+        self.assertIsNone(item["boll_up"])
+        # 共识价空间足够大 → 紫灯，且不改红黄灯级
+        cons = {"avg": 200.0, "upd": "2026-11-19", "r": "2026-11-19", "s": "ok"}
+        item2 = monitor.new_listing_quote("ANT", {"note": "Anthropic"}, "focus", cons)
+        self.assertTrue(item2["purple"])
+        self.assertEqual(item2["level"], item["level"])
+        self.assertEqual(item2["target"]["kind"], "consensus")
+        # 手填加减价、成本照常带出
+        item3 = monitor.new_listing_quote("ANT", {"trigger": 90, "cost": 80}, "focus")
+        self.assertEqual(item3["trigger"], 90)
+        self.assertIsNotNone(item3["cost"])
+
     def test_new_listing_is_not_counted_as_missing(self):
-        self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"])
+        self._seed([95.0, 95.5], ["2026-11-18", "2026-11-19"])
         item = monitor.new_listing_quote("ANT", {"note": "Anthropic"}, "focus")
         snap = monitor.build_snapshot({}, [item], {"focus": {"ANT": {}}, "positions": {}})
         summary = snap["summary"]
