@@ -323,7 +323,7 @@ check("红2 黄2 绿4" not in html and "10 项数据已更新" not in html
       and "成功 ·2026-10-07 20:40（北京） · 缺失 2" in re.sub(r'<[^>]+>', '', html),
       "运行灯只报完成时间与缺失，正常时不写数据量与灯级计数")
 check('id="runLight" data-phase="ok"' in html, "运行灯初始为绿")
-check('id="ruleLight" data-phase="idle"' in html and 'id="ruleLightTxt"' in html,
+check('id="ruleLight" data-phase="busy"' in html and 'id="ruleLightTxt"' in html,
       "独立规则灯初始待核验，不预先宣称最新规则生效")
 check("规则按当前设置生效" not in html, "未查最新设置前没有假绿灯")
 check("运行详情" not in html, "首页无运行详情")
@@ -412,7 +412,7 @@ snap4["summary"] = dict(snapshot["summary"], stale_symbols=["NTNX", "MCD"])
 html4 = monitor.render(macro, items, 10, snapshot=snap4)
 check("旧数据 2：NTNX…" in html4 and "规则未完全生效" not in html4, "旧日线不被误报为完全没数据")
 check('id="runLight" data-phase="partial"' in html4, "旧日线只有 2 只：运行灯初始为黄（3 只以内不红）")
-check('id="ruleLight" data-phase="idle"' in html4, "行情失败时规则灯仍独立待核验")
+check('id="ruleLight" data-phase="busy"' in html4, "行情失败时规则灯仍独立待核验")
 
 # 旧基本面输入必须完全忽略，不改变行情灯、排序或无异动折叠。
 import copy as _copy

@@ -836,9 +836,11 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         """抬头重排：站名 32px 锁 39px 行盒；定投贴站名；规则/仓位同步上下两排紧贴编辑按钮。"""
         css = page_assets.PAGE_CSS
         self.assertIn('.brandbar h1.brand{margin:0;font-size:32px;line-height:39px;', css)
-        self.assertIn('.sync-stack{display:flex;flex-direction:column;justify-content:center;gap:0;flex:none;min-width:0;margin-left:2px}', css)
-        self.assertIn('.sync-stack .runlight{flex:none;white-space:nowrap;line-height:1.25}', css)
-        self.assertIn('.sync-stack .cost-state{min-width:0;white-space:nowrap;text-align:left;font-size:var(--status-font-size);line-height:1.25}', css)
+        self.assertIn('.sync-stack{display:flex;flex-direction:column;justify-content:flex-start;gap:0;flex:none;min-width:0;margin-left:2px;min-height:calc(var(--status-font-size)*2.5)}', css)
+        self.assertIn('.sync-stack .runlight{flex:none;white-space:nowrap;line-height:1.25;min-height:calc(var(--status-font-size)*1.25)}', css)
+        self.assertIn('.sync-stack .cost-state{min-width:0;white-space:nowrap;text-align:left;font-size:var(--status-font-size);line-height:1.25;min-height:calc(var(--status-font-size)*1.25)}', css)
+        # 2026-11-23 用户：「暂无法核验」时只剩一排灰字、被居中到两排之间 → 栈恒占两行高、自上而下排
+        self.assertNotIn('.sync-stack{display:flex;flex-direction:column;justify-content:center', css)
         # 2026-11-23 用户：抬头两排里「规则已生效」前的圆灯去掉，两排文字同一条竖线左对齐、已同步与已生效同绿
         self.assertIn('.sync-stack .rulelight .dot{display:none}', css)
         self.assertNotIn('.sync-stack .cost-state{padding-left', css)

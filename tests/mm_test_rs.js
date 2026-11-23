@@ -782,6 +782,11 @@ async function check(name, fn) {
     const f = fixture(snapshot(), false, {failRules: true, failPublic: true});
     assert.equal(f.els.ruleLightTxt.textContent, '正在核验');
     await f.win.MMRunStatus.refresh();
+    // 2026-11-23：从没读到过规则时，第一次失败仍写「正在核验」（后台会自动重试），不假绿也不吓人；
+    // 连续第二次失败才认定「暂无法核验」。
+    assert.equal(f.els.ruleLightTxt.textContent, '正在核验');
+    assert.equal(f.els.ruleLight.dataset.phase, 'busy');
+    await f.win.MMRunStatus.refresh();
     assert.equal(f.els.ruleLightTxt.textContent, '暂无法核验');
     assert.equal(f.els.ruleLight.dataset.phase, 'idle');
     f.data.failRules = false; f.data.sha = C;
@@ -812,9 +817,10 @@ async function check(name, fn) {
     const f = fixture(snapshot(), false, {failRules: true,
       intercept: url => url === './status.json' ? pub.promise : undefined});
     const pending = f.win.MMRunStatus.refresh(); await flush();
-    assert.equal(f.els.ruleLightTxt.textContent, '暂无法核验');
+    // 2026-11-23：规则读取一失败就立即有反馈（不等公开请求）；首次失败写「正在核验」，再失败才「暂无法核验」
+    assert.equal(f.els.ruleLightTxt.textContent, '正在核验');
     pub.resolve(response(snapshot())); await pending;
-    assert.equal(f.els.ruleLight.dataset.phase, 'idle');
+    assert.equal(f.els.ruleLight.dataset.phase, 'busy');
   });
   await check('状态机审计：保存确认发布后断网不倒退超时，新目标必须重核', async () => {
     const f = fixture(); f.data.sha = C;
@@ -1082,7 +1088,7 @@ async function check(name, fn) {
       let finished = false;
       const pending = f.els.btnCheckStatus.onclick().then(() => { finished = true; });
       await flush();
-      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000).length, 0);
+      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000 && t.ms !== 4500).length, 0);
       assert.equal(f.timers.filter(t => t.active && t.ms === 15000).length, 1);
       const count = f.urls.length;
       f.advance(11000); staleTimer.fn(); await flush();
@@ -1146,7 +1152,7 @@ async function check(name, fn) {
       }
       await old; await flush();
       assert.equal(oldSignal.aborted, true);
-      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000).length, 0);
+      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000 && t.ms !== 4500).length, 0);
       const count = f.urls.length;
       gate.resolve(stage === 'run' ? response({workflow_runs: [f.data.run]}) : response({jobs: []}));
       await flush(); assert.equal(f.urls.length, count);
@@ -1167,7 +1173,7 @@ async function check(name, fn) {
     f.data.intercept = url => url.includes('/daily.yml/runs?') && /[?&]per_page=1(?:&|$)/.test(url) ? second.promise : undefined;
     const next = f.els.btnCheckStatus.onclick(); await old; await flush();
     assert.equal(f.els.btnCheckStatus.disabled, true);
-    assert.equal(f.timers.filter(t => t.active && t.ms !== 15000).length, 0);
+    assert.equal(f.timers.filter(t => t.active && t.ms !== 15000 && t.ms !== 4500).length, 0);
     first.resolve(response({workflow_runs: [{id: 9, status: 'completed', conclusion: 'failure'}]})); await flush();
     assert.equal(f.els.btnCheckStatus.disabled, true);
     second.resolve(response({workflow_runs: [f.data.run]})); await next;

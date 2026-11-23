@@ -767,6 +767,18 @@
       if (!persist()) dirty = true;
       return different;
     }
+    // 2026-11-23 用户：显示「仓位已同步」时，数值必须是自己最新保存上传的。
+    // 公开页面（raw）自己有缓存，刚上传后几分钟内可能读到旧版；旧版没有「更旧」的标记就会被当成云端
+    // 覆盖本机并写「已同步」。每次上传后的云端副本都带保存时间（updated_at）并缓存在本机：
+    // 读到的云端比本机缓存的「更旧」，且缓存是 15 分钟内保存的 → 判为还没更新到，不覆盖、不写已同步，
+    // 保持「拉取中…」并每 10 秒自动重读；超过 15 分钟仍更旧则按云端为准（防止别处回滚被永远拒绝）。
+    var STALE_WINDOW = 15 * 60 * 1000, STALE_RETRY = 10000;
+    function staleRemote(j) {
+      var c = read(LS_CLOUD),
+        saved = c && Date.parse(c.updated_at),
+        got = j && Date.parse(j.updated_at);
+      return isFinite(saved) && isFinite(got) && got < saved && Date.now() - saved < STALE_WINDOW;
+    }
     function startPull() {
       if (isolated || !writer || disposed || clearBusy) return;
       if (_pullTimer) {
@@ -783,6 +795,13 @@
       SYNC = 'pulling';
       pullCloud(function (j, error) {
         if (disposed || !writer || generation !== pullGeneration) return;
+        if (j && staleRemote(j)) {
+          SYNC = 'pulling';
+          NOTICE = '';
+          _pullTimer = setTimeout(startPull, STALE_RETRY);
+          paint();
+          return;
+        }
         if (j) {
           try {
             mergeCloud(j, cloudFirstPending);

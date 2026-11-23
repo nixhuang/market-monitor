@@ -959,10 +959,12 @@ tr.gray td{color:var(--dim)}
 .statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-6px 0 8px;font-size:13.5px;line-height:1.5}
 /* 2026-11-20 抬头再排：规则同步、仓位同步压成上下两排，紧贴「编辑」按钮右侧，不再单独占一排。
    两处文案最长 5 字（「规则已生效」「仓位已同步」），同号 var(--status-font-size) 不撑宽按钮排；
-   .sync-stack 后代选择器压过 cost_panel.css 里 .cost-state 的 11px 基础值。 */
-.sync-stack{display:flex;flex-direction:column;justify-content:center;gap:0;flex:none;min-width:0;margin-left:2px}
-.sync-stack .runlight{flex:none;white-space:nowrap;line-height:1.25}
-.sync-stack .cost-state{min-width:0;white-space:nowrap;text-align:left;font-size:var(--status-font-size);line-height:1.25}
+   .sync-stack 后代选择器压过 cost_panel.css 里 .cost-state 的 11px 基础值。
+   2026-11-23 用户：「暂无法核验」时下排仓位行还没出现／为空，栈只剩一排，被居中到两排之间。
+   改成栈恒占两行高、内容自上而下排，规则行永远在上排、仓位行在下排；每行 min-height 保证空行也占位。 */
+.sync-stack{display:flex;flex-direction:column;justify-content:flex-start;gap:0;flex:none;min-width:0;margin-left:2px;min-height:calc(var(--status-font-size)*2.5)}
+.sync-stack .runlight{flex:none;white-space:nowrap;line-height:1.25;min-height:calc(var(--status-font-size)*1.25)}
+.sync-stack .cost-state{min-width:0;white-space:nowrap;text-align:left;font-size:var(--status-font-size);line-height:1.25;min-height:calc(var(--status-font-size)*1.25)}
 .sync-stack .cost-state .warn,.sync-stack .cost-state .ok,.sync-stack .cost-state .dim{font-size:inherit}
 /* 2026-11-23 用户：「规则已生效」前面的圆灯去掉，让它和下排「仓位已同步」文字左对齐、颜色一致。
    灯只是装饰（状态本来就由文字颜色表达：成功绿／进行中黄／失败红），这里只在抬头两排栈里隐藏，

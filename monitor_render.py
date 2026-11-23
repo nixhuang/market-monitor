@@ -2264,7 +2264,7 @@ class PageRenderer:
   <button id="btnCheckStatus">状态</button>
   <button id="btnHardRefresh">刷新</button>
   <button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false" aria-label="就地编辑成本价与数量" disabled>编辑</button>
-  <span class="sync-stack" id="syncStack"><span class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">暂无法核验</span></span></span>
+  <span class="sync-stack" id="syncStack"><span class="runlight rulelight" id="ruleLight" data-phase="busy"><i class="dot"></i><span id="ruleLightTxt">正在核验</span></span></span>
   <script>{self._context.HARD_REFRESH_JS}</script>
 </div>
 <div class="statusrow">

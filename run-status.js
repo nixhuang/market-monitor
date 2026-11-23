@@ -60,12 +60,15 @@
   let retryPending = false, retrySince = 0;
   // 普通打开页面时，若一次没读到公开状态，自动再试两次，避免停在“没读到”。
   const PUBLIC_RETRY_MAX = 2;
+  // 2026-11-23 用户：刷新后规则核验要等很久。读规则指纹先试 GitHub API（最准），失败才退回公开原文；
+  // API 在部分网络下会卡住不返回，原来要干等整整 15 秒才退回。现在 API 这一步只给 4.5 秒，超时立刻改读公开原文。
+  const RULE_API_TIMEOUT = 4500;
   let publicRetry = 0;
   let authNotice = '', checkFeedback = '', checkPhase = 'idle';
   let checkRequest = 0, checkDismissed = false;
   // 「核对」按钮的原始文案由页面决定（首页就是「状态」），点完必须还原成它，不能写死成别的。
   let checkLabel = null;
-  let latestRules = null, rulesError = '', ruleSince = 0;
+  let latestRules = null, rulesError = '', ruleSince = 0, rulesFailures = 0;
 
   function getToken() {
     if (options.getToken) {
@@ -110,7 +113,7 @@
   // revalidate：静态文件（看板 index.html、raw 配置原文）用「必须向服务器校验但允许 304」，
   // 而不是 no-store 的每次全量重传。语义不变——拿到的仍是线上当前内容，只是未变更时不传 body。
   async function request(url, opts = {}) {
-    const {method = 'GET', body, github = false, signal, text = false, revalidate = false} = opts;
+    const {method = 'GET', body, github = false, signal, text = false, revalidate = false, timeoutMs} = opts;
     const cancelled = () => Object.assign(new Error('请求已取消'), {name: 'AbortError'});
     if (destroyed || signal && signal.aborted) throw cancelled();
     if (github && Date.now() < apiBlockedUntil) {
@@ -138,7 +141,7 @@
       timeout = window.setTimeout(() => {
         local.abort();
         reject(new Error('网络请求超时；可稍后查运行状态，不代表运行失败'));
-      }, options.timeoutMs);
+      }, timeoutMs || options.timeoutMs);
     });
     try {
       return await Promise.race([expired, aborted, (async () => {
@@ -495,7 +498,11 @@
     const tracked = Object.keys(targets).length > 0 && expected &&
       Object.entries(targets).every(([file, receipt]) => expected[file] === receipt.blobSHA);
     const receiptPending = tracked && (!snap || !configMatches(snap, targets));
-    if (rulesError) return {phase: 'idle', text: '暂无法核验'};
+    // 2026-11-23 用户：刚刷新、规则还没读到时不该写「暂无法核验」（像是坏了），应是「正在核验」。
+    // 从没成功读过规则、且连续失败不足 2 次（后台 4s/10s 会自动重试）→ 仍算正在核验；
+    // 连续失败 2 次以上才认定「暂无法核验」。已成功读过后再失败，保持原样直接报暂无法核验。
+    if (rulesError) return !latestRules && rulesFailures < 2
+      ? {phase: 'busy', text: '正在核验'} : {phase: 'idle', text: '暂无法核验'};
     if (!expected) return {phase: 'busy', text: '正在核验'};
     // 清单、分组和规则均一致，且保存回执的本次生成证据已确认，才可显示绿灯。
     if (sameConfig(snap, expected) && !receiptPending) return {phase: 'ok', text: '规则已生效'};
@@ -821,6 +828,7 @@
         } else ruleSince = 0;
       }
       rulesError = nextRulesError;
+      rulesFailures = nextRulesError ? rulesFailures + 1 : 0;
       render();
     };
     const rulesTask = (async () => {
@@ -828,7 +836,7 @@
       const readSHA = async (file, ref = options.branch) => {
         try {
           const value = await request(bust(apiURL('/contents/' + file + '?ref=' +
-            encodeURIComponent(ref))), {github: true, signal});
+            encodeURIComponent(ref))), {github: true, signal, timeoutMs: RULE_API_TIMEOUT});
           if (!SHA.test(value && value.sha || '')) throw new Error('配置缺少有效 blob SHA');
           return value.sha;
         } catch (error) {

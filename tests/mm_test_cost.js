@@ -404,6 +404,24 @@ test('明确保存上传成功后重启读取远端即同步，不额外提交',
   assert.equal(c.local().items.AAA.qty,11);assert.equal(c.state().SYNC,'synced');assert.equal(c.puts().length,0);assert.equal(c.requests.length,1);
 });
 
+test('刚保存后刷新读到更旧的云端副本：不覆盖、不写已同步，自动重读到新版才同步',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','11');await b.save();
+  const put=await finishPush(b),remote=b.payload(put);assert.equal(b.state().dirty,false);await b.dispose();
+  const c=await boot({store:b.store,now:NOW+1000});
+  c.respond(c.requests[0],meta({...SEED,updated_at:'2020-01-01T00:00:00.000Z'},'old'));await settle();
+  assert.equal(c.state().SYNC,'pulling');assert.doesNotMatch(c.doc.getElementById('costState').textContent,/已同步/);
+  assert.equal(c.state().DATA.items.AAA.qty,11);assert.equal(c.local().items.AAA.qty,11);
+  await c.tick(10000);assert.equal(c.requests.length,2);
+  c.respond(c.requests[1],meta(remote,'saved'));await settle();
+  assert.equal(c.state().SYNC,'synced');assert.equal(c.local().items.AAA.qty,11);assert.equal(c.puts().length,0);
+});
+test('云端副本更旧但本机缓存已超过15分钟：按云端为准（别处回滚不被永远拒绝）',async()=>{
+  const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();b.edit('AAA','qty','11');await b.save();
+  await finishPush(b);await b.dispose();
+  const c=await boot({store:b.store,now:NOW+16*60*1000});
+  c.respond(c.requests[0],meta({...SEED,updated_at:'2020-01-01T00:00:00.000Z'},'old'));await settle();
+  assert.equal(c.state().SYNC,'synced');assert.equal(c.local().items.AAA.qty,5);assert.equal(c.puts().length,0);
+});
 
 test('新页填token只重开读取，不补传旧dirty或未知事务',async()=>{
   const b=await boot({token:false,local:{...copy(SEED),_local:{dirty:true,revision:7}}}),old=b.requests[0];
