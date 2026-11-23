@@ -456,6 +456,7 @@
 .pi-wname, .pi-wpnl, .pi-wmv, .pi-wpct { font-size: 15px; font-variant-numeric: tabular-nums; }
 .pi-wname { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pi-wpnl, .pi-wmv, .pi-wpct { font-weight: 400; white-space: nowrap; text-align: left; }
+.pi-wcur { color: var(--dim, #8b93a1); font-weight: 400; }   /* 市值前的美元符号：灰色，数字仍是正文色 */
 .pi-wshare { position: relative; display: grid; grid-template-columns: 52px minmax(0,1fr);
   align-items: center; gap: var(--pi-wgap); min-width: 0; }
 .pi-wshare::before { content: ""; position: absolute; left: calc(var(--pi-wgap) / -2); top: -2px; bottom: -2px;

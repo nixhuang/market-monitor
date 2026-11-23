@@ -2728,7 +2728,7 @@
       wlist.innerHTML = shown.map(function (s) {
         return '<div class="pi-wrow"><span class="pi-wname">' + esc(s.label) + '</span>' +
                '<b class="pi-wpnl ' + (s.ratio >= 0 ? 'up' : 'down') + '">' + pct(s.ratio) + '</b>' +
-               '<b class="pi-wmv">' + Math.round(s.mv).toLocaleString('en-US') + '</b>' +
+               '<b class="pi-wmv"><span class="pi-wcur">$</span>' + Math.round(s.mv).toLocaleString('en-US') + '</b>' +
                '<span class="pi-wshare"><b class="pi-wpct">' + s.pc.toFixed(1) + '%</b>' +
                '<span class="pi-wbar"><i style="width:' + s.pc.toFixed(4) + '%;background:' +
                s.color + '"></i></span></span></div>';
