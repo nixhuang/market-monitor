@@ -839,9 +839,14 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('.sync-stack{display:flex;flex-direction:column;justify-content:center;gap:0;flex:none;min-width:0;margin-left:2px}', css)
         self.assertIn('.sync-stack .runlight{flex:none;white-space:nowrap;line-height:1.25}', css)
         self.assertIn('.sync-stack .cost-state{min-width:0;white-space:nowrap;text-align:left;font-size:var(--status-font-size);line-height:1.25}', css)
+        # 2026-11-23 用户：抬头两排里「规则已生效」前的圆灯去掉，两排文字同一条竖线左对齐、已同步与已生效同绿
+        self.assertIn('.sync-stack .rulelight .dot{display:none}', css)
+        self.assertNotIn('.sync-stack .cost-state{padding-left', css)
+        self.assertIn('.sync-stack .cost-state .ok{color:var(--green)}', css)
+        self.assertIn('.runlight[data-phase="ok"]{color:var(--green)}', css)
         self.assertIn('.brandbar .dca-badge{font-size:16px;margin-left:10px;margin-bottom:4px}', css)
         self.assertNotIn('.statusrow.flagrow', css)
-        self.assertNotIn('.flagrow .rulelight .dot{display:none', css)   # 2026-11-20 用户：规则前的灯圈保留
+        self.assertNotIn('.flagrow .rulelight .dot{display:none', css)   # 旧的 flagrow 写法仍不存在（现行规则是 .sync-stack 里的 .rulelight .dot）
         page = self.render()
         self.assertIn('<span class="sync-stack" id="syncStack">', page)
         self.assertNotIn('<div class="statusrow flagrow">', page)

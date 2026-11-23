@@ -227,7 +227,7 @@
     // 种子来自构建期 REAL.trade；云端读得到时以 data 分支 trade-ledger.json 为准。
     var T0 = (REAL && REAL.trade) || {};
     var TRADE = { total: Number(T0.total) || 0, by_year: clone(T0.by_year || {}),
-      cleared_by_year: clone(T0.cleared_by_year || {}), records: (T0.records || []).slice(0, 20), ids: [] };
+      cleared_by_year: clone(T0.cleared_by_year || {}), records: (T0.records || []).slice(0, 50), ids: [] };
     // 分类标签下拉：构建期注入行业表；没注入时兜底成内置行业表，保证下拉永远有可选项。
     var SECTOR_GROUPS = (Array.isArray(T0.sector_groups) && T0.sector_groups.length) ? T0.sector_groups :
       [['technology', 'IT·AI'], ['industrials', '工航防建'], ['index_funds', '指数基'], ['healthcare', '医疗保健'],
@@ -1724,7 +1724,7 @@
       var fresh = entries.filter(function (e) { return !seen[e.id]; });
       if (!fresh.length) return null;
       var next = clone(led);
-      next.records = fresh.slice().reverse().map(tradeRow).concat(led.records || []).slice(0, 20);
+      next.records = fresh.slice().reverse().map(tradeRow).concat(led.records || []).slice(0, 50);
       next.by_year = next.by_year || {}; next.cleared_by_year = next.cleared_by_year || {};
       fresh.forEach(function (e) {
         var y = String(e.at || bjNow()).slice(0, 4);
@@ -1742,7 +1742,7 @@
       if (!object(led) || !Array.isArray(led.records)) return;
       TRADE = { total: Number(led.total) || 0, by_year: object(led.by_year) ? led.by_year : {},
         cleared_by_year: object(led.cleared_by_year) ? led.cleared_by_year : {},
-        records: led.records.slice(0, 20), ids: Array.isArray(led.ids) ? led.ids : [] };
+        records: led.records.slice(0, 50), ids: Array.isArray(led.ids) ? led.ids : [] };
     }
     function stageTrades() {
       if (!tradeDraft.length) return;
@@ -2728,9 +2728,10 @@
       wlist.innerHTML = shown.map(function (s) {
         return '<div class="pi-wrow"><span class="pi-wname">' + esc(s.label) + '</span>' +
                '<b class="pi-wpnl ' + (s.ratio >= 0 ? 'up' : 'down') + '">' + pct(s.ratio) + '</b>' +
-               '<b class="pi-wpct">' + s.pc.toFixed(1) + '%</b>' +
+               '<b class="pi-wmv">' + Math.round(s.mv).toLocaleString('en-US') + '</b>' +
+               '<span class="pi-wshare"><b class="pi-wpct">' + s.pc.toFixed(1) + '%</b>' +
                '<span class="pi-wbar"><i style="width:' + s.pc.toFixed(4) + '%;background:' +
-               s.color + '"></i></span></div>';
+               s.color + '"></i></span></span></div>';
       }).join('');
     }
 

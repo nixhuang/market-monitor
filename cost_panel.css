@@ -395,7 +395,8 @@
   #group_positions .pi-zone-money { gap: 4px; margin-top: 5px; }
   /* v18 仓位展开明细：手机档仍只用这一个 ≤600 断点，不新增第二档 */
   .pi-body { padding: 2px 8px 9px; }
-  .pi-wrow { grid-template-columns: minmax(0,1fr) minmax(0,1fr) 48px minmax(0,.85fr); gap: 6px; }
+  .pi-wlist { --pi-wgap: 6px; }
+  .pi-wshare { grid-template-columns: 48px minmax(0,1fr); }
   .pi-kpis { gap: 4px; }
   .pi-kpi { gap: 3px; }
   #group_positions .cashbond-row .cb-item, #group_positions .cashbond-row .cb-total { gap: 3px; }
@@ -446,14 +447,19 @@
 .pi-kval { font-size: var(--pos-num-fs,16px); font-weight: 600; }
 .pi-body .up { color: var(--up); }
 .pi-body .down { color: var(--down); }
-/* 行业权重四列：名称 | 盈亏比（涨跌色） | 仓位比例 | 柱条 */
-.pi-wlist { display: flex; flex-direction: column; gap: 5px; }
-.pi-wrow { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) 52px minmax(0,1.05fr);
-  align-items: center; gap: 8px; min-width: 0; }
-.pi-wname, .pi-wpnl, .pi-wpct { font-size: 15px; font-variant-numeric: tabular-nums; }
+/* 行业权重四块：名称 | 盈亏比（涨跌色） | 市值（无美元符号） | 占比（数字＋柱条同属一块）；数字都不加粗。
+   四块起点等距平铺（1fr/1fr/1fr/2.05fr），随页面宽度自动伸缩。市值与占比之间的灰色竖线画在两块间隙正中、
+   绝对定位，不占任何横向空间（线左右不留 padding／margin）。 */
+.pi-wlist { display: flex; flex-direction: column; gap: 5px; --pi-wgap: 8px; }
+.pi-wrow { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,2.05fr);
+  align-items: center; gap: var(--pi-wgap); min-width: 0; }
+.pi-wname, .pi-wpnl, .pi-wmv, .pi-wpct { font-size: 15px; font-variant-numeric: tabular-nums; }
 .pi-wname { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pi-wpnl { font-weight: 600; text-align: left; }
-.pi-wpct { font-weight: 600; text-align: right; }
+.pi-wpnl, .pi-wmv, .pi-wpct { font-weight: 400; white-space: nowrap; text-align: left; }
+.pi-wshare { position: relative; display: grid; grid-template-columns: 52px minmax(0,1fr);
+  align-items: center; gap: var(--pi-wgap); min-width: 0; }
+.pi-wshare::before { content: ""; position: absolute; left: calc(var(--pi-wgap) / -2); top: -2px; bottom: -2px;
+  width: 1px; background: var(--section-line, rgba(139,147,161,.32)); pointer-events: none; }
 .pi-wbar { display: block; height: 9px; border-radius: 5px; background: var(--line); overflow: hidden; }
 .pi-wbar i { display: block; height: 100%; min-width: 2px; border-radius: 5px; }
 .pi-log-link { display: inline-flex; align-items: center; gap: 5px; color: var(--head-blue-on);

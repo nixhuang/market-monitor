@@ -964,6 +964,13 @@ tr.gray td{color:var(--dim)}
 .sync-stack .runlight{flex:none;white-space:nowrap;line-height:1.25}
 .sync-stack .cost-state{min-width:0;white-space:nowrap;text-align:left;font-size:var(--status-font-size);line-height:1.25}
 .sync-stack .cost-state .warn,.sync-stack .cost-state .ok,.sync-stack .cost-state .dim{font-size:inherit}
+/* 2026-11-23 用户：「规则已生效」前面的圆灯去掉，让它和下排「仓位已同步」文字左对齐、颜色一致。
+   灯只是装饰（状态本来就由文字颜色表达：成功绿／进行中黄／失败红），这里只在抬头两排栈里隐藏，
+   .runlight .dot 的规则与别处（页底状态等）不动；隐藏后两排都是 flex 起点，文字天然同一条竖线，
+   不需要任何缩进。颜色：已同步用主绿 --green（与上排 ok 态同一个变量），不再用编辑面板那套浅绿
+   --cost-ok；「未同步／上传失败」等警示色不变。 */
+.sync-stack .rulelight .dot{display:none}
+.sync-stack .cost-state .ok{color:var(--green)}
 .check-result{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
 .check-result[data-phase="bad"]{border-color:var(--red)}
 .check-result[data-phase="busy"]{border-color:var(--yellow)}

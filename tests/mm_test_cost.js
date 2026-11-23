@@ -3235,14 +3235,14 @@ test('自动记账：取消草稿不记账，没保存就不碰账本',async()=>
   trade(b,'AAA','buy','1','100');b.doc.getElementById('costCancel').click();await settle();
   await b.tick(60000);assert.equal(ledgerGet(b),undefined);assert.equal(ledgerPut(b),undefined);await b.dispose();
 });
-test('自动记账：账本已满 25 笔时新记录顶掉最旧的，累计不随窗口裁剪重算',async()=>{
+test('自动记账：账本已满 50 笔时新记录顶掉最旧的，累计不随窗口裁剪重算',async()=>{
   const b=await bootTrade();
   trade(b,'AAA','sell','1','150');await b.save();await finishPush(b,200,TRADE_SEED);await settle();
   const full={total:777,by_year:{'2026':700},cleared_by_year:{'2026':9},ids:[],
-    records:Array.from({length:20},(_,i)=>['X'+i,'加仓','1','1.00','—','1.00','26-11-01'])};
+    records:Array.from({length:50},(_,i)=>['X'+i,'加仓','1','1.00','—','1.00','26-11-01'])};
   b.respond(ledgerGet(b),{sha:'led-sha',content:Buffer.from(JSON.stringify(full)).toString('base64')});await settle();
   const led=b.payload(ledgerPut(b));
-  assert.equal(led.records.length,20);assert.equal(led.records[0][0],'AAA');assert.equal(led.records[19][0],'X18');
+  assert.equal(led.records.length,50);assert.equal(led.records[0][0],'AAA');assert.equal(led.records[49][0],'X48');
   assert.equal(led.ids.length,1);assert.equal(led.total,777);assert.equal(led.by_year['2026'],700);assert.equal(led.cleared_by_year['2026'],9);
   await b.dispose();
 });
