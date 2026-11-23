@@ -1,9 +1,9 @@
 {
  "schema_version": 2,
  "real": true,
- "updated_at": "2026-11-23T14:29:30.171Z",
- "cash": 22322.33,
- "cash_extra": 20676.92,
+ "updated_at": "2026-11-23T14:33:36.427Z",
+ "cash": 22322.31,
+ "cash_extra": 20676.9,
  "fixed": 16916.97,
  "fixed_cost": 16916.97,
  "items": {
