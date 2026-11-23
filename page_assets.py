@@ -810,7 +810,7 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-members-panel.tone-red .signal-member-metric{color:var(--lamp-red)}
 #signalCounts .signal-members-panel.tone-yellow .signal-member-metric{color:var(--lamp-yellow)}
 #signalCounts .signal-members-panel.tone-gray .signal-member-metric{color:var(--text)}
-#signalCounts .signal-member-block{margin:0 0 10px}
+#signalCounts .signal-member-block{margin:0 0 4px}
 #signalCounts .signal-member-block[hidden]{display:none}
 #signalCounts .signal-member-block:last-child{margin-bottom:0}
 #signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--head-blue);display:flex;align-items:center}
@@ -886,7 +886,7 @@ tr[id^="s-"]{scroll-margin-top:64px}
 #signalCounts .signal-filter{padding:8.1px 12px;border-top:1px solid var(--list-border);font-size:13px}
 #signalCounts .signal-filter[hidden]{display:none}
 #signalCounts .signal-filter-head{display:flex;align-items:center;gap:8px;color:var(--head-blue);font-weight:600}
-#signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:38px;padding:0 10px;font:inherit;font-weight:400;color:var(--text);background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:pointer}
+#signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:26px;padding:0 24px;font:inherit;font-weight:400;color:var(--text);background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:pointer}
 #signalCounts .signal-filter p{margin:6px 0 0;color:var(--dim)}
 #signalCounts .signal-filter ul{list-style:none;margin:6px 0 0;padding:0}
 #signalCounts .signal-filter li{padding:4.5px 0;overflow-wrap:anywhere}
@@ -1548,8 +1548,9 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10p
 #signalCounts .signal-extra-row>.text-only[open]{padding-bottom:8px}
 #signalCounts .signal-extra-row>.earnings-week[open]{padding-bottom:8px}
 #signalCounts .earnings-week-meta{display:block;margin:1px 0 0 9px;color:var(--head-blue-on);font-size:12px}
-#signalCounts .signal-filter .signal-member-block h5{margin:6px 0 4px;color:var(--head-blue);font-size:13px;font-weight:600}
-#signalCounts .signal-filter .signal-member-block+.signal-member-block{margin-top:10px}
+#signalCounts .signal-filter .signal-member-block h5{margin:0 0 4px;color:var(--head-blue);font-weight:600}   /* 字号不在这里写死：桌面 13px、手机 15px，与下面个股描述文字同号（见手机档 h5 规则） */
+#signalCounts .signal-filter .signal-filter-head+.signal-member-block h5{margin-top:6px}
+#signalCounts .signal-filter .signal-member-block+.signal-member-block{margin-top:4px}   /* 分组之间间距缩小（原 10px），第一只个股上方也不再画线 */
 #signalCounts .signal-filter .signal-member-block ul{margin:0}
 #signalCounts .signal-filter .signal-member-belong:empty{display:none}
 @media(max-width:600px){
@@ -1649,7 +1650,7 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}
 #signalCounts .earnings-week-meta{font-size:15px;line-height:20.25px}
 #signalCounts .signal-member-direction{font-size:15px;line-height:20.25px}
 #signalCounts .signal-filter-head>span{font-size:13px;line-height:19.5px}
-#signalCounts .signal-filter-clear{font-size:13px;line-height:19.5px}
+#signalCounts .signal-filter-clear{font-size:13px;line-height:24px}   /* 清除钮：加宽变矮（高 26、横向内距 24），多选结果头一排不再占那么多上下空间 */
 #signalCounts td .signal-filter-toggle{padding:0 4px;font-size:16px;line-height:15.95px}
 #signalCounts .signal-extra-row>.signal-filter-toggle{font-size:16px;line-height:16.68px}
 #signalCounts .signal-extra-row>details>summary{font-size:16px;line-height:22px}
@@ -2371,7 +2372,9 @@ function appendRsiArrows(parent, text) {
 function signalMemberKey(member) {
   const weights = {red:5, yellow:4, gray:3, white:3, purple:2, green:1};
   const order = member.o == null ? 9 : Number(member.o);
-  const bucket = order === 0 && ['长持仓', '短持仓'].includes(member.g) ? 0 : order === 1 ? 1 : 2;
+  // 持仓＝分组顺序第 0 位（不分长短）。成员所属组名自 11-15 起只截前两个字（长持／短持），
+  // 旧写法拿「长持仓／短持仓」全称比对，永远对不上，持仓个股全掉进「其他」；改认顺序位，名称写法再变也不受影响。
+  const bucket = order === 0 ? 0 : order === 1 ? 1 : 2;
   let red = 0, score = 0, count = 0, magnitude = 0;
   member.details.forEach(function(part) {
     red += part.l === 'red' ? 1 : 0;
@@ -2437,7 +2440,7 @@ function renderSignalFilter() {
     const heading = document.createElement("h5");
     heading.textContent = ["持仓", "重点", "其他"][bucket];
     const list = document.createElement("ul");
-    records.forEach(function(record) {
+    records.forEach(function(record, index) {
     const m = record.member;
     const li = document.createElement("li");
     // 多选名称前保留对应原灯色竖条；描述内每条条件只用自身文字颜色。
@@ -2501,8 +2504,9 @@ function renderSignalFilter() {
       detail.appendChild(condition);
     });
     li.append(detail);
-    // 保留扁平清单原有的分隔线；拆组后不靠DOM重排回补computed样式。
-    if (!record.first) li.classList.add("has-separator");
+    // 分隔线只画在「同一分组内」个股之间：每个分组名下第一只个股上方不画线（2026-11-23 用户）。
+    // 旧写法按全局第一只判断，每个分组的第一只都会多出一条线。
+    if (index > 0) li.classList.add("has-separator");
     list.append(li);
     });
     block.append(heading, list);

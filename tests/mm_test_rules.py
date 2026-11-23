@@ -2840,6 +2840,38 @@ class ModuleBoundaryRegression(unittest.TestCase):
             self.assertEqual(near(SimpleNamespace(vol_sigma=2)), 0.75)
 
 
+class SignalFilterBucketRegression(unittest.TestCase):
+    def test_holdings_bucket_follows_group_order_not_full_label(self):
+        """2026-11-23：多选结果里持仓个股掉进「其他」——成员组名只截前两字（长持／短持），
+        旧代码拿「长持仓／短持仓」全称比对永远对不上。持仓分桶必须只认分组顺序第 0 位。"""
+        js = monitor.PAGE_INTERACTION_JS
+        self.assertIn("const bucket = order === 0 ? 0 : order === 1 ? 1 : 2;", js)
+        self.assertNotIn("includes(member.g)", js)
+        # 组名确实被截成前两字：这条若变了，分桶仍不依赖它，但要让人知道
+        self.assertEqual(monitor._member_belong({"group": "position", "hold": "long"}), "长持")
+        self.assertEqual(monitor._member_belong({"group": "position", "hold": "short"}), "短持")
+
+    def test_signal_filter_groups_tight_and_no_rule_above_first_stock(self):
+        """2026-11-23：多选清单分组之间距离缩小；分组名下第一只个股上方不画分隔线（线只在组内个股之间）。"""
+        js, css = monitor.PAGE_INTERACTION_JS, monitor.PAGE_CSS
+        self.assertIn("records.forEach(function(record, index) {", js)
+        self.assertIn('if (index > 0) li.classList.add("has-separator");', js)
+        self.assertNotIn('if (!record.first) li.classList.add("has-separator");', js)
+        self.assertIn("#signalCounts .signal-filter .signal-member-block+.signal-member-block{margin-top:4px}", css)
+        self.assertIn("#signalCounts .signal-member-block{margin:0 0 4px}", css)
+        self.assertNotIn("signal-member-block+.signal-member-block{margin-top:10px}", css)
+        # 分组名（持仓／重点／其他）字号与个股描述文字同号：这条规则不能再写死 13px，否则手机上被压得比描述小
+        self.assertIn("#signalCounts .signal-filter .signal-member-block h5{margin:0 0 4px;color:var(--head-blue);font-weight:600}", css)
+        self.assertNotIn("signal-member-block h5{margin:0 0 4px;color:var(--head-blue);font-size:13px", css)
+        self.assertIn("#signalCounts .signal-member-block h5{font-size:15px;line-height:16.25px}", css)
+        self.assertIn("#signalCounts .signal-filter-detail{font-size:15px;line-height:20.25px}", css)
+
+    def test_signal_filter_clear_button_is_wide_and_short(self):
+        css = monitor.PAGE_CSS
+        self.assertIn("#signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:26px;padding:0 24px;", css)
+        self.assertNotIn("signal-filter-clear{margin-left:auto;box-sizing:border-box;height:38px", css)
+
+
 class CostSeedRegression(unittest.TestCase):
     def test_stock_cost_seed_accepts_finite_zero_negative_and_rejects_invalid(self):
         costs = {"ZERO_INT": 0, "ZERO_FLOAT": 0.0, "NEG_INT": -7,

@@ -489,11 +489,11 @@ class TestGroups(unittest.TestCase):
         # 风险表数字统一：回撤的数字与周百分比同号，均线标签在数据前同一排（11-23 起写出 200 日／50 日）
         self.assertIn('class="unit">回撤 <span class="unit-num">', risk)
         self.assertRegex(risk, r'<td class="num"><span class="ma-val">[\d.]+%</span>'
-                               r'<span class="unit ma-tag">200日均线</span></td>')
+                               r'<span class="unit ma-tag">200日均线上</span></td>')
         self.assertNotIn('unit-inline', risk)
         # 11-23：50 日均线挪到「变化」列，两排＝上排数字、下排灰字「50日均线」；当前列里不再出现
         self.assertRegex(risk, r'<td class="num dim"><span class="ma-val">[\d.]+%</span>'
-                               r'<span class="unit ma-tag">50日均线</span></td>')
+                               r'<span class="unit ma-tag">50日均线上</span></td>')
         self.assertNotIn('50日均线：', risk)
         self.assertNotIn('>长均线<', risk)
         self.assertNotIn('短均线：', risk)

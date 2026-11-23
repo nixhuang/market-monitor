@@ -233,10 +233,10 @@ _macro_b = dict(macro, breadth={"ok": True, "name": "上涨参与度", "date": "
 _html_b = monitor.render(_macro_b, items, 10, snapshot=snapshot, dup_hidden=2)
 _breadth_row = re.search(r'<tr class="\w+"><td>上涨参与度.*?</tr>', _html_b, re.S)[0]
 _breadth_cur = _breadth_row.split('</td>', 2)[1]            # 第二格＝当前列
-check('<td class="num"><span class="ma-val">47.0%</span><span class="unit ma-tag">200日均线</span></td>' in _breadth_row
+check('<td class="num"><span class="ma-val">47.0%</span><span class="unit ma-tag">200日均线上</span></td>' in _breadth_row
       and "unit-inline" not in _breadth_row
       and "50日均线" not in _breadth_cur and "29.3" not in _breadth_cur
-      and '<td class="num dim"><span class="ma-val">29.3%</span><span class="unit ma-tag">50日均线</span></td>' in _breadth_row
+      and '<td class="num dim"><span class="ma-val">29.3%</span><span class="unit ma-tag">50日均线上</span></td>' in _breadth_row
       and "长均线" not in _breadth_row and "短均线" not in _breadth_row
       and "上宏观" not in _html_b.split('id="macroCard"', 1)[1].split('</table>', 1)[0]
       and "宏观均线沿用数据源固定口径，不随个股均线设置变化" in _html_b

@@ -542,7 +542,7 @@ class PageRenderer:
                 # 2026-11-23 用户：50 日均线那一项挪到「变化」列（见下方 dw_txt）；
                 # 当前列的 200 日均线也拆成上下两排——上排数字、下排灰字「200日均线」，跟变化列同写法。
                 val = (f'<span class="ma-val">{it["value"]:.1f}%</span>'
-                       f'<span class="unit ma-tag">200日均线</span>')
+                       f'<span class="unit ma-tag">200日均线上</span>')   # 11-23 用户：站上 200 日均线的股票占比，写「200日均线上」
             elif key == "nfci":
                 val = f'{it["value"]:+.2f}'
             else:
@@ -587,7 +587,7 @@ class PageRenderer:
                 # 2026-11-23 用户：上涨参与度的 50 日均线内容挪到变化列，写法跟 VIX 一样——
                 # 上排数字（白）、下排灰字「50日均线」；数据缺失就整格留空，不写「—」。
                 dw_txt = (f'<span class="ma-val">{it["pct50"]:.1f}%</span>'
-                          f'<span class="unit ma-tag">50日均线</span>')
+                          f'<span class="unit ma-tag">50日均线上</span>')   # 11-23 用户：站上 50 日均线的股票占比，写「50日均线上」
             label = html_lib.escape(str(it.get("name") or self._context.RISK_LABELS[key]))
             # 2026-10-30：「截至」二字删掉，只留日期（单独一行小字，谁都看得出是数据日期）
             label += f'<span class="unit">{html_lib.escape(it["date"])}</span>'
