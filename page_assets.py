@@ -1027,7 +1027,7 @@ tr.gray td{color:var(--dim)}
 .stat-badge.green{color:var(--green)}
 .group-card>summary .grp-name{white-space:nowrap;flex:none}
 .macro-card>summary .grp-name{white-space:nowrap;flex:none}
-.rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
+.rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim);font-weight:400}   /* 2026-11-23 用户：标题栏「20日对.SPX ±x%」不加粗（原先继承标题栏的 600） */
 .pos-total{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text);font-size:var(--pos-num-fs,14px)}
 .rs-spy.up{color:var(--up)}
 .rs-spy.down{color:var(--down)}

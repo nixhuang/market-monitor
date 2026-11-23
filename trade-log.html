@@ -30,7 +30,7 @@ h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);whi
 .pgbtn[hidden]{display:none}   /* 第一页只有「下一页」、第二页只有「上一页」，两个不同时出现；不足一页时两个都不显示 */
 .tblwrap{overflow-x:auto}
 /* 12:23 口径：表格文字 +1px（13.5→14.5 / 手机 12.5→13.5），六档实测零溢出才保留 */
-table{width:100%;border-collapse:collapse;font-size:14.5px;font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:14.5px;font-variant-numeric:tabular-nums}   /* 固定列宽（见 colgroup）：第 1、2 页每列位置完全一致，不随当页内容宽窄漂移 */
 th,td{padding:4px 7px;white-space:nowrap;border-bottom:1px solid var(--line);text-align:right}
 th:nth-child(-n+2),td:nth-child(-n+2){text-align:left}
 thead th{color:var(--dim);font-weight:600;border-bottom:1px solid var(--head);
@@ -48,7 +48,7 @@ td.cut{color:var(--orange)}
 @media(max-width:600px){
   .stage{padding:calc(env(safe-area-inset-top,0px) + 60px) 4px 20px}
   table{font-size:13.5px}
-  th,td{padding:4px 5px}
+  th,td{padding:4px 3px}   /* 手机档左右内距 3px：固定列宽下给「37.0188 股／25000.00 金额／+2500.00 已实现」留足位置 */
   .sfoot{padding:7px 9px;gap:6px}
   .back,.pgbtn{padding:3px 9px;font-size:14px}
   .pager{gap:6px}
@@ -61,6 +61,7 @@ td.cut{color:var(--orange)}
   <h1>交易记录</h1>
   <div class="tblwrap">
     <table>
+      <colgroup><col style="width:14%"><col style="width:9%"><col style="width:14%"><col style="width:14%"><col style="width:16%"><col style="width:16%"><col style="width:17%"></colgroup>
       <thead><tr><th>代码</th><th>方向</th><th>股数</th><th>成交价</th><th>已实现</th><th>金额</th><th>时间</th></tr></thead>
       <tbody id="tbody"></tbody>
     </table>
@@ -93,6 +94,10 @@ td.cut{color:var(--orange)}
         } else if(i === 3){             // 已实现列
           if(c.charAt(0) === '+') cls = ' class="up"';
           else if(c.charAt(0) === '-') cls = ' class="down"';
+        }
+        if(i === 2){                    // 成交价列：只显示小数点后两位（账本里可能带 3～4 位）
+          var n = parseFloat(c);
+          if(isFinite(n)) c = n.toFixed(2);
         }
         return '<td' + cls + '>' + c + '</td>';
       }).join('') + '</tr>';

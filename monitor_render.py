@@ -335,7 +335,7 @@ class PageRenderer:
             space_text = f'{t["space"]:+.1f}'.rstrip('0').rstrip('.')
             sign = "neg" if t["space"] < 0 else "pos"
             parts.append(f'<span class="target-space" data-sign="{sign}">{space_text}%</span>')
-        if self._context._pos_num(t.get("price")) is not None:
+        if self._context._pos_num(t.get("price")) is not None and not t.get("suspect"):
             parts.append(f'<span class="target-price">{self._context._price_text(t["price"])}</span>')
         month = t.get("month")
         # 2026-11-13 19:35 用户：「分隔符·要在两个数字中间」（原来 · 写进文本、前导空格被行首折叠，
@@ -348,7 +348,8 @@ class PageRenderer:
             parts.append('<span class="target-month">'
                          f'<span class="target-sep">&middot;</span>{month}月</span>')
         if state == "failed":
-            parts.append('<span>获取失败</span>')
+            # 共识价和现价差了好几倍（多半拆股）：写「待核实」，不亮出那个离谱的数；其余失败仍写「获取失败」
+            parts.append('<span>待核实</span>' if t.get("suspect") else '<span>获取失败</span>')
         return (f'<td class="tgs {cls}" data-target-state="{state}">'
                 f'<span class="lvtag tgt {cls}">{" ".join(parts)}</span></td>')
 

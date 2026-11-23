@@ -2840,6 +2840,95 @@ class ModuleBoundaryRegression(unittest.TestCase):
             self.assertEqual(near(SimpleNamespace(vol_sigma=2)), 0.75)
 
 
+class ConsensusSanityRegression(unittest.TestCase):
+    """2026-11-23 闪迪拆股：缓存里还是拆股前的共识价 2047.38，现价只有 79 → 页面曾显示 +2483.8%。
+    共识价与现价差 6 倍以上＝不可信：页面写「待核实」、不算空间/达到，并插队重抓。"""
+
+    def test_implausible_ratio_both_directions_and_missing_data(self):
+        f = monitor.consensus_implausible
+        self.assertTrue(f(2047.38, 79.24))        # 拆股前的旧共识价
+        self.assertTrue(f(10, 100))               # 反方向（合股）也算
+        self.assertFalse(f(248.15, 79.24))        # 3.1 倍：真实的高空间，照常显示
+        self.assertFalse(f(5.9 * 100, 100))
+        self.assertTrue(f(6 * 100, 100))          # 边界：恰好 6 倍就算
+        self.assertFalse(f(None, 79.24))
+        self.assertFalse(f(248.15, None))
+        self.assertFalse(f(0, 79.24))
+
+    def test_evaluate_target_marks_suspect_and_renders_pending_text(self):
+        t = monitor.evaluate_target(79.24, 94.4, {"kind": "consensus", "price": 2047.38, "month": 11, "failed": False},
+                                    "position", 3)
+        self.assertTrue(t["failed"] and t["suspect"])
+        self.assertEqual(monitor.target_display_state(t), "failed")
+        html = monitor.target_tag(t)
+        self.assertIn("待核实", html)
+        self.assertNotIn("2047.38", html)
+        self.assertNotIn("2483", html)
+        self.assertNotIn("target-space", html)
+        self.assertNotIn("获取失败", html)
+        # 正常的高空间不受影响
+        ok = monitor.evaluate_target(79.24, 94.4, {"kind": "consensus", "price": 248.15, "month": 11, "failed": False},
+                                     "position", 3)
+        self.assertFalse(ok.get("failed"))
+        self.assertEqual(monitor.target_display_state(ok), "high")
+        # 手填目标不做这道检查（用户自己写的数）
+        manual = monitor.evaluate_target(79.24, 94.4, {"kind": "manual", "price": 2047.38, "month": None, "failed": False},
+                                         "position", 3)
+        self.assertFalse(manual.get("failed"))
+        # 普通获取失败仍写「获取失败」
+        failed = monitor.evaluate_target(79.24, 94.4, {"kind": "consensus", "price": 90.0, "month": 11, "failed": True},
+                                         "position", 3)
+        self.assertIn("获取失败", monitor.target_tag(failed))
+
+    def test_suspect_entry_jumps_the_queue_and_is_refetched_with_fresh_value(self):
+        from unittest.mock import patch
+        old = {"s": "ok", "avg": 2047.38, "upd": "2026-11-11", "r": "2026-11-15", "r_tz": "America/New_York",
+               "try": "2026-11-15"}
+        fresh = {"s": "ok", "avg": 248.15, "upd": "2026-11-20"}
+        calls = []
+
+        def fake_fetch(sess, sym):
+            calls.append(sym)
+            return dict(fresh)
+
+        class Sess:
+            headers = {}
+
+        with patch.object(monitor, "fetch_consensus_one", side_effect=fake_fetch), \
+                patch.object(monitor, "consensus_robots_ok", return_value=True), \
+                patch.object(monitor, "budget_sleep", return_value=True):
+            data, stat = monitor.update_consensus(["SNDK"], {"data": {"SNDK": old}}, "2026-11-23", sess=Sess(),
+                                                  quota_day="2026-11-23", prices={"SNDK": 79.24})
+            self.assertEqual(calls, ["SNDK"])                       # 才 8 天、本来没到期，也被插队重抓
+            self.assertEqual(data["SNDK"]["avg"], 248.15)
+            self.assertNotIn("sus", data["SNDK"])
+            # 价格正常的同一条旧缓存不重抓（保持 14 天节拍）
+            calls.clear()
+            monitor.update_consensus(["SNDK"], {"data": {"SNDK": old}}, "2026-11-23", sess=Sess(),
+                                     quota_day="2026-11-24", prices={"SNDK": 1900.0})
+            self.assertEqual(calls, [])
+
+    def test_still_suspect_after_refetch_is_flagged_and_not_hammered(self):
+        from unittest.mock import patch
+        old = {"s": "ok", "avg": 2047.38, "upd": "2026-11-11", "r": "2026-11-15", "r_tz": "America/New_York"}
+
+        class Sess:
+            headers = {}
+
+        with patch.object(monitor, "fetch_consensus_one", return_value={"s": "ok", "avg": 2000.0, "upd": "2026-11-22"}), \
+                patch.object(monitor, "consensus_robots_ok", return_value=True):
+            data, _ = monitor.update_consensus(["SNDK"], {"data": {"SNDK": old}}, "2026-11-23", sess=Sess(),
+                                               quota_day="2026-11-23", prices={"SNDK": 79.24})
+        self.assertTrue(data["SNDK"]["sus"])
+        # 带 sus 标记、刚抓过的：次日不再重复请求；满 3 天才再看
+        self.assertFalse(monitor._consensus_suspect_due(data["SNDK"], 79.24, "2026-11-24"))
+        self.assertTrue(monitor._consensus_suspect_due(data["SNDK"], 79.24, "2026-11-26"))
+
+    def test_main_flow_passes_current_prices(self):
+        src = (ROOT / 'monitor.py').read_text(encoding='utf-8')
+        self.assertIn('prices={normalize_symbol(d["symbol"]): d.get("price")', src)
+
+
 class SignalFilterBucketRegression(unittest.TestCase):
     def test_holdings_bucket_follows_group_order_not_full_label(self):
         """2026-11-23：多选结果里持仓个股掉进「其他」——成员组名只截前两字（长持／短持），
@@ -2898,6 +2987,20 @@ class SignalFilterBucketRegression(unittest.TestCase):
         cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
         self.assertIn("return a.share - b.share;", cost)
         self.assertNotIn("return b.share - a.share;", cost)
+
+    def test_rs_spy_title_text_not_bold(self):
+        """2026-11-23：标题栏「20日对.SPX ±x%」不加粗，不再继承标题栏的 600。"""
+        css = monitor.PAGE_CSS
+        self.assertIn(".rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim);font-weight:400}", css)
+
+    def test_trade_log_fixed_columns_and_two_decimal_price(self):
+        """2026-11-23：交易记录两页每列位置一致（固定列宽，不随当页内容漂移）；成交价只显示小数点后两位。"""
+        html = (ROOT / 'trade-log.html').read_text(encoding='utf-8')
+        self.assertIn('table-layout:fixed', html)
+        self.assertIn('<colgroup><col style="width:14%"><col style="width:9%"><col style="width:14%"><col style="width:14%">'
+                      '<col style="width:16%"><col style="width:16%"><col style="width:17%"></colgroup>', html)
+        self.assertIn('if(i === 2){', html)
+        self.assertIn('c = n.toFixed(2);', html)
 
     def test_signal_filter_clear_button_is_wide_and_short(self):
         css = monitor.PAGE_CSS

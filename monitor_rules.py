@@ -137,6 +137,18 @@ def _price_text(v):
     return f"{v:.2f}".rstrip("0").rstrip(".")
 
 
+CONSENSUS_SANITY_RATIO = 6
+
+
+def consensus_implausible(avg, price):
+    """共识价和现价差了 CONSENSUS_SANITY_RATIO 倍以上（任一方向）→ True：多半是拆股/合股后数据没对上。
+    缺任何一边的数据按「不判定」处理，返回 False。"""
+    a, p = _pos_num(avg), _pos_num(price)
+    if a is None or p is None:
+        return False
+    return a / p >= CONSENSUS_SANITY_RATIO or p / a >= CONSENSUS_SANITY_RATIO
+
+
 def target_label(t):
     return "目标价" if t.get("kind") == "manual" else "共识价"
 
@@ -341,6 +353,11 @@ class RuleEngine:
                  space_detail="", reached_detail="")
         if t.get("failed") or self._context._pos_num(t.get("price")) is None or self._context._pos_num(price) is None:
             t["failed"] = True
+            return t
+        # 自动共识价和现价差了好几倍（多半拆股）：不算空间/达到，页面写「待核实」，等重抓纠正。手填目标不受影响。
+        if t.get("kind") == "consensus" and consensus_implausible(t["price"], price):
+            t["failed"] = True
+            t["suspect"] = True
             return t
         p, tp = Decimal(str(price)), Decimal(str(t["price"]))
         space = float((tp / p - 1) * 100)

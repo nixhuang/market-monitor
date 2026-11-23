@@ -2999,6 +2999,11 @@ CONSENSUS_POST_EARN_LAG_DAYS = 2      # 财报后至少等 2 个美东自然日�
 CONSENSUS_MAX_PER_DAY = 12           # 北京自然日的独立台账，删除/关闭分组不返还额度
 CONSENSUS_RETRY_PER_DAY = 3          # 失败重试最多占用 3 个名额，避免挤掉正常到期项
 CONSENSUS_RETRY_BACKOFF = (1, 2, 4, 7)  # 连续失败：首次次日重试，此后逐步退避
+# 2026-11-23 拆股类错数据防护（闪迪：缓存里还是拆股前的 2047.38，现价只有 79）：共识价与现价差这么多倍
+# 就当它不可信——页面写「待核实」、不算空间/达到，并且不等 14 天到期，立刻插队重抓；
+# 重抓后仍然离谱的，每隔几天才再看一次，免得天天敲对方网站。
+CONSENSUS_SANITY_RATIO = monitor_rules.CONSENSUS_SANITY_RATIO
+CONSENSUS_SUSPECT_RECHECK_DAYS = 3
 
 
 
@@ -3082,6 +3087,9 @@ def fetch_consensus_one(sess, sym):
     return {"s": "fail", "why": "页面结构或共识数据无法解析", "kind": "parse"}
 
 
+consensus_implausible = monitor_rules.consensus_implausible
+
+
 def _consensus_fetch_day(entry):
     date = _iso_date(entry.get("r"))
     if date and entry.get("r_tz") != "America/New_York":
@@ -3143,6 +3151,19 @@ def consensus_due(entry, today_iso):
     return consensus_priority(entry, today_iso) is not None
 
 
+def _consensus_suspect_due(entry, price, today_iso):
+    """缓存里的共识价和现价差了好几倍（多半拆股/合股没跟上）→ 该立刻重抓。
+    刚重抓过仍离谱的（带 sus 标记）几天内不重复。"""
+    if not isinstance(entry, dict) or entry.get("s") != "ok" or not consensus_implausible(entry.get("avg"), price):
+        return False
+    if entry.get("sus"):
+        try:
+            return _days_between(today_iso, entry["r"]) >= CONSENSUS_SUSPECT_RECHECK_DAYS
+        except (KeyError, ValueError, TypeError):
+            return True
+    return True
+
+
 def _consensus_failed(old_entry, today_iso, why):
     old_entry = old_entry if isinstance(old_entry, dict) else {}
     count = old_entry.get("failures", 0)
@@ -3174,8 +3195,10 @@ def _consensus_quota(prev, quota_day):
 
 
 def update_consensus(symbols, prev, today_iso, sess=None, sleep=None, clock=None,
-                     force=False, next_earn=None, earnings_events=None, quota_day=None, deadline=None):
-    """事件/TTL 用美东日，额度用独立北京日；force 仅强制到期，不绕过日额度或同日去重。"""
+                     force=False, next_earn=None, earnings_events=None, quota_day=None, deadline=None,
+                     prices=None):
+    """事件/TTL 用美东日，额度用独立北京日；force 仅强制到期，不绕过日额度或同日去重。
+    prices＝{代码: 现价}：缓存里的共识价与现价差 CONSENSUS_SANITY_RATIO 倍以上（多半是拆股）时插队重抓。"""
     clock = clock or time.monotonic
     sleep = sleep or time.sleep
     deadline = min(clock() + CONSENSUS_BUDGET, deadline if deadline is not None else float("inf"))
@@ -3189,8 +3212,11 @@ def update_consensus(symbols, prev, today_iso, sess=None, sleep=None, clock=None
     ledger = _consensus_quota(prev, quota_day)
     attempted, retried = set(ledger["symbols"]), set(ledger["retry_symbols"])
     ranked = []
+    prices = prices if isinstance(prices, dict) else {}
     for s in syms:
         rank = 0 if force else consensus_priority(data[s], today_iso, quota_day)
+        if rank is None and _consensus_suspect_due(data[s], prices.get(s), today_iso):
+            rank = -1                      # 离谱数据：排在所有到期项前面
         if rank is not None and s not in attempted:
             ranked.append((rank, str(data[s].get("r") or ""), s))
     ranked.sort()
@@ -3255,6 +3281,8 @@ def update_consensus(symbols, prev, today_iso, sess=None, sleep=None, clock=None
         else:
             streak = 0
             fresh = {**res, "r": today_iso, "r_tz": "America/New_York", "try": quota_day}
+            if consensus_implausible(res.get("avg"), prices.get(s)):
+                fresh["sus"] = True        # 刚重抓还是离谱：记一笔，几天内不再重复敲
             for k in ("ne", "earn_pending"):
                 if k in entry:
                     fresh[k] = entry[k]
@@ -4405,7 +4433,9 @@ def _main(argv, runtime, snapshots=None):
     try:
         cons_data, cons_stat = update_consensus(cons_syms, prev_cons, event_today,
                                                next_earn=_next_earnings_dates(earn_stat),
-                                               earnings_events=earn_stat.get("events"), quota_day=quota_day)
+                                               earnings_events=earn_stat.get("events"), quota_day=quota_day,
+                                               prices={normalize_symbol(d["symbol"]): d.get("price")
+                                                       for d in items if d.get("symbol")})
     except Exception as e:
         log(f"  ! 共识价更新中断，沿用旧值：{str(e)[:90]}")
         cons_data = {k: v for k, v in old_cons.items() if k in cons_syms and isinstance(v, dict)}
