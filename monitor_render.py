@@ -1306,6 +1306,11 @@ class PageRenderer:
                          '<span class="pi-kpi"><span class="pi-kname">清仓</span><b class="pi-kval" id="piCleared">—</b></span>'
                          '</div></div>'
                          '<div class="pi-block"><div class="pi-wlist" id="piWeights"></div></div>'
+                         # 2026-11-23：默认折叠的「盈亏明细」（每只个股的总盈亏）（固定从亏损到盈利），放在「交易记录」上一排。
+                         # 用户定：标题右侧不写合计金额，也不另做已实现的名单。内容由 cost_panel.js 按真实持仓填。
+                         '<div class="pi-block pi-fold-block" id="piPnlBlock" hidden>'
+                         '<details class="pi-fold" id="piPnlFold"><summary><span class="pi-fold-name">盈亏明细</span></summary>'
+                         '<div class="pi-plist" id="piPnlList"></div></details></div>'
                          '<div class="pi-block pi-records"><a class="pi-log-link" href="./trade-log.html" '
                          'target="_blank" rel="noopener">交易记录'
                          '<span class="pi-arrow" aria-hidden="true">↗</span></a></div></div>')

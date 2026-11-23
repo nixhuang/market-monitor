@@ -983,10 +983,10 @@ test('AbortController缺失时仍按截止时间完成本地失败且忽略迟�
   await b.enter();b.edit();await b.save();let get=b.requests.at(-1);await b.tick(b.state().deadline);
   assert.equal(b.state().inFlight,null);assert.equal(b.state().dirty,true);b.respond(get,meta(SEED));await settle();assert.equal(b.puts().length,0);
 });
-test('终稿五列编辑器右对齐数值，贡献列表金额百分比仍居中',()=>{
+test('终稿五列编辑器右对齐数值，贡献列表金额百分比与行业权重一样左起等比平铺',()=>{
   assert.doesNotMatch(CSS,/#costManage \.ep-val\{/);
   assert.match(CSS,/#costManage \.ep-grid input,#costManage \.ep-cash input\{[^}]*text-align:right/);
-  assert.match(CSS,/\.cost-contrib \.cv,\.cost-contrib \.ca\{[^}]*text-align:center/);
+  assert.match(CSS,/\.cost-contrib \.cv,\.cost-contrib \.ca\{[^}]*text-align:left/);   // 11-23：与行业权重同款，各列左起、起点间距等比
   assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
 });
 test('当日面板标题维持统一字号，仅面板内容文字各增加1px',()=>{
@@ -1056,12 +1056,14 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.ok(topLevel(CSS).includes('.sub .cost-state'));
   // 手机当日贡献列表：名称轨与金额文本中心不动；盈亏比在78px轨道内居中，长值向两侧展开。
   const mobileCostCSS=CSS.slice(CSS.indexOf('@media(max-width:600px)'));
-  assert.ok(mobileCostCSS.includes('--cost-contrib-cols:minmax(0,1.5fr) 78px 78px minmax(0,.853fr);'));
-  assert.ok(mobileCostCSS.includes('.cost-contrib li > .ca{position:relative;left:-21px;}'));
+  // 11-23：当日清单改成与行业权重同一种等比平铺（名称｜金额｜盈亏比｜比例条，subgrid 共用列轨），不再写死 78px 列宽和 left 偏移
+  assert.ok(CSS.includes('--cost-contrib-cols:minmax(max-content,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.6fr);'));
+  assert.ok(CSS.includes('grid-template-columns:subgrid;'));
+  assert.ok(mobileCostCSS.includes('--cost-contrib-gap:6px;'));
+  assert.doesNotMatch(mobileCostCSS,/\.cost-contrib li > \.ca\{position:relative/);
   assert.doesNotMatch(mobileCostCSS,/\.cost-contrib li > \.cv\{text-align:right/);
   assert.doesNotMatch(mobileCostCSS,/\.cost-contrib li > \.cv\{position:relative;left:-\d+px/);
-  assert.ok(mobileCostCSS.includes('--cost-cbar-left:4px;'));
-  assert.ok(mobileCostCSS.includes('.cost-contrib .cbar{height:12px;margin:0 8px 0 var(--cost-cbar-left);}'));
+  assert.ok(mobileCostCSS.includes('.cost-contrib .cbar{height:12px;}'));
   assert.doesNotMatch(mobileCostCSS,/\.cost-contrib \.cbar\{[^}]*margin:[^}]*-\d/);
   assert.match(CSS,/\.cost-contrib \.cbar\{order:4;position:relative;height:7px/);
   /* 旧六列成本卡及其旧桌面/手机微调已由终稿四列编辑器替代；历史断言退役。
@@ -1994,10 +1996,11 @@ test('成本面板JS和回归文件语法有效',()=>{
 test('当日贡献代码和中文名按实际监控行ID跳转，无目标时保留纯文本',async()=>{
   const b=await bootCash({prepareDocument(doc){doc.getElementById('s-aaa').id='main-row-AAA';}});
   const stockRow=b.doc.querySelectorAll('table.stk tr[data-symbol]').find(tr=>tr.getAttribute('data-symbol')==='AAA');
-  const name=b.doc.querySelector('.cost-contrib .cn-name'),link=name.querySelector('a.signal-member-jump');
+  // 当日清单已改为从亏到盈排序，第一行不一定是 AAA：按代码取 AAA 那一行
+  const name=b.doc.querySelectorAll('.cost-contrib .cn-name').find(n=>n.textContent.includes('AAA')),link=name.querySelector('a.signal-member-jump');
   assert.ok(stockRow);assert.equal(link.getAttribute('href'),'#'+stockRow.id);
   assert.equal(link.querySelector('.cnsym').textContent,'AAA');assert.equal(link.querySelector('.cncn').textContent,'测试名称');
-  const legacy=await bootCash({legacySymbols:true}),legacyName=legacy.doc.querySelector('.cost-contrib .cn-name');
+  const legacy=await bootCash({legacySymbols:true}),legacyName=legacy.doc.querySelectorAll('.cost-contrib .cn-name').find(n=>n.textContent.includes('AAA'));
   assert.equal(legacyName.querySelector('a.signal-member-jump'),null);
   assert.match(legacyName.textContent,/AAA/);assert.match(legacyName.textContent,/测试名称/);
 });

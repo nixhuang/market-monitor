@@ -1687,9 +1687,6 @@ table.stk tr[data-symbol]>td.sig{--sig-borrow:14px}
 .statusrow{padding-left:var(--head-inset);padding-right:var(--head-inset)}
 .check-result{padding-left:var(--head-inset);padding-right:var(--head-inset)}
 .dual-row > details[open]{min-height:50px}
-.dual-body>.cost-contrib li{grid-template-columns:minmax(84px,.5fr) 66px 62px minmax(0,1fr);column-gap:10px;padding-right:32px}
-.dual-body>.cost-contrib li>.ca{text-align:left}
-.dual-body>.cost-contrib .cbar{margin-left:31px;max-width:300px}
 #signalCounts .target-purple h5,#signalCounts .pnl-extra h5{font-size:14px;line-height:17.5px}
 #signalCounts .target-purple .signal-member-direction{font-size:13px;line-height:16.25px}
 #signalCounts .pnl-extra .signal-member-metric{font-size:13px;line-height:16.25px}
@@ -1798,8 +1795,16 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
   function isFree(card) {
     return !card || card.id === "signalCounts" || card.id === "group_positions";
   }
+  // 2026-11-23：展开其他分组时，统计里展开的子板块（空间/财报/盈亏到价）和仓位里展开的盈亏明细
+  // （盈亏明细）也一并收起；统计、仓位两个大栏本身仍保持展开。
+  function closeSubFolds() {
+    document.querySelectorAll("#signalCounts details[open], #group_positions .pi-fold[open]").forEach(function(d) {
+      d.open = false;
+    });
+  }
   function closeOthers(keep) {
     if (isFree(keep)) return;
+    closeSubFolds();
     document.querySelectorAll("details.card[open]").forEach(function(other) {
       if (other === keep || isFree(other)) return;
       other.open = false;

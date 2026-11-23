@@ -23,8 +23,10 @@
   --cost-rule-magenta: #ef8de4;
 }
 .cost-manage, .dual-body {
-  --cost-contrib-cols: minmax(0,.74fr) 66px 62px minmax(0,1fr);
-  --cost-cbar-left: 15.5px;
+  /* 当日收益清单与行业权重、盈亏明细同一种平铺法：名称｜金额｜盈亏比｜比例条 四块，起点间距随页面宽度等比伸缩，
+     不写死像素列宽；名称块至少容得下最长的「代码＋中文名」（一行不换行），其余块平分剩下的宽度。 */
+  --cost-contrib-cols: minmax(max-content,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.6fr);
+  --cost-contrib-gap: 8px;
 }
 /* 五列交易编辑器：交易只改草稿，保存/取消沿真实事务链执行。 */
 #costManage.cost-manage {
@@ -236,14 +238,16 @@
 .runbar .cost-edit-btn { align-self: center; box-sizing: border-box; height: 34px; }
 .cost-edit-btn[hidden], .cost-acts[hidden], .cost-notice[hidden], #costManage [data-cost-add][hidden] { display: none; }
 /* 当日收益清单：金额在第二列、百分比第三列，灯色取主表等级。 */
-.cost-contrib { list-style: none; margin: 0; padding: 0 0 0 16px; }
+.cost-contrib { list-style: none; margin: 0; padding: 0 16px 0 16px; display: grid;
+  grid-template-columns: var(--cost-contrib-cols); column-gap: var(--cost-contrib-gap); }
 .cost-contrib li {
   display: grid;
   align-items: center;
-  gap: 0 6px;
+  grid-column: 1 / -1;
+  column-gap: var(--cost-contrib-gap);
   padding: 3px 0;
   font-size: 12px;
-  grid-template-columns: var(--cost-contrib-cols);
+  grid-template-columns: subgrid;
   font-variant-numeric: tabular-nums;
   position: relative;
 }
@@ -269,7 +273,7 @@
 .cost-contrib .cncn { color: var(--dim); }
 .cost-contrib .ca { order: 2; }
 .cost-contrib .cv { order: 3; }
-.cost-contrib .cv, .cost-contrib .ca { text-align: center; white-space: nowrap; justify-self: stretch; }
+.cost-contrib .cv, .cost-contrib .ca { text-align: left; white-space: nowrap; justify-self: stretch; }
 .cost-contrib .cv.up, .cost-contrib .ca.up { color: var(--up); }
 .cost-contrib .cv.down, .cost-contrib .ca.down { color: var(--down); }
 #dayPnlCard > summary .dp-amt, #dayPnlCard > summary .dp-pct { font-size: 16px; font-weight: 400; }
@@ -288,7 +292,7 @@
   overflow: hidden;
   width: auto;
   justify-self: stretch;
-  margin: 0 8px 0 var(--cost-cbar-left);
+  margin: 0;
 }
 .cost-contrib .cbar::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--cost-track-axis); }
 .cost-contrib .cbar i { position: absolute; top: 0; bottom: 0; display: block; }
@@ -375,27 +379,23 @@
 .rules-body li.rule-setting { margin-left: 6px; border-left: 2px solid var(--line); padding-left: 8px; }
 @media(max-width:600px) {
   .cost-manage, .dual-body {
-    /* 440px基准：78px列可容纳+$9,999.9/-1234.5%；名称轨保持原宽，比例条吸收收窄。 */
-    --cost-contrib-cols: minmax(0,1.5fr) 78px 78px minmax(0,.853fr);
-    --cost-cbar-left: 4px;
+    /* 手机档：列距收到 6px，其余同桌面（等比平铺，不再写死 78px 列宽）。 */
+    --cost-contrib-gap: 6px;
   }
   .cost-edit-btn { padding: 8px 13px; font-size: 16px; line-height: 1.08; }
   .runbar .cost-edit-btn { height: 40px; }
   .cost-legend { font-size: 12px; }
-  .cost-contrib { padding-left: 12px; }
+  .cost-contrib { padding-left: 12px; padding-right: 12px; }
   .cost-contrib li { font-size: 13px; line-height: 15.75px; }
   .cost-contrib li > .cv, .cost-contrib li > .ca { height: 15.75px; }
-  /* 金额轨扩宽后左移6px，文本中心不变；盈亏比在78px轨道内居中，长值向两侧展开。 */
-  .cost-contrib li > .ca { position: relative; left: -21px; }
-  .cost-contrib .cbar {
-    height: 12px;
-    margin: 0 8px 0 var(--cost-cbar-left);
-  }
+  .cost-contrib .cbar { height: 12px; }
   .cost-foot { font-size: 12px; }
   #group_positions .pi-zone-money { gap: 4px; margin-top: 5px; }
   /* v18 仓位展开明细：手机档仍只用这一个 ≤600 断点，不新增第二档 */
   .pi-body { padding: 2px 8px 9px; }
   .pi-wlist { --pi-wgap: 6px; }
+  /* 盈亏明细手机档：列距 6；名称仍一行（代码＋中文名），其余三列平分剩下的宽度 */
+  .pi-plist { column-gap: 6px; }
   .pi-wshare { grid-template-columns: 48px minmax(0,1fr); }
   .pi-kpis { gap: 4px; }
   .pi-kpi { gap: 3px; }
@@ -463,6 +463,32 @@
   width: 1px; background: var(--section-line, rgba(139,147,161,.32)); pointer-events: none; }
 .pi-wbar { display: block; height: 9px; border-radius: 5px; background: var(--line); overflow: hidden; }
 .pi-wbar i { display: block; height: 100%; min-width: 2px; border-radius: 5px; }
+/* 2026-11-23 仓位里默认折叠的「盈亏明细」（每只个股的总盈亏；标题右侧不放合计；左边展开小三角 12×12 的 CSS 实心三角）。
+   行＝代码+名称 | 金额 | 盈亏比 | 市值 四块等距平铺（1fr×4，随页面宽度伸缩），数字不加粗；金额带涨跌色，
+   市值前灰色美元符号，与行业权重同一套写法。 */
+.pi-fold > summary { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 26px;
+  cursor: pointer; list-style: none; color: var(--head-blue-on); font-size: 15px; }
+.pi-fold > summary::-webkit-details-marker { display: none; }
+/* 展开小三角用 CSS 直接画（字符 ▸ 在字体里只有约 5px，调字号也大不起来）：收起＝向右 ▶ 8×12，展开＝向下 ▼ 12×8，
+   宽高盒固定 10×10（11-23 缩小 2px），与标题文字间距 4px（summary 的 gap），收起／展开两态盒子不变、标题文字不会左右跳。 */
+.pi-fold > summary::before { content: ""; flex: none; width: 10px; height: 10px; margin-right: 0; box-sizing: border-box;
+  background: var(--dim, #8b93a1); clip-path: polygon(15% 0, 100% 50%, 15% 100%); }
+.pi-fold[open] > summary::before { clip-path: polygon(0 15%, 100% 15%, 50% 100%); }
+.pi-fold > summary .pi-fold-name { flex: 1 1 auto; font-weight: 600; }
+.pi-fold > summary:focus-visible { outline: 2px solid var(--head-blue-on); outline-offset: 2px; }
+/* 整张名单共用一套列轨：名称列至少容得下最长的「代码＋中文名」（一行不换行），四列起点间距随页面宽度等比伸缩
+   （与行业权重一致，不写死间距）；每行用 subgrid 继承列轨，所以各行竖向对齐、最右列也铺到页面边。 */
+.pi-plist { display: grid; grid-template-columns: minmax(max-content,1.7fr) repeat(3, minmax(0,1fr)); column-gap: 8px; margin-top: 4px; }   /* 名称块权重 1.7：金额、盈亏比两列整体往右靠 */
+.pi-prow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
+  align-items: center; min-width: 0; padding: 4px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+.pi-prow + .pi-prow { border-top: 1px solid var(--line); }
+/* 名称一行显示：代码＋灰色中文名同排，不换行、不省略 */
+.pi-pname { color: var(--text); min-width: 0; white-space: nowrap; line-height: 1.25; }
+.pi-pname .pi-pcn { color: var(--dim, #8b93a1); margin-left: 4px; font-size: 13px; }
+.pi-pname a { color: inherit; text-decoration: none; }
+.pi-pamt, .pi-ppct, .pi-pmv { font-weight: 400; white-space: nowrap; text-align: left; }
+.pi-pmv { text-align: right; }   /* 最右的市值列靠右贴齐页面右边，不留空 */
+.pi-pmv .pi-wcur { color: var(--dim, #8b93a1); }
 .pi-log-link { display: inline-flex; align-items: center; gap: 5px; color: var(--head-blue-on);
   font-size: 16px; font-weight: 600; text-decoration: none; }
 .pi-log-link:hover, .pi-log-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }

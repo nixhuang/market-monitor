@@ -2689,6 +2689,30 @@
         minimumFractionDigits: 2, maximumFractionDigits: 2
       });
     }
+    // 2026-11-23：仓位里默认折叠的「盈亏明细」（每只个股的总盈亏）：长短持仓混排，固定从亏损到盈利；
+    // 每行 代码+名称｜总盈亏金额｜总盈亏比｜市值（市值前灰色 $）。成本未知的个股不进，避免用 0 冒充。
+    // 用户定：标题右侧不写合计金额，也不另做已实现的名单。
+    function pnlRowHtml(sym, cn, amt, pctTxt, mvTxt, up) {
+      var link = ROW_BY_SYM[sym] && ROW_BY_SYM[sym].tr && ROW_BY_SYM[sym].tr.id;
+      var name = '<span class="pi-pname">' + (link ? '<a class="signal-member-jump" href="#' + esc(link) + '">' : '') +
+        esc(sym) + (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '') + '</span>';
+      return '<div class="pi-prow">' + name +
+        '<b class="pi-pamt ' + (up ? 'up' : 'down') + '">' + amt + '</b>' +
+        '<b class="pi-ppct ' + (up ? 'up' : 'down') + '">' + pctTxt + '</b>' +
+        '<b class="pi-pmv">' + mvTxt + '</b></div>';
+    }
+    function renderPnlFolds(rows) {
+      var items = rows.filter(function (r) { return r.has && r.costKnown && r.pnlAmt !== null; })
+        .map(function (r) { return { sym: r.sym, cn: r.note, amt: r.pnlAmt, pct: r.pnlPct, mv: r.mv }; })
+        .sort(function (a, b) { return a.amt - b.amt; });
+      var blk = document.getElementById('piPnlBlock'), list = document.getElementById('piPnlList');
+      if (blk) blk.hidden = !items.length;
+      var html = items.map(function (x) {
+        return pnlRowHtml(x.sym, x.cn, money(x.amt), pct(x.pct),
+          '<span class="pi-wcur">$</span>' + Math.round(x.mv).toLocaleString('en-US'), x.amt >= 0);
+      }).join('');
+      if (list && list._r !== html) { list.innerHTML = html; list._r = html; }
+    }
     function renderPositionPanel(rows, holdingsMv) {
       var body = document.getElementById('piBody');
       if (!body) return;
@@ -2725,6 +2749,7 @@
         }).sort(function (a, b) { return b.pc - a.pc; });
       var block = wlist.closest('.pi-block');
       if (block) block.hidden = !shown.length;
+      renderPnlFolds(rows);
       wlist.innerHTML = shown.map(function (s) {
         return '<div class="pi-wrow"><span class="pi-wname">' + esc(s.label) + '</span>' +
                '<b class="pi-wpnl ' + (s.ratio >= 0 ? 'up' : 'down') + '">' + pct(s.ratio) + '</b>' +
@@ -2891,8 +2916,9 @@
           x.share = gross > 0 ? (x.amt / gross) * 100 : 0;
           mx = Math.max(mx, Math.abs(x.share));
         });
+        // 2026-11-23 用户：当日清单固定从亏损到盈利（亏得最多在最上，赚得最多在最下）
         cl.sort(function (a, b) {
-          return b.share - a.share;
+          return a.share - b.share;
         });
         var crows = cl
           .map(function (x) {

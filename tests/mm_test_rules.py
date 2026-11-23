@@ -2866,6 +2866,39 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn("#signalCounts .signal-member-block h5{font-size:15px;line-height:16.25px}", css)
         self.assertIn("#signalCounts .signal-filter-detail{font-size:15px;line-height:20.25px}", css)
 
+    def test_position_pnl_fold_skeleton_and_single_open_linkage(self):
+        """2026-11-23：仓位里默认折叠的「盈亏明细」（每只个股的总盈亏）——放在「交易记录」入口上一排、标题右侧不写合计、
+        不做「已实现盈亏明细」；展开其他分组时，统计子板块和这个盈亏明细一并自动收起。"""
+        import monitor_render
+        src = (ROOT / 'monitor_render.py').read_text(encoding='utf-8')
+        i_fold, i_log = src.index('id="piPnlBlock"'), src.index('class="pi-block pi-records"')
+        self.assertLess(i_fold, i_log)                                   # 在交易记录上一排
+        self.assertIn('<details class="pi-fold" id="piPnlFold"><summary><span class="pi-fold-name">盈亏明细</span></summary>', src)
+        self.assertNotIn('piPnlSum', src)                                # 标题右侧不写合计金额
+        self.assertNotIn('piRealizedBlock', src)                         # 不做已实现盈亏明细
+        self.assertNotIn('已实现盈亏明细', src)
+        self.assertNotIn('<details class="pi-fold" id="piPnlFold" open', src)   # 默认折叠
+        js = monitor.PAGE_INTERACTION_JS
+        self.assertIn('document.querySelectorAll("#signalCounts details[open], #group_positions .pi-fold[open]")', js)
+        self.assertIn("    closeSubFolds();\n    document.querySelectorAll(\"details.card[open]\")", js)
+        cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
+        self.assertIn(".sort(function (a, b) { return a.amt - b.amt; });", cost)   # 固定从亏损到盈利
+        self.assertNotIn('piRealizedList', cost)
+        self.assertNotIn('piPnlSum', cost)
+        css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
+        self.assertIn('.pi-fold > summary::before { content: ""; flex: none; width: 10px; height: 10px; margin-right: 0;', css)   # 左边展开小三角：CSS 画的 10×10 实心三角，与标题间距走 summary gap 4px
+        self.assertIn('.pi-plist { display: grid; grid-template-columns: minmax(max-content,1.7fr) repeat(3, minmax(0,1fr));', css)   # 名单共用列轨，名称一行、其余三列平铺
+        self.assertIn('.pi-prow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;', css)
+        self.assertIn('.pi-pmv { text-align: right; }', css)   # 市值列靠右贴齐页面右边
+        self.assertIn('.pi-fold[open] > summary::before { clip-path: polygon(0 15%, 100% 15%, 50% 100%); }', css)
+        self.assertNotIn('个股总盈亏', src)                                                  # 名称已改为「盈亏明细」
+
+    def test_day_contrib_sorted_loss_to_profit(self):
+        """2026-11-23：当日清单固定从亏损到盈利。"""
+        cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
+        self.assertIn("return a.share - b.share;", cost)
+        self.assertNotIn("return b.share - a.share;", cost)
+
     def test_signal_filter_clear_button_is_wide_and_short(self):
         css = monitor.PAGE_CSS
         self.assertIn("#signalCounts .signal-filter-clear{margin-left:auto;box-sizing:border-box;height:26px;padding:0 24px;", css)

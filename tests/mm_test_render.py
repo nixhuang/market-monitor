@@ -2756,7 +2756,7 @@ const deadline = setTimeout(() => {
         name:width+'px仓位/资产/现金/长短外缘与其它顶层分组同全宽，仓位可点开合、子▲有底色及交易容量',actual:layout});
       assertions.push({ok:layout.day.amount.fontSize==='16px'&&layout.day.percent.fontSize==='16px'&&layout.day.amount.fontWeight==='400'&&layout.day.percent.fontWeight==='400'
         &&layout.day.code?.fontSize==='16px'&&layout.day.name?.fontSize==='15px'&&layout.day.pnl?.fontSize==='15px'
-        &&layout.day.ratio?.fontSize==='15px'&&layout.day.ratio.textAlign==='center'&&layout.day.linkStatic==='dotted'&&layout.day.barFits
+        &&layout.day.ratio?.fontSize==='15px'&&layout.day.ratio.textAlign==='left'&&layout.day.linkStatic==='dotted'&&layout.day.barFits
         &&layout.day.allLinksVisible,
         name:width+'px当日每股名称可见及跳转边框完整位于cn-name与祖先裁切盒内，标题16不加粗/列表16/15和比例条不越界',actual:layout.day});
       const trade=await evaluate(`(async()=>{
