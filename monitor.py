@@ -1058,9 +1058,11 @@ def macro_status(key, item, drawdown=None):
         v = item["value"]
         dw = item.get("delta_week")
         if dw is not None and dw >= HY_WEEK_RED:
+            # 2026-11-24 用户：「一周急升，信用升温」两段重复、也没说清为什么红 → 四字直说：
+            # 急升偏高＝涨得快、水平也已过黄线；急升触红＝红灯完全由一周涨幅触发、水平还没到黄线。
             if v >= S["hy_green"]:
-                return "red", "一周急升，信用升温"
-            return "red", "一周急升，待观察"
+                return "red", "急升偏高"
+            return "red", "急升触红"
         if v >= 500:
             return "red", "压力很高"
         if v >= S["hy_red"]:
@@ -1191,7 +1193,8 @@ def market_risk_summary(macro, target_date=None):
                 for category, weight in zip(RISK_CATEGORIES, RISK_CATEGORY_WEIGHT))
     warnings = [RISK_LABELS[key] for key in RISK_INDICATORS if levels[key] in ("red", "yellow")]
     level = "red" if score >= 5 else "yellow" if score >= 2 or missing else "green"
-    label = {"red": "升高", "yellow": "留意", "green": "平稳"}[level]
+    # 2026-11-24 用户：「升高」读起来像温度计、没有警示意味 → 红档改「警戒」，与「留意」「平稳」成一级比一级重。
+    label = {"red": "警戒", "yellow": "留意", "green": "平稳"}[level]
     if not warnings and missing:
         label = "数据不足"
     if warnings:
@@ -1629,12 +1632,50 @@ def short_history_of(symbol):
         return _SHORT_HISTORY.get(normalize_symbol(symbol))
 
 
+def _new_listing_with_realtime(symbol, short):
+    """盘中口径（目标日＝今天、正在开盘）：新股的短日线只到昨天，价格栏就会一直停在昨收。
+    2026-11-24 用户：ANT 盘中抓到的是 20 日的日线。普通标的靠 apply_realtime 合并实时价，
+    新股没走那条通道；这里照同一套校验补上——Nasdaq 报价必须 isRealTime、成交时间落在当日常规时段、
+    延迟 ≤5 分钟，且短日线最后一根正好是上一交易日（不跨天补），才把当日价作为新的一根。
+    当日一根只有成交价、没有真实高低开 → 范围有效位标 False，振幅照旧算不出来，绝不编。
+    返回 (短日线副本, 实时成交时间)；任何一步不满足就原样返回 (short, "")。"""
+    try:
+        if CLOSED_ONLY or not S.get("use_realtime") or not TARGET_DATE or not short.get("dates"):
+            return short, ""
+        if short["dates"][-1] >= TARGET_DATE:
+            return short, ""
+        session = market_sessions.active_session(datetime.now(US_TZ))
+        if session is None or session[0] != TARGET_DATE:
+            return short, ""
+        if short["dates"][-1] != market_sessions.previous_session(TARGET_DATE):
+            return short, ""
+        rt = nasdaq_realtime(symbol)
+        if not rt or market_sessions.validated_quote_time(rt.get("ts"), datetime.now(US_TZ)) is None:
+            return short, ""
+        px = rt.get("price")
+        if isinstance(px, bool) or not _finite_pos(px):
+            return short, ""
+        out = dict(short)
+        n = len(short["dates"])
+        out["dates"] = list(short["dates"]) + [TARGET_DATE]
+        out["closes"] = list(short["closes"]) + [px]
+        out["highs"] = list(short.get("highs") or short["closes"]) + [px]
+        out["lows"] = list(short.get("lows") or short["closes"]) + [px]
+        out["opens"] = list(short.get("opens") or [None] * n) + [None]
+        out["range_valid"] = list(short.get("range_valid") or [True] * n) + [False]
+        out["price"], out["prev_close"] = px, short["closes"][-1]
+        return out, rt.get("ts") or "x"
+    except (ValueError, TypeError, KeyError, IndexError, OverflowError):
+        return short, ""
+
+
 def new_listing_quote(symbol, sc, group):
     """上市初期通道：只报已核验的价格、涨跌幅与振幅，不伪造 OHLC，也不计算任何技术信号。
     没有短历史就返回 None，交回原来的「无数据」分支。"""
     short = short_history_of(symbol)
     if not short:
         return None
+    short, rt_ts = _new_listing_with_realtime(symbol, short)
     price, prev = short["price"], short["prev_close"]
     if not _finite_pos(price):
         return None
@@ -1654,7 +1695,9 @@ def new_listing_quote(symbol, sc, group):
         "dist_high": None, "dist_low": None, "vol_ratio": None,
         "day_amp": session["day_amp"], "week_chg": None, "range52": None,
         "trigger": sc.get("trigger"), "group": group,
-        "data_date": short["dates"][-1], "source": "Nasdaq 上市初期日线",
+        "data_date": short["dates"][-1],
+        "source": "Nasdaq 上市初期实时价" if rt_ts else "Nasdaq 上市初期日线",
+        "realtime": bool(rt_ts), "rt_ts": rt_ts,
         "boll_up": None, "boll_dn": None,
         # 2026-11-20：文案固定，不写「第 N 个交易日」——那个数字每天变、且和
         # 「日线不足 30 根／暂不计算技术指标」说的是同一件事，格子里本来就全是「—」。

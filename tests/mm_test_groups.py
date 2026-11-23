@@ -2657,8 +2657,8 @@ class TestGroups(unittest.TestCase):
                     self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': value})[0], expected)
             self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 30})[0], 'yellow')
             self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 29})[0], 'green')
-            self.assertIn('待观察', monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 60})[1])
-            self.assertNotIn('待观察', monitor.macro_status('hy_oas', {'ok': True, 'value': 360, 'delta_week': 60})[1])
+            self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320, 'delta_week': 60})[1], '急升触红')
+            self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 360, 'delta_week': 60})[1], '急升偏高')
             self.assertEqual(monitor.macro_status('hy_oas', {'ok': True, 'value': 320,
                                                              'delta_week': 50})[0], 'red')
         finally:
@@ -2861,7 +2861,8 @@ class TestGroups(unittest.TestCase):
         page = monitor.render(macro, [], 0, snapshot={'target_trade_date': '2026-10-09'})
         summary = page.split('id="macroCard"', 1)[1].split('</summary>', 1)[0]
         self.assertIn('id="marketRiskLight" data-level="red"', summary)
-        self.assertIn('升高', summary)
+        self.assertIn('警戒', summary)
+        self.assertNotIn('升高', summary)
         self.assertNotIn('红1 · 黄1', summary)
         self.assertIn('走弱，压力同步升高', page)
         self.assertIn('<span class="unit">2026-10-02</span>', page)  # 2026-10-30：指标行不再写「截至」
@@ -10197,6 +10198,34 @@ class NewListingTests(unittest.TestCase):
         self.assertTrue(all(value is None for value in item["rsi"].values()))
         self.assertIsNone(item["range52"])
         self.assertIsNone(item["day_amp"])        # 首日没有昨收，振幅留空
+
+    def test_new_listing_midsession_uses_validated_realtime_price(self):
+        # 2026-11-24：盘中（目标日＝今天）新股价格不能停在昨天的日线；实时价过校验才并入
+        self._seed([95.0, 97.17], ["2026-11-18", "2026-11-19"])
+        sess = ("2026-11-20", None)
+        with patch.object(monitor, "TARGET_DATE", "2026-11-20"), patch.object(monitor, "CLOSED_ONLY", False), \
+             patch.object(monitor.market_sessions, "active_session", return_value=sess), \
+             patch.object(monitor.market_sessions, "previous_session", return_value="2026-11-19"), \
+             patch.object(monitor.market_sessions, "validated_quote_time", return_value=object()), \
+             patch.object(monitor, "nasdaq_realtime", return_value={"price": 100.0, "ts": "Nov 20, 2026 10:30 AM ET", "volume": 1}):
+            item = monitor.new_listing_quote("ANT", {}, "focus")
+        self.assertAlmostEqual(item["price"], 100.0)
+        self.assertEqual(item["data_date"], "2026-11-20")
+        self.assertAlmostEqual(item["chg"], (100.0 / 97.17 - 1) * 100)
+        self.assertTrue(item["realtime"])
+        self.assertIsNone(item["day_amp"], "当日一根只有成交价，振幅不能编")
+        # 实时价没过校验 → 原样用昨收日线，不假装是今天
+        with patch.object(monitor, "TARGET_DATE", "2026-11-20"), patch.object(monitor, "CLOSED_ONLY", False), \
+             patch.object(monitor.market_sessions, "active_session", return_value=sess), \
+             patch.object(monitor.market_sessions, "previous_session", return_value="2026-11-19"), \
+             patch.object(monitor, "nasdaq_realtime", return_value=None):
+            item = monitor.new_listing_quote("ANT", {}, "focus")
+        self.assertEqual(item["data_date"], "2026-11-19")
+        self.assertFalse(item["realtime"])
+        # 收盘口径不碰实时价
+        with patch.object(monitor, "TARGET_DATE", "2026-11-20"), patch.object(monitor, "CLOSED_ONLY", True), \
+             patch.object(monitor, "nasdaq_realtime", side_effect=AssertionError("收盘口径不该取实时价")):
+            self.assertEqual(monitor.new_listing_quote("ANT", {}, "focus")["data_date"], "2026-11-19")
 
     def test_new_listing_note_is_fixed_for_every_bar_count(self):
         # 2026-11-20：文案不许随日线根数变，第 2、3、4…根都还是同一句
