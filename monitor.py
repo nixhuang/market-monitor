@@ -925,6 +925,13 @@ def build_macro(previous=None, nfci_state=None):
         if key == "sp500":
             dd = pct_from_high(rows)
             item["drawdown"] = dd
+        # 2026-11-23：标普／VIX 都要 200 日均线。标普拿它算偏离（变化列上排＋判灯），
+        # VIX 只显示均线数值（「均 19.86」），判灯仍按 VIX 数值档位不变。
+        if key in ("sp500", "vix"):
+            ma = moving_average(rows, scale=cfg["scale"])
+            item["ma200"] = ma
+            if key == "sp500":
+                item["ma_dev"] = ma200_deviation(cur, ma)
         if key == "ust10":
             item["month_ago"], item["delta_month"] = month_change(rows)
         limit = NFCI_MAX_LAG_DAYS if key == "nfci" else 7
@@ -974,10 +981,13 @@ def build_macro(previous=None, nfci_state=None):
             if 0 <= nd_age <= 7:
                 cur_nd = nd_rows[-1][1]
                 week_nd = nd_rows[-6][1] if len(nd_rows) >= 6 else None
+                nd_ma = moving_average(nd_rows)
                 macro["nasdaq"] = {"ok": True, "name": "纳斯达克指数", "value": cur_nd,
                                    "date": nd_rows[-1][0], "source": "Yahoo ^IXIC",
                                    "week_ago": week_nd,
-                                   "delta_week": (cur_nd - week_nd) if week_nd is not None else None}
+                                   "delta_week": (cur_nd - week_nd) if week_nd is not None else None,
+                                   # 2026-11-23：与标普同一把尺子，变化列两排与评语都看这个偏离
+                                   "ma200": nd_ma, "ma_dev": ma200_deviation(cur_nd, nd_ma)}
                 log(f"  纳斯达克指数: {cur_nd:,.2f} ({nd_rows[-1][0]})")
             else:
                 log("  ! 纳斯达克指数数据日期过期，参考行显示无数据")
@@ -991,6 +1001,52 @@ NASDAQ_WEEK_YELLOW = -2.0  # 一周跌 >= 2%：走弱
 NASDAQ_WEEK_RED = -4.0  # 一周跌 >= 4%：急跌
 HY_WEEK_YELLOW = 30   # 垃圾债利差一周（5个交易日）扩大 >= 30 bp → 黄
 HY_WEEK_RED = 50      # 一周扩大 >= 50 bp → 红
+
+# 2026-11-23 用户定稿：标普500／纳斯达克的变化列与判灯都改成「收盘价相对 200 日均线
+# 偏高／偏低多少」。上方一律不报警，只在高出 20% 以上换一句提示（历史上高偏离常继续涨，
+# 点黄灯会让综合灯在牛市里常年挂着）；下方按 3／8／15 三档递进。VIX 变化列只显示
+# 均线数值，判灯仍只看 VIX 自己落在哪一档，不跟着改。
+MA200_WINDOW = 200
+MA200_HIGH_HINT = 20.0   # 高出均线 >=20%：绿，只把评语换成「偏离偏高」（不亮灯）
+MA200_NEAR = -3.0        # 贴线缓冲：下方不足 3% 仍算绿，免得天天变灯
+MA200_YELLOW = -8.0
+MA200_RED = -15.0
+
+
+def moving_average(rows, window=MA200_WINDOW, scale=1.0):
+    """最近 window 根收盘价的算术平均；不足或含非法值返回 None（不拿短样本凑数）。"""
+    if len(rows) < window:
+        return None
+    vals = [v for _, v in rows[-window:]]
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) and v > 0 for v in vals):
+        return None
+    return sum(vals) / window * scale
+
+
+def ma200_deviation(value, ma200):
+    """现价相对 200 日均线的偏离百分比：正数＝在均线上方。"""
+    if not ma200 or not isinstance(value, (int, float)) or not math.isfinite(value):
+        return None
+    return (value / ma200 - 1.0) * 100.0
+
+
+def ma200_status(dev):
+    """按偏离百分比给灯与评语；数据不足返回灰，不冒充安全信号。
+    2026-11-23：评语统一四个字——手机风险表状态列只有约 80px，六字评语会折成
+    两行把灯条撑高；「偏离偏高」的提醒味仍保留在设置页说明里（只提示、不亮灯）。"""
+    if dev is None:
+        return "gray", "均线不足"
+    if dev >= MA200_HIGH_HINT:
+        return "green", "偏离偏高"
+    if dev >= 0:
+        return "green", "均线上方"
+    if dev >= MA200_NEAR:
+        return "green", "贴近均线"
+    if dev >= MA200_YELLOW:
+        return "yellow", "跌破均线"
+    if dev >= MA200_RED:
+        return "yellow", "明显偏低"
+    return "red", "深度偏低"
 
 
 def macro_status(key, item, drawdown=None):
@@ -1026,6 +1082,11 @@ def macro_status(key, item, drawdown=None):
         return "green", "平静"
 
     if key == "sp500":
+        # 2026-11-23 用户定稿：判灯改看「相对 200 日均线」，与变化列上排同一个数。
+        # 旧快照／旧测试里没有 ma_dev 时退回原回撤档位，避免缺字段就冒充绿灯。
+        dev = item.get("ma_dev")
+        if dev is not None:
+            return ma200_status(dev)
         dd = item.get("drawdown")
         if dd is None:
             return "gray", "—"
@@ -1038,8 +1099,11 @@ def macro_status(key, item, drawdown=None):
         return "green", "第0档"
 
     if key == "nasdaq":
-        # 2026-10-30：纳斯达克指数参考行补评语，口径与标普500错开——标普看回撤档位，
-        # 纳斯达克只看一周涨跌（跨指数可比用百分比），上涨不出字，仍不计入综合灯。
+        # 2026-11-23 用户定稿：与标普同一把尺子（相对 200 日均线），不再看一周涨跌。
+        # 仍只作用于本行显示，不进 RISK_INDICATORS、不计入综合灯。
+        dev = item.get("ma_dev")
+        if dev is not None:
+            return ma200_status(dev)
         dw = item.get("delta_week")
         base = item.get("week_ago")
         if dw is None or not base:
@@ -1085,10 +1149,10 @@ def macro_status(key, item, drawdown=None):
 
 
 RISK_INDICATORS = ("hy_oas", "vix", "sp500", "breadth", "nfci")
-RISK_LABELS = {"hy_oas": "垃圾债利差", "vix": "VIX", "sp500": "标普500回撤",
+RISK_LABELS = {"hy_oas": "垃圾债利差", "vix": "VIX", "sp500": "标普500均线",
                "breadth": "上涨参与度", "nfci": "金融压力NFCI"}
 RISK_RULE_TEXT = (
-    "五项指标分三类：信用／金融环境（垃圾债利差、金融压力NFCI）、情绪（VIX）、趋势（标普500回撤、上涨参与度）。"
+    "五项指标分三类：信用／金融环境（垃圾债利差、金融压力NFCI）、情绪（VIX）、趋势（标普500均线偏离、上涨参与度）。"
     "每项黄记1分、红记2分；同类只取最高分，不重复计分；信用／金融环境类按2倍计分，情绪、趋势各按1倍，总分0至8。"
     "0至1分为绿灯（有轻微提示会写在说明里），2至4分为黄灯，5分及以上为红灯。"
     "数据缺失时最低为黄灯，缺失不代表安全。这是风险参考规则，不预测涨跌，也不是买卖指令。"
@@ -1245,7 +1309,10 @@ def patch_closing_bar(symbol, data):
 def yahoo_history(symbol):
     """返回 dict: closes(list), volumes(list), highs, lows；失败返回 None
     多端点轮换 + 429 退避重试，尽量扛住限流"""
-    span = "2y" if max(S["ma_short"], S["ma_long"]) > 200 and symbol not in FRED_YAHOO_ALIAS.values() else "1y"
+    # 2026-11-23：指数日线要算 200 日均线，一年只有约 250 根、少几天就凑不齐，
+    # 四个指数别名统一取两年；个股仍按 ma_short/ma_long 决定，不把全站抓数翻倍。
+    is_index = symbol in FRED_YAHOO_ALIAS.values() or symbol == "^IXIC"
+    span = "2y" if is_index or max(S["ma_short"], S["ma_long"]) > 200 else "1y"
     endpoints = [
         f"https://query1.finance.yahoo.com/v8/finance/chart/{{s}}?range={span}&interval=1d",
         f"https://query2.finance.yahoo.com/v8/finance/chart/{{s}}?range={span}&interval=1d",
@@ -3683,6 +3750,13 @@ _position_long_zone_card = _page_renderer._position_long_zone_card
 
 
 _group_card = _page_renderer._group_card
+
+
+# 2026-11-20 23:xx：其它分组两两并排，渲染层新增的两个方法同样挂到模块上。
+_dual_group_card = _page_renderer._dual_group_card
+
+
+_group_dual_rows = _page_renderer._group_dual_rows
 
 
 _run_light = monitor_render._run_light

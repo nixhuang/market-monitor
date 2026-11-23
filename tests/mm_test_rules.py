@@ -147,7 +147,7 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('background:var(--lamp-yellow)', declarations('.range52-cost'))
         for lamp in ('red', 'yellow', 'green'):
             self.assertIn(f'table.stk tr.{lamp}[data-symbol]{{--lamp-line:var(--{lamp})}}', css)
-        self.assertIn('width:2px', declarations('table.stk tr[data-symbol]::before'))
+        self.assertIn('width:4px', declarations('table.stk tr[data-symbol]::before'))
         self.assertIn('#signalCounts .signal-name-lamp.tone-target-high{--name-lamp:var(--target-high)}', css)
         for alias in ('tone-target-high', 'target-space-high'):
             self.assertIn(f'#signalCounts .signal-member-block h5.{alias}', css)
@@ -309,7 +309,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         for dead in ('#c4a3ff', '196,163,255', '176,132,255'):
             self.assertNotIn(dead, css)
         # 灯圈（计数徽章）与胶囊（共识价标签）本体、描边圈同源。
-        self.assertIn('.stat-badge.purple{border-color:var(--purple)}', css)
+        self.assertIn('.stat-badge.purple{color:var(--purple)}', css)
         self.assertIn('.stat-dot.purple{background:var(--purple)}', css)
         target_rule = re.search(r'td\.tgs \.lvtag\.tgt\{([^}]*)\}', css)[1]
         self.assertIn('color:var(--purple)', target_rule)
@@ -395,13 +395,14 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         # 市场风险表：固定列宽，不再让 WTI 参考行那一大段说明把状态列撑到 138.6px
         # （短文案「平静」后面空一大截），也不再把指标列挤到 65.8px（「垃圾债利差」逐字折三行）。
         # 四列不换行所需（含左右各 10px 内边距）实测 126/159/90/114：
-        # 宽屏 26/33/18/23 → 184.6/234.3/127.8/163.3；≤600px 30/34/15/21 → 112.5/127.5/56.3/78.8。
+        # 宽屏 26/33/18/23 → 184.6/234.3/127.8/163.3；≤600px 27/28/21/24（11-23 调整）。
         # 指标列仍左对齐，其余三列居中；原油「依据与来源」整块删除，不再留 .reference-detail。
         scope = ':is(#macroCard, .macro-scope)'
         self.assertIn(scope + ' table{table-layout:fixed}', css)
         for col, width in (('first-child',26), ('nth-child(2)',33), ('nth-child(3)',18), ('nth-child(4)',23)):
             self.assertIn(scope + f' td:{col}{{width:{width}%', css)
-        for col, width in (('first-child',29), ('nth-child(2)',32), ('nth-child(3)',18), ('nth-child(4)',21)):
+        # 11-23 手机档：名称收窄，当前列与变化列左移靠近名称列，变化列与评语列一起放宽
+        for col, width in (('first-child',27), ('nth-child(2)',28), ('nth-child(3)',21), ('nth-child(4)',24)):
             self.assertIn(scope + f' td:{col}{{width:{width}%}}', mobile)
         for col, width in ((2,33), (3,18), (4,23)):
             self.assertIn(scope + f' td:nth-child({col}){{width:{width}%;text-align:center}}', css)
@@ -426,7 +427,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('.zone-card>summary{box-sizing:border-box;height:48px;padding-top:0;padding-bottom:0}', css)
         for card in ('macro-card', 'day-pnl-card'):
             self.assertIn(f'.{card}>summary.grp{{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}}', css)
-        self.assertIn('.stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}', mobile)
+        self.assertIn('.stat-badge{font-size:17px;line-height:16px}', mobile)
         self.assertNotIn('linear-gradient(90deg,rgba(143,184,240,', css)
         self.assertNotIn('inset 3px 0 0 #8fb8f0', css)
         # 「信号」列所有胶囊同宽且文字居中
@@ -457,7 +458,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('--sym-w:100px', css)
         self.assertIn(':root{--status-font-size:14.5px;--sym-w:98px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;'
                       '--lamp-top:8px;--lamp-h:36px;--row-pad-top:5px;--tgs-font:16px;'
-                      '--tgs-pad-l:0px;--tgs-pad-r:0px}', css)
+                      '--tgs-pad-l:0px;--tgs-pad-r:0px;--pos-num-fs:16px}', css)
         self.assertIn('table.stk tr[data-symbol]>td.sym{font-size:17px;padding-left:6px;padding-right:2px}', css)
         self.assertIn('--tgs-w:104px', css)
         self.assertIn('--tgs-w:108px', css)
@@ -479,7 +480,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         # 2026-11-13：灯条与价格区两侧（共三条）灰色分隔线共用同一组上下几何，长度一致。
         self.assertIn('--lamp-top:8.5px', css)
         self.assertIn('--lamp-h:31.5px', css)
-        self.assertIn('top:var(--lamp-top);width:2px;height:var(--lamp-h);background:var(--lamp-line)', css)
+        self.assertIn('top:var(--lamp-top);width:4px;height:var(--lamp-h);background:var(--lamp-line)', css)
         self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertNotIn('table.stk tr[data-symbol]::before{top:7px;height:36px}', css)
         self.assertEqual(css.count('top:var(--lamp-top);height:var(--lamp-h);width:1px;'
@@ -700,11 +701,31 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         # 11-17 用户「变化列下排『周』『周 bp』保持灰色」：不跟上排涨跌色跳
         self.assertIn('td.num.dim .unit{font-size:var(--macro-aux);color:var(--dim)}', css)
         self.assertIn('td.num.dim .chg-num{font-size:var(--macro-chg);color:var(--dim)}', css)
-        # 渲染层不再产出「—」变化列，纳指参考行也整格空白（精确 HTML 由 mm_test_render.py 守门）
+        # 2026-11-23 再定稿：标普／纳指变化列两排＝上排百分比＋下排灰字「200均线偏离」，
+        # 标普不再写周变化；VIX 两排＝上排均线数值＋下排灰字「200日均线」。
+        # 空值整格留空仍只在 chg_cell 一处（精确 HTML 由 mm_test_render.py 守门）。
         src = (ROOT / 'monitor_render.py').read_text(encoding='utf-8')
-        self.assertIn('def chg_cell(txt, unit="", sign=""):', src)     # 无值整格留空只在这一处
-        self.assertIn('\'<td class="num dim"></td>\' if not txt else', src)
-        self.assertIn('nd_chg = chg_cell("")', src)                   # 纳指缺周数据时才空白；有数据写「周 ±x.x%」（2026-11-20）
+        self.assertIn('def chg_cell(txt, unit="", sign=""):', src)
+        self.assertIn("if not txt:\n                return '<td class=\"num dim\"></td>'", src)
+        self.assertIn('<span class="ma-dev">{dev:+.1f}%</span>', src)
+        self.assertIn('<span class="unit ma-tag">200均线偏离</span>', src)
+        self.assertIn('<span class="ma-val">{it["ma200"]:.2f}</span>', src)
+        self.assertIn('<span class="unit ma-tag">200日均线</span>', src)
+        self.assertIn('<span class="ma-dev">{nd_dev:+.1f}%</span>', src)
+        self.assertIn('nd_chg = chg_cell("")', src)                   # 纳指缺均线数据时整格留空
+        self.assertIn('dw_unit = "周" + dw_pct', src)                 # 仅旧快照回退还留着周变化
+        # 上排主数字跟「当前」列点位同号同行高；下排「200」不放大，整排沿用 .unit
+        self.assertIn('td.num.dim .ma-tag{letter-spacing:-.5px;white-space:nowrap;'
+                      'line-height:calc(var(--macro-chg) * 1.15)}', css)
+        self.assertNotIn('.ma-tag{font-size:', css)
+        self.assertIn('td.num.dim .ma-val{display:block;font-size:var(--macro-body);line-height:1.25}', css)
+        self.assertNotIn('<span class="unit-num">200</span>', src)
+        # 手机档：名称列收窄，当前列与变化列左移靠近名称列，变化列与评语列一起放宽
+        self.assertIn('td:first-child{width:27%}', css)
+        self.assertIn('td:nth-child(2){width:28%}', css)
+        self.assertIn('td:nth-child(3){width:21%}', css)
+        self.assertIn('td:nth-child(4){width:24%}', css)
+        self.assertNotIn('.ma-label', css)
 
     def test_earnings_fallback_has_no_dead_disclaimer_text(self):
         """22:35：没取到日期的财报整条隐藏，源码不许再留失败解释长句或占位提示。"""
@@ -792,21 +813,30 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertEqual(_amp_display_tone('7.2'), '')
 
     def test_header_relayout_2026_11_20(self):
-        """抬头重排：站名 32px 锁 39px 行盒；抓取灯独占一排；规则说明带灯圈靠左、仓位同步靠右同号。"""
+        """抬头重排：站名 32px 锁 39px 行盒；定投贴站名；规则/仓位同步上下两排紧贴编辑按钮。"""
         css = page_assets.PAGE_CSS
         self.assertIn('.brandbar h1.brand{margin:0;font-size:32px;line-height:39px;', css)
-        self.assertIn('.statusrow.flagrow{justify-content:space-between;gap:8px;margin:-2px 0 8px}', css)
-        self.assertIn('.statusrow.flagrow .rulelight{flex:none;white-space:nowrap}', css)
-        self.assertIn('.statusrow.flagrow .cost-state{min-width:0;text-align:right;white-space:normal;overflow-wrap:anywhere;font-size:var(--status-font-size);line-height:1.4}', css)
+        self.assertIn('.sync-stack{display:flex;flex-direction:column;justify-content:center;gap:0;flex:none;min-width:0;margin-left:2px}', css)
+        self.assertIn('.sync-stack .runlight{flex:none;white-space:nowrap;line-height:1.25}', css)
+        self.assertIn('.sync-stack .cost-state{min-width:0;white-space:nowrap;text-align:left;font-size:var(--status-font-size);line-height:1.25}', css)
+        self.assertIn('.brandbar .dca-badge{font-size:16px;margin-left:10px;margin-bottom:4px}', css)
+        self.assertNotIn('.statusrow.flagrow', css)
         self.assertNotIn('.flagrow .rulelight .dot{display:none', css)   # 2026-11-20 用户：规则前的灯圈保留
         page = self.render()
-        self.assertIn('<div class="statusrow flagrow">', page)
-        status, flag = page.split('<div class="statusrow flagrow">', 1)
+        self.assertIn('<span class="sync-stack" id="syncStack">', page)
+        self.assertNotIn('<div class="statusrow flagrow">', page)
+        bar, status = page.split('<div class="statusrow">', 1)
+        self.assertIn('id="costEditBtn"', bar)
+        self.assertLess(bar.index('id="costEditBtn"'), bar.index('id="syncStack"'))
+        self.assertIn('id="ruleLight"', bar)
+        self.assertNotIn('id="ruleLight"', status[:status.index('</div>')])
         self.assertIn('id="runLight"', status)
-        self.assertNotIn('id="ruleLight"', status)
-        self.assertIn('id="ruleLight"', flag)
-        self.assertNotIn('id="runLight"', flag)
-        self.assertIn('<i class="dot"></i><span id="ruleLightTxt">', flag)
+        self.assertIn('<i class="dot"></i><span id="ruleLightTxt">', bar)
+        cost_js = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
+        self.assertIn("querySelector('.sync-stack')", cost_js)
+        self.assertIn('<span class="warn">仓位待核验</span>', cost_js)
+        self.assertNotIn('上传结果待核验', cost_js)
+        self.assertNotIn('未填 token</span>', cost_js)
 
     def test_only_two_breakpoints_phone_600_and_desktop_601(self):
         """只适配三台设备（2026-11-01 定）：手机档 ≤600（按 iPhone 18 Pro Max 竖屏 440 定稿）、
@@ -849,7 +879,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('--tgs-pad-l:2px;', css)
         self.assertIn('--tgs-pad-r:3px;', css)
         # 手机档 16px 比 15px 宽约 5px，靠左右内距归零腾出；桌面档内距保持 2/3px。
-        self.assertIn('--tgs-pad-l:0px;--tgs-pad-r:0px}', mobile)
+        self.assertIn('--tgs-pad-l:0px;--tgs-pad-r:0px;--pos-num-fs:16px}', mobile)
         self.assertNotIn('td.tgs .lvtag.tgt{font-size:15px}', css)
         self.assertNotIn("setProperty('--tgs-font'", page_assets.PAGE_INTERACTION_JS)
         # 2026-11-13 用户定值：手机档振/量 15px、涨跌幅/涨跌额 16px；压缩档只收间距、不许改字号。
@@ -1234,11 +1264,10 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('#group_positions>summary::before{visibility:hidden}', css)  # 三角恢复可见
         self.assertIn('--frame-green:#2c8f3e', css)
         self.assertNotIn('border-color:', pos)
-        zone = re.search(r'#group_positions_long\.zone-card,#group_positions_short\.zone-card\{([^}]+)\}', css)[1]
-        self.assertIn('--signal-border:var(--frame-green)', zone)
-        self.assertIn('background:var(--card);border:1px solid var(--frame-green)', zone)
-        self.assertIn('box-sizing:border-box;width:100%', zone)
-        self.assertIn('border-radius:9px', zone)
+        # 2026-11-20：长短持仓改成与当日／风险同款并排双卡，绿框专属规则已退休。
+        zone = re.search(r'#zoneDualRow\{([^}]+)\}', css)[1]
+        self.assertIn('--collapse-bg:var(--positions-collapse)', zone)
+        self.assertIn('#zoneDualRow:has(> details[open]) > .dual-body{display:block}', css)
         self.assertIn('height:26px;', re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1])
         self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', css)
         button = re.search(r'\n\.collapse-group\{([^}]*)\}', css)[1]
@@ -1393,10 +1422,10 @@ vm.createContext(ctx);vm.runInContext(fs.readFileSync(0,'utf8'),ctx);
 const click=(card)=>{ev.click.forEach(f=>f({target:new Element(card)}));};
 const flush=()=>{while(frames.length)frames.shift()();};
 const focus=cards[3];
-// 用户点分组标题并展开：其它分组（含「仓位」与长/短持仓）都收起
+// 用户点分组标题并展开：其它分组（含长/短持仓）都收起；2026-11-20 定稿「仓位」豁免，保持展开
 click(focus);focus.open=true;focus.top=40;flush();
 assert.equal(cards[1].open,false);assert.equal(cards[2].open,false);assert.equal(cards[4].open,false);
-assert.equal(cards[0].open,false);assert.equal(focus.open,true);
+assert.equal(cards[0].open,true);assert.equal(focus.open,true);
 assert.equal(ctx.scrolled,-60);     // 点开的这组被上拽后拉回原位（top 100→40 补 -60）
 assert.equal(ctx.smooth,-13);       // 再平滑滚到 8.75% 高度线：屏高600→线在 round(52.5)=53，当前top 40 → top-线 = -13
 // 点「仓位」标题展开：与普通分组一样，其它分组收起
@@ -1417,8 +1446,9 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertNotIn('stat-find', header)
         page = self.render()
         brandbar = re.search(r'<div class="brandbar">(.*?)</div>', page, re.S)[1]
-        self.assertLess(brandbar.index('<h1 class="brand">NIX-Matrix</h1>'), brandbar.index('class="stat-find"'))
-        self.assertIn('id="statFindInput" type="text" maxlength="8"', brandbar)
+        self.assertLess(brandbar.index('<h1 class="brand">Matrix</h1>'), brandbar.index('class="stat-find"'))
+        self.assertIn('id="statFindInput" type="text" maxlength="5"', brandbar)
+        self.assertIn('.stat-find input{box-sizing:border-box;width:74px;', page_assets.PAGE_CSS)   # 5 位美股代码墨宽
         self.assertIn('<button type="button" id="statFindBtn">FIND</button>', brandbar)
         self.assertRegex(header, r'<span class="count-total count-earn">报 [—0-9]+</span>')
         # 2026-11-20：标题栏最右是「总 N」＝数据那里抓取的总只数（含没取到的）
@@ -1464,10 +1494,111 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         cost = strip_css_comments((ROOT / 'cost_panel.css').read_text(encoding='utf-8'))
         self.assertIn('margin: 8px 0 4px', re.search(r'#group_positions \.asset-row\s*\{([^}]*)\}', cost)[1])
         self.assertIn('margin: 4px 0 0', re.search(r'#group_positions \.cashbond-row\s*\{([^}]*)\}', cost)[1])
-        declarations = re.search(r'#group_positions_long\.zone-card,#group_positions_short\.zone-card\{([^}]*)\}', css)[1]
-        self.assertIn('width:100%', declarations)
-        self.assertNotIn('margin-left:', declarations)
-        self.assertNotIn('margin-right:', declarations)
+        # 2026-11-20：并排双卡沿用 .dual-row 的 100% 宽，不再有自己的 width / 左右负边距。
+        zone_head = re.search(r'#zoneDualRow\{([^}]+)\}', css)[1]
+        self.assertIn('--collapse-bg:var(--positions-collapse)', zone_head)
+        self.assertIn('--zone-name-fs:14px', zone_head)
+        # 21:2x：仓位栏标题「$总资产 -$盈亏(-x%)」与长短持仓标题「-4.7%」同号，
+        # 涨跌额去粗；两档只靠 --pos-num-fs 一个变量，不再各写各的。
+        self.assertIn('--pos-num-fs:14px', css)
+        self.assertIn('--pos-num-fs:16px', css)
+        self.assertIn('.zone-r2 .zone-amt{font-size:var(--pos-num-fs,14px);font-weight:400;', css)
+        self.assertIn('.zone-r2 .zone-pct{font-size:var(--pos-num-fs,14px);', css)
+        self.assertIn('font-size: var(--pos-num-fs,14px); line-height: 24px;', cost)
+        self.assertNotIn('#group_positions_long.zone-card', css)
+        self.assertIn('.dual-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))', css)
+
+    def test_risk_state_text_follows_lamp_and_stripes_widen_2026_11_21(self):
+        """2026-11-21：风险表状态列文字跟红黄灯变色；风险指标名与主表个股代码左边灯条各 +2px。"""
+        css = page_assets.PAGE_CSS
+        self.assertIn(':is(#macroCard, .macro-scope) tr.red td:nth-child(4){color:var(--lamp-red)}', css)
+        self.assertIn(':is(#macroCard, .macro-scope) tr.yellow td:nth-child(4){color:var(--lamp-yellow)}', css)
+        self.assertIn('tr.red td:first-child::before{background:var(--red);width:3.5px}', css)
+        self.assertIn('tr.yellow td:first-child::before{background:var(--yellow);width:3.5px}', css)
+        self.assertIn('tr.green td:first-child::before{background:var(--green);width:3px}', css)
+        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:4px;', css)
+        self.assertNotIn('top:var(--lamp-top);width:2px;', css)
+
+    def test_group_dual_colors_spacing_and_float_fold_2026_11_21(self):
+        """2026-11-21：标题栏红黄数字＝个股描述区灯色；其它分组外框回紫；
+        两排行距拉开但框高不变；▲ 悬浮吸底，且只管仓位以下的分组。"""
+        css = page_assets.PAGE_CSS
+        # 红黄数字与个股描述文字同源（.signal-item 用的就是 --lamp-red / --lamp-yellow）
+        self.assertIn('.stat-badge.red{color:var(--lamp-red)}', css)
+        self.assertIn('.stat-badge.yellow{color:var(--lamp-yellow)}', css)
+        self.assertIn('#signalCounts .count-red{color:var(--lamp-red)}', css)
+        self.assertIn('#signalCounts .count-yellow{color:var(--lamp-yellow)}', css)
+        self.assertIn('.signal-item[data-signal-level="red"]{color:var(--lamp-red)}', css)
+        self.assertIn('.signal-item[data-signal-level="yellow"]{color:var(--lamp-yellow)}', css)
+        # 其它分组展开框 / 清单框回到原来的紫；绿框仍只给仓位与长短持仓
+        self.assertIn('.dual-row.group-dual > details[open]{border:var(--frame-w) solid var(--signal-border)}', css)
+        self.assertIn('border:var(--frame-w) solid var(--signal-border);border-radius:12px}', css)
+        self.assertIn('#zoneDualRow > details[open]{border:var(--frame-w) solid var(--frame-green)}', css)
+        self.assertIn('.dual-row.group-dual > details{border:1px solid var(--line)}', css)
+        # 行距 +4px，标题框仍锁 47px
+        self.assertIn('margin-bottom:4px', re.search(r'\.zone-r1\{([^}]+)\}', css)[1])
+        self.assertIn('height:47px;min-height:47px', css)
+        # ▲ 条件式悬浮：只有长清单够不着时按钮才吸底，滚到分组底部还原成原来的清单底栏
+        self.assertIn('#zoneDualRow .group-bottom,\n.dual-row.group-dual .group-bottom{min-height:26px}', css)
+        self.assertIn('#zoneDualRow .collapse-group.is-floating,\n.dual-row.group-dual .collapse-group.is-floating{position:fixed;', css)
+        # 2026-11-21：上边缘 vh-46 不变，下边缘往下 8px、同时加高 8px（bottom 12→4／height 34→42）
+        self.assertIn('bottom:calc(4px + env(safe-area-inset-bottom,0px))', css)
+        self.assertNotIn('bottom:calc(12px + env(safe-area-inset-bottom,0px))', css)
+        self.assertIn('height:42px;margin:0;transform:translateX(-50%)', css)
+        self.assertNotIn('height:34px;margin:0;transform:translateX(-50%)', css)
+        # 悬浮态不能再写死 96px：宽度由 JS 量取清单底部那条 ▲ 的宽度，两态完全一致
+        self.assertIn('width:var(--collapse-float-w,96px)', css)
+        self.assertNotIn('width:96px;height:34px', css)
+        # 固定态仍是线上原色；悬浮态底色压暗一档、紫绿两色统一盖住 70%（.7），
+        # 暗 ≠ 更透；「再暗一些」只等比压三元组到 75%，透明度 .7 一个字不动；
+        # 描边与分组展开那一圈完全同款：同一变量、同一线宽、实色不带透明度
+        self.assertIn('--collapse-bg:rgba(var(--frame-purple-rgb),.2)', css)
+        self.assertIn('--collapse-bg:var(--positions-collapse)', css)
+        self.assertIn('--collapse-float-purple-rgb:60,38,96', css)
+        self.assertIn('--collapse-float-green-rgb:15,53,23', css)
+        self.assertIn('--collapse-float-purple:rgba(var(--collapse-float-purple-rgb),.7)', css)
+        self.assertIn('--collapse-float-green:rgba(var(--collapse-float-green-rgb),.7)', css)
+        self.assertNotIn('--collapse-float-purple-rgb:80,50,128', css)
+        self.assertNotIn('--collapse-float-green-rgb:20,70,30', css)
+        self.assertNotIn('--collapse-float-purple:rgba(var(--collapse-float-purple-rgb),.55)', css)
+        self.assertNotIn('--collapse-float-green:rgba(var(--collapse-float-green-rgb),.5)', css)
+        self.assertNotIn('--collapse-float-purple:rgba(var(--frame-purple-rgb)', css)
+        self.assertIn('background:var(--collapse-float-bg,var(--collapse-bg));box-shadow:0 4px 16px rgba(0,0,0,.65)', css)
+        self.assertIn('.collapse-group.is-floating:hover{color:var(--text);background:var(--collapse-float-bg,var(--collapse-bg))}', css)
+        self.assertNotIn('background:color-mix(in srgb,var(--collapse-bg)', css)
+        self.assertNotIn('background:var(--signal-bg);box-shadow', css)
+        self.assertIn('#zoneDualRow .collapse-group.is-floating{--collapse-float-bg:var(--collapse-float-green);border:var(--frame-w) solid var(--frame-green)}', css)
+        self.assertIn('.dual-row.group-dual .collapse-group.is-floating{--collapse-float-bg:var(--collapse-float-purple);border:var(--frame-w) solid var(--signal-border)}', css)
+        self.assertNotIn('border:2px solid var(--frame-green)', css)
+        self.assertNotIn('.is-floating{border:1px solid', css)
+        self.assertNotIn('.group-bottom{position:fixed;', css)
+        self.assertNotIn('#signalCounts .group-bottom{position:fixed', css)
+        js = page_assets.PAGE_INTERACTION_JS
+        self.assertIn("classList.toggle('is-floating'", js)
+        self.assertIn("btn.style.setProperty('--collapse-float-w'", js)
+        self.assertIn('wrapRect.width.toFixed(1)', js)
+        # 2026-11-21 定稿：全站只认一条固定参考线＝长持仓「第一只与第二只个股之间的
+        # 分隔线」到「长持仓标题栏下边缘」的距离（DEMO 六档实测 177.75~180.25，写死 180）。
+        # 按钮上沿（vh-46）碰到「标题栏下边缘 + 180」就浮、越过就收；不再逐组动态量
+        # 个股分隔线（有的分组第一条分隔线离标题很远／很近，会飘），也不再与标题栏重叠。
+        # 此前「隔两个个股明细」「贴着标题栏底边」「按本组分隔线实时量」三版全部作废。
+        self.assertIn('const FIXED_GAP = 180', js)
+        self.assertIn('const floatTop = vh - 46', js)
+        self.assertIn("const headId = btn.getAttribute('aria-controls')", js)
+        self.assertIn('const sepY = headBottom === null ? null : headBottom + FIXED_GAP', js)
+        self.assertIn('sepY <= floatTop', js)
+        self.assertIn('passedSep && naturalTop > floatTop', js)
+        self.assertNotIn("panel.querySelectorAll('tr[data-symbol]')", js)
+        self.assertNotIn('rows[0].getBoundingClientRect().bottom', js)
+        self.assertNotIn('rows[1].getBoundingClientRect().top', js)
+        self.assertNotIn('headBottom <= floatTop', js)
+        self.assertNotIn('headBottom <= gap', js)
+        self.assertNotIn('headBottom <= 0', js)
+        self.assertNotIn('headTop <= 0', js)
+        self.assertNotIn('Math.min(2, rows.length)', js)
+        self.assertNotIn('const gap = 2 * (rowH > 0 ? rowH : 60)', js)
+        self.assertIn("window.addEventListener('scroll', schedule", js)
+        self.assertIn("document.addEventListener('toggle', schedule, true)", js)
 
     def test_mobile_settings_two_row_fixture_preserves_all_fields_and_dividers(self):
         source = (ROOT / 'edit.html').read_text(encoding='utf-8')
@@ -1948,7 +2079,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
     def test_statistics_collapse_bar_shares_border_color_only_in_statistics(self):
         self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page_assets.PAGE_CSS)
         self.assertIn('#signalCounts .collapse-group{color:var(--white)}', page_assets.PAGE_CSS)
-        zone = re.search(r'#group_positions_long\.zone-card,#group_positions_short\.zone-card\{([^}]+)\}', page_assets.PAGE_CSS)[1]
+        zone = re.search(r'#zoneDualRow\{([^}]+)\}', page_assets.PAGE_CSS)[1]
         self.assertIn('--collapse-bg:var(--positions-collapse)', zone)
         self.assertNotIn('bar.appendChild(shortcut)', page_assets.RULES_INTERACTION_JS)
 
@@ -2071,9 +2202,10 @@ class Details {}
 const Node={DOCUMENT_POSITION_PRECEDING:2,DOCUMENT_POSITION_FOLLOWING:4,
   DOCUMENT_POSITION_CONTAINED_BY:16};
 const context={HTMLDetailsElement:Details,Node,
+  requestAnimationFrame:()=>0,   // 条件式吸底按钮的排帧调度，离线沙箱里只需登记不执行
   document:{querySelector:()=>null,querySelectorAll:()=>[],
   addEventListener:(k,f)=>(events[k]||=[]).push(f)},
-  window:{location:{hash:''},addEventListener:(k,f)=>(windowEvents[k]||=[]).push(f)}};
+  window:{location:{hash:''},scrollY:1000,addEventListener:(k,f)=>(windowEvents[k]||=[]).push(f)}};
 vm.createContext(context);vm.runInContext(fs.readFileSync(0,'utf8'),context);
 const sub={open:true,style:{display:''},offsetHeight:1,closest:()=>null};
 const card=new Details();card.open=false;card.offsetHeight=1;

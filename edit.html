@@ -9,7 +9,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png?v=3">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=3">
 <link rel="manifest" href="./manifest.webmanifest">
-<title>编辑清单 · NIX-Matrix</title>
+<title>编辑清单 · Matrix</title>
 <style>
 :root{
   --bg:#0f1115; --card:#171a21; --line:#252a33; --text:#e6e8ec; --dim:#8b93a1;
@@ -85,6 +85,8 @@ details.fold>summary,details.set>summary{gap:8px}
 :root{
   --bg:#0b0e14;
   --card:#141a24;
+  --pos-num-fs:14px;  /* 2026-11-20 用户：仓位栏所有金额／涨跌额／涨跌幅与长短持仓标题「-4.7%」同号。
+                          桌面 14px、手机档覆盖 16px；两处共用这一个变量，不会再各写各的导致不齐。 */
   --sym-w:100px;      /* 代码列按用户指的「LMT 那么宽」定死：桌面 100 / 手机 98（代码+中文备注名）。
                          原来是 max-content，各行 40~121px 参差、价格区左边界跟着晃；手机档覆盖 98px。
                          2026-11-13 用户「电脑上 7 个中文字宽、手机上 6 个」：桌面 note 11.5px（单字 12px），
@@ -208,6 +210,17 @@ details.fold>summary,details.set>summary{gap:8px}
   --orange:#ffa94d;
   --cyan:#4dd0e1;
   --positions-collapse:rgba(46,160,67,.15);
+  /* 悬浮 ▲ 内部：2026-11-21 用户「有点亮了，再暗些」——把底色本身压暗一档；
+     随后定稿「盖住 70%」：紫、绿两态统一 .7（原来 .55／.5），颜色盖得更满、
+     底下表格字不再成片透出，但仍留 30% 半透、不是全实。外框保持分组展开那圈不变。
+     再定稿「底色透明度不变、颜色再暗一些」：透明度恒 .7 一个字不动，只把两组
+     三元组等比压到原来的 75%（紫 80,50,128→60,38,96；绿 20,70,30→15,53,23），
+     三个通道同比例下降，所以色相不变、只是整体更沉，不靠掺黑／混白／改透明度。
+     三元组在 :root 单独定义，别处不许写死；固定态保持线上原色不动。 */
+  --collapse-float-purple-rgb:60,38,96;
+  --collapse-float-green-rgb:15,53,23;
+  --collapse-float-purple:rgba(var(--collapse-float-purple-rgb),.7);
+  --collapse-float-green:rgba(var(--collapse-float-green-rgb),.7);
   --tag-bg:rgba(107,163,240,.14);
   --tag-border:rgba(107,163,240,.32);
   --quote-bg:rgba(139,147,161,.1);

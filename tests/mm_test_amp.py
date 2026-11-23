@@ -42,16 +42,19 @@ if m:
           and bar.index('btnHardRefresh') < bar.index('costEditBtn')
           and 'cost-edit-btn' in _edit_btn.group(0),
           "「编辑」在顶栏「刷新」右边，保留原按钮类且绑定前禁用")
-    check('btnlink' not in bar, "「设置」已从顶栏搬走（顶栏只留四个按钮 + 定投）")
+    check('btnlink' not in bar, "「设置」已从顶栏搬走（顶栏只留四个按钮 + 编辑右侧状态两排）")
     check('id="runLight"' in row and 'id="runLightTxt"' in row, "第四排：状态灯 + 文案")
     check('runLight' not in bar, "灯已从第三排移走")
-# 2026-11-20：抓取状态灯独占第四排，规则说明与仓位同步另起第五排（规则前灯圈保留）
-_flag = re.search(r'<div class="statusrow flagrow">(.*?)</div>', page, re.S)
-check(bool(_flag) and 'id="ruleLight"' in _flag.group(1) and 'id="runLight"' not in _flag.group(1),
-      "第五排：规则说明独占左位、仓位同步挂右侧，抓取灯留在上一排")
+# 2026-11-20：规则同步与仓位同步压成上下两排，紧跟「编辑」按钮右侧；抓取灯仍独占下一排
+_stack = re.search(r'<span class="sync-stack" id="syncStack">(.*?)</span></span>', page, re.S)
+check(bool(_stack) and 'id="ruleLight"' in _stack.group(1)
+      and 'id="runLight"' not in _stack.group(1)
+      and bar.index('costEditBtn') < bar.index('syncStack'),
+      "编辑按钮右侧：规则同步在上下两排状态栈里，抓取灯留在下一排")
+check('<div class="statusrow flagrow">' not in page, "旧的独立第五排已删除")
 _cost_js = (Path(ROOT) / 'cost_panel.js').read_text(encoding='utf-8')
-check("querySelector('.statusrow.flagrow')" in _cost_js and 'host.appendChild(syncMirror)' in _cost_js,
-      "仓位同步镜像改挂到「规则 + 同步」那一排")
+check("querySelector('.sync-stack')" in _cost_js and 'host.appendChild(syncMirror)' in _cost_js,
+      "仓位同步镜像挂到编辑按钮右侧状态栈的下排")
 # 「设置」与「返回看板」同在页底 .acts 一排，顺序：返回看板 → 设置（2026-10-29）
 _acts = re.search(r'<div class="acts">(.*?)</div>', page, re.S)
 check(bool(_acts) and 'id="btnReturnBoard"' in _acts[1] and '>设置</a>' in _acts[1]
@@ -63,10 +66,11 @@ check(monitor.PAGE_CSS == page_assets.PAGE_CSS and '.statusrow{' in page_assets.
       and strip_css_comments(page_assets.PAGE_CSS.removesuffix(page_assets.RULES_CSS)) in styles
       and styles.count(strip_css_comments(page_assets.RULES_CSS)) == 1, "statusrow 共用样式完整嵌入且规则样式只一份")
 check('改自选清单' not in page, "旧的「改自选清单」已删除")
-# 2026-11-02：市场风险栏的「绿灯 综合：平稳」靠右排，与其它栏目右侧的「20日对.SPX …」同一条右端线
-check(strip_css_comments('.macro-card>summary .group-stats{margin-left:auto') in strip_css_comments(styles)
-      and 'justify-content:flex-end' in styles,
-      "市场风险标题行读数靠右，与其它栏目右侧读数对齐")
+# 2026-11-23：风险标题的红黄数字紧跟「风险」标题，和其它分组标题一致；综合灯仍靠右端
+check(strip_css_comments('.macro-card>summary .group-stats{margin-left:0') in strip_css_comments(styles)
+      and 'justify-content:flex-start;text-align:left;gap:8px;flex:1 1 auto}' in strip_css_comments(styles)
+      and '.market-risk-badge{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;margin-left:auto}' in strip_css_comments(styles),
+      "风险标题红黄数字紧跟标题，综合灯仍留在右端")
 # PC 顶栏整体往中间收「一些」（不是居中）：左右各内缩 --head-inset，改一个数即可调幅度
 check('--head-inset:64px' in styles and 'padding-left:var(--head-inset)' in styles,
       "PC 顶栏内缩变量与内缩规则存在")

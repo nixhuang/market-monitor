@@ -1,6 +1,6 @@
 {
-  "name": "NIX-Matrix",
-  "short_name": "NIX-Matrix",
+  "name": "Matrix",
+  "short_name": "Matrix",
   "start_url": "./",
   "scope": "./",
   "display": "browser",

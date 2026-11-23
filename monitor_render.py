@@ -16,6 +16,19 @@ from page_assets import COST_PANEL_HTML
 _DISPLAY_AMP_YELLOW = 6.0
 _DISPLAY_AMP_RED = 10.0
 
+# 2026-11-20 23:xx 用户定稿：除「仓位」外的其它分组两两并排，与长短持仓同款双卡。
+# 顺序即页面顺序；最后一行只有「房地产」，标题单独占左半、清单仍跨两列。
+# 数据与统计口径仍用 GROUPS / _display_groups()，这里只管首页怎么摆。
+GROUP_DUAL_PAIRS = (
+    ("focus", "index_funds"),
+    ("technology", "healthcare"),
+    ("financials", "energy"),
+    ("industrials", "materials"),
+    ("utilities", "communications"),
+    ("consumer_staples", "consumer_discretionary"),
+    ("real_estate",),
+)
+
 
 def _amp_display_tone(value):
     """按页面上真正显示的一位小数判色，避免「写着 6.0% 却按原始 6.04% 染黄」。"""
@@ -270,7 +283,7 @@ class PageRenderer:
         self._context = context
 
     def dca_badge(self, d):
-        """顶栏最右侧的短提醒「定投：N」（N=距定投日还差几个美股交易日）；仅定投日当天黄字。
+        """站名右侧的短提醒「定投：N」（N=距定投日还差几个美股交易日）；仅定投日当天黄字。
     完整日期放读屏标签；天数缺失或异常时不显示，避免给出错误天数。"""
         if not isinstance(d, dict):
             return ""
@@ -329,9 +342,10 @@ class PageRenderer:
         # 导致 · 贴着价格、离月份却隔了一个空格）。分隔符独立成 .target-sep 元素，左右由同一变量
         # --tgs-month-gap 给等距 margin，· 的中心严格落在「共识价右缘 ↔ 月份数字左缘」的中点。
         # 排版仍由 page_assets.py 的四列成组布局承担：共识价 + (· + N月) 作为一整组在框内居中；
-        # 「N月」字号由 CSS 定值 14px。title 仍写「N月」便于核对。
+        # 「N月」字号由 CSS 定值 14px。2026-11-20 用户：看板页永远不要鼠标悬停说明，
+        # 这里不写 title；月份本身就是可见文字，读屏也能直接读到，不需要重复标签。
         if state != "failed" and type(month) is int and 1 <= month <= 12:
-            parts.append(f'<span class="target-month" title="{month}月">'
+            parts.append('<span class="target-month">'
                          f'<span class="target-sep">&middot;</span>{month}月</span>')
         if state == "failed":
             parts.append('<span>获取失败</span>')
@@ -493,9 +507,12 @@ class PageRenderer:
         rows_macro = []
 
         def chg_cell(txt, unit="", sign=""):
-            """变化列单元格（2026-11-17）：没有值就整格留空，不写「—」免得被当成抓取失败。"""
-            return ('<td class="num dim"></td>' if not txt else
-                    f'<td class="num dim"{sign}>{txt}<span class="unit">{unit}</span></td>')
+            """变化列单元格（2026-11-17）：没有值就整格留空，不写「—」免得被当成抓取失败。
+            2026-11-23：VIX 只写「均 19.86」一排，unit 为空时不再补一个空的 .unit 撑高行。"""
+            if not txt:
+                return '<td class="num dim"></td>'
+            tail = f'<span class="unit">{unit}</span>' if unit else ""
+            return f'<td class="num dim"{sign}>{txt}{tail}</td>'
         for key in self._context.RISK_INDICATORS:
             it = macro.get(key, {})
             if risk["levels"][key] == "gray":
@@ -529,28 +546,46 @@ class PageRenderer:
 
             dw = it.get("delta_week")
             base = it.get("week_ago")
-            # 2026-11-17 用户「完全不显示的就空白好了」：不看周变化的指标整格留空，连「周」
-            # 单位都不写，免得「—」被当成抓取失败。数值默认白色（td.num.dim 已改色），
-            # 只有标普500 这类按点差＋百分比读涨跌的指数挂 data-sign 走涨跌色；
-            # 纳指参考行（11-17 用户「不需要周变化了」）也整格留空，只留点位／日期／评语；
-            # 垃圾债利差／10Y 美债是 bp 点差，风险表里红绿另有灯义，保持白色不混色。
+            # 2026-11-17 用户「完全不显示的就空白好了」：不看周变化的指标整格留空，
+            # 连「周」单位都不写，免得「—」被当成抓取失败。
+            # 2026-11-23 用户定稿：标普变化列两排＝上排相对 200 日均线的百分比（涨跌色）、
+            # 下排灰字「200均线偏离」，周变化整列不写；当前列的点位／回撤仍保留。
+            # VIX 两排＝上排均线数值（白）、下排灰字「200日均线」。
+            # 垃圾债利差仍是「+17 周」白色点差，不混涨跌色。
+            # 11-23 追加：变化列上排主数字的文字格式与「当前」列点位同款；
+            # 下排标签整排小灰字，「200」不放大、与「均线偏离」同号。
             sign_attr = ""
+            dw_txt, dw_unit = "", ""
             if key == "hy_oas" and dw is not None:
-                dw_txt, dw_pct = f'{dw:+.0f}', ""
-            elif key == "sp500" and dw is not None:
-                dw_txt = f'{dw:+.0f}'
-                dw_pct = f' <span class="chg-num">{dw / base * 100:+.1f}%</span>' if base else ""
-                sign_attr = (' data-sign="up"' if dw > 0 else
-                             ' data-sign="down"' if dw < 0 else "")
-            else:
-                dw_txt, dw_pct = "", ""
+                dw_txt, dw_unit = f'{dw:+.0f}', "周"
+            elif key == "sp500":
+                dev = it.get("ma_dev")
+                if dev is not None:
+                    # 2026-11-23 用户定稿：变化列两排——上排相对 200 日均线的百分比
+                    # （涨跌色），下排灰字「200均线偏离」；周变化整列不再写。
+                    dw_txt = (f'<span class="ma-dev">{dev:+.1f}%</span>'
+                              f'<span class="unit ma-tag">200均线偏离</span>')
+                    sign_attr = (' data-sign="up"' if dev > 0 else
+                                 ' data-sign="down"' if dev < 0 else "")
+                elif dw is not None:
+                    # 旧快照没有均线字段时退回原点差＋周百分比，不拿空白冒充数据缺失下的判灯
+                    dw_txt = f'{dw:+.0f}'
+                    sign_attr = (' data-sign="up"' if dw > 0 else
+                                 ' data-sign="down"' if dw < 0 else "")
+                    dw_pct = f' <span class="chg-num">{dw / base * 100:+.1f}%</span>' if base else ""
+                    dw_unit = "周" + dw_pct
+            elif key == "vix" and it.get("ma200") is not None:
+                # 2026-11-23 用户定稿：VIX 也分两排——上排均线数值（白色），
+                # 下排写出是多少日均线的灰字名称。
+                dw_txt = (f'<span class="ma-val">{it["ma200"]:.2f}</span>'
+                          f'<span class="unit ma-tag">200日均线</span>')
             label = html_lib.escape(str(it.get("name") or self._context.RISK_LABELS[key]))
             # 2026-10-30：「截至」二字删掉，只留日期（单独一行小字，谁都看得出是数据日期）
             label += f'<span class="unit">{html_lib.escape(it["date"])}</span>'
             # 数据来源（FRED / Cboe / Yahoo …）按 2026-10-15 要求不再在指标行里展示，页底仍保留整体来源说明
             rows_macro.append(
                 f'<tr class="{lv}"><td>{label}</td><td class="num">{val}</td>'
-                f'{chg_cell(dw_txt, "周" + dw_pct, sign_attr)}<td>{txt}</td></tr>'
+                f'{chg_cell(dw_txt, dw_unit, sign_attr)}<td>{txt}</td></tr>'
             )
 
         # 参考行：10Y 美债一个月变化。只看利率冲击，不进 RISK_INDICATORS，不影响综合灯和有效指标数
@@ -568,21 +603,24 @@ class PageRenderer:
         else:
             rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债</td>'
                               '<td colspan="3">无数据或已过期</td></tr>')
-        # 纳斯达克指数参考行（2026-10-30）：展示点位，并按一周涨跌给评语（只提示下跌）。
-        # 灯级只作用于本行显示，仍不进 RISK_INDICATORS、不计入综合灯与有效指标数。
-        # 2026-11-17 用户「纳指不需要周变化了」：变化列整格留空，只留点位／日期／评语。
-        # 一周涨跌仍由 macro_status 用来给灯级与「一周平稳／走弱／急跌」评语，数据层一行不动。
+        # 纳斯达克指数参考行（2026-10-30）：展示点位；灯级只作用于本行显示，
+        # 仍不进 RISK_INDICATORS、不计入综合灯与有效指标数。
+        # 2026-11-23 用户定稿：变化列两排——上排相对 200 日均线的百分比（涨跌色），
+        # 下排灰字「200均线偏离」；与标普同款，判灯也用同一把尺子。
+        # 11-23 追加：上排主数字与「当前」列点位同款，下排「200」不放大。
         nd = macro.get("nasdaq") or {}
         nd_val = self._context._pos_num(nd.get("value"))
         if nd.get("ok") is True and nd_val is not None:
             nd_lv, nd_txt = self._context.macro_status("nasdaq", nd)
-            # 2026-11-20 用户：评语写「一周急跌」，变化列就该有周变化数据——补回，写法同标普500（点差＋周 百分比、涨跌色）
-            ndw, ndb = nd.get("delta_week"), nd.get("week_ago")
-            if ndw is not None and ndb:
-                nd_chg = chg_cell(f'{ndw:+.0f}', f'周 <span class="chg-num">{ndw / ndb * 100:+.1f}%</span>',
-                                  ' data-sign="up"' if ndw > 0 else ' data-sign="down"' if ndw < 0 else "")
+            nd_dev = nd.get("ma_dev")
+            if nd_dev is not None:
+                nd_sign = (' data-sign="up"' if nd_dev > 0 else
+                           ' data-sign="down"' if nd_dev < 0 else "")
+                nd_chg = (f'<td class="num dim"{nd_sign}>'
+                          f'<span class="ma-dev">{nd_dev:+.1f}%</span>'
+                          f'<span class="unit ma-tag">200均线偏离</span></td>')
             else:
-                nd_chg = chg_cell("")
+                nd_chg = chg_cell("")   # 均线数据不足：整格留空，不拿周变化冒充
             rows_macro.append(
                 f'<tr class="{nd_lv}" id="nasdaqRef"><td>纳斯达克指数'
                 f'<span class="unit">{html_lib.escape(str(nd.get("date") or ""))}</span></td>'
@@ -909,11 +947,18 @@ class PageRenderer:
 
 
     def _quiet_keep(self, d, earnings_week):
-        """独立于红黄灯的主表保留原因。"""
-        return bool(d.get("reference_only") or not d.get("foldable", True)
-                    or self._context._target_active(d)
-                    or self._context.earnings_soon(d.get("earnings"), earnings_week)
-                    or self._context.earnings_past_keep(d.get("earnings"), earnings_week))
+        """独立于红黄灯的主表保留原因。
+
+        2026-11-20 用户定稿：整行绿灯、唯一动静是紫灯的个股一律收进「无异动 N 只」——
+        先是「空间达标」space / 紫红 high，再补上「达到目标价」实心紫 reached。
+        红黄灯由 _group_body 的等级判定常驻；财报窗口、参考行情、不可折叠、描述区
+        其它文字等保留原因照旧，即「只有实心紫」才折，不是所有实心紫都无条件折。
+        """
+        if (d.get("reference_only") or not d.get("foldable", True)
+                or self._context.earnings_soon(d.get("earnings"), earnings_week)
+                or self._context.earnings_past_keep(d.get("earnings"), earnings_week)):
+            return True
+        return False
 
 
     def _price_rows_html(self, d, snapshot):
@@ -1057,8 +1102,12 @@ class PageRenderer:
         return out or '<tr class="gray"><td colspan="5">今晚无异动，不用盯</td></tr>'
 
 
-    def _group_stats_html(self, g, group, items_by_symbol, enabled):
-        """分组标题仅计红、黄、缺失、紫；技术灰只在统计面板计数。"""
+    def _group_stats_html(self, g, group, items_by_symbol, enabled, split=False):
+        """分组标题仅计红、黄、缺失、紫；技术灰只在统计面板计数。
+
+        split=True（2026-11-20 双列并排）：返回 (上排, 下排) 两段，上排＝组名后的
+        颜色灯数，下排＝板块相对强弱；默认仍拼成原来的一串，老分组标题一行不动。
+        """
         stats = ''.join(self._context._count_badge(lv, count, label)
                         for lv, label in (("red", "红色警示"), ("yellow", "黄色警示"))
                         if (count := sum(d["level"] == lv for d in g)))
@@ -1069,7 +1118,12 @@ class PageRenderer:
         # 紫色（目标价 / 共识价警示）：条数跟在红黄灯后面；一条都没有就不显示
         if (n_pur := self._context.purple_counts(g)):
             stats += self._context._count_badge("purple", n_pur, "紫色警示")
+        # 2026-11-21 用户：分组标题不再写「仅板块ETF」——两排标题里这行说明多余。
+        # 只有整组一个标的都没有、且监测确实关掉时，才留一句「监测关闭」。
+        if not enabled and not g:
+            stats = '<span class="monitor-note">监测关闭</span>' + stats
         # 板块组：红黄灯后面跟「板块 ETF 近 20 日相对标普500的强弱」，折叠时也能看到
+        lower = ""
         rs = (items_by_symbol.get(group["sector_etf"]) or {}).get("rs_spy") if group.get("sector_etf") else None
         if rs:
             diff = rs["diff"]
@@ -1078,12 +1132,9 @@ class PageRenderer:
             rs_tip = html_lib.escape(
                 f'{group["sector_etf"]} {rs["days"]}日 {rs["etf"]:+.1f}% − {bn} {rs["bench"]:+.1f}% = {diff:+.1f} 个百分点'
                 f'（{rs["start"]} → {rs["end"]}）')
-            stats += (f'<span class="rs-spy {rs_cls}" aria-label="{rs_tip}">'
+            lower += (f'<span class="rs-spy {rs_cls}" aria-label="{rs_tip}">'
                       f'{html_lib.escape(str(rs["days"]))}日对{".SPX" if bn == self._context.RS_BENCH_NAME else html_lib.escape(bn)} {diff:+.1f}%</span>')
-        if not enabled:
-            note = "仅板块ETF" if g else "监测关闭"
-            stats = f'<span class="monitor-note">{note}</span>' + stats
-        return stats
+        return (stats, lower) if split else stats + lower
 
 
     def _sort_group_items(self, g, group):
@@ -1148,6 +1199,14 @@ class PageRenderer:
     # 长/短持仓标题栏右侧只剩「市值 / 盈亏（比例）」两列，占比已于 2026-11-19 撤掉；数字由 cost_panel.js 填。
     _ZONE_NUMS = '<span class="zone-num">—</span><span class="zone-num">—</span>'
 
+    def _zone_head(self, label, zg):
+        """2026-11-20：与「当日／风险」同款并排标题——第一排组名＋颜色灯数，
+        第二排涨跌额／涨跌幅；市值金额已搬进「仓位」展开明细。数字由 cost_panel.js 填。"""
+        return (f'<span class="zone-r1"><span class="zone-name">{label}({len(zg)})</span>'
+                f'{self._zone_badges(zg)}</span>'
+                f'<span class="zone-r2"><span class="zone-amt">—</span>'
+                f'<span class="zone-pct">—</span></span>')
+
     def _zone_badges(self, zg):
         """2026-11-19：红 / 黄 / 紫灯圈从「仓位」标题搬到各自的长 / 短持仓标题，按本区个股自己统计。"""
         out = ''.join(self._context._count_badge(lv, count, label)
@@ -1186,25 +1245,45 @@ class PageRenderer:
         if not g and enabled:
             empty_note = ('本组标的已在优先分组展示，避免重复信号' if registered.get(group["key"], 0)
                           else '暂无标的，去设置页录入')
+        zones_html = ""
         if group["key"] == "positions":
-            parts.append(self._context._position_long_zone_card(g, group, items_by_symbol, snapshot, earnings_week, enabled))
+            long_g = [d for d in g if self._context._position_zone(d) == "long"]
             short_g = [d for d in g if self._context._position_zone(d) == "short"]
+            long_body = (self._context._group_body(long_g, group, snapshot, earnings_week, enabled,
+                                                   'group_positions_long', '长持仓', empty_note)
+                         if long_g else '')
             short_body = self._context._group_body(short_g, group, snapshot, earnings_week, enabled,
                                                    'group_positions_short', '短持仓', empty_note)
-            parts.append(f'<details class="zone-card" id="group_positions_short">'
-                         f'<summary><span class="zone-name">短持仓({len(short_g)})</span>{self._zone_badges(short_g)}'
-                         f'<span class="group-stats zone-stats">{self._ZONE_NUMS}</span></summary>{short_body}</details>')
-            # 2026-11-19：展开明细 = 比例条与图例 + 「持仓 / Cash / 固收」资金排（同属一块、不画分隔线）
-            # + 三项汇总（已实现 / 今年 / 清仓）+ 行业权重 + 交易记录入口。骨架静态输出，数字由
-            # cost_panel.js 填；资金排沿用原 .cashbond-row 节点与填值逻辑，总盈亏节点保留但隐藏。
-            parts.insert(0, '<div class="pi-body" id="piBody">'
+            # 2026-11-20：与「当日／风险」一模一样的并排双卡——两枚标题只留 summary，
+            # 清单放进跨两列的 .dual-body；哪一枚展开就显示对应清单（CSS :has() 控制）。
+            zones_html = (
+                '<div class="dual-row zone-dual" id="zoneDualRow">'
+                + ((f'<details class="card zone-head-card" id="group_positions_long">'
+                    f'<summary class="grp zone-grp">{self._zone_head("长持仓", long_g)}</summary></details>')
+                   if long_g else '')
+                + (f'<details class="card zone-head-card" id="group_positions_short">'
+                   f'<summary class="grp zone-grp">{self._zone_head("短持仓", short_g)}</summary></details>')
+                + '<div class="dual-body zone-scope" data-owner="">'
+                + ((f'<div class="zone-panel" data-owner="long" data-zone="long">{long_body}</div>')
+                   if long_g else '')
+                + (f'<div class="zone-panel" data-owner="short" data-zone="short">{short_body}</div>')
+                + '</div></div>'
+            )
+            # 展开明细：比例条与图例 +「持仓 / Cash / 固收」+ 长/短持仓市值金额排
+            # + 三项汇总 + 行业权重 + 交易记录入口。数字由 cost_panel.js 填。
+            parts.append('<div class="pi-body" id="piBody">'
                          '<div class="pi-block pi-first">'
                          '<div class="cost-foot asset-row cost-manage"></div>'
                          '<div class="cashbond-row"><span class="cb-total">'
                          '<span class="pi-cname">持仓</span><span class="cb-total-amt">—</span>'
                          '<span class="cb-total-pnl">—</span></span>'
                          '<span class="cb-item cb-cash"><span class="cb-name">Cash</span><span class="cb-amt">—</span></span>'
-                         '<span class="cb-item cb-bond"><span class="cb-name">固收</span><span class="cb-amt">—</span></span></div></div>'
+                         '<span class="cb-item cb-bond"><span class="cb-name">固收</span><span class="cb-amt">—</span></span></div>'
+                         '<div class="pi-zone-money">'
+                         '<span class="pi-zone-item" data-zone="group_positions_long"><span class="pi-zone-name">长持仓</span>'
+                         '<span class="pi-zone-mv">—</span></span>'
+                         '<span class="pi-zone-item" data-zone="group_positions_short"><span class="pi-zone-name">短持仓</span>'
+                         '<span class="pi-zone-mv">—</span></span></div></div>'
                          '<div class="pi-block pi-funds"><div class="pi-kpis">'
                          '<span class="pi-kpi"><span class="pi-kname">已实现</span><b class="pi-kval" id="piRealized">—</b></span>'
                          '<span class="pi-kpi"><span class="pi-kname">今年</span><b class="pi-kval" id="piYear">—</b></span>'
@@ -1217,12 +1296,6 @@ class PageRenderer:
         else:
             parts.append(self._context._group_body(g, group, snapshot, earnings_week, enabled,
                                      f'group_{group["key"]}', group["label"], empty_note))
-        # 2026-11-19：长 / 短持仓子框从「仓位」卡里移出，成为紧跟其后的两张平级绿框卡；
-        # 「仓位」卡自己只装展开明细（比例条 / 资金排 / 三项汇总 / 行业权重 / 交易记录入口）。
-        zones_html = ""
-        if group["key"] == "positions":
-            zones_html = "\n".join(parts[1:]) + "\n"
-            parts = parts[:1]
         body = "\n".join(parts)
         # 2026-11-19：「持仓」栏目改名「仓位」，默认折叠、点标题开合，与其它分组一致；标题右侧只放
         # 总资产与总盈亏（由 cost_panel.js 填），3 个灯圈已搬到长 / 短持仓各自的标题栏。
@@ -1232,6 +1305,55 @@ class PageRenderer:
         return (f'<details class="card group-card" id="group_{html_lib.escape(str(group["key"]), quote=True)}">'
                 f'<summary class="grp"><span class="grp-name">{html_lib.escape(label)} ({len(g)})</span>'
                 f'<span class="group-stats">{stats}</span></summary>{body}</details>\n{zones_html}')
+
+
+    def _dual_group_card(self, group, g, items_by_symbol, snapshot):
+        """2026-11-20 23:xx：与长短持仓同款的一枚并排标题 + 一块共用清单。
+
+        标题只留 summary（两排：上排组名＋颜色灯数，下排板块相对强弱），
+        清单搬进跨两列的 .dual-body > .group-panel，靠 CSS :has() 按位置显隐。
+        组名字号、灯数字号、第二排字号全部复用长短持仓的变量，不另起一套。
+        """
+        monitoring = snapshot.get("group_monitoring", {})
+        registered = snapshot.get("registered_counts", {})
+        g = self._context._sort_group_items(g, group)
+        earnings_week = (snapshot.get("earnings_week") or {}).get("asof") or self._context._bj_today()
+        enabled = monitoring.get(group["key"], True)
+        empty_note = ''
+        if not g and enabled:
+            empty_note = ('本组标的已在优先分组展示，避免重复信号' if registered.get(group["key"], 0)
+                          else '暂无标的，去设置页录入')
+        key = html_lib.escape(str(group["key"]), quote=True)
+        body = self._context._group_body(g, group, snapshot, earnings_week, enabled,
+                                         f'group_{group["key"]}', group["label"], empty_note)
+        upper, lower = self._context._group_stats_html(g, group, items_by_symbol, enabled, split=True)
+        head = (f'<details class="card group-card" id="group_{key}" data-owner="{key}">'
+                f'<summary class="grp zone-grp"><span class="zone-r1">'
+                f'<span class="zone-name">{html_lib.escape(str(group["label"]))} ({len(g)})</span>{upper}</span>'
+                f'<span class="zone-r2">{lower}</span></summary></details>')
+        panel = f'<div class="group-panel" data-owner="{key}">{body}</div>'
+        return head, panel
+
+
+    def _group_dual_rows(self, items_by_group, items_by_symbol, snapshot):
+        """首页分组区：仓位仍是单卡＋长短持仓双卡，其余按 GROUP_DUAL_PAIRS 两列并排。"""
+        by_key = {g["key"]: g for g in self._context.GROUPS}
+        pos = by_key["positions"]
+        out = [self._context._group_card(pos, items_by_group[pos["item_group"]], items_by_symbol, snapshot)]
+        for pair in GROUP_DUAL_PAIRS:
+            heads, panels = [], []
+            for key in pair:
+                group = by_key[key]
+                head, panel = self._context._dual_group_card(
+                    group, items_by_group[group["item_group"]], items_by_symbol, snapshot)
+                heads.append(head)
+                panels.append(panel)
+            cls = "dual-row zone-dual group-dual" + (" solo-left" if len(pair) == 1 else "")
+            out.append(f'<div class="{cls}" id="dualRow_{pair[0]}">'
+                       + "".join(heads)
+                       + '<div class="dual-body group-scope" data-owner="">'
+                       + "".join(panels) + '</div></div>')
+        return "\n".join(out)
 
 
     def _member_icons(self, d, kind, level):
@@ -1869,7 +1991,7 @@ class PageRenderer:
 <p>{html_lib.escape(self._context.RISK_RULE_TEXT)}</p>
 <h5>宏观指标细则</h5>
 <p>垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到黄线，一周扩大至少 {self._context.HY_WEEK_YELLOW} bp 为黄、至少 {self._context.HY_WEEK_RED} bp 为红（水平仍低于黄线也照常报灯，说明另提醒观察是否持续）；达到 500 bp 会标注“压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
-<p>VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500距近一段高点回撤不足10%为绿、达到10%或15%为黄、达到20%为红，这些是已发生的跌幅。</p>
+<p>VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500按收盘价相对 200 日均线判读：在均线上方为绿，下方不足3%仍为绿（贴近均线），低于均线达到3%或8%为黄、达到15%为红；高出均线20%以上只写「偏离偏高」提醒一句，不亮灯。纳斯达克用同一把尺子，只作参考，不影响页面最上面那盏总灯。这些是已发生的偏离，不预测涨跌。</p>
 <p>上涨参与度：站上宏观长均线的股票不足50%为黄；不足30%时，还需近期垃圾债利差已为红，或金融压力NFCI达到或高于0，才升级红；站上宏观短均线的股票不足30%也为黄。宏观均线沿用数据源固定口径，不随个股均线设置变化。NFCI为周度：达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
 <h5>数据有效性</h5>
 <p>综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力NFCI最多13日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且垃圾债利差最多落后5日并已为红，或NFCI最多落后13日且达到或高于0；垃圾债利差仅为黄不足以确认。</p>
@@ -2041,8 +2163,9 @@ class PageRenderer:
                 items_by_group[item["group"]].append(item)
         # 板块 ETF 可能因去重落在持仓／重点关注里，按代码在全部条目里找，不限本组
         items_by_symbol = {self._context.normalize_symbol(d["symbol"]): d for d in items}
-        group_cards = "".join(self._context._group_card(group, items_by_group[group["item_group"]], items_by_symbol, snapshot)
-                              for group in self._context._display_groups())
+        # 2026-11-20 23:xx：其它分组两两并排（配对顺序见 GROUP_DUAL_PAIRS），
+        # 仓位仍单卡＋长短持仓双卡；数据统计与排序口径不受页面摆位影响。
+        group_cards = self._context._group_dual_rows(items_by_group, items_by_symbol, snapshot)
 
         # 来源与抓取间隔集中到独立名词／抓取区块；页脚只保留导航入口。
         risk_title = html_lib.escape(f"综合判断：{risk['label']} · 有效指标 {risk['valid_count']}/5")
@@ -2059,7 +2182,7 @@ class PageRenderer:
                        f'role="status" aria-label="{risk_title}">'
                        f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
                        f'{html_lib.escape(risk["label"])}</span>')
-        dca_title = self._context.dca_badge(snapshot.get("dca_reminder"))  # 顶栏最右侧（2026-10-19：从市场风险标题挪过来）
+        dca_title = self._context.dca_badge(snapshot.get("dca_reminder"))  # 2026-11-20：从按钮排挪到站名右侧，字号不变
         # 只把前端会读的字段内联进页面（见 slim_snapshot 的说明）：页面体积 −131KB，
         # 状态核验用到的 run_id / request_id / config_files / source_sha 全部保留。
         snapshot_json = self._context.json_script(slim_snapshot(snapshot))
@@ -2104,14 +2227,14 @@ class PageRenderer:
 <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png?v=3">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=3">
 <link rel="manifest" href="./manifest.webmanifest">
-<title>NIX-Matrix</title>
+<title>Matrix</title>
 <style>
 {self._context.PAGE_CSS.removesuffix(self._context.RULES_CSS)}
 {cost_css}
 {self._context.RULES_CSS}</style>
 </head>
 <body>{current_rules}<div class="wrap">
-<div class="brandbar"><h1 class="brand">NIX-Matrix</h1><span class="stat-find"><input id="statFindInput" type="text" maxlength="8" placeholder="代码" aria-label="按股票代码定位" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><button type="button" id="statFindBtn">FIND</button></span></div>
+<div class="brandbar"><h1 class="brand">Matrix</h1>{dca_title}<span class="stat-find"><input id="statFindInput" type="text" maxlength="5" placeholder="代码" aria-label="按股票代码定位" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><button type="button" id="statFindBtn">FIND</button></span></div>
 <div class="sub">{html_lib.escape(sub_line)}</div>
 
 <div class="runbar">
@@ -2119,14 +2242,11 @@ class PageRenderer:
   <button id="btnCheckStatus">状态</button>
   <button id="btnHardRefresh">刷新</button>
   <button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false" aria-label="就地编辑成本价与数量" disabled>编辑</button>
-  {dca_title}
+  <span class="sync-stack" id="syncStack"><span class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">暂无法核验</span></span></span>
   <script>{self._context.HARD_REFRESH_JS}</script>
 </div>
 <div class="statusrow">
   <div class="runlight" id="runLight" data-phase="{init_light_phase}"><i class="dot"></i><span id="runLightTxt">{init_light}</span></div>
-</div>
-<div class="statusrow flagrow">
-  <div class="runlight rulelight" id="ruleLight" data-phase="idle"><i class="dot"></i><span id="ruleLightTxt">暂无法核验</span></div>
 </div>
 <div id="checkResult" class="check-result" role="status" hidden></div>
 

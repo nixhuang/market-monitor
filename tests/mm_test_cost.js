@@ -438,7 +438,7 @@ for(const key of [LOCAL,CLOUD,PENDING])test('云端覆盖时'+key+'落盘失败�
   const b=await boot({local:{...copy(SEED),_local:{dirty:true,revision:3}}});b.store.failSet.add(key);
   b.respond(b.requests[0],meta({...SEED,cash:555}));await settle();await b.tick(180000);
   assert.equal(b.state().DATA.cash,555);assert.equal(b.state().dirty,true);assert.notEqual(b.state().SYNC,'synced');
-  assert.match(b.doc.getElementById('costState').textContent,/未持久化/);assert.equal(b.puts().length,0);
+  assert.match(b.doc.getElementById('costState').textContent,/未存本机/);assert.equal(b.puts().length,0);
 });
 test('旧dirty读取失败后自动重试成功只采用新云端，不补传本地',async()=>{
   const b=await boot({token:false,local:{...copy(SEED),_local:{dirty:true,revision:3}}});
@@ -579,7 +579,8 @@ for(const [name,fixed,fixedCost] of [['固收盈利',200,15],['固收亏损',20,
     // AAA: 100*5成本=500无盈亏；BBB: 100*2-90*2=20，成本合计680。
     assert.equal(sum.querySelector('b').textContent,'$'+Math.round(700+30+fixed).toLocaleString('en-US'));
     assert.equal(sum.querySelectorAll('b')[1].textContent,'+$20.0（+2.9%）');
-    assert.match(sum.getAttribute('title'),/盈亏仅股票\/ETF/);
+    assert.equal(sum.hasAttribute('title'),false);   // 看板页不留鼠标悬停说明
+    assert.match(sum.getAttribute('aria-label'),/盈亏仅股票\/ETF/);
     assert.match(sum.getAttribute('aria-label'),/股票\/ETF持仓盈亏/);
     const bond=b.doc.querySelector('.cashbond-row .cb-bond');
     assert.ok(bond);assert.equal(bond.querySelector('.cb-amt').textContent,'$'+Math.round(fixed).toLocaleString('en-US'));
@@ -606,11 +607,11 @@ test('固收盈利不能抵消股票亏损且编辑成本仍保留',async()=>{
   assert.equal(b.doc.querySelector('.cashbond-row .cb-bond .pct'),null);
   assert.equal(b.puts().length,0);
 });
-test('本地写失败显式提示且不清dirty不上传',async()=>{let b=await boot();b.store.failSet.add(LOCAL);await b.enter();b.edit();await b.save();assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未持久化/);assert.equal(b.puts().length,0);assert.match(b.doc.getElementById('costNotice').textContent,/尚未持久化/);assert.equal(b.doc.getElementById('costNotice').hidden,false);assert.equal(b.doc.querySelector('[data-cost-export]'),null);});
+test('本地写失败显式提示且不清dirty不上传',async()=>{let b=await boot();b.store.failSet.add(LOCAL);await b.enter();b.edit();await b.save();assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未存本机/);assert.equal(b.puts().length,0);assert.match(b.doc.getElementById('costNotice').textContent,/尚未持久化/);assert.equal(b.doc.getElementById('costNotice').hidden,false);assert.equal(b.doc.querySelector('[data-cost-export]'),null);});
 test('存储恢复后可显式重试保存',async()=>{let b=await boot();b.store.failSet.add(LOCAL);await b.enter();b.edit();await b.save();b.store.failSet.delete(LOCAL);b.requestSave(0,true);await b.tick(0);await finishPush(b);assert.equal(b.state().dirty,false);assert.equal(b.local().items.AAA.qty,1);});
 test('节流时间持久化失败禁止上传',async()=>{let b=await boot();b.store.failSet.add(PUSH_AT);await b.enter();b.edit();await b.save();assert.equal(b.puts().length,0);assert.equal(b.state().dirty,true);});
-test('上传成功但本地cloud缓存失败不谎报已同步',async()=>{let b=await boot();await b.enter();b.edit();await b.save();b.store.failSet.add(CLOUD);await finishPush(b);assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未持久化/);});
-test('存储损坏不会用种子静默覆盖',async()=>{let s=shared({[LOCAL]:'{invalid'});let b=await boot({store:s});assert.equal(s.values.get(LOCAL),'{invalid');assert.match(b.doc.getElementById('costState').textContent,/未持久化/);});
+test('上传成功但本地cloud缓存失败不谎报已同步',async()=>{let b=await boot();await b.enter();b.edit();await b.save();b.store.failSet.add(CLOUD);await finishPush(b);assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未存本机/);});
+test('存储损坏不会用种子静默覆盖',async()=>{let s=shared({[LOCAL]:'{invalid'});let b=await boot({store:s});assert.equal(s.values.get(LOCAL),'{invalid');assert.match(b.doc.getElementById('costState').textContent,/未存本机/);});
 test('多tab只允许一个写者，旧标签页不能覆盖',async()=>{let b=await boot();let c=await boot({store:b.store});assert.equal(c.state().writer,false);await b.enter();b.edit('AAA','qty','8');await c.enter();assert.equal(c.state().editing,false);assert.throws(()=>c.importData(SEED));assert.equal(c.local().items.AAA.qty,8);c.fireWindow('storage',{key:LOCAL});assert.equal(c.state().DATA.items.AAA.qty,8);await b.dispose();await c.enter();assert.equal(c.state().writer,true);assert.equal(c.state().DATA.items.AAA.qty,8);});
 test('GET等待时pagehide取消旧请求并安全让第二tab接管',async()=>{
   let b=await boot();await b.enter();b.edit();await b.save();let old=b.requests.at(-1), c=await boot({store:b.store});
@@ -704,7 +705,7 @@ test('不支持Web Locks安全降级为隔离会话编辑',async()=>{
   let b=await boot({noLocks:true,protocol:'file:'});let original=b.store.values.get(LOCAL);
   await b.enter();assert.equal(b.state().editing,true);b.edit('AAA','qty','9');await b.save();
   assert.equal(b.sessionLocal().items.AAA.qty,9);assert.equal(b.store.values.get(LOCAL),original);assert.equal(b.requests.length,0);
-  assert.match(b.doc.getElementById('costState').textContent,/隔离预览/);assert.match(b.doc.getElementById('costFoot').textContent,/关闭标签页前请导出/);
+  assert.match(b.doc.getElementById('costState').textContent,/仅预览/);assert.match(b.doc.getElementById('costFoot').textContent,/关闭标签页前请导出/);
 });
 test('跨tab接管先GET且仓位保存依旧遵守持久化节流',async()=>{
   let b=await boot();await b.enter();b.edit();await b.save();await finishPush(b);let c=await boot({store:b.store,now:NOW+1000});
@@ -821,7 +822,7 @@ test('无锁多tab完全隔离不会互相覆写或覆盖正式页',async()=>{
 
 test('隔离会话存储失败显式提示并保留导出能力',async()=>{
   let b=await boot({noLocks:true});b.session.failSet.add(SESSION_LOCAL);await b.enter();b.edit('AAA','qty','8');await b.save();
-  assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未持久化/);assert.ok(b.doc.querySelector('[data-cost-export]'));
+  assert.equal(b.state().dirty,true);assert.match(b.doc.getElementById('costState').textContent,/未存本机/);assert.ok(b.doc.querySelector('[data-cost-export]'));
   assert.equal(b.state().DATA.items.AAA.qty,8);assert.equal(b.local().items.AAA.qty,5);assert.equal(b.requests.length,0);
 });
 test('隔离存储恢复后显式重试成功但仍不上传',async()=>{
@@ -1042,8 +1043,8 @@ test('数据时间和只读/同步状态跟随规则字号，定投在手机和�
   assert.match(ASSETS,/\.runlight\{[^}]*font-size:var\(--status-font-size\)/);
   assert.match(CSS,/\.sub \.cost-state\{margin-left:auto;flex:none;font-size:inherit;?\}/);
   assert.match(CSS,/\.sub \.cost-state \.warn,\.sub \.cost-state \.ok,\.sub \.cost-state \.dim\{font-size:inherit;?\}/);
-  assert.match(ASSETS,/\.runbar \.dca-badge\{font-size:16px;margin-left:auto\}/);
-  assert.match(ASSETS,/\.runbar \.dca-badge\{margin-left:auto;font-size:18px;line-height:24px\}/);
+  assert.match(ASSETS,/\.brandbar \.dca-badge\{font-size:16px;margin-left:10px;margin-bottom:4px\}/);
+  assert.match(ASSETS,/\.brandbar \.dca-badge\{margin-left:8px;margin-bottom:4px;font-size:18px;line-height:24px\}/);
 });
 test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀且不中英混排',()=>{
   // 终稿当日贡献由dual-body承载；保留灯条，数值第二/三列，样式尺寸以440/1440真实harness验收。
@@ -1138,8 +1139,8 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   // 搬走后不再留「卡片内的编辑按钮」死规则
   assert.doesNotMatch(CSS,/\.cost-manage>summary \.cost-edit-btn/);
   assert.match(CSS,/\.cost-edit-btn\[hidden\]\{display:none\}/);
-  // 「已同步 / 未同步」2026-11-02 起手机与桌面同一套：都搬到「数据时间 …」那排的最右侧，
-  // 标题行只剩「总资产·盈亏 + 编辑」。JS 里不许再按 max-width 分档，CSS 规则必须两档共用（不在 @media 内）。
+  // 「已同步 / 未同步」2026-11-20 起挂在「编辑」按钮右侧两排状态栈的下排（旧页面退回数据时间排）。
+  // JS 里不许再按 max-width 分档，CSS 规则必须两档共用（不在 @media 内）。
   const syncFn = SOURCE.slice(SOURCE.indexOf('function syncMirrorEl'), SOURCE.indexOf('function showNotice'));
   assert.ok(syncFn.length > 0 && !/max-width:600px/.test(syncFn), '同步状态胶囊不应再按手机档分支');
   assert.match(CSS,/\.sub \.cost-state\{margin-left:auto;flex:none;font-size:13px\}/);
@@ -1375,6 +1376,8 @@ function loadSignalFilterPage(doc){
   const start=assets.indexOf('function signalFilterData('),end=assets.indexOf('document.addEventListener("click"',start);
   assert.ok(start>=0&&end>start,'执行真实筛选数据读取、交集、箭头及DOM渲染函数');
   const context={document:doc,Element};context.window=context;
+  // 条件式吸底按钮会登记滚动/开合监听并排帧；离线沙箱只验证筛选数据读取，不真的跑布局
+  context.addEventListener=()=>{};context.requestAnimationFrame=()=>0;
   vm.createContext(context);vm.runInContext(assets.slice(start,end),context);
   return context;
 }
@@ -2289,7 +2292,8 @@ for(const missing of [true,false])test('审核边界：'+(missing?'未知':'零'
 });
 test('审核边界：未知成本与已知成本混合不冒充完整合计，明确录入零后可计算',async()=>{
   const b=await boot({local:{...copy(SEED),schema_version:2,items:{AAA:{qty:5},BBB:{cost:90,qty:2}}},noLocks:true,forbidRequests:true});
-  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·—（—）');assert.match(b.doc.querySelector('.cost-sum').getAttribute('title'),/成本未知/);
+  assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·—（—）');assert.match(b.doc.querySelector('.cost-sum').getAttribute('aria-label'),/成本未知/);
+  assert.equal(b.doc.querySelector('.cost-sum').hasAttribute('title'),false);   // 看板页不留鼠标悬停说明
   assert.equal(b.doc.querySelector('.cashbond-row .cb-total-pnl').textContent,'—（—）');
   await b.enter();b.edit('AAA','cost','0');await b.save();assert.equal(b.sessionLocal().items.AAA.cost,0);
   assert.equal(b.doc.querySelector('.cost-sum').textContent,'$750·+$520.0（+288.9%）');await b.dispose();

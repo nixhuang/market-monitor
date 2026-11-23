@@ -41,7 +41,7 @@ line-58||p|两者只保留在主表，不进入“无异动”，不计入统计
     ("rule-folded", r"""line-64||h4|三、折叠
 ||h5|目标／共识价
 ||p|所有分组：
-target-inactive||p|目标空间<${target_space_pct}%、未达到目标／共识价、共识获取失败及失败旧价。
+target-inactive||p|目标空间<${target_space_pct}%、未达到目标／共识价、共识获取失败及失败旧价；仅紫灯（空间达标或达到目标价的实心紫）且描述区无其它文字同样折叠。
 ||h5|财报
 ||p|所有分组：
 earnings-far||p|仅有未来${earn_far_start}～${earn_list_days}天财报名单。"""),
@@ -502,6 +502,8 @@ TARGET_DASH_BORDER = 'data:image/svg+xml,' + quote(
 PAGE_PALETTE = """:root{
   --bg:#0b0e14;
   --card:#141a24;
+  --pos-num-fs:14px;  /* 2026-11-20 用户：仓位栏所有金额／涨跌额／涨跌幅与长短持仓标题「-4.7%」同号。
+                          桌面 14px、手机档覆盖 16px；两处共用这一个变量，不会再各写各的导致不齐。 */
   --sym-w:100px;      /* 代码列按用户指的「LMT 那么宽」定死：桌面 100 / 手机 98（代码+中文备注名）。
                          原来是 max-content，各行 40~121px 参差、价格区左边界跟着晃；手机档覆盖 98px。
                          2026-11-13 用户「电脑上 7 个中文字宽、手机上 6 个」：桌面 note 11.5px（单字 12px），
@@ -625,6 +627,17 @@ PAGE_PALETTE = """:root{
   --orange:#ffa94d;
   --cyan:#4dd0e1;
   --positions-collapse:rgba(46,160,67,.15);
+  /* 悬浮 ▲ 内部：2026-11-21 用户「有点亮了，再暗些」——把底色本身压暗一档；
+     随后定稿「盖住 70%」：紫、绿两态统一 .7（原来 .55／.5），颜色盖得更满、
+     底下表格字不再成片透出，但仍留 30% 半透、不是全实。外框保持分组展开那圈不变。
+     再定稿「底色透明度不变、颜色再暗一些」：透明度恒 .7 一个字不动，只把两组
+     三元组等比压到原来的 75%（紫 80,50,128→60,38,96；绿 20,70,30→15,53,23），
+     三个通道同比例下降，所以色相不变、只是整体更沉，不靠掺黑／混白／改透明度。
+     三元组在 :root 单独定义，别处不许写死；固定态保持线上原色不动。 */
+  --collapse-float-purple-rgb:60,38,96;
+  --collapse-float-green-rgb:15,53,23;
+  --collapse-float-purple:rgba(var(--collapse-float-purple-rgb),.7);
+  --collapse-float-green:rgba(var(--collapse-float-green-rgb),.7);
   --tag-bg:rgba(107,163,240,.14);
   --tag-border:rgba(107,163,240,.32);
   --quote-bg:rgba(139,147,161,.1);
@@ -694,9 +707,10 @@ body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system
 .wrap{max-width:718px;margin:0 auto}
 h1{font-size:19px;margin:18px 0 4px;font-weight:600;text-align:center}
 h1.brand{color:var(--frame-purple)}
-/* 顶部一排：站名靠左、代码定位 FIND 靠右，两者底边对齐（flex-end） */
+/* 顶部一排：站名 + 定投靠左、代码定位 FIND 靠右，底边对齐（flex-end） */
 /* 2026-11-20 站名 26→32px；行盒锁 39px（＝原 26×1.5），盒顶不动、盒底仍与 FIND 对齐，
-   FIND 不下移、整排高度不变；32px 时站名+FIND 共 330px，手机 440 净宽 398px 内零溢出。 */
+   FIND 不下移、整排高度不变。站名改短为 Matrix 并把定投挪到标题右侧后，
+   「Matrix + 定投：999 + FIND」三者在手机 440 净宽 398px 内仍零溢出。 */
 .brandbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:18px 0 4px}
 .brandbar h1.brand{margin:0;font-size:32px;line-height:39px;text-align:left;white-space:nowrap}
 /* 2026-11-20 桌面抬头行距收紧：数据时间→按钮 16→8px，与手机档一致；手机档 @media 自带 8px，改这条不影响手机。 */
@@ -705,7 +719,6 @@ h1.brand{color:var(--frame-purple)}
 /* 父级只留标题内缩，资产行与子框使用完整分组宽度；▲沿用原持仓绿色底。 */
 #group_positions,#group_positions[open]{background:var(--card);border:var(--frame-w) solid var(--frame-yellow);box-shadow:none;padding:3px 0 2px;margin-bottom:0;overflow:hidden}
 #group_positions>summary{cursor:pointer;margin-left:5px;margin-right:5px}
-#group_positions_long.zone-card,#group_positions_short.zone-card{--collapse-bg:var(--positions-collapse);--signal-border:var(--frame-green);box-sizing:border-box;width:100%;background:var(--card);border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 9px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:9px 10px;border-top:1px solid var(--line);vertical-align:middle}
@@ -737,14 +750,16 @@ tr:first-child td{border-top:none}
 #signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}
 #signalCounts .collapse-group{color:var(--white)}
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
-#signalCounts .count-red{color:var(--red)}
-#signalCounts .count-yellow{color:var(--yellow)}
+/* 统计标题栏的数字也是「分组标题栏上的红黄数字」，同批跟随描述区灯色 */
+#signalCounts .count-red{color:var(--lamp-red)}
+#signalCounts .count-yellow{color:var(--lamp-yellow)}
 #signalCounts .count-earn{color:var(--text)}
 #signalCounts .count-all{color:var(--dim)}   /* 总 N：抓取总只数，灰字不抢红黄白紫的注意力 */
 #signalCounts>summary .count-all{margin-left:auto}   /* 2026-11-20 用户：总 N 靠右，贴标题栏右缘（group-stats 是占满余宽的 flex，auto 外边距把它推到最右） */
-/* 顶部右侧的代码定位：5 位代码 + FIND；字号 16px 防止 iOS 聚焦时自动放大页面 */
+/* 顶部右侧的代码定位：美股代码最长 5 位（GOOGL / BRK-B），输入框按 5 个大写字母墨宽定 74px
+   ＝字母约 60px + 左右内距 12px + 边框 2px；字号仍 16px 防止 iOS 聚焦时自动放大页面。 */
 .stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}
-.stat-find input{box-sizing:border-box;width:111px;height:32px;padding:0 6px;font:inherit;font-size:16px;font-weight:600;line-height:30px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;text-transform:uppercase;text-align:center;outline:none}
+.stat-find input{box-sizing:border-box;width:74px;height:32px;padding:0 6px;font:inherit;font-size:16px;font-weight:600;line-height:30px;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;text-transform:uppercase;text-align:center;outline:none}
 .stat-find input::placeholder{color:var(--dim);font-weight:400;text-transform:none}
 .stat-find input:focus{border-color:var(--head-blue-on)}
 .stat-find input.miss{border-color:var(--lamp-red)}
@@ -940,15 +955,15 @@ tr.gray td{color:var(--dim)}
 .runbar a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
 .acts a.btnlink{padding:6px 12px;font-size:15px;color:var(--text);background:var(--button-bg);border:1px solid var(--control-border);border-radius:8px;text-decoration:none;display:inline-block}
 /* 2026-11-20 桌面抬头收紧：状态灯上下留白 -4/14 → -6/8（与手机档一致），
-   按钮→状态灯 10→8、状态灯→规则排 12→6；手机档 @media 已写死 -6/8，改这条对手机零影响。
-   加上 .sub 的 16→8，桌面抬头整体少 16px（173→157），正文随之上移。 */
+   按钮→状态灯 10→8；手机档 @media 已写死 -6/8，改这条对手机零影响。 */
 .statusrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-6px 0 8px;font-size:13.5px;line-height:1.5}
-/* 2026-11-20 抬头重排：抓取状态灯独占一排；下一排放规则说明（保留灯圈、靠左）与仓位同步（靠右，同号）。
-   双类选择器压过 .statusrow 的 margin/gap；手机档 16px 内距仍由 .statusrow 自身继承，不另抄一遍。 */
-.statusrow.flagrow{justify-content:space-between;gap:8px;margin:-2px 0 8px}
-.statusrow.flagrow .rulelight{flex:none;white-space:nowrap}
-.statusrow.flagrow .cost-state{min-width:0;text-align:right;white-space:normal;overflow-wrap:anywhere;font-size:var(--status-font-size);line-height:1.4}
-.statusrow.flagrow .cost-state .warn,.statusrow.flagrow .cost-state .ok,.statusrow.flagrow .cost-state .dim{font-size:inherit}
+/* 2026-11-20 抬头再排：规则同步、仓位同步压成上下两排，紧贴「编辑」按钮右侧，不再单独占一排。
+   两处文案最长 5 字（「规则已生效」「仓位已同步」），同号 var(--status-font-size) 不撑宽按钮排；
+   .sync-stack 后代选择器压过 cost_panel.css 里 .cost-state 的 11px 基础值。 */
+.sync-stack{display:flex;flex-direction:column;justify-content:center;gap:0;flex:none;min-width:0;margin-left:2px}
+.sync-stack .runlight{flex:none;white-space:nowrap;line-height:1.25}
+.sync-stack .cost-state{min-width:0;white-space:nowrap;text-align:left;font-size:var(--status-font-size);line-height:1.25}
+.sync-stack .cost-state .warn,.sync-stack .cost-state .ok,.sync-stack .cost-state .dim{font-size:inherit}
 .check-result{padding:10px 12px;margin:0 0 14px;border:1px solid var(--line);border-radius:8px;font-size:13px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--text)}
 .check-result[data-phase="bad"]{border-color:var(--red)}
 .check-result[data-phase="busy"]{border-color:var(--yellow)}
@@ -973,7 +988,10 @@ tr.gray td{color:var(--dim)}
 .zone-card>summary .zone-name{color:var(--text);font-size:15px;font-weight:600;white-space:nowrap;flex:none}
 .zone-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-start;text-align:left;flex:1 1 auto}
 .zone-card>summary:focus-visible{outline:2px solid var(--link-blue);outline-offset:-2px}
-.zone-card .quiet{font-size:12px;color:var(--dim);padding:8px 10px 0;line-height:1.6}
+/* 2026-11-20：长短持仓清单搬进 .zone-panel 后不再有 .zone-card 祖先，
+   「无异动 N 只」必须继续沿用原 zone-card 内的 12px / 8px 10px 0 / 1.6 行高，
+   否则会退回 .quiet 的 13px 与底部 12px 留白，和当日／风险板块不齐。 */
+:is(.zone-card,.zone-panel) .quiet{font-size:12px;color:var(--dim);padding:8px 10px 0;line-height:1.6}
 .group-card[open]:where(:not(#signalCounts,#costManage)){border:var(--frame-w) solid var(--signal-border)}
 .macro-card[open]{border:var(--frame-w) solid var(--signal-border)}
 .zone-card[open]{border:1px solid var(--signal-border)}
@@ -988,17 +1006,22 @@ tr.gray td{color:var(--dim)}
 .zone-card[open]>summary::before{transform:rotate(90deg);color:var(--head-blue-on)}
 .zone-card + .group-bottom{margin-top:22px}
 .zone-card + .quiet + .group-bottom{margin-top:22px}
-.stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;width:24px;min-width:24px;height:18px;padding:0 1px;border-radius:999px;border:1.5px solid var(--dim);background:transparent;font-size:14px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums;color:var(--white);position:relative;top:2px}
-.stat-badge.red{border-color:var(--red)}
-.stat-badge.yellow{border-color:var(--yellow)}
-.stat-badge.gray{border-color:var(--dim)}
-.stat-badge.missing{border-color:var(--dim);border-style:dashed}
-.stat-badge.purple{border-color:var(--purple)}
-.stat-badge.green{border-color:var(--green)}
+/* 所有分组标题的灯数一律不画圈：只留对应等级的颜色数字（2026-11-20 用户定稿）。
+   去掉原 24×18 空心圆、描边与固定宽高，数字仍同号不加粗、tabular-nums 对齐。
+   白灯/缺失沿用「仅文字灰」，其余各自语义色，颜色只认 :root 色板。 */
+.stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;padding:0;border:0;background:transparent;font-size:14px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums;color:var(--white);position:relative;top:2px}
+/* 2026-11-21 用户：分组标题栏的红／黄数字＝个股描述区红／黄文字（--lamp-red / --lamp-yellow），
+   不再用涨跌色 --red #f85149 / --yellow #d29922——那两个偏暗，和描述区不是一个颜色。 */
+.stat-badge.red{color:var(--lamp-red)}
+.stat-badge.yellow{color:var(--lamp-yellow)}
+.stat-badge.gray{color:var(--dim)}
+.stat-badge.missing{color:var(--dim)}
+.stat-badge.purple{color:var(--purple)}
+.stat-badge.green{color:var(--green)}
 .group-card>summary .grp-name{white-space:nowrap;flex:none}
 .macro-card>summary .grp-name{white-space:nowrap;flex:none}
 .rs-spy{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dim)}
-.pos-total{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text)}
+.pos-total{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text);font-size:var(--pos-num-fs,14px)}
 .rs-spy.up{color:var(--up)}
 .rs-spy.down{color:var(--down)}
 .stat-dot{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
@@ -1007,11 +1030,12 @@ tr.gray td{color:var(--dim)}
 .stat-dot.gray{background:var(--dim)}
 .stat-dot.green{background:var(--green)}
 .stat-dot.purple{background:var(--purple)}
-.macro-card>summary .stat-badge{top:0;margin-right:2px}
-.market-risk-badge{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+/* 11-23 用户：风险标题的红黄数字要紧跟「风险」标题，与其它分组标题同一套排法；
+   综合灯仍留在标题栏右端，靠自身 auto 外边距推过去。 */
+.macro-card>summary .stat-badge{top:0}
+.market-risk-badge{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;margin-left:auto}
 .market-risk-badge[data-level="green"]{color:var(--green)}
-.macro-card>summary .group-stats{margin-left:auto;display:inline-flex;align-items:center;justify-content:flex-end;text-align:right;gap:0;flex:0 1 auto}
-#group_positions_long.zone-card>summary .zone-stats,#group_positions_short.zone-card>summary .zone-stats{margin-left:auto;justify-content:flex-end;margin-right:-1px}
+.macro-card>summary .group-stats{margin-left:0;display:inline-flex;align-items:center;justify-content:flex-start;text-align:left;gap:8px;flex:1 1 auto}
 .quiet-list{margin:8px 0;border-top:1px solid var(--quiet-rule);border-bottom:1px solid var(--quiet-rule)}
 .quiet-list>summary{padding:8px 12px;color:var(--dim);font-size:13px;cursor:pointer}
 .quiet-list[open]>summary{background:none;box-shadow:none;color:var(--head-blue)}
@@ -1027,9 +1051,11 @@ tr.gray td{color:var(--dim)}
 .runlight[data-phase="ok"] .dot{background:var(--green);box-shadow:0 0 0 3px var(--status-ok-halo)}
 .runlight[data-phase="bad"]{color:var(--red)}
 .runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px var(--status-bad-halo)}
-.dca-badge{margin-left:auto;white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
+/* 2026-11-20：定投从按钮排最右挪到站名右侧；字号沿用桌面 16 / 手机 18，只改位置不改大小。
+   底边给 4px，让 18px 小字与 32px 站名的视觉基线对齐（brandbar 是 align-items:flex-end）。 */
+.dca-badge{white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
 .dca-badge.on{color:var(--yellow)}
-.runbar .dca-badge{font-size:16px;margin-left:auto}
+.brandbar .dca-badge{font-size:16px;margin-left:10px;margin-bottom:4px}
 .oil-reference-row td{font-size:13px;overflow-wrap:anywhere}
 .oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
 .oil-state{font-size:12px;font-weight:600}
@@ -1065,6 +1091,16 @@ tr.gray td{color:var(--dim)}
    「长均线」标签写到数据前面同一排（行内，不再另起一行）。 */
 :is(#macroCard, .macro-scope) td .unit .unit-num{font-size:var(--macro-chg)}
 :is(#macroCard, .macro-scope) td .unit.unit-inline{display:inline;margin-right:2px}
+/* 2026-11-23 风险表 200 日均线：标普／纳指上排＝相对均线的百分比（涨跌色），
+   VIX 上排＝均线数值（白）；下排统一灰字标签，标普／纳指写「200均线偏离」、
+   VIX 写「200日均线」。窄屏那条 white-space:normal 会误伤标签，故单独锁住。
+   11-23 追加：上排主数字的文字格式与「当前」列点位完全同款（同字号同行高）；
+   下排标签整排沿用 .unit 的小灰字，「200」不单独放大、与「均线偏离」同号。
+   下排行盒要跟「回撤 -8.2%」那排同高（内含 14px 数字撑到 16.1px），否则两列
+   内容高不同，垂直居中会把变化列上排数字整体压低约 2px。 */
+:is(#macroCard, .macro-scope) td.num.dim .ma-tag{letter-spacing:-.5px;white-space:nowrap;line-height:calc(var(--macro-chg) * 1.15)}
+:is(#macroCard, .macro-scope) td.num.dim .ma-dev,
+:is(#macroCard, .macro-scope) td.num.dim .ma-val{display:block;font-size:var(--macro-body);line-height:1.25}
 .dual-row > .dual-body{grid-column:1/-1;grid-row:2;min-width:0;margin:0;padding:0;border:0;background:transparent}
 .dual-row > .dual-body[hidden]{display:none}
 .day-pnl-card > summary.dp-head{display:flex;align-items:center;gap:8px;padding:0 12px 0 4px;list-style:none;cursor:pointer;box-sizing:border-box}
@@ -1074,7 +1110,10 @@ tr.gray td{color:var(--dim)}
 .dp-pct{font-size:13px;font-weight:400}
 .dp-nums .up{color:var(--up)}
 .dp-nums .down{color:var(--down)}
-.dual-row .group-bottom{display:none}
+/* 2026-11-20 20:4x：只有「当日／风险」的内容区不显示 ▲；长短持仓清单的
+   「收起本组」按钮保留（清单已搬进 .zone-panel，见下方 #zoneDualRow 规则）。 */
+.dual-row:not(.zone-dual) .group-bottom{display:none}
+.dual-row.zone-dual .group-bottom{display:block}
 .dual-row tr.mh{display:none}
 .dual-row > details{grid-row:1;min-width:0;margin:0;box-sizing:border-box;position:relative;z-index:2}
 .dual-row > details[open]{padding-bottom:2px;min-height:63px;border-top:var(--frame-w) solid var(--signal-border);border-left:var(--frame-w) solid var(--signal-border);border-right:var(--frame-w) solid var(--signal-border);border-bottom:0;border-radius:12px 12px 0 0}
@@ -1094,13 +1133,116 @@ tr.gray td{color:var(--dim)}
     var(--signal-border) calc(50% + 4px),
     transparent calc(50% + 4px))}
 .dual-body > [data-owner][hidden]{display:none}
+
+/* ===== 2026-11-20 长短持仓：与「当日／风险」一模一样的并排双卡 =====
+   两枚标题只留 summary，清单放进跨两列的 .dual-body；哪枚展开就显示哪块清单，
+   全靠 :has() 由 details.open 驱动，不搬内容、不重算数据；统计跳转只需把对应标题打开。
+   20:4x 用户追加：标题字号对齐其它分组（手机更大）、与仓位卡之间留 14px、
+   两枚标题与共用清单都用「完整四边框」（收起灰／展开紫，跟其它分组同款，
+   不再是被切掉下边框的连通框），清单底部「▲ 收起本组」保留。 */
+/* 组名跟个股代码 td.sym 同字号（桌面 14px／手机 17px），其余数字仍按上一轮放大。 */
+#zoneDualRow{--collapse-bg:var(--positions-collapse);--zone-name-fs:14px;--zone-badge-fs:14px;--zone-pad-y:2px}
+/* 与仓位卡之间留 14px＝普通分组之间的间距；用 class 组合写，避免重复 #zoneDualRow 规则 */
+.dual-row.zone-dual{margin-top:14px}
+/* 两态同一套 padding／高度链路：展开那枚不再被压矮 5px；框＝完整四边＋12px 圆角 */
+/* 21:0x：只有展开的那枚是绿框，收起的回到默认灰框（不带外框色），一眼分辨哪个展开；
+   两态共用同一套 padding／min-height／圆角，避免展开时卡片高度跳。清单框恒绿。 */
+#zoneDualRow > details,#zoneDualRow > details[open]{box-sizing:border-box;min-height:0;padding:var(--zone-pad-y) 4px;border-radius:12px}
+#zoneDualRow > details{border:1px solid var(--line)}
+#zoneDualRow > details[open]{border:var(--frame-w) solid var(--frame-green)}
+#zoneDualRow > details[open]::after{display:none}
+/* 绿框左右各外扩 2px、区内补 2px：框线落在持仓框与个股行首灯条正中，不再跟灯条贴住；
+   外扩的 4px 正好被 border 2px + padding 4px 吸收，内容宽度不变，表格列宽不动。 */
+#zoneDualRow > .dual-body:not([hidden]){margin:0 -2px;padding:0 2px;border:var(--frame-w) solid var(--frame-green);border-radius:12px}
+#zoneDualRow > .dual-body:not([hidden])::before{display:none}
+#zoneDualRow .group-bottom{margin:0 4px 0}
+#zoneDualRow > details > summary.zone-grp{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:0;box-sizing:border-box;height:47px;min-height:47px;padding:0 12px 0 4px;line-height:1.15}
+#zoneDualRow > details > summary.zone-grp::before{display:none}
+/* 2026-11-21：两排文字的行距拉开 4px（22+4+20＝46px，仍在固定 47px 标题框内居中）；
+   框高、字号、上下内距一律不动。长短持仓与板块分组共用这一条，规格不分裂。 */
+.zone-r1{display:flex;align-items:center;gap:5px;min-width:0;white-space:nowrap;line-height:22px;font-size:var(--zone-name-fs);margin-bottom:4px}
+.zone-r1 .zone-name{font-size:var(--zone-name-fs);font-weight:600;color:var(--text);flex:none}
+.zone-r1 .stat-badge{font-size:var(--zone-badge-fs);top:0}
+.zone-r2{display:flex;align-items:baseline;gap:6px;min-width:0;white-space:nowrap;line-height:20px;font-variant-numeric:tabular-nums}
+/* 2026-11-20 21:2x：涨跌额不加粗，且与涨跌幅「-4.7%」同号；仓位栏金额也共用 --pos-num-fs。 */
+.zone-r2 .zone-amt{font-size:var(--pos-num-fs,14px);font-weight:400;color:var(--text)}
+.zone-r2 .zone-pct{font-size:var(--pos-num-fs,14px);color:var(--dim)}
+.zone-r2 .zone-amt.up,.zone-r2 .zone-pct.up{color:var(--up)}
+.zone-r2 .zone-amt.down,.zone-r2 .zone-pct.down{color:var(--down)}
+#zoneDualRow > .dual-body{display:none}
+#zoneDualRow:has(> details[open]) > .dual-body{display:block}
+#zoneDualRow > .dual-body > .zone-panel{display:none}
+#zoneDualRow:has(> #group_positions_long[open]) > .dual-body > [data-owner="long"],
+#zoneDualRow:has(> #group_positions_short[open]) > .dual-body > [data-owner="short"]{display:block}
+#zoneDualRow:has(> details:only-of-type) > details{grid-column:1/-1}
+
+/* ===== 2026-11-20 23:xx 其它分组两两并排，规格与长短持仓完全一致 =====
+   与 #zoneDualRow 平行的一套规则：选择器换成 .group-dual，不动长短持仓那条，
+   两边既有的守门断言都不受影响；尺寸／字号／框色一律复用同一批变量，不另抄数值。
+   清单显隐按「第几枚标题」对应「第几块面板」，纯 :has() 驱动，不为每个分组写一条。 */
+/* 清单底部 ▲ 的底色沿用线上固定态：其它分组紫 rgba(--frame-purple-rgb,.2)，
+   长短持仓绿 --positions-collapse。此前这里误写成绿，两列分组的 ▲ 跟着持仓变绿了。 */
+.dual-row.group-dual{--zone-name-fs:14px;--zone-badge-fs:14px;--zone-pad-y:2px;--collapse-bg:rgba(var(--frame-purple-rgb),.2)}
+.dual-row.group-dual > details,.dual-row.group-dual > details[open]{box-sizing:border-box;min-height:0;padding:var(--zone-pad-y) 4px;border-radius:12px}
+.dual-row.group-dual > details{border:1px solid var(--line)}
+/* 2026-11-21 用户：其它分组的外框回到原来的紫（--signal-border＝--frame-purple），
+   绿框只留给仓位／长短持仓；收起态灰框不变。 */
+.dual-row.group-dual > details[open]{border:var(--frame-w) solid var(--signal-border)}
+.dual-row.group-dual > details[open]::after{display:none}
+.dual-row.group-dual > details > summary.zone-grp{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:0;box-sizing:border-box;height:47px;min-height:47px;padding:0 12px 0 4px;line-height:1.15;list-style:none;cursor:pointer;touch-action:manipulation}
+.dual-row.group-dual > details > summary.zone-grp::before{display:none}
+.dual-row.group-dual > details[open] > summary .zone-name{color:var(--head-blue)}
+.dual-row.group-dual > .dual-body{display:none}
+.dual-row.group-dual:has(> details[open]) > .dual-body{display:block}
+.dual-row.group-dual > .dual-body:not([hidden]){margin:0 -2px;padding:0 2px;border:var(--frame-w) solid var(--signal-border);border-radius:12px}
+.dual-row.group-dual > .dual-body:not([hidden])::before{display:none}
+.dual-row.group-dual .group-bottom{margin:0 4px 0}
+.dual-row.group-dual > .dual-body > .group-panel{display:none}
+.dual-row.group-dual:has(> details:nth-child(1)[open]) > .dual-body > .group-panel:nth-child(1),
+.dual-row.group-dual:has(> details:nth-child(2)[open]) > .dual-body > .group-panel:nth-child(2){display:block}
+/* 房地产只有一枚标题，按用户要求仍占左半；清单跨两列，表格列宽不被压窄 */
+.dual-row.group-dual.solo-left > details{grid-column:1}
+/* 下排「20日对.SPX ±x%」与长短持仓第二排同号；没有相对强弱的分组留足行高对齐 */
+.dual-row.group-dual .zone-r2{min-height:20px}
+
+/* ===== 2026-11-21 向上折叠「▲」：长清单够不着时悬浮，滚到分组底部就回原位 =====
+   平时它就是清单最底下那条普通的 ▲（跟着分组一起滚）；只有清单比一屏还长、
+   ▲ 还没进视口时，JS 才给按钮加 .is-floating 浮到屏幕底部中间，随时可点；
+   滚到分组底部、▲ 自己露出来了，立刻去掉这个类还原成原来那条。
+   固定的是按钮本身，.group-bottom 用 min-height 继续占位，文档高度不变、回位零跳动；
+   仓位和它上面的统计／当日／风险不参与（选择器不覆盖，仓位的 ▲ 本来就隐藏）。
+   按钮 DOM 与 aria-controls 一个字不改，点击仍走原有的「只收本组 + 下方内容原地不动」逻辑；
+   一次只会有一个这类清单展开（互斥规则），所以不会出现两枚 ▲ 叠在一起。 */
+#zoneDualRow .group-bottom,
+.dual-row.group-dual .group-bottom{min-height:26px}
+/* 悬浮按钮宽度＝清单底部那条 ▲ 的宽度：固定态是 width:100%（即恒占位的 .group-bottom 宽度），
+   但 position:fixed 后 100% 会变成整个视口宽，所以由 JS 把量到的宽度写进 --collapse-float-w；
+   96px 只是脚本未执行时的兜底，正常永远走变量。box-sizing:border-box 保证描边不占额外宽度。
+   2026-11-21 用户「上边缘不变、下边缘往下、加高」：bottom 12→4／height 34→42，两者之和仍是
+   46px，所以按钮顶边恒在 vh-46 不动，只是往下长 8px；JS 的「底部 ▲ 还没进视口」临界 vh-46
+   因此不用改。追加「再暗些、描边跟展开外框一致」：描边改成分组展开那一圈的完全同款
+   （同一个变量、同一条线宽、实色不带透明度），不再用更粗更亮的一圈；固定态保留线上原色
+   （紫 .2／绿 .15），悬浮态换成压暗一档但更实心的底色（暗 ≠ 更透），hover 沿用同一色，不混白。 */
+#zoneDualRow .collapse-group.is-floating,
+.dual-row.group-dual .collapse-group.is-floating{position:fixed;left:50%;bottom:calc(4px + env(safe-area-inset-bottom,0px));z-index:60;width:var(--collapse-float-w,96px);height:42px;margin:0;transform:translateX(-50%);border-radius:10px;color:var(--text);background:var(--collapse-float-bg,var(--collapse-bg));box-shadow:0 4px 16px rgba(0,0,0,.65)}
+#zoneDualRow .collapse-group.is-floating{--collapse-float-bg:var(--collapse-float-green);border:var(--frame-w) solid var(--frame-green)}
+.dual-row.group-dual .collapse-group.is-floating{--collapse-float-bg:var(--collapse-float-purple);border:var(--frame-w) solid var(--signal-border)}
+#zoneDualRow .collapse-group.is-floating:hover,
+.dual-row.group-dual .collapse-group.is-floating:hover{color:var(--text);background:var(--collapse-float-bg,var(--collapse-bg))}
+.dual-row.group-dual .zone-r2 .rs-spy,.dual-row.group-dual .zone-r2 .monitor-note{font-size:var(--pos-num-fs,14px);line-height:20px;margin-left:0}
 .dp-head .dp-nums{margin-left:auto;display:flex;flex-direction:row;align-items:baseline;gap:6px;line-height:1.2;white-space:nowrap}
 :is(#macroCard, .macro-scope) td{font-size:var(--macro-body);overflow-wrap:anywhere;padding:4px 8px;line-height:1.25;padding-top:3px;padding-bottom:3px}
 :is(#macroCard, .macro-scope) tr:is(.red,.yellow,.green) td:first-child{box-shadow:none;position:relative;padding-left:14px}
-:is(#macroCard, .macro-scope) tr:is(.red,.yellow,.green) td:first-child::before{content:'';position:absolute;left:6px;top:3px;bottom:3px;width:1.5px;border-radius:1px;background:var(--text);pointer-events:none;z-index:1}
-:is(#macroCard, .macro-scope) tr.red td:first-child::before{background:var(--red);width:1.5px}
-:is(#macroCard, .macro-scope) tr.yellow td:first-child::before{background:var(--yellow);width:1.5px}
-:is(#macroCard, .macro-scope) tr.green td:first-child::before{background:var(--green);width:1px}
+/* 2026-11-21 用户：风险指标名左边灯条与主表个股代码左边灯条各加宽 2px
+   （风险 1.5/1 → 3.5/3，主表 2 → 4）。left 与 padding-left 不动，加宽后仍在文字左侧留白里。 */
+:is(#macroCard, .macro-scope) tr:is(.red,.yellow,.green) td:first-child::before{content:'';position:absolute;left:6px;top:3px;bottom:3px;width:3.5px;border-radius:1px;background:var(--text);pointer-events:none;z-index:1}
+:is(#macroCard, .macro-scope) tr.red td:first-child::before{background:var(--red);width:3.5px}
+:is(#macroCard, .macro-scope) tr.yellow td:first-child::before{background:var(--yellow);width:3.5px}
+:is(#macroCard, .macro-scope) tr.green td:first-child::before{background:var(--green);width:3px}
+/* 2026-11-21 用户：风险表「状态」列文字跟本行灯级走，颜色与个股描述红／黄同款；
+   绿灯行仍白字、无数据行仍灰字，油价行的 .oil-state 自带同级颜色不冲突。 */
+:is(#macroCard, .macro-scope) tr.red td:nth-child(4){color:var(--lamp-red)}
+:is(#macroCard, .macro-scope) tr.yellow td:nth-child(4){color:var(--lamp-yellow)}
 .oil-reference-row.red .oil-state{color:var(--lamp-red)}
 .oil-reference-row.yellow .oil-state{color:var(--lamp-yellow)}
 .market-risk-badge[data-level="red"]{color:var(--lamp-red)}
@@ -1155,7 +1297,8 @@ table.stk tr.gray[data-symbol]{--lamp-line:var(--text)}
    对齐值原为手机 39=46-7、桌面 34.5=44-9.5，再各减 3 → 36 / 31.5。
    原 41.7/42.7 会多探出 7.2 / 3.7px。
    2026-11-13：三处分区竖线改用同一组 --lamp-top/--lamp-h，长度与灯条一样，不再各量各的。 */
-table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:2px;height:var(--lamp-h);background:var(--lamp-line);pointer-events:none;z-index:2}
+/* 2026-11-21 用户：个股代码左边灯条加宽 2px（2 → 4），上下几何与颜色一律不动。 */
+table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:4px;height:var(--lamp-h);background:var(--lamp-line);pointer-events:none;z-index:2}
 /* 代码格（2026-11-17）：底色渐变已整块挪到 tr 上（见上面 tr 规则），td.sym 自身不再画背景，
    否则会把「延伸到价格区」的渐变切成两段。这里只管文字几何：上内距走 --row-pad-top
    （桌面 3 / 手机 5），手机档 padding-left/right 由后面的规则单独覆盖，不许写死左右内距
@@ -1368,7 +1511,6 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10p
 .stk th{font-size:13px;color:var(--dim);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
 #group_positions[open]{padding-bottom:2px}
 #group_positions>.group-bottom{display:none}
-#group_positions_short.zone-card{margin-bottom:16px}
 #runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
 #runLightTxt[data-expandable]{cursor:pointer}   /* 失败名单超过 3 只时折进「…」，点一下展开 */
 #signalCounts .signal-extra-row{--chip-w:84px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
@@ -1393,7 +1535,7 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10p
    只把右内距 6→2px：note 可见宽仍是 98−6−2＝90px＝精确 6 个中文字，文字墨迹→灰线由 6px 收到 2px。
    灰线左移 4px 全部转给 --tgs-w（104→108），中间 minmax(0,1fr) 价格区净宽不变，98 行仍全 0 档、
    零侵占。四位数共识价的「10月」离紫框右线由 4px 放宽到 7.5px。其余只覆盖变量值。 */
-:root{--status-font-size:14.5px;--sym-w:98px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;--lamp-top:8px;--lamp-h:36px;--row-pad-top:5px;--tgs-font:16px;--tgs-pad-l:0px;--tgs-pad-r:0px}
+:root{--status-font-size:14.5px;--sym-w:98px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;--lamp-top:8px;--lamp-h:36px;--row-pad-top:5px;--tgs-font:16px;--tgs-pad-l:0px;--tgs-pad-r:0px;--pos-num-fs:16px}
 .sig-cols[data-combo="1"]{--combo-size:11.3px;--combo-cy:9.7px}
 body{padding-left:5px;padding-right:5px}
 .oil-reference-row td{padding:8px 6px}
@@ -1419,10 +1561,12 @@ body{padding-left:5px;padding-right:5px}
 .group-card>summary .group-stats{line-height:24px;font-size:16px;gap:6px}
 .macro-card>summary .group-stats{line-height:24px;font-size:16px;gap:6px}
 .zone-card>summary .group-stats{font-size:14px;line-height:22.5px;gap:6px}
-:is(#macroCard, .macro-scope) td:first-child{width:29%}
-:is(#macroCard, .macro-scope) td:nth-child(2){width:32%}
-:is(#macroCard, .macro-scope) td:nth-child(3){width:18%}
-:is(#macroCard, .macro-scope) td:nth-child(4){width:21%}
+/* 11-23 手机档：名称列收窄到 27%，当前列与变化列整体左移靠近名称列；变化列和
+   评语列一起放宽到 21／24，两列文字之间不再贴在一起。 */
+:is(#macroCard, .macro-scope) td:first-child{width:27%}
+:is(#macroCard, .macro-scope) td:nth-child(2){width:28%}
+:is(#macroCard, .macro-scope) td:nth-child(3){width:21%}
+:is(#macroCard, .macro-scope) td:nth-child(4){width:24%}
 :is(#macroCard, .macro-scope) td{padding:3px 6px}
 :is(#macroCard, .macro-scope) tr.mh td{padding:3px 6px}
 :is(#macroCard, .macro-scope) td:nth-child(3) .unit{white-space:normal}
@@ -1453,9 +1597,12 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}
 .runbar button:not(.cost-edit-btn){padding:8px 13px;font-size:16px;line-height:1.08;height:40px}
 .sub{padding-left:16px;padding-right:16px;margin-bottom:8px;line-height:18px}
 .runlight{line-height:16.88px}
-.stat-badge{width:24px;min-width:24px;height:18px;padding:0 1px;font-size:17px;line-height:16px}
+.stat-badge{font-size:17px;line-height:16px}
+/* 2026-11-20 20:4x／20:5x：手机上标题放大，但组名须跟个股代码 td.sym 同为 17px；
+   只覆盖变量值，不重抄整条规则。 */
+#zoneDualRow,.dual-row.group-dual{--zone-name-fs:17px;--zone-badge-fs:17px;--zone-pad-y:6px}
 #signalCounts .signal-count-toggle{font-size:17px;line-height:16px}
-.rs-spy,.pos-total{font-size:16px;line-height:24px}
+.rs-spy,.pos-total{font-size:var(--pos-num-fs,16px);line-height:24px}
 .zone-card>summary .zone-name{font-size:16px;line-height:22.5px}
 .zone-card>summary .zone-num{font-size:16px;line-height:22.5px}
 .dual-body>.cost-contrib .cnsym{font-size:15px;line-height:15.75px}
@@ -1489,7 +1636,7 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}
 #signalCounts>summary .count-total{font-size:16px;line-height:24px}
 .market-risk-badge{font-size:16px;line-height:24px}
 .monitor-note{font-size:16px;line-height:24px}
-.runbar .dca-badge{margin-left:auto;font-size:18px;line-height:24px}
+.brandbar .dca-badge{margin-left:8px;margin-bottom:4px;font-size:18px;line-height:24px}
 .range52-hi{font-size:13px;line-height:11px}
 .range52-lo{font-size:13px;line-height:11px}
 .range52-gap{font-size:13px;line-height:11px}
@@ -1620,6 +1767,29 @@ COST_PANEL_HTML = r'''<details class="edit-panel cost-manage" id="costManage">
 # 单独导出供 monitor 替换旧锚点处理器；PAGE_INTERACTION_JS 已含此块，勿重复追加。
 RULES_INTERACTION_JS = ""  # 保留导出兼容；规则跳转、hash监听和高亮计时器已删除。
 PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
+
+// 2026-11-20 用户定稿：除「统计」和「仓位」可以与任何分组一起展开，其它所有分组
+// 任何情况下一次只能开一个。覆盖点标题、程序化打开、统计名单跳转、FIND 定位四条路径。
+(function enforceSingleOpen() {
+  function isFree(card) {
+    return !card || card.id === "signalCounts" || card.id === "group_positions";
+  }
+  function closeOthers(keep) {
+    if (isFree(keep)) return;
+    document.querySelectorAll("details.card[open]").forEach(function(other) {
+      if (other === keep || isFree(other)) return;
+      other.open = false;
+    });
+  }
+  window.__mmCloseOtherGroups = closeOthers;   // 统计名单跳转 / FIND 定位时显式调用
+  // click 捕获阶段同步关：晚一帧再关会让页面高度在滚动定位之后才变，视口落到清单半中间。
+  document.addEventListener("click", function(event) {
+    const sm = event.target instanceof Element ? event.target.closest("details.card > summary") : null;
+    const card = sm && sm.parentElement;
+    if (!card || card.open) return;          // 收起这一下不动别人
+    closeOthers(card);
+  }, true);
+})();
 // 当日/风险共用一处常驻详情区；只切换hidden，不移动内容或重算数据。
 (function bindDualCards() {
   document.querySelectorAll('.dual-row').forEach(function(row) {
@@ -1978,7 +2148,8 @@ document.addEventListener("click", function(event) {
   requestAnimationFrame(function() {
     if (!d.open) return;
     document.querySelectorAll("details[id^='group_'][open]").forEach(function(other) {
-      if (other !== d) other.open = false;
+      // 2026-11-20 定稿：「仓位」可与任何分组一起展开，不受「一次只开一个」影响。
+      if (other !== d && other.id !== 'group_positions') other.open = false;
     });
     // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到顶部 8.75% 高度线（上面留给灵动岛）。
     const delta = d.getBoundingClientRect().top - topBefore;
@@ -2315,12 +2486,116 @@ function renderSignalFilter() {
     box.append(block);
   });
 }
+/* ==== MM_FLOAT_FOLD_BEGIN ==== */
+/* 2026-11-21：▲ 平时就是清单最底下那条普通按钮，跟着分组一起滚。
+   只有「清单比一屏还长、底部那条 ▲ 还没进视口」时才浮到屏幕底部中间；
+   滚到分组底部、▲ 自己露出来了，立刻去掉 is-floating 还原原样。
+   wrap 是 static 占位，它的 top 就是 ▲ 在文档流里的自然位置，不受 fixed 影响。
+   边界（2026-11-21 定稿；此前「隔两个个股明细」「贴着标题栏底边」「按本组第一／
+   第二只个股之间分隔线实时量」三版全部作废）：全站只认一条固定参考线，取
+   DEMO 里长持仓「第一只与第二只个股之间的分隔线」到「长持仓标题栏下边缘」的距离，
+   六档实测 177.75~180.25px，统一写死 180。任何展开分组都把
+   「自己的标题栏下边缘 + 180」当成这条线：按钮上沿（bottom 4 + 高 42 = vh-46）
+   碰到它就浮，往回滚越过它就收。因此不再逐组量个股行高，按钮浮着时标题栏
+   始终留在按钮上方约一只个股的距离，绝不会与标题栏重叠一部分才消失。 */
+(function () {
+  const SEL = '#zoneDualRow .group-bottom .collapse-group, .dual-row.group-dual .group-bottom .collapse-group';
+  // 固定基准，不随分组／视口变化：来源是长持仓 DEMO 实测，见上方注释。
+  const FIXED_GAP = 180;
+  function update() {
+    const vh = window.innerHeight;
+    document.querySelectorAll(SEL).forEach(function (btn) {
+      const wrap = btn.parentElement;
+      const panel = btn.closest('.zone-panel[data-owner],.group-panel[data-owner]');
+      const wrapRect = wrap.getBoundingClientRect();
+      const shown = !!panel && getComputedStyle(panel).display !== 'none'
+        && wrapRect.height > 0;
+      const naturalTop = wrapRect.top;
+      const longList = !!panel && panel.getBoundingClientRect().height > vh * 0.7;
+      // 固定态按钮是 width:100%，宽度就是恒占位的 .group-bottom 的宽度；浮起来后
+      // fixed 的 100% 会变成视口宽，所以先量好写进变量，让两态宽度完全一致。
+      // 每次滚动/缩放都重算，横竖屏切换或列宽变化后也不会留着旧宽度。
+      if (wrapRect.width > 0) {
+        btn.style.setProperty('--collapse-float-w', wrapRect.width.toFixed(1) + 'px');
+      }
+      // 标题栏靠按钮自带的 aria-controls 找回，不受清单搬进共用面板影响。
+      const floatTop = vh - 46;
+      const headId = btn.getAttribute('aria-controls');
+      const head = headId ? document.getElementById(headId) : null;
+      const headBottom = head ? head.getBoundingClientRect().bottom : null;
+      const sepY = headBottom === null ? null : headBottom + FIXED_GAP;
+      const passedSep = sepY !== null && sepY <= floatTop;
+      btn.classList.toggle('is-floating', shown && longList && passedSep && naturalTop > floatTop);
+    });
+  }
+  let frame = 0;
+  function schedule() {
+    if (frame) return;
+    frame = requestAnimationFrame(function () { frame = 0; update(); });
+  }
+  window.addEventListener('scroll', schedule, {passive: true});
+  window.addEventListener('resize', schedule);
+  window.addEventListener('pageshow', schedule);
+  document.addEventListener('toggle', schedule, true);
+  document.addEventListener('cost:painted', schedule);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(schedule);
+  schedule();
+})();
+/* ==== MM_FLOAT_FOLD_END ==== */
 document.addEventListener("click", function(event) {
   if (!(event.target instanceof Element)) return;
   const closeButton = event.target.closest(".collapse-group");
   if (closeButton) {
-    const card = closeButton.closest("details");
+    let card = closeButton.closest("details");
+    // 2026-11-20：长短持仓清单搬进 .dual-body > .zone-panel 后，▲ 已不在标题 details 内；
+    // 用按钮自带的 aria-controls 找回对应标题卡，其它分组仍走 closest("details")。
+    const zonePanel = card ? null : (closeButton.closest ? closeButton.closest(".zone-panel[data-owner]") : null);
+    if (zonePanel) {
+      const controls = closeButton.getAttribute("aria-controls");
+      card = controls ? document.getElementById(controls) : null;
+    }
+    // 2026-11-20 23:xx：其它分组的清单也搬进 .dual-body > .group-panel 后，
+    // ▲ 同样不在标题 details 内；按 aria-controls 找回标题卡，以「本行之后第一个元素」
+    // 的上沿补回滚动，与长短持仓同款，不用 scrollIntoView 拉动整页。
+    const groupPanel = card ? null : (closeButton.closest ? closeButton.closest(".group-panel[data-owner]") : null);
+    if (groupPanel) {
+      const controls = closeButton.getAttribute("aria-controls");
+      const head = controls ? document.getElementById(controls) : null;
+      if (!head) return;
+      const row = head.closest(".dual-row.group-dual");
+      const next = row ? row.nextElementSibling : null;
+      const topBefore = next ? next.getBoundingClientRect().top : null;
+      head.open = false;
+      if (next && topBefore !== null) {
+        const delta = next.getBoundingClientRect().top - topBefore;
+        // 2026-11-21：从长清单中部点悬浮 ▲ 时，收起后文档变矮，补回来的目标滚动位置可能是负数；
+        // 硬补会被浏览器钳到 0，反而把整页甩到页首。补不了就保持当前滚动位置，
+        // 用户看到的是刚收起的分组标题和后面的内容，不会再莫名其妙回到最顶。
+        if (delta > 1 || (delta < -1 && window.scrollY + delta >= 0)) window.scrollBy(0, delta);
+      }
+      const heading = head.querySelector(":scope > summary");
+      if (heading) heading.focus({preventScroll: true});
+      return;
+    }
     if (!card) return;
+    if (zonePanel) {
+      // 清单收起后整段消失，隐藏的 .zone-panel 不能当锚点；用「本组之后的第一个元素」
+      // 的上沿前后差补回滚动，下方内容原地不动，也不把整页拉到分组标题。
+      const dual = document.getElementById("zoneDualRow");
+      const next = dual ? dual.nextElementSibling : null;
+      const topBefore = next ? next.getBoundingClientRect().top : null;
+      card.open = false;
+      if (next && topBefore !== null) {
+        const delta = next.getBoundingClientRect().top - topBefore;
+        // 2026-11-21：从长清单中部点悬浮 ▲ 时，收起后文档变矮，补回来的目标滚动位置可能是负数；
+        // 硬补会被浏览器钳到 0，反而把整页甩到页首。补不了就保持当前滚动位置，
+        // 用户看到的是刚收起的分组标题和后面的内容，不会再莫名其妙回到最顶。
+        if (delta > 1 || (delta < -1 && window.scrollY + delta >= 0)) window.scrollBy(0, delta);
+      }
+      const zoneHeading = card.querySelector(":scope > summary");
+      if (zoneHeading) zoneHeading.focus({preventScroll: true});
+      return;
+    }
     // 只收本组：按钮以上整段塌掉，视觉上向下折进按钮所在的这一行（不再用 scrollIntoView 把整页拉到分组标题）。
     // 长持仓、短持仓和其它分组同为分组卡（只多了「持仓」标题和底色），统一处理：
     // 本组底边（▲按钮所在的那一行）就是锚点——文档流里它下面的一切都随它一起移动，
@@ -2388,11 +2663,30 @@ document.addEventListener("click", function(event) {
 });
 
 function revealStockRow(target, hash) {
-  let node = target;
+  let node = target, keep = null;
   while (node && node !== document.body) {   // 从里到外把所有祖先 details 打开
-    if (node.tagName === "DETAILS") node.open = true;
+    if (node.tagName === "DETAILS") {
+      node.open = true;
+      if (!keep && node.matches && node.matches("details.card")) keep = node;
+    }
     node = node.parentElement;
   }
+  // 2026-11-20：长短持仓清单住在并排双卡共用的 .dual-body 里，不是标题 details 的后代；
+  // 跳转时按 data-owner 把对应标题打开，并把它当作互斥里要保留的那一个。
+  const zonePanel = target.closest ? target.closest(".zone-panel[data-owner]") : null;
+  if (zonePanel) {
+    const zoneCard = document.getElementById(zonePanel.dataset.owner === "long"
+      ? "group_positions_long" : "group_positions_short");
+    if (zoneCard) { zoneCard.open = true; keep = zoneCard; }
+  }
+  // 2026-11-20 23:xx：其它分组清单也住在并排双卡共用的 .dual-body 里，
+  // 统计名单跳转／FIND 定位时按 data-owner 打开对应标题，并作为互斥里保留的那一个。
+  const groupPanel = target.closest ? target.closest(".group-panel[data-owner]") : null;
+  if (groupPanel) {
+    const groupCard = document.getElementById("group_" + groupPanel.dataset.owner);
+    if (groupCard) { groupCard.open = true; keep = groupCard; }
+  }
+  if (window.__mmCloseOtherGroups) window.__mmCloseOtherGroups(keep);
   target.classList.remove("stk-flash");
   void target.offsetWidth;                   // 强制重排，保证连点同一个名字也能再闪一次
   target.classList.add("stk-flash");
@@ -2438,7 +2732,8 @@ function findStock() {
   }
   if (window.MM_SETTINGS && window.MM_SETTINGS.group_single_open === 1) {
     document.querySelectorAll("details[id^='group_'][open]").forEach(function(d) {
-      if (!d.contains(target)) d.open = false;
+      // 同上：FIND 定位也不顺手收掉「仓位」。
+      if (d.id !== 'group_positions' && !d.contains(target)) d.open = false;
     });
   }
   revealStockRow(target, "#" + target.id);

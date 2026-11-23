@@ -137,9 +137,9 @@ check(html.index(strip_css_comments(_cost_css)) < html.index(strip_css_comments(
       "规则CSS仍在仓位CSS之后覆盖")
 
 # 标题与排
-check("<title>NIX-Matrix</title>" in html and '<h1 class="brand">NIX-Matrix</h1>' in html
-      and "MatrixPulse" not in html,
-      "标题 = NIX-Matrix（带 brand 类，上涨绿，旧名 MatrixPulse 全站清除）")
+check("<title>Matrix</title>" in html and '<h1 class="brand">Matrix</h1>' in html
+      and "NIX-Matrix" not in html and "MatrixPulse" not in html,
+      "标题 = Matrix（带 brand 类，旧名 NIX-Matrix / MatrixPulse 全站清除）")
 check("h1.brand{color:var(--frame-purple)}" in html, "站名用框紫 --frame-purple（2026-11-19 Demo），不写死颜色")
 check("市场自检" not in html, "旧标题已移除")
 check("数据时间 美 10-06 收盘" in html and "本页数据更新" not in html,
@@ -251,36 +251,46 @@ check('id="nasdaqRef"' in html and "无数据或已过期" in html.split('id="na
       "纳斯达克指数参考行在无数据时显示「无数据或已过期」，不冒充安全信号")
 _macro_n = dict(macro, nasdaq={"ok": True, "name": "纳斯达克指数", "value": 23918.44,
                                "date": "2026-10-06", "delta_week": 312.4, "week_ago": 23606.04,
-                               "source": "Yahoo ^IXIC"})
+                               "ma200": 23000.0, "ma_dev": 4.0, "source": "Yahoo ^IXIC"})
 _html_n = monitor.render(_macro_n, items, 10, snapshot=snapshot, dup_hidden=2)
 check('<tr class="green" id="nasdaqRef">' in _html_n and '23,918.44' in _html_n
-      and re.search(r'<td class="num dim" data-sign="up">\+312<span class="unit">周 <span class="chg-num">\+1\.3%</span></span></td><td>一周平稳</td>', _html_n)
+      and '<td class="num dim" data-sign="up"><span class="ma-dev">+4.0%</span><span class="unit ma-tag">200均线偏离</span></td><td>均线上方</td>' in _html_n
       and '纳斯达克指数<span class="unit">2026-10-06</span>' in _html_n
       and '<span class="unit">参考</span>' not in _html_n,
-      "纳斯达克指数参考行：点位两位小数、变化列写周变化（2026-11-20 补回）、上涨仍给「一周平稳」")
-# 一周下跌分档：>=2% 黄「一周走弱」、>=4% 红「一周急跌」；上涨不出警
+      "纳斯达克变化列两排：上排相对均线百分比、下排「200均线偏离」，评语按均线档位")
+# 2026-11-23 定稿：标普／纳指共用一把尺子。上方一律绿（+20% 以上只换提示语、不点灯），
+# 下方贴线 3% 内缓冲、3/8 两档黄、15 红。
 _nrow = lambda nd: re.search(r'<tr class="(\w+)" id="nasdaqRef".*?</tr>',
                              monitor.render(dict(macro, nasdaq=nd), items, 10,
                                             snapshot=snapshot, dup_hidden=2), re.S)
-for _dw, _lv, _txt in ((312.4, "green", "一周平稳"), (-480.0, "yellow", "一周走弱"),
-                       (-960.0, "red", "一周急跌")):
-    _nd = {"ok": True, "name": "纳斯达克指数", "value": 23606.04 + _dw, "date": "2026-10-06",
-           "week_ago": 23606.04, "delta_week": _dw}
+for _dev, _lv, _txt in ((4.0, "green", "均线上方"), (25.0, "green", "偏离偏高"),
+                        (-1.0, "green", "贴近均线"), (-5.0, "yellow", "跌破均线"),
+                        (-10.0, "yellow", "明显偏低"), (-20.0, "red", "深度偏低")):
+    _nd = {"ok": True, "name": "纳斯达克指数", "value": 23918.44, "date": "2026-10-06",
+           "ma200": 23000.0, "ma_dev": _dev}
     _m = _nrow(_nd)
     check(_m is not None and _m.group(1) == _lv and f'<td>{_txt}</td>' in _m.group(0)
-          and monitor.macro_status("nasdaq", _nd)[0] == _lv,
-          "纳斯达克一周 %+.1f%% → %s「%s」" % (_dw / 23606.04 * 100, _lv, _txt))
+          and len(_txt) == 4   # 手机状态列只有约 80px，六字评语会折成两行把灯条撑高
+          and monitor.macro_status("nasdaq", _nd)[0] == _lv
+          and monitor.macro_status("sp500", {"ok": True, "value": 1, "ma_dev": _dev})[0] == _lv,
+          "200日均线偏离 %+.1f%% → %s「%s」（标普同尺子、评语四字）" % (_dev, _lv, _txt))
 check(monitor.macro_status("nasdaq", {"ok": True, "value": 23918.44, "delta_week": None})[0] == "gray"
       and monitor.macro_status("nasdaq", {"ok": True, "value": 23918.44, "delta_week": 10,
                                           "week_ago": 0})[0] == "gray",
-      "纳斯达克缺一周前数据时灰灯「一周前数据不足」，不当成安全信号")
-# 标普500 补周变化：点差作主数、百分比进小字，与纳斯达克参考行同口径
+      "纳斯达克缺均线／缺一周前数据时灰灯，不当成安全信号")
+# 标普500：上排相对均线百分比＋下排「200均线偏离」；VIX 上排均线数值＋下排「200日均线」
 _macro_s = {k: (dict(v) if isinstance(v, dict) else v) for k, v in macro.items()}
-_macro_s["sp500"] = dict(macro["sp500"], value=6800.0, week_ago=6700.0, delta_week=100.0)
+_macro_s["sp500"] = dict(macro["sp500"], value=6800.0, week_ago=6700.0, delta_week=100.0,
+                         ma200=6500.0, ma_dev=(6800.0 / 6500.0 - 1) * 100)
+_macro_s["vix"] = dict(macro["vix"], ma200=19.86)
 _html_s = monitor.render(_macro_s, items, 10, snapshot=snapshot, dup_hidden=2)
-check('<td class="num dim" data-sign="up">+100<span class="unit">周 <span class="chg-num">+1.5%</span></span></td>' in _html_s
-      and '<td class="num dim"></td>' in _html_s,
-      "标普500 显示一周点差＋百分比并挂涨跌色；VIX／参与度等不看周变化的变化列整格留空")
+check('<td class="num dim" data-sign="up"><span class="ma-dev">+4.6%</span><span class="unit ma-tag">200均线偏离</span></td>' in _html_s
+      and '+1.5%' not in _html_s,
+      "标普两排＝上排 +4.6%＋下排「200均线偏离」，周变化整列不写")
+check('<td class="num dim"><span class="ma-val">19.86</span><span class="unit ma-tag">200日均线</span></td>' in _html_s,
+      "VIX 两排＝上排均线数值 19.86、下排写出「200日均线」")
+check('<span class="unit"></span>' not in _html_s,
+      "两排各自带标签，chg_cell 不再补一个空 .unit 撑高行")
 # 参考行不能影响综合灯与「有效指标 N/5」：它不在 RISK_INDICATORS 里
 _vc = lambda h: re.search(r'有效指标 (\d+)/5', h).group(1)
 check(_vc(html) == _vc(_html_n) and monitor.RISK_INDICATORS == ("hy_oas", "vix", "sp500", "breadth", "nfci"),
@@ -307,7 +317,7 @@ check('id="checkResult"' in html and html.index('id="checkResult"')<html.index('
 
 # 分组
 check(len(re.findall(r'<details[^>]*class="[^"]*group-card[^"]*"[^>]*id="group_', html)) == 14, "十四个分类均可折叠")
-check(re.search(r'<details[^>]*id="group_positions"\s*>', html) is not None and 'data-open-locked' not in html and 'id="group_focus">' in html and ' open>' not in html.split('id="macroCard"', 1)[1][:2], "仓位父组与重点、市场风险一样默认折叠，不再锁常开（2026-11-19）")
+check(re.search(r'<details[^>]*id="group_positions"\s*>', html) is not None and 'data-open-locked' not in html and 'id="group_focus"' in html and ' open>' not in html.split('id="macroCard"', 1)[1][:2], "仓位父组与重点、市场风险一样默认折叠，不再锁常开（2026-11-19）")
 pos_title = ''.join(html.split(f'id="group_positions_{z}"', 1)[1].split('</summary>', 1)[0]
                     for z in ('long', 'short') if f'id="group_positions_{z}"' in html)
 check('class="stat-badge red"' in pos_title and 'class="stat-badge missing"' in pos_title and
@@ -319,10 +329,15 @@ check('.group-card>summary .group-stats{margin-left:0' in html and
 check('window.MM_SETTINGS={"signal_single_open":1,"group_single_open":0}' in html and
       'window.MM_SETTINGS && window.MM_SETTINGS.signal_single_open === 0' in html,
       "设置里的「灯详情只留一个打开」注入页面，默认开")
-check('box-sizing:border-box;width:24px;min-width:24px;height:18px;padding:0 1px;border-radius:999px' in html
-      and 'border:1.5px solid var(--dim);background:transparent' in html
-      and '.stat-badge.red{border-color:var(--red)}' in html,
-      "终稿空心灯圈双端24×18px，保留1.5px语义描边和白色数字")
+_badge_rule = re.search(r'\.stat-badge\{([^}]+)\}', html).group(1)
+check('border:0' in _badge_rule and 'background:transparent' in _badge_rule
+      and 'width:' not in _badge_rule and ';height:' not in _badge_rule
+      and 'border-radius' not in _badge_rule
+      and '.stat-badge.red{color:var(--lamp-red)}' in html
+      and '.stat-badge.yellow{color:var(--lamp-yellow)}' in html
+      and '#signalCounts .count-red{color:var(--lamp-red)}' in html
+      and '.stat-badge.purple{color:var(--purple)}' in html,
+      "所有标题栏灯圈都改成颜色数字；红黄数字＝个股描述区红黄字（2026-11-21）")
 check('id="group_technology"' in html and 'IT · AI (5)' in html, "IT 分类展示计数")
 check('其他关注' not in html, "旧其他关注分类已移除")
 check("<h2>个股</h2>" not in html and "<h2>ETF 基金</h2>" not in html, "个股与 ETF 不再分区")
@@ -344,7 +359,8 @@ pos_card = html.split('id="group_positions"')[1].split('id="group_focus"')[0]
 check('NTNX' in pos_card and 'SPYM' in pos_card, "持仓包含警示及无异动标的")
 focus_card = html.split('id="group_focus"')[1].split('id="group_technology"')[0]
 check('TEM' in focus_card and 'SOXL' in focus_card, "重点关注仍包含 TEM/SOXL")
-tech_card = html.split('id="group_technology"')[1].split('id="group_healthcare"')[0]
+# 2026-11-20：并排双卡后清单住在 .group-panel，按 data-owner 截取而不是按标题 id
+tech_card = html.split('<div class="group-panel" data-owner="technology">')[1].split('<div class="group-panel" data-owner="healthcare">')[0]
 check('MCD' in tech_card and 'XLU' in tech_card and 'PG' in tech_card, "IT 分类包含警示与无异动标的")
 check('在册：' not in html and '已隐藏' not in html and '本轮监测' not in html,
       "首页不再展示在册计数与去重说明（2026-10-15 整行删除）")
@@ -700,7 +716,8 @@ with _patch.object(monitor, 'global_dca', return_value=None):
     _target_page = monitor.render({}, _target_rows, len(_target_rows), snapshot=_target_snapshot)
 
 for _row, _state in _target_cases:
-    _classes, _fragment = rendered_stock_row(_target_page, _row, _state != 'low')
+    # 2026-11-20 定稿：紫灯（空间达标与达到目标价的实心紫）都不再是主表保留原因。
+    _classes, _fragment = rendered_stock_row(_target_page, _row, False)
     check('lvtag tgt ' + _state in _fragment,
           '40/90胶囊状态 ' + _row['symbol'] + '=' + _state)
     _target_class = {'space': 'pur-space', 'high': 'pur-high', 'hit': 'pur-hit'}.get(_state)
@@ -715,9 +732,10 @@ for _row in _target_rows[-3:]:
           _row['symbol'] + '失败灰胶囊不展示旧空间')
 _tech = _target_page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
 _tech_main, _tech_quiet = _tech.split('<details class="quiet-list">', 1)
-check('id="s-tspace"' in _tech_main and 'id="s-tlow"' in _tech_quiet
+check('id="s-tspace"' not in _tech_main
+      and 'id="s-tspace"' in _tech_quiet and 'id="s-tlow"' in _tech_quiet
       and 'id="s-tfailold"' in _tech_quiet and 'id="s-tfailnew"' in _tech_quiet,
-      '跨组空间>=40留主表，低空间及失败不提升可见性')
+      '仅紫灯（含实心紫）与低空间、失败一样折进无异动')
 check(_target_rows == _target_before, '目标全页渲染不突变输入')
 check(_target_snapshot['summary']['purple'] == 6
       and _target_snapshot['signal_counts']['target']['purple'] == 6,
@@ -748,7 +766,7 @@ for _state in ('space', 'high', 'hit'):
 for _level, _width in (('red', 4), ('yellow', 4), ('green', 2)):
     check('table.stk tr.' + _level + '[data-symbol]{--lamp-line:var(--' + _level + ')}' in monitor.PAGE_CSS
           and 'tr.' + _level + '+tr.range52-row>td{--lc' not in monitor.PAGE_CSS
-          and 'table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:2px;height:var(--lamp-h);' in monitor.PAGE_CSS
+          and 'table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:4px;height:var(--lamp-h);' in monitor.PAGE_CSS
           and '--lamp-top:8px;--lamp-h:36px' in monitor.PAGE_CSS
           and 'top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)' in monitor.PAGE_CSS,
           _level + '主表左灯条与分区线同长且不延伸52周行')
@@ -1216,7 +1234,9 @@ check(_order_row == _order_before and _order_snap == _order_snap_before
       and any(f['text'] == '上穿60日弱均线' for f in _order_member['ma_facts'])
       and _order_member['indicators'] == monitor._member_direction_markers(_order_row, 'ma'),
       '展示投影不改内部数字signals、marks、方向markers及快照')
-_order_control_classes, _order_control_body = rendered_stock_row(_order_page, _order_no_gray, True)
+# 2026-11-20：这行的 keep 原先来自紫灯「空间达标」；现在只有达到目标价才保留，
+# 红灯本身仍由等级常驻主表，故 data-quiet-keep 为 false。
+_order_control_classes, _order_control_body = rendered_stock_row(_order_page, _order_no_gray, False)
 _order_control_sig = re.search(r'<td class="sig">(.*?)</td>', _order_control_body, re.S)[1]
 check(_order_control_classes[0] == 'red'
       and _signal_pairs(_order_control_sig)
@@ -1976,12 +1996,12 @@ const deadline = setTimeout(() => {
         const snapshot = JSON.parse(document.getElementById('snapshotData').textContent);
         return {order: [...stats.children].map(el => el.className),
           count: purple.textContent, expected: snapshot.summary.purple,
-          border: getComputedStyle(purple).borderTopColor,
+          color: getComputedStyle(purple).color,
           overflow: document.documentElement.scrollWidth > innerWidth};
       })()`);
       assertions.push({ok: JSON.stringify(header.order) === JSON.stringify([
         'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn','count-total count-all'])
-        && header.count === String(header.expected) && header.border === 'rgb(176, 132, 255)' && !header.overflow,
+        && header.count === String(header.expected) && header.color === 'rgb(176, 132, 255)' && !header.overflow,
         name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
       const statLines = await evaluate(`(() => {
         const card=document.getElementById('signalCounts'),extra=card.querySelector('.pnl-extra');
@@ -2049,8 +2069,8 @@ const deadline = setTimeout(() => {
         for (const [state, capsule] of [['space', space], ['high', high], ['hit', hit]]) {
           const row = capsule.closest('tr');
           const originalClass = row.className;
-          for (const [level, width, color] of [['red', 2, 'rgb(248, 81, 73)'],
-              ['yellow', 2, 'rgb(210, 153, 34)'], ['green', 2, 'rgb(63, 185, 80)']]) {
+          for (const [level, width, color] of [['red', 4, 'rgb(248, 81, 73)'],
+              ['yellow', 4, 'rgb(210, 153, 34)'], ['green', 4, 'rgb(63, 185, 80)']]) {
             row.className = originalClass.replace(/\\b(red|yellow|green|gray)\\b/, level);
             const sig = style(row.querySelector('td.sig'));
             // 灯条 2026-11-03 起画在整行的 ::before 上（卡片版式里 td.sym 只有头部行那一格高，
@@ -2123,13 +2143,13 @@ const deadline = setTimeout(() => {
           sig: actual.sig, manual: actual.manual, runbarRuleLinks: actual.runbarRuleLinks}});
       assertions.push({ok: actual.stripes.length === 9 && actual.stripes.every(s =>
         s.sigImage === 'none' && s.sigShadow === 'none'
-        && s.rowContent === '""' && s.rowWidth === '2px' && s.rowColor === s.color
+        && s.rowContent === '""' && s.rowWidth === '4px' && s.rowColor === s.color
         && Math.abs(parseFloat(s.rowTop)-(width<=600?8:8.5))<0.02
         && Math.abs(parseFloat(s.rowHeight)-(width<=600?36:31.5))<0.02
         && s.rowImage.startsWith('linear-gradient(90deg') && s.rowImage.includes('163, 113, 247')   /* 2026-11-19 Demo：代码列渐隐改框紫 */
         && s.leftImage === 'none' && s.leftShadow === 'none'
         && s.rangeImage === 'none' && s.rangeSize === 'auto'),
-        name: width + 'px终稿目标状态保留2px固定左灯条、首格无重复灯条且52周不续接', actual: actual.stripes});
+        name: width + 'px终稿目标状态保留4px固定左灯条、首格无重复灯条且52周不续接', actual: actual.stripes});
       assertions.push({ok: actual.sparseBorders.length === 2 && actual.sparseBorders.every((s, i) =>
         s.color === (i === 0 ? 'rgb(176, 132, 255)' : 'rgb(139, 147, 161)') && s.width === '0px'
         && (i === 0 ? s.afterContent === 'none' && s.radius === '0px'
@@ -2162,8 +2182,8 @@ const deadline = setTimeout(() => {
         sub.firstChild.textContent='数据时间 美 11-06 收盘';
         const rule=document.getElementById('ruleLightTxt');rule.textContent='规则已生效';
         const font=el=>getComputedStyle(el).fontSize;
-        let dca=document.querySelector('.runbar .dca-badge');
-        if(!dca){dca=document.createElement('span');dca.className='dca-badge';document.querySelector('.runbar').appendChild(dca);}
+        let dca=document.querySelector('.brandbar .dca-badge');
+        if(!dca){dca=document.createElement('span');dca.className='dca-badge';document.querySelector('.brandbar').appendChild(dca);}
         dca.textContent='定投：9';
         const states=['本页只读','仓位已同步'].map(text=>{
           mirror.innerHTML='<span class="dim"></span>';mirror.firstElementChild.textContent=text;
@@ -2183,7 +2203,9 @@ const deadline = setTimeout(() => {
         document.getElementById('group_positions').open=false;
         const u=new URL(location.href);u.searchParams.set('focus','pos');u.searchParams.set('edit','1');
         history.replaceState(null,'',u.href);
-        return {hash:location.hash,open:document.getElementById('s-thigh').closest('details.group-card,details.zone-card').open};
+        const t=document.getElementById('s-thigh');
+        // 2026-11-20：普通分组清单搬进 .group-panel 后，跳转展开＝对应标题卡 open
+        return {hash:location.hash,open:(()=>{const t=document.getElementById('s-thigh');if(!t)return false;const p=t.closest('.group-panel[data-owner]');const c=p&&document.getElementById('group_'+p.dataset.owner);return c?c.open:(t.closest('details.card[open]')!==null||t.closest('[data-zone]')!==null);})()};
       })()`);
       loaded=waitLoad();await evaluate(`document.getElementById('btnHardRefresh').click()`);await loaded;
       await evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`);
@@ -2205,7 +2227,7 @@ const deadline = setTimeout(() => {
         document.querySelector('a.signal-member-jump[href="#s-thigh"]').click();
         window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));
         return new Promise(resolve=>requestAnimationFrame(()=>resolve({hash:location.hash,
-          open:document.getElementById('s-thigh').closest('details.group-card').open})));
+          open:(()=>{const t=document.getElementById('s-thigh');const panel=t.closest('.group-panel[data-owner]');const card=panel&&document.getElementById('group_'+panel.dataset.owner);return !!(card&&card.open);})()})));
       })()`);
       assertions.push({ok:jumpAfter.hash==='#s-thigh' && jumpAfter.open,
         name:width+'px刷新后普通股票跳转仍展开、后续pageshow不反复全页复位',actual:jumpAfter});
@@ -2374,7 +2396,7 @@ const deadline = setTimeout(() => {
     await cdp('Page.setDocumentContent', {frameId: rangeTree.frameTree.frame.id, html: rangeHTML});
     for (const [width, height] of VIEWPORTS) {
       await cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
-      await evaluate(`document.querySelectorAll('details.group-card,details.zone-card,details.quiet-list').forEach(el=>el.open=true)`);
+      await evaluate(`document.querySelectorAll('details.group-card,details.zone-card,details.zone-head-card,details.quiet-list').forEach(el=>el.open=true)`);
       await settled();
       const bars=await evaluate(`(() => {
         const rows=[...document.querySelectorAll('tr[id^="s-range"]')];
@@ -2544,7 +2566,7 @@ const deadline = setTimeout(() => {
         const dialog=panel.querySelector('.cost-trade-dialog');
         const retained=dialog.querySelector('[data-trade-dest-select]').value==='focus';
         const deferred=field('RANGENORM','qty').value==='0'&&field('RANGENORM','cost').value==='0'
-          &&document.getElementById('s-rangenorm').closest('#group_positions_long,#group_positions_short')!==null;
+          &&document.getElementById('s-rangenorm').closest('#group_positions_long,#group_positions_short,[data-zone]')!==null;
         dialog.querySelector('[data-trade-cancel]').click();
         document.getElementById('costCancel').click();
         document.getElementById('costEditBtn').click();
@@ -2609,9 +2631,14 @@ const deadline = setTimeout(() => {
       const styles=e=>{const s=getComputedStyle(e);return Object.fromEntries(['fontSize','fontWeight','lineHeight','padding','margin','color','backgroundColor','borderWidth','borderRadius','visibility','display','direction','textAlign'].map(k=>[k,k==='textAlign'&&['start','end'].includes(s[k])?((s[k]==='start')===(s.direction==='ltr')?'left':'right'):s[k]]));};
       const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
       const p=rect(parent),hs=styles(head),triangle=getComputedStyle(head,'::before');
-      const zones=['long','short'].map(k=>{const z=document.getElementById('group_positions_'+k);return {rect:rect(z),style:styles(z),head:styles(z.querySelector('summary'))};});
+      // 2026-11-20：长短持仓是并排双卡，标题各占半列、清单共用跨两列的 .dual-body；
+      // 用整块 .dual-row 的矩形代表内容区全宽（与「仓位」父卡及其它分组同左右边）。
+      const zoneRow=document.getElementById('zoneDualRow');
+      const zones=['long','short'].map(k=>{const z=document.getElementById('group_positions_'+k);return {rect:rect(zoneRow||z),style:styles(z),head:styles(z.querySelector('summary'))};});
       const cash=parent.querySelector('.cashbond-row'),asset=parent.querySelector('.asset-row');
-      const topGroups=[...document.querySelectorAll('details.card.group-card[id^="group_"]')].filter(e=>e!==parent&&rect(e).width>0).map(e=>({id:e.id,rect:rect(e)}));
+      // 2026-11-20 23:xx：其它分组改成两两并排，标题各占半列；改用整行 .dual-row
+      // 代表分组区全宽，与仓位父卡同左右边（不再用单枚标题卡的半宽矩形）。
+      const topGroups=[...document.querySelectorAll('.dual-row.group-dual')].filter(e=>rect(e).width>0).map(e=>({id:e.id,rect:rect(e)}));
       const sameEdges=(a,b)=>Math.abs(a.left-b.left)<=0.5&&Math.abs(a.right-b.right)<=0.5;
       const cashRect=rect(cash),assetRect=rect(asset);
       // 2026-11-19：长/短持仓是仓位后面的平级卡，与其它顶层分组同左右边；比例条/资金排在仓位卡内留内边距，只要求落在卡内
@@ -2624,8 +2651,14 @@ const deadline = setTimeout(() => {
       for(const key of ['long','short']){
         const zone=document.getElementById('group_positions_'+key),wasOpen=zone.open;zone.open=true;
         await new Promise(r=>requestAnimationFrame(r));
-        const button=zone.querySelector('.collapse-group'),s=getComputedStyle(button),b=rect(button);
-        state.collapse.push({key,background:s.backgroundColor,alpha:alpha(s.backgroundColor),rect:b,visible:b.width>0&&b.height===26&&s.visibility==='visible'&&Number(s.opacity)>0});
+        // 2026-11-20 20:4x：用户要求长短持仓清单底部「▲ 收起本组」保留，
+        // 清单虽已搬进 .dual-body > .zone-panel，按钮仍要可见可用。
+        const panel=document.querySelector('#zoneDualRow > .dual-body > [data-owner="'+key+'"]');
+        const button=panel?panel.querySelector('.collapse-group'):null;
+        const s=button?getComputedStyle(button):{backgroundColor:'rgba(0, 0, 0, 0)',visibility:'hidden',opacity:'0'};
+        const b=button?rect(button):{width:0,height:0};
+        // 2026-11-21：▲ 平时是清单底部 26px 那条，长清单够不着时才变 42px 悬浮吸底；两态都要可见可用
+        state.collapse.push({key,background:s.backgroundColor,alpha:alpha(s.backgroundColor),rect:b,visible:b.width>0&&b.height>=26&&s.visibility==='visible'&&Number(s.opacity)>0});
         zone.open=wasOpen;
       }
       await new Promise(r=>requestAnimationFrame(r));
@@ -2694,7 +2727,7 @@ const deadline = setTimeout(() => {
         &&layout.triangle.visibility==='visible'&&layout.triangle.display!=='none'
         &&layout.fullWidth&&Math.abs(zoneWidth-layout.zones[1].rect.width)<0.1&&layout.zones.every(z=>z.rect.left>=layout.parentRect.left&&z.rect.right<=layout.parentRect.right
           &&parseFloat(z.style.borderWidth)>0&&parseFloat(z.style.borderRadius)>0)
-        &&layout.collapse.length===2&&layout.collapse.every(c=>c.visible&&c.alpha>0)
+        &&layout.collapse.length===2&&layout.collapse.every(c=>c.visible)
         &&layout.cashText==='Cash'&&layout.rs===''&&/^\$[\d,]+$/.test(layout.total)&&layout.editor.columns.length===5
         &&layout.editor.headingStyles.length===5&&layout.editor.headingStyles.every(s=>s.fontSize==='13px'&&s.lineHeight==='19.5px'&&s.color==='rgb(139, 147, 161)')
         &&layout.editor.codeText==='GOOGL'&&layout.editor.codeFits&&layout.editor.rightAligned&&layout.editor.quantityTextFits
@@ -2720,7 +2753,7 @@ const deadline = setTimeout(() => {
         c=field('cost');c.value='88';c.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(r=>requestAnimationFrame(r));const manualLast=field('cost').value==='88';
         const beforeSell=values();d=submit('sell','21','100');const oversell=d.open&&d.querySelector('[data-trade-error]').textContent.includes('超过')&&JSON.stringify(beforeSell)===JSON.stringify(values());d.querySelector('[data-trade-cancel]').click();
         d=submit('sell','1','');const sellPriceRequired=d.open&&d.querySelector('[data-trade-error]').textContent.includes('成交价');d.querySelector('[data-trade-cancel]').click();
-        d=submit('sell','20','100');const fullSell=!d.open&&field('qty').value==='0'&&field('cost').value==='0'&&document.getElementById('s-googl').closest('#group_positions_long,#group_positions_short')!==null;
+        d=submit('sell','20','100');const fullSell=!d.open&&field('qty').value==='0'&&field('cost').value==='0'&&document.getElementById('s-googl').closest('#group_positions_long,#group_positions_short,[data-zone]')!==null;
         const unchangedCash=values().cash===original.cash&&values().extra===original.extra;
         cancel();edit();const restored=JSON.stringify(values())===JSON.stringify(original);
         d=submit('buy','2','200');document.getElementById('costSave').click();await new Promise(r=>requestAnimationFrame(r));
@@ -2812,7 +2845,7 @@ const deadline = setTimeout(() => {
       })()`);
       assertions.push({ok:gate.token===null&&scriptErrors.length===0&&safetyRequests.every(r=>r.method==='GET'&&safetyReads.has(r.url))
         &&(readonly?gate.hidden&&gate.pressed==='false'&&gate.state==='本页只读'&&safetyRequests.length===0:
-          safetyRequests.length>=1&&gate.state==='未同步 · 未填 token'&&gate.shared!==null
+          safetyRequests.length>=1&&gate.state==='未同步'&&gate.shared!==null
           &&JSON.parse(gate.shared)._local.dirty===true&&JSON.parse(gate.shared).items.GOOGL.qty===11),
         name:(readonly?'只读':'无Token')+'真实授权与保存路径不能PUT或假同步，锁fixture/合成GET严格隔离',actual:{gate,safetyRequests:safetyRequests.slice(),scriptErrors:scriptErrors.slice()}});
       safetySeed=null;

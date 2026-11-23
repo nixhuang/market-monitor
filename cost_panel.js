@@ -244,8 +244,9 @@
       return !!(r && document.documentElement.contains(r.tr));
     }
     function isPosition(r) {
-      // 2026-11-19：长短持仓已移出成平级绿框卡；保留对父卡的兼容（历史 DOM 与测试夹具里行仍挂在父卡下）。
-      return live(r) && !!r.tr.closest('#group_positions_long,#group_positions_short,#group_positions');
+      // 2026-11-20：清单搬进并排双卡共用的 .dual-body，用 data-zone 认长短；
+      // 仍兼容旧 DOM 与测试夹具里「行挂在 #group_positions_long / #group_positions 下」的写法。
+      return live(r) && !!r.tr.closest('#group_positions_long,#group_positions_short,#group_positions,[data-zone]');
     }
     function rowBySym(sym) {
       return ROW_BY_SYM[sym] || null;
@@ -294,7 +295,7 @@
         tr: tr,
         note: note ? note.getAttribute('data-full') || note.textContent.trim() : '',
         isEtf: !!sd.querySelector('.tag'),
-        isLong: !!tr.closest('#group_positions_long'),
+        isLong: !!tr.closest('#group_positions_long,[data-zone="long"]'),
         price: price,
         prevClose: prev > 0 ? prev : 0,
         chg: prev > 0 ? (price / prev - 1) * 100 : num(chg && chg.textContent),
@@ -2001,8 +2002,8 @@
     var sortKey = read(LS_SORT) === 'wt' ? 'wt' : 'pnl';
     function syncMirrorEl() {
       if (syncMirror) return syncMirror;
-      // 2026-11-20：仓位同步搬到「规则说明」那排的最右；旧页面没有这排时退回数据时间排
-      var host = document.querySelector('.statusrow.flagrow') || document.querySelector('.sub');
+      // 2026-11-20：仓位同步挂到「编辑」按钮右侧状态栈的下排；旧页面没有这排时退回数据时间排
+      var host = document.querySelector('.sync-stack') || document.querySelector('.sub');
       if (!host) return null;
       syncMirror = document.createElement('span');
       syncMirror.className = 'cost-state';
@@ -2655,15 +2656,15 @@
           cost = sumOf(arr, function (x) {
             return x.cost * x.qty;
           });
-        var pp = unknown ? null : cost > 0 ? (pnl / cost) * 100 : mv > 0 ? null : 0,
-          stats = zone.querySelector('summary .zone-stats');
-        if (stats) {
-          var spans = stats.querySelectorAll('.zone-num');
-          if (spans.length >= 2) {
-            spans[0].textContent = plain(mv);
-            spans[1].textContent = money(pnl) + '(' + pct(pp) + ')';
-            updateTone(spans[1], pnl);
-          }
+        var pp = unknown ? null : cost > 0 ? (pnl / cost) * 100 : mv > 0 ? null : 0;
+        // 2026-11-20 定稿：市值金额只在「仓位」Cash／固收下面那一排；
+        // 并排标题第二排改成「涨跌额 ＋ 涨跌幅」两格，各自带涨跌色。
+        var moneyRow = document.querySelector('#group_positions .pi-zone-item[data-zone="' + zone.id + '"]');
+        if (moneyRow) updateText('.pi-zone-mv', plain(mv), moneyRow);
+        var head = document.querySelector('#' + zone.id + ' > summary.zone-grp');
+        if (head) {
+          updateTone(updateText('.zone-amt', money(pnl), head), pnl);
+          updateTone(updateText('.zone-pct', pct(pp), head), pnl);
         }
       });
       // 现金/固收行最左侧：长短持仓合计市值（股票/ETF），与右侧盈亏同口径；总资产改放持仓标题行。
@@ -2766,7 +2767,7 @@
           cost = num(it.cost),
           qty = num(it.qty),
           held = isPosition(r);
-        r.isLong = !!r.tr.closest('#group_positions_long');
+        r.isLong = !!r.tr.closest('#group_positions_long,[data-zone="long"]');
         r.has = held && qty > 0;
         r.costKnown = own(it, 'cost');
         r.cost = cost;
@@ -2830,18 +2831,17 @@
           '（' +
           pct(tPct) +
           '）</b>';
+        // 2026-11-20：看板页永远不要鼠标悬停说明。口径与异常原因并入读屏标签，
+        // 不再写 title（手机悬停不出来，桌面也只是一层重复解释）。
         sumEl.setAttribute(
-          'title',
-          '总资产含现金及固收；盈亏仅股票/ETF持仓，不含现金项及固收' +
+          'aria-label',
+          '总资产 ' + plain(totalAsset) + '；股票/ETF持仓盈亏 ' + money(totalPnl) + '，' + pct(tPct) +
+            '；总资产含现金及固收，盈亏仅股票/ETF持仓' +
             (unknownCost
               ? '；部分持仓成本未知，合计盈亏暂不计算'
               : totalMv > 0 && totalCost === 0
                 ? '；零成本持仓不计算收益率'
                 : ''),
-        );
-        sumEl.setAttribute(
-          'aria-label',
-          '总资产 ' + plain(totalAsset) + '；股票/ETF持仓盈亏 ' + money(totalPnl) + '，' + pct(tPct),
         );
       }
       renderPosTotal(totalAsset);
@@ -2968,12 +2968,11 @@
           } catch (e) {}
         }
       }
-      var tk = ghToken(),
-        msg = esc(SYNC_MSG),
+      var msg = esc(SYNC_MSG),
         syncChip = Object.keys(storageErrors).length
-          ? '<span class="warn">本地未持久化</span>'
+          ? '<span class="warn">未存本机</span>'
           : isolated
-            ? '<span class="warn">隔离预览 · 不上传</span>'
+            ? '<span class="warn">仅预览</span>'
             : !writer
               ? '<span class="dim">本页只读</span>'
               : SYNC === 'pulling'
@@ -2987,9 +2986,9 @@
                         (hadOwn ? 'dim' : 'warn') +
                         '" aria-label="没取到云端持仓数据；本机数据不受影响">云端未取到</span>'
                       : uncertain
-                        ? '<span class="warn">上传结果待核验</span>'
+                        ? '<span class="warn">仓位待核验</span>'
                         : dirty || !sameAsCloud()
-                          ? '<span class="warn">未同步' + (tk ? '' : ' · 未填 token') + '</span>'
+                          ? '<span class="warn">未同步</span>'
                           : '<span class="ok" aria-label="仓位已同步' +
                             (CLOUD && CLOUD.updated_at
                               ? '：云端数据 ' + esc(String(CLOUD.updated_at).slice(0, 16))

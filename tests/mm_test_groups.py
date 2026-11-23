@@ -474,11 +474,17 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('截至', risk)
         self.assertIn('23,918.44', risk)
         self.assertIn('id="nasdaqRef"', risk)
-        # 2026-11-20 用户：评语写「一周急跌」变化列就该有周变化——补回（同标普500：点差＋「周 ±x.x%」涨跌色）。
+        # 2026-11-23：这个 fixture 只有 40 根日线，凑不齐 200 日均线 → 变化列整格留空、
+        # 判灯退回旧周涨跌口径「一周平稳」，不拿短样本冒充均线。
+        # 新口径的精确 HTML 由 mm_test_render.py 用带 ma_dev 的 fixture 守门。
+        self.assertIsNone(monitor.moving_average([('2026-10-01', 10)] * 199))
+        self.assertEqual(monitor.moving_average([('2026-10-01', 10)] * 200), 10.0)
         self.assertIn('<tr class="green" id="nasdaqRef"', risk)
         self.assertIn('<td>一周平稳</td>', risk)
         _nd = risk.split('id="nasdaqRef"')[1].split('</tr>')[0]
-        self.assertRegex(_nd, r'<td class="num dim"(?: data-sign="(?:up|down)")?>[+-]?\d+<span class="unit">周 <span class="chg-num">[+-]\d+\.\d%</span></span></td>')
+        self.assertIn('<td class="num dim"></td>', _nd)
+        self.assertNotIn('200日均线', _nd)
+        self.assertNotIn('周 <span class="chg-num">', _nd)
         self.assertNotIn('周 bp', _nd)
         # 风险表数字统一：回撤的数字与周百分比同号，长均线标签在数据前同一排
         self.assertIn('class="unit">回撤 <span class="unit-num">', risk)
@@ -785,7 +791,8 @@ class TestGroups(unittest.TestCase):
         with patch.object(monitor, 'global_dca', return_value=None), patch.object(monitor, 'RISK_IDENTITIES', {'^GSPC', '^VIX'}):   # 旧的参考行渲染路径：临时放开 ^TNX
             snap = monitor.build_snapshot(macro, rows, cfg)
             page = monitor.render(macro, rows, len(rows), snapshot=snap)
-        index = page.split('id="group_index_funds"', 1)[1].split('<div class="group-bottom">', 1)[0]
+        # 2026-11-20：清单已搬进并排双卡共用的 .group-panel，按 data-owner 截取
+        index = page.split('<div class="group-panel" data-owner="index_funds">', 1)[1].split('<div class="group-bottom">', 1)[0]
         self.assertIn('BD#US10Y', index)
         self.assertNotIn('.VIX', index)
         self.assertNotIn('.SPX', index)
@@ -910,7 +917,7 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(snap['summary']['missing_symbols'], [])
         page = monitor.render({}, [row], 1, snapshot=snap)
         self.assertIn('化材金纸 (1)', page)          # 括号里是页面实际显示数（登记 2，监测关闭只显示板块 ETF）
-        self.assertIn('仅板块ETF', page)
+        self.assertNotIn('仅板块ETF', page)           # 2026-11-21 用户：这行说明不再写进分组标题
         self.assertNotIn('XLB 仍监测', page)
         self.assertNotIn('行业监测关闭', page)
         self.assertNotIn('清单保留，普通标的暂停抓取和报警', page)
@@ -1081,7 +1088,8 @@ class TestGroups(unittest.TestCase):
                 page = f.read()
             with open(os.path.join(directory, 'status.json'), encoding='utf-8') as f:
                 snap = json.load(f)
-        index = page.split('id="group_index_funds"', 1)[1].split('<div class="group-bottom">', 1)[0]
+        # 2026-11-20：清单已搬进并排双卡共用的 .group-panel，按 data-owner 截取
+        index = page.split('<div class="group-panel" data-owner="index_funds">', 1)[1].split('<div class="group-bottom">', 1)[0]
         self.assertIn('4.25%', index)
         self.assertNotIn('.VIX', index)
         self.assertNotIn('.SPX', index)
@@ -1640,7 +1648,7 @@ class TestGroups(unittest.TestCase):
         order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, pos).start()
                  for s in ('QQQM', 'NVDA', 'SPYM', 'AAPL')]
         self.assertEqual(order, sorted(order))
-        tech = page.split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
+        tech = page.split('<div class=\"group-panel\" data-owner=\"technology\">', 1)[1].split('<div class=\"group-panel\" data-owner=\"healthcare\">', 1)[0]
         main, quiet = tech.split('<details class=\"quiet-list\">', 1)
         # 2026-11-18：板块 ETF 绿灯无警示仍常驻主表，不折叠进「无异动」
         self.assertRegex(main, r'<td class="sym"><span class="sym-box \w+">XLK')
@@ -1651,14 +1659,14 @@ class TestGroups(unittest.TestCase):
                   mk('AMD', 'yellow', 7.0, 'technology'), mk('NVDA2', 'yellow', 9.0, 'technology')]
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
             snap2 = monitor.build_snapshot({}, items2, {'positions': {}})
-        tech2 = monitor.render({}, items2, 4, snapshot=snap2).split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
+        tech2 = monitor.render({}, items2, 4, snapshot=snap2).split('<div class=\"group-panel\" data-owner=\"technology\">', 1)[1].split('<div class=\"group-panel\" data-owner=\"healthcare\">', 1)[0]
         order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, tech2).start()
                  for s in ('XLK', 'MU', 'NVDA2', 'AMD')]
         self.assertEqual(order, sorted(order))
         items3 = [mk('XLK', 'yellow', 0.5, 'technology'), mk('MU', 'red', 5.0, 'technology'), mk('AMD', 'yellow', 7.0, 'technology')]
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
             snap3 = monitor.build_snapshot({}, items3, {'positions': {}})
-        tech3 = monitor.render({}, items3, 3, snapshot=snap3).split('id=\"group_technology\"', 1)[1].split('id=\"group_healthcare\"', 1)[0]
+        tech3 = monitor.render({}, items3, 3, snapshot=snap3).split('<div class=\"group-panel\" data-owner=\"technology\">', 1)[1].split('<div class=\"group-panel\" data-owner=\"healthcare\">', 1)[0]
         order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, tech3).start()
                  for s in ('MU', 'XLK', 'AMD')]
         self.assertEqual(order, sorted(order))      # 黄档 XLK 排黄档第一，仍在红档 MU 之后
@@ -2660,7 +2668,8 @@ class TestGroups(unittest.TestCase):
             snap = monitor.build_snapshot(macro, [], cfg)
         page = monitor.render(macro, [], 0, snapshot=snap)
         risk = page.split('id="macroCard"', 1)[1].split('id="group_positions"', 1)[0]
-        index = page.split('id="group_index_funds"', 1)[1].split('<div class="group-bottom">', 1)[0]
+        # 2026-11-20：清单已搬进并排双卡共用的 .group-panel，按 data-owner 截取
+        index = page.split('<div class="group-panel" data-owner="index_funds">', 1)[1].split('<div class="group-bottom">', 1)[0]
         self.assertEqual(risk.count('id="ust10Ref"'), 1)      # 风险参考里的 10Y 参考行还在
         self.assertNotIn('BD#US10Y', index)
 
@@ -3120,7 +3129,7 @@ class TestTargets(unittest.TestCase):
                     self.assertEqual(tag(target), f'<td class="tgs {css}" data-target-state="{state}"><span class="lvtag tgt {css}">'
                                      + '<span class="target-space" data-sign="pos">+' + str(space) + '%</span> '
                                      + '<span class="target-price">429.47</span> '
-                                     + '<span class="target-month" title="10月"><span class="target-sep">&middot;</span>10月</span></span></td>')
+                                     + '<span class="target-month"><span class="target-sep">&middot;</span>10月</span></span></td>')
                     self.assertNotIn('共识', tag(target))
                     self.assertNotIn('目标', tag(target))
         failed = tag({'kind': 'consensus', 'price': 429.0, 'month': 8, 'failed': True,
@@ -3466,7 +3475,9 @@ class TestTargets(unittest.TestCase):
                 self.assertEqual(len(matches), 1)
                 attrs, body = matches[0]
                 self.assertEqual(re.findall(r'\bclass="([^"]*)"', attrs), [level + ' pur pur-space'])
-                for name, value in (('data-quiet-keep', 'true'), ('data-price', '100.0'),
+                # 2026-11-20：紫灯「空间达标」不再是主表保留原因，三行的 keep 标记都是 false；
+                # 红黄灯靠等级留主表，AAA 在持仓合并表里照常显示。
+                for name, value in (('data-quiet-keep', 'false'), ('data-price', '100.0'),
                                     ('data-prev-close', '99.0')):
                     self.assertEqual(re.findall(r'\b' + name + r'="([^"]*)"', attrs), [value])
                 self.assertRegex(body, r'<td class="sym"><span class="sym-box \w+">' + symbol)
@@ -3506,7 +3517,7 @@ class TestTargets(unittest.TestCase):
         self.assertNotIn('data-signal-kind="target"', sig)
         self.assertNotIn('<span class="tnote">', page)
         # 手填目标价胶囊同样不写「目标」，开头是距现价的空间百分比（2026-10-15 改）
-        self.assertIn('<span class="target-space" data-sign="pos">+8%</span> <span class="target-price">108</span> <span class="target-month" title="10月"><span class="target-sep">&middot;</span>10月</span>', page)
+        self.assertIn('<span class="target-space" data-sign="pos">+8%</span> <span class="target-price">108</span> <span class="target-month"><span class="target-sep">&middot;</span>10月</span>', page)
         self.assertNotIn('<span>目标</span>', page)
         self.assertNotIn('共识价来源', page)               # 只有手填：不显示共识来源
 
@@ -3541,7 +3552,7 @@ class TestTargets(unittest.TestCase):
             self.assertIn('tr.' + level + ' td:first-child{box-shadow:inset ' + str(width)
                           + 'px 0 0 var(--' + level + ')', css)
         self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
-                      'top:var(--lamp-top);width:2px;height:var(--lamp-h);', css)
+                      'top:var(--lamp-top);width:4px;height:var(--lamp-h);', css)
         self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
         self.assertNotIn('linear-gradient(var(--lc),var(--lc))', css)
@@ -4001,8 +4012,6 @@ class TestCacheAudit(unittest.TestCase):
                 self.assertNotIn('data-fund-', markup)
         exceptions = [
             {'level': 'red'}, {'level': 'yellow'},
-            {'purple': True, 'target': monitor.evaluate_target(
-                100, 100, {'kind': 'consensus', 'price': 140, 'failed': False}, 'technology', 3)},
             {'earnings': {'status': 'ok', 'date': '2026-10-20', 'timing': 'post'}},
             {'earnings': {'status': 'ok', 'date': '2026-10-26', 'timing': 'pre'}}]
         for change in exceptions:
@@ -4012,6 +4021,17 @@ class TestCacheAudit(unittest.TestCase):
                                    fund_cache_note='旧基本面待更新'))
                 self.assertEqual(markup, body(row))
                 self.assertNotIn('class="quiet-list"', markup)
+                self.assertNotIn('基本面', markup)
+        # 2026-11-20：仅紫灯「空间达标」不再常驻主表；旧基本面字段同样不能改变这一点。
+        purple_only = dict(base, purple=True, target=monitor.evaluate_target(
+            100, 100, {'kind': 'consensus', 'price': 140, 'failed': False}, 'technology', 3))
+        for row in (purple_only,
+                    dict(purple_only, fund={'level': 'red', 'hits': ['旧基本面风险']},
+                         fund_cache_note='旧基本面待更新')):
+            with self.subTest(purple_space=row.get('fund')):
+                markup = body(row)
+                self.assertEqual(markup, body(purple_only))
+                self.assertIn('<details class="quiet-list"><summary>无异动 1 只', markup)
                 self.assertNotIn('基本面', markup)
 
 
@@ -6864,7 +6884,7 @@ class Test52wRangeBar(unittest.TestCase):
         self.assertIn('cursor:default', css)
         self.assertNotIn('.stk tr.red+tr.range52-row>td{--lc:', css)
         self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
-                      'top:var(--lamp-top);width:2px;height:var(--lamp-h);', css)
+                      'top:var(--lamp-top);width:4px;height:var(--lamp-h);', css)
         self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
         for level in ('red', 'yellow', 'green'):
@@ -6952,10 +6972,14 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertEqual([g['key'] for g in monitor._display_groups()], expected)
         page = monitor.render({}, [], 0, snapshot={})
         rendered = re.findall(r'<details class="card group-card" id="group_([^"]+)"', page)
-        self.assertEqual(rendered, expected)
-        self.assertEqual(rendered[-2:], ['real_estate', 'index_funds'])
-        self.assertEqual([key for key in rendered if key != 'index_funds'],
-                         [key for key in original_keys if key != 'index_funds'])
+        # 2026-11-20：页面改成两两并排（指数基与重点同排、房地产单独占左半），
+        # 但 GROUPS 与 _display_groups() 的数据／统计顺序一点不变。
+        page_order = ['positions', 'focus', 'index_funds', 'technology', 'healthcare',
+                      'financials', 'energy', 'industrials', 'materials', 'utilities',
+                      'communications', 'consumer_staples', 'consumer_discretionary', 'real_estate']
+        self.assertEqual(rendered, page_order)
+        self.assertEqual(len(rendered), len(original_keys))
+        self.assertEqual(sorted(rendered), sorted(original_keys))
         self.assertEqual(monitor.GROUPS, original)
 
     def test_every_group_has_local_bottom_collapse_button(self):
@@ -7004,6 +7028,18 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertNotIn('fetch(', monitor.PAGE_INTERACTION_JS)
         self.assertNotIn('localStorage', monitor.PAGE_INTERACTION_JS)
 
+    def test_single_open_is_forced_for_every_group_except_stats_and_positions(self):
+        """2026-11-20：任何情况下（含统计名单跳转）除统计/仓位外所有分组只能开一个。"""
+        js = monitor.PAGE_INTERACTION_JS
+        self.assertIn('(function enforceSingleOpen() {', js)
+        self.assertIn('card.id === "signalCounts" || card.id === "group_positions"', js)
+        self.assertIn('document.querySelectorAll("details.card[open]")', js)
+        self.assertIn('window.__mmCloseOtherGroups = closeOthers;', js)
+        self.assertIn('}, true);', js)   # click 在捕获阶段同步关
+        self.assertIn('const zonePanel = target.closest ? target.closest(".zone-panel[data-owner]") : null;', js)
+        self.assertIn('if (zoneCard) { zoneCard.open = true; keep = zoneCard; }', js)
+        self.assertIn('if (window.__mmCloseOtherGroups) window.__mmCloseOtherGroups(keep);', js)
+
     def test_opening_a_signal_list_keeps_it_in_view(self):
         # 「同时只开一个」会先收起上一个清单、把整页拉上去，新点开的清单容易跳到视口外。
         # 展开后必须：先把被点按钮拉回原屏幕位置，再把新清单整块带进视口。
@@ -7042,7 +7078,7 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('--collapse-bg:var(--signal-bg)', monitor.PAGE_CSS)
         # 2026-11-19 Demo：仓位父卡黄框、可开合；绿色收起条与绿框归长/短持仓平级卡。
         pos_rule = re.search(r'#group_positions,#group_positions\[open\]\{([^}]+)\}', monitor.PAGE_CSS)[1]
-        zone_rule = re.search(r'#group_positions_long\.zone-card,#group_positions_short\.zone-card\{([^}]+)\}', monitor.PAGE_CSS)[1]
+        zone_rule = re.search(r'#zoneDualRow\{([^}]+)\}', monitor.PAGE_CSS)[1]
         self.assertIn('--collapse-bg:var(--positions-collapse)', zone_rule)
         tint = re.search(r'--positions-collapse:rgba\((\d+),(\d+),(\d+),([.\d]+)\)', monitor.PAGE_CSS)
         self.assertIsNotNone(tint)
@@ -7052,7 +7088,7 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('border:var(--frame-w) solid var(--frame-yellow)', pos_rule)
         self.assertIn('background:var(--card)', pos_rule)
         self.assertIn('.zone-card .group-bottom{margin:0 4px 0}', monitor.PAGE_CSS)
-        self.assertIn('--signal-border:var(--frame-green)', zone_rule)
+        self.assertIn('#zoneDualRow > .dual-body{display:none}', monitor.PAGE_CSS)   # 并排双卡共用一块跨列清单
         self.assertNotIn('border-color:', pos_rule)
 
     def test_jump_flash_never_overwrites_the_lamp_bar(self):
@@ -7080,7 +7116,12 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('#signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}', page)
         self.assertIn(monitor.PAGE_INTERACTION_JS, page)
         controls = re.findall(r'<button type="button" class="collapse-group" aria-controls="([^"]+)"', page)
-        self.assertEqual(controls, ['costManage', 'signalCounts'] + ['group_positions_short' if g['key'] == 'positions' else f'group_{g["key"]}' for g in monitor._display_groups()])
+        # 2026-11-20：▲ 的顺序跟着首页并排双卡走，不再跟数据统计顺序
+        page_order = ['focus', 'index_funds', 'technology', 'healthcare', 'financials', 'energy',
+                      'industrials', 'materials', 'utilities', 'communications',
+                      'consumer_staples', 'consumer_discretionary', 'real_estate']
+        self.assertEqual(controls, ['costManage', 'signalCounts', 'group_positions_short']
+                         + [f'group_{k}' for k in page_order])
         self.assertEqual(len(controls), 16)
         # 双栏用自身summary切换；外层持仓不重复收起，空长区不占位。
         self.assertEqual(re.sub(r"<script.*?</script>", "", page, flags=re.S)
@@ -7112,7 +7153,9 @@ class TestQuietKeep(unittest.TestCase):
         return monitor._group_body(rows, config, snapshot or {}, asof, True,
                                    'group_' + config['key'], config['label'])
 
-    def test_keep_flags_and_actual_group_placement_share_all_four_reasons(self):
+    def test_keep_flags_and_actual_group_placement_share_all_three_reasons(self):
+        # 2026-11-20：紫灯「空间达标」不再常驻主表，TARGETKEEP 与 NORMAL 一起折进无异动；
+        # 保留原因剩参考行情 / 不可折叠 / 财报窗口三条（达到目标价另见 TestPurpleSpaceFoldsIntoQuiet）。
         for group in (g['item_group'] for g in monitor.GROUPS):
             for level in ('green', 'red', 'yellow', 'gray'):
                 rows = [self.item('NORMAL', group=group, level=level),
@@ -7128,29 +7171,30 @@ class TestQuietKeep(unittest.TestCase):
                         # 2026-11-16：持仓不再拆「无异动」表，四档 keep 只体现在行标记上
                         self.assertNotIn('<details class="quiet-list"', output)
                         for row in rows:
-                            keep = row['symbol'] != 'NORMAL'
+                            keep = row['symbol'] not in ('NORMAL', 'TARGETKEEP')
                             marker = f'id="{monitor._stock_anchor_id(row["symbol"])}" data-quiet-keep="{str(keep).lower()}"'
                             self.assertIn(marker, output)
                         continue
                     shown, _, quiet = output.partition('<details class="quiet-list"')
                     for row in rows:
-                        keep = row['symbol'] != 'NORMAL'
+                        keep = row['symbol'] not in ('NORMAL', 'TARGETKEEP')
                         marker = f'id="{monitor._stock_anchor_id(row["symbol"])}" data-quiet-keep="{str(keep).lower()}"'
                         self.assertIn(marker, output)
                         self.assertEqual(marker in shown, keep or level != 'green')
                         self.assertEqual(marker in quiet, not keep and level == 'green')
 
     def test_target_reached_uses_container_group_not_stale_row_group(self):
-        for container, stale, keep in (('position', 'technology', True),
-                                        ('focus', 'technology', True),
-                                        ('technology', 'position', False)):
+        # 2026-11-20：实心紫「达到」也不再保留，三组的 keep 全是 false；
+        # 持仓合并表本身不显示「无异动」清单，其余两组会折进去。
+        for container, stale, has_quiet in (('position', 'technology', False),
+                                            ('focus', 'technology', True),
+                                            ('technology', 'position', True)):
             row = self.item(group=stale, target={'kind': 'manual', 'price': 99})
             before = json.dumps(row, sort_keys=True)
             with self.subTest(container=container, stale=stale):
                 output = self.body([row], container)
-                marker = f'id="s-test" data-quiet-keep="{str(keep).lower()}"'
-                self.assertIn(marker, output)
-                self.assertEqual('<details class="quiet-list"' in output, not keep)
+                self.assertIn('id="s-test" data-quiet-keep="false"', output)
+                self.assertEqual('<details class="quiet-list"' in output, has_quiet)
                 self.assertEqual(json.dumps(row, sort_keys=True), before)
 
     def test_explicit_earnings_window_is_used_in_both_classification_and_row(self):
@@ -7223,22 +7267,29 @@ class TestPositionZones(unittest.TestCase):
         return monitor._group_card(self.positions_group(), items, {}, {})
 
     def test_long_and_short_zones_have_independent_totals_and_collapse(self):
-        """终稿r36：双子区常驻且默认折叠，独立数字和收起按钮保留。"""
+        """2026-11-20：与「当日／风险」一模一样的并排双卡，两排标题、金额搬进仓位。"""
         out = self.card([self.item('AAA', 'green', 'long'),
                          self.item('BBB', 'red', 'short'), self.item('CCC', 'yellow')])
-        self.assertEqual(re.findall(r'<details class="zone-card" id="([^"]+)">', out),
+        self.assertIn('class="dual-row zone-dual" id="zoneDualRow"', out)
+        self.assertEqual(re.findall(r'<details class="card zone-head-card" id="([^"]+)">', out),
                          ['group_positions_long', 'group_positions_short'])
-        self.assertNotRegex(out, r'<details class="zone-card"[^>]*\bopen\b')
-        # 2026-11-19：「仓位」父卡默认收起、不再锁常开；长/短持仓是它后面两张平级卡
+        self.assertNotRegex(out, r'<details class="card zone-head-card"[^>]*\bopen\b')
         self.assertNotRegex(out, r'<details\b(?=[^>]*\bid="group_positions")(?=[^>]*\sopen(?:\s|>))[^>]*>')
         self.assertNotIn('data-open-locked', out)
         self.assertNotIn('<details class="quiet-list" open>', out)
         self.assertEqual(re.findall(r'<span class="zone-name">([^<]+)</span>', out),
-                         ['长持仓(1)', '短持仓(2)'])   # 半角括号、无空格（2026-11-19）
-        self.assertEqual(out.count('class="zone-num"'), 4)      # 每区只剩「市值 / 盈亏」两列，占比已撤
+                         ['长持仓(1)', '短持仓(2)'])
+        # 第一排组名＋颜色灯数，第二排涨跌额＋涨跌幅；市值金额不再挂标题
+        self.assertEqual(out.count('class="zone-r1"'), 2)
+        self.assertEqual(out.count('class="zone-r2"'), 2)
+        self.assertEqual(out.count('class="zone-amt"'), 2)
+        self.assertEqual(out.count('class="zone-pct"'), 2)
+        self.assertNotIn('class="zone-num"', out)
+        self.assertIn('class="pi-zone-money"', out)
+        self.assertEqual(out.count('class="pi-zone-item"'), 2)
         self.assertEqual(re.findall(r'aria-controls="([^"]+)"', out),
                          ['group_positions_long', 'group_positions_short'])
-        long_zone, short_zone = out.split('id="group_positions_short"', 1)
+        long_zone, short_zone = out.split('data-owner="short"', 1)
         self.assertIn('AAA', long_zone)
         self.assertNotIn('BBB', long_zone)
         self.assertIn('BBB', short_zone)
@@ -7248,10 +7299,17 @@ class TestPositionZones(unittest.TestCase):
         self.assertNotIn('cb-sep', out)
         self.assertIn('class="cost-foot asset-row cost-manage"', out)
 
+    def test_quiet_row_keeps_zone_typography_after_panel_move(self):
+        """2026-11-20：清单搬进 .zone-panel 后不再有 .zone-card 祖先，
+        「无异动」行必须仍用 12px / 8px 10px 0 / 1.6 行高，
+        不能退回 .quiet 的 13px 与底部 12px 留白。"""
+        self.assertIn(':is(.zone-card,.zone-panel) .quiet{font-size:12px;', monitor.PAGE_CSS)
+        self.assertNotIn('.zone-card .quiet{', monitor.PAGE_CSS)
+
     def test_empty_long_zone_is_not_rendered(self):
         out = self.card([self.item('BBB', 'red', 'short')])
-        self.assertNotIn('group_positions_long', out)
-        self.assertEqual(out.count('class="zone-card"'), 1)
+        self.assertNotIn('id="group_positions_long"', out)   # 金额排里的 data-zone 不算子卡
+        self.assertEqual(out.count('class="card zone-head-card"'), 1)
         self.assertIn('id="group_positions_short"', out)
 
     def test_unmarked_positions_count_as_short(self):
@@ -7292,10 +7350,41 @@ class TestPositionZones(unittest.TestCase):
 
     def test_short_zone_bottom_gap_uses_final_three_pixel_contract(self):
         self.assertIn('#group_positions[open]{padding-bottom:2px}', monitor.PAGE_CSS)
-        self.assertIn('#group_positions_long.zone-card,#group_positions_short.zone-card{--collapse-bg:var(--positions-collapse);'
-                      '--signal-border:var(--frame-green);box-sizing:border-box;width:100%;background:var(--card);'
-                      'border:1px solid var(--frame-green);border-radius:9px;margin:9px 0 9px}', monitor.PAGE_CSS)
-        self.assertIn('.zone-card .group-bottom{margin:0 4px 0}', monitor.PAGE_CSS)
+        # 2026-11-20：绿框专属规则已退休，并排双卡沿用 .dual-row 的外框与间距。
+        zone_head = re.search(r'#zoneDualRow\{([^}]+)\}', monitor.PAGE_CSS)[1]
+        self.assertIn('--collapse-bg:var(--positions-collapse)', zone_head)
+        self.assertIn('--zone-name-fs:14px', zone_head)   # 与个股代码 td.sym 桌面 14px 同字号
+        self.assertIn('--zone-name-fs:17px', monitor.PAGE_CSS)   # 手机档 td.sym 17px
+        self.assertIn('#zoneDualRow > details > summary.zone-grp{', monitor.PAGE_CSS)
+        # 21:2x：涨跌额不加粗且与涨跌幅「-4.7%」同号；仓位栏标题金额／涨跌额／涨跌幅
+        # 也共用 --pos-num-fs（桌面 14 / 手机 16）。第一排「长持仓(N) + 颜色数字」保持原样。
+        self.assertIn('--pos-num-fs:14px', monitor.PAGE_CSS)
+        self.assertIn('--pos-num-fs:16px', monitor.PAGE_CSS)
+        self.assertIn('.zone-r2 .zone-amt{font-size:var(--pos-num-fs,14px);font-weight:400;',
+                      monitor.PAGE_CSS)
+        self.assertIn('.zone-r2 .zone-pct{font-size:var(--pos-num-fs,14px);', monitor.PAGE_CSS)
+        self.assertIn('.pos-total{white-space:nowrap;font-variant-numeric:tabular-nums;'
+                      'color:var(--text);font-size:var(--pos-num-fs,14px)}', monitor.PAGE_CSS)
+        self.assertIn('.zone-r1 .zone-name{font-size:var(--zone-name-fs);',
+                      monitor.PAGE_CSS)
+        self.assertIn('.zone-r1 .stat-badge{font-size:var(--zone-badge-fs);top:0}',
+                      monitor.PAGE_CSS)
+        # 20:5x／21:0x：只有展开的那枚是绿框，收起回默认灰框；清单框恒绿，
+        # 且清单框左右外扩 2px + 区内补 2px 避开行首灯条
+        self.assertIn('#zoneDualRow > details{border:1px solid var(--line)}', monitor.PAGE_CSS)
+        self.assertIn('#zoneDualRow > details[open]{border:var(--frame-w) solid var(--frame-green)}',
+                      monitor.PAGE_CSS)
+        self.assertIn('#zoneDualRow > .dual-body:not([hidden]){margin:0 -2px;padding:0 2px;'
+                      'border:var(--frame-w) solid var(--frame-green);border-radius:12px}',
+                      monitor.PAGE_CSS)
+        self.assertIn('#zoneDualRow:has(> details[open]) > .dual-body{display:block}', monitor.PAGE_CSS)
+        # 20:4x 追加：与仓位留 14px、完整四边框、长短持仓清单底部「▲ 收起本组」保留。
+        self.assertIn('.dual-row.zone-dual{margin-top:14px}', monitor.PAGE_CSS)
+        self.assertIn('#zoneDualRow > details[open]::after{display:none}', monitor.PAGE_CSS)
+        self.assertIn('.dual-row:not(.zone-dual) .group-bottom{display:none}', monitor.PAGE_CSS)
+        self.assertIn('#zoneDualRow .group-bottom{margin:0 4px 0}', monitor.PAGE_CSS)
+        self.assertIn('closeButton.getAttribute("aria-controls")', monitor.PAGE_INTERACTION_JS)
+        self.assertIn('const next = dual ? dual.nextElementSibling : null;', monitor.PAGE_INTERACTION_JS)
 
     def test_other_groups_keep_one_body(self):
         group = next(g for g in monitor.GROUPS if g['key'] == 'focus')
@@ -7788,8 +7877,9 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             self.assertNotIn('<strong>LATE</strong>', panel)
             self.assertNotIn('<table>', panel)  # 只有财报名单时不画信号计数表，不伪造信号
             page = monitor.render({}, rows, len(rows), snapshot=snap)
-            technology = page.split('id="group_technology"', 1)[1].split('id="group_energy"', 1)[0]
-            self.assertTrue(technology.startswith('>'))  # 近期财报不自动展开分类，用户点开后才看到
+            technology = page.split('<div class="group-panel" data-owner="technology">', 1)[1].split('<div class="group-panel" data-owner="energy">', 1)[0]
+            # 近期财报不自动展开分类，用户点开后才看到；并排双卡后直接看标题卡有没有 open
+            self.assertNotRegex(re.search(r'<details[^>]*id="group_technology"[^>]*>', page).group(0), r'\bopen\b')
             self.assertEqual(re.findall(r'<details\b(?=[^>]*\sopen(?:\s|>))[^>]*\bid="(\w+)"[^>]*>', page), ['signalCounts'])  # open不限定末属性；2026-11-19 起仅统计展开，「仓位」同其余分组默认折叠
             self.assertRegex(technology.split('<details class="quiet-list"')[0],
                                 r'<td class="sym"><span class="sym-box \w+">AAPL')
@@ -10010,7 +10100,7 @@ class TestFinalSourceContract(unittest.TestCase):
                                 for tag, classes in parser.direct), (cls, parser.direct))
         self.assertTrue(all(tag in ('td', 'th') for tag, _ in parser.direct))
         self.assertIn('class="earn-band"', rendered)  # 财报整排落在 52 周条那一行，主行不再有财报格
-        self.assertIn('class="target-month" title="10月"><span class="target-sep">&middot;</span>10月</span>', rendered)
+        self.assertIn('class="target-month"><span class="target-sep">&middot;</span>10月</span>', rendered)
         self.assertIn('class="target-space" data-sign="pos"', rendered)
         self.assertNotRegex(rendered, r'data-ack|ack-btn|cost-warn|r48-demo|data-r58-key')
 
@@ -10191,6 +10281,97 @@ class HoldingsListGuard(unittest.TestCase):
         for key in ("positions", "healthcare", "technology", "financials"):
             self.assertNotIn("GEHC", self.cfg.get(key) or {},
                              "同一只股票只能存在一份")
+
+
+
+class TestPurpleSpaceFoldsIntoQuiet(unittest.TestCase):
+    """2026-11-20 用户：整行绿灯、唯一动静是紫灯「空间达标」的个股折进「无异动 N 只」。
+
+    达到目标价（实心紫）、红黄灯、描述区其它文字、财报窗口、参考行情仍常驻主表；
+    统计面板的紫色计数与个股紫胶囊都不受折叠影响。
+    """
+
+    @staticmethod
+    def _target(price=160.0, hit=False, band='medium', space=60.0, space_hit=True):
+        return {'kind': 'consensus', 'price': price, 'month': 11, 'failed': False,
+                'hit': hit, 'space': space, 'space_hit': space_hit, 'band': band,
+                'space_detail': '', 'reached_detail': ''}
+
+    @staticmethod
+    def _item(**changes):
+        row = dict(symbol='PSPACE', note='', level='green', group='technology', chg=0.0,
+                   price=100.0, prev_close=100.0, signals=[], signal_marks=[], foldable=True,
+                   data_date='2026-11-19')
+        row.update(changes)
+        return row
+
+    def _body(self, row, group='technology', asof='2026-11-20'):
+        cfg = next(g for g in monitor.GROUPS if g['item_group'] == group)
+        return monitor._group_body([row], cfg, {'earnings_week': {'asof': asof}}, asof, True,
+                                   'group_' + cfg['key'], cfg['label'])
+
+    def test_space_only_folds_but_keeps_purple_capsule(self):
+        row = self._item(target=self._target(), purple=True)
+        body = self._body(row)
+        self.assertIn('<details class="quiet-list"><summary>无异动 1 只', body)
+        self.assertIn('data-quiet-keep="false"', body)
+        shown, _, quiet = body.partition('<details class="quiet-list"')
+        self.assertNotIn('id="s-pspace"', shown)
+        self.assertIn('id="s-pspace"', quiet)
+        self.assertIn('lvtag tgt space', quiet)
+        self.assertIn('pur-space', quiet)
+
+    def test_high_space_also_folds(self):
+        row = self._item(target=self._target(price=200.0, band='high', space=100.0), purple=True)
+        body = self._body(row)
+        self.assertIn('无异动 1 只', body)
+        self.assertIn('pur-high', body)
+        self.assertIn('data-quiet-keep="false"', body)
+
+    def test_only_reached_target_also_folds_into_quiet(self):
+        # 2026-11-20：实心紫「达到」也不再常驻主表，唯一动静是紫灯的个股收进无异动。
+        row = self._item(group='focus',
+                         target=self._target(price=99.0, hit=True, band='low',
+                                             space=-1.0, space_hit=False), purple=True)
+        body = self._body(row, group='focus')
+        self.assertIn('无异动 1 只', body)
+        self.assertIn('data-quiet-keep="false"', body)
+        self.assertIn('pur-hit', body)
+
+    def test_red_and_yellow_still_stay(self):
+        for level in ('red', 'yellow'):
+            with self.subTest(level=level):
+                row = self._item(level=level, target=self._target(), purple=True)
+                body = self._body(row)
+                self.assertNotIn('无异动', body)
+                self.assertIn('id="s-pspace"', body)
+
+    def test_visible_description_still_stays(self):
+        row = self._item(target=self._target(), purple=True,
+                         signals=['RSI 2条 ↓ 超卖'])
+        body = self._body(row)
+        self.assertNotIn('无异动', body)
+        self.assertIn('id="s-pspace"', body)
+
+    def test_earnings_window_still_stays(self):
+        row = self._item(target=self._target(), purple=True,
+                         earnings={'status': 'ok', 'kind': 'official', 'date': '2026-11-20'})
+        body = self._body(row)
+        self.assertNotIn('无异动', body)
+        self.assertIn('data-quiet-keep="true"', body)
+
+    def test_position_group_still_shows_every_row(self):
+        # 持仓（长/短）本来就把「无异动」并进同一张表，紫空间行只是排序靠后，不消失。
+        row = self._item(group='position', target=self._target(), purple=True)
+        body = self._body(row, group='position')
+        self.assertNotIn('<details class="quiet-list"', body)
+        self.assertNotIn('无异动', body)
+        self.assertIn('id="s-pspace"', body)
+        self.assertIn('data-quiet-keep="false"', body)
+
+    def test_purple_statistics_are_not_changed_by_folding(self):
+        row = self._item(target=self._target(), purple=True)
+        self.assertEqual(monitor.purple_counts([row]), 1)
 
 
 if __name__ == '__main__':

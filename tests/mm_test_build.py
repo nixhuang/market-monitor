@@ -1020,6 +1020,7 @@ class RulesTemplateTests(unittest.TestCase):
                      '点亮橙色', '点亮青色', '持仓盈亏 持仓分组',
                      '浮盈或浮亏达到 ±10%', '只作提示，不再出红灯。',
                      '两者只保留在主表，不进入“无异动”，不计入统计面板',
+                     '仅紫灯（空间达标或达到目标价的实心紫）且描述区无其它文字同样折叠',
                      '布林下轨▼ + RSI 0条白灯白灯（折）',
                      'RSI 2条 ↓超卖白灯',
                      '布林上轨▲ + RSI 1条 ↑超买白灯仅文字无提示',
@@ -1189,7 +1190,7 @@ class RulesTemplateTests(unittest.TestCase):
                           + '{background:' + background + ';text-align:center}', css)
         self.assertIn('#signalRulesBody .nav-gray{color:var(--rules-muted)}', css)
         self.assertIn('tr.gray td{color:var(--dim)}', assets.PAGE_CSS)
-        self.assertIn('.stat-badge.gray{border-color:var(--dim)}', assets.PAGE_CSS)
+        self.assertIn('.stat-badge.gray{color:var(--dim)}', assets.PAGE_CSS)
         blocks = re.findall(r'([^{}]+)\{([^{}]*)\}', css)
         centered = set()
         for selectors, declarations in blocks:
