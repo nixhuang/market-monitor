@@ -219,19 +219,35 @@ check('data-pxfit="1"' in _html_e and 'max-width:600px' in _html_e,
       '手机断点与价格区溢出兜底存在')
 _macro_u = dict(macro, ust10=dict(macro["ust10"], value=4.55, delta_week=0.12, month_ago=4.0, delta_month=0.55))
 _html_u = monitor.render(_macro_u, items, 10, snapshot=snapshot, dup_hidden=2)
-check('id="ust10Ref"' in _html_u and "急升 +55 bp" in _html_u and '<span class="unit">参考</span>' not in _html_u and "不计入综合灯" not in _html_u
-      and '<td class="num dim">+12<span class="unit">周 bp</span></td>' in _html_u, "10Y美债参考行：一个月急升标黄，周变化按 bp 显示")
+# 2026-11-23 用户：周和月都写进「变化」列（上排月、下排周），评语列只留评语文字，不再带数字
+_ust_row = re.search(r'<tr class="\w+" id="ust10Ref">.*?</tr>', _html_u, re.S)[0]
+check('id="ust10Ref"' in _html_u and '<span class="unit">参考</span>' not in _html_u and "不计入综合灯" not in _html_u
+      and '<td class="num dim"><span class="bp-row"><span class="bp-num">+55</span><span class="unit bp-unit">月 bp</span></span>'
+          '<span class="bp-row"><span class="bp-num">+12</span><span class="unit bp-unit">周 bp</span></span></td><td>急升</td>' in _ust_row
+      and "急升 +55 bp" not in _html_u and re.search(r'<td>[^<]*\d+\s*bp[^<]*</td></tr>$', _ust_row) is None,
+      "10Y美债参考行：变化列上排一个月、下排一周（各带灰字月 bp／周 bp），评语列只写评语「急升」不带数字")
 check('id="ust10Ref"' in html and "无数据或已过期" in html.split('id="ust10Ref"')[1].split("</tr>")[0],
       "10Y美债缺一个月数据时显示无数据")
 _macro_b = dict(macro, breadth={"ok": True, "name": "上涨参与度", "date": "2026-10-06", "value": 47.0,
                                "pct50": 29.3, "unit": "%", "source": "History of Market"})
 _html_b = monitor.render(_macro_b, items, 10, snapshot=snapshot, dup_hidden=2)
-check("<span class=\"unit unit-inline\">长均线</span> 47.0%" in _html_b
-      and "短均线：<span class=\"unit-num\">29.3%</span>" in _html_b
+_breadth_row = re.search(r'<tr class="\w+"><td>上涨参与度.*?</tr>', _html_b, re.S)[0]
+_breadth_cur = _breadth_row.split('</td>', 2)[1]            # 第二格＝当前列
+check('<td class="num"><span class="ma-val">47.0%</span><span class="unit ma-tag">200日均线</span></td>' in _breadth_row
+      and "unit-inline" not in _breadth_row
+      and "50日均线" not in _breadth_cur and "29.3" not in _breadth_cur
+      and '<td class="num dim"><span class="ma-val">29.3%</span><span class="unit ma-tag">50日均线</span></td>' in _breadth_row
+      and "长均线" not in _breadth_row and "短均线" not in _breadth_row
       and "上宏观" not in _html_b.split('id="macroCard"', 1)[1].split('</table>', 1)[0]
       and "宏观均线沿用数据源固定口径，不随个股均线设置变化" in _html_b
-      and not re.search(r'\d+日(?:均线|线)', _html_b.split('id="macroCard"', 1)[1].split('</table>', 1)[0]),
-      "上涨参与度短长命名（去掉「上宏观」前缀），沿用固定宏观口径及原数据值")
+      and "页面写的 200 日均线是中长期、50 日均线是近一两个月" in _html_b,
+      "上涨参与度：当前列只写 200 日均线，50 日均线挪到变化列两排（数字＋灰字标签），沿用固定宏观口径")
+check(monitor.macro_status("hy_oas", {"ok": True, "value": 352.0, "delta_week": 5.0})
+      == ("yellow", "利差偏高")
+      and monitor.macro_status("hy_oas", {"ok": True, "value": 300.0, "delta_week": 35.0})
+      == ("yellow", "走阔转弱")
+      and "收紧" not in monitor.macro_status("hy_oas", {"ok": True, "value": 352.0})[1],
+      "垃圾债利差过黄线写「利差偏高」，不再写读起来像利差变小的「收紧」")
 # ===== 2026-10-30 市场风险表：极致压缩 + 文案删减 + 新增纳斯达克指数参考行 =====
 _mcard = lambda h: h.split('id="macroCard"', 1)[1].split('</table>', 1)[0]
 check(':is(#macroCard, .macro-scope) td{' in monitor.PAGE_CSS
@@ -761,7 +777,12 @@ for _state in ('space', 'high', 'hit'):
           and '--pstripe' not in monitor.PAGE_CSS,
           _state + '主行及52周续行均不再绘制右紫条')
 # 2026-10-30：红灯条宽度跟黄灯条对齐（6 → 4px），左内边距保持 14px 不动（文字左缘不变）。
-# 2026-11-13：主表左灯条固定双端几何，三处分区竖线共用同组变量、长度与灯条一致；
+# 2026-11-13：主表左灯条固定双端几何，分区竖线共用同组变量、长度与灯条一致；
+# 2026-11-23：紫灯区右侧不再画灰竖线，只留代码|价格、价格|紫灯两条。
+check('td.tgs::after' not in monitor.PAGE_CSS
+      and monitor.PAGE_CSS.count('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)') == 2
+      and 'td.px::after{content:"";position:absolute;right:0;' in monitor.PAGE_CSS,
+      '个股行灰竖线只剩两条：紫灯区右侧不画，价格区与紫灯区之间保留')
 # 不延伸至52周行；统计面板名单仍用全局 tr.red/yellow/green td:first-child 的 inset 灯条。
 for _level, _width in (('red', 4), ('yellow', 4), ('green', 2)):
     check('table.stk tr.' + _level + '[data-symbol]{--lamp-line:var(--' + _level + ')}' in monitor.PAGE_CSS

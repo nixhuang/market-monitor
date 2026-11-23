@@ -537,8 +537,12 @@ class PageRenderer:
             elif key == "breadth":
                 # 2026-10-30：「上宏观」三字删掉（长／短均线本身就是宏观口径，不必重复）
                 # 2026-11-20 用户：「长均线」写到数据前面、同一排；数字与风险表其它小数字同号
-                val = (f'<span class="unit unit-inline">长均线</span> {it["value"]:.1f}%'
-                       f'<span class="unit">短均线：<span class="unit-num">{it["pct50"]:.1f}%</span></span>')
+                # 2026-11-23 用户：长／短均线分别是多少日要写出来——长＝200 日、短＝50 日
+                #（数据源 History of Market 的「站上 200／50 日均线的成分股占比」）
+                # 2026-11-23 用户：50 日均线那一项挪到「变化」列（见下方 dw_txt）；
+                # 当前列的 200 日均线也拆成上下两排——上排数字、下排灰字「200日均线」，跟变化列同写法。
+                val = (f'<span class="ma-val">{it["value"]:.1f}%</span>'
+                       f'<span class="unit ma-tag">200日均线</span>')
             elif key == "nfci":
                 val = f'{it["value"]:+.2f}'
             else:
@@ -579,6 +583,11 @@ class PageRenderer:
                 # 下排写出是多少日均线的灰字名称。
                 dw_txt = (f'<span class="ma-val">{it["ma200"]:.2f}</span>'
                           f'<span class="unit ma-tag">200日均线</span>')
+            elif key == "breadth" and it.get("pct50") is not None:
+                # 2026-11-23 用户：上涨参与度的 50 日均线内容挪到变化列，写法跟 VIX 一样——
+                # 上排数字（白）、下排灰字「50日均线」；数据缺失就整格留空，不写「—」。
+                dw_txt = (f'<span class="ma-val">{it["pct50"]:.1f}%</span>'
+                          f'<span class="unit ma-tag">50日均线</span>')
             label = html_lib.escape(str(it.get("name") or self._context.RISK_LABELS[key]))
             # 2026-10-30：「截至」二字删掉，只留日期（单独一行小字，谁都看得出是数据日期）
             label += f'<span class="unit">{html_lib.escape(it["date"])}</span>'
@@ -593,13 +602,20 @@ class PageRenderer:
         if ut.get("ok") and ut.get("delta_month") is not None:
             ulv, utxt = self._context.macro_status("ust10", ut)
             uw = ut.get("delta_week")
-            uw_txt = f'{uw * 100:+.0f}' if uw is not None else ""
+            um = ut.get("delta_month")
             ulabel = (f'{html_lib.escape(str(ut.get("name") or "10Y美债"))}'
                       f'<span class="unit">{html_lib.escape(ut["date"])}</span>')
-            # 11-17：缺一周前数据时整格空白，不再写「—」；有值也只走白色（bp 不套涨跌色）。
+            # 2026-11-23 用户：周和月都写进「变化」列——上排一个月「-23 月 bp」，
+            # 下排一周「-24 周 bp」（数字白、「月 bp」「周 bp」灰小字），评语列只留评语文字。
+            # 11-17：缺哪一排数据，那一排整排不写（不写「—」，免得被当成抓取失败）；bp 不套涨跌色，保持白色。
+            def bp_row(v, label):
+                return (f'<span class="bp-row"><span class="bp-num">{v * 100:+.0f}</span>'
+                        f'<span class="unit bp-unit">{label}</span></span>') if v is not None else ""
+            rows_txt = bp_row(um, "月 bp") + bp_row(uw, "周 bp")
+            ucell = f'<td class="num dim">{rows_txt}</td>' if rows_txt else '<td class="num dim"></td>'
             rows_macro.append(
                 f'<tr class="{ulv}" id="ust10Ref"><td>{ulabel}</td><td class="num">{ut["value"]:.2f}%</td>'
-                f'{chg_cell(uw_txt, "周 bp")}<td>{utxt}</td></tr>')
+                f'{ucell}<td>{utxt}</td></tr>')
         else:
             rows_macro.append('<tr class="gray" id="ust10Ref"><td>10Y美债</td>'
                               '<td colspan="3">无数据或已过期</td></tr>')
@@ -1990,14 +2006,14 @@ class PageRenderer:
 <h5>综合评分</h5>
 <p>{html_lib.escape(self._context.RISK_RULE_TEXT)}</p>
 <h5>宏观指标细则</h5>
-<p>垃圾债利差：低于黄线为绿、达到黄线为黄、达到红线为红；即使未到黄线，一周扩大至少 {self._context.HY_WEEK_YELLOW} bp 为黄、至少 {self._context.HY_WEEK_RED} bp 为红（水平仍低于黄线也照常报灯，说明另提醒观察是否持续）；达到 500 bp 会标注“压力很高”。红灯代表信用风险升温，不等于股市必跌。</p>
+<p>垃圾债利差：低于黄线为绿、达到黄线为黄（写作“利差偏高”）、达到红线为红；即使未到黄线，一周扩大至少 {self._context.HY_WEEK_YELLOW} bp 为黄（写作“走阔转弱”）、至少 {self._context.HY_WEEK_RED} bp 为红（水平仍低于黄线也照常报灯，说明另提醒观察是否持续）；达到 500 bp 会标注“压力很高”。利差越大代表市场越担心垃圾债还不上钱。红灯代表信用风险升温，不等于股市必跌。</p>
 <p>VIX：低于绿线为绿；从绿线起为黄（紧张），从黄线起仍为黄（恐慌）；达到红线才为红。标普500按收盘价相对 200 日均线判读：在均线上方为绿，下方不足3%仍为绿（贴近均线），低于均线达到3%或8%为黄、达到15%为红；高出均线20%以上只写「偏离偏高」提醒一句，不亮灯。纳斯达克用同一把尺子，只作参考，不影响页面最上面那盏总灯。这些是已发生的偏离，不预测涨跌。</p>
-<p>上涨参与度：站上宏观长均线的股票不足50%为黄；不足30%时，还需近期垃圾债利差已为红，或金融压力NFCI达到或高于0，才升级红；站上宏观短均线的股票不足30%也为黄。宏观均线沿用数据源固定口径，不随个股均线设置变化。NFCI为周度：达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
+<p>上涨参与度：数的是标普500成分股里有多少比例站在自己的均线之上，页面写的 200 日均线是中长期、50 日均线是近一两个月。站上 200 日均线的股票不足50%为黄；不足30%时，还需近期垃圾债利差已为红，或金融压力NFCI达到或高于0，才升级红；站上 50 日均线的股票不足30%也为黄。宏观均线沿用数据源固定口径，不随个股均线设置变化。NFCI为周度：达到或高于0为黄，低于0为绿。没有可用数据时显示“无数据”，不当作安全信号。</p>
 <h5>数据有效性</h5>
 <p>综合判定按本轮目标交易日检查有效性：垃圾债利差、VIX、标普500最多落后7个自然日；上涨参与度最多5日；周度金融压力NFCI最多13日。未来日期、缺值或非有限数无效，缺失不当作绿。上涨参与度不足30%升级红还要求自身最多落后5日，且垃圾债利差最多落后5日并已为红，或NFCI最多落后13日且达到或高于0；垃圾债利差仅为黄不足以确认。</p>
 <h5>补充参考</h5>
 <p>WTI原油、10年美债收益率仅作参考，不计入五指标综合分或有效指标数。</p>
-<p>10年美债收益率：相对约30个自然日前可用观测，上行至少{self._context.UST_MONTH_YELLOW} bp为参考黄，至少{self._context.UST_MONTH_WATCH}但不足{self._context.UST_MONTH_YELLOW} bp只提示、仍绿；缺历史则不判断。</p>
+<p>10年美债收益率：变化列上排是相对约30个自然日前的一个月变化（月 bp），下排是相对5个交易日前的一周变化（周 bp），两个数跨度不同、不必相等；评语只按一个月变化来判——上行至少{self._context.UST_MONTH_YELLOW} bp为参考黄（写“急升”），至少{self._context.UST_MONTH_WATCH}但不足{self._context.UST_MONTH_YELLOW} bp只提示、仍绿（写“偏快”），其余写“平稳”；缺历史则不判断。</p>
 </details>
 </section>'''
 

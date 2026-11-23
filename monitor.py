@@ -1066,7 +1066,9 @@ def macro_status(key, item, drawdown=None):
         if v >= S["hy_red"]:
             return "red", "压力升高"
         if v >= S["hy_green"]:
-            return "yellow", "收紧"
+            # 2026-11-23 用户指出「收紧」读起来像利差变小，与真实含义（水平已过黄线、信用偏紧张）相反，
+            # 改成直说「利差偏高」；另一档「走阔转弱」讲的是一周内快速变大，两档方向一致不再打架。
+            return "yellow", "利差偏高"
         if dw is not None and dw >= HY_WEEK_YELLOW:
             return "yellow", "走阔转弱"
         return "green", "平静"
@@ -1120,11 +1122,13 @@ def macro_status(key, item, drawdown=None):
         if dm is None:
             return "gray", "一个月前数据不足"
         bp = round(dm * 100, 6)  # 避免 0.4999999 这类浮点误差让刚好 50 bp 漏判
+        # 2026-11-23 用户：数字（一个月／一周的变化）都写进「变化」列两排，评语里只写评语，
+        # 不再带数字，免得一个月的 -23 与变化列一周的 -24 被读成同一个数。
         if bp >= UST_MONTH_YELLOW:
-            return "yellow", f"急升 {bp:+.0f} bp"
+            return "yellow", "急升"
         if bp >= UST_MONTH_WATCH:
-            return "green", f"{bp:+.0f} bp 偏快"
-        return "green", f"{bp:+.0f} bp 平稳"
+            return "green", "偏快"
+        return "green", "平稳"
 
     if key == "curve":
         v = item["value"]
@@ -1140,7 +1144,8 @@ def macro_status(key, item, drawdown=None):
         if long_term < 30 and item.get("pressure_confirmed"):
             return "red", "走弱，压力同步升高"
         if long_term < 50:
-            return "yellow", "过半跌破长均线"
+            # 2026-11-23 用户看不懂「长均线」：当前列已改写成「200日均线 xx%」，评语直说「过半个股在均线下」。
+            return "yellow", "过半个股在均线下"
         if short_term < 30:
             return "yellow", "短期仅少数支撑"
         return "green", "趋势尚稳"

@@ -132,7 +132,9 @@ class RulesRegression(unittest.TestCase):
             frame = declarations(prefix + ':has(.tgt.' + state + ')::before')
             for geometry in ('left:-1px', 'right:0', 'top:var(--tgt-frame-top)', 'bottom:var(--tgt-frame-bottom)'):
                 self.assertIn(geometry, frame)
-            self.assertEqual(declarations(prefix + ':has(.tgt.' + state + ')::after'), 'display:none')
+            # 2026-11-23：紫灯区右侧的灰竖线整条删除，紫框态也就不再需要「隐藏右线」的规则
+            self.assertNotIn(prefix + ':has(.tgt.' + state + ')::after', css)
+        self.assertNotIn(prefix + '::after{content:""', css)
         self.assertIn('border:1px solid var(--purple)', declarations(prefix + ':has(.tgt.space)::before'))
         self.assertIn('border-color:var(--target-high)', declarations(prefix + ':has(.tgt.high)::before'))
         hit = declarations(prefix + ':has(.tgt.hit)::before')
@@ -478,13 +480,20 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         for level in ('red', 'yellow', 'green'):
             self.assertIn(f'table.stk tr.{level}[data-symbol]{{--lamp-line:var(--{level})}}', css)
         # 2026-11-13：灯条与价格区两侧（共三条）灰色分隔线共用同一组上下几何，长度一致。
+        # 2026-11-23 用户：紫灯区右侧不要灰竖线 → 只剩代码|价格、价格|紫灯两条，td.tgs 不再画右线。
         self.assertIn('--lamp-top:8.5px', css)
         self.assertIn('--lamp-h:31.5px', css)
         self.assertIn('top:var(--lamp-top);width:4px;height:var(--lamp-h);background:var(--lamp-line)', css)
         self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertNotIn('table.stk tr[data-symbol]::before{top:7px;height:36px}', css)
         self.assertEqual(css.count('top:var(--lamp-top);height:var(--lamp-h);width:1px;'
-                                   'background:var(--section-line)'), 3)
+                                   'background:var(--section-line)'), 2)
+        self.assertIn('td.sym::after{content:"";position:absolute;left:var(--vl-x);top:var(--lamp-top);'
+                      'height:var(--lamp-h);width:1px;background:var(--section-line)', css)
+        self.assertIn('td.px::after{content:"";position:absolute;right:0;top:var(--lamp-top);'
+                      'height:var(--lamp-h);width:1px;background:var(--section-line)', css)
+        self.assertNotIn('td.tgs::after', css)
+        self.assertNotIn('td.tgs:has(.tgt.space)::after', css)
         self.assertNotIn('var(--vl-top)', css)
         self.assertNotIn('var(--vl-h)', css)
         self.assertIn('font-size:15px;line-height:21.75px', css)
@@ -719,6 +728,17 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
                       'line-height:calc(var(--macro-chg) * 1.15)}', css)
         self.assertNotIn('.ma-tag{font-size:', css)
         self.assertIn('td.num.dim .ma-val{display:block;font-size:var(--macro-body);line-height:1.25}', css)
+        # 11-23 上涨参与度「当前」列也是上数字／下灰字两排（td.num，不带 .dim）
+        self.assertIn('td.num:not(.dim) .ma-val{display:block;font-size:var(--macro-body);line-height:1.25}', css)
+        self.assertIn('td.num:not(.dim) .ma-tag{display:block;letter-spacing:-.5px;white-space:nowrap;', css)
+        # 11-23 10Y 美债变化列：月、周各占一排（数字白＋灰字「月 bp」「周 bp」同一排）；两排行盒高度
+        # 锁成 18.8／16.1，与 VIX、上涨参与度那类两排行同高，不把这一行多撑出 2~3px
+        self.assertIn('td.num.dim .bp-row{display:block;white-space:nowrap;height:18.8px;line-height:18.8px;overflow:visible}', css)
+        self.assertIn('td.num.dim .bp-row:last-child:not(:only-child){height:16.1px;line-height:16.1px}', css)
+        self.assertIn('td.num.dim .bp-num{font-size:var(--macro-chg);color:var(--text)}', css)
+        self.assertIn('td.num.dim .bp-row .unit.bp-unit{display:inline;margin-left:3px;font-size:var(--macro-aux);color:var(--dim);line-height:inherit}', css)
+        self.assertIn('<span class="bp-row"><span class="bp-num">', src)
+        self.assertIn('bp_row(um, "月 bp") + bp_row(uw, "周 bp")', src)
         self.assertNotIn('<span class="unit-num">200</span>', src)
         # 手机档：名称列收窄，当前列与变化列左移靠近名称列，变化列与评语列一起放宽
         self.assertIn('td:first-child{width:27%}', css)

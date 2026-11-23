@@ -1101,6 +1101,18 @@ tr.gray td{color:var(--dim)}
 :is(#macroCard, .macro-scope) td.num.dim .ma-tag{letter-spacing:-.5px;white-space:nowrap;line-height:calc(var(--macro-chg) * 1.15)}
 :is(#macroCard, .macro-scope) td.num.dim .ma-dev,
 :is(#macroCard, .macro-scope) td.num.dim .ma-val{display:block;font-size:var(--macro-body);line-height:1.25}
+/* 11-23：上涨参与度「当前」列的 200 日均线也拆成上数字／下灰字两排，跟变化列同写法。
+   当前列是 td.num（不带 .dim），上排数字沿用本列正文字号与白色，下排标签同 .ma-tag 小灰字。 */
+:is(#macroCard, .macro-scope) td.num:not(.dim) .ma-val{display:block;font-size:var(--macro-body);line-height:1.25}
+:is(#macroCard, .macro-scope) td.num:not(.dim) .ma-tag{display:block;letter-spacing:-.5px;white-space:nowrap;line-height:calc(var(--macro-chg) * 1.15)}
+/* 11-23 10Y 美债变化列：一个月、一周各占一排，「-23 月 bp」「-24 周 bp」——数字白（14px），
+   后面紧跟灰色小标签「月 bp」「周 bp」同排；评语列只留评语。
+   两排行盒高度与别的两排行（VIX／上涨参与度）完全同款：上排 18.8（数字 14px×1.15 取整后与 .ma-val 同高）、
+   下排 16.1，合计 34.9，行高才不会比其它两排行多撑出 2~3px。 */
+:is(#macroCard, .macro-scope) td.num.dim .bp-row{display:block;white-space:nowrap;height:18.8px;line-height:18.8px;overflow:visible}
+:is(#macroCard, .macro-scope) td.num.dim .bp-row:last-child:not(:only-child){height:16.1px;line-height:16.1px}
+:is(#macroCard, .macro-scope) td.num.dim .bp-num{font-size:var(--macro-chg);color:var(--text)}
+:is(#macroCard, .macro-scope) td.num.dim .bp-row .unit.bp-unit{display:inline;margin-left:3px;font-size:var(--macro-aux);color:var(--dim);line-height:inherit}
 .dual-row > .dual-body{grid-column:1/-1;grid-row:2;min-width:0;margin:0;padding:0;border:0;background:transparent}
 .dual-row > .dual-body[hidden]{display:none}
 .day-pnl-card > summary.dp-head{display:flex;align-items:center;gap:8px;padding:0 12px 0 4px;list-style:none;cursor:pointer;box-sizing:border-box}
@@ -1146,9 +1158,12 @@ tr.gray td{color:var(--dim)}
 .dual-row.zone-dual{margin-top:14px}
 /* 两态同一套 padding／高度链路：展开那枚不再被压矮 5px；框＝完整四边＋12px 圆角 */
 /* 21:0x：只有展开的那枚是绿框，收起的回到默认灰框（不带外框色），一眼分辨哪个展开；
-   两态共用同一套 padding／min-height／圆角，避免展开时卡片高度跳。清单框恒绿。 */
+   两态共用同一套 padding／min-height／圆角，避免展开时卡片高度跳。清单框恒绿。
+   2026-11-23 用户：收起时只留「底边」一条绿线，展开才是完整绿框。做法＝两态边框宽度一致
+   （都是 --frame-w），收起态上／左／右三边透明、只给底边上色，所以展开收起卡片高度零跳动；
+   不再用灰框 --line。 */
 #zoneDualRow > details,#zoneDualRow > details[open]{box-sizing:border-box;min-height:0;padding:var(--zone-pad-y) 4px;border-radius:12px}
-#zoneDualRow > details{border:1px solid var(--line)}
+#zoneDualRow > details{border:var(--frame-w) solid transparent;border-bottom-color:var(--frame-green)}
 #zoneDualRow > details[open]{border:var(--frame-w) solid var(--frame-green)}
 #zoneDualRow > details[open]::after{display:none}
 /* 绿框左右各外扩 2px、区内补 2px：框线落在持仓框与个股行首灯条正中，不再跟灯条贴住；
@@ -1316,7 +1331,11 @@ table.stk tr[data-symbol]>td.sym>.sym-box .unit{display:inline-block;margin-left
    sym-box 改两列网格——代码文字（匿名项）在第 1 行第 1 列、标签在第 1 行第 2 列，中文名仍独占第 2 行整行；
    没有标签的行（其它分组）不含 .sec-tag，保持原单列几何，一个像素都不动。 */
 table.stk tr[data-symbol]>td.sym>.sym-box:has(.sec-tag){grid-template-columns:auto minmax(0,1fr);column-gap:3px}   /* 手机档代码列 98px：GOOGL(17px)58 + 3 + 「通信」28 ＝89 ≤ 内宽90，gap 再大就挤出 */
-table.stk tr[data-symbol]>td.sym>.sym-box .sec-tag{grid-row:1;grid-column:2;color:var(--dim);font-size:14px;font-weight:400;line-height:var(--row-height);white-space:nowrap;overflow:hidden;text-overflow:clip}
+/* 2026-11-23 用户：行业名称在代码区里靠右显示，只有手机上距离不足时才向左贴近代码。
+   第 2 列本来就是代码右边剩下的全部空间，标签用 justify-self:end 贴到列右端；
+   列里放不下时标签按内容宽度收缩（grid 子项 fit-content），自然退回到贴着代码的左侧，
+   不需要任何媒体查询。桌面代码区更宽，恒靠右。 */
+table.stk tr[data-symbol]>td.sym>.sym-box .sec-tag{grid-row:1;grid-column:2;justify-self:end;text-align:right;color:var(--dim);font-size:14px;font-weight:400;line-height:var(--row-height);white-space:nowrap;overflow:hidden;text-overflow:clip}
 table.stk tr[data-symbol]>td.sym>.sym-box:has(.sec-tag) .note{grid-row:2;grid-column:1/-1}
 table.stk tr[data-symbol]>td.sym::after{content:"";position:absolute;left:var(--vl-x);top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line);pointer-events:none}
 /* 价格区两排（2026-11-13 定，11-17 加周涨跌幅）：左块上排「现价 涨跌额（无$）」、
@@ -1382,8 +1401,8 @@ table.stk tr[data-symbol][data-pxfit="4"] .px-k{font-size:10px}
 table.stk[data-tgs-cut]{--tgs-month-gap:0px}
 table.stk[data-tgs-cut] tr[data-symbol]>td.px{overflow:hidden}
 table.stk tr[data-symbol]>td.px::after{content:"";position:absolute;right:0;top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line);pointer-events:none}
-table.stk tr[data-symbol]>td.tgs::after{content:"";position:absolute;right:0;top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line);pointer-events:none}
-table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:var(--row-pad-top) var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);line-height:0;text-align:center;box-sizing:border-box;width:var(--tgs-w);min-width:var(--tgs-w);max-width:var(--tgs-w)}
+/* 2026-11-23 用户：紫灯区右侧不要灰竖线，只留「价格区与紫灯区之间」那一条（由 td.px::after 画）。
+   所以 td.tgs 自己不再画右线，原来为紫框态隐藏它的三条 :has(...)::after{display:none} 一并删掉。 */table.stk tr[data-symbol]>td.tgs{grid-area:tgs;position:relative;isolation:isolate;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;padding:var(--row-pad-top) var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);line-height:0;text-align:center;box-sizing:border-box;width:var(--tgs-w);min-width:var(--tgs-w);max-width:var(--tgs-w)}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt{display:grid;grid-template-columns:minmax(0,1fr) auto auto minmax(0,1fr);grid-template-rows:var(--row-height) var(--row-height);flex:1;min-width:0;height:auto;min-height:0;margin:0;padding:0 1px;border:0;background:transparent;column-gap:0;row-gap:0;align-items:center;justify-items:center;line-height:var(--row-height);white-space:nowrap;font-size:var(--tgs-font);font-weight:400;color:var(--purple);font-variant-numeric:tabular-nums}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt>span{height:var(--row-height);line-height:var(--row-height);white-space:nowrap}
 table.stk tr[data-symbol]>td.tgs .target-space{grid-area:1/2/2/4}
@@ -1405,9 +1424,6 @@ table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad .target-price{grid-area:1/2/2/3}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad>span:not(.target-price){grid-area:2/2/3/3}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt.bad:not(:has(.target-price))>span{grid-area:1/2/2/3}
 table.stk tr[data-symbol]>td.tgs .lvtag.tgt.hit{color:var(--white)}
-table.stk tr[data-symbol]>td.tgs:has(.tgt.space)::after{display:none}
-table.stk tr[data-symbol]>td.tgs:has(.tgt.high)::after{display:none}
-table.stk tr[data-symbol]>td.tgs:has(.tgt.hit)::after{display:none}
 table.stk tr[data-symbol]>td.tgs:has(.tgt.space)::before{content:"";position:absolute;top:var(--tgt-frame-top);right:0;bottom:var(--tgt-frame-bottom);left:-1px;z-index:-1;pointer-events:none;background:var(--card);border:1px solid var(--purple);border-radius:3px}
 table.stk tr[data-symbol]>td.tgs:has(.tgt.high)::before{content:"";position:absolute;top:var(--tgt-frame-top);right:0;bottom:var(--tgt-frame-bottom);left:-1px;z-index:-1;pointer-events:none;background:var(--card);border:1px solid var(--purple);border-radius:3px;border-color:var(--target-high)}
 table.stk tr[data-symbol]>td.tgs:has(.tgt.hit)::before{content:"";position:absolute;top:var(--tgt-frame-top);right:0;bottom:var(--tgt-frame-bottom);left:-1px;z-index:-1;pointer-events:none;background:var(--tgt-solid);border-radius:0}

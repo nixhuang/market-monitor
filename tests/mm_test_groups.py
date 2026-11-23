@@ -486,9 +486,17 @@ class TestGroups(unittest.TestCase):
         self.assertNotIn('200日均线', _nd)
         self.assertNotIn('周 <span class="chg-num">', _nd)
         self.assertNotIn('周 bp', _nd)
-        # 风险表数字统一：回撤的数字与周百分比同号，长均线标签在数据前同一排
+        # 风险表数字统一：回撤的数字与周百分比同号，均线标签在数据前同一排（11-23 起写出 200 日／50 日）
         self.assertIn('class="unit">回撤 <span class="unit-num">', risk)
-        self.assertRegex(risk, r'<span class="unit unit-inline">长均线</span> [\d.]+%')
+        self.assertRegex(risk, r'<td class="num"><span class="ma-val">[\d.]+%</span>'
+                               r'<span class="unit ma-tag">200日均线</span></td>')
+        self.assertNotIn('unit-inline', risk)
+        # 11-23：50 日均线挪到「变化」列，两排＝上排数字、下排灰字「50日均线」；当前列里不再出现
+        self.assertRegex(risk, r'<td class="num dim"><span class="ma-val">[\d.]+%</span>'
+                               r'<span class="unit ma-tag">50日均线</span></td>')
+        self.assertNotIn('50日均线：', risk)
+        self.assertNotIn('>长均线<', risk)
+        self.assertNotIn('短均线：', risk)
         self.assertIn('td .unit .unit-num{font-size:var(--macro-chg)}', monitor.PAGE_CSS)
         self.assertNotIn('Cboe VIX 官方日线', risk)   # 2026-10-15：指标行不再逐条展示数据来源
         self.assertNotIn('.VIX</td>', page)
@@ -2547,11 +2555,13 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(monitor.month_change([('2026-10-05', 4.1)]), (None, None))
         st = lambda dm: monitor.macro_status('ust10', {'ok': True, 'value': 4.5, 'delta_month': dm})
         self.assertEqual(st(0.50)[0], 'yellow')
-        self.assertIn('急升', st(0.50)[1])
+        self.assertEqual(st(0.50)[1], '急升')                 # 11-23：评语只写评语，数字挪到变化列
         self.assertEqual(st(0.49)[0], 'green')
-        self.assertIn('偏快', st(0.30)[1])
-        self.assertIn('平稳', st(0.29)[1])
-        self.assertIn('平稳', st(-0.80)[1])
+        self.assertEqual(st(0.30)[1], '偏快')
+        self.assertEqual(st(0.29)[1], '平稳')
+        self.assertEqual(st(-0.80)[1], '平稳')
+        for _dm in (0.55, 0.30, -0.23):
+            self.assertNotRegex(st(_dm)[1], r'\d|bp')
         self.assertEqual(st(None)[0], 'gray')
         # 参考行不进综合灯：10Y 急升时 risk 的得分、有效指标数都不变
         macro = {k: {'ok': True, 'name': k, 'value': 1.0, 'date': '2026-10-06'}
@@ -2780,7 +2790,8 @@ class TestGroups(unittest.TestCase):
             breadth = monitor.market_breadth('2026-10-08')
         self.assertEqual(req.call_count, 1)
         self.assertEqual(monitor.macro_status('breadth', breadth)[0], 'yellow')
-        self.assertIn('过半跌破长均线', monitor.macro_status('breadth', breadth)[1])
+        self.assertIn('过半个股在均线下', monitor.macro_status('breadth', breadth)[1])
+        self.assertNotIn('长均线', monitor.macro_status('breadth', breadth)[1])
         breadth['pressure_confirmed'] = True
         self.assertEqual(monitor.macro_status('breadth', breadth)[0], 'red')
         body['latest']['pct200'] = 65
@@ -7369,9 +7380,11 @@ class TestPositionZones(unittest.TestCase):
                       monitor.PAGE_CSS)
         self.assertIn('.zone-r1 .stat-badge{font-size:var(--zone-badge-fs);top:0}',
                       monitor.PAGE_CSS)
-        # 20:5x／21:0x：只有展开的那枚是绿框，收起回默认灰框；清单框恒绿，
+        # 20:5x／21:0x：只有展开的那枚是完整绿框；11-23 起收起的那枚只留底边一条绿线
+        # （三边透明、边框宽度与展开一致，所以展开收起不跳高）。清单框恒绿，
         # 且清单框左右外扩 2px + 区内补 2px 避开行首灯条
-        self.assertIn('#zoneDualRow > details{border:1px solid var(--line)}', monitor.PAGE_CSS)
+        self.assertIn('#zoneDualRow > details{border:var(--frame-w) solid transparent;'
+                      'border-bottom-color:var(--frame-green)}', monitor.PAGE_CSS)
         self.assertIn('#zoneDualRow > details[open]{border:var(--frame-w) solid var(--frame-green)}',
                       monitor.PAGE_CSS)
         self.assertIn('#zoneDualRow > .dual-body:not([hidden]){margin:0 -2px;padding:0 2px;'
