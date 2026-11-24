@@ -3624,7 +3624,8 @@ class TestTargets(unittest.TestCase):
         t = {'kind': 'consensus', 'price': 101.0, 'month': 10, 'failed': False, 'hit': True,
              'space': 1.0, 'space_hit': False, 'band': 'low'}
         with_pur = self._page([self._row('PUR', 'green', True, t, ['在共识价 101 ±3% 内（偏离 -1.0%）'])])
-        self.assertIn('aria-label="紫色警示 1 项"', with_pur)
+        # 2026-11-24：长短持仓标题不再放灯数；持仓行的紫灯数改看统计面板的「紫」灯圈
+        self.assertIn('aria-label="紫 1 项"', with_pur)
         self.assertIn('stat-badge purple', with_pur.split('</style>')[1])
         without = self._page([self._row('AAPL', 'red', signals=['异动 +5.0%'])])
         self.assertNotIn('紫色警示', without)
@@ -7002,9 +7003,11 @@ class TestDisplayInteractions(unittest.TestCase):
                     output = monitor._group_card(group, [], {}, {})
                 card_id = f'group_{group["key"]}'
                 if group['key'] == 'positions':
-                    helper.assert_called_once_with('group_positions_short', '短持仓')
+                    # 2026-11-24：仓位卡底部也有固定（不悬浮）的向上折叠按钮，所以共两个：短持仓清单一个、仓位一个
+                    self.assertEqual([c.args for c in helper.call_args_list],
+                                     [('group_positions_short', '短持仓'), ('group_positions', '仓位')])
                     self.assertIn('aria-controls="group_positions_short"', output)
-                    self.assertNotIn('aria-controls="group_positions"', output)
+                    self.assertIn('aria-controls="group_positions"', output)
                     continue
                 helper.assert_called_once_with(card_id, group['label'])
                 buttons = re.findall(r'<button\b([^>]*)>(.*?)</button>', output, re.S)
@@ -7132,12 +7135,12 @@ class TestDisplayInteractions(unittest.TestCase):
         page_order = ['focus', 'index_funds', 'technology', 'healthcare', 'financials', 'energy',
                       'industrials', 'materials', 'utilities', 'communications',
                       'consumer_staples', 'consumer_discretionary', 'real_estate']
-        self.assertEqual(controls, ['costManage', 'signalCounts', 'group_positions_short']
+        self.assertEqual(controls, ['costManage', 'signalCounts', 'group_positions', 'group_positions_short']
                          + [f'group_{k}' for k in page_order])
-        self.assertEqual(len(controls), 16)
+        self.assertEqual(len(controls), 17)
         # 双栏用自身summary切换；外层持仓不重复收起，空长区不占位。
         self.assertEqual(re.sub(r"<script.*?</script>", "", page, flags=re.S)
-                         .count('<span class="collapse-icon" aria-hidden="true">▲</span>'), 16)
+                         .count('<span class="collapse-icon" aria-hidden="true">▲</span>'), 17)
 
     def test_market_risk_has_local_bottom_button_after_reference_content(self):
         page = monitor.render({}, [], 0, snapshot={})
@@ -7290,17 +7293,22 @@ class TestPositionZones(unittest.TestCase):
         self.assertNotIn('data-open-locked', out)
         self.assertNotIn('<details class="quiet-list" open>', out)
         self.assertEqual(re.findall(r'<span class="zone-name">([^<]+)</span>', out),
-                         ['长持仓(1)', '短持仓(2)'])
+                         ['长持(1)', '短持(2)'])
         # 第一排组名＋颜色灯数，第二排涨跌额＋涨跌幅；市值金额不再挂标题
         self.assertEqual(out.count('class="zone-r1"'), 2)
         self.assertEqual(out.count('class="zone-r2"'), 2)
         self.assertEqual(out.count('class="zone-amt"'), 2)
         self.assertEqual(out.count('class="zone-pct"'), 2)
         self.assertNotIn('class="zone-num"', out)
-        self.assertIn('class="pi-zone-money"', out)
-        self.assertEqual(out.count('class="pi-zone-item"'), 2)
+        # 2026-11-24 用户：持仓金额放进长持／短持标题第一排（名称后面），仓位里的长短持仓金额那一排不要了；灯数去除
+        self.assertEqual(out.count('class="zone-mv"'), 2)
+        self.assertNotIn('pi-zone-money', out)
+        self.assertNotIn('pi-zone-item', out)
+        head = out.split('id="zoneDualRow"', 1)[1].split('<div class="dual-body', 1)[0]
+        self.assertNotIn('stat-badge', head)
+        # 2026-11-24：仓位卡底部多一个固定（不悬浮）的向上折叠按钮，指向 group_positions
         self.assertEqual(re.findall(r'aria-controls="([^"]+)"', out),
-                         ['group_positions_long', 'group_positions_short'])
+                         ['group_positions', 'group_positions_long', 'group_positions_short'])
         long_zone, short_zone = out.split('data-owner="short"', 1)
         self.assertIn('AAA', long_zone)
         self.assertNotIn('BBB', long_zone)
@@ -7327,8 +7335,8 @@ class TestPositionZones(unittest.TestCase):
     def test_unmarked_positions_count_as_short(self):
         # 没标 hold 的仍算短持仓，不能漏入总额或落到长持仓。
         out = self.card([self.item('CCC', 'green')])
-        self.assertNotIn('长持仓(', out)
-        self.assertIn('短持仓(1)', out)
+        self.assertNotIn('长持(', out)
+        self.assertIn('短持(1)', out)
         self.assertIn('CCC', out.split('id="group_positions_short"', 1)[1])
 
     def test_long_zone_does_not_repeat_the_rule_text(self):

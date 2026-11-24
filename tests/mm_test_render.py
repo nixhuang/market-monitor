@@ -336,9 +336,13 @@ check(len(re.findall(r'<details[^>]*class="[^"]*group-card[^"]*"[^>]*id="group_'
 check(re.search(r'<details[^>]*id="group_positions"\s*>', html) is not None and 'data-open-locked' not in html and 'id="group_focus"' in html and ' open>' not in html.split('id="macroCard"', 1)[1][:2], "仓位父组与重点、市场风险一样默认折叠，不再锁常开（2026-11-19）")
 pos_title = ''.join(html.split(f'id="group_positions_{z}"', 1)[1].split('</summary>', 1)[0]
                     for z in ('long', 'short') if f'id="group_positions_{z}"' in html)
-check('class="stat-badge red"' in pos_title and 'class="stat-badge missing"' in pos_title and
-      '红1' not in pos_title and '缺失1' not in pos_title,
-      "分组警示采用灯色圆里带数字的徽章而非颜色文字（2026-10-15）")
+# 2026-11-24 用户：长持／短持标题去掉灯数（不再有灯圈）；其它分组标题仍是灯色圆里带数字的徽章
+other_title = ''.join(html.split(f'id="group_{g}"', 1)[1].split('</summary>', 1)[0]
+                      for g in ('focus', 'technology') if f'id="group_{g}"' in html)
+check('stat-badge' not in pos_title and '红1' not in pos_title and '缺失1' not in pos_title,
+      "长短持仓标题不再带灯数（2026-11-24）")
+check('class="stat-badge' in other_title,
+      "其它分组警示仍采用灯色圆里带数字的徽章而非颜色文字（2026-10-15）")
 # 2026-10-15 再调：名称与灯圈之间不再留 6px，靠得更近
 check('.group-card>summary .group-stats{margin-left:0' in html and
       '.group-stats{margin-left:auto' in html, "警示紧贴分组名称右侧左对齐，宏观标题保持原样")

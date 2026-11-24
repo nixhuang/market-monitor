@@ -390,7 +390,6 @@
   .cost-contrib li > .cv, .cost-contrib li > .ca { height: 15.75px; }
   .cost-contrib .cbar { height: 12px; }
   .cost-foot { font-size: 12px; }
-  #group_positions .pi-zone-money { gap: 4px; margin-top: 5px; }
   /* v18 仓位展开明细：手机档仍只用这一个 ≤600 断点，不新增第二档 */
   .pi-body { padding: 2px 8px 9px; }
   .pi-wlist { --pi-wgap: 6px; }
@@ -429,17 +428,8 @@
   font-size: var(--pos-num-fs,14px); line-height: 24px; }
 #group_positions > summary .pos-pnl.up { color: var(--up); }
 #group_positions > summary .pos-pnl.down { color: var(--down); }
-/* 2026-11-20：长/短持仓市值金额搬到「仓位」里，紧跟 持仓 / Cash / 固收 那一排下面。
-   两区并成一排、各自可换行，金额再长也不会把半宽标题撑破。 */
-#group_positions .pi-zone-money {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px; margin: 6px 0 0; font-variant-numeric: tabular-nums;
-}
-#group_positions .pi-zone-item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; }
-#group_positions .pi-zone-name { font-size: 13px; color: var(--dim, #8b93a1); white-space: nowrap; }
-#group_positions .pi-zone-mv { font-size: var(--pos-num-fs,15px); font-weight: 600; color: var(--text); white-space: nowrap; }
 .pi-block { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); }
-.pi-block.pi-records { margin-top: 2px; padding-top: 2px; border-top: 0; text-align: center; }
+/* 2026-11-24 用户：删除「今年」盈亏，交易记录入口放在它的位置（已实现｜交易记录｜清仓）；仓位底部是固定的向上折叠按钮。 */
 .pi-kpis { display: flex; align-items: baseline; justify-content: space-between;
   gap: 8px; font-size: 15px; line-height: 22.5px; white-space: nowrap; min-width: 0; height: 22.5px; }
 .pi-kpi { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
@@ -466,19 +456,9 @@
 /* 2026-11-23 仓位里默认折叠的「盈亏明细」（每只个股的总盈亏；标题右侧不放合计；左边展开小三角 12×12 的 CSS 实心三角）。
    行＝代码+名称 | 金额 | 盈亏比 | 市值 四块等距平铺（1fr×4，随页面宽度伸缩），数字不加粗；金额带涨跌色，
    市值前灰色美元符号，与行业权重同一套写法。 */
-.pi-fold > summary { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 26px;
-  cursor: pointer; list-style: none; color: var(--head-blue-on); font-size: 15px; }
-.pi-fold > summary::-webkit-details-marker { display: none; }
-/* 展开小三角用 CSS 直接画（字符 ▸ 在字体里只有约 5px，调字号也大不起来）：收起＝向右 ▶ 8×12，展开＝向下 ▼ 12×8，
-   宽高盒固定 10×10（11-23 缩小 2px），与标题文字间距 4px（summary 的 gap），收起／展开两态盒子不变、标题文字不会左右跳。 */
-.pi-fold > summary::before { content: ""; flex: none; width: 10px; height: 10px; margin-right: 0; box-sizing: border-box;
-  background: var(--dim, #8b93a1); clip-path: polygon(15% 0, 100% 50%, 15% 100%); }
-.pi-fold[open] > summary::before { clip-path: polygon(0 15%, 100% 15%, 50% 100%); }
-.pi-fold > summary .pi-fold-name { flex: 1 1 auto; font-weight: 600; }
-.pi-fold > summary:focus-visible { outline: 2px solid var(--head-blue-on); outline-offset: 2px; }
 /* 整张名单共用一套列轨：名称列至少容得下最长的「代码＋中文名」（一行不换行），四列起点间距随页面宽度等比伸缩
    （与行业权重一致，不写死间距）；每行用 subgrid 继承列轨，所以各行竖向对齐、最右列也铺到页面边。 */
-.pi-plist { display: grid; grid-template-columns: minmax(max-content,1.6fr) minmax(max-content,1.3fr) minmax(max-content,1fr) minmax(max-content,.7fr); column-gap: 8px; margin-top: 4px; }   /* 名称｜盈亏（金额+比，一个整体）｜市值｜仓位；每列至少容得下自己最长的内容 */
+.pi-plist { display: grid; grid-template-columns: minmax(0,max-content) max-content max-content max-content; justify-content: space-between; column-gap: 8px; margin-top: 4px; }   /* 名称｜盈亏｜市值｜仓位：每列按自己最长内容定宽，页面多出来的宽度平均摊在列与列之间（名称→盈亏、盈亏→金额、金额→仓位同一个规律）；只有名称列在放不下时才收窄，且只截中文备注名 */
 .pi-prow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
   align-items: center; min-width: 0; padding: 4px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
 .pi-prow + .pi-prow { border-top: 1px solid var(--line); }
@@ -498,9 +478,12 @@
 .pi-psort { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
 .pi-psort[aria-pressed="true"] { color: var(--head-blue-on); text-decoration: underline; text-underline-offset: 3px; }
 .pi-psort:focus-visible { outline: 2px solid var(--head-blue-on); outline-offset: 2px; border-radius: 3px; }
-.pi-pname { color: var(--text); min-width: 0; white-space: nowrap; line-height: 1.25; }
-.pi-pname .pi-pcn { color: var(--dim, #8b93a1); margin-left: 4px; font-size: 13px; }
-.pi-pname .pi-psec { color: var(--text); font-size: 13px; }   /* （行业前两个字）白字（2026-11-24 用户定），与备注名同号 */
+.pi-pname { display: flex; align-items: baseline; color: var(--text); min-width: 0; white-space: nowrap; line-height: 1.25; }
+/* 名称放不下时：代码、（行业）永远完整，只把灰色中文备注名从末尾省略 */
+.pi-pnm { display: flex; align-items: baseline; min-width: 0; flex: 0 1 auto; }
+.pi-psym { flex: none; }
+.pi-pname .pi-pcn { color: var(--dim, #8b93a1); margin-left: 4px; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pi-pname .pi-psec { flex: none; color: var(--text); font-size: 13px; }   /* （行业前两个字）白字（2026-11-24 用户定），与备注名同号 */
 /* 全角括号的字形只占半个字宽、另半个是空白：「（」空白在左、「）」空白在右，各自用 -0.5em 间距把空白边收掉，
    括号贴着文字，不占全角位置；文字内容仍是「SNDX闪迪（IT）」。 */
 .pi-pname .pi-pp { display: inline; }

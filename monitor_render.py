@@ -1221,8 +1221,9 @@ class PageRenderer:
     def _zone_head(self, label, zg):
         """2026-11-20：与「当日／风险」同款并排标题——第一排组名＋颜色灯数，
         第二排涨跌额／涨跌幅；市值金额已搬进「仓位」展开明细。数字由 cost_panel.js 填。"""
+        # 2026-11-24 用户：名称改「长持／短持」，灯数去除；持仓金额放在第一排名称后面（第二排仍是盈亏金额、盈亏比）（数字由 cost_panel.js 填）。
         return (f'<span class="zone-r1"><span class="zone-name">{label}({len(zg)})</span>'
-                f'{self._zone_badges(zg)}</span>'
+                f'<span class="zone-mv">—</span></span>'
                 f'<span class="zone-r2"><span class="zone-amt">—</span>'
                 f'<span class="zone-pct">—</span></span>')
 
@@ -1278,10 +1279,10 @@ class PageRenderer:
             zones_html = (
                 '<div class="dual-row zone-dual" id="zoneDualRow">'
                 + ((f'<details class="card zone-head-card" id="group_positions_long">'
-                    f'<summary class="grp zone-grp">{self._zone_head("长持仓", long_g)}</summary></details>')
+                    f'<summary class="grp zone-grp">{self._zone_head("长持", long_g)}</summary></details>')
                    if long_g else '')
                 + (f'<details class="card zone-head-card" id="group_positions_short">'
-                   f'<summary class="grp zone-grp">{self._zone_head("短持仓", short_g)}</summary></details>')
+                   f'<summary class="grp zone-grp">{self._zone_head("短持", short_g)}</summary></details>')
                 + '<div class="dual-body zone-scope" data-owner="">'
                 + ((f'<div class="zone-panel" data-owner="long" data-zone="long">{long_body}</div>')
                    if long_g else '')
@@ -1298,25 +1299,23 @@ class PageRenderer:
                          '<span class="cb-total-pnl">—</span></span>'
                          '<span class="cb-item cb-cash"><span class="cb-name">Cash</span><span class="cb-amt">—</span></span>'
                          '<span class="cb-item cb-bond"><span class="cb-name">固收</span><span class="cb-amt">—</span></span></div>'
-                         '<div class="pi-zone-money">'
-                         '<span class="pi-zone-item" data-zone="group_positions_long"><span class="pi-zone-name">长持仓</span>'
-                         '<span class="pi-zone-mv">—</span></span>'
-                         '<span class="pi-zone-item" data-zone="group_positions_short"><span class="pi-zone-name">短持仓</span>'
-                         '<span class="pi-zone-mv">—</span></span></div></div>'
+                         '</div>'
                          '<div class="pi-block pi-funds"><div class="pi-kpis">'
                          '<span class="pi-kpi"><span class="pi-kname">已实现</span><b class="pi-kval" id="piRealized">—</b></span>'
-                         '<span class="pi-kpi"><span class="pi-kname">今年</span><b class="pi-kval" id="piYear">—</b></span>'
+                         # 2026-11-24 用户：删除「今年」盈亏，交易记录入口放在它原来的位置（已实现与清仓之间）。
+                         '<span class="pi-kpi"><a class="pi-log-link" href="./trade-log.html" target="_blank" rel="noopener">交易记录'
+                         '<span class="pi-arrow" aria-hidden="true">↗</span></a></span>'
                          '<span class="pi-kpi"><span class="pi-kname">清仓</span><b class="pi-kval" id="piCleared">—</b></span>'
                          '</div></div>'
                          '<div class="pi-block"><div class="pi-wlist" id="piWeights"></div></div>'
                          # 2026-11-23：默认折叠的「盈亏明细」（每只个股的总盈亏）（固定从亏损到盈利），放在「交易记录」上一排。
                          # 用户定：标题右侧不写合计金额，也不另做已实现的名单。内容由 cost_panel.js 按真实持仓填。
+                         # 2026-11-24 用户：盈亏明细不折叠、「盈亏明细」那一行删除（只留抬头行和名单）。
                          '<div class="pi-block pi-fold-block" id="piPnlBlock" hidden>'
-                         '<details class="pi-fold" id="piPnlFold"><summary><span class="pi-fold-name">盈亏明细</span></summary>'
-                         '<div class="pi-plist" id="piPnlList"></div></details></div>'
-                         '<div class="pi-block pi-records"><a class="pi-log-link" href="./trade-log.html" '
-                         'target="_blank" rel="noopener">交易记录'
-                         '<span class="pi-arrow" aria-hidden="true">↗</span></a></div></div>')
+                         '<div class="pi-plist" id="piPnlList"></div></div>'
+                         '</div>'
+                         # 交易记录入口搬到「固收」下面一排（靠右，与固收同列）；底部是固定向上折叠按钮（不悬浮）。
+                         + self._context._collapse_button("group_positions", "仓位"))
         else:
             parts.append(self._context._group_body(g, group, snapshot, earnings_week, enabled,
                                      f'group_{group["key"]}', group["label"], empty_note))

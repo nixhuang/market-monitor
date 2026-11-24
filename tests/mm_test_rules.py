@@ -2957,44 +2957,54 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn("#signalCounts .signal-member-block h5{font-size:15px;line-height:16.25px}", css)
         self.assertIn("#signalCounts .signal-filter-detail{font-size:15px;line-height:20.25px}", css)
 
-    def test_position_pnl_fold_skeleton_and_single_open_linkage(self):
-        """2026-11-23：仓位里默认折叠的「盈亏明细」（每只个股的总盈亏）——放在「交易记录」入口上一排、标题右侧不写合计、
-        不做「已实现盈亏明细」；展开其他分组时，统计子板块和这个盈亏明细一并自动收起。"""
-        import monitor_render
+    def test_position_pnl_detail_always_open_and_bottom_collapse_button(self):
+        """2026-11-24 用户：盈亏明细不折叠、「盈亏明细」那一行删除；交易记录放在固收下面一排；
+        仓位底部是固定（不悬浮）的向上折叠按钮；长持／短持标题带持仓金额、无灯数，仓位里的金额那一排不要了。"""
         src = (ROOT / 'monitor_render.py').read_text(encoding='utf-8')
-        i_fold, i_log = src.index('id="piPnlBlock"'), src.index('class="pi-block pi-records"')
-        self.assertLess(i_fold, i_log)                                   # 在交易记录上一排
-        self.assertIn('<details class="pi-fold" id="piPnlFold"><summary><span class="pi-fold-name">盈亏明细</span></summary>', src)
-        self.assertNotIn('piPnlSum', src)                                # 标题右侧不写合计金额
-        self.assertNotIn('piRealizedBlock', src)                         # 不做已实现盈亏明细
-        self.assertNotIn('已实现盈亏明细', src)
-        self.assertNotIn('<details class="pi-fold" id="piPnlFold" open', src)   # 默认折叠
+        self.assertIn('id="piPnlBlock"', src)
+        self.assertNotIn('pi-fold', src.replace('pi-fold-block', ''))      # 不再有折叠壳
+        self.assertNotIn('piPnlFold', src)
+        self.assertNotIn('<summary><span class="pi-fold-name">', src)
+        # 2026-11-24 用户：删「今年」盈亏，交易记录入口放在它原来的位置（已实现与清仓之间）
+        self.assertNotIn('piYear', src)
+        self.assertNotIn('pi-records-row', src)
+        self.assertLess(src.index('id="piRealized"'), src.index('class="pi-log-link"'))
+        self.assertLess(src.index('class="pi-log-link"'), src.index('id="piCleared"'))
+        self.assertNotIn('pi-zone-money', src)
+        self.assertNotIn('class="pi-block pi-records"', src)
         js = monitor.PAGE_INTERACTION_JS
-        self.assertIn('document.querySelectorAll("#signalCounts details[open], #group_positions .pi-fold[open]")', js)
-        self.assertIn("    closeSubFolds();\n    document.querySelectorAll(\"details.card[open]\")", js)
+        self.assertIn('document.querySelectorAll("#signalCounts details[open]")', js)
+        self.assertNotIn('.pi-fold', js)
+        self.assertNotIn('card.id !== "group_positions"', js)               # 不折叠就不需要强制重排防护
+        self.assertIn('#group_positions>.group-bottom{display:block}', monitor.PAGE_CSS)
         cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
-        self.assertIn(": function (a, b) { return a.amt - b.amt; });", cost)   # 默认从亏损到盈利（2026-11-24 起可点抬头「仓位」改按仓位从大到小）
+        self.assertIn(": function (a, b) { return a.amt - b.amt; });", cost)   # 默认从亏损到盈利；可点抬头改按盈亏比／仓位
+        self.assertIn("updateText('.zone-mv', plain(mv), head)", cost)         # 持仓金额进标题
+        self.assertNotIn('pi-zone-mv', cost)
         self.assertNotIn('piRealizedList', cost)
         self.assertNotIn('piPnlSum', cost)
         css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
-        self.assertIn('.pi-fold > summary::before { content: ""; flex: none; width: 10px; height: 10px; margin-right: 0;', css)   # 左边展开小三角：CSS 画的 10×10 实心三角，与标题间距走 summary gap 4px
-        self.assertIn('.pi-plist { display: grid; grid-template-columns: minmax(max-content,1.6fr) minmax(max-content,1.3fr) minmax(max-content,1fr) minmax(max-content,.7fr);', css)   # 2026-11-24：名称｜盈亏(金额+比一个整体)｜市值｜仓位 四列共用列轨
+        self.assertNotIn('.pi-fold', css)
+        self.assertNotIn('.pi-zone-', css)
+        self.assertIn('.pi-plist { display: grid; grid-template-columns: minmax(0,max-content) max-content max-content max-content; justify-content: space-between;', css)   # 2026-11-24：每列按内容定宽，多出的宽度平均摊在列间；名称列放不下只截中文备注名
+        self.assertIn('.pi-pname .pi-pcn {', css)
+        self.assertIn('overflow: hidden; text-overflow: ellipsis;', css)        # 放不下时名称末尾省略
         self.assertIn('.pi-prow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;', css)
-        self.assertIn('.pi-prow.pi-phead', css)                # 2026-11-24：抬头行（代码｜盈亏｜金额｜仓位），与数据行同一套列轨
-        self.assertIn("data-psort", cost)                       # 点「盈亏」从亏到盈、点「仓位」从大到小
+        self.assertIn('.pi-prow.pi-phead', css)                                 # 抬头行与数据行同一套列轨
+        self.assertIn("data-psort", cost)
         self.assertIn("PNL_SORT === 'weight'", cost)
-        self.assertIn("pi-pp", cost)                             # 名称写成「代码 备注名（行业）」，括号单独包一层收掉全角空白
+        self.assertIn("PNL_SORT === 'ratio'", cost)
+        self.assertIn("pi-pp", cost)
         self.assertIn(".pi-pname .pi-pp:first-child { margin-left: -.5em; }", css)
-        self.assertIn("PNL_SORT === 'ratio'", cost)              # 盈亏（金额）与盈亏比两种从亏到盈的排序
-        self.assertIn("extra.hidden = total === 0;", cost)       # 到价没内容时整栏不显示
+        self.assertIn("extra.hidden = total === 0;", cost)
         self.assertIn('.signal-extra-row[hidden]{display:none}', monitor.PAGE_CSS)
-        self.assertIn('.pi-pw { text-align: right; }', css)   # 最右的仓位列靠右贴齐页面右边
-        self.assertIn('.pi-pname .pi-psec { color: var(--text);', css)   # 行业名称白字               # 代码后面的行业前两个字
-        self.assertIn("'<b class=\"pi-ppnl '", cost)           # 金额与盈亏比同在一个 pi-ppnl 里，算一个整体
-        self.assertIn("'<b class=\"pi-pw\">'", cost)            # 市值右边的仓位列
-        self.assertIn(".slice(0, 2) : '';", cost)               # 行业只要前两个字
-        self.assertIn('.pi-fold[open] > summary::before { clip-path: polygon(0 15%, 100% 15%, 50% 100%); }', css)
-        self.assertNotIn('个股总盈亏', src)                                                  # 名称已改为「盈亏明细」
+        self.assertIn('.pi-pw { text-align: right; }', css)
+        self.assertIn('.pi-pname .pi-psec { flex: none; color: var(--text);', css)
+        self.assertIn("'<b class=\"pi-ppnl '", cost)
+        self.assertIn("'<b class=\"pi-pw\">'", cost)
+        self.assertIn(".slice(0, 2) : '';", cost)
+        self.assertIn('.zone-r1 .zone-mv{', monitor.PAGE_CSS)   # 持仓金额在第一排名称后面，放不下只截金额
+        self.assertNotIn('.zone-r2 .zone-mv', monitor.PAGE_CSS)
 
     def test_jump_waits_for_layout_before_scroll_and_spym_is_short_named(self):
         """2026-11-24：当日清单点个股跳转落点偏（收起当日卡后页面才缩短，滚动已按旧高度开始）——

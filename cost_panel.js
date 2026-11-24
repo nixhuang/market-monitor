@@ -2670,12 +2670,11 @@
         var pp = unknown ? null : cost > 0 ? (pnl / cost) * 100 : mv > 0 ? null : 0;
         // 2026-11-20 定稿：市值金额只在「仓位」Cash／固收下面那一排；
         // 并排标题第二排改成「涨跌额 ＋ 涨跌幅」两格，各自带涨跌色。
-        var moneyRow = document.querySelector('#group_positions .pi-zone-item[data-zone="' + zone.id + '"]');
-        if (moneyRow) updateText('.pi-zone-mv', plain(mv), moneyRow);
         var head = document.querySelector('#' + zone.id + ' > summary.zone-grp');
         if (head) {
           updateTone(updateText('.zone-amt', money(pnl), head), pnl);
           updateTone(updateText('.zone-pct', pct(pp), head), pnl);
+          updateText('.zone-mv', plain(mv), head);   // 2026-11-24：持仓金额放在盈亏比后面
         }
       });
       // 现金/固收行最左侧：长短持仓合计市值（股票/ETF），与右侧盈亏同口径；总资产改放持仓标题行。
@@ -2712,8 +2711,8 @@
     function pnlRowHtml(sym, cn, amt, pctTxt, mvTxt, up, tone, wTxt) {
       var link = ROW_BY_SYM[sym] && ROW_BY_SYM[sym].tr && ROW_BY_SYM[sym].tr.id, sec = sectorTag(sym);
       // 与统计名单同一个排法：代码 备注名（行业）；全角括号的空白边收掉（.pi-pp），不占全角位置
-      var name = '<span class="pi-pname">' + (link ? '<a class="signal-member-jump" href="#' + esc(link) + '">' : '') +
-        esc(sym) + (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '') +
+      var name = '<span class="pi-pname">' + (link ? '<a class="signal-member-jump pi-pnm" href="#' + esc(link) + '">' : '<span class="pi-pnm">') +
+        '<span class="pi-psym">' + esc(sym) + '</span>' + (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '</span>') +
         (sec ? '<span class="pi-psec"><span class="pi-pp">（</span>' + esc(sec) + '<span class="pi-pp">）</span></span>' : '') + '</span>';
       return '<div class="pi-prow"' + (tone ? ' data-pnl="' + tone + '"' : '') + '>' + name +
         '<b class="pi-ppnl ' + (up ? 'up' : 'down') + '"><span class="pi-pamt">' + amt + '</span> <span class="pi-ppct">' + pctTxt + '</span></b>' +
@@ -2764,7 +2763,7 @@
       var body = document.getElementById('piBody');
       if (!body) return;
       var t = (REAL && REAL.trade) || {}, yr = bjNow().slice(0, 4);
-      [['piRealized', TRADE.total], ['piYear', TRADE.by_year[yr]]].forEach(function (pair) {
+      [['piRealized', TRADE.total]].forEach(function (pair) {
         var el = document.getElementById(pair[0]);
         if (!el) return;
         var v = Number(pair[1]) || 0;

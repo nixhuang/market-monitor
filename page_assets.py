@@ -1191,6 +1191,7 @@ tr.gray td{color:var(--dim)}
 /* 2026-11-20 21:2x：涨跌额不加粗，且与涨跌幅「-4.7%」同号；仓位栏金额也共用 --pos-num-fs。 */
 .zone-r2 .zone-amt{font-size:var(--pos-num-fs,14px);font-weight:400;color:var(--text)}
 .zone-r2 .zone-pct{font-size:var(--pos-num-fs,14px);color:var(--dim)}
+.zone-r1 .zone-mv{font-size:var(--pos-num-fs,14px);font-weight:400;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}   /* 2026-11-24 用户：长短持仓金额放在第一排「长持(4)」后面，白字不加粗；放不下只截金额末尾，名称与第二排盈亏完整 */
 .zone-r2 .zone-amt.up,.zone-r2 .zone-pct.up{color:var(--up)}
 .zone-r2 .zone-amt.down,.zone-r2 .zone-pct.down{color:var(--down)}
 #zoneDualRow > .dual-body{display:none}
@@ -1533,7 +1534,7 @@ table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:var(--sig-r
 table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10px;border:0;box-shadow:none}
 .stk th{font-size:13px;color:var(--dim);font-weight:600;text-align:left;padding:8px 10px;border-bottom:1px solid var(--line)}
 #group_positions[open]{padding-bottom:2px}
-#group_positions>.group-bottom{display:none}
+#group_positions>.group-bottom{display:block}   /* 2026-11-24 用户：仓位底部是固定的向上折叠按钮（不悬浮，悬浮脚本只管 #zoneDualRow／.group-dual 两处） */
 #runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
 #runLightTxt[data-expandable]{cursor:pointer}   /* 失败名单超过 3 只时折进「…」，点一下展开 */
 #signalCounts .signal-extra-row{--chip-w:84px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
@@ -1796,10 +1797,10 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
   function isFree(card) {
     return !card || card.id === "signalCounts" || card.id === "group_positions";
   }
-  // 2026-11-23：展开其他分组时，统计里展开的子板块（空间/财报/到价）和仓位里展开的盈亏明细
-  // （盈亏明细）也一并收起；统计、仓位两个大栏本身仍保持展开。
+  // 2026-11-23：展开其他分组时，统计里展开的子板块（空间/财报/到价）也一并收起；统计、仓位两个大栏本身仍保持展开。
+  // （2026-11-24：仓位里的盈亏明细已改为常显、不折叠，不在这里处理。）
   function closeSubFolds() {
-    document.querySelectorAll("#signalCounts details[open], #group_positions .pi-fold[open]").forEach(function(d) {
+    document.querySelectorAll("#signalCounts details[open]").forEach(function(d) {
       d.open = false;
     });
   }
