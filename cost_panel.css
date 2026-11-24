@@ -474,7 +474,7 @@
 .pi-prow.pi-phead + .pi-prow { border-top: 0; }
 .pi-ph { min-width: 0; white-space: nowrap; line-height: 1.25; }
 .pi-ph-w { text-align: right; }
-.pi-ph-pnl { display: flex; gap: 8px; }   /* 「盈亏」「盈亏比」两个排序钮并排 */
+.pi-ph-pnl { display: flex; gap: 18px; }   /* 「盈亏」「盈亏比」两个排序钮并排；2026-11-24 用户：两字挨得近，间距 8→18px（抬头列宽由下面数据行撑开，不会变宽） */
 .pi-psort { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
 .pi-psort[aria-pressed="true"] { color: var(--head-blue-on); text-decoration: underline; text-underline-offset: 3px; }
 .pi-psort:focus-visible { outline: 2px solid var(--head-blue-on); outline-offset: 2px; border-radius: 3px; }

@@ -988,7 +988,7 @@ try:
         for _side, _bands, _prefix in ((None, (100, 110, 90), 'OSNONE'),
                                        ('上轨', (100, 101, 90), 'OSUP'),
                                        ('下轨', (100, 110, 99), 'OSDOWN')):
-            _row = _business.analyze([35, 30, 20], _group, bands=_bands, symbol=_prefix + str(_index))
+            _row = _business.analyze([30, 30, 20], _group, bands=_bands, symbol=_prefix + str(_index))
             _oversold_rows.append((_row, _side))
 finally:
     _business.doCleanups()
@@ -1071,7 +1071,7 @@ try:
     with _patch.dict(monitor.S, {'chg_yellow': 2, 'chg_red': 4}):
         _coexist_rows = [
             _business.analyze([70, 70, 50], 'technology', symbol='STXY', chg=3),
-            _business.analyze([35, 35, 50], 'technology', symbol='STXR', chg=-5),
+            _business.analyze([33, 33, 50], 'technology', symbol='STXR', chg=-5),
             _business.analyze([70, 50, 50], 'technology', bands=(100, 101, 90), symbol='NEEY', chg=3)]
 finally:
     _business.doCleanups()
@@ -1138,7 +1138,7 @@ check(_coexist_rows == _coexist_before and _coexist_snap == _coexist_snap_before
 # 旧中点解析只恢复已知的同轨布林连续天数尾句；绝不追加独立布林灯。
 _tail = '连续第2日贴近下轨'
 _plain = '逼近布林下轨▼ 还差0.15%（盘中触及 293.63）'
-for _level, _rsi in ((None, None), ('yellow', 'RSI 2条 ↓超卖（≤35）'),
+for _level, _rsi in ((None, None), ('yellow', 'RSI 2条 ↓超卖（≤33）'),
                      ('red', 'RSI 3条 ↓超卖（≤35）')):
     _tail_row = item('TAIL', 'technology', _level or 'green')
     _tail_row.update(signals=([_rsi] if _rsi else []) + [_plain, _tail, '量比 1.2x'],
@@ -1174,12 +1174,12 @@ for _kind, _signals, _marks, _expected in (
         ('boll', ['跌破布林下轨▼（盘中触及 66.33）', '连续第4日贴近下轨（其中2日穿越）'], [],
          '盘中跌破布林下轨▼后收回，连续第4日贴近下轨（其中2日穿越）'),
         ('boll_rsi', ['跌破布林下轨▼（盘中触及 66.33）', '连续第4日贴近下轨（其中2日穿越）',
-                      'RSI 1条 ↓超卖（≤35）'], [],
+                      'RSI 1条 ↓超卖（≤30）'], [],
          '盘中跌破布林下轨▼后收回，连续第4日贴近下轨（其中2日穿越） · RSI 1条 ↓超卖'),
         ('ma', ['日内触及120日均线 ±1%区间'], [('ma_band', 'yellow')], '触及长均线 ±1%区间'),
         ('ma', ['上穿60日弱均线'], [('ma_cross', 'yellow')], '上穿短均线'),
         ('chg', ['异动 -21.9%'], [('chg', 'red')], '异动 -21.9%'),
-        ('rsi', ['RSI 1条 ↓超卖（≤35）'], [], 'RSI 1条 ↓超卖')):
+        ('rsi', ['RSI 1条 ↓超卖（≤30）'], [], 'RSI 1条 ↓超卖')):
     _copy_row = item('DIRECTFACT', 'technology', 'green')
     _copy_row.update(signals=_signals, signal_marks=_marks, ma_settings={'ma_short': 60, 'ma_long': 120})
     _copy_before = _copy.deepcopy(_copy_row)
@@ -1193,7 +1193,7 @@ for _kind, _signals, _marks, _expected in (
 # 但外层条目数、data-signal-kind/level、以及去标签后的事实文本必须逐字不变。
 _zone_row = item('ZONESPLIT', 'technology', 'yellow')
 _zone_row.update(signals=['跌破布林下轨▼（盘中触及 66.33）', '连续第4日贴近下轨（其中2日穿越）',
-                          'RSI 1条 ↓超卖（≤35）'], signal_marks=[])
+                          'RSI 1条 ↓超卖（≤30）'], signal_marks=[])
 _zone_html = _row_signals(_zone_row)
 check(_zone_html.count('class="signal-item"') == 2
       and 'class="sig-zone" data-side="boll"' in _zone_html
@@ -1207,7 +1207,7 @@ check(_zone_html.count('class="signal-item"') == 2
 # 描述红黄灰无紫稳定排序并安全转义，均线只投影展示，原数字事实与marks保留。
 _order_row = item('ORDERESCAPE', 'technology', 'red')
 _order_row.update(signals=['手填目标价说明 <b>尾部</b>', '无灯说明 <img onerror=x>',
-    'RSI 2条 ↓超卖（≤35）', '日内触及120日均线 ±1%区间', '上穿60日弱均线',
+    'RSI 2条 ↓超卖（≤33）', '日内触及120日均线 ±1%区间', '上穿60日弱均线',
     '量比 2.8x', '异动 -12.1%', '距加仓价 90 还差 1%', '另条说明 & 保留'],
     signal_marks=[('target', 'purple'), ('ma_band', 'yellow'), ('ma_cross', 'yellow'),
                   ('vol_ratio', 'yellow'), ('chg', 'red'), ('add_price', 'red')],
@@ -1215,7 +1215,7 @@ _order_row.update(signals=['手填目标价说明 <b>尾部</b>', '无灯说明 
     target=monitor.evaluate_target(100, 100, {'kind': 'manual', 'price': 150}, 'technology', 3))
 _order_no_gray = _copy.deepcopy(_order_row)
 _order_no_gray.update(symbol='ORDER2HIGH', signals=[
-    'RSI 2条 ↑超买（≥70）' if text == 'RSI 2条 ↓超卖（≤35）' else text
+    'RSI 2条 ↑超买（≥70）' if text == 'RSI 2条 ↓超卖（≤33）' else text
     for text in _order_row['signals']])
 _order_before = _copy.deepcopy(_order_row)
 _order_no_gray_before = _copy.deepcopy(_order_no_gray)
@@ -1282,7 +1282,7 @@ _business.setUp()
 try:
     _focus_text_rows = []
     for _group in ('focus', 'position', 'technology'):
-        for _values, _direction in (([70, 50, 50], '↑超买'), ([35, 50, 50], '↓超卖')):
+        for _values, _direction in (([70, 50, 50], '↑超买'), ([30, 50, 50], '↓超卖')):
             for _chg in (0, 6):
                 _symbol = 'FT' + _group.upper() + ('UP' if _direction == '↑超买' else 'DOWN') + str(_chg)
                 _focus_text_rows.append((_business.analyze(_values, _group, bands=(100, 101, 90),
@@ -1360,18 +1360,18 @@ try:
         _cases = [([50, 50, 50], (100, 110, 99), 'boll', 'gray', _group != 'position'),
                   ([70, 70, 70], (100, 110, 90), 'rsi',
                    'yellow' if _group == 'position' else 'gray', _group != 'focus'),
-                  ([35, 35, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
-                  ([70, 35, 35], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
+                  ([33, 33, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
+                  ([70, 33, 33], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
                   ([70, 70, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
-                  ([70, 70, 35], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
+                  ([70, 70, 30], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'focus' else 'yellow' if _active else '', _group != 'focus'),
                   ([35, 35, 35], (100, 101, 90), 'boll_rsi', 'yellow' if _active else 'gray', True)]
-        _cases += [([35, 50, 50], (100, 110, 90), 'rsi', '', True),
-                   ([70, 35, 50], (100, 110, 90), 'rsi', '', True),
+        _cases += [([30, 50, 50], (100, 110, 90), 'rsi', '', True),
+                   ([70, 30, 50], (100, 110, 90), 'rsi', '', True),
                    ([70, 70, 50], (100, 110, 90), 'rsi', 'gray' if _group == 'position' else '', True),
-                   ([70, 70, 35], (100, 110, 90), 'rsi', 'gray' if _group == 'position' else '', True),
-                   ([70, 35, 35], (100, 110, 90), 'rsi', 'gray', True),
-                   ([35, 50, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'position' else '', _group != 'position'),
-                   ([70, 35, 50], (100, 101, 90), 'boll_rsi', 'gray' if _active else '', _group != 'position'),
+                   ([70, 70, 30], (100, 110, 90), 'rsi', 'gray' if _group == 'position' else '', True),
+                   ([70, 33, 33], (100, 110, 90), 'rsi', 'gray', True),
+                   ([30, 50, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'position' else '', _group != 'position'),
+                   ([70, 30, 50], (100, 101, 90), 'boll_rsi', 'gray' if _active else '', _group != 'position'),
                    ([70, 50, 50], (100, 101, 90), 'boll_rsi', 'gray' if _group == 'position' else '', True)]
         if not _active:
             _cases += [([50, 50, 50], (100, 101, 90), 'boll', '', True),
@@ -1388,7 +1388,7 @@ try:
         for _low_n in (2, 3):
             for _case_index, (_high, _low, _side) in enumerate(((120, 89, '上轨'), (111, 80, '下轨'),
                                                                (120, 80, '下轨'), (110, 90, '上轨'))):
-                _values = [35] * _low_n + [50] * (3 - _low_n)
+                _values = [{2: 33, 3: 35}[_low_n]] * _low_n + [50] * (3 - _low_n)
                 _symbol = 'DUAUTH' + _group.upper() + str(_low_n) + str(_case_index)
                 _row = _business.analyze(_values, _group, high=_high, low=_low, symbol=_symbol)
                 _technical_level = ('red' if _low_n == 3 else 'yellow') if _side == '下轨' else ('gray' if _low_n == 3 else '')
@@ -2027,7 +2027,7 @@ const deadline = setTimeout(() => {
           overflow: document.documentElement.scrollWidth > innerWidth};
       })()`);
       assertions.push({ok: JSON.stringify(header.order) === JSON.stringify([
-        'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-all'])
+        'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','stat-badge earn','count-total count-all'])
         && header.count === String(header.expected) && header.color === 'rgb(176, 132, 255)' && !header.overflow,
         name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
       const statLines = await evaluate(`(() => {
@@ -2211,7 +2211,7 @@ const deadline = setTimeout(() => {
         const font=el=>getComputedStyle(el).fontSize;
         let dca=document.querySelector('#signalCounts > summary .dca-badge');
         if(!dca){dca=document.createElement('span');dca.className='dca-badge';document.querySelector('#signalCounts > summary .group-stats').appendChild(dca);}
-        dca.textContent='定投：9';
+        dca.innerHTML='定投：<span class="dca-n">9</span>';
         const states=['本页只读','仓位已同步'].map(text=>{
           mirror.innerHTML='<span class="dim"></span>';mirror.firstElementChild.textContent=text;
           return {text,font:font(mirror.firstElementChild),mirrorFont:font(mirror),overflow:sub.scrollWidth>sub.clientWidth+1};

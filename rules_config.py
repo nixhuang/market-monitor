@@ -15,8 +15,11 @@ SETTING_SCHEMA = {
     "boll_near_band_pct": _number(15.0, 0, 100),
     "chg_red": _number(4.0, 0, 100, order=("chg", 1)),
     "chg_yellow": _number(2.0, 0, 100, order=("chg", 0)),
-    "rsi_high": _number(70, 0, 100, order=("rsi", 1)),
-    "rsi_low": _number(35, 0, 100, order=("rsi", 0)),
+    "rsi_high": _number(70, 0, 100, order=("rsi", 3)),
+    # 2026-11-24 用户：超卖按条数分三档门槛——1 条线 ≤30、2 条线都 ≤32、3 条线都 ≤35（rsi_low 仍是 3 条那档，老配置沿用）
+    "rsi_low1": _number(30, 0, 100, order=("rsi", 0)),
+    "rsi_low2": _number(33, 0, 100, order=("rsi", 1)),
+    "rsi_low": _number(35, 0, 100, order=("rsi", 2)),
     "near_52w_low_pct": _number(1.0, 0, 100),
     "trigger_gap_pct": _number(5.0, 0, 100),
     "reduce_gap_pct": _number(3.0, 0, 100),

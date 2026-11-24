@@ -10,6 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import monitor
 
+
 # 测试一律用代码里的默认设置，不读线上 settings.json（线上值一改，测试就会无故失败）
 monitor.S.clear()
 monitor.S.update(monitor.DEFAULT_SETTINGS)
@@ -40,12 +41,33 @@ class TestRSI(unittest.TestCase):
 
     # ---------------------------------------------------------------- 单独 RSI 分组判灯
 
+    def test_oversold_three_tier_by_count(self):
+        """2026-11-24 超卖三档：1 条线 ≤30、2 条线都 ≤33、3 条线都 ≤35；超买仍是每条线 ≥70。"""
+        cases = [([30, 60, 60], 1),    # 1 条线 ≤30 → 1 条
+                 ([31, 60, 60], 0),    # 31 超过 1 条档
+                 ([33, 33, 60], 2),    # 2 条线都 ≤33 → 2 条
+                 ([33, 34, 60], 0),    # 34 超过 2 条档，且 33 也不 ≤30
+                 ([30, 33, 60], 2),
+                 ([35, 35, 35], 3),    # 3 条线都 ≤35 → 3 条
+                 ([35, 35, 36], 0),    # 第三条 36 超 35，前两条 35 超 33
+                 ([33, 33, 35], 3),
+                 ([30, 30, 36], 2),
+                 ([None, 33, 33], 2),  # 缺值不参与
+                 ([None, None, 30], 1),
+                 ([float('nan'), 35, 35], 0)]
+        for values, expected in cases:
+            with self.subTest(values=values):
+                self.assertEqual(monitor._rule_engine._rsi_low_hits(values), expected)
+        self.assertEqual(monitor._rule_engine._rsi_low_boundary(1), '≤30')
+        self.assertEqual(monitor._rule_engine._rsi_low_boundary(2), '≤33')
+        self.assertEqual(monitor._rule_engine._rsi_low_boundary(3), '≤35')
+
     def test_standalone_rsi_boundaries_and_lights(self):
         """单超卖仅文字、单超买无提醒、两条按组判、三超卖红、三超买持仓黄。"""
-        cases = [([50, 50, 50], 0), ([70, 69.999, 50], 0), ([36, 36.001, 50], 0),
-                 ([70, 70, 50], 1), ([80, 70, 50], 1), ([35, 35, 50], 1),
+        cases = [([50, 50, 50], 0), ([70, 69.999, 50], 0), ([36, 36.001, 50], 0), ([31, 50, 50], 0), ([30, 50, 50], 1),
+                 ([70, 70, 50], 1), ([80, 70, 50], 1), ([33, 33, 50], 1),
                  ([70, 70, 70], 1), ([35, 35, 35], 1), ([80, 20, 50], 1),
-                 ([None, 70, 70], 1), ([None, 34, 34], 1), ([None, None, 80], 0),
+                 ([None, 70, 70], 1), ([None, 34, 34], 0), ([None, 33, 33], 1), ([None, None, 80], 0),
                  ([float('nan'), 50, 80], 0)]
         for values, expected_texts in cases:
             with self.subTest(values=values):
@@ -66,7 +88,7 @@ class TestRSI(unittest.TestCase):
                     values = [invalid, invalid, invalid]
                     values[index] = 28
                     with self.subTest(group=group, invalid=invalid, index=index), \
-                            patch.dict(monitor.S, {'rsi_low': 28, 'rsi_high': 82}):
+                            patch.dict(monitor.S, {'rsi_low': 28, 'rsi_low1': 28, 'rsi_low2': 28, 'rsi_high': 82}):
                         level, signals, detail = self.analyze(values, group=group)
                         self.assertEqual((level, detail['foldable'], detail['signal_marks']), ('green', True, []))
                         self.assertEqual(signals, ['RSI 1条 ↓超卖（≤28）'])
@@ -84,7 +106,7 @@ class TestRSI(unittest.TestCase):
                 values = [82, 82, 82]
                 values[index] = third
                 with self.subTest(third=third, index=index), \
-                        patch.dict(monitor.S, {'rsi_low': 28, 'rsi_high': 82}):
+                        patch.dict(monitor.S, {'rsi_low': 28, 'rsi_low1': 28, 'rsi_low2': 28, 'rsi_high': 82}):
                     level, signals, detail = self.analyze(values, group='focus')
                     expected = ['RSI 2条 ↑超买（≥82）'] + (['RSI 1条 ↓超卖（≤28）'] if third == 28 else [])
                     self.assertEqual(signals, expected)

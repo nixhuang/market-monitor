@@ -259,7 +259,7 @@ if(process.argv.includes('--layout-fixture')){
 // 独立固定历史默认值，不能用生成器自身的值充当期望值而漏掉默认参数漂移。
 const expectedDefaults = {
   boll_n:20,boll_k:2,boll_near_pct:0.5,boll_near_band_pct:15,chg_red:4,chg_yellow:2,
-  rsi_high:70,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,
+  rsi_high:70,rsi_low1:30,rsi_low2:33,rsi_low:35,near_52w_low_pct:1,trigger_gap_pct:5,reduce_gap_pct:3,
   target_space_pct:40,target_high_space_pct:90,target_gap_pct:3,vol_ratio:1.5,vol_ratio_red:3,vol_ratio_z:2,vol_ratio_red_z:3.6,
   ma_short:50,ma_long:200,hy_green:350,hy_red:400,
   vix_green:20,vix_yellow:30,vix_red:40,use_realtime:1,dca_every:0,dca_start:'',signal_single_open:1,group_single_open:0,
@@ -605,7 +605,7 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   check(T.settingsError().includes('boll_n'), '布林周期零被阻止');
   els.set_boll_n.value='20';els.set_rsi_low.value='80';
   check(T.settingsError().includes('RSI'), 'RSI上下限倒置被阻止');
-  els.set_rsi_low.value='30';els.set_chg_red.value='4';els.set_chg_yellow.value='6';
+  els.set_rsi_low.value='35';els.set_chg_red.value='4';els.set_chg_yellow.value='6';
   check(T.settingsError().includes('chg_yellow'), '黄色高于红色阈值被阻止');
   els.set_chg_yellow.value='2';els.set_dca_start.value='2026-02-30';
   check(T.settingsError().includes('定投起点日'), '虚构日期不能保存');
@@ -739,8 +739,10 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   check(fp&&!fp.exact&&fp.symbol==='AAPL', '前缀也能定位（标注按前缀匹配）');
   check(T.findSymbol('NOSUCHXX')===null&&T.findSymbol('  ')===null, '找不到或空输入返回空，不报错');
   check(/<div class="row card-head">\s*<h2>规则参数<\/h2>\s*<button id="btnResetRules">[^<]*<\/button>\s*<button class="primary" id="btnSaveRules">/.test(src), '「恢复默认」「保存规则」在「规则参数」标题栏（恢复在左、保存在右）');
-  check(/<h2>分类清单<\/h2>\s*<span class="dirty-text" id="dirty"[^>]*><\/span>\s*<button id="btnReload">/.test(src)&&!src.includes('savebar'), '「有未保存的改动」提示紧跟「分类清单」标题，字号15px');
-  check(/<div class="row search-row">\s*<span id="groupTotal"><\/span>\s*<input id="symSearch"/.test(src)&&src.includes('.group-tools{flex-wrap:nowrap}'), '分组/记录数与搜索定位同一排，标题栏固定一行');
+  // 2026-11-24 用户：定位框收窄放进标题栏（分类清单｜代码框｜定位｜恢复清单｜保存清单）；「有未保存的改动」和目标价 0 的说明放标题栏下一排
+  check(/<h2>分类清单<\/h2>\s*<input id="symSearch"[^>]*maxlength="5">\s*<button id="btnLocate">[^<]*<\/button>\s*<button id="btnReload">/.test(src)&&/<div class="group-note">\s*<span class="dirty-text" id="dirty"[^>]*><\/span>\s*<p class="note">目标价填 0＝关闭这只股票的“达到”报灯（空间提醒照旧），清空即恢复。<\/p>/.test(src)&&!src.includes('savebar'), '定位框收窄进标题栏；未保存提示与目标价 0 说明放在标题栏下一排');
+  check(/<div class="row add-head"><h2>新增股票<\/h2><span id="groupTotal"><\/span><\/div>/.test(src)&&src.includes('.group-tools{flex-wrap:nowrap}')&&!src.includes('search-row'), '分组/记录数放在「新增股票」右侧，标题栏固定一行');
+  check(src.includes('.card-head button,.group-tools button{padding:7px 10px;font-size:14px;min-width:76px;line-height:1.3}'), '恢复默认／保存规则／恢复清单／保存清单四个按钮同尺寸');
   {
     // 统一按钮顺序：同一组里取消/恢复/关闭类在左，保存/确认类（primary）在右
     const order=(...ids)=>ids.map(id=>src.indexOf('id="'+id+'"'));

@@ -78,9 +78,17 @@ details.fold>summary,details.set>summary{gap:8px}
 .group-tools{flex-wrap:nowrap}
 .group-tools h2{margin:0;white-space:nowrap}
 .group-tools #btnReload{margin-left:auto}   /* 按钮永远靠右，提示出现/消失都不移动 */
-.search-row #groupTotal{flex:none;white-space:nowrap;font-size:14px;color:var(--dim)}
 .group-tools button{white-space:nowrap;flex:none}
-.group-tools button{padding:5px 9px;font-size:13px}
+/* 2026-11-24 用户：恢复默认／保存规则／恢复清单／保存清单四个按钮一样大（14px、内距 7px 10px、同一最小宽度 76px）；定位按钮同高 */
+.card-head button,.group-tools button{padding:7px 10px;font-size:14px;min-width:76px;line-height:1.3}
+.group-tools #btnLocate{min-width:0;padding:7px 8px}
+/* 定位输入框收窄：只留 5 个大写字母（GOOGL／BRK-B）的宽度，与恢复清单／保存清单同排；16px 字号防 iOS 聚焦放大 */
+.group-tools #symSearch{flex:none;width:76px;min-width:0;padding:5px 8px;height:34px}
+.add-head{margin-bottom:8px}
+.add-head h2{margin:0}
+.add-head #groupTotal{flex:none;white-space:nowrap;font-size:14px;color:var(--dim)}
+.group-note{margin:0 2px 10px}
+.group-note .dirty-text{display:block;max-width:none;margin-bottom:4px}
 /* MM_RULECSS_BEGIN：由 page_assets 生成，不手改 */
 :root{
   --bg:#0b0e14;
@@ -473,15 +481,12 @@ button.danger{color:#c9433d;font-weight:500}   /* 底色/边框沿用普通灰�
 .dca-grid .field input{width:100%;text-align:left}
 .dca-actions button{width:100%;padding:9px 4px;white-space:nowrap}
 /* 搜索定位：输入框占满，命中的行短暂高亮 */
-.search-row{margin:0 0 10px;flex-wrap:nowrap}
-.search-row button{flex:none;white-space:nowrap}
 /* 按钮顺序统一：取消/恢复/关闭类在左，保存/确认类在右（与首页编辑「取消｜保存」一致）。
    「规则参数」标题栏：标题在左，恢复默认｜保存规则在右；未保存提示紧跟在标题栏下一行 */
 .card-head{margin-bottom:2px}
 .card-head h2{margin:0 auto 0 0}
 .dirty-note:empty{display:none}
 .dirty-note{display:block;margin:0 0 4px}
-.search-row input{flex:1;min-width:0}
 .edit-group .stock-row.hit{background:rgba(107,163,240,.2);box-shadow:0 0 0 2px rgba(107,163,240,.35);border-radius:6px}
 /* 「规则参数」卡：原来每个开关行固定 46px、设置行间距 5px+输入框上下 8px，文字之间空得过大；
    开关行收成 34px，设置行输入框上下 5px、行距 2px，小节标题与按钮行间距同步收紧。 */
@@ -567,7 +572,9 @@ details.set[open]>summary{margin-bottom:2px}
         <div class="setrow"><label>涨跌幅红线（%）</label><input id="set_chg_red" inputmode="decimal"></div>
         <div class="setrow"><label>涨跌幅黄线（%）</label><input id="set_chg_yellow" inputmode="decimal"></div>
         <div class="setrow"><label>RSI 超买线</label><input id="set_rsi_high" inputmode="numeric"></div>
-        <div class="setrow"><label>RSI 超卖线</label><input id="set_rsi_low" inputmode="numeric"></div>
+        <div class="setrow"><label>RSI 超卖线（1条）</label><input id="set_rsi_low1" inputmode="numeric"></div>
+        <div class="setrow"><label>RSI 超卖线（2条）</label><input id="set_rsi_low2" inputmode="numeric"></div>
+        <div class="setrow"><label>RSI 超卖线（3条）</label><input id="set_rsi_low" inputmode="numeric"></div>
         <div class="setrow"><label>52周低点距离（%）</label><input id="set_near_52w_low_pct" inputmode="decimal"></div>
         <div class="setrow"><label>加仓价距离（%）</label><input id="set_trigger_gap_pct" inputmode="decimal"></div>
         <div class="setrow"><label>减仓价距离（%）</label><input id="set_reduce_gap_pct" inputmode="decimal"></div>
@@ -612,16 +619,16 @@ details.set[open]>summary{margin-bottom:2px}
 
   <div class="row group-tools">
     <h2>分类清单</h2>
-    <span class="dirty-text" id="dirty" role="status" aria-live="polite"></span>
+    <input id="symSearch" type="search" placeholder="代码" aria-label="搜索股票代码，定位所在分组" autocapitalize="characters" autocomplete="off" enterkeyhint="search" maxlength="5">
+    <button id="btnLocate">定位</button>
     <button id="btnReload">恢复清单</button><button class="primary" id="btnSave">保存清单</button>
   </div>
-  <div class="row search-row">
-    <span id="groupTotal"></span>
-    <input id="symSearch" type="search" placeholder="搜索股票代码，定位所在分组" aria-label="搜索股票代码" autocapitalize="characters" autocomplete="off" enterkeyhint="search">
-    <button id="btnLocate">定位</button>
+  <div class="group-note">
+    <span class="dirty-text" id="dirty" role="status" aria-live="polite"></span>
+    <p class="note">目标价填 0＝关闭这只股票的“达到”报灯（空间提醒照旧），清空即恢复。</p>
   </div>
   <div class="card add-entry" id="addEntry">
-    <h2>新增股票</h2>
+    <div class="row add-head"><h2>新增股票</h2><span id="groupTotal"></span></div>
     <div class="add-row">
       <input class="s" id="newSym" placeholder="代码" aria-label="股票代码" autocapitalize="characters" disabled>
       <input class="n" id="newNote" placeholder="名称备注（选填）" aria-label="名称备注（选填）" disabled>
@@ -631,7 +638,6 @@ details.set[open]>summary{margin-bottom:2px}
     <p class="note tip-up">新股选行业分组点添加，再改为「重点」</p>
   </div>
   <fieldset id="groupEditor" disabled style="border:0;padding:0;margin:0;min-width:0"></fieldset>
-  <p class="note">保存股票清单、备注、加仓价、减仓价、目标价和监测开关，不影响规则与定投设置。目标价填 0＝关闭这只股票的“达到”报灯（空间提醒照旧），清空即恢复。恢复清单会先询问是否丢弃未保存的清单改动。这里只新增关注股与各行业分组；要新增持仓股请到首页「编辑」里添加，已有的持仓仍可用每行的下拉在长／短持仓之间移动。</p>
 
   <div class="card" id="dcaCard">
     <h2>定投提醒</h2>
@@ -1281,7 +1287,7 @@ $('btnReload').onclick=()=>{
 
 /* ---------- 规则阈值（settings.json） ---------- */
 /* MM_SCHEMA_BEGIN：由 page_assets 生成，不手改 */
-const SET_SCHEMA={"defaults":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"boll_near_band_pct":15.0,"chg_red":4.0,"chg_yellow":2.0,"rsi_high":70,"rsi_low":35,"near_52w_low_pct":1.0,"trigger_gap_pct":5.0,"reduce_gap_pct":3.0,"target_space_pct":40.0,"target_high_space_pct":90.0,"target_gap_pct":3.0,"vol_ratio":1.5,"vol_ratio_red":3.0,"vol_ratio_z":2.0,"vol_ratio_red_z":3.6,"ma_short":50,"ma_long":200,"hy_green":350,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":0,"dca_start":"","signal_single_open":1,"group_single_open":0},"limits":{"boll_n":[2,250],"boll_k":[0.1,10],"boll_near_pct":[0,100],"boll_near_band_pct":[0,100],"chg_red":[0,100],"chg_yellow":[0,100],"rsi_high":[0,100],"rsi_low":[0,100],"near_52w_low_pct":[0,100],"trigger_gap_pct":[0,100],"reduce_gap_pct":[0,100],"target_space_pct":[40,40],"target_high_space_pct":[90,90],"target_gap_pct":[0,100],"vol_ratio":[0.1,100],"vol_ratio_red":[0.1,100],"vol_ratio_z":[0,10],"vol_ratio_red_z":[0,10],"ma_short":[0,250],"ma_long":[0,250],"hy_green":[0,10000],"hy_red":[0,10000],"vix_green":[0,200],"vix_yellow":[0,200],"vix_red":[0,200],"use_realtime":[0,1],"dca_every":[0,10000],"signal_single_open":[0,1],"group_single_open":[0,1]},"integers":["boll_n","ma_short","ma_long","use_realtime","dca_every","signal_single_open","group_single_open"],"excluded":{"ma_short":[1],"ma_long":[1]},"relations":[{"keys":["chg_yellow","chg_red"],"strict":false,"skip_zero":false},{"keys":["rsi_low","rsi_high"],"strict":true,"skip_zero":false},{"keys":["vol_ratio","vol_ratio_red"],"strict":false,"skip_zero":false},{"keys":["vol_ratio_z","vol_ratio_red_z"],"strict":false,"skip_zero":true},{"keys":["ma_short","ma_long"],"strict":false,"skip_zero":true},{"keys":["hy_green","hy_red"],"strict":false,"skip_zero":false},{"keys":["vix_green","vix_yellow","vix_red"],"strict":false,"skip_zero":false}]};
+const SET_SCHEMA={"defaults":{"boll_n":20,"boll_k":2.0,"boll_near_pct":0.5,"boll_near_band_pct":15.0,"chg_red":4.0,"chg_yellow":2.0,"rsi_high":70,"rsi_low1":30,"rsi_low2":33,"rsi_low":35,"near_52w_low_pct":1.0,"trigger_gap_pct":5.0,"reduce_gap_pct":3.0,"target_space_pct":40.0,"target_high_space_pct":90.0,"target_gap_pct":3.0,"vol_ratio":1.5,"vol_ratio_red":3.0,"vol_ratio_z":2.0,"vol_ratio_red_z":3.6,"ma_short":50,"ma_long":200,"hy_green":350,"hy_red":400,"vix_green":20,"vix_yellow":30,"vix_red":40,"use_realtime":1,"dca_every":0,"dca_start":"","signal_single_open":1,"group_single_open":0},"limits":{"boll_n":[2,250],"boll_k":[0.1,10],"boll_near_pct":[0,100],"boll_near_band_pct":[0,100],"chg_red":[0,100],"chg_yellow":[0,100],"rsi_high":[0,100],"rsi_low1":[0,100],"rsi_low2":[0,100],"rsi_low":[0,100],"near_52w_low_pct":[0,100],"trigger_gap_pct":[0,100],"reduce_gap_pct":[0,100],"target_space_pct":[40,40],"target_high_space_pct":[90,90],"target_gap_pct":[0,100],"vol_ratio":[0.1,100],"vol_ratio_red":[0.1,100],"vol_ratio_z":[0,10],"vol_ratio_red_z":[0,10],"ma_short":[0,250],"ma_long":[0,250],"hy_green":[0,10000],"hy_red":[0,10000],"vix_green":[0,200],"vix_yellow":[0,200],"vix_red":[0,200],"use_realtime":[0,1],"dca_every":[0,10000],"signal_single_open":[0,1],"group_single_open":[0,1]},"integers":["boll_n","ma_short","ma_long","use_realtime","dca_every","signal_single_open","group_single_open"],"excluded":{"ma_short":[1],"ma_long":[1]},"relations":[{"keys":["chg_yellow","chg_red"],"strict":false,"skip_zero":false},{"keys":["rsi_low1","rsi_low2","rsi_low","rsi_high"],"strict":true,"skip_zero":false},{"keys":["vol_ratio","vol_ratio_red"],"strict":false,"skip_zero":false},{"keys":["vol_ratio_z","vol_ratio_red_z"],"strict":false,"skip_zero":true},{"keys":["ma_short","ma_long"],"strict":false,"skip_zero":true},{"keys":["hy_green","hy_red"],"strict":false,"skip_zero":false},{"keys":["vix_green","vix_yellow","vix_red"],"strict":false,"skip_zero":false}]};
 const SET_DEFS=SET_SCHEMA.defaults;
 const SET_KEYS=Object.keys(SET_DEFS);
 const SET_LIMITS=SET_SCHEMA.limits;
@@ -1315,7 +1321,7 @@ function settingsError(){
     const keys=rule.keys;
     if(rule.skip_zero&&keys.some(key=>values[key]===0))continue;
     if(keys.some((key,i)=>i&&(rule.strict?values[key]<=values[keys[i-1]]:values[key]<values[keys[i-1]])))
-      return (rule.strict?'RSI 超卖线必须小于超买线；':'')+keys.join('、')+' 的阈值顺序不正确';
+      return (rule.strict?'RSI 超卖线须 1条＜2条＜3条＜超买线；':'')+keys.join('、')+' 的阈值顺序不正确';
   }
   const start=$('set_dca_start').value.trim();
   if(start&&(!DATE_RE.test(start)||Number.isNaN(Date.parse(start+'T00:00:00Z'))||

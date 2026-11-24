@@ -13,6 +13,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import monitor
 
+def _low_hits(values):
+    """2026-11-24 超卖三档：3 条线都 ≤35 算 3 条；否则 2 条线都 ≤33 算 2 条；否则 1 条线 ≤30 算 1 条。"""
+    v = sorted(values)
+    return 3 if v[2] <= 35 else 2 if v[1] <= 33 else 1 if v[0] <= 30 else 0
+
+
+
 
 # 固定摘录自 2026-11-09 开工备份的两个方法，仅供旧行事实对照。
 # 随测试入库，不读 outputs、本机目录或 Git 历史，也不从当前生产方法生成预期。
@@ -1752,14 +1759,14 @@ class TestGroups(unittest.TestCase):
         # 2026-10-19：定投提醒挪到了顶栏最右侧，不再挂在市场风险标题里
         title = lambda html: html
         quiet = page({**base, 'due': False, 'next_in': 5, 'next_date': '2026-10-15'})
-        self.assertIn('<span class="dca-badge" aria-label="定投提醒：还有 5 个交易日（2026-10-15）">定投：5</span>',
+        self.assertIn('<span class="dca-badge" aria-label="定投提醒：还有 5 个交易日（2026-10-15）">定投：<span class="dca-n">5</span></span>',
                       title(quiet))  # 放在市场风险标题右侧，平时不黄
         self.assertNotIn('class="dca ', quiet)  # 旧的独立提醒行已移除
         due = page({**base, 'due': True, 'date': '2026-10-15', 'times': 2, 'next_in': 0})
-        self.assertIn('<span class="dca-badge on" aria-label="定投提醒：今天是定投日（2026-10-15，第 2 次）">定投：0</span>',
+        self.assertIn('<span class="dca-badge on" aria-label="定投提醒：今天是定投日（2026-10-15，第 2 次）">定投：<span class="dca-n">0</span></span>',
                       title(due))
         pending = page({**base, 'pending': True, 'first': '2026-10-20', 'next_in': 3})
-        self.assertIn('>定投：3</span>', title(pending))
+        self.assertIn('>定投：<span class="dca-n">3</span></span>', title(pending))
         self.assertNotIn('class="dca-badge on"', pending)
         for broken in ({**base, 'due': False}, {**base, 'next_in': '5'}, {**base, 'next_in': -1}, None):
             self.assertNotIn('class="dca-badge"', title(page(broken)))  # 天数缺失/异常不显示，不猜
@@ -4904,7 +4911,7 @@ class TestBollRsiRules(unittest.TestCase):
                 for bands in ((100, 110, 90), (100, 101, 90), (100, 110, 99),
                               (None, None, None)):
                     with self.subTest(group=group, hold=hold, bands=bands):
-                        row = self.analyze([35, 30, 20], group, hold, bands)
+                        row = self.analyze([30, 30, 20], group, hold, bands)
                         upper, lower = bands[1] == 101, bands[2] == 99
                         expected = ('yellow' if group in monitor.BOLL_UP_SIGNAL_GROUPS else 'green') if upper else 'red'
                         kind = 'boll_rsi' if upper or lower else 'rsi'
@@ -4926,7 +4933,7 @@ class TestBollRsiRules(unittest.TestCase):
                                 {'shape': '↓', 'tone': 'red', 'label': 'RSI 3条 ↓超卖'}])
 
     def test_single_rsi_counts_respect_current_threshold_and_invalid_periods(self):
-        monitor.S['rsi_low'] = 28
+        monitor.S.update(rsi_low=28, rsi_low1=28, rsi_low2=28)
         for values, red in (([28, 28, 28], True), ([28.001, 28, 28], False),
                             ([None, 28, 28], False), ([float('nan'), 28, 28], False),
                             ([float('inf'), 28, 28], False)):
@@ -4942,7 +4949,7 @@ class TestBollRsiRules(unittest.TestCase):
                 for side, bands in (('上轨', (100, 101, 90)), ('下轨', (100, 110, 99))):
                     for high_n in range(4):
                         for low_n in range(4 - high_n):
-                            values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                            values = [70] * high_n + [{0:35,1:30,2:33,3:35}[low_n]] * low_n + [50] * (3 - high_n - low_n)
                             marks, kept = [], False
                             if side == '下轨':
                                 if low_n >= 2:
@@ -4989,7 +4996,7 @@ class TestBollRsiRules(unittest.TestCase):
         for bands in ((100, 110, 90), (100, 101, 90), (100, 110, 99), (None, None, None)):
             for high_n in range(4):
                 for low_n in range(4 - high_n):
-                    values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                    values = [70] * high_n + [{0:35,1:30,2:33,3:35}[low_n]] * low_n + [50] * (3 - high_n - low_n)
                     short = self.analyze(values, hold='short', bands=bands)
                     for hold in ('long', 'LONG'):
                         with self.subTest(bands=bands, values=values, hold=hold):
@@ -5038,13 +5045,13 @@ class TestBollRsiRules(unittest.TestCase):
                 gray = monitor.text_only_members([row])
                 self.assertEqual([m['side'] for m in gray], ['下轨'] if side == '下轨' else [])
         # 有单条 RSI 的上轨仍是组合文字，不被“单独上轨零条”规则误删。
-        for values in ([70, 50, 50], [35, 50, 50], [70, 35, 50]):
+        for values in ([70, 50, 50], [30, 50, 50], [70, 30, 50]):
             for group in ('focus', 'technology'):
                 row = self.analyze(values, group, bands=(100, 101, 90))
                 self.assertTrue(any('布林上轨' in text for text in row['signals']))
                 gray = monitor.text_only_members([row])
                 self.assertEqual([m['kind'] for m in gray],
-                                 ['boll_rsi'] if group == 'focus' and values == [70, 35, 50] else [])
+                                 ['boll_rsi'] if group == 'focus' and values == [70, 30, 50] else [])
 
     def test_rule_template_groups_positions_without_changing_position_layout(self):
         from page_assets import RULE_BLOCKS, LAMP_RULE_TABLE
@@ -5058,15 +5065,17 @@ class TestBollRsiRules(unittest.TestCase):
         self.assertNotIn('RSI 下轨', LAMP_RULE_TABLE + body)
 
     def test_rsi_alone_and_plain_boll_remain_foldable(self):
-        for values in ([50, 50, 50], [70, 50, 50], [35, 50, 50], [70, 35, 50],
-                       [70, 70, 50], [35, 35, 50]):
+        for values in ([50, 50, 50], [70, 50, 50], [30, 50, 50], [70, 30, 50],
+                       [70, 70, 50], [33, 33, 50]):
             with self.subTest(values=values):
                 row = self.analyze(values)
                 self.assertEqual(row['level'], 'green')
                 self.assertTrue(row['foldable'])
                 self.assertEqual(row['signal_marks'], [])
-                if max(values.count(70), values.count(35)) < 2:
-                    self.assertEqual(row['signals'], ['RSI 1条 ↓超卖（≤35）'] if 35 in values else [])
+                low_n = 2 if values == [33, 33, 50] else 1 if 30 in values else 0   # 2026-11-24 超卖三档
+                if max(values.count(70), low_n) < 2 or values == [33, 33, 50]:
+                    self.assertEqual(row['signals'], ([f'RSI {low_n}条 ↓超卖（≤{ {1: 30, 2: 33}[low_n] }）'] if low_n else [])
+                                     if values.count(70) < 2 else row['signals'])
         for bands in ((100, 101, 90), (100, 110, 99)):
             row = self.analyze([50, 50, 50], bands=bands)
             self.assertEqual(row['foldable'], bands[2] != 99)
@@ -5079,7 +5088,7 @@ class TestBollRsiRules(unittest.TestCase):
                  (110, 90, '上轨', 'green', True))
         for high, low, selected, level, foldable in cases:
             with self.subTest(high=high, low=low):
-                row = self.analyze([35, 35, 50], 'technology', high=high, low=low)
+                row = self.analyze([33, 33, 50], 'technology', high=high, low=low)
                 self.assertTrue(any('布林上轨' in text for text in row['signals']))
                 self.assertTrue(any('布林下轨' in text for text in row['signals']))
                 self.assertIn('布林' + selected, row['boll_alert_text'])
@@ -5105,8 +5114,8 @@ class TestBollRsiRules(unittest.TestCase):
 
     def test_technical_keep_is_independent_of_other_red_price_signal(self):
         for values, bands, keep in (([70, 50, 50], (100, 110, 99), True),
-                                    ([35, 35, 50], (100, 101, 90), False),
-                                    ([35, 35, 50], (100, 110, 99), False),
+                                    ([33, 33, 50], (100, 101, 90), False),
+                                    ([33, 33, 50], (100, 110, 99), False),
                                     ([50, 50, 50], (100, 110, 90), False)):
             with self.subTest(values=values, bands=bands):
                 row = self.analyze(values, 'technology', bands=bands, cfg={'trigger': 100})
@@ -5120,11 +5129,11 @@ class TestBollRsiRules(unittest.TestCase):
         # 一律常驻主表，不再收进「无异动 N 只」；只有描述区全空的绿行才折叠。
         # 这 5 行虽然都是绿灯，描述区却都有文字，因此整组不再出现折叠列表。
         group = next(g for g in monitor.GROUPS if g['item_group'] == 'technology')
-        rows = [self.analyze([35, 35, 50], 'technology', bands=(100, 101, 90), symbol='UPLOW'),
+        rows = [self.analyze([33, 33, 50], 'technology', bands=(100, 101, 90), symbol='UPLOW'),
                 self.analyze([70, 50, 50], 'technology', bands=(100, 110, 99), symbol='DOWNONE'),
                 self.analyze([70, 70, 50], 'technology', bands=(100, 101, 90), symbol='UPHIGH'),
                 self.analyze([50, 50, 50], 'technology', bands=(100, 110, 99), symbol='PLAIN'),
-                self.analyze([35, 35, 50], 'technology', symbol='RSIONLY')]
+                self.analyze([33, 33, 50], 'technology', symbol='RSIONLY')]
         body = monitor._group_body(rows, group, {}, {}, True, 'group_technology', group['label'])
         self.assertNotIn('<details class="quiet-list"', body)
         self.assertNotIn('无异动', body)
@@ -5147,7 +5156,7 @@ class TestBollRsiRules(unittest.TestCase):
             for hold in ('short', 'long'):
                 for high_n in range(4):
                     for low_n in range(4 - high_n):
-                        values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                        values = [70] * high_n + [{0:35,1:30,2:33,3:35}[low_n]] * low_n + [50] * (3 - high_n - low_n)
                         expected = ('red' if low_n == 3 else 'yellow'
                                     if high_n == 3 and group == 'position' else 'green')
                         with self.subTest(group=group, hold=hold, high_n=high_n, low_n=low_n):
@@ -5166,7 +5175,7 @@ class TestBollRsiRules(unittest.TestCase):
                                              and not (group != 'position' and high_n == 2))
                             self.assertEqual(bool(gray), gray_expected)
                             if max(high_n, low_n) < 2:
-                                self.assertEqual(row['signals'], ['RSI 1条 ↓超卖（≤35）'] if low_n else [])
+                                self.assertEqual(row['signals'], ['RSI 1条 ↓超卖（≤30）'] if low_n else [])
                             if high_n and low_n and max(high_n, low_n) == 2:
                                 directions = monitor._member_direction_markers(row, 'rsi')
                                 self.assertEqual({m['shape'] for m in directions}, {'↑', '↓'})
@@ -5182,7 +5191,7 @@ class TestBollRsiRules(unittest.TestCase):
                 for high, low, side in ((120, 90, '上轨'), (110, 80, '下轨'), (110, 90, '上轨')):
                     for high_n in range(4):
                         for low_n in range(4 - high_n):
-                            values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                            values = [70] * high_n + [{0:35,1:30,2:33,3:35}[low_n]] * low_n + [50] * (3 - high_n - low_n)
                             expected = 'green'
                             if low_n == 3 and (side == '下轨' or group in ('position', 'focus')):
                                 expected = 'yellow' if side == '上轨' else 'red'
@@ -5214,9 +5223,9 @@ class TestBollRsiRules(unittest.TestCase):
                             self.assertEqual(counts['boll_rsi']['yellow'], int(expected == 'yellow'))
 
     def test_direction_markers_keep_mixed_rsi_in_separate_or_shared_text(self):
-        for signals in (['RSI 2条 ↑超买（≥70）', 'RSI 1条 ↓超卖（≤35）'],
+        for signals in (['RSI 2条 ↑超买（≥70）', 'RSI 1条 ↓超卖（≤30）'],
                         ['RSI 2条 ↑超买 / 1条 ↓超卖'],
-                        ['RSI 1条 ↑超买（≥70）', 'RSI 2条 ↓超卖（≤35）']):
+                        ['RSI 1条 ↑超买（≥70）', 'RSI 2条 ↓超卖（≤33）']):
             with self.subTest(signals=signals):
                 markers = monitor._member_direction_markers({'signals': signals}, 'rsi')
                 self.assertEqual({m['shape'] for m in markers}, {'↑', '↓'})
@@ -5231,7 +5240,7 @@ class TestBollRsiRules(unittest.TestCase):
         groups = [g['item_group'] for g in monitor.GROUPS]
         for high_n, low_n in ((3, 0), (0, 3), (2, 1), (1, 2), (1, 1)):
             for bands in ((100, 101, 90), (100, 110, 99)):
-                values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                values = [70] * high_n + [{0:35,1:30,2:33,3:35}[low_n]] * low_n + [50] * (3 - high_n - low_n)
                 for index, primary in enumerate(groups):
                     with self.subTest(values=values, bands=bands, primary=primary):
                         first = self.analyze(values, primary, 'long', bands, symbol='BRK.B-US')
@@ -5279,7 +5288,7 @@ class TestBollRsiRules(unittest.TestCase):
         self.assertEqual(row, before)
 
     def test_gray_coexists_with_other_indicators_but_excludes_technical_lamps_and_bad_data(self):
-        row = self.analyze([35, 35, 50], 'technology', symbol='TEXT')
+        row = self.analyze([33, 33, 50], 'technology', symbol='TEXT')
         old_overbought = self.analyze([70, 70, 50], 'technology', symbol='OLDHIGH')
         self.assertEqual(monitor.text_only_members([row])[0]['kind'], 'rsi')
         # 技术灰与其他指标红黄及目标紫并存，成员携带最终行灯供交集使用。
@@ -5322,7 +5331,7 @@ class TestBollRsiRules(unittest.TestCase):
         with patch.dict(monitor.S, {'chg_yellow': 2, 'chg_red': 4}):
             for symbol, values, bands, chg, color, kind in (
                 ('STXY', [70, 70, 50], (100, 110, 90), 3, 'yellow', None),
-                ('STXR', [35, 35, 50], (100, 110, 90), -5, 'red', 'rsi'),
+                ('STXR', [33, 33, 50], (100, 110, 90), -5, 'red', 'rsi'),
                 ('NEEY', [70, 50, 50], (100, 101, 90), 3, 'yellow', None),
             ):
                 row = self.analyze(values, 'technology', bands=bands, symbol=symbol, chg=chg)
@@ -5369,7 +5378,7 @@ class TestBollRsiRules(unittest.TestCase):
 
     def test_combination_red_yellow_never_add_gray_or_duplicate_description_dots(self):
         for values, bands, color in (([35, 35, 35], (100, 110, 99), 'red'),
-                                      ([35, 35, 50], (100, 110, 99), 'yellow')):
+                                      ([33, 33, 50], (100, 110, 99), 'yellow')):
             with self.subTest(color=color):
                 row = self.analyze(values, 'technology', bands=bands)
                 self.assertEqual(row['signal_marks'], [('boll_rsi', color)])
@@ -5392,7 +5401,7 @@ class TestBollRsiRules(unittest.TestCase):
 
     def test_legacy_row_without_foldable_stays_shown_when_text_2026_11_18(self):
         group = next(g for g in monitor.GROUPS if g['item_group'] == 'technology')
-        row = self.analyze([35, 35, 50], 'technology', bands=(100, 101, 90))
+        row = self.analyze([33, 33, 50], 'technology', bands=(100, 101, 90))
         row.pop('foldable')
         body = monitor._group_body([row], group, {}, {}, True, 'group_technology', group['label'])
         # 2026-11-18：描述区有可见文字，即使缺 foldable 旧字段也常驻主表，不进无异动折叠。
@@ -5403,7 +5412,7 @@ class TestBollRsiRules(unittest.TestCase):
     def test_blank_description_green_row_still_folds_2026_11_18(self):
         # 对照：描述区完全空白的绿行仍折叠进「无异动 1 只」，折叠功能没有消失。
         group = next(g for g in monitor.GROUPS if g['item_group'] == 'technology')
-        row = self.analyze([35, 35, 50], 'technology', bands=(100, 101, 90))
+        row = self.analyze([33, 33, 50], 'technology', bands=(100, 101, 90))
         row.pop('foldable')
         row['signals'] = []
         row['signal_marks'] = []
@@ -5495,7 +5504,7 @@ class TestTechnicalFacts(unittest.TestCase):
             low = count if '超卖' in condition else 0
             side = '上轨' if '布林上轨' in condition else '下轨' if '布林下轨' in condition else None
             kind = {'布林+RSI': 'boll_rsi', '单独RSI': 'rsi', '单独布林': 'boll'}[category]
-            values = [70] * high + [35] * low + [50] * (3 - high - low)
+            values = [70] * high + [{0:35,1:30,2:33,3:35}[low]] * low + [50] * (3 - high - low)
             for group in groups:
                 column = 0 if group == 'position' else 1 if group == 'focus' else 2
                 expected_level = lamp_levels[lamps[column]]
@@ -5553,12 +5562,12 @@ class TestTechnicalFacts(unittest.TestCase):
     def test_current_three_changes_preserve_independent_lamps_and_legacy_gray_projection(self):
         import copy
         for group in (g['item_group'] for g in monitor.GROUPS):
-            cases = [([35, 50, 50], None), ([70, 35, 50], None),
-                     ([70, 70, 50], None), ([70, 70, 35], None),
-                     ([70, 35, 35], None), ([35, 50, 50], '上轨'),
-                     ([70, 35, 50], '上轨')]
+            cases = [([30, 50, 50], None), ([70, 30, 50], None),
+                     ([70, 70, 50], None), ([70, 70, 30], None),
+                     ([70, 33, 33], None), ([30, 50, 50], '上轨'),
+                     ([70, 30, 50], '上轨')]
             for values, side in cases:
-                high, low = values.count(70), values.count(35)
+                high, low = values.count(70), _low_hits(values)
                 facts = self.expected(group, high, low, side)
                 bands = (100, 101, 90) if side else (100, 110, 90)
                 for chg in (0, 3, 6):
@@ -5576,9 +5585,9 @@ class TestTechnicalFacts(unittest.TestCase):
                             self.assertEqual(len(rsi_texts), 1 if side is None and max(high, low) < 2
                                              else int(high > 0) + int(low > 0))
                             if side is None and max(high, low) < 2:
-                                self.assertEqual(rsi_texts, ['RSI 1条 ↓超卖（≤35）'])
+                                self.assertEqual(rsi_texts, ['RSI 1条 ↓超卖（≤30）'])
                                 self.assertFalse(any('超买' in s for s in row['signals']))
-                            self.assertEqual(row['signals'].count('RSI 1条 ↓超卖（≤35）'), int(low == 1))
+                            self.assertEqual(row['signals'].count('RSI 1条 ↓超卖（≤30）'), int(low == 1))
                             gray = monitor.text_only_members([row])
                             gray_expected = facts['level'] == 'gray'
                             self.assertEqual([(m['kind'], m['level']) for m in gray],
@@ -5607,7 +5616,7 @@ class TestTechnicalFacts(unittest.TestCase):
 
     def test_nonposition_two_overbought_legacy_texts_do_not_become_gray_from_other_lamps(self):
         for signals in (['RSI 2条 ↑超买（≥70）'],
-                        ['RSI 2条 ↑超买（≥70）', 'RSI 1条 ↓超卖（≤35）'],
+                        ['RSI 2条 ↑超买（≥70）', 'RSI 1条 ↓超卖（≤30）'],
                         ['RSI 2条 ↑超买 / 1条 ↓超卖']):
             for level in ('green', 'yellow', 'red'):
                 with self.subTest(signals=signals, level=level):
@@ -5623,7 +5632,7 @@ class TestTechnicalFacts(unittest.TestCase):
                                          ['rsi'] if group == 'position' else [])
                         self.assertEqual([g['level'] for g in monitor._signal_description_groups(control)
                                           if g['kind'] == 'rsi'], ['gray' if group == 'position' else None])
-                    control = dict(row, signals=['RSI 2条 ↓超卖（≤35）', 'RSI 1条 ↑超买（≥70）'])
+                    control = dict(row, signals=['RSI 2条 ↓超卖（≤33）', 'RSI 1条 ↑超买（≥70）'])
                     self.assertEqual(monitor.text_only_members([control])[0]['kind'], 'rsi')
                     for price in (None, True, 0, -1, float('nan'), float('inf')):
                         self.assertEqual(monitor.text_only_members([dict(control, price=price)]), [])
@@ -5634,21 +5643,21 @@ class TestTechnicalFacts(unittest.TestCase):
         cases = [('position', [50, 50, 50], (100, 110, 99), 'boll', 'gray', False),
                  ('focus', [70, 70, 70], (100, 110, 90), 'rsi', 'gray', False)]
         cases += [('focus', values, (100, 101, 90), 'boll_rsi', 'gray', False)
-                  for values in ([70, 70, 50], [70, 70, 35], [35, 35, 50], [70, 35, 35])]
+                  for values in ([70, 70, 50], [70, 70, 30], [33, 33, 50], [70, 33, 33])]
         for group in [g['item_group'] for g in monitor.GROUPS
                       if g['item_group'] not in ('position', 'focus')] + ['custom_group']:
             cases += [(group, values, (100, 101, 90), kind, level, True)
                       for values, kind, level in (([70, 50, 50], None, 'green'),
-                                                  ([35, 50, 50], None, 'green'),
-                                                  ([70, 35, 50], None, 'green'),
+                                                  ([30, 50, 50], None, 'green'),
+                                                  ([70, 30, 50], None, 'green'),
                                                   ([70, 70, 50], None, 'green'),
-                                                  ([70, 70, 35], None, 'green'),
-                                                  ([35, 35, 50], None, 'green'),
-                                                  ([70, 35, 35], None, 'green'),
+                                                  ([70, 70, 30], None, 'green'),
+                                                  ([33, 33, 50], None, 'green'),
+                                                  ([70, 33, 33], None, 'green'),
                                                   ([70, 70, 70], 'boll_rsi', 'gray'),
                                                   ([35, 35, 35], 'boll_rsi', 'gray'))]
         for group, values, bands, kind, level, foldable in cases:
-            high, low = values.count(70), values.count(35)
+            high, low = values.count(70), _low_hits(values)
             side = '下轨' if bands[2] == 99 else '上轨' if bands[1] == 101 else None
             for chg in (0, 3, 6):
                 for trigger in (None, 100):
@@ -5691,7 +5700,7 @@ class TestTechnicalFacts(unittest.TestCase):
         groups = [g['item_group'] for g in monitor.GROUPS]
         for group in groups:
             for high_n, low_n in ((0, 0), (0, 1), (1, 1), (0, 2), (1, 2), (0, 3)):
-                values = [70] * high_n + [35] * low_n + [50] * (3 - high_n - low_n)
+                values = [70] * high_n + [{0:35,1:30,2:33,3:35}[low_n]] * low_n + [50] * (3 - high_n - low_n)
                 for day_high, day_low, side in ((120, 89, '上轨'), (111, 80, '下轨'),
                                                 (120, 80, '下轨'), (110, 90, '上轨')):
                     with self.subTest(group=group, high_n=high_n, low_n=low_n, side=side):
@@ -5718,7 +5727,7 @@ class TestTechnicalFacts(unittest.TestCase):
 
     def test_focus_upper_single_rsi_both_directions_are_text_without_gray(self):
         for group in ('position', 'focus', 'technology'):
-            for values in ([70, 50, 50], [35, 50, 50]):
+            for values in ([70, 50, 50], [30, 50, 50]):
                 for side, bands in (('上轨', (100, 101, 90)), ('下轨', (100, 110, 99))):
                     for chg in (0, 3, 6):
                         with self.subTest(group=group, values=values, side=side, chg=chg):
@@ -5728,7 +5737,7 @@ class TestTechnicalFacts(unittest.TestCase):
                             self.assertEqual(bool(gray), not excluded)
                             self.assertTrue(any('布林' + side in s for s in row['signals']))
                             self.assertTrue(any(s.startswith('RSI 1条') for s in row['signals']))
-                            keep = side == '下轨' or group == 'position' and values[0] == 35
+                            keep = side == '下轨' or group == 'position' and values[0] == 30
                             self.assertEqual(row['foldable'], not keep)
                             self.assertFalse(any(k in ('boll', 'rsi', 'boll_rsi') for k, _ in row['signal_marks']))
                             self.assertEqual(row['level'], 'red' if chg == 6 else 'yellow' if chg == 3 else 'green')
@@ -5742,14 +5751,14 @@ class TestTechnicalFacts(unittest.TestCase):
                                 self.assertEqual(snapshot['signal_counts']['chg'][row['level']], 1)
         # 双向各一条：持仓/重点仍灰，其他上轨无灰；不改变各组折叠契约。
         for group in (g['item_group'] for g in monitor.GROUPS):
-            row = self.analyzer.analyze([70, 35, 50], group, bands=(100, 101, 90))
+            row = self.analyzer.analyze([70, 30, 50], group, bands=(100, 101, 90))
             self.assertEqual([m['kind'] for m in monitor.text_only_members([row])],
                              ['boll_rsi'] if group in ('position', 'focus') else [])
             self.assertTrue(any('超买' in s for s in row['signals']))
             self.assertTrue(any('超卖' in s for s in row['signals']))
             self.assertEqual(row['foldable'], group != 'position')
         # 重点两条同侧技术灰不折，三条原红/黄不变。
-        for values, expected in (([70, 70, 50], 'gray'), ([35, 35, 50], 'gray'),
+        for values, expected in (([70, 70, 50], 'gray'), ([33, 33, 50], 'gray'),
                                   ([70, 70, 70], 'red'), ([35, 35, 35], 'yellow')):
             row = self.analyzer.analyze(values, 'focus', bands=(100, 101, 90))
             self.assertEqual(row['signal_marks'], [] if expected == 'gray' else [('boll_rsi', expected)])
@@ -5757,7 +5766,7 @@ class TestTechnicalFacts(unittest.TestCase):
             self.assertEqual(row['foldable'], expected != 'gray')
 
     def test_focus_single_rsi_dual_rail_respects_selected_side(self):
-        for values in ([70, 50, 50], [35, 50, 50]):
+        for values in ([70, 50, 50], [30, 50, 50]):
             for high, low, side in ((120, 90, '上轨'), (110, 80, '下轨'), (110, 90, '上轨')):
                 with self.subTest(values=values, side=side):
                     row = self.analyzer.analyze(values, 'focus', high=high, low=low)
@@ -5812,7 +5821,7 @@ class TestTechnicalFacts(unittest.TestCase):
             for hold in ('short', 'long'):
                 for high in range(4):
                     for low in range(4 - high):
-                        values = [70] * high + [35] * low + [50] * (3 - high - low)
+                        values = [70] * high + [{0:35,1:30,2:33,3:35}[low]] * low + [50] * (3 - high - low)
                         for side in (None, '上轨', '下轨'):
                             with self.subTest(group=group, hold=hold, high=high, low=low, side=side), \
                                     patch.object(monitor, 'classify_technical_facts', wraps=classify) as dispatch:
@@ -5836,7 +5845,7 @@ class TestTechnicalFacts(unittest.TestCase):
         classify = monitor.classify_technical_facts
         for group in (g['item_group'] for g in monitor.GROUPS):
             for high, low in ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (0, 3), (3, 0), (1, 2), (2, 1)):
-                values = [70] * high + [35] * low + [50] * (3 - high - low)
+                values = [70] * high + [{0:35,1:30,2:33,3:35}[low]] * low + [50] * (3 - high - low)
                 for day_high, day_low, side in ((120, 90, '上轨'), (110, 80, '下轨'), (110, 90, '上轨')):
                     with self.subTest(group=group, high=high, low=low, side=side), \
                             patch.object(monitor, 'classify_technical_facts', wraps=classify) as dispatch:
@@ -5908,7 +5917,7 @@ class TestIndependentLampChain(unittest.TestCase):
 
     def test_gray_survives_independent_lamps_and_never_duplicates_combo_technical_counts(self):
         for values, bands, technical in (((50, 50, 50), (100, 110, 90), []),
-                                        ((35, 35, 50), (100, 110, 90), ['rsi']),
+                                        ((33, 33, 50), (100, 110, 90), ['rsi']),
                                         ((70, 70, 50), (100, 110, 90), []),
                                         ((70, 50, 50), (100, 110, 99), ['boll_rsi']),
                                         ((35, 35, 35), (100, 110, 99), [])):
@@ -7864,7 +7873,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                           '<span class="stat-badge red" aria-label="红 0 项">0</span>'
                           '<span class="stat-badge yellow" aria-label="黄 0 项">0</span>', panel)
             self.assertIn('白 0', panel)
-            self.assertNotIn('count-earn', panel)   # 2026-11-24 用户：标题栏去掉「报 N」；原： 2026-11-20 筛选文案日期改 MM/DD 后，原先靠「财报 2026-…」凑出的「报 2」改为断言真正的财报计数
+            self.assertIn('class="stat-badge earn" aria-label="财报灯 4 项">4</span>', panel)   # 2026-11-24 用户：财报数量以白色数字圈加回（不写「报」）；原： 2026-11-20 筛选文案日期改 MM/DD 后，原先靠「财报 2026-…」凑出的「报 2」改为断言真正的财报计数
             old = monitor._signal_counts_card({'summary': {'red': 4, 'yellow': 32},
                                                'signal_counts': {'target': {'label': '目标价', 'purple': 3}}})
             for text in ('红 4', '黄 32', '白 0'):
@@ -8746,7 +8755,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                 {'symbol': 'BOLLONLY', 'group': 'focus', 'level': 'green',
                  'signal_marks': [], 'signals': ['逼近布林下轨▼ 还差0.30%']},
                 {'symbol': 'BOTH', 'group': 'technology', 'level': 'green',
-                 'signal_marks': [], 'signals': ['RSI 1条 ↓超卖（≤35）', '触及布林下轨▼']},
+                 'signal_marks': [], 'signals': ['RSI 1条 ↓超卖（≤30）', '触及布林下轨▼']},
                 {'symbol': 'OLDUP', 'group': 'technology', 'level': 'green',
                  'signal_marks': [], 'signals': ['RSI 2条 ↑超买（≥70）', '触及布林上轨▲']},
                 {'symbol': 'OLDRSI', 'group': 'technology', 'level': 'green',
@@ -8792,7 +8801,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         output = monitor._signal_counts_card(snap)
         header = output.split('</summary>', 1)[0]
         tokens = ['stat-badge red', 'stat-badge yellow', 'stat-badge gray',
-                  'stat-badge purple']
+                  'stat-badge purple', 'stat-badge earn']
         self.assertEqual([header.index(t) for t in tokens], sorted(header.index(t) for t in tokens))
         self.assertIn('<span class="stat-badge purple" aria-label="紫 1 项">1</span>', header)
         self.assertIn('<span class="stat-badge gray" aria-label="白 0 项">0</span>', header)
@@ -9313,12 +9322,12 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         analyzer.setUp()
         self.addCleanup(analyzer.doCleanups)
         for side, bands in (('上轨', (100, 101, 90)), ('下轨', (100, 110, 99))):
-            for tag, value in (('超买', 70), ('超卖', 35)):
+            for tag, value in (('超买', 70), ('超卖', None)):
                 reverse = (side, tag) in (('上轨', '超卖'), ('下轨', '超买'))
                 for count in (1, 2, 3):
                     for group in ('position', 'focus', 'technology'):
                         with self.subTest(side=side, tag=tag, count=count, group=group):
-                            row = analyzer.analyze([value] * count + [50] * (3-count), group, bands=bands)
+                            row = analyzer.analyze([value if value is not None else {1: 30, 2: 33, 3: 35}[count]] * count + [50] * (3-count), group, bands=bands)   # 超卖三档：1条30／2条32／3条35
                             before = copy.deepcopy(row)
                             main = plain_text(monitor._signals_html(row))
                             self.assertEqual(main.count('（反）'), int(reverse))
@@ -9351,7 +9360,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         analyzer = TestBollRsiRules()
         analyzer.setUp()
         self.addCleanup(analyzer.doCleanups)
-        for values, direction in (([70, 50, 50], '↑超买'), ([35, 50, 50], '↓超卖')):
+        for values, direction in (([70, 50, 50], '↑超买'), ([30, 50, 50], '↓超卖')):
             for group in ('position', 'focus', 'technology'):
                 with self.subTest(group=group, direction=direction):
                     row = analyzer.analyze(values, group, bands=(100, 101, 90))
@@ -9379,7 +9388,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         row = dict(symbol='MIXSAFE', note='备注 <b>不可执行</b>', group='technology',
                    price=100.123, prev_close=101.456, chg=-6, level='red', trigger=None,
                    signals=['仅文字 <img src=x onerror="bad()"> & \'保留\'',
-                            'RSI 2条 ↓超卖（≤35）', '量比 2.8x', '异动 -6%'],
+                            'RSI 2条 ↓超卖（≤33）', '量比 2.8x', '异动 -6%'],
                    signal_marks=[('chg', 'red'), ('vol_ratio', 'yellow')])
         before = copy.deepcopy(row)
         output = monitor._signals_html(row)
@@ -9513,7 +9522,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         import copy
         row = {'symbol': 'DOT', 'group': 'position', 'price': 100, 'level': 'yellow',
                'signals': ['触及布林下轨▼', '连续第2日贴近下轨',
-                           'RSI 2条 ↓超卖（≤35）', '量比 2.8x'],
+                           'RSI 2条 ↓超卖（≤33）', '量比 2.8x'],
                'signal_marks': [('boll_rsi', 'yellow'), ('vol_ratio', 'yellow')]}
         before = copy.deepcopy(row)
         result = monitor._signals_html(row)
@@ -9576,7 +9585,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
 
     def test_gray_is_only_true_technical_gray_and_context_has_no_lamp(self):
         row = {'symbol': 'GRAYTEST', 'group': 'position', 'level': 'green', 'price': 10,
-               'signals': ['RSI 2条 ↓超卖（≤35）'], 'signal_marks': []}
+               'signals': ['RSI 2条 ↓超卖（≤33）'], 'signal_marks': []}
         self.assertIn('data-signal-kind="rsi" data-signal-level="gray"', _row_signals(row))
         row['level'] = 'red'
         row['signal_marks'] = [('chg', 'red')]
@@ -9589,7 +9598,7 @@ class TestSignalDescriptionLamps(unittest.TestCase):
         row = {'symbol': 'ORDER', 'level': 'red', 'group': 'technology', 'price': 100,
                'target': {'kind': 'manual'}, 'ma_settings': {'ma_short': 50, 'ma_long': 200},
                'signals': ['手填目标价说明 <b>尾部</b>', '无灯说明 <img onerror=x>',
-                           'RSI 2条 ↓超卖（≤35）', '日内触及200日均线±1%',
+                           'RSI 2条 ↓超卖（≤33）', '日内触及200日均线±1%',
                            '量比 2.8x', '异动 -12.1%', '距加仓价 90 还差 1%',
                            '另条无灯说明 & 未触发', '日内触及200日均线±1%'],
                'signal_marks': [('target', 'purple'), ('ma_band', 'yellow'),
@@ -9725,7 +9734,7 @@ class TestMainOnlyDescriptionProjection(unittest.TestCase):
         self.addCleanup(analyzer.doCleanups)
         for value, raw, expected in ((28.5, 'RSI 3条 ↓超卖（≤28.5）', 'RSI 3条 ↓超卖'),
                                      (81.25, 'RSI 3条 ↑超买（≥81.25）', 'RSI 3条 ↑超买')):
-            with self.subTest(value=value), patch.dict(monitor.S, {'rsi_low': 28.5, 'rsi_high': 81.25}):
+            with self.subTest(value=value), patch.dict(monitor.S, {'rsi_low': 28.5, 'rsi_low1': 28.5, 'rsi_low2': 28.5, 'rsi_high': 81.25}):
                 row = analyzer.analyze([value] * 3, bands=(None, None, None))
             self.assertEqual(row['signals'], [raw])
             self.assert_main_only(row, expected)

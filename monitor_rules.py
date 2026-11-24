@@ -522,16 +522,34 @@ class RuleEngine:
         return {"kind": "boll_rsi", "level": level, "foldable": foldable}
 
 
+    def _rsi_low_hits(self, values):
+        """超卖条数（2026-11-24 用户）：3 条线都 ≤rsi_low（35）算 3 条；否则 2 条线都 ≤rsi_low2（33）算 2 条；
+        否则 1 条线 ≤rsi_low1（30）算 1 条；其余 0。无效值（None/非有限数）不参与。"""
+        S = self._context.S
+        vals = sorted(v for v in values if v is not None and math.isfinite(v))
+        for need, key in ((3, "rsi_low"), (2, "rsi_low2"), (1, "rsi_low1")):
+            if len(vals) >= need and vals[need - 1] <= S.get(key, S["rsi_low"]):
+                return need
+        return 0
+
+
+    def _rsi_low_boundary(self, hits):
+        """超卖文字里的门槛：按条数取对应那一档（1 条≤30、2 条≤33、3 条≤35）；页面主表与统计会把括号去掉。"""
+        S = self._context.S
+        key = {1: "rsi_low1", 2: "rsi_low2"}.get(hits, "rsi_low")
+        return f"≤{S.get(key, S['rsi_low']):g}"
+
+
     def _rule_rsi(self, al, x):
         """无轨用纯事实 API 判灯；有轨只保留 RSI 事实，由布林选轨后统一归组合。"""
         x.high_hits = sum(v is not None and math.isfinite(v) and v >= self._context.S["rsi_high"] for v in x.rsi.values())
-        x.low_hits = sum(v is not None and math.isfinite(v) and v <= self._context.S["rsi_low"] for v in x.rsi.values())
+        x.low_hits = self._rsi_low_hits(x.rsi.values())
         facts = (self._context.classify_technical_facts(x.group, x.high_hits, x.low_hits, None)
                  if not getattr(x, "boll_hits", []) else None)
         if facts:
             x.foldable = facts["foldable"]
         for count, tag, boundary in ((x.high_hits, "超买", f"≥{self._context.S['rsi_high']:g}"),
-                                     (x.low_hits, "超卖", f"≤{self._context.S['rsi_low']:g}")):
+                                     (x.low_hits, "超卖", self._rsi_low_boundary(x.low_hits))):
             if count >= 2:
                 text = self._context.rsi_hits_text(count, tag, boundary)
                 if facts and facts["level"] in ("red", "yellow"):
@@ -540,11 +558,11 @@ class RuleEngine:
                     al.signals.append(text)
         # 无轨单条超卖仅留文字；有轨由布林组合保留事实，避免重复或改变组合规则。
         if facts and x.low_hits == 1 and max(x.high_hits, x.low_hits) < 2:
-            al.signals.append(self._context.rsi_hits_text(1, "超卖", f"≤{self._context.S['rsi_low']:g}"))
+            al.signals.append(self._context.rsi_hits_text(1, "超卖", self._rsi_low_boundary(1)))
         # 已有两条同侧提醒时，补齐反向单条事实；单独一条超买仍无提醒。
         if max(x.high_hits, x.low_hits) >= 2:
             for count, tag, boundary in ((x.high_hits, "超买", f"≥{self._context.S['rsi_high']:g}"),
-                                         (x.low_hits, "超卖", f"≤{self._context.S['rsi_low']:g}")):
+                                         (x.low_hits, "超卖", self._rsi_low_boundary(x.low_hits))):
                 if count == 1:
                     al.signals.append(self._context.rsi_hits_text(1, tag, boundary))
 
@@ -646,7 +664,7 @@ class RuleEngine:
         oppo_hits = x.low_hits if up else x.high_hits
         # 单条 RSI 仅在触轨时补文字；不把单独 RSI 1 条变成提醒。
         for count, tag, boundary in ((x.high_hits, "超买", f"≥{self._context.S['rsi_high']:g}"),
-                                     (x.low_hits, "超卖", f"≤{self._context.S['rsi_low']:g}")):
+                                     (x.low_hits, "超卖", self._rsi_low_boundary(x.low_hits))):
             if count == 1:
                 text = self._context.rsi_hits_text(1, tag, boundary)
                 if text not in al.signals:

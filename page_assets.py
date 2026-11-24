@@ -134,7 +134,7 @@ ${chg_threshold_table}
 <p>碰轨为触及，穿轨为越轨。日波动来自历史，不是今天涨跌幅，也不是当天带宽的${boll_near_band_pct}%。</p>
 <p id="glossary-boll-dual">双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。布林与RSI的组合、分组限制及文字／报灯条件统一见《预警规则》。</p>
 <h5 id="glossary-rsi">RSI周期与条数</h5>
-<p>周期${rsi_periods}日；≥${rsi_high}超买，≤${rsi_low}超卖。</p>
+<p>周期${rsi_periods}日；≥${rsi_high}超买；超卖按条数分档：1条线≤${rsi_low1}、2条线都≤${rsi_low2}、3条线都≤${rsi_low}。</p>
 <h5 id="glossary-vol">量比 · 自适应／固定切换</h5>
 <p>完整日量比＝成交量÷此前${vol_ratio_base}日均量。收盘分布有效、两条自适应参数启用且量比≥1×时，按每只标的自身历史量比连续计算，不套股价波动档；否则用固定门槛。</p>
 <p>对数量比的中位数为m、稳健波动尺度为s（1.4826×MAD）；原门槛T＝exp(m＋k×s)，红k＝${vol_ratio_red_z}、黄k＝${vol_ratio_z}。新门槛＝√(T×F)，红F＝${vol_ratio_red}×、黄F＝${vol_ratio}×，在对数空间压缩一半高低差异。达到红门槛优先报红，否则达到黄门槛报黄。</p>
@@ -1023,6 +1023,7 @@ tr.gray td{color:var(--dim)}
 .stat-badge.red{color:var(--lamp-red)}
 .stat-badge.yellow{color:var(--lamp-yellow)}
 .stat-badge.gray{color:var(--dim)}
+.stat-badge.earn{color:var(--white);font-size:.85em;min-width:1.5em;height:1.5em;padding:0 .3em;border:1px solid currentColor;border-radius:999px}   /* 2026-11-24 用户：财报数量不写「报」字，像 ③ 那样带圈的白色数字；圈随字号缩放，两位数自动拉成胶囊 */
 .stat-badge.missing{color:var(--dim)}
 .stat-badge.purple{color:var(--purple)}
 .stat-badge.green{color:var(--green)}
@@ -1061,8 +1062,9 @@ tr.gray td{color:var(--dim)}
 .runlight[data-phase="bad"] .dot{background:var(--red);box-shadow:0 0 0 3px var(--status-bad-halo)}
 /* 2026-11-20：定投从按钮排最右挪到站名右侧；字号沿用桌面 16 / 手机 18，只改位置不改大小。
    底边给 4px，让 18px 小字与 32px 站名的视觉基线对齐（brandbar 是 align-items:flex-end）。 */
-.dca-badge{white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
-.dca-badge.on{color:var(--yellow)}   /* 定投日当天黄字；2026-11-24 用户：定投挪进统计标题栏后不再加外框 */
+.dca-badge{white-space:nowrap;color:var(--dim);font:inherit;font-variant-numeric:tabular-nums}
+#signalCounts>summary .dca-n{font-size:16px}   /* 「定投：」沿用原字号 14/16，数字 N 保持加大后的 16/19 */
+.dca-badge.on .dca-n{color:var(--yellow)}   /* 平时灰字，定投日当天只有数字 0 变黄（2026-11-24 用户）；2026-11-24 用户：定投挪进统计标题栏后不再加外框 */
 #signalCounts>summary .dca-badge{margin-left:auto;font-size:14px;font-weight:600}   /* 2026-11-24 用户：定投居中放在灯圈与「总 N」之间（两侧 auto 外边距均分余宽）；字号同「总 N」 */
 .oil-reference-row td{font-size:13px;overflow-wrap:anywhere}
 .oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
@@ -1679,6 +1681,7 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}
 .market-risk-badge{font-size:16px;line-height:24px}
 .monitor-note{font-size:16px;line-height:24px}
 #signalCounts>summary .dca-badge{font-size:16px;line-height:24px}
+#signalCounts>summary .dca-n{font-size:19px}
 .range52-hi{font-size:13px;line-height:11px}
 .range52-lo{font-size:13px;line-height:11px}
 .range52-gap{font-size:13px;line-height:11px}

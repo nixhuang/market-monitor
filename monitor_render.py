@@ -286,7 +286,7 @@ class PageRenderer:
         self._context = context
 
     def dca_badge(self, d):
-        """站名右侧的短提醒「定投：N」（N=距定投日还差几个美股交易日）；仅定投日当天黄字。
+        """站名右侧的短提醒「定投：N」（N=距定投日还差几个美股交易日）；平时灰字，仅定投日当天数字 0 黄字。
     完整日期放读屏标签；天数缺失或异常时不显示，避免给出错误天数。"""
         if not isinstance(d, dict):
             return ""
@@ -298,8 +298,10 @@ class PageRenderer:
             detail = f"定投提醒：{self._context.dca_text(d)}"
         except (KeyError, TypeError):
             detail = "定投提醒"
+        num = f'<span class="dca-n">{n}</span>'
         return (f'<span class="dca-badge{" on" if due else ""}" '
-                f'aria-label="{html_lib.escape(detail, quote=True)}">定投：{n}</span>')
+                f'aria-label="{html_lib.escape(detail, quote=True)}">定投：'
+                f'{num}</span>')
 
 
     def level_note(self, trigger, reduce, price=None):
@@ -1784,11 +1786,13 @@ class PageRenderer:
                           for entries in gray_by_kind.values() for m in entries})
         totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
                   ("gray", "白", gray_count), ("purple", "紫", whole(summary.get("purple"))),
-                  # 2026-11-24 用户：标题栏去掉「报 N」（财报数量）；定投提醒改居中放在灯圈与「总 N」之间
+                  # 2026-11-24 用户：财报数量加回来，不写「报」字，用白色数字圈显示（紫灯圈之后、定投与「总 N」之前）
+                  ("earn", "财报灯", self._context._earnings_week_panel(snapshot, count_only=True)),
                   # 2026-11-20 用户：标题栏最右写「总 N」＝数据那里一共抓取多少只（含没取到的，不含市场风险指标）
                   ("all", "总", whole(summary.get("total"))))
         parts = [
-            (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple")
+            (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple", "earn")
+             else self._context._count_badge("earn", "—", name) if key == "earn"
              else f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>')
             for key, name, n in totals]
         parts.insert(len(parts) - 1, self._context.dca_badge(snapshot.get("dca_reminder")))   # 「总 N」之前

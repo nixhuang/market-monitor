@@ -18,6 +18,7 @@ from unittest.mock import mock_open, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import monitor
+
 import page_assets
 from monitor_render import strip_css_comments, _amp_display_tone
 import rules_config
@@ -846,7 +847,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('.sync-stack .cost-state{padding-left', css)
         self.assertIn('.sync-stack .cost-state .ok{color:var(--green)}', css)
         self.assertIn('.runlight[data-phase="ok"]{color:var(--green)}', css)
-        self.assertIn('#signalCounts>summary .dca-badge{margin-left:auto;font-size:14px;font-weight:600}', css)   # 2026-11-24：定投在统计标题栏，居中
+        self.assertIn('#signalCounts>summary .dca-badge{margin-left:auto;font-size:14px;font-weight:600}', css)   # 与「统计」标题名同字号（桌面16／手机19）   # 2026-11-24：定投在统计标题栏，居中
         self.assertNotIn('.brandbar .dca-badge', css)
         self.assertNotIn('.statusrow.flagrow', css)
         self.assertNotIn('.flagrow .rulelight .dot{display:none', css)   # 旧的 flagrow 写法仍不存在（现行规则是 .sync-stack 里的 .rulelight .dot）
@@ -1489,10 +1490,12 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         css = page_assets.PAGE_CSS
         self.assertIn('.dual-row.group-dual.solo-left > .find-slot{grid-column:2;grid-row:1;align-self:stretch;', css)
         self.assertIn('.find-slot .stat-find input{width:96px;height:40px;', css)   # 适当放大：74→96px、32→40px
-        self.assertIn('.dca-badge.on{color:var(--yellow)}', css)
+        self.assertIn('.dca-badge.on .dca-n{color:var(--yellow)}', css)
         self.assertNotIn('border:1px solid var(--yellow)', css)   # 2026-11-24 用户：定投进统计标题后不加黄框   # 定投日当天：黄字加 1px 黄框
         self.assertIn('.stat-find input{box-sizing:border-box;width:74px;', css)   # 5 位美股代码墨宽（基础规格不变）
-        self.assertNotIn('count-earn', header)   # 2026-11-24 用户：去掉标题栏财报数量
+        self.assertIn('stat-badge earn', header)   # 2026-11-24 用户：财报数量加回来，不写「报」字，白色数字圈
+        self.assertNotIn('count-earn', header)
+        self.assertIn('.stat-badge.earn{color:var(--white);font-size:.85em;min-width:1.5em;height:1.5em;padding:0 .3em;border:1px solid currentColor;border-radius:999px}', css)
         # 2026-11-20：标题栏最右是「总 N」＝数据那里抓取的总只数（含没取到的）
         self.assertRegex(header, r'<span class="count-total count-all">总 [—0-9]+</span></span>$')
         full = monitor._signal_counts_card({'summary': {'red': 1, 'yellow': 2, 'total': 99}, 'signal_counts': {}}).split('</summary>', 1)[0]
@@ -1767,7 +1770,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
 
     def test_render_does_not_use_import_time_rules_snapshot(self):
         first = self.render()
-        monitor.S.update(trigger_gap_pct=9, reduce_gap_pct=0, rsi_low=28, rsi_high=82)
+        monitor.S.update(trigger_gap_pct=9, reduce_gap_pct=0, rsi_low1=24, rsi_low2=26, rsi_low=28, rsi_high=82)
         with patch.object(monitor, "RULES_TEMPLATE", "过期模板不能进入页面"):
             second = self.render()
         self.assertNotEqual(first, second)
@@ -1776,8 +1779,8 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         glossary = re.search(r'<template id="glossaryTpl">(.*?)</template>', second, re.S)[1]
         self.assertIn("相差≤3% → 点亮橙色", plain_text(rules))
         self.assertIn("相差≤3% → 点亮青色", plain_text(rules))
-        self.assertIn("≥82超买，≤28超卖", plain_text(glossary))
-        self.assertNotIn("≥70超买，≤35超卖", plain_text(glossary))
+        self.assertIn("≥82超买；超卖按条数分档：1条线≤24、2条线都≤26、3条线都≤28", plain_text(glossary))
+        self.assertNotIn("≥70超买；超卖按条数分档：1条线≤30、2条线都≤33、3条线都≤35", plain_text(glossary))
 
     def test_add_and_reduce_are_resident_notes_not_trade_lamps(self):
         # 终稿统一现价分母±3%；旧配置保留读兼容，但不再绑定已读/红灯功能。
@@ -1799,7 +1802,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertNotRegex(text, '已读|可点红灯')
 
     def test_current_three_rule_cells_reach_dynamic_and_rendered_templates(self):
-        for settings in ({}, {'rsi_low': 28, 'rsi_high': 82}):
+        for settings in ({}, {'rsi_low': 28, 'rsi_low1': 28, 'rsi_low2': 28, 'rsi_high': 82}):
             with patch.dict(monitor.S, settings):
                 markup = page_assets.rules_template(monitor.S, monitor._rule_constants())
                 for label, source in (('动态模板', markup), ('实际渲染页', self.render())):
@@ -1844,26 +1847,28 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
 
     def test_standalone_single_oversold_adds_only_low_text_before_boll_combination(self):
         for group in (g['item_group'] for g in monitor.GROUPS):
-            for values in ((35, 50, 50), (70, 35, 50), (70, 70, 35), (70, 35, 35)):
+            for values in ((30, 50, 50), (70, 30, 50), (70, 70, 30), (70, 33, 33)):
                 for side in (None, '上轨', '下轨'):
                     with self.subTest(group=group, values=values, side=side):
                         x = SimpleNamespace(group=group, rsi=dict(zip((6, 12, 24), values)),
                                             boll_hits=[] if side is None else [(0, '触及布林' + side)])
                         alerts = monitor._Alerts()
                         monitor._rule_rsi(alerts, x)
-                        high, low = values.count(70), values.count(35)
+                        high = values.count(70)
+                        sv = sorted(values)
+                        low = 3 if sv[2] <= 35 else 2 if sv[1] <= 33 else 1 if sv[0] <= 30 else 0   # 2026-11-24 超卖三档：1条≤30／2条≤33／3条≤35
                         expected = ([f'RSI {high}条 ↑超买（≥70）'] if high >= 2 else [])
-                        expected += ([f'RSI {low}条 ↓超卖（≤35）'] if low >= 2 else [])
+                        expected += ([f'RSI {low}条 ↓超卖（≤{ {2: 33, 3: 35}[low] }）'] if low >= 2 else [])
                         if max(high, low) >= 2:
                             expected += (['RSI 1条 ↑超买（≥70）'] if high == 1 else [])
-                            expected += (['RSI 1条 ↓超卖（≤35）'] if low == 1 else [])
+                            expected += (['RSI 1条 ↓超卖（≤30）'] if low == 1 else [])
                         elif side is None:
-                            expected += ['RSI 1条 ↓超卖（≤35）']
+                            expected += ['RSI 1条 ↓超卖（≤30）']
                         self.assertEqual(alerts.signals, expected)
                         self.assertEqual((alerts.level, alerts.marks), ('green', []))
                         if side:
                             monitor._rule_boll(alerts, x)
-                            self.assertEqual(alerts.signals.count('RSI 1条 ↓超卖（≤35）'), int(low == 1))
+                            self.assertEqual(alerts.signals.count('RSI 1条 ↓超卖（≤30）'), int(low == 1))
                             self.assertEqual(alerts.signals.count('RSI 1条 ↑超买（≥70）'), int(high == 1))
                             facts = monitor.classify_technical_facts(group, high, low, side)
                             self.assertEqual(x.foldable, facts['foldable'])
@@ -1898,7 +1903,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
                              dict(kind='boll_rsi', level='yellow', foldable=True))
             self.assertEqual(monitor.classify_technical_facts('focus', high, low, '下轨'),
                              dict(kind='boll_rsi', level='yellow', foldable=True))
-            values = [monitor.S['rsi_high']] * high + [monitor.S['rsi_low']] * low + [50] * (3 - high - low)
+            values = [monitor.S['rsi_high']] * high + [{0: 35, 1: monitor.S['rsi_low1'], 2: monitor.S['rsi_low2'], 3: monitor.S['rsi_low']}[low]] * low + [50] * (3 - high - low)
             for chg in (0, -6, 6):
                 with self.subTest(high=high, low=low, chg=chg):
                     x = SimpleNamespace(group='focus', rsi=dict(zip((6, 12, 24), values)),
@@ -2522,10 +2527,10 @@ assert.equal(scrolledBy,-650);     // 短持仓收起后下方内容同样原地
         settings = [dict(monitor.DEFAULT_SETTINGS), dict(monitor.DEFAULT_SETTINGS,
             trigger_gap_pct=7.25, reduce_gap_pct=1.75, ma_short=0, ma_long=0,
             boll_near_band_pct=0, vol_ratio_z=0, vol_ratio_red_z=4,
-            rsi_low=26.5, rsi_high=82)]
+            rsi_low1=20.5, rsi_low2=24, rsi_low=26.5, rsi_high=82)]
         settings += [dict(monitor.DEFAULT_SETTINGS, ma_short=s, ma_long=l, trigger_gap_pct=t, reduce_gap_pct=r)
                      for s, l, t, r in ((50, 0, 0, 4), (0, 200, 6, 0), (50, 50, 8, 2))]
-        overrides = [{"rsi_low": 26.5, "fund_om_drop": 7, "fund_enable": 0},
+        overrides = [{"rsi_low1": 20.5, "rsi_low2": 24, "rsi_low": 26.5, "fund_om_drop": 7, "fund_enable": 0},
                      {"ma_short": 0, "ma_long": 25, "vol_ratio_z": 0, "vol_ratio_red_z": 0.5},
                      {"boll_n": True, "ma_long": 1, "dca_start": "2026-02-30",
                       "rsi_low": 80, "rsi_high": 70, "fund_rev_red": -1, "fund_rev_yellow": -10},

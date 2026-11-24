@@ -1041,7 +1041,7 @@ class RulesTemplateTests(unittest.TestCase):
         settings = {'chg_yellow': 7, 'chg_red': 11,
                     'ma_short': 25, 'ma_long': 180, 'boll_n': 30, 'boll_k': 2.7,
                     'boll_near_band_pct': 10, 'boll_near_pct': 0.9,
-                    'rsi_high': 82, 'rsi_low': 24, 'near_52w_low_pct': 2.2,
+                    'rsi_high': 82, 'rsi_low1': 18, 'rsi_low2': 21, 'rsi_low': 24, 'near_52w_low_pct': 2.2,
                     'trigger_gap_pct': 7, 'reduce_gap_pct': 9,
                     'vol_ratio': 2.2, 'vol_ratio_red': 4.4, 'vol_ratio_z': 2.1, 'vol_ratio_red_z': 4.2}
         constants = {'vol_mult': '×0.5 / ×1.1 / ×1.8', 'rsi_periods': '5／10／21',
@@ -1066,7 +1066,7 @@ class RulesTemplateTests(unittest.TestCase):
         combined = self.plain(rules + glossary)
         for dynamic in ('短均线（启用）', '长均线（启用）', '布林为30日、±2.7倍', '×0.6（当前10%设置）',
                         '≤约0.6%', '≤约1.2%', '≤约1.8%', '固定0.9%', '周期5／10／21日',
-                        '≥82超买', '≤24超卖', '距低点≤2.2%', '相差≤3% → 点亮橙色', '相差≤3% → 点亮青色',
+                        '≥82超买', '1条线≤18', '2条线都≤21', '3条线都≤24', '距低点≤2.2%', '相差≤3% → 点亮橙色', '相差≤3% → 点亮青色',
                         '红k＝4.2', '黄k＝2.1', '红F＝4.4×', '黄F＝2.2×',
                         '红≥4.4×、黄≥2.2×', '新门槛＝√(T×F)', '固定±1.7%',
                         '限0.75%～1.25%', '检查近8日', '此前22日', '不足19分钟',
