@@ -1537,6 +1537,7 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10p
 #runLightTxt .run-timestamp{font-size:calc(1em + 1px);line-height:1}
 #runLightTxt[data-expandable]{cursor:pointer}   /* 失败名单超过 3 只时折进「…」，点一下展开 */
 #signalCounts .signal-extra-row{--chip-w:84px;--xr:12px;position:relative;display:block;padding:0;border-top:1px solid var(--line)}
+#signalCounts .signal-extra-row[hidden]{display:none}   /* 「到价」由页面脚本按持仓实时算：没内容就整行不显示，与其他指标一致 */
 #signalCounts .signal-extra-row>.text-only>summary{position:relative;box-sizing:border-box;min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
 #signalCounts .signal-extra-row>.earnings-week>summary{position:relative;box-sizing:border-box;min-height:50px;padding:14px var(--xr) 14px calc(var(--chip-w) + 17px);line-height:22px;font-size:16px;font-weight:400}
 #signalCounts .signal-extra-row>.text-only[open]>summary::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--list-border);pointer-events:none}

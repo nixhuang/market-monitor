@@ -2595,6 +2595,7 @@
           ul._rendered = html;
         }
       });
+      extra.hidden = total === 0;   // 没有到价提醒时整栏不显示（与其他指标一致）
       var summary = extra.querySelector('summary');
       var count = summary && summary.querySelector('[data-pnl-count]');
       if (count) setDirectText(count, String(total));
@@ -2710,32 +2711,35 @@
     }
     function pnlRowHtml(sym, cn, amt, pctTxt, mvTxt, up, tone, wTxt) {
       var link = ROW_BY_SYM[sym] && ROW_BY_SYM[sym].tr && ROW_BY_SYM[sym].tr.id, sec = sectorTag(sym);
+      // 与统计名单同一个排法：代码 备注名（行业）；全角括号的空白边收掉（.pi-pp），不占全角位置
       var name = '<span class="pi-pname">' + (link ? '<a class="signal-member-jump" href="#' + esc(link) + '">' : '') +
-        esc(sym) + (sec ? '<span class="pi-psec">' + esc(sec) + '</span>' : '') +
-        (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '') + '</span>';
+        esc(sym) + (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '') +
+        (sec ? '<span class="pi-psec"><span class="pi-pp">（</span>' + esc(sec) + '<span class="pi-pp">）</span></span>' : '') + '</span>';
       return '<div class="pi-prow"' + (tone ? ' data-pnl="' + tone + '"' : '') + '>' + name +
         '<b class="pi-ppnl ' + (up ? 'up' : 'down') + '"><span class="pi-pamt">' + amt + '</span> <span class="pi-ppct">' + pctTxt + '</span></b>' +
         '<b class="pi-pmv">' + mvTxt + '</b>' +
         '<b class="pi-pw">' + wTxt + '</b></div>';
     }
-    // 抬头（代码｜盈亏｜金额｜仓位）：点「盈亏」从亏到盈（默认），点「仓位」从大到小；只记在本页内存，不写本机不上传。
+    // 抬头（代码｜盈亏 盈亏比｜金额｜仓位）：点「盈亏」按金额、点「盈亏比」按百分比（都是从亏到盈，盈亏为默认），点「仓位」从大到小；只记在本页内存，不写本机不上传。
     var PNL_SORT = 'pnl', PNL_LAST = null;
     function pnlHeadHtml() {
-      function th(key, label, cls) {
-        return '<span class="pi-ph' + (cls || '') + '">' + (key
-          ? '<button type="button" class="pi-psort" data-psort="' + key + '" aria-pressed="' + (PNL_SORT === key) + '">' + label + '</button>'
-          : label) + '</span>';
+      function btn(key, label) {
+        return '<button type="button" class="pi-psort" data-psort="' + key + '" aria-pressed="' + (PNL_SORT === key) + '">' + label + '</button>';
       }
-      return '<div class="pi-prow pi-phead">' + th('', '代码') + th('pnl', '盈亏') + th('', '金额') +
-        th('weight', '仓位', ' pi-ph-w') + '</div>';
+      // 「盈亏」按盈亏金额、「盈亏比」按盈亏百分比，都是从亏到盈；「仓位」从大到小
+      return '<div class="pi-prow pi-phead"><span class="pi-ph">代码</span>' +
+        '<span class="pi-ph pi-ph-pnl">' + btn('pnl', '盈亏') + btn('ratio', '盈亏比') + '</span>' +
+        '<span class="pi-ph">金额</span><span class="pi-ph pi-ph-w">' + btn('weight', '仓位') + '</span></div>';
     }
     function renderPnlFolds(rows, holdingsMv) {
       PNL_LAST = [rows, holdingsMv];
       var items = rows.filter(function (r) { return r.has && r.costKnown && r.pnlAmt !== null; })
         .map(function (r) { return { sym: r.sym, cn: r.note, amt: r.pnlAmt, pct: r.pnlPct, mv: r.mv, tone: pnlTone(r.price, r.cost) }; })
         .sort(PNL_SORT === 'weight'
-          ? function (a, b) { return b.mv - a.mv || a.amt - b.amt; }   // 仓位从大到小（同仓位再按亏到盈）
-          : function (a, b) { return a.amt - b.amt; });                 // 盈亏从亏到盈
+          ? function (a, b) { return b.mv - a.mv || a.amt - b.amt; }               // 仓位从大到小（同仓位再按亏到盈）
+          : PNL_SORT === 'ratio'
+            ? function (a, b) { return (a.pct || 0) - (b.pct || 0) || a.amt - b.amt; }   // 盈亏比从亏到盈
+            : function (a, b) { return a.amt - b.amt; });                             // 盈亏金额从亏到盈（默认）
       var blk = document.getElementById('piPnlBlock'), list = document.getElementById('piPnlList');
       if (blk) blk.hidden = !items.length;
       if (list && !list._psortBound) {

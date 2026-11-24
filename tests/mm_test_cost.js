@@ -2505,8 +2505,8 @@ test('盈亏明细抬头行与排序：默认亏到盈，点仓位按市值从�
   b.paint();
   const list=b.doc.getElementById('piPnlList'),head=()=>list.querySelector('.pi-phead');
   assert.ok(head(),'有数据时要有抬头行');
-  assert.deepEqual([...head().children].map(e=>e.textContent),['代码','盈亏','金额','仓位']);
-  assert.deepEqual([...head().querySelectorAll('[data-psort]')].map(e=>e.getAttribute('data-psort')),['pnl','weight']);
+  assert.deepEqual([...head().children].map(e=>e.textContent),['代码','盈亏盈亏比','金额','仓位']);
+  assert.deepEqual([...head().querySelectorAll('[data-psort]')].map(e=>e.getAttribute('data-psort')),['pnl','ratio','weight']);
   const order=()=>list.querySelectorAll('.pi-prow .pi-pname').map(e=>e.textContent.slice(0,3));
   const press=k=>list.querySelector('[data-psort="'+k+'"]').fire('click',{bubbles:true});
   assert.deepEqual(order(),['AAA','BBB']);                               // 默认：从亏到盈
@@ -2517,8 +2517,18 @@ test('盈亏明细抬头行与排序：默认亏到盈，点仓位按市值从�
   assert.equal(head().querySelector('[data-psort="pnl"]').getAttribute('aria-pressed'),'false');
   for(let i=0;i<3;i++)b.paint();assert.deepEqual(order(),['BBB','AAA']);   // 重绘不复位
   press('pnl');assert.deepEqual(order(),['AAA','BBB']);
+  // 盈亏比：AAA -20%、BBB +100%，从亏到盈
+  press('ratio');assert.deepEqual(order(),['AAA','BBB']);assert.equal(head().querySelector('[data-psort="ratio"]').getAttribute('aria-pressed'),'true');
+  assert.equal(head().querySelector('[data-psort="pnl"]').getAttribute('aria-pressed'),'false');
   assert.equal(b.requests.length,0);assert.equal(b.puts().length,0);       // 只在本页内，不联网不上传
   await b.dispose();
+});
+test('到价没有内容时整栏不显示，有内容才出现（与其他指标一致）',async()=>{
+  const b=await bootCash();const extra=b.doc.querySelector('.pnl-extra');
+  b.paint();assert.equal(extra.hidden,true);
+  const r=b.rows.find(row=>row.sym==='AAA');r.trig=1000;b.paint();assert.equal(extra.hidden,true);
+  r.trig=100;b.paint();assert.equal(extra.hidden,false);
+  r.trig=1000;b.paint();assert.equal(extra.hidden,true);
 });
 test('终稿两组到价静态骨架重绘保留summary胶囊与展开状态',async()=>{
   const b=await bootCash(),extra=b.doc.querySelector('.pnl-extra'),details=extra.querySelector('details'),chip=extra.querySelector('.pnl-chip');

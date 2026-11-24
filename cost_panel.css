@@ -494,12 +494,18 @@
 .pi-prow.pi-phead + .pi-prow { border-top: 0; }
 .pi-ph { min-width: 0; white-space: nowrap; line-height: 1.25; }
 .pi-ph-w { text-align: right; }
+.pi-ph-pnl { display: flex; gap: 8px; }   /* 「盈亏」「盈亏比」两个排序钮并排 */
 .pi-psort { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
 .pi-psort[aria-pressed="true"] { color: var(--head-blue-on); text-decoration: underline; text-underline-offset: 3px; }
 .pi-psort:focus-visible { outline: 2px solid var(--head-blue-on); outline-offset: 2px; border-radius: 3px; }
 .pi-pname { color: var(--text); min-width: 0; white-space: nowrap; line-height: 1.25; }
 .pi-pname .pi-pcn { color: var(--dim, #8b93a1); margin-left: 4px; font-size: 13px; }
-.pi-pname .pi-psec { color: var(--dim, #8b93a1); margin-left: 5px; font-size: 13px; }   /* 行业分类前两个字，灰色，与名称同号 */
+.pi-pname .pi-psec { color: var(--text); font-size: 13px; }   /* （行业前两个字）白字（2026-11-24 用户定），与备注名同号 */
+/* 全角括号的字形只占半个字宽、另半个是空白：「（」空白在左、「）」空白在右，各自用 -0.5em 间距把空白边收掉，
+   括号贴着文字，不占全角位置；文字内容仍是「SNDX闪迪（IT）」。 */
+.pi-pname .pi-pp { display: inline; }
+.pi-pname .pi-pp:first-child { margin-left: -.5em; }
+.pi-pname .pi-pp:last-child { margin-right: -.5em; }
 .pi-pname a { color: inherit; text-decoration: none; }
 .pi-ppnl, .pi-pmv, .pi-pw { font-weight: 400; white-space: nowrap; text-align: left; }
 .pi-ppnl .pi-ppct { margin-left: 4px; }

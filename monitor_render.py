@@ -1787,7 +1787,7 @@ class PageRenderer:
             f'<div class="signal-member-block" hidden><h5>{label}</h5>'
             f'<ul class="signal-member-list" data-g="{key}"></ul></div>'
             for key, label in (("cut", "减仓价"), ("add", "加仓价")))   # 2026-11-24：浮盈／浮亏不再进统计，改在仓位「盈亏明细」行上加红绿底色
-        pnl_panel = ('<div class="signal-extra-row pnl-extra"><span class="pnl-chip">到价</span>'
+        pnl_panel = ('<div class="signal-extra-row pnl-extra" hidden><span class="pnl-chip">到价</span>'
                      '<details class="text-only pnl-detail"><summary>到价 · 0 只</summary>'
                      f'{pnl_blocks}</details></div>')
         return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'

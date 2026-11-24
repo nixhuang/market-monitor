@@ -2983,8 +2983,13 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn('.pi-prow.pi-phead', css)                # 2026-11-24：抬头行（代码｜盈亏｜金额｜仓位），与数据行同一套列轨
         self.assertIn("data-psort", cost)                       # 点「盈亏」从亏到盈、点「仓位」从大到小
         self.assertIn("PNL_SORT === 'weight'", cost)
+        self.assertIn("pi-pp", cost)                             # 名称写成「代码 备注名（行业）」，括号单独包一层收掉全角空白
+        self.assertIn(".pi-pname .pi-pp:first-child { margin-left: -.5em; }", css)
+        self.assertIn("PNL_SORT === 'ratio'", cost)              # 盈亏（金额）与盈亏比两种从亏到盈的排序
+        self.assertIn("extra.hidden = total === 0;", cost)       # 到价没内容时整栏不显示
+        self.assertIn('.signal-extra-row[hidden]{display:none}', monitor.PAGE_CSS)
         self.assertIn('.pi-pw { text-align: right; }', css)   # 最右的仓位列靠右贴齐页面右边
-        self.assertIn('.pi-pname .pi-psec', css)               # 代码后面的行业前两个字
+        self.assertIn('.pi-pname .pi-psec { color: var(--text);', css)   # 行业名称白字               # 代码后面的行业前两个字
         self.assertIn("'<b class=\"pi-ppnl '", cost)           # 金额与盈亏比同在一个 pi-ppnl 里，算一个整体
         self.assertIn("'<b class=\"pi-pw\">'", cost)            # 市值右边的仓位列
         self.assertIn(".slice(0, 2) : '';", cost)               # 行业只要前两个字
