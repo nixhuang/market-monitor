@@ -1221,8 +1221,12 @@ class PageRenderer:
     def _zone_head(self, label, zg):
         """2026-11-20：与「当日／风险」同款并排标题——第一排组名＋颜色灯数，
         第二排涨跌额／涨跌幅；市值金额已搬进「仓位」展开明细。数字由 cost_panel.js 填。"""
-        # 2026-11-24 用户：名称改「长持／短持」，灯数去除；持仓金额放在第一排名称后面（第二排仍是盈亏金额、盈亏比）（数字由 cost_panel.js 填）。
-        return (f'<span class="zone-r1"><span class="zone-name">{label}({len(zg)})</span>'
+        # 2026-11-24 用户：名称改「长持／短持」；红黄灯数放名称后面（不放紫灯数）；持仓金额再往后（第二排仍是盈亏金额、盈亏比）（数字由 cost_panel.js 填）。
+        # 2026-11-24 用户：手机上放得下，灯数加回来——只要红、黄灯数，不要紫灯数（也不要缺失圈）。
+        badges = ''.join(self._context._count_badge(lv, count, name)
+                         for lv, name in (("red", "红色警示"), ("yellow", "黄色警示"))
+                         if (count := sum(d["level"] == lv for d in zg)))
+        return (f'<span class="zone-r1"><span class="zone-name">{label}({len(zg)})</span>{badges}'
                 f'<span class="zone-mv">—</span></span>'
                 f'<span class="zone-r2"><span class="zone-amt">—</span>'
                 f'<span class="zone-pct">—</span></span>')

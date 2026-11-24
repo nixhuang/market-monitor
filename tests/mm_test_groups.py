@@ -3624,7 +3624,7 @@ class TestTargets(unittest.TestCase):
         t = {'kind': 'consensus', 'price': 101.0, 'month': 10, 'failed': False, 'hit': True,
              'space': 1.0, 'space_hit': False, 'band': 'low'}
         with_pur = self._page([self._row('PUR', 'green', True, t, ['在共识价 101 ±3% 内（偏离 -1.0%）'])])
-        # 2026-11-24：长短持仓标题不再放灯数；持仓行的紫灯数改看统计面板的「紫」灯圈
+        # 2026-11-24：长短持仓标题只放红、黄灯数，不放紫灯数；紫灯数看统计面板的「紫」灯圈
         self.assertIn('aria-label="紫 1 项"', with_pur)
         self.assertIn('stat-badge purple', with_pur.split('</style>')[1])
         without = self._page([self._row('AAPL', 'red', signals=['异动 +5.0%'])])
@@ -7305,7 +7305,13 @@ class TestPositionZones(unittest.TestCase):
         self.assertNotIn('pi-zone-money', out)
         self.assertNotIn('pi-zone-item', out)
         head = out.split('id="zoneDualRow"', 1)[1].split('<div class="dual-body', 1)[0]
-        self.assertNotIn('stat-badge', head)
+        # 2026-11-24 用户：灯数加回来，只要红、黄，不要紫灯数；灯数在名称与持仓金额之间
+        self.assertNotIn('stat-badge purple', head)
+        self.assertNotIn('stat-badge missing', head)
+        for r1 in re.findall(r'<span class="zone-r1">.*?</span></span>(?=<span class="zone-r2">)', head, re.S):
+            if 'stat-badge' in r1:
+                self.assertLess(r1.index('class="zone-name"'), r1.index('stat-badge'))
+                self.assertLess(r1.index('stat-badge'), r1.index('class="zone-mv"'))
         # 2026-11-24：仓位卡底部多一个固定（不悬浮）的向上折叠按钮，指向 group_positions
         self.assertEqual(re.findall(r'aria-controls="([^"]+)"', out),
                          ['group_positions', 'group_positions_long', 'group_positions_short'])
@@ -7369,7 +7375,7 @@ class TestPositionZones(unittest.TestCase):
         self.assertNotIn('<details class="quiet-list" open>', other)
 
     def test_short_zone_bottom_gap_uses_final_three_pixel_contract(self):
-        self.assertIn('#group_positions[open]{padding-bottom:2px}', monitor.PAGE_CSS)
+        self.assertIn('#group_positions[open]{padding-bottom:0}', monitor.PAGE_CSS)
         # 2026-11-20：绿框专属规则已退休，并排双卡沿用 .dual-row 的外框与间距。
         zone_head = re.search(r'#zoneDualRow\{([^}]+)\}', monitor.PAGE_CSS)[1]
         self.assertIn('--collapse-bg:var(--positions-collapse)', zone_head)

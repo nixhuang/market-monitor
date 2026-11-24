@@ -318,16 +318,16 @@
 .quiet-list[hidden] { display: none; }
 .quiet-list[open] > summary { background: none; box-shadow: none; color: var(--head-blue); }
 /* 终稿静态持仓资产行；不再克隆旧成本卡或靠脚本回补布局。 */
-#group_positions .asset-row { margin: 8px 0 4px; padding: 0; }
+#group_positions .asset-row { margin: 6px 0 3px; padding: 0; }   /* 2026-11-24 用户：仓位里各行间距整体缩小一点点（约 1~2px） */
 #group_positions .cashbond-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   padding: 0;
   font-size: 15px;
-  line-height: 22.5px;
+  line-height: 21px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -401,7 +401,7 @@
   #group_positions .cashbond-row .cb-item, #group_positions .cashbond-row .cb-total { gap: 3px; }
   #group_positions .cashbond-row { gap: 4px; }
   #costManage .cost-add-dialog { margin: 8px auto auto; }
-  #group_positions .asset-row .cost-legend b { line-height: 19.2px; }
+  #group_positions .asset-row .cost-legend b { line-height: 18px; }
 }
 
 /* ===== 2026-11-19 v18 仓位展开明细（已验收样张落地） =====
@@ -416,22 +416,22 @@
 #group_positions .cashbond-row .pi-cname { font-size: 14px; color: var(--dim, #8b93a1); }
 #group_positions .cashbond-row .cb-total-amt,
 #group_positions .cashbond-row .cb-amt { font-size: var(--pos-num-fs,15px); font-weight: 600; }
-.pi-body { padding: 2px 10px 10px; color: var(--text); font-size: 15px; line-height: 1.5; min-width: 0;
+.pi-body { padding: 2px 10px 8px; color: var(--text); font-size: 15px; line-height: 1.4; min-width: 0;
   font-variant-numeric: tabular-nums; }
 .pi-body * { box-sizing: border-box; min-width: 0; }
 .pi-block.pi-first { margin-top: 0; padding-top: 0; border-top: 0; }
-.pi-funds { display: flex; flex-direction: column; gap: 9px; }
+.pi-funds { display: flex; flex-direction: column; gap: 7px; }
 /* 比例条下百分比与行业权重表数字同号 15px；行高锁回原值，不撑高图例 */
-#group_positions .asset-row .cost-legend b { font-size: 15px; line-height: 22.4px; }
+#group_positions .asset-row .cost-legend b { font-size: 15px; line-height: 21px; }
 /* 仓位标题：总资产后面跟总盈亏（涨跌色），灯圈已搬到长/短持仓标题栏 */
 #group_positions > summary .pos-pnl { white-space: nowrap; font-variant-numeric: tabular-nums;
   font-size: var(--pos-num-fs,14px); line-height: 24px; }
 #group_positions > summary .pos-pnl.up { color: var(--up); }
 #group_positions > summary .pos-pnl.down { color: var(--down); }
-.pi-block { margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--line); }
+.pi-block { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }
 /* 2026-11-24 用户：删除「今年」盈亏，交易记录入口放在它的位置（已实现｜交易记录｜清仓）；仓位底部是固定的向上折叠按钮。 */
 .pi-kpis { display: flex; align-items: baseline; justify-content: space-between;
-  gap: 8px; font-size: 15px; line-height: 22.5px; white-space: nowrap; min-width: 0; height: 22.5px; }
+  gap: 8px; font-size: 15px; line-height: 21px; white-space: nowrap; min-width: 0; height: 21px; }
 .pi-kpi { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
 .pi-kname { font-size: 14px; color: var(--dim, #8b93a1); }
 .pi-kval { font-size: var(--pos-num-fs,16px); font-weight: 600; }
@@ -440,7 +440,7 @@
 /* 行业权重四块：名称 | 盈亏比（涨跌色） | 市值（无美元符号） | 占比（数字＋柱条同属一块）；数字都不加粗。
    四块起点等距平铺（1fr/1fr/1fr/2.05fr），随页面宽度自动伸缩。市值与占比之间的灰色竖线画在两块间隙正中、
    绝对定位，不占任何横向空间（线左右不留 padding／margin）。 */
-.pi-wlist { display: flex; flex-direction: column; gap: 5px; --pi-wgap: 8px; }
+.pi-wlist { display: flex; flex-direction: column; gap: 4px; --pi-wgap: 8px; }
 .pi-wrow { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,2.05fr);
   align-items: center; gap: var(--pi-wgap); min-width: 0; }
 .pi-wname, .pi-wpnl, .pi-wmv, .pi-wpct { font-size: 15px; font-variant-numeric: tabular-nums; }
@@ -460,7 +460,7 @@
    （与行业权重一致，不写死间距）；每行用 subgrid 继承列轨，所以各行竖向对齐、最右列也铺到页面边。 */
 .pi-plist { display: grid; grid-template-columns: minmax(0,max-content) max-content max-content max-content; justify-content: space-between; column-gap: 8px; margin-top: 4px; }   /* 名称｜盈亏｜市值｜仓位：每列按自己最长内容定宽，页面多出来的宽度平均摊在列与列之间（名称→盈亏、盈亏→金额、金额→仓位同一个规律）；只有名称列在放不下时才收窄，且只截中文备注名 */
 .pi-prow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
-  align-items: center; min-width: 0; padding: 4px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
+  align-items: center; min-width: 0; padding: 3px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
 .pi-prow + .pi-prow { border-top: 1px solid var(--line); }
 /* 名称一行显示：代码＋灰色中文名同排，不换行、不省略 */
 /* 2026-11-24 盈亏达到 ±10% 门槛的行加淡底色（盈绿、亏红，与主表成本行同色同判法）；

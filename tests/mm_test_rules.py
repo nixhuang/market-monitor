@@ -1449,14 +1449,16 @@ vm.createContext(ctx);vm.runInContext(fs.readFileSync(0,'utf8'),ctx);
 const click=(card)=>{ev.click.forEach(f=>f({target:new Element(card)}));};
 const flush=()=>{while(frames.length)frames.shift()();};
 const focus=cards[3];
-// 用户点分组标题并展开：其它分组（含长/短持仓）都收起；2026-11-20 定稿「仓位」豁免，保持展开
+// 用户点分组标题并展开：其它分组（含仓位、长/短持仓）都收起；2026-11-24 用户：点开其他分组时仓位面板也自动关闭
 click(focus);focus.open=true;focus.top=40;flush();
 assert.equal(cards[1].open,false);assert.equal(cards[2].open,false);assert.equal(cards[4].open,false);
-assert.equal(cards[0].open,true);assert.equal(focus.open,true);
+assert.equal(cards[0].open,false);assert.equal(focus.open,true);
 assert.equal(ctx.scrolled,-60);     // 点开的这组被上拽后拉回原位（top 100→40 补 -60）
 assert.equal(ctx.smooth,-13);       // 再平滑滚到 8.75% 高度线：屏高600→线在 round(52.5)=53，当前top 40 → top-线 = -13
 // 点「仓位」标题展开：与普通分组一样，其它分组收起
 cards[0].open=true;cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,false);
+// 点开仓位自己的长持清单：仓位保持展开，其它分组收起
+cards[0].open=true;cards[4].open=true;cards[1].open=true;click(cards[1]);flush();assert.equal(cards[0].open,true);assert.equal(cards[4].open,false);
 // 点击后其实是在收起：不动其它
 cards[4].open=true;focus.open=false;click(focus);flush();assert.equal(cards[4].open,true);
 // 开关关闭：不动
@@ -1519,8 +1521,8 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertIn('padding:3px 0 2px', parent)
         self.assertIn('#group_positions>summary{cursor:pointer;margin-left:5px;margin-right:5px}', css)
         cost = strip_css_comments((ROOT / 'cost_panel.css').read_text(encoding='utf-8'))
-        self.assertIn('margin: 8px 0 4px', re.search(r'#group_positions \.asset-row\s*\{([^}]*)\}', cost)[1])
-        self.assertIn('margin: 4px 0 0', re.search(r'#group_positions \.cashbond-row\s*\{([^}]*)\}', cost)[1])
+        self.assertIn('margin: 6px 0 3px', re.search(r'#group_positions \.asset-row\s*\{([^}]*)\}', cost)[1])
+        self.assertIn('margin: 3px 0 0', re.search(r'#group_positions \.cashbond-row\s*\{([^}]*)\}', cost)[1])
         # 2026-11-20：并排双卡沿用 .dual-row 的 100% 宽，不再有自己的 width / 左右负边距。
         zone_head = re.search(r'#zoneDualRow\{([^}]+)\}', css)[1]
         self.assertIn('--collapse-bg:var(--positions-collapse)', zone_head)
@@ -2976,7 +2978,7 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn('document.querySelectorAll("#signalCounts details[open]")', js)
         self.assertNotIn('.pi-fold', js)
         self.assertNotIn('card.id !== "group_positions"', js)               # 不折叠就不需要强制重排防护
-        self.assertIn('#group_positions>.group-bottom{display:block}', monitor.PAGE_CSS)
+        self.assertIn('#group_positions>.group-bottom{display:block;margin:0 4px 0}', monitor.PAGE_CSS)   # 与其它分组底部 ▲ 同款左右留边、同高 26px
         cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
         self.assertIn(": function (a, b) { return a.amt - b.amt; });", cost)   # 默认从亏损到盈利；可点抬头改按盈亏比／仓位
         self.assertIn("updateText('.zone-mv', plain(mv), head)", cost)         # 持仓金额进标题
@@ -3003,7 +3005,7 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn("'<b class=\"pi-ppnl '", cost)
         self.assertIn("'<b class=\"pi-pw\">'", cost)
         self.assertIn(".slice(0, 2) : '';", cost)
-        self.assertIn('.zone-r1 .zone-mv{', monitor.PAGE_CSS)   # 持仓金额在第一排名称后面，放不下只截金额
+        self.assertIn('.zone-r1 .zone-mv{margin-left:auto;', monitor.PAGE_CSS)   # 持仓金额在第一排名称后面，放不下只截金额
         self.assertNotIn('.zone-r2 .zone-mv', monitor.PAGE_CSS)
 
     def test_jump_waits_for_layout_before_scroll_and_spym_is_short_named(self):

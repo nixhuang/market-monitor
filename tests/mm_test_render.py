@@ -339,8 +339,9 @@ pos_title = ''.join(html.split(f'id="group_positions_{z}"', 1)[1].split('</summa
 # 2026-11-24 用户：长持／短持标题去掉灯数（不再有灯圈）；其它分组标题仍是灯色圆里带数字的徽章
 other_title = ''.join(html.split(f'id="group_{g}"', 1)[1].split('</summary>', 1)[0]
                       for g in ('focus', 'technology') if f'id="group_{g}"' in html)
-check('stat-badge' not in pos_title and '红1' not in pos_title and '缺失1' not in pos_title,
-      "长短持仓标题不再带灯数（2026-11-24）")
+zone_head = html.split('id="zoneDualRow"', 1)[1].split('<div class="dual-body', 1)[0] if 'id="zoneDualRow"' in html else ''
+check('stat-badge purple' not in zone_head and 'stat-badge missing' not in zone_head,
+      "长短持仓标题只放红、黄灯数，不放紫灯数和缺失圈（2026-11-24）")
 check('class="stat-badge' in other_title,
       "其它分组警示仍采用灯色圆里带数字的徽章而非颜色文字（2026-10-15）")
 # 2026-10-15 再调：名称与灯圈之间不再留 6px，靠得更近

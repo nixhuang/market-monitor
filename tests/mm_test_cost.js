@@ -1022,7 +1022,7 @@ test('当日面板标题维持统一字号，仅面板内容文字各增加1px',
   // 2026-11-19 Demo：仓位卡黄框可开合、默认收起；灯圈与绿框移到长短持仓子卡。
   assert.match(ASSETS,/#group_positions,#group_positions\[open\]\{[^}]*border:var\(--frame-w\) solid var\(--frame-yellow\)/);
   assert.match(ASSETS,/#group_positions>summary\{[^}]*cursor:pointer;[^}]*margin-left:5px;margin-right:5px/);
-  assert.match(CSS,/#group_positions \.cashbond-row\{[^}]*margin:4px 0 0/);
+  assert.match(CSS,/#group_positions \.cashbond-row\{[^}]*margin:3px 0 0/);
 });
 /* 旧六列成本表已被四列真实编辑器替代，下面为退役样式断言，不执行。 */
 /*
