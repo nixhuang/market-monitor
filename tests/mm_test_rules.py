@@ -3005,7 +3005,10 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn("'<b class=\"pi-ppnl '", cost)
         self.assertIn("'<b class=\"pi-pw\">'", cost)
         self.assertIn(".slice(0, 2) : '';", cost)
-        self.assertIn('.zone-r1 .zone-mv{margin-left:auto;', monitor.PAGE_CSS)   # 持仓金额在第一排名称后面，放不下只截金额
+        self.assertIn('.zone-r1 .zone-mv{margin-left:auto;', monitor.PAGE_CSS)
+        self.assertIn('#zoneDualRow .zone-r2{justify-content:flex-end}', monitor.PAGE_CSS)   # 长短持仓第二排盈亏靠右，只管 #zoneDualRow
+        self.assertNotIn('\n.zone-r2{justify-content:flex-end}', monitor.PAGE_CSS)
+        self.assertNotIn('longList', monitor.PAGE_INTERACTION_JS)   # 悬浮 ▲ 只看底部 ▲ 是否还没滚到，不再要求清单超过某个屏高比例   # 持仓金额在第一排名称后面，放不下只截金额
         self.assertNotIn('.zone-r2 .zone-mv', monitor.PAGE_CSS)
 
     def test_jump_waits_for_layout_before_scroll_and_spym_is_short_named(self):

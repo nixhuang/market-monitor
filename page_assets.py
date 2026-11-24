@@ -1191,6 +1191,7 @@ tr.gray td{color:var(--dim)}
 /* 2026-11-20 21:2x：涨跌额不加粗，且与涨跌幅「-4.7%」同号；仓位栏金额也共用 --pos-num-fs。 */
 .zone-r2 .zone-amt{font-size:var(--pos-num-fs,14px);font-weight:400;color:var(--text)}
 .zone-r2 .zone-pct{font-size:var(--pos-num-fs,14px);color:var(--dim)}
+#zoneDualRow .zone-r2{justify-content:flex-end}   /* 2026-11-24 用户：长短持仓标题第二排的盈亏金额、盈亏比靠右（只管长短持仓；其它分组第二排另有规则） */
 .zone-r1 .zone-mv{margin-left:auto;font-size:var(--pos-num-fs,14px);font-weight:400;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}   /* 2026-11-24 用户：长短持仓金额放在第一排「长持(4)」后面，白字不加粗；放不下只截金额末尾，名称与第二排盈亏完整 */
 .zone-r2 .zone-amt.up,.zone-r2 .zone-pct.up{color:var(--up)}
 .zone-r2 .zone-amt.down,.zone-r2 .zone-pct.down{color:var(--down)}
@@ -2548,7 +2549,7 @@ function renderSignalFilter() {
       const shown = !!panel && getComputedStyle(panel).display !== 'none'
         && wrapRect.height > 0;
       const naturalTop = wrapRect.top;
-      const longList = !!panel && panel.getBoundingClientRect().height > vh * 0.7;
+      // 2026-11-24 用户：只要底部 ▲ 还在悬浮位置下面（没滚到），就出现悬浮向上折叠；不再要求清单超过 0.7 屏。
       // 固定态按钮是 width:100%，宽度就是恒占位的 .group-bottom 的宽度；浮起来后
       // fixed 的 100% 会变成视口宽，所以先量好写进变量，让两态宽度完全一致。
       // 每次滚动/缩放都重算，横竖屏切换或列宽变化后也不会留着旧宽度。
@@ -2562,7 +2563,7 @@ function renderSignalFilter() {
       const headBottom = head ? head.getBoundingClientRect().bottom : null;
       const sepY = headBottom === null ? null : headBottom + FIXED_GAP;
       const passedSep = sepY !== null && sepY <= floatTop;
-      btn.classList.toggle('is-floating', shown && longList && passedSep && naturalTop > floatTop);
+      btn.classList.toggle('is-floating', shown && passedSep && naturalTop > floatTop);
     });
   }
   let frame = 0;
