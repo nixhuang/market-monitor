@@ -1364,13 +1364,13 @@ def yahoo_history(symbol):
                     last_err = "历史数据不足"
                     # 新股短历史也留档：高低可能是拿收盘价顶出来的，rv 标真伪，
                     # 交给 _display_session_values 决定振幅算不算，绝不冒充真实日内范围。
-                    # 已有留档（通常是 Nasdaq 的真实日线）时不覆盖，免得假高低把振幅顶掉。
-                    if short_history_of(symbol) is None:
-                        _remember_short_history(symbol,
-                            [{"d": d, "c": c, "h": h, "l": l, "o": o, "v": v, "rv": rv}
-                             for d, c, h, l, o, v, rv in
-                             zip(dates, closes, highs, lows, opens, vols, range_valid)],
-                            "yahoo")
+                    # 已有留档（通常是 Nasdaq 的真实日线）不被同样新或更旧的覆盖，免得假高低把振幅顶掉；
+                    # 来源晚到的较新一份由 _remember_short_history 自己取代较旧的。
+                    _remember_short_history(symbol,
+                        [{"d": d, "c": c, "h": h, "l": l, "o": o, "v": v, "rv": rv}
+                         for d, c, h, l, o, v, rv in
+                         zip(dates, closes, highs, lows, opens, vols, range_valid)],
+                        "yahoo")
                     continue
                 YAHOO_GATE.ok()
                 dates, closes, vols, highs, lows, range_valid, patched = _yahoo_meta_close(
@@ -1626,6 +1626,11 @@ def _remember_short_history(symbol, parsed, asset):
         return
     marks = [p.get("rv") for p in rows]
     with _SHORT_HISTORY_LOCK:
+        # 先到先得，但来源晚到的较新一份（最后一根日期更晚）取代较旧的（2026-11-24：Nasdaq 日线慢一天落地、
+        # Yahoo 已有当日，原先「已有就不覆盖」把它丢了）；同样新或更旧的不覆盖，假高低顶不掉真日线。
+        old = _SHORT_HISTORY.get(normalize_symbol(symbol))
+        if old and old.get("dates") and old["dates"][-1] >= rows[-1]["d"]:
+            return
         _SHORT_HISTORY[normalize_symbol(symbol)] = {
             "dates": [p["d"] for p in rows],
             "closes": [p["c"] for p in rows],
@@ -1644,23 +1649,43 @@ def short_history_of(symbol):
         return _SHORT_HISTORY.get(normalize_symbol(symbol))
 
 
+def _short_with_today(short, px, hi=None, lo=None, real=False):
+    """给新股短日线追加目标日一根（副本）。开盘价未知；高低只有 real=True（来自报价页的真实当日高低）才用，
+    否则拿成交价顶位并把范围有效位标 False，振幅留空，绝不编。"""
+    n = len(short["dates"])
+    out = dict(short)
+    out["dates"] = list(short["dates"]) + [TARGET_DATE]
+    out["closes"] = list(short["closes"]) + [px]
+    out["highs"] = list(short.get("highs") or short["closes"]) + [hi if real else px]
+    out["lows"] = list(short.get("lows") or short["closes"]) + [lo if real else px]
+    out["opens"] = list(short.get("opens") or [None] * n) + [None]
+    out["range_valid"] = list(short.get("range_valid") or [True] * n) + [bool(real)]
+    out["price"], out["prev_close"] = px, short["closes"][-1]
+    return out
+
+
 def _new_listing_with_realtime(symbol, short):
-    """盘中口径（目标日＝今天、正在开盘）：新股的短日线只到昨天，价格栏就会一直停在昨收。
-    2026-11-24 用户：ANT 盘中抓到的是 20 日的日线。普通标的靠 apply_realtime 合并实时价，
-    新股没走那条通道；这里照同一套校验补上——Nasdaq 报价必须 isRealTime、成交时间落在当日常规时段、
-    延迟 ≤5 分钟，且短日线最后一根正好是上一交易日（不跨天补），才把当日价作为新的一根。
-    当日一根的高低取 Nasdaq 同一响应里的当日最高／最低（振幅可算）；取不到就只有成交价、范围有效位标 False，
-    振幅留空，绝不编。量比不在此补：要几十个交易日的成交量基线，新股没有，页面照旧留空。
-    返回 (短日线副本, 实时成交时间)；任何一步不满足就原样返回 (short, "")。"""
+    """新股短日线停在目标日前一交易日时补当日一根（2026-11-24 用户：ANT 又停在 11/20）。
+    收盘口径：Nasdaq 日线收盘后要隔一阵才落地，与普通股 patch_closing_bar 同口径——收盘 +10 分钟后、
+    昨收对得上，才用 Nasdaq 收盘报价补；高低不可得、振幅留空。
+    盘中口径：Nasdaq 报价必须 isRealTime、成交时间落在当日常规时段、延迟 ≤5 分钟，且上一根正好是上一交易日；
+    高低取同一响应里的当日最高／最低（现价须落在区间内才信）。量比不补：新股没有几十日成交量基线。
+    返回 (短日线副本, 实时成交时间；收盘补的为空)；任何一步不满足就原样返回 (short, "")。"""
     try:
-        if CLOSED_ONLY or not S.get("use_realtime") or not TARGET_DATE or not short.get("dates"):
+        if not (TARGET_DATE and short.get("dates")) or short["dates"][-1] >= TARGET_DATE:
             return short, ""
-        if short["dates"][-1] >= TARGET_DATE:
+        if short["dates"][-1] != market_sessions.previous_session(TARGET_DATE):
+            return short, ""                      # 不跨天补
+        if CLOSED_ONLY:
+            bounds = market_sessions.session_bounds(TARGET_DATE)
+            if not bounds or datetime.now(timezone.utc) < bounds[1] + timedelta(minutes=10):
+                return short, ""
+            q = nasdaq_closing_quote(symbol, TARGET_DATE, short["closes"][-1])
+            return (_short_with_today(short, q["price"]), "") if q else (short, "")
+        if not S.get("use_realtime"):
             return short, ""
         session = market_sessions.active_session(datetime.now(US_TZ))
         if session is None or session[0] != TARGET_DATE:
-            return short, ""
-        if short["dates"][-1] != market_sessions.previous_session(TARGET_DATE):
             return short, ""
         rt = nasdaq_realtime(symbol)
         if not rt or market_sessions.validated_quote_time(rt.get("ts"), datetime.now(US_TZ)) is None:
@@ -1668,20 +1693,9 @@ def _new_listing_with_realtime(symbol, short):
         px = rt.get("price")
         if isinstance(px, bool) or not _finite_pos(px):
             return short, ""
-        out = dict(short)
-        n = len(short["dates"])
-        out["dates"] = list(short["dates"]) + [TARGET_DATE]
-        out["closes"] = list(short["closes"]) + [px]
-        # 当日真实高低：Nasdaq 同一响应带当日最高／最低，且现价必须落在区间内才信；
-        # 否则退回只有成交价、范围有效位 False（振幅留空，绝不编）。
         hi, lo = rt.get("day_high"), rt.get("day_low")
         real = _finite_pos(hi) and _finite_pos(lo) and lo - 1e-6 <= px <= hi + 1e-6
-        out["highs"] = list(short.get("highs") or short["closes"]) + [hi if real else px]
-        out["lows"] = list(short.get("lows") or short["closes"]) + [lo if real else px]
-        out["opens"] = list(short.get("opens") or [None] * n) + [None]
-        out["range_valid"] = list(short.get("range_valid") or [True] * n) + [bool(real)]
-        out["price"], out["prev_close"] = px, short["closes"][-1]
-        return out, rt.get("ts") or "x"
+        return _short_with_today(short, px, hi, lo, real), rt.get("ts") or "x"
     except (ValueError, TypeError, KeyError, IndexError, OverflowError):
         return short, ""
 

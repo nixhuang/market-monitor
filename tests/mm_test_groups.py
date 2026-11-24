@@ -6,7 +6,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import ExitStack
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -10231,10 +10231,43 @@ class NewListingTests(unittest.TestCase):
             item = monitor.new_listing_quote("ANT", {}, "focus")
         self.assertEqual(item["data_date"], "2026-11-19")
         self.assertFalse(item["realtime"])
-        # 收盘口径不碰实时价
+        # 收盘口径不碰实时价（收盘报价补当日另有测试；这里让它取不到，保持停在 11-19）
         with patch.object(monitor, "TARGET_DATE", "2026-11-20"), patch.object(monitor, "CLOSED_ONLY", True), \
+             patch.object(monitor, "nasdaq_closing_quote", return_value=None), \
              patch.object(monitor, "nasdaq_realtime", side_effect=AssertionError("收盘口径不该取实时价")):
             self.assertEqual(monitor.new_listing_quote("ANT", {}, "focus")["data_date"], "2026-11-19")
+
+    def test_new_listing_closed_mode_catches_up_to_target_day(self):
+        # 2026-11-24 用户：ANT 收盘口径又停在 11-20。Nasdaq 日线落地慢，先留档只到 11-20；
+        # ① 来源晚到的较新一份（最后一根更晚）要取代较旧的；② 仍停在前一天时用 Nasdaq 收盘报价补当日一根。
+        old = [{"d": "2026-11-19", "c": 97.17, "h": 115.1, "l": 92.72, "o": 111.5, "v": 1},
+               {"d": "2026-11-20", "c": 88.91, "h": 92.56, "l": 83.05, "o": 89.86, "v": 1}]
+        new = old + [{"d": "2026-11-23", "c": 87.64, "h": 94.24, "l": 84.61, "o": None, "v": 1, "rv": True}]
+        monitor._SHORT_HISTORY.clear()
+        with patch.object(monitor, "TARGET_DATE", "2026-11-23"), patch.object(monitor, "CLOSED_ONLY", True):
+            monitor._remember_short_history("ANT", old, "stocks")
+            monitor._remember_short_history("ANT", new, "yahoo")
+            self.assertEqual(monitor.short_history_of("ANT")["dates"][-1], "2026-11-23")
+            # 同样新或更旧的不覆盖（先到先得，假高低不顶掉真日线）
+            monitor._remember_short_history("ANT", old, "stocks")
+            self.assertEqual(monitor.short_history_of("ANT")["dates"][-1], "2026-11-23")
+            # ② 只有到 11-20 的留档 → 收盘报价补当日
+            monitor._SHORT_HISTORY.clear()
+            monitor._remember_short_history("ANT", old, "stocks")
+            bounds = monitor.market_sessions.session_bounds("2026-11-23")
+            with patch.object(monitor, "nasdaq_closing_quote", return_value={"price": 87.64, "volume": 1}) as q, \
+                 patch.object(monitor.market_sessions, "session_bounds", return_value=(bounds[0], datetime(2020, 1, 1, tzinfo=timezone.utc))):
+                item = monitor.new_listing_quote("ANT", {}, "focus")
+            q.assert_called_once()
+            self.assertEqual(item["data_date"], "2026-11-23")
+            self.assertAlmostEqual(item["price"], 87.64)
+            self.assertAlmostEqual(item["chg"], (87.64 / 88.91 - 1) * 100)
+            self.assertIsNone(item["day_amp"], "收盘报价没有当日高低，振幅不能编")
+            # 报价取不到 → 原样停在 11-20，不假装
+            with patch.object(monitor, "nasdaq_closing_quote", return_value=None), \
+                 patch.object(monitor.market_sessions, "session_bounds", return_value=(bounds[0], datetime(2020, 1, 1, tzinfo=timezone.utc))):
+                self.assertEqual(monitor.new_listing_quote("ANT", {}, "focus")["data_date"], "2026-11-20")
+        monitor._SHORT_HISTORY.clear()
 
     def test_new_listing_note_is_fixed_for_every_bar_count(self):
         # 2026-11-20：文案不许随日线根数变，第 2、3、4…根都还是同一句
@@ -10279,7 +10312,7 @@ class NewListingTests(unittest.TestCase):
         self.assertIn("4.2%", row)
         self.assertNotIn('>振</span><span class="px-v">—</span>', row)
 
-    def test_stat_chg_and_vol_lists_sorted_by_value_within_position_focus_other(self):
+    def test_stat_chg_and_vol_lists_sorted_by_value_ignoring_group(self):
         # 2026-11-24 用户：统计里涨跌幅栏、量比栏按「持仓／重点／其他」三段、段内按数值大小，不管灯级
         def row(sym, group, chg, vr, level="red"):
             return {"symbol": sym, "note": "", "group": group, "level": level, "chg": chg, "vol_ratio": vr,
@@ -10305,14 +10338,13 @@ class NewListingTests(unittest.TestCase):
             if level == "red":
                 self.assertIsNotNone(m, kind)
             return re.findall(r'signal-member-symbol">([A-Z0-9]+)<', m.group(1)) if m else []
-        # 涨跌幅（灯级混排也不影响）：持仓(P2 8%, P1 6%)、重点(F2 15%, F1 12%)、其他(H1 30%, T3 25%, T2 21%, T1 9%)
+        # 2026-11-24 用户：不管分组、不管灯级，纯按数值从高到低（涨跌幅取绝对值）
         # 页面把 ▲ 与 ▼ 分段（T3 是 ▼），所以这里只核对上涨段内部的先后
         got = order("chg", "red") + order("chg", "yellow")
-        self.assertEqual([x for x in got if x != "T3"], ["P2", "P1", "F2", "F1", "H1", "T2", "T1"])
-        self.assertLess(got.index("P2"), got.index("T3"))
-        # 量比同口径：持仓(P2 4.0, P1 2.5)、重点(F1 3.0, F2 1.5)、其他(H1 6.0, T2 5.0, T1 2.0, T3 1.0)
+        self.assertEqual([x for x in got if x != "T3"], ["H1", "T2", "F2", "F1", "T1", "P2", "P1"])
+        # 量比同口径：H1 6.0 > T2 5.0 > P2 4.0 > F1 3.0 > P1 2.5 > T1 2.0 > F2 1.5 > T3 1.0
         vr = order("vol_ratio", "red") + order("vol_ratio", "yellow")
-        self.assertEqual(vr, ["P2", "P1", "F1", "F2", "H1", "T2", "T1", "T3"])
+        self.assertEqual(vr, ["H1", "T2", "P2", "F1", "P1", "T1", "F2", "T3"])
 
     def test_new_listing_applies_change_rules_and_consensus_target_like_other_stocks(self):
         # 2026-11-24 用户：新股不需要多日线的部分（涨跌幅红黄灯、共识价/目标价紫灯、成本、加减价）与别的股一致

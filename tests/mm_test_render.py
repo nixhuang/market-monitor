@@ -120,8 +120,8 @@ check('--collapse-bg:var(--signal-collapse)' in re.search(r'#signalCounts\{([^}]
 # 空盈亏分组SSR即隐藏；长线共用统计标题选择器，不能局限于盈亏区。
 _pnl_blocks = re.findall(r'<div class="signal-member-block" hidden><h5>([^<]+)</h5>'
                          r'<ul class="signal-member-list" data-g="([^"]+)"></ul></div>', html)
-check(_pnl_blocks == [('浮盈', 'gain'), ('浮亏', 'loss'), ('减仓价', 'cut'), ('加仓价', 'add')],
-      '盈亏到价四组保留静态骨架但空分类初始不显示标题')
+check(_pnl_blocks == [('减仓价', 'cut'), ('加仓价', 'add')],
+      '到价两组（减仓价、加仓价）保留静态骨架但空分类初始不显示标题；浮盈浮亏不在统计里')
 _stat_heading = re.search(r'#signalCounts \.signal-member-block h5\{([^}]+)\}', monitor.PAGE_CSS)[1]
 _stat_line = re.search(r'#signalCounts \.signal-member-block h5::after\{([^}]+)\}', monitor.PAGE_CSS)[1]
 check('display:flex' in _stat_heading and 'align-items:center' in _stat_heading

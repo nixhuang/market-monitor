@@ -18,11 +18,11 @@ RULE_SECTIONS = (
     ("rule-lamps", r"""line-0||h4|一、报灯规则
 lamp-table||table|${lamp_table}
 line-35|rule-prices|h5|加仓价／减仓价 须设置有效价位
-line-36||p|加仓价 · 所有分组：主表描述区常驻显示「加仓价 N · 需+X%／需-X%」，平时灰字；现价与设置价相差≤3% → 点亮橙色，并列入统计面板「盈亏到价」。
-line-38||p|减仓价 · 持仓分组：主表描述区常驻显示「减仓价 N · 需+X%／需-X%」，平时灰字；现价与设置价相差≤3% → 点亮青色，并列入统计面板「盈亏到价」。
+line-36||p|加仓价 · 所有分组：主表描述区常驻显示「加仓价 N · 需+X%／需-X%」，平时灰字；现价与设置价相差≤3% → 点亮橙色，并列入统计面板「到价」。
+line-38||p|减仓价 · 持仓分组：主表描述区常驻显示「减仓价 N · 需+X%／需-X%」，平时灰字；现价与设置价相差≤3% → 点亮青色，并列入统计面板「到价」。
 line-40||p|减仓价：重点、其他分组不适用。
 line-41|rule-cost-loss|h5|持仓盈亏 持仓分组
-line-42||p|浮盈或浮亏达到 ±10% → 成本行加淡底色（盈绿、亏红），并列入统计面板「盈亏到价」；只作提示，不再出红灯。
+line-42||p|浮盈或浮亏达到 ±10% → 成本行加淡底色（盈绿、亏红），仓位「盈亏明细」里对应的行同样加淡底色；只作提示，不再出红灯。
 line-46||p|重点、其他分组不适用。
 line-47|rule-target-space|h5|目标空间 所有分组
 line-48||p|有效空间≥${target_space_pct}% → 紫空心灯；
@@ -814,7 +814,7 @@ tr:first-child td{border-top:none}
 #signalCounts .signal-member-block[hidden]{display:none}
 #signalCounts .signal-member-block:last-child{margin-bottom:0}
 #signalCounts .signal-member-block h5{margin:0 0 4px;font-size:13px;font-weight:600;color:var(--head-blue);display:flex;align-items:center}
-/* 终稿：所有统计清单共用分组标题右侧的淡长线，不只盈亏到价。 */
+/* 终稿：所有统计清单共用分组标题右侧的淡长线，不只「到价」。 */
 #signalCounts .signal-member-block h5::after{content:"";flex:1 1 auto;height:1px;margin-left:8px;background:var(--stat-rule-soft,#3a4356)}
 #signalCounts .signal-member-block h5:first-letter{letter-spacing:0}
 #signalCounts .signal-member-block ul{padding-left:2px}
@@ -1281,8 +1281,6 @@ tr.gray td{color:var(--dim)}
 #signalCounts .pnl-extra li.lamp-yellow{--name-lamp:var(--yellow)}
 #signalCounts .pnl-extra li.lamp-green{--name-lamp:var(--green)}
 #signalCounts .pnl-extra li.lamp-gray{--name-lamp:var(--text)}
-#signalCounts .pnl-extra .signal-member-metric.up{color:var(--up)}
-#signalCounts .pnl-extra .signal-member-metric.down{color:var(--down)}
 #signalCounts .pnl-extra .signal-member-metric.add{color:var(--orange)}
 #signalCounts .pnl-extra .signal-member-metric.cut{color:var(--cyan)}
 #signalCounts .earnings-week-bj{color:var(--earn-bj-color,var(--dim));font-size:inherit;font-weight:400}
@@ -1797,7 +1795,7 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
   function isFree(card) {
     return !card || card.id === "signalCounts" || card.id === "group_positions";
   }
-  // 2026-11-23：展开其他分组时，统计里展开的子板块（空间/财报/盈亏到价）和仓位里展开的盈亏明细
+  // 2026-11-23：展开其他分组时，统计里展开的子板块（空间/财报/到价）和仓位里展开的盈亏明细
   // （盈亏明细）也一并收起；统计、仓位两个大栏本身仍保持展开。
   function closeSubFolds() {
     document.querySelectorAll("#signalCounts details[open], #group_positions .pi-fold[open]").forEach(function(d) {
@@ -2123,7 +2121,7 @@ function normalizeSignalCard(card) {
   card.querySelectorAll(".signal-count-toggle").forEach(function(button) {
     button.setAttribute("aria-expanded", "false");
   });
-  // 紫灯、盈亏到价（.text-only）和未来15天财报（.earnings-week）三块同类：
+  // 紫灯、到价（.text-only）和未来15天财报（.earnings-week）三块同类：
   // 移动端（iOS Safari / 部分安卓内核）在父面板不可见期间改 open，偶尔不重算子元素
   // 高度，再展开就会留一块空白（紫灯展开时折叠统计、再展开尤其明显）。
   // 这里对三块都显式绕一次 display，逼它们按折叠态重排。
@@ -2724,9 +2722,12 @@ function revealStockRow(target, hash) {
   target.classList.remove("stk-flash");
   void target.offsetWidth;                   // 强制重排，保证连点同一个名字也能再闪一次
   target.classList.add("stk-flash");
-  target.scrollIntoView({block: "center", behavior: "smooth"});
   if (hash && history.replaceState) history.replaceState(null, "", hash);
   window.setTimeout(function() { target.classList.remove("stk-flash"); }, 1800);
+  // 2026-11-24：「当日」清单跳转落点偏——点击会收起当日卡，其下清单在 toggle 事件里晚一拍才隐藏，
+  // 页面高度在滚动开始后才缩短。等这次重排落定（toggle 之后再两帧）再滚；统计卡不被收起，故没这个问题。
+  const go = function() { target.scrollIntoView({block: "center", behavior: "smooth"}); };
+  window.setTimeout(function() { window.requestAnimationFrame(function() { window.requestAnimationFrame(go); }); }, 0);
 }
 // 统计面板里的标的名字 → 跳到首页该股所在行。
 // 个股可能躺在两层折叠里（分组卡片 + 「无异动 N 只」列表），跳转前必须逐层撑开祖先 details。

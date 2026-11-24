@@ -1616,16 +1616,13 @@ class PageRenderer:
                                 f'{belong}{direction}{value}</li>')
 
                     if kind in ("chg", "vol_ratio"):
-                        # 2026-11-24 用户：涨跌幅栏、量比栏按分组后的数值大小排，不管灯级；
-                        # 分组只分「持仓（长短合并）／重点／其他」三段。数值取成员的 mv（涨跌幅取绝对值），
-                        # 旧快照没有 mv 时退回原来的分组顺序。
-                        def _bucket(x):
-                            grp = str(x.get("group") or "")
-                            return 0 if grp == "position" else 1 if grp == "focus" else 2
+                        # 2026-11-24 用户：涨跌幅栏、量比栏不管分组、不管灯级，纯按数值从高到低排
+                        # （涨跌幅取绝对值；▲▼ 仍由框标题分两段，各段内同样从高到低）。
+                        # 数值取成员的 mv；同值或旧快照没有 mv 时，才退回原来的分组顺序打平。
                         def _mv(x):
                             v = x.get("mv")
                             return -v if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) else 0
-                        ordered = sorted(entries, key=lambda x: (_bucket(x), _mv(x),
+                        ordered = sorted(entries, key=lambda x: (_mv(x),
                                          group_order.get(str(x.get("group") or ""), len(self._context.GROUPS))))
                     else:
                         ordered = sorted(entries, key=lambda x: group_order.get(str(x.get("group") or ""), len(self._context.GROUPS)))
@@ -1789,9 +1786,9 @@ class PageRenderer:
         pnl_blocks = "".join(
             f'<div class="signal-member-block" hidden><h5>{label}</h5>'
             f'<ul class="signal-member-list" data-g="{key}"></ul></div>'
-            for key, label in (("gain", "浮盈"), ("loss", "浮亏"), ("cut", "减仓价"), ("add", "加仓价")))
-        pnl_panel = ('<div class="signal-extra-row pnl-extra"><span class="pnl-chip">盈亏到价</span>'
-                     '<details class="text-only pnl-detail"><summary>盈亏到价 · 0 只</summary>'
+            for key, label in (("cut", "减仓价"), ("add", "加仓价")))   # 2026-11-24：浮盈／浮亏不再进统计，改在仓位「盈亏明细」行上加红绿底色
+        pnl_panel = ('<div class="signal-extra-row pnl-extra"><span class="pnl-chip">到价</span>'
+                     '<details class="text-only pnl-detail"><summary>到价 · 0 只</summary>'
                      f'{pnl_blocks}</details></div>')
         return (f'<details class="card group-card" id="signalCounts" open><summary class="grp"><span class="grp-name">统计</span>'
                 f'<span class="group-stats">{stats}</span></summary>'

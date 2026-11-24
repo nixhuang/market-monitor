@@ -168,7 +168,7 @@ function makeDocument(opts={}){
     +'<button id="btnCheckStatus">状态</button><button id="btnHardRefresh">刷新</button>'
     +'<button type="button" class="cost-edit-btn" id="costEditBtn" aria-pressed="false" disabled>编辑</button></div>'
     +'<div class="dual-row"><details id="dayPnlCard"><summary><b class="dp-amt"></b><b class="dp-pct"></b></summary></details><div class="dual-body"><ul class="cost-contrib" data-owner="day"></ul></div></div>'
-    +COST_PANEL_HTML+'<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><div class="cost-foot asset-row cost-manage"></div><div class="cashbond-row"><span class="cb-total-amt"></span><span class="cb-total-pnl"></span><span class="cb-cash"><span class="cb-amt"></span></span><span class="cb-bond"><span class="cb-amt"></span></span></div><table></table></details><div id="signalCounts"><div class="signal-extra-row pnl-extra"><details><summary><span class="pnl-chip">盈亏到价</span><span class="pnl-count">0</span></summary><div class="signal-member-block" hidden><h5>浮盈</h5><ul class="signal-member-list" data-g="gain"></ul></div><div class="signal-member-block" hidden><h5>浮亏</h5><ul class="signal-member-list" data-g="loss"></ul></div><div class="signal-member-block" hidden><h5>减仓价</h5><ul class="signal-member-list" data-g="cut"></ul></div><div class="signal-member-block" hidden><h5>加仓价</h5><ul class="signal-member-list" data-g="add"></ul></div></details></div></div>';
+    +COST_PANEL_HTML+'<details id="group_positions"><summary><span class="grp-name"></span><span class="group-stats"></span></summary><div class="cost-foot asset-row cost-manage"></div><div class="cashbond-row"><span class="cb-total-amt"></span><span class="cb-total-pnl"></span><span class="cb-cash"><span class="cb-amt"></span></span><span class="cb-bond"><span class="cb-amt"></span></span></div><table></table></details><div id="signalCounts"><div class="signal-extra-row pnl-extra"><details><summary><span class="pnl-chip">到价</span><span class="pnl-count">0</span></summary><div class="signal-member-block" hidden><h5>减仓价</h5><ul class="signal-member-list" data-g="cut"></ul></div><div class="signal-member-block" hidden><h5>加仓价</h5><ul class="signal-member-list" data-g="add"></ul></div></details></div></div>';
   const table=doc.querySelector('table');table.className='stk';
   for(const sym of opts.symbols||['AAA','BBB']){
     const tr=new Element('tr',doc);tr.id=fixtureAnchor(sym);tr.className='green';
@@ -1311,14 +1311,17 @@ test('目标名单跳转执行真实页面监听打开祖先及滚动到成员',
   const row={tagName:'TR',parentElement:quiet,offsetWidth:1,classList:{add:c=>classes.add(c),remove:c=>classes.delete(c)},scrollIntoView:opts=>scrolls.push(opts)};
   let listener;
   const document={body,addEventListener:(name,fn)=>{assert.equal(name,'click');listener=fn;},getElementById:id=>id==='s-both'?row:null};
-  vm.runInNewContext(assets.slice(start,end),{document,Element,history:{replaceState:(a,b,hash)=>hashes.push(hash)},window:{setTimeout:fn=>timers.push(fn)}});
+  vm.runInNewContext(assets.slice(start,end),{document,Element,history:{replaceState:(a,b,hash)=>hashes.push(hash)},window:{setTimeout:fn=>timers.push(fn),requestAnimationFrame:fn=>fn()}});
   let prevented=false;
   const eventTarget=new Element('a',document);
   eventTarget.closest=selector=>{assert.equal(selector,'a.signal-member-jump');return {getAttribute:()=> '#s-both'};};
   listener({target:eventTarget,preventDefault:()=>{prevented=true;}});
   assert.equal(prevented,true);assert.equal(group.open,true);assert.equal(quiet.open,true);
-  assert.deepEqual(copy(scrolls),[{block:'center',behavior:'smooth'}]);assert.deepEqual(hashes,['#s-both']);
-  assert.ok(classes.has('stk-flash'));timers[0]();assert.equal(classes.size,0);
+  // 2026-11-24：滚动延后到收起引起的重排落定之后（setTimeout 0 + 两帧），不再同步滚一次
+  assert.deepEqual(copy(scrolls),[]);assert.deepEqual(hashes,['#s-both']);
+  assert.ok(classes.has('stk-flash'));assert.equal(timers.length,2);
+  timers[1]();assert.deepEqual(copy(scrolls),[{block:'center',behavior:'smooth'}]);
+  timers[0]();assert.equal(classes.size,0);
 });
 test('目标失败旧价灰胶囊不因面板重绘变成空间或达到',async()=>{
   const b=await boot({token:false,prepareDocument:doc=>targetDocument(doc,'bad',{noTriggers:true})});
@@ -2445,57 +2448,85 @@ for(const [p,t,g,on]of [[100,100,0,true],[100,100.0000000001,0,false],[100,99.99
 for(const [price,tone]of [[90.0000000001,''],[90,'loss'],[89.9999999999,'loss'],[80,'loss'],[79.9999999999,'loss'],[109.9999999999,''],[110,'gain'],[110.0000000001,'gain'],[100,'']])test('终稿盈亏±10淡底而非红灯 '+price,async()=>{
   const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:100,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',price,1000);}}),r=b.rows.find(r=>r.sym==='AAA');
   assert.equal(b.pnlTone(price,100),tone);assert.equal(r.costLine.getAttribute('data-pnl')||'',tone);assert.equal(r.tr.className,'green');
-  for(const g of ['gain','loss'])assert.equal(qaPnlRows(b,g).some(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA'),g===tone);
+  // 2026-11-24：浮盈浮亏不再进统计（「到价」只留加减仓价），骨架里也没有 gain／loss 两个名单
+  for(const g of ['gain','loss'])assert.equal(b.doc.querySelector('.pnl-extra ul[data-g="'+g+'"]'),null);
   qaAssertNoAck(b);assert.equal(b.requests.length,0);
 });
 for(const item of [{qty:5},{cost:0,qty:5},{cost:100,qty:0}])test('终稿未知成本零成本清仓不伪造盈亏提示 '+JSON.stringify(item),async()=>{
   const b=await bootCash({local:{...copy(SEED),items:{AAA:item}},prepareDocument(doc){qaQuote(doc,'AAA',80,1000);}}),r=b.rows.find(r=>r.sym==='AAA');
-  assert.equal(r.costLine.getAttribute('data-pnl'),null);assert.equal(qaPnlRows(b,'loss').length,0);assert.equal(qaPnlRows(b,'gain').length,0);assert.equal(r.tr.className,'green');
+  assert.equal(r.costLine.getAttribute('data-pnl'),null);assert.equal(r.tr.className,'green');
   if(item.qty===0)assert.equal(r.costLine.hidden,true);else assert.equal(r.costLine.hidden,false);
 });
 test('终稿移出持仓只保留加仓提示且不移表不造红',async()=>{
   const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:200,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',100,100);}}),r=b.rows.find(r=>r.sym==='AAA');
   const parent=r.tr.parentNode;b.paint();assert.equal(r.tr.parentNode,parent);b.move('AAA','watch');
   assert.equal(r.cap.hidden,false);assert.equal(r.cutCap.hidden,true);assert.equal(r.costLine.hidden,true);assert.equal(r.tr.className,'green');
-  assert.equal(qaPnlRows(b,'loss').length,0);assert.equal(qaPnlRows(b,'cut').some(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA'),false);
+  assert.equal(qaPnlRows(b,'cut').some(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA'),false);
   assert.equal(qaPnlRows(b,'add').some(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA'),true);
 });
-for(const level of ['red','yellow','green','gray'])test('终稿盈亏到价名单沿用个股基础灯 '+level,async()=>{
+for(const level of ['red','yellow','green','gray'])test('终稿到价名单沿用个股基础灯 '+level,async()=>{
   const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',100,100).className=level;}}),r=b.rows.find(r=>r.sym==='AAA');
-  for(const kind of ['loss','add','cut']){const li=qaPnlRows(b,kind).find(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA');assert.ok(li);assert.equal(li.className,'lamp-'+level);}
+  for(const kind of ['add','cut']){const li=qaPnlRows(b,kind).find(li=>li.querySelector('.signal-member-symbol')?.textContent==='AAA');assert.ok(li);assert.equal(li.className,'lamp-'+level);}
   for(let i=0;i<4;i++)b.paint();assert.equal(r.tr.className,level);qaAssertNoAck(b);
 });
-for(const kind of ['gain','loss','cut','add'])test('统计空分类 '+kind+' 空→有→空保留标题骨架且重绘不复位',async()=>{
+for(const kind of ['cut','add'])test('统计空分类 '+kind+' 空→有→空保留标题骨架且重绘不复位',async()=>{
   const empty={...copy(SEED),items:{AAA:{cost:100,qty:5}}};
   const b=await boot({local:empty,prepareDocument(doc){qaQuote(doc,'AAA',100,1000);doc.querySelector('.pnl-count').setAttribute('data-pnl-count','');}});
   b.respond(b.requests[0],meta(empty));await settle();
   const extra=b.doc.querySelector('.pnl-extra'),details=extra.querySelector('details'),summary=extra.querySelector('summary'),chip=extra.querySelector('.pnl-chip');
-  const lists=new Map(['gain','loss','cut','add'].map(g=>[g,extra.querySelector('ul[data-g="'+g+'"]')]));
+  const lists=new Map(['cut','add'].map(g=>[g,extra.querySelector('ul[data-g="'+g+'"]')]));
   const r=b.rows.find(row=>row.sym==='AAA');details.open=true;
   const checkGroups=active=>{for(const [g,ul]of lists){assert.equal(extra.querySelector('ul[data-g="'+g+'"]'),ul);assert.equal(ul.closest('.signal-member-block').hidden,g!==active);assert.equal(ul.querySelectorAll('li').length,g===active?1:0);}
     assert.equal(details.open,true);assert.equal(extra.querySelector('summary'),summary);assert.equal(extra.querySelector('.pnl-chip'),chip);assert.equal(summary.querySelector('[data-pnl-count]').textContent,active?'1':'0');};
   checkGroups('');
-  if(kind==='gain'||kind==='loss')b.mergeCloud({...empty,items:{AAA:{cost:kind==='gain'?80:125,qty:5}}});
-  else if(kind==='add')r.trig=100;else r.cut=100;
+  if(kind==='add')r.trig=100;else r.cut=100;
   for(let i=0;i<4;i++){b.paint();checkGroups(kind);}
   b.mergeCloud(empty);r.trig=1000;r.cut=1000;
   for(let i=0;i<4;i++){b.paint();checkGroups('');}
   assert.equal(b.requests.length,1);assert.equal(b.puts().length,0);qaAssertNoAck(b);await b.dispose();
 });
-for(const [kind,cost,expected]of [['gain',80,'+25.0% · +$50.0'],['loss',125,'-20.0% · -$62.5']])test('统计 '+kind+' 真实百分比和金额采用原始价格成本及小数数量',async()=>{
-  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost,qty:2.5}}},prepareDocument(doc){qaQuote(doc,'AAA',100,1000);}});
-  const r=b.rows.find(row=>row.sym==='AAA'),ul=b.doc.querySelector('.pnl-extra ul[data-g="'+kind+'"]');
-  assert.equal(r.pnlAmt,(100-cost)*2.5);assert.equal(r.pnlPct,(100-cost)/cost*100);
-  for(let i=0;i<4;i++){b.paint();assert.equal(ul.querySelector('.signal-member-metric').textContent,expected);assert.equal(ul.closest('.signal-member-block').hidden,false);assert.equal(r.tr.className,'green');}
+// 2026-11-24 用户：盈亏达到 ±10% 门槛的，在仓位「盈亏明细」行上加红绿底色（盈绿 gain、亏红 loss），不再进统计。
+function qaFoldDoc(doc){const d=doc.createElement('div');d.innerHTML='<div id="piBody"><div class="pi-block"><div id="piWeights"></div></div><div id="piPnlBlock" hidden><details class="pi-fold" id="piPnlFold"><summary>盈亏明细</summary><div class="pi-plist" id="piPnlList"></div></details></div></div>';doc.body.appendChild(d);}
+for(const [price,cost,tone,expected]of [[100,80,'gain','+25.0%'],[100,125,'loss','-20.0%'],[100,95,'','+5.3%'],[100,90.9091,'','+10.0%']])test('盈亏明细行底色 '+[price,cost,tone],async()=>{
+  const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost,qty:2.5}}},prepareDocument(doc){qaQuote(doc,'AAA',price,1000);qaFoldDoc(doc);}});
+  const r=b.rows.find(row=>row.sym==='AAA');
+  for(let i=0;i<4;i++){b.paint();
+    const row=b.doc.querySelectorAll('#piPnlList .pi-prow').filter(x=>!/pi-phead/.test(x.className))[0];assert.ok(row,'盈亏明细里要有 AAA 一行');
+    assert.equal(row.getAttribute('data-pnl')||'',b.pnlTone(price,cost));assert.equal(row.getAttribute('data-pnl')||'',r.costLine.getAttribute('data-pnl')||'','与主表成本行同一判法');
+    assert.match(row.querySelector('.pi-ppct').textContent,/^[+-]/);assert.ok(row.querySelector('.pi-ppnl .pi-pamt')&&row.querySelector('.pi-ppnl .pi-ppct'),'金额与盈亏比同在一个整体里');assert.match(row.querySelector('.pi-pw').textContent,/^\d+\.\d%$/);assert.equal(r.tr.className,'green');}
+  if(tone)assert.equal(b.doc.querySelectorAll('#piPnlList .pi-prow').filter(x=>!/pi-phead/.test(x.className))[0].getAttribute('data-pnl'),tone);
   assert.equal(b.requests.length,0);await b.dispose();
 });
-test('终稿四组pnl静态骨架重绘保留summary胶囊与展开状态',async()=>{
+// 2026-11-24 用户：盈亏明细加抬头行（代码｜盈亏｜金额｜仓位），点「盈亏」从亏到盈、点「仓位」从大到小。
+test('盈亏明细抬头行与排序：默认亏到盈，点仓位按市值从大到小，再点盈亏回来，重绘不复位',async()=>{
+  // AAA：成本 125 现价 100，亏，市值 200；BBB：成本 50 现价 100，盈，市值 3000（仓位更大）
+  const two={...copy(SEED),items:{AAA:{cost:125,qty:2},BBB:{cost:50,qty:30}}};
+  const b=await bootCash({local:two,prepareDocument(doc){qaQuote(doc,'AAA',100,1000);qaQuote(doc,'BBB',100,1000);qaFoldDoc(doc);}});
+  b.paint();
+  const list=b.doc.getElementById('piPnlList'),head=()=>list.querySelector('.pi-phead');
+  assert.ok(head(),'有数据时要有抬头行');
+  assert.deepEqual([...head().children].map(e=>e.textContent),['代码','盈亏','金额','仓位']);
+  assert.deepEqual([...head().querySelectorAll('[data-psort]')].map(e=>e.getAttribute('data-psort')),['pnl','weight']);
+  const order=()=>list.querySelectorAll('.pi-prow .pi-pname').map(e=>e.textContent.slice(0,3));
+  const press=k=>list.querySelector('[data-psort="'+k+'"]').fire('click',{bubbles:true});
+  assert.deepEqual(order(),['AAA','BBB']);                               // 默认：从亏到盈
+  assert.equal(head().querySelector('[data-psort="pnl"]').getAttribute('aria-pressed'),'true');
+  press('weight');
+  assert.deepEqual(order(),['BBB','AAA']);                               // 仓位从大到小
+  assert.equal(head().querySelector('[data-psort="weight"]').getAttribute('aria-pressed'),'true');
+  assert.equal(head().querySelector('[data-psort="pnl"]').getAttribute('aria-pressed'),'false');
+  for(let i=0;i<3;i++)b.paint();assert.deepEqual(order(),['BBB','AAA']);   // 重绘不复位
+  press('pnl');assert.deepEqual(order(),['AAA','BBB']);
+  assert.equal(b.requests.length,0);assert.equal(b.puts().length,0);       // 只在本页内，不联网不上传
+  await b.dispose();
+});
+test('终稿两组到价静态骨架重绘保留summary胶囊与展开状态',async()=>{
   const b=await bootCash(),extra=b.doc.querySelector('.pnl-extra'),details=extra.querySelector('details'),chip=extra.querySelector('.pnl-chip');
   assert.ok(chip,'必须保留summary静态胶囊，不以textContent删除');details.open=true;
   for(let i=0;i<4;i++)b.paint();assert.equal(details.open,true);assert.equal(extra.querySelector('.pnl-chip'),chip);
-  for(const g of ['gain','loss','cut','add'])assert.equal(extra.querySelectorAll('ul[data-g="'+g+'"]').length,1);
+  for(const g of ['cut','add'])assert.equal(extra.querySelectorAll('ul[data-g="'+g+'"]').length,1);
 });
-test('统计盈亏到价名单个股所属组名只保留前两个字',async()=>{
+test('统计到价名单个股所属组名只保留前两个字',async()=>{
   const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){
     qaQuote(doc,'AAA',100,100);
     // 夹具默认分组卡不带 grp-name 文本，补成真实页面结构，groupName() 才取得到组名。
@@ -2503,8 +2534,8 @@ test('统计盈亏到价名单个股所属组名只保留前两个字',async()=>
     card.className='group-card';
     card.querySelector('summary .grp-name').textContent='长持仓';
   }});
-  const li=qaPnlRows(b,'loss')[0];
-  assert.ok(li,'浮亏名单里至少要有一条');
+  const li=qaPnlRows(b,'add')[0];
+  assert.ok(li,'加仓价名单里至少要有一条');
   const span=li.querySelector('.signal-member-belong');
   assert.ok(span,'名单里要有分组标识');
   const txt=span.textContent;
@@ -2514,7 +2545,7 @@ test('统计盈亏到价名单个股所属组名只保留前两个字',async()=>
     '组名不能还是完整名: '+txt);
   assert.ok(SOURCE.includes('name.slice(0, 2)'),'前端截断规则必须存在');
   for(let i=0;i<4;i++)b.paint();
-  const after=qaPnlRows(b,'loss')[0].querySelector('.signal-member-belong').textContent;
+  const after=qaPnlRows(b,'add')[0].querySelector('.signal-member-belong').textContent;
   assert.equal(after,txt,'重绘不得还原完整组名');
   await b.dispose();
 });
@@ -2525,7 +2556,7 @@ for(const state of ['low','space','high','hit','bad'])test('终稿目标'+state+
 });
 test('终稿每次动态绘制通过document发cost:painted并已完成名单更新',async()=>{
   const b=await bootCash({local:{...copy(SEED),items:{AAA:{cost:125,qty:5}}},prepareDocument(doc){qaQuote(doc,'AAA',100,100);}});let n=0;
-  b.doc.addEventListener('cost:painted',()=>{n++;assert.equal(qaPnlRows(b,'loss').length,1);qaAssertNoAck(b);});b.paint();assert.equal(n,1);
+  b.doc.addEventListener('cost:painted',()=>{n++;assert.equal(qaPnlRows(b,'add').length,1);qaAssertNoAck(b);});b.paint();assert.equal(n,1);
 });
 test('终稿生产成本源码无ACK、DEMO模拟或浮亏造红链路',()=>{
   assert.doesNotMatch(SOURCE,/\b(?:setAck|pruneAck|ackStatEntries|renderAckGray|LOSS_STAT|DEMO|injectDemo|injectLmtEarnings)\b|data-ack|ack-btn|cost-warn|ack_tombstones|ack_contexts|\.acks\b|r48-demo|data-r58-key/);

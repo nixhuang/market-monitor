@@ -2518,23 +2518,14 @@
       } else el.appendChild(document.createTextNode(text));
     }
     function renderPnlPrices() {
-      var groups = { gain: [], loss: [], cut: [], add: [] };
+      // 2026-11-24 用户：「盈亏到价」改名「到价」，只留加减仓价提醒；盈亏达到 ±10% 改在仓位「盈亏明细」行上加红绿底色。
+      var groups = { cut: [], add: [] };
       ROWS.forEach(function (r) {
         if (!live(r)) return;
         r.lv =
           LV_ORDER.filter(function (l) {
             return r.tr.classList.contains(l);
           })[0] || 'gray';
-        if (r.has && r.costKnown && r.cost > 0) {
-          var tone = pnlTone(r.price, r.cost);
-          if (tone)
-            groups[tone].push({
-              r: r,
-              value: pct(r.pnlPct) + ' · ' + money(r.pnlAmt),
-              sort: -Math.abs(r.pnlPct),
-              cls: tone === 'gain' ? 'up' : 'down',
-            });
-        }
         ['add', 'cut'].forEach(function (kind) {
           var tag = kind === 'add' ? r.cap : r.cutCap,
             lv = kind === 'add' ? r.trig : r.cut;
@@ -2550,7 +2541,7 @@
           tag.setAttribute('data-near', near ? '1' : '0');
           // 2026-11-15：主表加减仓价方向文案跟服务端真源一致，按 (设置价 − 现价)/现价
           // 写「需+N%」／「需-N%」；前端重绘不能覆写回旧文案。
-          // 统计面板「盈亏到价」名单第二行仍是「距 价 · 差%」，那一条不在本次改动范围内。
+          // 统计面板「到价」名单第二行仍是「距 价 · 差%」，那一条不在本次改动范围内。
           var text = (kind === 'add' ? '加仓价 ' : '减仓价 ') + lv + ' · 需' + dir + mag + '%';
           setDirectText(tag.querySelector('span') || tag, text);
           if (near)
@@ -2607,7 +2598,7 @@
       var summary = extra.querySelector('summary');
       var count = summary && summary.querySelector('[data-pnl-count]');
       if (count) setDirectText(count, String(total));
-      else setDirectText(summary, '盈亏到价 · ' + total + ' 只');
+      else setDirectText(summary, '到价 · ' + total + ' 只');
     }
     function renderCostLine(r, totalAsset) {
       var td = r.costLine;
@@ -2711,24 +2702,57 @@
     // 2026-11-23：仓位里默认折叠的「盈亏明细」（每只个股的总盈亏）：长短持仓混排，固定从亏损到盈利；
     // 每行 代码+名称｜总盈亏金额｜总盈亏比｜市值（市值前灰色 $）。成本未知的个股不进，避免用 0 冒充。
     // 用户定：标题右侧不写合计金额，也不另做已实现的名单。
-    function pnlRowHtml(sym, cn, amt, pctTxt, mvTxt, up) {
-      var link = ROW_BY_SYM[sym] && ROW_BY_SYM[sym].tr && ROW_BY_SYM[sym].tr.id;
-      var name = '<span class="pi-pname">' + (link ? '<a class="signal-member-jump" href="#' + esc(link) + '">' : '') +
-        esc(sym) + (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '') + '</span>';
-      return '<div class="pi-prow">' + name +
-        '<b class="pi-pamt ' + (up ? 'up' : 'down') + '">' + amt + '</b>' +
-        '<b class="pi-ppct ' + (up ? 'up' : 'down') + '">' + pctTxt + '</b>' +
-        '<b class="pi-pmv">' + mvTxt + '</b></div>';
+    // tone：盈亏达到 ±10% 门槛时为 gain／loss（与主表成本行同一判法 pnlTone），行上加淡绿／淡红底色。
+    // 列序：代码（行业 名称）｜盈亏（金额 比，一个整体）｜市值｜仓位（占持仓股票/ETF 市值）。
+    function sectorTag(sym) {
+      var key = sectorOf(sym), g = SECTOR_GROUPS.filter(function (x) { return x[0] === key; })[0];
+      return g ? String(g[1]).replace(/\s+/g, '').slice(0, 2) : '';
     }
-    function renderPnlFolds(rows) {
+    function pnlRowHtml(sym, cn, amt, pctTxt, mvTxt, up, tone, wTxt) {
+      var link = ROW_BY_SYM[sym] && ROW_BY_SYM[sym].tr && ROW_BY_SYM[sym].tr.id, sec = sectorTag(sym);
+      var name = '<span class="pi-pname">' + (link ? '<a class="signal-member-jump" href="#' + esc(link) + '">' : '') +
+        esc(sym) + (sec ? '<span class="pi-psec">' + esc(sec) + '</span>' : '') +
+        (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '') + '</span>';
+      return '<div class="pi-prow"' + (tone ? ' data-pnl="' + tone + '"' : '') + '>' + name +
+        '<b class="pi-ppnl ' + (up ? 'up' : 'down') + '"><span class="pi-pamt">' + amt + '</span> <span class="pi-ppct">' + pctTxt + '</span></b>' +
+        '<b class="pi-pmv">' + mvTxt + '</b>' +
+        '<b class="pi-pw">' + wTxt + '</b></div>';
+    }
+    // 抬头（代码｜盈亏｜金额｜仓位）：点「盈亏」从亏到盈（默认），点「仓位」从大到小；只记在本页内存，不写本机不上传。
+    var PNL_SORT = 'pnl', PNL_LAST = null;
+    function pnlHeadHtml() {
+      function th(key, label, cls) {
+        return '<span class="pi-ph' + (cls || '') + '">' + (key
+          ? '<button type="button" class="pi-psort" data-psort="' + key + '" aria-pressed="' + (PNL_SORT === key) + '">' + label + '</button>'
+          : label) + '</span>';
+      }
+      return '<div class="pi-prow pi-phead">' + th('', '代码') + th('pnl', '盈亏') + th('', '金额') +
+        th('weight', '仓位', ' pi-ph-w') + '</div>';
+    }
+    function renderPnlFolds(rows, holdingsMv) {
+      PNL_LAST = [rows, holdingsMv];
       var items = rows.filter(function (r) { return r.has && r.costKnown && r.pnlAmt !== null; })
-        .map(function (r) { return { sym: r.sym, cn: r.note, amt: r.pnlAmt, pct: r.pnlPct, mv: r.mv }; })
-        .sort(function (a, b) { return a.amt - b.amt; });
+        .map(function (r) { return { sym: r.sym, cn: r.note, amt: r.pnlAmt, pct: r.pnlPct, mv: r.mv, tone: pnlTone(r.price, r.cost) }; })
+        .sort(PNL_SORT === 'weight'
+          ? function (a, b) { return b.mv - a.mv || a.amt - b.amt; }   // 仓位从大到小（同仓位再按亏到盈）
+          : function (a, b) { return a.amt - b.amt; });                 // 盈亏从亏到盈
       var blk = document.getElementById('piPnlBlock'), list = document.getElementById('piPnlList');
       if (blk) blk.hidden = !items.length;
-      var html = items.map(function (x) {
+      if (list && !list._psortBound) {
+        list._psortBound = true;
+        list.addEventListener('click', function (e) {
+          var b = e.target && e.target.closest && e.target.closest('[data-psort]');
+          if (!b) return;
+          var key = b.getAttribute('data-psort');
+          if (key === PNL_SORT || !PNL_LAST) return;
+          PNL_SORT = key;
+          renderPnlFolds(PNL_LAST[0], PNL_LAST[1]);
+        });
+      }
+      var html = (items.length ? pnlHeadHtml() : '') + items.map(function (x) {
         return pnlRowHtml(x.sym, x.cn, money(x.amt), pct(x.pct),
-          '<span class="pi-wcur">$</span>' + Math.round(x.mv).toLocaleString('en-US'), x.amt >= 0);
+          '<span class="pi-wcur">$</span>' + Math.round(x.mv).toLocaleString('en-US'), x.amt >= 0, x.tone,
+          (holdingsMv > 0 ? (x.mv / holdingsMv) * 100 : 0).toFixed(1) + '%');
       }).join('');
       if (list && list._r !== html) { list.innerHTML = html; list._r = html; }
     }
@@ -2768,7 +2792,7 @@
         }).sort(function (a, b) { return b.pc - a.pc; });
       var block = wlist.closest('.pi-block');
       if (block) block.hidden = !shown.length;
-      renderPnlFolds(rows);
+      renderPnlFolds(rows, holdingsMv);
       wlist.innerHTML = shown.map(function (s) {
         return '<div class="pi-wrow"><span class="pi-wname">' + esc(s.label) + '</span>' +
                '<b class="pi-wpnl ' + (s.ratio >= 0 ? 'up' : 'down') + '">' + pct(s.ratio) + '</b>' +

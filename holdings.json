@@ -93,7 +93,7 @@
       "sector": "technology"
     },
     "SPYM": {
-      "note": "标普500指数",
+      "note": "标普",
       "hold": "long",
       "cost": 88.77836555758391,
       "sector": "index_funds"

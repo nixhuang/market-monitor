@@ -2973,16 +2973,39 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn('document.querySelectorAll("#signalCounts details[open], #group_positions .pi-fold[open]")', js)
         self.assertIn("    closeSubFolds();\n    document.querySelectorAll(\"details.card[open]\")", js)
         cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
-        self.assertIn(".sort(function (a, b) { return a.amt - b.amt; });", cost)   # 固定从亏损到盈利
+        self.assertIn(": function (a, b) { return a.amt - b.amt; });", cost)   # 默认从亏损到盈利（2026-11-24 起可点抬头「仓位」改按仓位从大到小）
         self.assertNotIn('piRealizedList', cost)
         self.assertNotIn('piPnlSum', cost)
         css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
         self.assertIn('.pi-fold > summary::before { content: ""; flex: none; width: 10px; height: 10px; margin-right: 0;', css)   # 左边展开小三角：CSS 画的 10×10 实心三角，与标题间距走 summary gap 4px
-        self.assertIn('.pi-plist { display: grid; grid-template-columns: minmax(max-content,1.7fr) repeat(3, minmax(0,1fr));', css)   # 名单共用列轨，名称一行、其余三列平铺
+        self.assertIn('.pi-plist { display: grid; grid-template-columns: minmax(max-content,1.6fr) minmax(max-content,1.3fr) minmax(max-content,1fr) minmax(max-content,.7fr);', css)   # 2026-11-24：名称｜盈亏(金额+比一个整体)｜市值｜仓位 四列共用列轨
         self.assertIn('.pi-prow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;', css)
-        self.assertIn('.pi-pmv { text-align: right; }', css)   # 市值列靠右贴齐页面右边
+        self.assertIn('.pi-prow.pi-phead', css)                # 2026-11-24：抬头行（代码｜盈亏｜金额｜仓位），与数据行同一套列轨
+        self.assertIn("data-psort", cost)                       # 点「盈亏」从亏到盈、点「仓位」从大到小
+        self.assertIn("PNL_SORT === 'weight'", cost)
+        self.assertIn('.pi-pw { text-align: right; }', css)   # 最右的仓位列靠右贴齐页面右边
+        self.assertIn('.pi-pname .pi-psec', css)               # 代码后面的行业前两个字
+        self.assertIn("'<b class=\"pi-ppnl '", cost)           # 金额与盈亏比同在一个 pi-ppnl 里，算一个整体
+        self.assertIn("'<b class=\"pi-pw\">'", cost)            # 市值右边的仓位列
+        self.assertIn(".slice(0, 2) : '';", cost)               # 行业只要前两个字
         self.assertIn('.pi-fold[open] > summary::before { clip-path: polygon(0 15%, 100% 15%, 50% 100%); }', css)
         self.assertNotIn('个股总盈亏', src)                                                  # 名称已改为「盈亏明细」
+
+    def test_jump_waits_for_layout_before_scroll_and_spym_is_short_named(self):
+        """2026-11-24：当日清单点个股跳转落点偏（收起当日卡后页面才缩短，滚动已按旧高度开始）——
+        滚动改为等收起引起的重排落定（toggle 之后再两帧）才开始；SPYM 备注改「标普」。"""
+        js = monitor.PAGE_INTERACTION_JS
+        i = js.index('function revealStockRow')
+        body = js[i:js.index('// 统计面板里的标的名字', i)]
+        self.assertIn('requestAnimationFrame(function() { window.requestAnimationFrame(go); })', body)
+        self.assertEqual(body.count('scrollIntoView'), 1)           # 只剩延后的那一次，不再同步滚一次
+        self.assertLess(body.index('__mmCloseOtherGroups'), body.index('scrollIntoView'))
+        import json as _json
+        h = _json.load(open(ROOT / 'holdings.json', encoding='utf-8'))['positions']
+        n = _json.load(open(ROOT / 'symbol-names.json', encoding='utf-8'))
+        self.assertEqual(h['SPYM']['note'], '标普')
+        self.assertEqual(h['SPYM']['sector'], 'index_funds')        # 行业分类仍是指数基（页面标签「指数」）
+        self.assertEqual(n['SPYM'], '标普')
 
     def test_day_contrib_sorted_loss_to_profit(self):
         """2026-11-23：当日清单固定从亏损到盈利。"""

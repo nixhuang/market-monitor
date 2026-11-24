@@ -394,7 +394,7 @@
   /* v18 仓位展开明细：手机档仍只用这一个 ≤600 断点，不新增第二档 */
   .pi-body { padding: 2px 8px 9px; }
   .pi-wlist { --pi-wgap: 6px; }
-  /* 盈亏明细手机档：列距 6；名称仍一行（代码＋中文名），其余三列平分剩下的宽度 */
+  /* 盈亏明细手机档：列距 6；每列至少容得下自己最长的内容（名称一行：代码＋行业＋中文名），余宽按权重分 */
   .pi-plist { column-gap: 6px; }
   .pi-wshare { grid-template-columns: 48px minmax(0,1fr); }
   .pi-kpis { gap: 4px; }
@@ -478,16 +478,32 @@
 .pi-fold > summary:focus-visible { outline: 2px solid var(--head-blue-on); outline-offset: 2px; }
 /* 整张名单共用一套列轨：名称列至少容得下最长的「代码＋中文名」（一行不换行），四列起点间距随页面宽度等比伸缩
    （与行业权重一致，不写死间距）；每行用 subgrid 继承列轨，所以各行竖向对齐、最右列也铺到页面边。 */
-.pi-plist { display: grid; grid-template-columns: minmax(max-content,1.7fr) repeat(3, minmax(0,1fr)); column-gap: 8px; margin-top: 4px; }   /* 名称块权重 1.7：金额、盈亏比两列整体往右靠 */
+.pi-plist { display: grid; grid-template-columns: minmax(max-content,1.6fr) minmax(max-content,1.3fr) minmax(max-content,1fr) minmax(max-content,.7fr); column-gap: 8px; margin-top: 4px; }   /* 名称｜盈亏（金额+比，一个整体）｜市值｜仓位；每列至少容得下自己最长的内容 */
 .pi-prow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
   align-items: center; min-width: 0; padding: 4px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
 .pi-prow + .pi-prow { border-top: 1px solid var(--line); }
 /* 名称一行显示：代码＋灰色中文名同排，不换行、不省略 */
+/* 2026-11-24 盈亏达到 ±10% 门槛的行加淡底色（盈绿、亏红，与主表成本行同色同判法）；
+   左右各外延 3px 的同色阴影，让文字不贴着色块边（阴影只画在框外，不占版面、不撑宽、不叠色）。 */
+.pi-prow[data-pnl="gain"] { --tint: var(--pnl-gain-bg, rgba(63,185,80,.12)); }
+.pi-prow[data-pnl="loss"] { --tint: var(--pnl-loss-bg, rgba(248,81,73,.12)); }
+.pi-prow[data-pnl] { background: var(--tint); box-shadow: -3px 0 0 var(--tint), 3px 0 0 var(--tint); }
+/* 抬头行：与数据行同一套列轨（subgrid），四个列名各在自己那一列的左边（金额、仓位列与数字同向）；
+   「盈亏」「仓位」是可点的排序钮，选中的蓝色加下划线；不改变行高之外的任何版面。 */
+.pi-prow.pi-phead { padding: 2px 0 3px; font-size: 13px; color: var(--dim, #8b93a1); border-bottom: 1px solid var(--line); }
+.pi-prow.pi-phead + .pi-prow { border-top: 0; }
+.pi-ph { min-width: 0; white-space: nowrap; line-height: 1.25; }
+.pi-ph-w { text-align: right; }
+.pi-psort { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
+.pi-psort[aria-pressed="true"] { color: var(--head-blue-on); text-decoration: underline; text-underline-offset: 3px; }
+.pi-psort:focus-visible { outline: 2px solid var(--head-blue-on); outline-offset: 2px; border-radius: 3px; }
 .pi-pname { color: var(--text); min-width: 0; white-space: nowrap; line-height: 1.25; }
 .pi-pname .pi-pcn { color: var(--dim, #8b93a1); margin-left: 4px; font-size: 13px; }
+.pi-pname .pi-psec { color: var(--dim, #8b93a1); margin-left: 5px; font-size: 13px; }   /* 行业分类前两个字，灰色，与名称同号 */
 .pi-pname a { color: inherit; text-decoration: none; }
-.pi-pamt, .pi-ppct, .pi-pmv { font-weight: 400; white-space: nowrap; text-align: left; }
-.pi-pmv { text-align: right; }   /* 最右的市值列靠右贴齐页面右边，不留空 */
+.pi-ppnl, .pi-pmv, .pi-pw { font-weight: 400; white-space: nowrap; text-align: left; }
+.pi-ppnl .pi-ppct { margin-left: 4px; }
+.pi-pw { text-align: right; }   /* 最右的仓位列靠右贴齐页面右边，不留空 */
 .pi-pmv .pi-wcur { color: var(--dim, #8b93a1); }
 .pi-log-link { display: inline-flex; align-items: center; gap: 5px; color: var(--head-blue-on);
   font-size: 16px; font-weight: 600; text-decoration: none; }
