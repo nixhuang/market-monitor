@@ -1744,9 +1744,11 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(monitor.dca_text({**base, 'pending': True, 'first': '2026-10-20'}),
                          '尚未开始（首个定投日 2026-10-20）')
         def page(d):
-            snap = {'dca_reminder': d, 'registered_counts': {}, 'list_counts': {}, 'summary': {}}
+            snap = {'dca_reminder': d, 'registered_counts': {}, 'list_counts': {}, 'summary': {'red': 1, 'yellow': 0, 'total': 3}}   # 2026-11-24：定投在统计标题栏里，统计卡要有内容才渲染
+            row = {'symbol': 'AAA', 'group': 'position', 'note': '', 'price': 10, 'prev_close': 9.9, 'chg': 1, 'level': 'green',
+                   'signals': [], 'signal_marks': [], 'rsi': {}, 'data_date': '2026-10-15'}
             with patch.object(monitor, 'global_dca', return_value=None):
-                return monitor.render({}, [], 0, snapshot=snap)
+                return monitor.render({}, [row], 1, snapshot=snap)   # 有持仓行 → 统计卡渲染，定投在其标题栏里
         # 2026-10-19：定投提醒挪到了顶栏最右侧，不再挂在市场风险标题里
         title = lambda html: html
         quiet = page({**base, 'due': False, 'next_in': 5, 'next_date': '2026-10-15'})
@@ -7862,10 +7864,10 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                           '<span class="stat-badge red" aria-label="红 0 项">0</span>'
                           '<span class="stat-badge yellow" aria-label="黄 0 项">0</span>', panel)
             self.assertIn('白 0', panel)
-            self.assertIn('count-earn">报 4</span>', panel)   # 2026-11-20 筛选文案日期改 MM/DD 后，原先靠「财报 2026-…」凑出的「报 2」改为断言真正的财报计数
+            self.assertNotIn('count-earn', panel)   # 2026-11-24 用户：标题栏去掉「报 N」；原： 2026-11-20 筛选文案日期改 MM/DD 后，原先靠「财报 2026-…」凑出的「报 2」改为断言真正的财报计数
             old = monitor._signal_counts_card({'summary': {'red': 4, 'yellow': 32},
                                                'signal_counts': {'target': {'label': '目标价', 'purple': 3}}})
-            for text in ('红 4', '黄 32', '白 0', '报 —'):
+            for text in ('红 4', '黄 32', '白 0'):
                 self.assertIn(text, old)
             self.assertNotIn('紫灯 3 只', old)
             self.assertNotIn('class="signal-member-symbol"', old)
@@ -8790,7 +8792,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         output = monitor._signal_counts_card(snap)
         header = output.split('</summary>', 1)[0]
         tokens = ['stat-badge red', 'stat-badge yellow', 'stat-badge gray',
-                  'stat-badge purple', 'count-earn']
+                  'stat-badge purple']
         self.assertEqual([header.index(t) for t in tokens], sorted(header.index(t) for t in tokens))
         self.assertIn('<span class="stat-badge purple" aria-label="紫 1 项">1</span>', header)
         self.assertIn('<span class="stat-badge gray" aria-label="白 0 项">0</span>', header)

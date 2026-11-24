@@ -1061,8 +1061,8 @@ test('数据时间和只读/同步状态跟随规则字号，定投在手机和�
   assert.match(ASSETS,/\.runlight\{[^}]*font-size:var\(--status-font-size\)/);
   assert.match(CSS,/\.sub \.cost-state\{margin-left:auto;flex:none;font-size:inherit;?\}/);
   assert.match(CSS,/\.sub \.cost-state \.warn,\.sub \.cost-state \.ok,\.sub \.cost-state \.dim\{font-size:inherit;?\}/);
-  assert.match(ASSETS,/\.brandbar \.dca-badge\{font-size:16px;margin-left:10px;margin-bottom:4px\}/);
-  assert.match(ASSETS,/\.brandbar \.dca-badge\{margin-left:8px;margin-bottom:4px;font-size:18px;line-height:24px\}/);
+  assert.match(ASSETS,/#signalCounts>summary \.dca-badge\{margin-left:auto;font-size:14px;font-weight:600\}/);
+  assert.match(ASSETS,/#signalCounts>summary \.dca-badge\{font-size:16px;line-height:24px\}/);
 });
 test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀且不中英混排',()=>{
   // 终稿当日贡献由dual-body承载；保留灯条，数值第二/三列，样式尺寸以440/1440真实harness验收。

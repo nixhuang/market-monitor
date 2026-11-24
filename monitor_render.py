@@ -19,6 +19,9 @@ _DISPLAY_AMP_RED = 10.0
 # 2026-11-20 23:xx 用户定稿：除「仓位」外的其它分组两两并排，与长短持仓同款双卡。
 # 顺序即页面顺序；最后一行只有「房地产」，标题单独占左半、清单仍跨两列。
 # 数据与统计口径仍用 GROUPS / _display_groups()，这里只管首页怎么摆。
+STAT_FIND_HTML = ('<span class="stat-find"><input id="statFindInput" type="text" maxlength="5" placeholder="代码" aria-label="按股票代码定位" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><button type="button" id="statFindBtn">FIND</button></span>')
+
+
 GROUP_DUAL_PAIRS = (
     ("focus", "index_funds"),
     ("technology", "healthcare"),
@@ -1376,8 +1379,10 @@ class PageRenderer:
                 heads.append(head)
                 panels.append(panel)
             cls = "dual-row zone-dual group-dual" + (" solo-left" if len(pair) == 1 else "")
+            # 2026-11-24 用户：搜索 FIND 放到房地产（唯一单标题那行）右侧空着的位置，可适当放大。
+            find_box = ('<div class="find-slot">' + STAT_FIND_HTML + '</div>') if len(pair) == 1 else ""
             out.append(f'<div class="{cls}" id="dualRow_{pair[0]}">'
-                       + "".join(heads)
+                       + "".join(heads) + find_box
                        + '<div class="dual-body group-scope" data-owner="">'
                        + "".join(panels) + '</div></div>')
         return "\n".join(out)
@@ -1779,13 +1784,15 @@ class PageRenderer:
                           for entries in gray_by_kind.values() for m in entries})
         totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
                   ("gray", "白", gray_count), ("purple", "紫", whole(summary.get("purple"))),
-                  ("earn", "报", self._context._earnings_week_panel(snapshot, count_only=True)),
+                  # 2026-11-24 用户：标题栏去掉「报 N」（财报数量）；定投提醒改居中放在灯圈与「总 N」之间
                   # 2026-11-20 用户：标题栏最右写「总 N」＝数据那里一共抓取多少只（含没取到的，不含市场风险指标）
                   ("all", "总", whole(summary.get("total"))))
-        stats = "".join(
+        parts = [
             (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple")
              else f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>')
-            for key, name, n in totals)
+            for key, name, n in totals]
+        parts.insert(len(parts) - 1, self._context.dca_badge(snapshot.get("dca_reminder")))   # 「总 N」之前
+        stats = "".join(parts)
         pnl_blocks = "".join(
             f'<div class="signal-member-block" hidden><h5>{label}</h5>'
             f'<ul class="signal-member-list" data-g="{key}"></ul></div>'
@@ -2219,7 +2226,6 @@ class PageRenderer:
                        f'role="status" aria-label="{risk_title}">'
                        f'<i class="stat-dot {risk["level"]}" aria-hidden="true"></i>'
                        f'{html_lib.escape(risk["label"])}</span>')
-        dca_title = self._context.dca_badge(snapshot.get("dca_reminder"))  # 2026-11-20：从按钮排挪到站名右侧，字号不变
         # 只把前端会读的字段内联进页面（见 slim_snapshot 的说明）：页面体积 −131KB，
         # 状态核验用到的 run_id / request_id / config_files / source_sha 全部保留。
         snapshot_json = self._context.json_script(slim_snapshot(snapshot))
@@ -2264,14 +2270,14 @@ class PageRenderer:
 <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png?v=3">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon-180.png?v=3">
 <link rel="manifest" href="./manifest.webmanifest">
-<title>Matrix</title>
+<title>NIX-Matrix</title>
 <style>
 {self._context.PAGE_CSS.removesuffix(self._context.RULES_CSS)}
 {cost_css}
 {self._context.RULES_CSS}</style>
 </head>
 <body>{current_rules}<div class="wrap">
-<div class="brandbar"><h1 class="brand">Matrix</h1>{dca_title}<span class="stat-find"><input id="statFindInput" type="text" maxlength="5" placeholder="代码" aria-label="按股票代码定位" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"><button type="button" id="statFindBtn">FIND</button></span></div>
+<div class="brandbar"><h1 class="brand">NIX-Matrix</h1></div>
 <div class="sub">{html_lib.escape(sub_line)}</div>
 
 <div class="runbar">

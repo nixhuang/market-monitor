@@ -846,7 +846,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('.sync-stack .cost-state{padding-left', css)
         self.assertIn('.sync-stack .cost-state .ok{color:var(--green)}', css)
         self.assertIn('.runlight[data-phase="ok"]{color:var(--green)}', css)
-        self.assertIn('.brandbar .dca-badge{font-size:16px;margin-left:10px;margin-bottom:4px}', css)
+        self.assertIn('#signalCounts>summary .dca-badge{margin-left:auto;font-size:14px;font-weight:600}', css)   # 2026-11-24：定投在统计标题栏，居中
+        self.assertNotIn('.brandbar .dca-badge', css)
         self.assertNotIn('.statusrow.flagrow', css)
         self.assertNotIn('.flagrow .rulelight .dot{display:none', css)   # 旧的 flagrow 写法仍不存在（现行规则是 .sync-stack 里的 .rulelight .dot）
         page = self.render()
@@ -1475,11 +1476,23 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertNotIn('stat-find', header)
         page = self.render()
         brandbar = re.search(r'<div class="brandbar">(.*?)</div>', page, re.S)[1]
-        self.assertLess(brandbar.index('<h1 class="brand">Matrix</h1>'), brandbar.index('class="stat-find"'))
-        self.assertIn('id="statFindInput" type="text" maxlength="5"', brandbar)
-        self.assertIn('.stat-find input{box-sizing:border-box;width:74px;', page_assets.PAGE_CSS)   # 5 位美股代码墨宽
-        self.assertIn('<button type="button" id="statFindBtn">FIND</button>', brandbar)
-        self.assertRegex(header, r'<span class="count-total count-earn">报 [—0-9]+</span>')
+        # 2026-11-24 用户：站名改「NIX-Matrix」；FIND 搬到房地产（唯一单标题那行）右侧空位，顶部不再有它，页面里只有一份
+        self.assertIn('<h1 class="brand">NIX-Matrix</h1>', brandbar)
+        self.assertNotIn('stat-find', brandbar)
+        self.assertEqual(page.count('id="statFindInput"'), 1)
+        slot = re.search(r'<div class="find-slot">(.*?)</div>', page, re.S)[1]
+        self.assertIn('id="statFindInput" type="text" maxlength="5"', slot)
+        self.assertIn('<button type="button" id="statFindBtn">FIND</button>', slot)
+        row = re.search(r'<div class="dual-row zone-dual group-dual solo-left" id="dualRow_[a-z_]+">.*?<div class="dual-body', page, re.S)[0]
+        self.assertIn('class="find-slot"', row)                      # FIND 住在房地产那一行，跟在唯一标题后面
+        self.assertEqual(page.count('class="find-slot"'), 1)
+        css = page_assets.PAGE_CSS
+        self.assertIn('.dual-row.group-dual.solo-left > .find-slot{grid-column:2;grid-row:1;align-self:stretch;', css)
+        self.assertIn('.find-slot .stat-find input{width:96px;height:40px;', css)   # 适当放大：74→96px、32→40px
+        self.assertIn('.dca-badge.on{color:var(--yellow)}', css)
+        self.assertNotIn('border:1px solid var(--yellow)', css)   # 2026-11-24 用户：定投进统计标题后不加黄框   # 定投日当天：黄字加 1px 黄框
+        self.assertIn('.stat-find input{box-sizing:border-box;width:74px;', css)   # 5 位美股代码墨宽（基础规格不变）
+        self.assertNotIn('count-earn', header)   # 2026-11-24 用户：去掉标题栏财报数量
         # 2026-11-20：标题栏最右是「总 N」＝数据那里抓取的总只数（含没取到的）
         self.assertRegex(header, r'<span class="count-total count-all">总 [—0-9]+</span></span>$')
         full = monitor._signal_counts_card({'summary': {'red': 1, 'yellow': 2, 'total': 99}, 'signal_counts': {}}).split('</summary>', 1)[0]
@@ -1492,7 +1505,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         css = page_assets.PAGE_CSS
         self.assertIn('.stat-find{display:inline-flex;align-items:center;gap:6px;flex:none;margin-left:auto}', css)
         self.assertIn('.brandbar h1.brand{margin:0;font-size:32px;line-height:39px;text-align:left;white-space:nowrap}', css)   # 2026-11-20：32px 锁 39px 行盒，FIND 不下移
-        self.assertIn('.brandbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:18px 0 4px}', css)   # 搜索与站名底边对齐
+        self.assertIn('.brandbar{display:flex;align-items:flex-end;justify-content:center;gap:10px;margin:15px 0 4px}', css)   # 2026-11-24：FIND 搬走后顶栏只剩站名＋定投，定投紧贴站名
         self.assertIn('input.value = "";', js)                 # 点 FIND 后清空输入框
         self.assertIn('background:#1e232d;border:1px solid var(--line)', css)
         self.assertRegex(css, r'\.stat-find input\{[^}]*font-size:16px')   # 16px：iOS 聚焦不自动放大页面

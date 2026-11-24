@@ -137,9 +137,10 @@ check(html.index(strip_css_comments(_cost_css)) < html.index(strip_css_comments(
       "规则CSS仍在仓位CSS之后覆盖")
 
 # 标题与排
-check("<title>Matrix</title>" in html and '<h1 class="brand">Matrix</h1>' in html
-      and "NIX-Matrix" not in html and "MatrixPulse" not in html,
-      "标题 = Matrix（带 brand 类，旧名 NIX-Matrix / MatrixPulse 全站清除）")
+# 2026-11-24 用户：站名改回「NIX-Matrix」（页面 title 与 h1.brand 一致），旧名 MatrixPulse 仍全站清除
+check("<title>NIX-Matrix</title>" in html and '<h1 class="brand">NIX-Matrix</h1>' in html
+      and "MatrixPulse" not in html,
+      "标题 = NIX-Matrix（带 brand 类，旧名 MatrixPulse 全站清除）")
 check("h1.brand{color:var(--frame-purple)}" in html, "站名用框紫 --frame-purple（2026-11-19 Demo），不写死颜色")
 check("市场自检" not in html, "旧标题已移除")
 check("数据时间 美 10-06 收盘" in html and "本页数据更新" not in html,
@@ -2026,7 +2027,7 @@ const deadline = setTimeout(() => {
           overflow: document.documentElement.scrollWidth > innerWidth};
       })()`);
       assertions.push({ok: JSON.stringify(header.order) === JSON.stringify([
-        'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn','count-total count-all'])
+        'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-all'])
         && header.count === String(header.expected) && header.color === 'rgb(176, 132, 255)' && !header.overflow,
         name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
       const statLines = await evaluate(`(() => {
@@ -2208,8 +2209,8 @@ const deadline = setTimeout(() => {
         sub.firstChild.textContent='数据时间 美 11-06 收盘';
         const rule=document.getElementById('ruleLightTxt');rule.textContent='规则已生效';
         const font=el=>getComputedStyle(el).fontSize;
-        let dca=document.querySelector('.brandbar .dca-badge');
-        if(!dca){dca=document.createElement('span');dca.className='dca-badge';document.querySelector('.brandbar').appendChild(dca);}
+        let dca=document.querySelector('#signalCounts > summary .dca-badge');
+        if(!dca){dca=document.createElement('span');dca.className='dca-badge';document.querySelector('#signalCounts > summary .group-stats').appendChild(dca);}
         dca.textContent='定投：9';
         const states=['本页只读','仓位已同步'].map(text=>{
           mirror.innerHTML='<span class="dim"></span>';mirror.firstElementChild.textContent=text;
@@ -2219,8 +2220,8 @@ const deadline = setTimeout(() => {
       })()`);
       assertions.push({ok:header.sub===(width<=600?'14.5px':'13.5px') && header.sub===header.rule
         && header.states.every(s=>s.font===header.rule && s.mirrorFont===header.rule && !s.overflow)
-        && header.dca===(width<=600?'18px':'16px') && !header.overflow,
-        name:width+'px数据时间/只读/同步与规则同字号、定投加2px且无横向溢出',actual:header});
+        && header.dca===(width<=600?'16px':'14px') && !header.overflow,
+        name:width+'px数据时间/只读/同步与规则同字号、定投在统计标题栏（与「总 N」同字号）且无横向溢出',actual:header});
       const before = await evaluate(`(() => {
         const link=document.querySelector('a.signal-member-jump[href="#s-thigh"]');
         if(!link) throw Error('missing synthetic stock jump');

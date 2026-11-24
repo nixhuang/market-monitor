@@ -711,7 +711,7 @@ h1.brand{color:var(--frame-purple)}
 /* 2026-11-20 站名 26→32px；行盒锁 39px（＝原 26×1.5），盒顶不动、盒底仍与 FIND 对齐，
    FIND 不下移、整排高度不变。站名改短为 Matrix 并把定投挪到标题右侧后，
    「Matrix + 定投：999 + FIND」三者在手机 440 净宽 398px 内仍零溢出。 */
-.brandbar{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin:18px 0 4px}
+.brandbar{display:flex;align-items:flex-end;justify-content:center;gap:10px;margin:15px 0 4px}   /* 2026-11-24 用户：站名页面居中；定投已搬进统计标题栏 */
 .brandbar h1.brand{margin:0;font-size:32px;line-height:39px;text-align:left;white-space:nowrap}
 /* 2026-11-20 桌面抬头行距收紧：数据时间→按钮 16→8px，与手机档一致；手机档 @media 自带 8px，改这条不影响手机。 */
 .sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:8px}
@@ -753,7 +753,6 @@ tr:first-child td{border-top:none}
 /* 统计标题栏的数字也是「分组标题栏上的红黄数字」，同批跟随描述区灯色 */
 #signalCounts .count-red{color:var(--lamp-red)}
 #signalCounts .count-yellow{color:var(--lamp-yellow)}
-#signalCounts .count-earn{color:var(--text)}
 #signalCounts .count-all{color:var(--dim)}   /* 总 N：抓取总只数，灰字不抢红黄白紫的注意力 */
 #signalCounts>summary .count-all{margin-left:auto}   /* 2026-11-20 用户：总 N 靠右，贴标题栏右缘（group-stats 是占满余宽的 flex，auto 外边距把它推到最右） */
 /* 顶部右侧的代码定位：美股代码最长 5 位（GOOGL / BRK-B），输入框按 5 个大写字母墨宽定 74px
@@ -1063,8 +1062,8 @@ tr.gray td{color:var(--dim)}
 /* 2026-11-20：定投从按钮排最右挪到站名右侧；字号沿用桌面 16 / 手机 18，只改位置不改大小。
    底边给 4px，让 18px 小字与 32px 站名的视觉基线对齐（brandbar 是 align-items:flex-end）。 */
 .dca-badge{white-space:nowrap;color:var(--text);font:inherit;font-variant-numeric:tabular-nums}
-.dca-badge.on{color:var(--yellow)}
-.brandbar .dca-badge{font-size:16px;margin-left:10px;margin-bottom:4px}
+.dca-badge.on{color:var(--yellow)}   /* 定投日当天黄字；2026-11-24 用户：定投挪进统计标题栏后不再加外框 */
+#signalCounts>summary .dca-badge{margin-left:auto;font-size:14px;font-weight:600}   /* 2026-11-24 用户：定投居中放在灯圈与「总 N」之间（两侧 auto 外边距均分余宽）；字号同「总 N」 */
 .oil-reference-row td{font-size:13px;overflow-wrap:anywhere}
 .oil-reference-row .num{white-space:nowrap;font-variant-numeric:tabular-nums}
 .oil-state{font-size:12px;font-weight:600}
@@ -1229,6 +1228,12 @@ tr.gray td{color:var(--dim)}
 .dual-row.group-dual:has(> details:nth-child(2)[open]) > .dual-body > .group-panel:nth-child(2){display:block}
 /* 房地产只有一枚标题，按用户要求仍占左半；清单跨两列，表格列宽不被压窄 */
 .dual-row.group-dual.solo-left > details{grid-column:1}
+/* 2026-11-24 用户：搜索 FIND 放进房地产右侧空着的那一格，可适当放大（输入框 74→96px、高 32→40px、字 16→17px；
+   与左边标题同高 47px 的行里垂直居中）。第二列第一行，不占清单那一行；FIND 脚本只认 #statFindInput／#statFindBtn，位置无关。 */
+.dual-row.group-dual.solo-left > .find-slot{grid-column:2;grid-row:1;align-self:stretch;display:flex;align-items:center;justify-content:center;min-height:47px;min-width:0}   /* 2026-11-24 用户：代码框＋按钮在这一列（与上方可选消费同宽的第二列）里左右居中；align-self:stretch：槽位与整张房地产卡（含内距和边框）同高再居中，FIND 才与标题文字中线对齐 */
+.find-slot .stat-find{margin-left:0;gap:8px}
+.find-slot .stat-find input{width:96px;height:40px;font-size:17px;line-height:38px;border-radius:9px}
+.find-slot .stat-find button{height:40px;padding:0 14px;font-size:15px;line-height:38px;border-radius:9px}
 /* 下排「20日对.SPX ±x%」与长短持仓第二排同号；没有相对强弱的分组留足行高对齐 */
 .dual-row.group-dual .zone-r2{min-height:20px}
 
@@ -1629,7 +1634,7 @@ table.stk tr[data-symbol]>td.sig{padding:var(--sig-row-gap) 5px 7px;font-size:15
 table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}
 .stk th{padding:7px 5px;font-size:12px}
 #signalCounts .signal-extra-row{--chip-w:84px;--xr:8px;padding:0}
-.grp-name{font-size:20px;line-height:24px}
+.grp-name{font-size:19px;line-height:24px}   /* 2026-11-24 用户：手机上「统计」「仓位」标题名小 1px（20→19） */
 .runbar button:not(.cost-edit-btn){padding:8px 13px;font-size:16px;line-height:1.08;height:40px}
 .sub{padding-left:16px;padding-right:16px;margin-bottom:8px;line-height:18px}
 .runlight{line-height:16.88px}
@@ -1673,7 +1678,7 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}
 #signalCounts>summary .count-total{font-size:16px;line-height:24px}
 .market-risk-badge{font-size:16px;line-height:24px}
 .monitor-note{font-size:16px;line-height:24px}
-.brandbar .dca-badge{margin-left:8px;margin-bottom:4px;font-size:18px;line-height:24px}
+#signalCounts>summary .dca-badge{font-size:16px;line-height:24px}
 .range52-hi{font-size:13px;line-height:11px}
 .range52-lo{font-size:13px;line-height:11px}
 .range52-gap{font-size:13px;line-height:11px}
