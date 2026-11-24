@@ -2050,11 +2050,11 @@ const deadline = setTimeout(() => {
         renderSignalFilter();
         return {empty,headings,pair};
       })()`);
-      assertions.push({ok:statLines.empty.length===4&&statLines.empty.every(b=>b.hidden&&b.display==='none'&&b.count===0)
-        &&statLines.pair&&statLines.headings.some(h=>h.filter)&&statLines.headings.filter(h=>h.pnl).length===4
+      assertions.push({ok:statLines.empty.length===2&&statLines.empty.every(b=>b.hidden&&b.display==='none'&&b.count===0)
+        &&statLines.pair&&statLines.headings.some(h=>h.filter)&&statLines.headings.filter(h=>h.pnl).length===2
         &&statLines.headings.some(h=>!h.filter&&!h.pnl)&&statLines.headings.every(h=>h.display==='flex'&&h.align==='center'
           &&h.content==='""'&&h.height==='1px'&&h.width>0&&h.width<h.headWidth&&h.gap==='8px'&&h.color==='rgb(58, 67, 86)'),
-        name:width+'px统计空盈亏分类不占位，静态名单及真实多选交集标题均有右侧淡长线',actual:statLines});
+        name:width+'px统计空到价分类（减仓价、加仓价两块，2026-11-24 起浮盈浮亏已不在统计）不占位，静态名单及真实多选交集标题均有右侧淡长线',actual:statLines});
       await evaluate(`document.querySelectorAll('details.group-card,details.quiet-list').forEach(el => el.open = true)`);
       await settled();
       const actual = await evaluate(`(() => {
@@ -2337,7 +2337,7 @@ const deadline = setTimeout(() => {
       })()`);
       assertions.push({ok:clicks.every(p=>p.z==='1'&&p.pressed==='true')&&JSON.stringify(selected.kinds)===JSON.stringify(['target_purple','earnings_week'])
         &&JSON.stringify(selected.symbols.sort())===JSON.stringify(['TBOTH','TSPACE'])&&!selected.pnlSelectable&&!selected.panelOpen,
-        name:width+'px紫灯和财报按钮可点选，二者参与交集且仅盈亏到价排除',actual:{clicks,selected}});
+        name:width+'px紫灯和财报按钮可点选，二者参与交集且仅到价排除',actual:{clicks,selected}});
       await evaluate(`document.querySelector('.signal-filter-toggle[data-kind="ma"]').click()`);
       const triple=await evaluate(`(()=>{const kinds=[...document.querySelectorAll('.signal-filter-toggle[aria-pressed="true"]')].map(b=>b.dataset.kind);const r=kinds.length>=2?intersectSignals(signalFilterData(),kinds):{members:[]};return {kinds,symbols:(r.members||[]).map(m=>m.s),text:document.getElementById('signalFilterResult').textContent};})()`);
       assertions.push({ok:triple.kinds.length===3&&['target_purple','earnings_week','ma'].every(k=>triple.kinds.includes(k))
