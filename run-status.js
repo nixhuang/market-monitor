@@ -833,15 +833,14 @@
     };
     const rulesTask = (async () => {
       const checkedAt = Date.now();
-      const readSHA = async (file, ref = options.branch) => {
-        try {
-          const value = await request(bust(apiURL('/contents/' + file + '?ref=' +
-            encodeURIComponent(ref))), {github: true, signal, timeoutMs: RULE_API_TIMEOUT});
-          if (!SHA.test(value && value.sha || '')) throw new Error('配置缺少有效 blob SHA');
-          return value.sha;
-        } catch (error) {
-          if (signal.aborted || destroyed) throw error;
-          // 公开原文按 Git blob 哈希核验，两类配置采用同一口径；令牌不发送给 raw 主机。
+      // 2026-11-24 用户：刷新后「正在核验」要等好几秒。原因：GitHub API 在部分网络下不返回，要干等 4.5 秒超时才改读公开原文。
+      // 现在 API 照旧优先；若 1.2 秒还没答复，就同时再发一路公开原文（按 Git blob 哈希算同一口径的 SHA），谁先成功用谁，
+      // API 立刻失败则马上走公开原文（与原来一致）；两路都失败才报错。令牌不发送给 raw 主机。
+      const RAW_HEDGE_MS = 1200;
+      const readSHA = (file, ref = options.branch) => new Promise((resolve, reject) => {
+        let settled = false, apiError = null, rawError = null, rawStarted = false, hedgeTimer = 0;
+        const finish = (fn, value) => { if (settled) return; settled = true; window.clearTimeout(hedgeTimer); fn(value); };
+        const readRaw = async () => {
           const raw = await request(bust('https://raw.githubusercontent.com/' +
             encodeURIComponent(options.owner) + '/' + encodeURIComponent(options.repo) + '/' +
             encodeURIComponent(ref) + '/' + file), {signal, text: true});
@@ -852,8 +851,28 @@
           blob.set(header); blob.set(bytes, header.length);
           const hash = await window.crypto.subtle.digest('SHA-1', blob);
           return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
-        }
-      };
+        };
+        const startRaw = () => {
+          if (rawStarted || settled) return;
+          rawStarted = true;
+          readRaw().then(sha => finish(resolve, sha), error => {
+            rawError = error;
+            if (apiError) finish(reject, error);   // 两路都失败：报公开原文这一路的错（与原来一致）
+          });
+        };
+        hedgeTimer = window.setTimeout(startRaw, RAW_HEDGE_MS);
+        if (signal) signal.addEventListener('abort', () => { window.clearTimeout(hedgeTimer); }, {once: true});   // 目标变更或页面销毁：对冲计时器一并取消
+        request(bust(apiURL('/contents/' + file + '?ref=' + encodeURIComponent(ref))),
+          {github: true, signal, timeoutMs: RULE_API_TIMEOUT}).then(value => {
+          if (!SHA.test(value && value.sha || '')) throw new Error('配置缺少有效 blob SHA');
+          finish(resolve, value.sha);
+        }).catch(error => {
+          if (signal.aborted || destroyed) { finish(reject, error); return; }
+          apiError = error;
+          if (rawError) finish(reject, rawError);
+          else startRaw();
+        });
+      });
       try {
         const hashes = await Promise.all(FILES.map(file => readSHA(file)));
         nextRules = {files: Object.fromEntries(FILES.map((file, i) => [file, hashes[i]])),

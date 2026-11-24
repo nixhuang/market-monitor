@@ -1786,13 +1786,12 @@ class PageRenderer:
                           for entries in gray_by_kind.values() for m in entries})
         totals = (("red", "红", whole(summary.get("red"))), ("yellow", "黄", whole(summary.get("yellow"))),
                   ("gray", "白", gray_count), ("purple", "紫", whole(summary.get("purple"))),
-                  # 2026-11-24 用户：财报数量加回来，不写「报」字，用白色数字圈显示（紫灯圈之后、定投与「总 N」之前）
-                  ("earn", "财报灯", self._context._earnings_week_panel(snapshot, count_only=True)),
+                  # 2026-11-24 用户：数字圈画不正，财报数量改回文字「报 N」（紫灯圈之后、定投与「总 N」之前）
+                  ("earn", "报", self._context._earnings_week_panel(snapshot, count_only=True)),
                   # 2026-11-20 用户：标题栏最右写「总 N」＝数据那里一共抓取多少只（含没取到的，不含市场风险指标）
                   ("all", "总", whole(summary.get("total"))))
         parts = [
-            (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple", "earn")
-             else self._context._count_badge("earn", "—", name) if key == "earn"
+            (self._context._count_badge(key, n, name) if n is not None and key in ("red", "yellow", "gray", "purple")
              else f'<span class="count-total count-{key}">{name} {"—" if n is None else n}</span>')
             for key, name, n in totals]
         parts.insert(len(parts) - 1, self._context.dca_badge(snapshot.get("dca_reminder")))   # 「总 N」之前

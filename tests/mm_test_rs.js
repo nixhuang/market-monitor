@@ -374,8 +374,9 @@ async function check(name, fn) {
   await check('后台暂停状态查询，回到前台复用核验且不刷新页面', async () => {
     const f=fixture();await f.win.MMRunStatus.refresh();const requests=f.urls.length;
     f.win.document.hidden=true;f.events.visibilitychange();assert.equal(f.urls.length,requests);
-    const timers=f.timers.length;await f.win.MMRunStatus.refresh();
-    assert.equal(f.timers.length-timers,f.urls.length-requests,'隐藏页面只有请求超时计时器，不排下一轮查询');
+    const timers=f.timers.length;const hedge=()=>f.timers.filter(t=>t.ms===1200).length,hedge0=hedge();   // 2026-11-24 规则核验的「1.2 秒后并发读公开原文」对冲计时器不算轮询计时器
+    await f.win.MMRunStatus.refresh();
+    assert.equal(f.timers.length-timers-(hedge()-hedge0),f.urls.length-requests,'隐藏页面只有请求超时计时器，不排下一轮查询');
     f.data.holdingsSHA=C;f.win.document.hidden=false;f.events.visibilitychange();
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(f.els.ruleLightTxt.textContent,'正在更新');assert.equal(f.data.reloads.length,0);
@@ -1088,7 +1089,7 @@ async function check(name, fn) {
       let finished = false;
       const pending = f.els.btnCheckStatus.onclick().then(() => { finished = true; });
       await flush();
-      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000 && t.ms !== 4500).length, 0);
+      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000 && t.ms !== 4500 && t.ms !== 1200).length, 0);
       assert.equal(f.timers.filter(t => t.active && t.ms === 15000).length, 1);
       const count = f.urls.length;
       f.advance(11000); staleTimer.fn(); await flush();
@@ -1152,7 +1153,7 @@ async function check(name, fn) {
       }
       await old; await flush();
       assert.equal(oldSignal.aborted, true);
-      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000 && t.ms !== 4500).length, 0);
+      assert.equal(f.timers.filter(t => t.active && t.ms !== 15000 && t.ms !== 4500 && t.ms !== 1200).length, 0);
       const count = f.urls.length;
       gate.resolve(stage === 'run' ? response({workflow_runs: [f.data.run]}) : response({jobs: []}));
       await flush(); assert.equal(f.urls.length, count);
@@ -1173,7 +1174,7 @@ async function check(name, fn) {
     f.data.intercept = url => url.includes('/daily.yml/runs?') && /[?&]per_page=1(?:&|$)/.test(url) ? second.promise : undefined;
     const next = f.els.btnCheckStatus.onclick(); await old; await flush();
     assert.equal(f.els.btnCheckStatus.disabled, true);
-    assert.equal(f.timers.filter(t => t.active && t.ms !== 15000 && t.ms !== 4500).length, 0);
+    assert.equal(f.timers.filter(t => t.active && t.ms !== 15000 && t.ms !== 4500 && t.ms !== 1200).length, 0);
     first.resolve(response({workflow_runs: [{id: 9, status: 'completed', conclusion: 'failure'}]})); await flush();
     assert.equal(f.els.btnCheckStatus.disabled, true);
     second.resolve(response({workflow_runs: [f.data.run]})); await next;

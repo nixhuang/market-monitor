@@ -7873,7 +7873,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                           '<span class="stat-badge red" aria-label="红 0 项">0</span>'
                           '<span class="stat-badge yellow" aria-label="黄 0 项">0</span>', panel)
             self.assertIn('白 0', panel)
-            self.assertIn('class="stat-badge earn" aria-label="财报灯 4 项">4</span>', panel)   # 2026-11-24 用户：财报数量以白色数字圈加回（不写「报」）；原： 2026-11-20 筛选文案日期改 MM/DD 后，原先靠「财报 2026-…」凑出的「报 2」改为断言真正的财报计数
+            self.assertIn('<span class="count-total count-earn">报 4</span>', panel)   # 2026-11-24 用户：数字圈画不正，财报数量改回文字「报 N」
             old = monitor._signal_counts_card({'summary': {'red': 4, 'yellow': 32},
                                                'signal_counts': {'target': {'label': '目标价', 'purple': 3}}})
             for text in ('红 4', '黄 32', '白 0'):
@@ -8801,7 +8801,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         output = monitor._signal_counts_card(snap)
         header = output.split('</summary>', 1)[0]
         tokens = ['stat-badge red', 'stat-badge yellow', 'stat-badge gray',
-                  'stat-badge purple', 'stat-badge earn']
+                  'stat-badge purple', 'count-total count-earn']
         self.assertEqual([header.index(t) for t in tokens], sorted(header.index(t) for t in tokens))
         self.assertIn('<span class="stat-badge purple" aria-label="紫 1 项">1</span>', header)
         self.assertIn('<span class="stat-badge gray" aria-label="白 0 项">0</span>', header)

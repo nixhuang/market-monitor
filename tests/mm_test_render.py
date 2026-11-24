@@ -2027,7 +2027,7 @@ const deadline = setTimeout(() => {
           overflow: document.documentElement.scrollWidth > innerWidth};
       })()`);
       assertions.push({ok: JSON.stringify(header.order) === JSON.stringify([
-        'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','stat-badge earn','count-total count-all'])
+        'stat-badge red','stat-badge yellow','stat-badge gray','stat-badge purple','count-total count-earn','count-total count-all'])
         && header.count === String(header.expected) && header.color === 'rgb(176, 132, 255)' && !header.overflow,
         name: width + 'px统计表头红黄灰紫财报顺序、紫灯同源及折叠重开后保留', actual: header});
       const statLines = await evaluate(`(() => {

@@ -1493,9 +1493,9 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertIn('.dca-badge.on .dca-n{color:var(--yellow)}', css)
         self.assertNotIn('border:1px solid var(--yellow)', css)   # 2026-11-24 用户：定投进统计标题后不加黄框   # 定投日当天：黄字加 1px 黄框
         self.assertIn('.stat-find input{box-sizing:border-box;width:74px;', css)   # 5 位美股代码墨宽（基础规格不变）
-        self.assertIn('stat-badge earn', header)   # 2026-11-24 用户：财报数量加回来，不写「报」字，白色数字圈
-        self.assertNotIn('count-earn', header)
-        self.assertIn('.stat-badge.earn{color:var(--white);box-sizing:border-box;min-width:18px;height:18px;padding:0 3px;border:1.5px solid var(--white);border-radius:999px;font-size:12.5px;line-height:1}', css)
+        self.assertRegex(header, r'<span class="count-total count-earn">报 [—0-9]+</span>')   # 2026-11-24 用户：数字圈画不正，财报数量改回文字「报 N」
+        self.assertNotIn('stat-badge earn', header)
+        self.assertNotIn('.stat-badge.earn', css)
         # 2026-11-20：标题栏最右是「总 N」＝数据那里抓取的总只数（含没取到的）
         self.assertRegex(header, r'<span class="count-total count-all">总 [—0-9]+</span></span>$')
         full = monitor._signal_counts_card({'summary': {'red': 1, 'yellow': 2, 'total': 99}, 'signal_counts': {}}).split('</summary>', 1)[0]
