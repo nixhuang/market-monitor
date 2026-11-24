@@ -2708,14 +2708,25 @@
       var key = sectorOf(sym), g = SECTOR_GROUPS.filter(function (x) { return x[0] === key; })[0];
       return g ? String(g[1]).replace(/\s+/g, '').slice(0, 2) : '';
     }
+    // 2026-11-24 用户：盈亏明细的市值按位数留小数——千位及以上不留小数，百位 1 位，十位及以下 2 位（千分位逗号）。
+    function mvDigits(v) {
+      var a = Math.abs(num(v)), d = a >= 1000 ? 0 : a >= 100 ? 1 : 2;
+      // 四舍五入进位到下一档（如 99.996→100、999.96→1,000）时按新一档的位数显示
+      if (d === 2 && Math.round(a * 100) >= 10000) d = 1;
+      if (d === 1 && Math.round(a * 10) >= 10000) d = 0;
+      return num(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
     function pnlRowHtml(sym, cn, amt, pctTxt, mvTxt, up, tone, wTxt) {
       var link = ROW_BY_SYM[sym] && ROW_BY_SYM[sym].tr && ROW_BY_SYM[sym].tr.id, sec = sectorTag(sym);
       // 与统计名单同一个排法：代码 备注名（行业）；全角括号的空白边收掉（.pi-pp），不占全角位置
       var name = '<span class="pi-pname">' + (link ? '<a class="signal-member-jump pi-pnm" href="#' + esc(link) + '">' : '<span class="pi-pnm">') +
         '<span class="pi-psym">' + esc(sym) + '</span>' + (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '</span>') +
         (sec ? '<span class="pi-psec"><span class="pi-pp">（</span>' + esc(sec) + '<span class="pi-pp">）</span></span>' : '') + '</span>';
+      // 五个格子：名称｜盈亏金额（左对齐）｜盈亏比（右对齐）｜市值｜仓位（右对齐），各占固定列位，列间的余宽平分
+      var cls = up ? 'up' : 'down';
       return '<div class="pi-prow"' + (tone ? ' data-pnl="' + tone + '"' : '') + '>' + name +
-        '<b class="pi-ppnl ' + (up ? 'up' : 'down') + '"><span class="pi-pamt">' + amt + '</span> <span class="pi-ppct">' + pctTxt + '</span></b>' +
+        '<b class="pi-pamt ' + cls + '">' + amt + '</b>' +
+        '<b class="pi-ppct ' + cls + '">' + pctTxt + '</b>' +
         '<b class="pi-pmv">' + mvTxt + '</b>' +
         '<b class="pi-pw">' + wTxt + '</b></div>';
     }
@@ -2726,9 +2737,9 @@
         return '<button type="button" class="pi-psort" data-psort="' + key + '" aria-pressed="' + (PNL_SORT === key) + '">' + label + '</button>';
       }
       // 「盈亏」按盈亏金额、「盈亏比」按盈亏百分比，都是从亏到盈；「仓位」从大到小
-      return '<div class="pi-prow pi-phead"><span class="pi-ph">代码</span>' +
-        '<span class="pi-ph pi-ph-pnl">' + btn('pnl', '盈亏') + btn('ratio', '盈亏比') + '</span>' +
-        '<span class="pi-ph">金额</span><span class="pi-ph pi-ph-w">' + btn('weight', '仓位') + '</span></div>';
+      return '<div class="pi-prow pi-phead"><span class="pi-ph pi-ph-n">代码</span>' +
+        '<span class="pi-ph pi-ph-a">' + btn('pnl', '盈亏') + '</span><span class="pi-ph pi-ph-r">' + btn('ratio', '盈亏比') + '</span>' +
+        '<span class="pi-ph pi-ph-m">金额</span><span class="pi-ph pi-ph-w">' + btn('weight', '仓位') + '</span></div>';
     }
     function renderPnlFolds(rows, holdingsMv) {
       PNL_LAST = [rows, holdingsMv];
@@ -2754,7 +2765,7 @@
       }
       var html = (items.length ? pnlHeadHtml() : '') + items.map(function (x) {
         return pnlRowHtml(x.sym, x.cn, money(x.amt), pct(x.pct),
-          '<span class="pi-wcur">$</span>' + Math.round(x.mv).toLocaleString('en-US'), x.amt >= 0, x.tone,
+          '<span class="pi-wcur">$</span>' + mvDigits(x.mv), x.amt >= 0, x.tone,
           (holdingsMv > 0 ? (x.mv / holdingsMv) * 100 : 0).toFixed(1) + '%');
       }).join('');
       if (list && list._r !== html) { list.innerHTML = html; list._r = html; }

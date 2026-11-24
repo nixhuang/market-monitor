@@ -1023,7 +1023,7 @@ tr.gray td{color:var(--dim)}
 .stat-badge.red{color:var(--lamp-red)}
 .stat-badge.yellow{color:var(--lamp-yellow)}
 .stat-badge.gray{color:var(--dim)}
-.stat-badge.earn{color:var(--white);font-size:.85em;min-width:1.5em;height:1.5em;padding:0 .3em;border:1px solid currentColor;border-radius:999px}   /* 2026-11-24 用户：财报数量不写「报」字，像 ③ 那样带圈的白色数字；圈随字号缩放，两位数自动拉成胶囊 */
+.stat-badge.earn{color:var(--white);box-sizing:border-box;min-width:18px;height:18px;padding:0 3px;border:1.5px solid var(--white);border-radius:999px;font-size:12.5px;line-height:1}   /* 2026-11-24 用户：财报数量不写「报」字，像 ③ 那样带圈的白色数字；圈随字号缩放，两位数自动拉成胶囊 */
 .stat-badge.missing{color:var(--dim)}
 .stat-badge.purple{color:var(--purple)}
 .stat-badge.green{color:var(--green)}

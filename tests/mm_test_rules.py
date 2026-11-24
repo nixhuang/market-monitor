@@ -938,7 +938,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('padding:3px 8px;margin:5px 0 0', page_assets.PAGE_CSS)
         self.assertIn('.earn{display:block;margin:0;font-size:15px;font-weight:400;line-height:19px', css)
         # 2026-11-13：财报整排字号与描述区正文必须同号；以后任一边单独改字号都在这里拦下。
-        earn_fs = re.search(r'\.earn\{[^}]*font-size:([\d.]+)px', css).group(1)
+        earn_fs = re.search(r'(?<![\w-])\.earn\{[^}]*font-size:([\d.]+)px', css).group(1)
         sig_fs = re.search(r'table\.stk tr\[data-symbol\]>td\.sig\{[^}]*font-size:([\d.]+)px', css).group(1)
         self.assertEqual(earn_fs, sig_fs)
         self.assertIn('.earn-band{display:block;margin:5px 0 0;padding:2px 8px;background:var(--cost-row-bg)', css)
@@ -1495,7 +1495,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         self.assertIn('.stat-find input{box-sizing:border-box;width:74px;', css)   # 5 位美股代码墨宽（基础规格不变）
         self.assertIn('stat-badge earn', header)   # 2026-11-24 用户：财报数量加回来，不写「报」字，白色数字圈
         self.assertNotIn('count-earn', header)
-        self.assertIn('.stat-badge.earn{color:var(--white);font-size:.85em;min-width:1.5em;height:1.5em;padding:0 .3em;border:1px solid currentColor;border-radius:999px}', css)
+        self.assertIn('.stat-badge.earn{color:var(--white);box-sizing:border-box;min-width:18px;height:18px;padding:0 3px;border:1.5px solid var(--white);border-radius:999px;font-size:12.5px;line-height:1}', css)
         # 2026-11-20：标题栏最右是「总 N」＝数据那里抓取的总只数（含没取到的）
         self.assertRegex(header, r'<span class="count-total count-all">总 [—0-9]+</span></span>$')
         full = monitor._signal_counts_card({'summary': {'red': 1, 'yellow': 2, 'total': 99}, 'signal_counts': {}}).split('</summary>', 1)[0]
@@ -3007,7 +3007,11 @@ class SignalFilterBucketRegression(unittest.TestCase):
         css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
         self.assertNotIn('.pi-fold', css)
         self.assertNotIn('.pi-zone-', css)
-        self.assertIn('.pi-plist { display: grid; grid-template-columns: minmax(0,max-content) max-content max-content max-content; justify-content: space-between;', css)   # 2026-11-24：每列按内容定宽，多出的宽度平均摊在列间；名称列放不下只截中文备注名
+        self.assertIn('.pi-plist { --pi-name-w: 146px; --pi-pad: 10px; --pi-gapmin: 6px; display: grid;', css)   # 2026-11-24：名称列最宽到「BRK-B 伯克希尔（金融）」；余宽平分给 4 个弹性空隙，最右列贴容器右边
+        self.assertIn('.pi-ph-r { grid-column: 5; text-align: right; }', css)    # 盈亏比表头与数值都右对齐
+        self.assertIn('.pi-pamt { grid-column: 3; text-align: left; }', css)    # 盈亏金额左对齐
+        self.assertIn('.pi-prow[data-pnl]::before', css)                         # 底色铺满外框内，不用阴影外延
+        self.assertNotIn('box-shadow: -3px 0 0 var(--tint)', css)
         self.assertIn('.pi-pname .pi-pcn {', css)
         self.assertIn('overflow: hidden; text-overflow: ellipsis;', css)        # 放不下时名称末尾省略
         self.assertIn('.pi-prow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;', css)
@@ -3019,9 +3023,9 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn(".pi-pname .pi-pp:first-child { margin-left: -.5em; }", css)
         self.assertIn("extra.hidden = total === 0;", cost)
         self.assertIn('.signal-extra-row[hidden]{display:none}', monitor.PAGE_CSS)
-        self.assertIn('.pi-pw { text-align: right; }', css)
+        self.assertIn('.pi-pw { grid-column: 9; text-align: right; }', css)
         self.assertIn('.pi-pname .pi-psec { flex: none; color: var(--text);', css)
-        self.assertIn("'<b class=\"pi-ppnl '", cost)
+        self.assertIn("'<b class=\"pi-pamt ' + cls", cost)
         self.assertIn("'<b class=\"pi-pw\">'", cost)
         self.assertIn(".slice(0, 2) : '';", cost)
         self.assertIn('.zone-r1 .zone-mv{margin-left:auto;', monitor.PAGE_CSS)

@@ -394,7 +394,6 @@
   .pi-body { padding: 2px 8px 9px; }
   .pi-wlist { --pi-wgap: 6px; }
   /* 盈亏明细手机档：列距 6；每列至少容得下自己最长的内容（名称一行：代码＋行业＋中文名），余宽按权重分 */
-  .pi-plist { column-gap: 6px; }
   .pi-wshare { grid-template-columns: 48px minmax(0,1fr); }
   .pi-kpis { gap: 4px; }
   .pi-kpi { gap: 3px; }
@@ -458,7 +457,11 @@
    市值前灰色美元符号，与行业权重同一套写法。 */
 /* 整张名单共用一套列轨：名称列至少容得下最长的「代码＋中文名」（一行不换行），四列起点间距随页面宽度等比伸缩
    （与行业权重一致，不写死间距）；每行用 subgrid 继承列轨，所以各行竖向对齐、最右列也铺到页面边。 */
-.pi-plist { display: grid; grid-template-columns: minmax(0,max-content) max-content max-content max-content; justify-content: space-between; column-gap: 8px; margin-top: 4px; }   /* 名称｜盈亏｜市值｜仓位：每列按自己最长内容定宽，页面多出来的宽度平均摊在列与列之间（名称→盈亏、盈亏→金额、金额→仓位同一个规律）；只有名称列在放不下时才收窄，且只截中文备注名 */
+/* 2026-11-24 用户：名称列最宽只到「BRK-B 伯克希尔（金融）」，超出的缩写中文名；余宽平分给右边四个数值列之间的空隙。
+   列位：1 名称｜3 盈亏金额（左对齐）｜5 盈亏比（右对齐）｜7 市值｜9 仓位（右对齐）；2/4/6/8 是等分余宽的弹性空隙（不用 justify-content，
+   所以最右列一定贴到容器右边，各浏览器一致）。 */
+.pi-plist { --pi-name-w: 146px; --pi-pad: 10px; --pi-gapmin: 6px; display: grid; margin-top: 4px;
+  grid-template-columns: minmax(0,max-content) minmax(var(--pi-gapmin),1fr) max-content minmax(var(--pi-gapmin),1fr) max-content minmax(var(--pi-gapmin),1fr) max-content minmax(var(--pi-gapmin),1fr) max-content; }
 .pi-prow { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
   align-items: center; min-width: 0; padding: 3px 0; font-size: 15px; font-variant-numeric: tabular-nums; }
 .pi-prow + .pi-prow { border-top: 1px solid var(--line); }
@@ -467,14 +470,19 @@
    左右各外延 3px 的同色阴影，让文字不贴着色块边（阴影只画在框外，不占版面、不撑宽、不叠色）。 */
 .pi-prow[data-pnl="gain"] { --tint: var(--pnl-gain-bg, rgba(63,185,80,.12)); }
 .pi-prow[data-pnl="loss"] { --tint: var(--pnl-loss-bg, rgba(248,81,73,.12)); }
-.pi-prow[data-pnl] { background: var(--tint); box-shadow: -3px 0 0 var(--tint), 3px 0 0 var(--tint); }
+.pi-prow[data-pnl] { position: relative; isolation: isolate; }
+.pi-prow[data-pnl]::before { content: ""; position: absolute; z-index: -1; top: 0; bottom: 0; left: calc(var(--pi-pad) * -1); right: calc(var(--pi-pad) * -1); background: var(--tint); }   /* 底色左右铺满外框内（越过内容区内边距，不占版面、不撑宽） */
 /* 抬头行：与数据行同一套列轨（subgrid），四个列名各在自己那一列的左边（金额、仓位列与数字同向）；
    「盈亏」「仓位」是可点的排序钮，选中的蓝色加下划线；不改变行高之外的任何版面。 */
 .pi-prow.pi-phead { padding: 2px 0 3px; font-size: 13px; color: var(--dim, #8b93a1); border-bottom: 1px solid var(--line); }
 .pi-prow.pi-phead + .pi-prow { border-top: 0; }
 .pi-ph { min-width: 0; white-space: nowrap; line-height: 1.25; }
-.pi-ph-w { text-align: right; }
-.pi-ph-pnl { display: flex; gap: 18px; }   /* 「盈亏」「盈亏比」两个排序钮并排；2026-11-24 用户：两字挨得近，间距 8→18px（抬头列宽由下面数据行撑开，不会变宽） */
+.pi-ph-n { grid-column: 1; }
+.pi-ph-a { grid-column: 3; text-align: left; }
+.pi-ph-r { grid-column: 5; text-align: right; }
+.pi-ph-m { grid-column: 7; text-align: left; }
+.pi-ph-w { grid-column: 9; text-align: right; }
+
 .pi-psort { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
 .pi-psort[aria-pressed="true"] { color: var(--head-blue-on); text-decoration: underline; text-underline-offset: 3px; }
 .pi-psort:focus-visible { outline: 2px solid var(--head-blue-on); outline-offset: 2px; border-radius: 3px; }
@@ -490,9 +498,13 @@
 .pi-pname .pi-pp:first-child { margin-left: -.5em; }
 .pi-pname .pi-pp:last-child { margin-right: -.5em; }
 .pi-pname a { color: inherit; text-decoration: none; }
-.pi-ppnl, .pi-pmv, .pi-pw { font-weight: 400; white-space: nowrap; text-align: left; }
-.pi-ppnl .pi-ppct { margin-left: 4px; }
-.pi-pw { text-align: right; }   /* 最右的仓位列靠右贴齐页面右边，不留空 */
+.pi-pamt, .pi-ppct, .pi-pmv, .pi-pw { font-weight: 400; white-space: nowrap; }
+.pi-pname { grid-column: 1; max-width: var(--pi-name-w); }
+.pi-pamt { grid-column: 3; text-align: left; }
+.pi-ppct { grid-column: 5; text-align: right; }
+.pi-pmv { grid-column: 7; text-align: left; }
+
+.pi-pw { grid-column: 9; text-align: right; }   /* 最右的仓位列右边缘 = 容器右边缘 = 上面「清仓」数字的右边缘 */
 .pi-pmv .pi-wcur { color: var(--dim, #8b93a1); }
 .pi-log-link { display: inline-flex; align-items: center; gap: 5px; color: var(--head-blue-on);
   font-size: 16px; font-weight: 600; text-decoration: none; }

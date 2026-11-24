@@ -2493,7 +2493,7 @@ for(const [price,cost,tone,expected]of [[100,80,'gain','+25.0%'],[100,125,'loss'
   for(let i=0;i<4;i++){b.paint();
     const row=b.doc.querySelectorAll('#piPnlList .pi-prow').filter(x=>!/pi-phead/.test(x.className))[0];assert.ok(row,'盈亏明细里要有 AAA 一行');
     assert.equal(row.getAttribute('data-pnl')||'',b.pnlTone(price,cost));assert.equal(row.getAttribute('data-pnl')||'',r.costLine.getAttribute('data-pnl')||'','与主表成本行同一判法');
-    assert.match(row.querySelector('.pi-ppct').textContent,/^[+-]/);assert.ok(row.querySelector('.pi-ppnl .pi-pamt')&&row.querySelector('.pi-ppnl .pi-ppct'),'金额与盈亏比同在一个整体里');assert.match(row.querySelector('.pi-pw').textContent,/^\d+\.\d%$/);assert.equal(r.tr.className,'green');}
+    assert.match(row.querySelector('.pi-ppct').textContent,/^[+-]/);assert.ok(row.querySelector('.pi-pamt')&&row.querySelector('.pi-ppct'),'金额与盈亏比各占一列');assert.match(row.querySelector('.pi-pw').textContent,/^\d+\.\d%$/);assert.equal(r.tr.className,'green');}
   if(tone)assert.equal(b.doc.querySelectorAll('#piPnlList .pi-prow').filter(x=>!/pi-phead/.test(x.className))[0].getAttribute('data-pnl'),tone);
   assert.equal(b.requests.length,0);await b.dispose();
 });
@@ -2505,7 +2505,7 @@ test('盈亏明细抬头行与排序：默认亏到盈，点仓位按市值从�
   b.paint();
   const list=b.doc.getElementById('piPnlList'),head=()=>list.querySelector('.pi-phead');
   assert.ok(head(),'有数据时要有抬头行');
-  assert.deepEqual([...head().children].map(e=>e.textContent),['代码','盈亏盈亏比','金额','仓位']);
+  assert.deepEqual([...head().children].map(e=>e.textContent),['代码','盈亏','盈亏比','金额','仓位']);
   assert.deepEqual([...head().querySelectorAll('[data-psort]')].map(e=>e.getAttribute('data-psort')),['pnl','ratio','weight']);
   const order=()=>list.querySelectorAll('.pi-prow .pi-pname').map(e=>e.textContent.slice(0,3));
   const press=k=>list.querySelector('[data-psort="'+k+'"]').fire('click',{bubbles:true});
