@@ -1307,7 +1307,7 @@ class PageRenderer:
                          '<div class="pi-block pi-funds"><div class="pi-kpis">'
                          '<span class="pi-kpi"><span class="pi-kname">已实现</span><b class="pi-kval" id="piRealized">—</b></span>'
                          # 2026-11-24 用户：删除「今年」盈亏，交易记录入口放在它原来的位置（已实现与清仓之间）。
-                         '<span class="pi-kpi"><a class="pi-log-link" href="./trade-log.html" target="_blank" rel="noopener">交易记录'
+                         '<span class="pi-kpi"><a class="pi-log-link" href="./trade-log.html" target="_blank" rel="noopener"><span class="pi-log-text">交易记录</span>'
                          '<span class="pi-arrow" aria-hidden="true">↗</span></a></span>'
                          '<span class="pi-kpi"><span class="pi-kname">清仓</span><b class="pi-kval" id="piCleared">—</b></span>'
                          '</div></div>'

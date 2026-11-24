@@ -46,11 +46,11 @@ td.open{color:var(--up)}
 td.close{color:var(--down)}
 td.cut{color:var(--orange)}
 @media(max-width:600px){
-  .stage{padding:calc(env(safe-area-inset-top,0px) + 60px) 4px 20px}
+  .stage{padding:calc(env(safe-area-inset-top,0px) + 44px) 4px 20px}   /* 2026-11-24 用户：手机上整页再往上移一些（原 60px → 44px；仍避开灵动岛/状态栏的安全区） */
   table{font-size:13.5px}
   th,td{padding:4px 3px}   /* 手机档左右内距 3px：固定列宽下给「37.0188 股／25000.00 金额／+2500.00 已实现」留足位置 */
   .sfoot{padding:7px 9px;gap:6px}
-  .back,.pgbtn{padding:3px 9px;font-size:14px}
+  .back,.pgbtn{padding:5px 11px;font-size:15px}   /* 2026-11-24 用户：「返回看板」「上一页／下一页」字号 +1px，按钮框再大一点 */
   .pager{gap:6px}
 }
 </style>

@@ -2970,6 +2970,7 @@ class SignalFilterBucketRegression(unittest.TestCase):
         # 2026-11-24 用户：删「今年」盈亏，交易记录入口放在它原来的位置（已实现与清仓之间）
         self.assertNotIn('piYear', src)
         self.assertNotIn('pi-records-row', src)
+        self.assertIn('<span class="pi-log-text">交易记录</span><span class="pi-arrow"', src.replace("'\n                         '", ''))   # 下划线只在文字上，箭头不加
         self.assertLess(src.index('id="piRealized"'), src.index('class="pi-log-link"'))
         self.assertLess(src.index('class="pi-log-link"'), src.index('id="piCleared"'))
         self.assertNotIn('pi-zone-money', src)
@@ -3045,6 +3046,9 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn('<colgroup><col style="width:14%"><col style="width:9%"><col style="width:14%"><col style="width:14%">'
                       '<col style="width:16%"><col style="width:16%"><col style="width:17%"></colgroup>', html)
         self.assertIn('if(i === 2){', html)
+        # 2026-11-24 用户：手机上整页上移、按钮字号 +1px 并加大按钮框
+        self.assertIn('.stage{padding:calc(env(safe-area-inset-top,0px) + 44px) 4px 20px}', html)
+        self.assertIn('.back,.pgbtn{padding:5px 11px;font-size:15px}', html)
         self.assertIn('c = n.toFixed(2);', html)
 
     def test_signal_filter_clear_button_is_wide_and_short(self):

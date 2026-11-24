@@ -1163,6 +1163,7 @@ tr.gray td{color:var(--dim)}
    不再是被切掉下边框的连通框），清单底部「▲ 收起本组」保留。 */
 /* 组名跟个股代码 td.sym 同字号（桌面 14px／手机 17px），其余数字仍按上一轮放大。 */
 #zoneDualRow{--collapse-bg:var(--positions-collapse);--zone-name-fs:14px;--zone-badge-fs:14px;--zone-pad-y:2px}
+#dualRow{--zone-name-fs:14px}   /* 2026-11-24：当日／风险标题名与长持同字号 */
 /* 与仓位卡之间留 14px＝普通分组之间的间距；用 class 组合写，避免重复 #zoneDualRow 规则 */
 .dual-row.zone-dual{margin-top:14px}
 /* 两态同一套 padding／高度链路：展开那枚不再被压矮 5px；框＝完整四边＋12px 圆角 */
@@ -1275,6 +1276,11 @@ tr.gray td{color:var(--dim)}
 .market-risk-badge[data-level="yellow"]{color:var(--lamp-yellow)}
 .dp-head .dp-amt{font-size:17px}
 .dp-head .dp-pct{font-size:17px}
+/* 2026-11-24 用户：「当日」「风险」与「长持」「重点」同字号（桌面 14px／手机 17px，同一个 --zone-name-fs），
+   并去掉前面的小三角（其它分组前面都已没有三角），名字起点与它们一样贴左 4px；展开态只靠名字变蓝。
+   放在手机档 .grp-name 20px 之后生效（选择器更具体）。 */
+#dayPnlCard>summary.dp-head .grp-name,#macroCard>summary.grp .grp-name{font-size:var(--zone-name-fs,14px);line-height:24px}
+#dayPnlCard>summary::before,#macroCard>summary::before{display:none}
 #signalCounts .signal-extra-row.pnl-extra>.pnl-chip{position:absolute;top:6px;left:5px;width:var(--chip-w);box-sizing:border-box;height:38px;max-width:100%;padding:0 4px;display:inline-flex;align-items:center;justify-content:center;text-align:center;font:inherit;font-size:14px;font-weight:600;line-height:1.15;color:var(--text);background:transparent;border:1px solid var(--button-border);border-radius:6px;cursor:default;white-space:normal}
 #signalCounts .pnl-extra .text-only ul.signal-member-list{margin:0 0 10px;padding-left:2px;list-style:none}
 #signalCounts .pnl-extra .text-only ul.signal-member-list>li{list-style:none}
@@ -1576,6 +1582,9 @@ body{padding-left:5px;padding-right:5px}
 .group-card:not([open]){padding-bottom:2px;min-height:63px}
 .macro-card:not([open]){padding-bottom:2px;min-height:53px}
 .day-pnl-card:not([open]){padding-bottom:2px;min-height:53px}   /* 当日与风险折叠态同为53，比其它分组(63)矮；放在 .group-card 规则之后以覆盖 */
+/* 2026-11-24 用户：统计、仓位折叠态高度与当日、风险一致（手机 53；其它分组仍 63）。summary 同样锁 47，上下各留 3px（仓位上 3 下 2 → 统一 2/2）。 */
+#signalCounts:not([open]),#group_positions:not([open]){padding-top:2px;padding-bottom:2px;min-height:53px}
+#signalCounts:not([open])>summary.grp,#group_positions:not([open])>summary.grp{box-sizing:border-box;min-height:47px;padding-top:0;padding-bottom:0}
 /* 2026-11-18 用户「手机上当日/风险展开后，面板离标题有点远，拉近些」：桌面档已经把展开态
    压到 50px，手机档漏了覆盖，仍是基础规则的 63px —— summary 只有 47px，多出的 16px 空白
    再加 8px row-gap，面板看着离标题 21px（桌面 11px）。这里补回与折叠态同高的 53px，
@@ -1628,6 +1637,7 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}
 /* 2026-11-20 20:4x／20:5x：手机上标题放大，但组名须跟个股代码 td.sym 同为 17px；
    只覆盖变量值，不重抄整条规则。 */
 #zoneDualRow,.dual-row.group-dual{--zone-name-fs:17px;--zone-badge-fs:17px;--zone-pad-y:6px}
+#dualRow{--zone-name-fs:17px}
 #signalCounts .signal-count-toggle{font-size:17px;line-height:16px}
 .rs-spy,.pos-total{font-size:var(--pos-num-fs,16px);line-height:24px}
 .zone-card>summary .zone-name{font-size:16px;line-height:22.5px}
@@ -1683,6 +1693,9 @@ table.stk tr[data-symbol]>td.sig{--sig-borrow:14px}
 .group-card>summary.grp{box-sizing:border-box;height:44px;padding-top:0;padding-bottom:0}
 .macro-card>summary.grp{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}
 .day-pnl-card>summary.grp{box-sizing:border-box;height:47px;padding-top:0;padding-bottom:0}
+/* 2026-11-24 用户：统计、仓位折叠态与当日、风险同高（桌面也是 47 标题 + 上下各 2px 内距 + 1px 框 = 53）。 */
+#signalCounts:not([open]),#group_positions:not([open]){padding-top:2px;padding-bottom:2px;min-height:0}
+#signalCounts:not([open])>summary.grp,#group_positions:not([open])>summary.grp{box-sizing:border-box;height:47px;min-height:47px;padding-top:0;padding-bottom:0}
 .zone-card>summary{box-sizing:border-box;height:48px;padding-top:0;padding-bottom:0}
 .sub{padding-left:var(--head-inset);padding-right:var(--head-inset)}
 .runbar{padding-left:var(--head-inset);padding-right:var(--head-inset)}

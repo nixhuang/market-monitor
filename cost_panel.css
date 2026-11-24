@@ -496,7 +496,7 @@
 .pi-pmv .pi-wcur { color: var(--dim, #8b93a1); }
 .pi-log-link { display: inline-flex; align-items: center; gap: 5px; color: var(--head-blue-on);
   font-size: 16px; font-weight: 600; text-decoration: none; }
-.pi-log-link:hover, .pi-log-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.pi-log-text { text-decoration: underline; text-underline-offset: 3px; }   /* 2026-11-24 用户：「交易记录」四个字常驻下划线；右边的「↗」不加下划线（所以下划线放在文字 span 上，不放在整条链接上） */
 .pi-arrow { font-size: 13px; font-weight: 400; }
 
 /* 新增仓位弹窗压矮（键盘弹出也放得下）：代码｜长短持仓、数量｜成本、加仓价｜减仓价、目标价｜分类标签各并一排；
