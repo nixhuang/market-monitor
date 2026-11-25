@@ -210,12 +210,22 @@ def _dates(values):
     return {d.isoformat() for v in values if (d := _date(v)) is not None} if isinstance(values, list) else set()
 
 
-def _merge_events(name, left, right, preferred):
+def _merge_events(name, left, right, preferred, facts=()):
     out = copy.deepcopy(preferred)
     if name == "consensus":
         pending = _dates(left.get("earn_pending")) | _dates(right.get("earn_pending"))
+        # 2026-11-25 NTNX：本轮抓到「来源更新日期不早于财报日」的新价后这笔财报已结清，
+        # 合并时不能被另一次运行的旧检查点把 earn_pending 又并回来（否则会连着多抓几天）。
+        # facts 是两侧各自的价格事实，取最新来源更新日期当结清基准；没有 upd 就保守保留并集。
+        seen = [d for part in facts if isinstance(part, dict)
+                for d in (_date(part.get("upd")),) if d is not None]
+        cutoff = max(seen).isoformat() if seen else None
+        if cutoff:
+            pending = {d for d in pending if d > cutoff}
         if pending:
             out["earn_pending"] = sorted(pending)
+        else:
+            out.pop("earn_pending", None)
     return out
 
 
@@ -234,7 +244,7 @@ def _merge_entry(name, left, right, left_meta=None, right_meta=None):
         part = copy.deepcopy(rp[aspect] if use_right else lp[aspect])
         meta = copy.deepcopy(rm[aspect] if use_right else lm[aspect])
         if aspect == "events":
-            part = _merge_events(name, lp[aspect], rp[aspect], part)
+            part = _merge_events(name, lp[aspect], rp[aspect], part, (lp["facts"], rp["facts"]))
             meta["digest"] = _digest(part)
         merged.update(part)
         metadata[aspect] = meta

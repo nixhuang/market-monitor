@@ -421,6 +421,22 @@ class EntryVersionTests(TemporaryBase):
         self.assertEqual(actual["ne"], "2026-10-30")
         self.assertEqual(actual["earn_pending"], ["2026-10-17", "2026-10-19"])
 
+    def test_new_source_date_clears_stale_earnings_pending_on_merge(self):
+        # 2026-11-25 NTNX：抓到财报后的新价、本轮已结掉事件，旧检查点不能把 pending 并回来
+        old = {"r": "2026-10-18", "s": "ok", "avg": 79.27, "upd": "2026-10-15",
+               "ne": "2026-10-19", "earn_pending": ["2026-10-17"]}
+        fresh = {"r": "2026-10-19", "s": "ok", "avg": 74.74, "upd": "2026-10-19",
+                 "try": "2026-10-20", "r_tz": "America/New_York"}
+        for left, right in ((old, fresh), (fresh, old)):
+            with self.subTest(left=left["r"]):
+                merged, _ = rt._merge_entry("consensus", left, right)
+                self.assertNotIn("earn_pending", merged)
+                self.assertEqual(merged["avg"], 74.74)
+        # 抓回来的仍是财报前的旧价：事件必须保留，隔天继续抓
+        stale = {**fresh, "upd": "2026-10-15"}
+        merged, _ = rt._merge_entry("consensus", old, stale)
+        self.assertEqual(merged.get("earn_pending"), ["2026-10-17"])
+
     def test_same_day_consensus_event_uses_its_component_version(self):
         runtime = rt.RuntimeState(self.base)
         old = {"r": "2026-10-20", "s": "ok", "ne": "2026-10-23"}
