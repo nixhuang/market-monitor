@@ -208,6 +208,27 @@ class RulesRegression(unittest.TestCase):
         missing = re.search(r'(?m)^\.range52-missing\{([^}]*)\}', css)[1]
         self.assertIn('color:var(--dim)', missing)
 
+    def test_range52_phone_raises_endpoints_and_desktop_enlarges_digits(self):
+        css = page_assets.PAGE_CSS
+        # 桌面：两排数字 12px；横条仍是 flex:1 自动让宽，颜色与轨道原色不变
+        for selector, expected in (('.range52-lo', 'font-size:12px'),
+                                   ('.range52-hi', 'font-size:12px'),
+                                   ('.range52-gap', 'font-size:12px')):
+            rule = re.search(r'(?m)^' + re.escape(selector) + r'\{([^}]*)\}', css)[1]
+            self.assertIn(expected, rule)
+        self.assertIn('top:calc(100% + 2px)', re.search(r'(?m)^\.range52-gap\{([^}]*)\}', css)[1])
+        self.assertIn('flex:1 1 auto', re.search(r'(?m)^\.range52-track\{([^}]*)\}', css)[1])
+        # 手机档：只端价上移 2px，幅度补 2px 留在原位（间距 2 → 4px），字号仍 13px
+        phone = css[css.index('@media(max-width:600px)'):]
+        for selector in ('.range52-lo', '.range52-hi'):
+            rule = re.search(r'(?m)^' + re.escape(selector) + r'\{([^}]*)\}', phone)[1]
+            self.assertIn('top:-2px', rule)
+            self.assertIn('font-size:13px', rule)
+        gap_phone = re.search(r'(?m)^\.range52-gap\{([^}]*)\}', phone)[1]
+        self.assertIn('top:calc(100% + 4px)', gap_phone)
+        self.assertIn('font-size:13px', gap_phone)
+        self.assertIn('background:var(--range-track-line)', css)
+
     def test_earnings_date_palette_and_countdown_colors_share_all_display_paths(self):
         css = page_assets.PAGE_CSS
         self.assertIn('--head-blue-on:#8fb8f0', page_assets.PAGE_PALETTE)
@@ -1202,8 +1223,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('border-top:1px solid var(--stock-pair-line)', css)
         self.assertNotIn('background:var(--stock-pair-line)', css)
         self.assertEqual(css.count('var(--stock-pair-line)'), 1)
-        self.assertIn('.range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--range52-label)', css)
-        self.assertIn('.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--range52-label)', css)
+        self.assertIn('.range52-lo{position:relative;flex:none;font-size:12px;line-height:11px;color:var(--range52-label)', css)
+        self.assertIn('.range52-hi{position:relative;flex:none;font-size:12px;line-height:11px;color:var(--range52-label)', css)
         self.assertIn('border-top:9px solid var(--range-marker-border);', css)
         self.assertIn('border-top:7px solid var(--range-marker-fill)', css)
         self.assertIn('--name-lamp:var(--range-track)}', css)

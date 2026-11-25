@@ -908,10 +908,10 @@ tr[id^="s-"]{scroll-margin-top:64px}
 #signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="yellow"]{color:var(--lamp-yellow);--earn-bj-color:var(--lamp-yellow)}
 #signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="gray"]{color:var(--head-blue-on)}
 .range52-rail{position:relative;display:flex;align-items:flex-end;gap:11px;height:26px;padding-bottom:13px;font-variant-numeric:tabular-nums}
-.range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--range52-label);white-space:nowrap}
-.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--range52-label);white-space:nowrap}
+.range52-lo{position:relative;flex:none;font-size:12px;line-height:11px;color:var(--range52-label);white-space:nowrap}
+.range52-hi{position:relative;flex:none;font-size:12px;line-height:11px;color:var(--range52-label);white-space:nowrap}
 .range52-track{position:relative;flex:1 1 auto;height:2.1px;background:var(--range-track-line);border-radius:99px}
-.range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;color:var(--range52-label)}
+.range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:12px;color:var(--range52-label)}
 .range52-hi .range52-gap{left:auto;right:0}
 .range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;border-left:4.2px solid transparent;border-right:4.2px solid transparent;border-top:9px solid var(--range-marker-border);transform:translateX(-50%);z-index:1}
 .range52-marker::before{content:"";position:absolute;left:-3.2px;top:-8px;width:0;height:0;border-left:3.2px solid transparent;border-right:3.2px solid transparent;border-top:7px solid var(--range-marker-fill)}
@@ -1688,9 +1688,12 @@ table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}
 .monitor-note{font-size:16px;line-height:24px}
 #signalCounts>summary .dca-badge{font-size:16px;line-height:24px}
 #signalCounts>summary .dca-n{font-size:19px}
-.range52-hi{font-size:13px;line-height:11px}
-.range52-lo{font-size:13px;line-height:11px}
-.range52-gap{font-size:13px;line-height:11px}
+/* 2026-11-25 用户：手机只把左右端价上移 2px，下方幅度留在原位，两排间距 2 → 4px；
+   幅度挂在端价底下，端价上移必须给它补 2px，否则会跟着一起走、间距不变。
+   整条 52 周条与描述文字的距离一律不动；桌面另把两排字号 10 → 12px（横条 flex:1 自动让宽）。 */
+.range52-hi{font-size:13px;line-height:11px;top:-2px}
+.range52-lo{font-size:13px;line-height:11px;top:-2px}
+.range52-gap{font-size:13px;line-height:11px;top:calc(100% + 4px)}
 .quiet-list>summary{font-size:15px;line-height:19.5px}
 .acts .board-return{color:var(--link-blue);background:transparent;border:1px solid var(--control-border);border-radius:8px;padding:7px 15px;margin:0;font-size:16px;line-height:24px}
 .acts a.btnlink{color:var(--link-blue);background:transparent;border:1px solid var(--control-border);border-radius:8px;padding:7px 15px;margin:0;font-size:16px;line-height:24px}
