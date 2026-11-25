@@ -545,6 +545,8 @@ PAGE_PALETTE = """:root{
   --line:#252a33;
   --text:#e6e8ec;
   --dim:#8b93a1;
+  --range52-label:#adb5c1; /* 52周条两端价与下方幅度文字：2026-11-25 用户把明度从 0.59 提到 0.72（纯白=1）。
+                              只管数字；灰横条 --range-track-line / --range-track 与无数据提示 --dim 一律不动。 */
   --green:#3fb950;
   --yellow:#d29922;
   --red:#f85149;
@@ -906,10 +908,10 @@ tr[id^="s-"]{scroll-margin-top:64px}
 #signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="yellow"]{color:var(--lamp-yellow);--earn-bj-color:var(--lamp-yellow)}
 #signalCounts .signal-filter-condition[data-signal-kind="earnings_week"][data-signal-level="gray"]{color:var(--head-blue-on)}
 .range52-rail{position:relative;display:flex;align-items:flex-end;gap:11px;height:26px;padding-bottom:13px;font-variant-numeric:tabular-nums}
-.range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
-.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim);white-space:nowrap}
+.range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--range52-label);white-space:nowrap}
+.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--range52-label);white-space:nowrap}
 .range52-track{position:relative;flex:1 1 auto;height:2.1px;background:var(--range-track-line);border-radius:99px}
-.range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;color:var(--dim)}
+.range52-gap{position:absolute;top:calc(100% + 2px);left:0;line-height:11px;font-size:10px;color:var(--range52-label)}
 .range52-hi .range52-gap{left:auto;right:0}
 .range52-marker{position:absolute;bottom:100%;width:0;height:0;border-bottom:0;border-left:4.2px solid transparent;border-right:4.2px solid transparent;border-top:9px solid var(--range-marker-border);transform:translateX(-50%);z-index:1}
 .range52-marker::before{content:"";position:absolute;left:-3.2px;top:-8px;width:0;height:0;border-left:3.2px solid transparent;border-right:3.2px solid transparent;border-top:7px solid var(--range-marker-fill)}

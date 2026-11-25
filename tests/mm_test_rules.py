@@ -195,6 +195,19 @@ class RulesRegression(unittest.TestCase):
                        '.rule-table td{padding:6px 4px}'):
             self.assertIn(stable, css)
 
+    def test_range52_endpoint_labels_brighten_without_touching_track(self):
+        css = page_assets.PAGE_CSS
+        self.assertIn('--range52-label:#adb5c1', page_assets.PAGE_PALETTE)
+        for selector in ('.range52-lo', '.range52-hi', '.range52-gap'):
+            rule = re.search(r'(?m)^' + re.escape(selector) + r'\{([^}]*)\}', css)[1]
+            self.assertIn('color:var(--range52-label)', rule)
+            self.assertNotIn('color:var(--dim)', rule)
+        # 灰横条与无数据提示保持原色：只加亮两端价格与幅度数字
+        self.assertIn('--range-track-line:#495568', page_assets.PAGE_PALETTE)
+        self.assertIn('background:var(--range-track-line)', css)
+        missing = re.search(r'(?m)^\.range52-missing\{([^}]*)\}', css)[1]
+        self.assertIn('color:var(--dim)', missing)
+
     def test_earnings_date_palette_and_countdown_colors_share_all_display_paths(self):
         css = page_assets.PAGE_CSS
         self.assertIn('--head-blue-on:#8fb8f0', page_assets.PAGE_PALETTE)
@@ -1189,8 +1202,8 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('border-top:1px solid var(--stock-pair-line)', css)
         self.assertNotIn('background:var(--stock-pair-line)', css)
         self.assertEqual(css.count('var(--stock-pair-line)'), 1)
-        self.assertIn('.range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim)', css)
-        self.assertIn('.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--dim)', css)
+        self.assertIn('.range52-lo{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--range52-label)', css)
+        self.assertIn('.range52-hi{position:relative;flex:none;font-size:10px;line-height:11px;color:var(--range52-label)', css)
         self.assertIn('border-top:9px solid var(--range-marker-border);', css)
         self.assertIn('border-top:7px solid var(--range-marker-fill)', css)
         self.assertIn('--name-lamp:var(--range-track)}', css)
