@@ -9,15 +9,15 @@
     "next_in": 12,
     "next_date": "2026-12-11"
   },
-  "run_id": "45542282301",
+  "run_id": "45560033316",
   "request_id": "",
-  "source_sha": "46630f9157a0bd941e5dffed3c851a49cd10dd49",
-  "input_hash": "c9e895ef5d8fe609a106fbb4cf8825ef0adb1af27225bceffafb683969accbc7",
-  "build_id": "45542282301-1",
-  "started_at": "2026-11-25T03:46:35+00:00",
-  "started_at_bj": "2026-11-25T11:46:35+08:00",
-  "finished_at": "2026-11-25T11:49:39.004982+08:00",
-  "finished_at_bj": "2026-11-25T11:49:39+08:00",
+  "source_sha": "6cf6590e2f8a82ec8faaa1ef1ebdd669e54db9d0",
+  "input_hash": "2f30f8f455fb0cbe4cdfcce84e339c2a575b4c4c821634ae9fe6b0110de0781d",
+  "build_id": "45560033316-1",
+  "started_at": "2026-11-25T06:21:48+00:00",
+  "started_at_bj": "2026-11-25T14:21:48+08:00",
+  "finished_at": "2026-11-25T14:25:03.083748+08:00",
+  "finished_at_bj": "2026-11-25T14:25:03+08:00",
   "event": "push",
   "target_trade_date": "2026-11-24",
   "mode": "closed",
@@ -2402,16 +2402,6 @@
         "kind": "expected"
       },
       {
-        "symbol": "ZS",
-        "note": "云安全",
-        "group": "focus",
-        "level": "yellow",
-        "hold": "short",
-        "date": "2026-12-02",
-        "timing": "post",
-        "kind": "expected"
-      },
-      {
         "symbol": "SNOW",
         "note": "数据云",
         "group": "technology",
@@ -2468,7 +2458,7 @@
   },
   "treasury_reference": {
     "ok": true,
-    "value": 4.904000282287598,
+    "value": 4.9039998054504395,
     "date": "2026-11-24",
     "source": "Yahoo ^TNX",
     "unit": "%",
@@ -2477,7 +2467,7 @@
     "quote_name": null,
     "observed_date": null,
     "observed_value": null,
-    "delta_month": -0.0839996337890625
+    "delta_month": -0.0840001106262207
   },
   "coverage": "数据源日线；完整23小时夜盘/日盘覆盖尚未验证。自动日报不并入实时价；手动常规盘中按当前报价重算。",
   "data_time_text": "美 11-24 收盘",
@@ -2551,21 +2541,25 @@
     "checked_at": "2026-11-18T20:33:09.024842-05:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-11-25T03:48:44.144157+00:00"
+    "asof": "2026-11-25T06:23:53.696572+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 0,
+      "due": 3,
       "deferred": 0,
-      "tried": 0,
-      "ok": 0,
+      "tried": 3,
+      "ok": 3,
       "none": 0,
       "fail": 0,
       "stopped": "",
       "quota": {
         "date": "2026-11-25",
-        "symbols": [],
+        "symbols": [
+          "CEG",
+          "CRSP",
+          "TTWO"
+        ],
         "retry_symbols": []
       }
     },
@@ -2604,11 +2598,11 @@
       },
       "CRSP": {
         "avg": 85.42,
-        "upd": "2026-11-10",
-        "r": "2026-11-11",
+        "upd": "2026-11-16",
+        "r": "2026-11-25",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-11-11",
+        "try": "2026-11-25",
         "earn_pending": [
           "2026-11-09"
         ]
@@ -2770,6 +2764,7 @@
         "r_tz": "America/New_York",
         "s": "ok",
         "try": "2026-11-12",
+        "ne": "2027-02-01",
         "earn_pending": [
           "2026-10-27"
         ]
@@ -2897,6 +2892,7 @@
         "r_tz": "America/New_York",
         "s": "ok",
         "try": "2026-11-19",
+        "ne": "2027-02-09",
         "earn_pending": [
           "2026-11-03"
         ]
@@ -3066,6 +3062,7 @@
         "r_tz": "America/New_York",
         "s": "ok",
         "try": "2026-11-19",
+        "ne": "2027-02-09",
         "earn_pending": [
           "2026-10-20"
         ]
@@ -3132,6 +3129,7 @@
         "r_tz": "America/New_York",
         "s": "ok",
         "try": "2026-11-19",
+        "ne": "2027-02-02",
         "earn_pending": [
           "2026-10-20"
         ]
@@ -3167,6 +3165,7 @@
         "r_tz": "America/New_York",
         "s": "ok",
         "try": "2026-11-12",
+        "ne": "2027-02-09",
         "earn_pending": [
           "2026-10-27"
         ]
@@ -3198,6 +3197,7 @@
         "r_tz": "America/New_York",
         "s": "ok",
         "try": "2026-11-12",
+        "ne": "2027-02-10",
         "earn_pending": [
           "2026-10-27"
         ]
@@ -3286,6 +3286,7 @@
         "r_tz": "America/New_York",
         "s": "ok",
         "try": "2026-11-19",
+        "ne": "2027-02-09",
         "earn_pending": [
           "2026-11-03"
         ]
@@ -3302,12 +3303,12 @@
         ]
       },
       "CEG": {
-        "avg": 337.9,
-        "upd": "2026-11-10",
-        "r": "2026-11-11",
+        "avg": 340.38,
+        "upd": "2026-11-23",
+        "r": "2026-11-25",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-11-11",
+        "try": "2026-11-25",
         "earn_pending": [
           "2026-11-09"
         ]
@@ -3355,17 +3356,18 @@
         "r_tz": "America/New_York",
         "s": "ok",
         "try": "2026-11-12",
+        "ne": "2027-02-09",
         "earn_pending": [
           "2026-10-27"
         ]
       },
       "TTWO": {
-        "avg": 283.86,
-        "upd": "2026-11-10",
-        "r": "2026-11-11",
+        "avg": 285.48,
+        "upd": "2026-11-23",
+        "r": "2026-11-25",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-11-11",
+        "try": "2026-11-25",
         "ne": "2027-02-09",
         "earn_pending": [
           "2026-11-09"
@@ -3454,11 +3456,15 @@
     },
     "quota": {
       "date": "2026-11-25",
-      "symbols": [],
+      "symbols": [
+        "CEG",
+        "CRSP",
+        "TTWO"
+      ],
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-11-25T03:49:38.705688+00:00",
+    "asof": "2026-11-25T06:25:02.773418+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -3472,7 +3478,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3489,7 +3495,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3513,17 +3519,17 @@
       },
       "CRSP": {
         "facts": {
-          "asof": "2026-11-11T05:15:20.142862+00:00",
-          "at": "2026-11-11T00:00:00+00:00",
-          "digest": "e29c096828b56a7d02bc032f75ba6e4fd15e4803485cfd6fe13bd1712afc2331"
+          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "df9be3377e6e040aa38df8fdcb194791bfd19c1cd45864a9d0852631f58e3745"
         },
         "attempt": {
-          "asof": "2026-11-11T05:15:20.142862+00:00",
-          "at": "2026-11-10T16:00:00+00:00",
-          "digest": "4626f389ee826a738887c0a366bf8229fcafb8aa83db3118473507a0868f9c7c"
+          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "at": "2026-11-24T16:00:00+00:00",
+          "digest": "b2f91b4c24835b10c1038b3bd58d50e3aa929aa6bed87c03219d59b9b1ee5455"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "b349fa6c02925a10b4c0ad8d6d8d65e34f76d0ae66f22ab5c6828f6d00e6cb2c"
         }
@@ -3540,7 +3546,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -3591,7 +3597,7 @@
           "digest": "790e7077fa749be961d24e91580f696f94aeab16d5d5203902a78bcba32a9e30"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3608,7 +3614,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -3625,7 +3631,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "6fdb6ee21dd39b64f32af0d297a6d403868a02a83a7383f5815c35496219be18"
         }
@@ -3710,7 +3716,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3727,7 +3733,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -3744,7 +3750,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3761,7 +3767,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3778,9 +3784,9 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
-          "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
+          "digest": "2a447885e91232096bdce3651b2d9741455be4ed6a274755894844e3d0cf2232"
         }
       },
       "GEHC": {
@@ -3812,7 +3818,7 @@
           "digest": "a23d4affe35cfce786fbdf17d087c07e917d8e5838d7ae21a05728d7dc1e7b0e"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "229a5c551d6be267e2680ad2327c9c9ec18631501e1522fedaede2a850edc80c"
         }
@@ -3846,7 +3852,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3880,7 +3886,7 @@
           "digest": "a23d4affe35cfce786fbdf17d087c07e917d8e5838d7ae21a05728d7dc1e7b0e"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3897,7 +3903,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -3914,7 +3920,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3948,7 +3954,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -3965,7 +3971,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3982,9 +3988,9 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
-          "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
+          "digest": "9b10f1a30612f114326d998ae81ed5b32244eeb4bfdea324c8a2f6b00330e781"
         }
       },
       "COHR": {
@@ -3999,7 +4005,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -4016,7 +4022,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -4033,7 +4039,7 @@
           "digest": "801bc35ecf7a307bb0c37c85715cdc18931e37c57e8916fbbc358e56e9835c83"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "dd2a107b95a38bfdbfcabb3c2c8ff10b83d4aab2134f1395d1ee79cef8685c98"
         }
@@ -4050,7 +4056,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -4084,7 +4090,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "b7a4c2b0adc9ad39ba193b21a13a13ba857e0b2f7ed153a419387fc314ade66d"
         }
@@ -4135,7 +4141,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "fcbf9135509747b850be079ff35a7d6f4bc0ba40fc8e618660c7c8556a19206c"
         }
@@ -4152,7 +4158,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "3ab1dd1df2994e85b2a5605788e0537c6440ea5fd9762e98445e57c4308b3fd2"
         }
@@ -4169,7 +4175,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "8c841de081d855f40075b8b3875d5e6f5be1e29a5833b154513a59fca3480448"
         }
@@ -4186,7 +4192,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4203,7 +4209,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "c1c163e8a33ff3dd1343ad0fd0963cc28d30fdb532c4eb8a0a42db4c9991f2be"
         }
@@ -4220,7 +4226,7 @@
           "digest": "a23d4affe35cfce786fbdf17d087c07e917d8e5838d7ae21a05728d7dc1e7b0e"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "be73c567fb53ae88b9a6a819456010b5421fa578533609edd51e3d37be3f2baa"
         }
@@ -4237,9 +4243,9 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
-          "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
+          "digest": "b421cd043424e4ec95da3225cc1065c5af8a1dcb0e7849712e835a8ddbfb1847"
         }
       },
       "ABBV": {
@@ -4254,7 +4260,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "1ffef9318e623e19ec19c8be4793ccf2948522c884ed3ec29e26c3cac8264cc1"
         }
@@ -4271,7 +4277,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "f97f96841e2044aa1096720b7bbac3d8168300f18ffe485ae269935a626c3b79"
         }
@@ -4288,7 +4294,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -4305,7 +4311,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4339,9 +4345,9 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
-          "digest": "e7c5e7e8871d59d751bc99477446f76a5457ecc502df2126f406fdb92c626206"
+          "digest": "eb7362bfb1c3fb995a0830a61fe384e02da1c5cc884bca5de3eb976c454f027d"
         }
       },
       "AXP": {
@@ -4356,7 +4362,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "45d062dd2d8b7a4bb67cd2ec479ce7e0063d5bd5ca4214b2a800d39bd44a87de"
         }
@@ -4373,7 +4379,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "be73c567fb53ae88b9a6a819456010b5421fa578533609edd51e3d37be3f2baa"
         }
@@ -4390,9 +4396,9 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
-          "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
+          "digest": "f5655607c32c8047af37e33b16ce1fcbc0149b22294c0584b2260c822eb38846"
         }
       },
       "GS": {
@@ -4424,7 +4430,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "3187ddd3f2df50fd097eff406e02d1c4150cce8f627eda20976775643bc7fb1d"
         }
@@ -4441,9 +4447,9 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
-          "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
+          "digest": "350bab861122be2e885ef487eaf5d7e7ca1a2f7fdf3c43d60077126c613c2231"
         }
       },
       "JPM": {
@@ -4475,7 +4481,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "d950462b69fbadb5117bc1791218968f86c1ae42863f65dcf4969a039e9e1cda"
         }
@@ -4492,7 +4498,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "229a5c551d6be267e2680ad2327c9c9ec18631501e1522fedaede2a850edc80c"
         }
@@ -4526,7 +4532,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -4543,7 +4549,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "cd7c27f761a0ea07c0c7a59d7ebc6c5057dc5b4ed6b72f601d2b20e9d9597531"
         }
@@ -4560,7 +4566,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "cd7c27f761a0ea07c0c7a59d7ebc6c5057dc5b4ed6b72f601d2b20e9d9597531"
         }
@@ -4577,9 +4583,9 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
-          "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
+          "digest": "9b10f1a30612f114326d998ae81ed5b32244eeb4bfdea324c8a2f6b00330e781"
         }
       },
       "LIN": {
@@ -4594,24 +4600,24 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
       },
       "CEG": {
         "facts": {
-          "asof": "2026-11-11T05:15:20.142862+00:00",
-          "at": "2026-11-11T00:00:00+00:00",
-          "digest": "4d6aba73d074833c206e8091ad09a32609e58ccbe625d096c65ba89711b0c36b"
+          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "f4c6d589f26fe7c06faeb24318354ef3c2491c3f214f16a0e536844d0b7d0d4d"
         },
         "attempt": {
-          "asof": "2026-11-11T05:15:20.142862+00:00",
-          "at": "2026-11-10T16:00:00+00:00",
-          "digest": "4626f389ee826a738887c0a366bf8229fcafb8aa83db3118473507a0868f9c7c"
+          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "at": "2026-11-24T16:00:00+00:00",
+          "digest": "b2f91b4c24835b10c1038b3bd58d50e3aa929aa6bed87c03219d59b9b1ee5455"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "b349fa6c02925a10b4c0ad8d6d8d65e34f76d0ae66f22ab5c6828f6d00e6cb2c"
         }
@@ -4628,7 +4634,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4645,7 +4651,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "d77713b5a56eed6b2d6e310549734eeb7f7480406d56ec9eaf1462eff342f4d1"
         }
@@ -4662,7 +4668,7 @@
           "digest": "a23d4affe35cfce786fbdf17d087c07e917d8e5838d7ae21a05728d7dc1e7b0e"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -4679,24 +4685,24 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
-          "digest": "75a2fd50a91322f7870d5f80b5e045c6999d7717ab42cc360c5f22fb8464c909"
+          "digest": "f5655607c32c8047af37e33b16ce1fcbc0149b22294c0584b2260c822eb38846"
         }
       },
       "TTWO": {
         "facts": {
-          "asof": "2026-11-11T05:15:20.142862+00:00",
-          "at": "2026-11-11T00:00:00+00:00",
-          "digest": "1a439dc5cedaecedf351cc14b83b356faac1079f6c8d3481bc39defbb20c8287"
+          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "62c231b950b90c2f6fecc4ac50f26deb72bc71a309208c1edf1831faa1152533"
         },
         "attempt": {
-          "asof": "2026-11-11T05:15:20.142862+00:00",
-          "at": "2026-11-10T16:00:00+00:00",
-          "digest": "4626f389ee826a738887c0a366bf8229fcafb8aa83db3118473507a0868f9c7c"
+          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "at": "2026-11-24T16:00:00+00:00",
+          "digest": "b2f91b4c24835b10c1038b3bd58d50e3aa929aa6bed87c03219d59b9b1ee5455"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "ab1e5e6c25c9659351aabc27f8b1136c570d41c441edd0227be35ebe44b28188"
         }
@@ -4713,7 +4719,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4730,7 +4736,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -4747,7 +4753,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "a032a79759e22880052289547ce24537deaa30b553c34bc02d31dae1e963a189"
         }
@@ -4764,7 +4770,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
         }
@@ -4781,7 +4787,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4798,7 +4804,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "3187ddd3f2df50fd097eff406e02d1c4150cce8f627eda20976775643bc7fb1d"
         }
@@ -4815,7 +4821,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T03:49:38.705688+00:00",
+          "asof": "2026-11-25T06:25:02.773418+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4824,11 +4830,11 @@
   },
   "earnings": {
     "targets": 82,
-    "dated": 53,
-    "pending": 29,
+    "dated": 60,
+    "pending": 22,
     "failed": 0,
-    "fetched": 0,
-    "cached": 82,
+    "fetched": 20,
+    "cached": 62,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -4853,7 +4859,7 @@
         "kind": "expected",
         "label": "Earnings Date",
         "cross": "agree",
-        "fetched": "2026-11-16",
+        "fetched": "2026-11-25",
         "status": "ok"
       },
       "CRSP": {
@@ -4914,13 +4920,8 @@
         "status": "unknown"
       },
       "ZS": {
-        "date": "2026-12-02",
-        "timing": "post",
-        "kind": "expected",
-        "label": "Earnings Date",
-        "cross": "agree",
-        "fetched": "2026-11-18",
-        "status": "ok"
+        "fetched": "2026-11-25",
+        "status": "unknown"
       },
       "COST": {
         "date": "2026-12-10",
@@ -4959,7 +4960,7 @@
         "timing": "",
         "kind": "estimated",
         "source2": "yahoo",
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "ok"
       },
       "MSFT": {
@@ -4979,8 +4980,12 @@
         "status": "ok"
       },
       "NXPI": {
-        "fetched": "2026-11-18",
-        "status": "unknown"
+        "date": "2027-02-01",
+        "timing": "",
+        "kind": "expected",
+        "source2": "yahoo",
+        "fetched": "2026-11-25",
+        "status": "ok"
       },
       "GEHC": {
         "fetched": "2026-11-20",
@@ -4996,7 +5001,7 @@
         "kind": "expected",
         "label": "Earnings Date",
         "cross": "agree",
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "ok"
       },
       "SKHY": {
@@ -5025,9 +5030,9 @@
       "STX": {
         "date": "2027-01-26",
         "timing": "",
-        "kind": "estimated",
+        "kind": "expected",
         "source2": "yahoo",
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "ok"
       },
       "NOW": {
@@ -5058,8 +5063,12 @@
         "status": "ok"
       },
       "ANET": {
-        "fetched": "2026-11-18",
-        "status": "unknown"
+        "date": "2027-02-09",
+        "timing": "",
+        "kind": "estimated",
+        "source2": "yahoo",
+        "fetched": "2026-11-25",
+        "status": "ok"
       },
       "COHR": {
         "date": "2027-02-03",
@@ -5141,7 +5150,7 @@
         "timing": "",
         "kind": "estimated",
         "source2": "yahoo",
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "ok"
       },
       "PLTR": {
@@ -5161,7 +5170,7 @@
         "status": "ok"
       },
       "NVDA": {
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "unknown"
       },
       "WDC": {
@@ -5173,10 +5182,12 @@
         "status": "ok"
       },
       "SPCX": {
-        "fetched": "2026-11-18",
-        "status": "unknown",
-        "official_attempted": "2026-11-18",
-        "official_error": "http_403"
+        "date": "2027-02-09",
+        "timing": "",
+        "kind": "estimated",
+        "source2": "yahoo",
+        "fetched": "2026-11-25",
+        "status": "ok"
       },
       "ABBV": {
         "fetched": "2026-11-23",
@@ -5195,7 +5206,7 @@
         "timing": "",
         "kind": "estimated",
         "source2": "yahoo",
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "ok"
       },
       "LLY": {
@@ -5211,8 +5222,12 @@
         "status": "ok"
       },
       "CB": {
-        "fetched": "2026-11-18",
-        "status": "unknown"
+        "date": "2027-02-02",
+        "timing": "",
+        "kind": "estimated",
+        "source2": "yahoo",
+        "fetched": "2026-11-25",
+        "status": "ok"
       },
       "AXP": {
         "date": "2027-01-29",
@@ -5231,8 +5246,12 @@
         "status": "ok"
       },
       "SPGI": {
-        "fetched": "2026-11-18",
-        "status": "unknown"
+        "date": "2027-02-09",
+        "timing": "",
+        "kind": "estimated",
+        "source2": "yahoo",
+        "fetched": "2026-11-25",
+        "status": "ok"
       },
       "GS": {
         "date": "2027-01-19",
@@ -5247,8 +5266,12 @@
         "status": "unknown"
       },
       "HOOD": {
-        "fetched": "2026-11-18",
-        "status": "unknown"
+        "date": "2027-02-10",
+        "timing": "",
+        "kind": "estimated",
+        "source2": "yahoo",
+        "fetched": "2026-11-25",
+        "status": "ok"
       },
       "JPM": {
         "date": "2027-01-14",
@@ -5293,9 +5316,9 @@
       "NOC": {
         "date": "2027-01-26",
         "timing": "",
-        "kind": "estimated",
+        "kind": "expected",
         "source2": "yahoo",
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "ok"
       },
       "RTX": {
@@ -5303,12 +5326,16 @@
         "timing": "",
         "kind": "estimated",
         "source2": "yahoo",
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "ok"
       },
       "DD": {
-        "fetched": "2026-11-18",
-        "status": "unknown"
+        "date": "2027-02-09",
+        "timing": "",
+        "kind": "estimated",
+        "source2": "yahoo",
+        "fetched": "2026-11-25",
+        "status": "ok"
       },
       "LIN": {
         "fetched": "2026-11-20",
@@ -5343,8 +5370,12 @@
         "status": "ok"
       },
       "KO": {
-        "fetched": "2026-11-18",
-        "status": "unknown"
+        "date": "2027-02-09",
+        "timing": "",
+        "kind": "estimated",
+        "source2": "yahoo",
+        "fetched": "2026-11-25",
+        "status": "ok"
       },
       "TTWO": {
         "date": "2027-02-09",
@@ -5367,7 +5398,7 @@
         "timing": "",
         "kind": "estimated",
         "source2": "yahoo",
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "ok"
       },
       "PDD": {
@@ -5375,7 +5406,7 @@
         "status": "unknown"
       },
       "BKNG": {
-        "fetched": "2026-11-18",
+        "fetched": "2026-11-25",
         "status": "unknown"
       },
       "AMZN": {
@@ -5609,7 +5640,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-11-25T03:49:38.672593+00:00",
+    "asof": "2026-11-25T06:24:58.123303+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -5664,13 +5695,13 @@
       },
       "AVGO": {
         "facts": {
-          "asof": "2026-11-16T07:58:25.947291+00:00",
-          "at": "2026-11-16T00:00:00+00:00",
-          "digest": "e6e036241a05729d18c932cc718d6eb267f537b1433daefa5ca4fdfd6d2163be"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "bca62430f83c59c5dff79a48336dc6f28280b0b53b26059616a0712dfd5ecf0c"
         },
         "attempt": {
-          "asof": "2026-11-16T07:58:25.947291+00:00",
-          "at": "2026-11-16T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5834,14 +5865,14 @@
       },
       "ZS": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "36fc2f78c85300b84578c851fad0edefa1ff8dce920a33a1ae53fabf94005618"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "60ed5f51e9c8f3e9b8ecb166903b8a060c35f1d3df2f7772f36b1b16070b78b7"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -5902,13 +5933,13 @@
       },
       "V": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "663c7af3dc82203b6d87902b63f14189405e3779a242df52ef12d81470dfd89f"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "137f22a1bec1cd58812ad4a5a5e1367ed1bcaebf56357ae5a694e953d5e32b78"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -5953,14 +5984,14 @@
       },
       "NXPI": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "f4e0dfe74fdca6484478bb1a45f6aafaef9869b8b3607801fa978808766e4171"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6004,13 +6035,13 @@
       },
       "SNOW": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "36fc2f78c85300b84578c851fad0edefa1ff8dce920a33a1ae53fabf94005618"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "beacfcb52af64f59f1d2fc52d1839b3880b2c6a52a587734e55f3e70c7c7bfc8"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6072,13 +6103,13 @@
       },
       "STX": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "663c7af3dc82203b6d87902b63f14189405e3779a242df52ef12d81470dfd89f"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "cc4ada8ab62de426cd76d22e95484cf3b168730f3688fc08fbe947840dcf3b9c"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6157,14 +6188,14 @@
       },
       "ANET": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "92cf0dcfacd3817e9d8f4548a58bf8378865286f56a9addc6d01da0b52649b26"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6327,13 +6358,13 @@
       },
       "TER": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a374351bd488011e9cbd3946b40d8fac536d01c7410ebda8f924dd68d6723ca6"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "dc13c775728a703cb5157ffbcecf825b5e49df83fcd623a81b921bf7a004a041"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6378,13 +6409,13 @@
       },
       "NVDA": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "60ed5f51e9c8f3e9b8ecb166903b8a060c35f1d3df2f7772f36b1b16070b78b7"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
         },
         "events": {
@@ -6412,14 +6443,14 @@
       },
       "SPCX": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "92cf0dcfacd3817e9d8f4548a58bf8378865286f56a9addc6d01da0b52649b26"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "0ce80bfe9db40e053e73a98bc536e4bc1cb810782b30a1531bc3df3caea2ba02"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6463,13 +6494,13 @@
       },
       "ISRG": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "800e37f6ba78407eb2695e092dbcbf2c0a318d2287edd03f083e0a2d3de3157b"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "4feeceece17a2950a631175be63e26ba935e63521ecac4181fab1afde72021cc"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6514,14 +6545,14 @@
       },
       "CB": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "86aa983a6d4965e67c05a21e5d7e4b1a44a04e9f88855ffd36d3f5111096303c"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6565,14 +6596,14 @@
       },
       "SPGI": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "92cf0dcfacd3817e9d8f4548a58bf8378865286f56a9addc6d01da0b52649b26"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6616,14 +6647,14 @@
       },
       "HOOD": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "bcce8a66152fa47737b8e2a85aa6b88610adc8e9abe7154c04158c506d908d78"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6718,13 +6749,13 @@
       },
       "NOC": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "663c7af3dc82203b6d87902b63f14189405e3779a242df52ef12d81470dfd89f"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "cc4ada8ab62de426cd76d22e95484cf3b168730f3688fc08fbe947840dcf3b9c"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6735,13 +6766,13 @@
       },
       "RTX": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "663c7af3dc82203b6d87902b63f14189405e3779a242df52ef12d81470dfd89f"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "137f22a1bec1cd58812ad4a5a5e1367ed1bcaebf56357ae5a694e953d5e32b78"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6752,14 +6783,14 @@
       },
       "DD": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "92cf0dcfacd3817e9d8f4548a58bf8378865286f56a9addc6d01da0b52649b26"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6854,14 +6885,14 @@
       },
       "KO": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "92cf0dcfacd3817e9d8f4548a58bf8378865286f56a9addc6d01da0b52649b26"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
           "asof": "1970-01-01T00:00:00+00:00",
@@ -6905,13 +6936,13 @@
       },
       "NFLX": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "a5357d4a77f39e255514dffb6f165f7b6e2600007f652d745dd0bb5fd3ab9836"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "5808c473ae95165349fd2cdd5b8b9bda6209ed87babf994322f6752e927e639d"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a29ee2b15c494311c52521766e44af56a3ad2248e7a8ab465e5206463c13d288"
         },
         "events": {
@@ -6939,13 +6970,13 @@
       },
       "BKNG": {
         "facts": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
-          "digest": "7b5bf5b576d1389652894935d417cf09ef0ee4e3482282d7d0703ac34bf49fa8"
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "60ed5f51e9c8f3e9b8ecb166903b8a060c35f1d3df2f7772f36b1b16070b78b7"
         },
         "attempt": {
-          "asof": "2026-11-19T01:34:10.551434+00:00",
-          "at": "2026-11-18T00:00:00+00:00",
+          "asof": "2026-11-25T06:24:58.123303+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
           "digest": "a8e0ba654ce651dc312b81ee49fe54ecc3d8f326dcb8086581341823c2ed4139"
         },
         "events": {
@@ -7035,14 +7066,23 @@
       "rules": "美联储仅展示最近已核实的正式利率决议、目标区间、发布日期和官方来源；调整基点仅在声明明确且可核实时显示，不从区间或其他数据猜测。决议信息为neutral中性状态，不作风险灯或买卖解读。成功后持久缓存，日常仅本地比较下次公布时间，到期随下一次监测运行查询新决议，不按24小时重复抓取。失败或待更新后至少1小时重试，到期不绕过错误限速；日程缺失仅补查日历，已核实的同一声明不重复下载。仅按例行日程更新，临时决议可能延迟发现。旧正式决议不按天数或跨年删除，新决议到期或查询失败明确待更新并保留旧日期。原油同一实际合约近5交易日涨≥10%注意/≥20%警惕，近20交易日涨≥20%注意/≥30%警惕。原油参考不计入综合灯，不是官方风险线、市场概率或交易指令。"
     },
     "oil": {
-      "level": "gray",
-      "text": "原油数据待更新，暂不能判断成本压力。",
+      "level": "green",
+      "text": "未快速上涨",
       "source": "Yahoo NYMEX WTI期货",
-      "url": "https://finance.yahoo.com/quote/CL=F/"
+      "url": "https://finance.yahoo.com/quote/CL=F/",
+      "price": 82.05000305175781,
+      "date": "2026-11-24",
+      "contract": "Crude Oil Jan 27",
+      "day": 2.3450229833493244,
+      "day_from": "2026-11-23",
+      "week": -3.071468904021493,
+      "month": -16.32673353603695,
+      "incomplete": false,
+      "contract_symbol": "CLF27.NYM"
     },
-    "assessed_at": "2026-11-25T11:48:42.754209+08:00",
+    "assessed_at": "2026-11-25T14:23:52.276846+08:00",
     "schema_version": 2,
-    "asof": "2026-11-25T03:48:44.219319+00:00"
+    "asof": "2026-11-25T06:23:53.976428+00:00"
   },
   "data_lag": {
     "target": "2026-11-24",
