@@ -2361,7 +2361,10 @@ EARN_PAST_KEEP_DAYS = 3    # 财报发布后旧日期最多留到 D+3（2026-11-
 
 
 def _earnings_display_gap(e, today=None):
-    """倒计时与整条显示的共同口径：时段已知按北京落点（盘后 +1），时段待定只认美东日期。
+    """倒计时与整条显示的共同口径：时段已知按北京落点（盘后 +1）；
+    2026-11-25 用户：时段未知按最晚情况「美东盘后」算，北京落点也 +1，
+    因此北京运行日要过了美东财报日（次日凌晨）才写「已出」。
+    未发布的倒计时仍按美东日历写「（美N天）／（美明天）／（美今天）」。
     紧迫度判灯、无异动折叠、统计名单窗口仍各走原函数，不受这两个显示阈值影响。"""
     if not isinstance(e, dict) or e.get("status") != "ok":
         return None
@@ -2370,7 +2373,8 @@ def _earnings_display_gap(e, today=None):
         event = datetime.strptime(e.get("date", ""), "%Y-%m-%d").date()
     except (ValueError, TypeError):
         return None
-    return (event - base).days + (1 if e.get("timing") == "post" else 0)
+    timed = e.get("timing") in ("pre", "post", "during")
+    return (event - base).days + (1 if (e.get("timing") == "post" or not timed) else 0)
 
 
 def _earnings_gap(e, today=None):
@@ -2385,12 +2389,14 @@ _EARN_PAST_WORD = {0: "今天", -1: "昨天", -2: "前天"}
 
 
 def earnings_bj_date(e):
-    """北京落点日期：盘后跨到次日凌晨，其余按美东当天；用来写「N月N日已出」。"""
+    """北京落点日期：盘后跨到次日凌晨；2026-11-25 用户：时段未知按最晚的盘后算，也跨到次日凌晨。"""
     if not isinstance(e, dict) or not _iso_date(e.get("date")):
         return None
+    timing = e.get("timing")
+    timed = timing in ("pre", "post", "during")
     try:
         return (datetime.strptime(e["date"], "%Y-%m-%d").date()
-                + timedelta(days=1 if e.get("timing") == "post" else 0))
+                + timedelta(days=1 if (timing == "post" or not timed) else 0))
     except (ValueError, TypeError):
         return None
 
@@ -2401,12 +2407,12 @@ def _earnings_bj_day_text(e):
 
 
 def earnings_cd_merged(e, today=None):
-    """倒计时是不是北京口径（白字）：时段已定一律走北京；时段待定只有「已出」这种
-    确定已经过去的日期才走北京，未来仍按美东日期写「（美N天）」用蓝字。
+    """倒计时是不是北京口径（灰字）：2026-11-25 用户：时段未知整条也统一按最晚盘后写北京落点，
+    因此所有有效日期的倒计时都写北京、都用灰字，不再有「（美N天）」这种美东蓝档。
     渲染层、筛选元数据共用，避免三处口径分叉。"""
     timed = isinstance(e, dict) and e.get("timing") in ("pre", "post", "during")
     gap = _earnings_display_gap(e, today)
-    return bool(timed or (gap is not None and gap <= 0))
+    return gap is not None   # 有效日期一律写北京口径
 
 
 def earnings_bj_relative(e, today=None):
@@ -2422,22 +2428,39 @@ def earnings_countdown(e, today=None):
     """只留一个倒计时，括号里直接写清口径，不再靠蓝／白颜色区分。
 
     有些财报只有美东日期、没有时段；盘前／盘后在北京会跨一天。时段已知时用北京
-    落点（盘后再加一天），时段待定时只认美东日期。距今超过 EARN_COUNTDOWN_DAYS 天不写倒计时；
+    落点（盘后再加一天）；2026-11-25 用户：时段待定整条按最晚的盘后算，未发布与已出
+    一律写北京落点日期，不写时段词、不写「北京 待定」，当天不写已出。
+    距今超过 EARN_COUNTDOWN_DAYS 天不写倒计时；
     判灯与名单窗口仍走 earnings_urgency，不受这里影响；基准沿用页面渲染日 today，
     离线回放不随打开页面的日期漂移。
-    时段已定的今天／明天写「（北京 明天 晚间）」「（北京 今天 凌晨）」，把北京落点与
-    时段并进倒计时（相对日词本身就是日期）；未发布的 N 天写「（北京2天 11月12日 晚间）」，
+    时段已定的今天／明天写「（北京 明天 11/12晚间）」「（北京 今天 11/11凌晨已出）」，
+    2026-11-25 用户：有时段的括号永远带北京落点日期；盘后落当天凌晨的算已出，盘前／盘中落当天
+    晚间或夜里的还没到，当天不写「已出」（次日才写）。
+    把北京落点与时段并进倒计时（相对日词本身就是日期）；未发布的 N 天写「（北京2天 11月12日 晚间）」，
     「N天」只是倒计时天数、不是日期，所以括号里必须再写一次北京落点月日，
     以免后面按「不重复北京时间」清掉说明后整条只剩一个美东日期。
     凡是已经发布的（含时段待定）在倒计时里一次写全相对日＋月日
-    「（北京昨天11月2日已出）」，后面不再重复；时段待定且未发布仍写「（美N天）」。
+    「（北京昨天11月2日已出）」，后面不再重复；时段待定未发布写「（北京2天 11/26）」这类北京落点。
     """
     gap = _earnings_display_gap(e, today)
-    if gap is None or gap > EARN_COUNTDOWN_DAYS or gap < -EARN_PAST_KEEP_DAYS:
+    if gap is None:
+        return ""   # 日期非法／事件不是字典：不编造倒计时
+    timed = isinstance(e, dict) and e.get("timing") in ("pre", "post", "during")
+    # 时段未知的 gap 含「盘后 +1」：未发布窗口同样补回一天，免得 15 天档提前消失。
+    limit = EARN_COUNTDOWN_DAYS + (0 if timed else 1)
+    if gap > limit or gap < -EARN_PAST_KEEP_DAYS:
         return ""
-    timed = e.get("timing") in ("pre", "post", "during")
     if timed and gap in (0, 1):
-        return f"（北京 {'明天' if gap == 1 else '今天'} {_EARN_BJ_PERIOD[e['timing']]}）"
+        # 2026-11-25 用户：有时段的括号永远带北京落点日期；「已出」要按落点时段是否已经过去判断。
+        # 盘后落在当天凌晨（页面白天生成时已过）→ 当天就写已出；盘前／盘中落在当天晚间或夜里
+        # （还没到）→ 当天不写已出，代表今晚要出，第二天才写「昨天…已出」。
+        # 例：（北京 今天 11/25凌晨已出）美 11/24 盘后；（北京 今天 11/25晚间）美 11/25 盘前。
+        day = earnings_bj_date(e)
+        day_txt = f"{day.month:02d}/{day.day:02d}" if day else ""
+        word = "明天" if gap == 1 else "今天"
+        released = gap == 0 and e.get("timing") == "post"
+        return (f"（北京 {word} {day_txt}{_EARN_BJ_PERIOD[e['timing']]}"
+                + ("已出）" if released else "）"))
     if gap <= 0:
         # 2026-11-13：已出只写这一处，相对日＋北京月日一起写全，后面不再补第二句北京说明。
         # 2026-11-20 用户：取到过时段的已出，北京倒计时里也要写时段（美东那段本来就带盘前/盘后）。
@@ -2447,7 +2470,13 @@ def earnings_countdown(e, today=None):
         period = _EARN_BJ_PERIOD[e["timing"]] if timed else ""
         return f"（北京{_EARN_PAST_WORD.get(gap, '')}{day.month:02d}/{day.day:02d}{period}已出）"
     if not timed:
-        return f"（美{'明天' if gap == 1 else str(gap) + '天'}）"
+        # 2026-11-25 用户：时段未知的倒计时统一「北京时间在前」——整条按最晚的盘后算，
+        # 未发布也写北京落点日期；时段没抓到，所以不写「凌晨」这类时段词，也不挂「北京 待定」。
+        # 例：（北京2天 11/26）／（北京明天 11/26）／（北京今天11/26已出）。
+        day = earnings_bj_date(e)
+        day_txt = f"{day.month:02d}/{day.day:02d}" if day else ""
+        word = "明天" if gap == 1 else str(gap) + "天"
+        return f"（北京{word} {day_txt}）"
     # 时段已定、还没发布的 N 天：括号里写北京落点日期＋时段，后面不再补第二句北京说明。
     # 2026-11-14 用户「具体时段的财报全文永远有且只有一次美东日期和北京日期」：
     # 美东日期由「美 MM/DD 盘后」给出，北京日期只在这里出现一次；>15 天窗口倒计时为空，
@@ -2481,7 +2510,8 @@ def earnings_label(e, today=None):
     nxt = (datetime(int(year), int(month), int(day)) + timedelta(days=1)).strftime("%m/%d")
     # 财报列只写时间，不展示来源性质；真实时段缺失时不从会议钟点推断。
     note = {"pre": f"北京 {month}/{day} 晚间", "post": f"北京 {nxt} 凌晨",
-            "during": f"北京 {month}/{day} 夜–{nxt} 凌晨"}.get(e.get("timing"), "北京 待定")
+            "during": f"北京 {month}/{day} 夜–{nxt} 凌晨"}.get(e.get("timing"), "")
+            # 2026-11-25 用户：时段待定整条统一按最晚盘后写北京落点，不再挂「北京 待定」
     # 附加状态用列表拼：不留下「 · 」开头的空分隔符
     extra = []
     if e.get("kind") == "official" and e.get("official_error"):

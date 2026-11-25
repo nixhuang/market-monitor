@@ -204,7 +204,7 @@ class RulesRegression(unittest.TestCase):
         selectors = '.earn>.cd,#signalCounts .earnings-week-meta .cd,#signalCounts .signal-filter-condition[data-signal-kind="earnings_week"] .cd'
         declarations = re.search(re.escape(selectors) + r'\{([^}]*)\}', css)[1]
         # 23:29 用户「蓝色一直是美东时间的颜色」：颜色按口径分，不按「是不是倒计时」分。
-        # 写北京的倒计时（含已出）跟北京说明同灰，只有写「（美N天）」的 .cd.tbd 用美东蓝；
+        # 写北京的倒计时（含已出）跟北京说明同灰，2026-11-25 起时段未知也写北京落点，全部灰字；
         # 红黄由 --earn-bj-color 统一覆盖，避免写死颜色后倒计时不跟预警变色。
         self.assertIn('color:var(--earn-bj-color,var(--dim))', declarations)
         self.assertNotIn('color:inherit', declarations)
@@ -230,12 +230,12 @@ class RulesRegression(unittest.TestCase):
         cases = (
             ('post', '2026-11-20', '（北京11天 11/21 凌晨）', '', 'cd', False, False),
             ('pre',  '2026-11-12', '（北京2天 11/12 晚间）', '', 'cd', False, False),
-            (None,   '2026-11-12', '（美2天）', '北京 待定', 'cd tbd', True, False),
-            ('post', '2026-11-10', '（北京 明天 凌晨）', '', 'cd', False, True),
-            ('post', '2026-11-09', '（北京 今天 凌晨）', '', 'cd', False, True),
+            (None,   '2026-11-12', '（北京3天 11/13）', '', 'cd', False, False),   # 2026-11-25：北京时间在前，不挂「北京 待定」
+            ('post', '2026-11-10', '（北京 明天 11/11凌晨）', '', 'cd', False, True),   # 2026-11-25：明天档也带日期
+            ('post', '2026-11-09', '（北京 今天 11/10凌晨已出）', '', 'cd', False, True),   # 2026-11-25：落点当天写已出
             ('pre',  '2026-11-09', '（北京昨天11/09晚间已出）', '', 'cd', False, True),   # 2026-11-20：取到过时段的已出，倒计时里也写时段
-            (None,   '2026-11-09', '（北京昨天11/09已出）', '', 'cd', False, True),   # 2026-11-20：没取到时段的已出写 MM/DD
-            (None,   '2026-11-10', '（北京今天11/10已出）', '', 'cd', False, True),
+            (None,   '2026-11-09', '（北京今天11/10已出）', '', 'cd', False, True),   # 2026-11-25：时段未知按盘后算，美东 11/09 的北京落点是 11/10
+            (None,   '2026-11-10', '（北京明天 11/11）', '', 'cd', False, False),   # 2026-11-25：北京当天还没过美东盘后，不能写已出
         )
         for timing, date, countdown, bj, mark_cls, tbd, relative in cases:
             with self.subTest(timing=timing, date=date):
@@ -2048,7 +2048,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
                     self.assertIn(term, text)
         plain_glossary = plain_text(glossary[1])
         for term in ('沿用美东财报日期对比快照北京运行日', '红字保留期结束后才检查下一次',
-                     '失败时沿用有效旧日期', '名单含运行日至+15天', '待公布', '未知不猜钟点'):
+                     '失败时沿用有效旧日期', '名单含运行日至+15天', '待公布', '时段未知整条按最晚的美东盘后算'):
             self.assertIn(term, plain_glossary)
         self.assertNotIn('href="#rule-earnings"', glossary[1])
         self.assertIn('沿用美东财报日期对比快照北京运行日', plain_glossary)
@@ -2590,6 +2590,63 @@ process.stdout.write(JSON.stringify(result));
         link = re.search(r'<a class="pi-log-link"[^>]*>', src)[0]
         self.assertIn('href="./trade-log.html"', link)
         self.assertNotIn("target=", link)
+
+
+    def test_earnings_countdown_released_only_after_beijing_period(self):
+        """2026-11-25 用户：有时段的括号永远带日期；「已出」只在北京落点时段已过时写。
+        盘后落当天凌晨 → 当天写已出；盘前／盘中落当天晚间或夜里 → 当天不写（今晚要出），次日才写。"""
+        today = '2026-11-25'
+        cases = [
+            ('post',    '2026-11-24', '（北京 今天 11/25凌晨已出）'),
+            ('pre',     '2026-11-25', '（北京 今天 11/25晚间）'),
+            ('during',  '2026-11-25', '（北京 今天 11/25夜–凌晨）'),
+            ('post',    '2026-11-25', '（北京 明天 11/26凌晨）'),
+            ('pre',     '2026-11-26', '（北京 明天 11/26晚间）'),
+        ]
+        for timing, date, expected in cases:
+            with self.subTest(timing=timing, date=date):
+                text = monitor.earnings_countdown({'status': 'ok', 'date': date, 'timing': timing}, today)
+                self.assertEqual(text, expected)
+                self.assertIn('/', text)   # 永远带北京落点日期
+        for timing, date in (('pre', '2026-11-25'), ('during', '2026-11-25'), ('post', '2026-11-24')):
+            text = monitor.earnings_countdown({'status': 'ok', 'date': date, 'timing': timing}, '2026-11-26')
+            self.assertIn('已出', text)   # 不管哪天已出，都要带「已出」
+
+    def test_untimed_earnings_released_only_on_beijing_next_day(self):
+        """2026-11-25 用户：时段未知按最晚的美东盘后算，北京第二天才写「已出」。
+        2026-11-25 用户追加：倒计时一律「北京时间在前」——未发布写北京落点日期、
+        不写「凌晨」这类时段词、不挂「北京 待定」；已出写北京落点日期与「未获取」。
+        美东财报日 11/25：北京 11/24（北京2天 11/26）／11/25（北京明天 11/26）／
+        11/26（北京今天11/26已出）／11/27（北京昨天11/26已出）。报灯与名单窗口不受影响。"""
+        event = {'status': 'ok', 'date': '2026-11-25', 'timing': ''}
+        cases = [
+            ('2026-11-24', '（北京2天 11/26）', '美 11/25 时段待定', ''),
+            ('2026-11-25', '（北京明天 11/26）', '美 11/25 时段待定', ''),
+            ('2026-11-26', '（北京今天11/26已出）', '美 11/25 未获取', ''),
+            ('2026-11-27', '（北京昨天11/26已出）', '美 11/25 未获取', ''),
+            ('2026-11-28', '（北京前天11/26已出）', '美 11/25 未获取', ''),
+            ('2026-11-29', '（北京11/26已出）', '美 11/25 未获取', ''),
+        ]
+        for today, cd, main, note in cases:
+            with self.subTest(today=today):
+                self.assertEqual(monitor.earnings_countdown(event, today), cd)
+                self.assertEqual(monitor.earnings_label(event, today), (main, note))
+                self.assertNotIn('北京 待定', note)
+                self.assertIn('11/26', cd)   # 全档北京时间在前，日期恒为北京落点 11/26
+                self.assertTrue(monitor.earnings_cd_merged(event, today))   # 全档北京口径（灰字）
+                if today < '2026-11-26':
+                    self.assertNotIn('已出', cd)
+                    self.assertNotIn('凌晨', cd)   # 时段没抓到，不编造时段词
+                else:
+                    self.assertIn('已出', cd)
+        # 与盘后共用同一落点：无时段和盘后的北京日期都是 11/26
+        self.assertEqual(monitor.earnings_bj_date(event),
+                         monitor.earnings_bj_date({'status': 'ok', 'date': '2026-11-25', 'timing': 'post'}))
+        # 有时段三档不受影响
+        self.assertEqual(monitor.earnings_countdown({'status': 'ok', 'date': '2026-11-24', 'timing': 'post'}, '2026-11-25'),
+                         '（北京 今天 11/25凌晨已出）')
+        self.assertEqual(monitor.earnings_countdown({'status': 'ok', 'date': '2026-11-25', 'timing': 'pre'}, '2026-11-25'),
+                         '（北京 今天 11/25晚间）')
 
 
     def test_changed_modules_parse_as_python_311(self):

@@ -2388,7 +2388,7 @@ const deadline = setTimeout(() => {
       const expected={EPREV:'rgb(255, 133, 128)',ENOW:'rgb(255, 133, 128)',ERED:'rgb(255, 133, 128)',
         EYELLOW:'rgb(240, 198, 116)',EFAR:'rgb(143, 184, 240)',ETBD:'rgb(143, 184, 240)'};
       // 23:29 用户「蓝色一直是美东时间的颜色」：颜色按口径分，不按「是不是倒计时」分。
-      // 写北京的倒计时（含已出）跟北京说明同灰，写「（美N天）」的 .cd.tbd 才是美东蓝；
+      // 写北京的倒计时（含已出）跟北京说明同灰，写北京落点的倒计时一律灰字（2026-11-25 起时段未知也写北京）；
       // 命中红黄时整条（含两种口径的倒计时、北京说明）统一变色。
       const dim='rgb(139, 147, 161)',blue='rgb(143, 184, 240)',red='rgb(255, 133, 128)',yellow='rgb(240, 198, 116)';
       const cdExpected=t=>(t.color===red||t.color===yellow)?t.color:(t.tbd?blue:dim);

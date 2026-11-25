@@ -315,8 +315,9 @@ class TestGroups(unittest.TestCase):
         # 财报列不写来源，未知时段与复查状态仍如实保留。
         self.assertNotIn('官方来源', html)
         self.assertNotIn('<a ', html)
-        self.assertIn('北京 待定', html)
-        self.assertIn('北京 待定·待复核', html)  # 核验状态保留，分隔符紧凑
+        self.assertIn('（北京', html)   # 2026-11-25：时段未知也写北京落点倒计时
+        self.assertNotIn('北京 待定', html)
+        self.assertIn('>待复核</span>', html)  # 核验状态仍保留，不再挂「北京 待定」
         self.assertNotIn('官方', html)
         self.assertNotIn('核实于', html)
         self.assertNotIn('发布钟点', html)
@@ -1324,23 +1325,23 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(monitor.earnings_countdown(dict(ok, date='2026-10-30'), '2026-10-20'), '（北京11天 10/31 凌晨）')
         self.assertNotIn('不含具体钟点', note)
         self.assertNotIn('数据源只给', note)
-        # 2026-11-03：无时段写「时段待定」（原「具体时段待定」）；北京时间那行照旧保留
+        # 2026-11-25：时段未知整条按最晚盘后写北京落点，不再挂「北京 待定」
         self.assertIn('时段待定', monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'}, '2026-10-20')[0])
-        self.assertEqual(monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'}, '2026-10-20')[1], '北京 待定')
+        self.assertEqual(monitor.earnings_label({'status': 'ok', 'date': '2026-10-30', 'timing': '', 'kind': 'expected'}, '2026-10-20')[1], '')
 
     def test_earnings_labels_preserve_known_timing_without_source_notes(self):
         date = '2026-10-30'
         date_txt = '10/30'  # 使用冻结运行日，不让测试随真实日期漂移。
         for kind in ('official', 'expected', 'estimated'):
             # 2026-11-13：时段已定只在倒计时写北京口径，后面不再重复北京时间；
-            # 时段待定仍保留「北京 待定」，附加状态（待复核／另源日期）两态都要留。
+            # 2026-11-25：时段待定不再挂「北京 待定」，附加状态（待复核）仍要留。
             for timing, label, bj in (
                     ('pre', '盘前', ''),
                     ('post', '盘后', ''),
                     ('during', '盘中', ''),
-                    ('', '时段待定', '北京 待定'),
-                    (None, '时段待定', '北京 待定'),
-                    ('unknown', '时段待定', '北京 待定')):
+                    ('', '时段待定', ''),
+                    (None, '时段待定', ''),
+                    ('unknown', '时段待定', '')):
                 for error in ('', 'http_429'):
                     with self.subTest(kind=kind, timing=timing, error=error):
                         e = dict(self.official_fixture(), date=date, kind=kind,
@@ -1359,10 +1360,10 @@ class TestGroups(unittest.TestCase):
                             self.assertIn(f' {main}</span>', markup)
                             self.assertNotIn('earn-bj', markup)
                         timed = timing in ('pre', 'post', 'during')
-                        days = 11 if timing == 'post' else 10
-                        bj_txt = '10/31' if timing == 'post' else '10/30'
+                        days = 11 if (timing == 'post' or not timed) else 10   # 2026-11-25：时段未知按最晚盘后算
+                        bj_txt = '10/31' if (timing == 'post' or not timed) else '10/30'
                         period = {'pre': '晚间', 'post': '凌晨', 'during': '夜–凌晨'}
-                        cd = f'（北京{days}天 {bj_txt} {period[timing]}）' if timed else f'（美{days}天）'
+                        cd = f'（北京{days}天 {bj_txt} {period[timing]}）' if timed else f'（北京{days}天 {bj_txt}）'
                         self.assertIn(cd, markup)
                         self.assertNotIn('美东', markup)
                         self.assertEqual(e, before)
@@ -1924,7 +1925,7 @@ class TestGroups(unittest.TestCase):
         self.assertEqual(monitor.earnings_countdown({'status': 'ok', 'date': '2026-11-18', 'timing': 'post'}, '2026-11-20'),
                          '（北京昨天11/19凌晨已出）')
         self.assertEqual(monitor.earnings_countdown({'status': 'ok', 'date': '2026-11-19', 'timing': ''}, '2026-11-20'),
-                         '（北京昨天11/19已出）')
+                         '（北京今天11/20已出）')   # 2026-11-25：时段未知按盘后算，北京落点 11/20
 
     def test_attach_earnings_keeps_timing_after_source_clears_next_report(self):
         """走完整 attach_earnings：财报日已过、重抓回来没时段，页面条目仍沿用上一轮取到的盘后。"""
@@ -7896,7 +7897,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                           '<span class="signal-member-symbol">AAPL</span></a>'
                           '<span class="signal-member-belong">（IT）</span> ', panel)
             # 北京时段已定的「明天」并进倒计时，美东时间后不再重复北京说明。
-            self.assertIn('<span class="earnings-week-meta is-red"><span class="cd">（北京 明天 凌晨）</span>'
+            self.assertIn('<span class="earnings-week-meta is-red"><span class="cd">（北京 明天 10/15凌晨）</span>'
                           '美 10/14 盘后</span><span class="lamp-text">（绿灯）</span>', panel)
             # 2026-11-13：时段已定只在倒计时写北京口径，美东时间后不再重复北京时间。
             self.assertIn('<span class="signal-member-belong">（短持）</span> '
@@ -7959,7 +7960,7 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                     # 2026-11-13：时段已定只在倒计时写北京口径，后面不再重复。
                     # 统计名单用服务端冻结的日期重建 event，不带 official_error，所以它的
                     # 北京说明只看时段；主表那条则保留「待复核」后缀，两者各自核对。
-                    panel_bj = '' if timing in ('pre', 'post', 'during') else '北京 待定'
+                    panel_bj = ''   # 2026-11-25：时段待定也不再写「北京 待定」
                     if panel_bj:
                         self.assertIn(f'美 10/30 {label}<span class="earnings-week-bj', panel)
                         self.assertIn(f'·{panel_bj}</span></span>', panel)
@@ -7985,10 +7986,10 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
                         self.assertIn(f' {main}</span>', folded)
                         self.assertNotIn('class="earn-bj"', folded)
                     timed = timing in ('pre', 'post', 'during')
-                    days = 11 if timing == 'post' else 10
-                    bj_txt = '10/31' if timing == 'post' else '10/30'
+                    days = 11 if (timing == 'post' or not timed) else 10   # 2026-11-25：时段未知按最晚盘后算
+                    bj_txt = '10/31' if (timing == 'post' or not timed) else '10/30'
                     period = {'pre': '晚间', 'post': '凌晨', 'during': '夜–凌晨'}
-                    cd = f'（北京{days}天 {bj_txt} {period[timing]}）' if timed else f'（美{days}天）'
+                    cd = f'（北京{days}天 {bj_txt} {period[timing]}）' if timed else f'（北京{days}天 {bj_txt}）'
                     self.assertIn(cd, folded)
                     self.assertEqual(snap['summary']['green'], 1)
                     self.assertTrue(all(c['red'] == c['yellow'] == 0 for c in snap['signal_counts'].values()))
@@ -9924,26 +9925,30 @@ class TestFinalSourceContract(unittest.TestCase):
                     event_day = date.fromisoformat(today) + timedelta(days=raw_gap)
                     event = {'status': 'ok', 'date': event_day.isoformat(), 'timing': timing}
                     timed = timing in ('pre', 'post', 'during')
-                    shown = raw_gap + (1 if timing == 'post' else 0)
+                    shown = raw_gap + (1 if (timing == 'post' or not timed) else 0)   # 2026-11-25：时段未知按最晚的盘后算
                     period = {'pre': '晚间', 'post': '凌晨', 'during': '夜–凌晨'}
-                    bj_day = event_day + timedelta(days=1 if timing == 'post' else 0)
+                    bj_day = event_day + timedelta(days=1 if (timing == 'post' or not timed) else 0)
                     past = {0: '今天', -1: '昨天', -2: '前天'}
                     # 2026-11-13：已出在倒计时一次写全「相对日＋北京月日＋已出」，
-                    # 时段已定与已出都不在美东时间后重复北京说明；只有「时段待定且未发布」留北京待定。
-                    if shown < -monitor.EARN_PAST_KEEP_DAYS or shown > monitor.EARN_COUNTDOWN_DAYS:
+                    # 2026-11-25：时段未知整条统一写北京落点，后面不再挂「北京 待定」。
+                    if shown < -monitor.EARN_PAST_KEEP_DAYS or shown > monitor.EARN_COUNTDOWN_DAYS + (0 if timed else 1):
                         expected_cd = ''
                     elif timed and shown in (0, 1):
-                        expected_cd = f'（北京 {"明天" if shown == 1 else "今天"} {period[timing]}）'
+                        # 2026-11-25 用户：有时段的括号永远带北京落点日期；盘后落凌晨当天写已出，盘前/盘中落晚间还没到。
+                        expected_cd = (f'（北京 {"明天" if shown == 1 else "今天"} '
+                                       f'{bj_day.month:02d}/{bj_day.day:02d}{period[timing]}'
+                                       f'{"已出" if shown == 0 and timing == "post" else ""}）')
                     elif shown <= 0:
                         # 2026-11-20：已出的北京日期一律写「MM/DD」，取到时段再接时段
                         day_txt = f'{bj_day.month:02d}/{bj_day.day:02d}' + (period[timing] if timed else '')
                         expected_cd = f'（北京{past.get(shown, "")}{day_txt}已出）'
                     elif not timed:
-                        expected_cd = f'（美{"明天" if shown == 1 else str(shown) + "天"}）'
+                        word = "明天" if shown == 1 else str(shown) + "天"
+                        expected_cd = f'（北京{word} {bj_day.month:02d}/{bj_day.day:02d}）'
                     else:
                         # 2026-11-14：N 天倒计时不是日期，必须再写一次北京落点月日。
                         expected_cd = f'（北京{shown}天 {bj_day.month:02d}/{bj_day.day:02d} {period[timing]}）'
-                    expected_note = '' if timed or shown <= 0 else '北京 待定'
+                    expected_note = ''   # 2026-11-25：所有档位都不再挂「北京 待定」
                     with self.subTest(today=today, timing=timing, gap=raw_gap):
                         self.assertEqual(monitor.earnings_countdown(event, today), expected_cd)
                         main, note = monitor.earnings_label(event, today)
@@ -9954,7 +9959,7 @@ class TestFinalSourceContract(unittest.TestCase):
                         self.assertEqual('class="earn-bj"' in markup, bool(expected_note))
                         self.assertEqual(len(re.findall(r'class="cd(?: tbd)?"', markup)), int(bool(expected_cd)))
                         if expected_cd:
-                            tbd = ' tbd' if (not timed and shown > 0) else ''
+                            tbd = ''   # 2026-11-25：倒计时全写北京口径，不再有美东蓝档
                             self.assertIn('class="cd' + tbd + '"', markup)
 
     def test_timed_earnings_line_has_exactly_one_us_and_one_beijing_date(self):
@@ -10001,7 +10006,7 @@ class TestFinalSourceContract(unittest.TestCase):
                 if shown <= monitor.EARN_COUNTDOWN_DAYS:
                     self.assertIn(cd, panel)
                     self.assertEqual(data['earnings_week']['members'][0]['d'][0]['e']['c'], cd)
-        # 时段待定：只有美东倒计时与一次美东日期，整条不写北京日期。
+        # 2026-11-25：时段待定整条写一次北京落点日期（在倒计时里），不写时段词。
         for shown in (2, 5, 15):
             event_day = date.fromisoformat(today) + timedelta(days=shown)
             event = {'status': 'ok', 'date': event_day.isoformat(),
@@ -10010,10 +10015,11 @@ class TestFinalSourceContract(unittest.TestCase):
             cd = monitor.earnings_countdown(event, today)
             text = plain(monitor._earnings_html({'earnings': event}, today))
             with self.subTest(timing='tbd', shown=shown):
-                self.assertRegex(cd, r'^（美\d+天）$')
+                self.assertRegex(cd, r'^（北京(?:明天|\d+天) \d{2}/\d{2}）$')   # 2026-11-25：北京时间在前
                 self.assertEqual(len(us.findall(main)), 1)
-                self.assertEqual(note, '北京 待定')
-                self.assertEqual(len(bj.findall(text)), 0)
+                self.assertEqual(note, '')
+                self.assertEqual(len(re.findall(r'\d{2}/\d{2}', cd)), 1)   # 括号里恰好一次北京落点日期
+                self.assertEqual(len(bj.findall(text)), 0)   # 不写「北京 MM/DD」那种独立北京说明
 
     def test_released_earnings_never_say_timing_pending(self):
         """22:35 用户「（北京昨天11月12日已出） 美 11/12 时段待定 这种也很奇怪，都已出了还待定？」。
