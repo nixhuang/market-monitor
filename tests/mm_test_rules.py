@@ -2583,6 +2583,15 @@ process.stdout.write(JSON.stringify(result));
             self.assertEqual(actual["values"], rules_config.resolve_settings(raw, warnings.append))
             self.assertEqual(bool(actual["warnings"]), bool(warnings))
 
+    def test_trade_log_link_opens_in_same_tab(self):
+        """2026-11-25 用户：交易记录另开新标签会让后台旧首页一直占着仓位写入权，返回后新首页变「本页只读」；
+        与「设置」一样在同一标签打开（无 target）。"""
+        src = (ROOT / "monitor_render.py").read_text(encoding="utf-8")
+        link = re.search(r'<a class="pi-log-link"[^>]*>', src)[0]
+        self.assertIn('href="./trade-log.html"', link)
+        self.assertNotIn("target=", link)
+
+
     def test_changed_modules_parse_as_python_311(self):
         for name in ("monitor.py", "monitor_indicators.py", "monitor_rules.py",
                      "monitor_snapshot.py", "monitor_render.py", "rules_config.py",
