@@ -1,7 +1,7 @@
 {
  "schema_version": 2,
  "real": true,
- "updated_at": "2026-11-25T00:54:48.006Z",
+ "updated_at": "2026-11-25T02:47:33.143Z",
  "cash": 22436.93,
  "cash_extra": 20676.92,
  "fixed": 16916.97,
@@ -80,7 +80,7 @@
    "cost": 167.9
   },
   "ANT": {
-   "qty": 1,
+   "qty": 2,
    "cost": 82
   }
  }
