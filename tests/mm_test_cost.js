@@ -818,8 +818,8 @@ test('持仓标题行放总资产、现金行最左放长短持仓合计市值�
   assert.ok(head);assert.equal(b.doc.querySelector('#group_positions .rs-spy'),null);
   assert.match(head.textContent,/^\$[\d,]+$/);
   const hold=b.doc.querySelector('#group_positions>.cashbond-row .cb-total-amt').textContent;
-  assert.match(hold,/^\$[\d,]+$/);
-  assert.ok(Number(head.textContent.replace(/[^\d]/g,''))>=Number(hold.replace(/[^\d]/g,'')));   // 总资产含现金固收，不小于持仓市值
+  assert.match(hold,/^\$[\d,]+(?:\.\d)?$/);   // 2026-11-25：持仓市值与盈亏明细同口径，百位 1 位小数
+  assert.ok(parseFloat(head.textContent.replace(/[$,]/g,''))>=parseFloat(hold.replace(/[$,]/g,'')));   // 总资产含现金固收，不小于持仓市值；2026-11-25 金额可能带 1 位小数，用 parseFloat 而非剥数字
 });
 test('编辑时移组拒绝旧输入框提交已移走的标的',async()=>{
   let b=await boot();await b.enter();let input=b.doc.querySelector('input[data-sym="AAA"][data-f="qty"]');b.move('AAA','focus');input.value='999';
@@ -2505,7 +2505,7 @@ test('盈亏明细抬头行与排序：默认亏到盈，点仓位按市值从�
   b.paint();
   const list=b.doc.getElementById('piPnlList'),head=()=>list.querySelector('.pi-phead');
   assert.ok(head(),'有数据时要有抬头行');
-  assert.deepEqual([...head().children].map(e=>e.textContent),['代码','盈亏','盈亏比','金额','仓位']);
+  assert.deepEqual([...head().children].map(e=>e.textContent),['代码','盈亏','盈亏比','现值','仓位']);   // 2026-11-25 A 方案：这列是市值，表头写「现值」与个股行的「投入」区分
   assert.deepEqual([...head().querySelectorAll('[data-psort]')].map(e=>e.getAttribute('data-psort')),['pnl','ratio','weight']);
   const order=()=>list.querySelectorAll('.pi-prow .pi-pname').map(e=>e.textContent.slice(0,3));
   const press=k=>list.querySelector('[data-psort="'+k+'"]').fire('click',{bubbles:true});

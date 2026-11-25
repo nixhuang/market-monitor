@@ -158,6 +158,16 @@
         ? '$' + (r < 0 ? '-' : '') + (Math.abs(r) / 1e6).toFixed(2) + 'M'
         : '$' + r.toLocaleString('en-US');
     }
+    // 2026-11-24 用户：盈亏明细的市值按位数留小数——千位及以上不留小数，百位 1 位，十位及以下 2 位（千分位逗号）。
+    function mvDigits(v) {
+      var n = num(v), a = Math.abs(n);
+      if (a >= 1e6) return (n / 1e6).toFixed(2) + 'M';   // 与总资产/持仓标题原来的大数缩写同款，避免小面板被长数字撑宽
+      var d = a >= 1000 ? 0 : a >= 100 ? 1 : 2;
+      // 四舍五入进位到下一档（如 99.996→100、999.96→1,000）时按新一档的位数显示
+      if (d === 2 && Math.round(a * 100) >= 10000) d = 1;
+      if (d === 1 && Math.round(a * 10) >= 10000) d = 0;
+      return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
     function qtyInt(n) {
       var r = Math.round(num(n)),
         a = Math.abs(r),
@@ -2621,8 +2631,10 @@
         '</span><span class="cost-qty">' +
         qtyInt(r.qty) +
         '</span>' +
+        // 2026-11-25 用户 A 方案：个股行这一格是「投入」（成本价 × 股数），固定不随股价变；
+        // 现值＝盈亏明细「现值」列 / 长短持仓标题 / 现金行「持仓」合计，口径不变。
         '<span class="cost-mv">' +
-        plain(r.mv) +
+        (r.costKnown ? '$' + mvDigits(r.cost * r.qty) : '—') +
         '</span><span class="cost-pnl ' +
         cls +
         '">' +
@@ -2674,11 +2686,11 @@
         if (head) {
           updateTone(updateText('.zone-amt', money(pnl), head), pnl);
           updateTone(updateText('.zone-pct', pct(pp), head), pnl);
-          updateText('.zone-mv', plain(mv), head);   // 2026-11-24：持仓金额放在盈亏比后面
+          updateText('.zone-mv', '$' + mvDigits(mv), head);   // 2026-11-24：持仓金额放在盈亏比后面；2026-11-25 与盈亏明细同口径
         }
       });
       // 现金/固收行最左侧：长短持仓合计市值（股票/ETF），与右侧盈亏同口径；总资产改放持仓标题行。
-      updateText('#group_positions .cashbond-row .cb-total-amt', plain(sumOf(longs.concat(shorts), function (x) { return x.mv; })));
+      updateText('#group_positions .cashbond-row .cb-total-amt', '$' + mvDigits(sumOf(longs.concat(shorts), function (x) { return x.mv; })));
       var el = updateText(
         '#group_positions .cashbond-row .cb-total-pnl',
         money(totalPnl) + '（' + pct(tPct) + '）',
@@ -2708,14 +2720,6 @@
       var key = sectorOf(sym), g = SECTOR_GROUPS.filter(function (x) { return x[0] === key; })[0];
       return g ? String(g[1]).replace(/\s+/g, '').slice(0, 2) : '';
     }
-    // 2026-11-24 用户：盈亏明细的市值按位数留小数——千位及以上不留小数，百位 1 位，十位及以下 2 位（千分位逗号）。
-    function mvDigits(v) {
-      var a = Math.abs(num(v)), d = a >= 1000 ? 0 : a >= 100 ? 1 : 2;
-      // 四舍五入进位到下一档（如 99.996→100、999.96→1,000）时按新一档的位数显示
-      if (d === 2 && Math.round(a * 100) >= 10000) d = 1;
-      if (d === 1 && Math.round(a * 10) >= 10000) d = 0;
-      return num(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
-    }
     function pnlRowHtml(sym, cn, amt, pctTxt, mvTxt, up, tone, wTxt) {
       var link = ROW_BY_SYM[sym] && ROW_BY_SYM[sym].tr && ROW_BY_SYM[sym].tr.id, sec = sectorTag(sym);
       // 与统计名单同一个排法：代码 备注名（行业）；全角括号的空白边收掉（.pi-pp），不占全角位置
@@ -2739,7 +2743,7 @@
       // 「盈亏」按盈亏金额、「盈亏比」按盈亏百分比，都是从亏到盈；「仓位」从大到小
       return '<div class="pi-prow pi-phead"><span class="pi-ph pi-ph-n">代码</span>' +
         '<span class="pi-ph pi-ph-a">' + btn('pnl', '盈亏') + '</span><span class="pi-ph pi-ph-r">' + btn('ratio', '盈亏比') + '</span>' +
-        '<span class="pi-ph pi-ph-m">金额</span><span class="pi-ph pi-ph-w">' + btn('weight', '仓位') + '</span></div>';
+        '<span class="pi-ph pi-ph-m">现值</span><span class="pi-ph pi-ph-w">' + btn('weight', '仓位') + '</span></div>';
     }
     function renderPnlFolds(rows, holdingsMv) {
       PNL_LAST = [rows, holdingsMv];
@@ -2810,7 +2814,7 @@
       wlist.innerHTML = shown.map(function (s) {
         return '<div class="pi-wrow"><span class="pi-wname">' + esc(s.label) + '</span>' +
                '<b class="pi-wpnl ' + (s.ratio >= 0 ? 'up' : 'down') + '">' + pct(s.ratio) + '</b>' +
-               '<b class="pi-wmv"><span class="pi-wcur">$</span>' + Math.round(s.mv).toLocaleString('en-US') + '</b>' +
+               '<b class="pi-wmv"><span class="pi-wcur">$</span>' + mvDigits(s.mv) + '</b>' +
                '<span class="pi-wshare"><b class="pi-wpct">' + s.pc.toFixed(1) + '%</b>' +
                '<span class="pi-wbar"><i style="width:' + s.pc.toFixed(4) + '%;background:' +
                s.color + '"></i></span></span></div>';

@@ -3009,7 +3009,10 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn('#group_positions>.group-bottom{display:block;margin:0 4px 0}', monitor.PAGE_CSS)   # 与其它分组底部 ▲ 同款左右留边、同高 26px
         cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
         self.assertIn(": function (a, b) { return a.amt - b.amt; });", cost)   # 默认从亏损到盈利；可点抬头改按盈亏比／仓位
-        self.assertIn("updateText('.zone-mv', plain(mv), head)", cost)         # 持仓金额进标题
+        self.assertIn("updateText('.zone-mv', '$' + mvDigits(mv), head)", cost)         # 持仓金额进标题
+        self.assertIn("(r.costKnown ? '$' + mvDigits(r.cost * r.qty) : '—')", cost)   # 2026-11-25 A 方案：个股行金额是「投入」＝成本×股数，固定不随股价变
+        self.assertNotIn("plain(r.mv)", cost)
+        self.assertIn('pi-ph-m">现值</span>', cost)   # 盈亏明细那列改叫「现值」，与个股行的「投入」区分
         self.assertNotIn('pi-zone-mv', cost)
         self.assertNotIn('piRealizedList', cost)
         self.assertNotIn('piPnlSum', cost)
@@ -3081,6 +3084,7 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn('.stage{padding:calc(env(safe-area-inset-top,0px) + 44px) 4px 20px}', html)
         self.assertIn('.back,.pgbtn{padding:5px 11px;font-size:15px}', html)
         self.assertIn('c = n.toFixed(2);', html)
+        self.assertIn('.sheet{width:min(718px,100%);margin:0 auto;', html)   # 2026-11-25：PC 与首页同宽，不再 1000px 铺满
 
     def test_signal_filter_clear_button_is_wide_and_short(self):
         css = monitor.PAGE_CSS
