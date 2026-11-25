@@ -68,12 +68,6 @@
       "target_at": "2026-10",
       "sector": "industrials"
     },
-    "NTNX": {
-      "note": "混合云",
-      "hold": "short",
-      "cost": 44.80846153846154,
-      "sector": "technology"
-    },
     "UNH": {
       "note": "联合健康",
       "hold": "long",
@@ -251,6 +245,9 @@
     },
     "ASML": {
       "note": "阿斯麦"
+    },
+    "NTNX": {
+      "note": "混合云"
     }
   },
   "healthcare": {
