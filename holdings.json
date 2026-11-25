@@ -242,6 +242,15 @@
     },
     "SPCX": {
       "note": "商业航天"
+    },
+    "GLW": {
+      "note": "康宁"
+    },
+    "DELL": {
+      "note": "戴尔"
+    },
+    "ASML": {
+      "note": "阿斯麦"
     }
   },
   "healthcare": {
