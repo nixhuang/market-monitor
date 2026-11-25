@@ -2611,7 +2611,9 @@
       if (count) setDirectText(count, String(total));
       else setDirectText(summary, '到价 · ' + total + ' 只');
     }
-    function renderCostLine(r, totalAsset) {
+    // 2026-11-25 用户：主表个股「仓位」的分母是「股票/ETF 现值 + 现金（含 SGOV）」，不含固收；
+    // 现金/资金一变，比例跟着变。盈亏明细「仓位」仍按占持仓股票/ETF 算，两处口径不同是有意设计。
+    function renderCostLine(r, weightBase) {
       var td = r.costLine;
       if (!td) return;
       td.hidden = !r.has;
@@ -2623,7 +2625,7 @@
       var tone = r.costKnown ? pnlTone(r.price, r.cost) : '';
       if (tone) td.setAttribute('data-pnl', tone);
       else td.removeAttribute('data-pnl');
-      var w = totalAsset > 0 ? (r.mv / totalAsset) * 100 : 0,
+      var w = weightBase > 0 ? (r.mv / weightBase) * 100 : 0,
         cls = r.pnlAmt === null ? '' : r.pnlAmt >= 0 ? 'up' : 'down';
       var html =
         '<span class="cost-price">' +
@@ -2898,10 +2900,11 @@
                 : ' 位于区间 ' + pos.toFixed(1) + '%'),
         );
       });
-      var totalAsset = totalMv + cash + fixed;
+      var totalAsset = totalMv + cash + fixed;   // 总资产仍含固收，只用在抬头与资产结构条
+      var weightBase = totalMv + cash;          // 主表个股仓位比：不含固收
       if (unknownCost) totalPnl = null;
       ROWS.forEach(function (r) {
-        renderCostLine(r, totalAsset);
+        renderCostLine(r, weightBase);
       });
       renderPnlPrices();
       var tcls = totalPnl === null ? 'dim' : totalPnl >= 0 ? 'up' : 'down',

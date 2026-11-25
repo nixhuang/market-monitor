@@ -1303,7 +1303,7 @@ class RulesTemplateTests(unittest.TestCase):
         self.assertEqual(glossary.count('class="glossary-entry"'), 14)
         self.assertNotIn('可点红灯与已读', glossary)
         for unique in ('穿越确认幅度', '连续失败', '正常缓存＋已记录财报事件',
-                       '来源日期仍早于财报', '供应商确认', '官方核验', '估算日期',
+                       '来源更新日期不早于财报日', '供应商确认', '官方核验', '估算日期',
                        'BAMLH0A0HYM2', 'Cboe官方VIX日线优先', 'History of Market',
                        '金融压力NFCI', '至少隔1小时重试', '不是实时夜盘报价'):
             self.assertIn(unique, glossary)

@@ -1977,7 +1977,7 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
         for phrase in (
             '双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。',
             '显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。',
-            '例：已记录美东20日财报，正常缓存未到期，22日起可提前刷新。',
+            '例：已记录美东20日财报，21／22／23日各可抓一次；23日仍是旧数据就结掉，之后按14天常规到期。',
         ):
             self.assertEqual(text.count(phrase), 1)
         self.assertNotIn('21日不因晨星更新而重抓', text)
@@ -3008,13 +3008,85 @@ class ConsensusSanityRegression(unittest.TestCase):
             data, _ = monitor.update_consensus(["SNDK"], {"data": {"SNDK": old}}, "2026-11-23", sess=Sess(),
                                                quota_day="2026-11-23", prices={"SNDK": 79.24})
         self.assertTrue(data["SNDK"]["sus"])
-        # 带 sus 标记、刚抓过的：次日不再重复请求；满 3 天才再看
-        self.assertFalse(monitor._consensus_suspect_due(data["SNDK"], 79.24, "2026-11-24"))
+        self.assertEqual(data["SNDK"]["sus_streak"], 1)   # 本轮第 1 次连抓
+        # 2026-11-25 用户：抓回来仍是旧数据就隔天再抓，不再等 3 天
+        self.assertTrue(monitor._consensus_suspect_due(data["SNDK"], 79.24, "2026-11-24"))
         self.assertTrue(monitor._consensus_suspect_due(data["SNDK"], 79.24, "2026-11-26"))
+        # 一轮最多连抓 3 天；第 3 次之后回归 14 天常规，不再插队
+        third = dict(data["SNDK"], sus_streak=3, r="2026-11-25")
+        self.assertFalse(monitor._consensus_suspect_due(third, 79.24, "2026-11-26"))
+
+    def test_suspect_streak_restarts_after_normal_expiry(self):
+        """2026-11-25 用户：一轮 3 连抓用完后回归 14 天常规；那次抓回来还是离谱，
+        就重新开一轮（连续隔天才算同一轮，14 天的断档自然把 streak 归 1）。"""
+        from unittest.mock import patch
+        old = {"s": "ok", "avg": 2047.38, "upd": "2026-11-11", "r": "2026-11-25", "r_tz": "America/New_York",
+               "sus": True, "sus_streak": 3}
+
+        class Sess:
+            headers = {}
+
+        with patch.object(monitor, "fetch_consensus_one",
+                          return_value={"s": "ok", "avg": 2000.0, "upd": "2026-12-09"}), \
+                patch.object(monitor, "consensus_robots_ok", return_value=True), \
+                patch.object(monitor, "log"):
+            data, _ = monitor.update_consensus(["SNDK"], {"data": {"SNDK": old}}, "2026-12-09", sess=Sess(),
+                                               quota_day="2026-12-09", prices={"SNDK": 79.24},
+                                               force=True)
+        self.assertEqual(data["SNDK"]["sus_streak"], 1)     # 新的一轮
+        self.assertTrue(monitor._consensus_suspect_due(data["SNDK"], 79.24, "2026-12-10"))
 
     def test_main_flow_passes_current_prices(self):
         src = (ROOT / 'monitor.py').read_text(encoding='utf-8')
         self.assertIn('prices={normalize_symbol(d["symbol"]): d.get("price")', src)
+
+
+class PostEarningsConsensusRegression(unittest.TestCase):
+    """2026-11-25 用户定稿：财报日 +1 起抓（统一按最晚的盘后口径，不平移）；
+    来源更新日期不早于财报日才算新价，仍是旧数据就隔天再抓、最多连抓 3 天；
+    之后结掉这笔事件、回归 14 天常规，不每 14 天复活。窗口内排 -2 优先占名额。"""
+
+    E = '2026-11-20'
+
+    def base(self, **kw):
+        return {'s': 'ok', 'avg': 100.0, 'r': '2026-11-18', 'r_tz': 'America/New_York',
+                'upd': '2026-11-17', **kw}
+
+    def test_first_attempt_is_day_plus_one_and_window_is_three_days(self):
+        e = monitor._consensus_events(self.base(ne=self.E), None, None, self.E)
+        self.assertIsNone(monitor.consensus_priority(e, '2026-11-20'))        # 财报当天不抓
+        for day in ('2026-11-21', '2026-11-22', '2026-11-23'):
+            self.assertEqual(monitor.consensus_priority(e, day), -2)          # +1/+2/+3 连抓，排最前
+        self.assertIsNone(monitor.consensus_priority(e, '2026-11-24'))        # +4 窗口用完
+
+    def test_old_source_date_keeps_event_and_expires_after_three_days(self):
+        fresh = {'s': 'ok', 'avg': 100.0, 'r': '2026-11-21', 'r_tz': 'America/New_York',
+                 'upd': '2026-11-17', 'ne': self.E, 'earn_pending': [self.E]}
+        out = monitor._consensus_events(fresh, None, None, '2026-11-21')
+        self.assertEqual(out.get('earn_pending'), [self.E])                   # 旧数据不算完成
+        self.assertEqual(monitor.consensus_priority(out, '2026-11-22'), -2)   # 隔天继续抓
+        expired = monitor._consensus_events(fresh, None, None, '2026-11-24')
+        self.assertNotIn('earn_pending', expired)                             # 3 天后结掉
+        self.assertNotIn('ne', expired)
+        self.assertIsNone(monitor.consensus_priority(expired, '2026-11-24'))    # 回归常规，未满 14 天不抓
+
+    def test_new_source_date_completes_event_immediately(self):
+        fresh = {'s': 'ok', 'avg': 110.0, 'r': '2026-11-21', 'r_tz': 'America/New_York',
+                 'upd': '2026-11-21', 'ne': self.E, 'earn_pending': [self.E]}
+        out = monitor._consensus_events(fresh, None, None, '2026-11-21')
+        self.assertNotIn('earn_pending', out)
+        self.assertNotIn('ne', out)
+        self.assertIsNone(monitor.consensus_priority(out, '2026-11-22'))
+
+    def test_event_never_revives_after_window(self):
+        out = monitor._consensus_events(self.base(), None, [self.E], '2026-12-10')
+        self.assertNotIn('earn_pending', out)
+
+    def test_post_earnings_ranks_before_normal_expiry(self):
+        normal = self.base(r='2026-11-01')
+        self.assertEqual(monitor.consensus_priority(normal, '2026-11-21'), 3)
+        post = monitor._consensus_events(self.base(ne=self.E), None, None, '2026-11-21')
+        self.assertLess(monitor.consensus_priority(post, '2026-11-21'), 3)
 
 
 class SignalFilterBucketRegression(unittest.TestCase):
@@ -3066,7 +3138,7 @@ class SignalFilterBucketRegression(unittest.TestCase):
         self.assertIn('#group_positions>.group-bottom{display:block;margin:0 4px 0}', monitor.PAGE_CSS)   # 与其它分组底部 ▲ 同款左右留边、同高 26px
         cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
         self.assertIn(": function (a, b) { return a.amt - b.amt; });", cost)   # 默认从亏损到盈利；可点抬头改按盈亏比／仓位
-        self.assertIn("updateText('.zone-mv', '$' + mvDigits(mv), head)", cost)         # 持仓金额进标题
+        self.assertIn("updateText('.zone-mv', '$' + mvDigits(mv), head)", cost)         # 持仓金额进标题
         self.assertIn("(r.costKnown ? '$' + mvDigits(r.cost * r.qty) : '—')", cost)   # 2026-11-25 A 方案：个股行金额是「投入」＝成本×股数，固定不随股价变
         self.assertNotIn("plain(r.mv)", cost)
         self.assertIn('pi-ph-m">现值</span>', cost)   # 盈亏明细那列改叫「现值」，与个股行的「投入」区分

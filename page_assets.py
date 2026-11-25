@@ -178,10 +178,11 @@ ${vol_example_table}
 <p>北京每天最多12只，失败重试最多3只；每股每天最多1次，请求间隔2秒。</p>
 <h5 id="fetch-target-after-earnings">财报后：共识价提前刷新</h5>
 <table class="rule-table"><thead><tr><th scope="col">条件／结果</th><th scope="col">处理</th></tr></thead>
-<tbody><tr><th scope="row">正常缓存＋已记录财报事件</th><td>财报后2个美东自然日起，尚未完成对应刷新则加入队列；盘前／盘后不平移</td></tr>
-<tr><th scope="row">抓取成功</th><td>即使价格没变、来源日期仍早于财报，也算完成，通常再等14天</td></tr>
-<tr><th scope="row">抓取失败</th><td>按失败退避与日额度重试；未完成事件继续保留</td></tr></tbody></table>
-<p>例：已记录美东20日财报，正常缓存未到期，22日起可提前刷新。</p>
+<tbody><tr><th scope="row">正常缓存＋已记录财报事件</th><td>财报日 +1 个美东自然日起进入队列，排在最前优先占当天名额；盘前／盘后／时段待定统一按最晚的盘后算，不平移</td></tr>
+<tr><th scope="row">抓到财报后的新价</th><td>来源更新日期不早于财报日即算完成，通常再等14天</td></tr>
+<tr><th scope="row">仍是旧数据／抓取失败</th><td>不算完成（失败按退避重试），隔天继续抓；最多连抓3天，之后结掉这笔事件、回归14天常规</td></tr></tbody></table>
+<p>例：已记录美东20日财报，21／22／23日各可抓一次；23日仍是旧数据就结掉，之后按14天常规到期。</p>
+<p>共识价与现价差6倍以上（多半拆股／合股）：页面写「待核实」、不算空间与达到，并插到队列最前重抓；重抓仍是旧数据则隔天再抓，一轮最多连抓3天，之后回归14天常规，那次仍是旧数据可再开一轮。</p>
 <h5 id="fetch-earnings">财报日期：来源与缓存间隔</h5>
 <p>StockAnalysis主源 → Nasdaq补时段、交叉核对 → 均无日期才用Yahoo。已核验官方事件优先，支持官网适配的个股可补查官网。</p>
 <p>只抓日期／时段，不抓财报内容或基本面。重查间隔按美东自然日、当前距财报天数选列：</p>
@@ -594,6 +595,7 @@ PAGE_PALETTE = """:root{
   --frame-purple:#a371f7;      /* 框紫唯一来源；rgb 三元组给半透明场合引用，别处不许再写死 */
   --frame-purple-rgb:163,113,247;
   --frame-yellow:#f0c674;
+  --frame-yellow-rgb:240,198,116;   /* 与 --frame-yellow 同色；半透明场合按 --frame-purple-rgb 的写法引用，别处不许写死 */
   --lamp-size:14px;
   --head-inset:64px;
   --row-height:21px;
@@ -716,8 +718,10 @@ h1.brand{color:var(--frame-purple)}
 /* 2026-11-20 桌面抬头行距收紧：数据时间→按钮 16→8px，与手机档一致；手机档 @media 自带 8px，改这条不影响手机。 */
 .sub{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:var(--status-font-size);margin-bottom:8px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px 4px;margin-bottom:14px;overflow:hidden}
-/* 父级只留标题内缩，资产行与子框使用完整分组宽度；▲沿用原持仓绿色底。 */
-#group_positions,#group_positions[open]{background:var(--card);border:var(--frame-w) solid var(--frame-yellow);box-shadow:none;padding:3px 0 2px;margin-bottom:0;overflow:hidden}
+/* 父级只留标题内缩，资产行与子框使用完整分组宽度。
+   2026-11-25 用户：底部固定 ▲ 的底色跟外框走（框黄），透明度沿用分组展开态的 .2；
+   其它分组仍是框紫 .2，靠 --collapse-open-bg 的 fallback 保持不变。 */
+#group_positions,#group_positions[open]{background:var(--card);border:var(--frame-w) solid var(--frame-yellow);box-shadow:none;padding:3px 0 2px;margin-bottom:0;overflow:hidden;--collapse-open-bg:rgba(var(--frame-yellow-rgb),.2)}
 #group_positions>summary{cursor:pointer;margin-left:5px;margin-right:5px}
 h2{font-size:13px;color:var(--dim);font-weight:600;margin:10px 12px 8px;letter-spacing:.3px}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -744,7 +748,8 @@ tr:first-child td{border-top:none}
 .collapse-group{width:100%;height:26px;padding:0;font:inherit;color:var(--dim);display:flex;align-items:center;justify-content:center;box-sizing:border-box;background:var(--collapse-bg);border:0;border-radius:6px;cursor:pointer;touch-action:manipulation}
 .collapse-group .collapse-icon{font-size:16px;line-height:1}
 .collapse-group:hover{color:var(--text);background:var(--collapse-bg)}
-.card.group-card[open]>.group-bottom>.collapse-group,.card.group-card[open]>.group-bottom>.collapse-group:hover{background:rgba(var(--frame-purple-rgb),.2)}
+/* 展开态底部 ▲ 底色：默认框紫 .2；仓位栏在自己的规则里把 --collapse-open-bg 换成框黄，透明度同为 .2。 */
+.card.group-card[open]>.group-bottom>.collapse-group,.card.group-card[open]>.group-bottom>.collapse-group:hover{background:var(--collapse-open-bg,rgba(var(--frame-purple-rgb),.2))}
 .collapse-group:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
 .signal-count-toggle:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
 #signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}

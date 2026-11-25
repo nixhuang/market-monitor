@@ -3317,11 +3317,12 @@ class TestTargets(unittest.TestCase):
         self.assertEqual(pr(ok('bad'), today), 3)
         self.assertIsNone(pr({'s': 'none', 'reason': 'http404', 'r': '2026-09-12'}, today))         # 无覆盖：28 天不看
         self.assertEqual(pr({'s': 'none', 'r': '2026-09-10'}, today), 4)       # 满 30 天复查
-        # 财报日过后提前重取（等 2 天让分析师调完）
-        self.assertEqual(pr(ok('2026-10-05', ne='2026-10-08'), today), 2)
-        self.assertIsNone(pr(ok('2026-10-05', ne='2026-10-09'), today))        # 才过 1 天
-        self.assertEqual(pr(ok('2026-10-09', ne='2026-10-08'), today), 2)     # 财后1天抓取尚未覆盖2天等待窗口
-        self.assertEqual(pr(ok('2026-10-08', ne='2026-10-08'), today), 2)      # 财报当天取的：之后再取一次
+        # 2026-11-25 用户：财报日 +1 起抓、+3 截止；窗口内一律 -2（排最前优先占 12 个名额）
+        self.assertEqual(pr(ok('2026-10-05', ne='2026-10-08'), today), -2)      # +2
+        self.assertEqual(pr(ok('2026-10-05', ne='2026-10-09'), today), -2)      # +1 第一次
+        self.assertEqual(pr(ok('2026-10-09', ne='2026-10-08'), today), -2)      # 抓过但仍是旧数据：继续
+        self.assertEqual(pr(ok('2026-10-08', ne='2026-10-08'), today), -2)
+        self.assertIsNone(pr(ok('2026-10-05', ne='2026-10-06'), today))         # +4 超出连抓窗口
         self.assertIsNone(pr(ok('2026-10-05', ne='bad'), today))
         self.assertTrue(monitor.consensus_due(None, today))
         self.assertFalse(monitor.consensus_due(ok('2026-10-05'), today))
@@ -3405,9 +3406,10 @@ class TestTargets(unittest.TestCase):
                                      next_earn={'AAPL': '2026-10-12'})
         self.assertEqual(data['AAPL']['ne'], '2026-10-12')
         _, st, sess, _ = self._update(['AAPL'], {}, prev={'data': data}, today='2026-10-13')
-        self.assertEqual(st['due'], 0)                                           # 财报才过 1 天，还不取
-        d2, st, sess, _ = self._update(['AAPL'], {'aapl': spg_page(310)}, prev={'data': data}, today='2026-10-14')
-        self.assertEqual(d2['AAPL']['avg'], 310.0)                               # 财报过后 2 天，提前重取
+        self.assertEqual(st['due'], 1)                                           # 2026-11-25：财报 +1 就抓
+        # 来源更新日期不早于财报日才算法新价，事件当场结掉
+        d2, st, sess, _ = self._update(['AAPL'], {'aapl': spg_page(310, '2026-10-13')}, prev={'data': data}, today='2026-10-14')
+        self.assertEqual(d2['AAPL']['avg'], 310.0)                               # 财报过后 2 天，仍在连抓窗口
         self.assertNotIn('ne', d2['AAPL'])                                       # 没传新的财报日就不记
         # 过去的、写错的财报日不记
         for bad in ('2026-10-01', 'bad', None, 5):
@@ -3750,7 +3752,8 @@ class TestCacheAudit(unittest.TestCase):
         self.assertEqual(sess.calls, [])
         self.assertEqual(synced['data']['AAA']['ne'], '2026-10-08')
         self.assertNotIn('ne', prev['data']['AAA'])  # 不原地污染传入快照
-        final, _ = self._cons(['AAA'], {'aaa': spg_page(110)}, synced, next_earn={'AAA': '2026-10-08'})
+        # 2026-11-25：来源更新日期不早于财报日才算抓到新价、事件结掉
+        final, _ = self._cons(['AAA'], {'aaa': spg_page(110, '2026-10-09')}, synced, next_earn={'AAA': '2026-10-08'})
         self.assertEqual(final['stat']['tried'], 1)
         self.assertEqual(final['data']['AAA']['avg'], 110)
         self.assertNotIn('earn_pending', final['data']['AAA'])
@@ -3764,20 +3767,25 @@ class TestCacheAudit(unittest.TestCase):
 
     def test_next_quarter_date_does_not_erase_pending_event(self):
         prev = {'data': {'AAA': self._old(ne='2026-10-08')}}
-        state, _ = self._cons(['AAA'], prev=prev, today='2026-10-09', next_earn={'AAA': '2027-01-15'})
+        # 财报 +1 就抓；抓回来还是旧数据（upd 早于财报日）不算完成，待刷新事件必须留着
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(110, '2026-10-06')}, prev=prev,
+                              today='2026-10-09', next_earn={'AAA': '2027-01-15'})
         self.assertEqual(state['data']['AAA']['earn_pending'], ['2026-10-08'])
-        state, _ = self._cons(['AAA'], {'aaa': spg_page(120)}, state)
+        # 第二天抓到财报后的新价，事件结掉；下一季财报日仍在
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(120, '2026-10-09')}, state)
         self.assertEqual(state['stat']['tried'], 1)
         self.assertEqual(state['data']['AAA']['ne'], '2027-01-15')
         state, _ = self._cons(['AAA'], prev=state, today='2026-10-11', earnings_events={'AAA': ['2026-10-08']})
         self.assertEqual(state['stat']['tried'], 0)
 
-    def test_refresh_before_lag_does_not_satisfy_post_earnings_refresh(self):
+    def test_old_source_date_keeps_post_earnings_retry_alive(self):
+        """2026-11-25：抓回来的来源更新日期仍早于财报日＝旧数据，不算完成，隔天继续抓。"""
         prev = {'data': {'AAA': self._old(r='2026-09-25', ne='2026-10-08')}}
         state, _ = self._cons(['AAA'], {'aaa': spg_page(110)}, prev, today='2026-10-09')
-        self.assertEqual(state['stat']['tried'], 1)  # 常规到期恰落在财后第一天
+        self.assertEqual(state['stat']['tried'], 1)  # 财报 +1 第一次抓
         state, _ = self._cons(['AAA'], {'aaa': spg_page(120)}, state)
-        self.assertEqual(state['stat']['tried'], 1)  # 财后第二天仍要补取
+        self.assertEqual(state['stat']['tried'], 1)  # 旧数据不算完成，隔天继续抓
+        self.assertEqual(state['data']['AAA']['earn_pending'], ['2026-10-08'])
 
     def test_quota_zero_still_saves_new_event(self):
         prev = {'data': {'AAA': self._old()}, 'quota': {'date': '2026-10-10', 'symbols': ['USED'], 'retry_symbols': []}}
@@ -3841,9 +3849,9 @@ class TestCacheAudit(unittest.TestCase):
         self.assertNotIn('OLD', state['data'])
 
     def test_event_day_and_quota_day_are_independent(self):
-        prev = {'data': {'AAA': self._old(ne='2026-10-08')}}
+        prev = {'data': {'AAA': self._old(ne='2026-10-09')}}
         state, _ = self._cons(['AAA'], prev=prev, today='2026-10-09', quota_day='2026-10-10')
-        self.assertEqual(state['stat']['tried'], 0)  # 北京已10日，美东才9日
+        self.assertEqual(state['stat']['tried'], 0)  # 北京已10日，美东才9日，财报当天不抓
         state, _ = self._cons(['AAA'], {'aaa': spg_page(110)}, state,
                               today='2026-10-10', quota_day='2026-10-11')
         self.assertEqual(state['data']['AAA']['r'], '2026-10-10')
@@ -4066,8 +4074,9 @@ class TestCacheAudit(unittest.TestCase):
         self.assertEqual(state['data']['AAA']['s'], 'ok')
 
     def test_legacy_beijing_fetch_day_cannot_falsely_complete_us_event(self):
+        # 2026-11-25：完成与否只看「来源更新日期有没有过财报日」，跟旧缓存 r 的时区无关。
         old = {'data': {'AAA': {'s': 'ok', 'avg': 100, 'r': '2026-10-10', 'try': '2026-10-10', 'ne': '2026-10-08'}}}
-        state, _ = self._cons(['AAA'], {'aaa': spg_page(110)}, old,
+        state, _ = self._cons(['AAA'], {'aaa': spg_page(110, '2026-10-09')}, old,
                               today='2026-10-10', quota_day='2026-10-11')
         self.assertEqual(state['stat']['tried'], 1)
         self.assertEqual(state['data']['AAA']['r_tz'], 'America/New_York')
@@ -4111,17 +4120,17 @@ class TestCacheAudit(unittest.TestCase):
                 self.assertEqual(first['consensus']['quota']['date'], '2026-10-06')
                 second = run('2026-10-09T20:15:00-04:00', {'status': 'unknown'})
                 self.assertEqual(second['earnings']['events']['AAA'], ['2026-10-08'])
-                self.assertEqual(cons.call_count, 1)  # 财后第一天，不提前
+                self.assertEqual(cons.call_count, 2)  # 2026-11-25：财报日 +1 就抓（原来要等 +2）
                 third = run('2026-10-10T20:15:00-04:00', {'status': 'unknown'})
-                self.assertEqual(cons.call_count, 2)
+                self.assertEqual(cons.call_count, 3)  # 抓回来还是旧数据，隔天继续抓
                 self.assertEqual(third['consensus']['data']['AAA']['r'], '2026-10-10')
                 self.assertEqual(third['consensus']['quota'],
                                  {'date': '2026-10-11', 'symbols': ['AAA'], 'retry_symbols': []})
                 fourth = run('2026-10-10T21:15:00-04:00', {'status': 'unknown'})
-                self.assertEqual(cons.call_count, 2)  # 同一北京配额日不重复抓取
+                self.assertEqual(cons.call_count, 3)  # 同一北京配额日不重复抓取
                 self.assertEqual(fourth['consensus']['quota'], third['consensus']['quota'])
                 fifth = run('2026-10-11T20:15:00-04:00', {'status': 'unknown'})
-                self.assertEqual(cons.call_count, 2)  # 财后刷新完成，次日仍复用有效缓存
+                self.assertEqual(cons.call_count, 4)  # 连抓窗口第 3 天，仍是旧数据；+4 起才结掉
                 self.assertEqual(fifth['earnings']['events']['AAA'], ['2026-10-08'])
                 for state in (first, second, third, fourth, fifth):
                     self.assertNotIn('fundamental', state)
@@ -7114,6 +7123,11 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertLessEqual(float(tint[4]), 1)
         self.assertIn('border:var(--frame-w) solid var(--frame-yellow)', pos_rule)
         self.assertIn('background:var(--card)', pos_rule)
+        # 2026-11-25 用户：仓位栏底部固定 ▲ 跟外框同色（框黄），透明度仍按展开态规则的 .2；
+        # 其它分组没设这个变量，继续走框紫 .2 的 fallback。
+        self.assertIn('--frame-yellow-rgb:240,198,116', monitor.PAGE_CSS)
+        self.assertIn('--collapse-open-bg:rgba(var(--frame-yellow-rgb),.2)', pos_rule)
+        self.assertIn('background:var(--collapse-open-bg,rgba(var(--frame-purple-rgb),.2))', monitor.PAGE_CSS)
         self.assertIn('.zone-card .group-bottom{margin:0 4px 0}', monitor.PAGE_CSS)
         self.assertIn('#zoneDualRow > .dual-body{display:none}', monitor.PAGE_CSS)   # 并排双卡共用一块跨列清单
         self.assertNotIn('border-color:', pos_rule)

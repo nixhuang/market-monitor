@@ -2523,6 +2523,24 @@ test('盈亏明细抬头行与排序：默认亏到盈，点仓位按市值从�
   assert.equal(b.requests.length,0);assert.equal(b.puts().length,0);       // 只在本页内，不联网不上传
   await b.dispose();
 });
+// 2026-11-25 用户：主表个股「仓位」＝个股现值 ÷（持仓市值 + 现金含 SGOV），不含固收；
+// 资金变化时分母跟着变。盈亏明细「仓位」仍按占持仓股票/ETF 算，两处不同是有意设计。
+test('主表个股仓位比不含固收且随现金变化；盈亏明细仍按持仓占比',async()=>{
+  const b=await bootCash({local:copy(SEED),prepareDocument(doc){qaFoldDoc(doc);}});
+  b.paint();
+  const w=()=>b.doc.querySelector('#s-aaa .cost-line .cost-weight').textContent;
+  // SEED：AAA 5股×$100=$500，BBB 2股×$100=$200 → 持仓 $700；现金 $30；固收 $20
+  assert.equal(w(),'68.5%');                  // 500 / 730
+  assert.notEqual(w(),'66.7%');               // 旧口径含固收：500 / 750
+  const pi=b.doc.querySelectorAll('#piPnlList .pi-prow .pi-pw').map(e=>e.textContent);
+  assert.ok(pi.includes('71.4%'));            // 盈亏明细：500 / 700
+  b.importData({...copy(SEED),cash:100});b.paint();
+  assert.equal(b.state().DATA.cash,100);
+  assert.equal(w(),'62.5%');                  // 500 / 800，资金一变比例就跟着变
+  assert.ok(b.doc.querySelectorAll('#piPnlList .pi-prow .pi-pw').map(e=>e.textContent).includes('71.4%'));
+  assert.equal(b.requests.length,0);assert.equal(b.puts().length,0);
+  await b.dispose();
+});
 test('到价没有内容时整栏不显示，有内容才出现（与其他指标一致）',async()=>{
   const b=await bootCash();const extra=b.doc.querySelector('.pnl-extra');
   b.paint();assert.equal(extra.hidden,true);

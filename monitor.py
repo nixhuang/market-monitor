@@ -3102,7 +3102,7 @@ level_note = _page_renderer.level_note
 
 # ---------------------------------------------------------------- 目标价（手填 / S&P Global 共识价）
 # 全部分组个股使用手填优先的目标价；ETF、指数、期货不参与目标状态。
-# 共识价每只满 14 天到期，财报后至少 2 个美东自然日提前刷新；北京时间每天最多 12 只。
+# 共识价每只满 14 天到期，财报后隔 1 个美东自然日起提前刷新、最多连抓 3 天；北京时间每天最多 12 只。
 # 获取失败仅灰色虚线展示旧价，不参与空间或达到；有效手填值不受共识失败影响。
 # 空间 = (目标价 / 现价 − 1) × 100：低 <30%，中 [30%,70%)，高 ≥70%，不改变红黄绿。
 # 达到仅限持仓/重点关注：当日上穿、跌破或处于目标价 ±target_gap_pct% 内；优先于高空间。
@@ -3119,15 +3119,18 @@ CONSENSUS_BREAK = 3                   # 连续失败这么多次就停手，不�
 CONSENSUS_GROUPS = monitor_rules.CONSENSUS_GROUPS
 CONSENSUS_REFETCH_DAYS = 14           # 每只各自满这么多天重取（不再用统一的 1、15 号节拍）
 CONSENSUS_NONE_RECHECK_DAYS = 30      # 页面上没有共识价（无覆盖）的，隔这么久再看一次
-CONSENSUS_POST_EARN_LAG_DAYS = 2      # 财报后至少等 2 个美东自然日；不保证所有分析师已更新
+CONSENSUS_POST_EARN_LAG_DAYS = 1      # 2026-11-25 用户：财报日 +1 起第一次抓（统一按美东盘后这个最晚落点，盘前/盘后/时段待定都不平移）
+CONSENSUS_POST_EARN_WINDOW_DAYS = 3   # 最多连抓 3 天（+1/+2/+3）；仍是旧数据就结掉这笔事件、回归 14 天常规
 CONSENSUS_MAX_PER_DAY = 12           # 北京自然日的独立台账，删除/关闭分组不返还额度
 CONSENSUS_RETRY_PER_DAY = 3          # 失败重试最多占用 3 个名额，避免挤掉正常到期项
 CONSENSUS_RETRY_BACKOFF = (1, 2, 4, 7)  # 连续失败：首次次日重试，此后逐步退避
 # 2026-11-23 拆股类错数据防护（闪迪：缓存里还是拆股前的 2047.38，现价只有 79）：共识价与现价差这么多倍
-# 就当它不可信——页面写「待核实」、不算空间/达到，并且不等 14 天到期，立刻插队重抓；
-# 重抓后仍然离谱的，每隔几天才再看一次，免得天天敲对方网站。
+# 就当它不可信——页面写「待核实」、不算空间/达到，并且不等 14 天到期，立刻插队重抓。
+# 2026-11-25 用户：重抓后仍然离谱的隔天再抓，一轮最多连抓 3 天；一轮用完后回归 14 天常规，
+# 那次抓回来还是离谱就重新开一轮（源什么时候修好没法预判，不设「永久放弃」标记）。
 CONSENSUS_SANITY_RATIO = monitor_rules.CONSENSUS_SANITY_RATIO
-CONSENSUS_SUSPECT_RECHECK_DAYS = 3
+CONSENSUS_SUSPECT_RECHECK_DAYS = 1    # 抓回来仍离谱：隔天再抓
+CONSENSUS_SUSPECT_MAX_STREAK = 3      # 一轮最多连抓 3 天；14 天常规到期后可再开一轮
 
 
 
@@ -3223,7 +3226,12 @@ def _consensus_fetch_day(entry):
 
 
 def _consensus_events(entry, next_date, events, today):
-    """事件与价格缓存独立同步：改期更新未来日期，发生过的事件保留到完成财后刷新。"""
+    """事件与价格缓存独立同步：改期更新未来日期，发生过的事件保留到「抓到财报后的新价」或连抓 3 天用完。
+
+    2026-11-25 用户：完成条件从「抓过一次」改成「来源更新日期不早于财报日」——抓回来的
+    还是财报前的旧共识价（价格没变、upd 仍早于财报）不算完成，隔天继续抓；连抓窗口是
+    财报日 +1/+2/+3 共 3 天，窗口用完就结掉这笔事件、回归 14 天常规到期，不会每 14 天复活。
+    财报是一次性事件，与拆股那种「源一直没修好」的持续状态不同，所以不设周期性复发。"""
     out = dict(entry) if isinstance(entry, dict) else {}
     pending = _event_dates(out.get("earn_pending")) + _event_dates(events)
     old_ne, new_ne = _iso_date(out.get("ne")), _iso_date(next_date)
@@ -3234,9 +3242,11 @@ def _consensus_events(entry, next_date, events, today):
     ne = _iso_date(out.get("ne"))
     if ne and ne <= today:
         pending.append(ne)
-    fetched = _consensus_fetch_day(out)
-    pending = sorted({d for d in pending if d <= today and
-                      (not fetched or _days_between(fetched, d) < CONSENSUS_POST_EARN_LAG_DAYS)})
+    upd = _iso_date(out.get("upd"))
+    pending = sorted({d for d in pending
+                      if d <= today
+                      and _days_between(today, d) <= CONSENSUS_POST_EARN_WINDOW_DAYS
+                      and not (upd and upd >= d)})
     if pending:
         out["earn_pending"] = pending[-4:]
     else:
@@ -3247,7 +3257,7 @@ def _consensus_events(entry, next_date, events, today):
 
 
 def consensus_priority(entry, today_iso, quota_day=None):
-    """0 新加入，1 失败重试，2 财后到期，3 常规14天，4 无覆盖30天；事件按美东日。"""
+    """-2 财报后连抓（最优先占当天名额），0 新加入，1 失败重试，3 常规14天，4 无覆盖30天；事件按美东日。"""
     quota_day = quota_day or today_iso
     if not isinstance(entry, dict) or entry.get("s") not in ("ok", "none", "fail"):
         return 0
@@ -3265,9 +3275,11 @@ def consensus_priority(entry, today_iso, quota_day=None):
     pending = _event_dates(entry.get("earn_pending"))
     if _iso_date(entry.get("ne")):
         pending.append(entry["ne"])
-    if any(_days_between(today_iso, d) >= CONSENSUS_POST_EARN_LAG_DAYS and
-           _days_between(_consensus_fetch_day(entry), d) < CONSENSUS_POST_EARN_LAG_DAYS for d in pending):
-        return 2
+    # 2026-11-25 用户：财报日 +1 起抓、+3 截止；这段窗口内的事件（_consensus_events 已剔除
+    # 「抓到新价」的）一律排到最前，优先占每天 12 个名额。窗口外结掉、回归 14 天常规。
+    if any(CONSENSUS_POST_EARN_LAG_DAYS <= _days_between(today_iso, d) <= CONSENSUS_POST_EARN_WINDOW_DAYS
+           for d in pending):
+        return -2
     return 3 if age >= CONSENSUS_REFETCH_DAYS else None
 
 
@@ -3277,10 +3289,17 @@ def consensus_due(entry, today_iso):
 
 def _consensus_suspect_due(entry, price, today_iso):
     """缓存里的共识价和现价差了好几倍（多半拆股/合股没跟上）→ 该立刻重抓。
-    刚重抓过仍离谱的（带 sus 标记）几天内不重复。"""
+    2026-11-25 用户：抓回来仍离谱的（带 sus）隔天再抓，一轮最多连抓 3 天；一轮用完后
+    回归 14 天常规到期，那次抓回来还是离谱就重新开一轮（不设永久放弃标记）。"""
     if not isinstance(entry, dict) or entry.get("s") != "ok" or not consensus_implausible(entry.get("avg"), price):
         return False
     if entry.get("sus"):
+        try:
+            streak = int(entry.get("sus_streak") or 1)
+        except (ValueError, TypeError):
+            streak = 1
+        if streak >= CONSENSUS_SUSPECT_MAX_STREAK:
+            return False
         try:
             return _days_between(today_iso, entry["r"]) >= CONSENSUS_SUSPECT_RECHECK_DAYS
         except (KeyError, ValueError, TypeError):
@@ -3406,10 +3425,19 @@ def update_consensus(symbols, prev, today_iso, sess=None, sleep=None, clock=None
             streak = 0
             fresh = {**res, "r": today_iso, "r_tz": "America/New_York", "try": quota_day}
             if consensus_implausible(res.get("avg"), prices.get(s)):
-                fresh["sus"] = True        # 刚重抓还是离谱：记一笔，几天内不再重复敲
+                fresh["sus"] = True
+                # 只有「隔天接着抓」才算同一轮；14 天常规到期那次会自然断开，重新开一轮 3 连抓。
+                prev_r = _consensus_fetch_day(entry)
+                try:
+                    contiguous = bool(prev_r) and _days_between(today_iso, prev_r) == 1
+                    prev_streak = int(entry.get("sus_streak") or 0)
+                except (ValueError, TypeError):
+                    contiguous, prev_streak = False, 0
+                fresh["sus_streak"] = prev_streak + 1 if contiguous else 1
             for k in ("ne", "earn_pending"):
                 if k in entry:
                     fresh[k] = entry[k]
+            # upd（来源更新日期）跟着 res 进 fresh：早于财报日就是旧数据，事件保留、隔天继续抓。
             data[s] = _consensus_events(fresh, next_earn.get(s), earnings_events.get(s), today_iso)
     stat["deferred"] = len(ranked) - stat["tried"]
     log(f"  共识价：成功 {stat['ok']} · 无覆盖 {stat['none']} · 失败 {stat['fail']}"
