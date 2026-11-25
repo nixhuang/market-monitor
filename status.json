@@ -9,15 +9,15 @@
     "next_in": 12,
     "next_date": "2026-12-11"
   },
-  "run_id": "45560033316",
+  "run_id": "45607549616",
   "request_id": "",
-  "source_sha": "6cf6590e2f8a82ec8faaa1ef1ebdd669e54db9d0",
-  "input_hash": "2f30f8f455fb0cbe4cdfcce84e339c2a575b4c4c821634ae9fe6b0110de0781d",
-  "build_id": "45560033316-1",
-  "started_at": "2026-11-25T06:21:48+00:00",
-  "started_at_bj": "2026-11-25T14:21:48+08:00",
-  "finished_at": "2026-11-25T14:25:03.083748+08:00",
-  "finished_at_bj": "2026-11-25T14:25:03+08:00",
+  "source_sha": "d505da51156271df537b296fe5eadee75c4cc3b7",
+  "input_hash": "0df3bf65c9e1b1f37137c5278116dcf1b834d4e6fb4901009e2f7046f1e1d371",
+  "build_id": "45607549616-1",
+  "started_at": "2026-11-25T11:46:33+00:00",
+  "started_at_bj": "2026-11-25T19:46:33+08:00",
+  "finished_at": "2026-11-25T19:49:25.033039+08:00",
+  "finished_at_bj": "2026-11-25T19:49:25+08:00",
   "event": "push",
   "target_trade_date": "2026-11-24",
   "mode": "closed",
@@ -199,7 +199,7 @@
     "yellow": 32,
     "green": 59,
     "gray": 0,
-    "purple": 39,
+    "purple": 38,
     "total": 99,
     "macro_ok": 7,
     "stale_symbols": [],
@@ -257,7 +257,7 @@
       "label": "共识价",
       "red": 0,
       "yellow": 0,
-      "purple": 39
+      "purple": 38
     }
   },
   "signal_members": {
@@ -1291,18 +1291,6 @@
           "detail": "共识价 400.37，空间 +43.5%"
         },
         {
-          "symbol": "NTNX",
-          "note": "混合云",
-          "group": "position",
-          "hold": "short",
-          "level": "red",
-          "space": 45.20974537461073,
-          "band": "medium",
-          "price": 79.27,
-          "kind": "consensus",
-          "detail": "共识价 79.27，空间 +45.2%"
-        },
-        {
           "symbol": "UBER",
           "note": "优步",
           "group": "position",
@@ -1762,18 +1750,6 @@
         "price": 400.37,
         "kind": "consensus",
         "detail": "共识价 400.37，空间 +43.5%"
-      },
-      {
-        "symbol": "NTNX",
-        "note": "混合云",
-        "group": "position",
-        "hold": "short",
-        "level": "red",
-        "space": 45.20974537461073,
-        "band": "medium",
-        "price": 79.27,
-        "kind": "consensus",
-        "detail": "共识价 79.27，空间 +45.2%"
       },
       {
         "symbol": "UBER",
@@ -2541,15 +2517,15 @@
     "checked_at": "2026-11-18T20:33:09.024842-05:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-11-25T06:23:53.696572+00:00"
+    "asof": "2026-11-25T11:48:31.267726+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 3,
+      "due": 1,
       "deferred": 0,
-      "tried": 3,
-      "ok": 3,
+      "tried": 1,
+      "ok": 1,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -2558,6 +2534,7 @@
         "symbols": [
           "CEG",
           "CRSP",
+          "NTNX",
           "TTWO"
         ],
         "retry_symbols": []
@@ -2619,13 +2596,12 @@
         ]
       },
       "NTNX": {
-        "avg": 79.27,
-        "upd": "2026-10-26",
-        "r": "2026-11-12",
+        "avg": 74.74,
+        "upd": "2026-11-25",
+        "r": "2026-11-25",
         "r_tz": "America/New_York",
         "s": "ok",
-        "try": "2026-11-12",
-        "ne": "2026-11-24",
+        "try": "2026-11-25",
         "earn_pending": [
           "2026-11-24"
         ]
@@ -3459,12 +3435,13 @@
       "symbols": [
         "CEG",
         "CRSP",
+        "NTNX",
         "TTWO"
       ],
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-11-25T06:25:02.773418+00:00",
+    "asof": "2026-11-25T11:49:24.719778+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -3478,7 +3455,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3495,7 +3472,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3529,7 +3506,7 @@
           "digest": "b2f91b4c24835b10c1038b3bd58d50e3aa929aa6bed87c03219d59b9b1ee5455"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "b349fa6c02925a10b4c0ad8d6d8d65e34f76d0ae66f22ab5c6828f6d00e6cb2c"
         }
@@ -3546,26 +3523,26 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
       },
       "NTNX": {
         "facts": {
-          "asof": "2026-11-12T05:24:40.598965+00:00",
-          "at": "2026-11-12T00:00:00+00:00",
-          "digest": "8757aa7fa09cba2b092875438922e5a8e68e88490ea0b4d24e13479f41a12349"
+          "asof": "2026-11-25T11:49:24.719778+00:00",
+          "at": "2026-11-25T00:00:00+00:00",
+          "digest": "0b0a6c1d23be99ba37fb95ccdca0b591a225caf34fcfe41c2be103b7e8b4374f"
         },
         "attempt": {
-          "asof": "2026-11-12T05:24:40.598965+00:00",
-          "at": "2026-11-11T16:00:00+00:00",
-          "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
+          "asof": "2026-11-25T11:49:24.719778+00:00",
+          "at": "2026-11-24T16:00:00+00:00",
+          "digest": "b2f91b4c24835b10c1038b3bd58d50e3aa929aa6bed87c03219d59b9b1ee5455"
         },
         "events": {
-          "asof": "2026-11-24T05:16:42.988362+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
-          "digest": "802d9cb9a917925345a0f65da298cf0212a8cae73abb90e6fdea5a011e3fcd04"
+          "digest": "15dd9b5f9695833d42ad5db4fac2fac141117375ad3199bb380c9a6eb5969632"
         }
       },
       "UNH": {
@@ -3597,7 +3574,7 @@
           "digest": "790e7077fa749be961d24e91580f696f94aeab16d5d5203902a78bcba32a9e30"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3614,7 +3591,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -3631,7 +3608,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "6fdb6ee21dd39b64f32af0d297a6d403868a02a83a7383f5815c35496219be18"
         }
@@ -3716,7 +3693,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3733,7 +3710,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -3750,7 +3727,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3767,7 +3744,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -3784,7 +3761,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "2a447885e91232096bdce3651b2d9741455be4ed6a274755894844e3d0cf2232"
         }
@@ -3818,7 +3795,7 @@
           "digest": "a23d4affe35cfce786fbdf17d087c07e917d8e5838d7ae21a05728d7dc1e7b0e"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "229a5c551d6be267e2680ad2327c9c9ec18631501e1522fedaede2a850edc80c"
         }
@@ -3852,7 +3829,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3886,7 +3863,7 @@
           "digest": "a23d4affe35cfce786fbdf17d087c07e917d8e5838d7ae21a05728d7dc1e7b0e"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -3903,7 +3880,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "63f8b17be97fca6c4008471efb24c12e3062061f5c666a2de9f08b19bf2f532e"
         }
@@ -3920,7 +3897,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "424978e39f0d653a31140f446dd32ff32be647b8ca400b49625760688a05293e"
         }
@@ -3954,7 +3931,7 @@
           "digest": "dfa1d1e9c1f8ff962c96a2b7c7c29007ed04e16008b70cea7cafb94fab8ff4ad"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "8c7b549cce2677f6bd9044fbf9df94f98d75c47c5f0f3ed0c5e5407359dda573"
         }
@@ -3971,7 +3948,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -3988,7 +3965,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "9b10f1a30612f114326d998ae81ed5b32244eeb4bfdea324c8a2f6b00330e781"
         }
@@ -4005,7 +3982,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -4022,7 +3999,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -4039,7 +4016,7 @@
           "digest": "801bc35ecf7a307bb0c37c85715cdc18931e37c57e8916fbbc358e56e9835c83"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "dd2a107b95a38bfdbfcabb3c2c8ff10b83d4aab2134f1395d1ee79cef8685c98"
         }
@@ -4056,7 +4033,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "ee501d84cc8028c6b6b9ecd76d5fde8230a1fed2299fe174d15a56f70cad39b4"
         }
@@ -4090,7 +4067,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "b7a4c2b0adc9ad39ba193b21a13a13ba857e0b2f7ed153a419387fc314ade66d"
         }
@@ -4141,7 +4118,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "fcbf9135509747b850be079ff35a7d6f4bc0ba40fc8e618660c7c8556a19206c"
         }
@@ -4158,7 +4135,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "3ab1dd1df2994e85b2a5605788e0537c6440ea5fd9762e98445e57c4308b3fd2"
         }
@@ -4175,7 +4152,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "8c841de081d855f40075b8b3875d5e6f5be1e29a5833b154513a59fca3480448"
         }
@@ -4192,7 +4169,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4209,7 +4186,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "c1c163e8a33ff3dd1343ad0fd0963cc28d30fdb532c4eb8a0a42db4c9991f2be"
         }
@@ -4226,7 +4203,7 @@
           "digest": "a23d4affe35cfce786fbdf17d087c07e917d8e5838d7ae21a05728d7dc1e7b0e"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "be73c567fb53ae88b9a6a819456010b5421fa578533609edd51e3d37be3f2baa"
         }
@@ -4243,7 +4220,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "b421cd043424e4ec95da3225cc1065c5af8a1dcb0e7849712e835a8ddbfb1847"
         }
@@ -4260,7 +4237,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "1ffef9318e623e19ec19c8be4793ccf2948522c884ed3ec29e26c3cac8264cc1"
         }
@@ -4277,7 +4254,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "f97f96841e2044aa1096720b7bbac3d8168300f18ffe485ae269935a626c3b79"
         }
@@ -4294,7 +4271,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "72b16a438943bdcdce7845bbb91e6c0fd9f8aed6fad4af3401cb03d7996eea57"
         }
@@ -4311,7 +4288,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4345,7 +4322,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "eb7362bfb1c3fb995a0830a61fe384e02da1c5cc884bca5de3eb976c454f027d"
         }
@@ -4362,7 +4339,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "45d062dd2d8b7a4bb67cd2ec479ce7e0063d5bd5ca4214b2a800d39bd44a87de"
         }
@@ -4379,7 +4356,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "be73c567fb53ae88b9a6a819456010b5421fa578533609edd51e3d37be3f2baa"
         }
@@ -4396,7 +4373,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "f5655607c32c8047af37e33b16ce1fcbc0149b22294c0584b2260c822eb38846"
         }
@@ -4430,7 +4407,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "3187ddd3f2df50fd097eff406e02d1c4150cce8f627eda20976775643bc7fb1d"
         }
@@ -4447,7 +4424,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "350bab861122be2e885ef487eaf5d7e7ca1a2f7fdf3c43d60077126c613c2231"
         }
@@ -4481,7 +4458,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "d950462b69fbadb5117bc1791218968f86c1ae42863f65dcf4969a039e9e1cda"
         }
@@ -4498,7 +4475,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "229a5c551d6be267e2680ad2327c9c9ec18631501e1522fedaede2a850edc80c"
         }
@@ -4532,7 +4509,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "f56ff233e6b2ce0e8c83ffd081b448758e79210a0cb97a74756f6d6182ad92d5"
         }
@@ -4549,7 +4526,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "cd7c27f761a0ea07c0c7a59d7ebc6c5057dc5b4ed6b72f601d2b20e9d9597531"
         }
@@ -4566,7 +4543,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "cd7c27f761a0ea07c0c7a59d7ebc6c5057dc5b4ed6b72f601d2b20e9d9597531"
         }
@@ -4583,7 +4560,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "9b10f1a30612f114326d998ae81ed5b32244eeb4bfdea324c8a2f6b00330e781"
         }
@@ -4600,7 +4577,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4617,7 +4594,7 @@
           "digest": "b2f91b4c24835b10c1038b3bd58d50e3aa929aa6bed87c03219d59b9b1ee5455"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "b349fa6c02925a10b4c0ad8d6d8d65e34f76d0ae66f22ab5c6828f6d00e6cb2c"
         }
@@ -4634,7 +4611,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4651,7 +4628,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "d77713b5a56eed6b2d6e310549734eeb7f7480406d56ec9eaf1462eff342f4d1"
         }
@@ -4668,7 +4645,7 @@
           "digest": "a23d4affe35cfce786fbdf17d087c07e917d8e5838d7ae21a05728d7dc1e7b0e"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "f5836864ab8e7236e478695a9e77a2dfbeafec6612f463de0c48ecd6722730fd"
         }
@@ -4685,7 +4662,7 @@
           "digest": "1e5171ff2e14a882f21b79221a9f433f40b74a758575b6e8f60980ad4bc6ed25"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "f5655607c32c8047af37e33b16ce1fcbc0149b22294c0584b2260c822eb38846"
         }
@@ -4702,7 +4679,7 @@
           "digest": "b2f91b4c24835b10c1038b3bd58d50e3aa929aa6bed87c03219d59b9b1ee5455"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "ab1e5e6c25c9659351aabc27f8b1136c570d41c441edd0227be35ebe44b28188"
         }
@@ -4719,7 +4696,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4736,7 +4713,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "797197a7af6d772b52bd2cde77c303e4ab938e30c5959a1dc945299184d4b49b"
         }
@@ -4753,7 +4730,7 @@
           "digest": "2200315cc95f5ebf5e328cc2d22126b47397fbba957290cb31b6a629f93760c0"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "a032a79759e22880052289547ce24537deaa30b553c34bc02d31dae1e963a189"
         }
@@ -4770,7 +4747,7 @@
           "digest": "9842129c7d8c70598870b1fea846a29e67903a70d1fbf5e25f0078cffae21e20"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "20990c7fb2fec228e271545aa3a0b2ec9b70fea0cdb8459e826a23016df21c89"
         }
@@ -4787,7 +4764,7 @@
           "digest": "983e0e9e95ba44b5d6f0782d3558dcb7285836ad20ec7077ce6e975fff880996"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "8576262801f9826323af36cb8f52976f732013ec974a10c32512cae1780f1ca2"
         }
@@ -4804,7 +4781,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "3187ddd3f2df50fd097eff406e02d1c4150cce8f627eda20976775643bc7fb1d"
         }
@@ -4821,7 +4798,7 @@
           "digest": "a5be5e95e9d0274c05f76e2835733001ab0b83f93651ec9b2e5df20cb6b6993d"
         },
         "events": {
-          "asof": "2026-11-25T06:25:02.773418+00:00",
+          "asof": "2026-11-25T11:49:24.719778+00:00",
           "at": null,
           "digest": "6c5e7f035337544541278aaa530a693a998a7943f63864c47bb76fbcb7e03bbe"
         }
@@ -4833,8 +4810,8 @@
     "dated": 60,
     "pending": 22,
     "failed": 0,
-    "fetched": 20,
-    "cached": 62,
+    "fetched": 0,
+    "cached": 82,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -5640,7 +5617,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-11-25T06:24:58.123303+00:00",
+    "asof": "2026-11-25T11:49:24.336542+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -7080,9 +7057,9 @@
       "incomplete": false,
       "contract_symbol": "CLF27.NYM"
     },
-    "assessed_at": "2026-11-25T14:23:52.276846+08:00",
+    "assessed_at": "2026-11-25T19:48:30.192771+08:00",
     "schema_version": 2,
-    "asof": "2026-11-25T06:23:53.976428+00:00"
+    "asof": "2026-11-25T11:48:31.525105+00:00"
   },
   "data_lag": {
     "target": "2026-11-24",
