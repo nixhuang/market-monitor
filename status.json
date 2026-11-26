@@ -9,15 +9,15 @@
     "next_in": 11,
     "next_date": "2026-12-11"
   },
-  "run_id": "45794692916",
+  "run_id": "45803998681",
   "request_id": "",
-  "source_sha": "b0acf9eb89800ed8e8831c1dd7372259c43acbd7",
-  "input_hash": "5071025e4846926a7f1c17c03bb9833ce0f7ad2c90061490e2b352c646cafa54",
-  "build_id": "45794692916-1",
-  "started_at": "2026-11-26T09:43:58+00:00",
-  "started_at_bj": "2026-11-26T17:43:58+08:00",
-  "finished_at": "2026-11-26T17:46:58.207218+08:00",
-  "finished_at_bj": "2026-11-26T17:46:58+08:00",
+  "source_sha": "6cb283cc40cc5a509972d53c87b3c16d2a4a8bc1",
+  "input_hash": "94512a125ddad90fa69d60723b4775e236e98e96aea070bf34dcfd821a221dd6",
+  "build_id": "45803998681-1",
+  "started_at": "2026-11-26T10:43:40+00:00",
+  "started_at_bj": "2026-11-26T18:43:40+08:00",
+  "finished_at": "2026-11-26T18:46:31.486998+08:00",
+  "finished_at_bj": "2026-11-26T18:46:31+08:00",
   "event": "push",
   "target_trade_date": "2026-11-25",
   "mode": "closed",
@@ -2427,7 +2427,7 @@
     "checked_at": "2026-11-25T09:48:42.793969-05:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-11-26T09:46:06.289522+00:00"
+    "asof": "2026-11-26T10:45:40.493768+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
@@ -3166,7 +3166,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-11-26T09:46:58.184589+00:00",
+    "asof": "2026-11-26T10:46:31.460830+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -5309,7 +5309,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-11-26T09:46:58.166653+00:00",
+    "asof": "2026-11-26T10:46:31.437710+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -6715,9 +6715,9 @@
       "incomplete": false,
       "contract_symbol": "CLF27.NYM"
     },
-    "assessed_at": "2026-11-26T17:46:04.736447+08:00",
+    "assessed_at": "2026-11-26T18:45:39.353285+08:00",
     "schema_version": 2,
-    "asof": "2026-11-26T09:46:06.600783+00:00"
+    "asof": "2026-11-26T10:45:40.823242+00:00"
   },
   "data_lag": {
     "target": "2026-11-25",
