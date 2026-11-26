@@ -1072,10 +1072,19 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(CSS,/\.cost-contrib \.ca\{order:2/);assert.match(CSS,/\.cost-contrib \.cv\{order:3/);
   assert.match(CSS,/\.cost-contrib \.cn-name\{[^}]*text-align:left/);
   assert.ok(topLevel(CSS).includes('.sub .cost-state'));
-  // 手机当日贡献列表：名称轨与金额文本中心不动；盈亏比在78px轨道内居中，长值向两侧展开。
+  // 当日清单：名称｜金额｜盈亏比｜比例条，subgrid 共用列轨；两档各有一套列宽变量。
   const mobileCostCSS=CSS.slice(CSS.indexOf('@media(max-width:600px)'));
-  // 11-23：当日清单改成与行业权重同一种等比平铺（名称｜金额｜盈亏比｜比例条，subgrid 共用列轨），不再写死 78px 列宽和 left 偏移
+  // 11-23：基础值是等比平铺 1/1/1/1.6，不再写死 78px 列宽和 left 偏移
   assert.ok(CSS.includes('--cost-contrib-cols:minmax(max-content,1fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.6fr);'));
+  // 2026-11-26 用户定稿：电脑上【基于线上版】1/1/1/1.6 只做两处小位移（金额稍微右移、
+  // 盈亏比左移一些），不再把名称列拉到 1.8fr；比例条仍 1.6fr 不压缩。
+  // 手机档另用定宽数字列 70/56，两档互不相干。
+  const deskCostCSS = CSS.slice(CSS.indexOf('@media(min-width:601px)'), CSS.indexOf('@media(max-width:600px)'));
+  assert.match(deskCostCSS, /--cost-contrib-cols:minmax\(max-content,1\.1fr\) minmax\(84px,0\.78fr\) minmax\(64px,1fr\) minmax\(0,1\.6fr\);/);
+  assert.match(mobileCostCSS, /--cost-contrib-cols:minmax\(max-content,1\.6fr\) 70px 56px minmax\(0,0\.8fr\);/);
+  assert.ok(!mobileCostCSS.includes('minmax(84px,0.78fr)'), '手机档不得套用电脑档列宽');
+  assert.ok(!deskCostCSS.includes('70px 56px'), '电脑档不得套用手机档定宽');
+  assert.ok(!deskCostCSS.includes('1.8fr'), '电脑档大改版已作废，不得回到 1.8fr');
   assert.ok(CSS.includes('grid-template-columns:subgrid;'));
   assert.ok(mobileCostCSS.includes('--cost-contrib-gap:6px;'));
   assert.doesNotMatch(mobileCostCSS,/\.cost-contrib li > \.ca\{position:relative/);

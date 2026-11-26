@@ -74,6 +74,19 @@
 #costManage .ep-trade:disabled { opacity: .45; cursor: default; }
 @media(min-width:601px) {
   #costManage .ep-editor-head, #costManage .ep-editor-row { grid-template-columns: 58px 58px 58px 112px 90px; }
+  /* 2026-11-26 用户定稿（21:27 改口，前面 1.8fr 的大改作废）：电脑上以【线上版】
+     四列等比 1/1/1/1.6 为底，只做两处小位移——盈亏金额列稍微右移、盈亏比列左移一些。
+     名称列 1→1.1fr（142→160px，1440 实测；名称文字末端到金额列的空隙 8.5→26.8px），
+     金额列 1→0.78fr 并带 84px 下限、盈亏比列 1fr 带 64px 下限，比例条 1.6fr 不动（226→232px）。
+     1440 起点：金额 536→554（+18，稍微右移）、盈亏比 685→675（-10，左移一些）、
+     两列间距 149.5→121.4px；名称列远比大改版的 272px 收敛，整组数值仍贴着名称。
+     下限依据：15px 等宽数字「-$12,345.6」墨宽 68px、「-123.4%」53px（实测，非估），
+     84/64 各留 16/11px 余量；601/744/956/1133/1440/1920 六档零越界、零截断、零横向滚动。
+     手机档另在 @media(max-width:600px) 用定宽数字列，不套用这里的 84/64 下限。
+     这里只覆盖变量值，不重抄 grid-template-columns 规则。 */
+  .cost-manage, .dual-body {
+    --cost-contrib-cols: minmax(max-content,1.1fr) minmax(84px,0.78fr) minmax(64px,1fr) minmax(0,1.6fr);
+  }
 }
 #costManage [data-trade-destination][hidden], #costManage [data-trade-fill-all][hidden] { display: none; }
 /* 2026-11-26 用户：BUY/SELL 弹框两行——价格行「买入价$/卖出价$」＋输入框同一排，
@@ -392,8 +405,15 @@
 .rules-body li.rule-setting { margin-left: 6px; border-left: 2px solid var(--line); padding-left: 8px; }
 @media(max-width:600px) {
   .cost-manage, .dual-body {
-    /* 手机档：列距收到 6px，其余同桌面（等比平铺，不再写死 78px 列宽）。 */
+    /* 手机档：列距收到 6px；四列不再等比平铺，也不套用电脑档的 88/64 下限。 */
     --cost-contrib-gap: 6px;
+    /* 2026-11-26 用户：手机也要「名称拉开、两列数字右移靠近、比例条压缩」。
+       440 内容区约 396px（已扣左右 21/12 内距与 3×6 列距）：名称最长墨宽 134px，
+       最长金额「-$12,345.6」68px、最长盈亏比「-123.4%」53px（15px 等宽数字实测）。
+       数字列锁 70px / 56px（各留 2~3px 余量），两列起点相隔 76px（原来 73px，已是不能再近的极限）；
+       名称与比例条按 1.6fr / 0.8fr 分余量 → 名称 134→167、比例条 108→84，
+       盈亏比文字到比例条的空隙 21→9px。360~1920 实测零溢出、零横向滚动（320 及以下不在支持范围）。 */
+    --cost-contrib-cols: minmax(max-content,1.6fr) 70px 56px minmax(0,0.8fr);
   }
   .cost-edit-btn { padding: 8px 13px; font-size: 16px; line-height: 1.08; }
   .runbar .cost-edit-btn { height: 40px; }
