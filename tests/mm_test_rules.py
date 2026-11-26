@@ -1489,7 +1489,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         js = page_assets.PAGE_INTERACTION_JS
         self.assertIn('window.MM_SETTINGS.group_single_open === 1', js)
         self.assertNotIn('groupSummaryClickAt', js)   # 不再用 toggle 监听（会干扰统计面板的筛选归一化时序）
-        # 当日/风险/统计不是 group_ 前缀，不参与；2026-11-26 起仓位（含长/短持仓）也全程不参与互斥。
+        # 当日/风险/统计不是 group_ 前缀，不参与；2026-11-26 修订：只有仓位大栏不参与，长/短持仓恢复参与互斥。
         self.assertIn("details[id^='group_'][open]", js)
         self.assertNotIn('data-open-locked', js)
         script = r'''
@@ -1509,16 +1509,23 @@ vm.createContext(ctx);vm.runInContext(fs.readFileSync(0,'utf8'),ctx);
 const click=(card)=>{ev.click.forEach(f=>f({target:new Element(card)}));};
 const flush=()=>{while(frames.length)frames.shift()();};
 const focus=cards[3];
-// 2026-11-26 用户：只有普通分组参与「只开一个」；仓位、长/短持仓、统计全程不参与
+// 2026-11-26 修订：长/短持仓与普通分组一起参与「只开一个」；仓位大栏与统计不参与
 click(focus);focus.open=true;focus.top=40;flush();
 assert.equal(cards[4].open,false);assert.equal(focus.open,true);
-assert.equal(cards[0].open,true);assert.equal(cards[1].open,true);assert.equal(cards[2].open,true);
+assert.equal(cards[0].open,true);assert.equal(cards[1].open,false);assert.equal(cards[2].open,false);
 assert.equal(ctx.scrolled,-60);     // 点开的这组被上拽后拉回原位（top 100→40 补 -60）
 assert.equal(ctx.smooth,-13);       // 再平滑滚到 8.75% 高度线：屏高600→线在 round(52.5)=53，当前top 40 → top-线 = -13
-// 点「仓位」标题展开：不收起任何分组（仓位不参与互斥）
-cards[0].open=true;cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,true);
-// 点开仓位自己的长持清单：同样不收起任何分组，仓位保持展开
-cards[0].open=true;cards[4].open=true;cards[1].open=true;click(cards[1]);flush();assert.equal(cards[0].open,true);assert.equal(cards[4].open,true);
+// 点「仓位」大栏标题展开：不收起任何分组（仓位不参与互斥）
+cards[0].open=true;cards[4].open=true;cards[1].open=true;click(cards[0]);flush();
+assert.equal(cards[4].open,true);assert.equal(cards[1].open,true);
+// 点开长持仓：收起短持仓与其它普通分组，仓位大栏保留
+cards[0].open=true;cards[4].open=true;cards[1].open=true;cards[2].open=true;click(cards[1]);flush();
+assert.equal(cards[0].open,true);assert.equal(cards[1].open,true);
+assert.equal(cards[2].open,false);assert.equal(cards[4].open,false);
+// 点开短持仓：收起长持仓与其它普通分组，仓位大栏保留
+cards[0].open=true;cards[4].open=true;cards[1].open=true;cards[2].open=true;click(cards[2]);flush();
+assert.equal(cards[0].open,true);assert.equal(cards[2].open,true);
+assert.equal(cards[1].open,false);assert.equal(cards[4].open,false);
 // 点击后其实是在收起：不动其它
 cards[4].open=true;focus.open=false;click(focus);flush();assert.equal(cards[4].open,true);
 // 开关关闭：不动

@@ -7075,10 +7075,11 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('card.id === "signalCounts" || card.id === "group_positions"', js)
         self.assertIn('document.querySelectorAll("details.card[open]")', js)
         self.assertIn('window.__mmCloseOtherGroups = closeOthers;', js)
-        # 2026-11-26：仓位（含长/短持仓）与统计双向不参与互斥。
+        # 2026-11-26 修订：只有仓位大栏与统计双向不参与互斥，长/短持仓恢复参与。
         self.assertIn('if (other === keep || isFree(other)) return;', js)
-        self.assertIn("if (/^group_positions/.test(d.id)) return;", js)
-        self.assertIn("if (/^group_positions/.test(other.id)) return;", js)
+        self.assertIn("if (d.id === 'group_positions') return;", js)
+        self.assertIn("if (other.id === 'group_positions') return;", js)
+        self.assertIn("if (d.id === zoneKeep) return;", js)
         self.assertIn('}, true);', js)   # click 在捕获阶段同步关
         self.assertIn('const zonePanel = target.closest ? target.closest(".zone-panel[data-owner]") : null;', js)
         self.assertIn('if (zoneCard) { zoneCard.open = true; keep = zoneCard; }', js)

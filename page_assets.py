@@ -1796,16 +1796,17 @@ COST_PANEL_HTML = r'''<details class="edit-panel cost-manage" id="costManage">
 RULES_INTERACTION_JS = ""  # 保留导出兼容；规则跳转、hash监听和高亮计时器已删除。
 PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
 
-// 2026-11-26 用户定稿（覆盖 11-19／11-24 旧口径）：当日、风险与其它普通分组任何情况下一次只开一个；
-// 统计、仓位（含长/短持仓）完全不参与——展开它们不收起别人，别人展开也不收起它们。
+// 2026-11-26 修订：长/短持仓与其它普通分组一样参与「只开一个」，彼此互斥；
+// 只有统计、仓位大栏（长/短持仓的父级）不参与——展开它们不收起别人，别人展开也不收起它们。
 // 覆盖点标题、程序化打开、统计名单跳转、FIND 定位四条路径。
 (function enforceSingleOpen() {
   function isFree(card) {
-    return !card || card.id === "signalCounts" || card.id === "group_positions" || /^group_positions_/.test(card.id);
+    return !card || card.id === "signalCounts" || card.id === "group_positions";
   }
   function closeOthers(keep) {
     if (isFree(keep)) return;
-    closeSubFolds();
+    // 长/短持仓只跟分组互斥，不动统计里已展开的子板块（统计全程不参与）。
+    if (!(keep && /^group_positions_/.test(keep.id))) closeSubFolds();
     document.querySelectorAll("details.card[open]").forEach(function(other) {
       if (other === keep || isFree(other)) return;
       other.open = false;
@@ -2174,22 +2175,21 @@ document.addEventListener("toggle", function(event) {
   if (Math.abs(delta) > 1) window.scrollBy(0, delta);
   requestAnimationFrame(function() { revealSignalPanel(d); });
 }, true);
-// 设置「首页分组单个展开」=1：当日、风险以外的普通分组点标题展开时只保留一个。
-// 2026-11-26 用户：仓位（含长/短持仓）与统计不参与这套互斥，双向都不收起。
-// 撤销 11-19「仓位同普通分组」与 11-24「点开其他分组时关闭仓位」两条旧口径。
+// 设置「首页分组单个展开」=1：长/短持仓与其它普通分组点标题展开时只保留一个。
+// 2026-11-26 修订：只有仓位大栏（父级）与统计不参与，长/短持仓恢复双向互斥。
 // 只响应点标题（页面加载时的默认展开不触发）。
 document.addEventListener("click", function(event) {
   const summary = event.target instanceof Element ? event.target.closest("details[id^='group_'] > summary") : null;
   if (!summary || !(window.MM_SETTINGS && window.MM_SETTINGS.group_single_open === 1)) return;
   const d = summary.parentElement;
   if (!d) return;
-  if (/^group_positions/.test(d.id)) return;   // 仓位与长/短持仓展开：不收起任何分组
+  if (d.id === 'group_positions') return;   // 仓位大栏展开：不收起任何分组
   const topBefore = d.getBoundingClientRect().top;
   requestAnimationFrame(function() {
     if (!d.open) return;
     document.querySelectorAll("details[id^='group_'][open]").forEach(function(other) {
       if (other === d) return;
-      if (/^group_positions/.test(other.id)) return;   // 仓位与长/短持仓不被别人收起
+      if (other.id === 'group_positions') return;   // 仓位大栏是长/短持仓的父级，永远保留
       other.open = false;
     });
     // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到顶部 8.75% 高度线（上面留给灵动岛）。
@@ -2780,9 +2780,13 @@ function findStock() {
     return;
   }
   if (window.MM_SETTINGS && window.MM_SETTINGS.group_single_open === 1) {
+    const zonePanel = target.closest ? target.closest('.zone-panel[data-owner]') : null;
+    const zoneKeep = zonePanel ? (zonePanel.dataset.owner === 'long'
+      ? 'group_positions_long' : 'group_positions_short') : '';
     document.querySelectorAll("details[id^='group_'][open]").forEach(function(d) {
-      // 2026-11-26：仓位与长/短持仓不参与互斥，FIND 定位也不收起它们。
-      if (/^group_positions/.test(d.id)) return;
+      // 2026-11-26 修订：只有仓位大栏（父级）不参与；长/短持仓与普通分组仍只开一个。
+      if (d.id === 'group_positions') return;
+      if (d.id === zoneKeep) return;   // 定位到长/短持仓清单里的个股：保留对应标题
       if (!d.contains(target)) d.open = false;
     });
   }
