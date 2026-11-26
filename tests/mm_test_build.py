@@ -1064,7 +1064,7 @@ class RulesTemplateTests(unittest.TestCase):
                 self.assertIn(threshold, table)
             self.assertIn('中 ×1.1', table)
         combined = self.plain(rules + glossary)
-        for dynamic in ('短均线（启用）', '长均线（启用）', '布林为30日、±2.7倍', '×0.6（当前10%设置）',
+        for dynamic in ('短均线：确认幅度', '长均线：触及范围', '布林为30日、±2.7倍', '×0.6（当前10%设置）',
                         '≤约0.6%', '≤约1.2%', '≤约1.8%', '固定0.9%', '周期5／10／21日',
                         '≥82超买', '1条线≤18', '2条线都≤21', '3条线都≤24', '距低点≤2.2%', '相差≤3% → 点亮橙色', '相差≤3% → 点亮青色',
                         '红k＝4.2', '黄k＝2.1', '红F＝4.4×', '黄F＝2.2×',
@@ -1203,15 +1203,16 @@ class RulesTemplateTests(unittest.TestCase):
                 centered.update(selector.rsplit(' ', 1)[1] for selector in targets)
         self.assertEqual(centered, {'th', 'td'}, '分类、表头、条件及全部灯级单元格均需居中')
         common = re.search(r'\.card \.rules-body \.rule-table th,\.card \.rules-body \.rule-table td\{([^}]*)\}', css)[1]
-        for unchanged in ('text-align:left', 'vertical-align:top', 'padding:6px 7px',
+        for unchanged in ('text-align:left', 'vertical-align:top', 'padding:3px 7px',
                           'border:1px solid var(--rules-cell-border)'):
             self.assertIn(unchanged, common)
-        # 正文放大到宏观说明15px；像素行距保留原12px×1.65，避免字号同时扩大行距。
+        # 说明正文保持 15px、报灯表 14px；行盒 14px×1.2＝16.8px，单元格上下各收 3px。
         self.assertIn('font-size:inherit', common)
-        self.assertIn('line-height:19.8px', common)
-        self.assertIn('.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:15px;', css)
+        self.assertIn('line-height:16.8px', common)
+        self.assertIn('.card .rules-body{padding:6px 12px 8px;color:var(--dim);font-size:15px;', css)
+        self.assertIn('#rules-lamp-table{font-size:14px;', css)
         category = re.search(r'\.card \.rules-body \.rule-table th\.cat-col\{([^}]*)\}', css)[1]
-        for unchanged in ('vertical-align:middle', 'writing-mode:vertical-rl', 'padding:6px 0', 'width:18px'):
+        for unchanged in ('vertical-align:middle', 'writing-mode:vertical-rl', 'padding:3px 0', 'width:18px'):
             self.assertIn(unchanged, category)
 
     def test_four_authorized_rule_rows_preserve_adjacent_group_cells(self):
@@ -1288,8 +1289,9 @@ class RulesTemplateTests(unittest.TestCase):
                 markup = assets.rules_template({'ma_short': short, 'ma_long': long,
                     'boll_near_band_pct': 0, 'vol_ratio_z': 0, 'vol_ratio_red_z': 0}, {})
                 text = self.plain(markup)
-                for name, n in (('短均线', short), ('长均线', long)):
-                    self.assertIn(name + '（' + ('启用' if n else '关闭') + '）', text)
+                self.assertIn('短均线：确认幅度', text)
+                self.assertIn('长均线：触及范围', text)
+                self.assertNotRegex(text, r'(?:短|长)均线（(?:启用|关闭)）')
                 self.assertNotRegex(text, r'当前\d+日|\d+日均线|第一条|第二条|2～250')
                 self.assertIn('两条同周期只计一次，按简单穿越判断', text)
                 self.assertIn('关闭自适应或波动无效时固定0.5%', text)
@@ -1384,19 +1386,19 @@ class RulesTemplateTests(unittest.TestCase):
         override = dict(constants, quote_closed_sources='stooq → Yahoo → Nasdaq')
         self.assertIn('收盘日线：stooq → Yahoo → Nasdaq', self.plain(assets.glossary_body({}, override)))
 
-    def test_svg_never_changes_attributes_or_weak_link_labels_and_escapes_values(self):
-        markup = assets.rules_template({}, {'rsi_periods': '<script>超买</script>\"&'})
+    def test_no_drawn_arrows_and_escapes_values(self):
+        """2026-11-26 用户要求删掉设置页自绘箭头；术语纯文字，转义与弱链接保护不变。"""
+        markup = assets.rules_template({}, {'rsi_periods': '<script>超买</script>"&'})
         self.assertNotIn('<script>', markup)
         self.assertIn('&lt;script&gt;', markup)
-        self.assertIn('aria-hidden="true" focusable="false"', markup)
+        self.assertNotIn('<svg', markup)
+        self.assertNotIn('dir-arrow', markup)
+        self.assertNotIn('signal-term', markup)
         for attribute in re.findall(r'(?:data-original|aria-label)="([^"]*)"', markup):
             self.assertNotIn('<', attribute)
         for link in re.findall(r'<a\b[^>]*>.*?</a>', markup, re.S):
             self.assertNotIn('<svg', link)
             self.assertNotIn('<span', link)
-        for path in ('M3 3H15 M9 15V3 M5 7L9 3L13 7', 'M3 15H15 M9 3V15 M5 11L9 15L13 11',
-                     'M7 15V3 M3 7L7 3L11 7', 'M7 3V15 M3 11L7 15L11 11'):
-            self.assertIn('d="' + path + '"', markup)
 
     def test_filter_arrows_preserve_html_as_text_and_use_existing_classes(self):
         if not shutil.which('node'):
@@ -1477,23 +1479,20 @@ const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),{chromiu
       await page.locator('#signalRules > summary').click();
       await page.locator('#glossaryRules > summary').click();
       assert(await page.locator('#signalRules').evaluate(d=>d.open));
-      assert.equal(await page.locator('#signalRulesBody svg').count(),input.ruleSvgCount);
-      assert.equal(await page.locator('#glossaryRulesBody svg').count(),input.glossarySvgCount);
-      assert(input.glossarySvgCount>0);
+      assert.equal(await page.locator('#signalRulesBody svg').count(),0);
+      assert.equal(await page.locator('#glossaryRulesBody svg').count(),0);
       const appearance=await page.evaluate(()=>{
         document.getElementById('glossaryRules').open=true;
         const p=document.querySelector('#signalRulesBody p.rule-original');
         const g=document.querySelector('#glossaryRulesBody p');
-        const arrow=document.querySelector('#glossaryRulesBody svg');
         const table=document.getElementById('glossary-chg-table');
         return {pMargin:getComputedStyle(p).marginTop,gMargin:getComputedStyle(g).marginTop,
-          arrowHeight:arrow.getBoundingClientRect().height,
           yellow:getComputedStyle(table.rows[0].cells[1]).color,
           red:getComputedStyle(table.rows[0].cells[2]).color,
           horizontal:document.documentElement.scrollWidth>window.innerWidth};
       });
       assert.equal(appearance.pMargin,'1px');assert.equal(appearance.gMargin,'2px');
-      assert.equal(appearance.arrowHeight,18);assert.equal(appearance.yellow,'rgb(240, 198, 116)');
+      assert.equal(appearance.yellow,'rgb(240, 198, 116)');
       assert.equal(appearance.red,'rgb(255, 133, 128)');assert(!appearance.horizontal);
       await page.locator('#signalRules > summary').click();
       await page.locator('#glossaryRules > summary').click();
@@ -1512,9 +1511,7 @@ const assert=require('assert/strict'),fs=require('fs'),vm=require('vm'),{chromiu
         glossary_body = re.search(r'<div[^>]*id="glossaryRulesBody"[^>]*>(.*?)</template>', markup, re.S)
         self.assertIsNotNone(glossary_body, '名词模板须包含完整正文')
         payload = {'html': markup, 'css': assets.PAGE_CSS,
-                   'js': assets.RULES_INTERACTION_JS,
-                   'ruleSvgCount': rule_body.group(1).count('<svg'),
-                   'glossarySvgCount': glossary_body.group(1).count('<svg')}
+                   'js': assets.RULES_INTERACTION_JS}
         result = subprocess.run(['node', '-e', code], input=json.dumps(payload), text=True,
                                 encoding='utf-8', capture_output=True, check=False, timeout=120)
         self.assertEqual(result.returncode, 0, result.stderr)

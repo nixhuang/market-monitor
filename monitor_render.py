@@ -671,10 +671,15 @@ class PageRenderer:
         return sorted(unique_items, key=self._context._sort_key)
 
 
+    def _etf_cls(self, symbol, asset_etf=False, note=""):
+        """ETF 代码统一挂 etf-code（颜色由 CSS 一处定义）；不再生成「ETF」小标签。
+        备注名按「中文＋ETF」手填的新加入标的也算 ETF，不必先补代码表。"""
+        return " etf-code" if (asset_etf or self._context.is_etf(symbol)
+                               or str(note or "").strip().upper().endswith("ETF")) else ""
+
     def _row_tags(self, d, snapshot):
-        """名称旁的小标签：ETF、无数据、参考值、日线日期。"""
-        # ETF / 基金类标一个小标签，和个股区分开；抓不到数据时用静态表兜底判断
-        tag = '<span class="tag">ETF</span>' if (d.get("etf") or self._context.is_etf(d["symbol"])) else ""
+        """名称旁的小标签：无数据、参考值、日线日期；ETF 只靠代码颜色区分，不再出标签。"""
+        tag = ""
         if d.get("price") is None:
             tag += '<span class="tag quote-note">无数据</span>'
         elif d.get("reference_only"):
@@ -1110,7 +1115,7 @@ class PageRenderer:
             f'data-symbol="{html_lib.escape(self._context.normalize_symbol(d["symbol"]), quote=True)}" '
             f'data-price="{html_lib.escape(str(d.get("price") or ""), quote=True)}" '
             f'data-prev-close="{html_lib.escape(str(d.get("prev_close") or ""), quote=True)}"><td class="sym">'
-            f'<span class="sym-box {lamp_cls}">'
+            f'<span class="sym-box {lamp_cls}{self._etf_cls(d["symbol"], bool(d.get("etf")), d.get("note"))}">'
             f'{html_lib.escape(self._context.normalize_symbol(d["symbol"]))}{sec_html}{note}{hold_html}'
             f'{self._context._row_tags(d, snapshot)}</span>'
             f'</td><td class="num px">{self._price_rows_html(d, snapshot)}</td>'
@@ -1523,7 +1528,7 @@ class PageRenderer:
             bj_cls = "earnings-week-bj is-countdown" if relative else "earnings-week-bj"
             bj = f'<span class="{bj_cls}">·{esc(sub)}</span>' if sub else ""
             lines.append(f'<li{lamp_cls}><a class="signal-member-jump" href="#{anchor}">'
-                         f'<span class="signal-member-symbol">{esc(entry["symbol"])}</span>{note}</a>'
+                         f'<span class="signal-member-symbol{self._etf_cls(entry["symbol"], bool(entry.get("etf")), entry.get("note"))}">{esc(entry["symbol"])}</span>{note}</a>'
                          f'<span class="signal-member-belong">（{esc(belong)}）</span> '
                          f'<span class="earnings-week-meta{urg_cls}">{countdown}{esc(main)}{bj}</span>'
                          f'{lamp_text}</li>')
@@ -1622,7 +1627,7 @@ class PageRenderer:
                         lamp = d.get("level") if d.get("level") in ("red", "yellow", "green", "gray") else "unknown"
                         return (f'<li class="lamp-{lamp}">'
                                 f'<a class="signal-member-jump" href="#{self._context._stock_anchor_id(d["symbol"])}">'
-                                f'<span class="signal-member-symbol">{esc(d["symbol"])}</span>{note}</a>'
+                                f'<span class="signal-member-symbol{self._etf_cls(d["symbol"], bool(d.get("etf")), d.get("note"))}">{esc(d["symbol"])}</span>{note}</a>'
                                 f'{belong}{direction}{value}</li>')
 
                     if kind in ("chg", "vol_ratio"):
@@ -1853,7 +1858,7 @@ class PageRenderer:
                 lamp = r.get("level") if r.get("level") in ("red", "yellow", "green", "gray") else "unknown"
                 blocks[key].append((group_order.get(str(r.get("group") or ""), len(self._context.GROUPS)),
                                     f'<li class="lamp-{lamp}"><a class="signal-member-jump" href="#{self._context._stock_anchor_id(r["symbol"])}">'
-                                    f'<span class="signal-member-symbol">{esc(r["symbol"])}</span>{note}</a>{belong}</li>'))
+                                    f'<span class="signal-member-symbol{self._etf_cls(r["symbol"], bool(r.get("etf")), r.get("note"))}">{esc(r["symbol"])}</span>{note}</a>{belong}</li>'))
                 rec = filter_members.setdefault(self._context.instrument_identity(r["symbol"]), {
                     "s": r["symbol"], "n": r.get("note") if isinstance(r.get("note"), str) else "",
                     "g": self._context._member_belong(r),
@@ -1934,7 +1939,7 @@ class PageRenderer:
                     lead = f'<span class="signal-name-lamp {lamp}" aria-hidden="true"></span>'
                     high_class = ' class="target-space-high"' if section == "space" and d.get("band") == "high" else ""
                     lines.append(f'<li{high_class}>{lead}<a class="signal-member-jump" href="#{self._context._stock_anchor_id(symbol)}">'
-                                 f'<span class="signal-member-symbol">{esc(symbol)}</span>{note}</a>'
+                                 f'<span class="signal-member-symbol{self._etf_cls(symbol, bool(d.get("etf")), d.get("note"))}">{esc(symbol)}</span>{note}</a>'
                                  f'<span class="signal-member-belong">（{esc(self._context._member_belong(d))}）</span>'
                                  f' <span class="signal-member-direction">{self._target_detail_html(d, section)}</span></li>')
                 parts.append(f'<div class="signal-member-block"><h5>{label}</h5>'

@@ -864,7 +864,7 @@ _legacy_consensus.update(target={'kind': 'consensus', 'price': 250, 'failed': Tr
 _legacy_before = _copy.deepcopy(_legacy_consensus)
 _legacy_html = monitor._stock_row(_legacy_consensus, {})
 check(re.search(r'<td class="sig">(.*?)</td>', _legacy_html, re.S)[1] == _expected_sig
-      and re.search(r'<td class="sym">(?:<span class="sym-box \w+">)?(.*?)</td>', _legacy_html, re.S)[1]
+      and re.search(r'<td class="sym">(?:<span class="sym-box [\w -]+">)?(.*?)</td>', _legacy_html, re.S)[1]
       .startswith('TFAILOLD')
       and 'signal-dot' not in _legacy_html and monitor._signal_lamps(_legacy_consensus) == ''
       and 'lvtag tgt bad' in _legacy_html and 'pur-high' not in _legacy_html
@@ -1119,7 +1119,7 @@ check((_coexist_snap['summary']['red'], _coexist_snap['summary']['yellow']) == (
 for _row, _color, _kind in zip(_coexist_rows, ('yellow', 'red', 'yellow'), ('rsi', 'rsi', 'boll_rsi')):
     _classes, _body = rendered_stock_row(_coexist_page, _row, not _row.get('foldable', True))
     _sig = re.search(r'<td class="sig">(.*?)</td>', _body, re.S)[1]
-    _sym = re.search(r'<td class="sym">(?:<span class="sym-box \w+">)?(.*?)</td>', _body, re.S)[1]
+    _sym = re.search(r'<td class="sym">(?:<span class="sym-box [\w -]+">)?(.*?)</td>', _body, re.S)[1]
     check(_classes == [_color] and 'signal-dot' not in _body
           and _sym.startswith(_row['symbol'])
           and re.findall(r'data-signal-kind="([^"]*)" data-signal-level="([^"]*)"', _sig)
@@ -2407,15 +2407,18 @@ const deadline = setTimeout(() => {
       const rules=await evaluate(`(async()=>{
         document.querySelectorAll('#rulesHost details').forEach(d=>d.open=true);await document.fonts.ready;
         const base=getComputedStyle(document.querySelector('#marketRiskRules p')).fontSize;
-        const text=[...document.querySelectorAll('#signalRules .rules-body p,#signalRules .rules-body h4,#signalRules .rules-body h5,#glossaryRules .rules-body p,#glossaryRules .rules-body h4,#glossaryRules .rules-body h5,#rulesHost .rule-table th,#rulesHost .rule-table td')].map(e=>getComputedStyle(e).fontSize);
+        const cells=[...document.querySelectorAll('#signalRules .rules-body p,#signalRules .rules-body h4,#signalRules .rules-body h5,#glossaryRules .rules-body p,#glossaryRules .rules-body h4,#glossaryRules .rules-body h5,#rulesHost .rule-table th,#rulesHost .rule-table td')];
+        const text=cells.filter(e=>!e.closest('#rules-lamp-table')).map(e=>getComputedStyle(e).fontSize);
+        const lamp=[...document.querySelectorAll('#rules-lamp-table th,#rules-lamp-table td')].map(e=>getComputedStyle(e).fontSize);
         const table=document.querySelector('#rules-lamp-table'),s=getComputedStyle(table);
         const cell=table.querySelector('td'),cs=getComputedStyle(cell),cat=getComputedStyle(table.querySelector('.cat-col'));
-        return {base,text,width:s.width,cellPadding:cs.padding,lineHeight:cs.lineHeight,catWidth:cat.width,
+        return {base,text,lamp,width:s.width,cellPadding:cs.padding,lineHeight:cs.lineHeight,catWidth:cat.width,
           overflow:document.documentElement.scrollWidth>innerWidth};
       })()`);
-      assertions.push({ok:rules.base==='15px'&&rules.text.length>20&&rules.text.every(f=>f===rules.base)
-        &&rules.cellPadding===(width<=600?'6px 4px':'6px 7px')&&rules.lineHeight==='19.8px'&&!rules.overflow,
-        name:width+'px实际设置页规则字号对齐宏观15px，保留表格padding与原行距且无横向溢出',actual:rules});
+      assertions.push({ok:rules.base==='15px'&&rules.text.length>10&&rules.text.every(f=>f==='15px')
+        &&rules.lamp.length>20&&rules.lamp.every(f=>f==='14px')
+        &&rules.cellPadding===(width<=600?'3px 4px':'3px 7px')&&rules.lineHeight==='16.8px'&&!rules.overflow,
+        name:width+'px说明正文回到15px、报灯表14px，表格内距与行距按紧凑版且无横向溢出',actual:rules});
     }
     const rangeTree=await cdp('Page.getFrameTree');
     stage('52周条几何与交互');
@@ -2521,10 +2524,21 @@ const deadline = setTimeout(() => {
         result.actsSameRow=Math.abs(ar.top-xr.top)<1&&Math.abs(xr.top-sr.top)<1&&ar.right<xr.left&&xr.right<sr.left;
         sell.click();const dialog=panel.querySelector('.cost-trade-dialog');
         const fill=dialog.querySelector('[data-trade-fill-all]'),qtyInput=dialog.querySelector('[data-trade-qty]');
+        const fRect=fill&&fill.getBoundingClientRect(),qRect=qtyInput.getBoundingClientRect();
+        const pRect=dialog.querySelector('[data-trade-price]').getBoundingClientRect();
+        const plabel=dialog.querySelector('.cost-trade-price-row label span'),qlabel=dialog.querySelector('.cost-trade-qty-row label span');
         result.fillText=fill?fill.textContent:null;
         result.fillVisible=!!fill&&getComputedStyle(fill).display!=='none';
-        result.fillSameRow=!!fill&&fill.parentElement.contains(qtyInput)&&fill.previousElementSibling===qtyInput.parentElement;
-        result.fillRight=!!fill&&fill.getBoundingClientRect().left>=qtyInput.getBoundingClientRect().right-0.5;
+        result.fillInQtyRow=!!fill&&fill.parentElement.contains(qtyInput)&&fill.previousElementSibling===qtyInput.parentElement;
+        // 2026-11-26：清仓按钮在股数输入框右侧、同一排（不是下方）。
+        result.fillRightSameRow=!!fill&&fRect.left>=qRect.right-0.5&&fRect.top<qRect.bottom&&fRect.bottom>qRect.top;
+        // 价格行在上、股数行在下，各自标签与输入框同一排，两行输入框左缘对齐。
+        result.priceAboveQty=pRect.bottom<=qRect.top+1;
+        result.priceLabelText=plabel?plabel.textContent:null;
+        result.qtyLabelText=qlabel?qlabel.textContent:null;
+        result.labelsSameRow=!!plabel&&plabel.getBoundingClientRect().top<pRect.bottom&&plabel.getBoundingClientRect().bottom>pRect.top
+          &&!!qlabel&&qlabel.getBoundingClientRect().top<qRect.bottom&&qlabel.getBoundingClientRect().bottom>qRect.top;
+        result.inputsAligned=Math.abs(pRect.left-qRect.left)<1;
         if(fill)fill.click();result.fillQty=qtyInput.value;
         result.fillNoOverflow=document.documentElement.scrollWidth<=innerWidth;
         result.dialogOpen=dialog.open;result.destinations=[...dialog.querySelectorAll('[data-trade-dest-select] option')].map(i=>i.value);
@@ -2535,6 +2549,9 @@ const deadline = setTimeout(() => {
         // 2026-11-19 Demo：卖出弹窗只留一个「分组」下拉（原两个单选框横排作废）
         const destSel=dialog.querySelector('[data-trade-dest-select]'),destRect=destSel&&destSel.getBoundingClientRect();
         result.choicesSameRow=!!destSel&&dialog.querySelectorAll('input[type="radio"]').length===0&&destRect.width>0&&destRect.right<=dialog.getBoundingClientRect().right;
+        // 2026-11-26：分组下拉左缘与价格/股数输入框对齐；价格行与股数行拉开间距。
+        result.destAligned=!!destSel&&Math.abs(destRect.left-pRect.left)<1;
+        result.rowGap=Math.round(qRect.top-pRect.bottom);
         dialog.querySelector('[data-trade-cancel]').click();result.dialogClosed=!dialog.open;
         panel.querySelector('[data-trade-action="buy"][data-sym="RANGENORM"]').click();
         result.buyFillHidden=getComputedStyle(dialog.querySelector('[data-trade-fill-all]')).display==='none';
@@ -2551,7 +2568,9 @@ const deadline = setTimeout(() => {
         &&editor.dialogWidth>0&&editor.dialogWidth<=width-24&&!editor.hasCash
         &&editor.fixedFields===1&&editor.fixedCost&&editor.editorFont==='16px'&&editor.inputFont==='16px'
         &&editor.noOverflow&&editor.sellNote==='这只还没有行业分类，清仓前请先补分类标签'&&editor.dialogFont==='18px'&&editor.labelFont==='16px'
-        &&editor.fillText==='清仓'&&editor.fillVisible&&editor.fillSameRow&&editor.fillRight&&editor.fillQty==='10'
+        &&editor.fillText==='清仓'&&editor.fillVisible&&editor.fillInQtyRow&&editor.fillRightSameRow&&editor.fillQty==='10'
+        &&editor.priceAboveQty&&editor.labelsSameRow&&editor.inputsAligned&&editor.destAligned&&editor.rowGap>=12
+        &&editor.priceLabelText==='卖出价$'&&editor.qtyLabelText==='股数'
         &&editor.fillNoOverflow&&editor.buyFillHidden
         &&editor.addInActs&&editor.actsSameRow&&editor.choicesSameRow&&editor.hitWidth===55&&editor.hitHeight===31,
         name:width+'px真实五列代码/BUY/SELL/成本/数量、退休红叉市值列不显示及取消不变',actual:editor});

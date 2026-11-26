@@ -174,7 +174,7 @@ class RulesRegression(unittest.TestCase):
 
     def test_rule_body_font_matches_settings_macro_and_preserves_warning_table_geometry(self):
         source = (ROOT / 'edit.html').read_text(encoding='utf-8')
-        # 综合细则注入时移除macro-help，正文实际继承设置页body的15px，并非首页13px。
+        # 综合细则注入时移除macro-help；规则说明区统一定 16px，不是首页 13px。
         self.assertRegex(source, r'body\{[^}]*font:15px/1\.55')
         self.assertIn("if(mr) mr.className='card fold';", source)
         css = page_assets.RULES_CSS
@@ -185,14 +185,15 @@ class RulesRegression(unittest.TestCase):
             body = re.search(re.escape(selector) + r'\{([^}]*)\}', css)[1]
             self.assertIn('font-size:' + ('15px' if selector == '.card .rules-body' else 'inherit'), body)
         cells = re.search(r'\.rule-table td\{([^}]*)\}', css)[1]
-        self.assertIn('padding:6px 7px', cells)
-        self.assertIn('line-height:19.8px', cells)
+        self.assertIn('padding:3px 7px', cells)
+        self.assertIn('line-height:16.8px', cells)
         self.assertIn('line-height:13.2px', re.search(re.escape('.card .rules-body .rule-table th.cat-col') + r'\{([^}]*)\}', css)[1])
         self.assertIn('.card .rules-body .rule-table th.cat-col{line-height:12.1px}', css)
         for stable in ('width:calc(100% + 32px)', 'margin-left:-16px;margin-right:-16px',
                        'width:calc(100% + 40px)', 'margin-left:-20px;margin-right:-20px',
                        'col.cat-col{width:18px}', 'col.col-cond{width:40%}', 'col.col-cond{width:auto}', '#rules-lamp-table col[span]{width:86px}', '#rules-lamp-table td.cell-gray-fold{white-space:nowrap}',
-                       '.rule-table td{padding:6px 4px}'):
+                       '.rule-table td{padding:3px 4px}',
+                       '#rules-lamp-table{font-size:14px;'):
             self.assertIn(stable, css)
 
     def test_range52_endpoint_labels_brighten_without_touching_track(self):
@@ -228,6 +229,29 @@ class RulesRegression(unittest.TestCase):
         self.assertIn('top:calc(100% + 4px)', gap_phone)
         self.assertIn('font-size:13px', gap_phone)
         self.assertIn('background:var(--range-track-line)', css)
+
+    def test_etf_code_uses_link_blue_in_all_panels_and_badge_is_removed(self):
+        css = page_assets.PAGE_CSS
+        cost_css = (ROOT / 'cost_panel.css').read_text(encoding='utf-8')
+        js = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
+        render = (ROOT / 'monitor_render.py').read_text(encoding='utf-8')
+        interaction = page_assets.PAGE_INTERACTION_JS
+        edit = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        # 首页 / 设置页 / 统计 / 仓位 / 编辑面板共用设置页那个链接蓝，只由 etf-code 一处上色。
+        self.assertIn('.etf-code{color:var(--link-blue,#6ba3f0)}', css)
+        self.assertIn('table.stk tr[data-symbol]>td.sym>.sym-box.etf-code{color:var(--link-blue,#6ba3f0)}', css)
+        self.assertIn('#costManage .ep-code.etf-code { color: var(--link-blue, #6ba3f0); }', cost_css)
+        self.assertIn('.sym.etf{color:var(--link-blue,#6ba3f0)}', edit)
+        # 「ETF」小标签彻底删掉，不再生成也不再靠 display:none 藏起来。
+        self.assertNotIn('<span class="tag">ETF</span>', render)
+        self.assertNotIn(':has(.tag)', css)
+        self.assertNotIn('.tag{display:inline-block', css)
+        self.assertNotIn('sym-box .tag{display:none}', css)
+        # 前端从主表标记取 ETF 集合：编辑、盈亏明细、当日贡献、动态统计名单一起上色。
+        self.assertIn("isEtf: !!sd.querySelector('.sym-box.etf-code')", js)
+        self.assertIn('function isEtfCode(sym)', js)
+        self.assertGreaterEqual(js.count('etf-code'), 5)
+        self.assertIn('anchorRow.querySelector(".sym-box.etf-code")', interaction)
 
     def test_earnings_date_palette_and_countdown_colors_share_all_display_paths(self):
         css = page_assets.PAGE_CSS
@@ -317,7 +341,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('#glossaryRulesBody h4{text-align:center}', css)
         self.assertIn('#glossaryRulesBody h5{color:var(--head-blue-on)}', css)
         # 只在这两块生效：报灯规则的小标题仍是白字。
-        self.assertIn('.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:inherit;font-weight:600}', css)
+        self.assertIn('.card .rules-body h5{margin:8px 0 3px;color:var(--text);font-size:inherit;font-weight:600}', css)
         # 蓝色规则必须写在通用 h5 规则之后（同文件内顺序即层叠顺序），否则会被白字覆盖。
         self.assertLess(css.index('.card .rules-body h5{'), css.index('#glossaryRulesBody h5{'))
         # 成本隔离样式已格式化；设置页仍从唯一规则模板派生。
@@ -1465,7 +1489,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         js = page_assets.PAGE_INTERACTION_JS
         self.assertIn('window.MM_SETTINGS.group_single_open === 1', js)
         self.assertNotIn('groupSummaryClickAt', js)   # 不再用 toggle 监听（会干扰统计面板的筛选归一化时序）
-        # 当日/风险/统计不是 group_ 前缀，不参与；2026-11-19 起「仓位」不再常开锁定，与普通分组同待遇。
+        # 当日/风险/统计不是 group_ 前缀，不参与；2026-11-26 起仓位（含长/短持仓）也全程不参与互斥。
         self.assertIn("details[id^='group_'][open]", js)
         self.assertNotIn('data-open-locked', js)
         script = r'''
@@ -1485,16 +1509,16 @@ vm.createContext(ctx);vm.runInContext(fs.readFileSync(0,'utf8'),ctx);
 const click=(card)=>{ev.click.forEach(f=>f({target:new Element(card)}));};
 const flush=()=>{while(frames.length)frames.shift()();};
 const focus=cards[3];
-// 用户点分组标题并展开：其它分组（含仓位、长/短持仓）都收起；2026-11-24 用户：点开其他分组时仓位面板也自动关闭
+// 2026-11-26 用户：只有普通分组参与「只开一个」；仓位、长/短持仓、统计全程不参与
 click(focus);focus.open=true;focus.top=40;flush();
-assert.equal(cards[1].open,false);assert.equal(cards[2].open,false);assert.equal(cards[4].open,false);
-assert.equal(cards[0].open,false);assert.equal(focus.open,true);
+assert.equal(cards[4].open,false);assert.equal(focus.open,true);
+assert.equal(cards[0].open,true);assert.equal(cards[1].open,true);assert.equal(cards[2].open,true);
 assert.equal(ctx.scrolled,-60);     // 点开的这组被上拽后拉回原位（top 100→40 补 -60）
 assert.equal(ctx.smooth,-13);       // 再平滑滚到 8.75% 高度线：屏高600→线在 round(52.5)=53，当前top 40 → top-线 = -13
-// 点「仓位」标题展开：与普通分组一样，其它分组收起
-cards[0].open=true;cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,false);
-// 点开仓位自己的长持清单：仓位保持展开，其它分组收起
-cards[0].open=true;cards[4].open=true;cards[1].open=true;click(cards[1]);flush();assert.equal(cards[0].open,true);assert.equal(cards[4].open,false);
+// 点「仓位」标题展开：不收起任何分组（仓位不参与互斥）
+cards[0].open=true;cards[4].open=true;click(cards[0]);flush();assert.equal(cards[4].open,true);
+// 点开仓位自己的长持清单：同样不收起任何分组，仓位保持展开
+cards[0].open=true;cards[4].open=true;cards[1].open=true;click(cards[1]);flush();assert.equal(cards[0].open,true);assert.equal(cards[4].open,true);
 // 点击后其实是在收起：不动其它
 cards[4].open=true;focus.open=false;click(focus);flush();assert.equal(cards[4].open,true);
 // 开关关闭：不动
@@ -1557,13 +1581,30 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
 
     def test_single_add_entry_replaces_per_group_add_forms(self):
         source = (ROOT / 'edit.html').read_text(encoding='utf-8')
-        self.assertEqual(source.count('class="card add-entry"'), 1)
+        # 2026-11-26：分类清单／新增股票／各分组共用一个底色框，定投提醒留在外面单独成卡。
+        self.assertEqual(source.count('class="card list-frame"'), 1)
+        self.assertEqual(source.count('class="add-entry"'), 1)
+        frame = source[source.index('<div class="card list-frame"'):source.index('<div class="card" id="dcaCard"')]
+        for ident in ('addEntry', 'groupEditor'):
+            self.assertIn('id="' + ident + '"', frame)
+        self.assertIn('股票备注名最长6字，ETF最长4字+ETF', frame)
+        self.assertNotIn('id="dcaCard"', frame)
         for ident in ('newSym', 'newNote', 'newMove', 'btnAddSym'):
             self.assertEqual(source.count('id="' + ident + '"'), 1)
         self.assertNotIn('class="add row"', source)
         self.assertNotIn('add-prices', source)
         self.assertNotRegex(source, r"newSym_|newReduce_|newTarget_|newTrig_|'add_'")
         self.assertIn('.add-entry .add-row{display:grid;grid-template-columns:76px minmax(0,1fr) 104px 52px;', source)
+
+    def test_cancelled_requests_never_show_an_error_banner(self):
+        """刷新／超时主动掐掉的旧请求不是故障：设置页不再把浏览器英文原话弹成红字。"""
+        source = (ROOT / 'edit.html').read_text(encoding='utf-8')
+        self.assertIn('function isCancelled(e)', source)
+        self.assertIn('if(isCancelled(e.reason)){e.preventDefault();return;}', source)
+        self.assertIn('signal is aborted', source)
+        self.assertIn('void Promise.resolve().then(loadRun).catch(swallowAbort);', source)
+        rs = (ROOT / 'run-status.js').read_text(encoding='utf-8')
+        self.assertIn("error.name === 'AbortError' || /aborted without reason/i.test", rs)
 
     def test_positions_full_width_rows_preserve_title_inset(self):
         css = page_assets.PAGE_CSS
@@ -2109,9 +2150,9 @@ focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();
                 self.assertIn("两条同周期只计一次，按简单穿越判断", glossary)
                 self.assertNotIn("均线已关闭", rules_text)
                 self.assertNotIn("当前0日", rules_text)
-                for name, period in (("短均线", short), ("长均线", long)):
-                    status = "启用" if period else "关闭"
-                    self.assertIn(name + "（" + status + "）", glossary)
+                self.assertIn("短均线：确认幅度", glossary)
+                self.assertIn("长均线：触及范围", glossary)
+                self.assertNotRegex(glossary, r"(?:短|长)均线（(?:启用|关闭)）")
                 self.assertNotRegex(rules_text + glossary, r'当前\d+日|\d+日均线|第一条|第二条|2～250')
                 x = monitor._analysis_context("OFFLINE", {},
                     {"closes": [100.0] * 60, "price": 100, "prev_close": 100,
@@ -3211,7 +3252,7 @@ class SignalFilterBucketRegression(unittest.TestCase):
 
     def test_jump_waits_for_layout_before_scroll_and_spym_is_short_named(self):
         """2026-11-24：当日清单点个股跳转落点偏（收起当日卡后页面才缩短，滚动已按旧高度开始）——
-        滚动改为等收起引起的重排落定（toggle 之后再两帧）才开始；SPYM 备注改「标普」。"""
+        滚动改为等收起引起的重排落定（toggle 之后再两帧）才开始；SPYM 备注改「标普ETF」。"""
         js = monitor.PAGE_INTERACTION_JS
         i = js.index('function revealStockRow')
         body = js[i:js.index('// 统计面板里的标的名字', i)]
@@ -3221,9 +3262,9 @@ class SignalFilterBucketRegression(unittest.TestCase):
         import json as _json
         h = _json.load(open(ROOT / 'holdings.json', encoding='utf-8'))['positions']
         n = _json.load(open(ROOT / 'symbol-names.json', encoding='utf-8'))
-        self.assertEqual(h['SPYM']['note'], '标普')
+        self.assertEqual(h['SPYM']['note'], '标普ETF')
         self.assertEqual(h['SPYM']['sector'], 'index_funds')        # 行业分类仍是指数基（页面标签「指数」）
-        self.assertEqual(n['SPYM'], '标普')
+        self.assertEqual(n['SPYM'], '标普ETF')
 
     def test_day_contrib_sorted_loss_to_profit(self):
         """2026-11-23：当日清单固定从亏损到盈利。"""

@@ -63,6 +63,7 @@
 #costManage .ep-h:nth-child(2), #costManage .ep-h:nth-child(3) { text-align: center; }
 /* 代码保持16px/原五列轨道；跨平台字体略宽时可用空列距，不把GOOGL裁成省略号。 */
 #costManage .ep-code { min-width: max-content; overflow: visible; font-size: 16px; color: var(--text); white-space: nowrap; text-align: left; }
+#costManage .ep-code.etf-code { color: var(--link-blue, #6ba3f0); }
 #costManage .ep-trade {
   box-sizing: border-box; width: 55px; height: 31px; padding: 4px 5px;
   border: 1px solid var(--cost-edit-border); border-radius: 4px;
@@ -75,17 +76,25 @@
   #costManage .ep-editor-head, #costManage .ep-editor-row { grid-template-columns: 58px 58px 58px 112px 90px; }
 }
 #costManage [data-trade-destination][hidden], #costManage [data-trade-fill-all][hidden] { display: none; }
-/* 卖出弹框数量行：输入框占满剩余宽度，「清仓」贴右、只填数量不提交；按钮高度对齐 33px 输入框，
-   下外距与 label 的 10px 一致，flex-end 对齐后两者底边齐平，不撑高弹框。 */
-#costManage .cost-trade-dialog .cost-trade-qty-row { display: flex; align-items: flex-end; gap: 8px; }
-#costManage .cost-trade-dialog .cost-trade-qty-row label { flex: 1 1 auto; min-width: 0; }
+/* 2026-11-26 用户：BUY/SELL 弹框两行——价格行「买入价$/卖出价$」＋输入框同一排，
+   股数行「股数」＋输入框＋清仓按钮同一排；标签固定 62px 让两行输入框左缘对齐，
+   输入框 flex:1 且 min-width:0，360px 弹框内不横向溢出。价格行下方留 16px，与股数行拉开。 */
+#costManage .cost-trade-dialog .cost-trade-price-row,
+#costManage .cost-trade-dialog .cost-trade-qty-row { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+#costManage .cost-trade-dialog .cost-trade-price-row { margin-bottom: 16px; }
+#costManage .cost-trade-dialog .cost-trade-price-row label,
+#costManage .cost-trade-dialog .cost-trade-qty-row label { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; margin: 0; font-size: 16px; }
+#costManage .cost-trade-dialog .cost-trade-price-row label > span,
+#costManage .cost-trade-dialog .cost-trade-qty-row label > span,
+#costManage .cost-trade-dialog .cost-trade-group label > span { flex: 0 0 62px; white-space: nowrap; }
 #costManage .cost-trade-dialog .cost-trade-fill {
-  flex: 0 0 auto; box-sizing: border-box; height: 33px; margin-bottom: 10px; padding: 0 10px;
+  flex: 0 0 auto; box-sizing: border-box; height: 33px; padding: 0 10px;
   border: 1px solid var(--cost-edit-border); border-radius: 4px;
   background: var(--cost-edit-bg); color: var(--cost-edit-text); font-size: 14px; cursor: pointer;
 }
+/* 价格/股数输入框与各自标签同一排：flex 占满剩余宽度，不再另起一行（原 width:100%+margin-top:5px）。 */
 #costManage .cost-trade-dialog input:not([type="radio"]) {
-  box-sizing: border-box; width: 100%; margin-top: 5px; padding: 6px 8px;
+  box-sizing: border-box; flex: 1 1 auto; width: auto; min-width: 0; margin-top: 0; padding: 6px 8px;
   background: var(--cost-input-bg); color: var(--text); border: 1px solid var(--cost-input-border);
   border-radius: 4px; font: inherit; font-size: 16px;
 }
@@ -105,13 +114,12 @@
   border: 1px solid var(--cost-edit-border); border-radius: 4px;
   background: var(--cost-edit-bg); color: var(--cost-edit-text); cursor: pointer;
 }
+/* 新增仓位弹框输入框的基础样式；宽度由下面各行栅格规则给，16px 防 iOS 聚焦放大。 */
 #costManage .cost-add-dialog input:not([type="radio"]) {
-  box-sizing: border-box; width: calc(100% - 42px); padding: 4px 6px;
+  box-sizing: border-box; padding: 3px 6px; height: 30px;
   border: 1px solid var(--cost-input-border); border-radius: 3px;
   background: var(--cost-input-bg); color: var(--text); font-size: 16px;
 }
-/* 三个字的标签（加仓价/减仓价/目标价）比两个字的多占约 16px，输入框相应收窄，避免弹框内横向溢出 */
-#costManage .cost-add-dialog input[data-add-trigger], #costManage .cost-add-dialog input[data-add-reduce], #costManage .cost-add-dialog input[data-add-target] { width: calc(100% - 58px); }
 #costManage .ep-grid input, #costManage .ep-cash input {
   width: 100%;
   min-width: 0;
@@ -130,7 +138,7 @@
 #costManage .ep-cash {
   display: grid;
   grid-template-columns: repeat(2,minmax(0,1fr));
-  gap: 6px 10px;
+  gap: 10px 10px;   /* 2026-11-26 用户：固收框现金合计这一排与现金／SGOV 这一排之间拉开 6→10px */
   margin-top: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--line);
@@ -141,7 +149,7 @@
   align-items: center;
   gap: 6px;
   font-size: 16px;
-  color: var(--dim);
+  color: var(--white);   /* 2026-11-26 用户：现金／固收／SGOV 三个标签与「现金合计 $…」同为白字 */
   white-space: nowrap;
 }
 #costManage .ep-cash-total { display: flex; align-items: center; min-width: 0; white-space: nowrap; font-size: 16px; color: var(--white); }
@@ -399,7 +407,6 @@
   .pi-kpi { gap: 3px; }
   #group_positions .cashbond-row .cb-item, #group_positions .cashbond-row .cb-total { gap: 3px; }
   #group_positions .cashbond-row { gap: 4px; }
-  #costManage .cost-add-dialog { margin: 8px auto auto; }
   #group_positions .asset-row .cost-legend b { line-height: 18px; }
 }
 
@@ -511,34 +518,52 @@
 .pi-log-text { text-decoration: underline; text-underline-offset: 3px; }   /* 2026-11-24 用户：「交易记录」四个字常驻下划线；右边的「↗」不加下划线（所以下划线放在文字 span 上，不放在整条链接上） */
 .pi-arrow { font-size: 13px; font-weight: 400; }
 
-/* 新增仓位弹窗压矮（键盘弹出也放得下）：代码｜长短持仓、数量｜成本、加仓价｜减仓价、目标价｜分类标签各并一排；
-   每格文字在上、控件满宽，字段一个不少。弹窗贴顶且超高可滚动，底部按钮不会被输入法吃掉。 */
+/* 2026-11-26 用户定稿：新增仓位弹窗 4 行——
+   ① 代码＋长短持仓同一排（不写「持仓」二字，代码框 72px ≈ 5 个大写字母）；
+   ② 成本价／股数两列，③ 备注／分类两列，两行标签同为 48px 让控件左缘对齐；
+   ④ 加仓价／减仓价／目标价三列，标签在上、输入框在下。
+   弹窗与 BUY/SELL 一样居中，超高时框内滚动，底部按钮不会被输入法吃掉。 */
 #costManage .cost-add-dialog { padding: 12px 14px; max-height: calc(100dvh - 16px); overflow-y: auto; }
-#costManage .cost-add-dialog h3 { margin: 0 0 6px; }
-#costManage .cost-add-dialog .add-pair { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 0 10px; margin: 5px 0; }
-#costManage .cost-add-dialog .add-pair > label { display: block; margin: 0; min-width: 0; font-size: 16px; }
-#costManage .cost-add-dialog .add-pair > label > span,
-#costManage .cost-add-dialog .add-hold-cell > span { display: block; margin: 0 0 2px; font-size: 13px; color: var(--dim); }
-#costManage .cost-add-dialog .add-hold-cell { min-width: 0; }
-#costManage .cost-add-dialog .add-hold-cell .cost-add-hold { display: flex; align-items: center; gap: 6px; height: 30px; }
+#costManage .cost-add-dialog h3 { margin: 0 0 10px; }
+#costManage .cost-add-dialog .add-symbol-row { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+#costManage .cost-add-dialog .add-symbol-row > label { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; margin: 0; font-size: 16px; }
+#costManage .cost-add-dialog .add-symbol-row > label > span { flex: none; white-space: nowrap; }
+#costManage .cost-add-dialog .add-symbol-row input[data-add-symbol] { flex: 0 0 72px; width: 72px; }
+#costManage .cost-add-dialog .add-hold-cell { flex: 1 1 auto; min-width: 0; }
+#costManage .cost-add-dialog .add-hold-cell .cost-add-hold { display: flex; align-items: center; justify-content: flex-end; gap: 10px; height: 30px; }
 #costManage .cost-add-dialog .add-hold-cell .cost-add-hold label { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; white-space: nowrap; margin: 0; }
 #costManage .cost-add-dialog .add-hold-cell .cost-add-hold input[type="radio"] { width: 13px; height: 13px; margin: 0; flex: none; }
-#costManage .cost-add-dialog .add-pair input:not([type="radio"]),
-#costManage .cost-add-dialog .add-pair select {
-  box-sizing: border-box; display: block; width: 100%; height: 30px; padding: 3px 6px;
+/* 两列行：标签固定 48px（「成本价」3 字最宽），输入框／下拉占满本列剩余宽度。 */
+#costManage .cost-add-dialog .add-duo { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 0 10px; margin: 0 0 10px; }
+#costManage .cost-add-dialog .add-duo > label { display: flex; align-items: center; gap: 6px; min-width: 0; margin: 0; font-size: 16px; }
+#costManage .cost-add-dialog .add-duo > label > span { flex: 0 0 48px; white-space: nowrap; }
+#costManage .cost-add-dialog .add-duo input,
+#costManage .cost-add-dialog .add-duo select {
+  box-sizing: border-box; flex: 1 1 auto; width: auto; min-width: 0; height: 30px; padding: 3px 6px;
   background: var(--cost-input-bg); color: var(--text); border: 1px solid var(--cost-input-border);
   border-radius: 3px; font: inherit; font-size: 16px; }
-#costManage .cost-add-dialog > label.add-note { display: block; margin: 5px 0; }
-#costManage .cost-add-dialog > label.add-note input { box-sizing: border-box; display: inline-block; width: calc(100% - 42px); height: 30px; padding: 3px 6px; }
+/* 备注行不等宽：备注输入框至少要放得下 7 个 16px 汉字（≈112px + 内距），
+   分类标签压到 32px、下拉固定 96px，剩下的宽度全给备注输入框。 */
+#costManage .cost-add-dialog .add-duo.add-note-row { grid-template-columns: minmax(0,1fr) auto; }
+#costManage .cost-add-dialog .add-duo.add-note-row > label:last-child > span { flex: 0 0 32px; }
+#costManage .cost-add-dialog .add-duo.add-note-row select { flex: 0 0 96px; width: 96px; }
+/* 三列行：标签在上、输入框在下，每列约 105px，三个字的标签放得下。 */
+#costManage .cost-add-dialog .add-trio { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 0 8px; margin: 0 0 8px; }
+#costManage .cost-add-dialog .add-trio > label { display: block; min-width: 0; margin: 0; }
+#costManage .cost-add-dialog .add-trio > label > span { display: block; margin: 0 0 2px; font-size: 13px; color: var(--dim); }
+#costManage .cost-add-dialog .add-trio input { width: 100%; }
 #costManage .cost-add-dialog > p { margin: 5px 0; }
 #costManage .cost-add-dialog > .cost-acts { margin: 6px 0 0; }
 #costManage .cost-add-dialog select.add-must { border-color: var(--lamp-red); }
-/* 卖出弹窗只留一个「分组」下拉（清仓后归属分组） */
-#costManage .cost-trade-dialog .cost-trade-group { margin: 10px 0; }
-#costManage .cost-trade-dialog .cost-trade-group label { display: block; margin: 0; font-size: 16px; }
+/* 2026-11-26 用户：分组下拉收窄（96px），与右侧「清仓后移组」同一排；BUY 时分组整行隐藏，
+   说明独占一行靠左。分组标签也固定 62px、间距同 8px，让下拉框左缘与上面两个输入框对齐。 */
+#costManage .cost-trade-dialog .cost-trade-foot { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+#costManage .cost-trade-dialog .cost-trade-group { flex: 0 0 auto; margin: 0; }
+#costManage .cost-trade-dialog .cost-trade-group label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; white-space: nowrap; }
 #costManage .cost-trade-dialog .cost-trade-group select {
-  box-sizing: border-box; width: 100%; margin-top: 5px; padding: 6px 8px;
+  box-sizing: border-box; width: 96px; margin: 0; padding: 6px 8px;
   background: var(--cost-input-bg); color: var(--text); border: 1px solid var(--cost-input-border);
   border-radius: 4px; font: inherit; font-size: 16px; }
+#costManage .cost-trade-dialog .cost-trade-foot [data-trade-note] { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 15px; line-height: 1.4; }
 #costManage .cost-trade-dialog [data-trade-destination][hidden] { display: none; }
 </style>

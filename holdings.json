@@ -81,31 +81,31 @@
       "sector": "consumer_discretionary"
     },
     "DRAM": {
-      "note": "存储芯片",
+      "note": "存储芯片ETF",
       "hold": "short",
       "cost": 49.6575,
       "sector": "technology"
     },
     "SPYM": {
-      "note": "标普",
+      "note": "标普ETF",
       "hold": "long",
       "cost": 88.77836555758391,
       "sector": "index_funds"
     },
     "SCHD": {
-      "note": "嘉信红利",
+      "note": "嘉信红利ETF",
       "hold": "long",
       "cost": 32.88110513491993,
       "sector": "index_funds"
     },
     "QQQM": {
-      "note": "纳指",
+      "note": "纳指ETF",
       "hold": "long",
       "cost": 296.8010053983034,
       "sector": "index_funds"
     },
     "XLI": {
-      "note": "工业行业",
+      "note": "工业行业ETF",
       "hold": "long",
       "cost": 167.9,
       "sector": "industrials"
@@ -170,15 +170,15 @@
   },
   "index_funds": {
     "IBIT": {
-      "note": "比特币"
+      "note": "比特币ETF"
     }
   },
   "technology": {
     "XLK": {
-      "note": "科技行业"
+      "note": "科技行业ETF"
     },
     "SOXX": {
-      "note": "半导体行业"
+      "note": "半导体ETF"
     },
     "SKHY": {
       "note": "海力士"
@@ -252,7 +252,7 @@
   },
   "healthcare": {
     "XLV": {
-      "note": "医疗保健行业"
+      "note": "医疗保健ETF"
     },
     "ABBV": {
       "note": "艾伯维"
@@ -278,7 +278,7 @@
   },
   "financials": {
     "XLF": {
-      "note": "金融行业"
+      "note": "金融行业ETF"
     },
     "CB": {
       "note": "安达保险"
@@ -307,7 +307,7 @@
   },
   "energy": {
     "XLE": {
-      "note": "能源行业"
+      "note": "能源行业ETF"
     },
     "XOM": {
       "note": "埃克森美孚"
@@ -335,7 +335,7 @@
   },
   "materials": {
     "XLB": {
-      "note": "原材料行业"
+      "note": "原材料ETF"
     },
     "LIN": {
       "note": "林德-工业气体"
@@ -343,7 +343,7 @@
   },
   "utilities": {
     "XLU": {
-      "note": "公用事业行业"
+      "note": "公用事业ETF"
     },
     "CEG": {
       "note": "核电"
@@ -354,7 +354,7 @@
   },
   "consumer_staples": {
     "XLP": {
-      "note": "必需消费行业"
+      "note": "必需消费ETF"
     },
     "WMT": {
       "note": "沃尔玛"
@@ -368,7 +368,7 @@
   },
   "communications": {
     "XLC": {
-      "note": "通信服务行业"
+      "note": "通信服务ETF"
     },
     "TTWO": {
       "note": "游戏"
@@ -382,7 +382,7 @@
   },
   "consumer_discretionary": {
     "XLY": {
-      "note": "非必需消费行业"
+      "note": "可选消费ETF"
     },
     "PDD": {
       "note": "拼多多"
@@ -402,7 +402,7 @@
   },
   "real_estate": {
     "XLRE": {
-      "note": "房地产行业"
+      "note": "房地产ETF"
     }
   }
 }

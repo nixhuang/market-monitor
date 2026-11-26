@@ -187,6 +187,13 @@
         ensureActive();
         return value;
       })()]);
+    } catch (error) {
+      // 本地 abort 掐掉 fetch 时，Chrome 抛的是原生 DOMException「signal is aborted without reason」；
+      // 归一成统一的取消信号，别让浏览器英文原话冒到页面提示里变成「请求出错」。
+      if (error && (error.name === 'AbortError' || /aborted without reason/i.test(String(error.message)))) {
+        throw cancelled();
+      }
+      throw error;
     } finally {
       window.clearTimeout(timeout);
       if (signal) signal.removeEventListener('abort', abort);

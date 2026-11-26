@@ -945,10 +945,10 @@ class TestGroups(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
         names = json.loads((root / 'symbol-names.json').read_text(encoding='utf-8'))
         holdings = json.loads((root / 'holdings.json').read_text(encoding='utf-8'))
-        expected = {'XLK': '科技行业', 'XLV': '医疗保健行业', 'XLF': '金融行业',
-                    'XLE': '能源行业', 'XLI': '工业行业', 'XLB': '原材料行业',
-                    'XLU': '公用事业行业', 'XLP': '必需消费行业', 'XLC': '通信服务行业',
-                    'XLY': '非必需消费行业', 'XLRE': '房地产行业'}
+        expected = {'XLK': '科技行业ETF', 'XLV': '医疗保健ETF', 'XLF': '金融行业ETF',
+                    'XLE': '能源行业ETF', 'XLI': '工业行业ETF', 'XLB': '原材料ETF',
+                    'XLU': '公用事业ETF', 'XLP': '必需消费ETF', 'XLC': '通信服务ETF',
+                    'XLY': '可选消费ETF', 'XLRE': '房地产ETF'}
         for symbol, label in expected.items():
             self.assertEqual(names[symbol], label)
         for group in monitor.GROUPS:
@@ -1641,9 +1641,13 @@ class TestGroups(unittest.TestCase):
         # 2026-11-18：ETF 不再强制排最后，与个股同按「级别 + 涨跌幅绝对值」排序
         # 红：NVDA(9%) → XLK(4%)；黄：QQQ(6%) → AAPL(3%)
         # 2026-11-03：代码＋中文名外面多了一层灯色框 <span class="sym-box LEVEL">
-        order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, position).start()
+        order = [re.search(r'<td class="sym"><span class="sym-box [\w -]+">' + s, position).start()
                  for s in ('NVDA', 'XLK', 'QQQ', 'AAPL')]
         self.assertEqual(order, sorted(order))
+        # 2026-11-26：ETF 只靠蓝色代码区分，「ETF」小标签连 DOM 都不再生成。
+        self.assertRegex(position, r'<span class="sym-box [a-z]+ etf-code">XLK')
+        self.assertRegex(position, r'<span class="sym-box [a-z]+">NVDA')
+        self.assertNotIn('class="tag">ETF', page)
 
     def test_position_etf_normal_sort_and_sector_etf_stays_in_main_when_quiet(self):
         def mk(symbol, level, chg, group):
@@ -1661,14 +1665,14 @@ class TestGroups(unittest.TestCase):
         pos = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
         # 2026-11-18：ETF 不再强制排最后，与个股同按「级别 + 涨跌幅绝对值」排序
         # 红档 QQQM(8%) 在 NVDA(2%) 前，黄档 SPYM(9%) 在 AAPL(1%) 前
-        order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, pos).start()
+        order = [re.search(r'<td class="sym"><span class="sym-box [\w -]+">' + s, pos).start()
                  for s in ('QQQM', 'NVDA', 'SPYM', 'AAPL')]
         self.assertEqual(order, sorted(order))
         tech = page.split('<div class=\"group-panel\" data-owner=\"technology\">', 1)[1].split('<div class=\"group-panel\" data-owner=\"healthcare\">', 1)[0]
         main, quiet = tech.split('<details class=\"quiet-list\">', 1)
         # 2026-11-18：板块 ETF 绿灯无警示仍常驻主表，不折叠进「无异动」
-        self.assertRegex(main, r'<td class="sym"><span class="sym-box \w+">XLK')
-        self.assertNotRegex(quiet, r'<td class="sym"><span class="sym-box \w+">XLK')
+        self.assertRegex(main, r'<td class="sym"><span class="sym-box [\w -]+">XLK')
+        self.assertNotRegex(quiet, r'<td class="sym"><span class="sym-box [\w -]+">XLK')
         self.assertIn('无异动 1 只', tech)
         # 板块 ETF 有警示时：排在同一预警级别第一位（红里 XLK 在 MU 前，不越过更高级别）；2026-11-24 用户最终确认保持
         items2 = [mk('XLK', 'red', 1.0, 'technology'), mk('MU', 'red', 5.0, 'technology'),
@@ -1676,14 +1680,14 @@ class TestGroups(unittest.TestCase):
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
             snap2 = monitor.build_snapshot({}, items2, {'positions': {}})
         tech2 = monitor.render({}, items2, 4, snapshot=snap2).split('<div class=\"group-panel\" data-owner=\"technology\">', 1)[1].split('<div class=\"group-panel\" data-owner=\"healthcare\">', 1)[0]
-        order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, tech2).start()
+        order = [re.search(r'<td class="sym"><span class="sym-box [\w -]+">' + s, tech2).start()
                  for s in ('XLK', 'MU', 'NVDA2', 'AMD')]
         self.assertEqual(order, sorted(order))
         items3 = [mk('XLK', 'yellow', 0.5, 'technology'), mk('MU', 'red', 5.0, 'technology'), mk('AMD', 'yellow', 7.0, 'technology')]
         with patch.object(monitor, 'TARGET_DATE', '2026-10-07'), patch.object(monitor, 'global_dca', return_value=None):
             snap3 = monitor.build_snapshot({}, items3, {'positions': {}})
         tech3 = monitor.render({}, items3, 3, snapshot=snap3).split('<div class=\"group-panel\" data-owner=\"technology\">', 1)[1].split('<div class=\"group-panel\" data-owner=\"healthcare\">', 1)[0]
-        order = [re.search(r'<td class="sym"><span class="sym-box \w+">' + s, tech3).start()
+        order = [re.search(r'<td class="sym"><span class="sym-box [\w -]+">' + s, tech3).start()
                  for s in ('MU', 'XLK', 'AMD')]
         self.assertEqual(order, sorted(order))      # 黄档 XLK 排黄档第一，仍在红档 MU 之后
         self.assertNotIn('财报 "', page)             # 手机端不再用 CSS 给每行补「财报」
@@ -3504,8 +3508,8 @@ class TestTargets(unittest.TestCase):
                 for name, value in (('data-quiet-keep', 'false'), ('data-price', '100.0'),
                                     ('data-prev-close', '99.0')):
                     self.assertEqual(re.findall(r'\b' + name + r'="([^"]*)"', attrs), [value])
-                self.assertRegex(body, r'<td class="sym"><span class="sym-box \w+">' + symbol)
-        self.assertRegex(page, r'<td class="sym"><span class="sym-box \w+">DDD')
+                self.assertRegex(body, r'<td class="sym"><span class="sym-box [\w -]+">' + symbol)
+        self.assertRegex(page, r'<td class="sym"><span class="sym-box [\w -]+">DDD')
         # 2026-11-16：持仓合成一张表，普通绿灯不再有折叠段，只以 data-quiet-keep 区分
         position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
         self.assertNotIn('class="quiet-list"', position)
@@ -7071,6 +7075,10 @@ class TestDisplayInteractions(unittest.TestCase):
         self.assertIn('card.id === "signalCounts" || card.id === "group_positions"', js)
         self.assertIn('document.querySelectorAll("details.card[open]")', js)
         self.assertIn('window.__mmCloseOtherGroups = closeOthers;', js)
+        # 2026-11-26：仓位（含长/短持仓）与统计双向不参与互斥。
+        self.assertIn('if (other === keep || isFree(other)) return;', js)
+        self.assertIn("if (/^group_positions/.test(d.id)) return;", js)
+        self.assertIn("if (/^group_positions/.test(other.id)) return;", js)
         self.assertIn('}, true);', js)   # click 在捕获阶段同步关
         self.assertIn('const zonePanel = target.closest ? target.closest(".zone-panel[data-owner]") : null;', js)
         self.assertIn('if (zoneCard) { zoneCard.open = true; keep = zoneCard; }', js)
@@ -7936,11 +7944,11 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
             self.assertNotRegex(re.search(r'<details[^>]*id="group_technology"[^>]*>', page).group(0), r'\bopen\b')
             self.assertEqual(re.findall(r'<details\b(?=[^>]*\sopen(?:\s|>))[^>]*\bid="(\w+)"[^>]*>', page), ['signalCounts'])  # open不限定末属性；2026-11-19 起仅统计展开，「仓位」同其余分组默认折叠
             self.assertRegex(technology.split('<details class="quiet-list"')[0],
-                                r'<td class="sym"><span class="sym-box \w+">AAPL')
+                                r'<td class="sym"><span class="sym-box [\w -]+">AAPL')
             self.assertIn('无异动 1 只', technology)
             position = page.split('id="group_positions"', 1)[1].split('id="group_focus"', 1)[0]
             self.assertRegex(position.split('<details class="quiet-list"')[0],
-                                r'<td class="sym"><span class="sym-box \w+">BRK-B')
+                                r'<td class="sym"><span class="sym-box [\w -]+">BRK-B')
 
     def test_earnings_row_and_statistics_use_the_same_source_timing(self):
         import html as H

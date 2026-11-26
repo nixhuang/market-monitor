@@ -32,7 +32,7 @@ h1{font-size:19px;margin:14px 0 4px;font-weight:600}
   background:#232833;border:1px solid #333a47;border-radius:8px}
 .sub a.back-board:hover{background:#2b303c}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
-  padding:12px;margin-bottom:10px}
+  padding:10px;margin-bottom:8px}
 /* 区块标题（分类清单/规则参数/定投提醒/新增股票/规则与说明）统一：16px 白字加粗 */
 h2{font-size:16px;color:#fff;font-weight:600;margin:0 0 8px;letter-spacing:.3px}
 h2 span{color:#5f6672;font-weight:400}
@@ -85,9 +85,12 @@ details.fold>summary,details.set>summary{gap:8px}
 /* 定位输入框收窄：只留 5 个大写字母（GOOGL／BRK-B）的宽度，与恢复清单／保存清单同排；16px 字号防 iOS 聚焦放大 */
 .group-tools #symSearch{flex:none;width:76px;min-width:0;padding:5px 8px;height:34px}
 .add-head{margin-bottom:8px}
-.add-head h2{margin:0}
+/* 2026-11-26 用户：「新增股票」标题比原来小 1px，并跟「布林带／行情源开关」小节标题同色浅蓝。 */
+.add-head h2{margin:0;font-size:15px;color:var(--head-blue,#bfd5ff)}
 .add-head #groupTotal{flex:none;white-space:nowrap;font-size:14px;color:var(--dim)}
 .group-note{margin:0 2px 10px}
+/* 2026-11-26 用户：目标价 0 说明固定 14px；手机档 .note 的 13px 由这条更高优先级压过，两档同号。 */
+.group-note .note{font-size:14px}
 .group-note .dirty-text{display:block;max-width:none;margin-bottom:4px}
 /* MM_RULECSS_BEGIN：由 page_assets 生成，不手改 */
 :root{
@@ -298,11 +301,15 @@ details.fold>summary,details.set>summary{gap:8px}
 #fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:var(--head-blue);font-size:13px;font-weight:600;touch-action:manipulation}
 #fedRules[open]>summary,#fedGlossary[open]>summary,details.card[open]:has(>.rules-body)>summary{border-bottom:1px solid var(--line)}
 #fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:-2px}
-.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:15px;line-height:1.65;overflow-wrap:anywhere}
-.card .rules-body section+section{margin-top:16px;padding-top:4px;border-top:1px solid var(--line)}
-.card .rules-body h4{margin:6px 0 8px;color:var(--head-blue);font-size:inherit;font-weight:600}
-.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:inherit;font-weight:600}
-.card .rules-body p{margin:4px 0;color:var(--dim);font-size:inherit;line-height:1.65}
+/* 2026-11-26 用户：报灯表要 14px、上下紧凑，整页更轻量。
+   字号只动报灯表（#rules-lamp-table 14px）；说明正文保持原本 15px，未授权不得改。
+   规则参数卡的灰字 16px 是 11/25 老花眼要求，单独写在 edit.html，不在此块。
+   轻量靠间距：区内上下 8/12→6/8、分节 16→12、h4 6/8→4/6、h5 12/4→8/3、p 4→3。 */
+.card .rules-body{padding:6px 12px 8px;color:var(--dim);font-size:15px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body section+section{margin-top:12px;padding-top:3px;border-top:1px solid var(--line)}
+.card .rules-body h4{margin:4px 0 6px;color:var(--head-blue);font-size:inherit;font-weight:600}
+.card .rules-body h5{margin:8px 0 3px;color:var(--text);font-size:inherit;font-weight:600}
+.card .rules-body p{margin:3px 0;color:var(--dim);font-size:inherit;line-height:1.65}
 .card .rules-body .rule-group{color:var(--head-blue-on)}
 .card .rules-body a{color:var(--head-blue-on);text-underline-offset:3px}
 .card .rules-body a:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
@@ -310,17 +317,19 @@ details.fold>summary,details.set>summary{gap:8px}
 .card .rules-body .lamp-yellow{color:var(--lamp-yellow);font-weight:600}
 .card .rules-body .lamp-purple{color:var(--purple);font-weight:600}
 .card .rules-body .tone-target-high{color:var(--target-high);font-weight:600}
-.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid var(--rules-border);font-size:inherit;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-/* 预警表原行盒12px×1.65=19.8px；只放大字，不随字号放大行距。 */
-.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:inherit;line-height:19.8px;overflow-wrap:anywhere}
+.card .rules-body .rule-table{table-layout:fixed;margin:5px 0 8px;border:1px solid var(--rules-border);font-size:inherit;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* 14px×1.2＝16.8px 行盒（原 12px×1.65＝19.8px）；所有规则表共用一套：单元格上下 6→3px、
+   行盒 19.8→16.8px、表外距 8/12→5/8px。列宽/分类竖排列宽不变，只压上下留白。 */
+.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:3px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:inherit;line-height:16.8px;overflow-wrap:anywhere}
 .card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:var(--cost-row-bg);border-bottom:1px solid var(--rules-border)}
-#rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border:0;border-collapse:collapse}
+/* 报灯表整表 14px：th/td 的 font-size:inherit 继承它；说明正文保持原本 15px，不随设置改动。 */
+#rules-lamp-table{font-size:14px;margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border:0;border-collapse:collapse}
 /* 报灯表只留横向细线：不再有外框和逐格竖框，分组末行用较亮的同宽细线分段。 */
 .card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center;border:0;border-bottom:1px solid var(--rules-cell-border)}
 .card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}
 .card .rules-body .rule-table col.cat-col{width:18px}
 .card .rules-body .rule-table col.col-cond{width:40%}
-.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:13.2px;font-size:inherit;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
+.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:3px 0;line-height:13.2px;font-size:inherit;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
 .card .rules-body .ar-band-up{color:var(--green)}
 .card .rules-body .ar-band-down{color:var(--red)}
 .card .rules-body .ar-rsi-up{color:var(--rsi-up)}
@@ -346,21 +355,20 @@ details.fold>summary,details.set>summary{gap:8px}
 .card .rules-body #rules-lamp-table tbody td:first-of-type{color:var(--rules-strong)}
 .card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
 .card .rules-body .rule-anchor{display:block;height:0}
-@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-20px;margin-right:-20px;width:calc(100% + 40px)}.card .rules-body .rule-table col.col-cond{width:auto}#rules-lamp-table col[span]{width:86px}#rules-lamp-table td.cell-gray-fold{white-space:nowrap}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
+@media(max-width:600px){.card .rules-body{padding:6px 8px 8px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:3px 4px}#rules-lamp-table{margin-left:-20px;margin-right:-20px;width:calc(100% + 40px)}.card .rules-body .rule-table col.col-cond{width:auto}#rules-lamp-table col[span]{width:86px}#rules-lamp-table td.cell-gray-fold{white-space:nowrap}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
 #signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
 #signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
 #signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
-#signalRulesBody h5.rule-original,#signalRulesBody .rule-layout-heading,#glossaryRulesBody h5{margin:14px 0 4px}
+#signalRulesBody h5.rule-original,#signalRulesBody .rule-layout-heading,#glossaryRulesBody h5{margin:10px 0 3px}
 #signalRulesBody .rule-layout-scope{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
-#signalRulesBody h4.rule-original{margin:18px 0 7px}
+#signalRulesBody h4.rule-original{margin:12px 0 5px}
 #signalRulesBody section:first-of-type h4.rule-original{margin-top:6px}
-.card .rules-body .signal-term{display:inline-flex;align-items:center;vertical-align:baseline;white-space:nowrap;overflow-wrap:normal;gap:1px}
-.card .rules-body .dir-arrow{display:inline-block;flex:none;width:auto;height:18px;vertical-align:middle;margin-left:2px;overflow:visible}
+/* 2026-11-26 用户要求：设置页不再自绘方向箭头，术语只留纯文字，不再插入 SVG。 */
 #signalRulesBody .nav-gray{color:var(--rules-muted)}
 #glossaryRulesBody h4{text-align:center}
 #glossaryRulesBody h5{color:var(--head-blue-on)}
 #glossaryRulesBody p{margin:2px 0;line-height:1.5;color:var(--rules-copy)}
-#glossaryRulesBody .rule-table{margin:6px 0 8px}
+#glossaryRulesBody .rule-table{margin:4px 0 6px}
 #glossaryRulesBody .rule-table th,#glossaryRulesBody .rule-table td{line-height:1.5}
 #glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:var(--lamp-yellow)}
 #glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:var(--lamp-red)}
@@ -416,13 +424,17 @@ kbd{background:#0e1014;border:1px solid var(--line);border-radius:4px;
   padding:1px 5px;font-size:11px;font-family:ui-monospace,Menlo,monospace}
 .setgrid{display:grid;grid-template-columns:1fr;gap:5px}
 .setrow{display:flex;gap:8px;align-items:center}
-.setrow label{flex:1;font-size:13px;color:var(--dim);line-height:1.4}
+/* 规则参数卡灰字：2026-11-25 曾按老花眼放大到 16px，2026-11-26 用户定为统一 15px
+   （参数名、默认值数字、开关名、卡底注、未保存提示都在内）；输入框白字仍 16px。
+   行高原为 13px×1.4≈18.2px，这里写死 18px，字号调整后单行／换行两种行距都不变。 */
+.setrow label{flex:1;font-size:15px;color:var(--dim);line-height:18px}
 .setrow input{width:96px;text-align:right;font-variant-numeric:tabular-nums}
-.setrow .def{flex:none;min-width:36px;text-align:right;font-size:13px;color:#6f7785;font-variant-numeric:tabular-nums}
-/* 2026-11-20 用户点名：两条开关标签、规则区一行说明、新增股票一行提示，这四处灰字各 +1px；
-   同类其它灰字保持原字号，不整页放大，也不追加同选择器覆盖块。 */
-.note.tip-up{font-size:13.5px}         /* 桌面 12.5 → 13.5 */
-.setrow label.tip-up{font-size:14px}  /* 桌面/手机 13 → 14 */
+.setrow .def{flex:none;min-width:36px;text-align:right;font-size:15px;color:#6f7785;font-variant-numeric:tabular-nums}
+/* 2026-11-20 曾给规则区说明／两条开关标签等四处灰字各 +1px；现在整卡灰字一律 15px，
+   不再留 13/13.5/14/16 的零碎档位，开关标签随 .setrow label 同号。 */
+.note.tip-up{font-size:15px}
+/* 2026-11-26 用户：清单区这两句提示固定 14px，不跟规则参数卡的 15px 走。 */
+.add-entry .note.tip-up,.list-frame .list-name-note{font-size:14px}
 details.set{margin-top:4px}
 details.set summary{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;padding:4px 0;outline:none}
 details.set[open] summary{margin-bottom:8px}
@@ -439,6 +451,16 @@ details.fold[open]>summary{border-bottom:1px solid var(--line);
   margin-bottom:8px}
 details.fold>summary span{color:#5f6672;font-weight:400}
 .card>details.fold{background:none;border:none;border-radius:0;padding:0;margin-bottom:0}
+/* 2026-11-26 用户：分类清单整块（标题栏／提示／新增股票／各分组）共用一个底色框；
+   定投提醒是框外单独一张卡。里面不再各自套框，分组之间只留一条细分隔线。 */
+.list-frame{padding:10px}
+.list-frame>.group-tools{margin:0 2px 10px}
+.list-frame>.group-note{margin:0 2px 8px}
+.list-frame>.add-entry{background:none;border:0;border-radius:0;padding:0;margin:0 0 8px}
+.list-frame .list-name-note{margin:0 2px 8px}
+.list-frame #groupEditor>details.fold{background:none;border:0;border-radius:0;padding:0 8px;margin:0}
+.list-frame #groupEditor>details.fold+details.fold{border-top:1px solid var(--line)}
+.list-frame #groupEditor>details.fold>summary{padding:0 2px}
 /* 手机上折叠标题同样 15px、46px 高（统一写在下面的总块里，这里不再单独覆盖）。 */
 details.fold .pane{padding-bottom:6px}
 .pager{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
@@ -489,7 +511,8 @@ button.danger{color:#c9433d;font-weight:500}   /* 底色/边框沿用普通灰�
 .card-head{margin-bottom:2px}
 .card-head h2{margin:0 auto 0 0}
 .dirty-note:empty{display:none}
-.dirty-note{display:block;margin:0 0 4px}
+/* 双类选择器压过手机档 .note 的 13px：规则卡「有未保存的改动」也跟灰字同号 15px。 */
+.note.dirty-note{display:block;margin:0 0 4px;font-size:15px}
 .edit-group .stock-row.hit{background:rgba(107,163,240,.2);box-shadow:0 0 0 2px rgba(107,163,240,.35);border-radius:6px}
 /* 「规则参数」卡：原来每个开关行固定 46px、设置行间距 5px+输入框上下 8px，文字之间空得过大；
    开关行收成 34px，设置行输入框上下 5px、行距 2px，小节标题与按钮行间距同步收紧。 */
@@ -499,10 +522,10 @@ details.set[open]>summary{margin-bottom:2px}
 .setrow input,.setrow select{padding-top:5px;padding-bottom:5px}
 .setsec{margin:6px 0 0}
 #btnSaveRules{margin-top:0}
-/* 手机设置页：所有可见文字不小于「监测开启」按钮的 13px。 */
+/* 手机设置页：其余灰字不小于「监测开启」按钮的 13px；
+   规则参数卡的灰字统一 15px 由上面单条规则管（.note.tip-up 优先级更高），这里不再覆盖。 */
 @media(max-width:600px){
 .sub,.sub a,.note,.monitor-note,.pager,.subsec,kbd{font-size:13px}
-.note.tip-up{font-size:14px}          /* 手机原 13 → 14，与两条开关标签同号 */
 #marketRiskRules h5{font-size:15px}
 }
 </style>
@@ -620,6 +643,7 @@ details.set[open]>summary{margin-bottom:2px}
     </p>
   </div>
 
+  <div class="card list-frame" id="listFrame">
   <div class="row group-tools">
     <h2>分类清单</h2>
     <input id="symSearch" type="search" placeholder="代码" aria-label="搜索股票代码，定位所在分组" autocapitalize="characters" autocomplete="off" enterkeyhint="search" maxlength="5">
@@ -628,9 +652,9 @@ details.set[open]>summary{margin-bottom:2px}
   </div>
   <div class="group-note">
     <span class="dirty-text" id="dirty" role="status" aria-live="polite"></span>
-    <p class="note">目标价填 0＝关闭这只股票的“达到”报灯（空间提醒照旧），清空即恢复。</p>
+    <p class="note">目标价填 0＝关闭“达到”报灯（空间提醒照旧），清空恢复</p>
   </div>
-  <div class="card add-entry" id="addEntry">
+  <div class="add-entry" id="addEntry">
     <div class="row add-head"><h2>新增股票</h2><span id="groupTotal"></span></div>
     <div class="add-row">
       <input class="s" id="newSym" placeholder="代码" aria-label="股票代码" autocapitalize="characters" disabled>
@@ -640,7 +664,9 @@ details.set[open]>summary{margin-bottom:2px}
     </div>
     <p class="note tip-up">新股选行业分组点添加，再改为「重点」</p>
   </div>
+  <p class="note tip-up list-name-note">股票备注名最长6字，ETF最长4字+ETF</p>
   <fieldset id="groupEditor" disabled style="border:0;padding:0;margin:0;min-width:0"></fieldset>
+  </div>
 
   <div class="card" id="dcaCard">
     <h2>定投提醒</h2>
@@ -666,7 +692,7 @@ details.set[open]>summary{margin-bottom:2px}
 </div>
 </div>
 
-<script src="./run-status.js?v=6aa054fdb67013e2"></script>
+<script src="./run-status.js?v=dca4cf2cd0cbd7a8"></script>
 <script>
 const OWNER='nixhuang', REPO='market-monitor', BRANCH='main';
 const API='https://api.github.com/repos/'+OWNER+'/'+REPO;
@@ -719,6 +745,13 @@ function configText(){return JSON.stringify({...extra,...data,group_monitoring:{
 
 const msg=document.getElementById('msg');
 const setMsg=(t,c)=>{msg.textContent=t||'';msg.className=c||'';};
+/* 刷新／超时／切标签时会主动掐掉上一个还没拿完的请求，这是正常换请求、不是故障。
+   统一认「取消」这一种错误并静默，其它真错误照旧提示。 */
+function isCancelled(e){
+  const name=e&&e.name, msg=String((e&&e.message)||e||'');
+  return name==='AbortError'||/aborted|请求已取消|signal is aborted/i.test(msg);
+}
+function swallowAbort(e){if(!isCancelled(e))setMsg('请求出错：'+String((e&&e.message)||e||''),'err');}
 const $=id=>document.getElementById(id);
 
 let TOKEN='';
@@ -828,7 +861,7 @@ function trackReceipt(file,response){
     setMsg(file+' 写入已被接受，但提交回执缺少有效 blob/commit SHA，无法验证生效；请检查仓库，不要盲目重复保存','err');
     return false;
   }
-  void window.MMRunStatus.watchConfig({file,blobSHA,commitSHA});
+  void Promise.resolve().then(()=>window.MMRunStatus.watchConfig({file,blobSHA,commitSHA})).catch(swallowAbort);
   setMsg(file+' 已提交，等待看板更新','ok');
   return true;
 }
@@ -982,7 +1015,9 @@ async function load(){
     render();
     if(dedupedCount){changed=true;$('dirty').textContent='有未保存的改动';}
     setMsg(LOCAL_PREVIEW?'本地预览：保存仅存本机草稿，不提交 GitHub':TOKEN?'':'手动模式：改完点保存，复制 JSON 到 GitHub',TOKEN?'':'ok');
-    loaded=true;loadingControls(false);loadRun();loadSettings();
+    loaded=true;loadingControls(false);
+    void Promise.resolve().then(loadRun).catch(swallowAbort);
+    void Promise.resolve().then(loadSettings).catch(swallowAbort);
   }catch(e){setMsg('仓库里的 holdings.json 不是合法 JSON：'+e,'err');loadingControls(!loaded);}
 }
 
@@ -1538,7 +1573,7 @@ $('btnWipe').onclick=()=>{
   $('tok').value='';
   $('authCard').classList.remove('hide');
   setMsg('本机令牌已清除，编辑内容未重载；无令牌仍可查看公开状态','ok');
-  void loadRun();
+  void Promise.resolve().then(loadRun).catch(swallowAbort);
 };
 $('tok').onkeydown=e=>{if(e.key==='Enter')$('btnTok').click();};
 
@@ -1566,7 +1601,11 @@ $('btnCopy').onclick=async ()=>{
 };
 
 window.addEventListener('error',e=>setMsg('页面脚本出错：'+e.message,'err'));
-window.addEventListener('unhandledrejection',e=>setMsg('请求出错：'+(e.reason&&e.reason.message||e.reason),'err'));
+/* 兜底只报真故障：被主动掐掉的请求（浏览器原话 signal is aborted without reason）不再弹红字。 */
+window.addEventListener('unhandledrejection',e=>{
+  if(isCancelled(e.reason)){e.preventDefault();return;}
+  setMsg('请求出错：'+String((e.reason&&e.reason.message)||e.reason),'err');
+});
 
 async function bootstrap(){
   loadingControls(true);

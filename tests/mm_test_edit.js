@@ -314,16 +314,22 @@ check(src.includes('<a class="back-board" href="./index.html">← 回看板</a>'
     && /\.edit-group>summary\{color:var\(--text\);font-size:15px/.test(src),
     '折叠标题字号统一 15px（手机桌面同档）');
   check(/\.setsec::after\{content:"";flex:1;height:1px/.test(src)&&/\.setsec\{display:flex;align-items:center/.test(src), '参数分类标题右侧有分隔线');
-  check(/\.setrow label\{flex:1;font-size:13px/.test(src)
+  check(/\.setrow label\{flex:1;font-size:15px;color:var\(--dim\);line-height:18px\}/.test(src)
+    && /\.setrow \.def\{[^}]*font-size:15px/.test(src)
+    && /\.note\.tip-up\{font-size:15px\}/.test(src)
+    && /\.note\.dirty-note\{[^}]*font-size:15px/.test(src)
+    && /\.add-entry \.note\.tip-up,\.list-frame \.list-name-note\{font-size:14px\}/.test(src)
+    && /\.group-note \.note\{font-size:14px\}/.test(src)
+    && /\.add-head h2\{margin:0;font-size:15px;color:var\(--head-blue,#bfd5ff\)\}/.test(src)
     && /\.setsec\{font-size:14px;font-weight:600;color:var\(--head-blue/.test(src) && /\.subsec\{font-size:12px/.test(src)
     && /\.note\{color:var\(--dim\);font-size:12\.5px/.test(src)
     && /\nh2\{font-size:16px;color:#fff;font-weight:600/.test(src),
-    '设置项文字加大：label 13px、分节小字 12px、说明 12.5px、小节标题 14px');
-  check(/\.card\{background:var\(--card\);border:1px solid var\(--line\);border-radius:12px;\s*padding:12px;margin-bottom:10px\}/.test(src)
+    '2026-11-26：规则卡灰字统一 15px、清单两句提示与目标价 0 说明 14px、新增股票 15px 浅蓝，其余版式字号保持');
+  check(/\.card\{background:var\(--card\);border:1px solid var\(--line\);border-radius:12px;\s*padding:10px;margin-bottom:8px\}/.test(src)
     && /\.setgrid\{display:grid;grid-template-columns:1fr;gap:5px\}/.test(src)
     && /\.row\{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:5px\}/.test(src)
     && !/details\.fold>summary\{font-size:15px;line-height:20px\}/.test(src),
-    '间距收窄：卡片外距 14→10、网格间隙 7→5、行距 7→5；手机 15px 覆盖行已删');
+    '间距收窄：卡片外距 14→8、内距 12→10、网格间隙 7→5、行距 7→5；手机 15px 覆盖行已删');
   // 2026-10-30 二次调整：同卡并列的两行开关、回看板下方的空隙、三块说明卡标题。
   check(/details\.set summary\{font-size:15px;color:#6ba3f0;font-weight:600;cursor:pointer;/.test(src)
     && /details\.set>summary\{box-sizing:border-box;height:46px;display:flex;/.test(src),
@@ -729,7 +735,7 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
     const got=Object.fromEntries(log.map(([id,text,cls])=>[id,[text,cls]]));
     check(got.set_boll_n&&got.set_boll_n[0]==='20'&&got.set_chg_red&&got.set_chg_red[0]==='4'&&got.set_boll_n[1]==='def', '数值框左侧标出默认数值（只标数值，不写「默认」）');
     check(got.set_use_realtime[0]==='开'&&got.set_group_single_open[0]==='关', '开关项标默认的开/关');
-    check(/\.setrow \.def\{[^}]*font-size:13px[^}]*color:#6f7785/.test(src), '默认值是灰字、不小于13px');
+    check(/\.setrow \.def\{[^}]*font-size:15px[^}]*color:#6f7785/.test(src), '默认值仍是灰字、跟设置项同号 15px');
   }
   // 搜索定位：精确优先、前缀其次、找不到返回 null；代码全页唯一所以只会命中一个分组；返回所在页
   const holderKey=sym=>Object.keys(T.data).find(g=>T.data[g]&&T.data[g][sym]);
@@ -740,7 +746,7 @@ delete T.data[unsafeKey];T.initGroups(baseGroups);
   check(T.findSymbol('NOSUCHXX')===null&&T.findSymbol('  ')===null, '找不到或空输入返回空，不报错');
   check(/<div class="row card-head">\s*<h2>规则参数<\/h2>\s*<button id="btnResetRules">[^<]*<\/button>\s*<button class="primary" id="btnSaveRules">/.test(src), '「恢复默认」「保存规则」在「规则参数」标题栏（恢复在左、保存在右）');
   // 2026-11-24 用户：定位框收窄放进标题栏（分类清单｜代码框｜定位｜恢复清单｜保存清单）；「有未保存的改动」和目标价 0 的说明放标题栏下一排
-  check(/<h2>分类清单<\/h2>\s*<input id="symSearch"[^>]*maxlength="5">\s*<button id="btnLocate">[^<]*<\/button>\s*<button id="btnReload">/.test(src)&&/<div class="group-note">\s*<span class="dirty-text" id="dirty"[^>]*><\/span>\s*<p class="note">目标价填 0＝关闭这只股票的“达到”报灯（空间提醒照旧），清空即恢复。<\/p>/.test(src)&&!src.includes('savebar'), '定位框收窄进标题栏；未保存提示与目标价 0 说明放在标题栏下一排');
+  check(/<h2>分类清单<\/h2>\s*<input id="symSearch"[^>]*maxlength="5">\s*<button id="btnLocate">[^<]*<\/button>\s*<button id="btnReload">/.test(src)&&/<div class="group-note">\s*<span class="dirty-text" id="dirty"[^>]*><\/span>\s*<p class="note">目标价填 0＝关闭“达到”报灯（空间提醒照旧），清空恢复<\/p>/.test(src)&&!src.includes('savebar'), '定位框收窄进标题栏；未保存提示与目标价 0 说明放在标题栏下一排');
   check(/<div class="row add-head"><h2>新增股票<\/h2><span id="groupTotal"><\/span><\/div>/.test(src)&&src.includes('.group-tools{flex-wrap:nowrap}')&&!src.includes('search-row'), '分组/记录数放在「新增股票」右侧，标题栏固定一行');
   check(src.includes('.card-head button,.group-tools button{padding:7px 10px;font-size:14px;min-width:76px;line-height:1.3}'), '恢复默认／保存规则／恢复清单／保存清单四个按钮同尺寸');
   {

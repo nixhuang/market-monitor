@@ -123,32 +123,28 @@ GLOSSARY_BODY = r"""<div class="rules-body" id="glossaryRulesBody">
 <h4>名词解释与计算</h4>
 <h5 id="glossary-chg">涨跌幅 · 计算与阈值</h5>
 <p>涨跌幅＝（现价÷昨收−1）×100%；报灯取绝对值。</p>
-<p>按这只股票自己的历史日波动分档：&lt;${vol_low_sigma}%低档，&gt;${vol_high_sigma}%高档，其余中档；不足${vol_min_returns}个有效日收益取中档。不是按今天的涨跌选档。</p>
-<p>所有分组适用；达到红门槛报红，否则达到黄门槛报黄。</p>
+<p>按这只股票自己的历史日波动分档：&lt;${vol_low_sigma}%低档，&gt;${vol_high_sigma}%高档，其余中档；不足${vol_min_returns}个有效日收益取中档。</p>
 ${chg_threshold_table}
 <h5 id="glossary-boll">布林逼近 · 自适应</h5>
-<p>布林为${boll_n}日、±${boll_k}倍标准差。逼近范围＝历史日波动×${boll_near_factor}（当前${boll_near_band_pct}%设置）；波动越大，范围越宽。关闭自适应或波动无效时固定${boll_near_pct}%。</p>
-<p>连续自适应示例，不是固定三档：</p>
+<p>布林为${boll_n}日、±${boll_k}倍标准差。逼近范围＝历史日波动×${boll_near_factor}（当前${boll_near_band_pct}%设置）；关闭自适应或波动无效时固定${boll_near_pct}%。</p>
 <table class="rule-table"><thead><tr><th scope="col">假设平时日波动</th><th scope="col">距上轨／下轨多近算逼近</th></tr></thead>
 <tbody><tr><th scope="row">1%</th><td>≤约${boll_example_1}%</td></tr><tr><th scope="row">2%</th><td>≤约${boll_example_2}%</td></tr><tr><th scope="row">3%</th><td>≤约${boll_example_3}%</td></tr></tbody></table>
-<p>碰轨为触及，穿轨为越轨。日波动来自历史，不是今天涨跌幅，也不是当天带宽的${boll_near_band_pct}%。</p>
-<p id="glossary-boll-dual">双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。布林与RSI的组合、分组限制及文字／报灯条件统一见《预警规则》。</p>
+<p>日波动来自历史，不是今天涨跌幅，也不是当天带宽的${boll_near_band_pct}%。</p>
+<p id="glossary-boll-dual">双轨命中时，只选带符号距离较小的一轨；越轨距离为负，相等选上轨。</p>
 <h5 id="glossary-rsi">RSI周期与条数</h5>
 <p>周期${rsi_periods}日；≥${rsi_high}超买；超卖按条数分档：1条线≤${rsi_low1}、2条线都≤${rsi_low2}、3条线都≤${rsi_low}。</p>
 <h5 id="glossary-vol">量比 · 自适应／固定切换</h5>
-<p>完整日量比＝成交量÷此前${vol_ratio_base}日均量。收盘分布有效、两条自适应参数启用且量比≥1×时，按每只标的自身历史量比连续计算，不套股价波动档；否则用固定门槛。</p>
-<p>对数量比的中位数为m、稳健波动尺度为s（1.4826×MAD）；原门槛T＝exp(m＋k×s)，红k＝${vol_ratio_red_z}、黄k＝${vol_ratio_z}。新门槛＝√(T×F)，红F＝${vol_ratio_red}×、黄F＝${vol_ratio}×，在对数空间压缩一半高低差异。达到红门槛优先报红，否则达到黄门槛报黄。</p>
-<p>高中低仅为历史量比波动的示意，不是固定三档。假设m＝0、低／中／高的s分别为0.15／0.30／0.50：</p>
+<p>完整日量比＝成交量÷此前${vol_ratio_base}日均量。收盘分布有效、两条自适应参数启用且量比≥1×时按每只标的自身历史量比连续计算，否则用固定门槛。</p>
+<p>原门槛T＝exp(m＋k×s)，m为对数量比中位数、s＝1.4826×MAD；红k＝${vol_ratio_red_z}、黄k＝${vol_ratio_z}。新门槛＝√(T×F)，红F＝${vol_ratio_red}×、黄F＝${vol_ratio}×。达到红门槛优先报红，否则达到黄门槛报黄。</p>
 ${vol_example_table}
-<p>表中倍数为假设示例；实际门槛随每只标的自身分布连续变化。k不是均量倍数；有效自适应未命中，不再用固定倍数补灯。</p>
-<p>盘中量比＝（当日累计量÷已开盘分钟）÷（${vol_ratio_base}日均量÷全日分钟）。开盘成交偏快、折算值偏高，故盘中门槛按常规交易日等效分钟（已开盘分钟÷当日全日分钟×390）放宽：不足 45／60／90／120 等效分钟约 1.69／1.45／1.30／1.13 倍；半日市按当日实际交易时长折算，之后回到固定门槛（红≥${vol_ratio_red}×、黄≥${vol_ratio}×）；放宽的是门槛，显示仍是原始折算值。</p>
+<p>示例不是固定三档；有效自适应未命中，不再用固定倍数补灯。</p>
+<p>盘中量比＝（当日累计量÷已开盘分钟）÷（${vol_ratio_base}日均量÷全日分钟）。开盘按常规交易日等效分钟（已开盘分钟÷当日全日分钟×390）放宽门槛；半日市按当日实际交易时长折算，之后回到固定门槛（红≥${vol_ratio_red}×、黄≥${vol_ratio}×）。放宽的是门槛，显示仍是原始折算值。</p>
 <p>开盘不足${intraday_vol_quiet_min}分钟、非交易时段或盘中值无效时退回最近完整日；收盘分布无效或自适应关闭用固定门槛，完整日量比缺失则不判。</p>
 <h5 id="glossary-ma">均线确认 · 短均线／长均线</h5>
-<p>短均线（${ma_short_status}）：确认幅度＝历史日波动×0.5，限${ma_confirm_min}%～${ma_confirm_max}%；波动无效取${ma_confirm_default}%。检查近${ma_confirm_lookback}日另一侧记录，历史不足只判简单穿越。</p>
-<p>启用后的连续自适应示例：</p>
+<p>短均线：确认幅度＝历史日波动×0.5，限${ma_confirm_min}%～${ma_confirm_max}%；波动无效取${ma_confirm_default}%。检查近${ma_confirm_lookback}日另一侧记录，历史不足只判简单穿越。</p>
 <table class="rule-table"><thead><tr><th scope="col">假设平时日波动</th><th scope="col">穿越确认幅度</th></tr></thead>
 <tbody><tr><th scope="row">1%</th><td>${ma_example_1}%</td></tr><tr><th scope="row">2%</th><td>${ma_example_2}%</td></tr><tr><th scope="row">3%</th><td>${ma_example_3}%</td></tr></tbody></table>
-<p>长均线（${ma_long_status}）：触及范围固定±${ma_long_band_pct}%；简单穿越不需额外确认幅度。</p>
+<p>长均线：触及范围固定±${ma_long_band_pct}%；简单穿越不需额外确认幅度。</p>
 <p>周期可在设置页编辑，填0关闭对应均线；两条同周期只计一次，按简单穿越判断。</p>
 <h5 id="glossary-target">目标／共识价</h5>
 <p>有效手填目标价优先；未手填才用自动平均共识价。空间＝（目标／共识价÷现价−1）×100%。</p>
@@ -157,7 +153,8 @@ ${vol_example_table}
 <h5 id="glossary-earnings">财报与显示</h5>
 <p>报灯与名单窗口沿用美东财报日期对比快照北京运行日，盘前／盘后不平移。名单含运行日至+${earn_list_days}天，另留前一日红字；红字保留期结束后才检查下一次。</p>
 <p>失败时沿用有效旧日期；“待公布”仅表示本站未取得日期。</p>
-<p>显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。已知时段按北京落点计算，盘后顺延一日；时段未知整条按最晚的美东盘后算：倒计时一律写北京落点日期（北京2天／北京明天 11/26 这类），不写时段词，要等北京第二天才写「已出」。有具体时段的财报整条有且只有一次美东日期和一次北京日期：有倒计时时北京日期写在括号里，倒计时隐藏时写在后面的北京说明里；时段待定未发布时在倒计时里写一次北京落点日期，已出后写北京落点日期与「未获取」，都不写「北京 待定」。财报文字按预警规则变红／黄；无预警时美东时间用蓝色、北京时间（含写北京的倒计时）用灰色。显示换算不改变报灯窗口。</p>
+<p>显示倒计时以快照北京运行日为基准，不随打开页面日期漂移。已知时段按北京落点计算，盘后顺延一日；时段未知整条按最晚的美东盘后算，一律写北京落点日期。</p>
+<p>财报文字按预警规则变红／黄；无预警时美东时间用蓝色、北京时间（含写北京的倒计时）用灰色。显示换算不改变报灯窗口。</p>
 <h5 id="glossary-dedup">标的去重与显示优先级</h5>
 <p>显示与报警优先级：市场风险／持仓 → 重点 → 其他。同一实质标的只显示最高级，清单记录不删。</p>
 <p>VIX与标普指数仅在市场风险显示。</p>
@@ -182,10 +179,10 @@ ${vol_example_table}
 <tr><th scope="row">抓到财报后的新价</th><td>来源更新日期不早于财报日即算完成，通常再等14天</td></tr>
 <tr><th scope="row">仍是旧数据／抓取失败</th><td>不算完成（失败按退避重试），隔天继续抓；最多连抓3天，之后结掉这笔事件、回归14天常规</td></tr></tbody></table>
 <p>例：已记录美东20日财报，21／22／23日各可抓一次；23日仍是旧数据就结掉，之后按14天常规到期。</p>
-<p>共识价与现价差6倍以上（多半拆股／合股）：页面写「待核实」、不算空间与达到，并插到队列最前重抓；重抓仍是旧数据则隔天再抓，一轮最多连抓3天，之后回归14天常规，那次仍是旧数据可再开一轮。</p>
+<p>共识价与现价差6倍以上：页面写「待核实」、不算空间与达到，插到队列最前重抓；仍是旧数据隔天再抓，最多连抓3天。</p>
 <h5 id="fetch-earnings">财报日期：来源与缓存间隔</h5>
 <p>StockAnalysis主源 → Nasdaq补时段、交叉核对 → 均无日期才用Yahoo。已核验官方事件优先，支持官网适配的个股可补查官网。</p>
-<p>只抓日期／时段，不抓财报内容或基本面。重查间隔按美东自然日、当前距财报天数选列：</p>
+<p>只抓日期／时段，不抓财报内容或基本面。重查间隔按美东自然日：</p>
 <table class="rule-table"><thead><tr><th scope="col">日期性质</th><th scope="col">距财报≥15天</th><th scope="col">距财报4～14天</th><th scope="col">距财报0～3天</th></tr></thead>
 <tbody><tr><th scope="row">供应商确认</th><td>14天</td><td>7天</td><td>3天</td></tr>
 <tr><th scope="row">官方核验</th><td>7天</td><td>3天</td><td>3天</td></tr>
@@ -200,7 +197,6 @@ ${vol_example_table}
 <tr><th scope="row">金融压力NFCI</th><td>芝加哥联储原始周度数据；过期或不可用时以FRED同一指标同步备用</td></tr>
 <tr><th scope="row">10年美债收益率</th><td>Yahoo ^TNX百分比日线；校验标的与收益率序列，不混用债券价格</td></tr>
 <tr><th scope="row">WTI原油</th><td>Yahoo NYMEX WTI期货日线；不是实时夜盘报价</td></tr></tbody></table>
-<p>来源、观测日期与失效状态看对应数据项；有效期与判定见综合判断与宏观细则。</p>
 <h5 id="fetch-reference">补充参考：缓存间隔</h5>
 <table class="rule-table"><thead><tr><th scope="col">数据</th><th scope="col">缓存／重试</th></tr></thead>
 <tbody><tr><th scope="row">NFCI</th><td>按周度公布时点到期；有旧缓存时，未发布／失败至少隔1小时重试，无有效缓存则下一轮再查</td></tr>
@@ -252,12 +248,8 @@ def _colorize(body):
 
 
 def _rules_markup(body):
-    arrows = {
-        "上轨": (18, "M3 3H15 M9 15V3 M5 7L9 3L13 7"),
-        "下轨": (18, "M3 15H15 M9 3V15 M5 11L9 15L13 11"),
-        "超买": (14, "M7 15V3 M3 7L7 3L11 7"),
-        "超卖": (14, "M7 3V15 M3 11L7 15L11 11"),
-    }
+    """2026-11-26 用户定稿：设置页不再自绘方向箭头，术语一律纯文字。
+    报灯总表里的 ▲▼／↑↓ 是条件文字，不是自绘箭头，照旧保留。"""
     aliases = {
         "rule-lamps": "alerts", "rule-text": "display", "rule-folded": "quiet",
         "rule-boll-upper": "upper", "rule-boll-lower": "lower", "rule-vol": "volume",
@@ -273,27 +265,6 @@ def _rules_markup(body):
         "glossary-earnings": "earnings-terms", "fetch-target": "fetch-consensus",
         "fetch-target-after-earnings": "fetch-after-earnings", "fetch-earnings": "fetch-earnings-cache",
     }
-    def arrow(match):
-        name = match[0]
-        width, path = arrows[name]
-        return (f'<span class="signal-term" data-rule-term="{name}">{name}<svg class="dir-arrow" '
-                f'viewBox="0 0 {width} 18" width="{width}" height="18" fill="none" '
-                'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
-                f'stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="{path}"/></svg></span>')
-
-    # 报灯总表自带 ▲▼／↑↓ 字符箭头，不再重复插入方向 SVG。
-    blocks = []
-
-    def stash(match):
-        blocks.append(match[0])
-        return f"\x00{len(blocks) - 1}\x00"
-
-    body = re.sub(r'<table\b[^>]*id="rules-lamp-table"[^>]*>.*?</table>', stash, body, flags=re.S)
-    # 属性和弱链接标签不插入 SVG，data-original 保持纯文本。
-    body = re.sub(r'<a\b[^>]*>.*?</a>|<[^>]+>|([^<]+)',
-                  lambda m: re.sub("上轨|下轨|超买|超卖", arrow, m[1]) if m[1] else m[0],
-                  body, flags=re.S)
-    body = re.sub(r"\x00(\d+)\x00", lambda m: blocks[int(m[1])], body)
     return re.sub(r'(<(?:h5|section) id="([^"]+)"[^>]*>)',
                   lambda m: m[1] + (f'<span id="{aliases[m[2]]}" class="rule-anchor"></span>'
                                     if m[2] in aliases else ""), body)
@@ -320,9 +291,6 @@ def _rule_values(settings, constants):
         for kind in ("chg",):
             for level in ("red", "yellow"):
                 values[f"{kind}_{tier}_{level}"] = round(values[f"{kind}_{level}"] * mult, 6)
-    for period in ("short", "long"):
-        n = values["ma_" + period]
-        values[f"ma_{period}_status"] = "启用" if n else "关闭"
     values["earn_far_start"] = values["earn_soon_days"] + 1
     factor = values["boll_near_band_pct"] / 100 * 4 * values["boll_sigma_factor"]
     values["boll_near_factor"] = round(factor, 6)
@@ -733,8 +701,9 @@ tr:first-child td{border-top:none}
 .dim{color:var(--dim);font-size:13px}
 .sym{font-weight:600}
 .note{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
-.tag{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:.3px;vertical-align:1px;color:var(--head-blue-on);background:var(--tag-bg);border:1px solid var(--tag-border)}
-.tag.quote-note{color:var(--dim);background:var(--quote-bg);border-color:var(--line);font-weight:400}
+/* ETF 代码统一这个蓝：首页 / 设置页 / 统计 / 仓位 / 编辑面板共用；不再生成「ETF」小标签。 */
+.etf-code{color:var(--link-blue,#6ba3f0)}
+.tag.quote-note{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:4px;font-size:11px;font-weight:400;letter-spacing:.3px;vertical-align:1px;color:var(--dim);background:var(--quote-bg);border:1px solid var(--line)}
 .tnote{color:var(--purple)}
 .signal-magenta{color:var(--signal-magenta)}
 .signal-red{color:var(--lamp-red)}
@@ -1349,8 +1318,8 @@ table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--
    用户明确要求「代码文字高度位置不变」——改的只有渐变的 position/size。 */
 table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0;font-size:14px;line-height:var(--row-height)}
 table.stk tr[data-symbol]>td.sym>.sym-box{display:grid;grid-template-rows:var(--row-height) var(--row-height);align-items:center;width:100%;max-width:100%;margin:0;padding:0;border:0;background:none;color:var(--text);line-height:var(--row-height);cursor:default}
-table.stk tr[data-symbol]>td.sym>.sym-box:has(.tag){color:var(--head-blue-on)}
-table.stk tr[data-symbol]>td.sym>.sym-box .tag{display:none}
+table.stk tr[data-symbol]>td.sym>.sym-box.etf-code{color:var(--link-blue,#6ba3f0)}
+table.stk tr[data-symbol]>td.sym>.sym-box .tag.quote-note{display:none}
 /* 代码列定宽后极少数超长中文备注名（如「赛默飞世尔科技」）省略显示，完整名仍在 data-full；
    不给它撑宽整列，否则价格区左边界又会跟着晃。 */
 table.stk tr[data-symbol]>td.sym>.sym-box .note{display:block;margin:0;font-size:11.5px;line-height:var(--row-height);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
@@ -1735,11 +1704,15 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 #fedRules>summary,#fedGlossary>summary,details.card:has(>.rules-body)>summary{cursor:pointer;padding:9px 12px;color:var(--head-blue);font-size:13px;font-weight:600;touch-action:manipulation}
 #fedRules[open]>summary,#fedGlossary[open]>summary,details.card[open]:has(>.rules-body)>summary{border-bottom:1px solid var(--line)}
 #fedRules>summary:focus-visible,#fedGlossary>summary:focus-visible,details.card:has(>.rules-body)>summary:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:-2px}
-.card .rules-body{padding:8px 12px 12px;color:var(--dim);font-size:15px;line-height:1.65;overflow-wrap:anywhere}
-.card .rules-body section+section{margin-top:16px;padding-top:4px;border-top:1px solid var(--line)}
-.card .rules-body h4{margin:6px 0 8px;color:var(--head-blue);font-size:inherit;font-weight:600}
-.card .rules-body h5{margin:12px 0 4px;color:var(--text);font-size:inherit;font-weight:600}
-.card .rules-body p{margin:4px 0;color:var(--dim);font-size:inherit;line-height:1.65}
+/* 2026-11-26 用户：报灯表要 14px、上下紧凑，整页更轻量。
+   字号只动报灯表（#rules-lamp-table 14px）；说明正文保持原本 15px，未授权不得改。
+   规则参数卡的灰字 16px 是 11/25 老花眼要求，单独写在 edit.html，不在此块。
+   轻量靠间距：区内上下 8/12→6/8、分节 16→12、h4 6/8→4/6、h5 12/4→8/3、p 4→3。 */
+.card .rules-body{padding:6px 12px 8px;color:var(--dim);font-size:15px;line-height:1.65;overflow-wrap:anywhere}
+.card .rules-body section+section{margin-top:12px;padding-top:3px;border-top:1px solid var(--line)}
+.card .rules-body h4{margin:4px 0 6px;color:var(--head-blue);font-size:inherit;font-weight:600}
+.card .rules-body h5{margin:8px 0 3px;color:var(--text);font-size:inherit;font-weight:600}
+.card .rules-body p{margin:3px 0;color:var(--dim);font-size:inherit;line-height:1.65}
 .card .rules-body .rule-group{color:var(--head-blue-on)}
 .card .rules-body a{color:var(--head-blue-on);text-underline-offset:3px}
 .card .rules-body a:focus-visible{outline:2px solid var(--head-blue-on);outline-offset:2px}
@@ -1747,17 +1720,19 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 .card .rules-body .lamp-yellow{color:var(--lamp-yellow);font-weight:600}
 .card .rules-body .lamp-purple{color:var(--purple);font-weight:600}
 .card .rules-body .tone-target-high{color:var(--target-high);font-weight:600}
-.card .rules-body .rule-table{table-layout:fixed;margin:8px 0 12px;border:1px solid var(--rules-border);font-size:inherit;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
-/* 预警表原行盒12px×1.65=19.8px；只放大字，不随字号放大行距。 */
-.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:inherit;line-height:19.8px;overflow-wrap:anywhere}
+.card .rules-body .rule-table{table-layout:fixed;margin:5px 0 8px;border:1px solid var(--rules-border);font-size:inherit;width:100%;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+/* 14px×1.2＝16.8px 行盒（原 12px×1.65＝19.8px）；所有规则表共用一套：单元格上下 6→3px、
+   行盒 19.8→16.8px、表外距 8/12→5/8px。列宽/分类竖排列宽不变，只压上下留白。 */
+.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:3px 7px;border:1px solid var(--rules-cell-border);text-align:left;vertical-align:top;font-size:inherit;line-height:16.8px;overflow-wrap:anywhere}
 .card .rules-body .rule-table thead th{color:var(--text);font-weight:600;background:var(--cost-row-bg);border-bottom:1px solid var(--rules-border)}
-#rules-lamp-table{margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border:0;border-collapse:collapse}
+/* 报灯表整表 14px：th/td 的 font-size:inherit 继承它；说明正文保持原本 15px，不随设置改动。 */
+#rules-lamp-table{font-size:14px;margin-left:-16px;margin-right:-16px;width:calc(100% + 32px);border:0;border-collapse:collapse}
 /* 报灯表只留横向细线：不再有外框和逐格竖框，分组末行用较亮的同宽细线分段。 */
 .card .rules-body #rules-lamp-table th,.card .rules-body #rules-lamp-table td{text-align:center;border:0;border-bottom:1px solid var(--rules-cell-border)}
 .card .rules-body #rules-lamp-table .rule-reverse{color:var(--dim)}
 .card .rules-body .rule-table col.cat-col{width:18px}
 .card .rules-body .rule-table col.col-cond{width:40%}
-.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:6px 0;line-height:13.2px;font-size:inherit;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
+.card .rules-body .rule-table th.cat-col{width:18px;min-width:18px;max-width:18px;padding:3px 0;line-height:13.2px;font-size:inherit;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-align:center;vertical-align:middle;background:var(--rules-category-bg);writing-mode:vertical-rl;-webkit-writing-mode:vertical-rl;text-orientation:upright;-webkit-text-orientation:upright}
 .card .rules-body .ar-band-up{color:var(--green)}
 .card .rules-body .ar-band-down{color:var(--red)}
 .card .rules-body .ar-rsi-up{color:var(--rsi-up)}
@@ -1783,21 +1758,20 @@ RULES_CSS = """.nav-orange{color:var(--orange)}
 .card .rules-body #rules-lamp-table tbody td:first-of-type{color:var(--rules-strong)}
 .card .rules-body [id],#fedRules,#fedGlossary{scroll-margin-top:14px}
 .card .rules-body .rule-anchor{display:block;height:0}
-@media(max-width:600px){.card .rules-body{padding:8px 8px 12px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:6px 4px}#rules-lamp-table{margin-left:-20px;margin-right:-20px;width:calc(100% + 40px)}.card .rules-body .rule-table col.col-cond{width:auto}#rules-lamp-table col[span]{width:86px}#rules-lamp-table td.cell-gray-fold{white-space:nowrap}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
+@media(max-width:600px){.card .rules-body{padding:6px 8px 8px}.card .rules-body .rule-table th,.card .rules-body .rule-table td{padding:3px 4px}#rules-lamp-table{margin-left:-20px;margin-right:-20px;width:calc(100% + 40px)}.card .rules-body .rule-table col.col-cond{width:auto}#rules-lamp-table col[span]{width:86px}#rules-lamp-table td.cell-gray-fold{white-space:nowrap}.card .rules-body .rule-table th.cat-col{line-height:12.1px}}
 #signalRulesBody .rule-entry,#glossaryRulesBody .glossary-entry{border-radius:5px;scroll-margin-top:44px;padding:0 8px;margin:0 -8px;transition:background-color .2s,box-shadow .2s}
 #signalRulesBody .rule-original{white-space:pre-wrap;overflow-wrap:anywhere}
 #signalRulesBody p.rule-original{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
-#signalRulesBody h5.rule-original,#signalRulesBody .rule-layout-heading,#glossaryRulesBody h5{margin:14px 0 4px}
+#signalRulesBody h5.rule-original,#signalRulesBody .rule-layout-heading,#glossaryRulesBody h5{margin:10px 0 3px}
 #signalRulesBody .rule-layout-scope{margin:1px 0;line-height:1.5;color:var(--rules-copy)}
-#signalRulesBody h4.rule-original{margin:18px 0 7px}
+#signalRulesBody h4.rule-original{margin:12px 0 5px}
 #signalRulesBody section:first-of-type h4.rule-original{margin-top:6px}
-.card .rules-body .signal-term{display:inline-flex;align-items:center;vertical-align:baseline;white-space:nowrap;overflow-wrap:normal;gap:1px}
-.card .rules-body .dir-arrow{display:inline-block;flex:none;width:auto;height:18px;vertical-align:middle;margin-left:2px;overflow:visible}
+/* 2026-11-26 用户要求：设置页不再自绘方向箭头，术语只留纯文字，不再插入 SVG。 */
 #signalRulesBody .nav-gray{color:var(--rules-muted)}
 #glossaryRulesBody h4{text-align:center}
 #glossaryRulesBody h5{color:var(--head-blue-on)}
 #glossaryRulesBody p{margin:2px 0;line-height:1.5;color:var(--rules-copy)}
-#glossaryRulesBody .rule-table{margin:6px 0 8px}
+#glossaryRulesBody .rule-table{margin:4px 0 6px}
 #glossaryRulesBody .rule-table th,#glossaryRulesBody .rule-table td{line-height:1.5}
 #glossary-chg-table thead th:nth-child(2),#glossary-amp-table thead th:nth-child(2){color:var(--lamp-yellow)}
 #glossary-chg-table thead th:nth-child(3),#glossary-amp-table thead th:nth-child(3){color:var(--lamp-red)}
@@ -1822,10 +1796,10 @@ COST_PANEL_HTML = r'''<details class="edit-panel cost-manage" id="costManage">
 RULES_INTERACTION_JS = ""  # 保留导出兼容；规则跳转、hash监听和高亮计时器已删除。
 PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
 
-// 2026-11-20 用户定稿：除「统计」和「仓位」可以与任何分组一起展开，其它所有分组
-// 任何情况下一次只能开一个。覆盖点标题、程序化打开、统计名单跳转、FIND 定位四条路径。
+// 2026-11-26 用户定稿（覆盖 11-19／11-24 旧口径）：当日、风险与其它普通分组任何情况下一次只开一个；
+// 统计、仓位（含长/短持仓）完全不参与——展开它们不收起别人，别人展开也不收起它们。
+// 覆盖点标题、程序化打开、统计名单跳转、FIND 定位四条路径。
 (function enforceSingleOpen() {
-  // 2026-11-24 用户：点开其他分组时自动关闭仓位面板。统计仍是常开栏；长短持仓（仓位的子清单）和仓位自己互不关闭。
   function isFree(card) {
     return !card || card.id === "signalCounts" || card.id === "group_positions" || /^group_positions_/.test(card.id);
   }
@@ -1833,7 +1807,7 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
     if (isFree(keep)) return;
     closeSubFolds();
     document.querySelectorAll("details.card[open]").forEach(function(other) {
-      if (other === keep || other.id === "signalCounts") return;
+      if (other === keep || isFree(other)) return;
       other.open = false;
     });
   }
@@ -2200,20 +2174,22 @@ document.addEventListener("toggle", function(event) {
   if (Math.abs(delta) > 1) window.scrollBy(0, delta);
   requestAnimationFrame(function() { revealSignalPanel(d); });
 }, true);
-// 设置「首页分组单个展开」=1：用户点标题展开某个分组（含长/短持仓）时自动收起其它分组；
-// 当日、风险、统计不参与（2026-11-19 起「仓位」不再常开，同普通分组）。只响应点标题（页面加载时的默认展开不触发）。
+// 设置「首页分组单个展开」=1：当日、风险以外的普通分组点标题展开时只保留一个。
+// 2026-11-26 用户：仓位（含长/短持仓）与统计不参与这套互斥，双向都不收起。
+// 撤销 11-19「仓位同普通分组」与 11-24「点开其他分组时关闭仓位」两条旧口径。
+// 只响应点标题（页面加载时的默认展开不触发）。
 document.addEventListener("click", function(event) {
   const summary = event.target instanceof Element ? event.target.closest("details[id^='group_'] > summary") : null;
   if (!summary || !(window.MM_SETTINGS && window.MM_SETTINGS.group_single_open === 1)) return;
   const d = summary.parentElement;
   if (!d) return;
+  if (/^group_positions/.test(d.id)) return;   // 仓位与长/短持仓展开：不收起任何分组
   const topBefore = d.getBoundingClientRect().top;
   requestAnimationFrame(function() {
     if (!d.open) return;
     document.querySelectorAll("details[id^='group_'][open]").forEach(function(other) {
-      // 2026-11-24 用户：点开其他分组时仓位面板也自动关闭；仓位与它的长短持仓清单（group_positions_*）互不关闭。
       if (other === d) return;
-      if (other.id === 'group_positions' && d.id.indexOf('group_positions_') === 0) return;   // 打开的是仓位自己的长／短持仓清单：仓位保持展开
+      if (/^group_positions/.test(other.id)) return;   // 仓位与长/短持仓不被别人收起
       other.open = false;
     });
     // 收起上面的分组会把页面拉上去：先瞬间拉回原来的屏幕位置，再平滑滚到顶部 8.75% 高度线（上面留给灵动岛）。
@@ -2497,7 +2473,9 @@ function renderSignalFilter() {
     link.className = "signal-member-jump";
     link.setAttribute("href", "#" + m.a);
     const sym = document.createElement("strong");
-    sym.className = "signal-member-symbol";
+    const anchorRow = m.a && document.getElementById(String(m.a).replace(/^#/, ""));
+    sym.className = "signal-member-symbol" +
+      (anchorRow && anchorRow.querySelector(".sym-box.etf-code") ? " etf-code" : "");
     sym.textContent = m.s;
     link.append(sym);
     if (m.n) {
@@ -2803,8 +2781,8 @@ function findStock() {
   }
   if (window.MM_SETTINGS && window.MM_SETTINGS.group_single_open === 1) {
     document.querySelectorAll("details[id^='group_'][open]").forEach(function(d) {
-      // 同上：FIND 定位到别的分组时仓位也收起；定位到长短持仓清单里的个股则保留仓位。
-      if (d.id === 'group_positions' && target.closest('.zone-panel')) return;
+      // 2026-11-26：仓位与长/短持仓不参与互斥，FIND 定位也不收起它们。
+      if (/^group_positions/.test(d.id)) return;
       if (!d.contains(target)) d.open = false;
     });
   }

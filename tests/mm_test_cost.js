@@ -571,14 +571,14 @@ test('上传中再次编辑并折叠，旧回执不自动上传草稿',async()=>
 
 
 
-test('退役基本面不影响ETF标签和财报日期元素',async()=>{
+test('退役基本面不影响ETF代码着色和财报日期元素',async()=>{
   let b=await boot({prepareDocument(doc){
     const row=doc.getElementById('s-aaa'),sd=row.querySelector('td.sym');
-    const tag=doc.createElement('span');tag.className='tag';tag.textContent='ETF';sd.appendChild(tag);
+    const box=doc.createElement('span');box.className='sym-box etf-code';sd.appendChild(box);
     const date=doc.createElement('span');date.className='earn urgent';date.textContent='10/21 美东盘后 · 北京10/22 04:00';row.children[1].appendChild(date);
   }});
   assert.equal(b.rows[0].isEtf,true);
-  assert.equal(b.doc.querySelector('#s-aaa .tag').textContent,'ETF');await b.enter();
+  assert.ok(b.doc.querySelector('#s-aaa .sym-box.etf-code'));await b.enter();
   assert.ok(b.doc.querySelector('#costMembers .ep-grid [data-cost-row][data-sym="AAA"]'));
   assert.equal(b.doc.querySelector('#s-aaa .earn.urgent').textContent,'10/21 美东盘后 · 北京10/22 04:00');
   b.paint();assert.ok(b.doc.querySelector('#s-aaa .earn.urgent'));
@@ -1186,24 +1186,28 @@ test('盈亏贡献行首灯条按个股灯级上色，备注名不留ETF后缀�
   assert.match(CSS,/font-size:14px;line-height:18\.75px/);
   assert.match(CSS,/\.cost-mini \.t-name \.cnt\{font-size:11\.5px;line-height:17\.25px/);
   */
-  // 备注名：ETF 已有胶囊标签就不再重复写 ETF；含中文的只保留中文部分
+  // 备注名：ETF 三个字母由用户手填进名字（手机上整行最多 7 个字符）；
+  // 非 ETF 仍不允许中英混排、不写 ETF。名字表与持仓记录必须一致，用户以后手改不受限制。
   const read=f=>JSON.parse(fs.readFileSync(path.join(__dirname,'..',f),'utf8'));
   const names=read('symbol-names.json'), holdings=read('holdings.json');
   const latin=/[A-Za-z]/, cn=/[一-鿿]/;
-  const dirty=v=>typeof v==='string'&&v&&((latin.test(v)&&cn.test(v))||v.indexOf('ETF')>=0);
-  for(const [k,v] of Object.entries(names)) assert.equal(dirty(v),false,'symbol-names '+k+'='+v);
+  const ETF_NAMED=new Set(['DRAM','IBIT','QQQM','SCHD','SOXX','SPYM','XLB','XLC','XLE','XLF','XLI','XLK','XLP','XLRE','XLU','XLV','XLY']);
+  const dirty=(k,v)=>typeof v==='string'&&v&&(ETF_NAMED.has(k)
+    ? Array.from(v).length>7
+    : ((latin.test(v)&&cn.test(v))||v.indexOf('ETF')>=0));
+  for(const [k,v] of Object.entries(names)) assert.equal(dirty(k,v),false,'symbol-names '+k+'='+v);
   let seen=0;
   for(const [g,items] of Object.entries(holdings)){
     if(g==='_说明'||g==='group_monitoring'||typeof items!=='object'||!items) continue;
     for(const [k,entry] of Object.entries(items)){
       if(!entry||typeof entry!=='object'||typeof entry.note!=='string') continue;
-      seen++; assert.equal(dirty(entry.note),false,'holdings '+g+'/'+k+'='+entry.note);
+      seen++; assert.equal(dirty(k,entry.note),false,'holdings '+g+'/'+k+'='+entry.note);
       if(names[k]!==undefined) assert.equal(entry.note,names[k],'双源不一致 '+k);
     }
   }
   assert.ok(seen>50,'备注名条目过少：'+seen);
-  assert.equal(names.SCHD,'嘉信红利');
-  assert.equal(holdings.positions.SCHD.note,'嘉信红利');
+  assert.equal(names.SCHD,'嘉信红利ETF');
+  assert.equal(holdings.positions.SCHD.note,'嘉信红利ETF');
 });
 
 // 目标状态由后端页面提供，面板只叠加自己的行情灯，不重新推断30/70或复活旧异常红。
@@ -1598,7 +1602,7 @@ for(const [name,first,second,total] of [
   assert.equal(totalNode.textContent,'现金合计 $'+String(total));
   assert.equal(totalNode.parentNode.className,'ep-cash');
   assert.equal(b.doc.querySelectorAll('.ep-cash label').length,3);
-  assert.deepEqual(b.doc.querySelectorAll('.ep-cash label').map(el=>el.querySelector('span').textContent),['现金','sgov','固收']);
+  assert.deepEqual(b.doc.querySelectorAll('.ep-cash label').map(el=>el.querySelector('span').textContent),['现金','SGOV','固收']);
   await b.save();assert.equal(b.state().editing,false);assert.equal(b.doc.getElementById('costManage').classList.contains('cost-edit-open'),false);
   assert.equal(b.doc.querySelector('.cashbond-row .cb-cash .cb-amt').textContent,'$'+String(Math.round(total)));
   assert.equal(b.requests.length,0);assert.equal(b.store.writes.length,0);
@@ -1795,20 +1799,32 @@ test('生产五列原生交易行：代码独立完整，无备注红叉市值�
   b.addPosition('GOOGL','long','2','99');const added=b.doc.querySelector('[data-cost-row][data-sym="GOOGL"]');
   assert.equal(added.querySelector('.ep-code').textContent,'GOOGL');assert.equal(added.children.length,5);await b.dispose();
 });
-test('SELL 弹框提示改为「卖出价必填；清仓后移组。」，BUY 说明不变',async()=>{
-  // 2026-11-14 用户：旧句「全卖在面板保存后归零移组，不改现金，忽略费用。」太长，压成一句。
-  // 买方文案是另一条分支，不能跟着被改短。
+test('BUY 提示「不填买入价，只写数量用于拆股」、SELL 提示「清仓后移组」，价格/股数标签随买卖切换',async()=>{
+  // 2026-11-26 用户：两句旧提示都压短；价格行与股数行各自左标签右输入框，清仓按钮在股数输入框右侧；
+  // SELL 的「清仓后移组」与分组下拉同一排右侧，BUY 说明独占一行。
   assert.ok(!SOURCE.includes('全卖在面板保存后归零移组'));
+  assert.ok(SOURCE.includes("'不填买入价，只写数量用于拆股'")&&SOURCE.includes("'清仓后移组'"));
   const b=await boot({noLocks:true,forbidRequests:true});await b.enter();
   const panel=b.doc.getElementById('costManage');
   panel.querySelector('[data-trade-action="sell"][data-sym="AAA"]').click();
   let d=b.doc.querySelector('.cost-trade-dialog');
   // 2026-11-19 Demo：无行业标签老股，卖出价提示改为提醒先补分类
   assert.equal(d.querySelector('[data-trade-note]').textContent,'这只还没有行业分类，清仓前请先补分类标签');
+  assert.equal(d.querySelector('[data-trade-price-label]').textContent,'卖出价$');
+  assert.equal(d.querySelector('.cost-trade-qty-row label span').textContent,'股数');
+  assert.equal(d.querySelector('.cost-trade-price-row label span'),d.querySelector('[data-trade-price-label]'));
+  assert.equal(d.querySelector('[data-trade-note]').parentElement.className,'cost-trade-foot');
+  assert.equal(d.querySelector('[data-trade-note]').previousElementSibling.className,'cost-trade-group');
+  assert.equal(d.querySelector('.cost-trade-group label span').textContent,'分组');
+  const fill=d.querySelector('[data-trade-fill-all]'),qty=d.querySelector('[data-trade-qty]');
+  assert.equal(fill.parentElement.className,'cost-trade-qty-row');
+  assert.equal(fill.previousElementSibling.querySelector('[data-trade-qty]'),qty);
   d.querySelector('[data-trade-cancel]').click();
   panel.querySelector('[data-trade-action="buy"][data-sym="AAA"]').click();
   d=b.doc.querySelector('.cost-trade-dialog');
-  assert.equal(d.querySelector('[data-trade-note]').textContent,'买入价可空用于拆股；不改现金，忽略费用。');
+  assert.equal(d.querySelector('[data-trade-note]').textContent,'不填买入价，只写数量用于拆股');
+  assert.equal(d.querySelector('[data-trade-price-label]').textContent,'买入价$');
+  assert.equal(d.querySelector('[data-trade-destination]').hidden,true);
   d.querySelector('[data-trade-cancel]').click();await b.dispose();
 });
 test('卖出弹框数量行清仓按钮只在SELL出现，按草稿持仓数量自动填入且不提交',async()=>{
@@ -2855,6 +2871,21 @@ test('新增入口真实dialog仅加草稿，代码规范化，无行情不捏�
   trade(b,'XYZ.A','sell','2.3456','3');assert.equal(b.state().DATA.items['XYZ.A'],undefined);
   assert.equal(b.puts().length,0);await b.dispose();
 });
+test('新加入的 ETF 代码一律蓝色：已知代码表、或备注名以 ETF 结尾',async()=>{
+  const b=await bootClear();
+  const add=(sym,note)=>{
+    b.doc.querySelector('[data-cost-add]').click();
+    const d=b.doc.querySelector('.cost-add-dialog');
+    d.querySelector('[data-add-symbol]').value=sym;d.querySelector('[data-add-qty]').value='1';
+    d.querySelector('[data-add-cost]').value='2';d.querySelector('[data-add-note]').value=note;
+    d.querySelector('[data-add-sector]').value='technology';d.querySelector('[data-add-confirm]').click();
+  };
+  add('ARKF','六个中文备注');   // 在已知 ETF 表里，备注不带 ETF 也应变蓝
+  add('ZZQQ','机器人ETF');      // 不在表里，靠备注名以 ETF 结尾判出
+  for(const sym of ['ARKF','ZZQQ'])
+    assert.ok(b.doc.querySelector('[data-cost-row][data-sym="'+sym+'"] .ep-code').classList.contains('etf-code'),sym+' 应为蓝色');
+  await b.dispose();
+});
 for(const [sym,hold,qty,cost] of [['AAA','long','1','2'],['SGOV','long','1','2'],['USD','long','1','2'],['BOND','long','1','2'],['^GSPC','long','1','2'],
   ['bad code','long','1','2'],['CCC','bad','1','2'],['CCC','long','0','2'],['CCC','short','1e2','2'],['CCC','long','1','--2']])
 test('新增拒绝非法/重复/专属口径 '+[sym,hold,qty,cost].join('/'),async()=>{
@@ -3128,7 +3159,7 @@ test('混合块复核：非法草稿期间旧ACK入口不读写也不吞错误',
 test('固收单框DOM仅三项，打开和未编辑保存不改变旧云两字段',async()=>{
   const b=await boot();b.respond(b.requests[0],meta(SEED));await settle();await b.enter();
   const labels=b.doc.querySelectorAll('.ep-cash label');
-  assert.deepEqual(labels.map(el=>el.querySelector('span').textContent),['现金','sgov','固收']);
+  assert.deepEqual(labels.map(el=>el.querySelector('span').textContent),['现金','SGOV','固收']);
   assert.equal(b.doc.querySelectorAll('input[data-sym="BOND"]').length,1);
   assert.equal(b.doc.querySelector('input[data-f="fixed"]'),null);
   assert.equal(b.doc.querySelector('input[data-f="fixed_cost"]').value,'15');
@@ -3235,10 +3266,13 @@ test('五列原生编辑器字号与交易命中区，长代码不压入买卖�
   assert.match(CSS,/#costManage \.cost-clear-dialog h3\{[^}]*font-size:18px/);assert.match(CSS,/#costManage \.cost-clear-dialog label\{display:block;[^}]*font-size:16px/);
   assert.match(CSS,/#costManage \.cost-clear-dialog p\{[^}]*font-size:15px/);assert.match(CSS,/#costManage \.cost-add-dialog input:not\(\[type="radio"\]\)\{[^}]*font-size:16px/);
   assert.match(CSS,/#costManage \.cost-add-hold,#costManage \.cost-clear-choice\{display:flex;[^}]*gap:16px/);assert.match(CSS,/#costManage \.cost-add-hold label,#costManage \.cost-clear-choice label\{display:inline-flex/);
-  // 2026-11-14：卖出弹框数量行右侧「清仓」按钮与输入框同排，hidden 时彻底不占位。
-  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-qty-row\{[^}]*display:flex;align-items:flex-end;gap:8px/);
-  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-qty-row label\{[^}]*flex:1 1 auto;min-width:0/);
-  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-fill\{[^}]*height:33px;[^}]*font-size:14px/);
+  // 2026-11-26：价格／股数各一行、左标签右输入框，清仓按钮贴在股数输入框右侧；分组下拉收窄与提示同排。
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-price-row,\s*#costManage \.cost-trade-dialog \.cost-trade-qty-row\{display:flex;align-items:center;gap:8px/);
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-price-row label,\s*#costManage \.cost-trade-dialog \.cost-trade-qty-row label\{display:flex;[^}]*min-width:0;margin:0;font-size:16px/);
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-price-row label\s*>\s*span,\s*#costManage \.cost-trade-dialog \.cost-trade-qty-row label\s*>\s*span,\s*#costManage \.cost-trade-dialog \.cost-trade-group label\s*>\s*span\{flex:0 0 62px/);
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-price-row\{margin-bottom:16px/);
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-fill\{flex:0 0 auto;[^}]*height:33px;[^}]*font-size:14px/);
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-group select\{[^}]*width:96px/);
   assert.match(CSS,/\[data-trade-fill-all\]\[hidden\]\{display:none/);
   assert.equal((CSS.match(/@media/g)||[]).length,2);assert.doesNotMatch(CSS,/@media\((?:max-width:(?!600)|min-width:(?!601))/);await b.dispose();
 });

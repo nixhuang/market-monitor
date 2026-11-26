@@ -261,6 +261,11 @@
     function rowBySym(sym) {
       return ROW_BY_SYM[sym] || null;
     }
+    // 已知 ETF 代码表，与设置页 ETF_SET、monitor.py 的 ETF_SYMBOLS 同源。
+    // 备注名按「中文＋ETF」手填的新标的不用登记也会变蓝（见 isEtfCode）。
+    var KNOWN_ETF_CODES = Object.create(null);
+    ('AGG,ARKF,ARKK,ARKQ,ARKW,ARKX,BAR,BIL,BITO,BIV,BND,BSV,DBC,DBP,DGRO,DGRW,DIA,DRAM,EEM,EFA,EMB,ETHA,EUV,EWJ,FBTC,FLOT,FXI,GBTC,GLD,GLDM,GLTR,GSG,HYD,HYG,HYMB,IAU,IAUM,IBIT,ICSH,IEF,IEFA,IEI,IEMG,ITOT,IVV,IWM,IYR,IYT,JNK,JPST,KBE,KIE,KRE,LQD,MGK,MGV,MTUM,MUB,NEAR,NOBL,PALL,PFF,PGX,PPLT,QQQ,QQQM,QUAL,REM,SCHA,SCHB,SCHD,SCHE,SCHF,SCHP,SCHR,SCHX,SCHZ,SDY,SGOL,SGOV,SHV,SHY,SIVR,SIZE,SLV,SMH,SOXL,SOXS,SOXX,SPHD,SPHQ,SPMO,SPY,SPYG,SPYM,SPYV,SPYX,SQQQ,SVXY,TFLO,TIP,TLT,TQQQ,UNG,USMV,USO,UVXY,VAW,VB,VBR,VCIT,VCR,VCSH,VDC,VDE,VEA,VFH,VGT,VHT,VIG,VIS,VLUE,VNQ,VNQI,VO,VOO,VOOG,VOOV,VPU,VTI,VTV,VUG,VWO,VXUS,VXX,VYM,XAR,XBI,XHB,XLB,XLC,XLE,XLF,XLI,XLK,XLP,XLRE,XLU,XLV,XLY,XME,XOP,XPH,XRT,XSW,XTN').split(',').forEach(function (s) { KNOWN_ETF_CODES[s] = 1; });
+    var ETF_CODES = Object.create(null);
     all('tr[data-symbol],tr[id^="s-"]').forEach(function (tr) {
       var sd = tr.querySelector('td.sym'),
         px = tr.querySelector('.px-price');
@@ -304,7 +309,7 @@
         sym: sym,
         tr: tr,
         note: note ? note.getAttribute('data-full') || note.textContent.trim() : '',
-        isEtf: !!sd.querySelector('.tag'),
+        isEtf: !!sd.querySelector('.sym-box.etf-code'),
         isLong: !!tr.closest('#group_positions_long,[data-zone="long"]'),
         price: price,
         prevClose: prev > 0 ? prev : 0,
@@ -328,7 +333,29 @@
       };
       ROWS.push(r);
       if (!ROW_BY_SYM[sym]) ROW_BY_SYM[sym] = r;
+      if (r.isEtf) ETF_CODES[sym] = 1;
     });
+    // 2026-11-26 用户：新加入的 ETF 代码同样显示蓝色。三条判据——
+    // ① 页面已渲染的主表行；② 已知 ETF 代码表；③ 备注名以 ETF 结尾（新加入、还没进主表的标的，
+    //    含备注写成 6 个中文字不带 ETF 时不适用，那种仍按代码表判断）。
+    function etfNoteOf(sym) {
+      var s = String(sym || '').toUpperCase();
+      // 持仓条目可能只有数量／成本、没有备注，不能在这里短路；逐个找第一个带备注的来源。
+      var sources = [
+        ROW_BY_SYM[s],
+        (typeof DATA !== 'undefined' && DATA && DATA.items && DATA.items[s]) || null,
+        (typeof addDraft !== 'undefined' && addDraft && addDraft[s] && addDraft[s].extra) || null,
+        (typeof addedPositions !== 'undefined' && addedPositions && addedPositions[s] && addedPositions[s].extra) || null
+      ];
+      for (var i = 0; i < sources.length; i++) {
+        if (sources[i] && sources[i].note) return String(sources[i].note);
+      }
+      return '';
+    }
+    function isEtfCode(sym) {
+      var s = String(sym || '').toUpperCase();
+      return !!(ETF_CODES[s] || KNOWN_ETF_CODES[s] || /ETF\s*$/i.test(etfNoteOf(s)));
+    }
 
     var GH = { owner: 'nixhuang', repo: 'market-monitor', path: 'position-costs.json', branch: 'data' };
     var GH_API = 'https://api.github.com/repos/' + GH.owner + '/' + GH.repo + '/contents/' + GH.path;
@@ -1449,7 +1476,9 @@
       clearDraft = {}; addDraft = {}; editDraft = {}; editBaseline = null; draftPending = false;
       clearRecord.targets.forEach(function (t) { delete addedPositions[t.sym]; });
       persist(); clearTrack(receipt);
-      clearMessage('本次数值已保存，持仓分组已统一更新，等待规则更新；现金仅按明确编辑保存');
+      // 2026-11-25 用户：保存成功不再留回执文字，免得把编辑框撑成大片空白又没法关闭；
+      // 成功／失败统一由抬头「仓位同步」显示，清空 NOTICE 后 syncCostNotice 会收起整个框。
+      clearMessage('');
       clearRecord.targets.forEach(function (t) {
         document.dispatchEvent(new CustomEvent('cost:cleared', { detail: { symbol: t.sym, group: t.destination } }));
       });
@@ -1893,14 +1922,17 @@
       try { tradeGuard(sym); } catch (err) { clearMessage(err.message); return; }
       if (!tradeDialog) {
         tradeDialog = document.createElement('dialog'); tradeDialog.className = 'cost-clear-dialog cost-trade-dialog';
-        // 2026-11-14：数量行右侧「清仓」只把当前持仓数量填进输入框，不提交交易、不改草稿；
-        // 只有卖出需要它（买入没有「全部」的概念），用 hidden 属性跟目的地那排一样开合。
-        tradeDialog.innerHTML = '<h3></h3><div class="cost-trade-qty-row"><label>成交数量<input data-trade-qty inputmode="decimal" step="0.0001" autocomplete="off"></label>' +
+        // 2026-11-26 用户：弹框两行——价格行「买入价$/卖出价$」与输入框同一排，股数行「股数」与
+        // 输入框同一排、清仓按钮贴在数量输入框右侧；说明与分组下拉同一排、落在收窄下拉框右侧。
+        tradeDialog.innerHTML = '<h3></h3>' +
+          '<div class="cost-trade-price-row"><label><span data-trade-price-label></span>' +
+          '<input data-trade-price inputmode="decimal" step="0.0001" autocomplete="off"></label></div>' +
+          '<div class="cost-trade-qty-row"><label><span>股数</span>' +
+          '<input data-trade-qty inputmode="decimal" step="0.0001" autocomplete="off"></label>' +
           '<button type="button" class="cost-trade-fill" data-trade-fill-all hidden>清仓</button></div>' +
-          '<label>成交价<input data-trade-price inputmode="decimal" step="0.0001" autocomplete="off"></label><p data-trade-note></p>' +
-          '<div class="cost-trade-group" data-trade-destination><label>分组<select data-trade-dest-select aria-label="卖出后归属分组">' +
+          '<div class="cost-trade-foot"><div class="cost-trade-group" data-trade-destination><label><span>分组</span><select data-trade-dest-select aria-label="卖出后归属分组">' +
           DEST_GROUPS.map(function (g) { return '<option value="' + esc(g[0]) + '">' + esc(g[1]) + '</option>'; }).join('') +
-          '</select></label></div><p data-trade-error role="status"></p>' +
+          '</select></label></div><p data-trade-note></p></div><p data-trade-error role="status"></p>' +
           '<div class="cost-acts"><button type="button" data-trade-cancel>取消</button><button type="button" class="primary" data-trade-confirm>加入草稿</button></div>';
         panel.appendChild(tradeDialog);
         tradeDialog.addEventListener('cancel', function () { tradeActive = null; });
@@ -1931,10 +1963,11 @@
       }
       tradeActive = { sym: sym, side: side, generation: editGeneration };
       tradeDialog.querySelector('h3').textContent = (side === 'buy' ? '买入 ' : '卖出 ') + sym;
+      tradeDialog.querySelector('[data-trade-price-label]').textContent = side === 'buy' ? '买入价$' : '卖出价$';
       tradeDialog.querySelector('[data-trade-qty]').value = ''; tradeDialog.querySelector('[data-trade-price]').value = '';
       tradeDialog.querySelector('[data-trade-error]').textContent = '';
-      tradeDialog.querySelector('[data-trade-note]').textContent = side === 'buy' ? '买入价可空用于拆股；不改现金，忽略费用。' :
-        (sectorOf(sym) ? '卖出价必填；清仓后移组。' : '这只还没有行业分类，清仓前请先补分类标签');
+      tradeDialog.querySelector('[data-trade-note]').textContent = side === 'buy' ? '不填买入价，只写数量用于拆股' :
+        (sectorOf(sym) ? '清仓后移组' : '这只还没有行业分类，清仓前请先补分类标签');
       tradeDialog.querySelector('[data-trade-destination]').hidden = side !== 'sell';
       tradeDialog.querySelector('[data-trade-fill-all]').hidden = side !== 'sell';
       // 老股已有行业标签 → 清仓分组自动预选同名分组（不点也有默认）；没标签的回落到「重点」。
@@ -1983,20 +2016,21 @@
       if (!editing || !writer || disposed || clearBusy) return;
       if (!addDialog) {
         addDialog = document.createElement('dialog'); addDialog.className = 'cost-clear-dialog cost-add-dialog';
-        // 2026-11-19：弹窗压矮（键盘弹出也放得下）——代码｜长短持仓、数量｜成本、加仓价｜减仓价、目标价｜分类标签各并一排。
+        // 2026-11-26 用户定稿：① 代码＋长短持仓同一排（不写「持仓」二字，代码框按 5 个字母宽）；
+        // ② 成本价／股数两列，③ 备注／分类两列，④ 加仓价／减仓价／目标价三列；备注名仍是最多 7 字。
         addDialog.innerHTML = '<h3>新增仓位</h3>' +
-          '<div class="add-pair"><label><span>代码</span><input data-add-symbol maxlength="32" aria-label="新仓位代码"></label>' +
-          '<div class="add-hold-cell"><span>持仓</span><div class="cost-add-hold"><label><input type="radio" name="addHold" data-add-hold value="long" checked>长持仓</label>' +
+          '<div class="add-symbol-row"><label><span>代码</span><input data-add-symbol maxlength="32" aria-label="新仓位代码"></label>' +
+          '<div class="add-hold-cell"><div class="cost-add-hold"><label><input type="radio" name="addHold" data-add-hold value="long" checked>长持仓</label>' +
           '<label><input type="radio" name="addHold" data-add-hold value="short">短持仓</label></div></div></div>' +
-          '<div class="add-pair"><label><span>数量</span><input data-add-qty inputmode="decimal" aria-label="新仓位数量"></label>' +
-          '<label><span>成本</span><input data-add-cost inputmode="decimal" aria-label="新仓位成本"></label></div>' +
-          '<label class="add-note">备注 <input data-add-note maxlength="7" placeholder="中文名，选填" aria-label="新仓位备注名"></label>' +
-          '<div class="add-pair"><label><span>加仓价</span><input data-add-trigger inputmode="decimal" placeholder="选填" aria-label="新仓位加仓价"></label>' +
-          '<label><span>减仓价</span><input data-add-reduce inputmode="decimal" placeholder="选填" aria-label="新仓位减仓价"></label></div>' +
-          '<div class="add-pair"><label><span>目标价</span><input data-add-target inputmode="decimal" placeholder="选填，0＝关闭达到报灯" aria-label="新仓位目标价"></label>' +
-          '<label><span>分类标签</span><select data-add-sector aria-label="分类标签"><option value="">选择分类标签</option>' +
+          '<div class="add-duo"><label><span>成本价</span><input data-add-cost inputmode="decimal" aria-label="新仓位成本价"></label>' +
+          '<label><span>股数</span><input data-add-qty inputmode="decimal" aria-label="新仓位股数"></label></div>' +
+          '<div class="add-duo add-note-row"><label><span>备注</span><input data-add-note maxlength="7" placeholder="中文名，选填" aria-label="新仓位备注名"></label>' +
+          '<label><span>分类</span><select data-add-sector aria-label="分类标签"><option value="">选择分类</option>' +
           SECTOR_GROUPS.map(function (g) { return '<option value="' + esc(g[0]) + '">' + esc(g[1]) + '</option>'; }).join('') +
           '</select></label></div>' +
+          '<div class="add-trio"><label><span>加仓价</span><input data-add-trigger inputmode="decimal" placeholder="选填" aria-label="新仓位加仓价"></label>' +
+          '<label><span>减仓价</span><input data-add-reduce inputmode="decimal" placeholder="选填" aria-label="新仓位减仓价"></label>' +
+          '<label><span>目标价</span><input data-add-target inputmode="decimal" placeholder="选填" aria-label="新仓位目标价"></label></div>' +
           '<p data-add-message role="status"></p>' +
           '<div class="cost-acts"><button type="button" data-add-cancel>取消</button><button type="button" class="primary" data-add-confirm>加入草稿</button></div>';
         panel.appendChild(addDialog);
@@ -2434,7 +2468,7 @@
     }
     function editorRow(sym, cost, qty) {
       return '<div class="ep-editor-row" data-cost-row data-sym="' + esc(sym) + '">' +
-        '<span class="ep-code">' + esc(sym) + '</span>' +
+        '<span class="ep-code' + (isEtfCode(sym) ? ' etf-code' : '') + '">' + esc(sym) + '</span>' +
         ['buy', 'sell'].map(function (side) {
           return '<button type="button" class="ep-trade" data-trade-action="' + side + '" data-sym="' + esc(sym) +
             '" aria-label="' + (side === 'buy' ? '买入 ' : '卖出 ') + esc(sym) + '">' + side.toUpperCase() + '</button>';
@@ -2448,7 +2482,7 @@
       }).join('');
       var fields = [
         ['现金', 'USD', 'cash', cashFirst(DATA)],
-        ['sgov', 'USD', 'cash_extra', DATA.cash_extra],
+        ['SGOV', 'USD', 'cash_extra', DATA.cash_extra],
         ['固收', 'BOND', 'fixed_cost', fixedCost],
       ]
         .map(function (f) {
@@ -2586,7 +2620,7 @@
               r.lv +
               '"><a class="signal-member-jump" href="#' +
               esc(r.tr.id) +
-              '"><span class="signal-member-symbol">' +
+              '"><span class="signal-member-symbol' + (r.isEtf ? ' etf-code' : '') + '">' +
               esc(r.sym) +
               '</span>' +
               (r.note ? '<span class="note">' + esc(r.note) + '</span>' : '') +
@@ -2726,7 +2760,7 @@
       var link = ROW_BY_SYM[sym] && ROW_BY_SYM[sym].tr && ROW_BY_SYM[sym].tr.id, sec = sectorTag(sym);
       // 与统计名单同一个排法：代码 备注名（行业）；全角括号的空白边收掉（.pi-pp），不占全角位置
       var name = '<span class="pi-pname">' + (link ? '<a class="signal-member-jump pi-pnm" href="#' + esc(link) + '">' : '<span class="pi-pnm">') +
-        '<span class="pi-psym">' + esc(sym) + '</span>' + (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '</span>') +
+        '<span class="pi-psym' + (isEtfCode(sym) ? ' etf-code' : '') + '">' + esc(sym) + '</span>' + (cn ? '<span class="pi-pcn">' + esc(cn) + '</span>' : '') + (link ? '</a>' : '</span>') +
         (sec ? '<span class="pi-psec"><span class="pi-pp">（</span>' + esc(sec) + '<span class="pi-pp">）</span></span>' : '') + '</span>';
       // 五个格子：名称｜盈亏金额（左对齐）｜盈亏比（右对齐）｜市值｜仓位（右对齐），各占固定列位，列间的余宽平分
       var cls = up ? 'up' : 'down';
@@ -2997,7 +3031,7 @@
               fmt1(Math.abs(x.share)) +
               '%"><span class="cn-name">' +
               (targetId ? '<a class="signal-member-jump" href="#' + esc(targetId) + '">' : '') +
-              '<span class="cnsym">' +
+              '<span class="cnsym' + (isEtfCode(x.sym) ? ' etf-code' : '') + '">' +
               esc(x.sym) +
               '</span>' +
               (x.cn ? ' <span class="cncn">' + esc(x.cn) + '</span>' : '') +
