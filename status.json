@@ -9,15 +9,15 @@
     "next_in": 11,
     "next_date": "2026-12-11"
   },
-  "run_id": "45818887200",
+  "run_id": "45832282668",
   "request_id": "",
-  "source_sha": "2d32d3d1234712fd65282a45b872d9cbc27ae769",
-  "input_hash": "14388a55af4547b459149c59866aa975079ff7cceccfe940efbe882f232441e8",
-  "build_id": "45818887200-1",
-  "started_at": "2026-11-26T12:21:28+00:00",
-  "started_at_bj": "2026-11-26T20:21:28+08:00",
-  "finished_at": "2026-11-26T20:25:08.224386+08:00",
-  "finished_at_bj": "2026-11-26T20:25:08+08:00",
+  "source_sha": "fca25eafeacf604c582870b5845e41e1ab5f6120",
+  "input_hash": "a7ed9d9b5259a52551a03dea4fa959027ceaee93058fdf30c501bd14efd5ced2",
+  "build_id": "45832282668-1",
+  "started_at": "2026-11-26T13:45:41+00:00",
+  "started_at_bj": "2026-11-26T21:45:41+08:00",
+  "finished_at": "2026-11-26T21:48:36.383888+08:00",
+  "finished_at_bj": "2026-11-26T21:48:36+08:00",
   "event": "push",
   "target_trade_date": "2026-11-25",
   "mode": "closed",
@@ -2339,7 +2339,7 @@
     "sp500": "2026-11-25",
     "ust10": "2026-11-25",
     "nfci": "2026-11-20",
-    "breadth": "2026-11-24",
+    "breadth": "2026-11-25",
     "nasdaq": "2026-11-25"
   },
   "treasury_reference": {
@@ -2427,7 +2427,7 @@
     "checked_at": "2026-11-25T09:48:42.793969-05:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-11-26T12:24:00.628645+00:00"
+    "asof": "2026-11-26T13:47:39.789369+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
@@ -3166,7 +3166,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-11-26T12:25:08.200207+00:00",
+    "asof": "2026-11-26T13:48:36.342064+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -5309,7 +5309,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-11-26T12:25:08.179902+00:00",
+    "asof": "2026-11-26T13:48:36.314623+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -6715,9 +6715,9 @@
       "incomplete": false,
       "contract_symbol": "CLF27.NYM"
     },
-    "assessed_at": "2026-11-26T20:23:59.709670+08:00",
+    "assessed_at": "2026-11-26T21:47:38.535991+08:00",
     "schema_version": 2,
-    "asof": "2026-11-26T12:24:00.838803+00:00"
+    "asof": "2026-11-26T13:47:40.122711+00:00"
   },
   "data_lag": {
     "target": "2026-11-25",
