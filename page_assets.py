@@ -473,7 +473,10 @@ PAGE_PALETTE = """:root{
   --card:#141a24;
   --pos-num-fs:14px;  /* 2026-11-20 用户：仓位栏所有金额／涨跌额／涨跌幅与长短持仓标题「-4.7%」同号。
                           桌面 14px、手机档覆盖 16px；两处共用这一个变量，不会再各写各的导致不齐。 */
-  --sym-w:100px;      /* 代码列按用户指的「LMT 那么宽」定死：桌面 100 / 手机 98（代码+中文备注名）。
+  --sym-w:102px;      /* 2026-11-26：桌面 100→102 / 手机 98→100，两档各 +2px 与代码格左内距 +2px 成对，
+                         note 可见净宽（桌面 84 / 手机 90）不变；多出的 2px 从价格区 1fr 出，紫灯区不动。
+                         下面历史注释里的 100／98 是这次改动之前的基线，保留作溯源。
+                         代码列按用户指的「LMT 那么宽」定死：桌面 100 / 手机 98（代码+中文备注名）。
                          原来是 max-content，各行 40~121px 参差、价格区左边界跟着晃；手机档覆盖 98px。
                          2026-11-13 用户「电脑上 7 个中文字宽、手机上 6 个」：桌面 note 11.5px（单字 12px），
                          100px − 左右各 8px 内距＝84px＝精确 7 字；手机 note 14.5px（单字 15px），
@@ -622,7 +625,7 @@ PAGE_PALETTE = """:root{
   --range-track:#9fa3aa;
   --range-track-line:#495568; /* 52周价格横条：2026-11-16 与个股双线互换，取原 --stock-divider 值 */
   --count-active:#2f4f86;
-  --count-red-border:rgba(255,133,128,.45);
+  --count-red-border:rgba(248,81,73,.45);  /* 2026-11-26 用户：统计红灯数字外框改涨跌/灯条红 #f85149 的 45%；底色仍描述红 16%。 */
   --count-yellow-border:rgba(240,198,116,.45);
   --count-red-bg:rgba(255,133,128,.16);
   --count-yellow-bg:rgba(240,198,116,.16);
@@ -726,8 +729,8 @@ tr:first-child td{border-top:none}
 #signalCounts{--collapse-bg:var(--signal-collapse);border:var(--frame-w) solid var(--signal-border);box-shadow:none;background:none}
 #signalCounts .collapse-group{color:var(--white)}
 #signalCounts>summary .count-total{white-space:nowrap;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
-/* 统计标题栏的数字也是「分组标题栏上的红黄数字」，同批跟随描述区灯色 */
-#signalCounts .count-red{color:var(--lamp-red)}
+/* 统计标题栏的数字也是「分组标题栏上的红黄数字」；2026-11-26 红数字同批改为涨跌红 --red #f85149，黄仍描述黄 */
+#signalCounts .count-red{color:var(--red)}
 #signalCounts .count-yellow{color:var(--lamp-yellow)}
 #signalCounts .count-all{color:var(--dim)}   /* 总 N：抓取总只数，灰字不抢红黄白紫的注意力 */
 #signalCounts>summary .count-all{margin-left:auto}   /* 2026-11-20 用户：总 N 靠右，贴标题栏右缘（group-stats 是占满余宽的 flex，auto 外边距把它推到最右） */
@@ -994,9 +997,9 @@ tr.gray td{color:var(--dim)}
    去掉原 24×18 空心圆、描边与固定宽高，数字仍同号不加粗、tabular-nums 对齐。
    白灯/缺失沿用「仅文字灰」，其余各自语义色，颜色只认 :root 色板。 */
 .stat-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;padding:0;border:0;background:transparent;font-size:14px;font-weight:400;line-height:1;font-variant-numeric:tabular-nums;color:var(--white);position:relative;top:2px}
-/* 2026-11-21 用户：分组标题栏的红／黄数字＝个股描述区红／黄文字（--lamp-red / --lamp-yellow），
-   不再用涨跌色 --red #f85149 / --yellow #d29922——那两个偏暗，和描述区不是一个颜色。 */
-.stat-badge.red{color:var(--lamp-red)}
+/* 2026-11-26 用户：分组标题栏的红数字改回涨跌／灯条红 --red #f85149；黄数字仍是描述黄 --lamp-yellow。
+   红灯描述文字本身保持 --lamp-red #ff8580，两处不再同色（撤销 11-21 的「红数字＝描述红」口径）。 */
+.stat-badge.red{color:var(--red)}
 .stat-badge.yellow{color:var(--lamp-yellow)}
 .stat-badge.gray{color:var(--dim)}
 .stat-badge.missing{color:var(--dim)}
@@ -1309,14 +1312,17 @@ table.stk tr.gray[data-symbol]{--lamp-line:var(--text)}
    对齐值原为手机 39=46-7、桌面 34.5=44-9.5，再各减 3 → 36 / 31.5。
    原 41.7/42.7 会多探出 7.2 / 3.7px。
    2026-11-13：三处分区竖线改用同一组 --lamp-top/--lamp-h，长度与灯条一样，不再各量各的。 */
-/* 2026-11-21 用户：个股代码左边灯条加宽 2px（2 → 4），上下几何与颜色一律不动。 */
-table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:4px;height:var(--lamp-h);background:var(--lamp-line);pointer-events:none;z-index:2}
+/* 2026-11-21 用户：个股代码左边灯条加宽 2px（2 → 4），上下几何与颜色一律不动。
+   2026-11-26 用户：灯条与分组外框由 1px 改为 3px（left 0 → 2）。多出的 2px 由中间价格区
+   minmax(0,1fr) 吸收（紫灯区 --tgs-w 固定宽不动，避免胶囊与多位数字溢出）；代码格左内距与
+   --sym-w 同步 +2px，代码／中文备注名的可见净宽与灯条到文字的相对间距都保持不变。 */
+table.stk tr[data-symbol]::before{content:"";position:absolute;left:2px;top:var(--lamp-top);width:4px;height:var(--lamp-h);background:var(--lamp-line);pointer-events:none;z-index:2}
 /* 代码格（2026-11-17）：底色渐变已整块挪到 tr 上（见上面 tr 规则），td.sym 自身不再画背景，
    否则会把「延伸到价格区」的渐变切成两段。这里只管文字几何：上内距走 --row-pad-top
    （桌面 3 / 手机 5），手机档 padding-left/right 由后面的规则单独覆盖，不许写死左右内距
    （会把手机档 6px/2px 覆盖掉、中文名贴上灯条）。字号/行高/内距一律不动，
    用户明确要求「代码文字高度位置不变」——改的只有渐变的 position/size。 */
-table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0;font-size:14px;line-height:var(--row-height)}
+table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0 10px;font-size:14px;line-height:var(--row-height)}
 table.stk tr[data-symbol]>td.sym>.sym-box{display:grid;grid-template-rows:var(--row-height) var(--row-height);align-items:center;width:100%;max-width:100%;margin:0;padding:0;border:0;background:none;color:var(--text);line-height:var(--row-height);cursor:default}
 table.stk tr[data-symbol]>td.sym>.sym-box.etf-code{color:var(--link-blue,#6ba3f0)}
 table.stk tr[data-symbol]>td.sym>.sym-box .tag.quote-note{display:none}
@@ -1506,6 +1512,10 @@ table.stk tr[data-symbol]>td.sig{grid-area:sig;display:block;padding:var(--sig-r
 .stk td.sig .sig-zone{display:block;min-width:0;overflow-wrap:anywhere;padding-left:8px;text-indent:0}
 .stk td.sig .signal-item[data-signal-level] .sig-zone{text-indent:-8px}
 .stk td.sig .signal-item[data-signal-level] .sig-zone::before{content:"";display:inline-block;width:3px;height:10px;margin-right:5px;border-radius:1px;background:currentColor;vertical-align:middle}
+/* 2026-11-26 用户：红灯描述文字仍是描述红 #ff8580，它前面的 3×10px 小竖块改用涨跌／灯条红 #f85149；
+   黄、绿、白与近阈值等其它档仍跟随文字色 currentColor，不动。 */
+.stk td.sig .signal-item[data-signal-level="red"]::before,
+.stk td.sig .signal-item[data-signal-level="red"] .sig-zone::before{background:var(--red)}
 .stk td.sig .sig-sep{display:none}
 .stk td.sig .signal-separator{display:none}
 .stk td.sig .signal-item[data-signal-level="green"]{color:var(--green)}
@@ -1550,7 +1560,7 @@ table.stk tr.range52-row>td:first-child{position:relative;padding:0 10px 2px 10p
    只把右内距 6→2px：note 可见宽仍是 98−6−2＝90px＝精确 6 个中文字，文字墨迹→灰线由 6px 收到 2px。
    灰线左移 4px 全部转给 --tgs-w（104→108），中间 minmax(0,1fr) 价格区净宽不变，98 行仍全 0 档、
    零侵占。四位数共识价的「10月」离紫框右线由 4px 放宽到 7.5px。其余只覆盖变量值。 */
-:root{--status-font-size:14.5px;--sym-w:98px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;--lamp-top:8px;--lamp-h:36px;--row-pad-top:5px;--tgs-font:16px;--tgs-pad-l:0px;--tgs-pad-r:0px;--pos-num-fs:16px}
+:root{--status-font-size:14.5px;--sym-w:100px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;--lamp-top:8px;--lamp-h:36px;--row-pad-top:5px;--tgs-font:16px;--tgs-pad-l:0px;--tgs-pad-r:0px;--pos-num-fs:16px}
 .sig-cols[data-combo="1"]{--combo-size:11.3px;--combo-cy:9.7px}
 body{padding-left:5px;padding-right:5px}
 .oil-reference-row td{padding:8px 6px}
@@ -1591,7 +1601,7 @@ body{padding-left:5px;padding-right:5px}
 :is(#macroCard, .macro-scope) .oil-reference-row td{padding-top:6px;padding-bottom:6px}
 :is(#macroCard, .macro-scope) .oil-reference-row td:last-child{line-height:20.25px}
 :is(#macroCard, .macro-scope) .oil-reference-row td:first-child::before{top:6px;bottom:6px}
-table.stk tr[data-symbol]>td.sym{font-size:17px;padding-left:6px;padding-right:2px}
+table.stk tr[data-symbol]>td.sym{font-size:17px;padding-left:8px;padding-right:2px}
 table.stk tr[data-symbol]>td.sym>.sym-box{line-height:20.8px}
 table.stk tr[data-symbol]>td.sym>.sym-box .note{font-size:14.5px}
 /* 2026-11-13 用户定：手机档三组数字字号恒定 —— 紫灯框 16px（:root 的 --tgs-font）、振/量 15px、

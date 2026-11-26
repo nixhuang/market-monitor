@@ -355,11 +355,11 @@ _badge_rule = re.search(r'\.stat-badge\{([^}]+)\}', html).group(1)
 check('border:0' in _badge_rule and 'background:transparent' in _badge_rule
       and 'width:' not in _badge_rule and ';height:' not in _badge_rule
       and 'border-radius' not in _badge_rule
-      and '.stat-badge.red{color:var(--lamp-red)}' in html
+      and '.stat-badge.red{color:var(--red)}' in html
       and '.stat-badge.yellow{color:var(--lamp-yellow)}' in html
-      and '#signalCounts .count-red{color:var(--lamp-red)}' in html
+      and '#signalCounts .count-red{color:var(--red)}' in html
       and '.stat-badge.purple{color:var(--purple)}' in html,
-      "所有标题栏灯圈都改成颜色数字；红黄数字＝个股描述区红黄字（2026-11-21）")
+      "所有标题栏灯圈都改成颜色数字；红数字＝涨跌红 #f85149、黄数字仍描述黄（2026-11-26）")
 check('id="group_technology"' in html and 'IT · AI (5)' in html, "IT 分类展示计数")
 check('其他关注' not in html, "旧其他关注分类已移除")
 check("<h2>个股</h2>" not in html and "<h2>ETF 基金</h2>" not in html, "个股与 ETF 不再分区")
@@ -793,7 +793,7 @@ check('td.tgs::after' not in monitor.PAGE_CSS
 for _level, _width in (('red', 4), ('yellow', 4), ('green', 2)):
     check('table.stk tr.' + _level + '[data-symbol]{--lamp-line:var(--' + _level + ')}' in monitor.PAGE_CSS
           and 'tr.' + _level + '+tr.range52-row>td{--lc' not in monitor.PAGE_CSS
-          and 'table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:4px;height:var(--lamp-h);' in monitor.PAGE_CSS
+          and 'table.stk tr[data-symbol]::before{content:"";position:absolute;left:2px;top:var(--lamp-top);width:4px;height:var(--lamp-h);' in monitor.PAGE_CSS
           and '--lamp-top:8px;--lamp-h:36px' in monitor.PAGE_CSS
           and 'top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)' in monitor.PAGE_CSS,
           _level + '主表左灯条与分区线同长且不延伸52周行')

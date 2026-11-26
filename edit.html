@@ -98,7 +98,10 @@ details.fold>summary,details.set>summary{gap:8px}
   --card:#141a24;
   --pos-num-fs:14px;  /* 2026-11-20 用户：仓位栏所有金额／涨跌额／涨跌幅与长短持仓标题「-4.7%」同号。
                           桌面 14px、手机档覆盖 16px；两处共用这一个变量，不会再各写各的导致不齐。 */
-  --sym-w:100px;      /* 代码列按用户指的「LMT 那么宽」定死：桌面 100 / 手机 98（代码+中文备注名）。
+  --sym-w:102px;      /* 2026-11-26：桌面 100→102 / 手机 98→100，两档各 +2px 与代码格左内距 +2px 成对，
+                         note 可见净宽（桌面 84 / 手机 90）不变；多出的 2px 从价格区 1fr 出，紫灯区不动。
+                         下面历史注释里的 100／98 是这次改动之前的基线，保留作溯源。
+                         代码列按用户指的「LMT 那么宽」定死：桌面 100 / 手机 98（代码+中文备注名）。
                          原来是 max-content，各行 40~121px 参差、价格区左边界跟着晃；手机档覆盖 98px。
                          2026-11-13 用户「电脑上 7 个中文字宽、手机上 6 个」：桌面 note 11.5px（单字 12px），
                          100px − 左右各 8px 内距＝84px＝精确 7 字；手机 note 14.5px（单字 15px），
@@ -247,7 +250,7 @@ details.fold>summary,details.set>summary{gap:8px}
   --range-track:#9fa3aa;
   --range-track-line:#495568; /* 52周价格横条：2026-11-16 与个股双线互换，取原 --stock-divider 值 */
   --count-active:#2f4f86;
-  --count-red-border:rgba(255,133,128,.45);
+  --count-red-border:rgba(248,81,73,.45);  /* 2026-11-26 用户：统计红灯数字外框改涨跌/灯条红 #f85149 的 45%；底色仍描述红 16%。 */
   --count-yellow-border:rgba(240,198,116,.45);
   --count-red-bg:rgba(255,133,128,.16);
   --count-yellow-bg:rgba(240,198,116,.16);

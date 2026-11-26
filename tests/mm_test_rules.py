@@ -513,14 +513,14 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         css = page_assets.PAGE_CSS
         self.assertIn('grid-template-areas:"sym px tgs" "cost cost cost" "sig sig sig"', css)
         self.assertIn('grid-template-columns:var(--sym-w) minmax(0,1fr) var(--tgs-w)', css)
-        # 2026-11-13「电脑上 7 个中文字宽、手机上 6 个」：桌面 100px（内距 8px，可见 84px＝7 字），
-        # 手机 98px（左 6 / 右 2px 内距，可见 90px＝6 字）。灰线由 --vl-x 按 sym 右边界算，随列宽同步。
+        # 2026-11-13「电脑上 7 个中文字宽、手机上 6 个」：桌面 102px（左内距 10px，可见 84px＝7 字），
+        # 手机 100px（左 8 / 右 2px 内距，可见 90px＝6 字）。灰线由 --vl-x 按 sym 右边界算，随列宽同步。
         # 19:35 恢复左内距 6px（不贴灯条）；20:51 左移灰线 4px 转给紫灯区，note 可见宽仍 90px。
-        self.assertIn('--sym-w:100px', css)
-        self.assertIn(':root{--status-font-size:14.5px;--sym-w:98px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;'
+        self.assertIn('--sym-w:102px', css)
+        self.assertIn(':root{--status-font-size:14.5px;--sym-w:100px;--tgs-w:108px;--px-gap:5px;--px-col-gap:6px;'
                       '--lamp-top:8px;--lamp-h:36px;--row-pad-top:5px;--tgs-font:16px;'
                       '--tgs-pad-l:0px;--tgs-pad-r:0px;--pos-num-fs:16px}', css)
-        self.assertIn('table.stk tr[data-symbol]>td.sym{font-size:17px;padding-left:6px;padding-right:2px}', css)
+        self.assertIn('table.stk tr[data-symbol]>td.sym{font-size:17px;padding-left:8px;padding-right:2px}', css)
         self.assertIn('--tgs-w:104px', css)
         self.assertIn('--tgs-w:108px', css)
         self.assertIn('width:100%;max-width:100%;margin:0;padding:0;border:0;background:none', css)
@@ -956,9 +956,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
     def test_mobile_stock_numbers_and_main_row_padding_are_compact(self):
         css = page_assets.PAGE_CSS
         mobile = css.split('@media(max-width:600px){', 1)[1].split('@media(min-width:601px){', 1)[0]
-        # 手机 17px 代码 + 左 6 / 右 2px 内距：与 --sym-w:98px 成对，中文备注名可见宽度仍 90px＝6 字，
+        # 手机 17px 代码 + 左 8 / 右 2px 内距：与 --sym-w:100px 成对，中文备注名可见宽度仍 90px＝6 字，
         # 左侧离 2px 灯条留 4px（19:35 恢复后不再动），右侧把省下的 4px 让给灰线左移（20:51）。
-        self.assertIn('table.stk tr[data-symbol]>td.sym{font-size:17px;padding-left:6px;padding-right:2px}', mobile)
+        self.assertIn('table.stk tr[data-symbol]>td.sym{font-size:17px;padding-left:8px;padding-right:2px}', mobile)
         self.assertIn('--tgs-w:108px', mobile)
         # 紫灯框字号已统一成 --tgs-font（桌面 13 / 手机 16），且恒定：窄屏压缩不许改字号。
         self.assertIn('--tgs-font:13px;', css)
@@ -980,7 +980,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertIn('.px-chg,.px-amt,.px-v{font-size:16.5px}', css)
         self.assertIn('.px-k{font-size:14px', css)
         self.assertIn('table.stk tr.range52-row>td:first-child{padding:0 6px 2px 6px}', mobile)
-        self.assertIn('table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0;', css)
+        self.assertIn('table.stk tr[data-symbol]>td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0 10px;', css)
         self.assertNotIn('data-layout="tight"', css)
         self.assertNotRegex(css, r'add-ck|ack-btn|手机（iOS Chrome）最终覆盖')
 
@@ -1041,7 +1041,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         变量 4px，所以「第一排下沿→下一排内容」不受影响，仍是 4px。"""
         css = page_assets.PAGE_CSS
         self.assertIn('border-top:1px solid var(--stock-pair-line);--lamp-line:var(--line);--sig-row-gap:4px;background-image:', css)
-        for rule in ('td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0;',
+        for rule in ('td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0 10px;',
                      'td.px{grid-area:px;position:relative;display:block;min-width:0;padding:var(--row-pad-top) 6px 0;',
                      'padding:var(--row-pad-top) var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);'):
             self.assertIn(rule, css)
@@ -1094,7 +1094,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertEqual(pb + mt, 5)
         self.assertEqual(border, 1)
         self.assertEqual(top, 5)
-        for rule in ('td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0;',
+        for rule in ('td.sym{grid-area:sym;position:static;display:block;padding:var(--row-pad-top) 8px 0 10px;',
                      'td.px{grid-area:px;position:relative;display:block;min-width:0;padding:var(--row-pad-top) 6px 0;',
                      'padding:var(--row-pad-top) var(--tgs-pad-r,3px) 0 var(--tgs-pad-l,2px);'):
             self.assertIn(rule, css)
@@ -1142,7 +1142,7 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         self.assertNotIn('td.px', sel)
         self.assertNotIn('td.tgs', sel)
         # 「代码文字高度位置不变」：td.sym 的文字几何三件套原样保留
-        self.assertIn('padding:var(--row-pad-top) 8px 0;', sym_rule)
+        self.assertIn('padding:var(--row-pad-top) 8px 0 10px;', sym_rule)
         self.assertIn('font-size:14px;line-height:var(--row-height)', sym_rule)
 
     def test_code_fade_more_transparent_and_ends_before_target_zone_2026_11_17(self):
@@ -1654,17 +1654,17 @@ sub[0].open=true;cards[0].open=false;click(cards[0]);assert.equal(sub[0].open,tr
         self.assertIn('tr.red td:first-child::before{background:var(--red);width:3.5px}', css)
         self.assertIn('tr.yellow td:first-child::before{background:var(--yellow);width:3.5px}', css)
         self.assertIn('tr.green td:first-child::before{background:var(--green);width:3px}', css)
-        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;top:var(--lamp-top);width:4px;', css)
+        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:2px;top:var(--lamp-top);width:4px;', css)
         self.assertNotIn('top:var(--lamp-top);width:2px;', css)
 
     def test_group_dual_colors_spacing_and_float_fold_2026_11_21(self):
-        """2026-11-21：标题栏红黄数字＝个股描述区灯色；其它分组外框回紫；
+        """2026-11-26：标题栏红数字＝涨跌红、黄数字仍描述黄；其它分组外框回紫；
         两排行距拉开但框高不变；▲ 悬浮吸底，且只管仓位以下的分组。"""
         css = page_assets.PAGE_CSS
-        # 红黄数字与个股描述文字同源（.signal-item 用的就是 --lamp-red / --lamp-yellow）
-        self.assertIn('.stat-badge.red{color:var(--lamp-red)}', css)
+        # 2026-11-26：标题栏红数字改涨跌红 --red，黄仍是描述黄；描述文字本身仍 --lamp-red
+        self.assertIn('.stat-badge.red{color:var(--red)}', css)
         self.assertIn('.stat-badge.yellow{color:var(--lamp-yellow)}', css)
-        self.assertIn('#signalCounts .count-red{color:var(--lamp-red)}', css)
+        self.assertIn('#signalCounts .count-red{color:var(--red)}', css)
         self.assertIn('#signalCounts .count-yellow{color:var(--lamp-yellow)}', css)
         self.assertIn('.signal-item[data-signal-level="red"]{color:var(--lamp-red)}', css)
         self.assertIn('.signal-item[data-signal-level="yellow"]{color:var(--lamp-yellow)}', css)
@@ -3232,9 +3232,9 @@ class SignalFilterBucketRegression(unittest.TestCase):
         cost = (ROOT / 'cost_panel.js').read_text(encoding='utf-8')
         self.assertIn(": function (a, b) { return a.amt - b.amt; });", cost)   # 默认从亏损到盈利；可点抬头改按盈亏比／仓位
         self.assertIn("updateText('.zone-mv', '$' + mvDigits(mv), head)", cost)         # 持仓金额进标题
-        self.assertIn("(r.costKnown ? '$' + mvDigits(r.cost * r.qty) : '—')", cost)   # 2026-11-25 A 方案：个股行金额是「投入」＝成本×股数，固定不随股价变
+        self.assertIn("'$' + mvDigits(r.mv)", cost)   # 2026-11-26：个股行金额由投入（成本×股数）改为现值＝现价×股数
         self.assertNotIn("plain(r.mv)", cost)
-        self.assertIn('pi-ph-m">现值</span>', cost)   # 盈亏明细那列改叫「现值」，与个股行的「投入」区分
+        self.assertIn('pi-ph-m">现值</span>', cost)   # 盈亏明细那列仍叫「现值」，与个股行现值同口径
         self.assertNotIn('pi-zone-mv', cost)
         self.assertNotIn('piRealizedList', cost)
         self.assertNotIn('piPnlSum', cost)
@@ -3364,6 +3364,44 @@ class CostSeedRegression(unittest.TestCase):
                                                      "APH": {"cost": 78.94, "qty": 30}})
                     self.assertEqual((data["fixed"], data["fixed_cost"]), (16829.03, 16916.97))
                     self.assertNotIn("SGOV", data["items"])
+
+
+class PaletteSpacing1126Regression(unittest.TestCase):
+    """2026-11-26 用户定稿：标题红灯数字／描述前小红块／统计红灯数字外框改涨跌红，
+    个股行金额由投入改现值，当日灯条与比例条左右对称，主表灯条离外框 3px。"""
+
+    def test_red_palette_and_present_value(self):
+        css = page_assets.PAGE_CSS
+        cost_js = (ROOT / "cost_panel.js").read_text(encoding="utf-8")
+        # 红灯数字＝涨跌红 #f85149；红灯描述文字仍描述红 #ff8580，两者不再同色
+        self.assertIn(".stat-badge.red{color:var(--red)}", css)
+        self.assertIn("#signalCounts .count-red{color:var(--red)}", css)
+        self.assertIn('.signal-item[data-signal-level="red"]{color:var(--lamp-red)}', css)
+        self.assertIn("--count-red-border:rgba(248,81,73,.45)", css)
+        self.assertIn("--count-red-bg:rgba(255,133,128,.16)", css)   # 只改外框，底色仍是描述红
+        # 描述文字前的小竖块单独换涨跌红；只红档，其它档仍跟随 currentColor
+        self.assertIn('.stk td.sig .signal-item[data-signal-level="red"]::before,', css)
+        self.assertIn('.stk td.sig .signal-item[data-signal-level="red"] .sig-zone::before{background:var(--red)}', css)
+        # 个股行金额＝现价×股数，不再用成本×股数，成本未知也能显示
+        self.assertIn("'$' + mvDigits(r.mv)", cost_js)
+        self.assertNotIn("mvDigits(r.cost * r.qty)", cost_js)
+
+    def test_lamp_and_bar_spacing(self):
+        css = page_assets.PAGE_CSS
+        cost_css = (ROOT / "cost_panel.css").read_text(encoding="utf-8")
+        # 当日清单左内距 +9px（桌面 25 / 手机 21），灯条到外框与右侧比例条对称；其它清单不动
+        self.assertIn('.dual-body > ul.cost-contrib[data-owner="day"] { padding-left: 25px; }', cost_css)
+        self.assertIn('.dual-body > ul.cost-contrib[data-owner="day"] { padding-left: 21px; }', cost_css)
+        self.assertIn(".cost-contrib { list-style: none; margin: 0; padding: 0 16px 0 16px;", cost_css)
+        self.assertIn(".cost-contrib { padding-left: 12px; padding-right: 12px; }", cost_css)
+        # 主表灯条 1px→3px；2px 由价格区 1fr 吸收，紫灯区固定宽与代码可见净宽都不变
+        self.assertIn("left:2px;top:var(--lamp-top);width:4px;height:var(--lamp-h)", css)
+        self.assertIn("--sym-w:102px", css)
+        self.assertIn("--sym-w:100px;--tgs-w:108px", css)
+        self.assertIn("--tgs-w:104px", css)
+        self.assertIn("padding:var(--row-pad-top) 8px 0 10px", css)
+        self.assertIn("font-size:17px;padding-left:8px;padding-right:2px", css)
+        self.assertIn("grid-template-columns:var(--sym-w) minmax(0,1fr) var(--tgs-w)", css)
 
 
 if __name__ == "__main__":

@@ -248,6 +248,11 @@
 /* 当日收益清单：金额在第二列、百分比第三列，灯色取主表等级。 */
 .cost-contrib { list-style: none; margin: 0; padding: 0 16px 0 16px; display: grid;
   grid-template-columns: var(--cost-contrib-cols); column-gap: var(--cost-contrib-gap); }
+/* 2026-11-26 用户：当日板块代码左边的灯条贴外框（桌面 8px / 手机 4px），右侧比例条却有
+   桌面 17px / 手机 13px。只给当日清单左内距 +9px（16→25，手机 12→21），灯条 left:-9px
+   随之右移同样距离，左右到外框的间距就对称了；内容区少掉的 9px 由四列分摊，比例条随之缩短。
+   行业权重／盈亏明细等其它 .cost-contrib 清单不动。 */
+.dual-body > ul.cost-contrib[data-owner="day"] { padding-left: 25px; }
 .cost-contrib li {
   display: grid;
   align-items: center;
@@ -394,6 +399,7 @@
   .runbar .cost-edit-btn { height: 40px; }
   .cost-legend { font-size: 12px; }
   .cost-contrib { padding-left: 12px; padding-right: 12px; }
+  .dual-body > ul.cost-contrib[data-owner="day"] { padding-left: 21px; }  /* 左灯条 4px→13px，与右侧比例条 13px 对称 */
   .cost-contrib li { font-size: 13px; line-height: 15.75px; }
   .cost-contrib li > .cv, .cost-contrib li > .ca { height: 15.75px; }
   .cost-contrib .cbar { height: 12px; }

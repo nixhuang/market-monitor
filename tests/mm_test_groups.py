@@ -3579,7 +3579,7 @@ class TestTargets(unittest.TestCase):
             self.assertNotIn('tr.' + level + '+tr.range52-row>td{--lc', css)
             self.assertIn('tr.' + level + ' td:first-child{box-shadow:inset ' + str(width)
                           + 'px 0 0 var(--' + level + ')', css)
-        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
+        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:2px;'
                       'top:var(--lamp-top);width:4px;height:var(--lamp-h);', css)
         self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
@@ -6921,7 +6921,7 @@ class Test52wRangeBar(unittest.TestCase):
         # 旧仓位快捷跳转不借主表代码冒充编辑按钮；真正编辑入口由成本套覆盖。
         self.assertIn('cursor:default', css)
         self.assertNotIn('.stk tr.red+tr.range52-row>td{--lc:', css)
-        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:0;'
+        self.assertIn('table.stk tr[data-symbol]::before{content:"";position:absolute;left:2px;'
                       'top:var(--lamp-top);width:4px;height:var(--lamp-h);', css)
         self.assertIn('--lamp-top:8px;--lamp-h:36px', css)
         self.assertIn('top:var(--lamp-top);height:var(--lamp-h);width:1px;background:var(--section-line)', css)
