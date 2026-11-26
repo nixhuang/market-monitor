@@ -9,15 +9,15 @@
     "next_in": 11,
     "next_date": "2026-12-11"
   },
-  "run_id": "45767650692",
+  "run_id": "45773873589",
   "request_id": "",
-  "source_sha": "b2a0291ad3b9918d55c536be065ba17172951dd8",
-  "input_hash": "dda3f35b1d7cf6eac3473ec588e16d3a0f483959efa26bb89a341fc14916fe9b",
-  "build_id": "45767650692-1",
-  "started_at": "2026-11-26T06:21:41+00:00",
-  "started_at_bj": "2026-11-26T14:21:41+08:00",
-  "finished_at": "2026-11-26T14:25:03.067236+08:00",
-  "finished_at_bj": "2026-11-26T14:25:03+08:00",
+  "source_sha": "646f14a2fcf495825fc8b976b64e804655b3613d",
+  "input_hash": "646d84c19d3d6c8ba40d226a86f1bb229a5c28f830595be4736543ac2c28a494",
+  "build_id": "45773873589-1",
+  "started_at": "2026-11-26T07:14:43+00:00",
+  "started_at_bj": "2026-11-26T15:14:43+08:00",
+  "finished_at": "2026-11-26T15:17:55.882053+08:00",
+  "finished_at_bj": "2026-11-26T15:17:55+08:00",
   "event": "push",
   "target_trade_date": "2026-11-25",
   "mode": "closed",
@@ -2427,15 +2427,15 @@
     "checked_at": "2026-11-25T09:48:42.793969-05:00",
     "result": "ok",
     "schema_version": 2,
-    "asof": "2026-11-26T06:23:36.165947+00:00"
+    "asof": "2026-11-26T07:17:02.003854+00:00"
   },
   "consensus": {
     "source": "stockanalysis.com（S&P Global）",
     "stat": {
-      "due": 12,
+      "due": 0,
       "deferred": 0,
-      "tried": 12,
-      "ok": 12,
+      "tried": 0,
+      "ok": 0,
       "none": 0,
       "fail": 0,
       "stopped": "",
@@ -3166,7 +3166,7 @@
       "retry_symbols": []
     },
     "schema_version": 2,
-    "asof": "2026-11-26T06:25:02.993879+00:00",
+    "asof": "2026-11-26T07:17:55.844985+00:00",
     "entry_meta": {
       "HII": {
         "facts": {
@@ -4501,8 +4501,8 @@
     "dated": 63,
     "pending": 17,
     "failed": 0,
-    "fetched": 13,
-    "cached": 67,
+    "fetched": 0,
+    "cached": 80,
     "deferred": 0,
     "data": {
       "BRK-B": {
@@ -5309,7 +5309,7 @@
       ]
     },
     "schema_version": 2,
-    "asof": "2026-11-26T06:24:38.471879+00:00",
+    "asof": "2026-11-26T07:17:55.813985+00:00",
     "entry_meta": {
       "BRK-B": {
         "facts": {
@@ -6715,9 +6715,9 @@
       "incomplete": false,
       "contract_symbol": "CLF27.NYM"
     },
-    "assessed_at": "2026-11-26T14:23:35.004595+08:00",
+    "assessed_at": "2026-11-26T15:16:59.890622+08:00",
     "schema_version": 2,
-    "asof": "2026-11-26T06:23:36.432392+00:00"
+    "asof": "2026-11-26T07:17:02.428918+00:00"
   },
   "data_lag": {
     "target": "2026-11-25",
