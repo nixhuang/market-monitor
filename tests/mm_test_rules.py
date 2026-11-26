@@ -1489,6 +1489,9 @@ if (JSON.stringify(result.members[0].details[1].e)!==JSON.stringify(e)) throw ne
         js = page_assets.PAGE_INTERACTION_JS
         self.assertIn('window.MM_SETTINGS.group_single_open === 1', js)
         self.assertNotIn('groupSummaryClickAt', js)   # 不再用 toggle 监听（会干扰统计面板的筛选归一化时序）
+        # 2026-11-26 用户：长/短持仓展开时也要收起统计的紫灯／财报子板块，不许再跳过 closeSubFolds
+        self.assertNotIn('if (!(keep && /^group_positions_/.test(keep.id))) closeSubFolds();', js)
+        self.assertIn("if (!card || card.open || !/^group_positions_/.test(card.id)) return;", js)
         # 当日/风险/统计不是 group_ 前缀，不参与；2026-11-26 修订：只有仓位大栏不参与，长/短持仓恢复参与互斥。
         self.assertIn("details[id^='group_'][open]", js)
         self.assertNotIn('data-open-locked', js)
@@ -1500,7 +1503,9 @@ const mk=(id,open)=>new Details(id,open);
 const cards=[mk('group_positions',true),mk('group_positions_long',true),mk('group_positions_short',true),mk('group_focus',false),mk('group_tech',true)];
 class Element{constructor(card){this.card=card;}
   closest(q){return q==="details[id^='group_'] > summary"&&this.card?{parentElement:this.card}:null;}}
-const sel=s=>s==="details[id^='group_'][open]"?cards.filter(c=>c.open):[];
+const sub=[mk('sig_purple',true),mk('sig_earnings',true)];
+const sel=s=>s==="details[id^='group_'][open]"?cards.filter(c=>c.open)
+  :s==="#signalCounts details[open]"?sub.filter(c=>c.open):[];
 const frames=[];
 const ctx={HTMLDetailsElement:Details,Element,Date,requestAnimationFrame:f=>frames.push(f),
   document:{addEventListener:(k,f)=>(ev[k]||=[]).push(f),querySelectorAll:sel,querySelector:()=>null,getElementById:()=>null},
@@ -1530,6 +1535,12 @@ assert.equal(cards[1].open,false);assert.equal(cards[4].open,false);
 cards[4].open=true;focus.open=false;click(focus);flush();assert.equal(cards[4].open,true);
 // 开关关闭：不动
 focus.open=true;ctx.window.MM_SETTINGS.group_single_open=0;click(focus);flush();assert.equal(cards[4].open,true);
+// 2026-11-26 用户：点长/短持仓标题展开，统计里已展开的紫灯／财报子板块与其它分组一样被收起
+ctx.window.MM_SETTINGS.group_single_open=1;
+sub[0].open=true;sub[1].open=true;cards[1].open=false;click(cards[1]);
+assert.equal(sub[0].open,false);assert.equal(sub[1].open,false);
+// 点「仓位」大栏标题：统计子板块不受影响
+sub[0].open=true;cards[0].open=false;click(cards[0]);assert.equal(sub[0].open,true);
 '''
         result = subprocess.run([sys.executable, "-B", str(ROOT / "tests/run_all.py"), "--offline-node", "-e", script],
                                 cwd=ROOT, input=js, capture_output=True, text=True, encoding="utf-8", timeout=30)

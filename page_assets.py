@@ -1798,15 +1798,14 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
 
 // 2026-11-26 修订：长/短持仓与其它普通分组一样参与「只开一个」，彼此互斥；
 // 只有统计、仓位大栏（长/短持仓的父级）不参与——展开它们不收起别人，别人展开也不收起它们。
-// 覆盖点标题、程序化打开、统计名单跳转、FIND 定位四条路径。
+// 覆盖点标题、程序化打开、统计名单跳转、FIND 定位四条路径；四条路径展开分组时都收起统计子板块。
 (function enforceSingleOpen() {
   function isFree(card) {
     return !card || card.id === "signalCounts" || card.id === "group_positions";
   }
   function closeOthers(keep) {
     if (isFree(keep)) return;
-    // 长/短持仓只跟分组互斥，不动统计里已展开的子板块（统计全程不参与）。
-    if (!(keep && /^group_positions_/.test(keep.id))) closeSubFolds();
+    closeSubFolds();
     document.querySelectorAll("details.card[open]").forEach(function(other) {
       if (other === keep || isFree(other)) return;
       other.open = false;
@@ -1820,6 +1819,14 @@ PAGE_INTERACTION_JS = RULES_INTERACTION_JS + r"""
     });
   }
   window.__mmCloseOtherGroups = closeOthers;   // 统计名单跳转 / FIND 定位时显式调用
+  // 2026-11-26 用户：长/短持仓是 .zone-card，不命中下面 .card 的捕获；点它们的标题展开时，
+  // 也要像其它普通分组一样收起统计里已展开的紫灯／财报等子板块。仓位大栏不在此列。
+  document.addEventListener("click", function(event) {
+    const sm = event.target instanceof Element ? event.target.closest("details[id^='group_'] > summary") : null;
+    const card = sm && sm.parentElement;
+    if (!card || card.open || !/^group_positions_/.test(card.id)) return;
+    closeSubFolds();
+  }, true);
   // click 捕获阶段同步关：晚一帧再关会让页面高度在滚动定位之后才变，视口落到清单半中间。
   document.addEventListener("click", function(event) {
     const sm = event.target instanceof Element ? event.target.closest("details.card > summary") : null;
