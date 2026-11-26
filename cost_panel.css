@@ -555,9 +555,10 @@
 #costManage .cost-add-dialog > p { margin: 5px 0; }
 #costManage .cost-add-dialog > .cost-acts { margin: 6px 0 0; }
 #costManage .cost-add-dialog select.add-must { border-color: var(--lamp-red); }
-/* 2026-11-26 用户：分组下拉收窄（96px），与右侧「清仓后移组」同一排；BUY 时分组整行隐藏，
-   说明独占一行靠左。分组标签也固定 62px、间距同 8px，让下拉框左缘与上面两个输入框对齐。 */
-#costManage .cost-trade-dialog .cost-trade-foot { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+/* 2026-11-26 用户：分组下拉收窄（96px），右侧留 12px 给「清仓后移到该组」；BUY 时分组整行隐藏，
+   说明独占一行靠左。分组标签固定 62px + 8px，让下拉框左缘与上面两个输入框对齐。
+   短说明由 JS 锁 nowrap，不再挤到下拉框上；没有行业分类的长提示仍可折行。 */
+#costManage .cost-trade-dialog .cost-trade-foot { display: flex; align-items: center; gap: 12px; margin: 10px 0; }
 #costManage .cost-trade-dialog .cost-trade-group { flex: 0 0 auto; margin: 0; }
 #costManage .cost-trade-dialog .cost-trade-group label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; white-space: nowrap; }
 #costManage .cost-trade-dialog .cost-trade-group select {

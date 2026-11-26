@@ -8815,6 +8815,27 @@ for (const level of ['red', 'yellow', 'gray', undefined]) {
         self.assertNotIn('(持仓)', output)
         self.assertNotIn('(IT · AI)', output)
 
+    def test_gray_members_sort_by_own_lamp_inside_three_buckets(self):
+        """2026-11-26 用户：白灯名单「持仓→重点→其他」三档之内还要按个股自身灯级排，
+        末尾行业（公水电气/可选消费）里的红灯、黄灯不能固定垫底。"""
+        def gray(sym, group, level):
+            return {'kind': 'boll', 'symbol': sym, 'group': group, 'level': level,
+                    'shape': '▼', 'side': '下轨', 'rsi_n': 0, 'rsi_side': '',
+                    'detail': '跌破布林下轨▼', 'note': '', 'hold': 'short'}
+        members = [gray('POSG', 'position', 'green'), gray('FOCG', 'focus', 'green'),
+                   gray('GRNX', 'technology', 'green'), gray('REDX', 'utilities', 'red'),
+                   gray('YELX', 'consumer_discretionary', 'yellow')]
+        snap = {'signal_counts': {'boll': {'label': '布林', 'red': 0, 'yellow': 0, 'purple': 0}},
+                'signal_members': {'boll': {'red': [], 'yellow': [], 'purple': []}},
+                'text_only': members}
+        output = monitor._signal_counts_card(snap)
+        start = output.index('class="signal-members-panel tone-gray"')
+        panel = output[start:output.index('</div></td>', start)]
+        order = re.findall(r'<span class="signal-member-symbol[^"]*">([A-Z]+)</span>', panel)
+        self.assertEqual(order, ['POSG', 'FOCG', 'REDX', 'YELX', 'GRNX'])
+        self.assertEqual(re.findall(r'<li class="lamp-(\w+)"', panel),
+                         ['green', 'green', 'red', 'yellow', 'green'])
+
     def test_statistics_header_orders_red_yellow_gray_purple_then_earnings(self):
         rows = [self.member_row('RED', 'position', 'red', ('chg', 'red')),
                 self.member_row('PURPLE', 'focus', 'green', ('target', 'purple'))]

@@ -1799,11 +1799,12 @@ test('生产五列原生交易行：代码独立完整，无备注红叉市值�
   b.addPosition('GOOGL','long','2','99');const added=b.doc.querySelector('[data-cost-row][data-sym="GOOGL"]');
   assert.equal(added.querySelector('.ep-code').textContent,'GOOGL');assert.equal(added.children.length,5);await b.dispose();
 });
-test('BUY 提示「不填买入价，只写数量用于拆股」、SELL 提示「清仓后移组」，价格/股数标签随买卖切换',async()=>{
+test('BUY 提示「不填买入价，只写数量用于拆股」、SELL 提示「清仓后移到该组」，价格/股数标签随买卖切换',async()=>{
   // 2026-11-26 用户：两句旧提示都压短；价格行与股数行各自左标签右输入框，清仓按钮在股数输入框右侧；
-  // SELL 的「清仓后移组」与分组下拉同一排右侧，BUY 说明独占一行。
+  // SELL 的「清仓后移到该组」锁不折行、落在分组下拉同一排右侧，BUY 说明独占一行。
   assert.ok(!SOURCE.includes('全卖在面板保存后归零移组'));
-  assert.ok(SOURCE.includes("'不填买入价，只写数量用于拆股'")&&SOURCE.includes("'清仓后移组'"));
+  assert.ok(SOURCE.includes("'不填买入价，只写数量用于拆股'")&&SOURCE.includes("'清仓后移到该组'"));
+  assert.match(CSS,/#costManage \.cost-trade-dialog \.cost-trade-foot\{[^}]*gap:12px/);
   const b=await boot({noLocks:true,forbidRequests:true});await b.enter();
   const panel=b.doc.getElementById('costManage');
   panel.querySelector('[data-trade-action="sell"][data-sym="AAA"]').click();

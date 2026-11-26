@@ -1966,8 +1966,12 @@
       tradeDialog.querySelector('[data-trade-price-label]').textContent = side === 'buy' ? '买入价$' : '卖出价$';
       tradeDialog.querySelector('[data-trade-qty]').value = ''; tradeDialog.querySelector('[data-trade-price]').value = '';
       tradeDialog.querySelector('[data-trade-error]').textContent = '';
-      tradeDialog.querySelector('[data-trade-note]').textContent = side === 'buy' ? '不填买入价，只写数量用于拆股' :
-        (sectorOf(sym) ? '清仓后移组' : '这只还没有行业分类，清仓前请先补分类标签');
+      // 2026-11-26 用户：短说明写成「清仓后移到该组」，固定不折行，稳稳落在分组下拉框右侧；
+      // 没有行业分类的长提示仍允许换行，BUY 的说明也一样。
+      var tradeNote = tradeDialog.querySelector('[data-trade-note]');
+      tradeNote.textContent = side === 'buy' ? '不填买入价，只写数量用于拆股' :
+        (sectorOf(sym) ? '清仓后移到该组' : '这只还没有行业分类，清仓前请先补分类标签');
+      tradeNote.style.whiteSpace = (side === 'sell' && sectorOf(sym)) ? 'nowrap' : 'normal';
       tradeDialog.querySelector('[data-trade-destination]').hidden = side !== 'sell';
       tradeDialog.querySelector('[data-trade-fill-all]').hidden = side !== 'sell';
       // 老股已有行业标签 → 清仓分组自动预选同名分组（不点也有默认）；没标签的回落到「重点」。

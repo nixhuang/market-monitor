@@ -281,6 +281,20 @@ def _gray_by_kind(snapshot):
     return out
 
 
+# 2026-11-26 用户：统计名单先按「持仓／重点／其他」三档，档内再按个股自身灯级排
+# （红>黄>灰/白>紫>绿），不能让排在末尾行业里的红黄灯埋在名单最后。
+# 权重与 page_assets.py 的多选清单 signalMemberKey 保持一致，两处排序观感一致。
+_LAMP_WEIGHT = {"red": 5, "yellow": 4, "gray": 3, "white": 3, "purple": 2, "green": 1}
+
+
+def _member_sort_key(d, group_order):
+    """三档分组 → 个股自身灯级 → 原分组顺序 → 代码（稳定兜底）。"""
+    order = group_order.get(str(d.get("group") or ""), len(group_order))
+    bucket = 0 if order == 0 else 1 if order == 1 else 2
+    return (bucket, -_LAMP_WEIGHT.get(str(d.get("level") or ""), 0),
+            order, str(d.get("symbol") or ""))
+
+
 class PageRenderer:
     def __init__(self, context):
         self._context = context
@@ -1640,7 +1654,9 @@ class PageRenderer:
                         ordered = sorted(entries, key=lambda x: (_mv(x),
                                          group_order.get(str(x.get("group") or ""), len(self._context.GROUPS))))
                     else:
-                        ordered = sorted(entries, key=lambda x: group_order.get(str(x.get("group") or ""), len(self._context.GROUPS)))
+                        # 2026-11-26：非数值栏位统一「三档分组 + 档内个股自身灯级」，
+                        # 不再只按分组顺序平铺（红黄灯会被末尾行业组埋到最后）。
+                        ordered = sorted(entries, key=lambda x: _member_sort_key(x, group_order))
                     if kind in self._context._BLOCK_PANEL_KINDS:
                         # 方向放到框标题上：▲ 一框、▼ 一框，名单里不再逐条画三角
                         blocks, order = {}, []
@@ -1856,7 +1872,9 @@ class PageRenderer:
                 note = f'<span class="note">{esc(r.get("note"))}</span>' if str(r.get("note") or "").strip() else ""
                 belong = f'<span class="signal-member-belong">（{esc(self._context._member_belong(r))}）</span>'
                 lamp = r.get("level") if r.get("level") in ("red", "yellow", "green", "gray") else "unknown"
-                blocks[key].append((group_order.get(str(r.get("group") or ""), len(self._context.GROUPS)),
+                # 白灯名单同样按「三档分组 + 档内个股自身灯级」排；旧的只按 group_order 会
+                # 让 utilities / consumer_discretionary 这些末尾行业的红黄灯固定垫底。
+                blocks[key].append((_member_sort_key(r, group_order),
                                     f'<li class="lamp-{lamp}"><a class="signal-member-jump" href="#{self._context._stock_anchor_id(r["symbol"])}">'
                                     f'<span class="signal-member-symbol{self._etf_cls(r["symbol"], bool(r.get("etf")), r.get("note"))}">{esc(r["symbol"])}</span>{note}</a>{belong}</li>'))
                 rec = filter_members.setdefault(self._context.instrument_identity(r["symbol"]), {
